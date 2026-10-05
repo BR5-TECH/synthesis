@@ -1,6 +1,6 @@
 ## Intent
 
-Fix Claude Code OAuth token validation and remove GitHub authentication as a requirement for project discussions when the user has no GitHub tokens stored. Keep GitHub authentication for all other GitHub operations. Discussion comments posted without a stored token use a fixed local human participant displayed as **Me**; do not create a separate identity record or change existing GitHub-authored comments.
+Fix Claude Code OAuth token validation and remove GitHub authentication as a requirement for project discussions when the user has no GitHub tokens stored. Keep GitHub authentication for all other GitHub operations. Discussion comments posted without a stored token use a fixed local human participant. Its saved participant snapshot is non-GitHub; display it as **Me** while no project GitHub identity resolves, and otherwise display the currently resolved project identity without changing the snapshot. Do not create a separate identity record or change existing GitHub-authored comments.
 
 ## User journey
 

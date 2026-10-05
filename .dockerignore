@@ -1,0 +1,33 @@
+# What is never part of a build context.
+#
+# The build context of a project image is the project root (specifications/
+# core/PSS-project-settings-storage.md PSS-FR-26), and both backends send that
+# whole tree to the Docker daemon before the first build step runs. Without
+# this file the tree is dominated by compiler and package-manager output —
+# `src-tauri/target` alone is tens of gigabytes on a developer machine — and the
+# upload takes longer than the daemon's own answer is waited for, which is a
+# build that fails on a timeout without one line of build output.
+#
+# Nothing named here is an input to any image this repository builds. No
+# Dockerfile is excluded: the Docker Engine backend names the Dockerfile inside
+# the context, so a Dockerfile left out of the context cannot be built.
+
+# Rust build output, at every depth: src-tauri, server, and the mock CLI each
+# carry one.
+**/target
+
+# Node package trees and frontend build output.
+**/node_modules
+**/.pnpm-store
+dist
+dist-ssr
+
+# Machine state, never authored work.
+**/*.tsbuildinfo
+**/.DS_Store
+**/*.log
+.playwright-mcp
+.idea
+.vscode
+.synthesis
+

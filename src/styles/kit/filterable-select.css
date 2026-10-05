@@ -1,0 +1,438 @@
+/* ---------- FILTERABLE SELECT (AII-FR-36 .. FR-40) ----------
+   The model selector of both AI integration levels. A control the section
+   renders itself rather than a native `<select>`, because a provider may offer
+   hundreds of models and a native one offers no way to reach a model but
+   scrolling.
+
+   The open panel carries `.menu`, which is what makes it an opaque elevated
+   surface — the same one every other dropdown in the application floats on.
+   Without it the panel would sit transparently over the rows beneath. */
+.fsel { position: relative; }
+/* The resting control reads as the field it replaces, so a row of inputs and
+   selectors lines up. `.input` supplies the box; this adds the value/caret
+   split a select needs. */
+.fsel__trigger {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-2); text-align: left; cursor: pointer;
+}
+.fsel__trigger:disabled { cursor: default; color: var(--fg-4); }
+.fsel__value {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fsel__value--placeholder { color: var(--fg-4); }
+.fsel__caret { flex: none; color: var(--fg-3); font-size: var(--fs-ui-2xs); }
+.fsel__menu {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 200;
+}
+/* AII-FR-36: the filter is the topmost row, above the options. */
+.fsel__filter { padding-bottom: var(--sp-1); }
+/* AII-FR-36: hundreds of options scroll vertically and never horizontally —
+   a long model id truncates instead, so the panel keeps the field's width. */
+.fsel__list { max-height: 260px; overflow-y: auto; overflow-x: hidden; }
+.fsel__option {
+  display: flex; align-items: center;
+  height: 26px; padding: 0 var(--sp-2);
+  font-size: var(--fs-ui-sm); color: var(--fg-1);
+  border-radius: var(--r-xs); cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* The highlight is one thing whether the mouse or the arrow keys moved it,
+   so the two never disagree about which row is about to be committed. */
+.fsel__option[data-highlighted="true"] { background: var(--bg-active); }
+.fsel__option[data-selected="true"] { font-weight: 600; }
+/* An option the caller marked unavailable: shown so the author can see it
+   exists, greyed so it reads as unavailable before it is tried, and carrying
+   the reason at its trailing edge. */
+.fsel__option--off { color: var(--fg-4); cursor: default; }
+.fsel__option--off[data-highlighted="true"] { background: transparent; }
+.fsel__option-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fsel__option-hint {
+  margin-left: auto; padding-left: var(--sp-2);
+  font-size: var(--fs-ui-xs); color: var(--fg-4); flex: none;
+}
+/* AII-FR-39: a first-class row, not an empty panel. */
+.fsel__empty {
+  padding: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-ui-sm); color: var(--fg-3);
+}
+/* AII-FR-38: what the filter is showing out of what the record carries. */
+.fsel__count {
+  margin-top: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2) 0;
+  border-top: 1px solid var(--border-1);
+  font-size: var(--fs-ui-xs); color: var(--fg-3);
+}
+
+/* ---------- Draft change review (DCR-draft-change-review.md) ---------- */
+
+/* DCR-FR-01: the review's own scrim, anchored to the New Artifact tab rather
+   than to the window. `position: absolute` against `.draft-workspace`, so what
+   is dimmed is the tab the proposal is about and the shell around it — the
+   activity rail, the panels, the tab strip — stays lit and usable. The window's
+   modals (`.scrim`) are fixed because what they interrupt is the whole
+   application; this one interrupts one tab, and opens itself in it.
+
+   For the same reason it sits on the *tab* modal layer rather than the window's
+   (`--z-tab-modal` < `--z-overlay`): `.draft-workspace` is a positioning
+   context and not a stacking one, so this scrim's z-index competes with the
+   shell's own, and on the window's modal layer it painted over the chrome's
+   dropdowns — a roster opened from a control the scrim does not cover, drawn
+   underneath it. A tab's modal dims the tab and outranks nothing the shell
+   floats above it. */
+.draft-review-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-tab-modal);
+  background: rgba(8, 9, 13, 0.55);
+  /* Flex rather than the centred grid the window's `.scrim` uses, and the
+     margin as padding here rather than as arithmetic on the modal. A grid track
+     under `place-items: center` is sized by its item's max-content — so the
+     modal's own `width` would grow the track past the tab and a percentage
+     bound on the modal would then resolve against the *track* and clamp
+     nothing, letting it hang over the tab's trailing edge on a narrow window.
+     A flex item shrinks to its container instead. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-2);
+  animation: scrim-in 120ms var(--ease-out);
+}
+
+/* DCR-FR-01 wireframe: three bands — a head, a scrolling body, and a foot whose
+   controls stay reachable without scrolling a long comparison to its end. Wider
+   and taller than the chooser modal beside it because what it holds is a diff,
+   and bounded against the *tab* it sits in, so the tab's own chrome stays
+   visible around it however narrow the surface has been made. */
+.draft-review {
+  display: flex;
+  flex-direction: column;
+  width: 900px;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.draft-review__head {
+  flex: none;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-1);
+}
+
+.draft-review__title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--fg-2);
+}
+
+.draft-review__path {
+  font-family: var(--font-source-family);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+}
+
+.draft-review__by {
+  flex: 1;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+}
+
+.draft-review__dismiss {
+  display: inline-flex;
+  flex: none;
+  padding: 0;
+  color: var(--fg-3);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.draft-review__dismiss:hover { color: var(--fg-1); }
+
+/* DCR-FR-04: the role the agent proposed under, below the name it qualifies and
+   above the rationale — the recession, and the one-line clip, a comment surface
+   gives it (CMT-FR-77). Rendered only for a non-empty snapshot, so the head
+   reserves no height for one that is absent. */
+.draft-review__agent-title {
+  margin-top: 2px;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* DCR-FR-04: the agent's rationale as prose, across the modal's full measure
+   and set a step above the chrome around it — it is the one thing in the head
+   the author has to read rather than glance at, and the reason the comparison
+   below it looks the way it does. Bounded in height so a long one still cannot
+   push the comparison out of view. */
+.draft-review__rationale {
+  margin: var(--sp-1) 0 0;
+  max-height: 4.5em;
+  overflow-y: auto;
+  font-size: var(--fs-ui-title);
+  color: var(--fg-2);
+}
+
+/* The only region that scrolls (DCR-FR-01 layout notes).
+
+   DCR-FR-07: one flat field under the comparison, in every mode. What each mode
+   SHOWS is DFV's and is rendered here unchanged — the marking, the gutters, the
+   pairing, the page's measure and its padding. What is dropped is the framing
+   the comparison brings with it: `.diff`'s border, corners and recessed fill,
+   and the Rich page's edge, elevation and field. Every one of those is drawn
+   for a comparison sitting inside a padded tab body with the tab's own surface
+   showing around it. The modal gives them no such margin — the comparison is
+   its whole middle band — so the frame lands a pixel in from the modal's own
+   edge and reads as a seam rather than as an edge of anything, and the field
+   behind it reads as a band of another colour ringing the diff. */
+.draft-review__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-canvas);
+}
+
+/* Rich is not the exception it is in a Diff tab: DFV-FR-38's recessed field is
+   one of the framings dropped here, so the page sits on the same flat surface
+   every other mode does. */
+.draft-review__body[data-page="on"] { background: var(--bg-canvas); }
+
+/* Transparent rather than the canvas, because each of these layers over the
+   body's own field and nothing shows through it but that field. */
+.draft-review__body .diff,
+.draft-review__body .diff-rich--page,
+.draft-review__body .diff-rich--split,
+.draft-review__body .diff-rich--split .diff-sbs__heading,
+/* The two sheets Side-by-side paints behind its rows. */
+.draft-review__body .diff-rich--split .diff-sbs__scroll::before,
+.draft-review__body .diff-rich--split .diff-sbs__scroll::after {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Opaque, though — these two mask a grid whose gaps ARE the rule between the
+   panes (`.diff-sbs__row` and `.diff-sbs__heading` are `--border-1` showing
+   through a 1px gap). Made transparent they would let that fill the row and
+   turn the whole comparison the colour of a border. */
+.draft-review__body .diff-sbs__cell,
+.draft-review__body .diff-sbs__pane {
+  background: var(--bg-canvas);
+}
+
+.draft-review__foot {
+  flex: none;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--border-1);
+  background: var(--bg-panel);
+}
+
+/* DCR-FR-11: the two decisions first and centred — they are what the foot is
+   for — with the optional feedback stacked beneath them. */
+.draft-review__controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+/* DCR-FR-11: quiet until it is used. The field is optional, and a wide well
+   with a hard edge sitting under the decision reads as something that has to be
+   filled in before the decision can be made. So: a narrow measure centred under
+   the controls, one line tall, no fill of its own, and a hairline that only
+   states where the text will go — the field asserts itself on focus and not
+   before. */
+.draft-review__feedback {
+  /* No global box-sizing reset in this project — see `.input`. Without it the
+     border and the padding would put the field wider than the measure below and
+     the height cap would exclude its own padding. */
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 420px;
+  min-width: 0;
+  margin: 0 auto;
+  display: block;
+  /* Height is set from the content by the component, up to the cap below —
+     four lines of text plus the padding and the hairline, after which the field
+     stops growing and scrolls. `resize` is off because the height is no longer
+     the author's to set: a dragged height would be overwritten on the next
+     keystroke. */
+  max-height: calc(var(--lh-snug) * 4em + 9px);
+  overflow-y: auto;
+  resize: none;
+  /* Barely inset: with no side edges to sit inside, padding here only pushes the
+     text off the start of the rule it is written on. */
+  padding: 4px 2px;
+  font: inherit;
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-snug);
+  color: var(--fg-1);
+  background: transparent;
+  /* A single rule to write on rather than a box: the field is optional, and a
+     boxed one reads as something to fill in. The rule itself is the kit's own
+     field ladder (`.input` rests on `--border-2` and hovers to `--border-3`)
+     rather than a step lighter: with no fill behind it this hairline is the
+     whole of the affordance, and a lighter one all but disappears against the
+     foot in dark. */
+  border: 0;
+  border-bottom: 1px solid var(--border-2);
+  border-radius: 0;
+  transition: border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.draft-review__feedback::placeholder { color: var(--fg-4); }
+.draft-review__feedback:hover { border-bottom-color: var(--border-3); }
+.draft-review__feedback:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+  /* The focus ring the rest of the kit uses is a rounded rect — the three edges
+     this field doesn't have. An inset shadow on the one edge it does doubles the
+     rule to 2px instead, which is a visible focus indicator that costs no
+     layout: an actual 2px border would shift the text up by a pixel. */
+  box-shadow: inset 0 -1px 0 var(--accent);
+}
+.draft-review__feedback:disabled { color: var(--fg-3); }
+
+.draft-review__actions {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  /* Wider than the kit's usual button gap on purpose: these two controls are
+     opposites, both irreversible, and adjacent targets. The space between them
+     is what stops a slipped click from deciding the other way. */
+  gap: var(--sp-4);
+}
+
+.draft-review__decided {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-2);
+}
+
+.draft-review__warning,
+.draft-review__error {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-ui-xs);
+}
+
+.draft-review__warning { color: var(--warn); }
+.draft-review__error { color: var(--danger); }
+
+/* DCR-FR-27: the one line that says which of the two things has happened. It
+   sits with the refusals rather than with the write state on the toggle row,
+   because "candidate saved" and "your draft has not changed" answer different
+   questions and must never be read as one sentence. */
+.draft-review__edited {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+}
+
+/* DCR-FR-29: the conflict, with its two resolutions side by side. Neither is
+   the primary: the surface does not choose for the author which candidate
+   survives. */
+.draft-review__conflict {
+  margin: 0 0 var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--warn);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+}
+.draft-review__conflict p { margin: 0 0 var(--sp-2); }
+.draft-review__conflict-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+/* CMT-FR-48: a proposal reference renders as a control rather than a preview.
+   Shaped like the chip beside it so a comment's attachments read as one row,
+   and marked by state so a decided one is legible at a glance. */
+.comment-attach__proposal {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  max-width: 100%;
+  padding: 2px var(--sp-1);
+  overflow: hidden;
+  font: inherit;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-2);
+  text-align: left;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+/*
+ * CMT-FR-71: the control names the draft's prompt in every state it renders in,
+ * so within the rail's measure the state word yields rather than the name.
+ * `.comment-attach__chip-type` holds its width because a chip's is a media type
+ * — two words beside a filename — while this one is a sentence, and a sentence
+ * that will not shrink squeezes the path down to its first few characters and
+ * leaves the control naming nothing.
+ */
+.comment-attach__proposal .comment-attach__chip-type {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* DCR-FR-HVXK: what the proposal changes, and where it is read. Both are words
+   rather than a colour, so the summary is legible in either theme and without
+   colour discrimination. */
+.comment-attach__proposal-count {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-src-2xs);
+  color: var(--fg-3);
+}
+.comment-attach__proposal-route {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+}
+/* The card of a standing proposal is marked by the live rail the mock draws,
+   which is the same signal the tab's own marker carries. */
+.comment-attach__proposal[data-state="pending"] { border-left: 2px solid var(--live); }
+
+.comment-attach__proposal:hover:not(:disabled) { color: var(--fg-1); }
+.comment-attach__proposal:disabled { color: var(--fg-3); cursor: default; }
+.comment-attach__proposal[data-state="pending"] { border-color: var(--border-1); border-left-color: var(--live); }
+
+/* NAW-FR-35 / DCR-FR-03: the tab's pending marker, beside the archived one. */
+.draft-workspace__proposal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px var(--sp-1);
+  color: var(--fg-2);
+  background: none;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.draft-workspace__proposal:hover { color: var(--fg-1); }
+
+/* DRP-FR-19: a draft awaiting a decision, on its row in the Drafts panel. Told
+   apart from the build indicator beside it — a build in flight is work
+   happening, a proposal pending is work waiting. */
+.draft-row__proposal {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--fg-2);
+}
+

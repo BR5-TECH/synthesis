@@ -1,0 +1,319 @@
+/* Where the author answers a discussion agent that asked several things at once
+   (`../../../specifications/ui/DQA-discussion-question-answering.md`).
+
+   The block sits between the conversation's message list and its composer,
+   inside whichever surface renders the discussion. It is no floating overlay and
+   no modal (DQA-FR-CKYP), so it takes part in the panel's own layout and the
+   rest of the window stays operable while it stands.
+
+   The tokens are the application's own throughout, so every text keeps its
+   contrast against the theme in each of its three settings (DQA-FR-VNKQ,
+   GLS-FR-04). */
+
+/* DQA-FR-RDPU: set on the measure of the conversation it stands in, and centred
+   within its surface rather than filled to that surface's width.
+
+   The block takes that measure by **filling the conversation card it is already
+   inside**, rather than by declaring one. Every presentation puts that card on
+   its own measure and centres it — the draft's column on DDS-FR-HGMB's, the rail
+   and the overlay on theirs — so one rule follows all five, and the block and
+   the messages above it stand in one rail wherever the discussion is read. */
+.discussion-questions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  box-sizing: border-box;
+  width: 100%;
+  margin: var(--sp-2) 0;
+}
+
+.discussion-questions__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+/* DQA-FR-PDLN: the agent that asked, and its recorded title where it carries
+   one. The handle leads because it is what the author addressed. */
+.discussion-questions__asker {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.discussion-questions__handle {
+  font-size: var(--fs-ui-md);
+  font-weight: 600;
+  color: var(--fg-1);
+}
+.discussion-questions__title {
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-3);
+  margin-left: var(--sp-1);
+}
+/* DQA-FR-MJPV: which question of how many, and how many still need an answer.
+   A structural count rather than reading matter, so it is the quietest thing in
+   the head — and still a step above a caption, because a disabled Submit is
+   explained here and nowhere else. */
+.discussion-questions__progress {
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-snug);
+  color: var(--fg-3);
+  margin-left: auto;
+}
+
+/* DQA-FR-VNKQ: the question area carries a background of its own, distinct from
+   the surface behind it and white in neither theme, so the thing being asked
+   reads as a region rather than as more of the conversation. */
+.discussion-questions__question {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  /* The answer rows stand directly against each other — the group is one
+     question's answers, and any space between them reads as several things
+     rather than as one choice. What separates the question from the group is
+     the legend's own margin below, so this does not pull the question down onto
+     them. */
+  gap: 0;
+}
+/* The fieldset takes focus when a page turns (DQA-FR-TFCE), so it must show it
+   — but only from the keyboard, a click on a control inside it having moved
+   nothing. */
+.discussion-questions__question:focus { outline: none; }
+.discussion-questions__question:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* The answer rows and the note, as one group. It adds no box of its own: a
+   presentation that draws the group as a card styles this element, and every
+   other one renders exactly as it did before the wrapper existed. */
+.discussion-questions__group { display: contents; }
+
+/* DQA-FR-XQOR: the recorded question text. It is the thing being asked, so it
+   is the largest text in the block. */
+.discussion-questions__ask {
+  padding: 0;
+  font-size: var(--fs-ui-title);
+  line-height: var(--lh-normal);
+  color: var(--fg-1);
+  margin-bottom: var(--sp-2);
+}
+
+/* DQA-FR-QWTB, DQA-FR-FCZL: the recorded options and the own answer as rows of
+   one answer group.
+
+   A row is `--ctl-h-sm` tall — the kit's own dense row — and the whole label is
+   the target, so a short row is still a large one to hit. */
+.discussion-questions__choice {
+  display: flex;
+  /* An option is a short phrase on one line, so the mark and the words sit on
+     one centre line and the row is as tall as its text and no taller. */
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 3px var(--sp-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.discussion-questions__choice:hover { background: var(--bg-hover); }
+/* DQA-FR-EWLB: the selected state is never colour alone — the radio's own mark
+   carries it first, and this fill is the second telling of it.
+
+   A fill and no outline. An accent rule around the chosen row is the loudest
+   thing in the block, and it competes with the question above it for a state
+   the radio has already stated; the fill says the same thing quietly. */
+.discussion-questions__choice[data-selected="true"] {
+  background: var(--bg-active);
+}
+.discussion-questions__option {
+  font-size: var(--fs-ui-md);
+  line-height: var(--lh-normal);
+  color: var(--fg-1);
+}
+.discussion-questions__choice > input[type="radio"],
+.discussion-questions__own-head > input[type="radio"] {
+  margin: 0;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+/* An option long enough to wrap reads from its first line, so the mark goes
+   back to the top rather than floating beside the middle of a paragraph. */
+.discussion-questions__option {
+  min-width: 0;
+}
+
+/* DQA-FR-FCZL: the own-answer row reads down rather than across — the choice on
+   one line, the field beneath it. Its label wraps the radio and its words and
+   stops there, so nothing the author types becomes part of the name the row
+   announces itself by. */
+.discussion-questions__choice--own {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  cursor: auto;
+  padding: 0 var(--sp-2);
+}
+.discussion-questions__own-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 3px 0;
+  cursor: pointer;
+}
+/* The writing starts under the words of the row it belongs to rather than under
+   its mark. Taken as padding rather than as a margin, so the rule the field is
+   written on still runs the width of the row: a textarea does not stretch to a
+   flex line the way a block does, and a margin left it at its own `cols` width. */
+.discussion-questions__typed {
+  margin: 0;
+  /* One inline declaration rather than a `padding-left` beside the shared rule's
+     `padding-inline`: the two name the same edge in this writing mode, and the
+     logical one would win on source order and flatten the indent to nothing. */
+  padding-inline: calc(var(--sp-2) + var(--fs-ui-md)) var(--sp-2);
+  font-size: var(--fs-ui-md);
+}
+
+/* DQA-FR-ROXG, DQA-FR-JJON: the note of this question's own, below the answer
+   rows and offered only beside a chosen option.
+
+   The kit's own optional field: a rule to write on rather than a box, taking the
+   background it is written against. Nothing opens it and nothing labels it — the
+   placeholder is the whole of what says it is there and what it is for, which is
+   what keeps it from reading as a form to fill in. A filled box here would be
+   the brightest thing in the block, above the question it belongs to.
+   `.draft-review__feedback` carries the rest of it.
+
+   It stands clear of the answer rows rather than among them, which is what says
+   a note is not an answer (DQA-FR-UAKC): everything in the group above is
+   something the author can choose, and this is not. */
+.discussion-questions__note-field,
+.discussion-questions__typed {
+  max-width: none;
+  /* The kit sets this field's rule for a panel background. On the question
+     area's own field it all but disappears, and the placeholder is then the only
+     thing saying there is somewhere to write, so the rule is taken one step up
+     the same ladder (`.input` hovers to this) to stay visible unfocused. */
+  border-bottom-color: var(--border-3);
+}
+.discussion-questions__note-field {
+  margin-top: var(--sp-2);
+  margin-inline: 0;
+  /* The writing starts in the same column as the words of the rows above it —
+     past the row's own inset, the mark, and the gap after it — so everything in
+     the block that is text reads down one edge. The field itself still spans the
+     whole content width, so the rule it is written on runs the width of the rows
+     rather than starting under them. */
+  padding-inline: calc(var(--sp-2) * 2 + var(--fs-ui-md)) var(--sp-2);
+  font-size: var(--fs-ui-md);
+}
+
+/* DQA-FR-WKTP: the typed refusal, inline at the foot of the block. */
+.discussion-questions__error {
+  margin: 0;
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-normal);
+  color: var(--danger);
+}
+
+.discussion-questions__foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+/* ACT-FR-20: the draft workspace floats its action control — the Draft actions
+   toggle and the discussions control beside it — over the bottom-trailing corner
+   of its body, above everything in the column. Submit is at this block's
+   trailing end, and without a reservation it lands underneath the control and
+   cannot be clicked at all (DQA-FR-EWLB).
+
+   The clearance is taken **below** the block rather than inside it. The composer
+   that normally stands here is one field, and it holds itself clear by insetting
+   its trailing end (`../components/draft-discussion.css`); this block is a whole
+   question and cannot be narrowed the same way without moving every edge in it
+   off the measure, so it stands above the control's line instead — which is the
+   same rule the composer's foot follows, read the other way round.
+
+   While a set stands, the composer is one line of text (DQA-FR-PXNC), so that
+   line is what the control's corner falls on. Measured against the control
+   rather than guessed: the toggle is `--draft-actions-size` square and inset
+   from the frame by `--sp-4`. */
+.draft-workspace .discussion-questions__composer-note {
+  padding-bottom: calc(var(--draft-actions-size, 36px) + var(--sp-4));
+}
+/* The position indicator. Decorative — the head already states the position in
+   words (DQA-FR-MJPV), which is what carries it for a reader who cannot see
+   these. */
+.discussion-questions__dots {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.discussion-questions__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border-1);
+}
+.discussion-questions__dot[data-answered="true"] { background: var(--fg-3); }
+.discussion-questions__dot[data-current="true"] {
+  background: var(--accent);
+  transform: scale(1.35);
+}
+
+/* DQA-FR-PXNC: the composer below the block, disabled with one line saying why.
+   It states nothing about the agent, about a turn, or about how long an answer
+   has been owed. */
+.discussion-questions__composer-note {
+  margin: var(--sp-2) 0 0;
+  box-sizing: border-box;
+  width: 100%;
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-normal);
+  color: var(--fg-3);
+}
+
+/* DQA-FR-FBWO: a submitted question and the answer immediately after it render
+   as **one history entry** — the question and its options above, the answer
+   below, with a single rule between the two halves rather than as two stacked
+   cards.
+
+   DQA-FR-TSJD: presentation and nothing else. No stored relation joins the two
+   comments and neither body is rewritten; a surface that dropped these rules
+   would draw two ordinary comments and lose only the grouping. */
+.comment[data-pair="question"] {
+  border: 1px solid var(--border-1);
+  border-bottom: none;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  padding: var(--sp-2);
+  margin-bottom: 0;
+}
+.comment[data-pair="answer"] {
+  border: 1px solid var(--border-1);
+  border-top: none;
+  border-radius: 0 0 var(--r-md) var(--r-md);
+  padding: var(--sp-2);
+  margin-top: 0;
+}
+/* The one rule between the halves. Drawn on the answer so the two borders above
+   and below it cannot double up into a two-pixel line. */
+.comment[data-pair="answer"]::before {
+  content: "";
+  display: block;
+  height: 1px;
+  background: var(--border-1);
+  /* Back out the padding, so the rule spans the entry rather than the text. */
+  margin: 0 calc(var(--sp-2) * -1) var(--sp-2);
+}
+/* CVP-FR-32's own/other split puts a human answer on the trailing side, which
+   would break the entry in two. A pair is one exchange, so both halves read
+   from the same side. */
+.comment[data-pair="answer"][data-own="true"] {
+  align-self: stretch;
+  text-align: start;
+}

@@ -1,0 +1,619 @@
+/* ---------- Logs (LOG-logs.md) ---------- */
+/* LOG-FR-05: two control rows pinned above the list, which is the only region
+   that scrolls. The panel is a column so the list absorbs whatever height the
+   bottom panel was dragged to (SNV-FR-50). */
+.logs {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  outline: none;
+}
+.logs__controls {
+  flex: none;
+  border-bottom: 1px solid var(--border-1);
+}
+.logs__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+}
+.logs__row + .logs__row {
+  border-top: 1px solid var(--border-1);
+}
+.logs__label {
+  color: var(--fg-3);
+  font-size: var(--fs-ui-xs);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+}
+.logs__select {
+  height: var(--ctl-h-sm);
+  padding: 0 var(--sp-2);
+  color: var(--fg-1);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-ui-sm);
+  box-sizing: border-box;
+}
+.logs__check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--fg-2);
+  font-size: var(--fs-ui-sm);
+  user-select: none;
+  cursor: pointer;
+}
+/* Grows to the space the two flanking controls leave, rather than being given a
+   width — a width plus the input's own padding is the box-sizing trap. */
+.logs__search {
+  flex: 1;
+  min-width: 0;
+}
+.logs__error {
+  color: var(--log-error);
+  font-size: var(--fs-ui-sm);
+}
+
+/* LOG-FR-02: fixed columns, so messages start at one left edge down the whole
+   list and the eye can run it vertically. */
+.logs__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--sp-2) 0;
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-sm);
+  line-height: var(--lh-source-compact);
+}
+.logs__entry {
+  padding: 0 var(--sp-4);
+}
+/* The band marks the ROW, not the record. Painted on the entry it also filled
+   the gutter beside an expanded record — a selected record 300px tall rendered
+   as one solid slab of accent, most of it empty. The negative margin lets the
+   row still reach both edges of the panel, which is what a list selection has
+   to do; `--bg-active` is the tone every other selected row in the application
+   uses (`.tree-row[data-selected]`), rather than the text-selection token this
+   panel alone had reached for at nearly twice the alpha. */
+.logs__line {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: baseline;
+  cursor: pointer;
+  margin: 0 calc(var(--sp-4) * -1);
+  padding: 0 var(--sp-4);
+}
+.logs__entry[data-selected="true"] .logs__line {
+  background: var(--bg-active);
+}
+/* LOG-FR-03's colour channel, at the scale a reader actually scans: the two
+   levels worth finding in a wall of INFO carry a rail in their own colour, so
+   they are locatable without reading the level column down the list. DEBUG and
+   INFO carry none — a marker on the levels that make up most of a buffer marks
+   nothing. */
+.logs__entry[data-level="WARN"] .logs__line {
+  box-shadow: inset 2px 0 0 var(--log-warn);
+}
+.logs__entry[data-level="ERROR"] .logs__line {
+  box-shadow: inset 2px 0 0 var(--log-error);
+}
+/* 13ch rather than 12: `HH:MM:SS.mmm` is exactly 12 characters, and a column
+   sized to its content leaves the next one no headroom at all. `--fg-3` rather
+   than the dimmest step, because this is the column a reader correlates records
+   by — it has to be legible, not merely present. */
+.logs__ts {
+  flex: none;
+  width: 13ch;
+  color: var(--log-meta);
+}
+/* LOG-FR-03: the printed label carries the level; the colour is a second
+   channel rather than the only one. */
+.logs__lvl {
+  flex: none;
+  width: 6ch;
+  font-weight: var(--fw-semi);
+  color: var(--fg-2);
+}
+.logs__lvl[data-level="DEBUG"] {
+  color: var(--log-debug);
+}
+.logs__lvl[data-level="INFO"] {
+  color: var(--log-info);
+}
+.logs__lvl[data-level="WARN"] {
+  color: var(--log-warn);
+}
+.logs__lvl[data-level="ERROR"] {
+  color: var(--log-error);
+}
+/* Wide enough for every domain a record can carry —  `frontend·ai·backend·remote`
+   is 25 characters, and LOG-FR-02 says a record carrying several domains shows
+   ALL of them. A narrower column ellipsised exactly the multi-domain records
+   the column exists to distinguish; the extra character over the worst case is
+   headroom, so a longer domain name added later does not silently truncate. */
+.logs__domains {
+  flex: none;
+  width: 27ch;
+  color: var(--log-meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* No horizontal scrollbar: a long message wraps at the message column's left
+   edge instead. */
+.logs__msg {
+  flex: 1;
+  min-width: 0;
+  color: var(--fg-1);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* LOG-FR-04: the expanded record, indented to the message column and pushing
+   later rows down rather than overlaying them. */
+/* Indented to the message column, so the JSON reads as belonging to the row it
+   unfolded from rather than to the list. The offset is the three fixed columns
+   plus the three gaps that separate them. */
+.logs__json {
+  /* `inherit` is load-bearing, not tidiness: a bare <pre> takes the UA's own
+     monospace, and the `ch` offset below would then resolve against a different
+     advance width than the columns it aligns to. */
+  font-family: inherit;
+  margin: var(--sp-1) 0 var(--sp-2) calc(46ch + var(--sp-3) * 3);
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--fg-2);
+  background: var(--bg-sunken);
+  /* The hairline is what makes the block read as one under BOTH themes: in dark
+     `--bg-sunken` drops well below the panel and needs no help, while in light
+     it sits four steps from it and the block would otherwise have no edge at
+     all. */
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  /* No region of this panel scrolls horizontally (LOG layout notes): a long
+     value wraps inside the block rather than bringing its own scroller. */
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* LOG-FR-14: at the head of the list, so it scrolls away with the oldest
+   record it describes. */
+.logs__dropped {
+  margin: 0 var(--sp-4) var(--sp-2) var(--sp-4);
+  padding: var(--sp-1) var(--sp-3);
+  color: var(--fg-1);
+  background: var(--warn-soft);
+  border-radius: var(--r-sm);
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-xs);
+}
+/* LOG-FR-10: the pin's state has to be readable, and a ghost button carries no
+   active treatment of its own — the panel gives it one, plus `aria-pressed` in
+   the markup so the state is in both channels rather than in neither. */
+.logs__row .btn[data-active="true"] {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+/* LOG-FR-18: the two states read differently. The empty buffer is a designed
+   block; a list narrowed to nothing is a line inside the list's own region,
+   with every control left where the author set it. */
+.logs__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-10) var(--sp-4);
+  text-align: center;
+  font-family: var(--font-ui-family);
+}
+.logs__empty-line {
+  color: var(--fg-1);
+  font-size: var(--fs-ui-md);
+  font-weight: var(--fw-medium);
+}
+.logs__empty-body {
+  margin: 0;
+  max-width: 44ch;
+  color: var(--fg-3);
+  font-size: var(--fs-ui-sm);
+}
+.logs__message {
+  padding: var(--sp-4);
+  color: var(--fg-3);
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-sm);
+}
+
+/* A live region that carries an announcement to a screen reader without
+   occupying the layout — DRP-FR-28's "what has just happened and where the item
+   now sits". Not `display: none`, which assistive technology skips. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- PROJECT SETTINGS → DOCKER (SET-FR-21 … SET-FR-27) ----------
+   The section settles one thing per tab: which image an agent's work runs in.
+   It lives in a window fixed at 800 × 600 (SWN-FR-03) with a 200px nav beside
+   it, so every rule here is spending a height budget of about five hundred
+   pixels — which is why the type steps down to the caption sizes, the two
+   halves of an image reference share one frame, and the build output is given a
+   scroll region of its own instead of growing the section. */
+
+/* SET-FR-24: the one statement about the backend, and the route to where it is
+   configured. A strip rather than a sentence, because it qualifies every tab
+   below it rather than belonging to the tab in front. */
+.docker-backend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  box-sizing: border-box;
+  padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-3);
+  margin-bottom: var(--sp-3);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-ui-xs);
+}
+.docker-backend__state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--fg-2);
+}
+/* The state reads as a colour as well as a word: a section whose Build control
+   is disabled is most often disabled by this line. */
+.docker-backend__state::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fg-4);
+}
+.docker-backend__state[data-state="verified"]::before { background: var(--ok); }
+.docker-backend__state[data-state="unverified"]::before { background: var(--warn); }
+
+.docker-backend__link {
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  padding: 2px var(--sp-1);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.docker-backend__link:hover { text-decoration: underline; }
+.docker-backend__link:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* SET-FR-24: the tab graduation needs, marked without a word — the strip stays
+   three labels wide and the tab keeps the vendor's name as its whole
+   accessible name. */
+.docker-tab { position: relative; }
+/* Room for the mark, so it stands beside the label rather than on it. */
+.docker-tab[data-graduates="true"] { padding-right: calc(var(--sp-2) + 9px); }
+.docker-tab[data-graduates="true"]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: var(--sp-2);
+  width: 5px;
+  height: 5px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.docker-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-3);
+}
+/* "optional" belongs to the label without being shouted by it. */
+.docker-field__optional {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  color: var(--fg-4);
+}
+
+/* SET-FR-21: an image name and its tag are one reference, so they are one
+   frame joined by the colon that writes them — and the tag takes the width a
+   tag needs rather than a second full-width row. */
+.docker-ref {
+  display: flex;
+  align-items: stretch;
+  box-sizing: border-box;
+  height: var(--ctl-h-md);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  transition: border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out);
+}
+.docker-ref:hover { border-color: var(--border-3); }
+.docker-ref:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.docker-ref__name,
+.docker-ref__tag {
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+  background: none;
+  border: 0;
+  outline: none;
+  min-width: 0;
+  padding: 0 var(--sp-2);
+}
+.docker-ref__name { flex: 1 1 auto; }
+/* Wide enough for `latest`, a semantic version, or a short branch name, which
+   is every tag this project writes. */
+.docker-ref__tag { flex: 0 0 100px; width: 100px; padding-left: 0; }
+.docker-ref__name::placeholder,
+.docker-ref__tag::placeholder { color: var(--fg-4); }
+/* The colon is written against the tag, and a rule divides the two halves —
+   a colon floating in the gap between them joins nothing. */
+.docker-ref__sep {
+  display: flex;
+  align-items: center;
+  padding-left: var(--sp-2);
+  border-left: 1px solid var(--border-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-4);
+  user-select: none;
+}
+
+/* SET-FR-23: what the tab's configuration is worth. One line under the fields
+   it qualifies. */
+.docker-state {
+  margin: calc(-1 * var(--sp-2)) 0 var(--sp-3);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-normal);
+  color: var(--fg-3);
+}
+
+/* SET-FR-24: the tab graduation needs says so where the author is working. */
+.docker-graduates {
+  display: flex;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-3);
+  color: var(--fg-2);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-normal);
+}
+/* The same accent mark the tab wears, so the tab and the sentence explaining it
+   read as one statement. */
+.docker-graduates::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.docker-alert {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-normal);
+  color: var(--danger);
+}
+
+.docker-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+}
+.docker-actions__hint {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  min-width: 0;
+}
+
+/* SET-FR-26: the build's progress and its output. A region of its own, with a
+   height it cannot grow past — a Docker build writes a line per step and a line
+   per layer, and a section that grows with them pushes its own controls off a
+   window that cannot be resized. */
+.docker-build {
+  margin-top: var(--sp-3);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.docker-build__bar {
+  display: block;
+  width: 100%;
+  height: 3px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: var(--border-1);
+}
+.docker-build__bar::-webkit-progress-bar { background: transparent; }
+.docker-build__bar::-webkit-progress-value {
+  background: var(--accent);
+  transition: width var(--dur-fast) var(--ease-out);
+}
+.docker-build__bar::-moz-progress-bar { background: var(--accent); }
+/* No total reported yet: a sliver crosses the track until one is. */
+.docker-build__bar:indeterminate {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent) 50%,
+    transparent 100%
+  );
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: docker-build-sweep 1.1s linear infinite;
+}
+@keyframes docker-build-sweep {
+  from { background-position: -45% 0; }
+  to   { background-position: 145% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .docker-build__bar:indeterminate {
+    animation: none;
+    background-position: 30% 0;
+  }
+}
+.docker-build__log {
+  /* Seven whole lines. A region whose height is not a multiple of the line box
+     ends on a half-drawn line, which reads as a clipping bug rather than as
+     something to scroll. */
+  max-height: calc(7 * 1.55 * var(--fs-ui-xs) + 2 * var(--sp-2));
+  overflow-y: auto;
+  padding: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  line-height: 1.55;
+  color: var(--fg-2);
+}
+.docker-build__log:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--ring);
+}
+.docker-build__line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.docker-build__result {
+  margin: 0;
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--border-1);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-normal);
+  color: var(--fg-2);
+}
+.docker-build__result[data-outcome="succeeded"] { color: var(--ok); }
+.docker-build__result[data-outcome="failed"] { color: var(--danger); }
+.docker-build__result[data-outcome="cancelled"] { color: var(--fg-3); }
+
+/* GRU-FR-KRVD: restart provenance, directly under the run region's provenance
+   line and in the same register — a statement about where this run came from
+   rather than a control the state offers. */
+.graduation__restart-provenance {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 4px;
+}
+.graduation__restart-provenance p { margin: 0; }
+/* GRU-FR-KRVD: the route, which changes the selection alone. Drawn as text in
+   the line it stands in rather than as a button beside it, because it is a way
+   of reading the sentence on rather than a further act on the run. */
+.graduation__restart-route {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.graduation__restart-route:hover { color: var(--accent-hover); }
+
+/* ---------------------------------------------------------------------------
+   Draft information (`specifications/ui/DFI-draft-information.md`)
+
+   One scrollable column of labelled rows in three groups, in a fixed order. A
+   reading surface and nothing else: the only interactive element is the
+   dismissing control in the head, so nothing here has a hover, a focus ring, or
+   a pointer of its own.
+   --------------------------------------------------------------------------- */
+.draft-info .modal__body {
+  gap: 2px;
+  max-height: min(70vh, 620px);
+  overflow-y: auto;
+}
+.draft-info__row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 3px 0;
+}
+.draft-info__row--nested { padding-left: 14px; }
+.draft-info__label { color: var(--fg-2); flex: 1 1 auto; min-width: 0; }
+.draft-info__value {
+  color: var(--fg-1);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+/* DFI-FR-HSYB: a figure that was not captured is stated rather than shown as a
+   number, so it is set apart from one that is a figure. */
+.draft-info__value--absent { color: var(--fg-3); font-style: italic; }
+/* The two directions of a reported token figure, aligned in their own columns
+   so a bucket's input and output read down the modal rather than across it. */
+.draft-info__pair {
+  display: inline-grid;
+  grid-template-columns: minmax(84px, auto) minmax(84px, auto);
+  gap: 12px;
+  justify-items: end;
+}
+.draft-info__partial { color: var(--warn); display: inline-flex; }
+.draft-info__group {
+  color: var(--fg-1);
+  font-weight: 600;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-1);
+}
+.draft-info__footer {
+  color: var(--fg-3);
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-1);
+}
+.draft-info__failure {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--fg-2);
+}
+
+
+/* DFI-FR-BZQN: the publication group's own rows — one record per block, each
+   naming the repository and issue, when it was published, and its marker. */
+.draft-info__subgroup { color: var(--fg-2); margin-top: 8px; }
+.draft-info__publication {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0 4px 12px;
+  color: var(--fg-2);
+}
+/* DFI-FR-WQLE: the record's one control. It leaves the application, so it is
+   marked as a link rather than as an action inside the modal. */
+.draft-info__publication-issue {
+  align-self: flex-start;
+  padding: 0;
+  color: var(--accent);
+}

@@ -1,0 +1,7 @@
+id = "19ff76333c8-0011-dd59e376"
+scope = "project"
+body = """
+When reply is recevied in comments/discussions - we should be scrolling down to the bottom of the thread.
+Same should be happening when changing the presentation mode for a discussion."""
+created_at = "2026-08-12T19:11:41Z"
+updated_at = "2026-08-13T17:22:24Z"

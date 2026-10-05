@@ -1,0 +1,5 @@
+id = "1a001838beb-0041-d5d30875"
+scope = "project"
+body = "AGC-FR-07 is stale after graduation. It still resolves a draft's artifact type against \"its destination root joined with its draft-relative path (per DRS-FR-07)\" — and DRS-FR-07 no longer gives a draft a destination root of any kind, which was the point of the change: the graduation agent chooses where the specification goes from the captured prompt (GRD-FR-22). The implementation now falls back to the resolver's content tiebreak, so a prompt declaring `type:` in its frontmatter names that type and one declaring nothing names none rather than a guessed one. That is the only honest answer left, but AGC-agent-conversations.md has not been updated to say so — it was not in the graduation handoff and needs an analyst pass."
+created_at = "2026-08-14T18:23:13Z"
+updated_at = "2026-08-14T18:23:13Z"

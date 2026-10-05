@@ -1,0 +1,23 @@
+/* ABT-FR-QZHW: the About panel keeps the shared modal frame; only its content
+   needs rules. It is narrower than the default modal so it sits comfortably
+   inside the fixed Project picker window. */
+.modal.about-panel { width: 360px; }
+.about-panel__description {
+  margin: 0;
+  font-size: var(--fs-ui-md);
+  color: var(--fg-1);
+}
+.about-panel__link {
+  align-self: flex-start;
+  font: inherit;
+  color: var(--accent);
+  border-radius: var(--r-sm);
+  padding: 2px var(--sp-1);
+  margin-left: calc(var(--sp-1) * -1);
+  cursor: pointer;
+}
+.about-panel__link:hover { text-decoration: underline; }
+.about-panel__link:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}

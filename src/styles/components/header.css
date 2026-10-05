@@ -1,0 +1,690 @@
+/* ============================================================
+   SYNTHESIS — components.css
+   Reusable patterns: buttons, inputs, tabs, badges, chips, kbd,
+   tree rows, panels, menus, toggles, code/diff blocks.
+   Depends on colors_and_type.css.
+   ============================================================ */
+
+/* ACT-FR-03 / ACT-FR-09: the diameter of the collapsed action control, and how
+   much field it needs beside a page to sit clear of it — its own gutter against
+   the frame, its diameter, and a gap before the page begins.
+   Declared at the root because EVERY tab carries the control (ACT-FR-01), and
+   the dock's size, the menu's offset, the composer's offset and the panel's
+   offset are all measured from it. Scoped to one host, every other tab resolves
+   it to nothing and each calc() built on it silently becomes `auto` — a squashed
+   toggle, and a menu laid out at the top of the tab over the toolbar. */
+:root {
+  --draft-actions-size: 36px;
+  --draft-actions-clear: calc(
+    var(--sp-4) + var(--draft-actions-size) + var(--sp-2)
+  );
+}
+
+/* ---------- BUTTONS ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  font-family: var(--font-sans);
+  font-size: var(--fs-ui-md);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  padding: 0 var(--sp-3);
+  height: var(--ctl-h-md);
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg-1);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out);
+  user-select: none;
+  white-space: nowrap;
+}
+.btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+
+/* Primary — solid accent, for confirm/commit */
+.btn--primary {
+  background: var(--accent); color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.btn--primary:hover  { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn--primary:active { background: var(--accent-press); border-color: var(--accent-press); }
+
+/* Default — bordered, neutral */
+.btn--default {
+  background: var(--bg-canvas);
+  border-color: var(--border-2);
+  color: var(--fg-1);
+}
+.btn--default:hover  { border-color: var(--border-3); background: var(--bg-hover); }
+.btn--default:active { background: var(--bg-active); }
+
+/* Ghost — no border, panel/menu inline use */
+.btn--ghost { color: var(--fg-2); }
+.btn--ghost:hover  { background: var(--bg-hover); color: var(--fg-1); }
+.btn--ghost:active { background: var(--bg-active); }
+
+/* Danger — for stop run, discard changes */
+.btn--danger { color: var(--danger); border-color: var(--border-2); background: var(--bg-canvas); }
+.btn--danger:hover { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
+
+/* Sizes */
+.btn--sm { height: var(--ctl-h-sm); padding: 0 var(--sp-2); font-size: var(--fs-ui-sm); }
+.btn--lg { height: var(--ctl-h-xl); padding: 0 var(--sp-4); font-size: var(--fs-ui-md); }
+
+/* A ghost button that starts a block of text rather than sitting in a row of
+   controls: its own horizontal padding is pulled back so the label lines up
+   with the prose above it. Without this the button has no visible border to
+   explain why its text is inset from everything else in the card. */
+.btn--inline-start { margin-left: calc(-1 * var(--sp-2)); }
+
+.btn--icon { width: 28px; padding: 0; justify-content: center; }
+.btn--icon.btn--sm { width: 24px; }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* ---------- INPUTS ---------- */
+.input, .textarea {
+  font-family: var(--font-sans);
+  font-size: var(--fs-ui-md);
+  line-height: var(--lh-normal);
+  color: var(--fg-1);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  padding: 0 var(--sp-3);
+  height: var(--ctl-h-lg);
+  width: 100%;
+  /* There is no global box-sizing reset in this project — it is declared per
+     rule — so this one is load-bearing. Without it `width: 100%` resolves to
+     the container's content width and the horizontal padding and border are
+     added on top, pushing the field 26px past the edge of whatever holds it.
+     A field inside a row flex container escapes this (its flex basis is
+     resolved instead), which is why the overflow only shows on fields laid out
+     in a column: the Branch field of the New worktree dialog, and the Name
+     field of the New artifact modal. */
+  box-sizing: border-box;
+  transition: border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out);
+}
+.textarea { height: auto; padding: var(--sp-2) var(--sp-3); resize: vertical; min-height: 72px; }
+.input::placeholder, .textarea::placeholder { color: var(--fg-4); }
+.input:hover, .textarea:hover { border-color: var(--border-3); }
+.input:focus, .textarea:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.input--mono { font-family: var(--font-mono); font-size: var(--fs-ui-sm); }
+/* Compact field, for a rename that happens inside a 24px row rather than in a
+   form: the same chrome as `.input` at the height the row actually has. */
+.input--sm { height: var(--ctl-h-sm); padding: 0 var(--sp-2); font-size: var(--fs-ui-sm); }
+
+/* ---------- SELECT ----------
+   A native `<select>` wearing the same chrome as `.input`, so the two read as
+   one control family wherever a surface offers both. `appearance: none` is what
+   removes the platform's own chrome; the caret is drawn here instead, which is
+   why the right padding is larger than the left. */
+.select {
+  font-family: var(--font-sans);
+  font-size: var(--fs-ui-md);
+  line-height: var(--lh-normal);
+  color: var(--fg-1);
+  background-color: var(--bg-canvas);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  padding: 0 var(--sp-6) 0 var(--sp-2);
+  height: var(--ctl-h-lg);
+  box-sizing: border-box;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  /* The caret, as a data URI so the rule stays self-contained and no request is
+     made for it. `currentColor` cannot reach an SVG loaded this way, so the
+     stroke is the muted foreground both themes resolve close to. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239A958B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--sp-2) center;
+  transition: border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out);
+}
+.select:hover { border-color: var(--border-3); }
+.select:focus-visible {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.select[disabled] { opacity: 0.45; cursor: not-allowed; }
+.select--sm { height: var(--ctl-h-sm); font-size: var(--fs-ui-sm); padding-right: var(--sp-5); }
+
+/* ---------- ICON BUTTON ----------
+   The bare glyph affordance a dense row carries — a row's `[⋯]`, a rail's `+`.
+   Distinct from `.btn--icon` in that it takes no border and no height from the
+   button scale: it sits inside a row and must not set that row's height. */
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--ctl-sq); height: var(--ctl-sq);
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--fg-3);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out);
+}
+.icon-btn:hover { background: var(--bg-hover); color: var(--fg-1); }
+.icon-btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.icon-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.icon-btn--xs { width: 18px; height: 18px; font-size: var(--fs-ui-sm); }
+
+/* Search input (top chrome) — slightly different chrome */
+.search-input {
+  display: flex; align-items: center; gap: var(--sp-2);
+  height: var(--ctl-h-md); padding: 0 var(--sp-3);
+  background: var(--bg-sunken);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--fg-2);
+  width: 100%;
+  box-sizing: border-box;
+}
+.search-input:hover { border-color: var(--border-2); }
+.search-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); background: var(--bg-canvas); }
+.search-input input { all: unset; flex: 1; font-size: var(--fs-ui-sm); color: var(--fg-1); }
+
+/* SCH-FR-12: the three query-mode toggles, inside the input at its leading
+   edge, ahead of the text caret. Same size class as the other top-chrome
+   controls, and reachable by keyboard from the input. */
+.search-input__modes { display: inline-flex; align-items: center; gap: 2px; }
+.search-input__mode {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 20px; padding: 0 4px;
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono); font-size: var(--fs-ui-xs); line-height: 1;
+  color: var(--fg-3);
+  cursor: pointer;
+  /* Anchors the tooltip below. */
+  position: relative;
+}
+
+/* SCH-FR-12: the toggles are two glyphs a character apart (`Aa` / `aA`), so
+   what each one does has to be readable somewhere. Shown on hover AND on
+   keyboard focus, since the toggles are reachable from the input. */
+.search-input__tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: var(--z-overlay);
+  display: none;
+  width: max-content; max-width: 260px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-4);
+  color: var(--fg-2);
+  font-family: var(--font-sans);
+  font-size: var(--fs-ui-xs); font-weight: 400; line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+}
+.search-input__tip strong {
+  display: block;
+  color: var(--fg-1);
+  font-weight: 600;
+}
+.search-input__mode:hover .search-input__tip,
+.search-input__mode:focus-visible .search-input__tip { display: block; }
+.search-input__mode:hover { background: var(--bg-active); color: var(--fg-2); }
+.search-input__mode[data-active="true"] {
+  background: var(--bg-active);
+  color: var(--accent);
+  font-weight: 600;
+}
+.search-input__mode:focus-visible { box-shadow: 0 0 0 2px var(--ring); }
+
+/* ---------- TABS (main viewport) ---------- */
+.tabstrip {
+  display: flex; align-items: stretch;
+  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--border-1);
+  height: 34px;
+  /* TAB-FR-27: one row, never wrapped. The strip itself does not scroll —
+     the region below does — so the Home affordance at its head stays put
+     (TAB-FR-29). */
+  overflow: hidden;
+}
+/* TAB-FR-27 / TAB-FR-28: the scrolling region.
+   Holds the tabs and nothing else. `overflow-x: scroll` rather than `auto` so
+   the scroll position is always addressable, with the scrollbar itself hidden
+   in all three engines: no permanent bar, none on hover, and none during a
+   scroll. The wheel handler in TabStrip.tsx is what a pointer reaches the far
+   end with, since there is no bar left to drag. */
+.tabstrip__scroll {
+  display: flex; align-items: stretch;
+  flex: 1 1 auto; min-width: 0;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  scrollbar-width: none;              /* Firefox */
+  -ms-overflow-style: none;           /* legacy Edge */
+  overscroll-behavior-x: contain;
+}
+.tabstrip__scroll::-webkit-scrollbar { width: 0; height: 0; display: none; }
+/* The leading inset is the trailing one plus the narrow gutter the two reserved
+   marks are drawn in (`.tab__attention`, `.tab__pin`) — they are laid out of
+   flow, so an unmarked, unpinned tab reads as icon-then-label against its
+   leading edge rather than pushed a mark's width and two gaps inward. */
+.tab {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  padding: 0 var(--sp-3) 0 14px;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-2);
+  border-right: 1px solid var(--border-1);
+  background: transparent;
+  cursor: pointer;
+  flex: 0 0 auto;
+  max-width: 220px;
+  position: relative;
+}
+/* TAB-FR-27: a tab holds a legible width rather than shrinking without bound as
+   the strip fills — enough for the two reserved mark slots, a truncated label,
+   and a whole close control. Past that the region scrolls (TAB-FR-28) instead
+   of squeezing the twentieth tab into nothing.
+
+   Scoped to the scrolling region rather than set on `.tab` itself, because the
+   floor is about what a *tab* needs to stay readable and the Home affordance is
+   a control of the strip rather than a tab (per `SNV-shell-navigation.md`
+   SNV-FR-09): it carries an icon and nothing else, so a floor sized for a label
+   and a close control stretches it into a wide empty box. It sits outside this
+   region already (TAB-FR-29), which is exactly the line the rule wants. */
+.tabstrip__scroll > .tab { min-width: 96px; }
+/* TAB-FR-30: the strip takes one tab stop and the arrow keys move a ring across
+   it. The ring is drawn inset so it is not clipped by the scrolling region's
+   edge on the first and last tabs. */
+.tab:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+/* The active tab carries its own inset accent bar, and `box-shadow` replaces
+   rather than accumulates — at equal specificity the later active rule won and
+   the ring vanished on exactly the tab the strip's single tab stop lands on, so
+   a keyboard author saw no ring at all until they arrowed off it, and lost it
+   again the moment they pressed Enter. Both shadows are drawn here instead, and
+   this selector outranks either on its own. */
+.tab[data-active="true"]:focus-visible {
+  box-shadow:
+    inset 0 2px 0 0 var(--accent),
+    inset 0 0 0 2px var(--ring);
+}
+.tab:hover { background: var(--bg-hover); color: var(--fg-1); }
+.tab[data-active="true"] {
+  background: var(--bg-canvas); color: var(--fg-1);
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+/* TAB-FR-29, and the layout note under TAB-FR-35: the close control keeps the
+   tab's trailing edge, on every tab and whatever its label is, while the dirty
+   indicator keeps its place after the label.
+
+   A tab holds a floor width (`.tabstrip__scroll > .tab` above), so a short label
+   leaves free space in it. The free space goes to the margin ahead of the close
+   control: that puts the control on the trailing edge and leaves the dirty
+   indicator against the label text it belongs to. Before this, the space fell
+   after the close control, which put the control in the middle of the tab and
+   out of line with the close control of every fuller tab beside it.
+
+   The free space goes here rather than to the label, which would move the close
+   control the same way but carry the dirty indicator along with it — a floored
+   tab labelled `Te` then showed the dot 17px from the text it marks instead of
+   8px, which the layout note does not allow. An auto margin resolves to zero
+   when the free space is negative, so a full tab is unchanged.
+
+   Each part keeps its width and the label alone gives, which is the same rule
+   from the other end: when the label is too long, the label truncates and the
+   glyph, the dirty indicator, and the close control each stay whole. The two
+   marks in the leading gutter are out of flow, so the rule does not touch
+   them. */
+.tab > * { flex: 0 0 auto; }
+.tab__label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab__close { margin-inline-start: auto; display: inline-flex; width: 16px; height: 16px; align-items: center; justify-content: center; border-radius: var(--r-xs); color: var(--fg-3); }
+.tab__close:hover { background: var(--bg-hover); color: var(--fg-1); }
+/* TAB-FR-16: the Dashboard's close control while it is the only open tab —
+   present, greyed-out, and inert, with no hover affordance to suggest
+   otherwise. */
+.tab__close--disabled { color: var(--fg-4); cursor: default; opacity: 0.45; }
+.tab__close--disabled:hover { background: transparent; color: var(--fg-4); }
+.tab__dirty { width: 6px; height: 6px; border-radius: 50%; background: var(--live); }
+
+/* TAB-FR-35: the pinned marker.
+   Laid out on every tab whether it shows or not, exactly as the needs-attention
+   mark beside it is, so pinning or unpinning a tab changes neither its own
+   width nor any other tab's position. Both are drawn in the tab's leading
+   gutter — out of flow, so the reservation costs the label no width and the
+   icon no leading inset — and each keeps a fixed place in it rather than
+   sharing one: the two stand together on one tab often enough (a pinned tab
+   raising a notification) and a marker that moved when the other appeared would
+   be the shift this rule exists to prevent. The gutter sits ahead of the label
+   and the close control and covers neither. */
+.tab__pin {
+  position: absolute;
+  inset-inline-start: 3px;
+  top: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 9px; height: 9px;
+  color: var(--fg-3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms linear;
+}
+.tab[data-pinned] .tab__pin { opacity: 1; }
+/* The second signal beside the marker: a pinned tab's own surface tone, so
+   shape and tone each say it and neither is carried by colour alone. Set below
+   the active tab's treatment, which stays the stronger of the two — a pinned
+   tab that is also the active one must still read as active first. */
+.tab[data-pinned] { background: var(--bg-hover); color: var(--fg-1); }
+.tab[data-pinned][data-active="true"] { background: var(--bg-canvas); }
+
+/* TAB-FR-32: the tab context menu. Positioned in fixed coordinates against the
+   tab it was opened on, and given the same surface every other menu in the
+   window takes (`.menu`), so the strip's menu and the Project panel's read as
+   one kind of surface.
+
+   `z-index` is load-bearing rather than decorative: the menu is a sibling of
+   `.viewport__body` and earlier than it in DOM order, so at `z-index: auto` it
+   paints *beneath* every positioned descendant of the active tab — the Editor's
+   sticky toolbar (`z-index: 2`) and the page body among them. The menu was both
+   invisible and un-clickable over an Editor tab while every hit test landed on
+   the prose behind it. It takes the same overlay layer the window's other
+   floating surfaces take (SNV-FR-56), which is what puts it above all of them. */
+.menu--tab {
+  min-width: 200px;
+  z-index: var(--z-overlay);
+}
+
+/* NTF-FR-34: the needs-attention mark.
+   Always laid out, never conditionally rendered, so a tab taking or losing an
+   indication shifts neither itself nor any tab beside it. A diamond rather than
+   a dot, and at the tab's leading edge rather than after the label, so it is
+   distinguishable from the dirty indicator by shape and by position as well as
+   by colour — the two can and do stand on one tab at once. Drawn in the leading
+   gutter (see `.tab__pin`), above the pinned marker's place in it. */
+.tab__attention {
+  position: absolute;
+  inset-inline-start: 4px;
+  top: 8px;
+  width: 7px; height: 7px;
+  transform: rotate(45deg);
+  background: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms linear;
+}
+.tab[data-attention] .tab__attention { opacity: 1; }
+/* The signals beside the mark: the tab's own surface tone, and an accent bar
+   inset on its leading edge. The tone carries real luminance rather than hue
+   alone — `--accent-soft` reads as an accent tint but sits within a percent of
+   `--bg-chrome` in greyscale, so a reader who cannot discriminate the two
+   colours would have seen nothing. `--attention-surface` is separated from
+   `--bg-chrome` (an unmarked tab) and from `--bg-canvas` (the active tab, which
+   is never marked — NTF-FR-26) in both themes, so the three are told apart in
+   greyscale as well as in colour. */
+.tab[data-attention] {
+  background: var(--attention-surface);
+  color: var(--fg-1);
+  box-shadow: inset 2px 0 0 0 var(--accent);
+}
+/* NTF-FR-35: the arrival pulse. Bounded to three cycles by
+   `animation-iteration-count` as well as by the store's own timer, so nothing in
+   the strip animates continuously however long an indication stands. */
+@keyframes tab-attention-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.25; }
+}
+.tab[data-attention="pulse"] .tab__attention {
+  animation: tab-attention-pulse 400ms ease-in-out 3;
+}
+/* NTF-FR-35: where the platform asks for reduced motion the emphasis is static
+   from the moment it appears. The store checks the same preference and does not
+   set the pulsing state at all; this is the guard for a platform it cannot read. */
+@media (prefers-reduced-motion: reduce) {
+  .tab__attention { transition: none; }
+  .tab[data-attention="pulse"] .tab__attention { animation: none; }
+}
+
+/* ---------- BADGES & CHIPS ---------- */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-medium);
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: var(--bg-sunken);
+  color: var(--fg-2);
+  line-height: 1.5;
+}
+.badge--accent { background: var(--accent-soft); color: var(--accent); }
+.badge--live   { background: var(--live-soft); color: var(--live); }
+.badge--ok     { background: var(--ok-soft);   color: var(--ok); }
+.badge--warn   { background: var(--warn-soft); color: var(--warn); }
+.badge--danger { background: var(--danger-soft); color: var(--danger); }
+
+/* ---------- UNRESOLVED MARKER ----------
+   "What this row points at is gone." One class for both panels that can say it
+   — a note whose entity no longer resolves (NTS-FR-23) and a thread whose
+   artifact no longer resolves (CMP-FR-12) — because it is one state and reading
+   it two ways across the window costs the user a second look. The marker names
+   the ENTITY, never the row's own status: in the Comments panel a row can be
+   Unresolved and Resolved at once, and those two words are about different
+   things (CMP-FR-12). */
+.unresolved-marker {
+  flex: none;
+  padding: 0 4px;
+  border-radius: var(--r-xs);
+  background: var(--bg-sunken);
+  color: var(--fg-3);
+  font-size: var(--fs-ui-2xs);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.chip-type {
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-2xs);
+  font-weight: var(--fw-semi);
+  padding: 1px 4px;
+  border-radius: var(--r-xs);
+  letter-spacing: var(--ls-wide);
+  background: var(--bg-sunken);
+  color: var(--fg-3);
+  text-transform: uppercase;
+}
+/* Artifact type chips — single-letter glyphs, color-coded */
+.chip-type[data-type="skill"]        { background: #ECEEFF; color: #3B4BEF; }
+.chip-type[data-type="agent"]        { background: #FBF0CF; color: #B07A00; }
+.chip-type[data-type="prompt"]       { background: #DFF3EA; color: #1F8F6B; }
+.chip-type[data-type="spec"]         { background: #FCE6E6; color: #C82A2F; }
+.chip-type[data-type="flow"]         { background: #E5E0D6; color: #44403B; }
+.chip-type[data-type="instructions"] { background: #FFEDE0; color: #E5530B; }
+.chip-type[data-type="scenario"]     { background: #EDE5FB; color: #6F47C2; }
+.chip-type[data-type="scratchpad"]   { background: #E0EBF8; color: #2862AB; }
+[data-theme="dark"] .chip-type[data-type="skill"]        { background: #232745; color: #9AA7FF; }
+[data-theme="dark"] .chip-type[data-type="agent"]        { background: #3A2E10; color: #E0A93B; }
+[data-theme="dark"] .chip-type[data-type="prompt"]       { background: #14322A; color: #6BD7AA; }
+[data-theme="dark"] .chip-type[data-type="spec"]         { background: #401819; color: #F39DA0; }
+[data-theme="dark"] .chip-type[data-type="flow"]         { background: #2A2E37; color: #B8B4AC; }
+[data-theme="dark"] .chip-type[data-type="instructions"] { background: #3A1E10; color: #FF8453; }
+[data-theme="dark"] .chip-type[data-type="scenario"]     { background: #2A1F40; color: #C19EFF; }
+[data-theme="dark"] .chip-type[data-type="scratchpad"]   { background: #1A2538; color: #8AB4E8; }
+
+/* Lifecycle status dot */
+.dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.dot--draft    { background: var(--fg-4); }
+.dot--active   { background: var(--ok); }
+.dot--inactive { background: var(--fg-4); opacity: 0.5; }
+.dot--deleted  { background: var(--danger); opacity: 0.6; }
+/* RUN-FR-04 / DSH-FR-07: the in-flight indicator. It renders only while a run is
+   actually running — never as decoration on an idle surface. An infinite
+   animation keeps the compositor re-uploading the window surface for as long as
+   the element is mounted, so a live dot left on the tab that opens by default
+   costs a frame loop for the life of the window. `will-change` promotes the dot
+   to its own layer, so each frame is an alpha blend on the compositor rather
+   than a repaint of the dot and its shadow. */
+.dot--live {
+  background: var(--live);
+  box-shadow: 0 0 0 3px var(--live-soft);
+  will-change: opacity;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+/* The indicator stays visible and legible; only its motion stops. `will-change`
+   is released with it — a permanent composited layer for an element that no
+   longer animates is pure cost. */
+@media (prefers-reduced-motion: reduce) {
+  .dot--live { animation: none; will-change: auto; }
+}
+
+/* ---------- KBD ---------- */
+kbd, .kbd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-2xs);
+  font-weight: var(--fw-medium);
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-2);
+  border-bottom-width: 2px;
+  color: var(--fg-2);
+}
+
+/* ---------- TREE ROW (Library) ---------- */
+.tree-row {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: 2px var(--sp-2) 2px 0;
+  height: 24px;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+  cursor: pointer;
+  border-radius: var(--r-xs);
+  user-select: none;
+}
+.tree-row:hover { background: var(--bg-hover); }
+.tree-row[data-selected="true"] { background: var(--bg-active); color: var(--fg-1); }
+.tree-row__caret { width: 14px; flex: none; color: var(--fg-3); display: inline-flex; align-items: center; justify-content: center; }
+.tree-row__icon  { width: 14px; flex: none; color: var(--fg-3); }
+.tree-row__name  { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-row__meta  { font-size: var(--fs-ui-xs); color: var(--fg-3); }
+
+/* ---------- PANEL CHROME ---------- */
+.panel-header {
+  display: flex; align-items: center; gap: var(--sp-2);
+  /* Holds whatever the UI role makes of the controls inside it — `.icon-btn`
+     is a ratio of that role now, so a fixed height would crop it. */
+  min-height: var(--ctl-h-md);
+  padding: 0 var(--sp-3);
+  border-bottom: 1px solid var(--border-1);
+  background: var(--bg-panel);
+}
+.panel-header__title {
+  font-size: var(--fs-ui-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  font-weight: var(--fw-semi);
+  color: var(--fg-3);
+  flex: 1;
+}
+/* SNV-FR-57: a header whose title is a file name rather than the panel's own
+   name. The name is content and is never case-transformed; it also reads at the
+   body colour rather than the muted one a label takes. */
+.panel-header__title--file {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+}
+.panel-header__actions { display: flex; gap: 2px; }
+
+/* ---------- MENU / DROPDOWN ---------- */
+.menu {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  padding: var(--sp-1);
+  box-shadow: var(--shadow-3);
+  min-width: 180px;
+}
+.menu-item {
+  display: flex; align-items: center; gap: var(--sp-2);
+  /* A floor, not a ceiling: a label that wraps to two lines needs two
+     line-heights, and a fixed height would let the second line paint over the
+     row below it once the UI role outgrows the box (GLS-FR-19). */
+  min-height: var(--ctl-h-sm); padding: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-ui-sm); color: var(--fg-1);
+  border-radius: var(--r-xs); cursor: pointer;
+}
+.menu-item:hover { background: var(--bg-active); }
+/* A destructive entry reads as one before it is clicked, not only in the
+   confirmation it opens — the same signal `.btn--danger` carries. */
+.menu-item--danger { color: var(--danger); }
+.menu-item--danger:hover { background: var(--danger-soft); }
+.menu-item__kbd { margin-left: auto; display: inline-flex; align-items: center; }
+.menu-sep { height: 1px; background: var(--border-1); margin: var(--sp-1) -4px; }
+
+/* A disabled menu item — e.g. folder Paste when the clipboard is empty
+   (LCM-FR-03). Greyed and non-interactive. */
+.menu-item--disabled { color: var(--fg-4); cursor: default; }
+.menu-item--disabled:hover { background: transparent; }
+
+/* The nested "Artifact type" submenu (LCM-FR-04): a flyout anchored flush to the
+   right of its parent item. It opens on mouse-over; sitting flush (no left
+   margin) keeps a continuous hover region from the parent into the flyout so
+   crossing into it doesn't dismiss it. */
+.menu-item--parent { position: relative; }
+.menu--sub {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  z-index: 1;
+}
+
+/* Inline rename input + delete confirmation hosted inside the context menu so
+   no native dialog is needed (LCM-FR-02). */
+.menu-rename, .menu-confirm { padding: var(--sp-1) var(--sp-2); min-width: 180px; }
+.menu-rename__error { color: var(--danger); font-size: var(--fs-ui-sm); margin-top: var(--sp-1); }
+.menu-rename__actions, .menu-confirm__actions {
+  display: flex; gap: var(--sp-2); margin-top: var(--sp-2);
+}
+.menu-confirm__text { font-size: var(--fs-ui-sm); color: var(--fg-1); }
+
+/* ---------- CARD ---------- */
+.card {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
+}
+.card--inset { background: var(--bg-panel); }
+
+/* ---------- DIFF BLOCKS ---------- */
+/* DFV-FR-37: a Source rendering is the file's literal text, so it and the
+   line-number gutter beside it are the **Source code** role. The gutter
+   inheriting from here rather than naming a size of its own is what keeps its
+   fixed width and the alignment of the two side-by-side panes holding at any
+   size the role carries. */
+.diff {
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-sm);
+  line-height: var(--lh-source-compact);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.diff-line { display: flex; padding: 1px var(--sp-3); }
+.diff-line[data-kind="add"] { background: var(--diff-add-bg); color: var(--diff-add-fg); }
+.diff-line[data-kind="del"] { background: var(--diff-del-bg); color: var(--diff-del-fg); }
+
+/* Hunk headers orient the reader inside a long file; they are neither an
+   addition nor a removal. */
+.diff-line[data-kind="hunk"] { background: var(--bg-sunken); color: var(--fg-3); }
+

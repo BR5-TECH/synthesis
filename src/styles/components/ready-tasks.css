@@ -1,0 +1,34 @@
+/* GIT-FR-OGHO … GIT-FR-TZUI: the Ready tasks section of the Git panel. */
+.ready-tasks { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.ready-tasks__body { flex: 1; overflow: auto; padding: 6px 0; }
+.ready-tasks__summary {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 12px; color: var(--fg-2);
+}
+.ready-tasks__state { padding: 6px 14px; color: var(--fg-2); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.ready-tasks__state p { margin: 0; }
+.ready-tasks__error { margin: 0; padding: 4px 14px; color: var(--danger); }
+.ready-tasks__stale { padding-bottom: 4px; }
+.ready-tasks__stale .t-muted { padding: 0 14px; margin: 0; }
+.ready-tasks__list { list-style: none; margin: 0; padding: 0; }
+.ready-tasks__list[data-stale="true"] .ready-tasks__row { opacity: 0.75; }
+.ready-tasks__row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px;
+  align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--border-1);
+}
+.ready-tasks__row:hover { background: var(--bg-hover); }
+.ready-tasks__row-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ready-tasks__title {
+  color: var(--fg-1); font-size: var(--fs-ui-sm);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.ready-tasks__meta { color: var(--fg-3); white-space: nowrap; }
+.ready-tasks__row-actions { display: flex; align-items: center; gap: 8px; }
+.ready-tasks__row-error { grid-column: 1 / -1; margin: 0; color: var(--danger); }
+.ready-tasks__link {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--accent); font-family: inherit;
+}
+.ready-tasks__link:hover:not(:disabled) { text-decoration: underline; }
+.ready-tasks__link:disabled { color: var(--fg-3); cursor: default; }
+.ready-tasks__link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

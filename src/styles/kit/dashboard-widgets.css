@@ -1,0 +1,562 @@
+/* ---------- Dashboard widgets ---------- */
+.dash {
+  padding: 28px 32px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-content: start;
+  height: 100%;
+  overflow: auto;
+}
+.dash-widget {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 12px;
+  /* Both axes, and `min-width` is the load-bearing one: a grid item's automatic
+     minimum is its MIN-CONTENT size, so a single long draft name or run label
+     pushes its column past `1fr` and the grid overflows the page horizontally —
+     which `.dash-row__name`'s ellipsis cannot save, because the row never gets
+     told to be narrower. With this the two columns stay equal at any width and
+     the ellipsis does its job. */
+  min-height: 0;
+  min-width: 0;
+}
+.dash-widget__head {
+  display: flex; align-items: center; gap: 8px;
+}
+.dash-widget__title {
+  flex: 1;
+  font-size: var(--fs-ui-xs); text-transform: uppercase; letter-spacing: var(--ls-caps);
+  color: var(--fg-3); font-weight: 600;
+}
+.dash-widget__count { font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3); }
+.dash-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm); cursor: pointer;
+  font-size: var(--fs-ui-md);
+}
+.dash-row:hover { background: var(--bg-hover); }
+.dash-row__name { color: var(--fg-1); flex: 1; min-width: 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dash-row__meta { font-size: var(--fs-ui-xs); color: var(--fg-3); white-space: nowrap; flex: none; }
+/* `flex: 1` so the body fills the card below the head. It is what lets the
+   empty, loading and error notices centre in the widget's whole content area
+   rather than sitting just under the title (DSH-FR-09). */
+.dash-widget__body { display: flex; flex-direction: column; gap: 2px; min-height: 0; flex: 1; }
+/* DSH-FR-18: a widget refreshing after it has once rendered keeps showing the
+   data it holds, marked as stale rather than emptied — so neither a refresh nor
+   an error blanks a widget the author is reading. */
+.dash-widget__stale {
+  font-size: var(--fs-ui-xs); text-transform: uppercase; letter-spacing: var(--ls-caps);
+  /* `--fg-3`, the muted-text token, not `--fg-4`: the placeholder token measures
+     under 2.5:1 against this surface in both themes and is close to invisible in
+     dark — and this marker is the whole of what tells the author their rows are
+     being refreshed rather than final. */
+  color: var(--fg-3); font-weight: 600;
+}
+/* Dimmed enough to read as provisional, not so far that the meta column stops
+   being legible: the rows underneath are data the author is still reading
+   (DSH-FR-18), so this must not amount to hiding them. Measured rather than
+   guessed — at 0.75 the already-muted meta column falls under 3:1 against the
+   card in dark, and the marker in the head is what carries the message anyway. */
+.dash-widget[data-stale="true"] .dash-widget__body { opacity: 0.85; }
+/* DSH-FR-09: centred on BOTH axes within the widget's content area. `flex: 1`
+   is what supplies the vertical half — without it the notice keeps its
+   `min-height` and sits under the title rather than in the middle of the card,
+   which is what the requirement asks for. */
+.dash-row__empty {
+  display: flex; align-items: center; justify-content: center;
+  flex: 1;
+  min-height: 88px;
+  padding: 6px 8px;
+  font-size: var(--fs-ui-md); color: var(--fg-3); text-align: center;
+}
+/* DSH-FR-18: an error is content — it is stated in the widget's own content
+   area, in the colour the rest of the application states a failure in, and the
+   widget is not hidden by DSH-FR-04 for holding one. */
+.dash-row__empty--error { color: var(--danger); }
+/* DSH-FR-08: the whole-Dashboard empty state — no widgets, and an invitation to
+   start work. */
+.dash--empty { grid-template-columns: 1fr; place-content: center; }
+.dash-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  text-align: center; padding: 32px;
+}
+.dash-empty__title { font-size: var(--fs-ui-lg); color: var(--fg-1); font-weight: 600; }
+.dash-empty__hint { font-size: var(--fs-ui-md); color: var(--fg-3); max-width: 46ch; }
+
+/* ---------- Editor ---------- */
+/* EDT-FR-63: the **field** — everything of the tab that is not the page: the
+   band above the surface (EDT-FR-43), the margin the comments occupy
+   (EDT-FR-61), and the empty width beside the centred page. Recessed below the
+   background the page carries, and distinct from it under either theme
+   (OVW-FR-09, OVW-FR-10). */
+.editor-tab {
+  background: var(--doc-field-bg);
+  /* PCR-FR-01 / EDT-FR-84: the positioning context the prompt change review is
+     anchored in, so its scrim covers this tab and stops at its edges rather than
+     the window's — leaving the activity rail, the panels and the tab strip lit
+     and reachable while the author reads. The same thing `.draft-workspace`
+     declares for the draft review it hosts (DCR-FR-01). */
+  position: relative;
+}
+
+/* PCR-FR-16 / EDT-FR-16: the pending indication, a graphical icon control in
+   the tab's action cluster beside the comments control rather than in a chrome
+   of its own. It says a change is waiting on the author, so it carries the
+   attention colour the cluster's other active state does. */
+.editor__proposal-indication[data-active] {
+  color: var(--accent);
+}
+
+/* EDT-FR-63 / CMT-FR-64: where the page sits along the tab's inline axis.
+   Centring is what the tab does with field it has no other use for — so where
+   the margin beside the page carries comments and the tab is too narrow to
+   leave them their measure, the page gives up its LEADING field and slides
+   toward that edge, widening the trailing field until the cards fit in it. Its
+   measure is untouched, so nothing reflows and the caret does not move.
+
+   `100%` resolves at each use site against that element's containing block, and
+   the page, the raw-text sheet and the frontmatter region all have the tab's own
+   width behind them — which is why one declaration here reaches all three and
+   they cannot slide apart from one another.
+
+   The middle term is the leading field left when the trailing one has taken what
+   it needs; the upper clamp is the centred position, so a wide tab keeps it, and
+   the lower is the inset the page keeps from the tab's edge, which it never
+   passes. A rail that is closed, or whose cards have gone below the page, leaves
+   the variable unset and the page centred (the `auto` fallback at each use). */
+.editor-tab[data-rail="open"][data-comments="beside"],
+.draft-editor[data-rail="open"][data-comments="beside"] {
+  --page-lead: clamp(
+    var(--doc-page-inset),
+    calc(100% - var(--doc-page-outer) - var(--comment-margin-need)),
+    calc((100% - var(--doc-page-outer)) / 2)
+  );
+}
+/* EDT-FR-63: the editing surface renders as a **page** — a bounded sheet
+   carrying a background of its own, inset from the tab's boundaries on every
+   side and separated from the **field** behind it by an edge, so where the
+   document begins and ends is legible the moment a file opens rather than
+   inferred from where the text happens to stop.
+
+   The page is the scroll container, so its leading and trailing edges hold
+   their place while the text moves between them: both are reachable, and the
+   page never runs flush into the band above it. Presentation only — nothing
+   here touches a byte, a dirty marker, an undo step, or a find match. */
+.editor {
+  /* DCR-FR-12 / DCR-FR-BQNL: the action chip and the gutter map are placed
+     within this scroller, so it is what their offsets are measured from. */
+  position: relative;
+  padding: var(--doc-page-padding);
+  /* Sized on the page's whole outer box under `border-box`, which is the same
+     measure the raw-text sheet and the Diff tab's page take — content-box would
+     make each of the three differ from the others by its own padding and
+     border. The `min()` is what keeps the inset an inset: `margin: … auto`
+     alone produces one only while there is width left over, so on a tab
+     narrower than the page the sheet would otherwise run flush to both
+     boundaries at exactly the minimum window size the shell supports. */
+  box-sizing: border-box;
+  width: 100%;
+  max-width: min(
+    var(--doc-page-outer),
+    calc(100% - var(--doc-page-inset) * 2)
+  );
+  /* EDT-FR-63: centred, unless the comment margin beside it needs the width —
+     see `--page-lead` above. */
+  margin: var(--doc-page-inset) auto var(--doc-page-inset) var(--page-lead, auto);
+  background: var(--doc-page-bg);
+  border: 1px solid var(--border-1);
+  border-radius: var(--doc-page-radius);
+  box-shadow: var(--shadow-2);
+  /* CMT-FR-05: the containing block the comment affordance is placed against,
+     so its coordinates are the body's own and it scrolls with the passage. */
+  position: relative;
+}
+/* EDT-FR-43: the band sits on the field rather than on the page (EDT-FR-63),
+   so the controls over a document are never mistaken for part of it. */
+.editor__toolbar {
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-1);
+  background: var(--doc-field-bg);
+  position: sticky; top: 0; z-index: 2;
+  flex-wrap: nowrap;
+}
+.editor__toolbar .btn { flex: none; }
+/* Active formatting state for the Tiptap toolbar buttons. */
+.editor__toolbar .btn[data-active="true"] { background: var(--accent-soft); color: var(--accent); }
+/* EDT-FR-85: the two states an image the host has not drawn renders in.
+   Both are distinguished by shape and by the words beside them rather than by
+   colour, and neither is an error dialog: the author goes on writing while an
+   image is pending or unresolved (NAW-FR-52, NAW-FR-54). */
+.editor__prose img.editor__image--pending,
+.editor__prose img.editor__image--unresolved {
+  /* A frame the reader can see, so an unresolved reference is never nothing at
+     all. Sized from the text rather than from the picture, whose dimensions are
+     exactly what is not known here.
+
+     `height` explicitly rather than `min-height`: the stand-in bytes are a 1×1
+     GIF, and the document's own `img { height: auto }` derives a square from
+     that intrinsic ratio — so a minimum never binds and the frame comes out as
+     tall as it is wide. */
+  display: inline-block;
+  width: 8rem; height: 3rem;
+  min-width: 8rem; min-height: 3rem;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  vertical-align: middle;
+}
+/* The destination itself, drawn beside the frame so which reference is broken is
+   legible without focusing it and without hovering it.
+
+   A sibling element rather than generated content on the image: `img` is a
+   replaced element and no browser paints `::after` on one, so a rule written
+   that way draws nothing and leaves the author with the empty frame EDT-FR-85
+   forbids. The element is supplied by the surface's own decoration. */
+.editor__prose .editor__image-label {
+  display: inline-block;
+  vertical-align: middle;
+  max-width: 24rem;
+  margin-inline-start: 6px;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-2);
+  /* The destination is as long as the author made it; it wraps inside its own
+     box rather than pushing the line off the page. */
+  overflow-wrap: anywhere;
+}
+/* NAW-FR-54: a selected image is distinguishable — by a ring, and by the same
+   ring on the placeholder, rather than by the removal control appearing
+   somewhere else being the only sign. */
+.editor__prose img.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* NAW-FR-51: the pending state of an insertion, occupying the cursor position.
+   Text rather than a spinner, so it is legible without colour, and inline, so
+   it does not push the paragraph around while the store is in flight. */
+.editor__image-inserting {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-2);
+}
+/* NAW-FR-53 / NAW-FR-54: the removal action a selected image carries — named in
+   words, reachable from the keyboard, and depending on neither hover nor
+   colour. */
+.editor__image-remove {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+  font-size: var(--fs-ui-sm);
+  cursor: pointer;
+}
+/* EDT-FR-16: right-aligned cluster of graphical action controls. */
+.editor__actions { display: flex; align-items: center; gap: 4px; flex: none; }
+/* Square icon buttons — sized as comfortable pointer targets. */
+.btn.btn--icon { width: var(--ctl-h-lg); height: var(--ctl-h-md); padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.btn.btn--icon[data-active="true"] { background: var(--accent-soft); color: var(--accent); }
+/* CMT-FR-31: the card's own controls are graphical — a card is narrow, and a
+   row of words where a row of glyphs would do costs the comment its space. */
+.btn.btn--icon-sm { width: var(--ctl-h-sm); height: var(--ctl-sq); padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.btn.btn--icon-xs { width: var(--ctl-h-xs); height: calc(var(--font-ui-size) * 18 / 13); padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+/* EDT-FR-17: the raw Markdown source surface (text mode). */
+.editor__source {
+  flex: 1; width: 100%; box-sizing: border-box;
+  border: none; outline: none; resize: none;
+  padding: 24px 48px 64px;
+  /* EDT-FR-63: the raw-text surface is the page the WYSIWYG surface is, so it
+     carries the page's background rather than a bare region's — its edge and
+     its inset are on `.editor__source-wrap`, the sheet it fills. */
+  background: var(--doc-page-bg); color: var(--fg-1);
+  /* EDT-FR-62: the raw-text surface is the **Source code** role, whole. */
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-md);
+  line-height: var(--font-source-line-height);
+  tab-size: 2;
+  /* EDT-FR-77: declared rather than inherited from the UA's textarea defaults,
+     because the layer behind this one (`.editor__source-hl`) declares exactly
+     these and the two have to break lines in the same places. A source file
+     carries that layer whenever it is open, so a disagreement about where a long
+     unbroken run wraps would not be a rare find-panel artefact but the ordinary
+     appearance of the file: two copies of the text, a line apart. */
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  text-rendering: auto;
+}
+.editor__source:disabled { background: var(--bg-sunken); color: var(--fg-3); }
+/* EDT-FR-49: the source surface and the aria-hidden layer that carries its find
+   matches share one box, with identical metrics so glyphs register exactly. */
+/* EDT-FR-63: the sheet the raw-text surface fills — the same inset, the same
+   measure, and the same edge the WYSIWYG page carries, so a mode toggle changes
+   what is on the page and not whether there is one. `overflow: hidden` is what
+   keeps the textarea's corners inside the sheet's radius. */
+.editor__source-wrap {
+  flex: 1; position: relative; display: flex; min-height: 0;
+  /* `width: 100%` is load-bearing, not belt-and-braces. This sheet is a flex
+     item of the tab's COLUMN, so `margin: … auto` puts the autos on the cross
+     axis — where an auto margin suppresses the stretch that would otherwise
+     give the item its width, leaving it to shrink to the textarea's intrinsic
+     size (a ~270px ribbon down the middle of the tab) with `max-width` never
+     binding at all. A definite cross size is what restores it. The page above
+     is a flex item of a ROW and so is not exposed to this. */
+  box-sizing: border-box;
+  width: 100%;
+  max-width: min(
+    var(--doc-page-outer),
+    calc(100% - var(--doc-page-inset) * 2)
+  );
+  margin: var(--doc-page-inset) auto var(--doc-page-inset) var(--page-lead, auto);
+  background: var(--doc-page-bg);
+  border: 1px solid var(--border-1);
+  border-radius: var(--doc-page-radius);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+.editor__source-wrap .editor__source { flex: 1; }
+.editor__source-hl {
+  position: absolute; inset: 0; z-index: 0;
+  margin: 0; pointer-events: none; overflow: hidden;
+  box-sizing: border-box;
+  padding: 24px 48px 64px;
+  /* EDT-FR-49: identical metrics to the textarea above it, so glyphs register
+     exactly — including when the Source role's size or face changes under both. */
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-md);
+  line-height: var(--font-source-line-height);
+  tab-size: 2;
+  white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
+  /* Stated rather than inherited: a `pre` picks up `optimizeLegibility` from the
+     document in some stacks while a `textarea` does not, and the two boxes have
+     to shape and space text identically or the layer drifts from the glyphs it
+     is decorating. */
+  text-rendering: auto;
+  color: transparent;
+}
+/* While the layer is showing, the textarea's own glyphs give way to it and only
+   the caret and selection remain visible. Either reason puts it there — the find
+   panel's matches (EDT-FR-49) or a source file's syntax tokens (EDT-FR-74) — and
+   both are drawn on the one layer, so a match inside a coloured token keeps its
+   marking and its colour (EDT-FR-77). */
+.editor__source-wrap[data-layer="on"] .editor__source {
+  position: relative; z-index: 1;
+  background: transparent; color: transparent; caret-color: var(--fg-1);
+}
+.editor__source-wrap[data-layer="on"] .editor__source-hl { color: var(--fg-1); }
+
+/* EDT-FR-74 / EDT-FR-78 / DFV-FR-57: a source file's syntax tokens, on whichever
+   surface draws them — the Editor's layer behind its textarea, and a Diff tab's
+   Source rows. Colour alone, from the theme's own roles: the token layer changes
+   no metric, so a language resolving or failing to resolve moves no character on
+   screen. A scope that maps to no role is not wrapped at all and keeps `--fg-1`. */
+.hl--comment  { color: var(--code-comment); }
+.hl--keyword  { color: var(--code-keyword); }
+.hl--string   { color: var(--code-string); }
+.hl--number   { color: var(--code-number); }
+.hl--type     { color: var(--code-type); }
+.hl--function { color: var(--code-function); }
+.hl--variable { color: var(--code-variable); }
+.hl--meta     { color: var(--code-meta); }
+.hl--punctuation { color: var(--code-punct); }
+
+/* EDT-FR-49: match highlighting, shared by all three editing surfaces — the
+   source layer, the frontmatter layer, and the ProseMirror decorations. */
+.find-match {
+  background: var(--accent-soft);
+  border-radius: 2px;
+  color: inherit;
+}
+.find-match--current {
+  background: var(--accent);
+  color: var(--bg-canvas);
+}
+
+/* EDT-FR-43: the Find / Find & Replace panels occupy the toolbar band. */
+.editor__find { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.editor__find-row { display: flex; align-items: center; gap: 4px; }
+.editor__find-input { flex: 1; min-width: 0; }
+.editor__find-input input { all: unset; flex: 1; min-width: 0; font-size: var(--fs-ui-sm); color: var(--fg-1); }
+.editor__find-count {
+  flex: none; min-width: 56px; text-align: right;
+  font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3);
+}
+.editor__find-count[data-invalid="true"] { color: var(--danger, #d9534f); }
+/* EDT-FR-18 / EDT-FR-63: frontmatter rendered as a visually distinct, editable
+   region — and part of the editing surface, so it belongs ON the page rather
+   than on the field between the band and it. It takes the page's own outer box
+   and joins the sheet below it: the two read as one page with the YAML block at
+   its head, instead of a narrower block floating above a wider sheet with
+   nothing lining up.
+
+   It stays outside the page's scroller rather than inside it, because the
+   collapse of EDT-FR-20 is driven by how far the BODY has scrolled — a region
+   that scrolled away with the text would have nothing left to collapse. */
+.editor__frontmatter {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: min(
+    var(--doc-page-outer),
+    calc(100% - var(--doc-page-inset) * 2)
+  );
+  margin: var(--doc-page-inset) auto 0 var(--page-lead, auto);
+  border: 1px solid var(--border-1);
+  border-bottom: 0;
+  border-radius: var(--doc-page-radius) var(--doc-page-radius) 0 0;
+  background: var(--accent-soft);
+  /* EDT-FR-63: the page's edge is a hairline together with a soft elevation,
+     and the head of the page carries both exactly as the sheet below it does.
+     This box used to spend its whole `box-shadow` on a 3px accent rule drawn
+     inside its leading edge, which cost the joined page two things at once:
+     the head had no elevation while the sheet did, so the outline died at the
+     seam; and the leading edge read as a 3px rule against a hairline on the
+     top and the trailing edge, which is the asymmetry you see before you read
+     a word of the YAML. What marks the region as distinct (EDT-FR-18) is its
+     tint, its accent label and its Source-code role — none of which have to
+     weight one edge of the page against another. */
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+/* The sheet gives up its own top inset and top corners to the region above it,
+   so the join is a single page rather than two stacked boxes. */
+.editor-tab[data-frontmatter="on"] .editor {
+  margin-top: 0;
+  border-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+/* …and the comment layer follows the page's top wherever it is. The rail is
+   pinned to where the page STARTS, not to a fixed inset (CMT-FR-27): the page
+   gives up its top margin to the frontmatter region above it, so a rail still
+   held at `--doc-page-inset` puts every card exactly that far below the line it
+   annotates — on every artifact that carries frontmatter, which is most of
+   them. */
+.editor-tab[data-frontmatter="on"] .comment-rail { top: 0; }
+.editor__frontmatter-label {
+  font-family: var(--font-mono); font-size: var(--fs-ui-2xs); letter-spacing: 0.08em; text-transform: uppercase;
+  /* Registered with the prose below rather than with the sheet's edge. */
+  color: var(--accent); padding: 5px var(--doc-page-gutter) 2px; opacity: 0.85;
+}
+/* EDT-FR-20: head row carries the label and the minimize button (top-right). */
+.editor__frontmatter-head { display: flex; align-items: center; justify-content: space-between; }
+.editor__frontmatter-head .editor__frontmatter-label { padding-bottom: 0; }
+/* Registered with the page's gutter, like the label opposite it and the count
+   along the bottom edge (EDT-FR-59) — every other thing the region draws sits
+   on that line, and a control hanging 8px off the trailing edge left the head
+   row ragged against a foot row that was not. It is still the region's
+   top-right corner (EDT-FR-20); it is now the corner of the page's text
+   column rather than of its paper. */
+.editor__frontmatter-min {
+  /* What stands on the gutter is the GLYPH's box, not the button's: a
+     `btn--icon` is a hit target built around a 14px mark (the size the JSX asks
+     Icon.Minimize for), so the gutter measured to the button would leave the
+     mark 8px short of the line the count below it stands on. Hence the gutter
+     less the button's own overhang. (The drawn stroke sits a further ~3px
+     inside its 14px box, as every glyph in the set does — icons compose by
+     their boxes, so that is the unit that registers here.)
+
+     `border-box` is load-bearing for that arithmetic, not belt-and-braces:
+     there is no global box-sizing reset in this project — `components.css`
+     declares it per rule — and `.btn` carries `border: 1px solid transparent`,
+     so under the default content-box `--ctl-h-lg` is the width INSIDE that
+     border and the overhang is `(--ctl-h-lg - 14px) / 2 + 1px`. Sizing the
+     button by its outer box is what makes the term below the whole of it. */
+  box-sizing: border-box;
+  margin: 2px calc(var(--doc-page-gutter) - (var(--ctl-h-lg) - 14px) / 2) 0 0;
+  color: var(--accent);
+}
+/* EDT-FR-20: collapsed single-line summary bar — the whole bar expands on click. */
+.editor__frontmatter--collapsed {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px var(--doc-page-gutter);
+  font: inherit; text-align: left; cursor: pointer;
+  color: var(--accent);
+}
+.editor__frontmatter--collapsed .editor__frontmatter-label { padding: 0; flex: none; }
+/* Layered OVER the region's tint rather than replacing it. `--bg-active` is
+   translucent, so the `background` shorthand it used to be set with composited
+   it against the field behind the bar and took the frontmatter tint out from
+   under it — for exactly as long as the pointer was there. That was survivable
+   while an accent rule marked the region through the hover; the tint is now the
+   marker, so it has to hold. Set as `background-image` so the colour beneath
+   it (`.editor__frontmatter`) is left standing. */
+.editor__frontmatter--collapsed:hover {
+  background-image: linear-gradient(var(--bg-active), var(--bg-active));
+}
+.editor__frontmatter-preview {
+  flex: 1; min-width: 0;
+  /* EDT-FR-62: the frontmatter region is the Source code role, collapsed
+     summary included — it is the same YAML, read at a glance. */
+  font-family: var(--font-source-family); font-size: var(--fs-src-sm); color: var(--fg-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* EDT-FR-21: the editable textarea overlays an aria-hidden highlight layer that
+   bolds YAML keys. The textarea text is transparent (only the caret shows) so the
+   styled layer beneath reads through; both layers share identical box metrics and
+   wrapping so glyphs register exactly. */
+.editor__frontmatter-edit { position: relative; }
+.editor__frontmatter-input,
+.editor__frontmatter-hl {
+  display: block; width: 100%; box-sizing: border-box;
+  margin: 0; border: none;
+  /* EDT-FR-62: the editable YAML is the Source code role. Both layers take it,
+     because EDT-FR-21 requires their box metrics to be identical — a role
+     change that reached only one of them would knock the highlight layer out
+     of register with the caret. */
+  font-family: var(--font-source-family); font-size: var(--fs-src-sm);
+  line-height: var(--font-source-line-height);
+  /* Registered with the prose on the sheet below (EDT-FR-63). */
+  padding: 0 var(--doc-page-gutter) 8px;
+  /* Soft-wrap long lines instead of scrolling horizontally (EDT-FR-18). */
+  white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
+}
+.editor__frontmatter-input {
+  position: relative; z-index: 1;
+  outline: none; resize: none; overflow: hidden;
+  background: transparent;
+  color: transparent; caret-color: var(--fg-2);
+}
+.editor__frontmatter-hl {
+  position: absolute; inset: 0; z-index: 0;
+  pointer-events: none; overflow: hidden;
+  color: var(--fg-2);
+}
+/* EDT-FR-21: the three roles the YAML parse assigns — keys bold, scalar values
+   at the layer's own weight/colour, and every indicator (fences, `:`, list
+   markers, quotes, `|`/`>` headers, flow braces) plus comments receding. */
+.editor__frontmatter-key { font-weight: 700; }
+.editor__frontmatter-punct { color: var(--fg-3); }
+.editor__frontmatter-punct--comment { font-style: italic; }
+/* EDT-FR-58: the block does not parse — an inline indication in the head row. */
+.editor__frontmatter-invalid {
+  flex: 1; min-width: 0; text-align: right; padding: 5px 8px 2px;
+  font-family: var(--font-mono); font-size: var(--fs-ui-2xs); letter-spacing: 0.04em;
+  color: var(--danger, #d9534f);
+}
+/* EDT-FR-59: the description budget, trailing-aligned along the bottom edge. */
+.editor__frontmatter-foot { display: flex; justify-content: flex-end; padding: 0 var(--doc-page-gutter) 6px; }
+.editor__frontmatter-count {
+  font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3);
+}
+.editor__frontmatter-count[data-over="true"] { color: var(--danger, #d9534f); }
+/* On the collapsed bar the same reading sits after the summary text, which
+   truncates first (the preview owns the flexible width). */
+.editor__frontmatter--collapsed .editor__frontmatter-count { flex: none; }
+/* The Tiptap (ProseMirror) editing surface fills the doc column. */
+.editor__prose { outline: none; min-height: 60vh; }
+.editor__prose:focus, .editor__prose:focus-visible { outline: none; }
+.editor__prose p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder); color: var(--fg-3); float: left; height: 0; pointer-events: none;
+}
+

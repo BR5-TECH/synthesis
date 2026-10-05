@@ -1,0 +1,219 @@
+# The repository's only task file (TSK-FR-01).
+#
+# Specification: specifications/infra/TSK-taskfile.md
+#
+# It defines seven tasks and no other task. Every command it holds belongs to
+# another specification, and this file restates that command byte for byte
+# rather than changing it:
+#
+#   the platform build commands   specifications/infra/TSK-taskfile.md
+#   the image build commands      specifications/infra/AVI-agent-vendor-images.md
+#                                 specifications/server/BMS-backend-microservice.md
+#   the verification lanes        specifications/infra/CIP-ci-pipeline.md
+#
+# The file installs nothing and provisions nothing. A prerequisite that is
+# missing is reported, not repaired. No task publishes anything, reads a
+# credential, or changes release metadata.
+
+version: '3'
+
+vars:
+  # The local server image name (BMS-FR-22). It carries no registry host, so a
+  # local image is never mistaken for the published one.
+  SERVER_IMAGE: synthesis-server
+
+tasks:
+  build:
+    desc: Bundle the desktop application for this host (macOS, Linux, or Windows).
+    dir: '{{.ROOT_DIR}}'
+    vars:
+      # The one platform task that matches the host. An empty value means the
+      # host is none of the three supported ones (TSK-FR-05, TSK-FR-06).
+      PLATFORM_TASK: '{{if eq OS "darwin"}}build:macos{{else if eq OS "linux"}}build:linux{{else if eq OS "windows"}}build:windows{{else}}{{end}}'
+    preconditions:
+      - sh: '{{if .PLATFORM_TASK}}true{{else}}false{{end}}'
+        msg: 'task build: the host operating system is "{{OS}}", which no platform task supports. The supported hosts are macOS, Linux, and Windows. Nothing was built and nothing was cross-compiled.'
+    cmds:
+      # Exactly one platform task, and no build command of this task's own.
+      - task: '{{.PLATFORM_TASK}}'
+
+  build:macos:
+    desc: 'Bundle the desktop application on a macOS host: pnpm tauri build --bundles app.'
+    dir: '{{.ROOT_DIR}}'
+    preconditions:
+      # A native-host task. It builds for the host it runs on, names no target
+      # triple, and configures no cross-compilation toolchain (TSK-FR-10).
+      - sh: '{{if eq OS "darwin"}}true{{else}}false{{end}}'
+        msg: 'task build:macos: this task builds on a macOS host only. It found the host operating system "{{OS}}". It needs a macOS (darwin) host. It builds no other platform bundle in place of the one it cannot build.'
+      # A prerequisite that is missing is named and nothing is built
+      # (TSK-FR-11). The operating-system SDK, the compiler, the linker, and
+      # the tooling of a bundle target are reported by the build itself.
+      - sh: command -v node
+        msg: 'task build:macos: the prerequisite "Node.js" is missing. No "node" executable is on PATH.'
+      - sh: command -v pnpm
+        msg: 'task build:macos: the prerequisite "pnpm" is missing. No "pnpm" executable is on PATH.'
+      - sh: command -v cargo
+        msg: 'task build:macos: the prerequisite "cargo" is missing. No "cargo" executable is on PATH. The toolchain must be the one src-tauri/rust-toolchain.toml pins, which is channel 1.88.'
+      - sh: pnpm exec tauri --version
+        msg: 'task build:macos: the prerequisite "the Tauri CLI" cannot be resolved. Run "pnpm install" to obtain it.'
+    cmds:
+      # The output stays in the build directory. The task installs nothing and
+      # copies nothing out of the repository (TSK-FR-12).
+      - pnpm tauri build --bundles app
+
+  build:linux:
+    desc: 'Bundle the desktop application on a Linux host: pnpm tauri build.'
+    dir: '{{.ROOT_DIR}}'
+    preconditions:
+      - sh: '{{if eq OS "linux"}}true{{else}}false{{end}}'
+        msg: 'task build:linux: this task builds on a Linux host only. It found the host operating system "{{OS}}". It needs a Linux host. It builds no other platform bundle in place of the one it cannot build.'
+      - sh: command -v node
+        msg: 'task build:linux: the prerequisite "Node.js" is missing. No "node" executable is on PATH.'
+      - sh: command -v pnpm
+        msg: 'task build:linux: the prerequisite "pnpm" is missing. No "pnpm" executable is on PATH.'
+      - sh: command -v cargo
+        msg: 'task build:linux: the prerequisite "cargo" is missing. No "cargo" executable is on PATH. The toolchain must be the one src-tauri/rust-toolchain.toml pins, which is channel 1.88.'
+      - sh: pnpm exec tauri --version
+        msg: 'task build:linux: the prerequisite "the Tauri CLI" cannot be resolved. Run "pnpm install" to obtain it.'
+    cmds:
+      # No bundle target is named, so the output is Tauri's default Linux
+      # bundle selection (TSK-FR-08).
+      - pnpm tauri build
+
+  build:windows:
+    desc: 'Bundle the desktop application on a Windows host: pnpm tauri build.'
+    dir: '{{.ROOT_DIR}}'
+    preconditions:
+      - sh: '{{if eq OS "windows"}}true{{else}}false{{end}}'
+        msg: 'task build:windows: this task builds on a Windows host only. It found the host operating system "{{OS}}". It needs a Windows host. It builds no other platform bundle in place of the one it cannot build.'
+      - sh: command -v node
+        msg: 'task build:windows: the prerequisite "Node.js" is missing. No "node" executable is on PATH.'
+      - sh: command -v pnpm
+        msg: 'task build:windows: the prerequisite "pnpm" is missing. No "pnpm" executable is on PATH.'
+      - sh: command -v cargo
+        msg: 'task build:windows: the prerequisite "cargo" is missing. No "cargo" executable is on PATH. The toolchain must be the one src-tauri/rust-toolchain.toml pins, which is channel 1.88.'
+      - sh: pnpm exec tauri --version
+        msg: 'task build:windows: the prerequisite "the Tauri CLI" cannot be resolved. Run "pnpm install" to obtain it.'
+    cmds:
+      # No bundle target is named, so the output is Tauri's default Windows
+      # bundle selection (TSK-FR-09).
+      - pnpm tauri build
+
+  docker:
+    desc: Build the two vendor images and the server image locally, under one version tag. It publishes nothing.
+    dir: '{{.ROOT_DIR}}'
+    vars:
+      # The repository portion of each vendor image reference, read from
+      # docker/agent-images/manifest.toml rather than restated here
+      # (TSK-FR-17). The manifest stays the only place in the repository that
+      # names an image reference, so the two can never drift. The tag that the
+      # reference carries is dropped: the tag comes from the version this task
+      # resolves.
+      CLAUDE_CODE_IMAGE:
+        sh: awk -F'"' '/^\[claude_code\]/{f=1} f&&/^image_ref/{r=$2; sub(/:[^:\/]*$/, "", r); print r; exit}' '{{.ROOT_DIR}}/docker/agent-images/manifest.toml'
+      CODEX_IMAGE:
+        sh: awk -F'"' '/^\[codex\]/{f=1} f&&/^image_ref/{r=$2; sub(/:[^:\/]*$/, "", r); print r; exit}' '{{.ROOT_DIR}}/docker/agent-images/manifest.toml'
+      # One local build version for the whole invocation (TSK-FR-14,
+      # TSK-FR-16). The sources are the Git sources of BMS-FR-14, in that
+      # order: the exact tag at HEAD, then the short commit hash, then the
+      # literal string "undefined". A Git command that fails, and a Git
+      # executable that is absent, fall to the next source and do not fail the
+      # task (TSK-FR-15). No suffix, no timestamp, and no branch name is added.
+      VERSION:
+        sh: git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo undefined
+    preconditions:
+      - sh: command -v docker
+        msg: 'task docker: the container runtime is missing. No "docker" executable is on PATH. No image was built.'
+      - sh: docker info
+        msg: 'task docker: the container runtime is not available. The "docker" executable is on PATH, but no daemon answered it. No image was built.'
+    cmds:
+      - cmd: |
+          echo '==> task docker: the local build version of this invocation is "{{.VERSION}}"'
+        silent: true
+      # The Claude Code vendor image. Dockerfile and context per AVI-FR-01.
+      # It takes no version build argument: it pins its vendor CLI and its
+      # browser in its own Dockerfile (TSK-FR-19).
+      - cmd: |
+          trap 'echo "task docker: the image {{.CLAUDE_CODE_IMAGE}}:{{.VERSION}} failed to build." >&2' ERR
+          docker build \
+            --file docker/agent-images/claude-code/Dockerfile \
+            --tag '{{.CLAUDE_CODE_IMAGE}}:{{.VERSION}}' \
+            docker/agent-images/claude-code
+      # The Codex vendor image, on the same terms.
+      - cmd: |
+          trap 'echo "task docker: the image {{.CODEX_IMAGE}}:{{.VERSION}} failed to build." >&2' ERR
+          docker build \
+            --file docker/agent-images/codex/Dockerfile \
+            --tag '{{.CODEX_IMAGE}}:{{.VERSION}}' \
+            docker/agent-images/codex
+      # The server image. Dockerfile and context per BMS-FR-17. It receives the
+      # resolved version as SYNTHESIS_BUILD_VERSION, so the container it
+      # produces reports that version from GET /v1/health (BMS-FR-14).
+      - cmd: |
+          trap 'echo "task docker: the image {{.SERVER_IMAGE}}:{{.VERSION}} failed to build." >&2' ERR
+          docker build \
+            --file server/Dockerfile \
+            --build-arg SYNTHESIS_BUILD_VERSION='{{.VERSION}}' \
+            --tag '{{.SERVER_IMAGE}}:{{.VERSION}}' \
+            server
+
+  specs:
+    desc: Run the specification consistency check over the corpus.
+    dir: '{{.ROOT_DIR}}'
+    cmds:
+      # The check needs neither Node nor a Rust toolchain and depends on no
+      # other task, so it runs on a bare checkout (TSK-FR-QVXD, CIP-FR-HZKA).
+      # Its own tests run first, on the same terms and for the same reason.
+      - python3 -m unittest discover -s tools/spec-check
+      - python3 tools/spec-check/spec_check.py
+
+  tests:
+    desc: Run every verification lane the pull-request pipeline runs, in the pipeline's order.
+    dir: '{{.ROOT_DIR}}'
+    vars:
+      # The working directory of each lane that runs outside the repository
+      # root, declared here rather than assembled in a command (TSK-FR-02).
+      # Each path is absolute, so a lane gives the same result whatever
+      # directory `task` was started from.
+      MOCK_LANE_DIR: '{{.ROOT_DIR}}/tools/agentic-cli-mock'
+      SERVER_LANE_DIR: '{{.ROOT_DIR}}/server'
+    cmds:
+      # The specification lane. It is reached through specs and its command is
+      # not restated here, on the same terms as the backend lane (TSK-FR-25).
+      - task: specs
+      # The frontend lanes, from the repository root. `pnpm test` runs here in
+      # one command the suite that the three CI areas run (CIP-FR-VRPM,
+      # CIP-FR-07).
+      - cmd: |
+          trap 'echo "task tests: the frontend lane failed." >&2' ERR
+          echo '==> task tests: the frontend lane, from the repository root'
+          pnpm test
+          pnpm build
+          pnpm exec tsc -p tsconfig.test.json --noEmit
+      # The application backend lane (CIP-FR-12). It is reached through
+      # tests:backend and its commands are not restated here, so the two can
+      # never name different commands or different directories (TSK-FR-26).
+      - task: tests:backend
+      # The agentic CLI mock lane, from tools/agentic-cli-mock/ (CIP-FR-19).
+      - cmd: |
+          trap 'echo "task tests: the agentic CLI mock lane failed." >&2' ERR
+          echo '==> task tests: the agentic CLI mock lane, from tools/agentic-cli-mock/'
+          cd '{{.MOCK_LANE_DIR}}'
+          cargo check
+          cargo test
+      # The server lane, from server/ (CIP-FR-21).
+      - cmd: |
+          trap 'echo "task tests: the server lane failed." >&2' ERR
+          echo '==> task tests: the server lane, from server/'
+          cd '{{.SERVER_LANE_DIR}}'
+          cargo build --locked
+          cargo test --locked
+
+  tests:backend:
+    desc: 'Run the application backend verification lane: cargo check, then cargo test, from src-tauri/.'
+    dir: '{{.ROOT_DIR}}/src-tauri'
+    cmds:
+      # Either command exiting non-zero fails the task at once, and the
+      # command after it does not run (TSK-FR-24).
+      - cargo check
+      - cargo test

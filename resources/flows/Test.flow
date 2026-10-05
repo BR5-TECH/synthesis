@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "name": "Test Flow",
+  "nodes": [
+    {
+      "id": "n1",
+      "name": "Design",
+      "artifactIds": [
+        ".claude/skills/analyst/SKILL.md",
+        "CLAUDE.md"
+      ],
+      "position": {
+        "x": 230.765625,
+        "y": 173.73046875
+      }
+    },
+    {
+      "id": "n2",
+      "name": "Validate spec",
+      "position": {
+        "x": 691.80078125,
+        "y": 368.90625
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "n1",
+      "to": "n2",
+      "label": "Validation"
+    }
+  ]
+}

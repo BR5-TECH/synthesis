@@ -1,0 +1,652 @@
+/* ============================================================
+   SYNTHESIS DESIGN SYSTEM — colors_and_type.css
+   Single source of truth for color + typographic tokens.
+   Theme via [data-theme="light"] / [data-theme="dark"] on <html>.
+   Default = dark (matches IDE convention; spec mandates both).
+   ============================================================ */
+
+/* -------- FONTS (variable, via Google Fonts) --------
+   Substitution flagged: no font files shipped in the codebase.
+   Inter is referenced in src/App.css; JetBrains Mono is the
+   chosen mono companion. Both should be replaced with licensed
+   .woff2 files in fonts/ once provided. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ---------- DOCUMENT PAGE ----------
+     The page a document is read on — the Editor's canvas, and the Diff tab's
+     rich rendering of the same document. Declared once so the two cannot
+     drift apart. */
+  --doc-page-width: 820px;
+  --doc-page-padding: 24px 48px 64px;
+  /* The horizontal half of that padding, named on its own so anything drawn
+     ON the page — the frontmatter region above the prose — can register with
+     the text rather than with the sheet's edge. */
+  --doc-page-gutter: 48px;
+  /* The page's whole box — its max-width plus the horizontal padding it draws
+     inside that width. This, not `--doc-page-width`, is the edge the text
+     reaches, so it is what anything measuring the empty margin beside the page
+     has to measure against. */
+  --doc-page-box: calc(820px + 96px);
+  /* EDT-FR-63: how far the page is inset from the tab's boundaries on every
+     side. What is left over is the **field** — the band above the surface, the
+     margin the comments occupy, and the empty width beside the centred page.
+     Declared here beside the page's own metrics because the inset is what makes
+     the page a page: without it there is no field for its edge to be an edge
+     against. */
+  --doc-page-inset: 16px;
+  /* The page's whole outer box — `--doc-page-box` plus the hairline it draws on
+     each side. Every surface that renders a page sizes on this, under
+     `box-sizing: border-box`, so the two editing modes and the Diff tab's Rich
+     rendering land on one measure rather than three that differ by the border. */
+  --doc-page-outer: calc(var(--doc-page-box) + 2px);
+  /* The page's edge — a hairline together with a soft elevation, so where the
+     document begins and ends is legible the moment a file opens rather than
+     inferred from where the text happens to stop. */
+  --doc-page-radius: var(--r-md);
+
+  /* ---------- COMMENT MARGIN (CMT-FR-63, CMT-FR-64) ----------
+     The narrowest measure a card stays readable at, and what the margin needs
+     beside the page to hold one: the card itself, the gutter against the frame
+     (`--sp-6`, taken on the rail's own box), and the gap between a card and the
+     prose it is about (`--sp-4`). Below that width — with the page already slid
+     as far toward the leading edge as its inset allows — the cards leave the
+     margin for a column under the page. `useCommentArrangement.ts` mirrors these
+     numbers to decide which arrangement holds; `style-invariants.test.ts` keeps
+     the two from drifting apart. */
+  --comment-card-min-w: 232px;
+  --comment-margin-need: calc(
+    var(--comment-card-min-w) + var(--sp-6) + var(--sp-4)
+  );
+  /* CMT-FR-63: the height the margin keeps back from its foot for whatever else
+     it has to show, so a footer of resolved threads never buries a thread still
+     open. Roughly one card — enough to read the top of the first one and reach
+     it. Nothing is kept back when there is nothing else to keep it for. */
+  --comment-card-floor: 96px;
+
+  /* ---------- TYPOGRAPHIC ROLES (OVW-FR-13) ----------
+     Every piece of text the app renders belongs to exactly one of three roles,
+     each carrying a family, a base size, and a line height. The nine values
+     below are the application's **built-in defaults**: the Appearance section
+     (GLS-FR-17) writes a role's property onto `:root` only when the user has
+     chosen one, so an unset field falls through to exactly these (GLS-FR-22,
+     OVW-FR-14). Nothing else in the stylesheet names a font family or a
+     literal size — the tokens under each role are what the rest of the app
+     reads, so a role's knob reaches every surface belonging to it.
+
+     A chosen family is written *in front of* the built-in stack rather than
+     replacing it, so a family uninstalled since it was chosen falls back to the
+     built-in face on its own, with the stored selection left intact
+     (GLS-FR-22). */
+
+  /* UI — panels, tabs, chrome, modals, the status bar, comment and note
+     bodies. What text belongs to unless one of the other two names it. */
+  --font-ui-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-ui-size: 13px;
+  --font-ui-line-height: 1.5;
+
+  /* RICH MARKDOWN — the prose of a rendered Markdown document: the Editor's
+     WYSIWYG surface (EDT-FR-62) and a Diff tab's Rich rendering (DFV-FR-37).
+     One role for both is what makes DFV-FR-17's promise hold: an artifact read
+     in a Diff tab and the same artifact open for editing are one document
+     rather than two that resemble each other. */
+  --font-rich-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-rich-size: 15px;
+  --font-rich-line-height: 1.65;
+
+  /* SOURCE CODE — literal source text and code: the Editor's raw-text surface,
+     the fenced/inline code and the frontmatter region inside a rendered
+     document, and a Diff tab's Source rendering with its line-number gutter. */
+  --font-source-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-source-size: 13px;
+  --font-source-line-height: 1.65;
+
+  /* ---------- FONT FAMILIES ----------
+     The established names the stylesheet already reads. `--font-sans` and
+     `--font-display` alias onto the UI role, so every existing chrome rule
+     follows the user's choice without being rewritten.
+
+     `--font-mono` deliberately does **not** alias onto the Source role. It is
+     the app's monospace *accent* face — commit hashes, diffstats, paths, kbd
+     hints — and every one of those is UI-role text by OVW-FR-13's "everything
+     else" clause; OVW-FR-13 names the status bar as UI explicitly. Their being
+     monospace is a layout property (tabular figures, hashes that line up
+     column-wise), not a typographic role. Routing them through the Source role
+     would re-typeset the whole chrome the moment a user picked a proportional
+     face for code — which GLS-FR-18 explicitly permits — so the Source role is
+     named directly by the surfaces that belong to it and nowhere else. */
+  --font-sans: var(--font-ui-family);
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-display: var(--font-ui-family);
+
+  /* ---------- TYPE SCALE ----------
+     IDE-density. Smaller than a marketing site, larger than a terminal. Each
+     step is a ratio of its role's base size rather than a literal, so moving a
+     role's size moves its whole ladder and the proportions between the steps
+     survive. At the default base sizes every calc below resolves to the px
+     value in its comment.
+
+     ui-* is chrome, doc-* is a rendered document's prose, src-* is source text
+     and code — the three ladders are the three roles. */
+  --fs-ui-2xs:  calc(var(--font-ui-size) * 10 / 13);   /* 10px — micro-labels, eyebrows      */
+  --fs-ui-xs:   calc(var(--font-ui-size) * 11 / 13);   /* 11px — badges, hash chips, captions*/
+  --fs-ui-sm:   calc(var(--font-ui-size) * 12 / 13);   /* 12px — tab labels, panel meta      */
+  --fs-ui-md:   var(--font-ui-size);                   /* 13px — default UI text             */
+  --fs-ui-title: calc(var(--font-ui-size) * 14 / 13);  /* 14px — modal titles                */
+  --fs-ui-lg:   calc(var(--font-ui-size) * 15 / 13);   /* 15px — section headers in panels   */
+  --fs-doc-sm:  calc(var(--font-rich-size) * 14 / 15); /* 14px — editor caption / muted text */
+  --fs-doc-md:  var(--font-rich-size);                 /* 15px — editor body                 */
+  --fs-doc-lg:  calc(var(--font-rich-size) * 18 / 15); /* 18px — editor h3                   */
+  --fs-doc-xl:  calc(var(--font-rich-size) * 22 / 15); /* 22px — editor h2                   */
+  --fs-doc-2xl: calc(var(--font-rich-size) * 28 / 15); /* 28px — editor h1                   */
+  --fs-src-2xs: calc(var(--font-source-size) * 10 / 13); /* 10px                             */
+  --fs-src-xs:  calc(var(--font-source-size) * 11 / 13); /* 11px                             */
+  --fs-src-sm:  calc(var(--font-source-size) * 12 / 13); /* 12px — diff rows, frontmatter    */
+  --fs-src-md:  var(--font-source-size);                 /* 13px — the raw-text surface      */
+  --fs-src-lg:  calc(var(--font-source-size) * 14 / 13); /* 14px — a fenced block on the page*/
+  --fs-display: calc(var(--font-ui-size) * 40 / 13);   /* 40px — picker title, branding      */
+
+  /* ---------- LINE HEIGHTS ----------
+     The fixed steps a heading or a chrome row is set on. A role's own line
+     height is the separate `--font-*-line-height` above, and it is what body
+     text on that role reads. */
+  --lh-tight:  1.15;
+  --lh-snug:   1.35;
+  --lh-normal: 1.5;
+  /* The measure a conversation body is read at. A message is prose rather than
+     a chrome row, so it is set looser than `--lh-normal`; it is read in a panel
+     rather than on a page, so it stays tighter than `--lh-relaxed`. */
+  --lh-message: 1.55;
+  --lh-relaxed: 1.65;
+  /* The Source role's line height at the compact measure a diff row is set on.
+     The role's knob still moves it, but a diff stays denser than an editor
+     page — that difference is what tells a comparison apart from a document,
+     so it is expressed as a ratio rather than lost to a shared value. */
+  --lh-source-compact: calc(var(--font-source-line-height) * 1.35 / 1.65);
+
+  /* ---------- WEIGHTS ---------- */
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-semi:    600;
+  --fw-bold:    700;
+
+  /* ---------- LETTER SPACING ---------- */
+  --ls-tight:  -0.01em;
+  --ls-normal: 0;
+  --ls-wide:    0.04em;   /* UI labels, eyebrows                  */
+  --ls-caps:    0.08em;   /* ALL CAPS micro-labels                */
+
+  /* ---------- CONTROL HEIGHTS ----------
+     A control's height is a ratio of the UI role's size rather than a fixed
+     count of pixels, so a row grows with the text it holds instead of clipping
+     it. Without this the UI role's size knob is bounded not by what is readable
+     but by the first control whose box stops fitting its own label — a button
+     that crops its text at 17px is what would make the range unusable
+     (GLS-FR-19). At the default 13px every step below resolves to the pixel
+     value in its comment. */
+  --ctl-h-xs: calc(var(--font-ui-size) * 20 / 13);  /* 20px — inline chips     */
+  --ctl-h-sm: calc(var(--font-ui-size) * 24 / 13);  /* 24px — dense rows       */
+  --ctl-h-md: calc(var(--font-ui-size) * 28 / 13);  /* 28px — default buttons  */
+  --ctl-h-lg: calc(var(--font-ui-size) * 30 / 13);  /* 30px — form fields      */
+  --ctl-h-xl: calc(var(--font-ui-size) * 34 / 13);  /* 34px — large buttons    */
+  --ctl-h-2xl: calc(var(--font-ui-size) * 40 / 13); /* 40px — panel headers    */
+  --ctl-sq:   calc(var(--font-ui-size) * 22 / 13);  /* 22px — square glyph box */
+
+  /* The Editor's formatting toolbar, as anything positioned beside its body has
+     to know it: one default-height control, the 6px it is padded by top and
+     bottom, and the hairline under it. Derived rather than measured so it stays
+     right at every UI scale, and named so a surface that must start below the
+     toolbar says so instead of carrying a number nobody can trace. */
+  --editor-toolbar-h: calc(var(--ctl-h-md) + var(--sp-3) + 1px);
+
+  /* ---------- RADII ---------- */
+  --r-none: 0;
+  --r-xs:   3px;   /* chips, hash badges                       */
+  --r-sm:   5px;   /* inputs, buttons, tabs                    */
+  --r-md:   7px;   /* cards, panels                            */
+  --r-lg:   10px;  /* modals, large surfaces                   */
+  --r-full: 999px;
+
+  /* ---------- SPACING (4-step) ----------
+     `--sp-N` is N steps of 4 pixels. The half steps below fill the odd values a
+     dense surface needs — the gap between a name and the time beside it, the
+     inset of a chip, the space between two rows of one group — so no surface
+     writes a literal pixel for them. They are half steps and not a second
+     ladder: nothing takes a value the whole steps and these do not cover. */
+  --sp-0-5: 2px;
+  --sp-1:  4px;
+  --sp-1-5: 6px;
+  --sp-2:  8px;
+  --sp-2-5: 10px;
+  --sp-3:  12px;
+  --sp-3-5: 14px;
+  --sp-4:  16px;
+  --sp-4-5: 18px;
+  --sp-5:  20px;
+  --sp-6:  24px;
+  --sp-8:  32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* ---------- ELEVATION / SHADOWS ----------
+     IDE flavour: subtle, low-Y, never glowy. */
+  --shadow-1: 0 1px 0 rgba(0,0,0,0.05);
+  --shadow-2: 0 1px 2px rgba(0,0,0,0.08), 0 1px 1px rgba(0,0,0,0.04);
+  --shadow-3: 0 4px 12px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.06);
+  --shadow-4: 0 12px 32px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.10);
+  --shadow-focus: 0 0 0 3px var(--ring);
+
+  /* ---------- MOTION ---------- */
+  --ease-out:  cubic-bezier(0.16, 0.84, 0.44, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast:   120ms;
+  --dur-base:   180ms;
+  --dur-slow:   280ms;
+
+  /* ---------- Z LAYERS ---------- */
+  --z-base:    1;
+  /* A modal belonging to one *tab* rather than to the window (DCR-FR-01): it is
+     above everything the tab draws and below every floating surface of the
+     shell, because the shell around such a modal stays lit and reachable — the
+     chrome's dropdowns included, which are what would otherwise open beneath a
+     scrim that never covered the control that opened them. */
+  --z-tab-modal: 30;
+  --z-overlay: 50;
+  --z-modal:   100;
+  --z-toast:   200;
+}
+
+/* ============================================================
+   LIGHT THEME — "Paper".
+   Calm, paper-ish neutrals. For day work; matches macOS light IDEs.
+   ============================================================ */
+:root,
+[data-theme="light"] {
+  /* Brand accents (theme-stable hue, slightly adjusted L) */
+  --accent:        #4B5BFF;   /* primary action / focus / brand   */
+  --accent-hover:  #3B4BEF;
+  --accent-press:  #2F3FD8;
+  --accent-soft:   #ECEEFF;   /* tinted background                */
+  --accent-fg:     #FFFFFF;   /* on top of --accent               */
+
+  --live:          #E5530B;   /* in-flight runs, dirty markers    */
+  --live-soft:     #FFEDE0;
+  --ok:            #1F8F6B;   /* git clean / save success         */
+  --ok-soft:       #DFF3EA;
+  --warn:          #B07A00;   /* dirty / staged warnings          */
+  --warn-soft:     #FBF0CF;
+  --danger:        #C82A2F;   /* destructive (rare in v1)         */
+  --danger-soft:   #FCE6E6;
+
+  /* Surfaces — top chrome → deepest panel */
+  --bg-app:        #FAF8F5;   /* app body, project picker         */
+  --bg-chrome:     #F1EEE8;   /* top bar, activity bar            */
+  --bg-panel:      #F7F5F0;   /* vertical panel, bottom panel     */
+  --bg-canvas:     #FFFFFF;   /* main editor canvas, tabs body    */
+  --bg-elevated:   #FFFFFF;   /* modals, popovers, overlay        */
+  --bg-sunken:     #EFEBE3;   /* code blocks, inputs              */
+  --attention-surface: #DDE0F5; /* NTF-FR-34: a tab needing attention */
+  /* EDT-FR-63: the page and the field it is set on. Three tones have to stay
+     apart from one another under either theme — the page, the field around it,
+     and a comment card sitting on that field (CMT-FR-38) — so the field takes a
+     tone of its own rather than borrowing the panel's, which is what a card
+     already uses. */
+  --doc-page-bg:   var(--bg-canvas);
+  /* Recessed, but only just: the page is separated from the field by an edge —
+     a hairline and an elevation — rather than by a drop in tone, so the field
+     needs to be light enough that the tab does not read as a dark surround with
+     a document cut out of it. */
+  --doc-field-bg:  #F1EEE7;   /* recessed field around the page   */
+  /* `FLO-flow.md`: a Flow node's surface. It reads as part of the drawing rather
+     than as a card on top of it, so it is lighter than the elevated tone a
+     modal takes and slightly translucent — the canvas's own dot grid carries
+     faintly through it, and the node's own dots (below) continue the texture at
+     the same pitch. */
+  --flow-node-bg:  rgba(255,255,255,0.86);
+  --flow-node-dot: rgba(0,0,0,0.05);
+  --bg-hover:      rgba(0,0,0,0.04);
+  --bg-active:     rgba(75,91,255,0.10);
+  --bg-selection:  rgba(75,91,255,0.18);
+
+  /* Foreground */
+  --fg-1:          #1A1816;   /* primary text                     */
+  --fg-2:          #44403B;   /* secondary text, body             */
+  --fg-3:          #6E6A63;   /* tertiary, muted, meta            */
+  --fg-4:          #9A958B;   /* placeholder, disabled            */
+  --fg-on-accent:  #FFFFFF;
+
+  /* Lines */
+  --border-1:      #E5E0D6;   /* default UI dividers              */
+  --border-2:      #D7D1C3;   /* stronger separators, inputs      */
+  --border-3:      #BAB3A2;   /* hovered/emphasis borders         */
+  --ring:          rgba(75,91,255,0.35);
+
+  /* Syntax-ish (diff, code, log) */
+  --diff-add-bg:   #E4F5EC;
+  --diff-add-fg:   #186E4F;
+  --diff-del-bg:   #FBE3E3;
+  --diff-del-fg:   #A21F23;
+  /* The words that actually differ inside a replaced line, against the softer
+     whole-line tint above — what turns "this line changed" into "this word
+     changed" at a glance. */
+  --diff-add-strong-bg: #A8E6C6;
+  --diff-del-strong-bg: #F6BDBD;
+  --log-info:      #44403B;
+  /* Dark enough to clear 4.5:1 both on the panel (6.5:1) and on --warn-soft,
+     which is what the Logs panel's eviction notice sits on (5.7:1). The lighter
+     amber it replaces read as washed-out cream-on-cream in light mode at the
+     small size these labels are set in. */
+  --log-warn:      #7D5700;
+  --log-error:     #C82A2F;
+  /* The Logs panel's recessive columns — timestamp and domains. A step of its
+     own rather than --fg-3, which clears 4.5:1 in light but not in dark, and
+     these are the columns a reader correlates records by. */
+  --log-meta:      #6F6A62;
+  /* DEBUG recedes to the same step as those columns: it is detail that only
+     matters once you are already investigating, and it is the level a busy
+     buffer is mostly made of. Without a tone of its own it inherited --fg-2 —
+     which is exactly --log-info, leaving the two commonest levels rendered
+     identically and the colour channel of LOG-FR-03 carrying nothing. */
+  --log-debug:     var(--log-meta);
+
+  /* ---------- SYNTAX TOKENS (EDT-FR-78) ----------
+     The colours a source file's tokens are read in, on the Editor's source
+     surface and in a Diff tab's Source rendering (DFV-FR-57). Declared here as
+     semantic roles of the theme rather than imported from the highlighting
+     library's own stylesheet: a theme is what these have to answer to, and a
+     palette shipped with a grammar answers to nothing in this application.
+
+     Nine roles rather than the library's forty scopes, each holding at least
+     4.5:1 against the page (`--doc-page-bg`) so a file is readable rather than
+     merely colourful, and each far enough from `--fg-1` that a token reads as
+     one. Plain text keeps `--fg-1`: an unmapped scope is not given a colour of
+     its own, so the palette stays a set a reader can learn. */
+  --code-comment:  #6E6A63;
+  --code-keyword:  #8B3FA8;
+  --code-string:   #1F7A4D;
+  --code-number:   #A8551A;
+  --code-type:     #1D6FA5;
+  --code-function: #2F4FD0;
+  --code-variable: #44403B;
+  --code-meta:     #7D5700;
+  --code-punct:    #6E6A63;
+}
+
+/* ============================================================
+   DARK THEME — "Graphite".
+   Cool slate, calibrated for long sessions. Default for IDE.
+   ============================================================ */
+[data-theme="dark"] {
+  --accent:        #7A8BFF;
+  --accent-hover:  #8C9CFF;
+  --accent-press:  #6877EE;
+  --accent-soft:   #232745;
+  --accent-fg:     #0B0C12;
+
+  --live:          #FF8453;
+  --live-soft:     #3A1E10;
+  --ok:            #4AB78F;
+  --ok-soft:       #14322A;
+  --warn:          #E0A93B;
+  --warn-soft:     #3A2E10;
+  --danger:        #F26F73;
+  --danger-soft:   #401819;
+
+  --bg-app:        #0E1014;
+  --bg-chrome:     #14171D;
+  --bg-panel:      #181B22;
+  --bg-canvas:     #1B1F27;
+  --bg-elevated:   #232733;
+  --bg-sunken:     #0B0D11;
+  --attention-surface: #262B4C; /* NTF-FR-34: a tab needing attention */
+  /* EDT-FR-63 / CMT-FR-38: page, field, and card, all three distinct here too —
+     the field recedes below the canvas the page carries, and the panel tone a
+     card takes sits between them. */
+  --doc-page-bg:   var(--bg-canvas);
+  --doc-field-bg:  #101319;
+  /* The same reading as in the light theme: lighter than `--bg-elevated`, which
+     is what a node used to take and what made a canvas of them read as a scatter
+     of dark slabs. */
+  --flow-node-bg:  rgba(61,68,84,0.82);
+  --flow-node-dot: rgba(255,255,255,0.06);
+  --bg-hover:      rgba(255,255,255,0.05);
+  --bg-active:     rgba(122,139,255,0.16);
+  --bg-selection:  rgba(122,139,255,0.24);
+
+  --fg-1:          #ECEAE5;
+  --fg-2:          #B8B4AC;
+  --fg-3:          #847F76;
+  --fg-4:          #5A554C;
+  --fg-on-accent:  #0B0C12;
+
+  --border-1:      #262A33;
+  --border-2:      #333845;
+  --border-3:      #4A4F5E;
+  --ring:          rgba(122,139,255,0.45);
+
+  --diff-add-bg:   #14322A;
+  --diff-add-fg:   #6BD7AA;
+  --diff-del-bg:   #3A1A1C;
+  --diff-del-fg:   #F39DA0;
+  --diff-add-strong-bg: #1F6B4B;
+  --diff-del-strong-bg: #6E2B2E;
+  --log-info:      #B8B4AC;
+  --log-warn:      #E0A93B;
+  --log-error:     #F26F73;
+  --log-meta:      #948F85;
+  --log-debug:     var(--log-meta);
+
+  /* EDT-FR-78: the same nine roles, re-read for this theme. A token colour is
+     never carried across from the other one — these sit against a dark page and
+     have to clear the same 4.5:1 there. */
+  --code-comment:  #948E81;
+  --code-keyword:  #D79BE8;
+  --code-string:   #7BD3A0;
+  --code-number:   #E8A87C;
+  --code-type:     #7BC2EE;
+  --code-function: #9DAAFF;
+  --code-variable: #C9C4BA;
+  --code-meta:     #E0A93B;
+  --code-punct:    #948E81;
+}
+
+/* ============================================================
+   SEMANTIC TYPE — applied directly to HTML elements where
+   appropriate; otherwise opt-in via classes.
+   ============================================================ */
+/* OVW-FR-13: the UI role is the document's own typography, so every surface
+   that names neither of the other two roles inherits it — which is what lets a
+   surface added later render correctly with no typographic decision of its
+   own. */
+html, body {
+  font-family: var(--font-ui-family);
+  font-size:   var(--fs-ui-md);
+  line-height: var(--font-ui-line-height);
+  color:       var(--fg-1);
+  background:  var(--bg-app);
+  font-feature-settings: "ss01", "cv11"; /* Inter: clean a, single-story g */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* The Tauri window is fixed-size; the document itself must never scroll.
+     Picker PPK-FR-10/PPK-FR-11 require that the only scroll region in the app's
+     pre-project surface is the recent-projects list. */
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* DISPLAY — used in Project Picker, large empty states */
+.t-display {
+  font-family: var(--font-display);
+  font-size: var(--fs-display);
+  line-height: var(--lh-tight);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--ls-tight);
+  color: var(--fg-1);
+}
+
+/* DOCUMENT (Markdown editor) — Tiptap WYSIWYG.
+   EDT-FR-62 / DFV-FR-37: a rendered Markdown document's prose is the **Rich
+   Markdown** role. Declared on `.doc` itself rather than left to inherit, so
+   the page carries the role wherever it is mounted — the Editor's canvas and a
+   Diff tab's rich rendering alike — instead of picking up whatever the
+   surrounding chrome is set in. */
+.doc { font-family: var(--font-rich-family); }
+.doc h1, .t-h1 { font-size: var(--fs-doc-2xl); line-height: var(--lh-tight); font-weight: var(--fw-bold);  letter-spacing: var(--ls-tight); margin: 0 0 var(--sp-4); }
+.doc h2, .t-h2 { font-size: var(--fs-doc-xl);  line-height: var(--lh-snug);  font-weight: var(--fw-semi);  margin: var(--sp-6) 0 var(--sp-3); }
+.doc h3, .t-h3 { font-size: var(--fs-doc-lg);  line-height: var(--lh-snug);  font-weight: var(--fw-semi);  margin: var(--sp-5) 0 var(--sp-2); }
+.doc p,  .t-p  { font-size: var(--fs-doc-md);  line-height: var(--font-rich-line-height); margin: 0 0 var(--sp-3); color: var(--fg-2); }
+.doc ul, .doc ol { font-size: var(--fs-doc-md); line-height: var(--font-rich-line-height); margin: 0 0 var(--sp-3); padding-left: var(--sp-5); color: var(--fg-2); }
+.doc li + li { margin-top: var(--sp-1); }
+.doc strong { font-weight: var(--fw-semi); color: var(--fg-1); }
+.doc em { font-style: italic; }
+.doc a  { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
+.doc a:hover { border-bottom-style: solid; }
+.doc blockquote {
+  border-left: 2px solid var(--border-3);
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-4);
+  margin: 0 0 var(--sp-3);
+  color: var(--fg-3);
+  font-style: italic;
+}
+/* EDT-FR-62 / OVW-FR-13: code inside a rendered document is the **Source code**
+   role, so it reads as code on whichever surface the author is on. Inline code
+   takes the role's face but stays sized relative to the run it sits in — an
+   absolute size here would set a `code` span inside an h1 two steps smaller
+   than the heading around it. */
+.doc code, .t-code {
+  font-family: var(--font-source-family);
+  font-size: 0.92em;
+  background: var(--bg-sunken);
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  color: var(--fg-1);
+}
+/* A fenced block is its own paragraph rather than a run inside one, so it takes
+   the Source role whole — face, size, and line height. */
+.doc pre {
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-lg);
+  line-height: var(--font-source-line-height);
+  background: var(--bg-sunken);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-1);
+  overflow-x: auto;
+  margin: 0 0 var(--sp-3);
+}
+.doc pre code { background: none; padding: 0; }
+.doc hr { border: 0; border-top: 1px solid var(--border-1); margin: var(--sp-6) 0; }
+/* EDT-FR-68: the constructs the rich surface models must read as themselves.
+   A table without rules is a run-on of words, and a task list wearing both a
+   bullet and a checkbox reads as neither. */
+.doc table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-doc-md);
+  line-height: var(--font-rich-line-height);
+  color: var(--fg-2);
+}
+.doc th, .doc td {
+  border: 1px solid var(--border-1);
+  padding: var(--sp-1) var(--sp-2);
+  text-align: left;
+  vertical-align: top;
+}
+.doc th { background: var(--bg-sunken); font-weight: var(--fw-semi); color: var(--fg-1); }
+/* A table wider than the page's measure scrolls within its own wrapper. The
+   page keeps its bounded measure whatever the tab's width (EDT-FR-63), so the
+   document never slides sideways under a wide table. */
+.doc .tableWrapper { overflow-x: auto; max-width: 100%; margin: 0 0 var(--sp-3); }
+.doc .tableWrapper > table { margin: 0; }
+.doc img { max-width: 100%; height: auto; border-radius: var(--r-xs); }
+/* The checkbox stands where the list marker would, so a task reads as one line
+   rather than as a marker above its text. */
+.doc ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+.doc ul[data-type="taskList"] li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+.doc ul[data-type="taskList"] li > label {
+  flex: 0 0 auto;
+  user-select: none;
+}
+.doc ul[data-type="taskList"] li > div { flex: 1 1 auto; min-width: 0; }
+.doc ul[data-type="taskList"] li > div > p { margin: 0; }
+
+/* ---------- DOC AT UI SCALE ----------
+   The same Markdown rendering, typeset for a panel row rather than a page.
+   A vertical panel is a narrow surface whose rows run at the ui-* scale, and a
+   body set at the doc-* scale dwarfs every other row beside it (per
+   `CMP-comments-panel.md` and `NTS-notes.md` layout notes). Structure, emphasis
+   and code all still read — only the measure changes.
+
+   The modifier takes the *host's* type treatment rather than naming one of its
+   own: `.doc` sets a size and a colour on every block, and a surface that has
+   already declared what its body reads like — `.comment__body` is 12px at
+   `--fg-1` — would otherwise be overruled by a rule that knows nothing about
+   it. Inheriting means one modifier composes with any row, and a surface that
+   changes its own scale carries its Markdown along with it. */
+/* OVW-FR-13: a comment body and a note body are panel rows, so they are the
+   **UI** role — not the Rich Markdown one `.doc` brings. The modifier takes the
+   family back, exactly as it takes the measure back: what makes these Markdown
+   is the structure they render, not the page they would be read on. Code inside
+   them still comes from `.doc code` / `.doc pre` above, because code is the
+   Source role in any rendered document. */
+.doc--ui { font-family: var(--font-ui-family); }
+.doc--ui p,
+.doc--ui ul,
+.doc--ui ol {
+  font-size: inherit; color: inherit;
+  line-height: var(--lh-snug); margin: 0 0 var(--sp-2);
+}
+/* A heading in a panel row is distinguished by weight, not by size: at this
+   measure a step up in size is invisible, and a step that showed would be the
+   dwarfing this modifier exists to prevent. */
+.doc--ui h1,
+.doc--ui h2,
+.doc--ui h3 {
+  font-size: inherit; line-height: var(--lh-snug);
+  font-weight: var(--fw-semi); letter-spacing: 0;
+  margin: 0 0 var(--sp-1); color: inherit;
+}
+.doc--ui ul, .doc--ui ol { padding-left: var(--sp-4); }
+/* A quote takes the measure but keeps `.doc blockquote`'s muted colour: being
+   set back from the prose around it is what marks the passage as quoted, and
+   that is a distinction in the content, not in the scale this modifier
+   changes. */
+.doc--ui blockquote {
+  margin: 0 0 var(--sp-2); padding: 0 0 0 var(--sp-2);
+  font-size: inherit;
+}
+/* A code block is a box at the host's own measure; the code inside it takes its
+   notch from `.doc code` above, which is already relative. Setting a notch here
+   as well would compound with that one and land a fenced block two steps below
+   the prose around it. */
+.doc--ui pre { margin: 0 0 var(--sp-2); padding: var(--sp-2); font-size: inherit; }
+.doc--ui hr { margin: var(--sp-2) 0; }
+/* The last block sets no trailing gap: the row's own padding is the spacing
+   between a body and whatever follows it. */
+.doc--ui > :last-child { margin-bottom: 0; }
+
+/* UI text — chrome, tabs, panels, menus. */
+.t-ui      { font-size: var(--fs-ui-md); line-height: var(--lh-normal); color: var(--fg-1); }
+.t-ui-sm   { font-size: var(--fs-ui-sm); line-height: var(--lh-snug);   color: var(--fg-2); }
+.t-ui-xs   { font-size: var(--fs-ui-xs); line-height: var(--lh-snug);   color: var(--fg-3); }
+.t-meta    { font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3); }
+.t-eyebrow { font-size: var(--fs-ui-xs); text-transform: uppercase; letter-spacing: var(--ls-caps); font-weight: var(--fw-semi); color: var(--fg-3); }
+/* SNV-FR-57: content sitting inside an eyebrow — a file name, a path — is not a
+   label and is never case-transformed. The eyebrow keeps its treatment for the
+   label beside it. */
+.t-eyebrow__literal { text-transform: none; letter-spacing: 0; }
+.t-label   { font-size: var(--fs-ui-sm); font-weight: var(--fw-medium); color: var(--fg-2); }
+.t-muted   { color: var(--fg-3); }
+.t-hash    { font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3); }
+
+/* Selection */
+::selection { background: var(--bg-selection); color: var(--fg-1); }

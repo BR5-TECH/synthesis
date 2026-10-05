@@ -1,0 +1,5 @@
+id = "19ffa26da7f-0022-84faf951"
+scope = "project"
+body = "OS notifications delivered while app is not in the focus (i.e. in background) causes a dialog “Choose application” to show up with “use_default” in question. Looks like OS notifications do not have a proper association?"
+created_at = "2026-08-13T08:04:38Z"
+updated_at = "2026-08-13T08:05:32Z"

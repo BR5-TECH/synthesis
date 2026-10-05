@@ -1,0 +1,643 @@
+
+.comment {
+  border-top: 1px solid var(--border-1);
+  padding-top: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+/* The rule divides messages, so it belongs between them rather than above the
+   first. It still draws where a quote line or a Locked badge opens the card,
+   because there it divides that from the conversation — but a discussion card
+   carries neither (CMT-FR-55), and there the rule was a line ruled under
+   nothing across the top of every card. */
+.comment-card > .comment:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+/* Positioned, because the thread's overflow menu hangs off the head of the
+   message the thread opens with (CMT-FR-15) and resolves its offsets against
+   this box. */
+.comment__head { display: flex; align-items: center; gap: var(--sp-2); position: relative; }
+/* CMT-FR-38: a message's author line recedes below the message, on the same
+   terms the card head's does — a name set at the body's own size and colour
+   competes with what it signs. */
+.comment__author {
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  color: var(--fg-2);
+}
+/* CMT-FR-10: an agent's comment is distinguishable from a human's. */
+.comment__author[data-agent="true"] { color: var(--accent); }
+/* CMT-FR-77: the role an agent answered under, on a line of its own directly
+   below the name. Quieter than the name above it — it qualifies the author
+   rather than competing with them — and clipped to one line, because a title is
+   author-supplied text and a long one would push the message it heads down the
+   card. It is only ever rendered for a non-empty snapshot, so there is no empty
+   state here to reserve height for. */
+.comment__title {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  line-height: var(--lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The title lines up with the NAME, not with the agent marker that precedes it.
+   The marker is text inside `.comment__author`, so a title starting at the
+   card's edge sits under the glyph and reads as belonging to it rather than to
+   the name above.
+
+   The indent is a hidden copy of the marker rather than a measured padding, so
+   it is exactly one marker wide in whatever font, size, and weight the author
+   line resolves to — a hard-coded value would drift the moment any of the three
+   changed. It matches `--fw-semi` for the same reason: the author span is
+   semibold and a glyph's advance width is weight-dependent.
+
+   `visibility: hidden` keeps it out of the accessibility tree, and a
+   pseudo-element keeps it out of `textContent` — so a copied comment carries no
+   stray glyph. Kept in step with the marker rendered in `CommentRail.tsx` and
+   `Comments.tsx`; those two sites name this rule. */
+.comment__title::before,
+.comment-row__title::before {
+  content: "✦ ";
+  visibility: hidden;
+  font-weight: var(--fw-semi);
+}
+.comment__time { color: var(--fg-3); font-size: var(--fs-ui-xs); }
+.comment__quote-button { margin-left: auto; color: var(--fg-3); }
+.comment__quote-button:hover { color: var(--accent); }
+/* The one action a composer leads with, so it carries the accent while the
+   others stay quiet. */
+.comment-card__post:not(:disabled) { color: var(--accent); }
+/* Not `--accent-soft`: on a card that has lifted onto `--bg-elevated` the two
+   are all but the same colour in the dark theme, which is exactly the state an
+   author is in while writing. */
+.comment-card__post:not(:disabled):hover { background: var(--bg-active); }
+/* CMT-FR-13: a quoted message renders as an attributed block above the body of
+   the comment that quotes it. */
+.comment__quoted {
+  border-left: 2px solid var(--border-2);
+  padding-left: var(--sp-2);
+  margin: var(--sp-1) 0;
+  color: var(--fg-3);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-snug);
+}
+.comment__quoted--pending {
+  display: flex;
+  gap: var(--sp-1);
+  align-items: center;
+  background: var(--bg-sunken);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  padding: var(--sp-1) var(--sp-2);
+}
+.comment__quoted--pending button {
+  all: unset;
+  cursor: pointer;
+  margin-left: auto;
+  color: var(--fg-3);
+  display: inline-flex;
+}
+.comment__quoted--pending button:hover { color: var(--fg-1); }
+
+/* The rail is narrow: a comment body reads as prose at the rail's scale rather
+   than at the document's. */
+.comment__body { font-size: var(--fs-ui-sm); color: var(--fg-1); }
+.comment__body p { margin: var(--sp-1) 0; }
+.comment__body pre {
+  margin: var(--sp-1) 0;
+  padding: var(--sp-2);
+  overflow-x: auto;
+  background: var(--bg-sunken);
+  border-radius: var(--r-sm);
+}
+.comment__body-heading { font-weight: var(--fw-semi); margin: var(--sp-2) 0 2px; }
+.comment__body-list { margin: 2px 0; }
+.comment__body-marker { color: var(--fg-3); }
+
+.comment-card__reply { margin-top: var(--sp-2); }
+
+/* CMT-FR-45 / CMT-FR-46: the Attach control and what a composer has queued. */
+.comment-attach { position: relative; display: inline-flex; }
+
+.comment-attach__menu {
+  position: absolute;
+  bottom: calc(100% + var(--sp-1));
+  /* The menu hangs from whichever of the control's edges has the composer
+     behind it, so it opens across the field instead of out of it. Getting this
+     backwards is not a cosmetic slip: the rail is `overflow: hidden` and the
+     conversation tab is a clipped column, so a menu opening the wrong way is sliced
+     by its container and the part carrying the two entries is unreachable.
+
+     Trailing is the default, for a control ending a control row
+     (`.draft-composer__actions`, `justify-content: flex-end`). Anchoring
+     leftward there also keeps the rail from acquiring horizontal scroll, which
+     the link form's `autoFocus` would otherwise ride to drag every card off the
+     margin. */
+  right: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 11rem;
+  padding: var(--sp-1);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+}
+
+/* CMT-FR-45: the inline field puts Attach at the composer's leading edge, so
+   the menu hangs from that edge and opens across the message area. Anchored the
+   other way it would open leftward from a control ~24px inside the surface and
+   spend 150 of its 176 pixels outside it. */
+.comment-attach[data-align="leading"] .comment-attach__menu {
+  right: auto;
+  left: 0;
+}
+
+.comment-attach__menu button {
+  padding: var(--sp-1) var(--sp-2);
+  font: inherit;
+  color: var(--fg-1);
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.comment-attach__menu button:hover { background: var(--bg-hover); }
+
+/* No width of its own: the form is as wide as the menu above it and no wider.
+   A `min-width` here would push the form past whichever edge of the surface the
+   menu is not anchored to, and past a leading edge that overflow contributes
+   nothing to `scrollWidth` — so the clipped strip would be unreachable by any
+   means. The inputs shrink to fit rather than the form growing to hold them. */
+.comment-attach__link > * {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.comment-attach__pending {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+}
+
+/* A chip stays inside the card's measure: a long filename truncates rather than
+   widening the rail past the margin it has (CMT-FR-48). */
+.comment-attach__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  max-width: 100%;
+  padding: 2px var(--sp-1);
+  overflow: hidden;
+  color: var(--fg-2);
+  text-decoration: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-ui-sm);
+}
+
+.comment-attach__chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comment-attach__chip-type { color: var(--fg-3); flex: none; }
+
+.comment-attach__chip[data-broken] { color: var(--fg-3); }
+
+.comment-attach__chip button {
+  display: inline-flex;
+  flex: none;
+  padding: 0;
+  color: var(--fg-3);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.comment-attach__chip button:hover { color: var(--fg-1); }
+
+/* CMT-FR-48: a thumbnail bounded to the card's measure — an index of the
+   picture rather than the picture, which opens at full size on activation.
+   Bounded in height as well as width, on the same principle the rail applies to
+   a very long comment: a card that grows without limit pushes its own composer
+   under the rail's pinned footer, where it cannot be clicked at all. */
+.comment__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+  max-height: 13rem;
+  overflow-y: auto;
+}
+
+.comment-attach__thumb { display: block; max-width: 100%; line-height: 0; }
+
+.comment-attach__thumb img {
+  max-width: 100%;
+  max-height: 7rem;
+  object-fit: contain;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+}
+/* CMT-FR-45 / CMT-FR-11: one field carrying the message and the two controls
+   that act on it — Attach leading, Post trailing — rather than a text box above
+   a separate row of buttons. The border and the surface move here from the
+   textarea, which becomes the middle of the field rather than the whole of it,
+   so the three read as one control in every mode a conversation is written in. */
+.comment-composer {
+  box-sizing: border-box;
+  width: 100%;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  padding: var(--sp-1) var(--sp-2);
+  transition: border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out);
+}
+/* The field takes the focus ring the textarea used to, so focusing the message
+   lights the whole control rather than a box inside it. */
+.comment-composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus);
+}
+.comment-composer__row {
+  display: flex;
+  /* The controls sit on the LAST line of a grown message rather than floating
+     beside its middle, which is where the eye expects Send once the box is
+     five lines tall. */
+  align-items: flex-end;
+  gap: var(--sp-1);
+}
+/* Neither control gives up its hit area as the field grows, and the message
+   takes every pixel they do not. The selectors are on the row's OWN children:
+   both the Attach control and the composer render a wrapper element, so a rule
+   aimed at the button or the textarea inside them reaches a box its parent has
+   already sized. */
+.comment-composer__row > * { flex: 0 0 auto; }
+.comment-composer__row > .mention-composer {
+  flex: 1 1 auto;
+  /* Without this a long unbroken word sets the flex base and pushes Post off
+     the trailing edge, which is the default `min-width: auto` doing its job in
+     the one place it is wrong. */
+  min-width: 0;
+}
+.mention-composer > .comment-card__composer { width: 100%; }
+
+.comment-card__composer {
+  display: block;
+  /* The middle of the field: it takes the width left over and carries none of
+     the chrome, which the field around it now holds. */
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: var(--font-sans);
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-snug);
+  color: var(--fg-1);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: var(--sp-1) 0;
+  transition: border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out);
+}
+/* CVP-FR-55: a composer that sizes itself to its text has no use for a floor —
+   the floor is what kept it three lines tall when it opens at one — and none for
+   a resize grip, which the next keystroke would overrule. */
+.comment-card__composer[data-autogrow="true"] {
+  min-height: 0;
+  resize: none;
+}
+/* CMT-FR-78: the placeholder names who an untagged reply will reach, and a list
+   too long for the field is clipped with an ellipsis at its trailing edge. A
+   textarea placeholder wraps by default, which would take a second line and grow
+   the field in the one project — many agents enrolled — where that is worst; it
+   stays on one line and is disclosed nowhere else, so nothing here adds a title
+   or an accessible name carrying the untruncated list. */
+.comment-card__composer::placeholder {
+  color: var(--fg-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The ring is the field's now (`.comment-composer:focus-within`), so the
+   textarea takes none of its own — two rings inside one another read as a
+   mistake. */
+.comment-card__composer:focus { outline: none; }
+.comment-card__composer:disabled { background: none; color: var(--fg-3); }
+.comment-composer:has(.comment-card__composer:disabled) {
+  background: var(--bg-sunken);
+}
+.comment-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-1);
+  margin-top: var(--sp-2);
+}
+.comment-card__error {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-snug);
+  color: var(--danger);
+}
+
+/* CMT-FR-42: a pending contribution occupies the position the agent's answer
+   will take, so the card does not reflow when the answer replaces it. It is
+   deliberately quieter than a comment — nothing has been said yet. */
+.comment--pending {
+  opacity: 0.7;
+  font-style: italic;
+}
+.comment--pending .comment__time {
+  font-style: normal;
+}
+
+/* CMT-FR-42: the placeholder sits where the agent's answer will, in the same
+   measure a comment does, so a card holding several outstanding turns stays
+   legible and the reply that replaces it does not reflow the card. */
+.comment__body--pending {
+  margin: 0;
+  color: var(--fg-2);
+}
+
+/* CMT-FR-73: a failed contribution occupies the position the answer would have
+   taken, so the card does not reflow when Retry puts **Thinking…** back there.
+   Distinguished from a delivered comment and from a pending one by more than
+   colour — a marker glyph, its own left edge, and its own wording — because a
+   message that reads like an answer but is the absence of one is the worst thing
+   this card could render. */
+.comment--failed {
+  border-inline-start: 2px solid var(--danger);
+  padding-inline-start: var(--sp-2);
+}
+/* CMT-FR-82: the unsupported-image notice — a **status and not an error**, so
+   it is neither the danger edge above nor a blocking banner. Its own edge and
+   its own wording distinguish it without relying on colour, and it is focusable
+   so a keyboard user can read it where it sits. */
+.comment__image-notice {
+  margin: var(--sp-1) 0 0;
+  padding-inline-start: var(--sp-2);
+  border-inline-start: 2px solid var(--border-2);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-2);
+}
+.comment__image-notice:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.comment--failed .comment__failed-marker {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: auto;
+  color: var(--danger);
+}
+.comment__body--failed {
+  margin: 0;
+  color: var(--fg-2);
+}
+/* CMT-FR-73: the one lettered control in a card, because it is an offer the
+   author has to recognise rather than an action they already know is there
+   (CMT-FR-35 governs the rest). */
+.comment__failed-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--sp-1);
+}
+.comment__retry {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+/* CMT-FR-74: unavailable while its own dispatch is initiating. Expressed with
+   `aria-disabled` rather than `disabled` so the control keeps focus — see the
+   comment at its render site — which means the look has to be spelled out here
+   rather than inherited from `:disabled`. */
+.comment__retry[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* AGT-FR-04 / AGT-FR-25: a nickname and a provider-qualified model id are both
+   author-supplied and routinely long. Every surface that renders one sits in a
+   fixed-width panel, so a row that cannot shrink runs past its card and is cut
+   mid-word by the card's own overflow. `min-width: 0` is load-bearing: a flex
+   item defaults to its content's minimum width and would otherwise refuse to
+   shrink at all, whatever the ellipsis says. */
+.u-ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* AGT-FR-29: a tag that matches an enrolled agent, distinguishable from the
+   prose around it wherever a message body is rendered. A tag that matches
+   nobody never reaches this rule (AGT-FR-28). */
+/* AGT-FR-29: a tag resolving to at least one enrolled agent is bold wherever a
+   message body is rendered, so a reader can tell at a glance who it was
+   addressed to. Heavier than `.doc strong` deliberately — a body may carry its
+   own emphasis, and a tag has to read as an address rather than as one more
+   emphasised phrase in the sentence. A tag resolving to nobody never reaches
+   this class at all (AGT-FR-28), so an email address keeps the weight of the
+   prose around it. */
+.comment__tag {
+  color: var(--accent);
+  font-weight: var(--fw-bold);
+}
+
+/* CMT-FR-05: the affordance a non-empty selection reveals, placed just past the
+   end of that selection — `top`/`left` come from the selection's own geometry. */
+.editor__comment-affordance {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  /* A glyph beside the passage rather than a filled block over it: the text is
+     what the author is reading, and the affordance is only an offer. */
+  width: 26px;
+  height: 26px;
+  color: var(--fg-2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  padding: 0;
+  box-shadow: var(--shadow-2);
+  transition: color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out);
+}
+.editor__comment-affordance:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-3);
+}
+
+/* CMT-FR-29: the count rides with the control in the action cluster. Sized to
+   its contents rather than to the square an icon-only button gets, so the
+   numeral has room to sit beside the glyph instead of crowding it. */
+.btn.editor__comments-toggle {
+  position: relative;
+  width: auto;
+  min-width: 30px;
+  padding: 0 var(--sp-2);
+  gap: 5px;
+}
+.editor__comments-count {
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-2);
+}
+.editor__comments-toggle[data-active="true"] .editor__comments-count { color: inherit; }
+
+/* CMT-FR-28: an anchored passage is marked in the body, and the focused
+   thread's range distinguishably from the rest. Presentation only — no layout
+   shift, so marking a range never reflows the document under the caret. */
+.comment-anchor {
+  background: rgba(75, 91, 255, 0.10);
+  border-bottom: 1px solid rgba(75, 91, 255, 0.35);
+  cursor: pointer;
+}
+.comment-anchor--focused {
+  background: var(--bg-selection);
+  border-bottom: 2px solid var(--accent);
+}
+.comment-rail__action { margin-top: 6px; }
+
+/* ---------- Comments panel (CMP-comments-panel.md) ---------- */
+
+/* CMP-FR-05: the group header carries the group's name and its thread count.
+   A modifier rather than a redefinition of the shared class: `display: flex`
+   would otherwise reach the Notes panel's headers too and kill the
+   `text-overflow: ellipsis` they rely on, which needs a block container. */
+.note-group__header--counted { display: flex; align-items: baseline; gap: 8px; }
+.note-group__count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-3);
+}
+
+/* CMP-FR-10: the whole row is one activation target, so it is a button — reset
+   to the card the Notes rows already are rather than inheriting button chrome. */
+.comment-row {
+  display: block; width: calc(100% - 12px); box-sizing: border-box;
+  text-align: left;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  margin: 6px;
+  font: inherit;
+  font-size: var(--fs-ui-md); color: var(--fg-1);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+.comment-row:hover { background: var(--bg-hover); border-color: var(--border-2); }
+.comment-row:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+
+/* CMP-FR-12 / CMP-FR-29: an artifact that has gone leaves no owner to open, so
+   its row opens the fallback tab. Dimmed to say so, without hiding it. */
+.comment-row--missing { opacity: 0.75; }
+
+.comment-row__artifact {
+  display: flex; align-items: center; gap: 5px;
+  font-size: var(--fs-ui-xs); color: var(--fg-3);
+  margin-bottom: 4px;
+}
+/* CMP-FR-06: the whole project-relative path. Truncated from its *head* when
+   the panel is too narrow, so the file name survives and the folder is what
+   gives — the opposite of what a trailing ellipsis would do. */
+.comment-row__path {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  direction: rtl; text-align: left;
+}
+/* CMP-FR-06: the target kind, as a word at the owner line's trailing edge. */
+.comment-row__kind {
+  margin-left: auto; flex: none;
+  border: 1px solid var(--border-2); border-radius: var(--r-sm);
+  padding: 0 4px; color: var(--fg-2);
+}
+/* CMP-FR-12: the shared `.unresolved-marker` chip, following the kind. Its
+   appearance is the shared class's; only the placement is this panel's. */
+.comment-row .unresolved-marker { flex: none; }
+
+/* CMP-FR-06: the anchored passage, truncated to one line — it identifies the
+   thread, and a long selection must not push the conversation out of view. */
+.comment-row__quote {
+  display: flex; align-items: baseline; gap: 4px;
+  color: var(--fg-2); font-style: italic;
+  margin-bottom: 4px;
+}
+.comment-row__quote > span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.comment-row__meta {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: var(--fs-ui-xs); color: var(--fg-3);
+}
+.comment-row__author { font-weight: var(--fw-semi); color: var(--fg-2); }
+/* CMP-FR-07: an agent reads as one at a glance, as it does in the rail. */
+.comment-row__author[data-agent="true"] { color: var(--accent); }
+.comment-row__time { margin-left: auto; flex: none; cursor: default; }
+/* CMP-FR-30: the role the agent answered under, between the author line and the
+   body — the same relation, and the same recession, the rail gives it
+   (CMT-FR-77). Clipped to one line: the panel is narrow and an author-supplied
+   title must not cost the rows below it their place on screen. Indented to the
+   name by the shared `::before` rule beside `.comment__title`. */
+.comment-row__title {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  line-height: var(--lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The opening comment, clamped: the panel is narrow, and a long first message
+   must not cost the rows below it their place on screen. */
+.comment-row__body {
+  margin-top: 2px;
+  line-height: var(--lh-snug);
+  word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.comment-row__body > :first-child { margin-top: 0; }
+.comment-row__body > :last-child { margin-bottom: 0; }
+
+/* CMP-FR-06 / CMP-FR-25: the reply count and the attachment count share the
+   row's last line, the attachments at its trailing edge — so neither costs the
+   row a line of its own and the two never run together as `1 reply3`. */
+.comment-row__replies {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: 4px;
+  font-size: var(--fs-ui-xs); color: var(--fg-3);
+}
+
+.comment-row__attachments {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+}
+

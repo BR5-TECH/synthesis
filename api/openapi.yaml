@@ -1,0 +1,1935 @@
+openapi: 3.1.0
+info:
+  title: Synthesis server
+  version: "1.0.0"
+  summary: The application service and the relay boundary of the Synthesis server.
+  description: |
+    The REST surface of `specifications/server/SAS-server-application-service.md`,
+    the relay introspection routes of
+    `specifications/server/SRB-server-relay-boundary.md`, the project-discovery
+    route of `specifications/server/RSN-remote-session.md`, and the three
+    WebSocket upgrades of `specifications/server/WSK-websocket.md`.
+
+    Every route and every WebSocket upgrade but `GET /v1/health` needs the header
+    `Authorization: Bearer <token>`, carrying `SYNTHESIS_SERVER_TOKEN`. On the
+    application routes the token authenticates the persisted administrator user
+    (SAS-FR-LFCA, SAS-FR-XRPD), which bypasses every access-control check. On the
+    relay it authenticates transport access alone (RSN-FR-TWQJ): the handle
+    check, the worker-ownership check, and the end-to-end client authentication
+    stand beside it.
+
+    The permission each project-scoped operation needs is named in the
+    description of that operation. The relay evaluates no permission.
+
+    The frames the three WebSocket endpoints carry are not described here: a
+    WebSocket protocol is outside what OpenAPI describes, and
+    `specifications/server/WSK-websocket.md` holds the frame tables.
+servers:
+  - url: http://localhost:8080
+    description: The service as it binds by default.
+security:
+  - bearerAuth: []
+tags:
+  - name: Health
+    description: The unauthenticated health route of BMS-FR-11.
+  - name: Users
+  - name: Teams
+  - name: Organizations
+  - name: Memberships
+  - name: Invitations
+  - name: Devices
+  - name: Projects
+  - name: Grants
+    description: The project access-control grants of SAS-FR-CGTM.
+  - name: Drafts
+  - name: Conversations
+  - name: Relay
+    description: The read-only routing state of SRB-FR-SEKN.
+paths:
+  /v1/health:
+    get:
+      tags: [Health]
+      summary: The build version the binary was compiled from, and the capabilities it serves.
+      description: |
+        The one route that needs no credential (BMS-FR-11). It reports the build
+        version and the stable capability identifiers of BMS-FR-JQZW, and it
+        reports no key, no QR content, no device registration, no application
+        payload, no user, no project ownership, and no connection state.
+      security: []
+      responses:
+        '200':
+          description: The build version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+  /v1/users:
+    get:
+      tags: [Users]
+      summary: List the users the caller may read.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: The window of records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Users]
+      summary: Create a user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUser'
+      responses:
+        '201':
+          description: The record that was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/teams:
+    get:
+      tags: [Teams]
+      summary: List the teams the caller belongs to.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: The window of records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Team'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Teams]
+      summary: Create a team.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGroup'
+      responses:
+        '201':
+          description: The record that was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/organizations:
+    get:
+      tags: [Organizations]
+      summary: List the organizations the caller belongs to.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: The window of records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Organization'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Organizations]
+      summary: Create an organization.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGroup'
+      responses:
+        '201':
+          description: The record that was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/memberships:
+    get:
+      tags: [Memberships]
+      summary: List memberships, filtered by member or by target.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/MemberIdQuery'
+        - $ref: '#/components/parameters/TargetTypeQuery'
+        - $ref: '#/components/parameters/TargetIdQuery'
+      responses:
+        '200':
+          description: The window of records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Membership'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Memberships]
+      summary: Create a membership.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMembership'
+      responses:
+        '201':
+          description: The record that was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Membership'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/invitations:
+    get:
+      tags: [Invitations]
+      summary: List the invitations the caller may read.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: The window of records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Invitation'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Invitations]
+      summary: Create an invitation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvitation'
+      responses:
+        '201':
+          description: The record that was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/devices:
+    get:
+      tags: [Devices]
+      summary: List the devices the caller owns.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: The window of records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Device'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Devices]
+      summary: Register a device.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDevice'
+      responses:
+        '201':
+          description: The record that was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/projects:
+    get:
+      tags: [Projects]
+      summary: List the projects the caller may read (project.read).
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: The window of records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Project'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Projects]
+      summary: Create a project, with its owner grant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProject'
+      responses:
+        '201':
+          description: The record that was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/projects/{project_id}/grants:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Grants]
+      summary: List the grants of a project (project.manage_acl).
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: The window of records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Grant'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Grants]
+      summary: Create a grant (project.manage_acl).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGrant'
+      responses:
+        '201':
+          description: The record that was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Grant'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/projects/{project_id}/drafts:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Drafts]
+      summary: List the drafts of a project (draft.read).
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: The window of records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Draft'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Drafts]
+      summary: Create a draft (draft.create).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDraft'
+      responses:
+        '201':
+          description: The record that was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Draft'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/projects/{project_id}/conversations:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Conversations]
+      summary: List the conversations of a project (conversation.read).
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: The window of records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Conversation'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Conversations]
+      summary: Create a conversation (conversation.create).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConversation'
+      responses:
+        '201':
+          description: The record that was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/users/{user_id}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Users]
+      summary: Read one user.
+      responses:
+        '200':
+          description: The record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Users]
+      summary: Update one user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUser'
+      responses:
+        '200':
+          description: The record as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Users]
+      summary: Delete one user.
+      responses:
+        '204':
+          description: The record was deleted.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/teams/{team_id}:
+    parameters:
+      - $ref: '#/components/parameters/TeamId'
+    get:
+      tags: [Teams]
+      summary: Read one team.
+      responses:
+        '200':
+          description: The record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Teams]
+      summary: Update one team.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGroup'
+      responses:
+        '200':
+          description: The record as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Teams]
+      summary: Delete one team.
+      responses:
+        '204':
+          description: The record was deleted.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/organizations/{organization_id}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+    get:
+      tags: [Organizations]
+      summary: Read one organization.
+      responses:
+        '200':
+          description: The record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Organizations]
+      summary: Update one organization.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGroup'
+      responses:
+        '200':
+          description: The record as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Organizations]
+      summary: Delete one organization.
+      responses:
+        '204':
+          description: The record was deleted.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/memberships/{membership_id}:
+    parameters:
+      - $ref: '#/components/parameters/MembershipId'
+    get:
+      tags: [Memberships]
+      summary: Read one membership.
+      responses:
+        '200':
+          description: The record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Membership'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Memberships]
+      summary: Update one membership.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMembership'
+      responses:
+        '200':
+          description: The record as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Membership'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Memberships]
+      summary: Delete one membership.
+      responses:
+        '204':
+          description: The record was deleted.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/devices/{device_id}:
+    parameters:
+      - $ref: '#/components/parameters/DeviceId'
+    get:
+      tags: [Devices]
+      summary: Read one device.
+      responses:
+        '200':
+          description: The record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Devices]
+      summary: Update one device.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDevice'
+      responses:
+        '200':
+          description: The record as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Devices]
+      summary: Delete one device.
+      responses:
+        '204':
+          description: The record was deleted.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/projects/{project_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Projects]
+      summary: Read one project.
+      description: Needs project.read.
+      responses:
+        '200':
+          description: The record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Projects]
+      summary: Update one project.
+      description: Needs project.update.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProject'
+      responses:
+        '200':
+          description: The record as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Projects]
+      summary: Delete one project.
+      description: Needs the owner or the administrator.
+      parameters:
+        - $ref: '#/components/parameters/Cascade'
+      responses:
+        '204':
+          description: The record was deleted.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/projects/{project_id}/grants/{grant_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/GrantId'
+    get:
+      tags: [Grants]
+      summary: Read one grant.
+      description: Needs project.manage_acl.
+      responses:
+        '200':
+          description: The record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Grant'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Grants]
+      summary: Update one grant.
+      description: Needs project.manage_acl.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGrant'
+      responses:
+        '200':
+          description: The record as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Grant'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Grants]
+      summary: Delete one grant.
+      description: Needs project.manage_acl.
+      responses:
+        '204':
+          description: The record was deleted.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/drafts/{draft_id}:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+    get:
+      tags: [Drafts]
+      summary: Read one draft.
+      description: Needs draft.read.
+      responses:
+        '200':
+          description: The record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Draft'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Drafts]
+      summary: Update one draft.
+      description: Needs draft.update. The body carries the revision the caller holds; another revision is a stale_revision conflict.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDraft'
+      responses:
+        '200':
+          description: The record as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Draft'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Drafts]
+      summary: Delete one draft.
+      description: Needs draft.delete.
+      responses:
+        '204':
+          description: The record was deleted.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/conversations/{conversation_id}:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    get:
+      tags: [Conversations]
+      summary: Read one conversation.
+      description: Needs conversation.read.
+      responses:
+        '200':
+          description: The record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Conversations]
+      summary: Update one conversation.
+      description: Needs conversation.update. The body carries the revision the caller holds; another revision is a stale_revision conflict.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateConversation'
+      responses:
+        '200':
+          description: The record as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/invitations/{invitation_id}:
+    parameters:
+      - $ref: '#/components/parameters/InvitationId'
+    get:
+      tags: [Invitations]
+      summary: Read one invitation.
+      responses:
+        '200':
+          description: The invitation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/invitations/{invitation_id}/accept:
+    parameters:
+      - $ref: '#/components/parameters/InvitationId'
+    post:
+      tags: [Invitations]
+      summary: Accept an invitation, once.
+      description: The invitation moves to accepted and one active membership is written. An expired, revoked, or accepted invitation is an invitation_not_pending conflict.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptInvitation'
+      responses:
+        '201':
+          description: The membership that was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Membership'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/invitations/{invitation_id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/InvitationId'
+    post:
+      tags: [Invitations]
+      summary: Revoke a pending invitation.
+      responses:
+        '200':
+          description: The invitation as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/devices/{device_id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/DeviceId'
+    post:
+      tags: [Devices]
+      summary: Revoke a device.
+      responses:
+        '200':
+          description: The device as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/projects/{project_id}/transfer-ownership:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [Projects]
+      summary: Move the ownership of a project.
+      description: Reserved to the owner and to the administrator. The owner grant moves with the ownership, and this is the one way the owner changes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferOwnership'
+      responses:
+        '200':
+          description: The project as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/projects/{project_id}/grants/{grant_id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/GrantId'
+    post:
+      tags: [Grants]
+      summary: Revoke a grant.
+      description: Needs project.manage_acl. The grant supplies nothing at once and stays readable until it is deleted. The owner grant is an owner_protected conflict.
+      responses:
+        '200':
+          description: The grant as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Grant'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/drafts/{draft_id}/archive:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+    post:
+      tags: [Drafts]
+      summary: Archive a draft.
+      description: Needs draft.archive.
+      responses:
+        '200':
+          description: The draft as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Draft'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/drafts/{draft_id}/graduate:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+    post:
+      tags: [Drafts]
+      summary: Graduate a draft.
+      description: Needs draft.graduate.
+      responses:
+        '200':
+          description: The draft as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Draft'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/conversations/{conversation_id}/resolve:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    post:
+      tags: [Conversations]
+      summary: Resolve a conversation.
+      description: Needs conversation.resolve. A later message returns the conversation to open.
+      responses:
+        '200':
+          description: The conversation as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/conversations/{conversation_id}/lock:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    post:
+      tags: [Conversations]
+      summary: Lock a conversation.
+      description: Needs conversation.lock. A locked conversation refuses every later message.
+      responses:
+        '200':
+          description: The conversation as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/conversations/{conversation_id}/messages:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    get:
+      tags: [Conversations]
+      summary: Read the message sequence.
+      description: Needs conversation.read. The messages are in the order they were appended.
+      responses:
+        '200':
+          description: The append-only sequence.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Message'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Conversations]
+      summary: Append one message.
+      description: Needs conversation.append. The message takes the next sequence number, and no request writes one. A locked conversation is a conversation_locked conflict.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppendMessage'
+      responses:
+        '201':
+          description: The message that was appended.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/roles:
+    get:
+      tags: [Projects]
+      summary: The role-to-permission mapping.
+      description: The mapping the service publishes, for project, team, and organization roles.
+      responses:
+        '200':
+          description: The mapping.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Roles'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /v1/projects/{project_id}/permissions:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Projects]
+      summary: The effective permissions of one user on one project.
+      description: The caller's own permissions need project.read; another user's need project.manage_acl.
+      parameters:
+        - $ref: '#/components/parameters/UserIdQuery'
+      responses:
+        '200':
+          description: The union of the permissions the grants supply.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EffectivePermissions'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/relay/workers:
+    get:
+      tags: [Relay]
+      summary: The active worker routes.
+      description: The routing state is held in memory alone, and a restart drops every route.
+      responses:
+        '200':
+          description: The active routes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WorkerRoute'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /v1/relay/workers/{instance_id}:
+    parameters:
+      - $ref: '#/components/parameters/InstanceId'
+    get:
+      tags: [Relay]
+      summary: One worker route.
+      responses:
+        '200':
+          description: The route.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerRoute'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/relay/projects:
+    get:
+      tags: [Relay]
+      summary: The projects one worker exposes to one registered client.
+      description: |
+        RSN-FR-MHDV. The request names a registered client with its opaque
+        handle and the worker the handle is bound to. The answer holds the
+        worker, its selected project, and its exposed projects, and holds no
+        key, no handle, no application payload, no user, and no ownership data
+        (RSN-FR-QLEC). It reports the announcement the worker route holds when
+        the request is served; the relay caches nothing beyond it (RSN-FR-GXWB).
+      parameters:
+        - name: X-Synthesis-Client-Handle
+          in: header
+          required: true
+          description: The opaque handle the relay assigned at registration.
+          schema: { type: string }
+        - name: X-Synthesis-Instance-Id
+          in: header
+          required: true
+          description: The worker the handle is bound to.
+          schema: { type: string }
+      responses:
+        '200':
+          description: The exposed projects of that worker.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelayProjects'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: |
+            The handle was revoked, expired, or reset (RSN-FR-TFJU). The error
+            code is `handle_revoked`, `handle_expired`, or `handle_reset`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: |
+            No route holds the handle, the handle is bound to another worker, or
+            the worker holds no active route (RSN-FR-TFJU, RSN-FR-ZDPA). The
+            error code is `handle_not_found` or `worker_not_found`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /v1/worker:
+    get:
+      tags: [Relay]
+      summary: The worker WebSocket upgrade.
+      description: |
+        WSK-FR-KTRB. The IDE upgrades this route and speaks the worker protocol
+        of `specifications/server/WSK-websocket.md`. The first frame is
+        `worker_hello`. A request that is not an upgrade is answered
+        `400 Bad Request` (WSK-FR-NAXC).
+      responses:
+        '101': { description: The connection speaks the worker protocol. }
+        '400': { description: The request is not a WebSocket upgrade. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /v1/client:
+    get:
+      tags: [Relay]
+      summary: The client WebSocket upgrade.
+      description: |
+        WSK-FR-KTRB. The remote client upgrades this route and speaks the client
+        protocol. The first frame is `client_attach`, carrying the opaque handle
+        and the target worker.
+      responses:
+        '101': { description: The connection speaks the client protocol. }
+        '400': { description: The request is not a WebSocket upgrade. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /v1/registration:
+    get:
+      tags: [Relay]
+      summary: The registration WebSocket upgrade.
+      description: |
+        WSK-FR-KTRB, WSK-FR-BJTN. The mobile client upgrades this route and
+        speaks the registration protocol. The first frame is
+        `registration_start`, and the relay answers `registration_bound` with a
+        fresh opaque handle.
+      responses:
+        '101': { description: The connection speaks the registration protocol. }
+        '400': { description: The request is not a WebSocket upgrade. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        The static token of V1 (SAS-FR-LFCA), read from `SYNTHESIS_SERVER_TOKEN`.
+        On the application routes it authenticates the persisted administrator
+        user; on the relay routes and the WebSocket upgrades it authenticates
+        transport access alone (SRB-FR-JEBM). The service compares it in constant
+        time (SAS-FR-BZUK), and it reaches no answer, no log record, and no
+        persisted record (SAS-FR-PMRB).
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: The page size. The default is 100 and the maximum is 500.
+      schema: { type: integer, minimum: 1, maximum: 500 }
+    Offset:
+      name: offset
+      in: query
+      required: false
+      description: How many records to pass over before the page starts.
+      schema: { type: integer, minimum: 0 }
+    MemberIdQuery:
+      name: member_id
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+    TargetTypeQuery:
+      name: target_type
+      in: query
+      required: false
+      schema: { type: string, enum: [user, team, organization] }
+    TargetIdQuery:
+      name: target_id
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+    UserIdQuery:
+      name: user_id
+      in: query
+      required: false
+      description: The user whose permissions are read. It defaults to the caller.
+      schema: { type: string, format: uuid }
+    Cascade:
+      name: cascade
+      in: query
+      required: false
+      description: Deletes the drafts, the conversations, and the grants of the project with it.
+      schema: { type: boolean, default: false }
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TeamId:
+      name: team_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    OrganizationId:
+      name: organization_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    MembershipId:
+      name: membership_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    InvitationId:
+      name: invitation_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DeviceId:
+      name: device_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProjectId:
+      name: project_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    GrantId:
+      name: grant_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DraftId:
+      name: draft_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ConversationId:
+      name: conversation_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    InstanceId:
+      name: instance_id
+      in: path
+      required: true
+      description: The temporary identifier the IDE generated when it started.
+      schema: { type: string }
+  responses:
+    BadRequest:
+      description: |
+        A field is absent, empty, or too long; an identifier is not a UUID; or a
+        role or a permission is unknown. The codes are invalid_field,
+        invalid_role, and invalid_permission.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthenticated:
+      description: The request carries no accepted credential. The code is unauthenticated.
+      headers:
+        WWW-Authenticate:
+          schema: { type: string }
+          description: The scheme the route accepts.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: The principal may read the record but holds no permission for the operation. The code is forbidden.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: |
+        No record holds the identifier, or the principal may not read the
+        project, which is answered the same way so the existence of a project is
+        not disclosed. The code is not_found.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: |
+        The write conflicts with the state the service holds. The codes are
+        duplicate_id, duplicate_membership, duplicate_grant, owner_protected,
+        referenced, stale_revision, conversation_locked, and
+        invitation_not_pending.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Health:
+      type: object
+      required: [version, capabilities]
+      additionalProperties: false
+      properties:
+        version: { type: string }
+        capabilities:
+          type: array
+          description: |
+            The capabilities this relay serves (BMS-FR-JQZW). V1 advertises
+            exactly `remote_session` and `websocket`, each naming one
+            specification. A client treats an identifier it does not know as
+            unsupported.
+          items: { type: string, enum: [remote_session, websocket] }
+    Error:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              enum:
+                - unauthenticated
+                - forbidden
+                - not_found
+                - invalid_field
+                - invalid_role
+                - invalid_permission
+                - duplicate_id
+                - duplicate_membership
+                - duplicate_grant
+                - owner_protected
+                - referenced
+                - stale_revision
+                - conversation_locked
+                - invitation_not_pending
+                - internal
+            message: { type: string }
+    Permission:
+      type: string
+      enum:
+        - project.read
+        - project.update
+        - project.manage_acl
+        - draft.read
+        - draft.create
+        - draft.update
+        - draft.archive
+        - draft.delete
+        - draft.graduate
+        - conversation.read
+        - conversation.create
+        - conversation.append
+        - conversation.update
+        - conversation.resolve
+        - conversation.lock
+    ProjectRole:
+      type: string
+      enum: [owner, administrator, contributor, viewer]
+    MemberRole:
+      type: string
+      enum: [owner, administrator, member, viewer]
+    TargetType:
+      type: string
+      enum: [user, team, organization]
+    Status:
+      type: string
+      enum: [active, suspended]
+    IdentityClaim:
+      type: object
+      required: [issuer, subject]
+      properties:
+        issuer: { type: string }
+        subject: { type: string }
+    User:
+      type: object
+      required: [id, display_name, role, status, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        identity:
+          oneOf:
+            - $ref: '#/components/schemas/IdentityClaim'
+            - type: 'null'
+        display_name: { type: string, maxLength: 200 }
+        email: { type: [string, 'null'], maxLength: 320 }
+        role: { type: string, enum: [administrator, member] }
+        status: { $ref: '#/components/schemas/Status' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CreateUser:
+      type: object
+      required: [display_name]
+      properties:
+        id: { type: string, format: uuid }
+        display_name: { type: string, maxLength: 200 }
+        email: { type: string, maxLength: 320 }
+        role: { type: string, enum: [administrator, member] }
+        issuer: { type: string }
+        subject: { type: string }
+    UpdateUser:
+      type: object
+      properties:
+        display_name: { type: string, maxLength: 200 }
+        email: { type: string, maxLength: 320 }
+        role: { type: string, enum: [administrator, member] }
+        status: { $ref: '#/components/schemas/Status' }
+    Team:
+      type: object
+      required: [id, name, owner_id, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, maxLength: 200 }
+        owner_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Organization:
+      type: object
+      required: [id, name, owner_id, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, maxLength: 200 }
+        owner_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CreateGroup:
+      type: object
+      required: [name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, maxLength: 200 }
+        owner_id: { type: string, format: uuid }
+    UpdateGroup:
+      type: object
+      properties:
+        name: { type: string, maxLength: 200 }
+        owner_id: { type: string, format: uuid }
+    Membership:
+      type: object
+      required: [id, member_id, target_type, target_id, role, status, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        member_id: { type: string, format: uuid }
+        target_type: { type: string, enum: [team, organization] }
+        target_id: { type: string, format: uuid }
+        role: { $ref: '#/components/schemas/MemberRole' }
+        status: { $ref: '#/components/schemas/Status' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CreateMembership:
+      type: object
+      required: [member_id, target_type, target_id, role]
+      properties:
+        id: { type: string, format: uuid }
+        member_id: { type: string, format: uuid }
+        target_type: { type: string, enum: [team, organization] }
+        target_id: { type: string, format: uuid }
+        role: { $ref: '#/components/schemas/MemberRole' }
+    UpdateMembership:
+      type: object
+      properties:
+        role: { $ref: '#/components/schemas/MemberRole' }
+        status: { $ref: '#/components/schemas/Status' }
+    Invitation:
+      type: object
+      required: [id, target_type, target_id, inviter_id, role, expires_at, state, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        target_type: { type: string, enum: [team, organization] }
+        target_id: { type: string, format: uuid }
+        inviter_id: { type: string, format: uuid }
+        invitee_user_id: { type: [string, 'null'], format: uuid }
+        invitee_email: { type: [string, 'null'], maxLength: 320 }
+        role: { $ref: '#/components/schemas/MemberRole' }
+        expires_at: { type: string, format: date-time }
+        state: { type: string, enum: [pending, accepted, revoked] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CreateInvitation:
+      type: object
+      required: [target_type, target_id, role, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        target_type: { type: string, enum: [team, organization] }
+        target_id: { type: string, format: uuid }
+        invitee_user_id: { type: string, format: uuid }
+        invitee_email: { type: string, maxLength: 320 }
+        role: { $ref: '#/components/schemas/MemberRole' }
+        expires_at: { type: string, format: date-time }
+    AcceptInvitation:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: The user the membership is written for. It defaults to the invitee.
+    Device:
+      type: object
+      required: [id, owner_id, device_type, display_name, created_at, last_seen_at]
+      properties:
+        id: { type: string, format: uuid }
+        owner_id: { type: string, format: uuid }
+        device_type: { type: string, enum: [ide, client] }
+        display_name: { type: string, maxLength: 200 }
+        created_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        revoked_at: { type: [string, 'null'], format: date-time }
+    CreateDevice:
+      type: object
+      required: [device_type, display_name]
+      properties:
+        id: { type: string, format: uuid }
+        owner_id: { type: string, format: uuid }
+        device_type: { type: string, enum: [ide, client] }
+        display_name: { type: string, maxLength: 200 }
+    UpdateDevice:
+      type: object
+      properties:
+        display_name: { type: string, maxLength: 200 }
+        seen: { type: boolean, description: Moves the last-seen time to now. }
+    Project:
+      type: object
+      required: [id, display_name, owner_id, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        display_name:
+          type: string
+          maxLength: 200
+          description: Presentation only. The relay never routes by this value.
+        owner_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CreateProject:
+      type: object
+      required: [display_name]
+      properties:
+        id: { type: string, format: uuid }
+        display_name: { type: string, maxLength: 200 }
+        owner_id: { type: string, format: uuid }
+    UpdateProject:
+      type: object
+      properties:
+        display_name: { type: string, maxLength: 200 }
+    TransferOwnership:
+      type: object
+      required: [new_owner_id]
+      properties:
+        new_owner_id: { type: string, format: uuid }
+    Grant:
+      type: object
+      required: [id, project_id, target_type, target_id, role, permissions, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        target_type: { $ref: '#/components/schemas/TargetType' }
+        target_id: { type: string, format: uuid }
+        role: { $ref: '#/components/schemas/ProjectRole' }
+        permissions:
+          type: array
+          items: { $ref: '#/components/schemas/Permission' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        revoked_at: { type: [string, 'null'], format: date-time }
+        revoked_by: { type: [string, 'null'], format: uuid }
+    CreateGrant:
+      type: object
+      required: [target_type, target_id, role]
+      properties:
+        id: { type: string, format: uuid }
+        target_type: { $ref: '#/components/schemas/TargetType' }
+        target_id: { type: string, format: uuid }
+        role:
+          type: string
+          enum: [administrator, contributor, viewer]
+          description: The owner role is reached by a transfer of ownership alone.
+    UpdateGrant:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [administrator, contributor, viewer]
+    Draft:
+      type: object
+      required: [id, project_id, owner_id, title, content, state, revision, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        owner_id: { type: string, format: uuid }
+        title: { type: string, maxLength: 200 }
+        content: { type: string, maxLength: 1000000 }
+        state: { type: string, enum: [active, archived, graduated] }
+        revision: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CreateDraft:
+      type: object
+      required: [title]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, maxLength: 200 }
+        content: { type: string, maxLength: 1000000 }
+        owner_id: { type: string, format: uuid }
+    UpdateDraft:
+      type: object
+      required: [revision]
+      properties:
+        revision: { type: integer, minimum: 1 }
+        title: { type: string, maxLength: 200 }
+        content: { type: string, maxLength: 1000000 }
+    Message:
+      type: object
+      required: [id, sequence, author_id, body, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        sequence: { type: integer, minimum: 1 }
+        author_id: { type: string, format: uuid }
+        body: { type: string, maxLength: 1000000 }
+        created_at: { type: string, format: date-time }
+    AppendMessage:
+      type: object
+      required: [body]
+      properties:
+        id: { type: string, format: uuid }
+        body: { type: string, maxLength: 1000000 }
+    Conversation:
+      type: object
+      required: [id, project_id, owner_id, title, state, revision, messages, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        draft_id: { type: [string, 'null'], format: uuid }
+        owner_id: { type: string, format: uuid }
+        title: { type: string, maxLength: 200 }
+        state: { type: string, enum: [open, resolved, locked] }
+        revision: { type: integer, minimum: 1 }
+        messages:
+          type: array
+          items: { $ref: '#/components/schemas/Message' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CreateConversation:
+      type: object
+      required: [title]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, maxLength: 200 }
+        draft_id: { type: string, format: uuid }
+        owner_id: { type: string, format: uuid }
+    UpdateConversation:
+      type: object
+      required: [revision]
+      properties:
+        revision: { type: integer, minimum: 1 }
+        title: { type: string, maxLength: 200 }
+    Roles:
+      type: object
+      required: [permissions, project_roles, team_roles, organization_roles]
+      properties:
+        permissions:
+          type: array
+          items: { $ref: '#/components/schemas/Permission' }
+        project_roles:
+          type: array
+          items:
+            type: object
+            required: [role, permissions]
+            properties:
+              role: { $ref: '#/components/schemas/ProjectRole' }
+              permissions:
+                type: array
+                items: { $ref: '#/components/schemas/Permission' }
+        team_roles:
+          type: array
+          items: { $ref: '#/components/schemas/MemberRole' }
+        organization_roles:
+          type: array
+          items: { $ref: '#/components/schemas/MemberRole' }
+    EffectivePermissions:
+      type: object
+      required: [user_id, permissions]
+      properties:
+        user_id: { type: string, format: uuid }
+        permissions:
+          type: array
+          items: { $ref: '#/components/schemas/Permission' }
+    ExposedProject:
+      type: object
+      required: [project_id, display_name]
+      properties:
+        project_id:
+          type: string
+          description: The opaque identifier the relay routes by.
+        display_name:
+          type: string
+          description: Presentation only, and never a routing key.
+    WorkerRoute:
+      type: object
+      required: [instance_id, connection_id, connected_at, projects, attached_clients]
+      properties:
+        instance_id: { type: string }
+        connection_id: { type: string }
+        connected_at: { type: string, format: date-time }
+        projects:
+          type: array
+          items: { $ref: '#/components/schemas/ExposedProject' }
+        selected_project_id: { type: [string, 'null'] }
+        attached_clients: { type: integer, minimum: 0 }
+    RelayProjects:
+      type: object
+      required: [instance_id, selected_project_id, projects]
+      additionalProperties: false
+      properties:
+        instance_id: { type: string }
+        selected_project_id: { type: [string, 'null'] }
+        projects:
+          type: array
+          items: { $ref: '#/components/schemas/ExposedProject' }

@@ -1,0 +1,43 @@
+# Editor external change
+
+**Spec code:** `EXC`
+
+## Intent
+What the Editor does when the file under an open buffer changes beneath it. The Editor holds a baseline checksum for every artifact it has loaded and watches for the backend's report that the file on disk has moved on; where the two disagree, it raises a blocking modal offering exactly two resolutions and takes neither by itself. Nothing is reloaded and nothing is overwritten until the author says which version wins, because both answers destroy work and only the author knows which loss is acceptable. Separate from a divergence, and never confused with one, is the author's **own** wholesale replacement of a file — a rollback they confirmed or a proposed change they accepted — which is an instruction rather than a question and resets the session without asking. Out of scope: merging the two versions, which v1 does not attempt; the operations that report a change or restore a file, which belong to `../core/PST-project-storage.md` and `CHG-changes.md`; and the quiescing of an artifact's writes, which `EDT-editor.md` owns and which this surface only triggers and leaves.
+
+## UI contract boundary
+- **Owned by the UI**: the baseline checksum used to detect real divergence and to suppress the Editor's own writes, the external-change modal and its two resolutions, the never-auto-resolve rule, the inertness the modal imposes on every tab showing the artifact, and the two resets a confirmed rollback produces — what a reset discards and what it preserves.
+- **Delegated to backend (abstract)**: `"load artifact contents by id"` (returns `{ body, checksum }`), `"save artifact contents"` (returns `{ checksum }` of the bytes written), and the event `"artifact changed externally"` (payload `{ artifact_id, checksum }`). All three are owned by `../core/PST-project-storage.md`. In v1 the event is **consumed and resolved** here via a blocking modal rather than merely displayed. This surface introduces none of the three: a reset reloads through the same `"load artifact contents by id"` any other load uses, and which paths were restored or removed is the caller's typed result rather than anything read here (per `CHG-changes.md` CHG-FR-62).
+
+## Functional requirements
+1. **EXC-FR-WCOM** On load, the Editor records the `checksum` returned alongside the body by `"load artifact contents by id"` (per `../core/PST-project-storage.md` PST-FR-15) as the artifact's baseline.
+2. **EXC-FR-HKKG** The baseline is updated to the `checksum` returned by `"save artifact contents"` on every successful save.
+3. **EXC-FR-LKHZ** The Editor subscribes to the `"artifact changed externally"` event (per `../core/PST-project-storage.md` PST-FR-16).
+4. **EXC-FR-QCNO** When an event whose `artifact_id` matches an open artifact arrives and its `checksum` differs from that artifact's current baseline, the Editor raises the external-change modal.
+5. **EXC-FR-ALXA** An event whose `checksum` equals the baseline is the Editor's own just-saved write and is ignored: no modal is raised.
+6. **EXC-FR-VTUH** The external-change modal is blocking for the **artifact** rather than for one tab: it is raised on whichever of the artifact's tabs the author is in and leaves every tab showing that artifact inert until it is resolved, Editor and Diff alike (per `EDT-editor.md` EDT-FR-72), because the divergence is the file's and answering it twice would answer it twice differently.
+7. **EXC-FR-TYKX** The modal offers exactly two resolutions, **"Load from filesystem"** and **"Keep my version"**, and offers no merge in v1.
+8. **EXC-FR-WDAV** Choosing "Load from filesystem" discards the in-memory buffer, re-invokes `"load artifact contents by id"`, renders the returned body, clears the dirty indicator (per `EDT-editor.md` EDT-FR-04), and adopts the newly returned `checksum` as the baseline.
+9. **EXC-FR-WDEJ** Choosing "Keep my version" retains the in-memory buffer and the dirty indicator unchanged, and writes nothing at that moment.
+10. **EXC-FR-NMXQ** The write held for as long as the modal stood (per `EDT-editor.md` EDT-FR-70) is then performed, overwriting the on-disk file with the in-memory buffer, and the `checksum` it returns becomes the new baseline.
+11. **EXC-FR-VNLZ** The Editor never auto-resolves divergence: until the author picks a resolution it neither reloads nor overwrites.
+12. **EXC-FR-UWYK** If a further external change arrives — a new `checksum` — while a file is being kept in memory, the modal is re-raised for that fresh change, so a later third-party edit is not silently lost.
+13. **EXC-FR-QDMC** While the modal blocks the tab, undo and redo are inert along with every other edit operation.
+14. **EXC-FR-OGEG** Choosing "Keep my version" leaves the undo history and the buffer untouched, so the edits made before the modal appeared remain reversible afterwards.
+15. **EXC-FR-JAWT** An artifact whose file has been **replaced wholesale on disk by an act of the author's own** — a rollback that restored it, confirmed as restored by the operation that performed it and never assumed, or a proposed change they accepted (per `PCR-prompt-change-review.md` PCR-FR-11) — has its session reset to what the filesystem now holds.
+16. **EXC-FR-UVJY** That reset replaces the buffer by re-invoking `"load artifact contents by id"`, clears the dirty indicator, discards the undo history so the reloaded content is the oldest state undo reaches (per `EDT-editor.md` EDT-FR-24), adopts the returned `checksum` as the baseline, and leaves the quiesced state (per `EDT-editor.md` EDT-FR-81) so ordinary editing resumes.
+17. **EXC-FR-UPGM** The external-change modal is no part of that reset: it is not raised for it, and one already standing for that artifact is dismissed with neither of its resolutions taken, because offering "Keep my version" would offer the author back a buffer they have just had replaced on disk on purpose.
+18. **EXC-FR-WXXS** What survives a reset is everything that does not describe the discarded text: the active editing mode, the indentation convention, and any open find panel with its query, replacement text, and mode, whose matches recompute against the reloaded buffer (per `EDT-editor.md` EDT-FR-17, EDT-FR-37, and per `EFR-editor-find-replace.md` EFR-FR-GBJT, EFR-FR-ESDZ).
+19. **EXC-FR-ZXWI** An artifact whose file the same rollback reports **removed** has no session left to reset: its retained edit state is discarded outright **without being written**.
+20. **EXC-FR-CWUC** No close-time flush brings that artifact's pending write forward, no Save All sweep picks it up, and no failed-write guard refuses anything on its behalf (per `EDT-editor.md` EDT-FR-31, EDT-FR-35, EDT-FR-32), because writing the buffer of a file the author has just deleted would recreate exactly what they deleted.
+21. **EXC-FR-WTTZ** Every tab bound to a removed artifact closes (per `TAB-tabs.md` TAB-FR-41).
+22. **EXC-FR-UOJF** An artifact the operation reports as **neither** restored nor removed is left exactly as it stood — its buffer, dirty indicator, undo history, baseline, and any external-change modal over it all untouched — and its quiesce is lifted, because nothing on disk has been confirmed to have moved beneath it (per `CHG-changes.md` CHG-FR-63).
+23. **EXC-FR-MXWW** An acceptance that failed or was refused is the same case: nothing was written, so the session is left as it stood and its quiesce is lifted (per `PCR-prompt-change-review.md` PCR-FR-11).
+24. **EXC-FR-AEQZ** The acceptance of a change an agent proposed to a prompt artifact is the one act this modal does not hold back: it replaces the whole file on the author's own instruction, so a modal standing for that artifact is dismissed unanswered rather than waited on (per `EDT-editor.md` EDT-FR-84).
+25. **EXC-FR-NPFL** The one reset that reaches a buffer without this modal is the author's own wholesale replacement, which is not a divergence to resolve but an instruction, given on another surface and already carried out on disk, to discard the buffer.
+
+## Non-functional requirements
+- The baseline is held in memory alongside the artifact's editing session and is never persisted, so a restarted application re-establishes it from the next load rather than trusting a stored value.
+- Detection compares checksums alone and reads no file content to decide whether a divergence exists.
+- The modal is the only surface in the Editor that blocks editing, and it blocks per artifact rather than per window, so work on every other file continues while it stands.
+- No resolution is ever chosen by a timeout, a retry, or an application lifecycle event: an unresolved modal stays unresolved.

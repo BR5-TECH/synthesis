@@ -1,0 +1,667 @@
+
+/* GRV-FR-26: the comparison sits on one flat field with none of the framing a
+   Diff tab draws around it — `.diff`'s border, corners and recessed fill, and
+   Rich's page edge, elevation and field. Each of those is drawn for a comparison
+   inside a padded tab body with the tab's surface showing around it; the file
+   region offers no such margin, so a frame there lands a pixel in from the
+   region's own edge and reads as a seam. What each mode SHOWS is untouched,
+   including the page's measure and padding (layout notes). */
+.graduation-review__comparison {
+  margin-top: 8px;
+  min-height: 0;
+  background: var(--bg-canvas);
+}
+.graduation-review__comparison .diff,
+.graduation-review__comparison .diff-rich--page,
+.graduation-review__comparison .diff-rich--split,
+.graduation-review__comparison .diff-rich--split .diff-sbs__heading,
+.graduation-review__comparison .diff-rich--split .diff-sbs__sheets::before,
+.graduation-review__comparison .diff-rich--split .diff-sbs__sheets::after {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* Opaque, for the reason the draft review keeps them opaque: these two mask a
+   grid whose gaps are the rule between the panes, and a transparent cell lets
+   that fill the row. */
+.graduation-review__comparison .diff-sbs__cell,
+.graduation-review__comparison .diff-sbs__pane {
+  background: var(--bg-canvas);
+}
+
+/* NAW-FR-45: the run's state beside the draft's label, and the route to it. */
+.draft-workspace__graduation {
+  padding: 1px 6px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--fg-2);
+  cursor: pointer;
+}
+/* NAW-FR-46: the hand-off prompt a graduated draft holds, beside that tag. Set
+   as the tag's sibling rather than as another state, because it is a thing to
+   open rather than a fact about the run. */
+.draft-workspace__handoff {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--fg-2);
+  cursor: pointer;
+}
+.draft-workspace__handoff:hover { color: var(--fg-1); }
+
+/* NAW-FR-47: the surface it opens, bounded to the **tab** it sits in.
+   `max-height: 100%` is what makes that true, and it resolves against the scrim,
+   which is the tab. Without it the surface is sized by its content and spills
+   equally above and below a short tab — the scrim centres it and does not scroll
+   — putting the head and the foot over the window's own undimmed chrome, where
+   Copy and Close hit-test to the Runs panel and the top chrome instead of to
+   themselves. Every band inside it therefore has to be able to shrink: the three
+   are a fixed head, a scrolling body, and a fixed foot, exactly as the draft
+   change review this surface is bounded on the terms of composes its own. */
+.modal.draft-handoff {
+  display: flex;
+  flex-direction: column;
+  width: 640px;
+  max-width: 100%;
+  max-height: 100%;
+}
+.draft-handoff__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* `min-height: 0` against the default `auto`, which floors a flex item at its
+     content and is what would push the clamp above back out. */
+  min-height: 0;
+  overflow: hidden;
+}
+.draft-handoff__note { color: var(--fg-2); }
+.draft-handoff__none { color: var(--fg-3); }
+/* NAW-FR-47: verbatim in the Source code role, unrendered and soft-wrapped —
+   this text is the input to an agent rather than a document, so what is shown is
+   the characters that will reach it. It scrolls within itself so a long prompt
+   never pushes Copy off the surface.
+
+   Bounded by the surface rather than by a viewport fraction: a `vh` cap is
+   measured against the window while this surface is measured against the tab, so
+   on a window whose tab is short — the bottom panel open — a cap that looks
+   modest still made the surface taller than the tab it is bounded to. Filling
+   the body's own free space instead is bounded by construction, at every window
+   size and every panel arrangement. */
+.draft-handoff__text {
+  margin: 0;
+  padding: 10px;
+  /* Sized by its content where there is room, and shrunk below it where there is
+     not — `min-height: 0` being what lets the shrink actually happen. */
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+  font-family: var(--font-source-family);
+  font-size: var(--font-source-size);
+  line-height: var(--font-source-line-height);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* The report sits at the leading edge so the action keeps the trailing one, and
+   holds its space whether or not it says anything — a row that grew a line on
+   copy would move the button the author just pressed. */
+.draft-handoff .modal__actions .t-meta {
+  margin-right: auto;
+  color: var(--fg-3);
+}
+
+/* NAW-FR-44: why the prompt takes no edits. */
+.draft-workspace__locked {
+  margin: 0 12px 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  color: var(--fg-2);
+}
+/* DRP-FR-35: the panel's own route to a draft's run. */
+.drafts-tree__badge--run {
+  background: none;
+  cursor: pointer;
+  color: var(--fg-2);
+}
+
+/* ---------- DIFF TAB (DFV-diff-viewer.md) ---------- */
+/* `position: relative` is load-bearing: the action control is absolutely placed
+   in the tab's bottom-trailing corner (ACT-FR-10), and without a positioned
+   ancestor here it resolves against the initial containing block and lands on
+   the shell's status bar instead of inside the tab. */
+.diff-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+}
+.diff-view__path,
+.diff-view__comparison { font-size: var(--fs-ui-xs); color: var(--fg-3); }
+.diff-view__comparison { margin-left: auto; }
+/* Every mode soft-wraps, so nothing the tab renders reaches sideways: the body
+   scrolls vertically and never horizontally. A long line is read by wrapping
+   it, not by scrolling away from the gutter that numbers it. */
+.diff-view__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+/* DFV-FR-38: the field the Rich page is set on. Source keeps the tab's own
+   background, because it renders no page for a field to be behind. */
+.diff-view__body[data-page="on"] { background: var(--doc-field-bg); }
+/* The body is the scroller, and its children are flex items — so by default
+   they SHRINK to its height instead of overflowing it. Since `.diff` clips its
+   own overflow, the file would then be cut off at the fold with no scrollbar
+   anywhere. `flex: none` is what makes the content taller than the body, which
+   is what gives the body something to scroll. */
+.diff-view__body > * { flex: none; }
+/* Side-by-side is the exception: it brings its own scroller, because the two
+   panes have to share one scroll position (DFV-FR-13) and the `old`/`new`
+   heading stays put above them. So it fills the body exactly rather than
+   growing past it. */
+.diff-view__body > .diff-sbs {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* DFV-FR-07: one toolbar row under the tab header, both groups centred as a
+   single cluster. Each keeps its footprint whatever the file is — a group whose
+   choices do not apply renders disabled rather than disappearing — so the
+   controls never move between tabs. */
+/* DFV-FR-07 / DFV-FR-51: the two toggle groups keep the CENTRE of the row and
+   the target's write state sits at its trailing end.
+
+   Three columns rather than a flex row with an auto margin on the state: an
+   auto margin absorbs all the free space, which makes `justify-content: center`
+   a no-op and leaves the cluster flush against the leading edge. The outer
+   columns are `1fr` and equal, so the middle one is centred on the row however
+   long the state's text grows — and the leading column, which holds nothing,
+   is what pays for the trailing one. */
+.diff-toolbar {
+  display: grid;
+  /* `minmax(0, …)` on the two outer columns rather than a bare `1fr`: they must
+     stay EQUAL for the middle one to be centred, and a bare `1fr` is a minimum
+     of `auto`, so a long write state would widen its own column and push the
+     cluster off-centre — the very thing the grid is here to prevent. */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border-1);
+  flex: none;
+}
+/* Every child is pinned to row 1.
+   `grid-row` rather than auto-placement, because auto-placement is row-major
+   and sparse: the cluster comes first in DOM order and takes column 2, so a
+   note in column 1 — which comes after it — cannot back up to a column the
+   cursor has already passed and starts a second row instead, dragging the write
+   state down with it. The row would then be 25px taller on a file rich
+   rendering does not apply to than on one it does, which is exactly the
+   "the row keeps its position whatever the file is" the layout notes ask for. */
+.diff-toolbar > * { grid-row: 1; }
+/* The two groups and the divider between them are one cluster, in the middle
+   column. */
+.diff-toolbar__cluster {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.diff-toolbar__group { display: flex; align-items: center; gap: 2px; }
+.diff-toolbar__divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px var(--sp-2);
+  background: var(--border-1);
+}
+.diff-toolbar .btn[data-active="true"] { background: var(--bg-active); color: var(--accent); }
+.diff-toolbar .btn:disabled { opacity: 0.4; cursor: default; }
+/* The explanation takes the LEADING column, leaving the trailing one to the
+   write state. Two things in one column would sit on top of each other. */
+.diff-toolbar__note {
+  grid-column: 1;
+  justify-self: start;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  overflow-wrap: anywhere;
+}
+
+/* DFV-FR-51 / DCR-FR-26: the target's write state, at the row's trailing end
+   and nowhere else. The trailing column of the toolbar's grid is what puts it
+   there, and the leading column — equal in width and holding only the note — is
+   what pays for it, so the cluster stays centred however long the state's text
+   grows. It is not a control and takes no space from the groups: at the minimum
+   window size the column simply narrows and the text ellipsises. */
+.diff-toolbar__write-state {
+  grid-column: 3;
+  justify-self: end;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+.diff-toolbar__write-state[data-state="dirty"] { color: var(--fg-2); }
+.diff-toolbar__write-state[data-state="error"],
+.diff-toolbar__write-state[data-state="conflict"] { color: var(--danger); }
+
+/* DFV-FR-10: two fixed-width numeric gutter columns, old then new, so rows do
+   not shift horizontally as line numbers gain digits or as a re-fetch changes
+   the hunk set. The sign column is what carries the marking without colour.
+   Both are `flex: none` and top-aligned, so a wrapped line's continuation sits
+   under its text rather than under its number. */
+.diff-line { align-items: flex-start; }
+.diff-line__gutter {
+  /* Fixed, not `min-width`: a row whose line number gains a digit must not
+     widen its own gutter, or its text column steps sideways relative to every
+     other row — and in side-by-side the two panes stop lining up.
+
+     Fixed *per role*, though, not per pixel: the numbers inside it are set in
+     the Source code role (DFV-FR-37), so a width pinned at 48px crops a
+     four-digit line number the moment that role's size grows past the default —
+     the old and new columns then run into each other and read as one number.
+     Expressing it as a ratio keeps every row identical to every other, which is
+     the property the alignment depends on, while letting the column hold what
+     the role puts in it. */
+  width: calc(var(--font-source-size) * 48 / 13);
+  text-align: right;
+  padding-right: var(--sp-2);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-3);
+  flex: none;
+  user-select: none;
+}
+.diff-line__sign { width: 12px; flex: none; user-select: none; }
+/* The text is what wraps; `anywhere` so an unbroken token (a URL, a minified
+   line, a base64 blob) wraps too instead of forcing the row wide. */
+.diff-line__text {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The words that actually differ inside a replaced line. The line already
+   carries its own tint; this is the stronger mark that says which part of it
+   is the edit. */
+.diff-word {
+  background: var(--diff-add-strong-bg);
+  color: inherit;
+  border-radius: 2px;
+}
+.diff-line[data-kind="del"] .diff-word,
+.diff-block[data-mark="removed"] .diff-word {
+  background: var(--diff-del-strong-bg);
+}
+
+/* DFV-FR-13: one scroller holds both panes, so they cannot be seen at
+   different offsets and neither can be scrolled vertically on its own. */
+/* Fills the height the body gives it; the inner scroller is what moves. */
+.diff-sbs { display: flex; flex-direction: column; min-height: 0; }
+.diff-sbs__heading {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border-1);
+  flex: none;
+}
+.diff-sbs__pane {
+  background: var(--bg-panel);
+  padding: 2px var(--sp-3);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+}
+.diff-sbs__scroll { overflow-y: auto; overflow-x: hidden; min-height: 0; }
+/* A grid row is as tall as its tallest half, so a line that wraps to three
+   rows on one side keeps its counterpart opposite it on the other — the
+   alignment holds down the whole file however the text wraps. */
+.diff-sbs__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border-1);
+}
+.diff-sbs__cell { background: var(--bg-sunken); min-width: 0; }
+/* DFV-FR-11: filler is inert — no number, no content, no marking. */
+.diff-line[data-kind="filler"] { background: var(--bg-panel); opacity: 0.4; }
+
+/* DFV-FR-41: which half of a comparison takes the caret has to be legible
+   before the caret is put there, and by more than colour — a reader who cannot
+   discriminate the change marking's two tints still has the sign character in
+   the gutter and, here, a surface treatment of its own.
+
+   The hatch is the same field the filler rows take, so "this is not yours to
+   type into" reads as one thing throughout the tab rather than as three
+   different greys. It is drawn behind the text at low contrast, so it says
+   read-only without competing with what is written on it. */
+[aria-readonly="true"].diff-line__text,
+.diff-line[data-kind="del"] .diff-line__text,
+.diff-line[data-kind="filler"] {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 3px,
+    var(--border-1) 3px 4px
+  );
+  background-blend-mode: multiply;
+}
+
+/* DFV-FR-50: the editable target takes focus with a treatment of its own,
+   distinct from the read-only original's, so a keyboard user can see which
+   revision their next keystroke reaches. `outline-offset` keeps it clear of the
+   change marking's own edge. */
+/* The caret's own row says where the caret is, and by the same treatment the
+   rich target uses: a rule at the leading edge rather than a box drawn round the
+   text. A box reads as a widget the author has stepped into — the thing this
+   surface is deliberately not — and it is drawn on every click, because a
+   `contenteditable` is always focus-visible. Inset, so nothing reflows. */
+.diff-line__text--target { cursor: text; }
+.diff-line__text--target:focus-visible {
+  outline: none;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* DFV-FR-47: the rich target is the Editor's own surface over a run of the
+   document, so it takes no chrome of its own — a box drawn round the passage
+   being typed into is the tell that it is a widget rather than the document.
+   What says the caret is here is a rule at the run's leading edge, drawn as an
+   inset shadow so nothing reflows when it appears. */
+/* DFV-FR-47: the rich target is the Editor's own surface over a run of the
+   document, and it carries no chrome of its own — no box, no rule, no focus
+   ring. Anything drawn around or beside the text is the tell that this is a
+   widget the author has stepped into rather than the document itself, which is
+   the one thing this surface must not read as. What says the caret is here is
+   the caret. */
+.diff-run { position: relative; cursor: text; min-width: 0; flex: 1; }
+.diff-run__doc:focus-visible { outline: none; }
+/* The run's own blocks are laid out by `.doc`, exactly as the Editor lays them
+   out — except at its edges, where the run is a passage of a larger reading
+   rather than a page: a leading margin would push a one-block run's text below
+   the original it is rendered opposite (DFV-FR-45), and a trailing one would
+   open a gap under it. */
+.diff-run__doc > :first-child { margin-top: 0; }
+.diff-run__doc > :last-child { margin-bottom: 0; }
+
+/* DFV-FR-19: the marking, carried by the decorations the run applies to the
+   blocks of its document rather than by wrappers around them — a wrapper would
+   be content, and content is what the serialiser writes to disk. The geometry
+   matches `.diff-block` above so a marked run and a removed block rendered
+   beside it line their text up on one measure. */
+.diff-run { padding: 2px var(--sp-2); }
+.diff-run [data-mark] {
+  position: relative;
+  padding-left: calc(12px + var(--sp-2));
+  border-radius: var(--r-sm);
+}
+.diff-run [data-mark="added"] { background: var(--diff-add-bg); }
+.diff-run [data-mark="removed"] { background: var(--diff-del-bg); }
+/* DFV-FR-41: the sign character, so an addition and a removal are told apart
+   without the tint. `attr()` rather than a rule per mark, and a pseudo-element
+   rather than a node, so nothing here is selectable, editable, or serialised. */
+.diff-run [data-glyph]::before {
+  content: attr(data-glyph);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 12px;
+  font-family: var(--font-mono);
+  color: var(--fg-3);
+  user-select: none;
+  pointer-events: none;
+}
+/* A table row is the one marked unit that cannot carry the glyph itself: a
+   `::before` on a `tr` is laid out as an anonymous cell — a phantom leading
+   column the width of the padding — and padding on a row is dropped outright.
+   Its first cell carries both instead, which puts the sign in the same place
+   relative to the text as everywhere else. */
+.diff-run tr[data-mark] { padding-left: 0; border-radius: 0; }
+.diff-run tr[data-glyph]::before { content: none; }
+.diff-run tr[data-glyph] > :first-child {
+  position: relative;
+  padding-left: calc(12px + var(--sp-2));
+}
+.diff-run tr[data-mark="added"] > :first-child::before { content: "+"; }
+.diff-run tr[data-mark="removed"] > :first-child::before { content: "\2212"; }
+.diff-run tr[data-glyph] > :first-child::before {
+  position: absolute;
+  left: var(--sp-2);
+  top: var(--sp-2);
+  width: 12px;
+  font-family: var(--font-mono);
+  color: var(--fg-3);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* DFV-FR-54 / DCR-FR-31: a target with nothing in it says so, rather than
+   rendering as a blank region with nothing to act on. */
+/* The wrapper the tab claims undo/redo on (DFV-FR-50). It is a pass-through in
+   the flex column the tab is, so it must not become a box of its own. */
+.diff-view__target { display: contents; }
+.diff-empty-target { border: none; }
+.diff-empty-target__note {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+}
+
+/* DFV-FR-17: the rendered document is typeset by the Editor's own `.doc` rules
+   on the Editor's canvas, so a Spec read here and the same Spec open in the
+   Editor look like one document rather than two. */
+.diff-rich {
+  background: var(--doc-page-bg);
+  border: none;
+  /* `.diff` sets the Source role's metrics for the source modes. All three are
+     overridden here with the **Rich Markdown** role (DFV-FR-37), or an element
+     `.doc` does not restate — an h4, a table cell — would inherit the source
+     metrics here and the document's in the Editor, and the two would not
+     match. Taking the same role as the Editor's WYSIWYG surface is what makes
+     DFV-FR-17's identity between them hold under any font the user picks. */
+  font-family: var(--font-rich-family);
+  font-size: var(--fs-doc-md);
+  line-height: var(--font-rich-line-height);
+  white-space: normal;
+}
+/* DFV-FR-38: the Editor's page, whole — the same metrics, the same edge, and
+   the same inset over the same recessed field, which is the other half of the
+   identity DFV-FR-17 asserts. The tab's marking renders inside the page rather
+   than around it, so nothing about the framing changes what the diff says. */
+.diff-rich--page {
+  /* The same measure and the same shrink rule as the Editor's page, so the
+     artifact read here and the artifact open for editing are framed alike at
+     any tab width (`../styles/kit.css` `.editor`). */
+  box-sizing: border-box;
+  width: 100%;
+  max-width: min(
+    var(--doc-page-outer),
+    calc(100% - var(--doc-page-inset) * 2)
+  );
+  margin: var(--doc-page-inset) auto;
+  padding: var(--doc-page-padding);
+  border: 1px solid var(--border-1);
+  border-radius: var(--doc-page-radius);
+  box-shadow: var(--shadow-2);
+}
+/* DFV-FR-38: in Side-by-side each revision occupies a page of its own, the two
+   set on one field with the field showing between them, so the pair reads as
+   two documents beside each other rather than as one surface split by a rule.
+   The rows are laid out cell-by-cell for alignment, so the pages are drawn
+   behind them as two continuous sheets rather than per row — a border on each
+   cell would rule the file into strips. */
+.diff-rich--split { background: var(--doc-field-bg); }
+.diff-rich--split .diff-sbs__scroll { padding: var(--doc-page-inset); }
+/* The sheets hang off the ROWS' own wrapper rather than off the scroller.
+   An absolutely positioned child of a scroll container is laid out against that
+   container's padding box — which is one viewport tall — and then scrolls away
+   with the content: past a screen's worth of scrolling the pages were simply
+   gone and the document sat on the bare field. The wrapper is as tall as the
+   document, so the sheets are too. */
+.diff-rich--split .diff-sbs__sheets { position: relative; }
+.diff-rich--split .diff-sbs__sheets::before,
+.diff-rich--split .diff-sbs__sheets::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* Half the wrapper, less half the field showing between the two pages. */
+  width: calc(50% - var(--sp-4) / 2);
+  background: var(--doc-page-bg);
+  border: 1px solid var(--border-1);
+  border-radius: var(--doc-page-radius);
+  box-shadow: var(--shadow-2);
+  box-sizing: border-box;
+  pointer-events: none;
+  /* The sheets are BEHIND the rows, and saying so is required rather than
+     decorative: `::after` is the wrapper's last child, so at `z-index: auto`
+     it paints over every positioned row before it and the whole new revision
+     goes blank — `pointer-events: none` hides that from hit-testing but not
+     from painting. `::before` is the first child and so happened to paint
+     under its rows, which is why only one side of the pair went missing. */
+  z-index: 0;
+}
+.diff-rich--split .diff-sbs__sheets::before { left: 0; }
+.diff-rich--split .diff-sbs__sheets::after { right: 0; }
+.diff-rich--split .diff-sbs__row {
+  position: relative;
+  z-index: 1;
+  /* The field between the two pages, in place of the hairline rule the source
+     modes divide their panes with. */
+  gap: var(--sp-4);
+  background: none;
+}
+.diff-rich--split .diff-sbs__heading { background: var(--doc-field-bg); }
+/* Two columns cannot each hold a full page's margins, so the split view keeps
+   the typography and gives up the page padding. */
+.diff-rich--split .diff-block { padding: 2px var(--sp-3); }
+
+/* DFV-FR-33 – DFV-FR-35: a Flow's rich reading is its graph. Each entry — the
+   Flow's own fields, a node, a connection — is a card carrying its marking as a
+   whole, with the facts that changed marked inside it. */
+.diff-flow {
+  background: var(--bg-canvas);
+  font-family: var(--font-sans);
+  font-size: var(--fs-ui-sm);
+  white-space: normal;
+  padding: var(--sp-2);
+}
+.diff-sbs.diff-flow { padding: 0; }
+.diff-flow__entry {
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  padding: 4px 8px;
+  margin: 4px;
+  background: var(--bg-sunken);
+}
+.diff-flow__entry[data-mark="added"] { background: var(--diff-add-bg); }
+.diff-flow__entry[data-mark="removed"] { background: var(--diff-del-bg); }
+.diff-flow__entry[data-mark="changed"] { border-color: var(--accent); }
+.diff-flow__entry[data-mark="filler"] { opacity: 0.4; border-style: dashed; }
+.diff-flow__title { display: flex; align-items: baseline; gap: var(--sp-2); }
+.diff-flow__name { font-weight: 600; color: var(--fg-1); overflow-wrap: anywhere; }
+.diff-flow__kind {
+  font-size: var(--fs-ui-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-3);
+}
+/* The sign carries the change without colour, for both an entry and a fact. */
+.diff-flow__sign {
+  width: 10px;
+  flex: none;
+  font-family: var(--font-mono);
+  color: var(--fg-3);
+  user-select: none;
+}
+.diff-flow__fact {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding-left: 2px;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+.diff-flow__fact[data-mark="added"] { background: var(--diff-add-bg); }
+.diff-flow__fact[data-mark="removed"] { background: var(--diff-del-bg); }
+.diff-flow__label { color: var(--fg-3); flex: none; min-width: 58px; }
+.diff-flow__was { text-decoration: line-through; color: var(--fg-3); }
+
+/* DFV-FR-19: rich marking is applied to a whole block and never inside one. */
+.diff-block {
+  display: flex;
+  gap: var(--sp-2);
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-sm);
+}
+.diff-block[data-mark="added"] { background: var(--diff-add-bg); }
+.diff-block[data-mark="removed"] { background: var(--diff-del-bg); }
+.diff-block[data-mark="filler"] { opacity: 0.4; }
+.diff-block__marker {
+  width: 12px;
+  flex: none;
+  font-family: var(--font-mono);
+  color: var(--fg-3);
+  user-select: none;
+}
+.diff-block__body { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+/* One block per list item, so each renders as a one-item list. Its own bottom
+   margin would then space the items further apart than the Editor does. */
+.diff-block__body > ul,
+.diff-block__body > ol,
+.diff-block__body > p,
+.diff-block__body > blockquote,
+.diff-block__body > pre { margin-bottom: 0; }
+.diff-block__body > h1,
+.diff-block__body > h2,
+.diff-block__body > h3,
+.diff-block__body > h4,
+.diff-block__body > h5,
+.diff-block__body > h6 { margin-top: 0; }
+/* Nothing in a Diff tab is navigable (DFV-FR-06), so a rendered link reads as
+   a link without offering to follow one. */
+.diff-block__body a { cursor: default; }
+/* Code blocks wrap with everything else rather than scrolling sideways. The
+   `overflow-x` reset is load-bearing: `.doc pre` sets it to `auto`, so wrapping
+   alone would leave a long unbroken line with its own scrollbar. */
+.diff-block__body pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: hidden;
+}
+
+.md-table-row { display: flex; gap: var(--sp-3); font-size: var(--fs-doc-md); }
+.md-table-cell { flex: 1; min-width: 0; }
+.md-table-divider { border-top: 1px solid var(--border-1); }
+
+/* ---------- TOGGLE ---------- */
+.toggle { position: relative; width: 28px; height: 16px; border-radius: 8px; background: var(--border-2); cursor: pointer; transition: background var(--dur-fast); flex: none; }
+.toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--bg-canvas); transition: transform var(--dur-fast) var(--ease-out); box-shadow: var(--shadow-1); }
+.toggle[data-on="true"] { background: var(--accent); }
+.toggle[data-on="true"]::after { transform: translateX(12px); }
+
+/* ---------- SEPARATOR ---------- */
+.sep { height: 1px; background: var(--border-1); width: 100%; }
+.sep--v { width: 1px; height: 100%; background: var(--border-1); }
+
+/* ---------- ICON ---------- */
+.icon { width: 14px; height: 14px; display: inline-block; vertical-align: middle; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.icon--sm { width: 12px; height: 12px; }
+.icon--lg { width: 18px; height: 18px; }
+

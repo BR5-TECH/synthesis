@@ -1,0 +1,753 @@
+/* ---------- Notes ---------- */
+.note {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  margin: 6px;
+  font-size: var(--fs-ui-md); color: var(--fg-1);
+}
+/* `min-height` so the footer line is the same height whether it holds the
+   timestamp or the edit actions — the row must not resize when edit opens. */
+.note__meta {
+  display:flex; align-items:center; gap: 8px;
+  min-height: 18px;
+  font-size: var(--fs-ui-xs); color: var(--fg-3); margin-top: 6px;
+}
+.note[data-historical="true"] {
+  border-left: 2px solid var(--accent);
+  opacity: 0.9;
+}
+
+/* NTS-FR-09 / NTS-FR-12: the scope selector and the filter field, pinned above
+   the scrollable list so both stay visible while it scrolls. */
+/* SNV-FR-58: the pinned control stack every vertical panel puts above its
+   list — the text filter first, directly beneath the panel header, and the
+   selectors beneath it, broadest first, so the narrowest sits immediately above
+   the list it narrows. One class so the five panels that have one cannot drift
+   apart. */
+.panel-controls {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 6px 8px;
+}
+.panel-controls .select { width: 100%; }
+
+/* SNV-FR-62 / SNV-FR-63: the one form every selector takes — a row of toggle
+   buttons acting as a radio group, on exactly one line.
+
+   The horizontal clip is the backstop rather than the mechanism: which buttons
+   render is decided in `SelectorRow.tsx`, because the leading, trailing, and
+   active buttons are exempt from the clip and CSS can only cut from the
+   trailing edge. Here it guarantees the row can never wrap to a second line or
+   raise a scrollbar whatever the measurement says.
+
+   `clip` rather than `hidden`, and per-axis: the tooltip of SNV-FR-62 hangs
+   below each button, and `overflow: hidden` clips both axes — it would swallow
+   the tooltip whole, leaving a shortened tag with no way to read its full name
+   by hover or by keyboard. `hidden` on one axis also forces `auto` on the
+   other, which is the scrollbar this rule exists to prevent; `clip` is the one
+   value that cuts horizontally and lets the tooltip out vertically. */
+.selector-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  /* `safe` matters: once the row is wider than the panel, centring would push
+     its leading edge out of the clip rect and take the button SNV-FR-63 says
+     must always render. `safe center` falls back to `start` in exactly that
+     case, so a row that overflows still clips at its trailing edge. */
+  justify-content: safe center;
+  gap: var(--sp-1);
+  overflow-x: clip;
+  overflow-y: visible;
+  min-width: 0;
+}
+.selector-row__btn {
+  all: unset;
+  box-sizing: border-box;
+  flex: none;
+  display: inline-flex; align-items: center;
+  padding: 2px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  /* Anchors the tooltip below. */
+  position: relative;
+}
+.selector-row__btn:hover:not(:disabled) { background: var(--bg-hover); }
+.selector-row__btn:focus-visible { box-shadow: 0 0 0 2px var(--ring); }
+.selector-row__btn:disabled { opacity: .45; cursor: default; }
+/* The active position is the one naming what the list is showing right now, so
+   it reads as pressed rather than merely hovered. */
+.selector-row__btn[data-active="true"] {
+  background: var(--bg-active);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+/* An untyped position (All artifacts, All files, a scope, a status) has no
+   type colour of its own; the active one borrows the accent so the row still
+   reads at a glance. */
+.selector-row__btn[data-active="true"] .chip-type:not([data-type]) {
+  color: var(--accent);
+}
+
+/* SNV-FR-62: the position's full name, since the button itself carries a tag
+   shortened to fit the row. On hover and immediately on keyboard focus — there
+   is no sweep to debounce here, and a delay would make the name feel
+   unreachable from the keyboard. */
+.selector-row__tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: var(--z-overlay);
+  display: none;
+  width: max-content; max-width: 220px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-4);
+  color: var(--fg-2);
+  font-family: var(--font-sans);
+  font-size: var(--fs-ui-xs); font-weight: 400; line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+}
+.selector-row__btn:hover .selector-row__tip,
+.selector-row__btn:focus-visible .selector-row__tip { display: block; }
+/* An empty list says so in the middle of the space it would have filled,
+   rather than tucked into its top-left corner. Centred by the scroll container
+   itself — a percentage height on the message would overflow that container's
+   padding and raise a scrollbar over an empty panel. */
+.vpanel__body--empty,
+.vpanel__body--filtered,
+.notes__body--empty { display: flex; align-items: center; justify-content: center; }
+/* SNV-FR-61: a list narrowed to nothing by its own controls. It sits where the
+   list would have been — centred across the panel and down that region — rather
+   than as a run of text in its top-left corner, and the controls stay above it
+   holding what the author typed. */
+.panel-filtered {
+  margin: 0;
+  padding: 16px 24px;
+  max-width: 32ch;
+  text-align: center;
+  color: var(--fg-3);
+  line-height: var(--lh-snug);
+}
+.notes__message {
+  padding: 16px 24px;
+  font-size: var(--fs-ui-sm); color: var(--fg-3); text-align: center;
+}
+
+/* SNV-FR-60: the first-class empty state every vertical panel renders when it
+   has nothing at all to list. One class, for the same reason `.panel-controls`
+   above is one class — the requirement is about every such panel, and the way
+   five copies of a layout stay identical is by there being one of them.
+
+   Centred across the panel and down the region the list would have occupied
+   (the flex container above does the second half), on a measure narrower than
+   the panel so the sentence wraps into a block rather than running the full
+   width of a narrow surface. */
+.panel-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-3);
+  max-width: 30ch;
+  text-align: center;
+  color: var(--fg-3);
+}
+.panel-empty__line { color: var(--fg-2); margin: 0; }
+.panel-empty__body { margin: 0; line-height: var(--lh-snug); }
+/* The one thing to do sits clear of the prose above it, so it reads as a
+   control rather than as a third line of text. */
+.panel-empty__action { margin-top: var(--sp-1); }
+
+/* NTS-FR-18: the `[⋯]` button sits at the row's top-right and is always
+   rendered, not revealed on hover. */
+.note__body { display: flex; align-items: flex-start; gap: 6px; }
+.note__text {
+  flex: 1; min-width: 0;
+  line-height: 1.45;
+  word-break: break-word;
+  overflow: hidden;
+}
+/* NTS non-functional: the panel is narrow, so a long body truncates here and is
+   revealed whole in the inline editor rather than widening the panel.
+   The clamp sits on the rendered body rather than on `.note__text`, which is a
+   flex item of `.note__body` — a flex item's `display` is blockified, so
+   `-webkit-box` resolves to `flow-root` there and `-webkit-line-clamp`
+   truncates nothing at all. */
+.note__text > .comment__body {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6;
+  overflow: hidden;
+}
+/* A note holding no text still renders as a note. The placeholder sits in the
+   middle of the line the body would have started on — centred across the row,
+   muted and italic so it reads as the panel talking rather than as content. */
+.note__text--empty {
+  text-align: center;
+  color: var(--fg-3); font-style: italic;
+  /* The `[⋯]` button occupies the right-hand end of this line, so the text is
+     centred over the row rather than over what is left of it (the button's own
+     width plus the flex gap, minus its negative margin). */
+  margin-right: -20px;
+}
+.note__more { flex: none; margin: -2px -4px 0 0; }
+/* NTS-FR-23: the last-known path of a note whose entity no longer resolves. */
+.note__unresolved {
+  display: flex; align-items: baseline; gap: 6px;
+  margin-top: 4px;
+  font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3);
+}
+/* NTS-FR-23: the path truncates; the marker beside it never does, because a
+   truncated marker is not a marker. */
+.note__unresolved-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note__reminder { display: inline-flex; align-items: center; gap: 4px; }
+.note__when { cursor: default; }
+.note__error { margin-top: 6px; font-size: var(--fs-ui-xs); color: var(--danger); }
+
+/* NTS-FR-16: the inline editor.
+
+   Deliberately box-less — no border, no padding, no background of its own — and
+   typographically identical to `.note__text`, so the words stay exactly where
+   they were rendered when a row enters edit instead of shifting under the
+   caret. The card's own border is what shows the row is being edited. */
+.note__editor {
+  display: block;
+  width: 100%; box-sizing: border-box;
+  margin: 0; padding: 0; border: 0; outline: none;
+  background: transparent;
+  color: var(--fg-1);
+  font-family: inherit; font-size: var(--fs-ui-md); line-height: 1.45;
+  /* Height is set from the content (`autoGrow`), so the row is as tall as its
+     text and never scrolls inside itself. The floor is ONE line — the height a
+     single-line body already renders at — because `min-height` beats the
+     inline height `autoGrow` sets, and a two-line floor would grow every
+     one-line note the moment it was opened for editing. */
+  resize: none; overflow: hidden;
+  min-height: 1.45em;
+}
+.note[data-editing="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+/* Save and Cancel sit in the footer line the timestamp occupies otherwise, so
+   entering edit swaps the row's contents without changing its height. */
+.note__edit-actions { display: flex; gap: 2px; margin-left: auto; margin-right: -4px; }
+.note__edit-actions .btn { height: 18px; min-width: 18px; padding: 0 4px; }
+.note__save { color: var(--accent); }
+
+/* NTS-FR-10 / NTS-FR-11: the all-notes position's groups. An entity header is a
+   click-through; the Project and Unresolved headers are not. */
+.note-group { margin-bottom: 8px; }
+.note-group__header {
+  display: block; width: 100%; box-sizing: border-box;
+  padding: 4px 8px;
+  font-size: var(--fs-ui-xs); letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--fg-3);
+  background: none; border: 0; text-align: left;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* SNV-FR-57: a group naming an ENTITY carries a filename, which is content and
+   never case-transformed. The Project and Unresolved headers name no entity —
+   they are labels, and keep the eyebrow treatment above. */
+.note-group__header--entity { text-transform: none; letter-spacing: 0; }
+.note-group__header--link { cursor: pointer; }
+.note-group__header--link:hover { color: var(--fg-1); text-decoration: underline; }
+
+/* NTS-FR-04: the create affordance, pinned below the list. */
+.notes__create {
+  padding: 6px 8px;
+  border-top: 1px solid var(--border-1);
+  background: var(--bg-panel);
+}
+
+/* NTS-FR-22: the Move picker's type-to-filter list. */
+.notes-move { min-width: 220px; max-width: 320px; }
+.notes-move__list { max-height: 240px; overflow: auto; }
+.notes-move__item { gap: 8px; }
+.notes-move__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The folder, so two artifacts sharing a basename are told apart. */
+.notes-move__path {
+  margin-left: auto;
+  font-size: var(--fs-ui-xs); color: var(--fg-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  direction: rtl; text-align: right; max-width: 45%;
+}
+
+/* Utility */
+.spacer { flex: 1; }
+.kbd-row { display: inline-flex; gap: 2px; }
+
+/* GIT-FR-PZIE / GIT-FR-06: the push/pull output area. Line-shaped output scrolls
+   within the panel rather than overflowing into the main viewport. */
+.git__output {
+  flex: 1;
+  overflow: auto;
+  padding: 6px 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+.git__output-line { padding: 0 12px; white-space: pre-wrap; word-break: break-word; }
+
+/* --- Comment rail (CMT-comments.md) --------------------------------------
+   CMT-FR-01: comments occupy the margin the page already leaves to the right of
+   the artifact — no column of their own, no rule between them and the text. The
+   document keeps its width and its position whether or not comments are showing,
+   so opening them moves nothing the author is reading. */
+.editor__with-rail {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+/* Both pages are flex items of this row now (CMT-FR-02 puts the rail beside
+   whichever is showing), and a flex item's `min-width: auto` refuses to shrink
+   below its content — which on a source file is however long its longest line
+   is. Either page would then push the rail's margin off the tab. */
+.editor__with-rail > .editor,
+.editor__with-rail > .editor__source-wrap { min-width: 0; }
+/* ACT-FR-09: the collapsed control covers no part of the page AT ANY WINDOW
+   SIZE. Where the field beside the page is wide enough to hold it clear, the
+   page runs the full height of the tab; where it is not, a strip of field is
+   held open below the page instead. The same step the New Artifact tab uses for
+   the same control (`.draft-editor__surface`), measured with the same tokens so
+   the strip and the thing it clears cannot drift apart:
+   `(100% - page) / 2` is the field on one side — percentages in padding resolve
+   against the inline size — and the multiplier turns the comparison into a step,
+   the ramp between the two being a thousandth of a pixel wide. */
+.editor__with-rail {
+  padding-bottom: clamp(
+    0px,
+    (var(--draft-actions-clear) - (100% - var(--doc-page-box)) / 2) * 1000,
+    calc(var(--draft-actions-size) + var(--sp-4) * 2)
+  );
+}
+
+.comment-rail {
+  position: absolute;
+  /* CMT-FR-27 / EDT-FR-63: level with the page, not with the field around it.
+     A card's top is placed at its anchor's offset within the page's scroller,
+     so the layer holding the cards has to start where the page starts —
+     otherwise every card sits a page-inset too high. */
+  top: var(--doc-page-inset);
+  /* The window-edge gutter is taken here, on the rail's own box, and not as
+     padding: everything inside it is absolutely positioned, and an absolutely
+     positioned child resolves `left`/`right` against its ancestor's *padding
+     box* — so padding would leave the cards flush against the frame. */
+  right: var(--sp-6);
+  bottom: var(--doc-page-inset);
+  /* Everything the page leaves on its trailing side, less both gutters: the one
+     against the frame taken by `right` above, and the one between a card and the
+     prose it is about. `--page-lead` is where the page's leading edge actually
+     sits (see `.editor-tab[data-rail="open"]`), so this measures the field that
+     is really there rather than assuming the page is centred — which is what
+     lets the slide widen the margin instead of leaving the cards over the text.
+
+     Bounded above so the cards stay legible on a wide window, and below at the
+     narrowest measure a card stays readable at. The tab never asks for less than
+     that floor here: below the width where the floor still fits beside the page
+     the cards leave the margin entirely (CMT-FR-64), which is what keeps a card
+     from ever being laid over the page. */
+  width: clamp(
+    var(--comment-card-min-w),
+    calc(
+      100% - var(--doc-page-outer) - var(--page-lead, 0px) - var(--sp-6) -
+        var(--sp-4)
+    ),
+    360px
+  );
+  overflow: hidden;
+  background: none;
+  border: none;
+  padding: var(--sp-3) 0;
+  /* The layer itself is empty space; only the cards in it take the pointer, so
+     a click in the margin still reaches the document. */
+  pointer-events: none;
+  /* The two pinned sections are laid out rather than each stuck to an end and
+     bounded by a guess. The head takes what the foot leaves and the foot takes
+     what it needs, so a collapsed resolved disclosure costs the discussions one
+     row rather than two-fifths of the margin. The aligned layer is absolutely
+     positioned and so takes no part in this. */
+  display: flex;
+  flex-direction: column;
+}
+.comment-rail > * { pointer-events: auto; }
+
+/* The aligned layer: a card's top tracks the line its anchor is on
+   (CMT-FR-27), so cards are positioned rather than in normal flow, and the
+   whole layer is translated by the body's scroll offset so they travel with the
+   passages they belong to. */
+.comment-rail__aligned {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+.comment-rail__aligned > * { pointer-events: auto; }
+
+/* Threads with no line to sit beside — they belong to the artifact rather than
+   to a passage of it, so they stay put at the foot of the margin. */
+.comment-rail__unaligned {
+  /* Positioned only to carry a stacking order — it is a flex item, laid at the
+     rail's foot rather than stuck there. `margin-top: auto` is what puts it
+     there when the head above does not fill the margin; it takes the height it
+     needs and never grows into space the discussions could use, which is the
+     whole difference between a collapsed disclosure costing one row and costing
+     a fixed share (CMT-FR-62).
+
+     Shrinkable, so when the head and the foot both want more than the margin
+     has, each gives up a share of the deficit weighted by what it asked for —
+     which leaves a one-row footer beside twenty discussions with its row, and a
+     twenty-thread footer beside one discussion doing the scrolling.
+
+     What bounds it is CMT-FR-63: nothing at all while the margin has nothing
+     else to show, and the margin less one card's worth while it has. The first
+     case is the whole point — an artifact whose every thread is resolved was
+     spending the upper half of its margin on nothing while the disclosure
+     scrolled inside the lower one. */
+  position: relative;
+  flex: 0 1 auto;
+  margin-top: auto;
+  min-height: 0;
+  /* `max-height` bounds the CONTENT box by default, and this section carries
+     both padding and a top border — so a ceiling of `100% - one card` left the
+     footer 21px taller than that and the card it was keeping room for showed
+     twelve pixels of itself. The height meant here is the whole box. */
+  box-sizing: border-box;
+  max-height: 100%;
+  /* The gutter the rail's own padding would have given it taken here instead:
+     anything the footer leaves uncovered is a strip of whatever aligned card
+     runs past it, sliced mid-line. */
+  padding-bottom: var(--sp-3);
+  overflow-y: auto;
+  padding-top: var(--sp-2);
+  /* Pinned at the rail's foot means pinned IN FRONT of whatever aligned card
+     reaches that far (CMT-FR-17, CMT-FR-19). Without an opaque surface of its
+     own the two sets of text draw over each other; with one it reads as the
+     footer it is. The rule above it stands in for the gap it no longer has.
+     Opacity is the whole requirement, and the FIELD is what it must be opaque
+     in: the rail sits on the field beside the page (CMT-FR-01, per EDT-FR-63),
+     so any other colour paints a slab the width of the margin that stops where
+     the cards do — canvas white on a warm field reads as a stray rectangle
+     rather than as the surface it is. */
+  background: var(--doc-field-bg);
+  border-top: 1px solid var(--border-1);
+  z-index: 1;
+}
+/* CMT-FR-63: the height kept back for whatever else the margin has to show — a
+   discussion pinned at the head, or a thread aligned in the body. Without one of
+   those there is nothing to keep it back for, and the rule above lets the foot
+   have the margin whole. */
+.comment-rail__unaligned[data-bounded="true"] {
+  max-height: calc(100% - var(--comment-card-floor));
+}
+
+/* CMT-FR-53 / CMT-FR-62: the Discussion section, pinned at the rail's HEAD as
+   the orphaned section and the resolved disclosure are pinned at its foot. All
+   three stay put while the aligned cards scroll with the body, because a thread
+   with no line to align to has nothing to travel with.
+
+   It carries an opaque surface of its own for the same reason the footer does,
+   and in the same colour: pinned in front of whatever aligned card reaches that
+   far, two sets of text would otherwise draw over each other, and the field is
+   what it is pinned over. */
+.comment-rail__pinned-head {
+  /* Positioned only to carry a stacking order — like the footer it is a flex
+     item, and it takes exactly what the footer leaves: its natural height while
+     that fits, shrinking (and scrolling within itself) only once it does not.
+     No fraction of the margin is reserved from it, so what bounds the
+     discussions is the height of the footer actually rendered rather than a
+     guess at how tall one might get. */
+  position: relative;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* No padding at the top: the header below takes it instead. Padding here is a
+     strip the sticky header cannot reach, and a card scrolling under it shows
+     through as a sliced line of text above the word Discussion. */
+  padding-bottom: var(--sp-2);
+  background: var(--doc-field-bg);
+  border-bottom: 1px solid var(--border-1);
+  z-index: 1;
+}
+
+/* The section's own header stays put while its cards scroll under it. The
+   section scrolls within itself once it is full (CMT-FR-62), and a header that
+   scrolled away with them would leave the discussions unlabelled — and, on a
+   short window, half-clipped at the top edge as the newest card is brought into
+   view. It is opaque and carries the section's top gutter for the same reason:
+   everything it does not cover is a card sliced mid-line. */
+.comment-rail__pinned-head > .comment-rail__section-title {
+  position: sticky;
+  top: 0;
+  padding-top: var(--sp-3);
+  background: var(--doc-field-bg);
+  z-index: 1;
+}
+
+/* Placing the rail in a New Artifact tab.
+
+   The top offset: an Editor tab's rail is laid inside the box *below* the
+   formatting toolbar, so its own `top` is measured from there; here the rail is
+   a child of the whole draft surface, toolbar included, and the same offset
+   would start it a toolbar's height too high — the Discussion section's header
+   would sit behind the formatting controls, and its opaque surface would cut a
+   notch out of them.
+
+   The foot ends level with the page's, so the margin runs the length of the
+   document beside it. This is a DELIBERATE DEVIATION from NAW-FR-27's clause
+   that the margin's pinned sections "end above" the action control: the control
+   and the rail share the field's trailing edge — the control is `--sp-4` from
+   the frame, the rail `--sp-6`, so twenty-eight of the control's thirty-six
+   pixels are over the rail whatever height it is given — and ending above it
+   cost the foot a control's height of margin at every window size. The
+   collapsed disclosure is a short label on the leading side and is never under
+   it; an expanded one can put the bottom-trailing corner of its last card
+   behind it, which is the trade taken here. Restoring the requirement means
+   putting `calc(var(--sp-4) + var(--draft-actions-size) + var(--sp-2))` back. */
+.draft-editor > .comment-rail {
+  top: calc(var(--editor-toolbar-h) + var(--doc-page-inset));
+  bottom: var(--doc-page-inset);
+}
+
+/* CMT-FR-64: the cards below the page.
+ *
+ * Reached when the tab cannot hold a card beside the page even with the page
+ * slid as far leading as it goes. The rail stops being a layer over the field
+ * and becomes the second item of the column it was already a child of — so the
+ * arrangement changes without a card moving in the DOM, and the order they were
+ * already in (discussions, then the aligned cards in document order, then the
+ * orphaned and resolved sections) is the order the column reads in.
+ *
+ * Bounded to a share of the tab and scrolling within itself, because the
+ * alternative — a column as tall as the threads happen to be — pushes the page
+ * off the top of a narrow window, which is the arrangement this one exists to
+ * avoid. The page keeps the greater part either way.
+ *
+ * Both selectors are needed: an Editor tab's rail is inside the wrapper that
+ * holds the page beside it, a draft tab's is a child of the tab itself. */
+.editor-tab[data-comments="below"] .editor__with-rail {
+  flex-direction: column;
+}
+.editor-tab[data-comments="below"] .editor__with-rail > .editor {
+  /* A flex item's automatic minimum is its content's height; in a column that
+     is the whole document, and the rail below would be laid out past the foot
+     of the tab. */
+  min-height: 0;
+}
+.editor-tab[data-comments="below"] .comment-rail,
+.draft-editor[data-comments="below"] > .comment-rail {
+  position: static;
+  flex: 0 1 auto;
+  width: auto;
+  max-height: 40%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--sp-6) var(--sp-3);
+  border-top: 1px solid var(--border-1);
+  /* The bound is on the whole box, padding and border included — otherwise the
+     column is a little taller than the share it was given, at the expense of
+     the page above it. */
+  box-sizing: border-box;
+  /* Beside the page the rail is an empty layer over the field and only its cards
+     take the pointer, so a click in the margin still reaches the document. Here
+     it is a region of its own below the page, with nothing behind it to click
+     through to and a scroll of its own to receive. */
+  pointer-events: auto;
+}
+/* The two pinned sections stop being pinned: with the whole rail scrolling as
+   one column there is no fold for them to be pinned against, and a section
+   scrolling inside a section is two scrollbars for one list. */
+.editor-tab[data-comments="below"] .comment-rail__pinned-head,
+.draft-editor[data-comments="below"] .comment-rail__pinned-head,
+.editor-tab[data-comments="below"] .comment-rail__unaligned,
+.draft-editor[data-comments="below"] .comment-rail__unaligned {
+  flex: 0 0 auto;
+  max-height: none;
+  overflow: visible;
+  margin-top: 0;
+}
+/* The aligned layer aligns to nothing here — its cards are in flow, in document
+   order, and the component leaves off the scroll offset that would otherwise
+   slide the whole column off the top of the rail. */
+.editor-tab[data-comments="below"] .comment-rail__aligned,
+.draft-editor[data-comments="below"] .comment-rail__aligned {
+  position: static;
+}
+/* CMT-FR-64: the cards keep the measure they hold in the margin. The section is
+   full width; a card stretched to match it is a comment set across a thousand
+   pixels, which is neither the card that was beside the page nor a readable
+   measure for one. */
+.editor-tab[data-comments="below"] .comment-card,
+.draft-editor[data-comments="below"] .comment-card {
+  /* The measure is the card's whole box. A card carries padding and a hairline
+     and there is no box-sizing reset in this project, so a bare `max-width`
+     bounds only what is inside them and the card lands 26px over its measure. */
+  box-sizing: border-box;
+  max-width: 360px;
+}
+/* The section header stops sticking with them. It stuck to the top of the
+   margin because the section scrolled within itself; here the rail is the
+   scroller, so a sticky header would ride over the orphaned and resolved cards
+   further down the column, labelling them Discussion. */
+.editor-tab[data-comments="below"] .comment-rail__pinned-head > .comment-rail__section-title,
+.draft-editor[data-comments="below"] .comment-rail__pinned-head > .comment-rail__section-title {
+  position: static;
+}
+
+.comment-rail__blocked {
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-snug);
+  color: var(--fg-2);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+.comment-rail__route { margin-top: var(--sp-1); color: var(--fg-3); }
+
+.comment-rail__section { margin-top: var(--sp-3); }
+.comment-rail__section-title {
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-3);
+  padding: 0 var(--sp-1) var(--sp-1);
+}
+.comment-rail__disclosure {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-3);
+  border-radius: var(--r-sm);
+  padding: var(--sp-1) var(--sp-2);
+  transition: color var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out);
+}
+.comment-rail__disclosure:hover { color: var(--fg-1); background: var(--bg-hover); }
+/* `all: unset` above drops the user agent's own focus ring with everything
+   else, so the control has to draw one itself. Without it the disclosure is
+   operable from the keyboard but invisible to a keyboard user — they can open
+   it and cannot see where they are. Shared by every disclosure that reuses
+   this class, the graduation revision block among them (GRU-FR-34). */
+.comment-rail__disclosure:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+/* The rail's foot now runs level with the page's, which puts the trailing end of
+   a collapsed disclosure under the tab's action control. The label is short and
+   leading-aligned so nothing of it is covered — but the row is a full-width
+   button, and its trailing end would share pixels with the control, taking a
+   click meant for it. Shortening the row is what fixes that: padding would not,
+   being inside the button's own box and so still part of what it can be clicked
+   on. The label does not move, and the disclosure is only at the foot while it
+   is collapsed — expanded, it is the section's header with its cards below. */
+.draft-editor .comment-rail__disclosure {
+  width: calc(100% - var(--draft-actions-clear));
+}
+
+/* CMT-FR-38: a card is weighted **below** the page it annotates. It carries a
+   surface of its own — the warm panel tone, distinct from both the page and the
+   field it sits on (EDT-FR-63) — bounded by a hairline and by no elevation at
+   all, so the document stays the most prominent thing in the tab and the
+   threads read as margin notes rather than as a second document competing with
+   the first. Its body sets in the UI role at a scale smaller than the page's
+   prose; its author line and its timestamp recede further still. */
+.comment-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  box-shadow: none;
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-2);
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-snug);
+  color: var(--fg-2);
+  transition: border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out);
+}
+.comment-card:hover { border-color: var(--border-2); }
+/* Only the aligned column positions its cards; the orphaned and resolved
+   sections render theirs in normal flow. */
+.comment-card[data-positioned="true"] {
+  position: absolute;
+  left: 0;
+  right: 0;
+  margin-bottom: 0;
+}
+/* CMT-FR-05: the draft is the card being written, so it sits above whatever it
+   happens to align beside. Both selectors carry a second simple selector so they
+   outrank the hover rule above; without it, hovering the card being written
+   would quietly take its accent outline away. */
+.comment-card.comment-card--draft,
+.comment-card[data-focused="true"] {
+  /* CMT-FR-38: the card keeps its OWN surface while focused. `--bg-elevated`
+     is the page's own colour under the light theme, so lifting onto it made a
+     focused card indistinguishable from the document it annotates — the accent
+     edge below is what marks the card being worked in. */
+  border-color: var(--accent);
+  /* CMT-FR-38: the card being worked in is marked by its accent edge, not by
+     rising above the page — no card ever out-elevates the document, or the
+     margin stops reading as margin. */
+  box-shadow: var(--shadow-1);
+}
+.comment-card--draft { z-index: 2; }
+.comment-card[data-resolved="true"] { opacity: 0.7; }
+
+.comment-card__menu-button { align-self: center; }
+.comment-card__menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 5;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  padding: var(--sp-1);
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  box-shadow: var(--shadow-3);
+}
+.comment-card__menu button {
+  all: unset;
+  cursor: pointer;
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+}
+.comment-card__menu button:hover { background: var(--bg-hover); }
+.comment-card__menu button:disabled { color: var(--fg-3); cursor: default; }
+
+/* CMT-FR-19: an orphaned card shows the quote it was attached to in place of an
+   alignment, so it stays identifiable. */
+.comment-card__quote {
+  color: var(--fg-3);
+  font-size: var(--fs-ui-xs);
+  margin: var(--sp-1) 0 var(--sp-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comment-card__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  margin-bottom: var(--sp-2);
+}

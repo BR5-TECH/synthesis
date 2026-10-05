@@ -1,0 +1,5 @@
+id = "1a0019f306b-0045-2e9acdc6"
+scope = "project"
+body = "Running graduation end to end by hand needs a vendor image present locally and both integrations configured. Images: `docker build -t ghcr.io/br5-tech/synthesis-agent-claude-code:2.1.232 docker/agent-images/claude-code` (and/or the codex one at 0.147.0) — no registry and no manifest edit, because ensure_image does `docker image inspect` before it pulls and an unpublished entry is now addressed by that tag. Integrations: BOTH a CLI-kind agentic integration and an AI API provider must be configured, since the loop needs the first to write the specification and the second to judge whether it answers the prompt (GRL-FR-05). With no integration at all the first turn returns IntegrationUnresolved and the run goes terminal `failed`, which is correct per GRD-FR-18 — no retry changes it. Without the image the run rests `interrupted` and offers Continue."
+created_at = "2026-08-14T18:53:24Z"
+updated_at = "2026-08-14T18:53:24Z"

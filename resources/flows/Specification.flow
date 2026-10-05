@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "name": "Specification",
+  "nodes": [
+    {
+      "id": "n1",
+      "name": "Analyze request",
+      "artifactIds": [
+        "resources/prompts/specification/analysis.md"
+      ],
+      "position": {
+        "x": 60,
+        "y": 60
+      }
+    },
+    {
+      "id": "n2",
+      "name": "Build context",
+      "artifactIds": [
+        "resources/prompts/specification/context.md"
+      ],
+      "prompt": "- Read related specs\n\n",
+      "position": {
+        "x": 358.6171875,
+        "y": 288.56640625
+      }
+    },
+    {
+      "id": "n3",
+      "name": "Create preview",
+      "artifactIds": [
+        "resources/prompts/specification/preview.md"
+      ],
+      "position": {
+        "x": 775.41015625,
+        "y": 127.93359375
+      }
+    },
+    {
+      "id": "n4",
+      "name": "Clarify problem",
+      "artifactIds": [
+        "resources/prompts/specification/clarify.md"
+      ],
+      "position": {
+        "x": 770.27734375,
+        "y": 336.58984375
+      }
+    },
+    {
+      "id": "n5",
+      "name": "Write specification",
+      "artifactIds": [
+        "resources/prompts/specification/finalize.md"
+      ],
+      "position": {
+        "x": 1166.8046875,
+        "y": 216.58203125
+      }
+    },
+    {
+      "id": "n6",
+      "name": "Validate specification",
+      "artifactIds": [
+        "resources/prompts/specification/validation.md"
+      ],
+      "prompt": "- Validate the written artifact for consistence\n- Provide executive summary",
+      "position": {
+        "x": 1582.47265625,
+        "y": 223.0546875
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "n1",
+      "to": "n2"
+    },
+    {
+      "id": "e2",
+      "from": "n2",
+      "to": "n3"
+    },
+    {
+      "id": "e3",
+      "from": "n2",
+      "to": "n4"
+    },
+    {
+      "id": "e4",
+      "from": "n4",
+      "to": "n5"
+    },
+    {
+      "id": "e5",
+      "from": "n3",
+      "to": "n5"
+    },
+    {
+      "id": "e6",
+      "from": "n5",
+      "to": "n6"
+    }
+  ]
+}

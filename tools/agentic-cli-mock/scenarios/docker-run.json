@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "expected": {
+    "required_args": [
+      {
+        "name": "subcommand",
+        "value": "run"
+      },
+      {
+        "name": "auto-remove",
+        "value": "--rm"
+      },
+      {
+        "name": "stdin-attached",
+        "value": "--interactive"
+      },
+      {
+        "name": "network-flag",
+        "value": "--network"
+      },
+      {
+        "name": "network",
+        "value": "bridge"
+      },
+      {
+        "name": "workdir-flag",
+        "value": "--workdir"
+      },
+      {
+        "name": "workdir",
+        "value": "/workspace"
+      },
+      {
+        "name": "cap-drop",
+        "value": "--cap-drop"
+      },
+      {
+        "name": "caps",
+        "value": "ALL"
+      },
+      {
+        "name": "security-opt",
+        "value": "--security-opt"
+      },
+      {
+        "name": "no-new-privileges",
+        "value": "no-new-privileges"
+      },
+      {
+        "name": "mount-flag",
+        "value": "--mount"
+      },
+      {
+        "name": "workspace-mount",
+        "value": "type=bind,source=/host/worktree,target=/workspace"
+      },
+      {
+        "name": "session-state-mount",
+        "value": "type=bind,source=/host/sessions,target=/home/agent/.claude"
+      },
+      {
+        "name": "env-flag",
+        "value": "--env"
+      },
+      {
+        "name": "token-variable",
+        "value": "CLAUDE_CODE_OAUTH_TOKEN"
+      },
+      {
+        "name": "session-state-variable",
+        "value": "CLAUDE_CONFIG_DIR=/home/agent/.claude"
+      },
+      {
+        "name": "vendor-headless",
+        "value": "-p"
+      },
+      {
+        "name": "vendor-output-flag",
+        "value": "--output-format"
+      },
+      {
+        "name": "vendor-output-mode",
+        "value": "stream-json"
+      },
+      {
+        "name": "vendor-verbose",
+        "value": "--verbose"
+      },
+      {
+        "name": "vendor-schema-flag",
+        "value": "--json-schema"
+      },
+      {
+        "name": "vendor-permission-flag",
+        "value": "--permission-mode"
+      },
+      {
+        "name": "vendor-permission-mode",
+        "value": "bypassPermissions"
+      },
+      {
+        "name": "vendor-session-flag",
+        "value": "--session-id"
+      }
+    ],
+    "stdin": "{\"protocol_version\":1,\"instruction\":\"revise the draft\",\"input\":null,\"resume\":null,\"execution\":{\"timeout_ms\":60000,\"cancellation\":\"caller_controlled\"}}"
+  },
+  "response": {
+    "stdout": "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"vendor-session-9\",\"model\":\"claude-sonnet-5\",\"tools\":[\"Read\"]}\n{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"{\\\"protocol_version\\\":1,\\\"outcome\\\":\\\"success\\\",\\\"summary\\\":\\\"Revised the draft.\\\",\\\"result\\\":null,\\\"failure\\\":null,\\\"escalation\\\":null,\\\"session\\\":{\\\"session_id\\\":\\\"sess-1\\\",\\\"continuation_token\\\":null},\\\"metadata\\\":null}\",\"session_id\":\"vendor-session-9\"}\n",
+    "stderr": "",
+    "exit_code": 0,
+    "delay_ms": 0
+  }
+}

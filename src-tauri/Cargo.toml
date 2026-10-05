@@ -1,0 +1,215 @@
+[package]
+name = "synthesis"
+version = "0.1.0"
+description = "Synthesis"
+authors = ["Vyacheslav Kokorin <raver119@gmail.com>"]
+license = "Apache-2.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "synthesis_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+# CMS-FR-43: an `inline` attachment crosses the IPC boundary base64-encoded, and
+# `read_comment_attachment` sends the stored bytes back the same way. Tauri's
+# wire format is JSON, so a binary payload has to be text either way.
+base64 = "0.22"
+toml = "0.8"
+dirs = "6"
+ignore = "0.4"
+# SCC-FR-05: the `regex` query mode compiles the query as a regular expression.
+# A pattern that does not compile is the typed `"invalid query"` of SCC-FR-06.
+regex = "1"
+notify-debouncer-mini = "0.4"
+# GTC-FR-09 / GTC-FR-12: `fetch_remote_branches` contacts the project's primary
+# remote, so libgit2 needs its transports compiled in — without them a fetch
+# fails on the URL scheme before it ever presents a credential. `https` carries
+# the token-authenticated GitHub remote; `ssh` carries an `ssh://` or
+# `git@host:` remote, which authenticates with the author's own key through
+# their agent rather than with a token. `ssh_key_from_memory` stays off: keys
+# are read from disk by path, never held in this process's memory.
+git2 = { version = "0.21.0", default-features = false, features = [
+  "https",
+  "ssh",
+] }
+# GTS-FR-01: GitHub token secrets live in the OS credential store, never in
+# `synthesis.toml`. The `v1` feature is the platform-native store set
+# (Keychain on macOS, Credential Manager on Windows, Secret Service on *nix).
+keyring = { version = "4", features = ["v1"] }
+# The backend's HTTP client, used only where a credential has to be checked
+# against the service it belongs to: GTS-FR-04 / GTS-FR-07 verify a token
+# against api.github.com, and AAP-FR-05 / AIC-FR-22 verify an AI endpoint by
+# asking it for its model list. Every one of those calls is bounded by a global
+# timeout, because the UI has no way to cancel an in-flight `invoke`.
+ureq = "3"
+# AAP-FR-23: the `openrouter` provider is reached through this SDK, which is
+# what its verification, its model probe, and the reasoning parameter of every
+# call it carries go through. It is the only provider that depends on it — the
+# other three keep the `ureq` path above — so a fault here cannot cost the
+# application its ability to reach Anthropic, OpenAI, or a custom endpoint.
+# The crate is async; `ai_openrouter` confines the runtime to one owned thread
+# rather than making this module's call paths async.
+openrouter-rs = "0.13"
+# Only what `ai_openrouter` needs to drive that async SDK from a synchronous
+# call path: a current-thread runtime and the timer behind the probe deadline.
+# No macros and no multi-thread scheduler — this runtime exists for one request
+# at a time, on a thread the prober owns and joins.
+#
+# EAC-FR-17 / EAC-FR-24 additionally needs `process`: the agent-CLI executor
+# drives a container through the host Docker CLI, and reading its two pipes
+# while waiting on a deadline and a cancellation flag is exactly the shape a
+# blocking child cannot express without a thread per stream. `macros` is for
+# `select!` at that one call site.
+tokio = { version = "1", features = ["rt", "time", "process", "io-util", "macros"] }
+# `ApiErrorContext.status` is an `http::StatusCode`, which the probe maps onto
+# the shared refused-versus-unreachable distinction.
+http = "1"
+# FNT-FR-02 / FNT-FR-04: `list_system_fonts` reports the families this machine
+# has and whether each advances every glyph by a fixed width. `fontdb` is a
+# pure-Rust reader of the platform's own font directories, so the query costs
+# nothing beyond reading what the OS already knows (FNT-FR-05) and needs no
+# native toolkit linked in.
+fontdb = "0.24.0"
+# AGC-FR-14 / AGC-FR-27: the framework the conversation with an agent is
+# composed and driven through — its message construction, its completion
+# request, and (for every provider but OpenRouter) the client behind it. The
+# dependency's blast radius is `agent_conversations`' seam alone.
+#
+# Aliased to `rig` because that is the crate's own name for itself throughout
+# its documentation; the package is `rig-core`.
+rig = { package = "rig-core", version = "0.41" }
+# BMI-FR-02: the scoring, tokenisation, and stemming behind the nine in-memory
+# indexes of `bm25_index`. `k1`, `b`, and the stemmer set are this crate's, and
+# the spec deliberately leaves them to it.
+#
+# `language_detection` is enabled for the `Language`/`whichlang` mapping it
+# brings, NOT for its `LanguageMode::Detect`: that mode detects per document,
+# and a document here is a chunk (BMI-FR-05), while BMI-FR-08 requires a file's
+# language to be decided once over the whole file and applied to every chunk of
+# it — a two-word heading has far too little text to judge on its own.
+bm25 = { version = "2.3.2", features = ["language_detection"] }
+# AIC-FR-31: the launch credential the agent-CLI executor is handed overwrites
+# its bytes on drop. `zeroize` writes through volatile stores the optimiser may
+# not elide, which a hand-rolled overwrite of a `String` cannot promise. Already
+# in the tree as a transitive dependency of `keyring`; named here because
+# `agentic::SecretString` calls it directly.
+zeroize = "1"
+# BMI-FR-08: the detector itself, called directly so detection happens at file
+# granularity and each language shard is then built with a fixed language. It is
+# already in the tree as `bm25`'s own dependency; naming it here is what makes
+# `whichlang::detect_language` callable at the one call site that needs it.
+whichlang = "0.1"
+# DAS-FR-06: a draft prompt's image references are read with **the same
+# Markdown semantics the prompt is rendered with** — the inline image form and
+# the reference-style form in its full, collapsed, and shortcut spellings, with
+# a definition standing before or after the image that uses it, and labels
+# matched by the renderer's own normalization. Housekeeping deletes a file on
+# the strength of that reading (DAS-FR-12), so the reading has to be a real
+# CommonMark parse rather than a scan: a hand-rolled matcher that missed one
+# spelling would delete an image the author is still using. `into_offset_iter`
+# additionally gives each image its span in the source, which is what lets a
+# conversation interleave the prompt's text with its pictures in the positions
+# the Markdown put them (`AGC-agent-conversations.md` AGC-FR-35).
+#
+# `default-features = false` drops the crate's HTML renderer and its CLI
+# argument parsing, neither of which is used here.
+pulldown-cmark = { version = "0.13", default-features = false }
+# GSS-FR-38 / PSS-FR-26 / EAC-FR-39: the Docker Engine connection behind the
+# `bollard` backend mode. It carries a connector per endpoint form the platform
+# offers — a Unix socket, a Windows named pipe, and TCP — which is exactly the
+# platform-neutral endpoint set `GSS-global-settings-storage.md` GSS-FR-36
+# defines, and its image-build stream is what a project image build reads its
+# progress from. The `docker_cli` mode reaches nothing here: it runs the
+# author's own verified executable instead.
+bollard = "0.21"
+# The build context a Docker Engine build is handed. The Engine API takes a
+# context as a tar stream where the CLI takes a directory, so the project root
+# `PSS-project-settings-storage.md` PSS-FR-26 builds from is packed here.
+tar = "0.4"
+# Reading `bollard`'s build stream to its end. Already in the tree beneath every
+# async dependency; named here because the build loop calls `StreamExt::next`
+# at its one call site.
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+
+# DCL-FR-GLUS: the text of a PDF selected as a reference document. The Documents
+# collection reads the PDF bytes through the read-only documents instance of
+# `FsAccess` and hands them to `extract_text_from_mem`, so the extractor never
+# opens a path itself. It extracts embedded text only and does no OCR.
+pdf-extract = "0.12"
+
+[dev-dependencies]
+tempfile = "3"
+# AGC-FR-27: `rig::test_utils::MockCompletionModel` is the scripted completion
+# model the whole agent-conversation suite runs against, so no test spends a
+# token or leaves the machine. Enabled here rather than in `[dependencies]` so
+# the mock is not compiled into the shipped binary.
+rig = { package = "rig-core", version = "0.41", features = ["test-utils"] }
+# `tauri/test` provides `mock_app`, so the command bodies and the menu-event
+# relay can be exercised against a real (headless) app handle rather than only
+# through their extracted pure helpers.
+tauri = { version = "2", features = ["test"] }
+
+# NTD-notification-delivery.md: the OS notification centre this module posts
+# into. Deliberately NOT `tauri-plugin-notification`, whose desktop path drops
+# the handle `show()` returns — so it can neither report a click (NTD-FR-09) nor
+# replace a notification in place (NTD-FR-06) — and whose `permission_state()`
+# is hardcoded to `Granted` rather than asked of the platform (NTD-FR-02).
+#
+# macOS: `mac-notification-sys` is the only one of the three that returns a
+# `NotificationResponse`, which is what makes activation real rather than
+# synthesised. `wait_for_click` blocks, so every post owns a thread.
+[target.'cfg(target_os = "macos")'.dependencies]
+mac-notification-sys = "0.6"
+# SWN-FR-02: a settings window blocks the window that opened it. macOS has no
+# disabled window, and Tauri's own `set_enabled` blocks with a half-opaque
+# sheet, which greys out the parent and the settings window over it — against
+# SWN-FR-02's "the parent renders normally". `settings_window::macos_modality`
+# therefore drops the parent's own events instead, which is AppKit and so is
+# reached through these three. All are already in the tree as Tauri's own
+# dependencies, at the versions `tauri-runtime-wry` asks for, so nothing is
+# added to the build.
+objc2 = "0.6"
+block2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+  "block2",
+  "NSApplication",
+  "NSEvent",
+  "NSResponder",
+  "NSView",
+  "NSWindow",
+  "NSScreen",
+  "NSGraphics",
+] }
+
+# Every other desktop: delivery without an activation channel. `notify-rust`'s
+# `wait_for_action` is XDG-only and its Windows path returns no handle at all,
+# so `NotificationSink::supports_activation` reports false there and the address
+# a payload carries is simply never routed (NTD-FR-15 covers the platform with
+# no centre at all; this is the middle case — delivery works, clicking does not).
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+# `=4.17.0`, not `4.17`: a bare version string is a CARET requirement, so
+# `4.17` resolves to 4.18.x — the very version whose MSRV of 1.89 exceeds this
+# repo's pinned 1.88 toolchain, which is the whole reason for constraining it.
+# Defaults are left ON deliberately: `default = ["z"]` is the zbus/D-Bus
+# backend, and disabling it leaves Linux with no way to post at all.
+notify-rust = "=4.17.0"
+
+# FSA-FR-NRQE: `O_NOFOLLOW` and `O_NONBLOCK` for the bounded read of a regular
+# file. Already in the tree as a dependency of many crates.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

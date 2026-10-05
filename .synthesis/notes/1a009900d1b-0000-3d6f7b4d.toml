@@ -1,0 +1,5 @@
+id = "1a009900d1b-0000-3d6f7b4d"
+scope = "project"
+body = "Codex's login directory is mounted read/write into the agent container, and it should not stay that way. CDX-FR-23 / EAC-FR-16: the Codex CLI writes its session rollout files beneath the same $CODEX_HOME it reads auth.json from, so a read-only mount makes resume unreachable and leaves an expired credential unrefreshable — which is why it is writable today. The cost is that a container can write into the host's real ~/.codex, which is shared with the author's own local Codex usage and with every other project. Claude Code does not have this problem: its credential arrives as CLAUDE_CODE_OAUTH_TOKEN in the environment, so its session-state mount is a Synthesis-owned directory holding transcripts and nothing else. Resolve later by giving the executor a buffered filesystem: hand the container a writable overlay seeded from the login directory rather than the directory itself, so session state persists and token refresh works while the author's real ~/.codex stays untouched."
+created_at = "2026-08-16T07:53:50Z"
+updated_at = "2026-08-16T07:53:50Z"

@@ -1,0 +1,74 @@
+[package]
+name = "synthesis-server"
+version = "0.1.0"
+edition = "2021"
+# The repository's single Rust pin is src-tauri/rust-toolchain.toml. This line
+# repeats the same floor so the MSRV-aware resolver keeps the lock file on
+# dependency versions that compile under it (BMS-FR-24).
+rust-version = "1.88"
+description = "Standalone Synthesis backend microservice: Axum over Tokio, the application service and the relay boundary"
+license = "Apache-2.0"
+publish = false
+
+# BMS-FR-03: one library target holds every layer, and the binary holds the
+# process entry point alone. The integration tests drive the library's router.
+[lib]
+name = "synthesis_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "synthesis-server"
+path = "src/main.rs"
+
+# BMS-FR-02: the crate depends on neither `synthesis_lib`, nor Tauri, nor any
+# other code under src-tauri/. It links against no system library, so it builds
+# in a checkout that holds no src-tauri/ directory at all.
+#
+# BMS-FR-13, WSK-FR-KTRB: axum is taken with `default-features = false` and only
+# the features the service needs. `ws` carries the three upgrades of
+# `WSK-websocket.md`; no other optional feature is enabled.
+[dependencies]
+# `matched-path` gives the request record the route template rather than the
+# path, so an identifier never reaches a record through the route name (the
+# non-functional logging rule of `SAS-server-application-service.md`).
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "matched-path", "query", "tokio", "ws"] }
+# WSK-FR-TPJS: the socket is split so a frame the relay routes to a connection
+# is written while that connection is reading. `futures-util` supplies the split
+# and the sink; no other part of it is used.
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tokio = { version = "1", default-features = false, features = [
+    "macros",
+    "net",
+    "rt-multi-thread",
+    "signal",
+    "sync",
+    "time",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# SAS-FR-OZET: a record the request does not name takes one generated UUID
+# version 4. SAS-FR-HGZL: the configured administrator identifier is parsed as
+# a UUID.
+uuid = { version = "1", default-features = false, features = ["v4", "serde", "std"] }
+# The application layer stamps a record with an RFC 3339 time. `formatting` is
+# the one feature it needs; the crate parses no time of its own.
+time = { version = "0.3", default-features = false, features = ["std", "formatting"] }
+
+[dev-dependencies]
+# BMS-FR-25: the tests drive the router of BMS-FR-04 directly. `tower`'s
+# `oneshot` calls the router as a service, so no socket is opened, and
+# `http-body-util` collects the response body the router returns.
+tower = { version = "0.5", default-features = false, features = ["util"] }
+http-body-util = "0.1"
+# WSK-FR-KTRB: the WebSocket tests drive the three endpoints over a real socket,
+# so they need a WebSocket client. It reaches no shipped build.
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "handshake"] }
+# `test-util` gives the drain tests a paused clock, so a 10-second period is
+# asserted in no wall-clock time. It is a test-only feature and reaches no
+# shipped build.
+tokio = { version = "1", default-features = false, features = ["test-util"] }
+
+[profile.release]
+# BMS-FR-18: the final image holds the binary and nothing the service does not
+# need. Stripping the symbols here keeps the image build free of binutils.
+strip = true

@@ -1,0 +1,15 @@
+draftTemplate = """
+## Intent
+
+## User journey
+
+## Requirements
+
+- """
+graduationConcurrencyLimit = 2
+lineEndings = "lf"
+
+[dockerImages.claude_code]
+dockerfile = "docker/agent-images/claude-code/Dockerfile"
+imageName = "claude-code"
+tag = "latest"

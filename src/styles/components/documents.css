@@ -1,0 +1,190 @@
+/* documents: the Documents vertical panel (DPN). */
+
+/* DPN-FR-VPRV: the header, the filter, and the sources heading stay pinned.
+   Only the tree region scrolls between them. */
+.documents-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.documents-panel__body {
+  min-height: 0;
+}
+
+.documents-add {
+  flex: none;
+  gap: var(--sp-1-5);
+}
+.documents-add[disabled] {
+  opacity: 0.45;
+  cursor: progress;
+}
+
+/* DPN-FR-BADJ: the status line of a pick that ignored files, and the line of a
+   call that failed. State is in words, so colour is never the only sign. */
+.documents-notice {
+  margin: 0;
+  padding: var(--sp-1-5) var(--sp-3);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-snug);
+  color: var(--fg-2);
+  border-bottom: 1px solid var(--border-1);
+}
+.documents-notice:empty {
+  display: none;
+}
+.documents-notice[data-kind="alert"] {
+  color: var(--danger);
+}
+
+.documents-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.documents-error__text {
+  margin: 0;
+}
+
+.documents-filtered__text {
+  overflow-wrap: anywhere;
+  color: var(--fg-2);
+}
+
+/* DPN-FR-UGVG: the tree is one focus stop. The row that holds the keyboard
+   position shows an outline when the tree has the focus. */
+.documents-tree {
+  outline: none;
+  border-radius: var(--r-xs);
+}
+.documents-tree:focus-visible {
+  box-shadow: var(--shadow-focus);
+}
+.documents-row[data-active="true"] {
+  background: var(--bg-hover);
+}
+.documents-tree:focus-visible .documents-row[data-active="true"] {
+  background: var(--bg-active);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.documents-row[data-unavailable="true"] .documents-row__name {
+  color: var(--fg-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--fg-4);
+}
+/* DPN-FR-MICG: the word Unavailable is the state. */
+.documents-row__status {
+  flex: none;
+  margin-left: var(--sp-2);
+  font-style: italic;
+}
+
+/* DPN-FR-FZFL: the Selected sources section sits under the tree. Its heading is
+   pinned, and a long list of sources scrolls inside its own region. */
+.documents-sources {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  max-height: 40%;
+  min-height: 0;
+  border-top: 1px solid var(--border-1);
+  background: var(--bg-panel);
+}
+.documents-sources__heading {
+  margin: 0;
+  padding: var(--sp-1-5) var(--sp-3);
+  font-size: var(--fs-ui-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  font-weight: var(--fw-semi);
+  color: var(--fg-3);
+}
+.documents-sources__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--sp-2) var(--sp-2);
+  overflow: auto;
+  min-height: 0;
+}
+.documents-source {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--sp-2);
+  padding: 2px var(--sp-1);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+  border-radius: var(--r-xs);
+}
+.documents-source:hover {
+  background: var(--bg-hover);
+}
+.documents-source__kind {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  min-width: 4.2em;
+}
+/* A long path truncates in the middle: the head gives way, the tail stays. */
+.documents-source__path {
+  display: flex;
+  min-width: 0;
+}
+.documents-source__path-head {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.documents-source__path-tail {
+  flex: none;
+  white-space: nowrap;
+}
+.documents-source__remove {
+  flex: none;
+}
+.documents-source__state {
+  grid-column: 2 / 4;
+  font-size: var(--fs-ui-xs);
+  font-style: italic;
+  color: var(--fg-3);
+}
+.documents-source[data-unavailable="true"] .documents-source__path {
+  color: var(--fg-3);
+}
+
+/* DPN-FR-ZMBQ: the Add documents choice, a floating overlay of the window.
+   The shared `.menu` and `.menu-item` rules give its look. Its entries are
+   buttons, so the rules below remove the border, background, font and width
+   that a button has by default (the same resets as `SettingsSectionNav`).
+   A button also sizes its border box, so a `min-height` gives it a smaller
+   row than the `div` entries of the other menus. The column makes each entry
+   as wide as the choice, so the entry can size its content box as they do. */
+.documents-menu {
+  display: flex;
+  flex-direction: column;
+}
+.documents-menu .documents-menu__item {
+  box-sizing: content-box;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  appearance: none;
+}
+.documents-menu .documents-menu__item:hover {
+  background: var(--bg-active);
+}
+/* DPN-FR-KEBH: the arrow keys move focus between the entries, so the focused
+   entry shows the hover fill and the focus ring of the theme. */
+.documents-menu .documents-menu__item:focus-visible {
+  outline: none;
+  background: var(--bg-active);
+  box-shadow: var(--shadow-focus);
+}

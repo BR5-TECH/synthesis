@@ -1,0 +1,31 @@
+/* ---------- Merge run region (GRU-graduation-runs.md GRU-FR-NWEC,
+   GRU-FR-AJGM, GRU-FR-JRMA; GEA-graduation-escalation-answering.md
+   GEA-FR-WQZH) ----------
+   A merge run renders on the terms every run does. These rules add only what
+   it names beyond a draft run's region: the publication line, the paths Git
+   could not settle with what each side did to them, and the result. Every
+   value is a token the section already uses, so no colour, icon or interaction
+   of its own is introduced. */
+.graduation__merge-publication {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+/* What each side did to a path stands after the name, on the same row, and
+   ellipsizes before it takes the name's room: nothing scrolls sideways. */
+.graduation__path-fate {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 60%;
+  margin-left: var(--sp-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-ui-2xs);
+}
+.graduation__merge-context,
+.graduation__merge-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}

@@ -1,0 +1,330 @@
+/* ---------- CHANGES PANEL (CHG-changes.md) ---------- */
+/* The per-row diffstat (CHG-FR-10 / CHG-FR-11). Fixed-width and tabular so rows
+   do not shift horizontally as counts change during a reload. */
+.change-row__stat {
+  flex: none;
+  display: inline-flex;
+  gap: var(--sp-2);
+  justify-content: flex-end;
+  min-width: 72px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  font-variant-numeric: tabular-nums;
+}
+.change-row__added   { color: var(--diff-add-fg); }
+.change-row__removed { color: var(--diff-del-fg); }
+.change-row__binary  { color: var(--fg-3); font-style: italic; }
+/* CHG-FR-12: a renamed entry's previous path, alongside its current name. */
+.change-row__renamed { color: var(--fg-3); font-size: var(--fs-ui-xs); }
+
+/* CHG-FR-50 / CHG-FR-53: the count of changed files visible beneath a folder or
+   group node, stated with the noun it counts (CHG-FR-51). It sits against the
+   label rather than in the trailing column the diffstats occupy, so a folder's
+   file count is never read as a line count.
+
+   One step below the label's own size on the UI ladder — `.tree-row` is set at
+   `--fs-ui-sm`, so this is a point smaller at the role's default size — and in
+   the recessive foreground, which is what makes it read as a hint on the row
+   rather than a second label competing with the folder's name. Both sizes are
+   ratios of `--font-ui-size`, so the pair moves together with the role. */
+.tree-row__count {
+  /* The leftover width lands after the count, so the label is what absorbs a
+     narrowing panel and the count keeps its place. */
+  margin-right: auto;
+  /* Two words, so it must never break across lines on a fixed-height row. */
+  white-space: nowrap;
+  /* It never shrinks: a count cut to `2 fi…` says less than the bare numeral it
+     replaced, and the noun is the half that would go. This is how the diffstat
+     on a file row already behaves — fixed width, with the name yielding to it —
+     so a folder row and a file row narrow by the same rule. */
+  flex: none;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+}
+/* A counted label gives up its growth to the count beside it; it still shrinks
+   and ellipsises, because `.tree-row__name` keeps `min-width: 0`. Written as a
+   compound selector so it outranks `.tree-row__name`'s `flex: 1` on specificity
+   rather than on source order — the two are otherwise equal, and moving either
+   rule would silently take the truncation away. */
+.tree-row__name.tree-row__name--counted { flex: 0 1 auto; }
+
+/* CHG-FR-09: the two top-level groups, **Revisioned** and **Unrevisioned**. Set
+   in a heavier weight than the folder nodes beneath them so the two spines of
+   the tree read apart from the folders at a glance. */
+.tree-row--group .tree-row__name {
+  font-weight: var(--fw-semi);
+  color: var(--fg-1);
+}
+
+/* The panel's inline states — the ones that stay in the tree's own region with
+   every control above still present: an unresolvable target branch (CHG-FR-24) and a
+   failed read. Distinguished by the `data-state` attribute so each reads
+   differently.
+
+   Neither of the panel's other two shapes is here. Its *first-class* empty
+   states — not a repository (CHG-FR-22) and a comparison yielding nothing
+   (CHG-FR-23) — are the centred `.panel-empty` block every vertical panel
+   shares (SNV-FR-60); a change set the filters emptied is `.panel-filtered`,
+   the block every vertical panel shares for that (SNV-FR-61). An error is
+   neither: it says the panel could not answer, where those two say what the
+   answer was. */
+.changes-state {
+  padding: var(--sp-3);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-3);
+  line-height: var(--lh-snug);
+}
+.changes-state[data-state="unknown-branch"],
+.changes-state[data-state="error"] { color: var(--danger); }
+
+/* The checkbox column (CHG-FR-26). The leading element of every row, ahead of
+   the disclosure triangle's indentation guide, so the column reads straight
+   down whatever the nesting depth. */
+.change-check {
+  flex: none;
+  margin: 0;
+  width: 12px;
+  height: 12px;
+  accent-color: var(--accent);
+}
+
+/* The footer action control (CHG-FR-33). Pinned below the scrolling tree, with
+   the selected-file count at its leading edge and the split button at its
+   trailing edge. The button's footprint is stable as the selected action
+   changes, so the footer does not reflow. */
+.changes-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--border-1);
+}
+.changes-actions__count {
+  flex: 1;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+
+/* CHG-FR-55: the selected-file count on a row of its own between the tree and
+   the footer. Set in the same recessive treatment the folder counts take, so it
+   reads as a statement about the tree above it rather than as a control. */
+.changes-selected-count {
+  flex: none;
+  padding: var(--sp-1) var(--sp-3);
+  border-top: 1px solid var(--border-1);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+
+/* CHG-FR-56: the rollback button holds the footer's leading edge, and the split
+   control the trailing one — so a mode that renders no rollback button (Branch)
+   moves nothing, the split control being anchored to the far side regardless. */
+.changes-actions__rollback {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+/* CHG-FR-56: the split control holds the trailing edge whether or not the
+   leading corner is occupied. The push belongs to the split control itself, not
+   to the rollback button — hanging it off the button meant Branch mode, which
+   renders no button, had nothing pushing and the split slid to the leading
+   edge. */
+.changes-actions .split-action { margin-inline-start: auto; }
+/* CHG-FR-60: the preparation waits on somebody else's in-flight save, which is
+   otherwise indistinguishable from nothing happening. The button widens to say
+   so rather than swapping the icon out, so the control does not appear to
+   change identity mid-operation. */
+/* `.btn.` rather than a bare class: `kit.css`'s `.btn.btn--icon { width }` has
+   the same specificity and is imported after this file, so without the extra
+   `.btn` the button keeps its 30px icon width while the label inside it — which
+   does not wrap — paints over the icon and out past the panel's own edge. */
+.btn.changes-actions__rollback[data-busy] {
+  width: auto;
+  padding-inline: var(--sp-2);
+}
+.changes-actions__rollback-progress {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+/* The destructive action carries the danger colour on hover alone: a button
+   that is red at rest reads as an error state on a panel the author is only
+   reading. */
+.changes-actions__rollback:not([disabled]):hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* CHG-FR-65: what a rollback could not reach, above the count row. The tree
+   yields the height rather than the two rows beneath it moving. */
+.changes-rollback-failures {
+  flex: none;
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--border-1);
+  background: var(--danger-soft);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+  max-height: 120px;
+  overflow-y: auto;
+}
+.changes-rollback-failures__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--danger);
+  font-weight: 600;
+}
+.changes-rollback-failures__list {
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.changes-rollback-failures__list li {
+  display: flex;
+  gap: var(--sp-1);
+  justify-content: space-between;
+}
+/* The path is what the author acts on, so it survives a narrow panel whole
+   while the cause — which they can hover for — is what truncates. */
+.changes-rollback-failures__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.changes-rollback-failures__cause {
+  flex: none;
+  color: var(--fg-3);
+}
+
+/* CHG-FR-59: the rollback confirmation. Bounded in height with its path list
+   scrolling within it, so a rollback of two hundred files is still a dialog
+   rather than a page. */
+.rollback-confirm__warning {
+  margin: 0;
+  color: var(--fg-2);
+  line-height: 1.5;
+}
+.rollback-confirm__paths {
+  margin: 0;
+  padding: var(--sp-2);
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rollback-confirm__path {
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: space-between;
+  color: var(--fg-2);
+}
+/* The path being discarded wins the width, and the annotation beside it yields:
+   a rename row that clipped the current path while rendering the previous one
+   whole would be truncating the half the author is acting on. */
+.rollback-confirm__path-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rollback-confirm__path-fate {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-3);
+}
+/* CHG-FR-33: the shared split control (`SplitAction.tsx`), which the Changes
+   panel's footer and the graduation publication choice both use. The menu is
+   positioned against the control itself rather than against whichever foot it
+   sits in, so a host places the control and nothing else. */
+.split-action { position: relative; display: inline-flex; }
+.split-action__menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--sp-1));
+  z-index: 20;
+}
+.split-action__control { display: inline-flex; align-items: stretch; }
+.split-action__control > .btn:first-child {
+  min-width: 108px;
+  justify-content: center;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.split-action__control > .btn:last-child {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding-inline: var(--sp-2);
+}
+/* CHG-FR-49: one object, one appearance. `.btn[disabled]` already dims the
+   primary half; without this the dropdown half sits beside it at full accent
+   saturation and the single control reads as two different states. The
+   treatment describes the selected ACTION, not the control's reachability —
+   the dropdown stays operable (CHG-FR-35), and says so by coming back to full
+   contrast under the pointer and on keyboard focus. */
+.split-action__control[data-unavailable="true"] > .btn:last-child { opacity: 0.45; }
+.split-action__control[data-unavailable="true"] > .btn:last-child:hover,
+.split-action__control[data-unavailable="true"] > .btn:last-child:focus-visible {
+  opacity: 1;
+}
+/* The panel renders only that a push is running and how it ended; the transcript
+   itself is wide and line-shaped and lives in the bottom panel (CHG-FR-43). */
+.changes-note {
+  flex: none;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-snug);
+  border-top: 1px solid var(--border-1);
+  color: var(--fg-2);
+}
+.changes-note[data-tone="error"] { color: var(--danger); }
+
+/* ---------- COMMIT MESSAGE WINDOW (CMW-commit-message.md) ---------- */
+/* CMW-FR-06: the read-only file set. Scrolls inside its own frame so a commit
+   of several hundred files never grows the window past the screen. */
+.commit-files {
+  margin: 0;
+  padding: var(--sp-1) 0;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+}
+.commit-files__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 1px var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-snug);
+}
+.commit-files__path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+

@@ -1,0 +1,22 @@
+[package]
+name = "agentic-cli-mock"
+version = "0.1.0"
+edition = "2021"
+description = "Standalone stand-in for an agentic CLI, driven by a JSON scenario file"
+license = "Apache-2.0"
+publish = false
+
+# ACM-FR-01: the crate depends on a JSON reader and a base64 codec and on
+# nothing the application links a system library through. It is deliberately not
+# a member of the `synthesis` package under `src-tauri/` and does not depend on
+# `synthesis_lib`, so `cargo test` here compiles neither Tauri nor libgit2 and
+# succeeds in a checkout with no `src-tauri/` directory at all.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+
+[dev-dependencies]
+# Executable-level tests write scenario files and hand their paths to the
+# binary. Test-only, so it is not compiled into the shipped executable.
+tempfile = "3"

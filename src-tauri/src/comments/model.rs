@@ -45,6 +45,18 @@ pub enum Participant {
     },
 }
 
+impl Participant {
+    /// CMS-FR-HTOA: the fixed human a project that stores no GitHub token writes
+    /// as — an empty login, the display name `Me`, and no email.
+    pub fn local_human() -> Self {
+        Participant::Human {
+            login: String::new(),
+            display_name: Some(LOCAL_PARTICIPANT_NAME.to_string()),
+            email: None,
+        }
+    }
+}
+
 impl From<GithubIdentity> for Participant {
     fn from(identity: GithubIdentity) -> Self {
         Participant::Human {

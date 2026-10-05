@@ -18,10 +18,10 @@ import { Icon } from "../../icons";
 import type { AgentRoster } from "../../agentTags";
 import { stripCitationMarkers } from "../../../text/citationMarkers";
 import {
-  participantName,
   participantTitle,
   type Comment,
 } from "../../../types";
+import { useParticipantLabel } from "../../../state/projectIdentity";
 
 export interface MessageBlockProps {
   /** DDS-FR-QJFE: the whole run by one author, oldest first. */
@@ -82,6 +82,7 @@ export function MessageBlock({
   authorOf,
   actions,
 }: MessageBlockProps) {
+  const participantLabel = useParticipantLabel();
   const head = comments[0];
   const title = participantTitle(head.author);
 
@@ -99,7 +100,7 @@ export function MessageBlock({
           className="dds-message__author"
           data-agent={head.author.kind === "agent" || undefined}
         >
-          {participantName(head.author)}
+          {participantLabel(head.author)}
         </span>
         {/* CTA-FR-KFUF / CTA-FR-KYPK: the role the agent answered under, from
             this comment's own snapshot. Absent and empty both render nothing. */}
@@ -115,7 +116,7 @@ export function MessageBlock({
             <button
               type="button"
               className="btn btn--ghost btn--icon-xs dds-message__action"
-              aria-label={`Quote comment ${firstIndex + 1} by ${participantName(head.author)}`}
+              aria-label={`Quote comment ${firstIndex + 1} by ${participantLabel(head.author)}`}
               title="Quote"
               // Without this the button's own mousedown collapses the selection
               // before the click lands, and quoting an excerpt could never work.

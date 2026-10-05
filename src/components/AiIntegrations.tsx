@@ -1033,7 +1033,7 @@ export function oauthTokenValidation(value: string): string {
   if (value.trim() === "") return "";
   return isValidClaudeOauthToken(value.trim())
     ? ""
-    : "A token starts with sk-ant-oat01- followed by letters, digits, or hyphens.";
+    : "A token starts with sk-ant-oat01- followed by letters, digits, hyphens, or underscores.";
 }
 
 /**

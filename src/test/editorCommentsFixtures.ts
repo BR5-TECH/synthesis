@@ -16,6 +16,9 @@ export function human(login: string) {
   return { kind: "human", login } as const;
 }
 
+/** CMS-FR-HTOA: the participant a project without a GitHub token writes as. */
+export const LOCAL_HUMAN = { kind: "human", login: "", displayName: "Me" } as const;
+
 export { fragment } from "./discussionFixtures";
 
 export function makeThread(over: Partial<Discussion> = {}): Discussion {

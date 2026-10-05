@@ -29,6 +29,7 @@ import {
   comment,
   groupHeaders,
   human,
+  localHuman,
   rows,
   thread,
 } from "../test/commentsPanelFixtures";
@@ -48,6 +49,9 @@ vi.mock("@tauri-apps/api/event", () => ({
 function listReturns(items: DiscussionListItem[]) {
   invokeMock.mockImplementation((cmd: string) => {
     if (cmd === "list_all_discussions") return Promise.resolve(items);
+    // CMT-FR-ZCAE: the panel reads the identity to label the local
+    // participant's comments, and nothing else.
+    if (cmd === "resolve_comment_author_identity") return Promise.resolve(localHuman);
     throw new Error(`unexpected command ${cmd}`);
   });
 }
@@ -604,8 +608,11 @@ describe("CMP-FR-16: the panel is read-only", () => {
     }
 
     // And nothing but the one read reached the backend.
-    expect(invokeMock.mock.calls.map((c) => c[0])).toEqual([
+    // CMP-FR-17: the one read, and the identity read that only labels the
+    // local participant's comments.
+    expect(invokeMock.mock.calls.map((c) => c[0]).sort()).toEqual([
       "list_all_discussions",
+      "resolve_comment_author_identity",
     ]);
   });
 });
@@ -628,15 +635,81 @@ describe("CMP-FR-18, CMP-FR-07 / CMP-FR-22: the panel opens no floating overlay"
 });
 
 describe("CMP-FR-17: reading needs no identity", () => {
-  it("lists the project's threads without resolving an author", async () => {
-    listReturns([thread({ id: "t1" })]);
+  it("lists the project's threads in full when no identity resolves", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "list_all_discussions") {
+        return Promise.resolve([thread({ id: "t1" })]);
+      }
+      if (cmd === "resolve_comment_author_identity") {
+        return Promise.reject("github_token_selection_required");
+      }
+      throw new Error(`unexpected command ${cmd}`);
+    });
+    render(<Harness />);
+    expect(await screen.findByText("Which session?")).toBeInTheDocument();
+    // No picker, no missing-token text: the panel only reads for labels.
+    expect(screen.queryByText(/token/i)).not.toBeInTheDocument();
+    expect(invokeMock.mock.calls.some((c) => c[0] === "set_discussion_lock")).toBe(false);
+  });
+});
+
+describe("CMP-FR-KHUM: the local participant's label", () => {
+  const openerName = () =>
+    document.querySelector(".comment-row__author")?.textContent ?? "";
+
+  function resolving(identity: () => Promise<unknown>, items: DiscussionListItem[]) {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "list_all_discussions") return Promise.resolve(items);
+      if (cmd === "resolve_comment_author_identity") return identity();
+      throw new Error(`unexpected command ${cmd}`);
+    });
+  }
+  const tokensChanged = (): (() => void) => {
+    const call = listenMock.mock.calls.find((c) => c[0] === "github-tokens-changed");
+    expect(call).toBeDefined();
+    return () => (call?.[1] as (event: { payload: null }) => void)({ payload: null });
+  };
+
+  it("CMP-FR-KHUM: reads Me while the project stores no token", async () => {
+    resolving(
+      () => Promise.resolve(localHuman),
+      [thread({ id: "t1", comments: [comment("c1", "Which session?", localHuman)] })],
+    );
     render(<Harness />);
     await screen.findByText("Which session?");
-    expect(
-      invokeMock.mock.calls.some(
-        (c) => c[0] === "resolve_comment_author_identity",
-      ),
-    ).toBe(false);
+    await waitFor(() => expect(openerName()).toContain("Me"));
+  });
+
+  it("CMP-FR-KHUM: reads the project login once a token resolves, and Me again when it stops resolving", async () => {
+    let identity: () => Promise<unknown> = () => Promise.resolve(localHuman);
+    resolving(
+      () => identity(),
+      [thread({ id: "t1", comments: [comment("c1", "Which session?", localHuman)] })],
+    );
+    render(<Harness />);
+    await screen.findByText("Which session?");
+    await waitFor(() => expect(openerName()).toContain("Me"));
+
+    identity = () => Promise.resolve({ kind: "human", login: "octocat" });
+    act(() => tokensChanged()());
+    await waitFor(() => expect(openerName()).toContain("octocat"));
+    expect(listCalls()).toHaveLength(1);
+
+    identity = () => Promise.reject("github_token_selection_required");
+    act(() => tokensChanged()());
+    await waitFor(() => expect(openerName()).toContain("Me"));
+    expect(openerName()).not.toContain("octocat");
+  });
+
+  it("CMP-FR-KHUM: leaves a saved GitHub author as it was saved", async () => {
+    resolving(
+      () => Promise.resolve({ kind: "human", login: "octocat" }),
+      [thread({ id: "t1", comments: [comment("c1", "Which session?", human)] })],
+    );
+    render(<Harness />);
+    await screen.findByText("Which session?");
+    await waitFor(() => expect(openerName()).toContain("raver119"));
+    expect(openerName()).not.toContain("octocat");
   });
 });
 
@@ -677,8 +750,11 @@ describe("CMP-FR-04 / CMP-FR-18 / CMP-FR-19: how the panel stays current", () =>
     // CMP-FR-19: nothing a *log* does makes it re-read, and there is no poll.
     // Asserted as the absence of the mechanism: the panel subscribes to exactly
     // one channel and issues no call as time passes.
-    expect(listenMock.mock.calls.map((c) => c[0])).toEqual([
+    // The second channel is the token change that refreshes the labels of
+    // CMP-FR-KHUM, which re-reads no list.
+    expect(listenMock.mock.calls.map((c) => c[0]).sort()).toEqual([
       "discussion-changed",
+      "github-tokens-changed",
     ]);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10 * 60_000);

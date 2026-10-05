@@ -12,7 +12,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn(async () => () => {}),
+  listen: vi.fn(async (..._args: unknown[]) => () => {}),
   emit: vi.fn(async () => {}),
 }));
 
@@ -31,12 +31,14 @@ import {
   resetOwnerAvailability,
 } from "../state/ownerAvailability";
 import { resetSharedCommentIdentity } from "../hooks/useSharedCommentIdentity";
+import { resetProjectIdentity } from "../state/projectIdentity";
 import type { AgentTurn, Comment, Discussion, Tab } from "../types";
 import {
   noteDiscussionOrigin,
 } from "../test/origins";
 
 const human = { kind: "human", login: "raver119" } as const;
+const localHuman = { kind: "human", login: "", displayName: "Me" } as const;
 
 function comment(id: string, body: string): Comment {
   return { id, author: human, body, quotes: [], attachments: [], createdAt: "2026-02-01T00:00:00Z" };
@@ -97,6 +99,7 @@ beforeEach(() => {
   resetDiscussionFocus();
   resetOwnerAvailability();
   resetSharedCommentIdentity();
+  resetProjectIdentity();
 });
 afterEach(cleanup);
 
@@ -204,6 +207,64 @@ describe("TAB-FR-25, CVP-FR-47: closing and reopening the tab keeps the session"
     expect(screen.getByTestId("comment-pending")).toHaveTextContent("arch");
     expect(getDiscussionSession("d1").unreadCount).toBe(2);
     expect(getDiscussionSession("d1").firstUnreadId).toBe("c2");
+  });
+});
+
+describe("NTS-FR-27, NTS-FR-QVSP, CVP-FR-TIBK: a note discussion without a GitHub token", () => {
+  const openingTab = noteTab({ id: "conv:note:n1", threadId: undefined });
+  const authors = () =>
+    Array.from(document.querySelectorAll(".comment__author")).map((el) => el.textContent);
+
+  it("opens the note discussion as Me: the composer is enabled and offers no token setup", async () => {
+    const created = discussion({
+      comments: [{ ...comment("c1", "what did legal say?"), author: localHuman }],
+    });
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "resolve_comment_author_identity") return localHuman;
+      if (cmd === "get_or_create_note_discussion") return created;
+      return undefined;
+    });
+    const onOpened = vi.fn();
+    render(<ConversationTabView tab={openingTab} onOpened={onOpened} />);
+
+    const field = await screen.findByRole("textbox");
+    await waitFor(() => expect(field).toBeEnabled());
+    expect(screen.queryByText(/GitHub account|Global settings|Choose a token/i)).toBeNull();
+    await userEvent.type(field, "what did legal say?");
+    fireEvent.keyDown(field, { key: "Enter", ctrlKey: true });
+
+    await waitFor(() => expect(onOpened).toHaveBeenCalledTimes(1));
+    const [call] = invokeMock.mock.calls.filter((c) => c[0] === "get_or_create_note_discussion");
+    expect(Object.keys(call[1] as object).sort()).toEqual(["attachments", "body", "noteId"]);
+  });
+
+  it("labels the fixed local participant's comments Me, then by the project login once a token resolves", async () => {
+    let identity: unknown = localHuman;
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "resolve_comment_author_identity") return identity;
+      if (cmd === "list_agent_turns") return [];
+      return undefined;
+    });
+    const d = discussion({
+      comments: [
+        { ...comment("c1", "first"), author: localHuman },
+        comment("c2", "second"),
+      ],
+    });
+    publishThread(d);
+    render(<ConversationTabView tab={noteTab()} onOpened={vi.fn()} />);
+    await waitFor(() => expect(authors()).toEqual(["Me", "raver119"]));
+
+    identity = { kind: "human", login: "octocat" };
+    await act(async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      const call = (listen as unknown as { mock: { calls: unknown[][] } }).mock.calls.find(
+        (c) => c[0] === "github-tokens-changed",
+      );
+      (call?.[1] as () => void)();
+    });
+    await waitFor(() => expect(authors()).toEqual(["octocat", "raver119"]));
+    expect(d.comments[0].author).toEqual(localHuman);
   });
 });
 

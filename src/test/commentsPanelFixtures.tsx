@@ -35,6 +35,13 @@ export const agent: Extract<Participant, { kind: "agent" }> = {
   handle: "claude",
 };
 
+/** CMS-FR-HTOA: the participant a project without a GitHub token writes as. */
+export const localHuman: Extract<Participant, { kind: "human" }> = {
+  kind: "human",
+  login: "",
+  displayName: "Me",
+};
+
 export function comment(
   id: string,
   body: string,

@@ -6,7 +6,7 @@ use super::*;
 
 #[test]
 fn aic_ts29_only_a_structurally_valid_token_is_accepted() {
-    // AIC-FR-27: `^sk-ant-oat01-[A-Za-z0-9-]+$`, and nothing else. This is
+    // AIC-FR-27: `^sk-ant-oat01-[A-Za-z0-9_-]+$`, and nothing else. This is
     // the *pattern* — anchored at both ends. The surrounding whitespace
     // normalisation that precedes it is a separate layer, pinned by
     // `aic_ts27_surrounding_whitespace_is_normalised_before_the_pattern`.
@@ -19,7 +19,6 @@ fn aic_ts29_only_a_structurally_valid_token_is_accepted() {
         "",
         "oat01-abc",
         "sk-ant-oat01-",                 // the group needs one or more
-        "sk-ant-oat01-abc_def",          // underscore is not in the class
         "sk-ant-oat01-abc def",          // nor is a space
         " sk-ant-oat01-abc",             // unanchored at the front
         "sk-ant-oat01-abc\n",            // nor at the back
@@ -40,6 +39,9 @@ fn aic_ts29_only_a_structurally_valid_token_is_accepted() {
         "sk-ant-oat01-a",
         "sk-ant-oat01-A1-b2-C3",
         "sk-ant-oat01----",
+        "sk-ant-oat01-abc_def",
+        "sk-ant-oat01-_",
+        "sk-ant-oat01-a_b-C_3_",
     ] {
         assert!(is_valid_oauth_token(good), "{good:?} must validate");
     }
@@ -90,7 +92,7 @@ fn aic_ts27_surrounding_whitespace_is_normalised_before_the_pattern() {
 
 #[test]
 fn aic_ts29_a_malformed_token_is_refused_before_anything_runs() {
-    for bad in ["", "oat01-abc", "sk-ant-oat01-", "sk-ant-oat01-abc_def"] {
+    for bad in ["", "oat01-abc", "sk-ant-oat01-", "sk-ant-oat01-abc!def"] {
         let h = claude_harness();
         // Seeded first, so "the keychain was not touched" is a claim with
         // something to lose. Against an *empty* keychain the same assertion
@@ -143,7 +145,7 @@ fn aic_ts29_a_malformed_token_against_an_empty_keychain_stores_nothing() {
             &h.store,
             &h.ai,
             "claude_code",
-            &claude_config(Some("sk-ant-oat01-abc_def"))
+            &claude_config(Some("sk-ant-oat01-abc!def"))
         )
         .unwrap_err(),
         ERR_TOKEN_MALFORMED
@@ -195,7 +197,7 @@ fn aic_ts29_a_malformed_token_error_never_quotes_the_value() {
     // that echoed what it rejected would put a near-miss token — one stray
     // character from the real thing — into the Logs panel.
     let h = claude_harness();
-    let attempt = "sk-ant-oat01-nearly_valid_but_not";
+    let attempt = "sk-ant-oat01-nearly!valid!but!not";
     let err =
         verify_integration_impl(&h.store, &h.ai, "claude_code", &claude_config(Some(attempt)))
             .unwrap_err();
@@ -495,7 +497,7 @@ fn no_log_record_this_module_emits_can_carry_a_credential() {
 
     // …a rejection provoked by a near-miss value, which is the record most
     // likely to quote what it rejected…
-    let near_miss = "sk-ant-oat01-nearly_valid_but_not";
+    let near_miss = "sk-ant-oat01-nearly!valid!but!not";
     let bad = claude_config(Some(near_miss));
     log_verify_attempt(&sink, &TEST_BUFFER, "claude_code", &bad);
     let err = verify_integration_impl(&h.store, &h.ai, "claude_code", &bad);
@@ -525,7 +527,7 @@ fn no_log_record_this_module_emits_can_carry_a_credential() {
         SAMPLE_TOKEN,
         near_miss,
         "sk-ant-oat01-",
-        "nearly_valid",
+        "nearly!valid",
         // Not even the masked hint: the module's own convention is that a
         // log names a credential rather than describing it.
         "ygAA",

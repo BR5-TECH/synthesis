@@ -262,18 +262,27 @@ describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-F
     expect(callsTo("reanchor_discussion_fragment")).toHaveLength(0);
   });
 
-  it("NAW-FR-33, CMT-FR-24, CMT-FR-26, CMT-FR-51: is disabled while no identity resolves, and keeps body and strip when a post is refused", async () => {
+  it("NAW-FR-33, CMT-FR-24, CMT-FR-26: is enabled as Me when no token is stored, with no token reason", async () => {
+    stubDiscussions({ identity: { kind: "human", login: "", displayName: "Me" } });
+    renderWorkspace();
+    const composer = await openComposer();
+    await waitFor(() => expect(composer).toBeEnabled());
+    expect(screen.queryByText(/GitHub account/i)).toBeNull();
+    expect(screen.queryByText(/Global settings → GitHub/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Choose a token…" })).toBeNull();
+  });
+
+  it("NAW-FR-33, CMT-FR-24, CMT-FR-25, CMT-FR-51: is disabled while no identity resolves, and keeps body and strip when a post is refused", async () => {
     // NAW-FR-33: a discussion is a comment thread and cannot be attributed to
-    // nobody, so the composer states the same reason the margin's composers
-    // state and offers the same route (CMT-FR-24, CMT-FR-26).
-    stubDiscussions({ identityError: "github_token_missing" });
+    // nobody, so a binding that is still required keeps the composer disabled
+    // with the picker's reason (CMT-FR-24, CMT-FR-25).
+    stubDiscussions({ identityError: "github_token_selection_required" });
     renderWorkspace();
     const blocked = await openComposer();
     expect(blocked).toBeDisabled();
     expect(
-      screen.getByText(/needs a GitHub account to attribute comments to/i),
+      screen.getByText(/Choose which GitHub token this project uses/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Global settings → GitHub/)).toBeInTheDocument();
     expect(
       within(screen.getByTestId("draft-open-discussion")).getByRole("button", {
         name: "Post",

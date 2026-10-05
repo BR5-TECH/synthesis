@@ -14,6 +14,7 @@ import { EditSessionStore } from "../state/editSessions";
 import { GITHUB_TOKEN_ERRORS } from "../types";
 import {
   BODY,
+  LOCAL_HUMAN,
   commentsToggle,
   human,
   makeThread,
@@ -461,15 +462,14 @@ describe("CMT-FR-19: orphaned threads", () => {
 });
 
 describe("CMT-FR-24 / CMT-FR-25 / CMT-FR-26: identity gating", () => {
-  it("disables commenting and states the reason when no token is stored", async () => {
-    await mount({
-      threads: [makeThread()],
-      identityError: GITHUB_TOKEN_ERRORS.tokenMissing,
-    });
+  it("CMT-FR-24, CMT-FR-26: enables commenting as Me when no token is stored, with no missing-token reason", async () => {
+    await mount({ threads: [makeThread()], identity: LOCAL_HUMAN });
     const rail = await openRail();
-    expect(rail).toHaveTextContent(/GitHub account/i);
-    expect(rail).toHaveTextContent("Global settings → GitHub");
-    expect(screen.getByLabelText("Reply to thread t1")).toBeDisabled();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Reply to thread t1")).toBeEnabled(),
+    );
+    expect(rail).not.toHaveTextContent(/GitHub account/i);
+    expect(rail).not.toHaveTextContent("Global settings → GitHub");
   });
 
   it("gives a token that needs picking a different reason from one that needs adding", async () => {
@@ -498,6 +498,82 @@ describe("CMT-FR-24 / CMT-FR-25 / CMT-FR-26: identity gating", () => {
     await waitFor(() =>
       expect(screen.getByLabelText("Reply to thread t1")).toBeEnabled(),
     );
+  });
+});
+
+describe("CMT-FR-ZCAE: the local participant's label", () => {
+  const authorNames = () =>
+    Array.from(document.querySelectorAll(".comment__author")).map(
+      (el) => el.textContent,
+    );
+  const tokensChanged = () =>
+    act(() => {
+      for (const cb of listeners.get("github-tokens-changed") ?? []) {
+        cb({ payload: null });
+      }
+    });
+  const localThread = () =>
+    makeThread({
+      comments: [
+        {
+          id: "c1",
+          author: LOCAL_HUMAN,
+          body: "written without a token",
+          quotes: [],
+          attachments: [],
+          createdAt: "2026-01-01T00:00:00Z",
+        },
+        {
+          id: "c2",
+          author: human("raver119"),
+          body: "a saved github comment",
+          quotes: [],
+          attachments: [],
+          createdAt: "2026-01-01T00:00:01Z",
+        },
+      ],
+    });
+
+  it("CMT-FR-ZCAE, CMT-FR-10: reads Me while no identity resolves and the project login once one does, leaving other authors as saved", async () => {
+    const { backend } = await mount({ threads: [localThread()], identity: LOCAL_HUMAN });
+    await openRail();
+    await waitFor(() => expect(authorNames()).toEqual(["Me", "raver119"]));
+
+    backend.identity = human("octocat");
+    tokensChanged();
+    await waitFor(() => expect(authorNames()).toEqual(["octocat", "raver119"]));
+    // The stored snapshot is untouched: the comment is not read again.
+    expect(backend.threads[0].comments[0].author).toEqual(LOCAL_HUMAN);
+    expect(backend.calls.filter((c) => c.cmd === "list_discussions")).toHaveLength(1);
+  });
+
+  it("CMT-FR-ZCAE: reads Me again while a token binding is required", async () => {
+    const { backend } = await mount({ threads: [localThread()], identity: human("octocat") });
+    await openRail();
+    await waitFor(() => expect(authorNames()[0]).toBe("octocat"));
+
+    backend.identity = undefined;
+    backend.identityError = GITHUB_TOKEN_ERRORS.selectionRequired;
+    tokensChanged();
+    await waitFor(() => expect(authorNames()[0]).toBe("Me"));
+    expect(screen.getByLabelText("Reply to thread t1")).toBeDisabled();
+  });
+
+  it("CMT-FR-24, CMT-FR-ZCAE: posts nothing the author could mistake for another account", async () => {
+    const { backend } = await mount({ threads: [localThread()], identity: LOCAL_HUMAN });
+    await openRail();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Reply to thread t1")).toBeEnabled(),
+    );
+    fireEvent.change(screen.getByLabelText("Reply to thread t1"), {
+      target: { value: "no token needed" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Post" }));
+    await waitFor(() =>
+      expect(backend.calls.some((c) => c.cmd === "add_comment")).toBe(true),
+    );
+    const call = backend.calls.find((c) => c.cmd === "add_comment")!;
+    expect(JSON.stringify(call.args)).not.toMatch(/login|participant|author/i);
   });
 });
 
@@ -686,18 +762,14 @@ describe("CMT-FR-25: the token picker", () => {
     );
   });
 
-  it("offers no picker when nothing is stored, because there is nothing to pick between", async () => {
-    // CMT-FR-26 / GHA-FR-19.
-    await mount({
-      threads: [makeThread()],
-      identityError: GITHUB_TOKEN_ERRORS.tokenMissing,
-    });
+  it("CMT-FR-25, CMT-FR-26: offers no picker and no settings route when nothing is stored", async () => {
+    await mount({ threads: [makeThread()], identity: LOCAL_HUMAN });
     await openRail();
     expect(screen.queryByRole("button", { name: "Choose a token…" })).toBeNull();
     expect(
-      within(screen.getByRole("complementary", { name: "Comments" })).getByText(
+      within(screen.getByRole("complementary", { name: "Comments" })).queryByText(
         /Global settings → GitHub/,
       ),
-    ).toBeInTheDocument();
+    ).toBeNull();
   });
 });

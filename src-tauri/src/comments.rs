@@ -40,7 +40,7 @@ use sha2::{Digest, Sha256};
 use tauri::State;
 
 use crate::fs as fsa;
-use crate::github_tokens::{resolve_github_identity, GithubIdentity};
+use crate::github_tokens::{resolve_github_identity_if_stored, GithubIdentity};
 use crate::global_settings::GlobalSettingsStore;
 use crate::notes::{new_note_id, now_rfc3339};
 use crate::project::ProjectState;

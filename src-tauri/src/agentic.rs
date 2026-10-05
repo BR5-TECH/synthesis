@@ -147,7 +147,7 @@ pub const VAULT_NAMESPACE: &[&str] = &["agentic", "vendors"];
 /// The one prefix an OAuth token may carry (AIC-FR-27).
 const OAUTH_TOKEN_PREFIX: &str = "sk-ant-oat01-";
 
-/// AIC-FR-27: `^sk-ant-oat01-[A-Za-z0-9-]+$`, and nothing else.
+/// AIC-FR-27: `^sk-ant-oat01-[A-Za-z0-9_-]+$`, and nothing else.
 ///
 /// Spelled out rather than compiled as a regex because the pattern is anchored
 /// at both ends and has one repetition group, which `strip_prefix` plus a
@@ -161,12 +161,12 @@ const OAUTH_TOKEN_PREFIX: &str = "sk-ant-oat01-";
 /// wherever it is eventually presented.
 pub fn is_valid_oauth_token(token: &str) -> bool {
     match token.strip_prefix(OAUTH_TOKEN_PREFIX) {
-        // `[A-Za-z0-9-]+` — one or more, so a bare prefix does not pass.
+        // `[A-Za-z0-9_-]+` — one or more, so a bare prefix does not pass.
         Some(rest) => {
             !rest.is_empty()
                 && rest
                     .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '-')
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         }
         None => false,
     }

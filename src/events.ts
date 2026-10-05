@@ -142,6 +142,11 @@ export const GIT_OPERATION_FINISHED = "git-operation-finished";
 export const SEARCH_RESULTS = "search-results";
 /** SCC-FR-13: emitted exactly once per search, whatever the outcome. */
 export const SEARCH_ENDED = "search-ended";
+/**
+ * GTS-FR-AEQO: the token registry or a project's token binding changed. Carries
+ * no payload; a consumer of a resolved identity re-resolves it.
+ */
+export const GITHUB_TOKENS_CHANGED = "github-tokens-changed";
 /** CMS-FR-51: a discussion this application wrote into, as it now folds. */
 export const DISCUSSION_CHANGED = "discussion-changed";
 /**
@@ -499,6 +504,10 @@ export const onDiscussionChanged = (
   handler: (discussion: Discussion) => void,
 ): Promise<UnlistenFn> =>
   listen<Discussion>(DISCUSSION_CHANGED, (ev) => handler(ev.payload));
+
+/** GTS-FR-AEQO: subscribe to [`GITHUB_TOKENS_CHANGED`]. */
+export const onGithubTokensChanged = (handler: () => void): Promise<UnlistenFn> =>
+  listen<null>(GITHUB_TOKENS_CHANGED, () => handler());
 
 /**
  * CMS-FR-BQEN: a discussion gained a question set, or stopped holding one.

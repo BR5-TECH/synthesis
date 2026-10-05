@@ -47,7 +47,6 @@ import {
 } from "../../state/discussionSession";
 import {
   discussionTargetKey,
-  participantName,
   type AttachmentInput,
   type CommentQuote,
   type Discussion,
@@ -56,6 +55,7 @@ import {
   type ProjectAgent,
 } from "../../types";
 import { isPostAccelerator, postAcceleratorHint } from "./composerKeys";
+import { useParticipantLabel } from "../../state/projectIdentity";
 
 /** What an opening composer asks for when the author posts. */
 export interface OpenDiscussionRequest {
@@ -133,6 +133,7 @@ function errorText(e: unknown): string {
 }
 
 export function DiscussionComposer(props: DiscussionComposerProps) {
+  const participantLabel = useParticipantLabel();
   const { agents } = props;
   const sessionKey =
     props.mode === "reply" ? props.discussion.id : discussionTargetKey(props.target);
@@ -249,7 +250,7 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
 
   const authorOf = (commentId: string): string => {
     const c = thread?.comments.find((x) => x.id === commentId);
-    return c ? participantName(c.author) : "";
+    return c ? participantLabel(c.author) : "";
   };
 
   if (props.locked) return null;

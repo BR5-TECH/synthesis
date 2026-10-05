@@ -131,6 +131,52 @@ describe("plain talk and the author's own message (DDS-FR-VTKD, DDS-FR-QJFE)", (
   });
 });
 
+describe("the local participant's label (CVP-FR-TIBK, CMT-FR-ZCAE)", () => {
+  const LOCAL: Participant = { kind: "human", login: "", displayName: "Me" };
+  const names = () =>
+    Array.from(document.querySelectorAll("[data-testid='dds-message']")).map(
+      (block) => block.firstElementChild?.textContent ?? "",
+    );
+
+  it("CVP-FR-TIBK: reads Me in the draft discussion column while no project identity resolves", async () => {
+    renderColumn([
+      message("c1", LOCAL, "written without a token"),
+      message("c2", HELGA, "an agent answers"),
+    ]);
+    const blocks = await screen.findAllByTestId("dds-message");
+    expect(blocks[0]).toHaveTextContent("Me");
+    expect(blocks[1]).toHaveTextContent("helga");
+  });
+
+  it("CVP-FR-TIBK, CMT-FR-ZCAE: reads the project login once a token resolves, and Me again when it stops", async () => {
+    invokeMock.mockImplementation(async (cmd: string) =>
+      cmd === "resolve_comment_author_identity" ? LOCAL : [],
+    );
+    renderColumn([message("c1", LOCAL, "written without a token")]);
+    await screen.findByTestId("dds-message");
+    expect(names()[0]).toMatch(/^Me/);
+
+    invokeMock.mockImplementation(async (cmd: string) =>
+      cmd === "resolve_comment_author_identity"
+        ? { kind: "human", login: "octocat" }
+        : [],
+    );
+    await act(async () => {
+      for (const cb of listeners.get("github-tokens-changed") ?? []) cb({ payload: null });
+    });
+    await vi.waitFor(() => expect(names()[0]).toMatch(/^octocat/));
+
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "resolve_comment_author_identity") throw "github_token_selection_required";
+      return [];
+    });
+    await act(async () => {
+      for (const cb of listeners.get("github-tokens-changed") ?? []) cb({ payload: null });
+    });
+    await vi.waitFor(() => expect(names()[0]).toMatch(/^Me/));
+  });
+});
+
 describe("a submitted exchange is one card (DQA-FR-KYWR, DQA-FR-ZPGM, DQA-FR-BHXT)", () => {
   const question = message(
     "c1",

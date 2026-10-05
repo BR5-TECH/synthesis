@@ -33,7 +33,11 @@ import {
   setDiscussionLock,
   setDiscussionResolution,
 } from "../api";
-import { onAgentTurnStateChanged, onDiscussionChanged } from "../events";
+import {
+  onAgentTurnStateChanged,
+  onDiscussionChanged,
+  onGithubTokensChanged,
+} from "../events";
 import {
   dispatchTargets,
   withoutAwaitingReply,
@@ -311,6 +315,26 @@ export function useDiscussions(
   useEffect(() => {
     void loadIdentity();
   }, [loadIdentity]);
+
+  // GTS-FR-AEQO: a token or a binding changed, so the identity this surface
+  // writes as may have changed with it.
+  useEffect(() => {
+    if (!enabled) return;
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void onGithubTokensChanged(() => {
+      void loadIdentity();
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [enabled, loadIdentity]);
 
   // CTA-FR-ZOLW: what is still coming, from `"list agent turns"` when the tab
   // opens and from the event thereafter.

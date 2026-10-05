@@ -31,7 +31,7 @@ Fix Claude Code OAuth token validation and remove GitHub authentication as a req
 ### Tests
 
 - Test that the backend and UI accept the existing Claude token charset plus `_`, and reject characters outside the pattern.
-- Test no-token discussion reads, opening, comments, question-set answers, and other human discussion writes; verify the stored participant is the fixed local human and the UI displays **Me** without blocking or offering token setup.
+- Test no-token discussion reads, opening, comments, question-set answers, and other human discussion writes; verify the stored participant is the fixed local human and displays as **Me** without blocking or offering token setup. Then test that adding a token which resolves for the project changes the displayed author of past and new fixed-local-participant comments on every surface without changing stored snapshots; when identity does not resolve, including while a token binding is required, display **Me**. Verify existing GitHub-authored participants remain unchanged.
 - Test that one stored token keeps existing GitHub username attribution, multiple stored tokens still require the picker, and existing saved GitHub participants remain unchanged.
 - Test that other authenticated GitHub operations still require a token and use their existing recovery flows.
 

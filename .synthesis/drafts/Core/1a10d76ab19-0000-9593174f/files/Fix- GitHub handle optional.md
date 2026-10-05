@@ -7,7 +7,7 @@ Fix Claude Code OAuth token validation and remove GitHub authentication as a req
 - The user enters or re-verifies a Claude Code OAuth token. The field accepts the existing token characters and `_`.
 - The user opens, reads, and posts in a discussion when no GitHub tokens are stored. The composer is enabled, and their comments appear as **Me** without a token picker or a route to GitHub settings.
 - If one GitHub token is stored, existing implicit-token behavior and GitHub username authorship stay unchanged. If several tokens need a project binding, the existing token picker remains required; **Me** is not a fallback for that state.
-- Existing comments keep their saved participant and displayed name.
+- Existing comment participant snapshots remain unchanged. For comments authored with the fixed local participant, show the currently resolved project GitHub identity using the same author label as an ordinary GitHub-authored comment; show **Me** while no project identity resolves. Apply this display-only rule to past and new comments on every discussion surface. Existing GitHub-authored comments keep their saved identity.
 
 ## Requirements
 

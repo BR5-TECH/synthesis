@@ -1,0 +1,604 @@
+/* ---------- Map — specifications ----------
+   SMP-specification-map.md and its feature specs: SMZ (canvas and zoom), SMN
+   (nodes), SME (edges), SMI (inspector), SMO (organization), SMD (drafts). The
+   layout sets each node's position and size inline; everything else is here. */
+
+.smap {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-canvas);
+}
+
+/* SMP-FR-CVIB: the toolbar never wraps; it scrolls sideways when narrow. */
+.smap-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-1);
+  background: var(--bg-canvas);
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+}
+.smap-levels {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-1);
+}
+.smap-levels__option {
+  height: 20px;
+  padding: 0 9px;
+  font-family: inherit;
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-medium);
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--fg-3);
+  cursor: pointer;
+}
+.smap-levels__option[data-active] { background: var(--accent-soft); color: var(--accent); }
+.smap-levels__option:disabled { cursor: default; }
+.smap-toolbar__divider { flex: none; width: 1px; height: 18px; background: var(--border-1); }
+.smap-toolbar__label {
+  flex: none;
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.smap-toolbar__counts { flex: none; font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-2); }
+.smap-toolbar__spacer { flex: 1; }
+.smap-filter {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  font-family: inherit;
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-medium);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  color: var(--fg-3);
+  cursor: pointer;
+}
+/* SME-FR-OKUH / SMN-FR-HLDQ: the two toggles when on. */
+.smap-filter[data-filter="deps"][aria-pressed="true"] { background: var(--bg-active); color: var(--accent); }
+.smap-filter[data-filter="gaps"][aria-pressed="true"] { background: var(--danger-soft); color: var(--danger); }
+.smap-filter:disabled { opacity: 0.5; cursor: default; }
+
+/* SMN-FR-OJAY / SMN-FR-CMLN: a completeness bar is four segments in state
+   order; the variant sets its size only. */
+.smap-bar {
+  flex: none;
+  display: flex;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--bg-sunken);
+}
+.smap-bar[data-variant="project"] { width: 170px; height: 8px; }
+.smap-bar[data-variant="project"][data-narrow] { width: 92px; }
+.smap-bar[data-variant="card"] { height: 6px; }
+.smap-bar[data-variant="box"] { height: 4px; }
+.smap-bar[data-variant="mini"] { width: 38px; height: 4px; }
+.smap-bar[data-variant="hover"] { height: 5px; margin-top: 10px; }
+.smap-bar[data-variant="inspector"] { height: 6px; margin-top: 14px; }
+.smap-bar[data-variant="row"] { width: 44px; height: 4px; }
+.smap-bar__segment { height: 100%; }
+.smap-bar__segment[data-state="verified"],
+.smap-dot[data-state="verified"] { background: var(--ok); }
+.smap-bar__segment[data-state="built"],
+.smap-dot[data-state="built"] { background: var(--accent); }
+.smap-bar__segment[data-state="drafted"],
+.smap-dot[data-state="drafted"] { background: var(--fg-4); }
+.smap-bar__segment[data-state="gap"],
+.smap-dot[data-state="gap"] { background: var(--danger); }
+.smap-count { white-space: nowrap; }
+.smap-count[data-state="verified"] { color: var(--ok); }
+.smap-count[data-state="built"] { color: var(--accent); }
+.smap-count[data-state="drafted"] { color: var(--fg-4); }
+.smap-count[data-state="gap"] { color: var(--danger); }
+.smap-dot { flex: none; width: 5px; height: 5px; border-radius: 50%; }
+
+.smap-body { flex: 1; min-height: 0; display: flex; position: relative; }
+
+/* SMP-FR-ONSD / SMP-FR-LRAX: loading, error, and empty replace the canvas. */
+.smap-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-3);
+  text-align: center;
+}
+.smap-state__line { margin: 0; }
+
+/* SMZ-FR-DPWC: the dot grid and the one transformed stage. */
+.smap-canvas {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  background-color: var(--bg-canvas);
+  background-image: radial-gradient(circle at 1px 1px, var(--border-2) 1px, transparent 0);
+  background-size: 16px 16px;
+}
+.smap-canvas[data-panning] { cursor: grabbing; }
+.smap-stage { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-origin: 0 0; }
+
+/* SME-FR-SGUC / SME-FR-TJMY / SME-FR-VAEC */
+.smap-edges { position: absolute; overflow: visible; pointer-events: none; }
+.smap-edge { fill: none; }
+.smap-edge[data-weight="light"] { stroke: var(--border-2); stroke-width: 1.4; opacity: 0.7; }
+.smap-edge[data-weight="medium"] {
+  stroke: color-mix(in srgb, var(--border-2), var(--border-3));
+  stroke-width: 2.2;
+  opacity: 0.7;
+}
+.smap-edge[data-weight="heavy"] { stroke: var(--border-3); stroke-width: 3.2; opacity: 0.7; }
+.smap-edge[data-weight="active"] { stroke: var(--accent); stroke-width: 2.4; opacity: 0.95; }
+.smap-edge[data-weight="unresolved"] {
+  stroke: var(--danger);
+  stroke-width: 1.6;
+  stroke-dasharray: 6 5;
+  opacity: 0.9;
+}
+.smap-marker[data-marker="dim"] { fill: var(--border-3); }
+.smap-marker[data-marker="hot"] { fill: var(--accent); }
+.smap-marker[data-marker="bad"] { fill: var(--danger); }
+
+/* SMN: every node. The transition moves boxes on a level change (SMZ NFR). */
+.smap-node {
+  position: absolute;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition:
+    left 200ms var(--ease-out),
+    top 200ms var(--ease-out),
+    height 200ms var(--ease-out),
+    border-color var(--dur-fast) linear,
+    opacity 140ms linear;
+}
+.smap-node:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+/* SMN-FR-HLDQ / SME-FR-WRPX / SMO-FR-DKTM */
+.smap-node[data-dim="gaps"] { opacity: 0.3; }
+.smap-chip[data-dim="gaps"] { opacity: 0.25; }
+.smap-node[data-dim="related"] { opacity: 0.5; }
+.smap-node[data-dim="drag"] { opacity: 0.4; }
+
+/* SMN-FR-XCOK / SMN-FR-QHVM: root cards. */
+.smap-root {
+  overflow: hidden;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  background: var(--bg-canvas);
+  box-shadow: var(--shadow-2);
+}
+/* SMN-FR-KTZB / SMN-FR-EYRV / SMO-FR-ARQV */
+.smap-root[data-context],
+.smap-box[data-context] { border-color: var(--border-3); }
+.smap-root[data-selected] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.smap-box[data-selected] { border-color: var(--accent); }
+.smap-root[data-drop],
+.smap-box[data-drop] { border-color: var(--accent); }
+.smap-root__head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 0; }
+/* A root node's hue arrives inline as its two theme values; these are the
+   defaults for a node the index gives no hue. */
+.smap-swatch {
+  --smap-hue: var(--fg-4);
+  --smap-hue-light: var(--fg-4);
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--r-xs);
+  background: var(--smap-hue-light);
+}
+[data-theme="dark"] .smap-swatch { background: var(--smap-hue); }
+.smap-root__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-ui-lg);
+  font-weight: var(--fw-semi);
+  color: var(--fg-1);
+}
+.smap-root__meta { font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3); white-space: nowrap; }
+.smap-root__summary {
+  margin: 8px 14px 0;
+  height: 54px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  font-size: var(--fs-ui-sm);
+  line-height: 1.45;
+  color: var(--fg-2);
+  text-wrap: pretty;
+}
+.smap-root__stats { padding: 10px 14px 0; }
+.smap-counts { margin-top: 8px; display: flex; align-items: center; gap: 12px; font-size: var(--fs-ui-xs); }
+.smap-counts__spacer { flex: 1; }
+
+/* SMN-FR-PFYW / SMN-FR-UJRG: branch boxes and leaf-group boxes. */
+.smap-box { overflow: hidden; border: 1px solid var(--border-1); border-radius: var(--r-sm); }
+.smap-box[data-role="branch"] { background: var(--bg-panel); }
+.smap-box[data-role="leaf"] { background: var(--bg-canvas); }
+.smap-box__head { display: flex; align-items: center; gap: 8px; padding: 9px 11px 0; }
+.smap-box[data-role="leaf"] .smap-box__head { padding: 7px 10px 0; }
+.smap-box__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-ui-md);
+  font-weight: var(--fw-semi);
+  color: var(--fg-1);
+}
+.smap-box[data-role="leaf"] .smap-box__label { font-size: var(--fs-ui-sm); font-weight: var(--fw-medium); color: var(--fg-2); }
+.smap-box__meta { font-family: var(--font-mono); font-size: var(--fs-ui-2xs); color: var(--fg-4); white-space: nowrap; }
+.smap-box__summary {
+  box-sizing: border-box;
+  height: 46px;
+  padding: 6px 11px 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: var(--fs-ui-xs);
+  line-height: 1.4;
+  color: var(--fg-3);
+  text-wrap: pretty;
+}
+.smap-box[data-role="leaf"] .smap-box__summary { height: 32px; padding: 4px 10px 0; line-height: var(--lh-snug); }
+.smap-box__bar { padding: 8px 11px 0; }
+
+/* SMN-FR-ISBE / SMD-FR-CGNW: spec chips and planned chips. */
+.smap-chip {
+  height: 22px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 5px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-xs);
+  background: var(--bg-canvas);
+}
+.smap-chip[data-selected] { border-color: var(--accent); background: var(--accent-soft); }
+.smap-chip--planned { border-style: dashed; border-color: var(--border-2); }
+.smap-chip__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-ui-2xs);
+  color: var(--fg-2);
+}
+
+/* SMN-FR-WAGD: a spec code badge takes its folder's colours. */
+.smap-code {
+  flex: none;
+  padding: 1px 4px;
+  border-radius: var(--r-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-2xs);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--ls-wide);
+  white-space: nowrap;
+  background: var(--bg-sunken);
+  color: var(--fg-3);
+}
+.smap-chip .smap-code { padding: 1px 3px; font-size: calc(var(--font-ui-size) * 9 / 13); letter-spacing: 0; }
+.smap-code[data-folder="ui"]     { background: #ECEEFF; color: #3B4BEF; }
+.smap-code[data-folder="core"]   { background: #DFF3EA; color: #1F8F6B; }
+.smap-code[data-folder="ai"]     { background: #EDE5FB; color: #6F47C2; }
+.smap-code[data-folder="tools"]  { background: #FFEDE0; color: #E5530B; }
+.smap-code[data-folder="infra"]  { background: #E5E0D6; color: #44403B; }
+.smap-code[data-folder="server"] { background: #E0EBF8; color: #2862AB; }
+.smap-code[data-folder="dir"]    { background: #EFEBE3; color: #6E6A63; }
+[data-theme="dark"] .smap-code[data-folder="ui"]     { background: #232745; color: #9AA7FF; }
+[data-theme="dark"] .smap-code[data-folder="core"]   { background: #14322A; color: #6BD7AA; }
+[data-theme="dark"] .smap-code[data-folder="ai"]     { background: #2A1F40; color: #C19EFF; }
+[data-theme="dark"] .smap-code[data-folder="tools"]  { background: #3A1E10; color: #FF8453; }
+[data-theme="dark"] .smap-code[data-folder="infra"]  { background: #2A2E37; color: #B8B4AC; }
+[data-theme="dark"] .smap-code[data-folder="server"] { background: #1A2538; color: #8AB4E8; }
+[data-theme="dark"] .smap-code[data-folder="dir"]    { background: #0B0D11; color: #847F76; }
+.smap-code[data-folder][data-danger],
+[data-theme="dark"] .smap-code[data-folder][data-danger] { background: var(--danger-soft); color: var(--danger); }
+.smap-code--draft { background: var(--live-soft); color: var(--live); }
+
+/* SMO-FR-DKTM / SMO-FR-ARQV: the drag ghost and the insertion bar. */
+.smap-drop-bar { position: absolute; border-radius: 1px; background: var(--accent); pointer-events: none; }
+.smap-ghost {
+  position: absolute;
+  transform: translate(8px, 8px);
+  padding: 2px 8px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-xs);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-3);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-1);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* SMN-FR-MVWA / SMN-FR-YSKQ: the hover card ignores the pointer. */
+.smap-hover {
+  position: absolute;
+  z-index: 50;
+  width: 280px;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-3);
+  pointer-events: none;
+}
+.smap-hover__head { display: flex; align-items: center; gap: 8px; }
+.smap-hover__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-ui-sm);
+  font-weight: var(--fw-semi);
+  color: var(--fg-1);
+}
+.smap-hover__summary { margin-top: 8px; font-size: var(--fs-ui-sm); line-height: 1.45; color: var(--fg-2); text-wrap: pretty; }
+.smap-hover__meta { margin-top: 8px; font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3); }
+
+/* SMZ-FR-AILK: the legend. */
+.smap-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 26px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  cursor: default;
+}
+.smap-legend__level { color: var(--fg-2); }
+.smap-legend__divider { width: 1px; height: 12px; background: var(--border-2); }
+.smap-legend__item { display: inline-flex; align-items: center; gap: 5px; }
+.smap-legend .smap-dot { width: 6px; height: 6px; }
+
+/* SMZ-FR-JWXA: the zoom controls. */
+.smap-zoom {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-2);
+  cursor: default;
+}
+.smap-zoom__btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--fg-2);
+  cursor: pointer;
+}
+.smap-zoom__btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--fg-1); }
+.smap-zoom__btn:disabled { opacity: 0.5; cursor: default; }
+.smap-zoom__label { width: auto; padding: 0 8px; font-family: var(--font-mono); font-size: var(--fs-ui-xs); }
+/* SMI-FR-QWOP: an overlay inspector covers the canvas's right edge, so the zoom
+   controls move clear of it. */
+.smap-canvas[data-inspector-overlay] .smap-zoom { right: 312px; }
+
+/* SMZ-FR-BRCT: the focused subtree's breadcrumb. */
+.smap-crumbs {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 140px);
+  padding: 3px 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  white-space: nowrap;
+  cursor: default;
+}
+.smap-crumbs__item { padding: 0; border: none; background: transparent; font: inherit; color: var(--accent); cursor: pointer; }
+.smap-crumbs__sep { color: var(--fg-4); }
+.smap-crumbs__current { overflow: hidden; text-overflow: ellipsis; color: var(--fg-1); }
+
+/* SMI-FR-BNHI: the button that opens a hidden inspector. */
+.smap-inspector-open {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-3);
+  font-family: inherit;
+  font-size: var(--fs-ui-sm);
+  font-weight: var(--fw-medium);
+  color: var(--fg-1);
+  cursor: pointer;
+}
+.smap-inspector-open:hover { border-color: var(--border-3); }
+
+/* SMI-FR-QWOP: docked from 1160px of window, an overlay below. */
+.smap-inspector {
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: 318px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--border-1);
+  background: var(--bg-panel);
+}
+.smap-inspector[data-overlay] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  width: 300px;
+  box-shadow: var(--shadow-4);
+}
+.smap-inspector__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  box-sizing: border-box;
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--border-1);
+}
+.smap-inspector__title {
+  flex: 1;
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.smap-inspector__kind { font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-4); }
+.smap-inspector__body { flex: 1; overflow: auto; padding: 14px 14px 20px; }
+.smap-inspector__hint { margin: 0; font-size: var(--fs-ui-sm); color: var(--fg-3); }
+.smap-inspector__crumbs { font-size: var(--fs-ui-xs); color: var(--fg-4); }
+.smap-inspector__heading { margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+.smap-inspector__name { font-size: var(--fs-ui-title); font-weight: var(--fw-semi); color: var(--fg-1); }
+.smap-summary {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-canvas);
+}
+.smap-summary__label {
+  font-size: var(--fs-ui-2xs);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--fg-4);
+}
+.smap-summary__text { margin-top: 6px; font-size: var(--fs-ui-sm); line-height: var(--lh-normal); color: var(--fg-2); text-wrap: pretty; }
+.smap-inspector__grid { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; font-size: var(--fs-ui-xs); }
+.smap-inspector__totals { margin-top: 10px; font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-4); }
+.smap-section-label {
+  margin-top: 18px;
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.smap-rows { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+.smap-row {
+  width: 100%;
+  min-height: 26px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: var(--fg-1);
+}
+button.smap-row { cursor: pointer; }
+button.smap-row:hover { background: var(--bg-hover); }
+.smap-row[data-danger] .smap-row__label { color: var(--danger); }
+.smap-row__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-ui-sm);
+}
+.smap-row__count { flex: none; font-family: var(--font-mono); font-size: var(--fs-ui-2xs); color: var(--fg-4); }
+/* SMI-FR-ZLOA */
+.smap-attention {
+  margin-top: 18px;
+  padding: 10px 12px;
+  border: 1px solid var(--danger-soft);
+  border-radius: var(--r-md);
+  background: var(--danger-soft);
+}
+.smap-attention__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--danger);
+}
+.smap-attention__title .smap-dot { width: 6px; height: 6px; }
+.smap-attention__line { margin-top: 8px; font-size: var(--fs-ui-xs); color: var(--danger); }
+.smap-actions { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+/* SMI layout notes: a secondary action sits on --bg-canvas with a --border-2 line. */
+.smap-action { background: var(--bg-canvas); border: 1px solid var(--border-2); color: var(--fg-1); }
+.smap-action:hover { background: var(--bg-hover); border-color: var(--border-3); }
+
+/* SMO-FR-IMXW */
+.smap-dialog__text { margin: 0; font-size: var(--fs-ui-md); color: var(--fg-2); }

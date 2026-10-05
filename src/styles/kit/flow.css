@@ -1,0 +1,685 @@
+/* ---------- Flow (FLO-flow.md) ---------- */
+/* The tab is the Flow's own fields above a canvas that takes the rest — every
+   action lives on the canvas itself (FLO wireframe layout notes). */
+.flow-surface {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* FLO-FR-25: the Flow's name and description, the tab's only chrome — and
+   chrome sits on the field, the same as every other tab's does (EDT-FR-63).
+   On `--bg-elevated` this row was the one white band left in the shell, which
+   read as a surface belonging to something else rather than as this tab's own
+   heading. */
+.flow-header {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-2);
+  background: var(--doc-field-bg);
+}
+.flow-header__name,
+.flow-header__description {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg-1);
+  font: inherit;
+  padding: 2px 5px;
+  border-radius: var(--r-sm);
+  min-width: 0;
+}
+.flow-header__name { font-weight: 600; font-size: var(--fs-ui-md); flex: none; width: 240px; }
+.flow-header__description { flex: 1; font-size: var(--fs-ui-sm); color: var(--fg-2); }
+.flow-header__name:hover,
+.flow-header__description:hover { border-color: var(--border-2); }
+.flow-header__name:focus,
+.flow-header__description:focus {
+  border-color: var(--accent);
+  outline: none;
+  background: var(--bg-canvas);
+}
+/* Required, and marked rather than enforced: an unnamed Flow still saves. */
+.flow-header__name[data-missing="true"] { border-color: var(--danger, crimson); }
+.flow-header__required {
+  flex: none;
+  font-size: var(--fs-ui-xs);
+  color: var(--danger, crimson);
+}
+
+.flow-banner {
+  flex: none;
+  padding: 5px 12px;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--border-2);
+}
+.flow-banner--error { color: var(--danger, crimson); background: transparent; }
+
+.flow-error {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-3);
+  padding: 24px;
+  text-align: center;
+}
+
+.flow {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background:
+    radial-gradient(circle at 1px 1px, var(--border-2) 1px, transparent 0);
+  background-size: 16px 16px;
+  background-color: var(--bg-canvas);
+  overflow: hidden;
+  touch-action: none;
+}
+/* Pan and zoom are applied to this layer, not to the graph's coordinates: the
+   document stores unscaled positions (FLO-FR-21) and the view is never part of
+   it (FLO-FR-22). */
+.flow-viewport { position: absolute; inset: 0; }
+/* Edges are drawn in graph coordinates, which routinely fall outside the
+   element's own box — clipping them would hide exactly the long back-edges a
+   retry is drawn as. */
+.flow-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+
+/* FLO-FR-38: a loop, drawn as the region it is. Recessed rather than elevated,
+   so it reads as ground its members sit on rather than as a card in front of
+   them, and so a node inside one still reads as a node. */
+.flow-loop {
+  position: absolute;
+  /* The size the document carries is the size the box PAINTS at (FLO-FR-21):
+     there is no global reset, so without this the border and padding are added
+     outside the width, and every edge anchored to the border — and every
+     containment test the canvas makes — is off by that much. */
+  box-sizing: border-box;
+  border: 1px dashed var(--border-3);
+  border-radius: var(--r-lg);
+  background: var(--bg-sunken, rgba(127, 127, 127, 0.06));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-2);
+}
+.flow-loop[data-selected="true"] { border-color: var(--accent); border-style: solid; }
+.flow-loop[data-magnet="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.flow-loop__head { display: flex; align-items: center; gap: 4px; cursor: grab; }
+.flow-loop__grip { color: var(--fg-4); font-size: var(--fs-ui-sm); line-height: 1; }
+.flow-loop__name,
+.flow-loop__passes {
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 1px 4px;
+  min-width: 0;
+}
+.flow-loop__name { flex: 1; font-weight: 600; }
+.flow-loop__passes { width: 52px; flex: none; text-align: right; color: var(--fg-3); }
+.flow-loop__name:hover,
+.flow-loop__passes:hover { border-color: var(--border-2); }
+.flow-loop__name:focus,
+.flow-loop__passes:focus {
+  border-color: var(--accent);
+  outline: none;
+  background: var(--bg-canvas);
+}
+/* FLO-FR-38: the artifacts the loop is run under, in the header region above
+   its members. The rows are a node's (`.flow-node__ref*`), so only the column
+   they sit in is declared here — and it takes no height it does not need, a
+   loop referencing nothing having nothing to show. */
+.flow-loop__refs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* Each row is as wide as what it holds rather than as wide as the container.
+     A loop is metres wide where a reference row is a chip and a filename, and a
+     column stretched to the loop's full width is a box of mostly nothing —
+     which, being drawn over the loop's members (below), would take the presses
+     meant for them across the whole width of the container. */
+  align-items: flex-start;
+  flex: none;
+}
+.flow-loop__refs:empty { display: none; }
+/* FLO-FR-38: the loop's own chrome is drawn ABOVE what the loop holds.
+   Members are absolutely-placed siblings later in the viewport, so without a
+   stacking order they paint over the header — and a member the author dropped
+   near the top of the container swallows the picker, the remove affordances,
+   and the click-throughs, taking the presses meant for them. Every reference
+   the loop gains pushes the column further into that region, so this is the
+   ordinary case rather than a corner of it.
+
+   Above the edge labels too (`.flow-edge-label`, z-index 1): a label is one
+   more thing drawn inside the container, and the container's own controls have
+   to stay reachable whatever is drawn over the region they sit in. */
+.flow-loop__head,
+.flow-loop__refs {
+  position: relative;
+  z-index: 2;
+}
+/* …and in the reference column it is only the ROWS that are raised, not the
+   ground between them. The column stacks its rows with a gap, and a gap is the
+   container's own ground: a press landing there is aimed at whatever shows
+   through, so the column passes pointers through and each row takes its own
+   back. The header is left alone — its whole width IS a control, being what
+   drags the loop (FLO-FR-21). */
+.flow-loop__refs { pointer-events: none; }
+.flow-loop__refs > * { pointer-events: auto; }
+/* The loop's connection port sits at the middle of its trailing border, which
+   is the side of it an edge into a loop lands on (FLO-FR-39) — a container is
+   met on its border rather than at a fixed offset from its top, which is what a
+   node's port marks.
+
+   Written as a compound selector because `.flow-node__port` below carries the
+   node's `top` and is declared LATER: at equal specificity the later rule wins,
+   and this one would be dead. */
+.flow-loop__port.flow-loop__port { top: 50%; margin-top: -6px; }
+/* FLO-FR-44: resized from its own corner. */
+.flow-loop__resize {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--border-3);
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  cursor: nwse-resize;
+}
+.flow-loop__resize:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+.flow-node {
+  position: absolute;
+  /* As for `.flow-loop` above: the laid-out width is the painted width, so two
+     nodes the document places a node-width apart do not overlap. */
+  box-sizing: border-box;
+  /* A node is part of the drawing rather than a card set on top of it: a light,
+     slightly translucent surface carrying the canvas's own dot grid at the same
+     16px pitch. The tone still separates the node from the canvas — a node has
+     to be legible as a box — but by a step rather than by a slab.
+
+     The two grids are the same texture, not one continuous field: the canvas
+     paints its dots on `.flow`, which does not move, while a node sits inside
+     `.flow-viewport`, which is what pan and zoom transform. So the node's dots
+     travel and scale with the graph and the canvas's stay put. That is the
+     right way round — the texture belongs to the node the way it belongs to the
+     canvas — but it does mean the two only line up by coincidence. */
+  background-image:
+    radial-gradient(circle at 1px 1px, var(--flow-node-dot) 1px, transparent 0);
+  background-size: 16px 16px;
+  background-color: var(--flow-node-bg);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  box-shadow: var(--shadow-2);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+  cursor: grab;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.flow-node[data-selected="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+/* FLO-FR-33: the node an in-flight connection would land on. Reads as a target
+   rather than as a selection, so it does not compete with the selected node. */
+.flow-node[data-magnet="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.flow-node__head { display: flex; align-items: center; gap: 4px; }
+.flow-node__grip { color: var(--fg-4); font-size: var(--fs-ui-xs); line-height: 1; }
+/* The name reads as a label until it is focused, so a node renders as its name
+   rather than as a form (FLO-FR-09). */
+.flow-node__name {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg-1);
+  font: inherit;
+  font-weight: 600;
+  padding: 1px 3px;
+  border-radius: var(--r-sm);
+}
+.flow-node__name:hover { border-color: var(--border-2); }
+.flow-node__name:focus { border-color: var(--accent); outline: none; background: var(--bg-canvas); }
+
+/* One row per artifact the node references (FLO-FR-10), the remove affordance
+   sitting after the reference itself and only while the node is selected. */
+.flow-node__ref-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.flow-node__ref-row > :first-child { flex: 1; min-width: 0; }
+
+.flow-node__ref {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+  background: transparent;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.flow-node__ref-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-node__ref--unresolved { color: var(--danger, crimson); cursor: default; }
+
+/* The shared select chrome, at the canvas's own denser measure. kit.css loads
+   after components.css, so these two declarations win over `.select--sm`. */
+.flow-node__picker { font-size: var(--fs-ui-xs); max-width: 100%; height: 22px; }
+.flow-node__prompt {
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  padding: 4px 6px;
+  resize: vertical;
+  border-top: 1px solid var(--border-2);
+}
+/* The connection source, on the node's trailing edge. */
+.flow-node__port {
+  position: absolute;
+  right: -6px;
+  top: 12px;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-3);
+  background: var(--bg-elevated);
+  cursor: crosshair;
+}
+.flow-node__port:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+.flow-edge-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  padding: 1px 4px;
+  font-size: var(--fs-ui-2xs);
+  color: var(--fg-3);
+  cursor: pointer;
+  white-space: nowrap;
+  /* FLO-FR-19: the label sits at the edge's midpoint, which is inside a node
+     whenever the label is wider than the gap between the two it joins. Both
+     boxes are opaque, so without a stacking order the node paints last and
+     slices the label with no ellipsis and nothing to say it happened. The
+     label is the smaller box and the one carrying the text, so it goes on
+     top. */
+  z-index: 1;
+}
+.flow-edge-label[data-selected="true"] { border-color: var(--accent); }
+.flow-edge-label__input {
+  border: none;
+  background: transparent;
+  color: var(--fg-1);
+  font: inherit;
+  width: 72px;
+  outline: none;
+}
+/* The same measure the input takes, so the label's box does not resize as it
+   toggles between reading and editing — the edge would appear to jump on a
+   click that changed nothing but the affordance. */
+.flow-edge-label__text {
+  display: inline-block;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-status {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  pointer-events: none;
+}
+
+/* FLO-FR-13: a node's prompt read as the formatted text it is. The block
+   treatments come from the shared renderer; only the box around them is the
+   node's own, and it is unbounded in height because the node grows to fit. */
+.flow-node__rendered {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+  border-top: 1px solid var(--border-1);
+  padding-top: 6px;
+  overflow-wrap: anywhere;
+}
+.flow-node__rendered > :first-child { margin-top: 0; }
+.flow-node__rendered > :last-child { margin-bottom: 0; }
+
+/* FLO-FR-05 / FLO-FR-47: what a validation refused, one entry per violation. */
+.flow-violations {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-ui-xs);
+}
+.flow-violations__at {
+  font-family: var(--font-mono, monospace);
+  color: var(--fg-3);
+}
+
+/* FLO-FR-43 / FLO-FR-45: the two questions the canvas asks before an edit that
+   would take something away. Anchored over the canvas rather than over the
+   window, on the same footing as the tab's other transient surfaces. */
+.flow-dialog {
+  position: absolute;
+  left: 50%;
+  top: 24px;
+  transform: translateX(-50%);
+  max-width: 420px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3, var(--shadow-2));
+  padding: 12px 14px;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 5;
+}
+.flow-dialog p { margin: 0; }
+.flow-dialog__actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* The canvas's own controls: transparent until hovered, so the graph reads
+   through them (FLO-FR-07 / FLO-FR-22). */
+.flow-overlay {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--fg-3);
+  padding: 2px;
+}
+.flow-overlay:hover { border-color: var(--border-2); background: var(--bg-elevated); }
+/* FLO-FR-07: the add affordance and the short menu of what it adds.
+
+   The menu itself is the action control's own (`.draft-actions__menu`, ACT-FR-05)
+   — one treatment for both menus a Flow tab can open. Only its anchoring is this
+   canvas's business: the control's menu rises from a corner at the FOOT of its
+   tab, and this one hangs from an affordance at the head, so the two offsets it
+   sets against `bottom` are overridden here rather than restated. */
+.flow-addmenu { position: absolute; top: 0; right: 0; }
+.flow-addmenu__list {
+  top: 38px;
+  right: 8px;
+  bottom: auto;
+}
+.flow-overlay--add {
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  justify-content: center;
+  cursor: pointer;
+}
+.flow-overlay--add:hover { color: var(--accent); }
+/* ACT-FR-10: the action control keeps the corner and the view controls sit
+   LEADING of it, clear of the whole dock — the collapsed toggle, the discussions
+   pill beside it, and the gutter they share. Without this the control lands on
+   top of Fit and takes the press meant for it. */
+.flow-overlay--view {
+  right: calc(var(--sp-4) + var(--draft-actions-size) + 96px);
+  bottom: 8px;
+}
+.flow-overlay__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.flow-overlay__btn:hover { color: var(--accent); background: var(--accent-soft); }
+.flow-overlay__zoom { min-width: 34px; text-align: center; color: var(--fg-3); }
+
+/* ---------- Runs ---------- */
+.runs-log {
+  font-family: var(--font-mono); font-size: var(--fs-ui-sm);
+  padding: 8px 14px;
+  line-height: 1.55;
+  color: var(--fg-2);
+}
+.runs-line { display:flex; gap: 10px; padding: 0 2px; }
+.runs-line__ts { color: var(--fg-4); flex: none; width: 64px; }
+.runs-line__lvl { width: 44px; flex: none; font-weight: 600; }
+.runs-line__lvl[data-level="info"]  { color: var(--fg-2); }
+.runs-line__lvl[data-level="ok"]    { color: var(--ok); }
+.runs-line__lvl[data-level="warn"]  { color: var(--warn); }
+.runs-line__lvl[data-level="err"]   { color: var(--danger); }
+.runs-line__lvl[data-level="step"]  { color: var(--accent); }
+.runs-line__msg { flex: 1; white-space: pre-wrap; word-break: break-word; }
+.runs-head { display:flex; align-items:center; gap:10px; padding: 8px 14px; border-bottom: 1px solid var(--border-1); }
+/* RUN-FR-09: nothing in the window starts a run, so a project in which none has
+   started finds the panel here. The container centres the shared `.panel-empty`
+   block across the panel and down its height, exactly as a vertical panel's
+   empty body does — the block is one thing across the application, and the
+   bottom panel is not a reason for a sixth copy of it. */
+.runs-empty { display: flex; align-items: center; justify-content: center; height: 100%; }
+
+/* RUN-FR-14: a row's own event, opened in place beneath it. Monospace and
+   wrapped rather than scrolled sideways, because what is read here is a JSON
+   event whose interesting part is as likely to be at its end as its start. */
+.runs-payload {
+  margin: 2px 0 6px 118px;
+  padding: 8px 10px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  color: var(--fg-3);
+  font-family: var(--font-mono); font-size: var(--fs-ui-xs);
+  white-space: pre-wrap; word-break: break-word;
+  max-height: 320px; overflow: auto;
+}
+/* The summary is the row's own control, so it carries no button chrome — what
+   is clickable is the line itself. */
+.runs-line__expand {
+  background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.runs-line__expand:hover { color: var(--fg-1); }
+/* AGV-FR-05: the notice at the head of a stream that outgrew what is held. */
+.runs-notice {
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border-1);
+  color: var(--fg-3);
+}
+/* The kind column is wider than the four-letter level it replaced: "file
+   change" and "unrecognized" are what a reader scans for. */
+.runs-line__lvl { width: 96px; }
+
+
+/* ---------- Git ---------- */
+/* GIT-FR-01: the panel's Log / Branches / PRs sections. A text tab rather than
+   the viewport's `.tab`, because it switches a region inside a panel rather
+   than the main surface — but it carries the same accent-underline marking the
+   settings sections use, so "which section am I in" reads the same everywhere. */
+.bottom-tab {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  height: 26px; padding: 0 var(--sp-3);
+  font-size: var(--fs-ui-sm); color: var(--fg-3);
+  border-bottom: 2px solid transparent;
+  cursor: pointer; user-select: none; white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out);
+}
+.bottom-tab:hover { color: var(--fg-1); }
+.bottom-tab[data-active="true"] { color: var(--fg-1); border-bottom-color: var(--accent); }
+
+.git { display: grid; grid-template-columns: 260px 1fr; height: 100%; }
+.git__left { border-right: 1px solid var(--border-1); overflow: auto; }
+.git__section-head {
+  display:flex; align-items:center; gap:8px; padding: 8px 12px;
+  font-size: var(--fs-ui-xs); text-transform: uppercase; letter-spacing: var(--ls-caps); font-weight:600;
+  color: var(--fg-3);
+  border-bottom: 1px solid var(--border-1);
+}
+.git__file {
+  display:flex; align-items:center; gap:8px; padding: 5px 12px;
+  font-size: var(--fs-ui-sm); cursor: pointer; color: var(--fg-2);
+}
+.git__file:hover { background: var(--bg-hover); color: var(--fg-1); }
+.git__file[data-selected="true"] { background: var(--bg-active); color: var(--fg-1); }
+.git__file-status { font-family: var(--font-mono); font-size: var(--fs-ui-2xs); font-weight: 600; width: 14px; flex: none; }
+.git__file-status[data-st="M"] { color: var(--warn); }
+.git__file-status[data-st="A"] { color: var(--ok); }
+.git__file-status[data-st="D"] { color: var(--danger); }
+.git__file-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family: var(--font-mono); }
+.git__file-path { font-family: var(--font-mono); font-size: var(--fs-ui-2xs); color: var(--fg-4); }
+.git__right { display: flex; flex-direction: column; overflow: hidden; }
+.git__right-head { padding: 8px 14px; border-bottom: 1px solid var(--border-1); display:flex; align-items:center; gap:8px; }
+.git__commit-input {
+  padding: 8px 12px; border-top: 1px solid var(--border-1);
+  display:flex; flex-direction: column; gap: 6px; background: var(--bg-panel);
+}
+
+/* ---------- Modal overlay ---------- */
+.scrim {
+  position: fixed; inset: 0; z-index: var(--z-modal);
+  background: rgba(8, 9, 13, 0.55);
+  display: grid; place-items: center;
+  animation: scrim-in 120ms var(--ease-out);
+}
+@keyframes scrim-in { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+  width: 460px; max-width: calc(100vw - 32px);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-4);
+  overflow: hidden;
+  animation: modal-in 160ms var(--ease-out);
+}
+@keyframes modal-in { from { opacity:0; transform: translateY(6px) scale(.98); } to { opacity:1; transform:none; } }
+.modal__head { padding: 14px 18px 0; display:flex; align-items:center; gap:10px; }
+.modal__title { font-size: var(--fs-ui-title); font-weight: 600; color: var(--fg-1); flex:1; }
+.modal__body { padding: 14px 18px 18px; display:flex; flex-direction: column; gap: 14px; }
+.modal__actions { display:flex; gap: 8px; justify-content: flex-end; padding: 12px 18px 14px; border-top: 1px solid var(--border-1); background: var(--bg-panel); }
+/* WSS-FR-WPGR: two strategies one above the other, so neither reads as the
+   default and neither is chosen by where it happens to sit. */
+.modal__actions--stacked { flex-direction: column; align-items: stretch; }
+
+/* ---------- Search overlay ---------- */
+.search-overlay {
+  position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
+  width: 520px; max-height: 460px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-4);
+  z-index: var(--z-overlay);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.search-group { padding: 6px 0; border-bottom: 1px solid var(--border-1); }
+.search-group:last-child { border-bottom: 0; }
+.search-group__head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--fs-ui-2xs); text-transform: uppercase; letter-spacing: var(--ls-caps); font-weight: 600;
+  color: var(--fg-3); padding: 4px 14px 4px;
+}
+.search-group__count { margin-left: auto; font-family: var(--font-mono); }
+.search-result {
+  display:flex; align-items:center; gap: 8px;
+  padding: 6px 14px; cursor: pointer; font-size: var(--fs-ui-md); color: var(--fg-1);
+}
+.search-result:hover, .search-result[data-active="true"] { background: var(--bg-active); }
+.search-result__name { flex: 1; min-width: 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.search-result__meta { font-size: var(--fs-ui-xs); color: var(--fg-3); }
+.search-footer {
+  display:flex; align-items:center; gap: 10px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border-1);
+  background: var(--bg-panel);
+  font-size: var(--fs-ui-xs); color: var(--fg-3);
+}
+.search-footer button { margin-left: auto; }
+
+/* SCH-FR-03: the Artifacts group splits by subtype, one level deeper. */
+.search-group__head--nested {
+  padding-left: 28px;
+  text-transform: none; letter-spacing: 0; font-size: var(--fs-ui-xs);
+}
+.search-subgroup { padding-bottom: 2px; }
+
+/* SCH-FR-17: the snippet line sits indented beneath its result, prefixed by the
+   line number. A result that matched only on its path renders none. */
+.search-result-entry { display: block; }
+.search-result__snippet {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 0 14px 4px 34px;
+  font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3);
+}
+.search-result__line { flex: none; min-width: 3ch; text-align: right; opacity: 0.7; }
+.search-result__snippet-text {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* SCH-FR-19 / SCH-FR-21: in-progress, empty and error states. */
+.search-state { padding: 14px; font-size: var(--fs-ui-sm); color: var(--fg-3); }
+.search-state--error { color: var(--danger, #d24); }
+
+/* ---------- Search results tab (SCH-FR-08) ---------- */
+.search-page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.search-page__head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-1);
+  background: var(--bg-panel);
+}
+.search-page__query { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.search-page__query-text {
+  font-family: var(--font-mono); font-size: var(--fs-ui-md); color: var(--fg-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.search-page__mode { font-size: var(--fs-ui-xs); color: var(--fg-3); }
+.search-page__filter {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--fs-ui-xs); color: var(--fg-3);
+}
+.search-page__body { flex: 1; min-height: 0; overflow: auto; }
+

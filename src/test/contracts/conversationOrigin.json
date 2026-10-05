@@ -1,0 +1,54 @@
+[
+  {
+    "kind": "draft_discussion",
+    "origin": {
+      "discussionId": "disc-draft",
+      "target": { "kind": "draft", "draftId": "draft-1" },
+      "fragmentTarget": null
+    }
+  },
+  {
+    "kind": "draft_comment",
+    "origin": {
+      "discussionId": "disc-draft-fragment",
+      "target": { "kind": "draft", "draftId": "draft-1" },
+      "fragmentTarget": {
+        "owner": { "kind": "draft", "draftId": "draft-1" },
+        "path": "prompt.md",
+        "start": 4,
+        "end": 11,
+        "quote": "passage"
+      }
+    }
+  },
+  {
+    "kind": "artifact_discussion",
+    "origin": {
+      "discussionId": "disc-artifact",
+      "target": { "kind": "artifact", "artifactId": "specifications/ui/a.md" },
+      "fragmentTarget": null
+    }
+  },
+  {
+    "kind": "artifact_comment",
+    "origin": {
+      "discussionId": "disc-artifact-fragment",
+      "target": { "kind": "artifact", "artifactId": "specifications/ui/a.md" },
+      "fragmentTarget": {
+        "owner": { "kind": "artifact", "artifactId": "specifications/ui/a.md" },
+        "path": "specifications/ui/a.md",
+        "start": 0,
+        "end": 7,
+        "quote": "passage"
+      }
+    }
+  },
+  {
+    "kind": "note_discussion",
+    "origin": {
+      "discussionId": "disc-note",
+      "target": { "kind": "note", "noteId": "note-1" },
+      "fragmentTarget": null
+    }
+  }
+]

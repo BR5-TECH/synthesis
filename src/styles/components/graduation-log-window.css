@@ -1,0 +1,200 @@
+/* ---------- Graduation log window (GLW-graduation-log-window.md) ----------
+   GLW-FR-SLEK: no colour, icon, typography, or interaction pattern of its own.
+   Every value here is one of the application's own tokens, so both themes come
+   free and the window reads as part of the graduation surfaces around it. */
+.modal.glw {
+  width: 960px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  /* GLW-FR-SNDH: legible at the smallest supported window size. */
+  max-height: min(80vh, 720px);
+}
+.modal.glw > * { flex: none; }
+.glw__controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border-1);
+}
+.glw__streams { display: flex; gap: 4px; }
+/* GLW-FR-PHBA: the selected position is carried in words and in accessible
+   semantics; this treatment stands beside them rather than in place of them. */
+.glw__streams .btn[data-selected="true"] {
+  background: var(--bg-panel);
+  border-color: var(--accent);
+  color: var(--fg-1);
+}
+.glw__search { flex: 1 1 auto; min-width: 0; }
+.glw__body {
+  position: relative;
+  display: grid;
+  /* The narrow pass list at the leading edge, the wider viewport beside it. */
+  grid-template-columns: 180px minmax(0, 1fr);
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.glw__passes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  border-right: 1px solid var(--border-1);
+  overflow-y: auto;
+}
+.glw__passes-head { text-transform: uppercase; letter-spacing: 0.04em; }
+.glw__pass {
+  text-align: left;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--fg-2);
+  font-size: var(--fs-ui-sm);
+  cursor: pointer;
+}
+.glw__pass[data-selected="true"] {
+  border-color: var(--accent);
+  color: var(--fg-1);
+  background: var(--bg-panel);
+}
+.glw__viewport {
+  /* GLW-FR-SNDH: the only region that scrolls, and never sideways. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 14px 34px;
+  min-height: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--fs-ui-xs);
+}
+.glw__row {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border-1);
+}
+.glw__meta { color: var(--fg-3, var(--fg-2)); }
+/* GLW-FR-SNDH: a long line wraps rather than putting the region on a
+   horizontal scrollbar. */
+.glw__text { color: var(--fg-1); white-space: pre-wrap; word-break: break-word; }
+.glw__older { padding: 4px 0; }
+.glw__state { padding: 12px 4px; color: var(--fg-2); }
+.glw__state--warning { color: var(--warn); }
+.glw__follow {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+  background: var(--bg-elevated);
+}
+
+/* RPV-FR-LQUP / RPV-FR-TZBL: an activatable stage entry is a control in the
+   host's own treatment. The mark, the label, and the condition stay stacked on
+   the stage's centre line exactly as they are without it. */
+.run-progress__entry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.run-progress__entry[aria-disabled="true"] { cursor: default; opacity: 0.65; }
+
+/* ---------------------------------------------------------------------------
+   WSS-FR-KDVU / WSS-FR-ZMPC — the update resolution window
+
+   A merge that stopped is evidence before it is a form: the author cannot
+   answer "which of these two designs stands" without reading the paths the
+   merge could not settle. So the window's own weight goes on that evidence, and
+   the escalation form beneath it borrows the run region's treatment unchanged —
+   a question is a question wherever it is asked.
+
+   The chrome is `.modal--wide`'s: a bounded flex column whose body alone takes
+   the slack, because a window whose actions row is scrolled away is one the
+   author cannot answer.
+   --------------------------------------------------------------------------- */
+.modal.update-resolution {
+  max-width: 720px;
+}
+/* The branch pair, directly under the stream's name: which tree moves into
+   which is the first thing to establish and the quietest line in the window.
+   Quiet, but not below AA — `--fg-3` on the elevated ground measures under
+   4.5:1 in the dark theme, and this line names the two branches the merge is
+   between, which is not a detail an author may have to guess at. */
+.update-resolution__branches {
+  margin: 0;
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-snug);
+  color: var(--fg-2);
+}
+/* What the merge rests on, in one sentence. Set at the reading size rather than
+   the chrome's, because it is the sentence the author acts on. */
+.update-resolution__state {
+  margin: 0;
+  font-size: var(--fs-ui-title);
+  line-height: var(--lh-normal);
+  color: var(--fg-1);
+}
+/* GEA-FR-ZRGP: the paths, named. Given a ground of its own — the same sunken
+   ground the question area uses — so the evidence reads as a region rather than
+   as more of the sentence above it. */
+.update-resolution__paths {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+}
+.update-resolution__paths-title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-snug);
+  font-weight: var(--fw-semi);
+  color: var(--fg-2);
+}
+.update-resolution__paths ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+/* WSS-FR-NPXC: a refusal of an action taken here, beside the actions that took
+   it. It stands first in the row and pushes the controls to the right, so the
+   author reads why nothing happened before they press the control again. */
+.update-resolution__error {
+  margin: 0;
+  margin-right: auto;
+  align-self: center;
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-snug);
+  color: var(--danger);
+}
+/* Each row carries the path and, beside it, what the two sides did to it. The
+   pair is the whole reason the path is in front of the author, so it is a
+   sentence rather than two values they have to combine. */
+.update-resolution__paths li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-2);
+  min-width: 0;
+}
+.update-resolution__path {
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-snug);
+  color: var(--fg-1);
+  overflow-wrap: anywhere;
+}
+.update-resolution__fate {
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-snug);
+}

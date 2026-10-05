@@ -1,0 +1,72 @@
+/* CVP-FR-SDMQ: the parts of the shared discussion surface that no owner layout
+   drew before. Existing card, message, and composer rules are reused as they
+   are, so the surface reads the same wherever it is placed. */
+
+/* CMT-FR-WZTE / CVP-FR-44: the state words of a discussion. Every state is
+   text, so none depends on a colour. */
+.discussion-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-2);
+}
+.discussion-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-full);
+  color: var(--fg-3);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--ctl-h-sm);
+}
+
+/* The fragment quote is a control when the owner can scroll to the passage. */
+button.comment-card__quote {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  text-align: start;
+  cursor: pointer;
+}
+button.comment-card__quote:hover { color: var(--fg-1); }
+button.comment-card__quote:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+/* CVP-FR-TWRL: the unread indicator, in the flow between the messages and the
+   composer so that it covers no message. The region is always present and empty
+   when nothing is unread. */
+.discussion-unread {
+  display: flex;
+  justify-content: center;
+}
+.discussion-unread:empty { display: none; }
+.discussion-unread__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: var(--ctl-h-md);
+  padding: 0 var(--sp-3);
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  cursor: pointer;
+}
+.discussion-unread__button:hover { background: var(--accent-hover); }
+.discussion-unread__button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}

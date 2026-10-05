@@ -1,0 +1,150 @@
+/* document-viewer: the read-only Document tab for Markdown and text (DTV). */
+
+.document-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+}
+
+/* DTV-FR-VZNE: the slim bar that holds the Rich and Source switch. */
+.document-viewer__bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: var(--sp-1-5) var(--sp-3);
+  border-bottom: 1px solid var(--border-1);
+  background: var(--bg-chrome);
+}
+
+.document-viewer__switch {
+  display: inline-flex;
+  align-items: stretch;
+  height: var(--ctl-h-sm);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--bg-canvas);
+}
+.document-viewer__choice {
+  border: 0;
+  background: none;
+  padding: 0 var(--sp-3);
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  cursor: pointer;
+}
+.document-viewer__choice + .document-viewer__choice {
+  border-left: 1px solid var(--border-1);
+}
+.document-viewer__choice:hover {
+  background: var(--bg-hover);
+  color: var(--fg-1);
+}
+/* The active choice shows by fill and by weight, so colour is not the only
+   sign. */
+.document-viewer__choice[data-active="true"] {
+  background: var(--bg-active);
+  color: var(--fg-1);
+  font-weight: var(--fw-semi);
+}
+.document-viewer__choice:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* DTV-FR-HQTN: the text region scrolls and is a focus stop. */
+.document-viewer__text {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.document-viewer__text:focus-visible {
+  outline: none;
+  box-shadow: inset var(--shadow-focus);
+}
+
+/* DTV-FR-CIWP: the source view is the Source code role. It keeps line breaks
+   and spaces, and it does not rewrap. Long lines scroll sideways. */
+.document-viewer__source {
+  margin: 0;
+  padding: var(--sp-4);
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-md);
+  line-height: var(--font-source-line-height);
+  color: var(--fg-1);
+  white-space: pre;
+  tab-size: 4;
+  min-width: max-content;
+}
+
+/* DTV-FR-SSQI: the rich view is the Rich Markdown role (`.doc`). */
+.document-viewer__rich {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-4) var(--sp-10);
+  color: var(--fg-2);
+}
+.document-viewer__rich li > ul,
+.document-viewer__rich li > ol {
+  margin: var(--sp-1) 0 0;
+}
+.document-viewer__rich h4,
+.document-viewer__rich h5,
+.document-viewer__rich h6 {
+  font-size: var(--fs-doc-md);
+  font-weight: var(--fw-semi);
+  line-height: var(--lh-snug);
+  margin: var(--sp-4) 0 var(--sp-2);
+}
+
+/* A link shows as text. It never navigates, so it has no pointer cursor. */
+.doc-link {
+  color: var(--accent);
+  border-bottom: 1px dotted var(--accent);
+  cursor: text;
+}
+
+/* An image that is not stored in the text shows as a placeholder. */
+.doc-image {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1-5);
+  padding: 0 var(--sp-1-5);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-xs);
+  background: var(--bg-sunken);
+  color: var(--fg-3);
+  font-size: 0.92em;
+}
+.doc-image__glyph {
+  flex: 0 0 auto;
+}
+.doc-picture {
+  max-width: 100%;
+  height: auto;
+}
+
+/* DTV-FR-SSQI: a leading YAML region shows as source. */
+.doc-frontmatter {
+  color: var(--fg-2);
+}
+
+/* DTV-FR-SQNK, DTV-FR-BEQL: the loading, failed, and unavailable states. */
+.document-viewer__state {
+  padding: var(--sp-8) var(--sp-6);
+  font-size: var(--fs-ui-md);
+  color: var(--fg-2);
+}
+.document-viewer__state-title {
+  margin: 0 0 var(--sp-2);
+  font-weight: var(--fw-semi);
+  color: var(--fg-1);
+}
+.document-viewer__state-detail {
+  margin: 0;
+  color: var(--fg-3);
+}

@@ -1,0 +1,749 @@
+/* Synthesis IDE — UI-kit-specific layout (shell grid, widget grid).
+   Tokens come from ../../colors_and_type.css + ../../components.css. */
+
+#root { height: 100%; display: block; overflow: hidden; }
+
+/* App-level wrapper */
+.app {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-app);
+  color: var(--fg-1);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---------- Settings child windows (SWN-settings-windows.md) ----------
+   A settings window is a native child window of the application (SWN-FR-01),
+   not a tab of the main viewport: nothing of the main window's chrome is drawn
+   inside it, so its single section-navigated body simply takes the whole frame.
+   The frame's own size, position, and title belong to the backend. */
+.settings-window {
+  display: block;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ---------- Project picker layout ----------
+   The picker is rendered inside a fixed-size Tauri window
+   (see tauri.conf.json — 800×600). All sizes below are tuned so the
+   right column fits at natural height without scrolling (PPK-FR-10) and
+   the document body never scrolls (PPK-FR-10/PPK-FR-11). The only scrolling
+   region permitted is .picker-recents-body. */
+.picker {
+  width: 100%; height: 100%;
+  display: grid; place-items: stretch;
+  padding: 16px;
+  background: var(--bg-app);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.picker-frame {
+  width: 100%; max-width: 1280px;
+  margin: 0 auto;
+  display: flex; flex-direction: column; gap: 12px;
+  min-height: 0;
+  height: 100%;
+}
+.picker-head { display: flex; align-items: center; gap: 10px; color: var(--fg-1); flex: none; }
+/* PPK-FR-10/PPK-FR-11: Left column absorbs remaining width; right column is sized
+   to its natural content width (and never scrolls). */
+.picker-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.picker-card {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-lg);
+  padding: 12px 14px;
+  box-shadow: var(--shadow-2);
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+.picker-card--recents { min-height: 0; overflow: hidden; }
+/* PPK-FR-11: the recent-list region is the only scrolling area in the picker. */
+.picker-recents-body { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; }
+/* PPK-FR-10: right column never scrolls in either axis; sized to natural content. */
+.picker-right {
+  display: flex; flex-direction: column; gap: 10px;
+  width: 320px;
+  flex: none;
+  overflow: visible;
+  min-height: 0;
+}
+.picker-empty {
+  padding: 8px 6px;
+  font-size: var(--fs-ui-sm);
+  line-height: 1.5;
+}
+.picker-card__title { font-size: var(--fs-ui-sm); font-weight: 600; color: var(--fg-1); margin: 0 0 8px; flex: none; }
+.picker-recent-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.picker-recent-row:hover { background: var(--bg-hover); }
+.picker-recent-row__icon { color: var(--fg-3); margin-top: 2px; }
+.picker-recent-row__name { font-size: var(--fs-ui-sm); font-weight: 500; color: var(--fg-1); }
+.picker-recent-row__path { font-family: var(--font-mono); font-size: var(--fs-ui-2xs); color: var(--fg-3); margin-top: 1px; }
+.picker-recent-row__meta { font-size: var(--fs-ui-2xs); color: var(--fg-3); margin-top: 1px; }
+.picker-or {
+  display:flex; align-items:center; gap:10px;
+  color: var(--fg-3); font-size: var(--fs-ui-2xs); text-transform: uppercase; letter-spacing: var(--ls-caps);
+  margin: 6px 0;
+}
+.picker-or::before, .picker-or::after { content: ""; flex:1; height:1px; background: var(--border-1); }
+.picker-field { display:flex; flex-direction:column; gap:4px; margin-bottom: 8px; }
+.picker-field__label { font-size: var(--fs-ui-xs); color: var(--fg-3); text-transform: uppercase; letter-spacing: var(--ls-caps); font-weight: 600; }
+.picker-radio-row { display:flex; gap:18px; }
+/* AII-FR-QDLW / AII-FR-PMZK: an agentic tab's single per-task section. It is
+   closed until the author opens it and sits below both default selectors, and
+   its rows are set back from them so they read as departures from the pair
+   above rather than as more defaults. */
+.agentic-per-task { margin-top: 8px; }
+.agentic-per-task > summary {
+  cursor: pointer;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  user-select: none;
+}
+.agentic-per-task > summary:hover { color: var(--fg-2); }
+.agentic-per-task[open] > summary { margin-bottom: 8px; }
+/* The grid is what aligns the columns across the four rows: a column reads down
+   as one dimension and a row reads across as one kind of work. `minmax(0, 1fr)`
+   on the selector columns lets a long model name shrink its cell rather than
+   push the row wider than the tab. */
+.agentic-per-task__grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 10px;
+  margin-left: 12px;
+}
+/* A vendor that declares no effort levels has no effort column at all, so the
+   row closes up rather than leaving a gap where a control cannot go. */
+.agentic-per-task__grid--no-effort {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+.agentic-per-task__heading {
+  font-size: var(--fs-ui-2xs);
+  color: var(--fg-3);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  font-weight: 600;
+}
+.agentic-per-task__task {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+/* The cell bounds its selector rather than sizing to it, so a `FilterableSelect`
+   and a native `<select>` line up on the same column edges. */
+.agentic-per-task__cell { min-width: 0; }
+.agentic-per-task__cell > .select { width: 100%; }
+.picker-radio { display:flex; align-items:center; gap:6px; font-size: var(--fs-ui-md); cursor:pointer; }
+.picker-error {
+  color: var(--danger);
+  font-size: var(--fs-ui-xs);
+  margin-top: 4px;
+  display: inline-block;
+}
+
+/* ---------- IDE shell grid ----------
+   ┌──────────────────────────────────────────────┐
+   │             top chrome (44px)                │
+   ├──┬───────────────┬──────────────────────────-┤
+   │A │ vertical panel│  main viewport            │
+   │c │               │ ─────────────────────────-│
+   │t │               │  tabstrip + active tab    │
+   │  ├───────────────┴───────────────────────────┤
+   │  │        bottom panel (collapsible)         │
+   └──┴───────────────────────────────────────────┘
+*/
+/* SNV-FR-42 / STB-FR-01: the shell holds every zone ABOVE the status bar, so it
+   fills the space the strip leaves rather than the whole viewport. The strip is
+   a sibling inside `.app` (a flex column), which is what makes the activity bar,
+   vertical panel, bottom panel and main viewport all terminate above it.
+
+   SNV-FR-55: `activity` spans both content rows, so the bar runs the full height
+   of the shell and the bottom panel begins at its inner edge. Opening the bottom
+   panel therefore shortens the vertical panel and the viewport but never the
+   strip — which is what keeps its trailing cluster of toggles pinned to the foot
+   of the window (SNV-FR-44) instead of riding up on top of the panel they open. */
+.shell {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: 44px 1fr auto;
+  grid-template-columns: 44px 280px 1fr;
+  grid-template-areas:
+    "topchrome topchrome topchrome"
+    "activity panel viewport"
+    "activity bottom bottom";
+  overflow: hidden;
+  background: var(--bg-app);
+}
+
+/* ---------- Status bar (STB-status-bar.md) ----------
+   STB-FR-01 / STB-FR-02: a fixed-height, full-width strip along the bottom edge
+   with no splitter and no hide/collapse affordance. STB-FR-03: three regions
+   anchored independently — the grid's outer columns hug their own edges and the
+   centre column is centred — so an empty centre never displaces the trailing
+   controls. STB non-functional: it never wraps to a second line; an over-long
+   operation label truncates instead. */
+.status-bar {
+  flex: 0 0 auto;
+  /* Grows with the UI role so its text is never cropped (GLS-FR-19). */
+  min-height: calc(var(--font-ui-size) * 26 / 13);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border-top: 1px solid var(--border-1);
+  background: var(--bg-panel);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+  box-sizing: border-box;
+  /* NOT `overflow: hidden`: the in-flight operations overlay (STB-FR-12) is
+     positioned against `.status-bar__center` and grows UPWARD out of this
+     26px strip, so clipping here hides it completely. The strip's own regions
+     do their truncating individually — see `.status-bar__progress-label`. */
+}
+.status-bar__leading {
+  display: flex; align-items: center; gap: 2px;
+  justify-self: start; min-width: 0;
+}
+.status-bar__center {
+  /* `position: relative` anchors the overlay, which grows upward from here. */
+  position: relative;
+  justify-self: center; min-width: 0;
+  display: flex; align-items: center;
+}
+.status-bar__trailing {
+  display: flex; align-items: center; gap: 10px;
+  justify-self: end; min-width: 0;
+}
+
+.status-bar__btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--ctl-sq); height: var(--ctl-h-xs);
+  border: none; border-radius: 4px;
+  background: transparent; color: var(--fg-2);
+  cursor: pointer; padding: 0;
+}
+.status-bar__btn:hover { background: var(--bg-active); color: var(--fg-1); }
+
+.status-bar__progress {
+  display: flex; align-items: center; gap: 8px;
+  max-width: 340px; min-width: 0;
+  border: none; background: transparent; padding: 0 4px;
+  height: var(--ctl-h-xs); border-radius: 4px;
+  color: inherit; font: inherit; cursor: pointer;
+}
+.status-bar__progress:hover { background: var(--bg-active); }
+.status-bar__progress-label {
+  /* Truncate rather than growing the strip (STB non-functional). */
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 220px;
+}
+.status-bar__track {
+  position: relative; overflow: hidden;
+  flex: 0 0 auto;
+  width: 96px; height: 4px; border-radius: 2px;
+  background: var(--border-1);
+}
+.status-bar__fill {
+  position: absolute; inset: 0 auto 0 0;
+  background: var(--accent); border-radius: 2px;
+}
+/* STB-FR-08: no total -> an indeterminate busy state rather than a bar filled
+   to some invented proportion. */
+.status-bar__track[data-determinate="false"] .status-bar__fill {
+  width: 40%;
+  /* Guarantees the transform runs on the compositor. This bar animates for as
+     long as an untotalled operation is in flight, so its per-frame cost is paid
+     against a window the user is otherwise not touching. */
+  will-change: transform;
+  animation: status-bar-indeterminate 1.2s ease-in-out infinite;
+}
+@keyframes status-bar-indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .status-bar__track[data-determinate="false"] .status-bar__fill {
+    animation: none; will-change: auto; width: 100%; opacity: 0.5;
+  }
+}
+
+/* STB-FR-11: anchored above the centre region and growing upward. */
+.status-bar__overlay {
+  position: absolute; bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%);
+  min-width: 300px; max-width: 420px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-1); border-radius: 8px;
+  background: var(--bg-panel);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  z-index: 40;
+  /* STB-FR-HJVM: one row's height, the unit the five-row area is measured in. */
+  --status-overlay-row-h: calc(var(--ctl-h-xs) + 6px);
+}
+.status-bar__overlay-title {
+  font-size: var(--fs-ui-2xs); text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--fg-3);
+  padding-bottom: 6px; margin-bottom: 6px;
+  border-bottom: 1px solid var(--border-1);
+}
+/* STB-FR-HJVM: the rows sit in an area that is exactly five rows tall once more
+   than five are in flight, and scrolls vertically inside itself. Every row has
+   the same fixed height, so "five rows" is a length and not a guess. */
+.status-bar__overlay-rows {
+  max-height: calc(5 * var(--status-overlay-row-h));
+  overflow-y: auto; overflow-x: hidden;
+}
+.status-bar__overlay-row {
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  box-sizing: border-box; height: var(--status-overlay-row-h);
+  padding: 3px 0; min-width: 0;
+}
+/* STB-FR-RWPD: a row with a destination is a control; one without is plain
+   text and shows no pointer or hover that would imply an action. */
+.status-bar__overlay-action {
+  border: none; background: transparent; padding: 0;
+  color: inherit; font: inherit; text-align: start; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 100%;
+}
+/* The control's pointer area covers the whole row, the bar included. */
+.status-bar__overlay-action::after {
+  content: ""; position: absolute; inset: 0;
+}
+.status-bar__overlay-row--action:hover { background: var(--bg-active); }
+.status-bar__overlay-row--action:focus-within {
+  outline: 2px solid var(--accent); outline-offset: -2px;
+}
+
+.status-bar__select {
+  border: none; background: transparent; color: var(--fg-2);
+  font: inherit; font-size: var(--fs-ui-xs);
+  padding: 1px 2px; border-radius: 4px; cursor: pointer;
+}
+.status-bar__select:hover { background: var(--bg-active); color: var(--fg-1); }
+/* STB-FR-22: a neutral disabled state naming no convention. */
+.status-bar__inert { color: var(--fg-3); padding: 1px 2px; }
+
+/* STB non-functional: a stable rendered width, so the controls beside the
+   diffstat do not shift horizontally while it reloads. */
+.status-bar__diffstat {
+  display: inline-flex; gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.status-bar__added { color: var(--ok, #3fb950); }
+.status-bar__removed { color: var(--danger, #f85149); }
+
+.top-chrome {
+  grid-area: topchrome;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--border-1);
+  gap: 16px;
+}
+.top-chrome > :nth-child(2) { max-width: 520px; justify-self: center; width: 100%; }
+.top-chrome__left { display: flex; align-items: center; gap: 10px; }
+.top-chrome__right { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.top-chrome__brand { display: flex; align-items: center; gap: 8px; color: var(--fg-1); font-size: var(--fs-ui-md); font-weight: 600; }
+.top-chrome__brand .icon { color: var(--accent); }
+.top-chrome__project {
+  font-size: var(--fs-ui-sm); color: var(--fg-2);
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px; border-radius: var(--r-sm);
+  white-space: nowrap;
+}
+.top-chrome__project:hover { background: var(--bg-hover); }
+/* The project label is a <button> (the switcher trigger, SNV-FR-17). */
+button.top-chrome__project { background: transparent; border: 0; cursor: pointer; font-family: inherit; }
+
+/* ---------- PROJECT SWITCHER (SNV-FR-17..22) ---------- */
+.proj-switch { position: relative; display: inline-flex; }
+.proj-switch__menu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 200;
+  min-width: 260px; max-width: 360px;
+}
+/* SNV-FR-21: viewport caps at 5 rows; maxHeight/overflow are set inline so the
+   row budget is computed from SWITCHER_ROW_PX. overflow-x is hidden — labels
+   truncate (below) rather than introduce a horizontal scrollbar. */
+.proj-switch__list { overflow-x: hidden; }
+.proj-switch__row {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  height: 44px; padding: 0 8px; box-sizing: border-box;
+  background: transparent; border: 0; border-radius: var(--r-xs);
+  color: var(--fg-1); font-family: inherit; font-size: var(--fs-ui-sm);
+  text-align: left; cursor: pointer;
+}
+.proj-switch__row:hover { background: var(--bg-active); }
+/* SNV-FR-20: the current project is shown but non-actionable. */
+.proj-switch__row[data-current="true"] { cursor: default; color: var(--fg-2); }
+.proj-switch__row[data-current="true"]:hover { background: transparent; }
+.proj-switch__name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.proj-switch__meta { color: var(--fg-3); font-size: var(--fs-ui-xs); white-space: nowrap; flex-shrink: 0; }
+.proj-switch__empty { padding: 8px; font-size: var(--fs-ui-sm); }
+.proj-switch__error { padding: 6px 8px; color: var(--danger); font-size: var(--fs-ui-xs); }
+.proj-switch__footer {
+  display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box;
+  padding: 6px 8px; background: transparent; border: 0; border-radius: var(--r-xs);
+  color: var(--fg-1); font-family: inherit; font-size: var(--fs-ui-sm); text-align: left; cursor: pointer;
+}
+.proj-switch__footer:hover { background: var(--bg-active); }
+
+/* ---------- WORKTREE SELECTOR (WTS-worktree-selector.md) ---------- */
+.wt-select { position: relative; display: inline-flex; align-items: center; gap: 2px; }
+/* WTS-FR-29: an icon-only button sized to the chrome's control height, reading
+   as a sibling of the selector rather than as part of it. */
+.wt-select__refresh { flex: none; }
+/* WTS-FR-31: the busy state renders in place, within the control's own
+   footprint, so the leading cluster does not reflow while a refresh runs and the
+   universal search bar does not shift. */
+.wt-select__refresh[data-busy="true"] { opacity: .65; cursor: default; }
+.wt-select__refresh[data-busy="true"] svg { animation: wt-spin 900ms linear infinite; }
+@keyframes wt-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .wt-select__refresh[data-busy="true"] svg { animation: none; }
+}
+/* WTS-FR-34: the remote-outcome note overlays the chrome rather than displacing
+   it, anchored under the leading cluster. */
+.wt-select__note {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 210;
+  display: flex; align-items: center; gap: 6px;
+  max-width: 380px; padding: 4px 4px 4px 8px;
+  background: var(--bg-elevated); border: 1px solid var(--border-1);
+  border-radius: var(--r-sm); box-shadow: var(--shadow-3);
+  color: var(--fg-2); font-size: var(--fs-ui-xs);
+}
+/* Inside the open dropdown it is a row above the groups, not a floating card. */
+.wt-select__note--inline {
+  position: static; max-width: none; z-index: auto;
+  margin: 0 6px 4px; box-shadow: none;
+}
+.wt-select__note-text { flex: 1; min-width: 0; }
+/* ---------- PUSH CONTROL (GIT-FR-XXLE, GIT-FR-CNQO) ---------- */
+.push-control { position: relative; display: inline-flex; align-items: center; }
+.push-control__button { flex: none; position: relative; }
+/* GIT-FR-CNQO: unavailable keeps the same icon, grayed out, and the control
+   stays focusable. Hover does not light it up, so it does not read as active. */
+.push-control__button[data-state="unavailable"] { opacity: .45; cursor: default; }
+.push-control__button[data-state="unavailable"]:hover {
+  background: transparent; color: var(--fg-2);
+}
+.push-control__button[data-state="busy"] { opacity: .65; cursor: default; }
+.push-control__button[data-state="busy"] svg { animation: push-pulse 1100ms ease-in-out infinite; }
+@keyframes push-pulse { 50% { opacity: .35; transform: translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) {
+  .push-control__button[data-state="busy"] svg { animation: none; }
+}
+/* GIT-FR-CNQO: the reason, visible on hover and on keyboard focus. The control
+   is narrow, so the bubble takes the width of its text, not of the control. */
+.push-control__reason {
+  display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 210;
+  width: max-content; max-width: 280px; padding: 4px 8px; white-space: normal;
+  pointer-events: none;
+  background: var(--bg-elevated); border: 1px solid var(--border-1);
+  border-radius: var(--r-sm); box-shadow: var(--shadow-3);
+  color: var(--fg-2); font-size: var(--fs-ui-xs);
+}
+.push-control__button:hover + .sr-only + .push-control__reason,
+.push-control__button:focus-visible + .sr-only + .push-control__reason { display: block; }
+.push-control__note {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 210;
+  display: flex; align-items: center; gap: 6px;
+  max-width: 380px; padding: 4px 4px 4px 8px;
+  background: var(--bg-elevated); border: 1px solid var(--border-1);
+  border-radius: var(--r-sm); box-shadow: var(--shadow-3);
+  color: var(--fg-2); font-size: var(--fs-ui-xs);
+}
+.push-control__note-text { flex: 1; min-width: 0; }
+/* WTS non-functional: a stable maximum width, so a long branch name cannot
+   push the universal search bar out of the top chrome. */
+.wt-select__label {
+  display: inline-block; max-width: 160px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  vertical-align: bottom;
+}
+.wt-select__menu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 200;
+  min-width: 300px; max-width: 420px;
+}
+/* WTS-FR-06: the filter is the topmost row of the dropdown. */
+.wt-select__filter {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 6px 6px; color: var(--fg-3);
+}
+.wt-select__filter .input { flex: 1; min-width: 0; }
+/* WTS-FR-08: non-interactive group headings, in a fixed order. */
+.wt-select__head {
+  padding: 4px 8px 2px;
+  color: var(--fg-3); font-size: var(--fs-ui-2xs); font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase;
+}
+/* WTS-FR-26: each region scrolls vertically past its row budget and never
+   horizontally — labels and paths truncate instead. maxHeight/overflow are set
+   inline so the budget is computed from WORKTREE_ROW_PX. */
+.wt-select__group { overflow-x: hidden; }
+.wt-select__wt, .wt-select__branch {
+  display: flex; width: 100%; padding: 4px 8px; box-sizing: border-box;
+  background: transparent; border: 0; border-radius: var(--r-xs);
+  color: var(--fg-1); font-family: inherit; font-size: var(--fs-ui-sm);
+  text-align: left; cursor: pointer;
+}
+/* A worktree row is two lines — branch (or detached marker) above its path. */
+.wt-select__wt { flex-direction: column; gap: 1px; height: 40px; }
+.wt-select__branch { align-items: center; gap: 6px; height: 24px; }
+.wt-select__wt:hover, .wt-select__branch:hover { background: var(--bg-active); }
+/* WTS-FR-10 / WTS-FR-11: the current row and a missing row are inert. */
+.wt-select__wt[data-current="true"],
+.wt-select__wt[data-missing="true"] { cursor: default; color: var(--fg-2); }
+.wt-select__wt[data-current="true"]:hover,
+.wt-select__wt[data-missing="true"]:hover { background: transparent; }
+.wt-select__wt-line { display: flex; align-items: center; gap: 6px; width: 100%; }
+.wt-select__name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wt-select__path {
+  width: 100%; color: var(--fg-3); font-size: var(--fs-ui-2xs);
+  font-family: var(--font-mono);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* WTS-FR-14: the inline two-way choice, revealed on the branch row itself. */
+.wt-select__choice { display: flex; gap: 6px; padding: 4px 8px 6px 22px; }
+.wt-select__empty { padding: 6px 8px; font-size: var(--fs-ui-sm); }
+/* WTS-FR-24: typed errors render inline; they never replace the dropdown. */
+.wt-select__error { padding: 6px 8px; color: var(--danger); font-size: var(--fs-ui-xs); }
+.wt-select__location { display: flex; gap: 6px; align-items: center; }
+/* The Location field truncates from the left when the path overflows. */
+.wt-select__location .input { flex: 1; min-width: 0; direction: rtl; text-align: left; }
+
+/* SNV-FR-44: two clusters at opposite ends of the strip. `space-between` is
+   what anchors them — the leading cluster to the top, the trailing one to the
+   foot above the status bar — so the gap between them absorbs the window's
+   height rather than either cluster drifting. */
+.activity-bar {
+  grid-area: activity;
+  background: var(--bg-chrome);
+  border-right: 1px solid var(--border-1);
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+.activity-bar__cluster {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.activity-btn {
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--fg-3);
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: inherit;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  position: relative;
+}
+.activity-btn:hover { color: var(--fg-1); background: var(--bg-hover); }
+
+/* SNV-FR-54: a toggle whose panel is open. Two cues rather than one, because a
+   strip of six icons is scanned rather than read: a filled accent tint behind
+   the icon says "this one is on" on its own, and the rail says it without
+   relying on the tint being noticed against the chrome.
+
+   The tint + accent icon is the same vocabulary the editor and diff toolbars
+   use for an active icon button, so "on" looks the same wherever it appears.
+
+   The rail's -6px offset is load-bearing: the 32px button sits centred in the
+   44px strip, so its left edge is at 6px and -6px puts the rail flush against
+   the strip's outer edge. (At -7px it rendered at -1px — a 2px rail with 1px of
+   it outside the window, which is why it read as no indication at all.) */
+.activity-btn[data-active="true"] {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.activity-btn[data-active="true"]::before {
+  content: ""; position: absolute; left: -6px; top: 4px; bottom: 4px;
+  width: 2px; border-radius: 0 2px 2px 0; background: var(--accent);
+}
+
+/* SNV-FR-70 / NTF-FR-39: the Runs toggle carrying the needs-attention emphasis
+   the graduation runs it is the way to have raised.
+
+   A mark of its own, distinct from the active marking of SNV-FR-54 and standing
+   whether or not the toggle is active — a hidden bottom panel and an open one
+   showing another surface each say the same thing. It occupies space the cluster
+   reserves whether it is showing or not, so a toggle taking or losing it moves
+   no other toggle in the strip: the dot is absolutely positioned inside the
+   button's own 32px box and changes no layout.
+
+   Shape and tone each carry it: a filled dot at the toggle's trailing-top
+   corner, in the same accent the tab strip's mark uses, so one vocabulary says
+   "this wants you" wherever it appears. */
+.activity-btn__attention {
+  position: absolute;
+  top: 4px;
+  inset-inline-end: 3px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms linear;
+}
+.activity-btn[data-attention] .activity-btn__attention { opacity: 1; }
+/* NTF-FR-35: the arrival pulse, bounded in cycles exactly as the tab's is, so
+   nothing in the strip animates while the author reads. */
+.activity-btn[data-attention="pulse"] .activity-btn__attention {
+  animation: tab-attention-pulse 400ms ease-in-out 3;
+}
+@media (prefers-reduced-motion: reduce) {
+  .activity-btn__attention { transition: none; }
+  .activity-btn[data-attention="pulse"] .activity-btn__attention { animation: none; }
+}
+
+/* SNV-FR-48: the History toggle with no artifact-bound tab active. It keeps its
+   active marking when the panel is on History — greyed out says "you cannot
+   steer here", not "the panel is elsewhere" — so the disabled treatment is a
+   uniform fade over whichever state the toggle is in, never a reset of it. */
+.activity-btn:disabled { opacity: 0.45; cursor: default; }
+.activity-btn:disabled:not([data-active="true"]):hover {
+  background: transparent; color: var(--fg-3);
+}
+.activity-btn:disabled[data-active="true"]:hover {
+  background: var(--accent-soft); color: var(--accent);
+}
+
+/* SNV-FR-49: the activity bar's tooltip. Positioned against its own toggle, on
+   the strip's inner side, so it never overhangs the window edge. `pointer-events:
+   none` is load-bearing: the bubble sits over the panel next to the strip and
+   must not swallow a click meant for it — and it is what keeps this a hover
+   affordance rather than a floating overlay. */
+.tooltip-anchor { position: relative; display: inline-flex; }
+.tooltip {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 60;
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated, var(--bg-chrome));
+  color: var(--fg-1);
+  border: 1px solid var(--border-1);
+  box-shadow: var(--shadow-1, 0 2px 8px rgb(0 0 0 / 0.25));
+  font-size: var(--fs-ui-xs);
+  font-family: var(--font-sans);
+}
+.tooltip[data-side="left"] { left: calc(100% + 8px); }
+.tooltip[data-side="right"] { right: calc(100% + 8px); }
+
+.vpanel {
+  grid-area: panel;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border-1);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  /* Anchors the resize handle to the panel's inner edge (SNV-FR-33). */
+  position: relative;
+}
+.vpanel__body { flex: 1; overflow: auto; padding: 4px 6px; }
+
+/* SNV-FR-33: the vertical panel's resize handle — full height of the panel's
+   inner edge, straddling the 1px border so it is comfortably clickable. Sits
+   above the panel's content (which scrolls under it) and is absent entirely
+   when the panel is collapsed or hidden (SNV-FR-37, enforced in PanelResizer). */
+.vpanel__resizer {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 5px;
+  z-index: 5;
+  cursor: col-resize;
+  /* Transparent at rest: the panel border already draws the boundary. */
+  background: transparent;
+  /* The handle is the only thing the pointer should act on here, and a drag
+     must not select the panel's text as it sweeps across it. */
+  touch-action: none;
+  user-select: none;
+}
+.vpanel__resizer:hover,
+.vpanel__resizer[data-dragging="true"] { background: var(--accent); }
+
+.viewport {
+  grid-area: viewport;
+  display: flex; flex-direction: column;
+  overflow: hidden; min-width: 0;
+  background: var(--bg-canvas);
+}
+.viewport__body { flex: 1; overflow: auto; }
+
+.bottom-panel {
+  grid-area: bottom;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-1);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  /* Anchors the resize handle to the panel's top edge (SNV-FR-50). */
+  position: relative;
+}
+
+/* SNV-FR-50: the bottom panel's resize handle — full width of its top edge,
+   straddling the 1px border so it is comfortably grabbable. Sits above the
+   panel's content (which scrolls under it) and exists only while the panel
+   does, which is what SNV-FR-53's "no splitter while hidden" amounts to. */
+.bottom-panel__resizer {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 5px;
+  z-index: 5;
+  cursor: row-resize;
+  /* Transparent at rest: the panel border already draws the boundary. */
+  background: transparent;
+  /* The handle is the only thing the pointer should act on here, and a drag
+     must not select the panel's text as it sweeps across it. */
+  touch-action: none;
+  user-select: none;
+}
+.bottom-panel__resizer:hover,
+.bottom-panel__resizer[data-dragging="true"] { background: var(--accent); }
+.bottom-panel__nav {
+  display: flex; align-items: center; gap: 0;
+  height: 28px; padding: 0 12px;
+  border-bottom: 1px solid var(--border-1);
+  background: var(--bg-panel);
+}
+/* SNV-FR-47: the header names the surface the panel is on. It is a label, not a
+   switcher — the activity bar's bottom cluster is the only control that
+   chooses between the three. */
+.bottom-panel__title {
+  height: 28px; padding: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--fs-ui-xs); text-transform: uppercase; letter-spacing: var(--ls-caps); font-weight: 600;
+  color: var(--fg-1);
+}
+.bottom-panel__body { flex:1; overflow:auto; }
+.bottom-panel__nav-right { margin-left: auto; display:flex; gap:2px; }
+

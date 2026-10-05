@@ -1,0 +1,157 @@
+/* ---------- Git panel: log, branches, pull requests ---------- */
+/* GIT-FR-WQHD: the section controls wrap onto further rows rather than clip,
+   truncate or scroll sideways. Each keeps its full label and its badge. */
+.git__tabs {
+  display: flex; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border-1);
+}
+.git__tab { flex: 1 1 auto; justify-content: center; min-height: 26px; }
+.git__left { min-width: 0; overflow-x: hidden; }
+
+/* Region states: loading, empty and failure in words (GIT-FR-TFAU). */
+.git__state {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2);
+  padding: var(--sp-2) 12px;
+  font-size: var(--fs-ui-sm); color: var(--fg-3);
+}
+.git__state--error { color: var(--danger); }
+.git__stale {
+  padding: var(--sp-1) 12px;
+  font-size: var(--fs-ui-xs); color: var(--fg-3);
+}
+
+/* The Local / Remote and Open / Closed switches (GIT-FR-HLGO, GIT-FR-OBZW). */
+.git__switch-row { display: flex; align-items: center; justify-content: space-between; padding-right: 8px; }
+.git__switch { display: flex; gap: 2px; padding: 8px 12px; }
+.git__switch-option[data-active="true"] { background: var(--bg-active); color: var(--accent); }
+
+.git__file:focus-visible,
+.git-log__file:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+button.git__file {
+  width: 100%; border: 0; background: transparent; text-align: left; font: inherit;
+}
+.git__file-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Commit rows (GIT-FR-MVBZ). */
+.git__file.git-commit {
+  flex-direction: column; align-items: stretch; gap: 2px; padding: 8px 12px;
+}
+.git-commit__top { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.git-commit__subject {
+  flex: 1; min-width: 0; color: var(--fg-1); font-size: var(--fs-ui-sm);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.git-commit__who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.git-commit__foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.git-commit__branch { font-family: var(--font-mono); }
+.git-commit__ref { font-family: var(--font-mono); }
+
+/* GIT-FR-WMVK / GIT-FR-FATV: the large view of the Commits and Branches
+   sections. The files column takes the author's fraction of the width, 30 %
+   unless they set another, the diff takes the rest, and each scrolls on its
+   own at the full height of the view. */
+.git-log__view {
+  --git-files: 30%;
+  flex: 1; min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, var(--git-files)) auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+.git-log__files { min-height: 0; overflow-y: auto; overflow-x: hidden; }
+/* The divider: a wide grip with a hairline that thickens on hover and focus,
+   as the graduation run region's divider does (GRU-FR-ZPTE). */
+.git-split__divider { position: relative; width: 9px; cursor: col-resize; }
+.git-split__divider::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 4px;
+  width: 1px; background: var(--border-1);
+}
+.git-split__divider:hover::before,
+.git-split__divider:focus-visible::before { left: 3px; width: 3px; background: var(--accent); }
+.git-split__divider:focus-visible { outline: none; }
+/* A path or a branch name is case-sensitive, so the heading never upper-cases it. */
+.git-log__folder, .git-log__context { background: var(--bg-panel); text-transform: none; letter-spacing: 0; }
+.git-log__file { color: var(--fg-2); }
+/* GIT-FR-FATV: in a narrow files column the "from …" path of a renamed file
+   gives way before the file's own name does. Both start at their own width,
+   and the path shrinks far faster. */
+.git-log__file .git__file-name { flex: 0 1 auto; min-width: 0; }
+.git-log__file .git__file-path { flex: 0 1000 auto; min-width: 0; }
+.git-log__diff { min-height: 0; min-width: 0; overflow: auto; }
+/* The head stays above the hunks while the diff scrolls under it. */
+.git-log__diff-head {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; gap: 8px; align-items: center; padding: 6px 12px;
+  border-bottom: 1px solid var(--border-1); background: var(--bg-panel);
+}
+.git-log__hunk { border: none; border-radius: 0; }
+
+/* Branch rows and what a deletion reports beside them (GIT-FR-GAMV, GIT-FR-UDKY). */
+.git-branch { display: block; }
+.git-branch__refusal { padding-left: 12px; }
+.git-result {
+  display: flex; gap: 8px; align-items: flex-start; justify-content: space-between;
+  margin: 4px 8px; padding: 8px 10px;
+  border: 1px solid var(--border-1); border-radius: var(--r-md);
+  background: var(--bg-panel); font-size: var(--fs-ui-xs); color: var(--fg-2);
+}
+.git-result__lines { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+
+/* The branch menu: the shared `.menu` frame with focusable entries. */
+.git-menu { min-width: 200px; }
+.git-menu__item {
+  width: 100%; border: 0; background: transparent; text-align: left; font: inherit;
+  font-size: var(--fs-ui-sm);
+}
+.git-menu__item:focus-visible { outline: none; background: var(--bg-active); }
+
+/* Overlays (GIT-FR-NUCX, GIT-FR-QYWP). */
+.git-overlay { width: 560px; max-height: calc(100vh - 64px); display: flex; flex-direction: column; }
+.git-overlay > * { flex: none; }
+.git-overlay:focus { outline: none; }
+.git-overlay__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.git-info__facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; font-size: var(--fs-ui-sm); }
+.git-info__facts dt { color: var(--fg-3); }
+.git-info__facts dd { margin: 0; color: var(--fg-1); overflow-wrap: anywhere; }
+.git-info__commits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.git-info__commit { display: flex; flex-direction: column; gap: 2px; }
+.git-info__commit-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; font-size: var(--fs-ui-xs); }
+.git-info__commit-who { color: var(--fg-1); overflow-wrap: anywhere; }
+.git-info__message { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-ui-sm); color: var(--fg-2); }
+.git-delete__effect { margin: 0; font-size: var(--fs-ui-sm); color: var(--fg-1); overflow-wrap: anywhere; }
+.git-delete__warning {
+  padding: 8px 10px; border: 1px solid var(--warn); border-radius: var(--r-md);
+  background: var(--warn-soft); color: var(--fg-1); font-size: var(--fs-ui-sm);
+}
+.git-delete__paths { margin: 4px 0 0; padding-left: 18px; font-family: var(--font-mono); font-size: var(--fs-ui-xs); overflow-wrap: anywhere; }
+.git-delete__remote { display: flex; gap: 8px; align-items: center; font-size: var(--fs-ui-sm); color: var(--fg-1); }
+
+/* Pull requests (GIT-FR-OBZW, GIT-FR-FNQA). */
+.git__file.git-pr-row { flex-direction: column; align-items: stretch; gap: 2px; padding: 8px 12px; }
+.git-pr-row__top { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.git-pr-row__title {
+  flex: 1; min-width: 0; color: var(--fg-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.git-pr-row__foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+/* The large view scrolls inside the panel, never into the main viewport. */
+.git-pr__scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.git-pr__header { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--border-1); }
+.git-pr__title { margin: 0; font-size: var(--fs-ui-md); font-weight: 600; color: var(--fg-1); overflow-wrap: anywhere; }
+.git-pr__meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: var(--fs-ui-sm); }
+.git-pr__branches { font-family: var(--font-mono); color: var(--fg-2); overflow-wrap: anywhere; }
+.git-pr__link { white-space: normal; overflow-wrap: anywhere; }
+.git-pr__description { font-size: var(--fs-ui-sm); color: var(--fg-1); overflow-wrap: anywhere; }
+.git-pr__body { font-size: var(--fs-ui-sm); color: var(--fg-1); overflow-wrap: anywhere; }
+.git-pr__timeline { padding-bottom: 12px; }
+.git-pr__items { list-style: none; margin: 0; padding: 0; }
+.git-pr__item { padding: 8px 14px; border-bottom: 1px solid var(--border-1); display: flex; flex-direction: column; gap: 4px; }
+.git-pr__item[data-kind="review"] { border-left: 3px solid var(--accent); }
+.git-pr__item[data-kind="review_comment"] { border-left: 3px solid var(--border-3); }
+.git-pr__item[data-kind="commit"],
+.git-pr__item[data-kind="event"] { color: var(--fg-3); }
+.git-pr__item-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: var(--fs-ui-xs); }
+.git-pr__actor { color: var(--fg-1); font-weight: 500; }
+.git-pr__event { color: var(--fg-2); }
+.git-pr__time { margin-left: auto; }
+.git-pr__path { white-space: normal; overflow-wrap: anywhere; }
+.git-pr__subject { font-size: var(--fs-ui-sm); color: var(--fg-2); overflow-wrap: anywhere; }

@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "name": "Loop shapes",
+  "description": "Every shape a loop can take, in one document.",
+  "loops": [
+    {
+      "id": "l1",
+      "name": "Review cycle",
+      "artifactIds": [
+        "resources/prompts/specification/validation.md"
+      ],
+      "maxPasses": 5,
+      "position": {
+        "x": 360,
+        "y": 40
+      },
+      "size": {
+        "width": 520,
+        "height": 420
+      }
+    },
+    {
+      "id": "l2",
+      "name": "Repair",
+      "parentId": "l1",
+      "position": {
+        "x": 24,
+        "y": 210
+      },
+      "size": {
+        "width": 300,
+        "height": 180
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "id": "n1",
+      "name": "Collect context",
+      "artifactIds": [
+        "resources/prompts/specification/analysis.md"
+      ],
+      "prompt": "Read the repo and list every changed file.",
+      "position": {
+        "x": 60,
+        "y": 80
+      }
+    },
+    {
+      "id": "n2",
+      "name": "Draft",
+      "parentId": "l1",
+      "position": {
+        "x": 24,
+        "y": 90
+      }
+    },
+    {
+      "id": "n3",
+      "name": "Critique",
+      "parentId": "l1",
+      "position": {
+        "x": 264,
+        "y": 90
+      }
+    },
+    {
+      "id": "n4",
+      "name": "Apply fix",
+      "parentId": "l2",
+      "position": {
+        "x": 20,
+        "y": 70
+      }
+    },
+    {
+      "id": "n5",
+      "name": "Ship",
+      "position": {
+        "x": 60,
+        "y": 520
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "n1",
+      "to": "l1",
+      "label": "ok"
+    },
+    {
+      "id": "e2",
+      "from": "l1",
+      "to": "n5",
+      "label": "done"
+    },
+    {
+      "id": "e3",
+      "from": "n2",
+      "to": "n3"
+    },
+    {
+      "id": "e4",
+      "from": "n3",
+      "to": "n2"
+    },
+    {
+      "id": "e5",
+      "from": "n3",
+      "to": "l2"
+    }
+  ]
+}

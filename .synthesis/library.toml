@@ -1,0 +1,51 @@
+[assignments.prompts]
+type = "prompt"
+scope = "folder"
+
+[assignments."prompts/system"]
+type = "prompt"
+scope = "folder"
+
+[assignments."prompts/system/foo"]
+type = "prompt"
+scope = "folder"
+
+[assignments."resources/flows/Test"]
+type = "flow"
+scope = "file"
+
+[assignments."resources/prompts"]
+type = "prompt"
+scope = "folder"
+
+[assignments."resources/prompts/comment.md"]
+type = "prompt"
+scope = "file"
+
+[assignments."resources/prompts/discuss-artifact.md"]
+type = "prompt"
+scope = "file"
+
+[assignments."resources/prompts/discuss-draft.md"]
+type = "prompt"
+scope = "file"
+
+[assignments."resources/prompts/graduation/implementation"]
+type = "prompt"
+scope = "file"
+
+[assignments."resources/prompts/graduation/implementation.md"]
+type = "prompt"
+scope = "file"
+
+[assignments."resources/prompts/graduation/scrutinize.md"]
+type = "prompt"
+scope = "file"
+
+[assignments."resources/prompts/specification"]
+type = "prompt"
+scope = "folder"
+
+[assignments."resources/system"]
+type = "prompt"
+scope = "folder"

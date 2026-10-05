@@ -1,0 +1,8 @@
+# The build context is the crate. Nothing below is needed to compile it, and the
+# target directory of a developer's machine would be copied into the build stage
+# and slow every build down.
+target/
+rust-toolchain.toml
+README.md
+Dockerfile
+.dockerignore

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "expected": {
+    "required_args": [
+      { "name": "headless", "value": "exec" },
+      { "name": "command", "value": "cargo test --manifest-path Cargo.toml" }
+    ]
+  },
+  "response": {
+    "stdout": "running 3 tests\ntest result: ok. 3 passed; 0 failed\n",
+    "stderr": "warning: unused variable `x`\n",
+    "exit_code": 0,
+    "delay_ms": 0
+  }
+}

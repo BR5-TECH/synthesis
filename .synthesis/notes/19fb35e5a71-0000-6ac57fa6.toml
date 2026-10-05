@@ -1,0 +1,5 @@
+id = "19fb35e5a71-0000-6ac57fa6"
+scope = "project"
+body = "When a folder is renamed, the folder and subfolders are loosing artifact association. Needs to be fixed"
+created_at = "2026-07-30T14:12:13Z"
+updated_at = "2026-07-30T14:12:59Z"

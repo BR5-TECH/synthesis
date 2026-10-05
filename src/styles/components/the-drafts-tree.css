@@ -1,0 +1,914 @@
+/* ---------- The drafts TREE (DRP-FR-20 … DRP-FR-29) ----------
+   Depth is expressed by indentation alone, applied inline per row so it stays
+   legible at the panel's smallest width rather than pushing rows off it. The
+   implicit root is the tree's container and never a row (DRP-FR-20). */
+.drafts-tree { display: flex; flex-direction: column; }
+/* Positioned, and deliberately not `display: contents`: the folder's menu is
+   absolutely positioned inside this group, and an element that generates no box
+   is no containing block — the menu would anchor to whatever happened to be
+   positioned further up and land somewhere else entirely. */
+.drafts-tree__group { position: relative; display: flex; flex-direction: column; }
+.drafts-tree__children { display: flex; flex-direction: column; }
+.drafts-tree__folder {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--ctl-h-sm);
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--fg-1);
+}
+.drafts-tree__folder:hover { background: var(--bg-hover); }
+.drafts-tree__folder[aria-selected="true"] { background: var(--bg-active); }
+.drafts-tree__folder:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.drafts-tree__caret,
+.drafts-tree__icon { flex: none; display: inline-flex; align-items: center; color: var(--fg-3); }
+/* DRP non-functional: a long folder name truncates on its row rather than
+   widening the panel, and the row is a single line having no second to carry. */
+.drafts-tree__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-ui-sm);
+}
+/* DRP-FR-27: a valid drop target is highlighted for as long as the pointer is
+   over it. A target the move would be refused on is never given this. */
+.drafts-tree__folder--drop,
+.vpanel__body[data-drop-target="true"] {
+  box-shadow: inset 0 0 0 1px var(--accent);
+  background: var(--bg-active);
+}
+/* DRP-FR-08: an archived draft carries a marker where it sits, rather than
+   being listed apart under a header of its own. */
+.drafts-tree__badge {
+  flex: none;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  border: 1px solid var(--border-1);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+/* DRP-FR-29: a folder holding nothing the current filters admit keeps its row
+   and says so, rather than disappearing. */
+.drafts-tree__empty { margin: 0; padding: 2px 8px; color: var(--fg-3); }
+/* DRP-FR-23 / DRP-FR-24 / DRP-FR-31: an inline field, and the refusal that
+   attaches to it. The panel is narrow, so the reason wraps beneath the field
+   rather than sharing its line. */
+.drafts-tree__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.drafts-tree__error { margin: 0; padding: 2px 8px; color: var(--danger); overflow-wrap: anywhere; }
+/* DRP-FR-22: the menus use the Library context menu's own primitives — `.menu`
+   and `.menu-item` — so the two surfaces read as one system. Only the anchoring
+   is this panel's. */
+/* Positioned against the VIEWPORT by `AnchoredMenu`, not against the row: the
+   panel body scrolls, and a menu inside it is clipped at the body's edge — a
+   row near the bottom of the tree would lose most of its entries under the
+   pinned create affordance. The Library's context menu escapes its own panel
+   the same way, which is the behaviour DRP-FR-22 says these must match. */
+/* Opened at the pointer by `AnchoredMenu`, and fixed so the scrolling panel
+   body cannot clip it. */
+.drafts-tree__menu { min-width: 180px; }
+.drafts-tree__menu-btn { flex: none; }
+.drafts-tree__root-actions { display: inline-flex; margin-left: auto; }
+/* DRP-FR-23 / DRP-FR-24: an inline field stands exactly where the name it
+   replaces stood. Left to the input's own box it sits a few pixels right of
+   every other row's name, which reads as a misaligned tree. */
+.drafts-tree__field .input,
+.draft-row__head .drafts-tree__field .input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 18px;
+  padding: 0 4px;
+  margin-left: -5px;
+  font-size: var(--fs-ui-sm);
+}
+/* DRP-FR-28: the non-pointer move. Refused destinations are listed as
+   unavailable rather than omitted, so the reason one cannot be a destination is
+   legible. */
+/* DRP-FR-28: the destination chooser is the application's own filterable
+   select (`.fsel`), so twenty folders are as reachable as three. The dialog
+   only has to give it room to open. */
+.drafts-move__body { min-height: 220px; }
+
+/* The panel's empty state is `.panel-empty` in kit.css — the one block every
+   vertical panel shares (SNV-FR-60) — rather than anything of this panel's own.
+   DRP-FR-15 adds only that the pinned footer below is not rendered beside it. */
+/* DRP-FR-06 / LIB-FR-VMAQ: the pinned button is centred across the panel's width. */
+.drafts__footer,
+.library__footer {
+  display: flex;
+  justify-content: center;
+  padding: 8px;
+  border-top: 1px solid var(--border-1);
+}
+
+/* NAW-FR-05 / EDT-FR-63: the tab's regions across its width, all of them on the
+   field. Declared once here, on the tab's root, because the field is everything
+   of the tab that is NOT the page — the name row, the action row, the file
+   rail, and the width beside the centred sheet. Left to each region to declare,
+   the name row kept the canvas and became the lightest surface in the tab with
+   the darkest directly beneath it, which made the join between two rows of
+   chrome the hardest edge on screen: harder than the page's own. */
+.draft-workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--doc-field-bg);
+  /* DCR-FR-01: the positioning context the review overlay is anchored in, so it
+     covers this tab and stops at its edges rather than the window's. */
+  position: relative;
+}
+.draft-workspace__chrome {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-1);
+}
+.draft-workspace__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--fg-1);
+  font-weight: 600;
+  cursor: pointer;
+}
+/* NAW-FR-16: an archived draft opens and edits exactly as an active one does,
+   so its position is marked beside the label rather than changing the tab. */
+.draft-workspace__archived {
+  padding: 1px 6px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  color: var(--fg-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* NAW-FR-26: a rename the name binding cannot honour is refused against the
+   field it was typed into. The refusal is positioned out of flow so the chrome
+   row does not grow a line and shove the editing surface down while the author
+   corrects one character. */
+.draft-workspace__rename { position: relative; display: flex; align-items: center; }
+/* NAW-FR-51 / NAW-FR-54: the typed refusal of an image insertion, rendered
+   inline in the band above the page where the author is looking. Words on a
+   bounded box rather than a tone, so it is legible without colour, and it never
+   covers the rendering toggle in that band's trailing corner (NAW-FR-13). */
+.draft-workspace__image-error {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  color: var(--danger);
+  font-size: var(--fs-ui-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draft-workspace__name-error {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin: 4px 0 0;
+  padding: 4px 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+  box-shadow: var(--shadow-2);
+  color: var(--danger);
+  /* The message names the file that refused it, and a draft file's name is as
+     long as its author made it — so it wraps inside a bounded box rather than
+     running off the edge of the window, where the very part that says which
+     file collided is the part that is clipped. */
+  /* `width: max-content` is what makes the bound above bind at all: absolutely
+     positioned with `left: 0` and no `right`, the box otherwise shrinks to the
+     width of the field it hangs from and wraps a short message over three
+     lines. */
+  width: max-content;
+  max-width: min(420px, 60vw);
+  overflow-wrap: anywhere;
+  z-index: 5;
+}
+.draft-workspace__error {
+  padding: 6px 12px;
+  color: var(--danger, #d66);
+  border-bottom: 1px solid var(--border-1);
+}
+/* ACT-FR-09: the tab's own body, and the box the action control keeps its
+   corner in. The control belongs to the tab rather than to either column, so it
+   holds one place while the discussion column is shown, hidden, and resized —
+   and while the History rail beside it comes and goes. */
+.draft-workspace__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  /* NAW-FR-27: the diameter of the collapsed action control. Named once
+     because the dock's height, the menu's offset and the composer's offset are
+     all measured from it. */
+  --draft-actions-size: 36px;
+  /* How much room the control needs to sit clear of whatever it stands beside:
+     its own gutter against the frame, its diameter, and a gap. */
+  --draft-actions-clear: calc(
+    var(--sp-4) + var(--draft-actions-size) + var(--sp-2)
+  );
+}
+
+/* NAW-FR-05 / NAW-FR-08: the file rail is bounded so the editing surface keeps a
+   legible measure at the minimum window size the shell supports — and when it is
+   hidden it occupies none of the tab's width at all, because the whole rail goes
+   rather than merely its tree. */
+/* NAW-FR-39: the head of the rail — its title, what it records, and the **live
+   prompt row** — is pinned, and the versions scroll beneath it. The rail itself
+   must therefore not be the scroller: with `overflow-y` here, a draft that has
+   accumulated a dozen versions scrolls the live row off the top, and the row the
+   author needs to see what the prompt now says (and to get back to it) is gone
+   exactly when the history is long enough to be worth reading. */
+.draft-rail {
+  width: 220px;
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border-1);
+  overflow: hidden;
+}
+.draft-rail__title { flex: 1; }
+.draft-rail__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  color: var(--fg-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-top: 1px solid var(--border-1);
+}
+.draft-rail__header-actions { display: flex; gap: 2px; }
+/* NAW-FR-08: the toggle that shows and hides the rail, at the head of the
+   action row. It reads as a control of the draft rather than of the text, so it
+   takes the row's own type rather than the rail's uppercase header type. */
+.draft-rail__toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  cursor: pointer;
+}
+.draft-rail__toggle:hover { color: var(--fg-1); }
+.draft-rail__count {
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  color: var(--fg-3);
+}
+.draft-rail__tree { flex: 1; min-height: 0; padding-bottom: 8px; }
+
+/* NAW-FR-36: what the rail records, said in words at its head, so an author is
+   never left to infer from an unchanging list that their typing failed to save. */
+.draft-rail__legend {
+  margin: 0;
+  padding: 0 8px 8px;
+  color: var(--fg-3);
+}
+/* NAW-FR-41: the recoverable state of a history that could not be reconciled. */
+.draft-rail__error {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 0 8px 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  color: var(--fg-2);
+}
+.draft-rail__error p { margin: 0; }
+/* The quiet divider between the pinned live-prompt row and the versions. */
+.draft-rail__divider {
+  flex: none;
+  padding: 4px 8px;
+  color: var(--fg-4);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-top: 1px solid var(--border-1);
+}
+.draft-rail__versions {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+/* NAW-FR-07 / NAW-FR-39: one row per version — a source label above a
+   timestamp with its standing set between them — and the pinned live-prompt row
+   above them all. The row being read carries a leading marker of its own, so the
+   selection is legible without relying on fill alone. */
+.draft-version {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  background: none;
+  border: 0;
+  color: var(--fg-1);
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  text-align: left;
+  cursor: pointer;
+}
+.draft-version:hover { background: var(--bg-hover); }
+.draft-version--reading { background: var(--bg-active); }
+.draft-version__marker {
+  width: 8px;
+  flex: 0 0 8px;
+  color: var(--fg-2);
+}
+.draft-version__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.draft-version__source { color: var(--fg-1); overflow-wrap: anywhere; }
+.draft-version__standing,
+.draft-version__at { color: var(--fg-3); }
+.draft-version--live { padding-top: 8px; }
+.draft-version--live .draft-version__source { color: var(--fg-1); }
+
+/* NAW-FR-09 / NAW-FR-39: the strip above the page while a version is showing.
+   It states in words that the reading is read-only and carries the return to the
+   live prompt, so the difference between the two states is never carried by a
+   highlight alone.
+
+   NAW-FR-10: the return **leads** the strip and the words follow it, with room
+   between them — it is the control the author reaches for at the end of every
+   reading, and the mode toggle keeps the trailing edge the Editor's own mode
+   toggle keeps in the action row above. */
+.draft-reading {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3, 12px);
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border-1);
+  color: var(--fg-2);
+}
+.draft-reading__state { min-width: 0; }
+/* The words give way before the controls do: at a narrow width the state text
+   wraps and the two buttons keep their size, rather than the toggle being
+   squeezed to a sliver and then pushed off the trailing edge. */
+.draft-reading > .btn { flex: none; }
+/* NAW-FR-09: the reading takes the Editor's own sheet and metrics — the page,
+   its inset, its measure, its frontmatter region and both of its typographic
+   roles — so the only thing that changes between reading a version and editing
+   the prompt is whether the surface takes a keystroke. This is the Editor's own
+   root, which states its layout inline; the reading has no such component to
+   state it, so it is stated here. */
+.draft-reading__tab {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.draft-reading__page { flex: 1; }
+/* Only the scrolling and the wrap are the raw-text reading's own: a `<pre>` does
+   not scroll or soft-wrap the way the textarea it stands in for does. */
+.draft-reading__text {
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+/* EDT-FR-18 / EDT-FR-62: the frontmatter of a version being read — the region's
+   own metrics and Source-code role, without the highlight layer the editable
+   region carries beneath its textarea. There is nothing to type into here, so
+   there is nothing for a caret to register against. */
+.draft-reading__yaml {
+  display: block;
+  margin: 0;
+  box-sizing: border-box;
+  width: 100%;
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-sm);
+  line-height: var(--font-source-line-height);
+  padding: 0 var(--doc-page-gutter) 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  color: var(--fg-2);
+}
+
+/* NAW-FR-41: a draft whose storage is not the one prompt a draft is. The tab
+   renders this instead of an editing surface and instead of a rail. */
+.draft-workspace__blocked {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  max-width: 52ch;
+  margin: 32px auto;
+  padding: 16px 20px;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--fg-2);
+}
+.draft-workspace__blocked h2 { margin: 0; color: var(--fg-1); }
+.draft-workspace__blocked p { margin: 0; }
+
+/* NAW-FR-05: with the rail hidden this has the tab's whole width; with it shown
+   it takes what the rail leaves. It stays a positioning context of its own for
+   anything the column places over its page; the action control is not among
+   them, its corner being the tab's (ACT-FR-09). */
+.draft-editor {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+/* The editing surface above the composer — the Editor's own root, or the empty
+   state that stands in for it.
+ *
+ * `min-height: 0` is load-bearing rather than defensive. The Editor's root
+ * carries `height: 100%` and states no minimum of its own, so as a flex item in
+ * this column its automatic minimum size is its min-content height — the whole
+ * document's. It then refuses to shrink, and the composer beneath it is laid out
+ * past the foot of the column and off the bottom of the window, which is to say
+ * it disappears exactly once a draft grows past one screen. Zeroing that minimum
+ * lets the surface give up precisely the composer's height and no more.
+ *
+ * Carried on a class of its own rather than on `:first-child`: inserting
+ * anything ahead of the surface — a banner, an error boundary — would move a
+ * positional rule silently onto the wrong element and put the composer back off
+ * the screen, from an edit that looks unrelated to any of this.
+ *
+ * NAW-FR-27: the padding below is the strip of field the COLLAPSED action
+ * control sits in, so the one piece of chrome a tab always carries covers no
+ * part of the page. It is a constant: the control's own diameter and its
+ * gutters, and nothing about which floating surface is open.
+ *
+ * What the control opens — its column of actions, the composer — overlays the
+ * page instead of pushing it. Sizing this strip to whichever surface was
+ * showing meant the page resized under the author every time they reached for
+ * an action, and losing a third of the visible document to a menu that is
+ * dismissed on the next click is a worse trade than covering the page's
+ * bottom-trailing corner.
+ *
+ * They DO cover text: at the page's measure the composer reaches ~200px into
+ * the column at a wide window and further at a narrow one. What keeps that from
+ * costing the author anything is the scroll clearance below — the page can be
+ * scrolled far enough that its last line comes out from under whichever surface
+ * is open. The page's box never moves; only what there is to scroll changes. */
+.draft-editor__surface {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--doc-field-bg);
+  /* NAW-FR-27: the collapsed control covers no part of the page. It sits in the
+     bottom-trailing corner of the FIELD, so whether it can reach the page at all
+     is a question about width — and on any window wide enough to leave real
+     field beside the page it cannot, the page's trailing edge being hundreds of
+     pixels away. Holding a strip open below the page regardless bought that
+     clearance at every width and cost the draft a band the Editor tab does not
+     pay, which is what made a draft's page stop short of where an artifact's
+     ends.
+     So the strip is held only when the field is too narrow to hold the control
+     beside the page: `(100% - page) / 2` is the field on one side — percentages
+     in padding resolve against the inline size — and the multiplier turns the
+     comparison into a step, the ramp between the two being a thousandth of a
+     pixel wide. Everything in it is the same token the control is placed by, so
+     the strip and the thing it clears still cannot drift apart. */
+  padding-bottom: clamp(
+    0px,
+    (var(--draft-actions-clear) - (100% - var(--doc-page-box)) / 2) * 1000,
+    calc(var(--draft-actions-size) + var(--sp-4) * 2)
+  );
+}
+/* ACT-FR-09: a column whose foot is a bar of its own holds no strip open below
+   it. The strip exists so the control covers no part of the **page**; a bar is
+   chrome and carries none of the author's text, so the control stands over it
+   and the column ends where the bar ends. */
+.draft-editor__surface[data-foot="bar"] { padding-bottom: 0; }
+/* ACT-FR-09 / DDS-FR-TGBX: with the discussion column shown, the control's
+   corner falls over that column and not over this one, so nothing here is held
+   open for it. The page then reaches the column's foot with the same inset it
+   keeps at its head, which is the symmetry an artifact's page has in an Editor
+   tab. The strip above is for the one arrangement that still needs it: the
+   discussion column hidden, this column holding the tab's whole width, and the
+   control back in the field beside the page. */
+.dds-split[data-discussion="shown"] .draft-editor__surface { padding-bottom: 0; }
+/* ACT-FR-09: one control, one strip.
+ *
+ * The Editor holds this same strip on `.editor__with-rail`, because on an
+ * Editor tab that wrapper is the outermost thing below the toolbar and there is
+ * nothing else to hold it. A draft tab renders the Editor **inside** its own
+ * surface, which already holds the strip against the draft's own page box — so
+ * both fire for one control and the page stops two strips above the column's
+ * foot, in a band of empty field with nothing in it but the control.
+ *
+ * The surface keeps it and the Editor's stands down, rather than the other way
+ * about: the control is placed against `.draft-editor`, which is where its
+ * diameter and its clearance are declared, so the element that holds the
+ * control is the element that holds the space for it. This is also what closes
+ * the gap between the page and the review bar, the bar standing at the foot of
+ * the surface rather than inside the wrapper. */
+.draft-editor .editor__with-rail { padding-bottom: 0; }
+/* NAW-FR-13: a report, not a control — it recedes once the write has landed.
+   It is laid out **in** the band above the page rather than placed over it: the
+   trailing corner of that band is where the rendering toggle sits, in the
+   Editor's action row and in the reading's strip alike, and a report floated
+   into that corner covers the control. */
+.editor__report {
+  flex: none;
+  margin-right: 4px;
+  color: var(--fg-3);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.editor__report[data-dirty="true"] { color: var(--accent, #c90); }
+
+/* NAW-FR-10: a draft with every file deleted is a thing to start, not to edit. */
+.draft-editor__empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--fg-3);
+}
+.draft-editor__empty-actions { display: flex; gap: 8px; }
+
+/* ACT-FR-13: the opening composer floats free of the action control's corner
+   rather than anchored to it, horizontally centred in the window and sitting
+   in its lower quarter (`top: 75%`) — clear of a page's own content above it
+   while still reading as detached from the control that opened it, rather
+   than pinned dead centre where it would sit over whatever the tab shows.
+   `position: fixed` positions it against the viewport rather than the tab, so
+   it holds that position through a resize and escapes any local stacking
+   context the tab holds. Its width matches the detached overlay's own default
+   (CVP-FR-19: half the window, floored at `OVERLAY_MIN_WIDTH`), so the field
+   an author starts typing in is not a different width from the one they keep
+   typing in a moment later — the width follows the overlay; the vertical
+   position does not. */
+.draft-composer {
+  position: fixed;
+  top: 75%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: max(360px, 50vw);
+  box-sizing: border-box;
+  padding: var(--sp-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-3);
+  /* A literal rather than `--z-overlay`: this still shares the tab's own
+     stacking tier, below `--z-tab-modal`, so a draft's review scrim still
+     covers it exactly as it covers the rest of the tab's chrome — `position:
+     fixed` alone is what centres it against the viewport rather than the tab,
+     and does not by itself require the window-level overlay tier. */
+  z-index: 4;
+}
+/* ACT-FR-13: the surface's padding is the whole of the space around the field.
+   `.comment-card__reply` carries a top margin of its own for the case it was
+   written for — a reply footer following the comments above it in a card — and
+   here, where it is the only thing in the box, that margin lands on top of the
+   surface's own padding and the field sits low in a box taller above it than
+   below. It is dropped only when the field leads the surface: with the
+   disabled-state explanation above it (ACT-FR-17) the margin is the gap between
+   the two and stays. */
+.draft-composer > .comment-card__reply:first-child { margin-top: 0; }
+
+/* NAW-FR-33: a post the backend refused, and the reason commenting is
+   unavailable at all — both stated in the composer they belong to, because the
+   tab's own banner sits behind whatever is over the field. */
+.draft-composer__error {
+  margin-top: 6px;
+  color: var(--danger);
+}
+.draft-composer__blocked {
+  margin-bottom: 6px;
+  color: var(--fg-2);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2);
+}
+
+/* NAW-FR-27: every action a draft affords, gathered behind one control
+   floating in the bottom-trailing corner of the field around the editing
+   surface. Collapsed it is a single graphical control and nothing else, so a
+   tab being written in carries one small mark of chrome over its field rather
+   than a row of buttons across its head. */
+/* NAW-FR-27 / Non-functional requirements: "the page's last line is reachable
+   by scrolling with either of them open". An overlay covers the page's
+   bottom-trailing corner, so while one is open the page is given more to
+   scroll than its own content — enough that its foot clears the tallest of
+   them. This extends the SCROLL RANGE, not the sheet: the page's box does not
+   move, nothing already rendered shifts, and `scrollTop` is undisturbed, which
+   is the whole reason the reserved dock was given up.
+
+   Both scroll containers take it — the WYSIWYG page and the raw-text surface —
+   and the find-highlight layer behind the textarea takes it too, or the two
+   stop registering with each other the moment a match is near the foot. */
+.draft-editor[data-overlay="on"] .editor,
+.draft-editor[data-overlay="on"] .editor__source,
+.draft-editor[data-overlay="on"] .editor__source-hl {
+  /* The page's own 64px foot, plus the reach of the tallest overlay above the
+     page's bottom edge (the four-entry menu: inset + control + gap + column). */
+  padding-bottom: 260px;
+}
+.draft-actions__toggle {
+  position: absolute;
+  right: var(--sp-4);
+  bottom: var(--sp-4);
+  width: var(--draft-actions-size);
+  height: var(--draft-actions-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-2);
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  color: var(--fg-2);
+  box-shadow: var(--shadow-3);
+  cursor: pointer;
+  z-index: 5;
+  transition: color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out);
+}
+.draft-actions__toggle:hover { color: var(--fg-1); border-color: var(--border-3); }
+.draft-actions__toggle[data-open="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* NAW-FR-28: the four actions, stacked directly above the control and
+   trailing-aligned with it, each a named entry rather than a bare glyph. */
+.draft-actions__menu {
+  position: absolute;
+  right: var(--sp-4);
+  bottom: calc(var(--sp-4) + var(--draft-actions-size) + var(--sp-2));
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  z-index: 5;
+}
+.draft-actions__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 160px;
+  padding: 7px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-2);
+  color: var(--fg-1);
+  font-size: var(--fs-ui-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.draft-actions__item:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-3); }
+.draft-actions__item:disabled { color: var(--fg-4); cursor: default; }
+/* NAW-FR-29: Implement is rendered rather than hidden, so the shape of the
+   lifecycle is legible from the control itself — and it states that it is not
+   yet available rather than failing silently. */
+.draft-actions__note {
+  position: absolute;
+  right: calc(var(--sp-4) + var(--draft-actions-size) + var(--sp-2));
+  bottom: var(--sp-4);
+  max-width: min(320px, 60%);
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-2);
+  color: var(--fg-3);
+  z-index: 4;
+}
+
+/* DCR-FR-16: the two answers that are not refusals — an acceptance that landed
+   with its comment owed, and a draft whose history could not be reconciled.
+   Stated above the foot's controls, in the position a refusal is attached to,
+   because both answer the same question about what state the author is in. */
+.draft-review__owed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 12px;
+  color: var(--fg-2);
+  text-align: center;
+}
+.draft-review__owed p { margin: 0; }
+.draft-review__owed-actions { display: flex; gap: 8px; }
+
+/* DRP-FR-33: a draft whose storage is not the one prompt a draft is. Marked
+   distinctly on the row it still occupies — it is never hidden, because the
+   author is the one who decides what becomes of it. */
+.draft-row__inconsistent { color: var(--danger, #d66); }
+
+/* DRP-FR-17: why a row whose name says nothing about the query is in the list. */
+.draft-row__match {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 17px;
+  color: var(--fg-3);
+}
+
+.graduate-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-1);
+}
+.graduate-row__source { display: flex; align-items: center; gap: 6px; color: var(--fg-2); }
+/* NAW-FR-21: why this row's destination was refused, beside the field the
+   author corrects it in. */
+.graduate-row__error { color: var(--danger, #d66); }
+/* NAW-FR-20: the deletion this confirms to. It sits between the scrolling body
+   and the actions rather than inside the body, so a draft with more files than
+   the body can show cannot scroll it out of sight while Graduate stays pinned. */
+.graduate-warning {
+  margin: 0;
+  padding: 10px 18px 0;
+  color: var(--fg-3);
+}
+/* Wide content scrolls inside its own container rather than the page. */
+.modal--wide { max-width: 640px; width: 90vw; }
+.modal--wide .modal__body { max-height: 60vh; overflow-y: auto; }
+
+/* ACT-FR-01 / ACT-FR-09: the control generates no box of its own — every one of
+   its parts is positioned against the tab's own field, which is what lets one
+   component sit in a New Artifact tab, an Editor tab, a Flow canvas, and a Diff
+   tab without any of them laying out around it. */
+.action-control,
+.action-control__dock {
+  display: contents;
+}
+
+/* ACT-FR-20: the discussions control, immediately leading of the action control
+   on the same line, carrying the item's unresolved count. Rendered only while the
+   item carries at least one discussion, so an item nobody has discussed carries
+   one mark of chrome rather than two. */
+.action-control__discussions {
+  position: absolute;
+  right: calc(var(--sp-4) + var(--draft-actions-size) + var(--sp-2));
+  bottom: var(--sp-4);
+  height: var(--draft-actions-size);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  border: 1px solid var(--border-2);
+  border-radius: calc(var(--draft-actions-size) / 2);
+  background: var(--bg-elevated);
+  color: var(--fg-2);
+  box-shadow: var(--shadow-3);
+  cursor: pointer;
+  z-index: 5;
+  transition: color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out);
+}
+.action-control__discussions:hover {
+  color: var(--fg-1);
+  border-color: var(--border-3);
+}
+.action-control__discussions[data-open="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ACT-FR-18: what activating Implement does, said rather than left silent. Above
+   the dock rather than beside it, so it never shares a line with the discussions
+   control and neither takes an activation meant for the other. */
+.action-control__note {
+  position: absolute;
+  right: var(--sp-4);
+  bottom: calc(var(--sp-4) + var(--draft-actions-size) + var(--sp-2));
+  max-width: min(320px, 60%);
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-2);
+  color: var(--fg-3);
+  z-index: 4;
+}
+
+/* ACT-FR-20 / ACT-FR-21: the floating discussion panel, at the tab's trailing
+   side and bounded to a share of it, scrolling within itself so a long
+   conversation never takes the tab from the thing it is about. Opaque against
+   what it floats over, so no two sets of text read through one another. */
+.action-control__panel {
+  position: absolute;
+  right: var(--sp-4);
+  bottom: calc(var(--sp-4) + var(--draft-actions-size) + var(--sp-2));
+  width: min(360px, calc(100% - var(--sp-6)));
+  max-height: min(62%, 560px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+  z-index: 6;
+}
+.action-control__panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 6px 6px 6px 12px;
+  border-bottom: 1px solid var(--border-1);
+  color: var(--fg-2);
+}
+/* The rail inside the panel is a plain scrolling column: it has no margin to
+   align to and nothing to travel with, so it drops the absolute placement it
+   uses beside a page (CMT-FR-64). */
+.action-control__panel .comment-rail {
+  position: static;
+  inset: auto;
+  width: auto;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-2);
+}
+
+/* ACT-FR-21: the panel body is a plain scrolling column of shared surfaces. */
+.action-control__panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+}
+
+/* ACT-FR-21: in the panel the Discussion section is the whole content, so it
+   stops being a section.
+
+   Beside a page it earns everything it carries: a label, because it is one of
+   several kinds of card in the margin; an opaque field colour and a rule,
+   because it is pinned in front of the aligned cards travelling under it; and a
+   scroller of its own, because it shares the margin's height with the resolved
+   footer. The panel gives it none of those neighbours — it holds discussions
+   alone, and its own header already names them. Left as-is, all three read as
+   defects: the word Discussion twice, a recessed field colour banding across an
+   elevated surface, and the cards boxed in a scroller inside a scroller. */
+.action-control__panel .comment-rail__pinned-head {
+  overflow: visible;
+  padding-bottom: 0;
+  background: none;
+  border-bottom: none;
+}
+.action-control__panel .comment-rail__pinned-head > .comment-rail__section-title {
+  display: none;
+}
+
+
+.action-control__resolved {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}

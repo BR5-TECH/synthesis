@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 48" fill="none">
+  
+  <g fill="currentColor">
+    <rect x="0" y="0" width="48" height="48" rx="11" opacity="0.06"></rect>
+    <path d="M10 10 H38 V15 H20 L28 24 L20 33 H38 V38 H10 V35 L22.5 24 L10 13 Z"></path>
+  </g>
+  <text x="60" y="32" fill="currentColor" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="600" letter-spacing="-0.01em">Synthesis</text>
+</svg>

@@ -1,0 +1,148 @@
+/* ---------------------------------------------------------------------------
+   Drafts panel (DRP-drafts-panel.md) + New Artifact workspace
+   (NAW-new-artifact.md)
+   --------------------------------------------------------------------------- */
+
+/* DRP-FR-09: the whole row is the target — name, file count, timestamp and the
+   space around them — so the author aims at a row rather than at the one line
+   inside it that happened to carry a control. */
+.draft-row {
+  position: relative;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.draft-row:hover { background: var(--bg-hover); }
+.draft-row[aria-selected="true"] { background: var(--bg-active); }
+.draft-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.draft-row__head { display: flex; align-items: center; gap: 4px; }
+.draft-row__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  color: var(--fg-1);
+  text-align: left;
+}
+/* DRP non-functional: a long name truncates rather than widening the panel. */
+.draft-row__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.draft-row__rename { flex: 1; min-width: 0; }
+/* DRP-FR-11 / NAW-FR-26: a name the binding cannot honour is refused against
+   this field, which keeps the text the author typed. The panel is narrow, so the
+   refusal wraps beneath the field rather than sharing its line. */
+.draft-row__rename-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.draft-row__rename-error { margin: 0; color: var(--danger); overflow-wrap: anywhere; }
+/* Wraps rather than overflowing: at the panel's minimum width a deeply indented
+   row's meta line — file count, timestamp, and the pending-proposal marker —
+   is wider than what is left of the row, and a non-wrapping line would give the
+   whole panel a horizontal scrollbar (DRP non-functional requirements). */
+.draft-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  min-width: 0;
+  color: var(--fg-3);
+  padding-left: 17px;
+}
+.draft-row__meta > * { min-width: 0; }
+.draft-row__match { padding-left: 17px; }
+
+
+/* NAW-FR-CBUJ / NAW-FR-XRLD: the publication tag in the tab's chrome row. It
+   takes the treatment every other tag in that row takes, because it states a
+   fact about the draft on exactly the same terms. */
+.draft-workspace__publication {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  padding: 1px var(--sp-1);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--fg-2);
+}
+.draft-workspace__publication[data-state="published"] { cursor: pointer; }
+.draft-workspace__publication[data-state="published"]:hover { color: var(--fg-1); }
+/* The text alone carries the failure. The border stays quiet, so one tag in a
+   row of tags does not become the loudest thing in the tab. */
+.draft-workspace__publication[data-state="failed"] { color: var(--danger); }
+
+/* NAW-FR-LQAF / NAW-FR-HZSW: the publication band under the chrome row, in the
+   geometry the graduation-lock note sets. */
+.draft-workspace__publication-band {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 12px 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  color: var(--fg-2);
+}
+.draft-workspace__publication-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.draft-workspace__publication-actions { display: inline-flex; gap: 6px; }
+.draft-workspace__publication-error { color: var(--danger); margin: 0; }
+
+/* NAW-FR-RVGT: every configured remote, with a disabled entry's reason
+   directly beneath it rather than the entry being dropped. */
+.draft-publication-picker__origin { color: var(--fg-3); margin: 0 0 8px; }
+.draft-publication-picker__remotes { list-style: none; margin: 0; padding: 0; }
+.draft-publication-picker__remotes > li { padding: 4px 0; }
+.draft-publication-picker__remotes label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.draft-publication-picker__url { color: var(--fg-3); }
+.draft-publication-picker__reason {
+  margin: 2px 0 0 24px;
+  color: var(--fg-3);
+}
+.draft-publication-picker__persist {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.draft-publication-picker__name { color: var(--fg-1); }
+
+/* NAW-FR-HNVR: the publication chooser — the root option, the parent rows,
+   and the Type and milestone controls beneath the selected one. */
+.draft-publication-chooser__options { display: flex; flex-direction: column; gap: 6px; }
+.draft-publication-chooser__option {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.draft-publication-chooser__option > span { display: flex; flex-direction: column; gap: 2px; }
+.draft-publication-chooser__summary { color: var(--fg-2); }
+.draft-publication-chooser__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 0 6px 24px;
+}
+.draft-publication-chooser__field { display: flex; align-items: center; gap: 8px; }
+.draft-publication-chooser__fixed { margin: 0; color: var(--fg-2); }
+.draft-publication-chooser__notice { margin: 0; color: var(--fg-3); }
+.draft-workspace__publication-choice { color: var(--fg-3); }
+
+/* DRP-FR-ZRJJ: the GitHub marker of a GitHub-shadow draft, distinct from
+   every other marker. */
+.drafts-tree__badge--github {
+  display: inline-flex; align-items: center; gap: 3px;
+  color: var(--accent); background: var(--accent-soft);
+}

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "expected": {
+    "args": ["-p", "Summarise the staged diff in one sentence."],
+    "stdin": null
+  },
+  "response": {
+    "stdout": {
+      "encoding": "utf8",
+      "value": "{\"result\":\"ok\",\"summary\":\"Adds a scenario-driven mock for agentic CLIs.\"}\n"
+    },
+    "stderr": { "encoding": "utf8", "value": "" },
+    "exit_code": 0,
+    "delay_ms": 0
+  }
+}

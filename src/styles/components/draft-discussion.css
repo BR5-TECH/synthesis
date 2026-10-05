@@ -1,0 +1,666 @@
+/* The two-column shape of the New Artifact tab (`DDS-draft-discussion.md`).
+
+   Everything here comes from the design system's tokens. The surface introduces
+   no colour, no type size and no spacing step of its own — a column that had to
+   invent one would be a column the rest of the application could not match. */
+
+/* DDS-FR-KTVW: the document column, the splitter, and the discussion column, as
+   one grid. The template is set inline from the ratio, because that is the one
+   thing about this grid that changes as the author drags.
+
+   The bands at the two edges are the field the columns sit on. They yield
+   before the columns do: at the minimum window size the shell supports there is
+   no width to spend on empty margin, and the measure of the two columns is what
+   the surface is for. */
+.dds-split {
+  --dds-splitter-w: 5px;
+  display: grid;
+  /* One row, and it is the height of the grid rather than the height of its
+     tallest child.
+
+     Without this the row is `auto`: a column taller than the tab makes the grid
+     taller than the tab, the whole workspace grows past its own bounds, and the
+     tab's action row is pushed off the top of the window — at the minimum
+     window size the shell supports, which is exactly where it must not happen.
+     `minmax(0, 1fr)` is what lets the row be smaller than its content, and the
+     `min-height: 0` on each column below is the other half of it. */
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  /* DDS-FR-KTVW: the grid fills the tab's own bounds, so both columns share
+     their outer edges with the action row above them and the discussion column
+     reaches the tab's trailing edge. The shell's own chrome — the activity bar,
+     the panels, the tab strip — is what holds the tab clear of the window
+     frame; a band inside the tab would leave this one region short of the edges
+     every other region meets.
+
+     And no background of its own: the page sits on the field the tab already
+     sets, so the document column reads exactly as it does in every other tab
+     rather than on a second ground showing through it. */
+}
+/* The document column is a grid item here rather than a flex item, so it needs
+   its own floor: a grid item's automatic minimum is its content too. */
+.dds-split > .draft-editor {
+  min-height: 0;
+}
+
+/* DDS-FR-PNXR: the splitter. Five pixels of line with a grip in the middle of
+   it — wide enough to take a pointer, narrow enough to read as a division
+   rather than as a third column. */
+.dds-splitter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--border-1);
+  cursor: col-resize;
+  /* The grip is the only thing that overflows this five-pixel column. */
+  position: relative;
+  border: 0;
+  padding: 0;
+}
+.dds-splitter:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -1px;
+}
+.dds-splitter__grip {
+  width: 9px;
+  height: 34px;
+  border-radius: var(--r-sm);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-2);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.dds-splitter:hover .dds-splitter__grip,
+.dds-splitter[data-dragging="true"] .dds-splitter__grip {
+  border-color: var(--border-3);
+}
+
+/* DDS-FR-PNXR: the segmented control. One choice of three, so the three read as
+   one control with a single frame rather than as three buttons that happen to
+   sit together. */
+.dds-ratio {
+  display: inline-flex;
+  align-items: stretch;
+  height: var(--ctl-h-sm);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--bg-canvas);
+}
+.dds-ratio__option {
+  border: 0;
+  background: none;
+  padding: 0 var(--sp-3);
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.dds-ratio__option + .dds-ratio__option {
+  border-left: 1px solid var(--border-1);
+}
+.dds-ratio__option:hover { background: var(--bg-hover); color: var(--fg-1); }
+/* The chosen preset is carried by fill AND by weight, so the choice is legible
+   without colour discrimination. */
+.dds-ratio__option[data-active="true"] {
+  background: var(--bg-active);
+  color: var(--fg-1);
+  font-weight: var(--fw-semi);
+}
+.dds-ratio__option:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.draft-workspace__kbd {
+  color: var(--fg-4);
+  padding: 0 var(--sp-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-xs);
+}
+
+/* DDS-FR-XQMF: the control that hides and shows the discussion column. It reads
+   as pressed while the column stands, so one control says which of the two
+   arrangements the tab is in and offers the other. */
+.draft-workspace__discussion-toggle[aria-pressed="true"] {
+  color: var(--fg-1);
+  background: var(--bg-active);
+}
+
+/* DDS-FR-XQMF: a hidden column and a hidden splitter leave the layout. Named
+   here because each of them declares a `display` of its own, and the browser's
+   own rule for the attribute is the weaker of the two. */
+.dds-discussion[hidden],
+.dds-splitter[hidden] {
+  display: none;
+}
+
+/* DDS-FR-KTVW: the discussion column. Its own scroll region, with the header
+   above the scroller and the composer below it, so neither can be pushed off by
+   a long conversation. */
+.dds-discussion {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-1);
+  /* DDS-FR-ZMXQ / DDS-FR-LWPC: the stream's one breakpoint is the **panel's**
+     width, which the splitter sets and the window's width says nothing about.
+     A container query is the only thing that can read it. */
+  container-type: inline-size;
+}
+/* DDS-FR-DPRJ: the column's own header, above the scroller and never moved by
+   it. On the chrome tone, so it reads as the panel's edge rather than as the
+   first thing the transcript holds. */
+.dds-discussion__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: var(--ctl-h-2xl);
+  flex: 0 0 auto;
+  padding: 0 var(--sp-4);
+  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--border-1);
+}
+/* DDS-FR-DPRJ: following is the ordinary state, so it is a line rather than a
+   badge; only the paused state of DDS-FR-GKMT is picked out, because only that
+   one is worth interrupting the reader for. */
+.dds-discussion__state--following {
+  font-size: var(--fs-ui-sm);
+  color: var(--accent);
+}
+/* The caps micro-label is `.t-eyebrow`'s; this only says where it sits. */
+.dds-discussion__title { flex: 1; }
+/* DDS-FR-DPRJ / DDS-FR-GKMT: which of the two things the column is doing. The
+   words carry it; the badge's colour only agrees with them. */
+.dds-discussion__state { white-space: nowrap; }
+
+/* DDS-FR-SVBL: the anchor bar. Between the header and the transcript, because
+   it is about where the author came from rather than about the column. */
+.dds-anchor {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 0 0 auto;
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--border-1);
+}
+.dds-anchor__label {
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-src-2xs);
+}
+.dds-anchor__name {
+  flex: 1;
+  min-width: 0;
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dds-anchor__action {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dds-anchor__action:hover { color: var(--accent-hover); }
+.dds-anchor__action:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+/* Where a draft holds more than one discussion, which one is being read. */
+.dds-discussion__threads {
+  display: flex;
+  gap: var(--sp-1);
+  flex: 0 0 auto;
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--border-1);
+}
+.dds-discussion__thread {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: var(--ctl-h-xs);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-xs);
+  background: none;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  cursor: pointer;
+}
+.dds-discussion__thread:hover { background: var(--bg-hover); color: var(--fg-1); }
+.dds-discussion__resolved { margin-left: auto; }
+.dds-discussion__thread[data-active="true"] {
+  background: var(--bg-active);
+  border-color: var(--border-2);
+  color: var(--fg-1);
+  font-weight: var(--fw-semi);
+}
+
+/* The transcript and the composer. `position: relative` so the jump control can
+   hang over the foot of the scroller without moving anything. */
+/* DDS-FR-ZMXQ: no horizontal inset of its own. The transcript, the answering
+   block, the reply field and the empty-column statement each take the content
+   column's measure and centre on it, so an inset here would be taken twice and
+   every one of them would sit narrower than the measure says. */
+.dds-discussion__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+/* The one child with no measure of its own. */
+.dds-discussion__body > .comment-rail__blocked {
+  margin: 0 var(--sp-4);
+}
+
+/* DDS-FR-ZMXQ: the transcript is the column's full width and the **content
+   column inside it** is what carries the measure, centred there. The card is
+   therefore not narrowed here: a max-width on it would inset the scroller as
+   well, and the stream's own gutters would then be taken twice. */
+.dds-discussion__body > .comment-card--stream {
+  width: 100%;
+  min-height: 0;
+}
+/* The stream card's own rules live with the rest of the stream
+   (`../kit/discussion-stream.css`). They have to: `.comment-card` sets a frame
+   and a padding of its own, the two selectors carry equal specificity, and
+   `kit.css` is imported after this file — so a rule here would lose the tie and
+   the card would keep the rail card's box. */
+
+/* DDS-FR-GKMT: where the author stopped reading. The rules are `--live`, which
+   is the same signal the tab's own proposal marker uses. */
+.dds-unread {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) 0;
+}
+.dds-unread__rule {
+  flex: 1;
+  height: 1px;
+  background: var(--live);
+}
+.dds-unread__count {
+  color: var(--live);
+  font-weight: var(--fw-semi);
+  white-space: nowrap;
+}
+
+/* DDS-FR-CLBK: the collapsed head of a long discussion, expandable in place. */
+.dds-earlier {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: var(--sp-2) 0;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  cursor: pointer;
+}
+.dds-earlier:hover { color: var(--fg-1); }
+.dds-earlier:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+  border-radius: var(--r-xs);
+}
+.dds-earlier__rule {
+  flex: 1;
+  height: 1px;
+  background: var(--border-1);
+}
+
+/* DDS-FR-GKMT: the jump to the newest message, over the foot of the scroller.
+   Absolute so its appearance moves no message. */
+.dds-jump {
+  position: absolute;
+  right: var(--sp-6);
+  bottom: var(--sp-16);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: var(--ctl-h-md);
+  padding: 0 var(--sp-3);
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  box-shadow: var(--shadow-3);
+  cursor: pointer;
+  z-index: var(--z-base);
+}
+.dds-jump:hover { background: var(--accent-hover); }
+.dds-jump:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* NAW-FR-32 / ACT-FR-QWNP: the composer that begins a draft's first
+   discussion, in the column rather than in a floating overlay. */
+/* DDS layout: the composer keeps the foot it holds in every other state, and
+   the statement stands centred in the space above it. The author reaches for
+   the composer in the same place whether the column is empty or long. */
+.dds-open {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  flex: 1;
+  min-height: 0;
+  gap: var(--sp-2);
+  padding: var(--sp-6) 0;
+  /* DDS-FR-ZMXQ: the measure the transcript's content column is set on. What
+     stands in the empty column is where the first message will come, so it takes
+     that same measure and is centred on it rather than run across the column's
+     full width. */
+  width: min(var(--doc-page-width), calc(100% - var(--sp-3-5) * 2));
+  box-sizing: border-box;
+  margin-inline: auto;
+}
+/* `auto` above and below: the statement takes the free space either side of it,
+   which centres it in the space above the composer. `flex-end` puts the composer
+   at the foot in the state that carries no statement at all — an auto margin
+   takes the free space before `justify-content` sees it, so one declaration
+   serves both. */
+.dds-open__statement {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: auto 0;
+  text-align: center;
+}
+.dds-open__lead { color: var(--fg-1); font-weight: var(--fw-semi); }
+.dds-open__hint { color: var(--fg-3); }
+.dds-open__error { color: var(--danger); }
+.dds-open__actions { display: flex; justify-content: flex-end; }
+
+/* ---------------------------------------------------------------------------
+   The review, in the document column (`DCR-draft-change-review.md`)
+   --------------------------------------------------------------------------- */
+
+/* DCR-FR-11: the review bar above the page. It holds its place while the
+   document scrolls, so the counter and the two whole-proposal actions are
+   reachable without scrolling to either end. */
+.dds-review {
+  flex: 0 0 auto;
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-base);
+  background: var(--accent-soft);
+  border-top: 1px solid var(--border-1);
+}
+/* DCR-FR-11: the bar stays inside its own column at every width the shell
+   supports. A row that cannot wrap does not compress either — at the minimum
+   window size, with the split even, the whole-proposal actions run past the
+   splitter and paint over the discussion column. So the row wraps, and the
+   counter gives up its width first. */
+.dds-review__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+  padding: var(--sp-1) var(--sp-6) var(--sp-2);
+}
+/* ACT-FR-09: whatever chrome the control's corner falls on holds its trailing
+   end clear of it by the measure the control is placed by. Its own actions are
+   at that end, and a control the author cannot reach is worse than the band of
+   field this replaces.
+
+   The corner falls on the review bar only while the discussion column is
+   hidden. With that column shown it falls on the column's composer instead, and
+   the bar takes its ordinary trailing padding back — the whole width of the
+   document column being the author's to read the counter and the two
+   whole-proposal actions in. */
+.dds-split[data-discussion="hidden"] .dds-review__row {
+  padding-right: var(--draft-actions-clear, var(--sp-6));
+}
+/* ACT-FR-09 / DDS-FR-QPHL: with the discussion column shown, the control's
+   corner is over that column's composer. Post sits at the composer's trailing
+   end, so the composer holds that end clear by the measure the control is
+   placed by, less the gutter the control already keeps from the frame. The
+   whole field is inset rather than its row alone, so the trailing edge the
+   author sees is where the field ends rather than a band of empty field inside
+   it. */
+.dds-split[data-discussion="shown"] .dds-discussion .comment-card__reply {
+  padding-right: calc(
+    var(--draft-actions-clear, var(--sp-6)) - var(--sp-4)
+  );
+}
+/* DDS-FR-QPHL: and the composer's **foot** stands on the control's own line.
+   The control keeps `--sp-4` from the tab's foot (ACT-FR-09), so the composer
+   keeps the same from the column's, and the two read as one line of chrome
+   rather than one hanging below the other.
+
+   The foot rather than the middle, because the composer grows from one line to
+   five as the author writes (per CVP-FR-58): its top edge moves and only its
+   foot is a fixed edge to align on.
+
+   Two rules, because the column stands the composer in two different boxes and
+   the measure has to come out the same from either. Under a transcript it is
+   the reply of the card at the foot, whose inset is spent as padding inside the
+   card and margin below it — so the card still reaches the column's foot and no
+   band of panel opens under it. */
+.dds-split[data-discussion="shown"]
+  .dds-discussion
+  .comment-card--embedded
+  > .comment-card__reply {
+  padding-bottom: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+/* And where nothing has been said yet the composer stands in the empty-column
+   box instead (DDS-FR-HGMB), which sets its own inset and needs the same one at
+   the foot. */
+.dds-split[data-discussion="shown"] .dds-discussion .dds-open {
+  padding-bottom: var(--sp-4);
+}
+/* It names which change of how many, so it is read at a glance rather than
+   wrapped — and it is the one part of the row that may be cut short, the
+   controls beside it being controls the author has to reach. */
+.dds-review__state {
+  color: var(--fg-1);
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* DCR-FR-11: the move controls, beside the counter they move. */
+.dds-review__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+/* DCR-FR-CXZG: the two whole-proposal actions, as one thing. They hold the
+   row's trailing end together, and a row that wraps wraps before them rather
+   than between them. */
+.dds-review__all {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-left: auto;
+}
+/* DCR-FR-27: what has and has not happened to the draft. Under the counter
+   rather than beside it, so a sentence is never the half that is ellipsised. */
+.dds-review__standing {
+  padding: var(--sp-2) var(--sp-6) 0;
+  color: var(--fg-3);
+}
+.dds-review__conflict {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-6) 0;
+}
+/* DCR-FR-31: a change the review counts and cannot draw. */
+.dds-review__undrawn {
+  padding: var(--sp-2) var(--sp-6) 0;
+  color: var(--warn);
+}
+.dds-review__error {
+  padding: var(--sp-2) var(--sp-6) 0;
+  color: var(--danger);
+}
+
+/* DCR-FR-07 / DCR-FR-28: what a proposed change looks like in the prose.
+
+   Each state is carried by more than colour: an insertion is marked by a `+` in
+   its gutter, a deletion by a strike-through, and a change held for discussion
+   by both a different rail and its own gutter mark. */
+.hunk--del {
+  background: var(--diff-del-bg);
+  color: var(--fg-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--diff-del-fg);
+  box-shadow: inset 2px 0 0 var(--danger);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+/* DCR-FR-12: the space a deletion holds open for its chip. A deletion is drawn
+   over the document's own text, and an inline box reserves no height however
+   much padding it declares — so the space is a block below the struck passage.
+   Its height is the chip's own plus a little, so the chip reaches no line of
+   the prompt above or below it. */
+.hunk--del-foot {
+  height: 38px;
+  background: var(--diff-del-bg);
+  box-shadow: inset 2px 0 0 var(--danger);
+  border-radius: 0 0 var(--r-sm) 0;
+  margin-bottom: var(--sp-2);
+}
+.hunk--add {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  column-gap: var(--sp-3);
+  background: var(--diff-add-bg);
+  border-left: 2px solid var(--ok);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  /* The top padding is the space the action chip is placed over. It is the
+     chip's own height plus a little, so the chip never reaches a line of the
+     proposed text (DCR-FR-12). */
+  padding: 38px var(--sp-4) var(--sp-3) var(--sp-3);
+  margin: var(--sp-2) 0;
+  /* DCR-FR-09: the page's own body typography, stated rather than inherited.
+     The block stands between the document's blocks, and a block beside a
+     heading must not read at the heading's size or weight. The proposed text's
+     own headings, lists and code take the `.doc` rules inside it. */
+  font-family: var(--font-rich-family);
+  font-size: var(--fs-doc-md);
+  font-weight: var(--fw-regular);
+  line-height: var(--font-rich-line-height);
+  letter-spacing: normal;
+  font-style: normal;
+  text-decoration: none;
+}
+.hunk--add .hunk__gutter {
+  font-family: var(--font-mono);
+  font-size: var(--fs-src-sm);
+  color: var(--diff-add-fg);
+  text-align: center;
+}
+.hunk--add .hunk__body { min-width: 0; }
+/* DCR-FR-09 / DCR-FR-24: the proposed text's own editing surface. It adds no
+   frame of its own, and its first and last blocks drop their outer margins, so
+   the space reserved for the chip above it stays exact (DCR-FR-12). */
+.hunk__doc {
+  outline: none;
+  padding: 0;
+  min-height: 1lh;
+}
+.hunk__doc > :first-child { margin-top: 0; }
+.hunk__doc > :last-child { margin-bottom: 0; }
+/* A proposed text the Editor could not render is shown as written, line breaks
+   and all. */
+.hunk__plain { white-space: pre-wrap; }
+/* DCR-FR-07: a change held for discussion. Undecided, and marked as answered. */
+.hunk--discussing {
+  background: var(--warn-soft);
+  border-left-color: var(--warn);
+  box-shadow: inset 2px 0 0 var(--warn);
+}
+/* DCR-FR-31: a change whose text the prompt no longer holds. Drawn back, so it
+   reads as something that cannot be taken rather than as something else. */
+.hunk--lost { opacity: 0.6; }
+.hunk[data-focused="true"] { outline: 2px solid var(--ring); outline-offset: 1px; }
+
+/* DCR-FR-12: the action chip, over the space the change reserves for it. */
+.dds-chip {
+  position: absolute;
+  z-index: var(--z-base);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  /* DCR-FR-12: one line, whatever the page's measure. The space a change holds
+     open for the chip is the chip's own height, so a chip that wrapped to two
+     lines would cover the first line of the text it is about — which is the one
+     thing this control must never do. */
+  white-space: nowrap;
+  padding: var(--sp-1) var(--sp-2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+}
+.dds-chip__at { color: var(--fg-3); font-family: var(--font-mono); }
+.dds-chip__key,
+.dds-review__key {
+  padding: 0 var(--sp-1);
+  margin-left: var(--sp-1);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-2xs);
+}
+.dds-chip__lost { color: var(--fg-3); }
+
+/* DCR-FR-BQNL: the gutter map on the scroller's outer edge. */
+.dds-gutter {
+  position: absolute;
+  top: 0;
+  right: var(--sp-1);
+  bottom: 0;
+  width: 8px;
+  pointer-events: none;
+}
+.dds-gutter__mark {
+  position: absolute;
+  border: 0;
+  padding: 0;
+  right: 2px;
+  width: 4px;
+  height: 14px;
+  border-radius: var(--r-full);
+  pointer-events: auto;
+  cursor: pointer;
+  /* Distance from the viewport reads as being drawn back rather than as a
+     second colour, so the map stays legible without colour discrimination. */
+  opacity: 0.45;
+}
+.dds-gutter__mark[data-kind="add"] { background: var(--ok); }
+.dds-gutter__mark[data-kind="del"] { background: var(--danger); }
+.dds-gutter__mark[data-kind="replace"] { background: var(--accent); }
+.dds-gutter__mark[data-focused="true"] { opacity: 1; height: 18px; width: 5px; }
+.dds-gutter__mark[data-lost="true"] { opacity: 0.25; }
+.dds-gutter__mark:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  opacity: 1;
+}

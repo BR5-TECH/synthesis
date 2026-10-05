@@ -1,0 +1,48 @@
+# The pinned identity of every image the agent-CLI executor can launch
+# (AVI-FR-07).
+#
+# This file is application data. It is not author-editable through any surface,
+# is not read from a project, and is not overridable by an environment variable.
+# It is the ONLY place in the repository that names an image reference, a
+# digest, a CLI version, or the container UID/GID — `EAC`'s vendor execution
+# descriptors read it and nothing else does.
+#
+# ## image_digest and the unpublished sentinel
+#
+# AVI-FR-08 makes the digest an image's identity downstream: the executor pins
+# by digest so an image republished under the same tag is never silently
+# adopted. Until an image has actually been pushed there is no digest to record,
+# and this file carries the all-zero sentinel below instead.
+#
+#   sha256:0000000000000000000000000000000000000000000000000000000000000000
+#
+# The sentinel is a real value with a real meaning — "defined but not yet
+# published" — rather than a blank to be overlooked. `verify` (AVI-FR-13) fails
+# on it by design, so an unpublished image cannot be mistaken for a published
+# one; a launch against it fails as `ImageUnavailable`, which is exactly what it
+# is. Replace it with the digest `docker push` reported, in the same commit that
+# published the image.
+#
+# ## image_ref and the build revision
+#
+# A tag names an image, and `cli_version` names only the vendor CLI inside it.
+# The rest of an image — its package floor, its toolchains, its browser — can
+# change while that CLI does not, and a rebuilt image published over the old tag
+# is the substitution AVI-FR-08 exists to prevent. So the tag carries a build
+# revision after the CLI version: `2.1.233-2` is the second published definition
+# holding Claude Code 2.1.233. Raise it in the same commit as any change to a
+# Dockerfile, and record the digest the push reported beside it.
+
+[claude_code]
+image_ref = "ghcr.io/br5-tech/synthesis-agent-claude-code:2.1.233-3"
+image_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+cli_version = "2.1.233"
+uid = 10001
+gid = 10001
+
+[codex]
+image_ref = "ghcr.io/br5-tech/synthesis-agent-codex:0.147.0-3"
+image_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+cli_version = "0.147.0"
+uid = 10001
+gid = 10001

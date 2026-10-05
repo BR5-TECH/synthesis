@@ -1,0 +1,740 @@
+/* ---------------------------------------------------------------------------
+   Graduation (GRU-graduation-runs.md / GRV-graduation-review.md)
+   --------------------------------------------------------------------------- */
+
+/* GRU-FR-01: the section occupies the Runs panel's content region beneath the
+   panel's own section control, as two regions side by side. */
+.runs-sections { display: flex; flex-direction: column; height: 100%; }
+.runs-sections__control {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-1);
+}
+.runs-sections__body { flex: 1; min-height: 0; overflow: auto; }
+
+.graduation {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  /* RPV-FR-17: the surface a hollow mark has to be a hole in. The run region
+     paints no background of its own, so this is the bottom panel's. */
+  --progress-ground: var(--bg-panel);
+  /* GRU-FR-62: the rail's share of the panel's usable content width. Declared
+     here at the default so the rail has a width before the stored preference
+     has been read, and written over by the section as a percentage once it
+     has. */
+  --graduation-rail: 20%;
+}
+/* GRU-FR-03 / GRU-FR-62: the history rail at the leading edge, at the width the
+   author set — a fraction of the panel's usable content width, written on the
+   container as `--graduation-rail` and clamped there to 5 %–30 %.
+
+   `flex: none` with an explicit basis rather than a `flex-grow` share, because
+   the fraction is a statement about the *panel* rather than about how the two
+   regions divide what is spare. */
+.graduation__history {
+  flex: none;
+  width: var(--graduation-rail, 20%);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* GRU-FR-62 / GRU-FR-03: at the panel's smallest height the two-region layout
+   collapses. The rail stops being a column beside the run and becomes a single
+   control across the top of it, naming the selected run and how many runs the
+   view holds; the run region keeps the whole width. */
+.graduation__history[data-collapsed="true"] {
+  width: 100%;
+  flex: none;
+  position: relative;
+  z-index: 2;
+}
+.graduation[data-collapsed-rail="true"] { flex-direction: column; }
+.graduation__collapsed {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  border: none;
+  border-bottom: 1px solid var(--border-1);
+  background: var(--bg-panel);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.graduation__collapsed .graduation__tag { margin-left: auto; }
+.graduation__collapsed svg { transition: transform 120ms ease; }
+.graduation__history[data-open="true"] .graduation__collapsed svg {
+  transform: rotate(90deg);
+}
+/* The filters and the list are behind that control until it is asked for, and
+   then they stand over the run region rather than squeezing a panel that is
+   already too short to hold both. */
+.graduation__history[data-collapsed="true"] .graduation__filters,
+.graduation__history[data-collapsed="true"] .graduation__rail { display: none; }
+.graduation__history[data-collapsed="true"][data-open="true"] .graduation__filters {
+  display: flex;
+}
+.graduation__history[data-collapsed="true"][data-open="true"] .graduation__rail {
+  display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  max-height: 220px;
+  border: 1px solid var(--border-1);
+  border-top: none;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-4);
+}
+/* GRU-FR-56: the two filter controls are pinned above the list — they sit
+   outside the scrolling box rather than at the top of it, so they stay put
+   while it scrolls. */
+.graduation__filters {
+  flex: none;
+  border-bottom: 1px solid var(--border-1);
+}
+.graduation__rail {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px;
+}
+/* GRU-FR-62: the boundary the author drags. A hit area wider than the rule it
+   draws, because a one-pixel target is one nobody can hit; the rule itself is
+   the border the rail used to carry. */
+.graduation__divider {
+  flex: none;
+  width: 7px;
+  margin: 0 -3px;
+  cursor: col-resize;
+  background: none;
+  border: none;
+  padding: 0;
+  position: relative;
+  z-index: 1;
+}
+.graduation__divider::before {
+  content: "";
+  position: absolute;
+  inset: 0 3px;
+  background: var(--border-1);
+}
+.graduation__divider:hover::before,
+.graduation__divider:focus-visible::before { background: var(--accent); }
+.graduation__divider:focus-visible { outline: none; }
+.graduation__row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+}
+/* GRU-FR-59: the row opens the run and the control beside it files it away, so
+   the two are separate targets on one row rather than one button inside
+   another. */
+.graduation__row-open {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 4px 6px;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.graduation__archive {
+  flex: none;
+  align-self: center;
+  margin-right: 2px;
+  /* Shown on hover, on focus, and on the selected row — a control per row,
+     always drawn, would make the rail a column of buttons rather than a list of
+     runs. It stays reachable from the keyboard at every moment, focus being
+     what reveals it. */
+  opacity: 0;
+}
+.graduation__row:hover .graduation__archive,
+.graduation__row--selected .graduation__archive,
+.graduation__archive:focus-visible { opacity: 1; }
+/* GRU-FR-VBHD: every control of the cluster in one treatment, so the row reads
+   as one row of controls rather than as one control and its visitors. */
+.graduation__row-restart { margin-right: 2px; }
+.graduation__cluster {
+  flex: none;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+/* GRU-FR-BDFO / GRU-FR-CJRS: the row's dedicated handle and its two keyboard
+   moves, at the leading edge and in the treatment the cluster uses, so a drag
+   never starts from the row's selectable body. */
+.graduation__reorder {
+  flex: none;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.graduation__drag-handle {
+  cursor: grab;
+  color: var(--fg-3);
+}
+.graduation__drag-handle:active { cursor: grabbing; }
+.graduation__row:hover .graduation__reorder .graduation__archive,
+.graduation__row--selected .graduation__reorder .graduation__archive,
+.graduation__reorder .graduation__archive:focus-visible { opacity: 1; }
+/* GRU-FR-BDFO: while the pointer stands over a valid same-queue position the
+   rail shows **where the row would land**. A line at the row's edge rather than
+   a moved row: the visible order changes only when the backend has accepted the
+   drop (GRU-FR-20).
+
+   The line is on the **top** edge for every row, which reads as "it lands
+   here, above this one". The bottom-most row the author arranges offers a
+   second boundary on its own bottom edge, that being the only way to reach the
+   foot of its queue — the position its scheduler dispatches next. */
+.graduation__row[data-drop-target="true"] {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+.graduation__row[data-drop-target="true"][data-drop-edge="below"] {
+  box-shadow: inset 0 -2px 0 0 var(--accent);
+}
+/* The foot boundary's own target, drawn only while a drag it can take is in
+   progress. It overlays the row's bottom edge and the gap beneath, so the
+   author has something to aim at rather than a hairline. */
+.graduation__row { position: relative; }
+.graduation__drop-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 9px;
+}
+/* GRU-FR-YGMT: the value is read rather than inferred from a colour or a fill,
+   so the mark carries none of the meaning on its own — the accessible name and
+   the tooltip state it in words. */
+.graduation__auto-start[data-auto-start="off"] { color: var(--fg-3); }
+.graduation__row--selected {
+  border-color: var(--border-2);
+  background: var(--bg-active);
+}
+/* GRU-FR-25: a refused archive, against the row it was raised for. The row is
+   a horizontal pair of targets, so the message takes the whole of the next line
+   rather than squeezing in beside them. */
+.graduation__row { flex-wrap: wrap; }
+.graduation__row-error {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 0 6px 4px;
+}
+/* GRU-FR-57: a filed-away row reads as filed away wherever it is drawn, which
+   is the **Archived** view alone. */
+.graduation__row[data-archived="true"] .graduation__name { color: var(--fg-2); }
+.graduation__marker { color: var(--fg-3); }
+.graduation__name { font-weight: 600; font-size: var(--fs-ui-sm); }
+.graduation__tag { font-size: var(--fs-ui-xs); }
+/* GRU-FR-58 / DRP-FR-17: why a row whose name says nothing about the text is in
+   the list. */
+.graduation__matched { color: var(--fg-3); font-size: var(--fs-ui-xs); }
+/* GRH-FR-FYTH: the row says three things about its run — the draft it is about,
+   the state it stands in, and the stream it runs in — and the name is what the
+   author reads it by. The name takes the first line and the rest stand under it
+   on one meta line, so a rail at its narrowest still shows a whole name rather
+   than three half-lines.
+
+   Every part of the row is held to the row's own width: a run name and a stream
+   name are both as long as somebody made them, and neither may widen the rail
+   or put it on a horizontal scrollbar. */
+.graduation__row-meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+  max-width: 100%;
+}
+.graduation__row-open > .graduation__name,
+.graduation__row-meta > * {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The stream a run writes in, in the meta tone the state tag beside it takes. */
+.graduation__stream { color: var(--fg-3); }
+.graduation__run {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* RPV-FR-16: the stage row narrows against the region it is in rather than
+     against the window, because what decides whether its labels fit is the
+     width left beside the queue rail. */
+  container-type: inline-size;
+}
+.graduation__head { display: flex; align-items: center; gap: 8px; }
+.graduation__provenance { margin: 0; }
+
+/* RPV-run-progress.md: the stage row.
+   No colour, icon, typeface, or interaction of its own (RPV-FR-17, GRU-FR-36):
+   the marks are the existing foreground and accent tokens, the text is the UI
+   role, and both themes come free because every value here is a token. */
+.run-progress { display: flex; flex-direction: column; gap: var(--sp-1); }
+.run-progress__stages {
+  display: flex;
+  align-items: flex-start;
+  /* RPV-FR-19: no gap. The stages abut so that the track drawn across each of
+     them meets the next mark exactly — a gap here is the width of the break
+     that made the row read as a scatter of dots rather than one run of work.
+     The space between labels is padding inside a stage instead, which the
+     track spans rather than stops at. */
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* RPV-FR-16: never sideways. A width too narrow to hold every label reduces
+     the others to their marks rather than putting the row on a scrollbar. */
+  overflow: hidden;
+}
+.run-progress__stage {
+  display: flex;
+  flex-direction: column;
+  /* RPV-FR-19: the mark, the label, and the condition sit on the stage's own
+     centre line. Left-aligned, the last mark landed a label's width short of
+     the row's trailing edge and the track read as cut off before it got there;
+     centred, the track begins and ends the same distance inside both edges. */
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 0;
+  position: relative;
+  box-sizing: border-box;
+  /* RPV-FR-16: whether a label fits is a question about the **stage's own**
+     share of the row rather than about the row's total width — eight stages in
+     the width four used to have leave each cell half as wide, and a threshold
+     expressed against the row would have to be retuned every time a host
+     configured a different number of them. */
+  container-type: inline-size;
+}
+/* RPV-FR-19 / RPV-FR-20: the track, in halves.
+   Each stage owns the stretch on either side of its own mark — `::before` from
+   its leading edge to the centre, `::after` from the centre to its trailing
+   edge — so consecutive halves meet exactly under a mark whatever width the
+   cells take. Drawn as one span per cell instead, a cell that is wider than its
+   neighbour (which is what the narrow-width rule below produces) puts the joint
+   somewhere other than on a mark. */
+.run-progress__stage::before,
+.run-progress__stage::after {
+  content: "";
+  position: absolute;
+  /* The mark is 10px tall, so its centre is 5px down and a 2px track sits at
+     4px. */
+  top: 4px;
+  height: 2px;
+  background: var(--border-2);
+}
+.run-progress__stage::before { left: 0; width: 50%; }
+.run-progress__stage::after { left: 50%; width: 50%; }
+/* The row begins and ends at a mark: no half runs off either end. */
+.run-progress__stage:first-child::before,
+.run-progress__stage:last-child::after { content: none; }
+/* The track carries the work that is **done**. Everything up to the current
+   mark is behind the run — which is the half leading into a current stage as
+   well as both halves of a complete one — and the stretch after it is not.
+   Painting past the current mark would run the accent one segment further than
+   the run has actually got. */
+.run-progress__stage[data-status="complete"]::before,
+.run-progress__stage[data-status="complete"]::after,
+.run-progress__stage[data-status="current"]::before {
+  background: var(--accent);
+}
+.run-progress__mark {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--border-3);
+  box-sizing: border-box;
+  /* The mark sits on the track rather than beside it, and its own fill is what
+     hides the line behind a hollow one. Which surface that fill has to match is
+     the **host's** to say (RPV-FR-17): a component that hard-codes one draws a
+     dot in the wrong colour on every host but that one. The fallback is the
+     application's own page, for a host that names nothing. */
+  position: relative;
+  z-index: 1;
+  background: var(--progress-ground, var(--bg-canvas));
+}
+.run-progress__stage[data-status="complete"] .run-progress__mark {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.run-progress__stage[data-status="current"] .run-progress__mark {
+  border-color: var(--accent);
+  background: var(--progress-ground, var(--bg-canvas));
+}
+.run-progress__stage[data-condition="blocked"] .run-progress__mark,
+.run-progress__stage[data-condition="stopped"] .run-progress__mark {
+  border-color: var(--danger);
+}
+.run-progress__stage[data-condition="waiting"] .run-progress__mark,
+.run-progress__stage[data-condition="paused"] .run-progress__mark {
+  border-color: var(--warn);
+}
+.run-progress__label {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+  /* RPV-FR-16: a label narrower than its words **wraps** rather than being cut.
+     Ellipsised, "Specification acceptance" and "Implementation acceptance" both
+     read as "Specification aut…" in the width eight stages leave at the
+     smallest window the shell supports — and the current stage was among them,
+     which is the one thing this row must never do. Wrapped, every label stays
+     whole at that width and the row still never scrolls sideways. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  /* RPV-FR-19: the breathing room between one stage's words and the next is
+     taken inside the text rather than on the cell, so the cell stays exactly
+     as wide as its share of the row and its centre stays exactly on its mark. */
+  max-width: 100%;
+  padding: 0 var(--sp-1);
+  box-sizing: border-box;
+  text-align: center;
+}
+.run-progress__stage[data-status="current"] .run-progress__label {
+  color: var(--fg-1);
+  font-weight: 600;
+}
+.run-progress__condition {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  max-width: 100%;
+  padding: 0 var(--sp-1);
+  box-sizing: border-box;
+  text-align: center;
+}
+/* RPV-FR-16: at the narrowest supported width the current stage keeps its
+   label and its condition whole, and the rest reduce to their marks — the two
+   things this row exists to say are which stage and what condition. */
+/* Measured against the stage's own cell, so the rule reads "this label does not
+   fit" whatever number of stages the host configured. Below this the cell is
+   too narrow to hold even a wrapped word legibly, and the others give up their
+   words so the current one keeps its own. */
+@container (max-width: 56px) {
+  .run-progress__stage:not([data-status="current"]) .run-progress__label,
+  .run-progress__stage:not([data-status="current"]) .run-progress__condition {
+    display: none;
+  }
+}
+.run-progress__stage[data-status="current"] .run-progress__condition {
+  color: var(--fg-2);
+  white-space: normal;
+}
+/* RPV-FR-07: only `active` animates, and only where motion is welcome. Every
+   other condition is still, because a bar travelling over a run that is
+   waiting on the author says the opposite of the truth. */
+.run-progress[data-animates="true"]
+  .run-progress__stage[data-status="current"]
+  .run-progress__mark {
+  animation: run-progress-pulse 1.6s var(--ease-out) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-progress[data-animates="true"]
+    .run-progress__stage[data-status="current"]
+    .run-progress__mark {
+    animation: none;
+  }
+}
+@keyframes run-progress-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.run-progress__line,
+.run-progress__loop { margin: 0; }
+.run-progress__loop { color: var(--fg-3); }
+
+/* GRU-FR-YYXN: the pass history.
+
+   A vertical timeline: the stage row's own track turned through a right angle,
+   one run of work across the top and the passes it took down the side. Every
+   value is a token the section already uses, so it brings no colour, icon, or
+   interaction of its own (GRU-FR-NBRO). */
+.graduation__passes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.graduation__passes-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  color: var(--fg-3);
+}
+.graduation__passes-count { margin-left: auto; }
+/* GRU-FR-GXQE: the history has no height of its own. It grows with what it
+   holds, and the run region's scroll is the only scroll that moves it. A box
+   that scrolls inside the region gives the author two scroll positions for one
+   text, and WebKit can fail to repaint such a box when a closed account makes
+   its content shorter (GRU-FR-ZLWI). */
+.graduation__pass-list {
+  display: flex;
+  flex-direction: column;
+}
+/* The rule joining one pass to the next, so the rows read as one sequence
+   rather than as a stack.
+
+   It is drawn on the **row** rather than on the item, because the item also
+   holds the open account and the rule belongs to the timeline rather than to
+   the account. Its x is the mark's own centre: the row's leading padding, the
+   caret, the gap, and the mark's radius. Its ends are `50%` of the row rather
+   than a measured offset — the mark is centred in the row, so 50% is exactly
+   where it sits however the row's text is set. */
+.graduation__pass { position: relative; }
+.graduation__pass-row::before,
+.graduation__pass-row::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--sp-1) + 10px + var(--sp-2) + 3px);
+  width: 2px;
+  background: var(--border-2);
+}
+/* Broken **around** the mark rather than run behind it: the rule stops a pixel
+   short of the mark above it and starts a pixel past it below. A mark that has
+   to hide the line behind it needs a fill matching whatever is painted there,
+   which the row's own hover tint changes underneath it — the mark then reads as
+   a pale dot for as long as the pointer is on the row. With nothing to hide,
+   the mark is a hole in every state. The mark is 8px on the row's centre line,
+   so its radius plus a hair is 5px. */
+.graduation__pass-row::before { top: 0; height: calc(50% - 5px); }
+.graduation__pass-row::after { top: calc(50% + 5px); bottom: 0; }
+/* The sequence begins and ends on a mark: no stub runs off either end. */
+.graduation__pass:first-child .graduation__pass-row::before {
+  content: none;
+}
+.graduation__pass:last-child:not([data-open="true"])
+  .graduation__pass-row::after {
+  content: none;
+}
+/* The same of the oldest pass when it is the one open: its account carries the
+   rule down its side (see below), and with no mark under it that rule would
+   end in mid-air. The border stays for the inset it holds; it draws nothing. */
+.graduation__pass:last-child[data-open="true"] .graduation__account {
+  border-left-color: transparent;
+}
+.graduation__pass-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 3px var(--sp-1);
+  box-sizing: border-box;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+  position: relative;
+}
+.graduation__pass-row:hover { background: var(--bg-hover); }
+.graduation__pass-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.graduation__pass[data-open="true"] .graduation__pass-row {
+  /* The same tone a selected row of the queue rail takes (GRU-FR-36). */
+  background: var(--bg-active);
+  color: var(--fg-1);
+}
+/* GRU-FR-VDSK: the row of the open pass stays at the top edge of the run
+   region while its account scrolls under it, so the control that closes it is
+   always in view. The region is the scroller it sticks in. A sticky box is held
+   inside the scroller's padding, so the row sticks at minus the region's top
+   padding to reach its top edge, as the foot bar does at the bottom. Sticky is
+   a positioned box too, so the timeline's rules stay anchored to the row. The
+   tint is laid over the panel's ground, because the tone alone lets the
+   account show through it. */
+.graduation__pass[data-open="true"] > .graduation__pass-row {
+  position: sticky;
+  top: -8px;
+  z-index: 1;
+  background: linear-gradient(var(--bg-active), var(--bg-active)), var(--bg-panel);
+}
+.graduation__pass-caret {
+  flex: 0 0 auto;
+  width: 10px;
+  color: var(--fg-3);
+}
+/* The mark this pass sits at on the timeline, drawn like the stage row's own
+   and covering the rule behind it. */
+.graduation__pass-mark {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--border-3);
+  box-sizing: border-box;
+  /* Nothing to hide: the rule stops either side of it. */
+  background: transparent;
+  position: relative;
+  z-index: 1;
+  align-self: center;
+}
+.graduation__pass[data-current="true"] .graduation__pass-mark {
+  border-color: var(--accent);
+}
+.graduation__pass[data-open="true"] .graduation__pass-mark {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.graduation__pass-name {
+  flex: 0 0 auto;
+  font-weight: 500;
+  /* Tabular figures, so a two-digit pass does not shift the reason beside it
+     out of line with the reason above. This is the accent face the chrome
+     already uses for counts and hashes, not the Source role. */
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-2xs);
+  letter-spacing: 0.01em;
+  color: var(--fg-3);
+}
+.graduation__pass[data-open="true"] .graduation__pass-name,
+.graduation__pass[data-current="true"] .graduation__pass-name {
+  color: var(--fg-1);
+}
+.graduation__pass-reason {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.graduation__pass-now {
+  flex: 0 0 auto;
+  color: var(--fg-3);
+}
+/* GRU-FR-32: how many findings the Review that sent this pass back raised. It
+   sits between the reason and the latest mark rather than inside the reason,
+   which ellipsizes: a count truncated to "3 fin…" is the one thing on the row
+   that must not be read as half of itself. */
+.graduation__pass-findings {
+  flex: 0 0 auto;
+  color: var(--fg-3);
+}
+/* The open row takes a tint, and the meta tone against it is the one thing on
+   the row GRU-FR-32 says must not be hard to read. It takes the row's own text
+   tone there rather than a tone of its own (GRU-FR-36). */
+.graduation__pass[data-open="true"] .graduation__pass-findings {
+  color: var(--fg-2);
+}
+/* GRU-FR-44: an account arriving for a pass marks its row rather than dragging
+   the author off the one they are reading. The mark is a word to a screen
+   reader through the row's own text; this is only what makes it visible at a
+   glance. */
+.graduation__pass-row[data-new="true"] { font-weight: 500; }
+.graduation__pass-row[data-new="true"] .graduation__pass-name::after {
+  content: "•";
+  color: var(--accent);
+  margin-left: 4px;
+}
+
+/* GRU-FR-43: the account of a pass, opened in place under the row it belongs
+   to and inset past the timeline so it reads as that row's content. */
+/* Inset so its own rule lands exactly on the timeline's, which is what makes an
+   open account read as that row's content rather than as a block after it.
+
+   The room above and below the text is **padding** rather than margin, so the
+   rule runs the whole height of the box: as margin, it left a gap of that much
+   at each end, and the timeline read as broken between the open pass and the
+   one under it. The rule is the same width, colour, and x as the row's own, so
+   with no gap at either end the three are one line. */
+.graduation__account {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0 0 0 calc(var(--sp-1) + 10px + var(--sp-2) + 3px);
+  padding: 2px 0 var(--sp-2) var(--sp-3);
+  border-left: 2px solid var(--border-2);
+}
+/* GRU-FR-43 / GRU-FR-63: one account of the pass. A row can hold two — what
+   caused the pass and what became of it — and the boundary between them is what
+   keeps a closed disclosure ending the first from reading as the heading of the
+   second. The rule falls only *between* blocks, so a row with one account
+   carries no divider and reads exactly as it always did. Neither block is
+   indented against the other: the column stays one column and every heading and
+   every text keeps the one left edge, so what separates the accounts is the
+   boundary and never a step. */
+.graduation__account-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.graduation__account-block + .graduation__account-block {
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border-2);
+}
+.graduation__revision-head { color: var(--fg-3); }
+/* GRU-FR-43: the account's second heading — what the next turn was told to fix.
+   It is set exactly as the first one and on the same left edge, the two texts
+   being two halves of one account rather than a text and a footnote. It takes
+   the room a paragraph break would give it, so the pair does not read as one
+   block of four lines. */
+.graduation__revision-head--next { margin-top: var(--sp-1); }
+/* GRU-FR-33: untrusted model text. Line breaks are preserved by the box rather
+   than by a parser, and a long unbroken token wraps instead of widening the
+   panel. */
+.graduation__revision-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--fg-2);
+}
+.graduation__revision-none { color: var(--fg-3); font-style: italic; }
+/* GRU-FR-49: a Review's findings, inside the account of the pass they caused.
+   They take the tones, spacing, and borders this section already applies to a
+   run's state; nothing here is a colour, a mark, or a treatment defined only
+   for them (GRU-FR-36).
+
+   One finding is set apart from the next by a hairline rule rather than by
+   space alone, so a set of three reads as three: the three texts a finding
+   carries are already a paragraph, a path line, and a correction, and spacing
+   between findings large enough to beat that is spacing that pushes the third
+   finding off the list. The list has no height of its own (GRU-FR-GXQE). */
+.graduation__account-findings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* GSR-FR-PBON: the deterministic rule an application check refused a path on,
+   beside the path rather than in place of any of the finding's four fields. It
+   takes the tone the path line already carries; nothing here is a colour or a
+   mark of its own (GSR-FR-GCXB). */
+.graduation__finding-code { color: var(--fg-3); }
+.graduation__account-findings > li + li {
+  margin-top: var(--sp-1);
+  padding-top: var(--sp-1);
+  border-top: 1px solid var(--border-1);
+}
+/* GRU-FR-55: a path is a path to read, and a long one wraps rather than
+   scrolling the region sideways. */
+.graduation__finding-paths {
+  color: var(--fg-3);
+  overflow-wrap: anywhere;
+}

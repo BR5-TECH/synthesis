@@ -1,0 +1,218 @@
+/* pdf-viewer: the read-only PDF Viewer tab (PDV). */
+
+.pdf-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+}
+
+/* PDV-FR-QNVD: the toolbar uses the colours of the current theme. */
+.pdf-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  padding: var(--sp-1-5) var(--sp-3);
+  border-bottom: 1px solid var(--border-1);
+  background: var(--bg-chrome);
+  font-size: var(--fs-ui-sm);
+}
+.pdf-toolbar__group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.pdf-toolbar__search {
+  margin-left: auto;
+}
+
+.pdf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--ctl-h-sm);
+  height: var(--ctl-h-sm);
+  padding: 0 var(--sp-1-5);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  cursor: pointer;
+}
+.pdf-btn:hover:not([disabled]) {
+  background: var(--bg-hover);
+  color: var(--fg-1);
+}
+.pdf-btn--text {
+  padding: 0 var(--sp-2);
+}
+.pdf-btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pdf-btn:focus-visible,
+.pdf-page-field:focus-visible,
+.pdf-search-field:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.pdf-page-field,
+.pdf-search-field {
+  height: var(--ctl-h-sm);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+  font: inherit;
+  font-size: var(--fs-ui-sm);
+  padding: 0 var(--sp-1-5);
+}
+.pdf-page-field {
+  width: 3.5em;
+  text-align: center;
+}
+.pdf-search-field {
+  width: 14em;
+}
+.pdf-page-count,
+.pdf-zoom-label,
+.pdf-search-count {
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pdf-zoom-label {
+  min-width: 3.5em;
+  text-align: center;
+}
+.pdf-search-count {
+  min-width: 5em;
+}
+.pdf-icon {
+  flex: none;
+}
+
+/* PDV-FR-VKRL: one page at a time, on a sunken surface. The page itself keeps
+   the colours of the PDF (PDV-FR-QNVD). */
+.pdf-page-region {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+  padding: var(--sp-4);
+  background: var(--bg-sunken);
+}
+.pdf-page-region:focus-visible {
+  outline: none;
+  box-shadow: inset var(--shadow-focus);
+}
+.pdf-page-message {
+  margin: 0 0 var(--sp-3);
+  text-align: center;
+  color: var(--fg-3);
+}
+.pdf-page-sheet {
+  position: relative;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: var(--shadow-3);
+  --scale-factor: 1;
+  --total-scale-factor: var(--scale-factor);
+}
+.pdf-page-sheet[data-state="loading"] {
+  visibility: hidden;
+}
+.pdf-page-canvas {
+  display: block;
+}
+
+/* PDV-FR-KDVB: the text layer sits above the canvas and holds the page text at
+   its own position and size. The text is transparent, so the canvas shows, and
+   it is selectable, so the pointer and the keyboard can select and copy it.
+   These rules are the part of the PDF.js text layer style that the layer needs. */
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  color-scheme: only light;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+.pdf-text-layer span,
+.pdf-text-layer br {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+  user-select: text;
+}
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) {
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+.pdf-text-layer .markedContent {
+  display: contents;
+}
+.pdf-text-layer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  user-select: none;
+  cursor: default;
+}
+.pdf-text-layer.selecting .endOfContent {
+  top: 0;
+}
+.pdf-text-layer ::selection {
+  background: color-mix(in srgb, Highlight, transparent 55%);
+  color: transparent;
+}
+
+/* PDV-FR-BPXG: a match is a mark inside the text. It never changes the text.
+   The current match carries a frame as well as a fill, so colour is not the
+   only sign. */
+.pdf-match {
+  color: transparent;
+  background: rgb(255 214 0 / 0.45);
+  border-radius: 2px;
+}
+.pdf-match[data-current="true"] {
+  background: rgb(255 140 0 / 0.6);
+  outline: 2px solid #b35a00;
+  outline-offset: 1px;
+}
+
+/* PDV-FR-YLWC, PDV-FR-SLWS: the loading, failed, password, and unavailable
+   states, in text. */
+.pdf-viewer__state {
+  padding: var(--sp-8) var(--sp-6);
+  font-size: var(--fs-ui-md);
+  color: var(--fg-2);
+}
+.pdf-viewer__state-title {
+  margin: 0 0 var(--sp-2);
+  font-weight: var(--fw-semi);
+  color: var(--fg-1);
+}
+.pdf-viewer__state-detail {
+  margin: 0;
+  color: var(--fg-3);
+}

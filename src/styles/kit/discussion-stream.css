@@ -1,0 +1,645 @@
+/* The draft discussion column's message stream
+   (`../../../specifications/ui/DDS-draft-discussion.md` DDS-FR-ZMXQ through
+   DDS-FR-RJEV, and `../../../specifications/ui/DQA-discussion-question-answering.md`
+   DQA-FR-KYWR, DQA-FR-ZPGM).
+
+   Every value here is a token (DDS non-functional). The stream names no literal
+   colour, size, radius, or duration, so the two themes differ by token value
+   alone and the geometry is identical in both (DDS-FR-RJEV).
+
+   Scope: these rules reach the draft's discussion column and nothing else. The
+   rail's card, the action control's panel, the detached overlay and the
+   conversation tab keep the treatment `./conversation-presentation.css` gives
+   them — a draft conversation is the one this spec covers, and it holds no
+   presentation instance at all (CVP-FR-DKPW). */
+
+/* ---------- the content column (DDS-FR-ZMXQ) ---------- */
+
+/* One rule and no second layout. `min()` is the whole of it: 820 pixels while
+   the panel can hold that plus its gutters, the panel less those gutters below
+   it, and centred either way — so a wide panel keeps equal air on both sides
+   rather than a gutter on one. */
+.dds-stream {
+  display: flex;
+  justify-content: center;
+  padding: var(--sp-4-5) 0 var(--sp-5);
+}
+/* The measure is the document page's own (`--doc-page-width`). A message and the
+   draft it is about are read side by side, so the two columns are set on one
+   measure rather than on two that happen to be close. */
+.dds-stream__column {
+  width: min(var(--doc-page-width), calc(100% - var(--sp-3-5) * 2));
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+/* The one place the panel's own width changes anything else it draws. Below
+   this the items sit closer and the author line is allowed to wrap
+   (DDS-FR-LWPC). A container query rather than a media query: the column is
+   sized by the splitter, so the window's width says nothing about it. */
+@container (max-width: 620px) {
+  .dds-stream__column { gap: var(--sp-3-5); }
+  .dds-message__head { flex-wrap: wrap; }
+}
+
+/* The time, wherever the stream draws one (DDS-FR-LWPC). Monospace meta, never
+   emphasised, and never floated into a corner — its place in the row is what
+   puts it after the name. */
+.dds-stream__time {
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-regular);
+  color: var(--fg-4);
+  white-space: nowrap;
+}
+.dds-stream__spacer { flex: 1; min-width: 0; }
+
+/* ---------- date divider (DDS-FR-NDSA) ---------- */
+
+.dds-day {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2-5);
+}
+.dds-day__rule {
+  flex: 1;
+  height: 1px;
+  background: var(--border-1);
+}
+.dds-day__label {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+
+/* ---------- plain talk, and the author's own message ---------- */
+
+/* DDS-FR-BRHN: no border and no fill. Plain talk stands flush on the column's
+   own ground, so the cards below carry the weight of the state they hold. */
+.dds-message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1-5);
+  min-width: 0;
+}
+/* DDS-FR-VTKD: a rail and an indent, and nothing else. No fill, no border, and
+   no side of its own — the accent means "what the author said or chose"
+   (DDS-FR-CVLM), and a second accent surface would give it a second meaning. */
+.dds-message[data-own] {
+  padding-left: var(--sp-3);
+  box-shadow: inset var(--sp-0-5) 0 0 var(--accent);
+}
+
+.dds-message__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.dds-message__author {
+  font-size: var(--fs-ui-md);
+  font-weight: var(--fw-semi);
+  color: var(--fg-1);
+}
+.dds-message__role {
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-3);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* DDS-FR-FKZL: the actions at the trailing end of the author line. The pointer
+   reveals them; the keyboard reaches them at all times, which is why they are
+   hidden by opacity rather than left out of the document. */
+.dds-message__actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-0-5);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.dds-message:hover .dds-message__actions,
+.dds-message:focus-within .dds-message__actions,
+/* The question card carries the same actions on its own head row, so it reveals
+   them on the same terms. Without this pair the control is drawn at zero
+   opacity for the life of the card: still clickable and still in the tab order,
+   and invisible to anyone looking for it. */
+.dds-question:hover .dds-message__actions,
+.dds-question:focus-within .dds-message__actions {
+  opacity: 1;
+}
+.dds-message__action { color: var(--fg-3); }
+.dds-message__action:hover { color: var(--fg-1); }
+@media (prefers-reduced-motion: reduce) {
+  .dds-message__actions { transition: none; }
+}
+
+.dds-message__part {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1-5);
+  min-width: 0;
+}
+/* DDS-FR-GBWP: body copy is the secondary tone. Only the author's own message
+   reaches the primary one, so the eye has one thing to find. */
+.dds-message__body {
+  font-size: var(--fs-ui-md);
+  line-height: var(--lh-message);
+  color: var(--fg-2);
+  text-wrap: pretty;
+}
+.dds-message[data-own] .dds-message__body { color: var(--fg-1); }
+.dds-message__body p { margin: 0 0 var(--sp-1-5); }
+.dds-message__body p:last-child { margin-bottom: 0; }
+
+/* CMT-FR-13: a message this one quotes, as an attributed block above the body
+   that quotes it. */
+.dds-message__quote {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0-5);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2) var(--sp-3);
+}
+.dds-message__quote-label { color: var(--fg-3); }
+.dds-message__quote-text {
+  font-size: var(--fs-ui-md);
+  line-height: var(--lh-normal);
+  color: var(--fg-3);
+  text-wrap: pretty;
+}
+
+/* ---------- the transient row (DDS-FR-TGWY, DDS-FR-YSNB) ---------- */
+
+.dds-transient {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.dds-transient__dot {
+  width: var(--sp-1-5);
+  height: var(--sp-1-5);
+  flex: none;
+  border-radius: var(--r-full);
+  background: var(--live);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dds-transient__dot { animation: none; }
+}
+.dds-transient__word {
+  font-size: var(--fs-ui-md);
+  color: var(--fg-3);
+}
+
+/* ---------- the type chip (DDS-FR-MCUP) ---------- */
+
+/* The Library's artifact chip, in the tone of the kind it names. Both tones are
+   the application's own, so the chip follows the theme with everything around
+   it (DDS-FR-RJEV). */
+.dds-stream-chip {
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-2xs);
+  font-weight: var(--fw-semi);
+  line-height: var(--lh-snug);
+  padding: var(--sp-0-5) var(--sp-1-5);
+  border-radius: var(--r-xs);
+  white-space: nowrap;
+  flex: none;
+}
+.dds-stream-chip[data-kind="question"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.dds-stream-chip[data-kind="change"] {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+/* ---------- the question card (DQA-FR-KYWR, DQA-FR-ZPGM) ---------- */
+
+/* DDS-FR-BRHN: a card, because the exchange carries state. DQA-FR-VNKQ: on the
+   canvas tone every card in this column takes. */
+.dds-question {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+/* DDS-FR-PWDG: the border deepens one stop and nothing is re-tinted. The card is
+   read-only (DQA-FR-BHXT), so the surface itself does not darken — there is
+   nothing here to press. */
+.dds-question:hover { border-color: var(--border-2); }
+
+.dds-question__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4) 0;
+}
+.dds-question__author {
+  font-size: var(--fs-ui-md);
+  font-weight: var(--fw-semi);
+  color: var(--fg-1);
+}
+.dds-question__head .dds-stream__time { margin-left: auto; }
+
+/* DQA-FR-XQOR: the recorded text. It is the thing that was asked, so it takes
+   the primary tone while the options below it recede. */
+.dds-question__ask {
+  padding: var(--sp-2-5) var(--sp-4) 0;
+}
+.dds-question__ask-body {
+  font-size: var(--fs-ui-md);
+  line-height: var(--lh-message);
+  color: var(--fg-1);
+  text-wrap: pretty;
+}
+
+.dds-question__options {
+  list-style: none;
+  margin: 0;
+  padding: var(--sp-2-5) var(--sp-2) var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0-5);
+}
+.dds-question__option {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2-5);
+  padding: var(--sp-1-5) var(--sp-2);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-ui-md);
+  line-height: var(--lh-snug);
+  /* DDS-FR-GBWP: an option is 13px content, so it never takes the quietest
+     tone — `--fg-4` is meta and placeholders alone. */
+  color: var(--fg-3);
+}
+.dds-question__number {
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  flex: none;
+}
+.dds-question__value { min-width: 0; text-wrap: pretty; }
+
+/* DQA-FR-KYWR: the option the author chose, marked among the others rather than
+   restated below them. DDS-FR-CVLM: this is one of the three places the accent
+   stands, and it means what the author chose. */
+.dds-question__option[data-chosen] {
+  background: var(--accent-soft);
+  box-shadow: inset var(--sp-0-5) 0 0 var(--accent);
+  color: var(--fg-1);
+  font-weight: var(--fw-medium);
+}
+.dds-question__option[data-chosen] .dds-question__number { color: var(--accent); }
+
+/* DQA-FR-ZPGM: the note beside a chosen option, or the author's own words. Both
+   stand in the same footer and in the same shape; only the label differs. */
+.dds-question__footer {
+  display: flex;
+  gap: var(--sp-2-5);
+  padding: var(--sp-2-5) var(--sp-4);
+  background: var(--bg-sunken);
+  border-top: 1px solid var(--border-1);
+}
+.dds-question__footer-label {
+  white-space: nowrap;
+  padding-top: 1px;
+}
+.dds-question__footer-text {
+  font-size: var(--fs-ui-md);
+  line-height: var(--lh-normal);
+  color: var(--fg-2);
+  text-wrap: pretty;
+}
+
+/* ---------- the change row (DDS-FR-XHRB) ---------- */
+
+/* One line, and the row is the whole control. DDS-FR-BRHN: a card, because the
+   change it names carries state. */
+.dds-change {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2-5);
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+/* DDS-FR-PWDG: the surface darkens, the border deepens one stop, and nothing is
+   re-tinted with the accent. */
+.dds-change:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-2);
+}
+.dds-change:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+/* CTA-FR-UKIG: a row whose reading has not answered opens nothing, so it does
+   not offer to. It stays fully readable. */
+.dds-change:disabled { cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+  .dds-change { transition: none; }
+}
+
+.dds-change__path {
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-1);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dds-change__count {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+/* DDS-FR-YSNB: one lowercase word beside a six-pixel dot, in that state's own
+   tone. The word carries the state, and the dot agrees with it — so the row is
+   legible without colour discrimination. */
+.dds-change__dot {
+  width: var(--sp-1-5);
+  height: var(--sp-1-5);
+  flex: none;
+  border-radius: var(--r-full);
+}
+.dds-change__state {
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  white-space: nowrap;
+}
+.dds-change__dot[data-tone="ok"]      { background: var(--ok); }
+.dds-change__dot[data-tone="danger"]  { background: var(--danger); }
+.dds-change__dot[data-tone="warn"]    { background: var(--warn); }
+.dds-change__dot[data-tone="quiet"]   { background: var(--fg-4); }
+.dds-change__state[data-tone="ok"]     { color: var(--ok); }
+.dds-change__state[data-tone="danger"] { color: var(--danger); }
+.dds-change__state[data-tone="warn"]   { color: var(--warn); }
+.dds-change__state[data-tone="quiet"]  { color: var(--fg-3); }
+
+/* ---------- the card the column renders the conversation in ---------- */
+
+/* The stream's card drops the rail card's frame, exactly as the embedded one
+   does, and divides itself the same way: a scrolling transcript, with the
+   answering block and the reply field docked below it (DDS-FR-QZAV).
+
+   It sits in this file rather than beside the column's own rules because
+   `.comment-card` and `.comment-card--stream` carry equal specificity and
+   `kit.css` is imported last — so this is where the tie is won. Declared here,
+   the card keeps the rail card's 12-pixel padding and overflows the panel by
+   it, which no unit test can see. */
+.comment-card--stream {
+  border: 0;
+  background: none;
+  box-shadow: none;
+  margin-bottom: 0;
+  padding: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.comment-card--stream:hover { border-color: transparent; }
+/* The transcript sits at the **foot** of its scroller, so a short discussion
+   reads from the bottom where the newest message is. `margin-top: auto` on the
+   stream rather than `justify-content: flex-end` here: an overflow container
+   that justifies to the end clips its own first items once the content is
+   taller than the box, which is exactly the case a long discussion is. */
+.comment-card--stream > .comment-card__messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.comment-card--stream > .comment-card__messages > .dds-stream {
+  margin-top: auto;
+}
+
+/* ---------- the reply field (DDS-FR-HQTX) ---------- */
+
+/* One bounded field carrying the placeholder, the attach and post controls, and
+   the hint for the accelerator. It stays **docked** below the scroller
+   (DDS-FR-QZAV): an author reading back through a long discussion must still
+   reach the field they reply in. */
+/* DDS-FR-ZMXQ: the field takes the content column's own measure and centres on
+   it, so it lines up with the messages above it rather than running the panel's
+   full width beneath them. */
+.dds-discussion .comment-card--stream > .comment-card__reply {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: min(var(--doc-page-width), calc(100% - var(--sp-3-5) * 2));
+  margin: 0 auto var(--sp-3-5);
+}
+/* CTA-FR-UUXA: a refused turn renders at the foot, under the reply field. It
+   takes the field's measure (DDS-FR-ZMXQ), so it lines up with the field
+   rather than with the panel's edge, and it keeps the field's gap to the foot. */
+.dds-discussion .comment-card--stream > .comment-card__error {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: min(var(--doc-page-width), calc(100% - var(--sp-3-5) * 2));
+  margin: calc(var(--sp-2) - var(--sp-3-5)) auto var(--sp-3-5);
+}
+.dds-discussion .comment-card--stream .comment-composer {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2-5) var(--sp-3);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+/* DDS-FR-PWDG: focus swaps the border to the accent and draws the ring. The
+   accent is on the field the author is writing in, which is the one place
+   DDS-FR-CVLM's meaning already covers. */
+.dds-discussion .comment-card--stream .comment-composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus);
+}
+.dds-discussion .comment-card--stream .comment-composer__row {
+  gap: var(--sp-2-5);
+}
+.dds-discussion .comment-card--stream .comment-card__composer {
+  font-size: var(--fs-ui-md);
+}
+.dds-discussion .comment-card--stream .comment-card__composer::placeholder {
+  color: var(--fg-4);
+}
+/* Quieter than the kit's own key cap, which is drawn to be pressed. This one is
+   a reminder beside a field, so it recedes to the tone every other piece of meta
+   in the column takes. */
+.dds-reply__kbd {
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-regular);
+  color: var(--fg-4);
+  background: none;
+  border: 1px solid var(--border-1);
+  border-bottom-width: 1px;
+  flex: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dds-discussion .comment-card--stream .comment-composer { transition: none; }
+}
+
+/* ---------- the answering block, in this column (DQA-FR-VNKQ) ---------- */
+
+/* The block stands where DDS-FR-QZAV puts it — between the scroller and the
+   composer, outside both — and takes the stream's own forms while it is there.
+   Every rule below is scoped to this column: the rail's card, the action
+   control's panel, the overlay and the conversation tab keep the treatment
+   `./discussion-questions.css` gives them. */
+.dds-discussion .discussion-questions {
+  width: min(var(--doc-page-width), calc(100% - var(--sp-3-5) * 2));
+  margin: 0 auto var(--sp-3-5);
+  gap: var(--sp-2-5);
+  /* The hairline that divides the block from the last message above it. It is
+     the block's own edge rather than a gap, so the block reads as the end of
+     the conversation rather than as a panel under it. */
+  border-top: 1px solid var(--border-1);
+  padding-top: var(--sp-3-5);
+}
+.dds-discussion .discussion-questions__handle { color: var(--fg-1); }
+.dds-discussion .discussion-questions__title { color: var(--fg-3); }
+.dds-discussion .discussion-questions__progress {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+}
+
+/* DQA-FR-XQOR: the question stands above the group rather than inside it, at
+   the measure a message body is read on. */
+.dds-discussion .discussion-questions__ask {
+  font-size: var(--fs-ui-md);
+  line-height: var(--lh-message);
+  color: var(--fg-1);
+  margin: 0 0 var(--sp-2-5);
+  /* A legend is padded by the platform. Taken back off, so the question starts
+     on the same edge as every message above it rather than one step in. */
+  padding: 0;
+}
+
+.dds-discussion .discussion-questions__choice {
+  gap: var(--sp-2-5);
+  padding: var(--sp-2) var(--sp-2-5);
+  border-radius: var(--r-sm);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+/* DDS-FR-PWDG: hover darkens and never re-tints with the accent. */
+.dds-discussion .discussion-questions__choice:hover { background: var(--bg-hover); }
+/* DDS-FR-CVLM: the selected row is the third and last place the accent stands
+   in this column, and it means the same thing there — what the author chose. */
+.dds-discussion .discussion-questions__choice[data-selected="true"] {
+  background: var(--accent-soft);
+}
+.dds-discussion .discussion-questions__option {
+  font-size: var(--fs-ui-md);
+  line-height: var(--lh-snug);
+  color: var(--fg-2);
+}
+.dds-discussion
+  .discussion-questions__choice[data-selected="true"]
+  .discussion-questions__option {
+  color: var(--fg-1);
+}
+
+/* The radio, drawn rather than taken from the platform, so the chosen row reads
+   the same in both themes and at every scale. DQA-FR-EWLB: the mark carries the
+   state first and the row's fill is the second telling of it, so neither rests
+   on colour alone. */
+.dds-discussion .discussion-questions__choice > input[type="radio"],
+.dds-discussion .discussion-questions__own-head > input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: var(--sp-3);
+  height: var(--sp-3);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  background: var(--bg-canvas);
+  box-sizing: border-box;
+  transition: border var(--dur-fast) var(--ease-out);
+}
+.dds-discussion .discussion-questions__choice > input[type="radio"]:checked,
+.dds-discussion .discussion-questions__own-head > input[type="radio"]:checked {
+  border: var(--sp-1) solid var(--accent);
+}
+.dds-discussion .discussion-questions__choice > input[type="radio"]:focus-visible,
+.dds-discussion .discussion-questions__own-head > input[type="radio"]:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+.dds-discussion .discussion-questions__own-head {
+  gap: var(--sp-2-5);
+  padding: var(--sp-2) 0;
+}
+.dds-discussion .discussion-questions__choice--own { padding: 0 var(--sp-2-5); }
+
+/* DQA-FR-ROXG: the note, marked by its placeholder alone. */
+.dds-discussion .discussion-questions__note-field::placeholder,
+.dds-discussion .discussion-questions__typed::placeholder {
+  color: var(--fg-4);
+}
+
+/* DQA-FR-BXHU: the foot — Previous, the position indicator, Next, and Submit.
+   Next carries the weight because it is where the author is going; Previous is
+   the way back and recedes. */
+.dds-discussion .discussion-questions__foot { gap: var(--sp-3); }
+.dds-discussion .discussion-questions__dots { gap: var(--sp-1-5); }
+
+/* The question stands **above** the answer group rather than inside it: a
+   legend notches the border of the box it is in, and the prompt is not one of
+   the things being chosen between. So the fieldset carries no box at all here,
+   and the group below it is the card. */
+.dds-discussion .discussion-questions__question {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+.dds-discussion .discussion-questions__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0-5);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  padding: var(--sp-1-5);
+}
+
+/* DQA-FR-PXNC: the line that stands where the composer would while a set is
+   open. It takes the content column's measure like everything else the column
+   holds, so it begins on the same edge as the block above it. */
+.dds-discussion .discussion-questions__composer-note {
+  box-sizing: border-box;
+  width: min(var(--doc-page-width), calc(100% - var(--sp-3-5) * 2));
+  margin-inline: auto;
+}
+
+/* CTA-FR-MGVJ / CTA-FR-ARBB: what a turn left behind, at the foot of the
+   content column. It keeps the wording and the controls it has everywhere else;
+   what it drops here is the rule `.comment` draws between two messages, which
+   in this column would be a hairline ruled across the content column under
+   nothing. */
+.dds-stream__column > .comment,
+.dds-stream__column > .comment:first-child {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+}

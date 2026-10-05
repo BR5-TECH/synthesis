@@ -1,0 +1,311 @@
+name: CI
+
+# Verification runs on pull requests only. There is deliberately no `paths`
+# filter: `gate` is a required check, and a required check that never reports
+# leaves a pull request pending forever instead of blocking it.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# A new commit supersedes the run still in flight for the same pull request.
+# `github.ref` is `refs/pull/<n>/merge` here, so the group is per-pull-request
+# and never collides with another one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Verifies src/** — the unit tests of the frontend definition of done in
+  # CLAUDE.md. The runner has 2 vCPUs, so Vitest runs 1 worker, and the full
+  # suite takes about 15 min in one job. The matrix runs the 3 areas of the
+  # suite in parallel. Each area is a Vitest project (src/test/testAreas.ts),
+  # and its name is in the check name. `ui` runs the other two commands.
+  ui-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # Each area reports its failures, also when a different area fails.
+      fail-fast: false
+      matrix:
+        area: [editor and documents, components, app and state]
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm must exist before setup-node so that `cache: pnpm` can locate the
+      # store. Version tracks the developer environment.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Via env, not inline interpolation, like the gate below: no expression
+      # goes into a shell script.
+      - name: Unit tests (${{ matrix.area }})
+        env:
+          AREA: ${{ matrix.area }}
+        run: pnpm exec vitest run --project "$AREA"
+
+  # Verifies src/** — the build and the test typecheck of the frontend
+  # definition of done in CLAUDE.md. `ui-tests` runs the unit tests.
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm must exist before setup-node so that `cache: pnpm` can locate the
+      # store. Version tracks the developer environment.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+
+      # --frozen-lockfile: a pnpm-lock.yaml that disagrees with package.json
+      # fails here rather than silently resolving different versions than a
+      # developer has locally.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Production build and typecheck
+        run: pnpm build
+
+      # pnpm build excludes test files from typechecking; this is the only
+      # check that catches type errors inside them.
+      - name: Typecheck test files
+        run: pnpm exec tsc -p tsconfig.test.json --noEmit
+
+  # Verifies src-tauri/** — cargo check then cargo test.
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+
+      # The tauri crate links against webkit2gtk and friends on Linux. Without
+      # these, compilation fails before any test runs.
+      - name: Install Linux system dependencies
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            build-essential \
+            curl \
+            wget \
+            file
+
+      # Names no version: rustup reads src-tauri/rust-toolchain.toml, so that
+      # file stays the single source of truth for the toolchain. `install`
+      # rather than `show` because it installs unconditionally, while `show`
+      # only installs as a side effect of rustup's auto-install setting — with
+      # that disabled it would succeed having installed nothing and the lane
+      # would fail two steps later, pointing at the wrong step.
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install
+
+      # key: the action probes `rustc -vV` for its key, and a `uses:` step
+      # ignores defaults.run.working-directory — it runs at the workspace root,
+      # which the pin one directory down does not govern, so that probe reports
+      # the runner's default toolchain rather than the pinned one. Hashing the
+      # pin puts it back in the key, so bumping the channel cannot restore a
+      # cache built by the old compiler.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ hashFiles('src-tauri/rust-toolchain.toml') }}
+
+      # No global Git identity is configured here, deliberately. The suite's
+      # fixtures set repository-local user.name/user.email, so a bare runner is
+      # what proves no test leans on a developer's ambient Git config.
+      - name: Cargo check
+        run: cargo check
+
+      - name: Cargo test
+        run: cargo test
+
+  # Verifies tools/agentic-cli-mock/** — cargo check then cargo test.
+  mock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: tools/agentic-cli-mock
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deliberately no apt step: the crate links against nothing outside the
+      # Rust toolchain, so the packages the `backend` lane installs are not
+      # needed here. A lane that started needing them would mean the crate had
+      # picked up a dependency it is specified not to have.
+
+      # src-tauri/rust-toolchain.toml is the repository's single Rust pin, and
+      # it governs this lane too even though the crate sits outside that
+      # directory. rustup searches only the working directory and its parents,
+      # which never reach src-tauri from here, so the pin is copied in and then
+      # resolved exactly as the backend lane resolves it. Copying rather than
+      # parsing keeps every version, component and profile out of this
+      # workflow, so changing the pin changes every Rust lane with no workflow
+      # edit. The copy is runner-local and the crate's .gitignore keeps it from
+      # being committed as a second pin that could drift from the first.
+      - name: Apply the repository's Rust pin to this crate
+        working-directory: .
+        run: cp src-tauri/rust-toolchain.toml tools/agentic-cli-mock/rust-toolchain.toml
+
+      # Names no version: rustup reads the pin copied in by the step above.
+      # `install` rather than `show` because it installs unconditionally, while
+      # `show` only installs as a side effect of rustup's auto-install setting —
+      # with that disabled it would succeed having installed nothing and the
+      # lane would fail two steps later, pointing at the wrong step.
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install
+
+      # Its own cache: this crate has its own Cargo.lock, so its key must not
+      # be shared with the application's.
+      #
+      # key: the action probes `rustc -vV` for its key, and a `uses:` step
+      # ignores defaults.run.working-directory — it runs at the workspace root,
+      # where the pin does not reach, so that probe reports the runner's default
+      # toolchain rather than the pinned one. Hashing the pin puts it back in the
+      # key, so bumping the channel cannot restore a cache built by the old
+      # compiler.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools/agentic-cli-mock
+          key: ${{ hashFiles('src-tauri/rust-toolchain.toml') }}
+
+      # --locked: the committed Cargo.lock is the sole source of dependency
+      # versions, so a lock that disagrees with Cargo.toml fails the lane rather
+      # than being silently regenerated on the runner.
+      - name: Cargo check
+        run: cargo check --locked
+
+      - name: Cargo test
+        run: cargo test --locked
+
+
+  # Verifies server/** — cargo build then cargo test, both with --locked.
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deliberately no apt step: the crate links against nothing outside the
+      # Rust toolchain, so the packages the `backend` lane installs are not
+      # needed here. A lane that started needing them would mean the crate had
+      # picked up a dependency it is specified not to have.
+
+      # src-tauri/rust-toolchain.toml is the repository's single Rust pin, and
+      # it governs this lane too even though the crate sits outside that
+      # directory. rustup searches only the working directory and its parents,
+      # which never reach src-tauri from here, so the pin is copied in and then
+      # resolved exactly as the backend lane resolves it. Copying rather than
+      # parsing keeps every version, component and profile out of this
+      # workflow, so changing the pin changes every Rust lane with no workflow
+      # edit. The copy is runner-local and the crate's .gitignore keeps it from
+      # being committed as a second pin that could drift from the first.
+      - name: Apply the repository's Rust pin to this crate
+        working-directory: .
+        run: cp src-tauri/rust-toolchain.toml server/rust-toolchain.toml
+
+      # Names no version: rustup reads the pin copied in by the step above.
+      # `install` rather than `show` because it installs unconditionally, while
+      # `show` only installs as a side effect of rustup's auto-install setting —
+      # with that disabled it would succeed having installed nothing and the
+      # lane would fail two steps later, pointing at the wrong step.
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install
+
+      # Its own cache: this crate has its own Cargo.lock, so its key must not
+      # be shared with the application's or the mock's.
+      #
+      # key: the action probes `rustc -vV` for its key, and a `uses:` step
+      # ignores defaults.run.working-directory — it runs at the workspace root,
+      # where the pin does not reach, so that probe reports the runner's default
+      # toolchain rather than the pinned one. Hashing the pin puts it back in the
+      # key, so bumping the channel cannot restore a cache built by the old
+      # compiler.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+          key: ${{ hashFiles('src-tauri/rust-toolchain.toml') }}
+
+      # --locked: the committed Cargo.lock is the sole source of dependency
+      # versions, so a lock that disagrees with Cargo.toml fails the lane rather
+      # than being silently regenerated on the runner. `build` rather than
+      # `check`, because the process-level tests start the binary this step
+      # produces.
+      - name: Cargo build
+        run: cargo build --locked
+
+      - name: Cargo test
+        run: cargo test --locked
+
+  # A lane of its own rather than a step of `ui`: the check needs neither Node
+  # nor a Rust toolchain, so as a step of `ui` it would wait on a pnpm install
+  # it does not use and would not run at all when that install failed
+  # (CIP-FR-HZKA).
+  specs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deliberately no toolchain, no package install, and no cache: the check
+      # is one standard-library Python script and builds nothing (CIP-FR-JTMR).
+      - name: Test the specification consistency check
+        run: python3 -m unittest discover -s tools/spec-check
+
+      - name: Check specification consistency
+        run: python3 tools/spec-check/spec_check.py
+
+  # The single required check. Adding a lane means defining its job and adding
+  # its id to `needs` — the condition below is generic over every dependency,
+  # so it needs no edit and branch protection needs no change.
+  gate:
+    needs: [ui, ui-tests, backend, mock, server, specs]
+    # Without always(), a failing lane would skip this job, and a skipped
+    # required check blocks a pull request as pending rather than failing it.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Via env, not inline interpolation: the needs context also carries each
+      # job's outputs, so splicing it into a shell script would become an
+      # injection vector the moment a lane declares one.
+      - name: Report lane results
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: echo "$NEEDS"
+
+      # success is the only passing result; failure, cancelled and skipped all
+      # fail the gate.
+      - name: Fail if any lane did not succeed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: |
+          echo "::error::One or more required lanes did not succeed."
+          exit 1

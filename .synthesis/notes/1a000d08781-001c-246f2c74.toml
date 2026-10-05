@@ -1,0 +1,5 @@
+id = "1a000d08781-001c-246f2c74"
+scope = "project"
+body = "Comment that mentions one specifc agent should NOT be sent to another agent. it should be treated as change of actor in the conversation. other agents should not be participating in the chat unless called out again"
+created_at = "2026-08-14T15:07:41Z"
+updated_at = "2026-08-14T15:10:20Z"

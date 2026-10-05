@@ -1,0 +1,961 @@
+/* The act this finding asks for, set under the finding it belongs to rather
+   than beside it: it is what the next turn was told about **this** problem, and
+   an indent is what says so without a heading over every one of them. */
+.graduation__finding-fix { padding-left: var(--sp-2); }
+/* GRU-FR-43 / GRU-FR-34: the one control an account can hold — the correction
+   the findings above it are composed from. It carries the caret the iteration
+   rows already carry, so the author reads it as another thing that opens rather
+   than as a new kind of control (GRU-FR-36), and its text stands on the
+   account's own left edge like every heading there.
+
+   It is deliberately **not** set in the headings' face and size. A closed
+   disclosure says the same kind of thing a heading says, and one that reads as a
+   heading pairs itself with whatever text follows it — which, on a row carrying
+   two accounts, is the account beneath rather than anything this control opens.
+   The block boundary is what settles that (`.graduation__account-block`); this
+   is the second, quieter half of it, and changing the face to match the headings
+   would put the whole weight back on the border alone. */
+.graduation__revision-toggle {
+  display: block;
+  position: relative;
+  margin-top: var(--sp-1);
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: var(--fs-ui-2xs);
+  color: var(--fg-3);
+  text-align: left;
+  cursor: pointer;
+}
+.graduation__revision-toggle:hover { color: var(--fg-2); }
+.graduation__revision-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* GRU-FR-43: this heading is one of the account's headings, so its **text**
+   stands on the same left edge as the other two. The caret is the mark that
+   says the heading opens rather than part of what it says, so it goes in the
+   gutter the account's own leading padding already holds — set flush left in
+   it, which is exactly `--sp-3` wide. Laid out in the flow it pushed this one
+   heading in by its own width and read as a step in a flush column. */
+.graduation__revision-caret {
+  position: absolute;
+  left: calc(-1 * var(--sp-3));
+  width: var(--sp-3);
+}
+
+/* GRU-FR-06: the in-place warning is a bordered block that never collapses and
+   is legible at the panel's smallest supported height. */
+.graduation__warning {
+  border: 1px solid var(--warn, #d9a441);
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+  font-size: var(--fs-ui-xs);
+  line-height: 1.5;
+}
+.graduation__outcome ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: var(--fs-ui-xs);
+}
+/* GRU-FR-41: the escalation is the one thing on this surface the run is
+   actually stopped on, so it is set as the reading matter of the region rather
+   than as more of the run's own report.
+
+   Held to a **measure** and centred rather than filled to the region's width:
+   the run region is as wide as the window, and a question set across all of it
+   is a line the eye loses its place in and a choice list stranded beside an
+   arm's length of nothing. The cap is a multiple of the UI role's own size, so
+   it moves with the reader's chosen font rather than standing still at a pixel
+   count (OVW-FR-13). Centred, it sits under the middle of the stage row above
+   it, which is the alignment the region already has. */
+.graduation__escalation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--font-ui-size) * 56);
+  margin: var(--sp-2) auto 0;
+}
+/* GRU-FR-13 / ESU-FR-12: the reason, verbatim — and legible. Every text in
+   this area is set at least one step above the chrome's own caption size,
+   because a question the run is waiting on is not a caption. */
+.graduation__reason {
+  margin: 0;
+  font-size: var(--fs-ui-title);
+  line-height: var(--lh-normal);
+  color: var(--fg-2);
+}
+/* GRU-FR-41: the question area carries a background of its own, distinct from
+   the panel's and white in neither theme, so the thing being asked reads as a
+   region rather than as more of the run's own report. The tokens are the
+   panel's own, so it follows the application theme in each of its three
+   settings (GLS-FR-04). */
+.graduation__question {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.graduation__question-head,
+.graduation__question-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.graduation__question-foot { flex-wrap: wrap; }
+/* GRU-FR-37 / GRU-FR-39: which question of how many, which of the set are
+   answered, and how many still need one. Structural counts rather than reading
+   matter, so they are the quietest thing in the area — but a step above where
+   they were, the whole area having been too small to read. */
+.graduation__question-count {
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-snug);
+  color: var(--fg-3);
+}
+/* GEA-FR-GWTH: the same count stands on two grounds — inside a question, on the
+   sunken ground, and in the area's own foot, on the ground beneath it. `--fg-3`
+   clears AA on the first and does not on the second in the dark theme, so the
+   foot takes the step up. It says how many questions still need an answer,
+   which is the one line that explains a control the author cannot press. */
+.graduation__question-foot .graduation__question-count {
+  color: var(--fg-2);
+}
+/* The question itself, in the voice of the thing being asked. */
+.graduation__ask {
+  padding: 0;
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-ui-title);
+  line-height: var(--lh-normal);
+  font-weight: var(--fw-semi);
+  color: var(--fg-1);
+}
+.graduation__answer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  /* A fieldset for the grouping semantics and for nothing it draws. */
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+/* GRU-FR-38: one group, one selection.
+
+   The proposed responses and the author's own words are rows of the same
+   ladder — same card, same radio, same hit area — because they are alternatives
+   to each other rather than a list and a field beside it. Reading them as one
+   ladder is what makes "whatever is selected is the answer" legible without a
+   sentence explaining it. Raised off the sunken ground so a row is something to
+   press rather than a line of text with a dot next to it. */
+.graduation__choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: var(--sp-2);
+  box-sizing: border-box;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-panel);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out);
+}
+.graduation__choice > input[type="radio"] {
+  margin: 0;
+  /* On the first line of the summary beside it rather than on the row's own
+     centre, which a two-line description would drag halfway down the card. */
+  margin-top: calc(var(--fs-ui-title) * 0.25);
+  cursor: pointer;
+}
+.graduation__choice:hover { border-color: var(--border-3); background: var(--bg-hover); }
+/* The selection is carried by the radio's own state first — the border and the
+   fill are the second and third telling of it, never the only one. */
+.graduation__choice[data-selected="true"] {
+  border-color: var(--accent);
+  background: var(--bg-active);
+}
+.graduation__choice:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus);
+}
+/* GRU-FR-13: a proposed response reads as its short summary with its
+   description as supporting text beneath — and as nothing else. */
+.graduation__option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.graduation__option-summary {
+  font-size: var(--fs-ui-title);
+  line-height: var(--lh-snug);
+  color: var(--fg-1);
+}
+.graduation__option-description {
+  font-size: var(--fs-ui-md);
+  line-height: var(--lh-normal);
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+/* The free-text row's field is the draft-change review's own quiet note field
+   (`.draft-review__feedback`): one rule to write on rather than a box, sized
+   from its content. It is the same gesture in both places — a sentence in the
+   author's own words attached to a decision — so it is the same field. What it
+   gives up here is that field's centred measure: inside a row of the ladder it
+   takes the row's width, the row being the measure already. */
+/* The selector is doubled deliberately, on the same reasoning the graduation
+   review's rules below carry: `kit.css` is imported *after* this file and sets
+   the shared field's centred 420px measure and its caption size, both of which
+   a single class here loses the cascade to. */
+.graduation__choice .graduation__typed {
+  max-width: none;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+  font-size: var(--fs-ui-title);
+}
+/* The own-words row reads down rather than across: the choice on one line, the
+   field beneath it. Its label wraps the radio and its words and stops there —
+   the field is a sibling, so nothing the author types becomes part of the name
+   the row announces itself by. */
+.graduation__choice--own {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.graduation__own-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+}
+.graduation__own-head > input[type="radio"] { margin: 0; cursor: pointer; }
+/* The writing starts under the words of the choice it belongs to rather than
+   under its mark. Taken as padding rather than as a margin, so the rule the
+   field is written on still runs the whole width of the row: a textarea does
+   not stretch to a flex line the way a block does, and a margin left it at its
+   own `cols` width. */
+.graduation__choice--own:not([data-alone="true"]) .graduation__typed {
+  padding-left: calc(var(--sp-2) + var(--sp-3));
+}
+/* GRU-FR-13: with no proposed responses there is nothing to choose between, so
+   the row is the field alone — no card, no radio, and no selected state, none
+   of which would be telling the author anything. */
+.graduation__choice[data-alone="true"] {
+  grid-template-columns: 1fr;
+  padding: 0;
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+  cursor: auto;
+}
+/* GRU-FR-19: the run's own destructive act, on the stage row's level.
+   The stage row takes the width; the control keeps its own and stands at the
+   trailing edge. `flex-start` is what puts it on the **stage row's** line: the
+   progress component carries the iteration history in its detail slot, so a
+   centred control would land somewhere in the middle of a list of passes. */
+.graduation__stage-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+.graduation__stage-row > .run-progress { flex: 1; min-width: 0; }
+/* GRU-FR-19: a mark alone, drawn **larger** than an ordinary control of this
+   section, at the trailing edge of the stage row.
+
+   The size is what the label used to do: the one act this section cannot undo
+   is the one that must be hardest to hit in passing, and 32 px against the
+   28 px of `.btn--icon` and the 24 px of `.btn--icon.btn--sm` is what makes it
+   read as the heavier thing on a row it shares with nothing else. Its mark is a
+   bin rather than the ✕ every tab and every overlay in this window closes with,
+   which is the one thing a destructive act must not be mistaken for, and its
+   name and tooltip carry the words the label used to.
+
+   Quiet until it is pointed at, and never carrying the danger colour as its
+   resting state — a control that is red before it is reached reads as a warning
+   about the run rather than as a thing the author may do to it. */
+.graduation__discard {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--fg-2);
+  cursor: pointer;
+}
+.graduation__discard { position: relative; }
+.graduation__discard:disabled { opacity: 0.5; cursor: default; }
+/* GRU-FR-19: the words the mark stands for, on hover and immediately on
+   keyboard focus. The same treatment `.selector-row__tip` gives the view
+   selector's positions, which is what makes the two read as one vocabulary
+   rather than as two tooltips that happen to sit near each other. Anchored to
+   the trailing edge because the control sits at the stage row's own trailing
+   edge and a bubble hung from its left would run off the region. */
+.graduation__discard-tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: var(--z-overlay);
+  display: none;
+  width: max-content; max-width: 220px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-4);
+  color: var(--fg-2);
+  font-family: var(--font-sans);
+  font-size: var(--fs-ui-xs); font-weight: 400; line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+}
+.graduation__discard:hover .graduation__discard-tip,
+.graduation__discard:focus-visible .graduation__discard-tip { display: block; }
+.graduation__discard:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--bg-hover);
+}
+/* GRU-FR-WCZG: Restart stands in the position and the treatment Discard run
+   holds, so it takes the same box, the same size, and the same tooltip — and
+   not the danger tone, because starting a new run destroys nothing. */
+.graduation__restart:hover:not(:disabled) {
+  color: var(--fg-1);
+  border-color: var(--border-2);
+  background: var(--bg-hover);
+}
+.graduation__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+/* GRT-FR-VWHM: the confirmation a restart is taken in, opened in place of the
+   control that asked for it. One column inside the action row, so the question,
+   the stream it is answered with, and the two acts read down rather than
+   spilling across a row sized for buttons. */
+.graduation-restart {
+  /* It stands in the action row in place of the control that opened it, and
+     takes the whole of that row rather than a button's share of it. */
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--sp-2);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+}
+.graduation-restart__ask { margin: 0; font-size: var(--fs-ui-sm); }
+.graduation-restart__stream {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.graduation-restart__actions { display: flex; align-items: center; gap: 6px; }
+/* GRU-FR-41: while the run is waiting on the author, everything they act on is
+   one column — the question, the choices, and the control that sends them. The
+   row keeps its full width in every other state, where it carries the run's own
+   controls rather than the escalation's. */
+.graduation__run[data-awaiting="true"] .graduation__actions {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--font-ui-size) * 56);
+  margin: 0 auto;
+}
+/* GRV-FR-15: the outcome is chosen on the split control at the foot's trailing
+   edge, so the dismissal holds the leading edge and the space between them is
+   the row itself. */
+/* Doubled deliberately, on the reasoning the rules below carry: `kit.css` is
+   imported *after* this file and sets `.modal__actions { justify-content:
+   flex-end }`, which a single class here loses the cascade to. */
+.modal__actions.graduation-publish__actions { justify-content: space-between; }
+/* GSD-graduation-start-dialog.md: the dialog a graduation starts from.
+
+   It takes the shell's own window chrome (`.scrim`, `.modal`) and adds only
+   what this one asks for: the sentence saying what a graduation does, the note
+   under a stream a run already holds, and the block a project with no stream
+   is stopped by. The standing-work choice takes the ladder the escalation's
+   answers take (`.graduation__answer`), because it is the same gesture. */
+/* A column, so the body scrolls inside the window rather than pushing the
+   action row — the Graduate control itself — off the bottom with nothing to
+   scroll it back. `.modal` hides its overflow, so the cap has to be here and
+   the scrolling has to be on the body. */
+.modal.graduation-start {
+  width: 520px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 96px);
+}
+.modal.graduation-start > * { flex: none; }
+.modal.graduation-start .modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.graduation-start__what { margin: 0; }
+/* Both blocks are read before an act rather than after it, so they take a
+   bordered box rather than a tint: the box is what says "this is a condition
+   of the act" at the width the dialog is read at. */
+.graduation-start__notice {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  color: var(--fg-2);
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-normal);
+}
+/* A refusal the backend returned, in the tone every refusal of this section
+   takes. */
+.graduation-start__notice--refused { border-color: var(--danger); }
+/* What the chosen stream means for when the run starts, under the control it
+   is about. */
+.graduation-start__note { margin: 0; }
+/* GSD-FR-BZHW: where the run works is one choice of three, so the three sit on
+   one row and wrap rather than scroll at the dialog's width. They take the
+   ladder's own card (`.graduation__choice`), because they are alternatives to
+   each other in the same way. */
+.graduation-start__destination {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.graduation-start__destination-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.graduation-start__destination .graduation__choice { align-items: center; }
+.graduation-start__destination .graduation__choice > input[type="radio"] { margin-top: 0; }
+/* GSD-FR-USOH: the uncommitted paths a dirty worktree is refused for, complete,
+   in a box of bounded height that scrolls inside itself. */
+.graduation-start__paths {
+  margin: var(--sp-2) 0 0;
+  padding: var(--sp-2) var(--sp-3);
+  max-height: 160px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  overflow-wrap: anywhere;
+}
+/* GSD-FR-MZTB: the placeholder of the commit message carries meaning — it is
+   the name an empty message commits under — so it is toned as supporting text
+   rather than as the quiet hint an ordinary field's placeholder is. */
+.standing-work__message::placeholder { color: var(--fg-3); }
+
+/* GRU-FR-25 / GRV-FR-23: a typed failure, beside the run it is about. */
+.graduation__error { color: var(--danger, #e5484d); }
+
+/* GRU-FR-48: what a blocked run is resting on. It takes the tones, spacing, and
+   borders this section already uses for a run's state; nothing here is a
+   colour, a typeface, or a treatment defined only for it (GRU-FR-36). A
+   Review's findings are not here — they stand in the account of the pass they
+   caused (GRU-FR-49). */
+.graduation__blocker ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: var(--fs-ui-xs);
+}
+/* GRU-FR-48: one turn's report of an unreachable toolchain — which pass and
+   which code above, the turn's own words beneath. The two stack rather than
+   running together, a code and a paragraph on one line reading as one sentence
+   that begins with a label. */
+.graduation__blocker-pass,
+.graduation__blocker-report {
+  display: block;
+}
+.graduation__blocker-pass {
+  color: var(--fg-3);
+  /* GRU-FR-50: the code is agent-authored and unbounded like the message beside
+     it, so it wraps rather than widening the panel. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+/* GRU-FR-48: one turn's report is set apart from the next, on the terms the
+   findings list already uses. A turn's own message carries blank lines under
+   `pre-wrap`, so without this the space **inside** one report is larger than the
+   space **between** two and the reader pairs the wrong message with the wrong
+   pass — the same failure the pass account is bounded to prevent. */
+.graduation__blocker ul[aria-label="What each turn reported"] > li + li {
+  margin-top: var(--sp-1);
+  padding-top: var(--sp-1);
+  border-top: 1px solid var(--border-1);
+}
+/* GRU-FR-50: untrusted agent text — line breaks kept by the box rather than by a
+   parser, and a long unbroken token wraps instead of widening the panel. */
+.graduation__blocker-report {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* GRU-FR-LBPR: the backend's own account of what blocked the run, beneath the
+   sentence the author acts on. It is an internal error string carrying an
+   absolute path, so it stacks rather than running on, and a path has no space
+   to break at — without `overflow-wrap` it widens the panel instead of wrapping,
+   on the same terms GRU-FR-50 sets for an agent's own message above. */
+.graduation__blocker-detail {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+/* GRU-FR-49: the severity in **words**, distinguished by weight rather than by
+   a colour alone — a state carried by tone alone is one a reader of the other
+   theme, or of no colour at all, is not told. */
+.graduation__severity {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: var(--fs-ui-xs);
+  letter-spacing: 0.04em;
+}
+/* GRV-FR-31 / GRV-FR-32: the start preflight. Wider than the ordinary dialog
+   because what it holds is a path list rather than a passage, and a path
+   truncated to the dialog's measure is the one thing this surface must not do.
+   Doubled deliberately, for the cascade reason the publish rule above carries. */
+.modal.graduation-preflight {
+  width: min(640px, calc(100vw - 64px));
+  /* The shell's minimum is 1280x800 and the tallest set here is well inside it,
+     but a window shorter than that clipped the head and the foot off-screen with
+     no way to scroll to them — and the foot is where Cancel is. */
+  max-height: calc(100vh - 48px);
+}
+.modal.graduation-preflight .modal__body { overflow-y: auto; }
+/* GRV-FR-38: the publication choice states what Review said, and where Review
+   let the work through carrying advisory remarks it renders them whole. Two
+   remarks of any real length outgrow the viewport, and an uncapped dialog
+   centres itself with its foot — where the publication actions are — off-screen
+   with nothing to scroll it back.
+
+   The cap alone does not answer it, and is worse than nothing on its own: a
+   block container's in-flow children keep their full height whatever its
+   `max-height` is, so the body has nothing to scroll and `.modal`'s hidden
+   overflow clips the action row away rather than merely pushing it down. The
+   bound has to reach the body, which is what the column below does — the same
+   arrangement `.modal--wide` above carries, and for the same reason. The
+   preflight needs none of it because its own list is bounded directly. */
+.modal.graduation-publish {
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+/* Every band but the body keeps its height; the body takes what is left.
+   `min-height: 0` is what lets it shrink below its content — a flex item's
+   floor is its content height without it, which is the whole of the overflow. */
+.modal.graduation-publish > * { flex: none; }
+.modal.graduation-publish .modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* GRV-FR-33: Cancel at the leading edge, the split control at the trailing one. */
+.modal__actions.graduation-preflight__actions { justify-content: space-between; }
+/* GRV-FR-32: a set too long for the surface scrolls within the body, the header
+   and the foot keeping their place. */
+.graduation-preflight__list { max-height: 320px; }
+.graduation-preflight__statuses {
+  display: flex;
+  gap: var(--sp-1);
+  flex: 0 0 auto;
+}
+/* The rename's other location, set quieter than the path it belongs to. */
+.graduation-preflight__from { color: var(--fg-2); }
+
+/* GRV-FR-09: the review's file rail and file region, side by side.
+   Nothing scrolls horizontally; the comparison wraps inside its own frame.
+
+   The selectors below are doubled deliberately. `kit.css` is imported *after*
+   this file and sets `.modal { width: 460px }` and
+   `.modal__body { flex-direction: column }`; a single class here loses the
+   cascade to both, which lays the rail above the file region and leaves the
+   rail's border dangling across the modal. Specificity is what settles it,
+   because the import order is the shell's and not this feature's to change. */
+/* GRV-FR-30: the review is bounded to the viewport, and its **body** is the
+   only region that scrolls — which is what makes the foot pinned rather than
+   merely last, so the decisions are reachable without scrolling to the end of a
+   long comparison.
+
+   Without the bound the modal grows with its content and pushes its own head
+   off the top of the window and its action row below the fold: at the minimum
+   window size the shell supports the Request-changes confirm ends up outside
+   the viewport with nothing to scroll it into view, because `.scrim` does not
+   scroll and `.modal` hides its overflow. A modal that cannot be confirmed is
+   the one failure the author cannot work around. */
+.modal.modal--wide {
+  width: 90vw;
+  max-width: 1040px;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+}
+/* Every band but the body keeps its height; the body takes what is left and
+   gives it to the rail and the file region, which scroll within themselves.
+   `min-height: 0` is what lets it shrink below its content — a flex item's
+   floor is its content height without it, which is the whole of the overflow. */
+.modal.modal--wide > * { flex: none; }
+/* Three classes deep on purpose. `.modal--wide .modal__body` further down this
+   file sets a 60vh cap and `overflow-y: auto` for the narrow modals that share
+   the class; at equal specificity that rule wins on source order, and the
+   override below would be dead — the body would keep a second cap, in
+   content-box units, bounding it to less than the modal already gave it. This
+   one is bounded by the modal's own height instead. */
+.modal--wide .modal__body.graduation-review {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+}
+.graduation-review { display: flex; gap: 12px; min-height: 0; }
+/* GRV-FR-09: the header line, inset to the modal's own edge. A direct child of
+   `.modal` rather than of `.modal__body`, so without this it starts a pixel in
+   from the modal's border while the title above and the rail below are both
+   inset — the same reason the hand-off region carries its own padding. */
+.graduation-review__header { padding: 0 18px; }
+.graduation-review__rail {
+  flex: none;
+  width: 220px;
+  min-width: 160px;
+  overflow: auto;
+  border-right: 1px solid var(--border-1);
+}
+.graduation-review__row {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  padding: 4px 6px;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font-size: var(--fs-ui-xs);
+  cursor: pointer;
+}
+/* GRV-FR-09: which path is being read. `--bg-elevated` is the modal's own
+   background, so a row painted with it is a row nothing distinguishes. */
+.graduation-review__row[aria-selected="true"] {
+  background: var(--bg-active);
+  font-weight: 600;
+}
+/* GRV-FR-10: a failed path carries its own tone as well as its own mark. */
+.graduation-review__row--failed { color: var(--danger, #e5484d); }
+/* GRV-FR-09: nothing to walk, said where the paths would have been. */
+.graduation-review__rail-empty { padding: 4px 6px; margin: 0; }
+/* GRV-FR-20: the hand-off prompt is the rail's last row and is the one row that
+   is not a file. A rule above it separates it from the paths and a tone of its
+   own marks it, so the rail still reads as "these are the files" at a glance —
+   and the selected treatment is the rail's own, because it is selected the same
+   way and read in the same region as any path. */
+.graduation-review__row--handoff {
+  margin-top: 6px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border-1);
+  color: var(--accent);
+}
+.graduation-review__row--handoff[aria-selected="true"] { color: var(--accent); }
+.graduation-review__file { flex: 1; min-width: 0; overflow: auto; }
+/* GRV-FR-20: the hand-off region fills the file region rather than taking a
+   fixed strip beneath the change set, so the prompt is written at the size the
+   surface's reading region has and the comparison keeps the whole of it in
+   every state the author is not typing in. */
+.graduation-review__handoff {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+  min-height: 0;
+}
+.graduation-review__handoff-note { margin: 0; }
+/* GRV-FR-30: the quiet field's treatment comes from `.draft-review__feedback`;
+   what this adds is the measure and the height. It takes the region's own width
+   rather than the centred measure a field under a pair of decisions takes,
+   because here it is the region's content rather than a note attached to a
+   decision. */
+/* Doubled deliberately: `kit.css` is imported *after* this file and sets the
+   shared field's centred 420px measure, its four-line height cap, and its
+   margin — all of which a single class here loses the cascade to, which is what
+   left this field narrow and centred in a modal several times its width. */
+.draft-review__feedback.graduation-review__handoff-field {
+  flex: 1;
+  max-width: none;
+  max-height: none;
+  min-height: 120px;
+  margin: 8px 0 0;
+  resize: none;
+  overflow-y: auto;
+}
+/* GRV-FR-30: the review is composed on `DCR-draft-change-review.md`'s own
+   terms, and departs from them only where a change set of several files needs
+   what one file does not.
+
+   The opposed decisions are held further apart than controls elsewhere in the
+   window, for the reason the draft-change review holds them apart: they are
+   opposites, both irreversible, and adjacent targets — the space between them
+   is what a slipped click lands in rather than the other decision. */
+.graduation-review__actions .btn--danger + .btn--primary {
+  margin-left: var(--sp-4);
+}
+/* GRV-FR-14 / GRV-FR-21 / GRV-FR-30: the foot holds one row — the decisions,
+   or the sentence that replaces them. It is a band of its own so that the row
+   inside it can be swapped without the modal's edge moving, and it keeps the
+   modal's own inset because it is a direct child of `.modal`. */
+/* GRV-FR-23: a refusal attaches directly above the foot's controls, inset to
+   the modal's own edge — a direct child of `.modal` rather than of
+   `.modal__body`, so without this it starts a pixel in from the modal's border
+   while everything above and below it is inset. */
+.graduation-review__refusal { margin: 0 0 var(--sp-1); padding: 0 18px; }
+.graduation-review__foot { flex: none; }
+/* The row the decisions leave: what is being asked for, the field it is written
+   in, and the pair that settles it — read down, and settled at the same
+   trailing edge the decisions were settled at, so the eye does not have to find
+   a new corner of the surface. */
+.graduation-review__composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: 10px 18px 12px;
+  border-top: 1px solid var(--border-1);
+  background: var(--bg-panel);
+}
+/* A name rather than a placeholder: a label that vanishes on the first
+   keystroke is not a label. Set in the meta treatment the surface's other
+   supporting lines take. */
+.graduation-review__composer-label {
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-snug);
+  color: var(--fg-2);
+}
+/* GRV-FR-30: the draft-change review's quiet field, at the width the foot has.
+   Centred on a 420px measure it read as stranded in a modal five times that
+   wide — the measure is what a field under a pair of decisions takes, and this
+   one is the whole row. */
+/* Doubled for the reason the hand-off field's rule is. */
+.draft-review__feedback.graduation-review__composer-field {
+  max-width: none;
+  margin: 0;
+}
+.graduation-review__confirm { margin: 0; }
+/* The composer's own actions sit where the decisions sat: the same padding is
+   already on the band, so the row itself adds none. */
+.graduation-review__composer .modal__actions {
+  padding: var(--sp-1) 0 0;
+  border-top: 0;
+  background: none;
+}
+
+/* GRV-FR-26 / layout notes: the toggle groups sit at the trailing edge of the
+   row naming the path's operation and classification, and keep that position and
+   their footprint whichever path is selected — so the controls never move as the
+   author walks the rail. */
+.graduation-review__reading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+}
+/* The toolbar is a full-width row on a Diff tab, where it is the whole band
+   under the tab header. Here it shares a row with the operation line, so it
+   takes only the width its cluster needs and gives up the centring that band
+   gave it.
+
+   Two tracks rather than the tab's three, and the cluster in the last one: the
+   tab centres the cluster between two flexible tracks, which here would let the
+   "rich rendering doesn't apply" note that appears for a binary path size a
+   track and move the toggles as the author walks the rail. With the cluster in
+   the trailing track it is pinned to the row's trailing edge, so the note grows
+   the toolbar leading-ward and the toggles do not move (GRV-FR-26 layout
+   notes). */
+.graduation-review__reading .diff-toolbar {
+  flex: none;
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  grid-template-columns: auto auto;
+}
+
+/* GRU-FR-TXLW: one path list — its heading, its box, and the note under it. */
+.graduation__changeset {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+}
+.graduation__changeset > .t-meta { margin: 4px 0 0; }
+/* GRU-FR-NUCJ: the heading of a path list names it and its count, and opens and
+   closes the whole list. It keeps the eyebrow's type and takes no chrome of a
+   button: what makes it a control is the caret and the focus ring. */
+.graduation__paths-head {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 2px 0;
+  background: none;
+  border: none;
+  border-radius: var(--r-xs);
+  color: var(--fg-3);
+  cursor: pointer;
+  text-align: left;
+}
+.graduation__paths-head:hover { color: var(--fg-1); }
+.graduation__paths-head:focus-visible,
+.graduation__path-folder:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.graduation__paths-caret { display: inline-flex; width: 12px; }
+
+/* GRU-FR-TXLW: the tree stands in a box of bounded height and scrolls inside
+   it, so a change set of hundreds of paths does not push the passes and the
+   rest of the region away. Long names ellipsize: nothing scrolls sideways. */
+.graduation__paths {
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin-top: 4px;
+  padding: 2px 0;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+}
+.graduation__path-level {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* The Library's tree row, set one step denser for a list read in bulk. */
+.graduation__path-folder,
+.graduation__path-file {
+  height: 22px;
+  font-size: var(--fs-ui-xs);
+}
+.graduation__path-folder {
+  box-sizing: border-box;
+  width: 100%;
+  background: none;
+  border: none;
+  font-family: inherit;
+  text-align: left;
+}
+/* GRU-FR-BRGO is not a control yet, so a path row takes no pointer and no
+   hover of a control. */
+.graduation__path-file { cursor: default; color: var(--fg-2); }
+.graduation__path-file:hover { background: none; }
+.graduation__path-count {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-2xs);
+  color: var(--fg-3);
+}
+
+/* GRU-FR-MCYF: a wide region sets the path lists and the pass history side by
+   side, so the width beside a long list is not left empty. A narrow one stacks
+   them. The query reads the region's content box, so its width is the
+   region's 880px less the 12px of padding on each side. */
+.graduation__columns,
+.graduation__columns-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+/* GRU-FR-ZPTE: the boundary between the two columns. It stands only where
+   they stand side by side. A hit area wider than the rule it draws, because a
+   one-pixel target is one nobody can hit, and the area is the room between the
+   columns too. */
+/* GRU-FR-KWRB: the paths column's share where the author has set none. The
+   section writes the stored share over it, on the element itself. */
+.graduation__columns { --graduation-paths: 30%; }
+.graduation__columns-divider { display: none; }
+@container (min-width: 856px) {
+  /* GRU-FR-KWRB: the paths column takes the author's fraction of the columns'
+     width, 30 % unless they set another, and the pass history the rest. */
+  .graduation__columns[data-split="true"] {
+    display: grid;
+    grid-template-columns: minmax(0, var(--graduation-paths, 30%)) auto minmax(0, 1fr);
+    column-gap: 0;
+    align-items: start;
+  }
+  .graduation__columns[data-split="true"] > .graduation__columns-divider {
+    display: block;
+    align-self: stretch;
+    position: relative;
+    width: 17px;
+    min-height: 24px;
+    cursor: col-resize;
+  }
+}
+.graduation__columns-divider::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 8px;
+  width: 1px;
+  background: var(--border-1);
+}
+.graduation__columns-divider:hover::before,
+.graduation__columns-divider:focus-visible::before {
+  left: 7px;
+  width: 3px;
+  background: var(--accent);
+}
+.graduation__columns-divider:focus-visible { outline: none; }
+
+/* GRU-FR-OZAR: the action row is a foot bar pinned to the bottom edge of the
+   region. `margin-top: auto` holds it at the foot of a short region; sticky
+   holds it there while a long one scrolls under it. The negative margins take
+   it out to the region's side edges, and the ground is opaque so nothing that
+   scrolls under it shows through. */
+.graduation__foot {
+  position: sticky;
+  /* A sticky box is held inside the scroller's padding, so the foot sticks at
+     the region's bottom padding to reach its bottom edge. */
+  bottom: -8px;
+  /* A scrolling box has no content floor in a flex column, so without this
+     the foot shrinks to a strip whenever the region overflows. */
+  flex: none;
+  z-index: 2;
+  margin: auto -12px -8px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-1);
+  /* A foot that grows — the restart confirmation and a refusal together —
+     scrolls inside itself rather than taking the whole of a short region. */
+  max-height: 50%;
+  overflow-y: auto;
+}
+/* GRU-FR-OZAR / GRU-FR-NBRO: a control the keyboard moves to is scrolled
+   clear of the foot bar rather than under it. The value is the height of a
+   foot with one row of buttons. */
+.graduation__run { scroll-padding-bottom: 56px; }
+
+/* GRU-FR-QLRQ: the route to the time limit sits inside the stop notice, on
+   the line it explains, rather than in the foot bar beside the run's actions. */
+.graduation__warning-action {
+  margin-left: 2px;
+  vertical-align: baseline;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

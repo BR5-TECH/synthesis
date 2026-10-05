@@ -44,7 +44,7 @@ Update the existing requirements together so the UI and backend contracts agree:
 - `specifications/core/CMS-comments-storage.md` — define the fixed local human participant, its comment and event stamping, and how identity resolution permits discussion writes without a token; preserve stored participant snapshots and provide the current project-resolved identity needed for display without changing them.
 - `specifications/ui/CMT-comments.md`, `specifications/ui/ACT-action-control.md`, and `specifications/ui/CVP-conversation-presentation.md` — enable the shared discussion composers and actions for **Me**, and render fixed-local-participant comments using the current project identity or **Me** fallback across all shared surfaces; refresh visible labels when identity resolution changes without changing saved snapshots or existing picker behavior.
 - `specifications/ui/CMP-comments-panel.md` and `specifications/ui/DQA-discussion-question-answering.md` — render the fixed local participant's comments with the current project identity or **Me** fallback, and allow discussion-question answers under the same no-token rule.
-- `specifications/ui/NTS-notes.md` — keep note discussions available under the shared no-token identity behavior.
+- `specifications/ui/NTS-notes.md` — keep note discussions available under the shared no-token identity behavior and render fixed-local-participant comments with the current project identity or **Me** fallback.
 
 Check the other discussion surfaces that use these shared contracts and update any conflicting identity gating. Do not change unrelated discussion behavior or token-management UI.
 

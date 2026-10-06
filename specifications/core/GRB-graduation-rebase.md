@@ -164,7 +164,7 @@ attempt. The update record keeps `StreamMergeConflict` instead, which holds the
 path and the two side changes and no container path (per `WKS-work-streams.md`
 WKS-FR-ZKUP).
 
-Typed errors surfaced to the author by `WKS-work-streams.md`, which holds the whole list: `unsupported_conflict`, `stream_dirty`, `base_dirty`, `draft_save_failed`, `base_not_checked_out`, `merge_in_progress`, `merge_branch_moved`, `stale_base_revision`, `update_attempts_exhausted`, `update_in_progress`, `update_cancelled`.
+Typed errors surfaced to the author by `WKS-work-streams.md`, which holds the whole list: `unsupported_conflict`, `stream_dirty`, `base_dirty`, `base_not_checked_out`, `merge_in_progress`, `merge_branch_moved`, `stale_base_revision`, `update_attempts_exhausted`, `update_in_progress`, `update_cancelled`.
 
 Block codes of a merge run at the apply step: `merge_dirty_side`, `merge_guard_held`, `merge_apply_failed` (GRB-FR-HUTP). Rest reason after the pass budget: `pass_budget_exhausted` (GRB-FR-TGAZ).
 

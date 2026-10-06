@@ -26,6 +26,7 @@ use crate::tools::agent_exec::{
 mod blocking;
 mod commit_retitle;
 mod direct;
+mod direct_message;
 mod e2e;
 mod github_shadow;
 mod live_index;

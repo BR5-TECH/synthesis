@@ -42,9 +42,26 @@ export type Participant =
       title?: string;
     };
 
-/** The label the rail renders for a participant (CMT-FR-10). */
+/** CMS-FR-HTOA: the display name of the local participant. */
+export const LOCAL_PARTICIPANT_NAME = "Me";
+
+/**
+ * CMS-FR-HTOA: whether `p` is the fixed local participant a project without a
+ * GitHub token writes as — a human with no GitHub login.
+ */
+export function isLocalParticipant(p: Participant): boolean {
+  return p.kind === "human" && p.login === "";
+}
+
+/**
+ * The label the rail renders for a participant as it was stamped (CMT-FR-10).
+ *
+ * The local participant reads **Me** here. A surface that renders one shows the
+ * current project identity instead (CMT-FR-ZCAE) through `useParticipantLabel`.
+ */
 export function participantName(p: Participant): string {
-  return p.kind === "human" ? p.login : p.handle;
+  if (p.kind === "agent") return p.handle;
+  return isLocalParticipant(p) ? LOCAL_PARTICIPANT_NAME : p.login;
 }
 
 /**
@@ -840,8 +857,6 @@ export const COMMENT_ERRORS = {
 export const COMMENT_IDENTITY_ERRORS = {
   /** More than one token stored and none bound: the picker resolves it. */
   selectionRequired: GITHUB_TOKEN_ERRORS.selectionRequired,
-  /** Nothing stored at all: there is nothing to pick between. */
-  noneStored: GITHUB_TOKEN_ERRORS.tokenMissing,
   /** A token resolves but names no verified account. */
   unresolved: GITHUB_TOKEN_ERRORS.identityUnresolved,
   githubUnreachable: GITHUB_TOKEN_ERRORS.githubUnreachable,

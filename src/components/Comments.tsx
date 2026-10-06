@@ -24,7 +24,6 @@ import {
   type DiscussionListItem,
   discussionFragment,
   isFragmentTargeted,
-  participantName,
   participantTitle,
 } from "../types";
 import { useProjectAgents } from "../state/agentRegistry";
@@ -49,6 +48,7 @@ import {
 } from "./PanelEmptyState";
 import { UnresolvedMarker } from "./UnresolvedMarker";
 import { formatRelative } from "./ProjectPicker";
+import { useParticipantLabel } from "../state/projectIdentity";
 
 interface CommentsProps {
   /** CMP-FR-15: the session-memory filter text, held above this component. */
@@ -122,6 +122,7 @@ function errorText(e: unknown): string {
 }
 
 export function Comments({ panel, onReveal }: CommentsProps) {
+  const participantLabel = useParticipantLabel();
   // CMP-FR-06: draft names and note labels arrive after the list, so a row
   // redraws when they do.
   useOwnerFacts();
@@ -319,7 +320,7 @@ export function Comments({ panel, onReveal }: CommentsProps) {
                     past this marker to align with the name — `kit.css`
                     `.comment-row__title::before` carries a hidden copy. */}
                 {opener.author.kind === "agent" && "✦ "}
-                {participantName(opener.author)}
+                {participantLabel(opener.author)}
               </span>
               {/* CMP-FR-08: the thread's last activity, absolute on hover. */}
               <time

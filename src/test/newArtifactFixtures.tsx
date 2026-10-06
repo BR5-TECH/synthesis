@@ -720,6 +720,8 @@ export function makeStubs(invokeMock: Mock) {
       agents?: string[];
       /** NAW-FR-33 / CMT-FR-24: null means no identity resolves. */
       identityError?: string | null;
+      /** The participant the identity resolves to; defaults to a GitHub account. */
+      identity?: Participant;
       existing?: ReturnType<typeof discussionThread>[];
       /** The typed error `open_discussion_thread` refuses with, when it does. */
       openError?: string;
@@ -747,7 +749,7 @@ export function makeStubs(invokeMock: Mock) {
           return opts.turns ?? [];
         case "resolve_comment_author_identity":
           if (opts.identityError) throw opts.identityError;
-          return { kind: "human", login: "raver119" };
+          return opts.identity ?? { kind: "human", login: "raver119" };
         case "list_discussions":
           return threads;
         case "open_discussion": {

@@ -23,7 +23,11 @@ import {
   setDiscussionLock,
   setDiscussionResolution,
 } from "../api";
-import { onAgentTurnStateChanged, onDiscussionChanged } from "../events";
+import {
+  onAgentTurnStateChanged,
+  onDiscussionChanged,
+  onGithubTokensChanged,
+} from "../events";
 import { useRecoverableFailures } from "./useRecoverableFailures";
 import { useImageNotices } from "./useImageNotices";
 import {
@@ -478,6 +482,26 @@ export function useComments(
     void loadIdentity();
   }, [loadIdentity]);
 
+  // GTS-FR-AEQO: a token or a binding changed, so the identity this surface
+  // writes as may have changed with it.
+  useEffect(() => {
+    if (!enabled) return;
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void onGithubTokensChanged(() => {
+      void loadIdentity();
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [enabled, loadIdentity]);
+
   const noteError = useCallback((threadId: string, e: unknown) => {
     setErrors((prev) => ({ ...prev, [threadId]: errorText(e) }));
   }, []);
@@ -798,9 +822,10 @@ export function useComments(
  * CMT-FR-25 / CMT-FR-26: turn a typed identity refusal into what the rail says
  * and what the user does next.
  *
- * The four causes call for four different responses — pick a token, add one,
- * verify one, wait for the network — which is why the rail matches on them rather
- * than printing whatever came back. `opensPicker` is the one that the token
+ * The four causes call for four different responses — pick a token, verify one,
+ * wait for the network, unlock the keychain — which is why the rail matches on
+ * them rather than printing whatever came back. A project that stores no token is
+ * not among them: it writes as **Me** (CMT-FR-26). `opensPicker` is the one that the token
  * picker resolves; every other renders inline.
  */
 export function identityBlockFor(error: string | null): {
@@ -814,12 +839,6 @@ export function identityBlockFor(error: string | null): {
       return {
         message: "Choose which GitHub token this project uses before commenting.",
         opensPicker: true,
-      };
-    case COMMENT_IDENTITY_ERRORS.noneStored:
-      return {
-        message: "Commenting needs a GitHub account to attribute comments to.",
-        route: "Add a token in Global settings → GitHub.",
-        opensPicker: false,
       };
     case COMMENT_IDENTITY_ERRORS.unresolved:
       return {

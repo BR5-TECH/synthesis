@@ -15,6 +15,7 @@
  */
 import { useSyncExternalStore } from "react";
 import { resolveCommentAuthorIdentity } from "../api";
+import { onGithubTokensChanged } from "../events";
 import type { Participant } from "../types";
 
 interface SharedIdentity {
@@ -30,6 +31,8 @@ let state: SharedIdentity = {
 let asked = false;
 
 const listeners = new Set<() => void>();
+let unlistenTokens: (() => void) | null = null;
+let listeningTokens = false;
 
 function emit(next: SharedIdentity): void {
   state = next;
@@ -70,15 +73,43 @@ export function retrySharedCommentIdentity(): void {
   load();
 }
 
+/**
+ * GTS-FR-AEQO: a token or a binding changed, so the identity every presentation
+ * writes as is read again. Listened to while any presentation subscribes.
+ */
+function listenForTokenChanges(): void {
+  if (listeningTokens) return;
+  listeningTokens = true;
+  void Promise.resolve(onGithubTokensChanged(() => retrySharedCommentIdentity()))
+    .then((stop) => {
+      const off = typeof stop === "function" ? stop : null;
+      if (listeners.size === 0) {
+        off?.();
+        listeningTokens = false;
+      } else {
+        unlistenTokens = off;
+      }
+    })
+    .catch(() => {
+      listeningTokens = false;
+    });
+}
+
 export function useSharedCommentIdentity(): SharedIdentity {
   return useSyncExternalStore(
     (listener) => {
       listeners.add(listener);
+      listenForTokenChanges();
       // Kicked off from subscribe rather than from an effect, so a caller gets
       // it by subscribing at all — every consumer of this wants the identity.
       load();
       return () => {
         listeners.delete(listener);
+        if (listeners.size === 0 && unlistenTokens) {
+          unlistenTokens();
+          unlistenTokens = null;
+          listeningTokens = false;
+        }
       };
     },
     snapshot,

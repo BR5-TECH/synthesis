@@ -360,13 +360,12 @@ pub(super) fn settle(
 /// what stands before the first colon. A reason that is not one of them keeps
 /// its whole text.
 fn typed_failure(reason: &str) -> String {
-    const TYPED: [&str; 15] = [
+    const TYPED: [&str; 14] = [
         ERR_NOT_A_GIT_REPOSITORY,
         ERR_UNKNOWN_STREAM,
         ERR_STREAM_BUSY,
         ERR_STREAM_DIRTY,
         ERR_BASE_DIRTY,
-        crate::storage_floor::save::ERR_DRAFT_SAVE_FAILED,
         ERR_STREAM_MISSING,
         ERR_BASE_NOT_CHECKED_OUT,
         ERR_STALE_BASE_REVISION,

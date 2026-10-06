@@ -57,7 +57,7 @@ PromptDecisionOutcome {
 
 The last two are carried because `../ui/PCR-prompt-change-review.md` (PCR-FR-14) dispatches one fresh turn naming that comment as its trigger, and re-folding the thread to find what was just appended is both wasteful and ambiguous under a concurrent append.
 
-Errors are typed: `no_project_open`, `artifact_not_found`, `not_a_prompt_artifact`, `proposal_not_found`, `already_decided`, `candidate_stale`, `thread_locked`, `write_failed`, `acceptance_in_progress`, `acceptance_incomplete`, and the identity refusals `identity_selection_required`, `identity_none_stored`, `github_unreachable`, `keychain_unavailable`, which a decision inherits from the comment it appends (per `CMS-comments-storage.md` CMS-FR-12).
+Errors are typed: `no_project_open`, `artifact_not_found`, `not_a_prompt_artifact`, `proposal_not_found`, `already_decided`, `candidate_stale`, `thread_locked`, `write_failed`, `acceptance_in_progress`, `acceptance_incomplete`, and the identity refusals `identity_selection_required`, `github_unreachable`, `keychain_unavailable`, which a decision inherits from the comment it appends (per `CMS-comments-storage.md` CMS-FR-12).
 
 ### Events
 - `"prompt change proposals changed"` — carries `{ artifact_id, proposal }`, emitted when a proposal is recorded and again when it is decided (PCP-FR-15).

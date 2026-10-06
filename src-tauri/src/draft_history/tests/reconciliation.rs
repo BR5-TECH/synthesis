@@ -424,36 +424,35 @@ fn the_event_carries_an_entry_when_one_becomes_visible_and_null_when_one_is_with
     assert_eq!(events[0]["entry"]["seq"], 3);
 }
 
-/// The accepted-change events queued for the fixture's draft.
-fn accepted_events(f: &Fixture) -> usize {
+/// Every draft event queued for the fixture's draft.
+fn draft_events(f: &Fixture) -> usize {
     crate::storage_floor::commit::pending_events(&f.root)
         .into_iter()
-        .filter(|(id, event, _)| {
-            id == &f.draft_id && *event == crate::storage_floor::commit::DraftEvent::Accepted
-        })
+        .filter(|(id, _, _)| id == &f.draft_id)
         .count()
 }
 
-// PST-FR-DQZT / DHS-FR-20 / DHS-FR-19: a committed acceptance rolled forward
-// raises the accepted-change event again, a commit raised before the
-// interruption being one that may never have been taken; a rolled-back one
-// raises none.
+// PST-FR-DQZT / DHS-FR-02 / DHS-FR-20 / DHS-FR-19: neither a rolled-forward nor a
+// rolled-back acceptance raises a draft event.
 #[test]
-fn a_rolled_forward_acceptance_raises_its_event_and_a_rolled_back_one_does_not() {
+fn a_reconciled_acceptance_raises_no_draft_event() {
     let f = Fixture::new();
     f.write_prompt(ORIGINAL_TEXT);
     let proposal = f.propose(PROPOSED);
     interrupt(&f, &proposal, Phase::Committed);
-    let before = accepted_events(&f);
-    f.reconcile().expect("rolled forward");
-    assert_eq!(accepted_events(&f), before + 1);
+    let before = draft_events(&f);
+    assert!(matches!(
+        f.reconcile().expect("rolled forward"),
+        Reconciliation::RolledForward { .. }
+    ));
+    assert_eq!(draft_events(&f), before);
 
     let g = Fixture::new();
     g.write_prompt(ORIGINAL_TEXT);
     let proposal = g.propose(PROPOSED);
     interrupt(&g, &proposal, Phase::Prepared);
-    let before = accepted_events(&g);
+    let before = draft_events(&g);
     assert_eq!(g.reconcile().expect("rolled back"), Reconciliation::RolledBack);
-    assert_eq!(accepted_events(&g), before);
+    assert_eq!(draft_events(&g), before);
 }
 

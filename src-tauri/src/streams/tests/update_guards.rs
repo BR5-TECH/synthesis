@@ -498,14 +498,9 @@ fn a_stream_with_no_commits_of_its_own_is_fast_forwarded() {
     );
 }
 
-// WKS-FR-JVLM / PST-FR-RONA: an update checks out the stream's working copy and
-// only reads the base worktree. A draft edited in the base worktree neither
-// refuses the update nor is saved there, so the pinned base does not move; a
-// draft edited in the stream's working copy is saved before its checkout.
-#[test]
-fn an_update_saves_the_stream_side_and_leaves_the_base_side_alone() {
-    let fx = Fixture::new();
-    let home_rel = ".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef";
+/// A committed draft at `home_rel`, in the primary worktree and, through the
+/// stream made after it, in the stream's working copy.
+fn a_committed_draft(fx: &Fixture, home_rel: &str) -> std::path::PathBuf {
     let base_home = fx.root().join(home_rel);
     std::fs::create_dir_all(base_home.join("files")).unwrap();
     std::fs::write(
@@ -517,11 +512,20 @@ fn an_update_saves_the_stream_side_and_leaves_the_base_side_alone() {
     .unwrap();
     std::fs::write(base_home.join("files/P.md"), "committed\n").unwrap();
     commit_all(&fx.repo(), "a committed draft");
+    base_home
+}
+
+// WKS-FR-JVLM / PST-FR-DQZT: an update only reads the base worktree. A draft
+// edited there does not refuse the update and is not committed, so the pinned
+// base does not move and the edit stays on disk.
+#[test]
+fn a_draft_edited_in_the_base_worktree_does_not_refuse_an_update() {
+    let fx = Fixture::new();
+    let home_rel = ".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef";
+    let base_home = a_committed_draft(&fx, home_rel);
     let stream = stream_behind_its_base(&fx);
     let pinned = tip_of(&fx.repo(), &stream.base_branch);
     std::fs::write(base_home.join("files/P.md"), "edited in the base\n").unwrap();
-    let stream_home = Path::new(&stream.worktree_path).join(home_rel);
-    std::fs::write(stream_home.join("files/P.md"), "edited in the stream\n").unwrap();
 
     let report = block_on(updating::run(
         &fx.app,
@@ -533,15 +537,44 @@ fn an_update_saves_the_stream_side_and_leaves_the_base_side_alone() {
     ));
     report.outcome.expect("the update lands");
 
-    assert_eq!(tip_of(&fx.repo(), &stream.base_branch), pinned, "no save moved the base");
+    assert_eq!(tip_of(&fx.repo(), &stream.base_branch), pinned, "nothing moved the base");
     assert_eq!(
         std::fs::read_to_string(base_home.join("files/P.md")).unwrap(),
         "edited in the base\n",
     );
+}
+
+// WKS-FR-JVLM / WKS-FR-OKVB / PST-FR-DQZT: an update checks out the stream's
+// working copy. A committed draft edited there is not committed for the author:
+// it makes the stream side dirty, the update is refused with `stream_dirty`
+// naming the draft's path, and the edit stays on disk.
+#[test]
+fn a_draft_edited_in_the_stream_refuses_an_update_as_stream_dirty() {
+    let fx = Fixture::new();
+    let home_rel = ".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef";
+    a_committed_draft(&fx, home_rel);
+    let stream = stream_behind_its_base(&fx);
+    let pinned = tip_of(&fx.repo(), &stream.base_branch);
+    let stream_before = tip_of(&fx.repo(), &stream.branch);
+    let stream_prompt = Path::new(&stream.worktree_path).join(home_rel).join("files/P.md");
+    std::fs::write(&stream_prompt, "edited in the stream\n").unwrap();
+
+    let report = block_on(updating::run(
+        &fx.app,
+        &stream.id,
+        StreamUpdateStrategy::MergeSource,
+        pinned.to_string(),
+        Vec::new(),
+        ScriptedDispatch::new(Vec::new()),
+    ));
+    let reason = report.outcome.expect_err("refused");
+
+    assert_eq!(reason, format!("{ERR_STREAM_DIRTY}: {home_rel}/files/P.md"));
+    assert_eq!(tip_of(&fx.repo(), &stream.branch), stream_before, "nothing was committed");
+    assert_eq!(tip_of(&fx.repo(), &stream.base_branch), pinned);
     assert_eq!(
-        std::fs::read_to_string(stream_home.join("files/P.md")).unwrap(),
+        std::fs::read_to_string(&stream_prompt).unwrap(),
         "edited in the stream\n",
-        "the stream's checkout kept the saved prompt",
     );
 }
 

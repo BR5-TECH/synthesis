@@ -49,6 +49,9 @@ pub const ERR_ATTACHMENT_NOT_FOUND: &str = "attachment_not_found";
 /// silently dead channel. Matches `src/events.ts`'s constant byte-for-byte.
 pub const DISCUSSION_CHANGED: &str = "discussion-changed";
 
+/// CMS-FR-HTOA: the display name of the local participant.
+pub const LOCAL_PARTICIPANT_NAME: &str = "Me";
+
 /// CMS-FR-BQEN: the event a reserved or deleted question set announces itself
 /// on.
 ///

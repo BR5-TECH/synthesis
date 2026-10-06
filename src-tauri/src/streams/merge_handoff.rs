@@ -147,12 +147,6 @@ fn check<R: tauri::Runtime>(
     let base_worktree = base_repo
         .as_ref()
         .and_then(|repo| repo.workdir().map(std::path::PathBuf::from));
-    // PST-FR-RONA: the base worktree is what the merge checks out, so every
-    // draft changed there is saved before anything is compared.
-    if let Some(base_worktree) = base_worktree.as_deref() {
-        let access = store_fs(app)?;
-        crate::storage_floor::save::save_drafts_before_checkout(&access, base_worktree)?;
-    }
     merge::refuse_dirty(&stream.worktree(), base_worktree.as_deref())?;
 
     let mut prepared = merge::prepare(&main, stream)?;

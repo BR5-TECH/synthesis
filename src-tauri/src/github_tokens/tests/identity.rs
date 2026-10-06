@@ -163,3 +163,45 @@ fn a_registry_written_before_the_account_fields_existed_still_loads() {
     assert!(decoded.account_display_name.is_none());
     assert!(decoded.account_email.is_none());
 }
+
+// -- resolve_github_identity_if_stored (GTS-FR-ZKOD) ------------------
+
+// GTS-FR-ZKOD: only an empty registry answers `None`; every other state
+// answers exactly what `resolve_github_identity` answers.
+#[test]
+fn an_empty_registry_resolves_no_identity_and_every_other_state_resolves_as_before() {
+    let Harness { store, tokens, .. } =
+        harness(FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]));
+
+    assert_eq!(resolve_github_identity_if_stored(&store, "/dev/acme"), Ok(None));
+
+    add_token_impl(&store, &tokens, "work", "ghp_secret_1234").unwrap();
+    let one = resolve_github_identity_if_stored(&store, "/dev/acme").unwrap();
+    assert_eq!(one.map(|i| i.login), Some("raver119".to_string()));
+
+    store
+        .save_github_token_registry({
+            let mut r = store.load_github_token_registry().unwrap();
+            r.push(record("b", "personal"));
+            r
+        })
+        .unwrap();
+    assert_eq!(
+        resolve_github_identity_if_stored(&store, "/dev/acme").unwrap_err(),
+        ERR_SELECTION_REQUIRED,
+        "several tokens without a binding never fall back to a default identity"
+    );
+
+    set_binding_impl(&store, "/dev/acme", "b").unwrap();
+    assert_eq!(
+        resolve_github_identity_if_stored(&store, "/dev/acme").unwrap_err(),
+        ERR_IDENTITY_UNRESOLVED,
+        "a bound token with no verified account stays a refusal"
+    );
+}
+
+// GTS-FR-AEQO: the event name the frontend listens on.
+#[test]
+fn the_tokens_changed_event_name_is_the_one_the_frontend_listens_on() {
+    assert_eq!(GITHUB_TOKENS_CHANGED, "github-tokens-changed");
+}

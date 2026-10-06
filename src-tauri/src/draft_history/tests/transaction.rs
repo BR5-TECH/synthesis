@@ -215,60 +215,22 @@ fn a_failed_prompt_write_rolls_the_whole_acceptance_back() {
     assert_eq!(f.prompt(), PROPOSED);
 }
 
-/// The accepted-change events queued for one draft of a fixture.
-fn accepted_events(f: &Fixture) -> usize {
+/// Every draft event queued for one draft of a fixture.
+fn draft_events(f: &Fixture) -> usize {
     crate::storage_floor::commit::pending_events(&f.root)
         .into_iter()
-        .filter(|(id, event, _)| {
-            id == &f.draft_id && *event == crate::storage_floor::commit::DraftEvent::Accepted
-        })
+        .filter(|(id, _, _)| id == &f.draft_id)
         .count()
 }
 
-// PST-FR-DQZT / DHS-FR-02 / DHS-FR-14: an acceptance raises one accepted-change
-// draft event at its commit point; a rolled-back one raises none.
+// PST-FR-DQZT / DHS-FR-02 / DHS-FR-14: an acceptance raises no draft event, so
+// the accepted prompt stays uncommitted on disk until the next draft event.
 #[test]
-fn an_acceptance_raises_one_accepted_change_event_at_its_commit_point() {
+fn an_acceptance_raises_no_draft_event() {
     let f = Fixture::new();
-    let before = accepted_events(&f);
+    let before = draft_events(&f);
     f.accept_new("rewritten\n");
-    assert_eq!(accepted_events(&f), before + 1, "one event per acceptance");
-    let message = crate::storage_floor::commit::pending_events(&f.root)
-        .into_iter()
-        .rev()
-        .find(|(id, event, _)| {
-            id == &f.draft_id && *event == crate::storage_floor::commit::DraftEvent::Accepted
-        })
-        .map(|(_, _, message)| message)
-        .expect("the event");
-    assert!(message.starts_with("draft: accept change to \""), "{message}");
-}
-
-// PST-FR-DQZT / DHS-FR-19: an acceptance rolled back before its commit point
-// raises no draft event, so nothing is committed for a change that did not land.
-#[test]
-fn a_rolled_back_acceptance_raises_no_event() {
-    if crate::fs::permission_probe::skip_without_enforcement(
-        "a_rolled_back_acceptance_raises_no_event",
-        crate::fs::permission_probe::Injection::Write,
-    ) {
-        return;
-    }
-    let f = Fixture::new();
-    f.write_prompt(ORIGINAL_TEXT);
-    let proposal = f.propose(PROPOSED);
-    let files = drafts::draft_dir(&f.root, &f.draft_id)
-        .expect("dir")
-        .join("files");
-    use std::os::unix::fs::PermissionsExt;
-    let mode = std::fs::metadata(&files).expect("metadata").permissions();
-    std::fs::set_permissions(&files, std::fs::Permissions::from_mode(0o555))
-        .expect("read-only");
-    let before = accepted_events(&f);
-
-    let refused = f.accept(&proposal).unwrap_err();
-    std::fs::set_permissions(&files, mode).expect("writable again");
-
-    assert_eq!(refused, ERR_WRITE_FAILED);
-    assert_eq!(accepted_events(&f), before, "no event for a rolled-back acceptance");
+    f.accept_new("rewritten again\n");
+    assert_eq!(draft_events(&f), before, "no event for an acceptance");
+    assert_eq!(f.prompt(), "rewritten again\n", "the accepted prompt is on disk");
 }

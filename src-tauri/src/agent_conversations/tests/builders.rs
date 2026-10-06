@@ -111,6 +111,70 @@ fn the_discussion_builder_gathers_the_prompt_and_no_anchor() {
         .contains("and now what?"));
 }
 
+#[test]
+fn a_local_participants_comment_reaches_the_agent_as_me() {
+    // AGC-FR-08. The fixed local participant has an empty login, so the handle
+    // is its display name: no comment, quote, or reference reads `@:`.
+    let h = Harness::new(vec![]);
+    let (draft_id, thread) = seed_discussion(&h, &["first thought"]);
+    let first_id = thread.comments[0].id.clone();
+    let thread = crate::comments::add_comment_to(
+        &h.root(),
+        crate::comments::ThreadRef::discussion(&draft_id),
+        &thread.id,
+        "written as me".to_string(),
+        Vec::new(),
+        Vec::new(),
+        &crate::comments::Participant::local_human(),
+        "2026-01-01T00:05:00Z",
+    )
+    .expect("local reply");
+    let local_id = thread.comments.last().unwrap().id.clone();
+    let thread = crate::comments::add_comment_to(
+        &h.root(),
+        crate::comments::ThreadRef::discussion(&draft_id),
+        &thread.id,
+        "@arch what do you think of this?".to_string(),
+        vec![crate::comments::CommentQuote {
+            comment_id: local_id,
+            excerpt: "written as me".to_string(),
+        }],
+        Vec::new(),
+        &human("ada"),
+        "2026-01-01T00:06:00Z",
+    )
+    .expect("trigger");
+    let trigger = thread.comments.last().unwrap().id.clone();
+    assert_ne!(first_id, trigger);
+
+    let sections = build_input(
+        Roots::same(&h.root()),
+        &ConversationOrigin::of(&thread),
+        &trigger,
+    );
+
+    let history = section_of(&sections, TAG_DISCUSSION_HISTORY);
+    assert!(
+        history.body.contains("@Me:\nwritten as me"),
+        "the local participant is not named Me: {:?}",
+        history.body,
+    );
+    let current = section_of(&sections, TAG_CURRENT_COMMENT);
+    assert!(
+        current.body.contains("[quoting @Me: written as me]"),
+        "the quote does not name Me: {:?}",
+        current.body,
+    );
+    for section in &sections {
+        assert!(
+            !section.body.contains("@:"),
+            "an empty handle reached <{}>: {:?}",
+            section.tag,
+            section.body,
+        );
+    }
+}
+
 /// The value of an `artifact` section's `type` attribute, or `None` where it
 /// carries none.
 fn type_of(sections: &[InputSection]) -> Option<String> {

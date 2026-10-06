@@ -414,7 +414,7 @@ describe("the OAuth token rules", () => {
     ...over,
   });
 
-  it("matches the anchored pattern and nothing else (AII-FR-50)", () => {
+  it("AII-FR-50, AIC-FR-27: matches the anchored pattern and nothing else", () => {
     // The same table the Rust side checks against `is_valid_oauth_token`,
     // because two implementations of one pattern are exactly where a drift
     // would hide. This is the raw predicate: unanchored candidates fail here,
@@ -423,7 +423,6 @@ describe("the OAuth token rules", () => {
       "",
       "oat01-abc",
       "sk-ant-oat01-",
-      "sk-ant-oat01-abc_def",
       "sk-ant-oat01-abc def",
       " sk-ant-oat01-abc",
       "sk-ant-oat01-abc\n",
@@ -444,16 +443,17 @@ describe("the OAuth token rules", () => {
       "sk-ant-oat01-a",
       "sk-ant-oat01-A1-b2-C3",
       "sk-ant-oat01----",
+      "sk-ant-oat01-abc_def",
+      "sk-ant-oat01-_",
     ]) {
       expect(isValidClaudeOauthToken(good), good).toBe(true);
     }
   });
 
-  it("accepts only sk-ant-oat01- followed by letters, digits, or hyphens (AII-FR-50)", () => {
+  it("AII-FR-50: accepts only sk-ant-oat01- followed by letters, digits, hyphens, or underscores", () => {
     const rejections = [
       "oat01-abc",
       "sk-ant-oat01-",
-      "sk-ant-oat01-abc_def",
       "sk-ant-oat01-abc def",
       "xsk-ant-oat01-abc",
       "sk-ant-oat02-abc",
@@ -473,6 +473,7 @@ describe("the OAuth token rules", () => {
       "sk-ant-oat01-a",
       "sk-ant-oat01-A1-b2-C3",
       "sk-ant-oat01----",
+      "sk-ant-oat01-abc_def",
     ]) {
       expect(oauthTokenValidation(good)).toBe("");
     }

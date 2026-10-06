@@ -48,7 +48,6 @@ import { useQuestionSet } from "../../state/questionSets";
 import {
   discussionDraftId,
   discussionFragment,
-  participantName,
   type AgentTurn,
   type Discussion,
   type FragmentTarget,
@@ -68,6 +67,7 @@ import {
 import { UnreadDivider, UnreadIndicator } from "./UnreadMarks";
 import { useDiscussionFollow } from "./useDiscussionFollow";
 import { useThreadMenu } from "./useThreadMenu";
+import { useParticipantLabel } from "../../state/projectIdentity";
 
 export interface DiscussionSurfaceProps {
   discussion: Discussion;
@@ -146,6 +146,7 @@ export interface DiscussionSurfaceProps {
 }
 
 export function DiscussionSurface(props: DiscussionSurfaceProps) {
+  const participantLabel = useParticipantLabel();
   const { discussion: thread, owner, agents } = props;
   const stream = props.variant === "stream";
   const embedded = props.variant === "embedded";
@@ -258,7 +259,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
 
   const authorOf = (commentId: string): string => {
     const c = thread.comments.find((x) => x.id === commentId);
-    return c ? participantName(c.author) : "";
+    return c ? participantLabel(c.author) : "";
   };
 
   /**

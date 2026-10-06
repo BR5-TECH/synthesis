@@ -32,6 +32,12 @@ use tauri::State;
 use crate::global_settings::{now_iso8601, GlobalSettingsStore};
 use crate::project::ProjectState;
 
+mod discussion_identity;
+pub use discussion_identity::{
+    resolve_github_identity_if_stored, GITHUB_TOKENS_CHANGED,
+};
+use discussion_identity::emit_tokens_changed;
+
 // ---------------------------------------------------------------------------
 // Typed errors (GTS-FR-04 / GTS-FR-10 / GTS-FR-14)
 // ---------------------------------------------------------------------------
@@ -890,38 +896,50 @@ pub fn list_github_tokens(
 pub fn add_github_token(
     label: String,
     secret: String,
+    app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
     tokens: State<'_, GithubTokens>,
 ) -> Result<GithubTokenRecord, String> {
-    add_token_impl(&store, &tokens, &label, &secret)
+    let record = add_token_impl(&store, &tokens, &label, &secret)?;
+    emit_tokens_changed(&app);
+    Ok(record)
 }
 
 #[tauri::command]
 pub fn validate_github_token(
     id: String,
+    app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
     tokens: State<'_, GithubTokens>,
 ) -> Result<GithubTokenRecord, String> {
-    validate_token_impl(&store, &tokens, &id)
+    let record = validate_token_impl(&store, &tokens, &id)?;
+    emit_tokens_changed(&app);
+    Ok(record)
 }
 
 #[tauri::command]
 pub fn rename_github_token(
     id: String,
     label: String,
+    app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
     tokens: State<'_, GithubTokens>,
 ) -> Result<GithubTokenRecord, String> {
-    rename_token_impl(&store, &tokens, &id, &label)
+    let record = rename_token_impl(&store, &tokens, &id, &label)?;
+    emit_tokens_changed(&app);
+    Ok(record)
 }
 
 #[tauri::command]
 pub fn remove_github_token(
     id: String,
+    app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
     tokens: State<'_, GithubTokens>,
 ) -> Result<(), String> {
-    remove_token_impl(&store, &tokens, &id)
+    remove_token_impl(&store, &tokens, &id)?;
+    emit_tokens_changed(&app);
+    Ok(())
 }
 
 /// GTS-FR-12: hand the OS the token-creation URL and return. Transmits nothing,
@@ -945,10 +963,13 @@ pub fn get_project_github_token_binding(
 #[tauri::command]
 pub fn set_project_github_token_binding(
     token_id: String,
+    app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
     project: State<'_, ProjectState>,
 ) -> Result<ProjectTokenBinding, String> {
-    set_binding_impl(&store, &project.slot_key(), &token_id)
+    let binding = set_binding_impl(&store, &project.slot_key(), &token_id)?;
+    emit_tokens_changed(&app);
+    Ok(binding)
 }
 
 #[cfg(test)]

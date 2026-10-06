@@ -470,7 +470,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
   });
 
   it("ACT-FR-17: no identity disables the composer and opens nothing", async () => {
-    const b = backend({ identityError: "identity_none_stored" });
+    const b = backend({ identityError: "github_token_selection_required" });
     await renderEditor(b);
 
     await openActions();
@@ -551,7 +551,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
   });
 
   it("ACT-FR-28, CVP-FR-40, CVP-FR-41: the accelerator does nothing while the composer is disabled for want of an identity", async () => {
-    const b = backend({ identityError: "identity_none_stored" });
+    const b = backend({ identityError: "github_token_selection_required" });
     await renderEditor(b);
 
     await openActions();

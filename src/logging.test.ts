@@ -113,6 +113,61 @@ describe("frontend log emission (LOG-FR-19)", () => {
     expect((sent[1][0] as { message: string }).message).toBe("second");
   });
 
+  it("LOG-FR-19: drops a batch whose send throws before it returns, and surfaces nothing", () => {
+    // The flush runs on a timer, so a throw that escaped it would reach no
+    // caller: it would be an uncaught exception.
+    invoked.mockImplementationOnce(() => {
+      throw new Error("no backend");
+    });
+    log("ERROR", ["backend"], "first");
+    expect(() => vi.advanceTimersByTime(FLUSH_DELAY_MS)).not.toThrow();
+    expect(batches()).toHaveLength(1);
+
+    log("ERROR", ["backend"], "second");
+    vi.advanceTimersByTime(FLUSH_DELAY_MS);
+    const sent = batches();
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toHaveLength(1);
+    expect((sent[1][0] as { message: string }).message).toBe("second");
+  });
+
+  it("LOG-FR-19: drops a batch whose send returns no promise", () => {
+    invoked.mockImplementationOnce((() => undefined) as never);
+    log("ERROR", ["backend"], "first");
+    expect(() => vi.advanceTimersByTime(FLUSH_DELAY_MS)).not.toThrow();
+
+    log("ERROR", ["backend"], "second");
+    vi.advanceTimersByTime(FLUSH_DELAY_MS);
+    const sent = batches();
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toHaveLength(1);
+  });
+
+  it("LOG-FR-19: a full batch whose send throws does not throw from the emit", () => {
+    // A full batch flushes inside `log`, which can run in a render.
+    invoked.mockImplementationOnce(() => {
+      throw new Error("no backend");
+    });
+    expect(() => {
+      for (let n = 0; n < MAX_BATCH; n += 1) log("INFO", ["frontend"], `m${n}`);
+    }).not.toThrow();
+    expect(batches()).toHaveLength(1);
+
+    log("INFO", ["frontend"], "after");
+    vi.advanceTimersByTime(FLUSH_DELAY_MS);
+    expect(batches()[1]).toHaveLength(1);
+  });
+
+  it("LOG-FR-19: an on-demand flush whose send throws does not throw, and leaves no timer", () => {
+    invoked.mockImplementationOnce(() => {
+      throw new Error("no backend");
+    });
+    log("ERROR", ["backend"], "closing");
+    expect(() => flushLogs()).not.toThrow();
+    expect(batches()).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("does not lose records emitted while a flush is in flight", () => {
     // The pending array is taken before the call, so a record emitted during
     // the round trip lands in the next batch rather than in the one whose

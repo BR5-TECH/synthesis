@@ -408,6 +408,7 @@ fn drive_with(
             task,
             cancellation: cancel,
             activity: None,
+            durable_output: None,
             supplementary_mount: None,
         },
     ))

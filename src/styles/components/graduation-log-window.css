@@ -18,20 +18,16 @@
   padding: 10px 18px;
   border-bottom: 1px solid var(--border-1);
 }
-.glw__streams { display: flex; gap: 4px; }
-/* GLW-FR-PHBA: the selected position is carried in words and in accessible
-   semantics; this treatment stands beside them rather than in place of them. */
-.glw__streams .btn[data-selected="true"] {
-  background: var(--bg-panel);
-  border-color: var(--accent);
-  color: var(--fg-1);
-}
 .glw__search { flex: 1 1 auto; min-width: 0; }
-.glw__body {
+/* The body alone takes the slack, so the viewport is the one region that
+   scrolls. The selector outranks `.modal.glw > *` above, which would otherwise
+   stop the body from shrinking and let the rows run past the window. */
+.modal.glw > .glw__body {
   position: relative;
   display: grid;
   /* The narrow pass list at the leading edge, the wider viewport beside it. */
   grid-template-columns: 180px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   flex: 1 1 auto;
 }
@@ -68,16 +64,9 @@
   font-family: var(--font-mono, monospace);
   font-size: var(--fs-ui-xs);
 }
-.glw__row {
-  display: flex;
-  flex-direction: column;
-  padding: 2px 0;
-  border-bottom: 1px solid var(--border-1);
-}
-.glw__meta { color: var(--fg-3, var(--fg-2)); }
-/* GLW-FR-SNDH: a long line wraps rather than putting the region on a
-   horizontal scrollbar. */
-.glw__text { color: var(--fg-1); white-space: pre-wrap; word-break: break-word; }
+/* GLW-FR-KHGP / GLW-FR-SNDH: a row is the Agent Output row (`.runs-line`). Its
+   summary wraps, so the region never scrolls sideways. */
+.glw__viewport .runs-line { padding: 1px 0; }
 .glw__older { padding: 4px 0; }
 .glw__state { padding: 12px 4px; color: var(--fg-2); }
 .glw__state--warning { color: var(--warn); }

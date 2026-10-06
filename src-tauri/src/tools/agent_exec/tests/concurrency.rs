@@ -83,6 +83,7 @@ fn one_executor_driving_two_launches_keeps_them_separate() {
                     task: task("CLAUDE-ONLY"),
                     cancellation: CancellationToken::new(),
                     activity: None,
+                    durable_output: None,
                     supplementary_mount: None,
                 },
             ),
@@ -95,6 +96,7 @@ fn one_executor_driving_two_launches_keeps_them_separate() {
                     task: task("CODEX-ONLY"),
                     cancellation: CancellationToken::new(),
                     activity: None,
+                    durable_output: None,
                     supplementary_mount: None,
                 },
             )
@@ -159,6 +161,7 @@ fn concurrent_requests_cannot_cross_contaminate() {
                     task: task("CLAUDE-WORK"),
                     cancellation: CancellationToken::new(),
                     activity: None,
+                    durable_output: None,
                     supplementary_mount: None,
                 },
             ),
@@ -171,6 +174,7 @@ fn concurrent_requests_cannot_cross_contaminate() {
                     task: task("CODEX-WORK"),
                     cancellation: CancellationToken::new(),
                     activity: None,
+                    durable_output: None,
                     supplementary_mount: None,
                 },
             )

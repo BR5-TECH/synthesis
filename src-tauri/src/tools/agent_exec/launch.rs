@@ -450,6 +450,9 @@ impl AgentCliExecutor {
             },
         );
 
+        // EAC-FR-CPEP: the run is cancelled through a token linked to the
+        // caller's, so a durable failure never sets the caller's own flag.
+        let run_cancel = request.cancellation.linked();
         let observer = LaunchObserver {
             descriptor,
             carry_len: protocol::longest_secret(
@@ -458,6 +461,9 @@ impl AgentCliExecutor {
             .saturating_sub(1),
             secrets,
             sink: request.activity.as_ref(),
+            durable: request.durable_output.as_ref(),
+            cancel: run_cancel.clone(),
+            durable_failure: std::sync::Mutex::new(None),
             log: sink.clone(),
             logs_activity: request.supplementary_mount.is_none(),
             vendor: vendor.clone(),
@@ -504,7 +510,7 @@ impl AgentCliExecutor {
                 env: &env,
                 stdin: &stdin_bytes,
                 timeout: Duration::from_millis(request.task.execution.timeout_ms),
-                cancel: request.cancellation.clone(),
+                cancel: run_cancel.clone(),
                 stdout_limit: protocol::LIMIT_STDOUT,
                 stderr_limit: protocol::LIMIT_STDERR,
                 observer: Some(&observer),
@@ -541,6 +547,13 @@ impl AgentCliExecutor {
             RuntimeError::ImageUnavailable => AgentExecutionError::ImageUnavailable(vendor.clone()),
             RuntimeError::LaunchFailed(reason) => AgentExecutionError::LaunchFailed(reason),
         })?;
+
+        // EAC-FR-ZVRP: a run stopped for a durable failure is reported as that
+        // failure, whatever the process outcome was. It is returned after the
+        // container removal above, so nothing is left running behind it.
+        if let Some(failure) = observer.take_durable_failure() {
+            return Err(AgentExecutionError::DurableOutputFailed(failure));
+        }
 
         // --- 8. What the run means --------------------------------------------
         // The identity is asserted back only where the executor supplied it: on
@@ -618,6 +631,11 @@ impl AgentCliExecutor {
             payload: finished,
             payload_truncated: false,
         });
+        // EAC-FR-DWGS: the `finished` activity is the last one a durable sink
+        // is given, and its failure is the call's failure (EAC-FR-ZVRP).
+        if let Some(failure) = observer.take_durable_failure() {
+            return Err(AgentExecutionError::DurableOutputFailed(failure));
+        }
         if execution.process_outcome != ProcessOutcome::Completed {
             // EAC-FR-29: the excerpt is masked against everything this launch
             // handed the container that a record may not carry — the secrets in

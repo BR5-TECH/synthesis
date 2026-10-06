@@ -16,7 +16,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import { onAgentActivityAppended } from "../events";
-import type { AgentActivityKind, AgentActivityRecord } from "../types";
+import type { AgentActivityRecord } from "../types";
+import { ActivityLine } from "./AgentActivityLine";
 import { PanelEmptyState } from "./PanelEmptyState";
 
 interface RunsProps {
@@ -34,47 +35,6 @@ interface RunsProps {
   live: boolean;
   /** What the run is called, for the header. */
   label?: string | null;
-}
-
-/**
- * RUN-FR-03: which level treatment a kind takes.
- *
- * The kinds are the backend's (EAC-FR-33) and this maps them onto the four the
- * row already has, so a stream reads at a glance: what went wrong is red, what
- * the agent decided is accented, and its narration is plain.
- */
-const LEVEL: Record<string, "info" | "ok" | "warn" | "err" | "step"> = {
-  invocation: "step",
-  task: "step",
-  started: "step",
-  reasoning: "info",
-  message: "info",
-  tool_call: "step",
-  tool_result: "info",
-  command: "step",
-  file_change: "ok",
-  retry: "warn",
-  usage: "info",
-  finished: "ok",
-  error: "err",
-  diagnostic: "warn",
-  unrecognized: "warn",
-};
-
-/** The row's own short label for a kind. Wider than the level, and specific. */
-function kindLabel(kind: AgentActivityKind | string): string {
-  return kind.replace(/_/g, " ");
-}
-
-/** RUN-FR-11: the local wall-clock time a record was written. */
-function clockOf(at: string): string {
-  const when = new Date(at);
-  if (Number.isNaN(when.getTime())) return "";
-  return when.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
 }
 
 export function Runs({ runId, live, label }: RunsProps) {
@@ -345,15 +305,7 @@ export function Runs({ runId, live, label }: RunsProps) {
           const open = expanded.includes(record.seq);
           return (
             <div key={record.seq}>
-              <div className="runs-line">
-                <span className="runs-line__ts">{clockOf(record.at)}</span>
-                <span
-                  className="runs-line__lvl"
-                  data-level={LEVEL[record.kind] ?? "info"}
-                  title={record.channel}
-                >
-                  {kindLabel(record.kind)}
-                </span>
+              <ActivityLine at={record.at} kind={record.kind} title={record.channel}>
                 {/* RUN-FR-14: the whole event is one activation away. The
                     summary is this build's reading of it; the payload is what
                     the vendor actually wrote, which is what a reader needs when
@@ -372,7 +324,7 @@ export function Runs({ runId, live, label }: RunsProps) {
                 >
                   {record.summary}
                 </button>
-              </div>
+              </ActivityLine>
               {open && (
                 <pre className="runs-payload">
                   {record.payload}

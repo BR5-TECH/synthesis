@@ -29,17 +29,33 @@ fn names(logs: &GraduationLogIndexes, stream: GraduationLogStream, phase: &str, 
         .any(|segment| segment.phase_id == phase && segment.pass == pass)
 }
 
-/// Write one work-turn chunk per text to the source stream, as the executor does.
+/// Write one work-turn activity per text to the activity stream, as the
+/// executor's durable sink does.
 fn work_output(fx: &Fixture, run: &GraduationRun, texts: &[&str]) {
-    logs::append_source_chunks(
+    logs::append_activity_records(
         &fx.app,
         &run.id,
         run.logs.clone(),
         texts
             .iter()
-            .map(|text| logs::source_chunk(run, GraduationLogProducer::WorkTurn, "stdout", text))
+            .map(|text| {
+                logs::activity_record(
+                    &run.id,
+                    GraduationLogProducer::WorkTurn,
+                    Some(run.pass()),
+                    &crate::tools::agent_exec::DurableActivity {
+                        record_id: crate::notes::new_note_id(),
+                        at: crate::notes::now_rfc3339(),
+                        channel: "stdout",
+                        kind: "message",
+                        summary: text.to_string(),
+                    },
+                )
+                .expect("a safe kind")
+            })
             .collect(),
-    );
+    )
+    .expect("appended");
 }
 
 /// Call `read_graduation_logs` as the frontend does.
@@ -84,14 +100,14 @@ fn the_run_record_and_the_listing_name_the_output_of_a_turn_that_is_still_runnin
 
     let on_disk = saved(&fx, &run.id);
     assert!(
-        !names(&on_disk.logs, GraduationLogStream::Source, "working", Some(run.pass())),
+        !names(&on_disk.logs, GraduationLogStream::Activity, "working", Some(run.pass())),
         "the saved copy is behind the files inside a turn"
     );
 
     let got = crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
-    assert_eq!(got.logs.source.record_count, 2);
-    assert_eq!(got.logs.source.latest_sequence, 2);
-    assert!(names(&got.logs, GraduationLogStream::Source, "working", Some(run.pass())));
+    assert_eq!(got.logs.activity.record_count, 2);
+    assert_eq!(got.logs.activity.latest_sequence, 2);
+    assert!(names(&got.logs, GraduationLogStream::Activity, "working", Some(run.pass())));
 
     // The queue itself rather than the command: the command first sweeps a
     // working run no loop drives, and the sweep saves it.
@@ -103,7 +119,7 @@ fn the_run_record_and_the_listing_name_the_output_of_a_turn_that_is_still_runnin
         .expect("the run is listed");
     assert_eq!(entry.logs, got.logs, "the listing and the record report one index");
     assert_eq!(
-        saved(&fx, &run.id).logs.source.record_count,
+        saved(&fx, &run.id).logs.activity.record_count,
         0,
         "both answers came from the live indexes and not from a save"
     );
@@ -121,14 +137,14 @@ fn a_log_read_returns_records_written_after_the_last_save() {
     work_output(&fx, &run, &["second", "third"]);
 
     let on_disk = saved(&fx, &run.id).logs;
-    assert_eq!(on_disk.source.record_count, 1, "the save saw one record");
-    assert!(names(&on_disk, GraduationLogStream::Source, "working", Some(run.pass())));
+    assert_eq!(on_disk.activity.record_count, 1, "the save saw one record");
+    assert!(names(&on_disk, GraduationLogStream::Activity, "working", Some(run.pass())));
 
     for scope in [
         serde_json::json!({ "kind": "pass", "pass": run.pass() }),
         serde_json::json!({ "kind": "phase" }),
     ] {
-        let page = read(&fx, &run.id, scope.clone(), "source");
+        let page = read(&fx, &run.id, scope.clone(), "activity");
         assert_eq!(sequences(&page), vec![1, 2, 3], "scope {scope} reads the whole turn");
         assert_eq!(page.latest_sequence, 3);
     }
@@ -145,7 +161,7 @@ fn a_save_inside_a_turn_writes_the_live_indexes() {
     let mut loaded = crate::graduation::load_run(&fx.app, &run.id).expect("the run");
     crate::graduation::save_run(&fx.app, &mut loaded).expect("saved");
 
-    assert_eq!(saved(&fx, &run.id).logs.source.record_count, 2);
+    assert_eq!(saved(&fx, &run.id).logs.activity.record_count, 2);
 }
 
 // GRS-FR-ZTCF, GRS-FR-IOHF: a run this process does not write is read with its
@@ -219,7 +235,7 @@ fn a_swept_run_names_what_its_stopped_turn_wrote() {
     // The process that wrote them is gone.
     logs::release(&fx.app, &run.id);
     let before = saved(&fx, &run.id).logs;
-    assert_eq!(before.source.record_count, 0);
+    assert_eq!(before.activity.record_count, 0);
     assert_eq!(before.structured.record_count, 0);
 
     let queue = crate::graduation::project_queue(&fx.app).expect("the queue");
@@ -231,18 +247,18 @@ fn a_swept_run_names_what_its_stopped_turn_wrote() {
         swept.interruption.as_ref().map(|i| i.reason),
         Some(GraduationInterruptionReason::ExecutionAbandoned)
     );
-    let source = &swept.logs.source;
+    let source = &swept.logs.activity;
     assert_eq!(source.record_count, 3);
     assert_eq!(source.latest_sequence, 3);
     assert_eq!(source.durable_through_sequence, 3);
     let path = logs::paths_for(&fx.app, &run.id)
         .expect("the paths")
-        .stream(GraduationLogStream::Source);
+        .stream(GraduationLogStream::Activity);
     assert_eq!(
         source.byte_length,
         std::fs::metadata(&path).expect("the stream").len()
     );
-    assert!(names(&swept.logs, GraduationLogStream::Source, "working", Some(1)));
+    assert!(names(&swept.logs, GraduationLogStream::Activity, "working", Some(1)));
     assert_eq!(
         swept.logs.structured.record_count as usize,
         lines_of(&fx, &run.id, GraduationLogStream::Structured).len()
@@ -253,7 +269,7 @@ fn a_swept_run_names_what_its_stopped_turn_wrote() {
 
 /// The source sequences the file holds, in file order.
 fn source_sequences(fx: &Fixture, run_id: &str) -> Vec<u64> {
-    lines_of(fx, run_id, GraduationLogStream::Source)
+    lines_of(fx, run_id, GraduationLogStream::Activity)
         .iter()
         .map(|record| record.get("sequence").and_then(|v| v.as_u64()).unwrap_or_default())
         .collect()
@@ -271,7 +287,7 @@ fn a_refresh_that_seeds_the_indexes_reconciles_them_with_the_files() {
 
     let mut loaded = crate::graduation::load_run(&fx.app, &run.id).expect("the run");
     logs::refresh(&fx.app, &mut loaded);
-    assert_eq!(loaded.logs.source.record_count, 3);
+    assert_eq!(loaded.logs.activity.record_count, 3);
     work_output(&fx, &loaded, &["four"]);
 
     assert_eq!(source_sequences(&fx, &run.id), vec![1, 2, 3, 4]);
@@ -290,14 +306,14 @@ fn a_retry_that_seeds_the_indexes_reconciles_them_with_the_files() {
     loaded.logs.note_failed(
         logs::GraduationLogFailure::write(
             logs::index::CODE_APPEND_FAILED,
-            GraduationLogStream::Source,
+            GraduationLogStream::Activity,
             "The stream could not be written.",
             Vec::new(),
         ),
         0,
     );
     assert!(logs::retry_pending(&fx.app, &mut loaded), "nothing is pending, so it is healthy");
-    assert_eq!(loaded.logs.source.record_count, 3);
+    assert_eq!(loaded.logs.activity.record_count, 3);
     work_output(&fx, &loaded, &["four"]);
 
     assert_eq!(source_sequences(&fx, &run.id), vec![1, 2, 3, 4]);
@@ -355,8 +371,8 @@ fn a_driven_work_turn_is_readable_before_it_ends() {
         "the turn boundary saves what the files hold"
     );
     assert_eq!(
-        after.source.record_count as usize,
-        lines_of(&fx, &driven.id, GraduationLogStream::Source).len()
+        after.activity.record_count as usize,
+        lines_of(&fx, &driven.id, GraduationLogStream::Activity).len()
     );
 }
 
@@ -369,7 +385,7 @@ fn a_read_of_a_run_inside_a_turn_keeps_the_damaged_read_the_saved_copy_records()
     let damaged = logs::GraduationLogFailure {
         kind: "read".to_string(),
         code: logs::index::CODE_STREAM_CORRUPT.to_string(),
-        stream: GraduationLogStream::Source,
+        stream: GraduationLogStream::Activity,
         message: "Repair the stream file.".to_string(),
         at: crate::notes::now_rfc3339(),
         stopped_sequence: Some(0),
@@ -381,6 +397,6 @@ fn a_read_of_a_run_inside_a_turn_keeps_the_damaged_read_the_saved_copy_records()
     work_output(&fx, &run, &["first"]);
 
     let got = crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
-    assert_eq!(got.logs.source.record_count, 1, "the live stream index");
+    assert_eq!(got.logs.activity.record_count, 1, "the live stream index");
     assert_eq!(got.logs.last_read_failure, Some(damaged), "the saved damaged read");
 }

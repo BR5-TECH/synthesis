@@ -1,5 +1,6 @@
 //! What one line of a run's two log streams holds
-//! (`GRS-graduation-run-log-storage.md` GRS-FR-MEPZ, GRS-FR-JAPO, GRS-FR-NPIB).
+//! (`GRS-graduation-run-log-storage.md` GRS-FR-MEPZ, GRS-FR-JAPO, GRS-FR-SQGZ,
+//! GRS-FR-NPIB).
 //!
 //! A record is attributed by **what produced it** and by nothing else
 //! (GRS-FR-KJVN): the producer settles the phase and the pass, so no reader has
@@ -11,8 +12,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GraduationLogStream {
-    /// Raw executor output.
-    Source,
+    /// The safe normalized agent activity of the turns (GRS-FR-JAPO).
+    Activity,
     /// Structured graduation observability records.
     Structured,
 }
@@ -20,7 +21,7 @@ pub enum GraduationLogStream {
 impl GraduationLogStream {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Source => "source",
+            Self::Activity => "activity",
             Self::Structured => "structured",
         }
     }
@@ -28,7 +29,7 @@ impl GraduationLogStream {
     /// The file this stream is written to, inside the run's own log directory.
     pub fn file_name(self) -> &'static str {
         match self {
-            Self::Source => "source.jsonl",
+            Self::Activity => "activity.jsonl",
             Self::Structured => "structured.jsonl",
         }
     }
@@ -122,6 +123,31 @@ impl GraduationLogProducer {
     }
 }
 
+impl GraduationLogProducer {
+    /// GRS-FR-RDJP: whether a producer is an agent turn, which is the only
+    /// kind of producer that writes an activity record.
+    pub fn writes_activity(self) -> bool {
+        matches!(
+            self,
+            Self::WorkTurn
+                | Self::ClarificationJudgement
+                | Self::ReviewTurn
+                | Self::SemanticMergeTurn
+        )
+    }
+
+    /// GRS-FR-RDJP / GRS-FR-NUXT: the origin of one activity record. The
+    /// executor's own `finished` activity and every run-level record are the
+    /// executor's. The rest is the agent's.
+    pub fn activity_origin(self, pass: Option<u32>, channel: &str) -> GraduationLogOrigin {
+        if pass.is_none() || channel == "executor" {
+            GraduationLogOrigin::Executor
+        } else {
+            GraduationLogOrigin::Agent
+        }
+    }
+}
+
 /// The attribution every record of either stream carries (GRS-FR-MEPZ).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -155,22 +181,22 @@ pub struct GraduationStructuredRecord {
     pub fields: serde_json::Map<String, serde_json::Value>,
 }
 
-/// GRS-FR-JAPO: one chunk of executor output.
+/// GRS-FR-JAPO / GRS-FR-SQGZ: one safe activity of an agent turn.
+///
+/// It has no payload field, no task field, no reasoning field, and no raw
+/// output field. A reader can show nothing of a turn but a kind and one masked
+/// line, because nothing else was ever written.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct GraduationSourceChunk {
+pub struct GraduationActivityRecord {
     #[serde(flatten)]
     pub attribution: GraduationLogAttribution,
-    /// The integration the turn ran under; `null` where none applies.
-    pub agent: Option<String>,
-    /// The container the chunk was read from; `null` where none applies.
-    pub container: Option<String>,
     /// `stdout`, `stderr`, or `executor`.
-    pub source: String,
-    /// GRS-FR-QDVH: always `base64`.
-    pub encoding: String,
-    pub data_base64: String,
-    pub byte_length: u64,
+    pub channel: String,
+    /// One of the safe kinds of GRS-FR-WJIA.
+    pub kind: String,
+    /// One masked line, bounded by the executor.
+    pub summary: String,
 }
 
 /// One record of either stream, before a sequence is assigned to it.
@@ -178,28 +204,28 @@ pub struct GraduationSourceChunk {
 #[serde(tag = "stream", rename_all = "snake_case")]
 pub enum GraduationLogRecord {
     Structured(GraduationStructuredRecord),
-    Source(GraduationSourceChunk),
+    Activity(GraduationActivityRecord),
 }
 
 impl GraduationLogRecord {
     pub fn stream(&self) -> GraduationLogStream {
         match self {
             Self::Structured(_) => GraduationLogStream::Structured,
-            Self::Source(_) => GraduationLogStream::Source,
+            Self::Activity(_) => GraduationLogStream::Activity,
         }
     }
 
     pub fn attribution(&self) -> &GraduationLogAttribution {
         match self {
             Self::Structured(record) => &record.attribution,
-            Self::Source(record) => &record.attribution,
+            Self::Activity(record) => &record.attribution,
         }
     }
 
     pub(super) fn attribution_mut(&mut self) -> &mut GraduationLogAttribution {
         match self {
             Self::Structured(record) => &mut record.attribution,
-            Self::Source(record) => &mut record.attribution,
+            Self::Activity(record) => &mut record.attribution,
         }
     }
 
@@ -212,7 +238,7 @@ impl GraduationLogRecord {
     pub fn to_line(&self) -> Result<String, String> {
         let value = match self {
             Self::Structured(record) => serde_json::to_value(record),
-            Self::Source(record) => serde_json::to_value(record),
+            Self::Activity(record) => serde_json::to_value(record),
         };
         value.map_err(|e| e.to_string()).map(|v| v.to_string())
     }

@@ -7,6 +7,7 @@
  */
 
 import type { GraduationObservability } from "./graduationObservability";
+import type { GraduationLogStream } from "./graduationLogs";
 
 /** GRD-FR-QJHM: the nine states a run stands in. */
 export type GraduationRunState =
@@ -213,7 +214,7 @@ export interface GraduationCheckpoint {
 
 /** GRS-FR-WFWD: how far one of a run's two log streams stands. */
 export interface GraduationStreamIndex {
-  stream: "source" | "structured";
+  stream: GraduationLogStream;
   latestSequence: number;
   recordCount: number;
   durableThroughSequence: number;
@@ -231,7 +232,7 @@ export interface GraduationStreamIndex {
 export interface GraduationLogFailure {
   kind: "write" | "read";
   code: string;
-  stream: "source" | "structured";
+  stream: GraduationLogStream;
   message: string;
   at: string;
   stoppedSequence?: number | null;
@@ -250,7 +251,7 @@ export interface GraduationLogPersistence {
 /** GRS-FR-CGSP: what the run record holds about its logs. It holds no payload. */
 export interface GraduationLogIndexes {
   logStorageVersion: number;
-  source: GraduationStreamIndex;
+  activity: GraduationStreamIndex;
   structured: GraduationStreamIndex;
   persistence: GraduationLogPersistence;
   lastReadFailure?: GraduationLogFailure | null;

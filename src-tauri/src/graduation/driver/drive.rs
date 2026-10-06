@@ -820,7 +820,10 @@ async fn execute<R: tauri::Runtime>(
         cancellation: cancellation.clone(),
         // GXD-FR-IOZU: what the agent does reaches the run it is doing it for.
         // A turn with no sink is a run the author watches an empty panel for.
-        activity: activity_sink(app, run, part),
+        activity: activity_sink(app, run),
+        // GXD-FR-IOZU / GLG-FR-QKVI: the record of what the agent did, which
+        // the executor must deliver durably and acknowledged.
+        durable_output: Some(durable_sink(app, run, part)),
     };
     // GXD-FR-CYIW / GRD-FR-NHRY: the interval is the turn's own execution, from
     // the moment it is dispatched to the moment it returns. Held on this stack,
@@ -852,37 +855,42 @@ async fn execute<R: tauri::Runtime>(
     outcome
 }
 
-/// GXD-FR-IOZU: the activity sink one turn of this run reports through.
+/// GXD-FR-IOZU: the live activity sink one turn of this run reports through.
 ///
 /// `None` where the application holds no activity store, which costs the live
 /// panel and nothing else: no turn is refused over it.
 fn activity_sink<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &GraduationRun,
-    part: &str,
 ) -> Option<Arc<dyn crate::tools::agent_exec::AgentActivitySink>> {
-    let mut sinks: Vec<Arc<dyn crate::tools::agent_exec::AgentActivitySink>> = Vec::new();
     // AGV: the live panel, which is bounded and evicted.
-    if let Some(store) = app
+    let store = app
         .try_state::<Arc<crate::agent_activity::ActivityStore>>()
-        .map(|state| state.inner().clone())
-    {
-        let fs = crate::graduation::store_fs(app).ok();
-        sinks.push(Arc::new(crate::agent_activity::RunActivitySink::new(
-            app, &run.id, store, fs,
-        )));
-    }
-    // GRS-FR-JQOO: the durable copy, which is retained for the lifetime of the
-    // run record and is what the author reads a finished run back from.
-    sinks.push(Arc::new(logs::GraduationSourceSink::new(
-        app,
-        &run.id,
-        source_producer(part),
-    )));
-    Some(Arc::new(logs::CompositeSink::of(sinks)))
+        .map(|state| state.inner().clone())?;
+    let fs = crate::graduation::store_fs(app).ok();
+    Some(Arc::new(crate::agent_activity::RunActivitySink::new(
+        app, &run.id, store, fs,
+    )))
 }
 
-/// GRS-FR-KJVN: which producer a turn's output is attributed to.
+/// GXD-FR-IOZU / GLG-FR-QKVI: the durable activity sink one turn of this run
+/// reports through.
+///
+/// GRS-FR-JQOO: the record is retained for the lifetime of the run record and
+/// is what the author reads a finished run back from.
+fn durable_sink<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &GraduationRun,
+    part: &str,
+) -> Arc<dyn crate::tools::agent_exec::DurableOutputSink> {
+    Arc::new(logs::GraduationActivitySink::new(
+        app,
+        run,
+        source_producer(part),
+    ))
+}
+
+/// GRS-FR-KJVN: which producer a turn's activity is attributed to.
 fn source_producer(part: &str) -> GraduationLogProducer {
     match part {
         phases::PART_REVIEW => GraduationLogProducer::ReviewTurn,

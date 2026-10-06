@@ -58,20 +58,24 @@ AgentActivityEvent {
 ### The output a durable sink receives
 
 ```
-DurableOutputChunk {
+DurableActivity {
   record_id:         string,     // assigned here, stable across every retry
-  at:                string,     // RFC 3339 UTC, when the chunk was emitted
-  source:            "stdout" | "stderr" | "executor",
-  agent:             string | null,   // the pinned vendor this turn ran under
-  container:         string | null,   // the container the chunk was read from
-  data:              bytes,      // the complete redacted bytes of this chunk
-  byte_length:       integer
+  at:                string,     // RFC 3339 UTC, when the activity arrived
+  channel:           "stdout" | "stderr" | "executor",
+  kind:              SafeActivityKind,
+  summary:           string      // one masked line of at most 300 characters
 }
+
+SafeActivityKind =
+    "started" | "message" | "tool_call" | "tool_result" | "command"
+  | "file_change" | "retry" | "usage" | "finished" | "error" | "diagnostic"
 
 DurableOutputAck =
     { ok: true }
   | { ok: false, failure: { code, message } }   // the sink could not store it
 ```
+
+`DurableActivity` has no payload field. The kinds `invocation`, `task`, `reasoning`, and `unrecognized` are never delivered to a durable sink.
 
 The sink receives and cannot supply: it learns what the launch produced and decides nothing about it, and it is told no run identifier, the attribution being carried by the sink the caller constructed.
 
@@ -169,9 +173,9 @@ CapturedStream { bytes: Vec<u8>, truncated: bool }
 
 `process_outcome` describes the process; `response.outcome` describes the turn. An agent that reports `failure` or `escalation_required` produced a `completed` execution, because the process ran to completion and answered in the protocol — the two axes never collapse into one.
 
-### The pre-launch failures
+### The failures
 
-Every one of these is returned before any container is created, and each is distinct because each calls for a different correction:
+Every one of these but the last is returned before any container is created, and each is distinct because each calls for a different correction:
 
 ```
 AgentExecutionError =
@@ -189,6 +193,8 @@ AgentExecutionError =
                                           //   over a limit, or in a refused location
   | RepositoryMaskingUnavailable(reason)  // repository metadata inside the execution
                                           //   directory could not be masked (EAC-FR-41)
+  | DurableOutputFailed(failure)          // the durable sink could not store an activity;
+                                          //   returned after the container is gone (EAC-FR-ZVRP)
 ```
 
 ### The vendor execution descriptor
@@ -316,7 +322,7 @@ Production binds it to the Docker backend the machine has verified (EAC-FR-39): 
 
 45. **EAC-FR-42** An execution carrying the semantic-rebase mount emits **no `DEBUG` record into `../core/LGC-logging.md` and no stream excerpt anywhere**, and its boundary records are the only account of it that reaches that buffer. Three things are suppressed for that execution kind and for no other: the per-line `DEBUG` records EAC-FR-32 writes as stdout and stderr arrive; the two executor activities of EAC-FR-34 — the generated invocation and **the serialized task** — as `DEBUG` records; and the bounded stderr tail excerpt EAC-FR-29 attaches to a record for a run that did not complete. What remains is the `INFO` record at each end of the call and the `WARN` or `ERROR` on every failure path, each naming the vendor, the container, the outcome, the duration, the exit status, and the sizes and truncation of each captured stream — counts and identities, and no content.
     The suppression exists because the caller of this execution kind is held to a stricter rule than this tool's own masking gives it: a reconciliation's records may carry safe path names and counts and **no prompt text, file content, diff hunk, task input, or agent output at all** (per `../core/GRB-graduation-rebase.md` GRB-FR-OHWT), and the task of a semantic-rebase turn carries the captured graduation prompt while its streams carry the specification text the agent is reading and writing. A `DEBUG` floor that a reader can lower, or an excerpt cut from a stream of file contents, would put exactly that material in the session buffer — which is the one place this application's rule about it could be broken without anybody writing a record on purpose.
-    **Both sinks are unaffected**, and that is the point of confining the suppression to the log: a durable sink is the run's own record rather than the application's diagnostic buffer, and a reconciliation's turn is as much a part of a run's account as any other. A caller that supplied a sink receives every line and both executor activities exactly as EAC-FR-32 and EAC-FR-34 deliver them, masked on the terms of EAC-FR-29, so a semantic-rebase turn is watchable while it runs and its narration reaches the run's own activity stream rather than the session's diagnostic buffer. **Ordinary executions are unchanged in every respect**: a request supplying no semantic-rebase mount writes the same `DEBUG` records, the same executor activities, and the same stderr excerpt it always did, because a loop whose task carries no captured prompt and whose agent writes ordinary work is not what this rule is about.
+    **The activity sink is unaffected**, and that is the point of confining the suppression to the log: a sink is the run's own record rather than the application's diagnostic buffer. A caller that supplied an activity sink receives every line and both executor activities exactly as EAC-FR-32 and EAC-FR-34 deliver them, masked on the terms of EAC-FR-29. **Ordinary executions are unchanged in every respect**: a request supplying no semantic-rebase mount writes the same `DEBUG` records, the same executor activities, and the same stderr excerpt it always did, because a loop whose task carries no captured prompt and whose agent writes ordinary work is not what this rule is about.
 
 46. **EAC-FR-43** A task **names the shape its own answer must take**, and the executor supplies that shape. `result_contract` is one identifier of a closed set — `review_verdict` under v1 — and an identifier outside the set, like any undefined field, is a rejection before launch (EAC-FR-07). It names the `ReviewVerdict` of `../ai/GRL-graduation-loop.md` GRL-FR-VIAT and no other shape. A task that names none carries a free-form `result`, so the field constrains nothing for a caller that states no shape. The executor resolves the identifier to a fixed JSON Schema document compiled into the binary, writes that document into the task document as `result_schema` for **every** vendor, and hands it to the vendor descriptor besides. A vendor whose CLI validates an answer against a schema therefore enforces the named shape inside the run (per `../infra/CCP-claude-code-cli-protocol.md` CCP-FR-28); a vendor whose CLI enforces nothing carries the document in the task alone (per `../infra/CDX-codex-cli-protocol.md` CDX-FR-14), which is the same asymmetry EAC-FR-35 already answers the same way — the shape reaches every agent in words it can read, and the vendor that can check it also checks it.
     Each document is **selected by name and never assembled**: it is never derived from the task, never composed from its `input`, never carries project material, and never carries a credential, which is what lets it ride on an argument vector while the task may not (EAC-FR-09). Two turns naming one contract carry byte-identical documents whatever their tasks hold. Like the response contract beside it, it is written into the task document before EAC-FR-08's serialized-task bound is applied, so the document that bound is checked against is the document the agent receives.
@@ -324,11 +330,15 @@ Production binds it to the Docker backend the machine has verified (EAC-FR-39): 
 
 47. **EAC-FR-44** Every document of the set states **only structural rules the caller's own validation enforces, and none of them more freely**, on the terms `../infra/CCP-claude-code-cli-protocol.md` CCP-FR-07 already sets for the envelope schema. It follows that a rule the document **cannot** state faithfully stays with the caller rather than being approximated. One rule runs the other way, and one only: each object of a document **closes its field set**, which the caller's own validation need not do. An undefined key is the mark of an answer written to a different contract — an agent works with tools of its own, and one of those tools' answers is shaped like this one — and the answer that borrows another contract's field names borrows the name of the field this one reads. Refusing it costs one re-prompt inside the run; accepting it costs the turn, outside it. A field set is closed only where the answer is the caller's own shape: a payload the caller reads through another contract's rules is left open on that contract's terms. The `review_verdict` document admits exactly two answers and nothing else — the verdict object of `../core/GRD-graduation.md` GRL-FR-VIAT with its closed field set, its two `verdict` values, its three `severity` values, and its non-blank `rationale`, `description`, and `correction`; or an `escalate_to_user` request of `ESU-escalate-to-user-tool.md` ESU-FR-19 in place of a verdict (per `../core/GRD-graduation.md` GRL-FR-VBCL) — and it states none of the rules it has no reach over: the stable finding order of `../core/GRD-graduation.md` GRL-FR-VIAT which is a comparison between entries rather than a shape; that each `affected_files` entry is a path the change set holds, which is knowable only from the run's own manifest and is exactly the project material EAC-FR-09 keeps off an argument vector; the readable shapes a proposed response's `summary` and `description` keep, which are counts of words and sentences that a schema states in characters or not at all, on the same terms `../infra/CCP-claude-code-cli-protocol.md` CCP-FR-07 leaves them with the decoder; and that a `success` carries a result at all, which is a key of the envelope around the document rather than of the document. Each remains the caller's to enforce and each remains able to refuse an answer after the turn ends.
 
-48. **EAC-FR-VSNM** A caller may additionally require that a run be **kept**. Where it supplies a `durable_output` sink, the executor hands that sink **every chunk of stdout, of stderr, and of its own two pre-run reports**, in the order they were produced, as a `DurableOutputChunk` carrying the instant, which stream it came from, the pinned vendor, the container, and the complete bytes. One emitted chunk is one call: chunks are neither joined, split, re-wrapped, nor normalized on the way. Each chunk carries a `record_id` the executor assigns once and repeats on every retry of that same chunk, which is what lets a sink refuse a duplicate rather than store one.
-49. **EAC-FR-CXUE** The durable sink's **acknowledgement is mandatory**. A chunk is not accounted for until the sink answers `ok`, and the executor does not report the call as complete while any chunk is unacknowledged. A sink may take its time: the executor applies **bounded backpressure** to the reader rather than dropping, truncating, or skipping a chunk, so a slow sink slows a run and never silently shortens its record. The activity sink of EAC-FR-32 is unaffected and stays best-effort and non-blocking.
-50. **EAC-FR-DUTR** A sink that answers a **typed failure** ends the run's output delivery there. The executor cancels the container through the path EAC-FR-25 already honours, stops reading, and returns that failure to the caller, so the caller learns that the record is incomplete rather than receiving a turn that looks finished over output nobody kept. It is never launched around and never retried silently.
-51. **EAC-FR-FKCN** **Everything a durable sink receives is masked first.** EAC-FR-29's one rule is applied over the stream before a chunk is handed on, so no credential value, no session identity the executor assigned or was asked to resume, and no login directory in either spelling reaches the sink in any spelling. The executor reads no vendor session-state directory (EAC-FR-31), so no model transcript reaches it either. There is no second rule here and no path out of this tool that is masked on other terms.
+48. **EAC-FR-VSNM** A caller may additionally require that a run be **kept**. Where it supplies a `durable_output` sink, the executor hands that sink **every observed activity of a safe kind** (EAC-FR-DWGS), in the order observed, as a `DurableActivity` carrying the instant, the channel, the kind, and the one-line summary. Each activity carries a `record_id` the executor assigns once and repeats on every retry of that same activity, which is what lets a sink refuse a duplicate rather than store one.
+49. **EAC-FR-CXUE** The durable sink's **acknowledgement is mandatory**. An activity is not accounted for until the sink answers `ok`, and the executor does not report the call as complete while any activity is unacknowledged. A sink may take its time: the executor applies **bounded backpressure** to the reader by waiting for the answer, and it never drops, truncates, or skips an activity. The activity sink of EAC-FR-32 is unaffected and stays best-effort and non-blocking.
+50. **EAC-FR-DUTR** A sink that answers a **typed failure** ends the run's durable delivery there. The executor cancels the container through the path EAC-FR-25 already honours, stops delivering, and returns `DurableOutputFailed` carrying that failure, so the caller learns that the record is incomplete rather than receiving a turn that looks finished over activity nobody kept. It is never launched around and never retried silently.
+51. **EAC-FR-FKCN** **Everything a durable sink receives is masked first.** EAC-FR-29's one rule is applied before an activity is handed on, so no credential value, no session identity the executor assigned or was asked to resume, and no login directory in either spelling reaches the sink in any spelling. The executor reads no vendor session-state directory (EAC-FR-31), so no model transcript reaches it either. There is no second rule here and no path out of this tool that is masked on other terms.
 52. **EAC-FR-RLIW** The executor **stores nothing itself and knows no run identifier**. It reports what happened; which piece of work the record belongs to is the sink's, exactly as it already is for the activity sink (per `../core/AGV-agent-activity.md` AGV-FR-03). A call supplying no `durable_output` sink is the call it would have been before one existed: the process outcome, the response, the captured streams, and the generated argument vector are identical.
+53. **EAC-FR-DWGS** The durable sink receives an activity **only where its kind is a safe kind**: `started`, `message`, `tool_call`, `tool_result`, `command`, `file_change`, `retry`, `usage`, `finished`, `error`, or `diagnostic`. A `finished` activity of the executor channel is delivered after the run ends and before the call is reported as complete (EAC-FR-THUT).
+54. **EAC-FR-IRKZ** An activity of the kind `invocation`, `task`, `reasoning`, or `unrecognized` is **never delivered to a durable sink**. `DurableActivity` has no payload field, so the verbatim event, the serialized task, the generated invocation, and every full tool argument and result stay out of it. The activity sink of EAC-FR-32 still receives every kind unchanged.
+55. **EAC-FR-ZVRP** Where the durable sink fails, the call returns `DurableOutputFailed` after the container removal of EAC-FR-26 has been tried, whatever the process outcome was. The failure names a code and one message and carries no activity text.
+56. **EAC-FR-CPEP** The executor cancels the container for a durable failure through a token **linked to the caller's** token. It never sets the caller's own `cancellation`, so a caller that reads its token afterwards learns only what it decided itself.
 
 ## Non-functional requirements
 
@@ -343,5 +353,5 @@ Production binds it to the Docker backend the machine has verified (EAC-FR-39): 
 - Both pinned vendors load configuration from the mounted working tree — hooks, tool policies, and server declarations a repository carries are read without a trust prompt (`../infra/CCP-claude-code-cli-protocol.md` CCP-FR-22, `../infra/CDX-codex-cli-protocol.md` CDX-FR-26). The container is what bounds that, which is why EAC-FR-13's mount, port, and privilege limits are the security boundary rather than any vendor flag.
 - The tool holds no per-call state between calls and is cheap to construct, in keeping with `TLC-tool-conventions.md` TLC-FR-15.
 - Observation costs a run nothing it can fail on. A sink that panics, a log buffer that has evicted everything, and a caller that supplied no sink at all each leave the run's outcome unchanged, because the observer sits between the runtime and every reader rather than on the path the result takes.
-- A durable sink is the one thing that may slow a run: backpressure is bounded and applied to the reader, and a caller that supplies none pays nothing for the mechanism.
+- A durable sink is the one thing that may slow a run: backpressure is applied to the reader while the sink answers, and a caller that supplies none pays nothing for the mechanism.
 - The executor stores no activity of its own and knows no run identifier. It reports what happened; which piece of work that belongs to is the caller's, which is what keeps one loop's narration from ever reaching another's.

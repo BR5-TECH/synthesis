@@ -29,6 +29,14 @@ pub(super) struct LaunchObserver<'a, S: LogSink + Clone + Send + Sync + 'static>
     /// split across a delivery boundary is never emitted as a fragment.
     pub(super) carry_len: usize,
     pub(super) sink: Option<&'a Arc<dyn AgentActivitySink>>,
+    /// EAC-FR-VSNM: who must keep the run, if anyone.
+    pub(super) durable: Option<&'a Arc<dyn DurableOutputSink>>,
+    /// EAC-FR-CPEP: linked to the caller's token. A durable failure cancels
+    /// this one and never the caller's own.
+    pub(super) cancel: runtime::CancellationToken,
+    /// EAC-FR-DUTR: the first failure the durable sink answered, which ends
+    /// delivery.
+    pub(super) durable_failure: std::sync::Mutex<Option<DurableOutputFailure>>,
     pub(super) log: S,
     /// EAC-FR-42: whether this execution may write `DEBUG` records into the
     /// session buffer at all.
@@ -75,7 +83,64 @@ impl<'a, S: LogSink + Clone + Send + Sync + 'static> LaunchObserver<'a, S> {
             );
         }
         if let Some(sink) = self.sink {
-            sink.activity(event);
+            sink.activity(event.clone());
+        }
+        if let Some(durable) = self.durable {
+            self.deliver_durable(durable, &event);
+        }
+    }
+
+    /// EAC-FR-DWGS / EAC-FR-IRKZ / EAC-FR-CXUE: hand one safe activity to the
+    /// durable sink and wait for its answer.
+    ///
+    /// An excluded kind goes no further than this check, and what is built
+    /// here has no payload field. The first failure cancels the run through the
+    /// linked token and ends delivery (EAC-FR-DUTR, EAC-FR-CPEP).
+    fn deliver_durable(&self, durable: &Arc<dyn DurableOutputSink>, event: &AgentActivityEvent) {
+        if !is_safe_kind(event.kind) {
+            return;
+        }
+        {
+            let failed = match self.durable_failure.lock() {
+                Ok(held) => held.is_some(),
+                Err(poisoned) => poisoned.into_inner().is_some(),
+            };
+            if failed {
+                return;
+            }
+        }
+        let activity = DurableActivity {
+            record_id: crate::notes::new_note_id(),
+            at: event.at.clone(),
+            channel: event.channel,
+            kind: event.kind,
+            summary: descriptor::summary_line(&event.summary),
+        };
+        if let Err(failure) = durable.record(activity) {
+            logging::log_error(
+                &self.log,
+                &BUFFER,
+                &[Domain::Ai, Domain::Backend],
+                "agent run output could not be kept",
+                log_fields! {
+                    "vendor" => self.vendor.as_str(),
+                    "container" => self.container.as_str(),
+                    "code" => failure.code.as_str(),
+                },
+            );
+            match self.durable_failure.lock() {
+                Ok(mut held) => held.get_or_insert(failure),
+                Err(poisoned) => poisoned.into_inner().get_or_insert(failure),
+            };
+            self.cancel.cancel();
+        }
+    }
+
+    /// EAC-FR-ZVRP: the failure the durable sink answered, if it answered one.
+    pub(super) fn take_durable_failure(&self) -> Option<DurableOutputFailure> {
+        match self.durable_failure.lock() {
+            Ok(mut held) => held.take(),
+            Err(poisoned) => poisoned.into_inner().take(),
         }
     }
 

@@ -99,6 +99,7 @@ fn a_directory_outside_the_allowlist_is_refused_by_the_guard() {
             task: task("go"),
             cancellation: CancellationToken::new(),
             activity: None,
+            durable_output: None,
             supplementary_mount: None,
         },
     ))
@@ -168,6 +169,7 @@ fn an_unmountable_directory_is_refused_through_the_executor() {
             task: task("go"),
             cancellation: CancellationToken::new(),
             activity: None,
+            durable_output: None,
             supplementary_mount: None,
         },
     ))
@@ -239,6 +241,7 @@ fn an_api_kind_integration_is_refused_by_its_own_branch() {
                 task: task("go"),
                 cancellation: CancellationToken::new(),
                 activity: None,
+                durable_output: None,
                 supplementary_mount: None,
             },
         ))

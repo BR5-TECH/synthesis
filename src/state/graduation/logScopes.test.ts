@@ -37,19 +37,21 @@ describe("stage eligibility", () => {
   });
 
   it("GRU-FR-TQJW: a stage whose only segment names `pass = null` holds a log", () => {
-    const logs = makeLogs({ source: [{ phaseId: "queued", pass: null }] });
+    const logs = makeLogs({ activity: [{ phaseId: "queued", pass: null }] });
     expect(stageHoldsLogs(logs, "queued")).toBe(true);
   });
 
-  it("GRU-FR-TQJW: a segment of either stream makes the stage eligible", () => {
-    const logs = makeLogs({ structured: [{ phaseId: "done", pass: null }] });
-    expect(stageHoldsLogs(logs, "done")).toBe(true);
+  it("GRU-FR-TQJW: a segment of either index makes the stage eligible", () => {
+    const structured = makeLogs({ structured: [{ phaseId: "done", pass: null }] });
+    const activity = makeLogs({ activity: [{ phaseId: "done", pass: 1 }] });
+    expect(stageHoldsLogs(structured, "done")).toBe(true);
+    expect(stageHoldsLogs(activity, "done")).toBe(true);
   });
 
   it("GRS-FR-MBED: a storage version this build does not know makes no stage eligible", () => {
     const logs = makeLogs({
       logStorageVersion: 2,
-      source: [{ phaseId: "working", pass: 1 }],
+      activity: [{ phaseId: "working", pass: 1 }],
     });
     expect(stageHoldsLogs(logs, "working")).toBe(false);
   });
@@ -60,7 +62,7 @@ describe("stage eligibility", () => {
     const stages: ProgressStage[] = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta"].map(
       (id) => ({ id, label: id.toUpperCase() }),
     );
-    const logs = makeLogs({ source: [{ phaseId: "epsilon", pass: null }] });
+    const logs = makeLogs({ activity: [{ phaseId: "epsilon", pass: null }] });
     const decorated = stagesWithLogAccess(stages, logs);
     expect(decorated).toHaveLength(7);
     expect(decorated.map((stage) => stage.id)).toEqual(stages.map((s) => s.id));
@@ -78,24 +80,31 @@ describe("the window's pass list", () => {
     expect(passesInPhase(run(), "done")).toEqual([]);
   });
 
-  it("GLW-FR-RVKT: the run-level entry stands exactly where a `pass = null` segment does", () => {
+  it("GLW-FR-RVKT: the run-level entry stands exactly where an activity segment has `pass = null`", () => {
     const withRunLevel = run({
-      logs: makeLogs({ structured: [{ phaseId: "queued", pass: null }] }),
+      logs: makeLogs({ activity: [{ phaseId: "queued", pass: null }] }),
     });
     expect(hasRunLevelEntry(withRunLevel.logs, "queued")).toBe(true);
     expect(hasRunLevelEntry(withRunLevel.logs, "working")).toBe(false);
   });
 
-  it("GLW-FR-RVKT: both streams settle it, so the stream toggle adds and removes no entry", () => {
-    const logs = makeLogs({ source: [{ phaseId: "done", pass: null }] });
-    expect(hasRunLevelEntry(logs, "done")).toBe(true);
+  it("GLW-FR-RVKT, GLW-FR-FPUX: a run-level segment of the structured index adds no entry", () => {
+    const logs = makeLogs({
+      structured: [{ phaseId: "done", pass: null }],
+      activity: [{ phaseId: "done", pass: 1 }],
+    });
+    expect(hasRunLevelEntry(logs, "done")).toBe(false);
+    const target = run({ logs });
+    expect(
+      scopeEntries(target, "done").some((entry) => entry.kind === "run_level"),
+    ).toBe(false);
   });
 
   it("GLW-FR-CKLZ, GLW-FR-DDXJ: the run-level entry follows the passes and is not numbered as one", () => {
     const entries = scopeEntries(
       run({
         logs: makeLogs({
-          structured: [
+          activity: [
             { phaseId: "working", pass: 1 },
             { phaseId: "working", pass: null },
           ],
@@ -114,7 +123,7 @@ describe("the window's pass list", () => {
 
   it("GLW-FR-PDGA: an entry names its own read scope and no other", () => {
     const entries = scopeEntries(
-      run({ logs: makeLogs({ source: [{ phaseId: "working", pass: null }] }) }),
+      run({ logs: makeLogs({ activity: [{ phaseId: "working", pass: null }] }) }),
       "working",
     );
     expect(scopeOf(entries[0])).toEqual({ kind: "pass", pass: 1 });
@@ -123,61 +132,67 @@ describe("the window's pass list", () => {
 });
 
 describe("the opening selection", () => {
-  it("GLW-FR-ELJO: the newest listed pass whose own records the selected stream holds", () => {
+  it("GLW-FR-ELJO: the newest listed pass whose own records the activity index holds", () => {
     const target = run({
       logs: makeLogs({
-        source: [
+        activity: [
           { phaseId: "working", pass: 1 },
           { phaseId: "working", pass: 2 },
         ],
       }),
     });
-    expect(openingEntry(target, "working", "source")?.key).toBe("pass-2");
+    expect(openingEntry(target, "working")?.key).toBe("pass-2");
   });
 
   it("GLW-FR-ELJO: an older pass wins where the newest one printed nothing", () => {
     const target = run({
-      logs: makeLogs({ source: [{ phaseId: "working", pass: 1 }] }),
+      logs: makeLogs({ activity: [{ phaseId: "working", pass: 1 }] }),
     });
-    expect(openingEntry(target, "working", "source")?.key).toBe("pass-1");
+    expect(openingEntry(target, "working")?.key).toBe("pass-1");
   });
 
   it("GLW-FR-YVKD: a stage holding run-level records alone opens on the run-level entry", () => {
     const target = run({
-      logs: makeLogs({ source: [{ phaseId: "review", pass: null }] }),
+      logs: makeLogs({ activity: [{ phaseId: "review", pass: null }] }),
     });
-    expect(openingEntry(target, "review", "source")?.key).toBe("run-level");
+    expect(openingEntry(target, "review")?.key).toBe("run-level");
   });
 
   it("GLW-FR-ELJO: the run-level entry stays available but never displaces the newest pass", () => {
     const target = run({
       logs: makeLogs({
-        source: [
+        activity: [
           { phaseId: "working", pass: 2 },
           { phaseId: "working", pass: null },
         ],
       }),
     });
-    expect(openingEntry(target, "working", "source")?.key).toBe("pass-2");
+    expect(openingEntry(target, "working")?.key).toBe("pass-2");
     expect(
       scopeEntries(target, "working").some((entry) => entry.kind === "run_level"),
     ).toBe(true);
   });
 
-  it("GLW-FR-XZQM: the selected stream's own index settles it", () => {
+  it("GLW-FR-XZQM, GLW-FR-ELJO: the activity index alone settles it, and the structured index counts for nothing", () => {
     const target = run({
       logs: makeLogs({
-        source: [{ phaseId: "working", pass: 1 }],
+        activity: [{ phaseId: "working", pass: 1 }],
         structured: [{ phaseId: "working", pass: 2 }],
       }),
     });
-    expect(openingEntry(target, "working", "source")?.key).toBe("pass-1");
-    expect(openingEntry(target, "working", "structured")?.key).toBe("pass-2");
+    expect(openingEntry(target, "working")?.key).toBe("pass-1");
+  });
+
+  it("GLW-FR-ELJO: with no activity segment of a listed pass or run-level, the newest listed pass opens", () => {
+    const target = run({
+      logs: makeLogs({ structured: [{ phaseId: "working", pass: 1 }] }),
+    });
+    expect(openingEntry(target, "working")?.key).toBe("pass-2");
   });
 
   it("GLW-FR-WBTE: a pass that wrote nothing is still listed and still selectable", () => {
     const target = run({
-      logs: makeLogs({ source: [{ phaseId: "working", pass: 1 }] }),
+      logs: makeLogs({ activity: [{ phaseId: "working", pass: 1 }] }),
     });
     expect(scopeEntries(target, "working").map((e) => e.key)).toEqual([
       "pass-1",
@@ -187,19 +202,18 @@ describe("the opening selection", () => {
 });
 
 describe("scope identity", () => {
-  it("GLW-FR-NFLN: a key names one run, stage, entry, and stream", () => {
+  it("GLW-FR-NFLN: a key names one run, phase, and entry", () => {
     const entry = { key: "pass-1", kind: "pass" as const, pass: 1, label: "Pass 1" };
-    const base = scopeKey("r1", "working", entry, "source");
-    expect(scopeKey("r2", "working", entry, "source")).not.toBe(base);
-    expect(scopeKey("r1", "review", entry, "source")).not.toBe(base);
-    expect(scopeKey("r1", "working", entry, "structured")).not.toBe(base);
+    const base = scopeKey("r1", "working", entry);
+    expect(scopeKey("r2", "working", entry)).not.toBe(base);
+    expect(scopeKey("r1", "review", entry)).not.toBe(base);
     expect(
-      scopeKey(
-        "r1",
-        "working",
-        { key: "run-level", kind: "run_level", pass: null, label: "Run-level" },
-        "source",
-      ),
+      scopeKey("r1", "working", {
+        key: "run-level",
+        kind: "run_level",
+        pass: null,
+        label: "Run-level",
+      }),
     ).not.toBe(base);
   });
 });
@@ -222,11 +236,11 @@ describe("whether a log append can open a stage", () => {
     ["no segment names the current stage", at("working", "working", 1, {})],
     [
       "only another stage holds a segment",
-      at("working", "working", 1, { source: [{ phaseId: "review", pass: 1 }] }),
+      at("working", "working", 1, { activity: [{ phaseId: "review", pass: 1 }] }),
     ],
     [
       "only an earlier pass of the stage holds a segment",
-      at("working", "working", 2, { source: [{ phaseId: "working", pass: 1 }] }),
+      at("working", "working", 2, { activity: [{ phaseId: "working", pass: 1 }] }),
     ],
     ["the run rests interrupted with nothing written", at("interrupted", "working", 1, {})],
     ["the run rests blocked with nothing written", at("blocked", "working", 1, {})],
@@ -237,16 +251,16 @@ describe("whether a log append can open a stage", () => {
 
   it.each([
     [
-      "the source stream names the current stage and pass",
-      at("working", "working", 1, { source: [{ phaseId: "working", pass: 1 }] }),
+      "the activity index names the current stage and pass",
+      at("working", "working", 1, { activity: [{ phaseId: "working", pass: 1 }] }),
     ],
     [
-      "only the structured stream names the current stage and pass",
+      "only the structured index names the current stage and pass",
       at("working", "working", 1, { structured: [{ phaseId: "working", pass: 1 }] }),
     ],
     [
       "a run-level segment names the current stage",
-      at("working", "done", 1, { source: [{ phaseId: "done", pass: null }] }),
+      at("working", "done", 1, { activity: [{ phaseId: "done", pass: null }] }),
     ],
     [
       "a pass-less record names the queued stage",
@@ -254,7 +268,7 @@ describe("whether a log append can open a stage", () => {
     ],
     [
       "an older record holds pass 0, which the backend counts as pass 1",
-      at("working", "working", 0, { source: [{ phaseId: "working", pass: 1 }] }),
+      at("working", "working", 0, { activity: [{ phaseId: "working", pass: 1 }] }),
     ],
     ["the run completed", at("completed", "done", 1, {})],
     ["the run was discarded", at("discarded", "working", 1, {})],

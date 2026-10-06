@@ -159,19 +159,19 @@ fn every_stream_announces_that_it_grew_and_carries_no_record() {
     use tauri::Listener;
 
     let fx = Fixture::new();
-    let source = Arc::new(AtomicUsize::new(0));
+    let activity = Arc::new(AtomicUsize::new(0));
     let structured = Arc::new(AtomicUsize::new(0));
     let payloads = Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
     {
-        let (source, structured, payloads) =
-            (source.clone(), structured.clone(), payloads.clone());
+        let (activity, structured, payloads) =
+            (activity.clone(), structured.clone(), payloads.clone());
         fx.app.listen(
             crate::graduation::GRADUATION_LOG_RECORDS_APPENDED,
             move |event| {
                 let payload: serde_json::Value =
                     serde_json::from_str(event.payload()).expect("a payload");
                 match payload["stream"].as_str() {
-                    Some("source") => source.fetch_add(1, Ordering::SeqCst),
+                    Some("activity") => activity.fetch_add(1, Ordering::SeqCst),
                     Some("structured") => structured.fetch_add(1, Ordering::SeqCst),
                     _ => panic!("every event names one of the two streams"),
                 };
@@ -187,8 +187,8 @@ fn every_stream_announces_that_it_grew_and_carries_no_record() {
         "the structured stream announced that it grew"
     );
     assert!(
-        source.load(Ordering::SeqCst) > 0,
-        "and so did the source stream, which is what a following surface reads"
+        activity.load(Ordering::SeqCst) > 0,
+        "and so did the activity stream, which is what a following surface reads"
     );
     let held = payloads.lock().expect("the payloads");
     for payload in held.iter() {
@@ -197,7 +197,7 @@ fn every_stream_announces_that_it_grew_and_carries_no_record() {
         // No record content: the three fields and no other.
         let object = payload.as_object().expect("an object");
         assert_eq!(object.len(), 3, "{payload}");
-        for key in ["record", "records", "data_base64", "event", "fields"] {
+        for key in ["record", "records", "summary", "kind", "event", "fields"] {
             assert!(object.get(key).is_none(), "the event carries no {key}");
         }
     }

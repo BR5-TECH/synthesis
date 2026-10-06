@@ -589,6 +589,7 @@ fn the_container_is_created_from_the_image_the_project_commits() {
             task: task("go"),
             cancellation: CancellationToken::new(),
             activity: None,
+            durable_output: None,
             supplementary_mount: None,
         },
     ));
@@ -642,6 +643,7 @@ fn a_project_that_configures_no_image_launches_nothing() {
             task: task("go"),
             cancellation: CancellationToken::new(),
             activity: None,
+            durable_output: None,
             supplementary_mount: None,
         },
     ))
@@ -681,6 +683,7 @@ fn a_configured_image_that_cannot_be_pulled_is_image_unavailable() {
             task: task("go"),
             cancellation: CancellationToken::new(),
             activity: None,
+            durable_output: None,
             supplementary_mount: None,
         },
     ))
@@ -712,6 +715,7 @@ fn the_seam_receives_the_specification_the_cli_vector_is_rendered_from() {
             task: task("go"),
             cancellation: CancellationToken::new(),
             activity: None,
+            durable_output: None,
             supplementary_mount: None,
         },
     ))
@@ -752,6 +756,7 @@ fn an_unverified_docker_backend_refuses_before_any_container() {
             task: task("go"),
             cancellation: CancellationToken::new(),
             activity: None,
+            durable_output: None,
             supplementary_mount: None,
         },
     ))

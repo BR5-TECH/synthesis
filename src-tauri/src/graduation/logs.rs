@@ -1,6 +1,6 @@
 //! A run's two durable log streams (`GRS-graduation-run-log-storage.md`).
 //!
-//! Every run owns `logs/source.jsonl` and `logs/structured.jsonl` under its own
+//! Every run owns `logs/activity.jsonl` and `logs/structured.jsonl` under its own
 //! directory (GRD-FR-OSCG). They are what the author reads a run back from
 //! after it has stopped, which is the whole reason a failing run is debuggable
 //! rather than opaque.
@@ -38,8 +38,8 @@ pub use read::{
     GraduationLogPresentation,
 };
 pub use records::{
-    GraduationLogLevel, GraduationLogOrigin, GraduationLogProducer, GraduationLogRecord,
-    GraduationLogStream, GraduationSourceChunk, GraduationStructuredRecord,
+    GraduationActivityRecord, GraduationLogLevel, GraduationLogOrigin, GraduationLogProducer,
+    GraduationLogRecord, GraduationLogStream, GraduationStructuredRecord,
 };
 pub use writer::LogPaths;
 
@@ -85,8 +85,8 @@ impl StructuredEvent {
 
 /// The log indexes of every run this process is writing.
 ///
-/// A run's structured records come from the loop's own thread and its source
-/// chunks come from the executor's output path, so **two threads write one
+/// A run's structured records come from the loop's own thread and its activity
+/// records come from the executor's output path, so **two threads write one
 /// run's streams**. One shared index under one hold is what keeps their
 /// sequences ascending and keeps either from discarding what the other wrote
 /// (GRS-FR-SXNY).
@@ -186,8 +186,8 @@ pub fn emit<R: tauri::Runtime>(
     run: &mut GraduationRun,
     event: StructuredEvent,
 ) -> bool {
-    // GRS-FR-EIXS: **either** required stream is mandatory. A source chunk the
-    // executor's own thread could not store is found here, which is still
+    // GRS-FR-EIXS: **either** required stream is mandatory. An activity record
+    // the executor's own thread could not store is found here, which is still
     // before the run performs another agent action.
     if stream_failed(app, &run.id) {
         refresh(app, run);
@@ -249,7 +249,7 @@ pub fn retry_pending<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &mut Gra
 /// run.
 ///
 /// The indexes it advances are the run's **shared** ones, so a structured record
-/// from the loop and a source chunk from the executor's output path never take
+/// from the loop and an activity record from the executor's output path never take
 /// the same sequence and never discard each other's work.
 fn write_records<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
@@ -338,39 +338,56 @@ fn append_shared<R: tauri::Runtime>(
     }
 }
 
-/// GRS-FR-SXNY: append the executor output of a turn, from the thread that read
-/// it.
+/// GRS-FR-SXNY / GRS-FR-RGPN: append the activity of a turn, from the thread
+/// that read it, and answer only once it is durable.
 ///
 /// The run record is written by the loop's thread alone, so a failure here is
-/// recorded on the shared indexes and the loop rests the run at its next record
-/// — which is still before it performs another agent action (GRS-FR-EIXS).
-pub fn append_source_chunks<R: tauri::Runtime>(
+/// recorded on the shared indexes. The executor stops the turn on the failure
+/// (EAC-FR-DUTR), and the loop rests the run before it performs another agent
+/// action (GRS-FR-EIXS).
+pub fn append_activity_records<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run_id: &str,
     seed: GraduationLogIndexes,
-    chunks: Vec<GraduationSourceChunk>,
-) {
-    if chunks.is_empty() {
-        return;
+    activity: Vec<GraduationActivityRecord>,
+) -> Result<(), GraduationLogFailure> {
+    if activity.is_empty() {
+        return Ok(());
     }
-    let records = chunks.into_iter().map(GraduationLogRecord::Source).collect();
-    match append_shared(app, run_id, seed, GraduationLogStream::Source, records) {
-        // GRS-FR-UCZL: the source stream announces that it grew exactly as the
-        // structured one does. A surface following a working turn reads the raw
-        // output back under its own cursor on this, and nothing else tells it.
-        Ok(indexes) => announce_log_records(
-            app,
-            run_id,
-            GraduationLogStream::Source,
-            indexes.source.latest_sequence,
-        ),
-        Err(_) => logging::log_error(
-            app,
-            &crate::logging::BUFFER,
-            &[Domain::Backend],
-            "graduation could not write a turn's output to the run's source stream",
-            log_fields! { "run_id" => run_id.to_string() },
-        ),
+    let records = activity.into_iter().map(GraduationLogRecord::Activity).collect();
+    match append_shared(app, run_id, seed, GraduationLogStream::Activity, records) {
+        // GRS-FR-UCZL: the activity stream announces that it grew exactly as the
+        // structured one does. A surface following a working turn reads the
+        // activity back under its own cursor on this, and nothing else tells it.
+        Ok(indexes) => {
+            announce_log_records(
+                app,
+                run_id,
+                GraduationLogStream::Activity,
+                indexes.activity.latest_sequence,
+            );
+            Ok(())
+        }
+        Err(indexes) => {
+            logging::log_error(
+                app,
+                &crate::logging::BUFFER,
+                &[Domain::Backend],
+                "graduation could not write a turn's activity to the run's activity stream",
+                log_fields! { "run_id" => run_id.to_string() },
+            );
+            Err(indexes
+                .persistence
+                .failure
+                .unwrap_or_else(|| {
+                    GraduationLogFailure::write(
+                        index::CODE_STORAGE_UNAVAILABLE,
+                        GraduationLogStream::Activity,
+                        "The run's log storage could not be reached.",
+                        Vec::new(),
+                    )
+                }))
+        }
     }
 }
 
@@ -404,9 +421,9 @@ pub fn reconcile_saved<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &mut G
         );
         return;
     };
-    let before = (run.logs.source.record_count, run.logs.structured.record_count);
+    let before = (run.logs.activity.record_count, run.logs.structured.record_count);
     writer::reconcile(&fs, &paths, &mut run.logs);
-    let after = (run.logs.source.record_count, run.logs.structured.record_count);
+    let after = (run.logs.activity.record_count, run.logs.structured.record_count);
     if before != after {
         logging::log_info(
             app,
@@ -415,8 +432,8 @@ pub fn reconcile_saved<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &mut G
             "graduation brought a stopped run's saved log index up to its files",
             log_fields! {
                 "run_id" => run.id.clone(),
-                "saved_source_records" => before.0,
-                "source_records" => after.0,
+                "saved_activity_records" => before.0,
+                "activity_records" => after.0,
                 "saved_structured_records" => before.1,
                 "structured_records" => after.1,
             },
@@ -515,104 +532,130 @@ fn compose(run: &GraduationRun, event: &StructuredEvent) -> GraduationLogRecord 
     })
 }
 
-/// One chunk of executor output, attributed to the turn that produced it.
+/// GRS-FR-JAPO / GRS-FR-WJIA: one safe activity, attributed to the turn that
+/// produced it.
 ///
-/// The channel the executor reported is the record's `source`, which is why the
-/// three names agree byte-for-byte: `stdout`, `stderr`, and `executor`.
-pub fn source_chunk(
-    run: &GraduationRun,
+/// `None` for a kind the stream excludes (GRS-FR-VZUZ). The summary is cut to
+/// one line again here, so a record never holds a line break whatever reached
+/// the sink.
+pub fn activity_record(
+    run_id: &str,
     producer: GraduationLogProducer,
-    channel: &str,
-    payload: &str,
-) -> GraduationSourceChunk {
-    use base64::Engine as _;
-    let bytes = payload.as_bytes();
-    GraduationSourceChunk {
+    pass: Option<u32>,
+    activity: &crate::tools::agent_exec::DurableActivity,
+) -> Option<GraduationActivityRecord> {
+    if !crate::tools::agent_exec::is_safe_kind(activity.kind) || !producer.writes_activity() {
+        return None;
+    }
+    let pass = pass.filter(|_| producer.carries_pass());
+    Some(GraduationActivityRecord {
         attribution: records::GraduationLogAttribution {
             schema_version: 1,
-            record_id: crate::notes::new_note_id(),
+            record_id: activity.record_id.clone(),
             sequence: 0,
-            at: crate::notes::now_rfc3339(),
-            run_id: run.id.clone(),
+            at: activity.at.clone(),
+            run_id: run_id.to_string(),
             phase_id: producer.phase_id(None).as_str().to_string(),
-            pass: producer.carries_pass().then(|| run.pass()),
-            origin: GraduationLogOrigin::Executor,
+            pass,
+            origin: producer.activity_origin(pass, activity.channel),
             producer: producer.as_str().to_string(),
         },
-        agent: None,
-        container: None,
-        source: channel.to_string(),
-        encoding: "base64".to_string(),
-        data_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
-        byte_length: bytes.len() as u64,
-    }
+        channel: activity.channel.to_string(),
+        kind: activity.kind.to_string(),
+        summary: crate::tools::agent_exec::descriptor::summary_line(&activity.summary),
+    })
 }
 
-/// The sink that carries a turn's executor output into `source.jsonl`.
+/// The durable sink that carries a turn's safe activity into `activity.jsonl`.
 ///
 /// It stands beside `AGV-agent-activity.md`'s in-memory sink rather than in
 /// place of it: that one is the live panel and is evicted, and this one is the
-/// durable copy the author reads a finished run back from (GRS-FR-JQOO).
+/// record the author reads a finished run back from (GRS-FR-JQOO).
 ///
-/// **What it delivers is the executor's masked activity events** rather than
-/// byte-exact stdout chunks. `AgentActivityEvent` carries a summary and a
-/// payload string, and the executor exposes no byte-exact durable seam
-/// (GRS-FR-QDVH), so a record here holds the masked text of an event and not
-/// the raw bytes of the stream it came from.
+/// GRS-FR-RGPN / GRS-FR-ITWJ: it answers only once the record is durable, and
+/// it answers a failed append with the typed failure, which makes the executor
+/// stop the turn (EAC-FR-DUTR).
 ///
 /// GRS-FR-YXVY / GRS-FR-JWBW: what arrives has already passed the executor's
-/// own credential and session-identity masking (`../tools/EAC-execute-agent-cli.md`
-/// EAC-FR-29). This module applies no second rule of its own and inspects
-/// nothing: it accepts chunks from that masked delivery path and from no other.
-pub struct GraduationSourceSink<R: tauri::Runtime> {
+/// masking (`../tools/EAC-execute-agent-cli.md` EAC-FR-FKCN). This sink applies
+/// no second rule and holds no payload to apply one to.
+pub struct GraduationActivitySink<R: tauri::Runtime> {
     app: tauri::AppHandle<R>,
     run_id: String,
     producer: GraduationLogProducer,
+    /// GLG-FR-GZUM: the pass the run stood at when the turn was dispatched.
+    pass: u32,
+    /// Seeds the shared indexes where this process holds none yet.
+    seed: GraduationLogIndexes,
 }
 
-impl<R: tauri::Runtime> GraduationSourceSink<R> {
-    pub fn new(app: &tauri::AppHandle<R>, run_id: &str, producer: GraduationLogProducer) -> Self {
+impl<R: tauri::Runtime> GraduationActivitySink<R> {
+    pub fn new(
+        app: &tauri::AppHandle<R>,
+        run: &GraduationRun,
+        producer: GraduationLogProducer,
+    ) -> Self {
         Self {
             app: app.clone(),
-            run_id: run_id.to_string(),
+            run_id: run.id.clone(),
             producer,
+            pass: run.pass(),
+            seed: run.logs.clone(),
         }
     }
 }
 
-impl<R: tauri::Runtime> crate::tools::agent_exec::AgentActivitySink for GraduationSourceSink<R> {
-    fn activity(&self, event: crate::tools::agent_exec::AgentActivityEvent) {
-        // The run is reloaded per chunk so the record is attributed to the pass
-        // the run stands at now, and so two sinks never hold one record apart.
-        let Ok(run) = super::load_run(&self.app, &self.run_id) else {
-            return;
+impl<R: tauri::Runtime> crate::tools::agent_exec::DurableOutputSink for GraduationActivitySink<R> {
+    fn record(
+        &self,
+        activity: crate::tools::agent_exec::DurableActivity,
+    ) -> Result<(), crate::tools::agent_exec::DurableOutputFailure> {
+        let Some(record) = activity_record(&self.run_id, self.producer, Some(self.pass), &activity)
+        else {
+            // GRS-FR-VZUZ: an excluded kind is refused before it reaches the
+            // file. The executor never sends one, so this is the second defence.
+            logging::log_warn(
+                &self.app,
+                &crate::logging::BUFFER,
+                &[Domain::Backend],
+                "graduation refused an activity of an excluded kind",
+                log_fields! {
+                    "run_id" => self.run_id.clone(),
+                    "kind" => activity.kind,
+                },
+            );
+            return Ok(());
         };
-        let text = if event.payload.is_empty() {
-            event.summary.clone()
-        } else {
-            event.payload.clone()
-        };
-        let chunk = source_chunk(&run, self.producer, event.channel, &text);
-        append_source_chunks(&self.app, &self.run_id, run.logs.clone(), vec![chunk]);
+        append_activity_records(&self.app, &self.run_id, self.seed.clone(), vec![record])
+            .map_err(|failure| crate::tools::agent_exec::DurableOutputFailure {
+                code: failure.code,
+                message: failure.message,
+            })
     }
 }
 
-/// Both sinks a graduation turn reports through, as one.
-pub struct CompositeSink {
-    sinks: Vec<std::sync::Arc<dyn crate::tools::agent_exec::AgentActivitySink>>,
-}
-
-impl CompositeSink {
-    pub fn of(sinks: Vec<std::sync::Arc<dyn crate::tools::agent_exec::AgentActivitySink>>) -> Self {
-        Self { sinks }
-    }
-}
-
-impl crate::tools::agent_exec::AgentActivitySink for CompositeSink {
-    fn activity(&self, event: crate::tools::agent_exec::AgentActivityEvent) {
-        for sink in &self.sinks {
-            sink.activity(event.clone());
-        }
+/// GRS-FR-EIXS / GRS-FR-DDSB: the run record learns of a durable failure the
+/// executor reported, so the interruption names it.
+///
+/// The shared indexes already hold the failure where the sink wrote it. A
+/// failure that is not there yet is noted here, so the run never rests on
+/// `log_persistence_failed` with no failure to name.
+pub fn note_durable_failure<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &mut GraduationRun,
+    failure: &crate::tools::agent_exec::DurableOutputFailure,
+) {
+    refresh(app, run);
+    if run.logs.persistence.is_healthy() {
+        run.logs.note_failed(
+            GraduationLogFailure::write(
+                failure.code.as_str(),
+                GraduationLogStream::Activity,
+                failure.message.clone(),
+                Vec::new(),
+            ),
+            0,
+        );
     }
 }
 

@@ -54,6 +54,7 @@ mod concurrency;
 mod decoding;
 mod controls;
 mod watching;
+mod durable;
 mod observers;
 mod contracts;
 

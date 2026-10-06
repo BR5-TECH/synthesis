@@ -461,10 +461,6 @@ fn the_message_names_the_event_and_the_draft() {
     assert_eq!(message(DraftEvent::Created, "Push button"), "draft: create \"Push button\"");
     assert_eq!(message(DraftEvent::Deleted, "Push button"), "draft: delete \"Push button\"");
     assert_eq!(
-        message(DraftEvent::Accepted, "Push button"),
-        "draft: accept change to \"Push button\""
-    );
-    assert_eq!(
         message(DraftEvent::GraduationStarted, "Push button"),
         "draft: graduate \"Push button\""
     );
@@ -487,7 +483,7 @@ fn a_moved_draft_is_committed_at_its_new_location_and_removed_from_the_old() {
     )
     .expect("the move");
 
-    assert_eq!(commit_once(&f.root, ID, DraftEvent::Accepted), None, "the commit is taken");
+    assert_eq!(commit_once(&f.root, ID, DraftEvent::GraduationStarted), None, "the commit is taken");
     for gone in [
         format!(".synthesis/drafts/A/{ID}/draft.toml"),
         format!(".synthesis/drafts/A/{ID}/files/Prompt.md"),

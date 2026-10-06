@@ -44,8 +44,6 @@ export function refusalText(text: string): string {
       "This stream is the active worktree. Open another worktree first.",
     [STREAM_ERRORS.mergeInProgress]:
       "This repository is already merging or updating a stream.",
-    [STREAM_ERRORS.draftSaveFailed]:
-      "A draft could not be saved before the merge, so nothing was written.",
     [STREAM_ERRORS.mergeBranchMoved]:
       "The stream branch or the base branch moved after the merge was handed off. Nothing was written to either branch. Start the merge again.",
     [STREAM_ERRORS.mergeDirtySide]:

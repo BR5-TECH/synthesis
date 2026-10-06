@@ -577,7 +577,6 @@ describe("the commit route and the typed refusals (WSS-FR-TQBN, WSS-FR-NPXC, WSS
     [STREAM_ERRORS.notAGitRepository, /not inside a Git repository/],
     [STREAM_ERRORS.mergeInProgress, /already merging or updating/],
     [STREAM_ERRORS.updateInProgress, /already updating a stream/],
-    [STREAM_ERRORS.draftSaveFailed, /draft could not be saved/],
     [STREAM_ERRORS.baseNotCheckedOut, /No worktree holds the base branch/],
     [STREAM_ERRORS.vendorImageUnconfigured, /no agent image configured/],
     [STREAM_ERRORS.vendorImageInvalid, /image cannot carry a run/],

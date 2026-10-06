@@ -33,6 +33,7 @@ const EVENT_NAMES: &[&str] = &[
     prompt_proposals::PROMPT_PROPOSALS_CHANGED,
     agent_conversations::AGENT_TURN_STATE_CHANGED,
     comments::DISCUSSION_CHANGED,
+    github_tokens::GITHUB_TOKENS_CHANGED,
     logging::LOG_RECORDS_APPENDED,
     notifications::NOTIFICATION_ACTIVATED,
     graduation::GRADUATION_QUEUE_CHANGED,

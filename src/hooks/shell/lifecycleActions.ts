@@ -26,6 +26,7 @@ import { resetProposalHunks } from "../../state/proposalHunks";
 import { resetDraftDiscussions } from "../../state/draftDiscussion";
 import { resetPromptProposals } from "../../state/promptProposals";
 import { resetSharedCommentIdentity } from "../useSharedCommentIdentity";
+import { resetProjectIdentity } from "../../state/projectIdentity";
 import type { EditSessionStore } from "../../state/editSessions";
 import type { FlowSessionStore } from "../../state/flowSessions";
 import type { DraftSessionStore } from "../../state/draftSessions";
@@ -233,6 +234,7 @@ export function createLifecycleActions(deps: LifecycleDeps): LifecycleActions {
     // them name discussions of the outgoing content root, so both go with it.
     clearQuestionSets();
     resetSharedCommentIdentity();
+    resetProjectIdentity();
     /**
      * DCR-FR-33: the proposals every surface reads a draft's pending change
      * from, and the readings they were taken by, name drafts of the outgoing

@@ -298,8 +298,6 @@ export const STREAM_ERRORS = {
   active: "stream_active",
   /** GRB-FR-JIRD: one merge or update of one repository runs at a time. */
   mergeInProgress: "merge_in_progress",
-  /** WKS-FR-ZLWT: the stream's own record could not be saved before the merge. */
-  draftSaveFailed: "draft_save_failed",
   /** GRD-FR-XHSE: a branch moved after the merge was handed off. */
   mergeBranchMoved: "merge_branch_moved",
   /** GRD-FR-JSBE: a working copy holds uncommitted work, so nothing was applied. */

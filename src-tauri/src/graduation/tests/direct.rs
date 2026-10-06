@@ -52,7 +52,7 @@ impl Fixture {
     }
 
     /// A draft made committed, so the worktree stands clean around it.
-    fn committed_draft(&self, name: &str) -> String {
+    pub(super) fn committed_draft(&self, name: &str) -> String {
         let id = self.draft(name);
         self.commit_all("draft");
         id

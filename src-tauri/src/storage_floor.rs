@@ -22,7 +22,6 @@
 //! committed draft storage of one draft (`DRS-draft-storage.md` DRS-FR-VECL).
 
 pub mod commit;
-pub mod save;
 
 /// `DRS-draft-storage.md` DRS-FR-04: the drafts and everything they hold.
 pub const DRAFTS_REL: &str = ".synthesis/drafts";
@@ -44,8 +43,11 @@ pub const OWNED_FOLDERS: [&str; 1] = [DRAFTS_REL];
 /// included. A gate exists to protect the author's uncommitted work from a
 /// publication landing over it, and the drafts root is a folder the application
 /// writes into at a cadence no author controls, so a refusal naming anything
-/// under it is a refusal they cannot clear. What is **committed** under that
-/// prefix is narrower ([`is_draft_event_path`]).
+/// under it is a refusal they cannot clear. The dirty check before a stream
+/// checkout reads past less: a tracked path here that differs from `HEAD`
+/// counts on the side it checks out, because no draft event commits it first
+/// (`WKS-work-streams.md` WKS-FR-JVLM). What is **committed** under that prefix
+/// is narrower ([`is_draft_event_path`]).
 pub fn is_application_storage_rel(rel: &str) -> bool {
     let normalized = normalize_rel(rel);
     OWNED_FOLDERS.iter().any(|owned| {
@@ -94,6 +96,27 @@ pub fn is_application_storage_in_repo(repo_rel: &str) -> bool {
     }
 }
 
+/// The drafts root's `.gitattributes` and `.gitignore` (DRS-FR-BKFG).
+pub(crate) fn is_root_git_file(rel: &str) -> bool {
+    matches!(rel, ".gitattributes" | ".gitignore")
+}
+
+/// A repository-relative path as the project prefix it stands under and its
+/// path beneath that project's drafts root, where it has one.
+pub(crate) fn split_at_drafts(path: &str) -> Option<(String, String)> {
+    let marker = format!("{DRAFTS_REL}/");
+    let mut start = 0;
+    loop {
+        let tail = &path[start..];
+        if let Some(rel) = tail.strip_prefix(&marker) {
+            let prefix = path[..start].trim_end_matches('/').to_string();
+            return Some((prefix, rel.to_string()));
+        }
+        let next = tail.find('/')?;
+        start += next + 1;
+    }
+}
+
 /// One spelling for a path a status read may report in several.
 fn normalize_rel(rel: &str) -> String {
     let normalized = rel.replace('\\', "/");
@@ -103,6 +126,27 @@ fn normalize_rel(rel: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::is_application_storage_rel as owned;
+
+    /// WKS-FR-JVLM: a repository path splits at its own project's drafts root,
+    /// below a prefix for a co-located project, and the drafts root's two Git
+    /// files are told apart from a draft's own.
+    #[test]
+    fn a_path_splits_at_its_projects_drafts_root() {
+        use super::{is_root_git_file, split_at_drafts};
+        assert_eq!(
+            split_at_drafts(".synthesis/drafts/.gitignore"),
+            Some((String::new(), ".gitignore".to_string()))
+        );
+        assert_eq!(
+            split_at_drafts("apps/web/.synthesis/drafts/UI/x/files/P.md"),
+            Some(("apps/web".to_string(), "UI/x/files/P.md".to_string()))
+        );
+        for none in [".synthesis/drafts", ".synthesis/drafts-old/x", "src/main.rs"] {
+            assert_eq!(split_at_drafts(none), None, "{none}");
+        }
+        assert!(is_root_git_file(".gitignore") && is_root_git_file(".gitattributes"));
+        assert!(!is_root_git_file("UI/.gitignore"));
+    }
 
     /// PST-FR-XKVD: the set holds the drafts folder and nothing else. The
     /// conversation and statistics folders an earlier build committed are the

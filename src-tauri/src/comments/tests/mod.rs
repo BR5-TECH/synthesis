@@ -273,3 +273,4 @@ mod proposal_reference;
 mod note_discussions;
 mod question_bodies;
 mod question_sets;
+mod local_participant;

@@ -481,7 +481,7 @@ fn drs_ts_ispi_a_migrated_project_commits_the_drafts_it_already_had() {
     .expect("the old ignore file");
 
     // While the entry stands, the commit sees nothing at all.
-    super::commit_event(root, id, "older", DraftEvent::Accepted);
+    super::commit_event(root, id, "older", DraftEvent::GraduationStarted);
     f.commit_now();
     assert!(
         !f.committed_paths()
@@ -509,7 +509,7 @@ fn drs_ts_ispi_a_migrated_project_commits_the_drafts_it_already_had() {
     // DRS-FR-NRQQ: the next draft event of that draft carries its committed
     // storage. Its proposal is private draft storage and stays out of Git.
     super::ensure_private_ignored(root);
-    super::commit_event(root, id, "older", DraftEvent::Accepted);
+    super::commit_event(root, id, "older", DraftEvent::GraduationStarted);
     f.commit_now();
 
     let committed = f.committed_paths();
@@ -567,7 +567,7 @@ fn private_writers_commit_nothing_and_an_image_waits_for_the_next_event() {
         "no write of these raised a commit",
     );
 
-    super::commit_event(root, &id, "a prompt", DraftEvent::Accepted);
+    super::commit_event(root, &id, "a prompt", DraftEvent::GraduationStarted);
     f.commit_now();
     let committed = f.committed_paths();
     let asset_path = format!(".synthesis/drafts/{id}/{}", asset.path);

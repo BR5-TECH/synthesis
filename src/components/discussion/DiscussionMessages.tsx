@@ -19,13 +19,14 @@ import { activityStatus } from "../../state/agentActivity";
 import type { AgentRoster } from "../agentTags";
 import {
   discussionDraftId,
-  participantName,
+  isLocalParticipant,
   participantTitle,
   type AgentTurn,
   type Discussion,
   type Participant,
 } from "../../types";
 import type { PairedHalf } from "../CommentRail/questionPairs";
+import { useParticipantLabel } from "../../state/projectIdentity";
 
 /**
  * CVP-FR-32: whether this message is one the author wrote.
@@ -42,7 +43,9 @@ export function isOwnComment(
   if (!identity || identity.kind !== "human" || author.kind !== "human") {
     return false;
   }
-  return author.login === identity.login;
+  // CMT-FR-ZCAE: a comment of the local participant is the author's own
+  // whichever identity now labels it.
+  return isLocalParticipant(author) || author.login === identity.login;
 }
 
 export interface DiscussionMessagesProps {
@@ -82,6 +85,7 @@ export function DiscussionMessages({
   afterComments,
   footer,
 }: DiscussionMessagesProps) {
+  const participantLabel = useParticipantLabel();
   return (
     <>
       {thread.comments.map((comment, index) => (
@@ -106,7 +110,7 @@ export function DiscussionMessages({
                   {/* CMT-FR-10. `kit.css` `.comment__title::before` carries a
                       hidden copy of this marker, so the two must stay in step. */}
                   {comment.author.kind === "agent" && "✦ "}
-                  {participantName(comment.author)}
+                  {participantLabel(comment.author)}
                 </span>
                 <span className="comment__time" title={comment.createdAt}>
                   {formatRelative(comment.createdAt)}
@@ -118,7 +122,7 @@ export function DiscussionMessages({
                     className="btn btn--ghost btn--icon-xs comment__quote-button"
                     // Position in the thread, not just the author: two messages
                     // by one person would otherwise share a name (CMT-FR-35).
-                    aria-label={`Quote comment ${index + 1} by ${participantName(comment.author)}`}
+                    aria-label={`Quote comment ${index + 1} by ${participantLabel(comment.author)}`}
                     title="Quote"
                     // Without this the button's mousedown collapses the
                     // selection before the click lands.

@@ -316,17 +316,6 @@ fn a_conflict_merge_with_no_worktree_on_the_base_branch_is_refused_at_the_check(
 
 const DRAFT_ID: &str = "1a2b3c4d5e6-0001-deadbeef";
 
-/// The base worktree holds a committed draft that now differs from `HEAD`, and
-/// the repository is in a state that refuses the save commit.
-fn make_the_draft_save_fail(fx: &Fixture) {
-    std::fs::write(
-        fx.root().join(format!(".synthesis/drafts/UI/{DRAFT_ID}/files/P.md")),
-        "edited, never saved\n",
-    )
-    .unwrap();
-    std::fs::write(fx.repo().path().join("MERGE_HEAD"), "0".repeat(40)).expect("a merge");
-}
-
 fn commit_a_draft(fx: &Fixture) {
     let repo = fx.repo();
     commit_file(
@@ -347,12 +336,13 @@ fn commit_a_draft(fx: &Fixture) {
     );
 }
 
-// PST-FR-RONA, GRB-FR-QIHE, WKS-FR-GKPX: a base worktree whose changed draft
-// cannot be saved is refused with the typed `draft_save_failed`, on either
+// WKS-FR-JVLM, PST-FR-DQZT, WKS-FR-UZHT: a committed draft changed in the base
+// worktree is not committed for the author. It makes the base side dirty, so
+// the merge is refused with `base_dirty` naming the draft's path, on either
 // publication and for a clean merge and a conflict merge alike, and nothing is
-// written: no ref, no run, no file.
+// written: no commit, no ref, no run, and the changed prompt stays on disk.
 #[test]
-fn a_draft_that_cannot_be_saved_refuses_the_request_and_writes_nothing() {
+fn a_changed_committed_draft_refuses_the_merge_as_base_dirty() {
     for conflicting in [false, true] {
         for publication in [
             StreamMergePublication::Uncommitted,
@@ -365,18 +355,42 @@ fn a_draft_that_cannot_be_saved_refuses_the_request_and_writes_nothing() {
             let stream = if conflicting {
                 stream_with_three_conflicts(&fx)
             } else {
-                stream_ahead(&fx, "draft save")
+                stream_ahead(&fx, "changed draft")
             };
-            make_the_draft_save_fail(&fx);
+            let prompt = fx.root().join(format!(".synthesis/drafts/UI/{DRAFT_ID}/files/P.md"));
+            std::fs::write(&prompt, "accepted, never committed\n").unwrap();
             let before = observe(&fx, &stream);
             let base_tip = tip_text(&fx.repo(), &stream.base_branch);
 
             let refusal = merge(&fx, &stream.id, publication).expect_err("refused");
 
-            assert_eq!(refusal, "draft_save_failed", "conflicting: {conflicting}");
+            assert_eq!(
+                refusal,
+                format!("{ERR_BASE_DIRTY}: .synthesis/drafts/UI/{DRAFT_ID}/files/P.md"),
+                "conflicting: {conflicting}",
+            );
             assert_eq!(observe(&fx, &stream), before, "the refusal wrote something");
-            assert_eq!(tip_text(&fx.repo(), &stream.base_branch), base_tip);
+            assert_eq!(tip_text(&fx.repo(), &stream.base_branch), base_tip, "nothing was committed");
+            assert_eq!(std::fs::read_to_string(&prompt).unwrap(), "accepted, never committed\n");
             assert_no_run_anywhere(&fx);
         }
     }
+}
+
+// WKS-FR-JVLM: the drafts root's own Git files make no side dirty, though they
+// are tracked and the application rewrites them on its own account. A merge
+// with only those changed in the base worktree is not refused.
+#[test]
+fn a_changed_drafts_root_ignore_file_does_not_refuse_the_merge() {
+    let fx = Fixture::new();
+    commit_a_draft(&fx);
+    commit_file(&fx.repo(), ".synthesis/drafts/.gitignore", "*/history/\n", "drafts root ignore");
+    let stream = stream_ahead(&fx, "root ignore");
+    std::fs::write(
+        fx.root().join(".synthesis/drafts/.gitignore"),
+        "*/history/\n*/proposals/\n",
+    )
+    .unwrap();
+
+    merge(&fx, &stream.id, StreamMergePublication::Uncommitted).expect("merged");
 }

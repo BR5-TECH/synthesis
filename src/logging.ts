@@ -43,7 +43,8 @@ let timer: ReturnType<typeof setTimeout> | null = null;
  *
  * The batch is taken *before* the call, so records emitted while the round trip
  * is in flight accumulate into the next batch rather than being lost to this
- * one's `catch`. The rejection is swallowed on purpose (LOG-FR-19).
+ * one's `catch`. A rejection, a synchronous throw, and a return that is not a
+ * promise are all dropped on purpose (LOG-FR-19).
  */
 function flush(): void {
   if (timer !== null) {
@@ -53,9 +54,14 @@ function flush(): void {
   if (pending.length === 0) return;
   const batch = pending;
   pending = [];
-  void appendLogRecords(batch).catch(() => {
-    // Dropped, not retried. See the module comment.
-  });
+  // This function runs from a timer. A throw here has no caller to catch it, so
+  // it would become an uncaught exception. Every failure is dropped and not
+  // retried. See the module comment.
+  try {
+    void Promise.resolve(appendLogRecords(batch)).catch(() => {});
+  } catch {
+    // Dropped.
+  }
 }
 
 /** Schedule a flush if one is not already due. */

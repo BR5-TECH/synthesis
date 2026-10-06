@@ -3,11 +3,11 @@
 //! PST-FR-BIPA, PST-FR-KGRW).
 //!
 //! The application commits a draft's **committed draft storage** — its record,
-//! its prompt, and its images (`DRS-draft-storage.md` DRS-FR-ZIVL) — at four
+//! its prompt, and its images (`DRS-draft-storage.md` DRS-FR-ZIVL) — at three
 //! draft events and at no other time: the draft is created, the draft is
-//! deleted, a change is accepted into its prompt, and a graduation run of it is
-//! started. A save of the prompt makes no commit, so the author's typing never
-//! reaches the history on its own.
+//! deleted, and a graduation run of it is started. A save of the prompt and an
+//! accepted change to it make no commit, so neither the author's typing nor an
+//! agent's proposal reaches the history on its own.
 //!
 //! **Nothing waits for it.** Events are queued and committed one at a time, in
 //! order, on this module's own thread. No command is delayed by a commit and no
@@ -29,21 +29,16 @@ use crate::fs::RootFs;
 use crate::log_fields;
 use crate::logging::{self, Domain, Fields, LogSink, BUFFER};
 
-/// PST-FR-DQZT: the four moments a draft's committed storage is committed at.
+/// PST-FR-DQZT: the three moments a draft's committed storage is committed at.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DraftEvent {
     /// The draft was created (`DRS-draft-storage.md` DRS-FR-06).
     Created,
     /// The draft was deleted (`DRS-draft-storage.md` DRS-FR-21).
     Deleted,
-    /// A change was accepted into its prompt (`DHS-draft-history.md` DHS-FR-14).
-    Accepted,
     /// A graduation run of it was started (`GSU-graduation-start.md`
     /// GSU-FR-RNOM).
     GraduationStarted,
-    /// A stream checkout is about to overwrite it (PST-FR-RONA). Committed
-    /// synchronously by `super::save`, never queued.
-    Saved,
 }
 
 impl DraftEvent {
@@ -52,9 +47,7 @@ impl DraftEvent {
         match self {
             Self::Created => "create",
             Self::Deleted => "delete",
-            Self::Accepted => "accept change to",
             Self::GraduationStarted => "graduate",
-            Self::Saved => "save",
         }
     }
 
@@ -65,9 +58,7 @@ impl DraftEvent {
         match self {
             Self::Created => "created",
             Self::Deleted => "deleted",
-            Self::Accepted => "accepted",
             Self::GraduationStarted => "graduation_started",
-            Self::Saved => "saved",
         }
     }
 }

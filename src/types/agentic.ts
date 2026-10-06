@@ -213,7 +213,7 @@ export interface AgenticVerifyConfig {
  * `src-tauri/src/agentic.rs`), so a value that slipped past here still cannot
  * reach the keychain.
  */
-export const CLAUDE_OAUTH_TOKEN_PATTERN = /^sk-ant-oat01-[A-Za-z0-9-]+$/;
+export const CLAUDE_OAUTH_TOKEN_PATTERN = /^sk-ant-oat01-[A-Za-z0-9_-]+$/;
 
 /** Whether `value` is shaped like a Claude Code OAuth token (AII-FR-50). */
 export const isValidClaudeOauthToken = (value: string): boolean =>

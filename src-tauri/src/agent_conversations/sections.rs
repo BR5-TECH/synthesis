@@ -96,9 +96,17 @@ pub(super) fn section_of_parts(
 
 /// AGC-FR-08: every comment names its author by handle — an agent's nickname and
 /// a human's login alike, from the participant the log stamped — so an agent
-/// answering a thread that other agents are in can tell who said what.
+/// answering a thread that other agents are in can tell who said what. A human
+/// with no login (the fixed local participant of CMS-FR-HTOA) is named by the
+/// display name the log stamped, `Me` where it carries none.
 pub(super) fn handle_of(participant: &Participant) -> &str {
     match participant {
+        Participant::Human {
+            login, display_name, ..
+        } if login.is_empty() => display_name
+            .as_deref()
+            .filter(|name| !name.is_empty())
+            .unwrap_or(comments::LOCAL_PARTICIPANT_NAME),
         Participant::Human { login, .. } => login,
         Participant::Agent { handle, .. } => handle,
     }

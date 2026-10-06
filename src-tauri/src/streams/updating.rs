@@ -367,11 +367,6 @@ fn plan<R: tauri::Runtime>(
 
     let base_worktree = git::worktree_holding(&main, &stream.base_branch)
         .and_then(|repo| repo.workdir().map(PathBuf::from));
-    // PST-FR-RONA: the stream's working copy is what the update checks out, so
-    // every draft changed there is saved before the clean check. The base
-    // worktree is only read, and a save there would move the pinned revision.
-    let access = commands::store_fs(app)?;
-    crate::storage_floor::save::save_drafts_before_checkout(&access, &stream.worktree())?;
     update_git::refuse_dirty_for_update(&stream.worktree(), base_worktree.as_deref())?;
     // The tree this update will write, resolved before anything is computed: a
     // refusal that waited for the apply would arrive after a replay and, on a

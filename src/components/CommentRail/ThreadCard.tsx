@@ -22,7 +22,7 @@ import { usePendingContributions } from "../../hooks/usePendingContributions";
 import { submitQuestionAnswers } from "../DiscussionQuestions/submit";
 import type { ThreadCardProps } from "./cardTypes";
 import {
-  participantName,
+  isLocalParticipant,
   participantTitle,
   discussionDraftId,
   discussionFragment,
@@ -31,6 +31,7 @@ import {
   type Participant,
   type ProjectAgent,
 } from "../../types";
+import { useParticipantLabel } from "../../state/projectIdentity";
 
 /**
  * CVP-FR-32: whether this message is one the author wrote.
@@ -47,7 +48,9 @@ function isOwnComment(
   if (!identity || identity.kind !== "human" || author.kind !== "human") {
     return false;
   }
-  return author.login === identity.login;
+  // CMT-FR-ZCAE: a comment of the local participant is the author's own
+  // whichever identity now labels it.
+  return isLocalParticipant(author) || author.login === identity.login;
 }
 
 export function ThreadCard({
@@ -82,6 +85,7 @@ export function ThreadCard({
   beforeComment,
   visibleFrom = 0,
 }: ThreadCardProps) {
+  const participantLabel = useParticipantLabel();
   const thread = entry.thread;
   // CTA-FR-ZOLW, CTA-FR-XMCQ: one pending contribution for each agent.
   const { pendingTurns, onCancelTurn } = usePendingContributions(
@@ -314,7 +318,7 @@ export function ThreadCard({
 
   const authorOf = (commentId: string): string => {
     const c = thread.comments.find((x) => x.id === commentId);
-    return c ? participantName(c.author) : "";
+    return c ? participantLabel(c.author) : "";
   };
 
   /**
@@ -473,7 +477,7 @@ export function ThreadCard({
                   align with the name — `kit.css` `.comment__title::before`
                   carries a hidden copy of it, so the two must stay in step. */}
               {comment.author.kind === "agent" && "✦ "}
-              {participantName(comment.author)}
+              {participantLabel(comment.author)}
             </span>
             <span className="comment__time" title={comment.createdAt}>
               {formatRelative(comment.createdAt)}
@@ -491,7 +495,7 @@ export function ThreadCard({
                 // the same person would otherwise share one name, leaving a
                 // keyboard user no way to say which of them they meant
                 // (CMT-FR-35).
-                aria-label={`Quote comment ${index + 1} by ${participantName(comment.author)}`}
+                aria-label={`Quote comment ${index + 1} by ${participantLabel(comment.author)}`}
                 title="Quote"
                 // Without this the button's own mousedown collapses the
                 // selection before the click lands, and quoting a highlighted

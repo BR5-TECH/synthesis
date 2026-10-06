@@ -27,11 +27,13 @@ import {
   comment,
   groupHeaders,
   human,
+  localHuman,
   rows,
   thread,
 } from "../test/commentsPanelFixtures";
 
 const invokeMock = vi.fn();
+import { otherCommand } from "../test/invokeMocks";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
@@ -46,7 +48,10 @@ vi.mock("@tauri-apps/api/event", () => ({
 function listReturns(items: DiscussionListItem[]) {
   invokeMock.mockImplementation((cmd: string) => {
     if (cmd === "list_all_discussions") return Promise.resolve(items);
-    throw new Error(`unexpected command ${cmd}`);
+    // CMT-FR-ZCAE: the panel reads the identity to label the local
+    // participant's comments, and nothing else.
+    if (cmd === "resolve_comment_author_identity") return Promise.resolve(localHuman);
+    return otherCommand(cmd);
   });
 }
 
@@ -231,7 +236,11 @@ describe("SNV-FR-60, SNV-FR-61 / CMP-FR-21 / CMP-FR-24: the two empty states", (
   });
 
   it("clears a read error once a later read succeeds", async () => {
-    invokeMock.mockRejectedValueOnce("no_project_open");
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "list_all_discussions"
+        ? Promise.reject("no_project_open")
+        : Promise.resolve(localHuman),
+    );
     render(<Harness />);
     await screen.findByText("no_project_open");
 
@@ -360,10 +369,12 @@ describe("AGT-FR-28, AGT-FR-38 / AGT-FR-29: tags in a panel row", () => {
     expect(document.body.textContent).toContain("me@example.com");
     expect(document.body.textContent).toContain("@media");
 
-    // CMP-FR-18 and the panel's contract boundary: exactly one list call, and it
-    // invokes nothing else. The roster came from what the chrome had already read.
-    expect(invokeMock.mock.calls.map((c) => c[0])).toEqual([
+    // CMP-FR-18 and the panel's contract boundary: exactly one list call, and
+    // the identity read of CMP-FR-17 beside it. The roster came from what the
+    // chrome had already read.
+    expect(invokeMock.mock.calls.map((c) => c[0]).sort()).toEqual([
       "list_all_discussions",
+      "resolve_comment_author_identity",
     ]);
   });
 
@@ -391,10 +402,8 @@ describe("AGT-FR-28, AGT-FR-38 / AGT-FR-29: tags in a panel row", () => {
 
     act(() => enrol(["arch"]));
     await waitFor(() => expect(tags()).toEqual(["@arch"]));
-    // Still one call: the roster arrived without the panel asking.
-    expect(invokeMock.mock.calls.map((c) => c[0])).toEqual([
-      "list_all_discussions",
-    ]);
+    // Still one list call: the roster arrived without the panel asking.
+    expect(listCalls()).toHaveLength(1);
   });
 
   it("leaves @all as prose when every enrolled agent is degraded", async () => {

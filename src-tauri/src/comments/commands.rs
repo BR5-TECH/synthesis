@@ -11,12 +11,23 @@ use super::*;
 /// Resolved on every write rather than taken from the caller, so no frontend call
 /// can attribute a comment to someone else, and stamped into the event so it is
 /// never re-resolved afterwards — a later change of token does not rewrite the
-/// authorship of an existing comment.
+/// authorship of an existing comment. A project that stores no token writes as
+/// the local participant (CMS-FR-HTOA); every other refusal stays a refusal.
 pub(crate) fn acting_participant(
     store: &GlobalSettingsStore,
     project: &ProjectState,
 ) -> Result<Participant, String> {
-    resolve_github_identity(store, &project.slot_key()).map(Participant::from)
+    participant_for_slot(store, &project.slot_key())
+}
+
+/// [`acting_participant`] for a project slot key, so the resolution is testable
+/// without a running project.
+pub(crate) fn participant_for_slot(
+    store: &GlobalSettingsStore,
+    slot_key: &str,
+) -> Result<Participant, String> {
+    Ok(resolve_github_identity_if_stored(store, slot_key)?
+        .map_or_else(Participant::local_human, Participant::from))
 }
 
 /// The discussion a write command names, read from the store.

@@ -1,7 +1,0 @@
-## Intent
-
-## User journey
-
-## Requirements
-
-- 

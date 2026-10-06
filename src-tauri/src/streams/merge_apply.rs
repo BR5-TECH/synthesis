@@ -133,10 +133,6 @@ pub fn apply_merge_run<R: tauri::Runtime>(
     let base_worktree = base_repo
         .as_ref()
         .and_then(|repo| repo.workdir().map(std::path::PathBuf::from));
-    if let Some(base_worktree) = base_worktree.as_deref() {
-        crate::storage_floor::save::save_drafts_before_checkout(&fs, base_worktree)
-            .map_err(|reason| refuse(MergeApplyFailure::Failed(reason), "draft_save_failed"))?;
-    }
     // WKS-FR-UZHT: the base worktree is the author's own, and a forced checkout
     // over work they did while the run reconciled would lose it.
     if let Err(reason) = merge::refuse_dirty(&stream.worktree(), base_worktree.as_deref()) {

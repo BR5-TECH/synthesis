@@ -251,11 +251,7 @@ pub(super) fn finish<R: tauri::Runtime>(
         return;
     }
     let base = run.base_commit.clone().unwrap_or_default();
-    let message = format!(
-        "{}\n\nGraduated from the draft \"{}\".",
-        first_line(&run.input.prompt),
-        run.input.draft_name
-    );
+    let message = graduation_message(run);
     match commit::commit_run_work(worktree, &base, &message) {
         Ok(Some(committed)) => {
             run.commits.push(committed.revision);
@@ -741,6 +737,29 @@ pub(super) fn compose_instruction(verdict: &ReviewVerdict) -> String {
         }
     }
     out
+}
+
+/// GRD-FR-PQMX: the message of the commit a `ready` verdict makes, and the
+/// message an abandoned-turn commit is rewritten to (GRD-FR-WQTN).
+///
+/// A direct run commits under its own name alone. Every other run commits
+/// under the first line of its prompt, with the draft named in the body.
+pub(super) fn graduation_message(run: &GraduationRun) -> String {
+    const FALLBACK: &str = "Graduation run";
+    if run.is_direct() {
+        // A control character, a line break above all, would open a body.
+        let name: String = run
+            .input
+            .draft_name
+            .chars()
+            .map(|c| if c.is_control() { ' ' } else { c })
+            .collect();
+        let name = name.trim();
+        return if name.is_empty() { FALLBACK } else { name }.to_string();
+    }
+    let title = first_line(&run.input.prompt);
+    let title = if title.is_empty() { FALLBACK.to_string() } else { title };
+    format!("{title}\n\nGraduated from the draft \"{}\".", run.input.draft_name)
 }
 
 pub(super) fn first_line(text: &str) -> String {

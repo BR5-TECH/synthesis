@@ -335,8 +335,6 @@ where
             "originalEntryId" => journal.original_entry_id.clone().unwrap_or_default(),
         },
     );
-    commit_accepted(root, draft_id);
-
     let proposal = draft_proposals::read_proposal(root, draft_id, &input.proposal.id)?;
 
     // DHS-FR-15: only the decision that resolves the proposal owes the
@@ -383,25 +381,6 @@ where
             }
         },
     }
-}
-
-/// PST-FR-DQZT: a change accepted into the prompt is a draft event, raised at the
-/// acceptance's commit point (DHS-FR-14) and never before it, so a rolled-back
-/// acceptance commits nothing.
-///
-/// The name is read for the commit message alone (PST-FR-YWXF). A record that
-/// does not read leaves the id to stand in for it, because the accepted prompt
-/// is still a change the repository should hold.
-fn commit_accepted(root: &fs::RootFs, draft_id: &str) {
-    let name = drafts::draft_record(root, draft_id)
-        .map(|record| record.name)
-        .unwrap_or_else(|_| draft_id.to_string());
-    drafts::git_storage::commit_event(
-        root,
-        draft_id,
-        &name,
-        crate::storage_floor::commit::DraftEvent::Accepted,
-    );
 }
 
 /// The last step of a committed operation: the journal reaches `complete` and is
@@ -605,10 +584,6 @@ where
             Ok(Reconciliation::RolledBack)
         }
         Phase::Committed => {
-            // PST-FR-DQZT: the acceptance landed before the interruption, and a
-            // commit raised then may never have been taken. Raised again here;
-            // one that was taken leaves nothing to commit, which is a no-op.
-            commit_accepted(root, draft_id);
             append_decision(app, store, &journal)?;
             finish(root, &hist, &journal);
             log_recovery(app, "roll_forward", draft_id, &journal, "comment re-appended");

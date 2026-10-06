@@ -234,10 +234,10 @@ pub(super) fn ahead_of_base(main: &git2::Repository, stream: &WorkStream) -> u32
 ///   leaving untracked files where they are;
 /// - on a side the operation does not check out (`checked_out` false), no path
 ///   of it is, because nothing will overwrite it;
-/// - on the side it checks out, a tracked path of it that still differs from
-///   `HEAD` after the save of PST-FR-RONA is, because the checkout would revert
-///   it. The drafts root's own Git files are not: the application ensures them
-///   again on its next draft write.
+/// - on the side it checks out, a tracked path of it that differs from `HEAD`
+///   is, because the checkout would revert it and nothing commits it first
+///   (`PST-project-storage.md` PST-FR-DQZT). The drafts root's own Git files
+///   are not: the application ensures them again on its next draft write.
 pub(crate) fn uncommitted_paths(worktree: &Path, checked_out: bool) -> Vec<String> {
     let Ok(repo) = git2::Repository::open(worktree) else {
         return Vec::new();
@@ -261,8 +261,8 @@ pub(crate) fn uncommitted_paths(worktree: &Path, checked_out: bool) -> Vec<Strin
             }
             checked_out
                 && !entry.status().is_wt_new()
-                && !crate::storage_floor::save::split_at_drafts(path)
-                    .is_some_and(|(_, rel)| crate::storage_floor::save::is_root_git_file(&rel))
+                && !crate::storage_floor::split_at_drafts(path)
+                    .is_some_and(|(_, rel)| crate::storage_floor::is_root_git_file(&rel))
         })
         .filter_map(|entry| entry.path().ok().map(str::to_string))
         .collect();

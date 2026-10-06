@@ -53,6 +53,7 @@ const AI_API_LEGACY: &str = "com.synthesis.ai-api-provider";
 const AGENTIC_LEGACY: &str = "com.synthesis.agentic-integration";
 
 mod adapter;
+mod cache;
 mod entry;
 mod migration;
 mod retention;

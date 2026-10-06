@@ -325,10 +325,10 @@ fn no_vault_error_code_reaches_the_ipc_boundary() {
 }
 
 /// AAP-FR-02 read together with `ASV-application-secret-vault.md` ASV-FR-30:
-/// a listing costs **one** vault access however many providers it
-/// describes.
+/// a listing costs **no** keyring access once the vault cache is
+/// initialized, however many providers it describes (ASV-FR-DQHY).
 #[test]
-fn aap_fr02_a_listing_makes_one_vault_access() {
+fn aap_fr02_a_listing_makes_no_keyring_access_after_the_cache_is_initialized() {
     use crate::secret_vault::test_support::Call;
 
     let keyring = FakeKeyring::default();
@@ -341,14 +341,13 @@ fn aap_fr02_a_listing_makes_one_vault_access() {
         ],
         None,
     );
-    // Let migration run before the access is counted; it is the one
-    // sequence allowed to read more than once.
+    // The first listing initializes the vault cache.
     let _ = list_integrations_impl(&store, &ai).unwrap();
     let reads_before = keyring.count(&Call::Read);
 
     let list = list_integrations_impl(&store, &ai).unwrap();
 
     assert_eq!(list.len(), 4);
-    assert_eq!(keyring.count(&Call::Read) - reads_before, 1);
+    assert_eq!(keyring.count(&Call::Read) - reads_before, 0);
 }
 

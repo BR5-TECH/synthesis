@@ -40,7 +40,12 @@ fn vault_secrets_maps_ids_onto_paths_and_collapses_errors() {
 
     // Every typed vault failure collapses into the one error, and its message
     // names the outcome rather than anything about what the entry holds.
+    // A process that starts on an undecodable entry. The first vault holds a
+    // cache, so a second one stands for the next launch.
     keyring.set_entry("garbage");
+    let restarted = Arc::new(Vault::new(Box::new(keyring.clone())));
+    restarted.mark_migrated();
+    let secrets = VaultSecrets::new(restarted, &["ai_api", "providers"]);
     let err = AiSecretStore::get(&secrets, "openai").unwrap_err();
     assert_eq!(err.0, "vault_malformed");
 }

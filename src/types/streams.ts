@@ -233,7 +233,7 @@ export function updateNeedsAuthor(
 }
 
 /**
- * WSS-FR-HZVQ: whether **Update…** is enabled for this stream.
+ * WSS-FR-HZVQ: whether **Update stream** is enabled for this stream.
  *
  * Only where the stream stands behind its base branch and holds no queued and
  * no active run. A stream that is up to date has nothing to bring in, and one a
@@ -252,7 +252,7 @@ export function canUpdateStream(summary: WorkStreamSummary): boolean {
 /**
  * WSS-FR-XRHT: whether either reconciliation of this stream is in force.
  *
- * **Merge…** and **Update…** are both disabled while one is, because one
+ * **Merge stream** and **Update stream** are both disabled while one is, because one
  * reconciliation of a stream is startable at a time.
  */
 export function isReconciling(summary: WorkStreamSummary): boolean {

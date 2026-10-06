@@ -5,10 +5,11 @@
  * how far ahead and behind its base it stands, what its merge run link and its
  * update record hold, and which of its actions those permit (WSS-FR-JBYF).
  *
- * A row offers **Merge…**, **Update…** and **Delete…** in that order
- * (WSS-FR-TKMB). Merge takes the stream into its base branch; Update brings the
- * base branch into the stream. Each is enabled only where it has something to
- * do and nothing is already reconciling this stream (WSS-FR-XRHT).
+ * A row offers **Merge stream**, **Update stream** and **Delete stream** in
+ * that order, centered in the row (WSS-FR-TKMB). Merge takes the stream into
+ * its base branch; Update brings the base branch into the stream. Each is
+ * enabled only where it has something to do and nothing is already reconciling
+ * this stream (WSS-FR-XRHT).
  */
 
 import type { StreamMergePublication, WorkStreamSummary } from "../../types";
@@ -31,6 +32,8 @@ export interface StreamRowProps {
   surface: RowSurface;
   busy: boolean;
   error: string | null;
+  /** WSS-FR-PSXK: the name of the draft the run holding the stream works on. */
+  busyDraftName: string | null;
   /** WSS-FR-HGWL: the merge call this surface is waiting on, if one is out. */
   merge: RunningMerge | null;
   /** WSS-FR-KMHD / WSS-FR-PLVE: what the last settled merge call answered. */
@@ -70,6 +73,7 @@ export function StreamRow({
   surface,
   busy,
   error,
+  busyDraftName,
   merge,
   mergeOutcome,
   update,
@@ -147,7 +151,9 @@ export function StreamRow({
           Busy —{" "}
           {summary.mergeRun && summary.mergeRun.runId === stream.busyRunId
             ? summary.mergeRun.name
-            : `run ${stream.busyRunId}`}{" "}
+            : busyDraftName
+              ? `“${busyDraftName}”`
+              : "a run"}{" "}
           is working in it
         </p>
       )}
@@ -245,37 +251,37 @@ export function StreamRow({
           no work for stays in place and disabled, so the actions of two rows
           stand in one column. */}
       {!updating && !updateNeedsAuthor && !blocked && surface.kind === "none" && (
-        <div className="stream-select__row-actions">
+        <div className="stream-select__row-actions stream-select__row-actions--idle">
           <button
             type="button"
-            className="btn btn--ghost btn--sm"
+            className="btn btn--ghost btn--sm stream-select__act"
             disabled={!mergeable}
             data-testid={`stream-merge-${stream.id}`}
             title={mergeDisabledReason(summary, merging, mergeable)}
             onClick={() => onOpenSurface({ kind: "merge", streamId: stream.id })}
           >
-            Merge…
+            Merge stream
           </button>
           <button
             type="button"
-            className="btn btn--ghost btn--sm"
+            className="btn btn--ghost btn--sm stream-select__act"
             disabled={!updatable}
             data-testid={`stream-update-${stream.id}`}
             title={updateDisabledReason(summary, running)}
             onClick={() => onOpenSurface({ kind: "update", streamId: stream.id })}
           >
-            Update…
+            Update stream
           </button>
           <button
             type="button"
-            className="btn btn--ghost btn--sm"
+            className="btn btn--ghost btn--sm stream-select__act"
             // WSS-FR-HGWL / WSS-FR-XRHT: a stream whose merge call is out, or
             // whose merge run holds it, is not one to delete.
             disabled={merging || mergeRunHolds}
             data-testid={`stream-delete-${stream.id}`}
             onClick={() => onOpenSurface({ kind: "delete", streamId: stream.id })}
           >
-            Delete…
+            Delete stream
           </button>
         </div>
       )}
@@ -329,7 +335,7 @@ function strategyWord(strategy: string | undefined): string {
 }
 
 /**
- * WSS-FR-HZVQ: why **Update…** is disabled, in words rather than by a state the
+ * WSS-FR-HZVQ: why **Update stream** is disabled, in words rather than by a state the
  * author has to infer from a greyed control.
  */
 function updateDisabledReason(
@@ -345,7 +351,7 @@ function updateDisabledReason(
 }
 
 /**
- * WSS-FR-XRHT / WSS-FR-YPDA: why **Merge…** is disabled, in words.
+ * WSS-FR-XRHT / WSS-FR-YPDA: why **Merge stream** is disabled, in words.
  *
  * A merge call that is out and a merge run that holds the stream each say so,
  * and a stream that stands ahead of its base by nothing says that.

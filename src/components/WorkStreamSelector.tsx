@@ -176,6 +176,38 @@ export function WorkStreamSelector({
 
   useEffect(reload, [reload]);
 
+  /**
+   * WSS-FR-PSXK: the name of the draft each busy run works on, keyed by run id.
+   * A run's draft name never changes, so one read serves every later listing.
+   */
+  const [draftNames, setDraftNames] = useState<Record<string, string>>({});
+  const draftReads = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const summary of streams ?? []) {
+      const runId = summary.stream.busyRunId;
+      if (!runId || draftReads.current.has(runId)) continue;
+      // A merge run has no draft, and its row names the merge run instead.
+      if (summary.mergeRun?.runId === runId) continue;
+      draftReads.current.add(runId);
+      api
+        .getGraduationRun(runId)
+        .then((run) => {
+          const name = run?.input?.draftName ?? "";
+          if (mounted.current && name) {
+            setDraftNames((known) => ({ ...known, [runId]: name }));
+          }
+        })
+        .catch((reason) => {
+          // The next listing reads again, and the row names no run meanwhile.
+          draftReads.current.delete(runId);
+          logWarn(["frontend"], "busy run's draft name could not be read", {
+            runId,
+            reason: String(reason),
+          });
+        });
+    }
+  }, [streams]);
+
   // WSS-FR-JBYF: every event reloads the listing, whoever caused it.
   useEffect(() => {
     const pending = onWorkStreamsChanged(() => reload());
@@ -584,6 +616,9 @@ export function WorkStreamSelector({
                 busy={busyRow === summary.stream.id}
                 error={
                   rowError?.id === summary.stream.id ? rowError.text : null
+                }
+                busyDraftName={
+                  draftNames[summary.stream.busyRunId ?? ""] ?? null
                 }
                 merge={merging[summary.stream.id] ?? null}
                 mergeOutcome={outcomes[summary.stream.id] ?? null}

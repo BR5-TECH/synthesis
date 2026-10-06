@@ -25,6 +25,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }));
 
+import { resetLogBufferForTest } from "../logging";
 import { resetProjectIdentity, useParticipantLabel } from "./projectIdentity";
 import {
   resetSharedCommentIdentity,
@@ -54,6 +55,9 @@ beforeEach(() => {
   });
   resetProjectIdentity();
   resetSharedCommentIdentity();
+  // A token change emits a log record, and its flush timer must not reach the
+  // next test.
+  resetLogBufferForTest();
 });
 afterEach(cleanup);
 
@@ -107,6 +111,29 @@ describe("CVP-FR-TIBK, CMT-FR-ZCAE: the shared label rule", () => {
     identity = () => Promise.resolve(LOCAL);
     act(() => resetProjectIdentity());
     await waitFor(() => expect(result.current(LOCAL)).toBe("Me"));
+  });
+
+  it("CVP-FR-49: a read of the outgoing project that lands after the change is not applied, also while nothing renders", async () => {
+    let answerOutgoing: (value: unknown) => void = () => {};
+    identity = () => new Promise((res) => (answerOutgoing = res));
+    const first = renderHook(() => useParticipantLabel());
+    await waitFor(() =>
+      expect(invokeMock.mock.calls.some((c) => c[0] === "resolve_comment_author_identity")).toBe(true),
+    );
+    // The last surface goes before the read lands, so the project change
+    // starts no read of its own.
+    first.unmount();
+    act(() => resetProjectIdentity());
+    // Drain to a macrotask, so the whole invoke → refresh chain of the stale
+    // answer has run before the next surface subscribes and starts its own read.
+    await act(async () => {
+      answerOutgoing({ kind: "human", login: "octocat" });
+      await new Promise((res) => setTimeout(res, 0));
+    });
+
+    identity = () => new Promise(() => {});
+    const { result } = renderHook(() => useParticipantLabel());
+    expect(result.current(LOCAL)).toBe("Me");
   });
 
   it("one subscription serves every label, and the listener goes with the last one", async () => {

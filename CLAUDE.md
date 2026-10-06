@@ -33,6 +33,19 @@ Package manager: **pnpm** (v10+). Install with `pnpm install`.
 
 Definition-of-done for any frontend change: `pnpm test` green, `pnpm build` green, AND `pnpm exec tsc -p tsconfig.test.json --noEmit` clean. For any backend change: `cargo test` green and `cargo check` clean.
 
+## Tests must not depend on timing
+
+CI is always slower than a local machine. It runs each Vitest area (`src/test/testAreas.ts`) with 1 worker on 2 vCPUs, and one test can take 5 times longer there. A test that passes locally only because it is fast is a defect.
+
+- Do not make a result depend on how much real time passes. Do not use fixed sleeps, real-time limits, or the order of two independent async events. Wait for a state with `findBy*` or `waitFor`, or use fake timers and advance them.
+- Do not let a timer, a promise, or module-level state go from one test to the next. Reset each module store that the code under test touches in `beforeEach` (for example `resetLogBufferForTest`, `resetProjectIdentity`).
+- An `invoke` mock must answer the commands that the app sends in the background (`append_log_records`). For a command that it does not expect, it must return a rejected promise. It must not throw synchronously.
+- An unhandled error fails the CI lane, also when every test passes.
+- When a change adds a timer, a debounce, a background call, or a log emit on an async path, run the affected area as CI does: `pnpm exec vitest run --project "<area>" --maxWorkers=1`.
+- For Rust tests, run `TMPDIR=/tmp cargo test` when a result can depend on the length of a temporary path.
+
+`.claude/skills/engineer/references/conventions.md` has the details.
+
 ## Architecture
 
 Two-process Tauri 2 application:

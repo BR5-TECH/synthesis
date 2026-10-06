@@ -13,6 +13,8 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { act, cleanup, render, screen, within } from "@testing-library/react";
 
 const invokeMock = vi.fn();
+import { resetLogBufferForTest } from "../logging";
+import { resetProjectIdentity } from "../state/projectIdentity";
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
@@ -82,6 +84,10 @@ beforeEach(() => {
   invokeMock.mockResolvedValue([]);
   resetDraftDiscussions();
   resetDraftProposals();
+  // The project login and the log buffer are module-level, so a login or a
+  // flush timer from one test must not reach the next.
+  resetProjectIdentity();
+  resetLogBufferForTest();
 });
 afterEach(cleanup);
 

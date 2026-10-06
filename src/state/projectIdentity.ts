@@ -27,7 +27,7 @@ import {
 
 /** The login the project resolves to, or `null` while none resolves. */
 let login: string | null = null;
-/** Bumped by every read, so only the newest answer is applied. */
+/** Bumped by every read and by every reset, so only the newest answer is applied. */
 let generation = 0;
 let listening = false;
 let unlisten: (() => void) | null = null;
@@ -105,6 +105,9 @@ function snapshot(): string | null {
  * the incoming project's binding is read.
  */
 export function resetProjectIdentity(): void {
+  // A read still in flight is for the outgoing project, so its answer is not
+  // applied.
+  generation += 1;
   login = null;
   emit();
   if (listeners.size > 0) void refresh();

@@ -31,6 +31,7 @@ import {
   resetOwnerAvailability,
 } from "../state/ownerAvailability";
 import { resetSharedCommentIdentity } from "../hooks/useSharedCommentIdentity";
+import { resetLogBufferForTest } from "../logging";
 import { resetProjectIdentity } from "../state/projectIdentity";
 import type { AgentTurn, Comment, Discussion, Tab } from "../types";
 import {
@@ -100,6 +101,7 @@ beforeEach(() => {
   resetOwnerAvailability();
   resetSharedCommentIdentity();
   resetProjectIdentity();
+  resetLogBufferForTest();
 });
 afterEach(cleanup);
 

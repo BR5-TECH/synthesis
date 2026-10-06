@@ -11,12 +11,14 @@ import {
   publishProjectAgents,
   resetAgentRegistry,
 } from "../state/agentRegistry";
+import { resetLogBufferForTest } from "../logging";
 import { clearAllDiscussionSessions } from "../state/discussionSession";
 import {
   publishKnownDrafts,
   rememberNoteLabel,
   resetOwnerAvailability,
 } from "../state/ownerAvailability";
+import { resetProjectIdentity } from "../state/projectIdentity";
 import type {
   Comment,
   DiscussionListItem,
@@ -33,6 +35,7 @@ import {
   rows,
   thread,
 } from "../test/commentsPanelFixtures";
+import { otherCommand } from "../test/invokeMocks";
 
 const invokeMock = vi.fn();
 
@@ -52,7 +55,7 @@ function listReturns(items: DiscussionListItem[]) {
     // CMT-FR-ZCAE: the panel reads the identity to label the local
     // participant's comments, and nothing else.
     if (cmd === "resolve_comment_author_identity") return Promise.resolve(localHuman);
-    throw new Error(`unexpected command ${cmd}`);
+    return otherCommand(cmd);
   });
 }
 
@@ -69,8 +72,17 @@ beforeEach(() => {
   // carry their indicators into the next.
   clearAllDiscussionSessions();
   resetOwnerAvailability();
+  // The log buffer and the project login are module-level, so a flush timer or
+  // a login from one test must not reach the next.
+  resetLogBufferForTest();
+  resetProjectIdentity();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  // The flush timer of the last test must not fire during teardown.
+  resetLogBufferForTest();
+});
 
 // ---------------------------------------------------------------------------
 
@@ -643,7 +655,7 @@ describe("CMP-FR-17: reading needs no identity", () => {
       if (cmd === "resolve_comment_author_identity") {
         return Promise.reject("github_token_selection_required");
       }
-      throw new Error(`unexpected command ${cmd}`);
+      return otherCommand(cmd);
     });
     render(<Harness />);
     expect(await screen.findByText("Which session?")).toBeInTheDocument();
@@ -661,7 +673,7 @@ describe("CMP-FR-KHUM: the local participant's label", () => {
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === "list_all_discussions") return Promise.resolve(items);
       if (cmd === "resolve_comment_author_identity") return identity();
-      throw new Error(`unexpected command ${cmd}`);
+      return otherCommand(cmd);
     });
   }
   const tokensChanged = (): (() => void) => {
@@ -760,7 +772,6 @@ describe("CMP-FR-04 / CMP-FR-18 / CMP-FR-19: how the panel stays current", () =>
       await vi.advanceTimersByTimeAsync(10 * 60_000);
     });
     expect(listCalls()).toHaveLength(1);
-    vi.useRealTimers();
   });
 
   it("moves a row between groups when the write changed which group it belongs to", async () => {
@@ -865,9 +876,13 @@ describe("CMP-FR-04 / CMP-FR-18 / CMP-FR-19: how the panel stays current", () =>
     // The payload names a thread, not the project-wide list, so admitting it
     // before the list exists would render one row and hide every other.
     let release: (v: DiscussionListItem[]) => void = () => {};
-    invokeMock.mockImplementation(
-      () => new Promise((res) => (release = res)),
-    );
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "list_all_discussions") {
+        return new Promise((res) => (release = res));
+      }
+      if (cmd === "resolve_comment_author_identity") return Promise.resolve(localHuman);
+      return otherCommand(cmd);
+    });
     render(<Harness />);
     await waitFor(() => expect(listenMock.mock.calls.length).toBeGreaterThan(0));
 

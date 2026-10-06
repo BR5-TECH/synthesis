@@ -10,6 +10,8 @@ import {
 } from "@testing-library/react";
 
 import { Editor } from "./Editor";
+import { resetLogBufferForTest } from "../logging";
+import { resetProjectIdentity } from "../state/projectIdentity";
 import { EditSessionStore } from "../state/editSessions";
 import { GITHUB_TOKEN_ERRORS } from "../types";
 import {
@@ -63,6 +65,10 @@ vi.mock("@tauri-apps/api/event", () => ({
 beforeEach(() => {
   invokeMock.mockReset();
   unlistenMock.mockReset();
+  // The project login and the log buffer are module-level, so a login or a
+  // flush timer from one test must not reach the next.
+  resetProjectIdentity();
+  resetLogBufferForTest();
 });
 
 afterEach(() => {

@@ -89,6 +89,22 @@ log_error(&app, &BUFFER, &[Domain::Remote, Domain::Backend], "push rejected",
 When you are unsure whether a value is sensitive, log its **shape** rather than its value — a length,
 a boolean, a kind, a count. That is usually what helps debugging anyway, and it cannot leak.
 
+## Tests that pass on a slow runner
+
+CI is always slower than the machine where you write the test. The `ui-tests` lane runs each Vitest area (`src/test/testAreas.ts`) as its own job, with 1 worker on a 2-vCPU runner. A test there can take 5 times longer than locally. So a green local run does not prove that a test is correct when its result depends on time.
+
+**The example.** A token-change handler called `logDebug`. The log module (`src/logging.ts`) flushes its buffer on a real 200 ms timer. Locally, the rest of the test file finished in less than 200 ms, the worker closed, and the timer never fired. In CI the timer fired during a later test. The flush called `invoke("append_log_records")`, the test's `invoke` mock threw synchronously for an unknown command, and the throw in the timer callback was an uncaught exception. All 1814 tests passed, but the lane failed on "1 error".
+
+Rules:
+
+- **No real time in a result.** Do not use fixed sleeps, real-time limits, or the order of two independent async events. Wait for a state with `findBy*` / `waitFor`, or use `vi.useFakeTimers()` and advance the timers. A test that is correct only when the code is fast is a defect.
+- **Know the background timers.** Production code can start a timer that the test does not see: the log flush in `src/logging.ts` (`FLUSH_DELAY_MS`), debounces, and scheduled writes (`src/state/writeSchedule`). Every `logDebug` / `logInfo` / `logWarn` / `logError` starts the log flush timer, or adds its record to the batch of a timer that is already pending.
+- **Nothing goes to the next test.** A timer, an unresolved promise, or a module-level value from one test must not reach the next one. In `beforeEach`, reset each module store that the code under test touches, for example `resetLogBufferForTest()`, `resetProjectIdentity()`, `resetSharedCommentIdentity()`, `resetAgentRegistry()`.
+- **`invoke` mocks answer background commands and reject the others.** A strict mock that routes by command name must answer `append_log_records` (`Promise.resolve()`). For a command it does not expect, it returns `Promise.reject(new Error(...))`. A synchronous `throw` escapes any `.catch` that the caller attaches, and from a timer callback it is an uncaught exception that no test owns. A mock that answers every command with one shared promise (for example `() => new Promise((res) => (release = res))`) depends on the order of the calls. Route it by command name.
+- **An unhandled error fails the lane.** Vitest exits 1 on an unhandled error or rejection, also when every test passes. It names "the latest test", which is often not the test that caused the error.
+- **Run the area as CI does.** When a change adds a timer, a debounce, a background call, or a log emit on an async path, run the affected area with one worker: `pnpm exec vitest run --project "<area>" --maxWorkers=1`. To find a timing defect, make each test slower in a temporary copy (for example an `afterEach` that waits 40 ms). Do not commit that change.
+- **Rust has the same problem.** A test result must not depend on the speed of the machine or on the length of a temporary path. Run `TMPDIR=/tmp cargo test` when a result can depend on where text falls against a length limit.
+
 ## Build / test — definition of done
 
 Run the checks that match what you touched, and get them green before declaring done. Never declare done on red, and never retry silently past a real failure — surface it.

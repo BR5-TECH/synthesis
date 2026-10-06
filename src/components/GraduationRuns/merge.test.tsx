@@ -21,6 +21,7 @@ import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+import { resetLogBufferForTest } from "../../logging";
 import { resetAppPreferencesCache } from "../../state/appPreferences";
 import { forgetEveryDraft } from "../../state/escalationDrafts";
 import { forgetEverything } from "../../state/graduationSelection";
@@ -68,6 +69,8 @@ beforeEach(() => {
   resetAppPreferencesCache();
   forgetEverything();
   forgetEveryDraft();
+  // A flush timer from the previous test must not fire in this one.
+  resetLogBufferForTest();
 });
 afterEach(() => {
   cleanup();
@@ -389,9 +392,14 @@ describe("the paths a merge changes (GRU-FR-AJGM)", () => {
     const acts = () =>
       commands().filter(
         (name) =>
-          !["list_graduation_queue", "load_app_preferences", "get_graduation_capacity"].includes(
-            name,
-          ),
+          // The log flush is a background command, and its timer can fire
+          // during the click on a slow runner.
+          ![
+            "list_graduation_queue",
+            "load_app_preferences",
+            "get_graduation_capacity",
+            "append_log_records",
+          ].includes(name),
       ).length;
     const before = acts();
 

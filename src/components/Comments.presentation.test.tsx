@@ -33,6 +33,7 @@ import {
 } from "../test/commentsPanelFixtures";
 
 const invokeMock = vi.fn();
+import { otherCommand } from "../test/invokeMocks";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
@@ -50,7 +51,7 @@ function listReturns(items: DiscussionListItem[]) {
     // CMT-FR-ZCAE: the panel reads the identity to label the local
     // participant's comments, and nothing else.
     if (cmd === "resolve_comment_author_identity") return Promise.resolve(localHuman);
-    throw new Error(`unexpected command ${cmd}`);
+    return otherCommand(cmd);
   });
 }
 

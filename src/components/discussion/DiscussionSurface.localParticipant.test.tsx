@@ -29,6 +29,7 @@ import { DiscussionSurface } from "./DiscussionSurface";
 import { resetDiscussionFocus } from "../../state/discussionFocus";
 import { clearAllDiscussionSessions } from "../../state/discussionSession";
 import { clearQuestionSets, publishSet } from "../../state/questionSets";
+import { resetLogBufferForTest } from "../../logging";
 import { resetProjectIdentity } from "../../state/projectIdentity";
 import { forgetEveryDraft } from "../../state/questionAnswerDrafts";
 import type { Comment, Discussion, Participant, PendingQuestionSet } from "../../types";
@@ -98,6 +99,7 @@ beforeEach(() => {
   resetDiscussionFocus();
   forgetEveryDraft();
   resetProjectIdentity();
+  resetLogBufferForTest();
 });
 afterEach(cleanup);
 

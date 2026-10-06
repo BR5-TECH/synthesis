@@ -698,7 +698,13 @@
   text-align: left;
   cursor: pointer;
 }
-.draft-actions__item:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-3); }
+/* ACT-FR-KPWD: the hover tint is a layer on the opaque fill, not a replacement
+   for it. `--bg-hover` is translucent, so alone it lets the text under the menu
+   show through the entry. */
+.draft-actions__item:hover:not(:disabled) {
+  background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--bg-elevated);
+  border-color: var(--border-3);
+}
 .draft-actions__item:disabled { color: var(--fg-4); cursor: default; }
 /* NAW-FR-29: Implement is rendered rather than hidden, so the shape of the
    lifecycle is legible from the control itself — and it states that it is not

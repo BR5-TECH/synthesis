@@ -24,7 +24,7 @@ import {
   makeObservability,
   makeQueue,
   makeRun,
-  makeSourceEntry,
+  makeActivityEntry,
   pageForRead,
 } from "../../test/graduationFixtures";
 import type { GraduationQueue } from "../../types";
@@ -49,7 +49,7 @@ function run(id: string, over: Parameters<typeof makeRun>[2] = {}) {
       ],
     }),
     logs: makeLogs({
-      source: [
+      activity: [
         { phaseId: "queued", pass: null },
         { phaseId: "working", pass: 1 },
       ],
@@ -76,7 +76,7 @@ beforeEach(() => {
           makeLogPage({
             status: "available",
             entries: [
-              makeSourceEntry(1, `output of ${String(request.runId)}`, {
+              makeActivityEntry(1, `output of ${String(request.runId)}`, {
                 run_id: String(request.runId),
                 phase_id: String(request.phaseId),
               }),
@@ -175,7 +175,7 @@ describe("the stage row's route into the log window", () => {
           ],
         }),
         logs: makeLogs({
-          source: [
+          activity: [
             { phaseId: "working", pass: 1 },
             { phaseId: "review", pass: 1 },
             { phaseId: "working", pass: 2 },
@@ -216,15 +216,14 @@ describe("the stage row's route into the log window", () => {
     queue = makeQueue([
       run("r1"),
       run("r2", {
-        logs: makeLogs({ source: [{ phaseId: "working", pass: 1 }] }),
+        logs: makeLogs({ activity: [{ phaseId: "working", pass: 1 }] }),
       }),
     ]);
     await open();
 
     await userEvent.click(await screen.findByTestId("run-progress-stage-working"));
     await screen.findByTestId("graduation-log-window");
-    // Read the Structured stream and search inside the first run's window.
-    await userEvent.click(screen.getByRole("button", { name: "Structured" }));
+    // Search inside the first run's window.
     await userEvent.type(screen.getByTestId("glw-search"), "escalate");
     await waitFor(() => expect(reads().some((read) => read.query)).toBe(true));
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
@@ -236,11 +235,7 @@ describe("the stage row's route into the log window", () => {
     await userEvent.click(await screen.findByTestId("run-progress-stage-working"));
     const opened = await screen.findByTestId("graduation-log-window");
     expect(opened).toHaveAttribute("data-run", "r2");
-    // GLW-FR-BVYN: not its stream, not its search text, not a single record.
-    expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    // GLW-FR-BVYN: not its search text, not its pass, not a single record.
     expect(screen.getByTestId("glw-search")).toHaveValue("");
     expect(screen.queryByTestId("glw-match-count")).not.toBeInTheDocument();
     await waitFor(() =>
@@ -299,7 +294,7 @@ describe("the stage row's route into the log window", () => {
       run("r1", {
         logs: makeLogs({
           logStorageVersion: 2,
-          source: [{ phaseId: "working", pass: 1 }],
+          activity: [{ phaseId: "working", pass: 1 }],
         }),
       }),
     ]);
@@ -319,7 +314,7 @@ describe("a log append that can open a stage", () => {
 
   /** A run at its first work turn, whose indexes name nothing of `working` yet. */
   const firstTurn = (id: string, over: Parameters<typeof makeRun>[2] = {}) =>
-    run(id, { logs: makeLogs({ source: [{ phaseId: "queued", pass: null }] }), ...over });
+    run(id, { logs: makeLogs({ activity: [{ phaseId: "queued", pass: null }] }), ...over });
 
   /** Tell the section that a stream of `runId` grew, as the backend does. */
   async function append(runId: string, times = 1) {
@@ -330,7 +325,7 @@ describe("a log append that can open a stage", () => {
     await act(async () => {
       for (let sequence = 1; sequence <= times; sequence += 1) {
         for (const handler of handlers) {
-          handler({ payload: { runId, stream: "source", latestSequence: sequence } });
+          handler({ payload: { runId, stream: "activity", latestSequence: sequence } });
         }
       }
     });
@@ -515,7 +510,7 @@ describe("a log append that can open a stage", () => {
       {
         ...atReview,
         logs: makeLogs({
-          source: [
+          activity: [
             { phaseId: "working", pass: 1 },
             { phaseId: "review", pass: 1 },
           ],

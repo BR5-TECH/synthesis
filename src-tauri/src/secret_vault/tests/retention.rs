@@ -6,27 +6,6 @@ use super::*;
 // ASV-FR-27 … ASV-FR-33 — retention, disclosure, reach, and the budget
 // ---------------------------------------------------------------------------
 
-/// ASV-FR-27: nothing is retained between operations — a second read of the
-/// same path reads the keyring again.
-#[test]
-fn asv_ts_22_nothing_is_cached_between_operations() {
-    let (vault, keyring) = vault();
-    set(&vault, &["github", "tokens", "a"], "A").unwrap();
-
-    let reads_before = keyring.count(&Call::Read);
-    vault.read_secret(&p(&["github", "tokens", "a"])).unwrap();
-    assert_eq!(keyring.count(&Call::Read) - reads_before, 1);
-    vault.read_secret(&p(&["github", "tokens", "a"])).unwrap();
-    assert_eq!(keyring.count(&Call::Read) - reads_before, 2);
-
-    // And the answer follows the entry rather than a retained copy.
-    keyring.set_entry(r#"{"version":1}"#);
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        None
-    );
-}
-
 /// ASV-FR-31, ASV-FR-28 (renderings): no `Debug` rendering the module produces carries a
 /// secret, a path, or an id.
 #[test]
@@ -176,6 +155,7 @@ fn asv_ts_23_no_log_record_carries_a_secret_a_path_or_an_id() {
         "secret vault migration found nothing to adopt",
         "secret vault could not adopt a legacy secret",
         "secret vault write could not be verified",
+        "secret vault cache initialized",
     ] {
         assert!(messages.contains(site), "the session never reached {site:?}");
     }
@@ -250,9 +230,14 @@ fn asv_ts_25_presence_is_one_read_for_twenty_paths() {
         paths.push(path(&segments));
     }
 
+    // A second process, so the first presence request initializes the cache.
+    let vault = Vault::new(Box::new(keyring.clone()));
+    vault.mark_migrated();
     let reads_before = keyring.count(&Call::Read);
     let answers = vault.secret_presence(&paths).unwrap();
 
+    assert_eq!(keyring.count(&Call::Read) - reads_before, 1);
+    vault.secret_presence(&paths).unwrap();
     assert_eq!(keyring.count(&Call::Read) - reads_before, 1);
     assert_eq!(answers.len(), 20);
     assert!(answers.values().all(|v| *v));

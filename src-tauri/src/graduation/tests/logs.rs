@@ -21,7 +21,7 @@ fn a_run_owns_two_readable_streams_from_the_moment_it_exists() {
     logs::initialize(&fx.app, &mut run);
 
     let paths = logs::paths_for(&fx.app, &run.id).expect("the paths");
-    assert!(paths.stream(GraduationLogStream::Source).is_file());
+    assert!(paths.stream(GraduationLogStream::Activity).is_file());
     assert!(paths.stream(GraduationLogStream::Structured).is_file());
     assert!(run.logs.persistence.is_healthy());
     assert_eq!(run.logs.log_storage_version, 1);
@@ -163,8 +163,8 @@ fn the_run_record_holds_no_log_payload() {
     )
     .expect("the run record");
     assert!(
-        !record.contains("data_base64"),
-        "no source chunk reaches the run record"
+        !record.contains("RAW PAYLOAD") && !record.contains("the scripted turn ran"),
+        "no activity text reaches the run record"
     );
     assert!(
         !record.contains("the work turn wrote this"),
@@ -173,10 +173,11 @@ fn the_run_record_holds_no_log_payload() {
     assert!(record.contains("logStorageVersion"), "but the indexes do");
 }
 
-/// GRS-FR-JQOO, GXD-FR-IOZU: the durable source stream stands beside the live
-/// panel, and holds what the executor reported.
+/// GRS-FR-JQOO, GRS-FR-SQGZ, GRS-FR-WJIA, GRS-FR-VZUZ, GXD-FR-IOZU,
+/// GLG-FR-AVVZ, GLG-FR-YGCI, AGV-FR-ZSRV, EAC-FR-IRKZ: the durable activity stream stands beside the live panel and
+/// holds the safe kinds alone, with no payload.
 #[test]
-fn the_source_stream_holds_the_executor_output_the_live_panel_showed() {
+fn the_activity_stream_holds_only_the_safe_activity_the_live_panel_showed() {
     let fx = Fixture::new();
     let stream = fx.stream("editor");
     let run = fx.enqueue(&stream, "Write the panel.");
@@ -188,34 +189,47 @@ fn the_source_stream_holds_the_executor_output_the_live_panel_showed() {
         ]),
     );
 
-    let chunks = lines_of(&fx, &run.id, GraduationLogStream::Source);
-    assert_eq!(chunks.len(), 2, "one chunk per turn");
-    for chunk in &chunks {
-        assert_eq!(field(chunk, "encoding").as_str(), Some("base64"));
-        assert_eq!(field(chunk, "origin").as_str(), Some("executor"));
-        assert!(field(chunk, "byte_length").as_u64().unwrap_or_default() > 0);
+    let records = lines_of(&fx, &run.id, GraduationLogStream::Activity);
+    assert_eq!(records.len(), 4, "a message and a finished line per turn");
+    let kinds: Vec<&str> = records.iter().filter_map(|r| field(r, "kind").as_str()).collect();
+    assert_eq!(kinds, vec!["message", "finished", "message", "finished"]);
+    for record in &records {
+        let mut keys: Vec<&str> = record.as_object().unwrap().keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            vec![
+                "at", "channel", "kind", "origin", "pass", "phase_id", "producer", "record_id",
+                "run_id", "schema_version", "sequence", "summary"
+            ],
+            "a record holds the attribution and three fields, and no payload"
+        );
     }
-    assert_eq!(field(&chunks[0], "producer").as_str(), Some("work_turn"));
-    assert_eq!(field(&chunks[1], "producer").as_str(), Some("review_turn"));
-    assert_eq!(field(&chunks[1], "phase_id").as_str(), Some("review"));
+    let text = std::fs::read_to_string(
+        logs::paths_for(&fx.app, &run.id)
+            .unwrap()
+            .stream(GraduationLogStream::Activity),
+    )
+    .unwrap();
+    for excluded in ["RAW PAYLOAD", "the-secret-argument-vector", "the whole task document"] {
+        assert!(!text.contains(excluded), "{excluded} is never persisted");
+    }
+    assert_eq!(field(&records[0], "producer").as_str(), Some("work_turn"));
+    assert_eq!(field(&records[0], "origin").as_str(), Some("agent"));
+    assert_eq!(field(&records[1], "origin").as_str(), Some("executor"));
+    assert_eq!(field(&records[2], "producer").as_str(), Some("review_turn"));
+    assert_eq!(field(&records[2], "phase_id").as_str(), Some("review"));
+    assert_eq!(field(&records[0], "pass").as_u64(), Some(1));
 
-    // GRS-FR-QDVH: decoding recovers what was written.
-    use base64::Engine as _;
-    let decoded = base64::engine::general_purpose::STANDARD
-        .decode(field(&chunks[0], "data_base64").as_str().unwrap())
-        .expect("base64");
-    assert_eq!(
-        String::from_utf8(decoded).unwrap(),
-        "the scripted turn ran"
-    );
-
-    // AGV: the in-memory panel is a separate stream and still holds its own.
+    // AGV: the in-memory panel is a separate stream and still holds every kind.
     let store = fx
         .app
         .state::<std::sync::Arc<crate::agent_activity::ActivityStore>>()
         .inner()
         .clone();
-    assert_eq!(store.read(&run.id, None, None).records.len(), 2);
+    let live = store.read(&run.id, None, None).records;
+    assert_eq!(live.len(), 8);
+    assert!(live.iter().any(|record| record.kind == "invocation"));
 }
 
 /// GRS-FR-EIXS, GRS-FR-OVCO, GRD-FR-IKVE: a stream that cannot be written stops
@@ -416,10 +430,10 @@ fn a_structured_record_carries_its_level_and_its_fields() {
     );
 }
 
-/// GRS-FR-SXNY: the source stream's sequence ascends within the run, and the
+/// GRS-FR-SXNY: the activity stream's sequence ascends within the run, and the
 /// index the run record holds names what the file holds.
 #[test]
-fn the_source_streams_sequence_ascends_and_its_index_is_kept() {
+fn the_activity_streams_sequence_ascends_and_its_index_is_kept() {
     let fx = Fixture::new();
     let stream = fx.stream("editor");
     let run = fx.enqueue(&stream, "Write the panel.");
@@ -433,7 +447,7 @@ fn the_source_streams_sequence_ascends_and_its_index_is_kept() {
         ]),
     );
 
-    let chunks = lines_of(&fx, &run.id, GraduationLogStream::Source);
+    let chunks = lines_of(&fx, &run.id, GraduationLogStream::Activity);
     let sequences: Vec<u64> = chunks
         .iter()
         .map(|c| field(c, "sequence").as_u64().unwrap_or_default())
@@ -443,22 +457,23 @@ fn the_source_streams_sequence_ascends_and_its_index_is_kept() {
         (1..=chunks.len() as u64).collect::<Vec<u64>>(),
         "every chunk has its own ascending sequence"
     );
-    let index = run.logs.stream(GraduationLogStream::Source);
+    let index = run.logs.stream(GraduationLogStream::Activity);
     assert_eq!(index.record_count, chunks.len() as u64);
     assert_eq!(index.latest_sequence, chunks.len() as u64);
 }
 
-/// GRS-FR-EIXS: the **source** stream is mandatory too. A chunk the executor's
-/// own thread could not store rests the run before it takes another turn.
+/// GRS-FR-EIXS, GRS-FR-ITWJ, GLG-FR-UCRL, GXD-FR-MMFM: the **activity** stream
+/// is mandatory too. An activity the sink could not store stops the turn and
+/// rests the run before it takes another turn.
 #[test]
-fn a_source_stream_that_cannot_be_written_also_rests_the_run() {
+fn an_activity_stream_that_cannot_be_written_also_rests_the_run() {
     let fx = Fixture::new();
     let stream = fx.stream("editor");
     let run = fx.enqueue(&stream, "Write the panel.");
 
     let path = logs::paths_for(&fx.app, &run.id)
         .unwrap()
-        .stream(GraduationLogStream::Source);
+        .stream(GraduationLogStream::Activity);
     std::fs::create_dir_all(&path).expect("the obstruction");
 
     let dispatch = ScriptedDispatch::new(vec![
@@ -474,13 +489,13 @@ fn a_source_stream_that_cannot_be_written_also_rests_the_run() {
     );
     assert_eq!(
         run.logs.persistence.failure.as_ref().map(|f| f.stream),
-        Some(GraduationLogStream::Source),
+        Some(GraduationLogStream::Activity),
         "the run names the stream that stopped"
     );
     assert_eq!(
         dispatch.of_part("review").len(),
         0,
-        "no review turn is taken after the source stream failed"
+        "no review turn is taken after the activity stream failed"
     );
 }
 
@@ -546,11 +561,11 @@ fn a_pending_queue_of_both_streams_replays_each_into_its_own() {
     let stream = fx.stream("editor");
     let run = fx.enqueue(&stream, "Write the panel.");
 
-    // Both streams obstructed, so both a structured record and a source chunk
+    // Both streams obstructed, so both a structured record and an activity record
     // fail to land and are queued.
     let paths = logs::paths_for(&fx.app, &run.id).unwrap();
     std::fs::create_dir_all(paths.stream(GraduationLogStream::Structured)).unwrap();
-    std::fs::create_dir_all(paths.stream(GraduationLogStream::Source)).unwrap();
+    std::fs::create_dir_all(paths.stream(GraduationLogStream::Activity)).unwrap();
 
     let run = fx.drive(
         &run,
@@ -572,7 +587,7 @@ fn a_pending_queue_of_both_streams_replays_each_into_its_own() {
         "Continue either repairs both streams or refuses"
     );
 
-    std::fs::remove_dir_all(paths.stream(GraduationLogStream::Source)).ok();
+    std::fs::remove_dir_all(paths.stream(GraduationLogStream::Activity)).ok();
     let continued =
         crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone()).expect("continued");
     fx.app.state::<GraduationState>().set_loop_enabled(true);
@@ -580,7 +595,7 @@ fn a_pending_queue_of_both_streams_replays_each_into_its_own() {
     assert!(!paths.pending().exists(), "the queue is cleared once it is empty");
 
     // Every record landed in its own stream, once.
-    for stream in [GraduationLogStream::Structured, GraduationLogStream::Source] {
+    for stream in [GraduationLogStream::Structured, GraduationLogStream::Activity] {
         let records = lines_of(&fx, &run.id, stream);
         let mut ids: Vec<&str> = records
             .iter()
@@ -593,10 +608,10 @@ fn a_pending_queue_of_both_streams_replays_each_into_its_own() {
     }
 }
 
-/// GRS-FR-MQEQ: the source stream's partial final line is cut too, and its
+/// GRS-FR-MQEQ: the activity stream's partial final line is cut too, and its
 /// sequence continues rather than restarting.
 #[test]
-fn a_partial_final_line_in_the_source_stream_is_cut_as_well() {
+fn a_partial_final_line_in_the_activity_stream_is_cut_as_well() {
     let fx = Fixture::new();
     let stream = fx.stream("editor");
     let mut run = fx.enqueue(&stream, "Write the panel.");
@@ -604,26 +619,35 @@ fn a_partial_final_line_in_the_source_stream_is_cut_as_well() {
 
     let path = logs::paths_for(&fx.app, &run.id)
         .unwrap()
-        .stream(GraduationLogStream::Source);
+        .stream(GraduationLogStream::Activity);
     std::fs::write(
         &path,
         "{\"schema_version\":1,\"record_id\":\"whole\",\"sequence\":1,\"phase_id\":\"working\",\"pass\":1}\n{\"record_id\":\"cut",
     )
     .expect("a file with a partial tail");
 
-    logs::append_source_chunks(
+    let activity = crate::tools::agent_exec::DurableActivity {
+        record_id: "after-the-repair".to_string(),
+        at: crate::notes::now_rfc3339(),
+        channel: "stdout",
+        kind: "message",
+        summary: "after the repair".to_string(),
+    };
+    logs::append_activity_records(
         &fx.app,
         &run.id,
         run.logs.clone(),
-        vec![logs::source_chunk(
-            &run,
+        vec![logs::activity_record(
+            &run.id,
             GraduationLogProducer::WorkTurn,
-            "stdout",
-            "after the repair",
-        )],
-    );
+            Some(run.pass()),
+            &activity,
+        )
+        .expect("a safe kind")],
+    )
+    .expect("appended");
 
-    let records = lines_of(&fx, &run.id, GraduationLogStream::Source);
+    let records = lines_of(&fx, &run.id, GraduationLogStream::Activity);
     assert_eq!(records.len(), 2);
     let sequences: Vec<u64> = records
         .iter()

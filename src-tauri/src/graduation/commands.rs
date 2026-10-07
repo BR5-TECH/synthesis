@@ -772,7 +772,7 @@ pub fn read_graduation_logs<R: tauri::Runtime>(
         return Err(format!("{}: {phase_id}", logs::read::ERR_UNKNOWN_PHASE));
     }
     let selected = match stream.as_str() {
-        "source" => GraduationLogStream::Source,
+        "activity" => GraduationLogStream::Activity,
         "structured" => GraduationLogStream::Structured,
         _ => {
             refuse(ERR_UNKNOWN_STREAM);
@@ -809,8 +809,8 @@ pub fn read_graduation_logs<R: tauri::Runtime>(
         refuse(reason);
     })?;
 
-    // The shape of the answer, and no part of what it holds: no decoded output,
-    // no structured field, and no query text reaches a diagnostic record.
+    // The shape of the answer, and no part of what it holds: no summary, no
+    // structured field, and no query text reaches a diagnostic record.
     logging::log_debug(
         &app,
         &BUFFER,

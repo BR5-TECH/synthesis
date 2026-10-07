@@ -332,6 +332,7 @@ fn an_unavailable_credential_prevents_the_launch_without_disclosing_anything() {
             task: task("go"),
             cancellation: CancellationToken::new(),
             activity: None,
+            durable_output: None,
             supplementary_mount: None,
         },
     ))
@@ -385,6 +386,7 @@ fn an_unavailable_credential_prevents_the_launch_without_disclosing_anything() {
             task: task("go"),
             cancellation: CancellationToken::new(),
             activity: None,
+            durable_output: None,
             supplementary_mount: None,
         },
     ))
@@ -421,6 +423,7 @@ fn an_unusable_execution_directory_is_refused_before_launch() {
                 task: task("go"),
                 cancellation: CancellationToken::new(),
                 activity: None,
+                durable_output: None,
                 supplementary_mount: None,
             },
         ))

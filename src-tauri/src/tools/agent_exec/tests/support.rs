@@ -275,6 +275,7 @@ pub(super) fn run_with_cancel(
             task,
             cancellation,
             activity: None,
+            durable_output: None,
             supplementary_mount: None,
         },
     ))
@@ -323,6 +324,7 @@ pub(super) fn run_in(
             task: task("go"),
             cancellation: CancellationToken::new(),
             activity: None,
+            durable_output: None,
             supplementary_mount: None,
         },
     ))
@@ -357,6 +359,7 @@ pub(super) fn run_as(
             task: task("go"),
             cancellation: CancellationToken::new(),
             activity,
+            durable_output: None,
             supplementary_mount: mount,
         },
     ))
@@ -509,6 +512,7 @@ pub(super) fn run_watching(
             task,
             cancellation: CancellationToken::new(),
             activity: Some(sink),
+            durable_output: None,
             supplementary_mount: None,
         },
     ))

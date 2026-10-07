@@ -20,7 +20,8 @@ The single seam through which a graduation run reaches an execution agent, and t
 11. **GXD-FR-HGSU** An escalation pauses the run durably. The agent's reason and its ordered questions are persisted on the run, the run moves to `awaiting_author`, and the stream is released.
 12. **GXD-FR-BJYT** `answer_graduation_escalation(run_id, answers)` accepts an ordered set covering **every** recorded question and nothing else. Each entry carries the question's position, the answer, and a summary. A set that does not cover them all is refused and records nothing. A set against a run in a terminal state is refused with `run_state_not_permitted`. A set against a merge run whose pinned tip moved is refused with `merge_branch_moved` and records nothing (per `GRD-graduation.md` GRD-FR-XHSE).
 13. **GXD-FR-XPUR** An answered escalation goes into the **phase that asked**, and the pass does not advance. A work turn's answers resume the vendor's session where it can, and go into a fresh work turn where it cannot. A review turn's answers go into a fresh review turn that resumes no session, and are cleared once it returns a readable verdict.
-14. **GXD-FR-IOZU** Every dispatch carries an activity sink bound to the run, so what the agent does reaches the run it is doing it for (per `AGV-agent-activity.md`), and the run's two durable log sinks (per `GRS-graduation-run-log-storage.md`).
+14. **GXD-FR-IOZU** Every dispatch carries an activity sink bound to the run, so what the agent does reaches the run it is doing it for (per `AGV-agent-activity.md`), and a durable activity sink bound to the run, the turn's producer, and the turn's pass (per `GRS-graduation-run-log-storage.md`). The executor receives both sinks and never a run identifier.
+23. **GXD-FR-MMFM** A turn whose durable sink failed returns the executor's `DurableOutputFailed` (per `../tools/EAC-execute-agent-cli.md` EAC-FR-ZVRP) and rests the run `interrupted` with the reason `log_persistence_failed`. This reason takes precedence over the `cancelled` outcome the stopped container reports (per `../ai/GLG-graduation-loop-logging.md` GLG-FR-UCRL).
 15. **GXD-FR-CYIW** Every dispatch of a run that has a source draft is attributed: the operation's interval and every provider-reported usage record are appended against that draft when the turn ends (per `GRD-graduation.md` GRD-FR-NHRY). A merge run has no source draft, so its dispatches are attributed to no draft.
 16. **GXD-FR-TJRV** A continued run that stopped in a phase — on a blocker, an author pause, an application shutdown or a project change — resumes at the phase the checkpoint records, not at the start of the pass. The pass does not advance. A run that stopped in the review asks for a review turn and composes no work turn. A merge run that stopped in the phase `apply` resumes at that phase, dispatches no turn and spends no pass (per `GRD-graduation.md` GRD-FR-JSBE).
     - *Why:* The work did not change while the run was stopped, so a work turn spends a container to decide again what nobody reported a problem with.
@@ -52,7 +53,8 @@ GraduationTurnRequest {
   task,                      // AgentTaskRequest carrying GraduationTaskInput
   supplementary_mount?,      // the rebase bundle, for semantic_rebase alone; a merge turn has none
   cancellation,
-  activity_sink
+  activity_sink,
+  durable_output_sink        // the run's durable activity sink (GXD-FR-IOZU)
 }
 
 PassBudgetWindow {

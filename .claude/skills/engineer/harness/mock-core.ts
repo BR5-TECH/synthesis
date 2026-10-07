@@ -5729,7 +5729,7 @@ for (const run of graduationRuns) {
 }
 
 /** GRD-FR-KDWA: the log index every run carries. Healthy and empty. */
-function streamIndex(name: "source" | "structured") {
+function streamIndex(name: "activity" | "structured") {
   return {
     stream: name,
     latestSequence: 0,
@@ -5772,7 +5772,7 @@ function makeStreamRun(over: any) {
     },
     logs: {
       logStorageVersion: 1,
-      source: streamIndex("source"),
+      activity: streamIndex("activity"),
       structured: streamIndex("structured"),
       persistence: {
         status: "healthy",
@@ -6359,6 +6359,207 @@ const findRun = (runId: string) => {
   if (!run) throw "run_not_found";
   return run;
 };
+
+/* --- Graduation agent activity (GRS-graduation-run-log-storage.md) ---------
+ *
+ * Run `g-40` is working on its second pass after a review sent it back, so its
+ * Review phase holds an earlier pass the window must still list (GLW-FR-CKLZ).
+ * Records are kept per run, phase, and pass, and `read_graduation_logs` answers
+ * from them the way the backend does: ascending by sequence, bounded to a page.
+ *
+ * Add a record while the window is open, as a running phase would:
+ *   window.__appendGraduationActivity("g-40", "working", 2, "message", "text")
+ */
+const activityKinds = [
+  "started",
+  "message",
+  "tool_call",
+  "tool_result",
+  "progress",
+  "diagnostic",
+];
+const graduationActivity: Record<
+  string,
+  Array<{ sequence: number; at: string; phaseId: string; pass: number | null; kind: string; summary: string }>
+> = { "g-40": [] };
+(function seedGraduationActivity() {
+  const records = graduationActivity["g-40"];
+  const base = Date.parse("2026-09-06T09:02:00Z");
+  const add = (phaseId: string, pass: number | null, count: number) => {
+    for (let i = 0; i < count; i += 1) {
+      const sequence = records.length + 1;
+      records.push({
+        sequence,
+        at: new Date(base + sequence * 4000).toISOString(),
+        phaseId,
+        pass,
+        kind: activityKinds[i % activityKinds.length],
+        summary: `${phaseId} pass ${pass ?? "run-level"} step ${i + 1}`,
+      });
+    }
+  };
+  add("queued", null, 1);
+  add("working", 1, 60);
+  add("review", 1, 6);
+  add("working", 2, 4);
+})();
+
+function graduationActivityIndex(runId: string) {
+  const records = graduationActivity[runId] ?? [];
+  const segments: any[] = [];
+  for (const r of records) {
+    const last = segments[segments.length - 1];
+    if (last && last.phaseId === r.phaseId && last.pass === r.pass) {
+      last.lastSequence = r.sequence;
+      last.recordCount += 1;
+    } else {
+      segments.push({
+        phaseId: r.phaseId,
+        pass: r.pass,
+        firstSequence: r.sequence,
+        lastSequence: r.sequence,
+        recordCount: 1,
+      });
+    }
+  }
+  return {
+    stream: "activity",
+    latestSequence: records.length,
+    recordCount: records.length,
+    durableThroughSequence: records.length,
+    byteLength: records.length * 120,
+    segments,
+  };
+}
+
+graduationRuns.push(
+  makeStreamRun({
+    id: "g-40",
+    draftId: "d-40",
+    state: "working",
+    workTurns: 2,
+    reviewTurns: 1,
+    input: {
+      draftId: "d-40",
+      draftName: "Keep scroll position",
+      prompt: "Keep the editor's scroll position when a tab is reopened.",
+      promptChecksum: "sha-p40",
+      capturedAt: "2026-09-06T09:00:00Z",
+    },
+    checkpoint: {
+      pass: 2,
+      changedPaths: [],
+      hiddenPaths: [],
+      hiddenPathsOmitted: 0,
+      pendingEscalationAnswers: [],
+      verdictRefusals: 0,
+    },
+    observability: {
+      observabilityVersion: 1,
+      currentStage: "working",
+      stageCondition: "active",
+      queue: { waitReason: null, leftQueuedAt: "2026-09-06T09:02:00Z" },
+      stageHistory: [
+        { from: "queued", to: "working", pass: 1, at: "2026-09-06T09:02:00Z", reason: "work_started" },
+        { from: "working", to: "review", pass: 1, at: "2026-09-06T09:05:00Z", reason: "review_started" },
+        { from: "review", to: "working", pass: 2, at: "2026-09-06T09:08:00Z", reason: "review_revision" },
+      ],
+      revisionHistory: [],
+      passes: [
+        { pass: 1, status: "failed", task: "Keep the scroll position.", findings: [], startedAt: "2026-09-06T09:02:00Z" },
+        { pass: 2, status: "working", task: "Keep the scroll position.", findings: [], startedAt: "2026-09-06T09:08:00Z" },
+      ],
+    },
+  }),
+);
+(graduationRuns[graduationRuns.length - 1] as any).logs.activity = graduationActivityIndex("g-40");
+
+function syncGraduationLogIndex(runId: string) {
+  const run: any = graduationRuns.find((r) => r.id === runId);
+  if (run) run.logs.activity = graduationActivityIndex(runId);
+}
+
+(globalThis as Record<string, unknown>).__appendGraduationActivity = (
+  runId: string,
+  phaseId: string,
+  pass: number | null,
+  kind: string,
+  summary: string,
+) => {
+  const records = (graduationActivity[runId] ??= []);
+  const sequence = records.length + 1;
+  records.push({ sequence, at: new Date().toISOString(), phaseId, pass, kind, summary });
+  syncGraduationLogIndex(runId);
+  (globalThis as any).__fireBusEvent?.("graduation-log-records-appended", {
+    runId,
+    stream: "activity",
+    latestSequence: sequence,
+  });
+};
+
+function readGraduationActivity(a: any) {
+  const runId = String(a.runId ?? "");
+  const phaseId = String(a.phaseId ?? "");
+  const scope = a.pass ?? { kind: "phase" };
+  findRun(runId);
+  const limit = Math.min(Math.max(Number(a.limit ?? 50), 1), 200);
+  const query = String(a.query ?? "").trim().toLowerCase();
+  const all = graduationActivity[runId] ?? [];
+  let inScope = all.filter(
+    (r) =>
+      r.phaseId === phaseId &&
+      (scope.kind === "pass"
+        ? r.pass === scope.pass
+        : scope.kind === "run_level"
+          ? r.pass === null
+          : true),
+  );
+  if (query)
+    inScope = inScope.filter((r) =>
+      `${r.kind} ${r.summary}`.toLowerCase().includes(query),
+    );
+  const cursor = a.cursor ?? null;
+  let slice: typeof inScope;
+  let oldestReached: boolean;
+  if (cursor?.direction === "after") {
+    slice = inScope.filter((r) => r.sequence > cursor.sequence).slice(0, limit);
+    oldestReached = true;
+  } else if (cursor?.direction === "before") {
+    const older = inScope.filter((r) => r.sequence < cursor.sequence);
+    slice = older.slice(Math.max(older.length - limit, 0));
+    oldestReached = older.length <= limit;
+  } else {
+    slice = inScope.slice(Math.max(inScope.length - limit, 0));
+    oldestReached = inScope.length <= limit;
+  }
+  const first = slice[0];
+  const last = slice[slice.length - 1];
+  return {
+    runId,
+    stream: "activity",
+    phaseId,
+    scope,
+    entries: slice.map((r) => ({
+      record: { ...r, pass: r.pass },
+      presentation: { runLevel: r.pass === null },
+    })),
+    nextCursor: last
+      ? { runId, stream: "activity", direction: "after", sequence: last.sequence }
+      : cursor?.direction === "after"
+        ? cursor
+        : null,
+    olderCursor:
+      first && !oldestReached
+        ? { runId, stream: "activity", direction: "before", sequence: first.sequence }
+        : null,
+    matchedTotal: inScope.length,
+    oldestReached,
+    latestSequence: all.length,
+    status: inScope.length === 0 && !query ? "empty" : "available",
+    search: !query ? "not_requested" : inScope.length ? "matched" : "search_no_match",
+    failure: null,
+  };
+}
 
 /**
  * GRV-FR-13 /: the review in **in-place** mode, where the header
@@ -7712,6 +7913,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       };
     case "get_graduation_run":
       return { ...findRun(String(a.runId ?? "")) };
+    case "read_graduation_logs":
+      return readGraduationActivity(a);
     // GRD-FR-GRHC: the limit, the slots held, and the queued runs that wait for
     // a slot alone. The limit is the one the Graduation section saved.
     case "get_graduation_capacity": {

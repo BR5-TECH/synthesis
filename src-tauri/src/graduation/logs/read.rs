@@ -29,7 +29,7 @@ use super::index::{
 use super::records::GraduationLogStream;
 use super::writer::LogPaths;
 
-/// GLW-FR-DDXJ: what a record with no pass is shown and searched as.
+/// GLW-FR-DDXJ: what a structured record with no pass is searched as.
 pub const RUN_LEVEL_MARKER: &str = "run-level";
 
 /// GRS-FR-EYNU: the read-failure code a file that could not be read reports.
@@ -265,45 +265,37 @@ fn in_scope(line: &Line, phase_id: &str, scope: &GraduationLogPassScope) -> bool
     }
 }
 
-/// GRS-FR-OYIC: what a search matches is exactly what the surface displays.
+/// GRS-FR-OYIC: what a search matches is what the surface displays.
+///
+/// An activity search matches the kind and the summary of a record, which are
+/// the two texts a row shows. It matches no other field.
 fn searchable(value: &serde_json::Value, stream: GraduationLogStream) -> String {
     let mut haystack = String::new();
     let mut push = |text: &str| {
         haystack.push_str(text);
         haystack.push('\n');
     };
-    for key in ["run_id", "phase_id", "origin", "producer", "at"] {
-        if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
-            push(text);
-        }
-    }
-    if let Some(sequence) = value.get("sequence") {
-        push(&sequence.to_string());
-    }
-    match value.get("pass").and_then(|v| v.as_u64()) {
-        Some(pass) => push(&pass.to_string()),
-        // GRS-FR-OYIC: what is searched and what is shown are one set, and a
-        // record with no pass is shown with the run-level marker of
-        // `../../../../specifications/ui/GLW-graduation-log-window.md`
-        // GLW-FR-DDXJ rather than with a number.
-        None => push(RUN_LEVEL_MARKER),
-    }
     match stream {
-        GraduationLogStream::Source => {
-            for key in ["agent", "container", "source"] {
+        GraduationLogStream::Activity => {
+            for key in ["kind", "summary"] {
                 if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
                     push(text);
                 }
             }
-            // GRS-FR-QVTA: what is searched is what is decoded and shown.
-            if let Some(encoded) = value.get("data_base64").and_then(|v| v.as_str()) {
-                use base64::Engine as _;
-                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(encoded) {
-                    push(&String::from_utf8_lossy(&bytes));
-                }
-            }
         }
         GraduationLogStream::Structured => {
+            for key in ["run_id", "phase_id", "origin", "producer", "at"] {
+                if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
+                    push(text);
+                }
+            }
+            if let Some(sequence) = value.get("sequence") {
+                push(&sequence.to_string());
+            }
+            match value.get("pass").and_then(|v| v.as_u64()) {
+                Some(pass) => push(&pass.to_string()),
+                None => push(RUN_LEVEL_MARKER),
+            }
             for key in ["level", "event"] {
                 if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
                     push(text);

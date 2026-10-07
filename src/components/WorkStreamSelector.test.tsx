@@ -31,9 +31,18 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 /** Answer `list_work_streams` with `streams` and everything else with nothing. */
-function backend(streams: WorkStreamSummary[]) {
-  invokeMock.mockImplementation(async (cmd: string) => {
+function backend(
+  streams: WorkStreamSummary[],
+  draftNames: Record<string, string> = {},
+) {
+  invokeMock.mockImplementation(async (cmd: string, args?: { runId?: string }) => {
     if (cmd === "list_work_streams") return streams;
+    // WSS-FR-PSXK: a busy row reads the run's record for its draft's name.
+    if (cmd === "get_graduation_run") {
+      const name = draftNames[args?.runId ?? ""];
+      if (name === undefined) throw new Error("unknown run");
+      return { id: args?.runId, input: { draftName: name } };
+    }
     if (cmd === "list_worktrees_and_branches")
       return { worktrees: [], branches: [{ name: "main" }, { name: "dev" }] };
     // WSS-FR-BRMT: opening a delete reads the stream's uncommitted paths.
@@ -163,15 +172,29 @@ describe("the listing (WSS-FR-SOAS, WSS-FR-XZRD, WSS-FR-JBYF)", () => {
 });
 
 describe("a stream a run holds (WSS-FR-PSXK, WSS-FR-YCAL)", () => {
-  it("WSS-FR-PSXK: a busy stream names the run and offers no action", async () => {
+  it("WSS-FR-PSXK: a busy stream names the draft of the run and offers no action", async () => {
+    backend([summary({ busyRunId: "g7" })], { g7: "Editor scroll fix" });
+    renderSelector();
+    const menu = await openMenu();
+    expect(
+      await within(menu).findByText(/Busy — “Editor scroll fix” is working in it/),
+    ).toBeInTheDocument();
+    expect(within(menu).queryByText(/g7/)).toBeNull();
+    // The busy line REPLACES the actions, so nothing is offered that would be
+    // refused rather than being offered disabled.
+    expect(within(menu).queryByRole("button", { name: "Merge stream" })).toBeNull();
+    expect(within(menu).queryByRole("button", { name: "Delete stream" })).toBeNull();
+  });
+
+  it("WSS-FR-PSXK: a busy stream whose draft name cannot be read names no run id", async () => {
     backend([summary({ busyRunId: "g7" })]);
     renderSelector();
     const menu = await openMenu();
-    expect(within(menu).getByText(/Busy — run g7 is working in it/)).toBeInTheDocument();
-    // The busy line REPLACES the actions, so nothing is offered that would be
-    // refused rather than being offered disabled.
-    expect(within(menu).queryByRole("button", { name: "Merge…" })).toBeNull();
-    expect(within(menu).queryByRole("button", { name: "Delete…" })).toBeNull();
+    await waitFor(() => expect(calls("get_graduation_run")).toHaveLength(1));
+    expect(
+      within(menu).getByText(/Busy — a run is working in it/),
+    ).toBeInTheDocument();
+    expect(within(menu).queryByText(/g7/)).toBeNull();
   });
 
   it("WSS-FR-YCAL: a busy stream is not selectable, and nothing is invoked", async () => {
@@ -302,7 +325,7 @@ describe("creating a stream (WSS-FR-PDFX, WSS-FR-XZRO, WSS-FR-CRJD)", () => {
 describe("merging a stream (WSS-FR-YPDA, WSS-FR-VMNV, WSS-FR-OMAP)", () => {
   const openMerge = async () => {
     const menu = await openMenu();
-    await userEvent.click(within(menu).getByRole("button", { name: "Merge…" }));
+    await userEvent.click(within(menu).getByRole("button", { name: "Merge stream" }));
     return screen.findByTestId("stream-row-w1");
   };
 
@@ -383,7 +406,7 @@ describe("merging a stream (WSS-FR-YPDA, WSS-FR-VMNV, WSS-FR-OMAP)", () => {
 describe("deleting a stream (WSS-FR-UFZP)", () => {
   const openDelete = async () => {
     const menu = await openMenu();
-    await userEvent.click(within(menu).getByRole("button", { name: "Delete…" }));
+    await userEvent.click(within(menu).getByRole("button", { name: "Delete stream" }));
     return screen.findByTestId("stream-row-w1");
   };
 

@@ -154,7 +154,10 @@ fn asv_ts_14_second_quarantine_does_not_accumulate() {
     let first_object = keyring.entry().unwrap();
 
     // The whole prior value — quarantine field and all — becomes garbage again.
+    // A second process, because the first one holds the entry in its cache.
     keyring.set_entry(&format!("corrupted: {first_object}"));
+    let vault = Vault::new(Box::new(keyring.clone()));
+    vault.mark_migrated();
     set(&vault, &["github", "tokens", "b"], "B").unwrap();
 
     let object = keyring.object();

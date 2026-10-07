@@ -125,18 +125,15 @@ fn gts_ts15_every_vault_write_failure_is_one_keychain_unavailable() {
     }
 }
 
-/// GTS-FR-03 read with `ASV-application-secret-vault.md` ASV-FR-30: a
-/// listing costs **one** vault access, and that stays true as the number of
-/// records grows.
+/// GTS-FR-03 read with `ASV-application-secret-vault.md` ASV-FR-30 and
+/// ASV-FR-DQHY: a listing makes no keyring access once the vault cache is
+/// initialized, and that stays true as the number of records grows.
 ///
 /// This is the module where the count actually varies — AAP and AIC each
-/// list a fixed descriptor table — so it is the one where "one access" and
-/// "one access per record" can be told apart at all. Before the
-/// consolidation each record cost its own keyring entry; now twenty records
-/// cost the same single read as one, which on a platform that prompts per
-/// access is the difference between one authentication and twenty.
+/// list a fixed descriptor table — so it is the one where "no access" and
+/// "one access per record" can be told apart at all.
 #[test]
-fn gts_fr03_a_listing_costs_one_vault_access_however_many_records() {
+fn gts_fr03_a_listing_costs_no_keyring_access_however_many_records() {
     use crate::secret_vault::test_support::Call;
 
     let mut reads_for = Vec::new();
@@ -147,8 +144,7 @@ fn gts_fr03_a_listing_costs_one_vault_access_however_many_records() {
             .collect();
         let (store, tokens) =
             vault_harness(&keyring, registry, FakeVerifier::rejecting());
-        // Let migration run first; it is the one sequence allowed to read
-        // more than once.
+        // The first listing initializes the vault cache.
         let _ = list_tokens_impl(&store, &tokens).unwrap();
         let before = keyring.count(&Call::Read);
 
@@ -157,7 +153,7 @@ fn gts_fr03_a_listing_costs_one_vault_access_however_many_records() {
         assert_eq!(listed.len(), count);
         reads_for.push(keyring.count(&Call::Read) - before);
     }
-    assert_eq!(reads_for, vec![1, 1], "one read for one record and for twenty");
+    assert_eq!(reads_for, vec![0, 0], "no read for one record and for twenty");
 }
 
 /// ASV-FR-08: a project-scoped secret and a project's token binding are

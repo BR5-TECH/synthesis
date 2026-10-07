@@ -474,7 +474,8 @@ fn an_entry_from_a_newer_build_is_not_re_migrated_against() {
     }));
 
     // The first operation attempts migration, finds an entry it must not touch,
-    // and stands down for good.
+    // and stands down for good. Each later operation is an independent request
+    // and starts its own initialization attempt (ASV-FR-FTFU).
     for _ in 0..4 {
         assert_eq!(
             vault.read_secret(&p(&["github", "tokens", "a"])),
@@ -482,9 +483,9 @@ fn an_entry_from_a_newer_build_is_not_re_migrated_against() {
         );
     }
 
-    // One read per operation, not two: the first attempted migration, the rest
-    // did not.
-    assert_eq!(keyring.count(&Call::Read), 5);
+    // One read per operation: the first attempt's migration read the entry
+    // once, and the later attempts read it once each without migrating.
+    assert_eq!(keyring.count(&Call::Read), 4);
     assert_eq!(keyring.entry().as_deref(), Some(r#"{"version":99}"#));
     assert_eq!(keyring.legacy(GITHUB_LEGACY, "a").as_deref(), Some("A"));
 }

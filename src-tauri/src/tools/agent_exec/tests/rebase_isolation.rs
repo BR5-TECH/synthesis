@@ -638,6 +638,7 @@ fn eac_ts56_a_semantic_rebase_execution_writes_no_content_into_the_log() {
             task: request_task,
             cancellation: CancellationToken::new(),
             activity: Some(collected.clone() as Arc<dyn AgentActivitySink>),
+            durable_output: None,
             supplementary_mount: Some(SupplementaryMount::SemanticRebaseArtifact {
                 host_path: bundle,
             }),

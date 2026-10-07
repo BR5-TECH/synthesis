@@ -8,10 +8,12 @@
 //!
 //! Three properties carry the module:
 //!
-//! - **One entry, one access.** An operation makes at most one keyring read,
-//!   one write, and one read-back however many secrets are stored, so the
-//!   author answers one authentication prompt for an operation instead of one
-//!   per secret (ASV-FR-10, ASV-FR-30).
+//! - **One entry, one cache.** The first secret-dependent operation reads the
+//!   entry once and fills a process cache of every secret; later reads and
+//!   presence checks make no keyring access, so the author answers one
+//!   authentication prompt instead of one per operation (ASV-FR-ZUGZ,
+//!   ASV-FR-DQHY). The cache lives in memory only and assumes no other process
+//!   changes the entry (ASV-FR-SUXZ, ASV-FR-ELQN).
 //! - **A whole-object write, verified.** A mutation reads the entry, edits a
 //!   decoded copy, writes the complete object, and reads it back to compare;
 //!   anything that fails leaves the entry exactly as it was (ASV-FR-11,
@@ -268,6 +270,13 @@ pub struct Vault {
     /// holds it for its whole sequence, so two sequences never touch the entry
     /// at the same time and no update is lost (ASV-FR-14).
     lock: Mutex<()>,
+    /// ASV-FR-ZUGZ: the process cache of the whole decoded object. Empty until
+    /// the first secret-dependent operation fills it, and discarded with the
+    /// process. Locked only while `lock` is held, except for the brief check
+    /// that decides whether an initialization attempt is needed.
+    cache: Mutex<Option<Cached>>,
+    /// ASV-FR-CIDB: allows one initialization attempt at a time.
+    gate: InitGate,
     /// ASV-FR-20: whether migration has already run in this process. Read and
     /// written only while `lock` is held.
     migrated: AtomicBool,
@@ -292,6 +301,8 @@ impl Vault {
         Self {
             backend,
             lock: Mutex::new(()),
+            cache: Mutex::new(None),
+            gate: InitGate::new(),
             migrated: AtomicBool::new(false),
             candidates: Mutex::new(None),
             sink: Mutex::new(None),
@@ -369,70 +380,69 @@ impl Vault {
     /// ASV-FR-04 / ASV-FR-07: the secret at `path`, or `None` where the
     /// namespace, an intermediate object, or the leaf is absent — which is not
     /// an error.
+    ///
+    /// ASV-FR-DQHY: answered from the process cache. Only the request that
+    /// initializes the cache touches the keyring.
     pub fn read_secret(&self, path: &[String]) -> Result<Option<String>, VaultError> {
-        // Gathered before the lock is taken: the source reaches into the
-        // owning modules' registries, and the non-functional requirement is
-        // that the lock is held for the keyring access alone.
-        let pending = self.pending_candidates();
+        self.ensure_cache("read_secret")?;
         let _guard = self.acquire();
-        self.ensure_migrated_locked(pending);
-        let object = match self.load_locked("read_secret")?.state {
-            Loaded::Object(object) => object,
-            Loaded::Absent => return Ok(None),
-            Loaded::Malformed(_) => return Err(self.failed("read_secret", VaultError::Malformed)),
-        };
-        Ok(lookup(&object, path))
+        match self.cache_slot().as_ref() {
+            Some(cached) => Ok(lookup(&cached.object, path)),
+            None => Err(self.failed("read_secret", VaultError::Unavailable)),
+        }
     }
 
-    /// ASV-FR-30: presence for every supplied path from **one** read of the
-    /// entry, as booleans rather than values. A listing that describes many
-    /// records therefore makes one keyring access.
+    /// ASV-FR-30: presence for every supplied path from the process cache, as
+    /// booleans rather than values. A listing that describes many records
+    /// therefore makes no keyring access once the cache is initialized.
     pub fn secret_presence(
         &self,
         paths: &[SecretPath],
     ) -> Result<HashMap<SecretPath, bool>, VaultError> {
-        // Gathered before the lock is taken: the source reaches into the
-        // owning modules' registries, and the non-functional requirement is
-        // that the lock is held for the keyring access alone.
-        let pending = self.pending_candidates();
+        self.ensure_cache("secret_presence")?;
         let _guard = self.acquire();
-        self.ensure_migrated_locked(pending);
-        let object = match self.load_locked("secret_presence")?.state {
-            Loaded::Object(object) => object,
-            Loaded::Absent => Map::new(),
-            Loaded::Malformed(_) => {
-                return Err(self.failed("secret_presence", VaultError::Malformed))
-            }
+        let slot = self.cache_slot();
+        let Some(cached) = slot.as_ref() else {
+            return Err(self.failed("secret_presence", VaultError::Unavailable));
         };
         let mut answers = HashMap::with_capacity(paths.len());
         for path in paths {
-            answers.insert(path.clone(), lookup(&object, path).is_some());
+            answers.insert(path.clone(), lookup(&cached.object, path).is_some());
         }
         Ok(answers)
     }
 
     // -- Mutation --------------------------------------------------------
 
-    /// ASV-FR-10 / ASV-FR-13: apply every mutation of the request to a decoded
-    /// copy of the whole object and write that object back as one keyring
-    /// value, verified. Nothing is applied where anything fails (ASV-FR-12).
+    /// ASV-FR-10 / ASV-FR-13: apply every mutation of the request to a copy of
+    /// the cached object and write that object back as one keyring value,
+    /// verified. Nothing is applied where anything fails (ASV-FR-12), and the
+    /// cache takes the new object only after verification (ASV-FR-GLJD).
     pub fn apply_secret_mutations(&self, mutations: &[Mutation]) -> Result<(), VaultError> {
-        // Gathered before the lock is taken: the source reaches into the
-        // owning modules' registries, and the non-functional requirement is
-        // that the lock is held for the keyring access alone.
-        let pending = self.pending_candidates();
+        const OPERATION: &str = "apply_secret_mutations";
+        // ASV-FR-DIEF: an entry that would not decode leaves the cache empty,
+        // and a mutation is what recovers it.
+        match self.ensure_cache(OPERATION) {
+            Ok(()) | Err(VaultError::Malformed) => {}
+            Err(error) => return Err(error),
+        }
         let _guard = self.acquire();
-        self.ensure_migrated_locked(pending);
-        let snapshot = self.load_locked("apply_secret_mutations")?;
-        let (mut object, quarantined) = match snapshot.state {
-            Loaded::Object(object) => (object, false),
-            Loaded::Absent => (empty_object(), false),
-            // ASV-FR-17: recovery destroys nothing. The undecodable value rides
-            // along in the same single verified write as the new secrets.
-            Loaded::Malformed(raw) => {
-                let mut object = empty_object();
-                object.insert(FIELD_QUARANTINE.to_string(), Value::String(raw));
-                (object, true)
+        let (mut object, previous, quarantined) = match self.cache_base() {
+            Some((object, serialized)) => (object, serialized, false),
+            None => {
+                let snapshot = self.load_locked(OPERATION)?;
+                match snapshot.state {
+                    Loaded::Object(object) => (object, snapshot.raw, false),
+                    Loaded::Absent => (empty_object(), None, false),
+                    // ASV-FR-17: recovery destroys nothing. The undecodable
+                    // value rides along in the same single verified write as
+                    // the new secrets.
+                    Loaded::Malformed(raw) => {
+                        let mut object = empty_object();
+                        object.insert(FIELD_QUARANTINE.to_string(), Value::String(raw.clone()));
+                        (object, Some(raw), true)
+                    }
+                }
             }
         };
         for mutation in mutations {
@@ -442,13 +452,14 @@ impl Vault {
                         // A path whose parent is a string rather than an object
                         // cannot be created without destroying the secret that
                         // sits there. Refuse rather than overwrite.
-                        return Err(self.failed("apply_secret_mutations", VaultError::WriteFailed));
+                        return Err(self.failed(OPERATION, VaultError::WriteFailed));
                     }
                 }
                 Mutation::Remove { path } => remove_at(&mut object, path),
             }
         }
-        self.write_verified_locked("apply_secret_mutations", &object, snapshot.raw.as_deref())?;
+        let serialized = self.write_verified_locked(OPERATION, &object, previous.as_deref())?;
+        self.store_cache_locked(OPERATION, object, Some(serialized));
         self.emit(
             LogLevel::Debug,
             "secret vault mutated",
@@ -466,7 +477,8 @@ impl Vault {
         candidates: &[Candidate],
     ) -> Result<MigrationOutcome, VaultError> {
         let _guard = self.acquire();
-        let outcome = self.migrate_locked(candidates, &mut false)?;
+        let outcome =
+            self.migrate_locked("migrate_legacy_secrets", candidates, &mut false)?;
         self.migrated.store(true, Ordering::SeqCst);
         Ok(outcome)
     }
@@ -492,10 +504,7 @@ impl Vault {
     /// application and reaches into three registries; running it while the
     /// process-wide lock is held would put work this module does not control
     /// between every other secret operation and the keyring, against the
-    /// requirement that the lock covers the keyring access alone. Two callers
-    /// may gather concurrently and both hand their list in — the second finds
-    /// migration already done and drops it, which costs a registry read and
-    /// nothing else.
+    /// requirement that the lock covers the keyring access alone.
     fn pending_candidates(&self) -> Option<Vec<Candidate>> {
         if self.migrated.load(Ordering::SeqCst) {
             return None;
@@ -505,8 +514,79 @@ impl Vault {
         Some(source())
     }
 
-    /// ASV-FR-20: migration runs once per process, before the first read or
-    /// mutation the process performs.
+    /// Lock the cache slot. The caller holds `lock`, except in
+    /// [`Self::needs_initialization`].
+    fn cache_slot(&self) -> std::sync::MutexGuard<'_, Option<Cached>> {
+        match self.cache.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+
+    /// A copy of the cached object and the serialized value it agrees with.
+    fn cache_base(&self) -> Option<(Map<String, Value>, Option<String>)> {
+        self.cache_slot()
+            .as_ref()
+            .map(|cached| (cached.object.clone(), cached.serialized.clone()))
+    }
+
+    /// Put `object` in the cache. Called only with an object that the entry
+    /// verifiably holds: one just read from it, or one just written and read
+    /// back (ASV-FR-GLJD).
+    fn store_cache_locked(
+        &self,
+        operation: &'static str,
+        object: Map<String, Value>,
+        serialized: Option<String>,
+    ) {
+        let first = {
+            let mut slot = self.cache_slot();
+            let first = slot.is_none();
+            *slot = Some(Cached { object, serialized });
+            first
+        };
+        if first {
+            self.emit(
+                LogLevel::Debug,
+                "secret vault cache initialized",
+                log_fields! { "operation" => operation },
+            );
+        }
+    }
+
+    /// ASV-FR-ZUGZ: whether a request has to start an initialization attempt.
+    /// The cache is empty, or a candidate source arrived after the cache was
+    /// filled and migration has not run yet.
+    fn needs_initialization(&self) -> bool {
+        if self.cache_slot().is_none() {
+            return true;
+        }
+        if self.migrated.load(Ordering::SeqCst) {
+            return false;
+        }
+        matches!(self.candidates.lock().map(|slot| slot.is_some()), Ok(true))
+    }
+
+    /// ASV-FR-ZUGZ / ASV-FR-CIDB / ASV-FR-FTFU: make sure the cache serves
+    /// requests. The first request of the process starts an attempt; a request
+    /// that arrives during it waits and takes its result. A failure leaves the
+    /// cache empty and reaches the requesting operation as the vault's typed
+    /// error.
+    fn ensure_cache(&self, operation: &'static str) -> Result<(), VaultError> {
+        self.gate.run(
+            || self.needs_initialization(),
+            || {
+                // Gathered before the lock is taken (see `pending_candidates`).
+                let pending = self.pending_candidates();
+                let _guard = self.acquire();
+                self.initialize_locked(operation, pending)
+            },
+        )
+    }
+
+    /// ASV-FR-ZRWU: complete migration (ASV-FR-20), then hold the consolidated
+    /// object. Migration reads the entry itself, so a successful attempt reads
+    /// it once however it got there.
     ///
     /// Whether a failed migration is retried turns on **how far it got**, which
     /// is what keeps the cost of a broken machine bounded. A migration that
@@ -515,44 +595,57 @@ impl Vault {
     /// because retrying it costs one read of the one entry and the state it
     /// failed on is one a mutation can clear. A migration that got as far as
     /// reading legacy entries marks itself done whatever happened next: the
-    /// alternative is re-reading every legacy entry on every subsequent secret
-    /// operation for the life of the process, which on a platform that prompts
-    /// per keyring access means one authentication prompt per stored secret per
-    /// operation. ASV-FR-26 covers the rest — the next launch migrates again.
-    fn ensure_migrated_locked(&self, candidates: Option<Vec<Candidate>>) {
+    /// alternative is re-reading every legacy entry on every subsequent
+    /// attempt, which on a platform that prompts per keyring access means one
+    /// authentication prompt per stored secret. ASV-FR-26 covers the rest — the
+    /// next launch migrates again. `UnsupportedVersion` is marked done too: no
+    /// mutation of this build can clear it (ASV-FR-19), so retrying would only
+    /// repeat a prompt for the same answer.
+    fn initialize_locked(
+        &self,
+        operation: &'static str,
+        pending: Option<Vec<Candidate>>,
+    ) -> Result<(), VaultError> {
         // `None` is either "already done" or "nothing has told this vault what
         // the legacy layout held". The second is not marked done: the source is
         // installed at startup, and a caller that ran first must not cost the
         // process its migration.
-        let Some(candidates) = candidates else { return };
-        if self.migrated.load(Ordering::SeqCst) {
-            return;
+        if let Some(candidates) = pending {
+            if !self.migrated.load(Ordering::SeqCst) {
+                let mut read_a_legacy_entry = false;
+                match self.migrate_locked(operation, &candidates, &mut read_a_legacy_entry) {
+                    Ok(_) => self.migrated.store(true, Ordering::SeqCst),
+                    Err(VaultError::UnsupportedVersion) => {
+                        self.migrated.store(true, Ordering::SeqCst);
+                        return Err(VaultError::UnsupportedVersion);
+                    }
+                    // The legacy entries were reached and the write failed. The
+                    // plain load below decides what the entry holds now.
+                    Err(_) if read_a_legacy_entry => self.migrated.store(true, Ordering::SeqCst),
+                    // `Unavailable` and `Malformed` are both states a later
+                    // moment can clear — the keychain unlocks, or a mutation
+                    // quarantines the value. Already logged.
+                    Err(error) => return Err(error),
+                }
+            }
         }
-        let mut read_a_legacy_entry = false;
-        match self.migrate_locked(&candidates, &mut read_a_legacy_entry) {
-            Ok(_) => self.migrated.store(true, Ordering::SeqCst),
-            // Already logged, and the caller's own read reports the failure.
-            //
-            // `UnsupportedVersion` is marked done alongside a migration that
-            // got as far as the legacy entries, for the opposite reason: no
-            // mutation of this build can clear it (ASV-FR-19 refuses every one
-            // of them), so retrying would cost a second keyring read — and a
-            // second authentication prompt where the platform asks — on every
-            // secret operation for the life of the process, forever. The build
-            // that wrote the entry owns it.
-            Err(VaultError::UnsupportedVersion) => self.migrated.store(true, Ordering::SeqCst),
-            Err(_) if read_a_legacy_entry => self.migrated.store(true, Ordering::SeqCst),
-            // `Unavailable` and `Malformed` are both states a later moment can
-            // clear — the keychain unlocks, or a mutation quarantines the value
-            // — and a retry costs one read of the one entry.
-            Err(_) => {}
+        if self.cache_slot().is_some() {
+            return Ok(());
         }
+        let snapshot = self.load_locked(operation)?;
+        match snapshot.state {
+            Loaded::Object(object) => self.store_cache_locked(operation, object, snapshot.raw),
+            Loaded::Absent => self.store_cache_locked(operation, empty_object(), None),
+            Loaded::Malformed(_) => return Err(self.failed(operation, VaultError::Malformed)),
+        }
+        Ok(())
     }
 
     /// `read_a_legacy_entry` is set as soon as this reaches the legacy entries,
     /// which is what [`Self::ensure_migrated_locked`] decides retry policy on.
     fn migrate_locked(
         &self,
+        operation: &'static str,
         candidates: &[Candidate],
         read_a_legacy_entry: &mut bool,
     ) -> Result<MigrationOutcome, VaultError> {
@@ -561,7 +654,15 @@ impl Vault {
             return Ok(outcome);
         }
 
-        let snapshot = self.load_locked("migrate_legacy_secrets")?;
+        // Once the cache holds the object, migration works on it rather than
+        // reading the entry again (ASV-FR-DQHY).
+        let snapshot = match self.cache_base() {
+            Some((object, serialized)) => Snapshot {
+                raw: serialized,
+                state: Loaded::Object(object),
+            },
+            None => self.load_locked("migrate_legacy_secrets")?,
+        };
         let mut object = match snapshot.state {
             Loaded::Object(object) => object,
             Loaded::Absent => empty_object(),
@@ -634,10 +735,19 @@ impl Vault {
                 log_fields! { "candidates" => candidates.len(), "absent" => outcome.absent,
                 "unreadable" => outcome.unreadable },
             );
+            // Nothing was written, so `object` is what the entry holds.
+            if self.cache_slot().is_none() {
+                self.store_cache_locked(operation, object, snapshot.raw);
+            }
             return Ok(outcome);
         }
 
-        self.write_verified_locked("migrate_legacy_secrets", &object, snapshot.raw.as_deref())?;
+        let serialized = self.write_verified_locked(
+            "migrate_legacy_secrets",
+            &object,
+            snapshot.raw.as_deref(),
+        )?;
+        self.store_cache_locked(operation, object, Some(serialized));
 
         for candidate in deletable {
             match self
@@ -702,7 +812,7 @@ impl Vault {
         operation: &'static str,
         object: &Map<String, Value>,
         previous: Option<&str>,
-    ) -> Result<(), VaultError> {
+    ) -> Result<String, VaultError> {
         let serialized = match serde_json::to_string(&Value::Object(object.clone())) {
             Ok(serialized) => serialized,
             // A map built from JSON values cannot fail to serialise; treated as
@@ -719,17 +829,22 @@ impl Vault {
             Ok(None) | Err(_) => false,
         };
         if verified {
-            return Ok(());
+            return Ok(serialized);
         }
 
         // Best effort: the entry must hold what it held before the request.
         // A rollback the keyring also refuses leaves the entry where the failed
         // write put it, which is the one outcome nothing here can improve on —
-        // it is still reported as a failure.
+        // it is still reported as a failure. The entry is then of unknown
+        // state, so the cache is emptied and the next request reads the entry
+        // again (ASV-FR-GLJD).
         let restored = match previous {
             Some(previous) => self.backend.write(previous).is_ok(),
             None => self.backend.delete().is_ok(),
         };
+        if !restored {
+            *self.cache_slot() = None;
+        }
         self.emit(
             LogLevel::Warn,
             "secret vault write could not be verified",
@@ -744,127 +859,6 @@ enum LogLevel {
     Info,
     Warn,
     Error,
-}
-
-// ---------------------------------------------------------------------------
-// The object
-// ---------------------------------------------------------------------------
-
-enum Decoded {
-    Object(Map<String, Value>),
-    Unsupported,
-    Malformed,
-}
-
-/// An `AppSecrets` object of the current version holding nothing.
-fn empty_object() -> Map<String, Value> {
-    let mut object = Map::new();
-    object.insert(FIELD_VERSION.to_string(), Value::from(SCHEMA_VERSION));
-    object
-}
-
-/// Decide what a stored value is: a decodable object of a version this build
-/// knows, an object from a newer build, or something that is neither.
-fn decode(raw: &str) -> Decoded {
-    let value: Value = match serde_json::from_str(raw) {
-        Ok(value) => value,
-        Err(_) => return Decoded::Malformed,
-    };
-    let Value::Object(object) = value else {
-        return Decoded::Malformed;
-    };
-    match object.get(FIELD_VERSION).and_then(Value::as_u64) {
-        Some(version) if version == SCHEMA_VERSION => Decoded::Object(object),
-        Some(version) if version > SCHEMA_VERSION => Decoded::Unsupported,
-        // No version at all, a version of zero, or a version that is not a
-        // number: not a well-formed `AppSecrets` object (ASV-FR-17).
-        _ => Decoded::Malformed,
-    }
-}
-
-/// ASV-FR-07: the secret at `path`, or `None` where any level of it is absent
-/// or is not the shape the path implies.
-///
-/// ASV-FR-18: no path resolves the reserved `quarantine` field, whatever it is
-/// asked for.
-fn lookup(object: &Map<String, Value>, path: &[String]) -> Option<String> {
-    if !addressable(path) {
-        return None;
-    }
-    let (leaf, parents) = path.split_last()?;
-    let mut current = object;
-    for key in parents {
-        current = current.get(key)?.as_object()?;
-    }
-    current.get(leaf)?.as_str().map(str::to_string)
-}
-
-/// Write `secret` at `path`, creating every absent object between the root and
-/// the leaf (ASV-FR-05, ASV-FR-07).
-///
-/// Returns `false` where a level of the path is occupied by a value that is not
-/// an object — replacing it would destroy whatever sits there.
-fn insert_at(object: &mut Map<String, Value>, path: &[String], secret: &str) -> bool {
-    if !addressable(path) {
-        return false;
-    }
-    let Some((leaf, parents)) = path.split_last() else {
-        return false;
-    };
-    let mut current = object;
-    for key in parents {
-        let entry = current
-            .entry(key.clone())
-            .or_insert_with(|| Value::Object(Map::new()));
-        match entry.as_object_mut() {
-            Some(next) => current = next,
-            None => return false,
-        }
-    }
-    match current.get(leaf) {
-        // The leaf exists and is not a secret string; replacing it would drop a
-        // whole namespace a later build owns (ASV-FR-06).
-        Some(existing) if !existing.is_string() => false,
-        _ => {
-            current.insert(leaf.clone(), Value::String(secret.to_string()));
-            true
-        }
-    }
-}
-
-/// Remove the leaf at `path`. Removing a leaf that is not there succeeds, which
-/// is what makes a `Remove` idempotent.
-///
-/// Intermediate objects left empty are kept rather than pruned: an empty
-/// namespace and an absent one read identically (ASV-FR-07), and pruning would
-/// risk removing an object a build that does not know the namespace owns.
-fn remove_at(object: &mut Map<String, Value>, path: &[String]) {
-    if !addressable(path) {
-        return;
-    }
-    let Some((leaf, parents)) = path.split_last() else {
-        return;
-    };
-    let mut current = object;
-    for key in parents {
-        match current.get_mut(key).and_then(Value::as_object_mut) {
-            Some(next) => current = next,
-            None => return,
-        }
-    }
-    current.remove(leaf);
-}
-
-/// Whether a path names something this module will read or write.
-///
-/// ASV-FR-18: `quarantine` is a reserved root field rather than a namespace, so
-/// no `SecretPath` addresses it. The version field is reserved the same way —
-/// a path that overwrote it would make the entry undecodable.
-fn addressable(path: &[String]) -> bool {
-    match path.first() {
-        Some(root) => root != FIELD_QUARANTINE && root != FIELD_VERSION,
-        None => false,
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -885,120 +879,15 @@ pub fn global() -> Arc<Vault> {
         .clone()
 }
 
-// ---------------------------------------------------------------------------
-// The adapter the owning modules hold
-// ---------------------------------------------------------------------------
+mod adapter;
+mod cache;
+mod object;
 
-/// One namespace of the vault, presented as the `SecretStore` the owning
-/// modules already talk to.
-///
-/// The modules address their secrets by id; this turns an id into the
-/// `SecretPath` the vault reserves for that namespace, and turns every typed
-/// vault failure into the single `SecretUnavailable` those modules render as
-/// `keychain_unavailable` (ASV-FR-31).
-pub struct VaultSecrets {
-    vault: Arc<Vault>,
-    namespace: &'static [&'static str],
-}
-
-impl VaultSecrets {
-    pub fn new(vault: Arc<Vault>, namespace: &'static [&'static str]) -> Self {
-        Self { vault, namespace }
-    }
-
-    /// The vault path of `id` within this namespace.
-    pub fn path_of(&self, id: &str) -> SecretPath {
-        let mut path: SecretPath = self.namespace.iter().map(|s| (*s).to_string()).collect();
-        path.push(id.to_string());
-        path
-    }
-
-    fn set_secret(&self, id: &str, secret: &str) -> Result<(), VaultError> {
-        self.vault.apply_secret_mutations(&[Mutation::Set {
-            path: self.path_of(id),
-            secret: secret.to_string(),
-        }])
-    }
-
-    fn get_secret(&self, id: &str) -> Result<Option<String>, VaultError> {
-        self.vault.read_secret(&self.path_of(id))
-    }
-
-    fn delete_secret(&self, id: &str) -> Result<(), VaultError> {
-        self.vault.apply_secret_mutations(&[Mutation::Remove {
-            path: self.path_of(id),
-        }])
-    }
-
-    fn presence_of(&self, ids: &[&str]) -> Result<HashMap<String, bool>, VaultError> {
-        let paths: Vec<SecretPath> = ids.iter().map(|id| self.path_of(id)).collect();
-        let answers = self.vault.secret_presence(&paths)?;
-        Ok(ids
-            .iter()
-            .zip(paths.iter())
-            .map(|(id, path)| {
-                (
-                    (*id).to_string(),
-                    answers.get(path).copied().unwrap_or(false),
-                )
-            })
-            .collect())
-    }
-}
-
-/// Every typed vault failure becomes the one error the owning modules render as
-/// `keychain_unavailable` (ASV-FR-31). The code travels in the message so a
-/// developer reading a `Debug` can still tell them apart; it names an outcome
-/// and never a path, an id, or a secret (ASV-FR-28).
-fn unavailable_github(e: VaultError) -> crate::github_tokens::SecretUnavailable {
-    crate::github_tokens::SecretUnavailable(e.code().to_string())
-}
-
-fn unavailable_ai(e: VaultError) -> crate::ai_shared::SecretUnavailable {
-    crate::ai_shared::SecretUnavailable(e.code().to_string())
-}
-
-impl crate::github_tokens::SecretStore for VaultSecrets {
-    fn set(&self, id: &str, secret: &str) -> Result<(), crate::github_tokens::SecretUnavailable> {
-        self.set_secret(id, secret).map_err(unavailable_github)
-    }
-
-    fn get(&self, id: &str) -> Result<Option<String>, crate::github_tokens::SecretUnavailable> {
-        self.get_secret(id).map_err(unavailable_github)
-    }
-
-    fn delete(&self, id: &str) -> Result<(), crate::github_tokens::SecretUnavailable> {
-        self.delete_secret(id).map_err(unavailable_github)
-    }
-
-    fn presence(
-        &self,
-        ids: &[&str],
-    ) -> Result<HashMap<String, bool>, crate::github_tokens::SecretUnavailable> {
-        self.presence_of(ids).map_err(unavailable_github)
-    }
-}
-
-impl crate::ai_shared::SecretStore for VaultSecrets {
-    fn set(&self, id: &str, secret: &str) -> Result<(), crate::ai_shared::SecretUnavailable> {
-        self.set_secret(id, secret).map_err(unavailable_ai)
-    }
-
-    fn get(&self, id: &str) -> Result<Option<String>, crate::ai_shared::SecretUnavailable> {
-        self.get_secret(id).map_err(unavailable_ai)
-    }
-
-    fn delete(&self, id: &str) -> Result<(), crate::ai_shared::SecretUnavailable> {
-        self.delete_secret(id).map_err(unavailable_ai)
-    }
-
-    fn presence(
-        &self,
-        ids: &[&str],
-    ) -> Result<HashMap<String, bool>, crate::ai_shared::SecretUnavailable> {
-        self.presence_of(ids).map_err(unavailable_ai)
-    }
-}
+pub use adapter::VaultSecrets;
+use cache::{Cached, InitGate};
+#[cfg(test)]
+use object::addressable;
+use object::{decode, empty_object, insert_at, lookup, remove_at, Decoded};
 
 #[cfg(test)]
 pub(crate) mod test_support;

@@ -41,7 +41,7 @@ The backend module that turns a finished draft prompt into committed work. A dra
 26. **GRD-FR-GMTX** A run reaching a terminal state reclaims **nothing of the stream**: no branch is deleted, no working copy is removed, and no commit is undone. A stream outlives every run that ran in it and is removed only by its own deletion. A merge run reclaims what it owns itself, which is neither the stream nor a branch of the author (GRD-FR-KZPT).
 27. **GRD-FR-NHRY** Every agent or model operation a run that has a source draft performs is counted against that draft. A merge run has no source draft and writes no statistics line. When one finishes, this module appends one `agent_operation` line and one `token_usage` line for each provider-reported usage record (per `DSS-draft-statistics-storage.md` DSS-FR-SVJU). Nothing is estimated.
 28. **GRD-FR-KRTU** The interval recorded is the operation's actual execution and never anything else. Time a run spends queued, waiting for the author, blocked, or interrupted is not agent time and is recorded in no line.
-29. **GRD-FR-OSCG** A run's two persisted log streams live in the run's own directory — `short_data_dir()/g/<run-id>/logs/source.jsonl` and `.../logs/structured.jsonl` — and are retained for the lifetime of the run record (per `GRS-graduation-run-log-storage.md`).
+29. **GRD-FR-OSCG** A run's two persisted log streams live in the run's own directory — `short_data_dir()/g/<run-id>/logs/activity.jsonl` and `.../logs/structured.jsonl` — and are retained for the lifetime of the run record (per `GRS-graduation-run-log-storage.md`).
 30. **GRD-FR-IKVE** A required log stream that cannot be written stops the run before anything else happens. The run rests `interrupted` carrying the reason `log_persistence_failed`, and `continue_graduation_run` retries the pending writes first, before it attempts anything else.
 31. **GRD-FR-EFAU** `"graduation queue changed"` carrying `{ project_key, stream_id, worktree_path }` follows every durable change to a queue. `stream_id` is empty for the queue of an ordinary worktree, and `worktree_path` is empty for a stream run. `"graduation run changed"` carrying `{ run_id, state }` follows every state change. Nothing is emitted before the change is durable.
 32. **GRD-FR-TWMA** A project change and an application shutdown stop every running turn. The interruption each records carries `project_changed` or `application_shutdown` after the stopped turn returns. **A change of active worktree stops nothing**: a run works in its target's working copy. A dispatched direct run also prevents the change (`WTC-worktree-context.md` WTC-FR-FBJQ).
@@ -85,7 +85,7 @@ Everything one run owns stands under `FSA-filesystem-access.md`'s `short_data_di
 ```
 short_data_dir()/q/<project-key>.toml      the project's one run order
 short_data_dir()/g/<run-id>/run.toml       the run record
-short_data_dir()/g/<run-id>/logs/          source.jsonl, structured.jsonl
+short_data_dir()/g/<run-id>/logs/          activity.jsonl, structured.jsonl
 short_data_dir()/g/<run-id>/rv/            the review turn's throwaway checkout
 short_data_dir()/g/<run-id>/mw/            a merge run's merge worktree (GRD-FR-KZPT)
 short_data_dir()/w/<stream-id>/            the stream's working copy (WKS)

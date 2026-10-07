@@ -203,6 +203,7 @@ async fn execute<R: tauri::Runtime>(
         // GXD-FR-IOZU: an update turn is agent work the author waits on, so what
         // it does reaches the same panel every other turn's work reaches.
         activity: update_activity_sink(app, attempt_id),
+        durable_output: None,
     };
     dispatch
         .dispatch_graduation_turn(app, project_key, request)

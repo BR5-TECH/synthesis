@@ -63,7 +63,7 @@ pub fn initialize(fs: &FsAccess, paths: &LogPaths) -> Result<(), GraduationLogFa
             )
         })?;
     }
-    for stream in [GraduationLogStream::Source, GraduationLogStream::Structured] {
+    for stream in [GraduationLogStream::Activity, GraduationLogStream::Structured] {
         let path = paths.stream(stream);
         if path.is_file() {
             continue;
@@ -168,7 +168,7 @@ pub fn append(
 /// The check is one `byte_length` comparison, and the walk happens only when it
 /// fails: an index that already matches its file costs nothing.
 pub fn reconcile(fs: &FsAccess, paths: &LogPaths, indexes: &mut GraduationLogIndexes) {
-    for stream in [GraduationLogStream::Structured, GraduationLogStream::Source] {
+    for stream in [GraduationLogStream::Structured, GraduationLogStream::Activity] {
         let path = paths.stream(stream);
         let Ok(text) = fs.read_text(&path) else {
             continue;
@@ -218,7 +218,7 @@ pub fn replay_pending(
         clear_pending(fs, paths);
         return Ok(0);
     }
-    for stream in [GraduationLogStream::Structured, GraduationLogStream::Source] {
+    for stream in [GraduationLogStream::Structured, GraduationLogStream::Activity] {
         let held = record_ids_in(fs, &paths.stream(stream));
         let outstanding: Vec<GraduationLogRecord> = pending
             .iter()

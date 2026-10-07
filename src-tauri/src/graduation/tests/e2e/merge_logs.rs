@@ -51,7 +51,7 @@ fn the_turns_of_a_merge_run_are_attributed_as_work_and_review_turns() {
         ])
         .expect_state(GraduationRunState::Completed);
 
-    for stream in [GraduationLogStream::Structured, GraduationLogStream::Source] {
+    for stream in [GraduationLogStream::Structured, GraduationLogStream::Activity] {
         let records = records(&outcome, stream);
         assert!(!records.is_empty(), "the run's {stream:?} stream holds records");
         for record in &records {

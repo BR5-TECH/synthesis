@@ -89,6 +89,7 @@ fn concurrent_launches_over_real_processes_stay_separate() {
                     task: first,
                     cancellation: CancellationToken::new(),
                     activity: None,
+                    durable_output: None,
                     supplementary_mount: None,
                 },
             ),
@@ -101,6 +102,7 @@ fn concurrent_launches_over_real_processes_stay_separate() {
                     task: second,
                     cancellation: CancellationToken::new(),
                     activity: None,
+                    durable_output: None,
                     supplementary_mount: None,
                 },
             )

@@ -111,6 +111,65 @@ pub trait AgentActivitySink: Send + Sync {
     fn activity(&self, event: AgentActivityEvent);
 }
 
+/// One safe activity a durable sink must keep (EAC-FR-VSNM, EAC-FR-DWGS).
+///
+/// It has **no payload field**: the verbatim event, the serialized task, the
+/// generated invocation, and every full tool argument and result stay out of
+/// it by shape (EAC-FR-IRKZ). Every text in it has been through
+/// [`protocol::mask_secrets`] (EAC-FR-FKCN).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DurableActivity {
+    /// Assigned once by the executor (EAC-FR-VSNM).
+    pub record_id: String,
+    /// RFC 3339 UTC, taken when the activity arrived.
+    pub at: String,
+    pub channel: &'static str,
+    /// One of the safe kinds of [`is_safe_kind`].
+    pub kind: &'static str,
+    /// One masked line, bounded by [`descriptor::LIMIT_SUMMARY_LINE`].
+    pub summary: String,
+}
+
+/// EAC-FR-ZVRP: why a durable sink could not keep an activity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DurableOutputFailure {
+    pub code: String,
+    /// One sentence. It names the act that clears the failure and carries no
+    /// activity text.
+    pub message: String,
+}
+
+/// Who must keep a run (EAC-FR-VSNM).
+///
+/// The sink answers each activity once it is durable. The executor waits for
+/// the answer, which is the bounded backpressure of EAC-FR-CXUE, and it ends
+/// the run's delivery at the first failure (EAC-FR-DUTR).
+pub trait DurableOutputSink: Send + Sync {
+    fn record(&self, activity: DurableActivity) -> Result<(), DurableOutputFailure>;
+}
+
+/// EAC-FR-DWGS / EAC-FR-IRKZ: the kinds a durable sink may receive.
+///
+/// `invocation`, `task`, `reasoning`, and `unrecognized` are excluded. They
+/// carry task input, invocation contents, internal reasoning, or an unread raw
+/// protocol line.
+pub fn is_safe_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "started"
+            | "message"
+            | "tool_call"
+            | "tool_result"
+            | "command"
+            | "file_change"
+            | "retry"
+            | "usage"
+            | "finished"
+            | "error"
+            | "diagnostic"
+    )
+}
+
 /// The executor's own channel, for the two events it writes itself.
 const CHANNEL_EXECUTOR: &str = "executor";
 
@@ -132,6 +191,10 @@ pub struct AgentExecutionRequest {
     /// EAC-FR-32: who is watching this run, if anyone. Still not a way to
     /// influence the launch — a sink receives and cannot supply.
     pub activity: Option<Arc<dyn AgentActivitySink>>,
+    /// EAC-FR-VSNM: who must keep this run, if anyone. Like the activity sink it
+    /// receives and cannot supply, and it may only answer whether it stored
+    /// what it was given (EAC-FR-CXUE).
+    pub durable_output: Option<Arc<dyn DurableOutputSink>>,
     /// EAC-FR-40: at most one typed supplementary mount, of one kind, for one
     /// run.
     ///
@@ -319,6 +382,10 @@ pub enum AgentExecutionError {
     /// EAC-FR-41: repository metadata inside the execution directory could not
     /// be masked. There is no launch-anyway path.
     RepositoryMaskingUnavailable(String),
+    /// EAC-FR-ZVRP: the durable sink could not keep an activity. Unlike every
+    /// other member this one is returned **after** the container is gone: the
+    /// run was cancelled for it (EAC-FR-DUTR).
+    DurableOutputFailed(DurableOutputFailure),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -361,6 +428,7 @@ impl AgentExecutionError {
             AgentExecutionError::RepositoryMaskingUnavailable(_) => {
                 "repository_masking_unavailable"
             }
+            AgentExecutionError::DurableOutputFailed(_) => "durable_output_failed",
         }
     }
 }

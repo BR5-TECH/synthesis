@@ -203,6 +203,30 @@ pub(super) fn settle_execution<R: tauri::Runtime>(
                 None
             }
         },
+        // GLG-FR-UCRL / GXD-FR-MMFM: the executor stopped the turn because the
+        // run's activity could not be kept. The run rests on
+        // `log_persistence_failed` and names the failure, whatever outcome the
+        // stopped container reported.
+        Err(AgentExecutionError::DurableOutputFailed(failure)) => {
+            logging::log_error(
+                app,
+                &crate::logging::BUFFER,
+                &[Domain::Ai, Domain::Backend],
+                "graduation stopped a turn because its activity could not be kept",
+                log_fields! {
+                    "run_id" => run.id.clone(),
+                    "code" => failure.code.clone(),
+                },
+            );
+            logs::note_durable_failure(app, run, &failure);
+            abandon(
+                app,
+                run,
+                worktree,
+                Stop::of_reason(GraduationInterruptionReason::LogPersistenceFailed),
+            );
+            None
+        }
         Err(error) => {
             // GXD-FR-XEUX: the seam ends no run. Every pre-launch error rests
             // it instead, so a machine that could not start a container leaves

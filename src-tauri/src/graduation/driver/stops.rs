@@ -144,6 +144,9 @@ pub(super) fn stop_of_launch_error(error: &AgentExecutionError, limit_ms: u64) -
         AgentExecutionError::RepositoryMaskingUnavailable(_) => {
             "The repository metadata could not be hidden from the agent."
         }
+        AgentExecutionError::DurableOutputFailed(_) => {
+            "The run's log could not be written, so the turn was stopped."
+        }
     };
     Stop {
         reason: GraduationInterruptionReason::LaunchFailed,
@@ -174,6 +177,7 @@ pub(super) fn launch_error_kind(error: &AgentExecutionError) -> &'static str {
         AgentExecutionError::SessionStateUnavailable(_) => "session_state_unavailable",
         AgentExecutionError::SupplementaryMountInvalid(_) => "supplementary_mount_invalid",
         AgentExecutionError::RepositoryMaskingUnavailable(_) => "repository_masking_unavailable",
+        AgentExecutionError::DurableOutputFailed(_) => "durable_output_failed",
     }
 }
 
@@ -198,6 +202,9 @@ pub(super) fn detail_of(reason: GraduationInterruptionReason) -> &'static str {
         }
         GraduationInterruptionReason::ProjectChanged => {
             "The project changed while this run was working."
+        }
+        GraduationInterruptionReason::LogPersistenceFailed => {
+            "The run's log could not be written, so the turn was stopped."
         }
         _ => "The run was stopped before the turn finished.",
     }

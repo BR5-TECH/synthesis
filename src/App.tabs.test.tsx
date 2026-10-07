@@ -508,7 +508,7 @@ describe("a work stream merge started from the shell (CMW-FR-KRVP, WSS-FR-TQBN)"
     await enterIde();
     await userEvent.click(await screen.findByTestId("stream-selector"));
     const menu = await screen.findByTestId("stream-menu");
-    await userEvent.click(within(menu).getByRole("button", { name: "Merge…" }));
+    await userEvent.click(within(menu).getByRole("button", { name: "Merge stream" }));
     const row = await screen.findByTestId("stream-row-w1");
     await userEvent.click(within(row).getByRole("button", { name: "Commit…" }));
     return screen.findByRole("dialog");

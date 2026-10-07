@@ -413,10 +413,10 @@ fn search_matches_what_is_displayed_and_never_empties_the_scope() {
     );
 }
 
-/// GRS-FR-OYIC, GRS-FR-QVTA: a source search matches the decoded output, so a
-/// reader searches what is on screen.
+/// GRS-FR-OYIC: an activity search matches the summary a row shows, whatever
+/// the case.
 #[test]
-fn a_source_search_matches_the_decoded_output() {
+fn an_activity_search_matches_the_summary_a_row_shows() {
     let fx = Fixture::new();
     let run = driven(&fx);
 
@@ -425,7 +425,7 @@ fn a_source_search_matches_the_decoded_output() {
         &run,
         "working",
         GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
+        GraduationLogStream::Activity,
         None,
         Some(1000),
         Some("THE SCRIPTED TURN"),
@@ -467,7 +467,7 @@ fn a_scope_that_holds_nothing_is_empty_rather_than_failed() {
         &run,
         "queued",
         GraduationLogPassScope::Pass { pass: 7 },
-        GraduationLogStream::Source,
+        GraduationLogStream::Activity,
         None,
         None,
         None,
@@ -552,7 +552,7 @@ fn a_failed_write_of_this_stream_reads_as_a_persistence_failure() {
         &run,
         "working",
         GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
+        GraduationLogStream::Activity,
         None,
         None,
         None,
@@ -722,7 +722,7 @@ fn a_cursor_of_the_other_stream_or_of_no_direction_is_refused() {
     assert_eq!(
         refuse(GraduationLogCursor {
             run_id: run.id.clone(),
-            stream: GraduationLogStream::Source,
+            stream: GraduationLogStream::Activity,
             direction: DIRECTION_AFTER.to_string(),
             sequence: 1,
         }),
@@ -739,46 +739,45 @@ fn a_cursor_of_the_other_stream_or_of_no_direction_is_refused() {
     );
 }
 
-/// GRS-FR-OYIC: every displayed source field is searchable, so nothing a reader
-/// can see is unmatchable.
+/// GRS-FR-OYIC: an activity search matches the kind and the summary and no
+/// other field, so it never matches a text the window does not show.
 #[test]
-fn every_displayed_source_field_is_searchable() {
+fn an_activity_search_matches_the_kind_and_the_summary_alone() {
     let fx = Fixture::new();
     let run = driven(&fx);
-
-    let page = read(
-        &fx,
-        &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
-        None,
-        Some(1000),
-        None,
-    );
-    let chunk = page.entries[0].record.clone();
-    let sequence = chunk["sequence"].as_u64().expect("a sequence");
-    for needle in [
-        chunk["run_id"].as_str().unwrap().to_string(),
-        chunk["phase_id"].as_str().unwrap().to_string(),
-        chunk["origin"].as_str().unwrap().to_string(),
-        chunk["producer"].as_str().unwrap().to_string(),
-        chunk["source"].as_str().unwrap().to_string(),
-        chunk["at"].as_str().unwrap().to_string(),
-        sequence.to_string(),
-        chunk["pass"].as_u64().unwrap().to_string(),
-    ] {
-        let found = read(
+    let search = |needle: &str| {
+        read(
             &fx,
             &run,
             "working",
             GraduationLogPassScope::Phase,
-            GraduationLogStream::Source,
+            GraduationLogStream::Activity,
             None,
             Some(1000),
-            Some(&needle),
+            Some(needle),
+        )
+    };
+
+    let page = search("");
+    let record = page.entries[0].record.clone();
+    for needle in [
+        record["kind"].as_str().unwrap().to_string(),
+        record["summary"].as_str().unwrap().to_string(),
+    ] {
+        assert_eq!(search(&needle).search, SEARCH_MATCHED, "“{needle}” is searchable");
+    }
+    for hidden in [
+        record["run_id"].as_str().unwrap().to_string(),
+        record["producer"].as_str().unwrap().to_string(),
+        record["at"].as_str().unwrap().to_string(),
+        record["channel"].as_str().unwrap().to_string(),
+        "RAW PAYLOAD".to_string(),
+    ] {
+        assert_eq!(
+            search(&hidden).search,
+            SEARCH_NO_MATCH,
+            "“{hidden}” is not displayed, so it is not matched"
         );
-        assert_eq!(found.search, SEARCH_MATCHED, "“{needle}” is searchable");
     }
 }
 
@@ -823,56 +822,6 @@ fn a_structured_search_matches_the_fields_the_surface_renders() {
         );
         assert_eq!(found.search, SEARCH_MATCHED, "“{needle}” is searchable");
     }
-}
-
-/// GRS-FR-QVTA: decoding for display is UTF-8 with replacement characters, and
-/// the stored base64 is unchanged by a read.
-#[test]
-fn an_invalid_byte_sequence_is_searched_with_replacement_characters() {
-    use base64::Engine as _;
-    let fx = Fixture::new();
-    let run = driven(&fx);
-    let path = logs::paths_for(&fx.app, &run.id)
-        .expect("the paths")
-        .stream(GraduationLogStream::Source);
-    let text = std::fs::read_to_string(&path).expect("the stream");
-    let mut first: serde_json::Value =
-        serde_json::from_str(text.lines().next().unwrap()).expect("a chunk");
-    // `0xFF` is no part of any UTF-8 sequence, wrapped in text either side.
-    let bytes = [b"before".as_slice(), &[0xFF], b"after".as_slice()].concat();
-    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    first["data_base64"] = serde_json::Value::String(encoded.clone());
-    let phase = first["phase_id"].as_str().expect("a phase").to_string();
-    let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
-    lines[0] = first.to_string();
-    std::fs::write(&path, format!("{}\n", lines.join("\n"))).expect("the damaged chunk");
-
-    let page = read(
-        &fx,
-        &run,
-        &phase,
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
-        None,
-        Some(1000),
-        Some("before"),
-    );
-    assert_eq!(page.search, SEARCH_MATCHED, "the decoded text is searchable");
-    let after = read(
-        &fx,
-        &run,
-        &phase,
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
-        None,
-        Some(1000),
-        None,
-    );
-    assert_eq!(
-        after.entries[0].record["data_base64"].as_str(),
-        Some(encoded.as_str()),
-        "the stored base64 is returned unchanged"
-    );
 }
 
 /// GRS-FR-DYPS: `limit` bounds one page, whatever the caller asks for.
@@ -923,7 +872,7 @@ fn a_failed_write_of_one_stream_leaves_the_other_readable() {
         &run,
         "working",
         GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
+        GraduationLogStream::Activity,
         None,
         Some(1000),
         None,
@@ -941,7 +890,7 @@ fn a_stream_that_cannot_be_read_at_all_is_unavailable() {
     let run = driven(&fx);
     let path = logs::paths_for(&fx.app, &run.id)
         .expect("the paths")
-        .stream(GraduationLogStream::Source);
+        .stream(GraduationLogStream::Activity);
     // A directory where the stream should be: it exists, and it is no file.
     std::fs::remove_file(&path).expect("the stream");
     std::fs::create_dir(&path).expect("something unreadable in its place");
@@ -951,7 +900,7 @@ fn a_stream_that_cannot_be_read_at_all_is_unavailable() {
         &run,
         "working",
         GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
+        GraduationLogStream::Activity,
         None,
         None,
         None,
@@ -979,7 +928,7 @@ fn a_run_with_no_storage_reads_back_empty() {
         &run,
         "queued",
         GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
+        GraduationLogStream::Activity,
         None,
         None,
         None,

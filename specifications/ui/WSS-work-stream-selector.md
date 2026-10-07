@@ -3,7 +3,7 @@
 **Spec code:** `WSS`
 
 ## Intent
-The surface an author manages work streams from: creating one, seeing what each holds, bringing one up to the branch it came from, merging it back into that branch, and removing it when the work has landed. A base branch moves outside the application, so a row says how far behind its base a stream stands and offers to update it in place. A stream is where graduation runs do their work, so this is also where the author sees which stream an agent is busy in and how far ahead of its base each stream stands. A merge is an author-started operation that Git settles first. A merge Git settles on its own completes here at once, and this surface shows what landed, with no run. A merge Git cannot settle is handed to a **merge run**, a graduation run named `Merge <stream>` that stands in the Runs panel and is watched, paused, continued, answered and discarded there (per `GRU-graduation-runs.md`); this surface shows its status on the stream's row and opens it in Runs. An update is agent work too: Git settles what it can and one semantic turn settles the rest. An update runs on its own and may stop to ask the author a question, so what it settled stands on the row until they act on it, and the question is answered in a window this surface opens. It sits beside the worktree selector in the top chrome, because a stream is a checkout of the same repository and the author moves between the two the same way. Out of scope: the runs themselves, merge runs included, which are `GRU-graduation-runs.md`'s; the ordinary worktrees, which are `WTS-worktree-selector.md`'s.
+The surface an author manages work streams from: creating one, seeing what each holds, bringing one up to the branch it came from, merging it back into that branch, proposing it as a pull request, and removing it when the work has landed. A base branch moves outside the application, so a row says how far behind its base a stream stands and offers to update it in place. A stream is where graduation runs do their work, so this is also where the author sees which stream an agent is busy in and how far ahead of its base each stream stands. A merge is an author-started operation that Git settles first. A merge Git settles on its own completes here at once, and this surface shows what landed, with no run. A merge Git cannot settle is handed to a **merge run**, a graduation run named `Merge <stream>` that stands in the Runs panel and is watched, paused, continued, answered and discarded there (per `GRU-graduation-runs.md`); this surface shows its status on the stream's row and opens it in Runs. An update is agent work too: Git settles what it can and one semantic turn settles the rest. An update runs on its own and may stop to ask the author a question, so what it settled stands on the row until they act on it, and the question is answered in a window this surface opens. It sits beside the worktree selector in the top chrome, because a stream is a checkout of the same repository and the author moves between the two the same way. Out of scope: the runs themselves, merge runs included, which are `GRU-graduation-runs.md`'s; the window in which a pull request is defined and submitted, which is `CPR-create-pull-request.md`'s; the ordinary worktrees, which are `WTS-worktree-selector.md`'s.
 
 ## Functional requirements
 1. **WSS-FR-JVUF** The selector is a top-chrome control rendered immediately after the **Push** control, which follows the refresh control of the worktree selector (per `SNV-shell-navigation.md` SNV-FR-32 and `GIT-git.md` GIT-FR-XXLE), and only while the open project's content root sits inside a Git repository.
@@ -11,9 +11,9 @@ The surface an author manages work streams from: creating one, seeing what each 
 3. **WSS-FR-SOAS** Activating the control opens a dropdown listing every stream, each row naming the stream, its branch, how many commits it stands ahead of its base branch, how many it stands behind, and how many runs are queued on it.
 4. **WSS-FR-JMWA** A row names at most the first few of any path set it carries and counts the rest, the whole set standing in the row's accessible semantics and, for an update, in the update resolution window. No row grows past the listing's own scrolling region.
     - *Why:* A merge handoff or an update may leave a dozen paths unsettled, and a row that named them all would put the stream's own name and its action out of view together.
-5. **WSS-FR-XZRD** The dropdown and the New stream dialog are floating overlays of the main window, and every such overlay is mutually exclusive with every other (per `SNV-shell-navigation.md` SNV-FR-56).
-6. **WSS-FR-PSXK** A stream a run holds renders flagged **busy**, naming the draft the run works on rather than the run's id. Where the stream's merge run holds it, the line names that merge run instead, because a merge run has no draft. Where the draft's name cannot be read, the line names no run and no id at all. Its **Merge stream**, **Update stream** and **Delete stream** actions are disabled while it is busy, and the reason is given in words on the row.
-7. **WSS-FR-OQYG** A stream the backend reports as missing renders flagged missing and offers re-creation alone; its other actions are disabled.
+5. **WSS-FR-XZRD** The dropdown, the New stream dialog and the Create a PR window (WSS-FR-KHGP) are floating overlays of the main window, and every such overlay is mutually exclusive with every other (per `SNV-shell-navigation.md` SNV-FR-56).
+6. **WSS-FR-PSXK** A stream a run holds renders flagged **busy**, naming the draft the run works on rather than the run's id. Where the stream's merge run holds it, the line names that merge run instead, because a merge run has no draft. Where the draft's name cannot be read, the line names no run and no id at all. Its **Merge stream**, **Create a PR**, **Update stream** and **Delete stream** actions are disabled while it is busy, and the reason is given in words on the row. The row keeps **Create a PR** rendered as a disabled button beside the busy line (WSS-FR-EPCH).
+7. **WSS-FR-OQYG** A stream the backend reports as missing renders flagged missing and offers re-creation alone; its other actions are disabled. The row keeps **Create a PR** rendered as a disabled button and says in words that the stream is missing (WSS-FR-EPCH).
 8. **WSS-FR-YCAL** Selecting a stream row opens that stream's working copy as the project's content root, through `"activate worktree (path)"`. A busy stream is not selectable, and the refusal is rendered on the row rather than as a window-level message.
 9. **WSS-FR-PDFX** The dropdown provides a **New stream…** action rendered outside the listing's scrolling region. Activating it closes the dropdown and opens the New stream dialog.
 10. **WSS-FR-XZRO** The New stream dialog has exactly two inputs: a name, and the branch the stream is created from. The branch is pre-filled with the branch checked out in the active worktree and is chosen from the project's branches.
@@ -22,7 +22,7 @@ The surface an author manages work streams from: creating one, seeing what each 
 13. **WSS-FR-VMNV** The merge confirmation states plainly that Git merges first. It states that a merge Git settles completes at once and makes no run, and that a merge Git cannot settle is handed to a **merge run** named `Merge <stream>` in the Runs panel, where an agent reconciles it and the author controls it. It states that neither branch changes until a review of the reconciled result has judged it ready.
 14. **WSS-FR-OMAP** A merge that refuses because either side holds uncommitted paths renders the complete path set and routes to the Changes panel, rather than offering to commit or discard that work here.
 15. **WSS-FR-TQBN** The confirmation's commit choice opens the commit message window for the message alone (per `CMW-commit-message.md` CMW-FR-KRVP). That window closes as soon as it has one, and this surface starts the merge with it. A dismissed window starts nothing.
-16. **WSS-FR-HGWL** While the `"merge work stream (id, publication)"` call runs, the stream's row renders flagged **merging** and states `Merging <stream>`. The row's **Merge stream**, **Update stream** and **Delete stream** actions and its selection are disabled, and the row carries an accessible busy status. The row offers no cancel. The state is held by this surface for the length of the call alone, and it ends when the call settles, whatever it returns.
+16. **WSS-FR-HGWL** While the `"merge work stream (id, publication)"` call runs, the stream's row renders flagged **merging** and states `Merging <stream>`. The row's **Merge stream**, **Create a PR**, **Update stream** and **Delete stream** actions and its selection are disabled, and the row carries an accessible busy status. The row offers no cancel. The state is held by this surface for the length of the call alone, and it ends when the call settles, whatever it returns.
 17. **WSS-FR-OFCU** A row renders the status of the stream's **merge run** from `mergeRun` in the listing (its run id, its name and its state) rather than from what this surface attempted. A merge handoff one window started therefore renders in every other, and a merge run that changed state while the dropdown was closed is rendered when it next opens. A stream whose listing holds no `mergeRun` renders no merge status.
 18. **WSS-FR-RJTN** A row whose `mergeRun.state` is `awaiting_author` renders `Merge <stream>` as waiting on the author, says in words that the answer or the decision is made in Runs, and offers **Open in Runs…** (WSS-FR-AWRS). The row offers no **Answer…** and no **Continue** for a merge.
 19. **WSS-FR-GBWE** A row whose `mergeRun.state` is `failed` says that the merge run failed, that neither branch was written, and that the cause is in Runs, and it offers **Open in Runs…** (WSS-FR-AWRS). The row keeps that status until the run is discarded or archived, and its **Merge stream** action stays offered so that the author can start the merge again.
@@ -31,7 +31,7 @@ The surface an author manages work streams from: creating one, seeing what each 
 21. **WSS-FR-ZMPC** The window opens for an update alone. It names the stream, the base branch, the update record it opened against, and what that record rests on: the unsettled paths, and the escalation's reason and question set. It renders questions on the terms `GEA-graduation-escalation-answering.md` sets, and offers **Send answers**, **Retry**, **Cancel** and **Dismiss** as that record permits.
 22. **WSS-FR-NRCQ** For a merge the selector offers **Open in Runs…** and nothing that acts on the run: no **Continue**, **Answer…**, **Discard**, **Pause** or **Cancel merge**. Those are the Runs panel's (per `GRU-graduation-runs.md` GRU-FR-TOKG). No window of this surface renders a merge's escalation.
 23. **WSS-FR-NPXC** Every typed refusal of a merge renders on the stream's own row rather than as a window-level message: `stream_busy`, `stream_missing`, `unknown_stream`, `not_a_git_repository`, `merge_in_progress`, `update_in_progress`, `base_not_checked_out`, the image refusals `vendor_image_unconfigured`, `vendor_image_invalid`, `vendor_execution_unsupported` and `docker_backend_unverified`, and the dirty refusals of WSS-FR-OMAP. A merge the author started is answered where they started it.
-24. **WSS-FR-TKMB** A stream row offers **Update stream**, placed between **Merge stream** and **Delete stream**. It brings the stream up to the branch the stream records as its base, whichever branch the active worktree holds. The three actions are compact buttons, and each label names what it acts on. The row centers them in the dropdown's width.
+24. **WSS-FR-TKMB** A stream row offers **Update stream**, placed between **Create a PR** and **Delete stream**. It brings the stream up to the branch the stream records as its base, whichever branch the active worktree holds. The four actions are compact buttons in the order **Merge stream**, **Create a PR**, **Update stream**, **Delete stream**, and each label names what it acts on. The row centers them in the dropdown's width.
 25. **WSS-FR-HZVQ** **Update stream** is enabled only where the stream stands behind its base branch and holds no queued and no active run. It is disabled where the stream is up to date with its base and where a run is queued on it or holds it, and the row says which in words.
 26. **WSS-FR-NLXD** **Update stream** opens the **stream update window**, a floating overlay mutually exclusive with every other (per `SNV-shell-navigation.md` SNV-FR-56). It names the stream and the base branch, shows the base branch's revision as the listing read it, and lists the commits the stream is missing on the terms WSS-FR-JMWA sets.
 27. **WSS-FR-WPGR** The window offers **Merge source into stream**, **Rebase stream onto source** and **Cancel**. Confirming either strategy invokes `"update work stream (id, strategy, base revision)"` with the revision the window displayed, and the window closes. **Cancel** starts nothing.
@@ -53,40 +53,42 @@ The surface an author manages work streams from: creating one, seeing what each 
 43. **WSS-FR-BRMT** Opening the **Delete stream** confirmation reads `"get work stream uncommitted paths (id)"`. The confirmation shows that it is loading, and its **Delete** action stays disabled until the read answers. A failed read shows its error in the confirmation, offers a retry, and leaves **Delete** disabled.
 44. **WSS-FR-NHCV** When the stream's working copy holds uncommitted paths, the confirmation warns in words that deleting discards them, with their count and the first few paths (WSS-FR-JMWA). Its confirm action then names the discard and invokes `"delete work stream (id, force, discard uncommitted)"` with `discard uncommitted` true. Without uncommitted paths it passes false. Cancel changes nothing.
 45. **WSS-FR-PKQD** The refusals `stream_busy`, `stream_has_runs`, `stream_active`, `stream_unmerged`, and `stream_dirty` of a deletion render on the stream's own row. A `stream_dirty` refusal shows the warning of WSS-FR-NHCV with the paths it carries. No confirmation carries a way to remove a stream that a run holds, that has a non-terminal run, or that is the active worktree.
+46. **WSS-FR-KHGP** A stream row offers **Create a PR**, placed between **Merge stream** and **Update stream**. Activating it closes the dropdown and opens the Create a PR window (per `CPR-create-pull-request.md` CPR-FR-FDVO) with the stream's branch as the head branch, the branch the stream records as its base as the base branch, and the stream's name as the title. The surface starts no request itself and reads no repository of its own.
+47. **WSS-FR-EPCH** **Create a PR** is disabled, and the row says the reason in words, while any of these holds: the stream has been merged into its base branch or otherwise holds no commit its base branch lacks (it stands ahead of its base by nothing); a run holds the stream (WSS-FR-PSXK); a merge call of the stream runs (WSS-FR-HGWL); an update of the stream runs (WSS-FR-BDMU); the stream is missing (WSS-FR-OQYG). The button is rendered, and disabled, on every row in those states: beside the busy line of a busy row, beside the missing line of a missing row, and beside **Cancel update** on a row whose update runs. The row says the reason in words and carries it as the button's accessible description. It stays in place when disabled, so the actions of two rows stay in one column.
 
 ## Wireframes
 
 ```
-┌ streams (3) · 1 busy ─────────────────────────────┐
-│ ⟳ editor-work        4 ahead · 2 queued  ● busy   │
-│   synthesis/stream/editor-work                    │
-│   "Editor scroll fix" is working in it            │
-│                                                   │
-│ ⟳ docs-pass           1 ahead · 0 queued ● merging│
-│   synthesis/stream/docs-pass                      │
-│   Merging docs-pass                               │
-│ ⟳ bounds-work    2 ahead · 0 queued ● asks you    │
-│   synthesis/stream/bounds-work                    │
-│   Merge bounds-work waits on you: answer in Runs  │
-│                                [ Open in Runs… ]  │
-│ ⟳ spec-split     1 ahead · 0 queued  ● reconciling│
-│   synthesis/stream/spec-split                     │
-│   Git could not settle 3 paths. Nothing written.  │
-│   TAB-tabs.md, tabs.ts, tabs.test.ts              │
-│   Merge spec-split: reconciling                   │
-│                                [ Open in Runs… ]  │
-│ ⟳ ui-polish      2 ahead · 0 queued               │
-│   synthesis/stream/ui-polish                      │
-│   Merged 5 paths, left uncommitted. No run made.  │
-│ ⟳ api-shim   0 ahead · 3 behind · 0 queued        │
-│   synthesis/stream/api-shim                       │
-│   3 commits on main are not in this stream        │
-│  [Merge stream] [Update stream] [Delete stream]   │
-│   spike-undo   0 ahead · 0 behind · 0 queued      │
-│  [Merge stream] [Update stream] [Delete stream]   │
-├───────────────────────────────────────────────────┤
-│ + New stream…                                     │
-└───────────────────────────────────────────────────┘
+┌ streams (3) · 1 busy ────────────────────────────────────────────┐
+│ ⟳ editor-work        4 ahead · 2 queued  ● busy                  │
+│   synthesis/stream/editor-work                                   │
+│   "Editor scroll fix" is working in it                           │
+│                                                                  │
+│ ⟳ docs-pass           1 ahead · 0 queued ● merging               │
+│   synthesis/stream/docs-pass                                     │
+│   Merging docs-pass                                              │
+│ ⟳ bounds-work    2 ahead · 0 queued ● asks you                   │
+│   synthesis/stream/bounds-work                                   │
+│   Merge bounds-work waits on you: answer in Runs                 │
+│                                [ Open in Runs… ]                 │
+│ ⟳ spec-split     1 ahead · 0 queued  ● reconciling               │
+│   synthesis/stream/spec-split                                    │
+│   Git could not settle 3 paths. Nothing written.                 │
+│   TAB-tabs.md, tabs.ts, tabs.test.ts                             │
+│   Merge spec-split: reconciling                                  │
+│                                [ Open in Runs… ]                 │
+│ ⟳ ui-polish      2 ahead · 0 queued                              │
+│   synthesis/stream/ui-polish                                     │
+│   Merged 5 paths, left uncommitted. No run made.                 │
+│ ⟳ api-shim   0 ahead · 3 behind · 0 queued                       │
+│   synthesis/stream/api-shim                                      │
+│   3 commits on main are not in this stream                       │
+│  [Merge stream] [Create a PR] [Update stream] [Delete stream]    │
+│   spike-undo   0 ahead · 0 behind · 0 queued                     │
+│  [Merge stream] [Create a PR] [Update stream] [Delete stream]    │
+├──────────────────────────────────────────────────────────────────┤
+│ + New stream…                                                    │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ```
@@ -102,11 +104,11 @@ The surface an author manages work streams from: creating one, seeing what each 
 └───────────────────────────────────────────────────┘
 ```
 
-- Layout notes: the listing scrolls inside its own region and the New stream action stays fixed beneath it. A row's actions sit on the row, centered in the dropdown's width, and are reachable without a hover. The busy line replaces the actions rather than sitting beside them, so a busy stream offers nothing that would be refused. A row whose merge call runs disables its actions and carries `Merging <stream>` on its own line. A row with a merge run keeps **Open in Runs…** beside the run's status in words; a long path truncates from the end rather than wrapping the row. The paths a row names are cut to the first few with the rest counted (WSS-FR-JMWA), so no row outgrows the region it scrolls inside. Nothing scrolls horizontally at any width; a long branch name truncates from the middle and carries its whole value in accessible semantics. A row that is up to date with its base keeps **Update stream** in place and disabled rather than removing it, so the actions of two rows stay in one column. The stream update window states the source revision in short form beside the branch name and carries the whole revision in accessible semantics; its commit list scrolls inside its own region, and the two strategies stand one above the other so neither reads as the default.
+- Layout notes: the listing scrolls inside its own region and the New stream action stays fixed beneath it. A row's four actions sit on the row, centered in the dropdown's width, and are reachable without a hover. A busy row, a missing row and a row whose update runs show their status line and keep **Create a PR** beside it as a disabled button with its reason in words; they show no other action of the idle row. A row whose merge call runs disables its actions and carries `Merging <stream>` on its own line. A row with a merge run keeps **Open in Runs…** beside the run's status in words; a long path truncates from the end rather than wrapping the row. The paths a row names are cut to the first few with the rest counted (WSS-FR-JMWA), so no row outgrows the region it scrolls inside. Nothing scrolls horizontally at any width; a long branch name truncates from the middle and carries its whole value in accessible semantics. A row that is up to date with its base keeps **Update stream** in place and disabled rather than removing it, and a row that cannot open a pull request keeps **Create a PR** in place and disabled, so the actions of two rows stay in one column. The stream update window states the source revision in short form beside the branch name and carries the whole revision in accessible semantics; its commit list scrolls inside its own region, and the two strategies stand one above the other so neither reads as the default.
 
 ## UI contract boundary
 
-**Owned by the UI**: the resting label, the dropdown's grouping and scrolling, the New stream dialog and its validation, the merge, update and delete confirmations, the discard warning of a delete, and their wording, the stream update window's strategy choice and its display of the pinned source revision, the rendering of a merge call in progress, of a clean merge's result, of a merge run's status and of an update in progress and of what it settled, the update resolution window's placement, measure and treatment, the **Open in Runs…** control, which actions are enabled, and every inline refusal. The surface starts a merge and starts and cancels an update; it performs none of it, and it reads no repository of its own. It acts on no merge run.
+**Owned by the UI**: the resting label, the dropdown's grouping and scrolling, the New stream dialog and its validation, the merge, update and delete confirmations, the discard warning of a delete, and their wording, the stream update window's strategy choice and its display of the pinned source revision, the rendering of a merge call in progress, of a clean merge's result, of a merge run's status and of an update in progress and of what it settled, the **Create a PR** action, its enablement and the reason it states, the update resolution window's placement, measure and treatment, the **Open in Runs…** control, which actions are enabled, and every inline refusal. The surface starts a merge and starts and cancels an update; it performs none of it, and it reads no repository of its own. It acts on no merge run.
 
 **Delegated to backend (abstract)**:
 - `"create work stream (name, base branch)"` — owned by `../core/WKS-work-streams.md`.

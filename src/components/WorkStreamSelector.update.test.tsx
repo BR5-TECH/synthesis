@@ -94,21 +94,26 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("the Update action on a stream row (WSS-FR-TKMB, WSS-FR-HZVQ)", () => {
-  it("WSS-FR-TKMB: the row offers Update between Merge and Delete", async () => {
+  it("WSS-FR-TKMB, WSS-FR-KHGP: the row offers Update between Create a PR and Delete", async () => {
     const row = await openRow([behind({ aheadOfBase: 2 })]);
     const labels = within(row)
       .getAllByRole("button")
       .map((button) => button.textContent?.trim())
-      .filter((label) => label && /^(Merge stream|Update stream|Delete stream)$/.test(label));
+      .filter((label) => label && /^(Merge stream|Create a PR|Update stream|Delete stream)$/.test(label));
 
-    expect(labels).toEqual(["Merge stream", "Update stream", "Delete stream"]);
+    expect(labels).toEqual([
+      "Merge stream",
+      "Create a PR",
+      "Update stream",
+      "Delete stream",
+    ]);
   });
 
-  it("WSS-FR-TKMB: the three actions stand in one centered group", async () => {
+  it("WSS-FR-TKMB: the four actions stand in one centered group", async () => {
     const row = await openRow([behind({ aheadOfBase: 2 })]);
     const group = within(row).getByTestId("stream-merge-w1").parentElement;
     expect(group).toHaveClass("stream-select__row-actions--idle");
-    expect(within(group as HTMLElement).getAllByRole("button")).toHaveLength(3);
+    expect(within(group as HTMLElement).getAllByRole("button")).toHaveLength(4);
   });
 
   it("WSS-FR-HZVQ: Update is enabled only where the stream is behind its base", async () => {

@@ -1,0 +1,74 @@
+/* The Create a PR window and the pull request notice
+   (CPR-create-pull-request.md). The window reuses the modal frame, the field
+   styling and the action row every other modal of the application has. */
+.modal.create-pr {
+  width: 520px;
+  max-width: calc(100vw - 32px);
+  max-height: min(80vh, 720px);
+  display: flex;
+  flex-direction: column;
+}
+.modal.create-pr > * { flex: none; }
+/* The body alone takes the slack and scrolls, so a long block never pushes the
+   action row out of the window (CPR-FR-DWGS). */
+.modal.create-pr > .create-pr__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.create-pr__branches {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-3);
+}
+.create-pr__head {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  padding: 6px 0;
+}
+.create-pr__draft {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-ui-sm);
+  margin-bottom: var(--sp-2);
+}
+.create-pr__state { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.create-pr__state p { margin: 0; font-size: var(--fs-ui-sm); }
+.create-pr__block { color: var(--warn, var(--fg-1)); }
+.create-pr__failure {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  font-size: var(--fs-ui-sm);
+  color: var(--danger);
+}
+.pr-notice {
+  position: fixed;
+  left: 56px;
+  bottom: calc(var(--font-ui-size) * 26 / 13 + 10px);
+  z-index: 250;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  max-width: min(420px, 60vw);
+  padding: 8px 12px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated, var(--bg-panel));
+  box-shadow: var(--shadow-3);
+  font-size: var(--fs-ui-sm);
+}
+.pr-notice__text { flex: 1; min-width: 0; }
+.pr-notice__link { color: var(--accent); }
+/* CHG-FR-UCRL: the unavailable treatment of a button that stays reachable. */
+.create-pr-button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

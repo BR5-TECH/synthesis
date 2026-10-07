@@ -380,8 +380,9 @@ describe("GitHub authentication for operations that reach a remote (GHA-FR-16)",
     );
   });
 
-  it("applies the same precondition to pulling and to creating a pull request", async () => {
-    // GTC-FR-09: all three reach GitHub, so all three resolve a token first.
+  it("applies the same precondition to pulling and to pushing", async () => {
+    // GTC-FR-09: both reach GitHub, so both resolve a token first. Creating a
+    // pull request answers a missing token in its own window (GIT-FR-GZUM).
     withBinding("none_stored");
     await openTransfers();
 
@@ -389,16 +390,6 @@ describe("GitHub authentication for operations that reach a remote (GHA-FR-16)",
     await waitFor(() =>
       expect(screen.getByTestId("git-auth-note")).toHaveTextContent(
         /Pull needs a GitHub token/,
-      ),
-    );
-
-    await userEvent.click(screen.getByText("PRs"));
-    await userEvent.click(
-      screen.getByRole("button", { name: /Create PR for current branch/ }),
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("git-auth-note-prs")).toHaveTextContent(
-        /Creating a pull request needs a GitHub token/,
       ),
     );
   });

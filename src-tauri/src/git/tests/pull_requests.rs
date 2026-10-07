@@ -6,7 +6,7 @@
 
 use super::*;
 use crate::git::pull_requests::client::{
-    classify, GithubFailure, GithubPullRequests, HttpGithubPullRequests, API, MAX_PAGES, PAGE_SIZE,
+    classify, GithubFailure, GithubPullRequests, GithubWriteFailure, HttpGithubPullRequests, API, MAX_PAGES, PAGE_SIZE,
 };
 use crate::git::pull_requests::{
     ERR_GITHUB_TOKEN_REJECTED, ERR_INVALID_PULL_REQUEST_STATE, ERR_NOT_A_GITHUB_REMOTE,
@@ -30,6 +30,8 @@ pub(super) const PLATFORM: &str = "https://github.com/acme/platform.git";
 pub(super) struct FakeGithub {
     answers: Mutex<HashMap<String, Result<Value, GithubFailure>>>,
     requests: Mutex<Vec<(String, String)>>,
+    posts: Mutex<Vec<(String, String, Value)>>,
+    post_answer: Mutex<Option<Result<Value, GithubWriteFailure>>>,
 }
 
 impl FakeGithub {
@@ -54,12 +56,39 @@ impl FakeGithub {
         self.requests.lock().unwrap().clone()
     }
 
+    /// Answer the next writes with `answer`.
+    pub(super) fn answer_post(&self, answer: Result<Value, GithubWriteFailure>) {
+        *self.post_answer.lock().unwrap() = Some(answer);
+    }
+
+    /// Every `(secret, path, body)` this fake was asked to write, in order.
+    pub(super) fn posts(&self) -> Vec<(String, String, Value)> {
+        self.posts.lock().unwrap().clone()
+    }
+
     pub(super) fn paths(&self) -> Vec<String> {
         self.requests().into_iter().map(|(_, path)| path).collect()
     }
 }
 
 impl GithubPullRequests for FakeGithub {
+    fn post_json(
+        &self,
+        secret: &str,
+        path: &str,
+        body: &Value,
+    ) -> Result<Value, GithubWriteFailure> {
+        self.posts
+            .lock()
+            .unwrap()
+            .push((secret.to_string(), path.to_string(), body.clone()));
+        self.post_answer
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or(Err(GithubWriteFailure::Unreachable))
+    }
+
     fn get_json(&self, secret: &str, path: &str) -> Result<Value, GithubFailure> {
         self.requests
             .lock()
@@ -114,12 +143,12 @@ pub(super) fn token_ready() -> (GlobalSettingsStore, GithubTokens) {
 }
 
 /// A project that stores no token at all.
-fn token_missing() -> (GlobalSettingsStore, GithubTokens) {
+pub(super) fn token_missing() -> (GlobalSettingsStore, GithubTokens) {
     (GlobalSettingsStore::in_memory(), GithubTokens::new(Box::new(FixedSecret), Box::new(NoVerifier)))
 }
 
 /// A project that stores two tokens and has chosen neither.
-fn token_selection_required() -> (GlobalSettingsStore, GithubTokens) {
+pub(super) fn token_selection_required() -> (GlobalSettingsStore, GithubTokens) {
     let store = GlobalSettingsStore::in_memory();
     store.save_github_token_registry(vec![record("a"), record("b")]).unwrap();
     (store, GithubTokens::new(Box::new(FixedSecret), Box::new(NoVerifier)))

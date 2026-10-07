@@ -13,6 +13,7 @@
 //! a slow GitHub never holds the thread that serves `invoke` calls.
 
 pub(crate) mod client;
+pub(crate) mod create;
 mod model;
 mod timeline;
 
@@ -31,8 +32,13 @@ use crate::project::ProjectState;
 
 use super::{duration_ms, ERR_NO_REMOTE_CONFIGURED, TRANSFER};
 use client::{read_pages, GithubFailure, GithubPullRequests, HttpGithubPullRequests};
+pub use create::{
+    PullRequestHeadState,
+    ERR_PULL_REQUEST_EXISTS, ERR_PULL_REQUEST_REJECTED, ERR_PULL_REQUEST_TITLE_REQUIRED,
+};
 pub use model::{
-    PullRequestDetail, PullRequestSummary, PullRequestTimeline, PullRequestTimelineItem,
+    CreatedPullRequest, PullRequestDetail, PullRequestSummary, PullRequestTimeline,
+    PullRequestTimelineItem,
 };
 
 /// The remote is not on `github.com`, so there are no pull requests to read.
@@ -105,8 +111,12 @@ fn is_refusal(error: &str) -> bool {
     super::is_refusal(error)
         || matches!(
             error,
-            ERR_NOT_A_GITHUB_REMOTE | ERR_INVALID_PULL_REQUEST_STATE | ERR_PULL_REQUEST_NOT_FOUND
-        )
+            ERR_NOT_A_GITHUB_REMOTE
+                | ERR_INVALID_PULL_REQUEST_STATE
+                | ERR_PULL_REQUEST_NOT_FOUND
+                | ERR_PULL_REQUEST_EXISTS
+                | ERR_PULL_REQUEST_TITLE_REQUIRED
+        ) || error.starts_with(ERR_PULL_REQUEST_REJECTED)
 }
 
 /// Run one read and report it. `work` gets the resolved target; `outcome` turns
@@ -376,6 +386,57 @@ pub async fn list_pull_request_timeline(
             &HttpGithubPullRequests,
             id,
         )
+    })
+    .await
+    .map_err(join_error)?
+}
+
+/// GTC-FR-MMFM: open a pull request on the primary GitHub remote.
+#[tauri::command]
+pub async fn create_pull_request(
+    title: String,
+    body: String,
+    base: String,
+    head: String,
+    draft: bool,
+    app: tauri::AppHandle,
+    project: State<'_, ProjectState>,
+) -> Result<CreatedPullRequest, String> {
+    let root = project.require_root()?;
+    let project_key = project.slot_key();
+    tauri::async_runtime::spawn_blocking(move || {
+        let store = app.state::<GlobalSettingsStore>();
+        let tokens = app.state::<GithubTokens>();
+        create::create_pull_request_reported(
+            &app,
+            &logging::BUFFER,
+            &root,
+            &store,
+            &tokens,
+            &project_key,
+            &HttpGithubPullRequests,
+            &title,
+            &body,
+            &base,
+            &head,
+            draft,
+        )
+    })
+    .await
+    .map_err(join_error)?
+}
+
+/// GTC-FR-NEIW: what stands between a local branch and a pull request for it.
+#[tauri::command]
+pub async fn get_pull_request_head_state(
+    head: String,
+    base: Option<String>,
+    app: tauri::AppHandle,
+    project: State<'_, ProjectState>,
+) -> Result<create::PullRequestHeadState, String> {
+    let root = project.require_root()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        create::head_state_reported(&app, &logging::BUFFER, &root, &head, base.as_deref())
     })
     .await
     .map_err(join_error)?

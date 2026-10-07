@@ -440,6 +440,8 @@ pub fn run() {
             git::inspect_branch_deletion,
             git::delete_branch,
             git::list_pull_requests,
+            git::create_pull_request,
+            git::get_pull_request_head_state,
             git::get_pull_request_detail,
             git::list_pull_request_timeline,
             git::get_working_tree_status,

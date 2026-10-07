@@ -25,6 +25,7 @@ import { GraduationRuns } from "./GraduationRuns";
 import { Runs } from "./Runs";
 import { Logs } from "./Logs";
 import { Git } from "./Git";
+import type { PullRequestSource } from "./CreatePullRequest/types";
 import type { ReadyTasksBinding } from "./GitReadyTasks";
 
 interface BottomPanelProps {
@@ -45,6 +46,8 @@ interface BottomPanelProps {
   canCheckOutBranches: boolean;
   /** GHA-FR-16: open the GitHub token picker for a blocked operation. */
   onRequestGithubToken?: () => Promise<boolean>;
+  /** GIT-FR-05: open the Create a PR window for the current branch. */
+  onCreatePullRequest?: (source: PullRequestSource) => void;
   /** GRU-FR-RZDI: open a run's source draft in a New Artifact tab. */
   onOpenDraft?: (draftId: string) => void;
   /** GRU-FR-QLRQ: open Project settings on a named section. */
@@ -324,6 +327,7 @@ export function BottomPanel({
   onSwitchWorktree,
   canCheckOutBranches,
   onRequestGithubToken,
+  onCreatePullRequest,
   onOpenDraft,
   onOpenSettings,
   onOverlayOpening,
@@ -572,6 +576,7 @@ export function BottomPanel({
             onSwitchWorktree={onSwitchWorktree}
             canCheckOutBranches={canCheckOutBranches}
             onRequestGithubToken={onRequestGithubToken}
+            onCreatePullRequest={onCreatePullRequest}
             readyTasks={readyTasks}
             onOpenDraft={onOpenDraft}
             selectBranch={selectGitBranch ?? null}

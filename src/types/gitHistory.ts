@@ -123,6 +123,25 @@ export interface PullRequestSummary {
   updatedAt: string;
 }
 
+/** GTC-FR-MMFM: the pull request GitHub created. */
+export interface CreatedPullRequest {
+  number: number;
+  /** The address of its page on github.com. */
+  url: string;
+}
+
+/** GTC-FR-NEIW, GTC-FR-YWCP: what stands between a branch and a pull request. */
+export interface PullRequestHeadState {
+  head: string;
+  base: string;
+  hasRemote: boolean;
+  remoteBranchExists: boolean;
+  /** Absent (null) while the remote has no branch of the head's name. */
+  unpushed: number | null;
+  uncommittedPaths: string[];
+  aheadOfBase: number;
+}
+
 /** GTC-FR-ZIHE */
 export interface PullRequestDetail {
   number: number;

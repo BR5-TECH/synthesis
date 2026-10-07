@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import * as api from "../api";
 import { useGitTransfer } from "../hooks/useGitTransfer";
 import { logDebug, logWarn } from "../logging";
-import { Icon } from "./icons";
 import { tokenErrorMessage } from "./GithubTokens";
 import { GitBranches } from "./Git/GitBranches";
 import type { BranchKind } from "./Git/GitBranches";
@@ -13,6 +12,8 @@ import { PullRequestRail, PullRequestView } from "./Git/GitPullRequests";
 import { useBranchCompare } from "./Git/useBranchCompare";
 import type { BranchRef } from "./Git/useBranchCompare";
 import { useBranchListing } from "./Git/useBranchListing";
+import { CurrentBranchButton } from "./CreatePullRequest/CurrentBranchButton";
+import type { PullRequestSource } from "./CreatePullRequest/types";
 import { useGitLog } from "./Git/useGitLog";
 import { usePullRequests } from "./Git/usePullRequests";
 import type { GitBranch, WorktreeContext } from "../types";
@@ -49,6 +50,8 @@ interface GitProps {
    * (GHA-FR-17).
    */
   onRequestGithubToken?: () => Promise<boolean>;
+  /** GIT-FR-05: open the Create a PR window for the current branch. */
+  onCreatePullRequest?: (source: PullRequestSource) => void;
   /** GIT-FR-OGHO: the window's GitHub polling view and its actions. */
   readyTasks?: ReadyTasksBinding;
   /** GIT-FR-OZYT: open a draft's New Artifact tab. */
@@ -80,6 +83,7 @@ export function Git({
   onSwitchWorktree,
   canCheckOutBranches,
   onRequestGithubToken,
+  onCreatePullRequest,
   readyTasks,
   onOpenDraft,
   selectBranch,
@@ -358,29 +362,15 @@ export function Git({
         {tab === "prs" && (
           <>
             <div style={{ padding: "6px 12px" }}>
-              {/* GIT-FR-07 / GHA-FR-16: creating a PR reaches GitHub, so it
-                  resolves a token first. */}
-              <button
+              {/* GIT-FR-05 / GIT-FR-GZUM: opens the shared Create a PR window,
+                  which answers a missing or unselected GitHub token itself. */}
+              <CurrentBranchButton
+                label="Create PR for current branch"
                 className="btn btn--default btn--sm"
-                onClick={() =>
-                  void runAuthenticated("Creating a pull request", () =>
-                    setAuthNote(
-                      "Pull-request creation is not wired to a remote in this build.",
-                    ),
-                  )
-                }
-              >
-                <Icon.GitPull size={12} /> Create PR for current branch
-              </button>
-              {authNote && (
-                <div
-                  className="proj-switch__error"
-                  data-testid="git-auth-note-prs"
-                  style={{ marginTop: 8 }}
-                >
-                  {authNote}
-                </div>
-              )}
+                withIcon
+                testId="git-create-pr"
+                onCreatePullRequest={onCreatePullRequest}
+              />
             </div>
             <PullRequestRail pr={pullRequests} />
           </>

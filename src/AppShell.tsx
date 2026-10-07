@@ -55,6 +55,8 @@ import {
 import { useNotifications } from "./hooks/useNotifications";
 import type { useDiscussionAnnouncement } from "./state/discussionAnnouncer";
 import type { TabAttention } from "./components/TabStrip";
+import { CreatePullRequestWindow } from "./components/CreatePullRequestWindow";
+import { PullRequestNotice } from "./components/PullRequestNotice";
 
 /**
  * SNV-FR-06: which edge the activity bar and vertical panel occupy. The side is
@@ -142,6 +144,15 @@ export function AppShell(props: AppShellProps) {
     settleRollbackWindow,
     dismissRollbackWindow,
     requestRollback,
+    pullRequestWindow,
+    pullRequestNotice,
+    dismissPullRequestNotice,
+    openPullRequestWindow,
+    closePullRequestWindow,
+    dismissPullRequestWindow,
+    pullRequestSubmittingRef,
+    giveWayToPicker,
+    pullRequestCreated,
     openCommitWindow,
     graduationStart,
     openGraduationStart,
@@ -169,6 +180,7 @@ export function AppShell(props: AppShellProps) {
     dismissTokenPicker();
     dismissCommitWindow();
     dismissRollbackWindow();
+    dismissPullRequestWindow();
     dismissTabMenu();
     dismissGraduationOverlays();
     setAgentsRosterOpen(false);
@@ -230,6 +242,8 @@ export function AppShell(props: AppShellProps) {
           // WSS-FR-JVUF: the work-stream selector follows the worktree
           // selector, a stream being a checkout of the same repository.
           onRequestMergeCommit={requestMergeCommit}
+          // WSS-FR-KHGP: a stream row's Create a PR opens the shared window.
+          onCreatePullRequest={openPullRequestWindow}
           onOpenChanges={() => s.setPanelSurface("changes")}
           // WSS-FR-AWRS: the same route a `run` address takes.
           onOpenRun={(runId) => openGraduationRun(runId)}
@@ -250,6 +264,7 @@ export function AppShell(props: AppShellProps) {
               dismissTokenPicker();
               dismissCommitWindow();
               dismissRollbackWindow();
+              dismissPullRequestWindow();
               dismissTabMenu();
               dismissGraduationOverlays();
               setAgentsRosterOpen(false);
@@ -270,6 +285,7 @@ export function AppShell(props: AppShellProps) {
             dismissTokenPicker();
             dismissCommitWindow();
             dismissRollbackWindow();
+            dismissPullRequestWindow();
             setAgentsRosterOpen(false);
             // TAB-FR-32 / SNV-FR-56: the tab context menu is one of the
             // window's floating overlays, so a dropdown opening takes it down.
@@ -358,6 +374,7 @@ export function AppShell(props: AppShellProps) {
               dismissTokenPicker();
               dismissCommitWindow();
               dismissRollbackWindow();
+              dismissPullRequestWindow();
               dismissTabMenu();
               dismissGraduationOverlays();
               projectFolders.ensureFresh();
@@ -374,6 +391,7 @@ export function AppShell(props: AppShellProps) {
               dismissTokenPicker();
               dismissCommitWindow();
               dismissRollbackWindow();
+              dismissPullRequestWindow();
               dismissTabMenu();
               dismissGraduationOverlays();
               projectFolders.ensureFresh();
@@ -387,6 +405,7 @@ export function AppShell(props: AppShellProps) {
               dismissTokenPicker();
               dismissCommitWindow();
               dismissRollbackWindow();
+              dismissPullRequestWindow();
               dismissTabMenu();
               dismissGraduationOverlays();
               projectFolders.ensureFresh();
@@ -424,6 +443,8 @@ export function AppShell(props: AppShellProps) {
             // between, so the note routes to where one is added — the Global
             // settings window's GitHub section (SWN-FR-13, GIT-FR-10).
             onOpenGlobalSettings={() => s.openGlobalSettings("github")}
+            // CHG-FR-UPFP: the footer's Create a PR opens the shared window.
+            onCreatePullRequest={openPullRequestWindow}
             // DRP-FR-06 / DRP-FR-09 / DRP-FR-12: the Drafts surface creates,
             // opens, and abandons drafts; the tab strip follows each.
             onOpenDraft={s.openDraft}
@@ -501,6 +522,7 @@ export function AppShell(props: AppShellProps) {
               dismissTokenPicker();
               dismissCommitWindow();
               dismissRollbackWindow();
+              dismissPullRequestWindow();
               dismissTabMenu();
               dismissGraduationOverlays();
               setAgentsRosterOpen(false);
@@ -587,6 +609,7 @@ export function AppShell(props: AppShellProps) {
               dismissTokenPicker();
               dismissCommitWindow();
               dismissRollbackWindow();
+              dismissPullRequestWindow();
               setAgentsRosterOpen(false);
               dismissTabMenu();
             }}
@@ -613,6 +636,9 @@ export function AppShell(props: AppShellProps) {
               // so the picker opens with no preselection of its own.
               new Promise<boolean>((resolve) => openTokenPicker(null, resolve))
             }
+            // GIT-FR-05: the PRs rail's Create PR for current branch opens the
+            // shared window.
+            onCreatePullRequest={openPullRequestWindow}
             // GIT-FR-OGHO: the Ready tasks section renders the window's polling
             // view; GIT-FR-HNGQ routes its configuration states to the GitHub
             // polling section of Project settings.
@@ -641,6 +667,7 @@ export function AppShell(props: AppShellProps) {
           dismissTokenPicker();
           dismissCommitWindow();
           dismissRollbackWindow();
+          dismissPullRequestWindow();
           dismissTabMenu();
           dismissGraduationOverlays();
           s.openProgressOverlay();
@@ -758,6 +785,26 @@ export function AppShell(props: AppShellProps) {
         />
       )}
 
+      {/* CPR-create-pull-request.md: the Create a PR window, mounted only while
+          one is open so it starts from its source each time (CPR-FR-SSQI). It
+          is keyed on the opening, so coming back from the token picker mounts
+          it anew with what the author typed (CPR-FR-VZUZ). */}
+      {pullRequestWindow && (
+        <CreatePullRequestWindow
+          key={pullRequestWindow.nonce}
+          source={pullRequestWindow.source}
+          resume={pullRequestWindow.resume}
+          returnFocus={pullRequestWindow.opener}
+          onClose={closePullRequestWindow}
+          onCreated={pullRequestCreated}
+          onRequestToken={(input) => void giveWayToPicker(input)}
+          onOpenGlobalSettings={() => s.openGlobalSettings("github")}
+          onSubmittingChange={(running) => {
+            pullRequestSubmittingRef.current = running;
+          }}
+        />
+      )}
+
       {/* GHA-github-authentication.md: the token picker, mounted only while a
           choice is outstanding so it opens fresh each time (GHA-FR-15). */}
       {picker && (
@@ -773,6 +820,12 @@ export function AppShell(props: AppShellProps) {
           cannot be reached. Anchored in the shell rather than in a tab, and
           outside the single-overlay rule (SNV-FR-56) — it takes no focus and
           intercepts no pointer event. */}
+      {/* CPR-FR-ITWJ / CPR-FR-RDJP: what a created pull request leaves. A status
+          of the shell, outside the single-overlay rule (SNV-FR-56). */}
+      <PullRequestNotice
+        notice={pullRequestNotice}
+        onDismiss={dismissPullRequestNotice}
+      />
       <NotificationStatement
         message={notifications.statement}
         onDismiss={notifications.dismissStatement}

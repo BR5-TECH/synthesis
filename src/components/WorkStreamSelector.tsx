@@ -72,12 +72,19 @@ export interface WorkStreamSelectorProps {
    * (per `NTF-notifications.md` NTF-FR-17). The shell owns the navigation.
    */
   onOpenRun: (runId: string) => void;
+  /**
+   * WSS-FR-KHGP: open the Create a PR window (per
+   * `CPR-create-pull-request.md` CPR-FR-FDVO) for a stream. The shell owns the
+   * window; this surface starts no request and reads no repository.
+   */
+  onCreatePullRequest?: (source: PullRequestSource) => void;
 }
 
 import { StreamUpdateResolution, updateSubject } from "./StreamUpdateResolution";
 import { refusalText, splitRefusal } from "./WorkStreamSelector/refusals";
 import { NewStreamDialog } from "./WorkStreamSelector/NewStreamDialog";
 import { StreamRow } from "./WorkStreamSelector/StreamRow";
+import type { PullRequestSource } from "./CreatePullRequest/types";
 import type {
   MergeOutcome,
   RowSurface,
@@ -96,6 +103,7 @@ export function WorkStreamSelector({
   onRequestMergeCommit,
   onOpenChanges,
   onOpenRun,
+  onCreatePullRequest,
 }: WorkStreamSelectorProps) {
   const [open, setOpen] = useState(false);
   const [streams, setStreams] = useState<WorkStreamSummary[] | null>(null);
@@ -678,6 +686,16 @@ export function WorkStreamSelector({
                 onOpenChanges={() => {
                   close();
                   onOpenChanges?.();
+                }}
+                // WSS-FR-KHGP: the dropdown closes first, as it does for the
+                // commit message window, so it does not paint over the scrim.
+                onCreatePullRequest={(row) => {
+                  close();
+                  onCreatePullRequest?.({
+                    head: row.stream.branch,
+                    base: row.stream.baseBranch,
+                    title: row.stream.name,
+                  });
                 }}
               />
             ))}

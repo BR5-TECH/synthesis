@@ -129,6 +129,15 @@
   align-items: center;
   gap: var(--sp-1);
 }
+/* CHG-FR-UPFP: Create a PR sits beside the rollback button on the leading edge,
+   or alone there in Branch mode. It never wraps and never shrinks, so the split
+   control keeps the trailing edge at the narrowest supported panel width. */
+.changes-actions__create-pr {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
 /* CHG-FR-56: the split control holds the trailing edge whether or not the
    leading corner is occupied. The push belongs to the split control itself, not
    to the rollback button — hanging it off the button meant Branch mode, which

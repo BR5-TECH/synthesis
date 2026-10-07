@@ -30,7 +30,8 @@ Tauri commands — names match `../ui/GIT-git.md` byte-for-byte:
 - `"push current branch"` → `push_current_branch` — emits push output incrementally through an event stream owned by this module (mirrors `ADP-adapters.md`'s event-bus pattern for long-running output). Authenticated against a GitHub remote (GTC-FR-09).
 - `"pull current branch"` → `pull_current_branch` — emits pull output incrementally. Authenticated against a GitHub remote (GTC-FR-09).
 - `"list pull requests (state)"` → `list_pull_requests(state)` → `[PullRequestSummary]` — the PRs of the project's primary GitHub remote, where `state` is `"open"` or `"closed"`. Authenticated (GTC-FR-09, GTC-FR-GXUB).
-- `"create pull request"` → `create_pull_request(title, body, base, head)`. Authenticated (GTC-FR-09).
+- `"create pull request (title, body, base, head, draft)"` → `create_pull_request(title, body, base, head, draft)` → `CreatedPullRequest` — opens a pull request from `head` into `base` on the project's primary GitHub remote (GTC-FR-MMFM). It pushes and commits nothing. Authenticated (GTC-FR-09).
+- `"get pull request head state (head, base)"` → `get_pull_request_head_state(head, base)` → `PullRequestHeadState` — what stands between a local branch and a pull request for it: whether the remote holds the branch, whether it holds all of it, whether its checkout is clean, and whether it holds a commit its base lacks (GTC-FR-NEIW). Local reads only.
 - `"get pull request detail"` → `get_pull_request_detail(id)` → `PullRequestDetail` — the PR's description and header fields, where `id` is the PR number. Authenticated (GTC-FR-09, GTC-FR-ZIHE).
 - `"list pull request timeline (id)"` → `list_pull_request_timeline(id)` → `PullRequestTimeline` — the PR's full conversation and activity. Authenticated (GTC-FR-09, GTC-FR-CKTM).
 - `"list pull request review comments"` → `list_pull_request_review_comments(id)` (no UI consumer). Authenticated (GTC-FR-09).
@@ -161,6 +162,23 @@ PullRequestDetail {
   closed_at?, merged_at?
 }
 
+CreatedPullRequest {
+  number,                    // the pull request's number
+  url                        // the address of its page on github.com
+}
+
+PullRequestHeadState {
+  head,                      // the local branch, as named
+  base,                      // the base the answer is about; the default branch when none was named
+  has_remote,                // the project has a primary remote
+  remote_branch_exists,      // the primary remote has a remote-tracking ref of the same name
+  unpushed,                  // commits head holds that the remote-tracking ref lacks; null when
+                             //   remote_branch_exists is false
+  uncommitted_paths,         // [path] the checkout that holds head reports uncommitted (GTC-FR-LEBC);
+                             //   empty when no checkout holds head
+  ahead_of_base              // commits head holds that base lacks
+}
+
 PullRequestTimeline {
   items: [PullRequestTimelineItem],  // oldest first
   truncated                          // true when GitHub held more than this module reads
@@ -182,7 +200,7 @@ Typed errors returned by `rollback_paths` itself, in place of an outcome and wit
 
 Typed error returned by `get_working_tree_status` and `commit_paths` when the `expected_worktree` they were given is not the project's active worktree, having read nothing and written nothing: `worktree_identity_changed`, carrying the expected path and the active one (GTC-FR-31).
 
-Typed errors of the history and branch operations: `"not a git repository"`, `"unknown branch"`, `unknown_commit`, `path_not_in_commit`, `no_comparison_base`, `no_merge_base`, `path_not_in_comparison`, `not_a_local_branch`, `branch_in_primary_worktree`, `branch_in_active_worktree`, `branch_belongs_to_work_stream`, `"direct graduation active"`, and `worktree_dirty` carrying the complete set of uncommitted paths. The pull request operations return `"no remote configured"`, `not_a_github_remote`, `pull_request_not_found`, the two token errors of GTC-FR-10, `github_token_rejected`, and `github_unreachable`.
+Typed errors of the history and branch operations: `"not a git repository"`, `"unknown branch"`, `unknown_commit`, `path_not_in_commit`, `no_comparison_base`, `no_merge_base`, `path_not_in_comparison`, `not_a_local_branch`, `branch_in_primary_worktree`, `branch_in_active_worktree`, `branch_belongs_to_work_stream`, `"direct graduation active"`, and `worktree_dirty` carrying the complete set of uncommitted paths. The pull request operations return `"no remote configured"`, `not_a_github_remote`, `pull_request_not_found`, the two token errors of GTC-FR-10, `github_token_rejected`, and `github_unreachable`. `create_pull_request` also returns `pull_request_title_required`, `pull_request_exists`, and `pull_request_rejected: <reason>`, where the reason is the text GitHub gave. `get_pull_request_head_state` also returns `"unknown branch"`.
 
 ## Functional requirements
 1. **GTC-FR-01** Every operation listed in the contract surface exists as a Tauri command with a typed payload. In the walking-skeleton build, implementations may return canned working-tree state, canned branch lists, canned diff payloads, and empty PR lists; the UI Git panel must be fully renderable against these stubs.
@@ -240,6 +258,11 @@ Typed errors of the history and branch operations: `"not a git repository"`, `"u
 51. **GTC-FR-MBBH** The comparison returns the base, the merge base of the base tip and the branch tip, and the paths changed from the merge base tree to the branch tip tree, with the rename and binary flags of GTC-FR-YCEV. A branch that is its own base returns `same_as_base` true and no path.
 52. **GTC-FR-PYVV** `get_branch_compare_file_diff(name, kind, path)` returns the `DiffPayload` of that path from the merge base tree to the branch tip tree, with the hunk and binary-marker shape of `get_diff`. A path the comparison did not change returns `path_not_in_comparison`. It writes nothing.
 53. **GTC-FR-QVDE** Both comparison operations return `"unknown branch"` for a name that is not a branch of that kind, `no_comparison_base` when the base names no branch, and `no_merge_base` when the base and the branch share no commit. Each logs its start, its file count, and every error, with branch names but no path content.
+
+54. **GTC-FR-MMFM** `create_pull_request(title, body, base, head, draft)` first checks its arguments: a title that holds nothing but white space returns `pull_request_title_required`, and an empty `head` or `base` returns `"unknown branch"`. It then resolves the owner and repository of the primary remote on the terms of GTC-FR-GXUB and the token on the terms of GTC-FR-10, before any request is made. It sends one request that creates the pull request from `head` into `base`, with the title and the description as given and the `draft` flag, and returns the number and the page address of the pull request GitHub created. It creates no commit, pushes no branch, and changes no ref and no file.
+55. **GTC-FR-YQAE** `create_pull_request` returns `pull_request_exists` when GitHub reports that a pull request for the same head and base is already open, and `pull_request_rejected: <reason>` for any other refusal of the content, such as a head branch GitHub does not hold or a head with no commit its base lacks. GitHub's refusal of the token returns `github_token_rejected`, and so does an answer that the repository is not found, because a repository that the project's token cannot see is answered that way (as in GTC-FR-GXUB). A failure to reach GitHub returns `github_unreachable`, and so does a redirect answer: the operation does not follow a redirect, because a redirected request is not the creation of a pull request. When GitHub refuses a head branch or a base branch it does not hold, its answer names a field and a code and carries no message text, and the reason of `pull_request_rejected` then names that field and that code, for example `head invalid`. Neither the title, the description, nor the token is written to a log or to an error (GTC-FR-DWVY). Its log records hold the owner, the repository, the branch names, the draft flag, and the number of the pull request.
+56. **GTC-FR-NEIW** `get_pull_request_head_state(head, base)` reads local state alone: it makes no network request and writes nothing. `head` must be a local branch, or the call returns `"unknown branch"`. An absent or empty `base` is the repository's default branch, resolved as `CHC-changes.md` CHC-FR-13 resolves it, and a `base` that is neither a local branch nor a remote-tracking branch returns `"unknown branch"`. It reports on the remote as the last fetch left it (GTC-FR-12).
+57. **GTC-FR-YWCP** `remote_branch_exists` is true when the primary remote has a remote-tracking ref for `head`, and `unpushed` counts the commits reachable from `head` and not from that ref. `uncommitted_paths` is read from the checkout that holds `head`, whether it is the primary worktree, the active worktree, another linked worktree, or the working copy of a work stream, on the terms of GTC-FR-LEBC, and is empty when no checkout holds `head`. `ahead_of_base` counts the commits reachable from `head` and not from the base, counted as `WKS-work-streams.md` WKS-FR-EIBC counts the commits of a stream.
 
 ## Non-functional requirements
 - Long-running operations (push, pull, network calls) must stream output rather than block the Tauri invoke; the UI Git panel relies on streaming for its push/pull output area.

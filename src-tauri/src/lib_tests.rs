@@ -385,6 +385,8 @@ fn command_names_list_contains_layout_preferences_commands() {
         "inspect_branch_deletion",
         "delete_branch",
         "list_pull_requests",
+        "create_pull_request",
+        "get_pull_request_head_state",
         "get_pull_request_detail",
         "list_pull_request_timeline",
         "list_worktrees_and_branches",

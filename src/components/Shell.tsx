@@ -12,6 +12,7 @@ import { AgentsChromeControl } from "./Agents";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { WorktreeSelector, type SwitchOutcome } from "./WorktreeSelector";
 import { WorkStreamSelector } from "./WorkStreamSelector";
+import type { PullRequestSource } from "./CreatePullRequest/types";
 import { PushControl } from "./PushControl";
 import { Library } from "./Library";
 import { DocumentsPanel } from "./Documents";
@@ -73,6 +74,8 @@ interface TopChromeProps {
     streamId: string,
     streamName: string,
   ) => Promise<string | null>;
+  // WSS-FR-KHGP: open the Create a PR window for a work stream.
+  onCreatePullRequest?: (source: PullRequestSource) => void;
   // WSS-FR-OMAP: a merge refused for uncommitted work routes to the Changes
   // panel, which is where that work is settled.
   onOpenChanges: () => void;
@@ -121,6 +124,7 @@ export function TopChrome({
   activeWorktree,
   onSwitchWorktree,
   onRequestMergeCommit,
+  onCreatePullRequest,
   onOpenChanges,
   onOpenRun,
   themePref,
@@ -254,6 +258,7 @@ export function TopChrome({
             return { ok: false as const, error: outcome.cancelled ? undefined : outcome.error };
           }}
           onRequestMergeCommit={onRequestMergeCommit}
+          onCreatePullRequest={onCreatePullRequest}
           onOpenChanges={onOpenChanges}
           onOpenRun={onOpenRun}
         />
@@ -827,6 +832,8 @@ interface VPanelProps {
   onRequestGithubToken?: () => Promise<boolean>;
   // CHG-FR-45 / GHA-FR-19: no token stored at all — route to where one is added.
   onOpenGlobalSettings?: () => void;
+  // CHG-FR-UPFP: open the Create a PR window for the current branch.
+  onCreatePullRequest?: (source: PullRequestSource) => void;
   // SNV-FR-67: the Changes panel publishes each comparison it loads, so the
   // shell can resolve a Diff tab's file before activating that panel.
   onChangeSetLoaded?: (paths: string[]) => void;
@@ -858,6 +865,7 @@ export function VPanel({
   onRequestRollback,
   onRequestGithubToken,
   onOpenGlobalSettings,
+  onCreatePullRequest: onCreatePullRequestFromPanel,
   onChangeSetLoaded,
   onViewSpecMap,
   onOpenDraft,
@@ -924,6 +932,7 @@ export function VPanel({
         onRequestRollback={onRequestRollback}
         onRequestGithubToken={onRequestGithubToken}
         onOpenGlobalSettings={onOpenGlobalSettings}
+        onCreatePullRequest={onCreatePullRequestFromPanel}
       />
     );
   if (surface === "comments")

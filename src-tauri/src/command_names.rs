@@ -251,6 +251,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "inspect_branch_deletion",
     "delete_branch",
     "list_pull_requests",
+    "create_pull_request",
+    "get_pull_request_head_state",
     "get_pull_request_detail",
     "list_pull_request_timeline",
     // The single working-tree status primitive, which the graduation start

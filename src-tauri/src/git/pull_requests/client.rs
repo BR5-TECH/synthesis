@@ -38,15 +38,58 @@ pub(crate) enum GithubFailure {
     Unreachable,
 }
 
+/// How a write to GitHub failed (GTC-FR-YQAE). Like [`GithubFailure`] it is a
+/// fixed set, with one addition: the reason GitHub gave for refusing the
+/// content of a request, which holds no credential because GitHub answers about
+/// the content and never echoes the token.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum GithubWriteFailure {
+    /// HTTP 404 or 410: GitHub has no such repository for this token.
+    NotFound,
+    /// HTTP 401 or 403: GitHub refused the token.
+    Rejected,
+    /// HTTP 422: GitHub refused the content. Carries the reasons GitHub gave.
+    Invalid(String),
+    /// Anything else.
+    Unreachable,
+}
+
 /// One authenticated read of GitHub's REST API.
 pub(crate) trait GithubPullRequests: Send + Sync {
     /// GET `path` (starting with `/`, query included) on `api.github.com` and
     /// return the JSON body of a successful answer.
     fn get_json(&self, secret: &str, path: &str) -> Result<Value, GithubFailure>;
+
+    /// POST `body` as JSON to `path` (starting with `/`) on `api.github.com`
+    /// and return the JSON body of a successful answer. An implementation that
+    /// cannot write answers `Unreachable`.
+    fn post_json(
+        &self,
+        _secret: &str,
+        _path: &str,
+        _body: &Value,
+    ) -> Result<Value, GithubWriteFailure> {
+        Err(GithubWriteFailure::Unreachable)
+    }
 }
 
 /// The production client.
 pub(crate) struct HttpGithubPullRequests;
+
+/// An agent that returns a non-2xx answer as a response, so the body of a 422
+/// can be read for the reason GitHub gave.
+fn write_agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .timeout_global(Some(REQUEST_TIMEOUT))
+        .timeout_connect(Some(CONNECT_TIMEOUT))
+        .redirect_auth_headers(ureq::config::RedirectAuthHeaders::SameHost)
+        .http_status_as_error(false)
+        // A redirected POST may come back as a GET, whose answer is not the
+        // pull request. A redirect is a failure to create, not a success.
+        .max_redirects(0)
+        .build()
+        .into()
+}
 
 fn agent() -> ureq::Agent {
     ureq::Agent::config_builder()
@@ -68,6 +111,40 @@ pub(crate) fn classify(error: &ureq::Error) -> GithubFailure {
 }
 
 impl GithubPullRequests for HttpGithubPullRequests {
+    fn post_json(
+        &self,
+        secret: &str,
+        path: &str,
+        body: &Value,
+    ) -> Result<Value, GithubWriteFailure> {
+        if !path.starts_with('/') {
+            return Err(GithubWriteFailure::Unreachable);
+        }
+        let url = format!("{API}{path}");
+        let payload = serde_json::to_string(body).map_err(|_| GithubWriteFailure::Unreachable)?;
+        let mut response = write_agent()
+            .post(&url)
+            .header("Authorization", &format!("Bearer {secret}"))
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .header("User-Agent", "synthesis")
+            .header("Content-Type", "application/json")
+            .send(payload)
+            .map_err(|_| GithubWriteFailure::Unreachable)?;
+        let status = response.status().as_u16();
+        let text = response
+            .body_mut()
+            .read_to_string()
+            .map_err(|_| GithubWriteFailure::Unreachable)?;
+        match status {
+            200..=299 => serde_json::from_str(&text).map_err(|_| GithubWriteFailure::Unreachable),
+            401 | 403 => Err(GithubWriteFailure::Rejected),
+            404 | 410 => Err(GithubWriteFailure::NotFound),
+            422 => Err(GithubWriteFailure::Invalid(invalid_reason(&text))),
+            _ => Err(GithubWriteFailure::Unreachable),
+        }
+    }
+
     fn get_json(&self, secret: &str, path: &str) -> Result<Value, GithubFailure> {
         // The host is fixed here, so the token cannot be sent anywhere else.
         if !path.starts_with('/') {
@@ -90,6 +167,33 @@ impl GithubPullRequests for HttpGithubPullRequests {
             .map_err(|_| GithubFailure::Unreachable)?;
         serde_json::from_str(&body).map_err(|_| GithubFailure::Unreachable)
     }
+}
+
+/// The reasons of a 422 answer, joined: the `message` of GitHub's body and each
+/// error's own `message`. Text GitHub wrote about the request, never the token.
+pub(crate) fn invalid_reason(body: &str) -> String {
+    let Ok(value) = serde_json::from_str::<Value>(body) else {
+        return String::new();
+    };
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(message) = value.get("message").and_then(Value::as_str) {
+        parts.push(message.to_string());
+    }
+    if let Some(errors) = value.get("errors").and_then(Value::as_array) {
+        for error in errors {
+            if let Some(message) = error.get("message").and_then(Value::as_str) {
+                parts.push(message.to_string());
+            } else if let (Some(field), Some(code)) = (
+                error.get("field").and_then(Value::as_str),
+                error.get("code").and_then(Value::as_str),
+            ) {
+                // GitHub names a branch it does not hold by field and code,
+                // for example `head` and `invalid`.
+                parts.push(format!("{field} {code}"));
+            }
+        }
+    }
+    parts.join("; ")
 }
 
 /// What a paginated read found.

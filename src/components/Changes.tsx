@@ -40,6 +40,19 @@ import {
   pushUnavailableReason,
 } from "../gitSync";
 import { useGitTransfer } from "../hooks/useGitTransfer";
+import { ChangesFooter } from "./Changes/ChangesFooter";
+import { CheckBox, ChangeRow, NodeCount } from "./Changes/ChangeRow";
+import { SAVE_FAILED_KIND, rollbackFailureText } from "./Changes/rollbackText";
+import {
+  buildChangeTree,
+  commitSetOf,
+  entryVisible,
+  folderCheckState,
+  partitionEntries,
+  visibleFilesUnder,
+  type ChangeNode,
+} from "./Changes/tree";
+import type { PullRequestSource } from "./CreatePullRequest/types";
 import type { CommitFile } from "./CommitMessageModal";
 import type { RollbackFile } from "./RollbackConfirm";
 import type { RollbackResult } from "../types";
@@ -49,12 +62,10 @@ import {
   matchesLens,
   matchesText,
   presentTypes,
-  typeChip,
   typeLensPositions,
   type TypeLens,
 } from "../artifactTypes";
 import { Icon } from "./icons";
-import { SplitAction } from "./SplitAction";
 import { SelectorRow, type SelectorPosition } from "./SelectorRow";
 import {
   markRevealConsumed,
@@ -74,7 +85,6 @@ import {
 } from "../comparison";
 import type {
   BranchOption,
-  ChangeEntry,
   ChangeSet,
   ChangesCommitAction,
   ChangesMode,
@@ -82,183 +92,6 @@ import type {
   DiffTarget,
   PanelRevealRequest,
 } from "../types";
-
-// ---------------------------------------------------------------------------
-// Tree assembly (CHG-FR-08 / CHG-FR-09) — pure, and exported for its tests
-// ---------------------------------------------------------------------------
-
-export interface ChangeNode {
-  /** Stable key for expand/collapse and selection state (CHG-FR-17). */
-  key: string;
-  name: string;
-  /** Project-relative path of the folder or file. */
-  path: string;
-  kind: "folder" | "file";
-  /** Files only. */
-  entry?: ChangeEntry;
-  children: ChangeNode[];
-}
-
-/**
- * Build the nested folder tree for a set of already-filtered entries, with the
- * changed files as the only leaves (CHG-FR-08). Because the entries are filtered
- * first, a folder with no visible changed descendant simply never gets created —
- * which is exactly the rule CHG-FR-08 states.
- *
- * `keyPrefix` namespaces the node keys so the same path under **Revisioned** and
- * under **Unrevisioned** keeps independent expand state.
- */
-export function buildChangeTree(
-  entries: ChangeEntry[],
-  keyPrefix: string,
-): ChangeNode[] {
-  const roots: ChangeNode[] = [];
-  // Folder nodes by path, so repeated visits to the same folder reuse one node.
-  const folders = new Map<string, ChangeNode>();
-
-  const folderAt = (path: string): ChangeNode[] => {
-    if (path === "") return roots;
-    const existing = folders.get(path);
-    if (existing) return existing.children;
-    const slash = path.lastIndexOf("/");
-    const parent = slash === -1 ? "" : path.slice(0, slash);
-    const name = slash === -1 ? path : path.slice(slash + 1);
-    const node: ChangeNode = {
-      // Keys carry the node kind: a branch comparison can hold both a deleted
-      // file `a` and a new file `a/b.md`, and two sibling nodes named `a` with
-      // one key would collide in React and share expand state.
-      key: `${keyPrefix}d:${path}`,
-      name,
-      path,
-      kind: "folder",
-      children: [],
-    };
-    folders.set(path, node);
-    folderAt(parent).push(node);
-    return node.children;
-  };
-
-  for (const entry of entries) {
-    const slash = entry.path.lastIndexOf("/");
-    const parent = slash === -1 ? "" : entry.path.slice(0, slash);
-    folderAt(parent).push({
-      key: `${keyPrefix}f:${entry.path}`,
-      name: entry.name,
-      path: entry.path,
-      kind: "file",
-      entry,
-      children: [],
-    });
-  }
-
-  // Folders first, then files, each alphabetical — matching the Library's order.
-  const sort = (nodes: ChangeNode[]) => {
-    nodes.sort((a, b) => {
-      if (a.kind !== b.kind) return a.kind === "folder" ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-    for (const n of nodes) if (n.kind === "folder") sort(n.children);
-  };
-  sort(roots);
-  return roots;
-}
-
-/** Whether an entry survives the two AND-combined filters (CHG-FR-14). */
-export function entryVisible(
-  entry: ChangeEntry,
-  lens: TypeLens,
-  text: string,
-): boolean {
-  return matchesLens(lens, entry.artifactType) && matchesText(text, entry.name);
-}
-
-/**
- * Split a change set into the two top-level groups (CHG-FR-09): **Revisioned**,
- * holding every entry Git already tracks, and **Unrevisioned**, holding the
- * entries whose change status is untracked. The filters apply inside both groups
- * identically (CHG-FR-16).
- */
-export function partitionEntries(
-  entries: ChangeEntry[],
-  lens: TypeLens,
-  text: string,
-): { revisioned: ChangeEntry[]; unrevisioned: ChangeEntry[] } {
-  const visible = entries.filter((e) => entryVisible(e, lens, text));
-  return {
-    revisioned: visible.filter((e) => e.changeStatus !== "untracked"),
-    unrevisioned: visible.filter((e) => e.changeStatus === "untracked"),
-  };
-}
-
-/**
- * Every changed file at or below `node`, in tree order. Because the tree is
- * built from already-filtered entries, this is exactly the node's *currently
- * visible* descendants — which is what a folder's check cascades over and what
- * its tri-state is computed from (CHG-FR-28).
- */
-export function visibleFilesUnder(node: ChangeNode): ChangeEntry[] {
-  if (node.kind === "file") return node.entry ? [node.entry] : [];
-  return node.children.flatMap(visibleFilesUnder);
-}
-
-/**
- * CHG-FR-50 / CHG-FR-52: how many changed files are currently visible beneath a
- * node, counted recursively over its whole subtree rather than over its direct
- * children. Because the tree is built from already-filtered entries, this is by
- * construction the count the active filters admit — it is the same number the
- * node reveals when it is expanded, and it re-computes with the filters rather
- * than on a reload.
- */
-export function visibleFileCount(node: ChangeNode): number {
-  // Counted rather than collected: every folder and group row asks for this on
-  // every render, and `visibleFilesUnder` allocates an array per level.
-  if (node.kind === "file") return node.entry ? 1 : 0;
-  return node.children.reduce((sum, child) => sum + visibleFileCount(child), 0);
-}
-
-/** How a folder or group node's checkbox renders (CHG-FR-28). */
-export type CheckState = "checked" | "unchecked" | "indeterminate";
-
-/**
- * CHG-FR-28: a folder or group is checked when every visible changed file
- * beneath it is checked, unchecked when none is, and indeterminate when some
- * are. A folder with nothing visible beneath it cannot be rendered at all
- * (CHG-FR-08), so the empty case only arises defensively.
- */
-export function folderCheckState(
-  node: ChangeNode,
-  checked: ReadonlySet<string>,
-): CheckState {
-  const files = visibleFilesUnder(node);
-  if (files.length === 0) return "unchecked";
-  const ticked = files.filter((e) => checked.has(e.path)).length;
-  if (ticked === 0) return "unchecked";
-  return ticked === files.length ? "checked" : "indeterminate";
-}
-
-/**
- * CHG-FR-27: the **commit set** is exactly the file rows that are both checked
- * and currently visible under the active filters. A row the filters hide
- * contributes nothing whether or not it was checked while visible, so the panel
- * never commits a path the author cannot see.
- */
-export function commitSetOf(
-  visible: ChangeEntry[],
-  checked: ReadonlySet<string>,
-): CommitFile[] {
-  return visible
-    .filter((e) => checked.has(e.path))
-    .map((e) => ({ path: e.path, untracked: e.changeStatus === "untracked" }));
-}
-
-/** The label of the primary button for each action (CHG-FR-33). */
-const ACTION_LABELS: Record<ChangesCommitAction, string> = {
-  commit: "Commit",
-  commit_and_push: "Commit & Push",
-  push: "Push",
-};
-
-const ACTIONS: ChangesCommitAction[] = ["commit", "commit_and_push", "push"];
 
 /**
  * CHG-FR-02 / SNV-FR-62: the mode selector's two positions. Module-level so its
@@ -272,216 +105,17 @@ const MODE_POSITIONS: SelectorPosition<ChangesMode>[] = [
 ];
 
 export { canPush };
-
-// ---------------------------------------------------------------------------
-// Rows
-// ---------------------------------------------------------------------------
-
-/**
- * The diffstat cell (CHG-FR-10 / CHG-FR-11). Rendered at a fixed width so rows
- * do not shift horizontally as counts change during a reload.
- */
-function DiffStat({ entry }: { entry: ChangeEntry }) {
-  if (entry.isBinary) {
-    return (
-      <span className="change-row__stat" title="Binary file">
-        <span className="change-row__binary">binary</span>
-      </span>
-    );
-  }
-  return (
-    <span className="change-row__stat">
-      <span className="change-row__added">+{entry.addedLines ?? 0}</span>
-      <span className="change-row__removed">−{entry.removedLines ?? 0}</span>
-    </span>
-  );
-}
-
-/**
- * A checkbox whose indeterminate state is applied imperatively — the DOM
- * property has no JSX attribute, and a folder with only some of its visible
- * descendants ticked has to render as neither on nor off (CHG-FR-28).
- */
-function CheckBox({
-  state,
-  label,
-  onChange,
-}: {
-  state: CheckState;
-  label: string;
-  onChange: (next: boolean) => void;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = state === "indeterminate";
-  }, [state]);
-  return (
-    <input
-      ref={ref}
-      type="checkbox"
-      className="change-check"
-      aria-label={label}
-      checked={state === "checked"}
-      // CHG-FR-18: toggling a checkbox is not a click on the row — it changes
-      // the check and opens nothing.
-      onClick={(e) => e.stopPropagation()}
-      onChange={(e) => onChange(e.target.checked)}
-    />
-  );
-}
-
-/**
- * CHG-FR-50 / CHG-FR-53: the count of changed files visible beneath a folder or
- * group node, stated immediately after its label. It answers "how much is in
- * here?" without the node being opened and keeps answering it once it is, so it
- * is not conditioned on the node's expand state.
- *
- * CHG-FR-51: stated with the noun it counts and agreeing with it — `1 file`,
- * `13 files` — so the row reads as a sentence about its contents rather than
- * leaving the reader to work out what the digit beside a folder measures.
- *
- * It is text on the row and nothing more (CHG-FR-53): no activation target of
- * its own, so a pointer on it toggles the node exactly as the label does. A node
- * with nothing visible beneath it is never rendered (CHG-FR-08 / CHG-FR-16), so
- * no zero reaches the screen.
- */
-function NodeCount({ node }: { node: ChangeNode }) {
-  const count = visibleFileCount(node);
-  // No tooltip: the row carries none anywhere else, and one here would be an
-  // affordance the count is not supposed to have.
-  return (
-    <span className="tree-row__count">
-      {count} {count === 1 ? "file" : "files"}
-    </span>
-  );
-}
-
-interface ChangeRowProps {
-  node: ChangeNode;
-  depth: number;
-  open: boolean;
-  selected: boolean;
-  /** CHG-FR-26: null in Branch mode, which renders no checkbox at all. */
-  checkState: CheckState | null;
-  onCheck: (node: ChangeNode, next: boolean) => void;
-  onToggle: (node: ChangeNode) => void;
-  onOpen: (node: ChangeNode) => void;
-}
-
-function ChangeRow({
-  node,
-  depth,
-  open,
-  selected,
-  checkState,
-  onCheck,
-  onToggle,
-  onOpen,
-}: ChangeRowProps) {
-  const isFolder = node.kind === "folder";
-  const entry = node.entry;
-  return (
-    <div
-      className="tree-row"
-      style={{ paddingLeft: 4 + depth * 14 }}
-      data-selected={selected}
-      // CHG-FR-54: what a reveal scrolls to. The key rather than the path,
-      // because the same path under **Revisioned** and **Unrevisioned** is two
-      // distinct rows (CHG-FR-09).
-      data-node-key={node.key}
-      data-change-status={entry?.changeStatus}
-      onClick={() => (isFolder ? onToggle(node) : onOpen(node))}
-    >
-      {checkState && (
-        <CheckBox
-          state={checkState}
-          label={`Include ${node.path}`}
-          onChange={(next) => onCheck(node, next)}
-        />
-      )}
-      <span className="tree-row__caret">
-        {isFolder ? (
-          open ? (
-            <Icon.Caret size={12} />
-          ) : (
-            <Icon.CaretRight size={12} />
-          )
-        ) : null}
-      </span>
-      <span className="tree-row__icon">
-        {isFolder ? <Icon.Folder size={13} /> : <Icon.File size={13} />}
-      </span>
-      <span
-        className={
-          isFolder ? "tree-row__name tree-row__name--counted" : "tree-row__name"
-        }
-      >
-        {node.name}
-        {/* CHG-FR-12: a renamed entry sits at its current path and additionally
-            shows where it came from. */}
-        {entry?.previousPath && (
-          <span className="change-row__renamed"> (was {entry.previousPath})</span>
-        )}
-      </span>
-      {/* CHG-FR-50: how many changed files are visible beneath this folder,
-          against the label rather than in the trailing column the diffstats
-          occupy — a folder's file count read as a line count would be worse
-          than no count at all. */}
-      {isFolder && <NodeCount node={node} />}
-      {entry?.artifactType && (
-        <span
-          className="chip-type"
-          data-type={entry.artifactType}
-          title={
-            entry.typeSource
-              ? `${entry.artifactType} (${entry.typeSource})`
-              : entry.artifactType
-          }
-        >
-          {typeChip(entry.artifactType)}
-        </span>
-      )}
-      {entry && <DiffStat entry={entry} />}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Panel
-// ---------------------------------------------------------------------------
-
-/**
- * CHG-FR-65: render a typed rollback failure as a sentence.
- *
- * The kinds are the ones `../specifications/core/GTC-git.md` GTC-FR-25 returns.
- * An unrecognised kind is shown as it arrived rather than swallowed — a cause
- * the panel cannot name is still a cause the author needs to see.
- */
-/**
- * CHG-FR-61: the pseudo-kind a save failure carried into the rollback report
- * takes, so it renders beside the backend's own typed causes without pretending
- * to be one of them.
- */
-export const SAVE_FAILED_KIND = "unsaved_edit_lost";
-
-export function rollbackFailureText(kind: string): string {
-  switch (kind) {
-    case SAVE_FAILED_KIND:
-      return "an unsaved edit could not be written before it was discarded";
-    case "permission_denied":
-      return "permission denied";
-    case "not_found":
-      return "no longer exists";
-    case "is_directory":
-      return "is a folder, not a file";
-    case "path_outside_content_root":
-      return "lies outside the project";
-    case "write_failed":
-      return "could not be written";
-    default:
-      return kind;
-  }
-}
+export {
+  buildChangeTree,
+  commitSetOf,
+  entryVisible,
+  folderCheckState,
+  partitionEntries,
+  visibleFileCount,
+  visibleFilesUnder,
+} from "./Changes/tree";
+export type { ChangeNode, CheckState } from "./Changes/tree";
+export { SAVE_FAILED_KIND, rollbackFailureText } from "./Changes/rollbackText";
 
 interface ChangesProps {
   /** CHG-FR-18: open a Diff tab for a changed file under the active comparison. */
@@ -528,6 +162,8 @@ interface ChangesProps {
    * Git panel opens.
    */
   onRequestGithubToken?: () => Promise<boolean>;
+  /** CHG-FR-UPFP: open the Create a PR window for the current branch. */
+  onCreatePullRequest?: (source: PullRequestSource) => void;
   /** CHG-FR-45 / GHA-FR-19: no token is stored at all — route to where one is added. */
   onOpenGlobalSettings?: () => void;
   /**
@@ -558,6 +194,7 @@ export function Changes({
   onRequestCommitMessage,
   onRequestRollback,
   onRequestGithubToken,
+  onCreatePullRequest,
   onOpenGlobalSettings,
 }: ChangesProps) {
   const [mode, setMode] = useState<ChangesMode>("uncommitted");
@@ -1638,71 +1275,22 @@ export function Changes({
           Absent entirely outside a repository, because there is nothing to
           commit to. */}
       {!notARepository && (
-        <div className="changes-actions">
-          {/* CHG-FR-56: the rollback button holds the leading edge, in
-              Uncommitted mode of a Git repository and nowhere else. Because the
-              split control holds the trailing edge regardless, a mode that
-              renders no rollback button moves nothing in the footer. */}
-          {showChecks && (
-            <button
-              className="btn btn--sm btn--icon changes-actions__rollback"
-              // CHG-FR-58: the icon is never the only indication of the action —
-              // the accessible name and the tooltip both say it in words.
-              aria-label="Discard selected changes"
-              title={
-                rollbackUnavailableReason() ??
-                "Discard selected changes, returning these files to HEAD"
-              }
-              disabled={rollingBack || rollbackUnavailableReason() !== null}
-              data-busy={preparing || undefined}
-              onClick={() => void runRollback()}
-            >
-              <Icon.Rollback size={14} />
-              {/* CHG-FR-60: the preparation waits on somebody else's in-flight
-                  save, which is otherwise indistinguishable from nothing
-                  happening. */}
-              {preparing && (
-                <span className="changes-actions__rollback-progress">
-                  Discarding…
-                </span>
-              )}
-            </button>
-          )}
-          {/* CHG-FR-33 / CHG-FR-35 / CHG-FR-49: the split control, which is
-              the shared one the graduation publication choice also uses — one
-              object whose two halves dim together when the selected action
-              cannot be performed, whose dropdown stays operable while they do,
-              and whose inactive entry carries its reason on hover.
-
-              Commit and Commit & Push stay selectable while nothing is ticked,
-              because ticking is how the author makes them available. Push does
-              not: nothing done in this panel makes a branch that is level with
-              its remote pushable, so it renders inactive with the reason rather
-              than disappearing. */}
-          <SplitAction<ChangesCommitAction>
-            className="changes-actions__split"
-            value={action}
-            options={ACTIONS.map((value) => ({
-              value,
-              label: ACTION_LABELS[value],
-              unavailable:
-                value === "push" ? pushUnavailableReason(sync, pushRunning) : null,
-            }))}
-            onChange={selectAction}
-            onActivate={() => void runPrimary()}
-            available={primaryEnabled}
-            // CHG-FR-60: inert while a rollback is being confirmed, prepared, or
-            // executed. The dropdown is otherwise deliberately operable even
-            // when the selected action cannot be performed (CHG-FR-49), so this
-            // is the one condition that closes it — changing the commit action
-            // mid-rollback would act on a set that is moving.
-            primaryDisabled={!primaryEnabled || rollingBack}
-            menuDisabled={rollingBack}
-            primaryLabel={busy ? "Working…" : undefined}
-            primaryTitle={primaryReason}
-            menuLabel="Commit action"
-          />
-        </div>
+        <ChangesFooter
+          showRollback={showChecks}
+          rollbackReason={rollbackUnavailableReason()}
+          rollingBack={rollingBack}
+          preparing={preparing}
+          onRollback={() => void runRollback()}
+          action={action}
+          sync={sync}
+          pushRunning={pushRunning}
+          busy={busy}
+          primaryEnabled={primaryEnabled}
+          primaryReason={primaryReason}
+          onSelectAction={selectAction}
+          onRunPrimary={() => void runPrimary()}
+          onCreatePullRequest={onCreatePullRequest}
+        />
       )}
     </div>
   );

@@ -25,13 +25,14 @@ The version this protocol was established against is `2.1.233`. `AVI-agent-vendo
 
 ### Sources
 
-Every requirement below traces to one of these, all accessed **2026-08-16**:
+Every requirement below traces to one of these, all accessed **2026-08-16** except the gateway page, accessed **2026-10-09**:
 
 | Source | URL |
 |---|---|
 | Run Claude Code programmatically | `https://code.claude.com/docs/en/headless` |
 | CLI reference | `https://code.claude.com/docs/en/cli-reference` |
 | Manage sessions | `https://code.claude.com/docs/en/sessions` |
+| Connect Claude Code to an LLM gateway | `https://code.claude.com/docs/en/llm-gateway-connect` |
 | Get structured output from agents | `https://code.claude.com/docs/en/agent-sdk/structured-outputs` |
 | `claude --help` at `2.1.233` | the installed binary |
 | Direct observation at `2.1.233` | two probe runs, recorded in CCP-FR-06 and CCP-FR-11 |
@@ -122,10 +123,12 @@ Diagnostics only: startup warnings, invalid-flag errors, and skipped-configurati
 
 | Item | Form | Supplied by |
 |---|---|---|
-| OAuth token | `CLAUDE_CODE_OAUTH_TOKEN` in the container environment | `../core/AIC-agentic-integrations.md` AIC-FR-30 |
+| Subscription OAuth token | `CLAUDE_CODE_OAUTH_TOKEN` in the container environment | `../core/AIC-agentic-integrations.md` AIC-FR-30 |
+| Custom gateway | `ANTHROPIC_BASE_URL`, and the gateway token under the author's variable name (default `ANTHROPIC_AUTH_TOKEN`), in the container environment | `../core/AIC-agentic-integrations.md` AIC-FR-30 |
+| Author variables | further `NAME=value` entries in the container environment, which replace a variable of the same name above | `../core/AIC-agentic-integrations.md` AIC-FR-XZCS |
 | Session state | writable directory mounted in the container, addressed by `CLAUDE_CONFIG_DIR` | `../tools/EAC-execute-agent-cli.md` |
 
-Nothing else is required. This CLI needs no configuration file mount, no login directory, and no API key.
+Nothing else is required. This CLI needs no configuration file mount and no login directory.
 
 ## Functional requirements
 
@@ -150,10 +153,10 @@ Nothing else is required. This CLI needs no configuration file mount, no login d
 17. **CCP-FR-17** A resumed turn carries `--resume <session_id>` and no `--session-id`. Resumption restores the conversation history, tool calls, and results of the named session.
 18. **CCP-FR-18** Resumption requires the session's transcript to be readable in the container, and this CLI writes transcripts to `<config-dir>/projects/<project>/<session-id>.jsonl` inside whatever filesystem it is running on. This protocol therefore requires the mount of CCP-FR-19 for resumption to be reachable at all.
    - *Why:* A container without a session-state mount destroys every session it creates.
-19. **CCP-FR-19** Session state lives in a writable directory mounted into the container, and `CLAUDE_CONFIG_DIR` in the container environment addresses it. The directory is Synthesis-owned and holds transcripts rather than credentials; it carries no OAuth token, authentication reaching the container through the environment variable of CCP-FR-20 instead.
-20. **CCP-FR-20** Authentication is one environment variable, `CLAUDE_CODE_OAUTH_TOKEN`, carrying the token `../core/AIC-agentic-integrations.md`'s executor-only handoff supplies (AIC-FR-30). No configuration file, login directory, keychain, or API key is required, and this protocol reads none of them itself.
+19. **CCP-FR-19** Session state lives in a writable directory mounted into the container, and `CLAUDE_CONFIG_DIR` in the container environment addresses it. The directory is Synthesis-owned and holds transcripts rather than credentials; it carries no token, authentication reaching the container through the environment variables of CCP-FR-20 instead.
+20. **CCP-FR-20** Authentication is by environment variables alone, which `../core/AIC-agentic-integrations.md`'s executor-only handoff supplies (AIC-FR-30). Subscription mode supplies `CLAUDE_CODE_OAUTH_TOKEN`. Custom gateway mode supplies `ANTHROPIC_BASE_URL` and the gateway token under the author's variable name, and no `CLAUDE_CODE_OAUTH_TOKEN`. No configuration file, login directory, or keychain is required, and this protocol reads none of them itself.
 21. **CCP-FR-21** `--bare` is never generated.
-   - *Why:* Bare mode authenticates strictly by `ANTHROPIC_API_KEY` or an `apiKeyHelper` and never reads OAuth credentials, so it is incompatible with the token handoff of CCP-FR-20.
+   - *Why:* Bare mode authenticates strictly by `ANTHROPIC_API_KEY` or an `apiKeyHelper` and never reads OAuth credentials, so it is incompatible with the subscription handoff of CCP-FR-20.
 22. **CCP-FR-22** Because `--bare` is absent and `-p` skips the workspace trust dialog, the CLI loads configuration from the mounted working tree: hooks declared in the tree's `.claude/settings.json` run, and MCP servers declared in its `.mcp.json` connect, with no trust prompt. This is a property of the pinned invocation rather than an accident of it, and it is what makes the container — not the CLI — the isolation boundary.
 23. **CCP-FR-23** No flag outside this protocol's grammar is generated. `--continue`, `--fork-session`, `--no-session-persistence`, `--dangerously-skip-permissions`, `--max-turns`, `--input-format`, `--add-dir`, `--append-system-prompt`, `--agents`, `--mcp-config`, `--settings`, and every other flag the CLI accepts are absent, so the generated vector is derivable from this spec alone.
 24. **CCP-FR-24** A background Bash task the agent starts is terminated by the CLI about five seconds after the final result, and a background subagent is waited for up to a default ten-minute ceiling. Both are the vendor's own behavior inside the run and neither is something this protocol configures, but each can extend the wall-clock time between the agent answering and the process exiting.
@@ -166,7 +169,7 @@ Nothing else is required. This CLI needs no configuration file mount, no login d
 
 ## Non-functional requirements
 
-- Every fact in this spec traces to a source in the contract surface's table, accessed 2026-08-16, or to a probe run recorded in CCP-FR-06, CCP-FR-09, or CCP-FR-11. Behavior established only by observation is marked as observed rather than presented as documented.
+- Every fact in this spec traces to a source in the contract surface's table, accessed on the date it states, or to a probe run recorded in CCP-FR-06, CCP-FR-09, or CCP-FR-11. Behavior established only by observation is marked as observed rather than presented as documented.
 - This spec is self-contained. It reads no other vendor's protocol, is not written to be compared with one, and holds no statement whose truth depends on what another vendor does; a reader needs nothing but this file and the sources it names to generate a correct invocation.
 - The complete argument vector is derivable from this spec without running anything, which is what lets a test assert it exactly.
 - The full result document carries cost, token usage, and per-model accounting. This protocol reads none of it beyond the five fields the contract surface names, so a vendor addition to the document is not a protocol change.

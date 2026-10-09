@@ -64,7 +64,7 @@ use repository::{
 #[cfg(test)]
 use repository::repository_metadata_paths_within;
 
-use descriptor::{BindMount, CLAUDE_TOKEN_ENV, WORKSPACE_TARGET};
+use descriptor::{BindMount, WORKSPACE_TARGET};
 use protocol::{AgentResponseEnvelope, AgentTaskRequest, EnvelopeInvalid, LimitName, TaskInvalid};
 use runtime::{
     CancellationToken, CapturedStream, DockerRuntime, HostDockerCli, RunEnd, RunRequest,

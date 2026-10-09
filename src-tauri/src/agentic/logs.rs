@@ -40,6 +40,14 @@ pub(super) fn log_verify_attempt<S: LogSink + Clone + Send + 'static>(
             "hasBaseUrl" => config.base_url.is_some(),
             "newApiKey" => config.api_key.is_some(),
             "newOauthToken" => config.oauth_token.is_some(),
+            // AIC-FR-WNQR / AIC-FR-SXVA: the mode, whether a new gateway token
+            // came with it, and how many author entries — never a value.
+            "authMode" => match config.auth_mode.as_deref() {
+                None => "subscription",
+                Some(raw) => AuthMode::parse(raw).map_or("unrecognised", |_| raw),
+            },
+            "newGatewayToken" => config.gateway_token.is_some(),
+            "envVars" => config.env_vars.as_ref().map_or(0, Vec::len),
         },
     );
 }
@@ -63,6 +71,7 @@ pub(super) fn log_verify_outcome<S: LogSink + Clone + Send + 'static>(
                 "keyState" => format!("{:?}", integration.key_state),
                 "version" => integration.version.clone().unwrap_or_else(|| "none".into()),
                 "models" => integration.models.len(),
+                "authMode" => format!("{:?}", integration.auth_mode),
                 "durationMs" => duration_ms,
             },
         ),

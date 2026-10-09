@@ -979,6 +979,7 @@ pub fn verify_integration_impl(
             auth: descriptor.auth,
             models_path: descriptor.models_path,
             models_format: descriptor.models_format,
+            report_status: false,
         })
         .map_err(api_probe_error)?;
 

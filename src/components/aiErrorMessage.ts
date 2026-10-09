@@ -2,6 +2,41 @@ import { AI_ERRORS } from "../types";
 import { tlsErrorMessage } from "../tlsError";
 
 /**
+ * AII-FR-DKDC, AII-FR-HOKG: the failures of Claude Code's Custom Gateway. Their
+ * wire text carries a detail after the first colon — a status, a network cause,
+ * a variable name, or an entry number — so they are read by prefix. The detail
+ * is text the backend chose; nothing the author typed is quoted back.
+ */
+function gatewayErrorMessage(raw: string): string | null {
+  const colon = raw.indexOf(":");
+  const code = colon === -1 ? raw : raw.slice(0, colon);
+  const detail = colon === -1 ? "" : raw.slice(colon + 1);
+  switch (code) {
+    case AI_ERRORS.gatewayStatus: {
+      const hint =
+        detail === "401" || detail === "403"
+          ? " Check the token and the token variable name."
+          : detail === "404"
+            ? " Check the base URL."
+            : "";
+      return `The gateway answered with HTTP ${detail}.${hint}`;
+    }
+    case AI_ERRORS.gatewayUnreachable:
+      return `The gateway could not be reached: ${detail || "no cause given"}`;
+    case AI_ERRORS.gatewayNotAModelList:
+      return "The gateway answered, but not with a model list.";
+    case AI_ERRORS.tokenVarInvalid:
+      return "The token variable name is not valid. Use letters, digits, and underscores, and do not start with a digit.";
+    case AI_ERRORS.envVarInvalid:
+      return `Environment variable entry ${detail} is not written as NAME=value.`;
+    case AI_ERRORS.envVarReserved:
+      return `${detail} is set by Synthesis and cannot be used as an environment variable here.`;
+    default:
+      return null;
+  }
+}
+
+/**
  * Render a typed backend rejection as text that says what to do about it.
  *
  * The failures are deliberately distinguishable — a wrong path, a permissions
@@ -13,6 +48,8 @@ export function aiErrorMessage(e: unknown): string {
   // AII-FR-09 / AII-FR-20: a refused certificate names its host and its cause.
   const tls = tlsErrorMessage(raw);
   if (tls) return tls;
+  const gateway = gatewayErrorMessage(raw);
+  if (gateway) return gateway;
   switch (raw) {
     case AI_ERRORS.pathEmpty:
       return "Enter the path to the CLI before verifying.";

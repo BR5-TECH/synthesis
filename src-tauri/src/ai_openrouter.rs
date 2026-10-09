@@ -359,6 +359,7 @@ mod live {
                 auth: crate::ai_shared::AuthStyle::Bearer,
                 models_path: "/models",
                 models_format: crate::ai_shared::ModelsFormat::Lenient,
+                report_status: false,
             })
             .expect("the public model listing answers");
 

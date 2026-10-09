@@ -21,6 +21,7 @@ import {
   apiStatus,
   type AgenticDraft,
 } from "./AiIntegrations";
+import { emptyDraft } from "./agenticDraft";
 import { AI_ERRORS } from "../types";
 import {
   AGENTIC_ALL,
@@ -85,7 +86,10 @@ describe("the AI integrations section", () => {
         "Custom",
       ]),
     );
-    expect(agenticLevel().getAllByRole("tab").map((t) => t.textContent)).toEqual([
+    // The vendor strip alone: the Claude Code tab holds a strip of its own
+    // (AII-FR-IUUM), which is not a tab of this level.
+    const vendorStrip = agenticLevel().getByRole("tablist", { name: "Agentic AI" });
+    expect(within(vendorStrip).getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Claude Code",
       "Codex",
       "OpenCode",
@@ -317,10 +321,7 @@ describe("the AI integrations section", () => {
 
 describe("the status lines", () => {
   const draft = (over: Partial<AgenticDraft> = {}): AgenticDraft => ({
-    path: "",
-    baseUrl: "",
-    apiKey: "",
-    oauthToken: "",
+    ...emptyDraft(),
     ...over,
   });
 

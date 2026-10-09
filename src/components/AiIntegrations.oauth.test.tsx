@@ -21,6 +21,7 @@ import {
   rendersOauthTokenField,
   type AgenticDraft,
 } from "./AiIntegrations";
+import { emptyDraft } from "./agenticDraft";
 import { type AgenticVendorId, AI_ERRORS, isValidClaudeOauthToken } from "../types";
 import {
   AGENTIC_ALL,
@@ -407,10 +408,7 @@ describe("the Claude Code OAuth token field", () => {
 
 describe("the OAuth token rules", () => {
   const draft = (over: Partial<AgenticDraft> = {}): AgenticDraft => ({
-    path: "",
-    baseUrl: "",
-    apiKey: "",
-    oauthToken: "",
+    ...emptyDraft(),
     ...over,
   });
 

@@ -79,9 +79,10 @@ impl Drop for SecretString {
 /// names the person at the keyboard. AIC-FR-31 forbids a rendering that carries
 /// either.
 pub enum AgentLaunchCredential {
-    /// Claude Code authenticates with an OAuth token, presented as one
-    /// environment variable on one container (EAC-FR-15).
-    ClaudeOauthToken(SecretString),
+    /// Claude Code authenticates through environment variables on one
+    /// container: its subscription token, or its gateway URL and token, and
+    /// the author's own variables (AIC-FR-XZCS, EAC-FR-15).
+    ClaudeEnvironment(Vec<LaunchVariable>),
     /// Codex authenticates through the login directory its own CLI wrote on
     /// this machine, mounted read-only (EAC-FR-16). Not a secret this module
     /// holds — a location it resolves and never opens.
@@ -93,7 +94,11 @@ impl std::fmt::Debug for AgentLaunchCredential {
         // Which vendor's material this is, and nothing about what it holds.
         // That is the whole of what a diagnostic has any use for.
         match self {
-            Self::ClaudeOauthToken(_) => f.write_str("AgentLaunchCredential::ClaudeOauthToken"),
+            Self::ClaudeEnvironment(variables) => write!(
+                f,
+                "AgentLaunchCredential::ClaudeEnvironment({} variables)",
+                variables.len()
+            ),
             Self::CodexConfigMount { .. } => {
                 f.write_str("AgentLaunchCredential::CodexConfigMount(<redacted>)")
             }
@@ -104,6 +109,9 @@ impl std::fmt::Debug for AgentLaunchCredential {
 /// The vendor is not one this application can execute in a container:
 /// `opencode`, or either API-kind vendor (AIC-FR-30).
 pub const ERR_NOT_AN_EXECUTABLE_CLI: &str = "not_an_executable_cli";
+/// The registry could not be read, so the authentication mode is unknown
+/// (AIC-FR-30).
+pub const ERR_REGISTRY_UNAVAILABLE: &str = "registry_unavailable";
 /// Codex resolves, but the login directory its CLI writes is not on this
 /// machine — the author has not signed in to Codex here (AIC-FR-30).
 pub const ERR_CODEX_CONFIG_MISSING: &str = "codex_config_missing";
@@ -113,6 +121,7 @@ pub const ERR_CODEX_CONFIG_MISSING: &str = "codex_config_missing";
 /// Not a `#[tauri::command]`, not registered in `generate_handler!`, and not
 /// reachable from the frontend. Its only caller is the agent-CLI executor.
 pub fn resolve_agent_launch_credential(
+    store: &GlobalSettingsStore,
     ai: &AgenticIntegrations,
     vendor: &str,
 ) -> Result<AgentLaunchCredential, String> {
@@ -126,14 +135,29 @@ pub fn resolve_agent_launch_credential(
     }
 
     if descriptor.requires_oauth_token() {
+        // AIC-FR-WNQR: the stored mode decides which credential this launch
+        // reads. A registry that cannot be read is a refusal, never a quiet
+        // fall back to the other mode's credential.
+        let (records, _) = store
+            .load_agentic_registry()
+            .map_err(|_| ERR_REGISTRY_UNAVAILABLE.to_string())?;
+        let record = records
+            .into_iter()
+            .find(|r| r.vendor == vendor)
+            .unwrap_or_else(|| AgenticRecord::empty(vendor));
+        let secret_id = match record.auth_mode {
+            AuthMode::Subscription => vendor,
+            AuthMode::CustomGateway => GATEWAY_SECRET_ID,
+        };
         let token = ai
             .secrets
-            .get(vendor)
+            .get(secret_id)
             .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
             .ok_or(ERR_TOKEN_MISSING)?;
-        return Ok(AgentLaunchCredential::ClaudeOauthToken(SecretString::new(
-            token,
-        )));
+        let credential = SecretString::new(token);
+        return Ok(AgentLaunchCredential::ClaudeEnvironment(
+            compose_launch_environment(&record, &credential)?,
+        ));
     }
 
     let mount = descriptor

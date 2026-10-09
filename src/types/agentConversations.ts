@@ -63,6 +63,11 @@ export const AGENT_TURN_FAILURES = {
    * carries `tlsFailure`, which names the host and the cause.
    */
   tlsUntrusted: "tls_untrusted",
+  /**
+   * CVL-FR-21: the provider answered with a reply that could not be read.
+   * Recoverable: the author can retry, but the loop does not repeat it.
+   */
+  invalidResponse: "invalid_response",
 } as const;
 
 export type AgentTurnFailure =

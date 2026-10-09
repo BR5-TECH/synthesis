@@ -79,6 +79,9 @@ tokio = { version = "1", features = ["rt", "time", "process", "io-util", "macros
 # `ApiErrorContext.status` is an `http::StatusCode`, which the probe maps onto
 # the shared refused-versus-unreachable distinction.
 http = "1"
+# CVL-FR-TQRD: the body type of the HTTP client `rig` is given, which the
+# Custom gateway repair wraps.
+bytes = "1"
 # FNT-FR-02 / FNT-FR-04: `list_system_fonts` reports the families this machine
 # has and whether each advances every glyph by a fixed width. `fontdb` is a
 # pure-Rust reader of the platform's own font directories, so the query costs

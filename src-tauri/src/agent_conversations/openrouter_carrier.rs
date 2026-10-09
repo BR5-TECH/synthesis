@@ -250,6 +250,8 @@ pub(super) fn reply_from_openrouter(
         native_calls,
         native_usage,
         native_entries_dropped: 0,
+        // CVL-FR-TQRD: the repair belongs to the Custom gateway alone.
+        text_format_repaired: false,
         served_by,
         // CVL-FR-28: what this one call presented, as this client counted it.
         // A count of zero is read as not counted, on the same terms

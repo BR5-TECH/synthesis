@@ -139,6 +139,7 @@ mod openrouter_carrier;
 mod prose_tool_calls;
 mod provider_memory;
 mod registry;
+mod responses_repair;
 mod reporting;
 mod retries;
 mod rig_bridge;

@@ -4953,6 +4953,7 @@ dependencies = [
  "block2",
  "bm25",
  "bollard",
+ "bytes",
  "dirs",
  "fontdb",
  "futures-util",

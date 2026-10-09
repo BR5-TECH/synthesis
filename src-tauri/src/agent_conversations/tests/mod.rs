@@ -617,6 +617,7 @@ mod provider_tools;
 mod proposal_history;
 mod request_history;
 mod request_shape;
+mod responses_repair;
 mod retries;
 mod session_log;
 mod tool_loop_bounds;

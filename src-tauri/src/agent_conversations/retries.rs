@@ -115,6 +115,28 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 }
                 reply
             });
+        // CVL-FR-TQRD: a reply the Custom gateway repair changed. Recorded for
+        // every answered attempt, usable or not, so a gateway that keeps
+        // returning `"text": {}` is visible in the log. The provider and the
+        // model alone, never any part of the reply.
+        if let Ok(reply) = &outcome {
+            if reply.text_format_repaired {
+                logging::log_warn(
+                    app,
+                    turns.buffer(),
+                    &[Domain::Ai, Domain::Remote],
+                    "provider reply had no text format and was read as plain text",
+                    log_fields! {
+                        "turnId" => &plan.turn_id,
+                        "agent" => &plan.agent.nickname,
+                        "provider" => &endpoint.provider,
+                        "model" => model_label,
+                        "modelCall" => model_calls,
+                        "attempt" => attempt,
+                    },
+                );
+            }
+        }
         let failure = match outcome {
             Ok(reply) if reply_is_usable(&reply, at_bound, &plan.request.tools) => {
                 // CVL-FR-28: accumulated on the usable reply alone. A failed

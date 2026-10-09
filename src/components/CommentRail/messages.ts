@@ -59,6 +59,8 @@ export function turnFailureMessage(raw: string): string {
       return "The system keychain is unavailable, so the agent could not be reached.";
     case AGENT_TURN_FAILURES.tlsUntrusted:
       return "The certificate of the agent's provider is not trusted.";
+    case AGENT_TURN_FAILURES.invalidResponse:
+      return "The agent's provider answered with a reply the app could not read.";
     default:
       return raw;
   }

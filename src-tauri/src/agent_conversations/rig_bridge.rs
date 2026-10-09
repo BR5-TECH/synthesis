@@ -139,8 +139,32 @@ pub(super) mod rig_seam {
                 native_usage: None,
                 native_entries_dropped: 0,
                 input_tokens: input_tokens_of(&response.usage),
+                // The carrier sets this where it repaired the reply.
+                text_format_repaired: false,
             }),
-            Err(e) => Err(classify_provider_error(&e.to_string())),
+            Err(e) => Err(classify_completion_error(&e)),
+        }
+    }
+
+    /// The text `rig` 0.41 gives when a reply held no message and no tool call.
+    pub const EMPTY_RESPONSE_MESSAGE: &str = "Response contained no message or tool call (empty)";
+
+    /// CVL-FR-21: classify a framework error by its kind before any text of it
+    /// is read.
+    ///
+    /// A body the framework could not decode is `decode`: the provider answered,
+    /// so it is not `unreachable`. The framework's own report of a reply with no
+    /// message and no tool call is `empty_reply`. Only an error whose kind does
+    /// not settle its class goes to the text classification. No text of the
+    /// error goes into the failure.
+    pub fn classify_completion_error(error: &rig::completion::CompletionError) -> CallFailure {
+        use rig::completion::CompletionError;
+        match error {
+            CompletionError::JsonError(_) => CallFailure::new(FAIL_INVALID_RESPONSE, class::DECODE),
+            CompletionError::ResponseError(message) if message == EMPTY_RESPONSE_MESSAGE => {
+                CallFailure::from(FAIL_EMPTY_REPLY)
+            }
+            other => classify_provider_error(&other.to_string()),
         }
     }
 
@@ -325,6 +349,9 @@ pub(super) enum OpenAiRoute {
 pub(super) struct OpenAiAdapterConfig {
     pub base_url: String,
     pub route: OpenAiRoute,
+    /// CVL-FR-TQRD: whether a Responses reply gets the `text.format` repair.
+    /// Set for the Custom gateway alone.
+    pub repair_text_format: bool,
 }
 
 /// AAP-FR-ADPX / CVL-FR-ZPGW: the adapter configuration an endpoint calls for.
@@ -338,6 +365,7 @@ pub(super) fn openai_adapter_config(endpoint: &AiApiCall) -> OpenAiAdapterConfig
         return OpenAiAdapterConfig {
             base_url: endpoint.base_url.clone(),
             route: OpenAiRoute::Unrestricted,
+            repair_text_format: false,
         };
     }
     OpenAiAdapterConfig {
@@ -347,6 +375,7 @@ pub(super) fn openai_adapter_config(endpoint: &AiApiCall) -> OpenAiAdapterConfig
             Some(crate::ai_shared::ModelMode::Responses) => OpenAiRoute::Responses,
             None => OpenAiRoute::Unrestricted,
         },
+        repair_text_format: true,
     }
 }
 
@@ -368,6 +397,13 @@ async fn carry_openai(
     // trust setup of its own.
     let (http_client, tls_record) = crate::tls::rig_http_client()
         .map_err(|_| CallFailure::unreachable(class::CONNECT))?;
+    // CVL-FR-TQRD: the Custom gateway's replies are repaired before `rig` reads
+    // them. Every other provider's client passes its replies unchanged.
+    let http_client = super::responses_repair::ResponsesRepair::new(
+        http_client,
+        config.repair_text_format,
+    );
+    let repair = http_client.clone();
     let client = rig::providers::openai::Client::builder()
         .api_key(endpoint.api_key.clone().unwrap_or_default())
         .base_url(&config.base_url)
@@ -385,7 +421,12 @@ async fn carry_openai(
             rig_seam::run_model(client.completions_api().completion_model(model_id), request).await
         }
     };
-    result.map_err(|failure| with_recorded_tls(failure, &tls_record))
+    result
+        .map(|mut reply| {
+            reply.text_format_repaired = repair.repaired();
+            reply
+        })
+        .map_err(|failure| with_recorded_tls(failure, &tls_record))
 }
 
 /// CVL-FR-36: make the call, and narrow the provider-native entries it carries

@@ -242,6 +242,7 @@ impl CompletionSeam for GatedCompletion {
             native_calls: Vec::new(),
             native_usage: None,
             native_entries_dropped: 0,
+            text_format_repaired: false,
             served_by: None,
             prompt_tokens: None,
             output_tokens: None,

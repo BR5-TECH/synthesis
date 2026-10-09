@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { AGENT_TURN_FAILURES } from "../../types";
-import { loggableTurnFailure } from "./messages";
+import { loggableTurnFailure, turnFailureMessage } from "./messages";
 
 describe("what a refused dispatch puts in the log", () => {
   it.each(Object.values(AGENT_TURN_FAILURES))(
@@ -18,5 +18,20 @@ describe("what a refused dispatch puts in the log", () => {
     "agent_not_found ",
   ])("CTA-FR-UUXA: any other text is logged as unexpected (%j)", (raw) => {
     expect(loggableTurnFailure(raw)).toBe("unexpected");
+  });
+});
+
+describe("what a typed failure says", () => {
+  it.each(Object.values(AGENT_TURN_FAILURES))(
+    "AGC-FR-15: the typed failure %s has a message of its own",
+    (code) => {
+      expect(turnFailureMessage(code)).not.toBe(code);
+    },
+  );
+
+  it("AGC-FR-15: a reply the app could not read has its own message", () => {
+    expect(turnFailureMessage("invalid_response")).toBe(
+      "The agent's provider answered with a reply the app could not read.",
+    );
   });
 });

@@ -46,11 +46,18 @@ fn request() -> AgentRequest {
 
 /// Serve exactly one HTTP request on loopback with a refusal, and hand back what
 /// was received (the request line and the headers).
-fn refuse_once() -> (String, std::thread::JoinHandle<String>) {
+fn refuse_once() -> (
+    String,
+    std::thread::JoinHandle<String>,
+    std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
+    let accepted = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = accepted.clone();
     let handle = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
+        flag.store(true, std::sync::atomic::Ordering::SeqCst);
         stream
             .set_read_timeout(Some(Duration::from_secs(10)))
             .unwrap();
@@ -74,16 +81,23 @@ fn refuse_once() -> (String, std::thread::JoinHandle<String>) {
         );
         String::from_utf8_lossy(&received).to_string()
     });
-    (url, handle)
+    (url, handle, accepted)
 }
 
 /// Make one call through the production seam and return what the server saw.
 fn call_once(mode: Option<ModelMode>) -> (String, Result<ModelReply, CallFailure>) {
-    let (url, server) = refuse_once();
+    let (url, server, accepted) = refuse_once();
     let endpoint = custom_endpoint(&url, mode);
     let request = request();
     let exchange = opening_exchange(&request, false);
     let outcome = RigCompletion.complete(&request, &exchange, &endpoint, Duration::from_secs(20));
+    // A call refused before it is sent leaves the server waiting for a
+    // connection. This empty one releases it, so that case fails and does not
+    // hang. It is made only while the server still waits, so it cannot reach a
+    // listener another test bound to the same port after this one closed.
+    if !accepted.load(std::sync::atomic::Ordering::SeqCst) {
+        drop(std::net::TcpStream::connect(url.trim_start_matches("http://")));
+    }
     (server.join().unwrap(), outcome)
 }
 

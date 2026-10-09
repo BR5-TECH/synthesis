@@ -98,11 +98,18 @@ fn an_anthropic_request_carries_no_reasoning_parameter_for_any_choice() {
 /// Serve exactly one HTTP request on loopback with a refusal, and hand back the
 /// whole request: the request line, the headers, and the body. A connection
 /// that sends nothing gives an empty string.
-fn refuse_once() -> (std::net::SocketAddr, std::thread::JoinHandle<String>) {
+fn refuse_once() -> (
+    std::net::SocketAddr,
+    std::thread::JoinHandle<String>,
+    std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
+    let accepted = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = accepted.clone();
     let handle = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
+        flag.store(true, std::sync::atomic::Ordering::SeqCst);
         stream
             .set_read_timeout(Some(Duration::from_secs(10)))
             .unwrap();
@@ -136,7 +143,7 @@ fn refuse_once() -> (std::net::SocketAddr, std::thread::JoinHandle<String>) {
         );
         String::from_utf8_lossy(&received).to_string()
     });
-    (addr, handle)
+    (addr, handle, accepted)
 }
 
 // CVL-FR-KXTQ, CVL-FR-HBNW: a turn on a model that `rig` does not know, with a
@@ -145,7 +152,7 @@ fn refuse_once() -> (std::net::SocketAddr, std::thread::JoinHandle<String>) {
 // ends in `/v1`.
 #[test]
 fn an_anthropic_call_reaches_the_messages_api_with_the_limit_and_no_reasoning() {
-    let (addr, server) = refuse_once();
+    let (addr, server, accepted) = refuse_once();
     let endpoint = anthropic_endpoint(
         &format!("http://{addr}/v1"),
         "claude-opus-5-5",
@@ -158,8 +165,11 @@ fn an_anthropic_call_reaches_the_messages_api_with_the_limit_and_no_reasoning() 
     let outcome = RigCompletion.complete(&request, &exchange, &endpoint, Duration::from_secs(20));
     // A call refused before it is sent leaves the server waiting for a
     // connection. This empty one releases it, so that case fails below and does
-    // not hang. After a real call the server is done, and this has no effect.
-    drop(TcpStream::connect(addr));
+    // not hang. It is made only while the server still waits, so it cannot reach
+    // a listener another test bound to the same port after this one closed.
+    if !accepted.load(std::sync::atomic::Ordering::SeqCst) {
+        drop(TcpStream::connect(addr));
+    }
     let seen = server.join().unwrap();
 
     let first = seen.lines().next().unwrap_or_default();

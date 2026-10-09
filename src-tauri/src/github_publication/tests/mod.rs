@@ -366,6 +366,7 @@ pub(super) fn origin() -> PublicationRemote {
         repository_name: Some("widgets".to_string()),
         eligibility: RemoteEligibility::Eligible,
         reason: None,
+        tls_failure: None,
     }
 }
 

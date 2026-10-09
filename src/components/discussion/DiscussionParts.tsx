@@ -11,6 +11,7 @@
 import { Icon } from "../icons";
 import { isFragmentTargeted } from "../../types";
 import type { AgentTurn, Discussion } from "../../types";
+import { failedTurnDetail } from "../CommentRail/messages";
 
 export interface ThreadActionsProps {
   thread: Discussion;
@@ -134,6 +135,14 @@ export function TurnOutcomes({
           <p className="comment__body comment__body--failed">
             {failedTurn.nickname} could not produce a response.
           </p>
+        {failedTurnDetail(failedTurn) && (
+          <p
+            className="comment__body comment__body--failed"
+            data-testid="comment-failed-tls"
+          >
+            {failedTurnDetail(failedTurn)}
+          </p>
+        )}
           {/* CTA-FR-XZUO: a locked thread takes no further turn, so it offers no
               Retry. A resolved one keeps it. */}
           {!thread.locked && (

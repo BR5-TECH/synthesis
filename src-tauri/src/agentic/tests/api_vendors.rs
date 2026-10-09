@@ -5,6 +5,28 @@ use super::*;
 
 // -- AIC-FR-22, AIC-FR-26: API verification failures -----------------------------
 
+// AIC-FR-22, AAP-FR-HZTB
+#[test]
+fn a_refused_certificate_fails_api_verification_with_host_and_cause() {
+    let failure = crate::tls::TlsFailure::new("agents.corp", crate::tls::TlsCause::HostnameMismatch);
+    let h = harness(
+        FakeFs::with_executable(&[]),
+        Arc::new(FakeRunner::default()),
+        FakeProber::failing(ProbeError::TlsUntrusted(failure)),
+        FakeKeychain::new(),
+    );
+    let error = verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "claude_agent_api",
+        &api_config("https://agents.corp/v1", Some("k")),
+    )
+    .unwrap_err();
+    assert_eq!(error, "tls_untrusted:hostname_mismatch:agents.corp");
+    assert_ne!(error, ERR_UNREACHABLE);
+    assert!(h.store.load_agentic_registry().unwrap().0.is_empty());
+}
+
 #[test]
 fn aic_ts24_each_api_failure_is_distinguishable() {
     let cases: Vec<(ProbeError, &str)> = vec![

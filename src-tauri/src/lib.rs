@@ -60,6 +60,7 @@ pub mod skills;
 pub mod statistics;
 pub mod storage_floor;
 pub mod streams;
+pub mod tls;
 pub mod tools;
 pub mod watcher;
 pub mod window;
@@ -198,6 +199,10 @@ pub fn run() {
                 // than degrade into an application whose every write is refused.
                 panic!("synthesis: could not establish filesystem access: {e}");
             }
+            // AAP-FR-MXJD: the operating system certificate store is read on
+            // every start, off this thread, and the first outbound call waits
+            // for the result.
+            tls::load_at_start(app.handle());
             // ASV-FR-20: tell the vault where migration's candidates come
             // from. A keyring enumerates no entry, so the earlier
             // one-entry-per-secret layout can only be found by asking the

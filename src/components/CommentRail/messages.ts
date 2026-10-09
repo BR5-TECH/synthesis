@@ -3,7 +3,8 @@
  *
  * Kept apart from the rail so the rules stay readable and testable on their own.
  */
-import { AGENT_TURN_FAILURES, COMMENT_ERRORS } from "../../types";
+import { tlsFailureMessage } from "../../tlsError";
+import { AGENT_TURN_FAILURES, COMMENT_ERRORS, type AgentTurn } from "../../types";
 
 /**
  * The part of a refused dispatch that is safe to log: the typed failure code,
@@ -15,6 +16,18 @@ export function loggableTurnFailure(raw: string): string {
   return (Object.values(AGENT_TURN_FAILURES) as string[]).includes(raw)
     ? raw
     : "unexpected";
+}
+
+/**
+ * CTA-FR-EXVN: the one detail a failed contribution names — the host and the
+ * cause of a refused certificate. `null` for every other failure, which names
+ * nothing but the Retry beside it.
+ */
+export function failedTurnDetail(turn: AgentTurn): string | null {
+  if (turn.failure !== AGENT_TURN_FAILURES.tlsUntrusted || !turn.tlsFailure) {
+    return null;
+  }
+  return tlsFailureMessage(turn.tlsFailure);
 }
 
 /**
@@ -44,6 +57,8 @@ export function turnFailureMessage(raw: string): string {
       return "The agent answered with nothing.";
     case AGENT_TURN_FAILURES.keychainUnavailable:
       return "The system keychain is unavailable, so the agent could not be reached.";
+    case AGENT_TURN_FAILURES.tlsUntrusted:
+      return "The certificate of the agent's provider is not trusted.";
     default:
       return raw;
   }

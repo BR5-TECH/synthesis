@@ -858,16 +858,6 @@ pub fn resolve_project(
     }
 }
 
-/// Map a probe failure onto this module's typed error vocabulary (AAP-FR-05).
-fn api_probe_error(e: ProbeError) -> String {
-    match e {
-        ProbeError::Unreachable(_) => ERR_UNREACHABLE.to_string(),
-        ProbeError::Rejected => ERR_REJECTED.to_string(),
-        ProbeError::NotExpectedKind => ERR_NOT_AN_AI_ENDPOINT.to_string(),
-        ProbeError::TimedOut => ERR_TIMED_OUT.to_string(),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Command implementations
 // ---------------------------------------------------------------------------
@@ -1858,7 +1848,9 @@ pub fn set_project_ai_api_integration(
 
 mod agent_provider;
 pub(crate) mod custom_gateway;
+mod probe_error;
 mod turn_timeout;
+use probe_error::api_probe_error;
 pub use agent_provider::*;
 pub use turn_timeout::*;
 

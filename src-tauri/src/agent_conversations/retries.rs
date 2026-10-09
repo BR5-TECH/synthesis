@@ -237,13 +237,13 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
         // AGC-FR-19: a lock is what stops a conversation taking further
         // contributions, so a turn whose thread was locked while it was failing
         // has nowhere to deliver whatever a retry produced.
-        let locked = failure.recoverable()
+        let locked = failure.repeatable()
             && budget_left
             && time_left
             && !cancelled
             && thread_is_locked(plan.roots.borrowed(), &plan.origin);
         let will_retry =
-            failure.recoverable() && budget_left && time_left && !cancelled && !locked;
+            failure.repeatable() && budget_left && time_left && !cancelled && !locked;
         let planned = if will_retry {
             backoff_delay(&policy, attempt + 1, turns.jitter.as_ref())
         } else {
@@ -286,6 +286,10 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 "failure" => failure.failure,
                 "failureClass" => failure.class,
                 "status" => failure.status,
+                // CVL-FR-21: the host and the cause of a refused certificate,
+                // and nothing else of the request.
+                "tlsHost" => failure.tls.as_ref().map(|t| t.host.as_str()),
+                "tlsCause" => failure.tls.as_ref().map(|t| t.cause.as_str()),
                 // CVL-FR-35: the provider's own error code and its own id for
                 // the request that failed, where it answered with a structured
                 // error. Neither is anything it echoed back of what was sent,
@@ -314,6 +318,9 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
             }
             if locked {
                 return Err(TurnEnd::Failed(FAIL_THREAD_LOCKED));
+            }
+            if let Some(tls) = failure.tls {
+                return Err(TurnEnd::TlsUntrusted(tls));
             }
             return Err(TurnEnd::Failed(failure.failure));
         }

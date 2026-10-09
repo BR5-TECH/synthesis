@@ -9,6 +9,8 @@
  * panel says the same thing about the same code.
  */
 
+import { tlsErrorMessage } from "../../tlsError";
+
 export const GIT_ERRORS = {
   notARepository: "not a git repository",
   unknownBranch: "unknown branch",
@@ -98,6 +100,9 @@ export function rejectionMessage(
 ): string {
   const rejection = parseRejection(error);
   const { code, detail } = rejection;
+  // AAP-FR-LRTC: a refused certificate names its host and its cause.
+  const tls = tlsErrorMessage(code);
+  if (tls) return tls;
   const branch = subject.branch ? `Branch ${subject.branch}` : "This branch";
   switch (code) {
     case GIT_ERRORS.notARepository:

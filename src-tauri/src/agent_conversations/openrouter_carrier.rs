@@ -129,6 +129,7 @@ pub(super) fn openrouter_failure(error: &openrouter_rs::error::OpenRouterError) 
                 // as much text as it likes and a log line is not the place to
                 // find out how much that is.
                 provider_message: Some(truncated(&context.message, PROVIDER_MESSAGE_LIMIT)),
+                tls: None,
             }
         }
         // A transport failure carries no structure at all, so the text-scanning
@@ -145,9 +146,14 @@ pub(super) async fn carry_openrouter(
     built: openrouter_rs::api::chat::ChatCompletionRequest,
     endpoint: AiApiCall,
 ) -> Result<ModelReply, CallFailure> {
+    // AAP-FR-WMCX: the SDK is given the shared HTTP client, so it keeps no trust
+    // setup of its own.
+    let (http_client, tls_record) = crate::tls::openrouter_http_client()
+        .map_err(|_| CallFailure::unreachable(class::CONNECT))?;
     let client = openrouter_rs::OpenRouterClient::builder()
         .base_url(endpoint.base_url.clone())
         .api_key(endpoint.api_key.clone().unwrap_or_default())
+        .http_client(http_client)
         .build()
         .map_err(|_| CallFailure::unreachable(class::CONNECT))?;
 
@@ -161,7 +167,7 @@ pub(super) async fn carry_openrouter(
     let response = client
         .send_chat_completion(&built)
         .await
-        .map_err(|e| openrouter_failure(&e))?;
+        .map_err(|e| with_recorded_tls(openrouter_failure(&e), &tls_record))?;
     Ok(reply_from_openrouter(
         &response,
         endpoint.model_id.as_deref().unwrap_or_default(),

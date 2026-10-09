@@ -412,6 +412,8 @@ fn a_tool_heavy_turn_reports_each_call_begun_and_finished_and_nothing_else() {
                 "retryPermitted",
                 "startedAt",
                 "state",
+                // AGC-FR-RWPT: null except on a refused certificate.
+                "tlsFailure",
                 "triggerCommentId",
             ],
         );

@@ -460,6 +460,12 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
             (AgentTurnState::AwaitingReply, None, false)
         }
         Err(TurnEnd::Failed(reason)) => (AgentTurnState::Failed, Some(reason), is_recoverable(reason)),
+        // AGC-FR-RWPT: the host and the cause are written to the live turn
+        // first, so the terminal event and the recovery registry both carry them.
+        Err(TurnEnd::TlsUntrusted(tls)) => {
+            turns.note_tls_failure(&plan.turn_id, &tls);
+            (AgentTurnState::Failed, Some(FAIL_TLS_UNTRUSTED), true)
+        }
     };
     finish(
         app,

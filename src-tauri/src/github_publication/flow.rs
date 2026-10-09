@@ -684,7 +684,7 @@ pub fn resolve_remote_for(
         return Err(ERR_NO_REMOTE.to_string());
     };
     if remote.eligibility != RemoteEligibility::Eligible {
-        return Err(remote.eligibility.error_code().to_string());
+        return Err(remote.refusal_code());
     }
     Ok(remote.clone())
 }
@@ -783,7 +783,7 @@ pub fn resolve_repository_from(
             repository_owner: owner.clone(),
             repository_name: repo.clone(),
         }),
-        _ => Err(remotes::refusal_for(&resolution.remotes).to_string()),
+        _ => Err(remotes::refusal_for(&resolution.remotes)),
     }
 }
 

@@ -10,6 +10,9 @@ use super::*;
 // The scripted seam (CVL-FR-11)
 // ---------------------------------------------------------------------------
 
+/// The host a scripted `tls_untrusted` failure names.
+pub const SCRIPTED_TLS_HOST: &str = "provider.test";
+
 /// A [`CompletionSeam`] backed by `rig`'s own `MockCompletionModel`.
 ///
 /// Compiled into test builds only. It drives the scripted model through
@@ -536,6 +539,10 @@ impl CompletionSeam for ScriptedCompletion {
             // A script names the failure it wants; the class follows from the
             // value, which is what keeps every existing script unchanged while
             // the seam carries CVL-FR-21's finer classification in production.
+            // AGC-FR-RWPT: a scripted TLS refusal names a fixed host and cause.
+            Err(FAIL_TLS_UNTRUSTED) => Err(CallFailure::tls_untrusted(
+                crate::tls::TlsFailure::new(SCRIPTED_TLS_HOST, crate::tls::TlsCause::UnknownIssuer),
+            )),
             Err(failure) => Err(CallFailure::from(failure)),
         }
     }

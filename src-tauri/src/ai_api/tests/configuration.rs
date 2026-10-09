@@ -167,6 +167,36 @@ fn aap_ts04_every_verification_failure_is_distinguishable() {
     );
 }
 
+// AAP-FR-05, AAP-FR-HZTB, AAP-FR-PKWE
+#[test]
+fn a_refused_certificate_is_tls_untrusted_with_host_and_cause_and_commits_nothing() {
+    for (cause, wire) in [
+        (crate::tls::TlsCause::UnknownIssuer, "tls_untrusted:unknown_issuer:api.openai.com"),
+        (crate::tls::TlsCause::Expired, "tls_untrusted:expired:api.openai.com"),
+        (crate::tls::TlsCause::HostnameMismatch, "tls_untrusted:hostname_mismatch:api.openai.com"),
+        (crate::tls::TlsCause::Other, "tls_untrusted:other:api.openai.com"),
+    ] {
+        let failure = crate::tls::TlsFailure::new("api.openai.com", cause);
+        let h = harness(
+            FakeProber::failing(ProbeError::TlsUntrusted(failure)),
+            FakeKeychain::new(),
+        );
+        let error = verify_integration_impl(
+            &h.store,
+            &h.ai,
+            "openai",
+            "https://api.openai.com/v1",
+            Some("sk-1234"),
+        )
+        .unwrap_err();
+        assert_eq!(error, wire);
+        assert_ne!(error, ERR_UNREACHABLE, "a TLS failure never reads as unreachable");
+        assert!(!error.contains("sk-1234"), "the error holds no key");
+        assert!(h.store.load_ai_api_registry().unwrap().0.is_empty());
+        assert!(h.keys.get_raw("openai").is_none(), "a failed verification writes no key");
+    }
+}
+
 // -- AAP-FR-06, AAP-FR-07, AAP-FR-08 / TS-06: what a verification commits ---------------------
 
 #[test]

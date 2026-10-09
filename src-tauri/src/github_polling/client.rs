@@ -169,7 +169,7 @@ pub const MAX_PROJECT_PAGES: usize = 10;
 pub struct HttpGithubProjects;
 
 fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder().timeout_global(Some(TIMEOUT)).build().into()
+    crate::tls::ureq_config().timeout_global(Some(TIMEOUT)).build().into()
 }
 
 /// One GraphQL request. GPP-FR-WKZF: a transport error never reaches a caller
@@ -189,7 +189,11 @@ fn graphql(secret: &str, query: &str, variables: Value) -> Result<Value, String>
     let mut response = match response {
         Ok(response) => response,
         Err(ureq::Error::StatusCode(_)) => return Err(ERR_REQUEST_FAILED.to_string()),
-        Err(_) => return Err(ERR_GITHUB_UNREACHABLE.to_string()),
+        // AAP-FR-LRTC: a refused certificate is its own typed error.
+        Err(e) => {
+            return Err(crate::tls::ureq_wire(&e, GRAPHQL)
+                .unwrap_or_else(|| ERR_GITHUB_UNREACHABLE.to_string()))
+        }
     };
     let body = response.body_mut().read_to_string().map_err(|_| ERR_GITHUB_UNREACHABLE)?;
     serde_json::from_str(&body).map_err(|_| ERR_REQUEST_FAILED.to_string())
@@ -471,7 +475,7 @@ impl GithubProjects for HttpGithubProjects {
             query,
             json!({ "project": project_id, "item": item_id, "field": field_id, "option": option_id }),
         )
-        .map_err(|_| ERR_STATUS_UPDATE_FAILED.to_string())?;
+        .map_err(|e| crate::tls::keep_tls(e, ERR_STATUS_UPDATE_FAILED))?;
         let updated = response
             .get("data")
             .and_then(|d| d.get("updateProjectV2ItemFieldValue"))

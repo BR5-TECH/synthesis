@@ -51,6 +51,7 @@ fn write_error(failure: GithubWriteFailure) -> String {
             }
         }
         GithubWriteFailure::Unreachable => github_tokens::ERR_GITHUB_UNREACHABLE.to_string(),
+        GithubWriteFailure::TlsUntrusted(failure) => failure.wire(),
     }
 }
 

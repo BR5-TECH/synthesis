@@ -491,4 +491,13 @@ describe("tokenErrorMessage", () => {
     expect(tokenErrorMessage(new Error("boom"))).toBe("boom");
     expect(tokenErrorMessage(undefined)).toBe("operation failed");
   });
+
+  it("AAP-FR-LRTC: a refused certificate names the host and the cause", () => {
+    const wire = "tls_untrusted:unknown_issuer:api.github.com";
+    for (const rejection of [wire, `Error: ${wire}`, new Error(wire)]) {
+      const text = tokenErrorMessage(rejection);
+      expect(text).toContain("api.github.com");
+      expect(text).toMatch(/issuer.*unknown/);
+    }
+  });
 });

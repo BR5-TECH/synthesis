@@ -26,6 +26,9 @@ pub(super) enum TurnEnd {
     /// mistake the two spellings invite.
     TimedOut,
     Failed(&'static str),
+    /// AGC-FR-RWPT: the provider's certificate was refused. Recoverable, and
+    /// carries the host and the cause the turn reports.
+    TlsUntrusted(crate::tls::TlsFailure),
     /// CVL-FR-15: the turn asked the author something and ended on it.
     ///
     /// Not a failure and not a delivery: the conversation gained the agent's

@@ -4,6 +4,7 @@
 // Every name is re-exported from `./index`, so `from "../types"` still
 // resolves to the same set and no import site moved.
 
+import type { TlsCause } from "../tlsError";
 import { AI_ERRORS } from "./aiApi";
 import type { DiscussionTarget, FragmentTarget } from "./comments";
 
@@ -57,6 +58,11 @@ export const AGENT_TURN_FAILURES = {
   timedOut: "timed_out",
   emptyReply: "empty_reply",
   keychainUnavailable: "keychain_unavailable",
+  /**
+   * AGC-FR-RWPT: the provider's certificate is not trusted. The turn also
+   * carries `tlsFailure`, which names the host and the cause.
+   */
+  tlsUntrusted: "tls_untrusted",
 } as const;
 
 export type AgentTurnFailure =
@@ -73,6 +79,11 @@ export interface AgentTurn {
   triggerCommentId: string;
   state: AgentTurnState;
   failure: AgentTurnFailure | null;
+  /**
+   * AGC-FR-RWPT: the host and the cause of a refused certificate. Present only
+   * when `failure` is `tls_untrusted`.
+   */
+  tlsFailure?: { host: string; cause: TlsCause } | null;
   /**
    * AGC-FR-31: true only while this turn is its conversation's **current**
    * recoverable failure.

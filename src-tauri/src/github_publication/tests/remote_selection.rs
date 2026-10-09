@@ -432,3 +432,44 @@ fn a_repository_the_author_has_just_changed_keeps_its_answer_until_the_cache_dro
     assert_eq!(remotes_of()[0].eligibility, RemoteEligibility::Eligible);
 }
 
+
+/// AAP-FR-LRTC, GHP-FR-ZRFP: a publication refused for an untrusted GitHub
+/// certificate carries the full typed error. It names the host and the cause,
+/// and the reason sentence read from it names them too.
+#[test]
+fn a_refused_github_certificate_refuses_the_publish_with_host_and_cause() {
+    use crate::tls::TlsCause;
+    let classified = remotes::classify_with(
+        &[configured("origin", "https://github.com/acme/widgets")],
+        Some("s"),
+        &FakeGithub::with_probe(ProbeOutcome::TlsUntrusted(TlsCause::UnknownIssuer)),
+        false,
+    );
+    let wire = "tls_untrusted:unknown_issuer:api.github.com";
+    assert_eq!(remotes::refusal_for(&classified), wire);
+    assert_eq!(flow::resolve_remote_for(&classified, "origin"), Err(wire.to_string()));
+    let reason = remotes::refusal_reason(wire);
+    assert!(reason.contains("api.github.com"), "{reason}");
+    assert!(reason.contains("issuer"), "{reason}");
+}
+
+/// AAP-FR-LRTC, GHP-FR-WNJC: where one remote has a refused certificate and
+/// another has a repository condition, the certificate is named first, with its
+/// cause.
+#[test]
+fn a_refused_certificate_is_named_before_a_repository_condition() {
+    use crate::tls::TlsCause;
+    let mut classified = remotes::classify_with(
+        &[configured("origin", "https://github.com/acme/widgets")],
+        Some("s"),
+        &FakeGithub::with_probe(ProbeOutcome::IssuesDisabled),
+        false,
+    );
+    classified.extend(remotes::classify_with(
+        &[configured("upstream", "https://github.com/acme/upstream")],
+        Some("s"),
+        &FakeGithub::with_probe(ProbeOutcome::TlsUntrusted(TlsCause::Expired)),
+        false,
+    ));
+    assert_eq!(remotes::refusal_for(&classified), "tls_untrusted:expired:api.github.com");
+}

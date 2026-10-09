@@ -19,6 +19,7 @@ export type PublicationErrorCode =
   | "issues_disabled"
   | "issues_create_forbidden"
   | "token_unavailable"
+  | "tls_untrusted"
   | "attempt_in_progress"
   | "no_attempt"
   | "github_unreachable"
@@ -151,7 +152,8 @@ export type PublicationRemoteEligibility =
   | "issues_inaccessible"
   | "issues_disabled"
   | "issues_create_forbidden"
-  | "token_unavailable";
+  | "token_unavailable"
+  | "tls_untrusted";
 
 export interface PublicationRemote {
   name: string;

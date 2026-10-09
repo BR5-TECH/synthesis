@@ -191,11 +191,18 @@ pub fn classify_with(
                 repository_name: None,
                 eligibility: RemoteEligibility::NotGithub,
                 reason: RemoteEligibility::NotGithub.reason().map(str::to_string),
+                tls_failure: None,
             },
             Some((owner, repo)) => {
+                let mut tls_failure: Option<crate::tls::TlsFailure> = None;
                 let eligibility = match secret {
                     None => RemoteEligibility::TokenUnavailable,
                     Some(secret) => match probe_cached(secret, &owner, &repo, client, cache) {
+                        ProbeOutcome::TlsUntrusted(cause) => {
+                            tls_failure =
+                                Some(crate::tls::TlsFailure::new("api.github.com", cause));
+                            RemoteEligibility::TlsUntrusted
+                        }
                         ProbeOutcome::Publishable => RemoteEligibility::Eligible,
                         ProbeOutcome::IssuesUnreadable => RemoteEligibility::IssuesInaccessible,
                         ProbeOutcome::IssuesDisabled => RemoteEligibility::IssuesDisabled,
@@ -211,7 +218,11 @@ pub fn classify_with(
                     repository_owner: Some(owner),
                     repository_name: Some(repo),
                     eligibility,
-                    reason: eligibility.reason().map(str::to_string),
+                    reason: tls_failure
+                        .as_ref()
+                        .map(crate::tls::TlsFailure::describe)
+                        .or_else(|| eligibility.reason().map(str::to_string)),
+                    tls_failure,
                 }
             }
         })
@@ -265,14 +276,18 @@ pub fn resolve(
     }
 }
 
-/// GHP-FR-ZRFP: which of the four refusals a resolution with no selection
-/// stands on.
-pub fn refusal_for(remotes: &[PublicationRemote]) -> &'static str {
+/// GHP-FR-ZRFP: which of the refusals a resolution with no selection stands
+/// on.
+///
+/// AAP-FR-LRTC: a refused certificate answers with the full wire text
+/// `tls_untrusted:<cause>:<host>`, so the host and the cause reach every
+/// surface. Every other refusal is its bare code.
+pub fn refusal_for(remotes: &[PublicationRemote]) -> String {
     if remotes.is_empty() {
-        return ERR_NO_REMOTE;
+        return ERR_NO_REMOTE.to_string();
     }
     if remotes.iter().all(|r| r.kind == RemoteKind::Other) {
-        return ERR_NO_GITHUB_REMOTE;
+        return ERR_NO_GITHUB_REMOTE.to_string();
     }
     // GHP-FR-WNJC: name the condition that stops the most remotes. The first
     // three are conditions of the token and hold for every remote at once;
@@ -284,9 +299,13 @@ pub fn refusal_for(remotes: &[PublicationRemote]) -> &'static str {
     let mut forbidden = false;
     let mut disabled = false;
     let mut token_missing = false;
+    let mut untrusted: Option<String> = None;
     for remote in github {
         match remote.eligibility {
             RemoteEligibility::TokenUnavailable => token_missing = true,
+            RemoteEligibility::TlsUntrusted => {
+                untrusted.get_or_insert_with(|| remote.refusal_code());
+            }
             RemoteEligibility::IssuesInaccessible => inaccessible = true,
             RemoteEligibility::IssuesCreateForbidden => forbidden = true,
             RemoteEligibility::IssuesDisabled => disabled = true,
@@ -294,15 +313,17 @@ pub fn refusal_for(remotes: &[PublicationRemote]) -> &'static str {
         }
     }
     if token_missing {
-        ERR_TOKEN_UNAVAILABLE
+        ERR_TOKEN_UNAVAILABLE.to_string()
+    } else if let Some(wire) = untrusted {
+        wire
     } else if inaccessible {
-        ERR_ISSUES_INACCESSIBLE
+        ERR_ISSUES_INACCESSIBLE.to_string()
     } else if forbidden {
-        ERR_ISSUES_CREATE_FORBIDDEN
+        ERR_ISSUES_CREATE_FORBIDDEN.to_string()
     } else if disabled {
-        ERR_ISSUES_DISABLED
+        ERR_ISSUES_DISABLED.to_string()
     } else {
-        ERR_NO_GITHUB_REMOTE
+        ERR_NO_GITHUB_REMOTE.to_string()
     }
 }
 
@@ -313,11 +334,16 @@ pub fn refusal_for(remotes: &[PublicationRemote]) -> &'static str {
 /// drift, and a missed arm falls through to the text below without a compiler
 /// error — which is exactly how a refusal stops naming its own cause.
 pub fn refusal_reason(code: &str) -> String {
+    // AAP-FR-LRTC: a refused certificate names its host and its cause.
+    if let Some(failure) = crate::tls::TlsFailure::parse_wire(code) {
+        return failure.describe();
+    }
     let eligibility = match code {
         ERR_ISSUES_INACCESSIBLE => Some(RemoteEligibility::IssuesInaccessible),
         ERR_ISSUES_DISABLED => Some(RemoteEligibility::IssuesDisabled),
         ERR_ISSUES_CREATE_FORBIDDEN => Some(RemoteEligibility::IssuesCreateForbidden),
         ERR_TOKEN_UNAVAILABLE => Some(RemoteEligibility::TokenUnavailable),
+        crate::tls::ERR_TLS_UNTRUSTED => Some(RemoteEligibility::TlsUntrusted),
         _ => None,
     };
     if let Some(reason) = eligibility.and_then(RemoteEligibility::reason) {

@@ -102,6 +102,7 @@ fn failure_error(failure: GithubFailure, missing: &str) -> String {
         GithubFailure::NotFound => missing.to_string(),
         GithubFailure::Rejected => ERR_GITHUB_TOKEN_REJECTED.to_string(),
         GithubFailure::Unreachable => github_tokens::ERR_GITHUB_UNREACHABLE.to_string(),
+        GithubFailure::TlsUntrusted(failure) => failure.wire(),
     }
 }
 

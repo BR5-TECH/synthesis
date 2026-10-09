@@ -33,6 +33,9 @@ pub const FAIL_TIMED_OUT: &str = "timed_out";
 pub const FAIL_EMPTY_REPLY: &str = "empty_reply";
 /// The OS credential store would not produce the provider's key.
 pub const FAIL_KEYCHAIN_UNAVAILABLE: &str = "keychain_unavailable";
+/// The provider's certificate is not trusted (AGC-FR-RWPT). The turn also
+/// carries the host and the cause.
+pub const FAIL_TLS_UNTRUSTED: &str = "tls_untrusted";
 /// Every command here answers only while a project is open.
 pub const ERR_NO_PROJECT_OPEN: &str = "no_project_open";
 /// `cancel_agent_turn` was given an id no turn carries.
@@ -110,6 +113,8 @@ pub mod class {
     pub const TRANSPORT_OTHER: &str = "transport_other";
     /// The endpoint answered and refused the credentials.
     pub const AUTH: &str = "auth";
+    /// The TLS check refused the endpoint's certificate (CVL-FR-21).
+    pub const TLS: &str = "tls";
 }
 
 /// CVL-FR-21: one failed attempt, reduced to what is safe to report.
@@ -146,6 +151,9 @@ pub struct CallFailure {
     /// object rather than through a rendered request, and it is what makes a
     /// refusal readable rather than merely counted.
     pub provider_message: Option<String>,
+    /// CVL-FR-21 / AAP-FR-HZTB: the host and the cause, present only on
+    /// [`class::TLS`]. Nothing of the request is in it.
+    pub tls: Option<crate::tls::TlsFailure>,
 }
 
 impl CallFailure {
@@ -157,6 +165,15 @@ impl CallFailure {
             provider_code: None,
             provider_request_id: None,
             provider_message: None,
+            tls: None,
+        }
+    }
+
+    /// AGC-FR-RWPT: a certificate the TLS check refused.
+    pub fn tls_untrusted(failure: crate::tls::TlsFailure) -> Self {
+        Self {
+            tls: Some(failure),
+            ..Self::new(FAIL_TLS_UNTRUSTED, class::TLS)
         }
     }
 
@@ -175,6 +192,13 @@ impl CallFailure {
     /// rather than of the call, and calling again changes none of them.
     pub fn recoverable(&self) -> bool {
         is_recoverable(self.failure)
+    }
+
+    /// CVL-FR-18: whether the loop repeats the call by itself. A refused
+    /// certificate is recoverable but is not repeated: the same certificate is
+    /// refused again until the author changes the trust on the machine.
+    pub fn repeatable(&self) -> bool {
+        is_repeated_automatically(self.failure)
     }
 }
 
@@ -201,6 +225,14 @@ impl From<&'static str> for CallFailure {
 /// which is why the whole-turn `timed_out` stays non-recoverable while sharing a
 /// spelling with the retryable one.
 pub fn is_recoverable(failure: &str) -> bool {
+    matches!(
+        failure,
+        FAIL_UNREACHABLE | FAIL_TIMED_OUT | FAIL_EMPTY_REPLY | FAIL_TLS_UNTRUSTED
+    )
+}
+
+/// CVL-FR-18: the three recoverable values the loop repeats by itself.
+pub fn is_repeated_automatically(failure: &str) -> bool {
     matches!(failure, FAIL_UNREACHABLE | FAIL_TIMED_OUT | FAIL_EMPTY_REPLY)
 }
 

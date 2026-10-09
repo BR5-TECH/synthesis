@@ -32,6 +32,8 @@ pub enum ProbeOutcome {
     /// The repository accepts issues, and the scopes GitHub reports for this
     /// token hold none that may write one.
     CreateForbidden,
+    /// The TLS check refused GitHub's certificate (AAP-FR-LRTC).
+    TlsUntrusted(crate::tls::TlsCause),
 }
 
 /// An issue's parent, as GitHub reports it (GHP-FR-CMPR).
@@ -188,7 +190,7 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 pub struct HttpGithubIssues;
 
 fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder().timeout_global(Some(TIMEOUT)).build().into()
+    crate::tls::ureq_config().timeout_global(Some(TIMEOUT)).build().into()
 }
 
 /// Every request carries the same four headers. GitHub rejects a request with
@@ -243,6 +245,17 @@ pub fn transport_code(err: &ureq::Error) -> &'static str {
         ureq::Error::StatusCode(404) => ERR_ISSUES_INACCESSIBLE,
         _ => ERR_GITHUB_UNREACHABLE,
     }
+}
+
+/// [`transport_code`], except that a refused certificate becomes the typed error
+/// `tls_untrusted` with its host and cause (AAP-FR-LRTC).
+fn transport_error(err: &ureq::Error) -> String {
+    crate::tls::ureq_wire(err, API).unwrap_or_else(|| transport_code(err).to_string())
+}
+
+/// The typed error `tls_untrusted` for a refused certificate, or `fallback`.
+fn transport_or(err: &ureq::Error, fallback: &str) -> String {
+    crate::tls::ureq_wire(err, API).unwrap_or_else(|| fallback.to_string())
 }
 
 /// GHP-FR-RQDV: the scopes a response reports, or `None` where it reports none
@@ -402,8 +415,15 @@ impl GithubIssues for HttpGithubIssues {
         // granted this token. Listing the repository's issues would add
         // nothing: that endpoint also lists pull requests, so it answers for a
         // repository with Issues turned off just the same.
-        let Ok(response) = get(secret, &format!("{API}/repos/{owner}/{repo}")) else {
-            return ProbeOutcome::IssuesUnreadable;
+        let response = match get(secret, &format!("{API}/repos/{owner}/{repo}")) {
+            Ok(response) => response,
+            // AAP-FR-LRTC: a refused certificate is not an unreadable repository.
+            Err(e) => {
+                return match crate::tls::classify_ureq(&e) {
+                    Some(cause) => ProbeOutcome::TlsUntrusted(cause),
+                    None => ProbeOutcome::IssuesUnreadable,
+                }
+            }
         };
         // Taken before the body, which consumes the response. A classic token
         // reports its scopes on this header; a fine-grained token sends none.
@@ -425,7 +445,7 @@ impl GithubIssues for HttpGithubIssues {
     ) -> Result<Option<IssueRef>, String> {
         let query = format!("repo:{owner}/{repo} in:body \"{marker}\"");
         let url = format!("{API}/search/issues?per_page=20&q={}", urlencode(&query));
-        let response = get(secret, &url).map_err(|e| transport_code(&e).to_string())?;
+        let response = get(secret, &url).map_err(|e| transport_error(&e))?;
         let value = read_json(response)?;
         let items = value.get("items").and_then(|v| v.as_array()).cloned().unwrap_or_default();
         let found = match exact_match(&items, marker) {
@@ -443,7 +463,7 @@ impl GithubIssues for HttpGithubIssues {
                      ?state=all&sort=created&direction=desc&per_page=50"
                 );
                 let response =
-                    get(secret, &recent).map_err(|e| transport_code(&e).to_string())?;
+                    get(secret, &recent).map_err(|e| transport_error(&e))?;
                 let value = read_json(response)?;
                 let items = value.as_array().cloned().unwrap_or_default();
                 exact_match(&items, marker)
@@ -473,7 +493,7 @@ impl GithubIssues for HttpGithubIssues {
         let url = format!("{API}/repos/{owner}/{repo}/issues");
         let payload = issue_payload(title, body, fields);
         let response =
-            send_json(secret, "POST", &url, payload).map_err(|_| ERR_ISSUE_CREATE_FAILED)?;
+            send_json(secret, "POST", &url, payload).map_err(|e| transport_or(&e, ERR_ISSUE_CREATE_FAILED))?;
         let value = read_json(response).map_err(|_| ERR_ISSUE_CREATE_FAILED.to_string())?;
         issue_from_json(&value).ok_or_else(|| ERR_ISSUE_CREATE_FAILED.to_string())
     }
@@ -491,7 +511,7 @@ impl GithubIssues for HttpGithubIssues {
         let url = format!("{API}/repos/{owner}/{repo}/issues/{number}");
         let payload = issue_payload(title, body, fields);
         let response =
-            send_json(secret, "PATCH", &url, payload).map_err(|_| ERR_ISSUE_UPDATE_FAILED)?;
+            send_json(secret, "PATCH", &url, payload).map_err(|e| transport_or(&e, ERR_ISSUE_UPDATE_FAILED))?;
         let value = read_json(response).map_err(|_| ERR_ISSUE_UPDATE_FAILED.to_string())?;
         issue_from_json(&value).ok_or_else(|| ERR_ISSUE_UPDATE_FAILED.to_string())
     }
@@ -512,7 +532,7 @@ impl GithubIssues for HttpGithubIssues {
                     .ok_or_else(|| ERR_GITHUB_UNREACHABLE.to_string())
             }
             Err(ureq::Error::StatusCode(404 | 410)) => Ok(None),
-            Err(e) => Err(transport_code(&e).to_string()),
+            Err(e) => Err(transport_error(&e)),
         }
     }
 
@@ -530,8 +550,7 @@ impl GithubIssues for HttpGithubIssues {
                     "{API}/repos/{owner}/{repo}/issues?state=open&type={}&per_page={PAGE_SIZE}&page={page}",
                     urlencode(issue_type)
                 );
-                let response = get(secret, &url)
-                    .map_err(|_| ERR_PARENT_ISSUES_UNREADABLE.to_string())?;
+                let response = get(secret, &url).map_err(|e| transport_or(&e, ERR_PARENT_ISSUES_UNREADABLE))?;
                 let value = read_json(response)
                     .map_err(|_| ERR_PARENT_ISSUES_UNREADABLE.to_string())?;
                 let items = value.as_array().cloned().unwrap_or_default();
@@ -564,7 +583,7 @@ impl GithubIssues for HttpGithubIssues {
             // and GitHub answers 404 for it. That is an owner with no Type, not
             // a read that failed.
             Err(ureq::Error::StatusCode(404)) => Ok(Vec::new()),
-            Err(_) => Err(ERR_ISSUE_TYPES_UNREADABLE.to_string()),
+            Err(e) => Err(transport_or(&e, ERR_ISSUE_TYPES_UNREADABLE)),
         }
     }
 
@@ -580,7 +599,7 @@ impl GithubIssues for HttpGithubIssues {
                 "{API}/repos/{owner}/{repo}/milestones?state=open&per_page={PAGE_SIZE}&page={page}"
             );
             let response =
-                get(secret, &url).map_err(|_| ERR_MILESTONES_UNREADABLE.to_string())?;
+                get(secret, &url).map_err(|e| transport_or(&e, ERR_MILESTONES_UNREADABLE))?;
             let value =
                 read_json(response).map_err(|_| ERR_MILESTONES_UNREADABLE.to_string())?;
             let items = value.as_array().cloned().unwrap_or_default();
@@ -609,7 +628,7 @@ impl GithubIssues for HttpGithubIssues {
         });
         send_json(secret, "POST", &url, payload)
             .map(|_| ())
-            .map_err(|_| ERR_SUB_ISSUE_LINK_FAILED.to_string())
+            .map_err(|e| transport_or(&e, ERR_SUB_ISSUE_LINK_FAILED))
     }
 
     fn unlink_sub_issue(
@@ -624,7 +643,7 @@ impl GithubIssues for HttpGithubIssues {
         let payload = serde_json::json!({ "sub_issue_id": sub_issue_id });
         send_json(secret, "DELETE", &url, payload)
             .map(|_| ())
-            .map_err(|_| ERR_SUB_ISSUE_LINK_FAILED.to_string())
+            .map_err(|e| transport_or(&e, ERR_SUB_ISSUE_LINK_FAILED))
     }
 }
 

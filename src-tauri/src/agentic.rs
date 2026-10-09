@@ -126,6 +126,21 @@ pub const ERR_NONE_CONFIGURED: &str = "none_configured";
 /// chosen (AIC-FR-19).
 pub const ERR_NONE_SELECTED: &str = "none_selected";
 
+/// A variable name that the Docker client process or the executor owns (AIC-FR-XTEZ).
+pub const ERR_ENV_VAR_RESERVED: &str = "env_var_reserved";
+/// An `env_vars` entry is not `NAME=value` (AIC-FR-XTEZ).
+pub const ERR_ENV_VAR_INVALID: &str = "env_var_invalid";
+/// The token variable name is not usable (AIC-FR-CVPW).
+pub const ERR_TOKEN_VAR_INVALID: &str = "token_var_invalid";
+/// The gateway answered with a status that is not 2xx (AIC-FR-DRPC). The error
+/// text is `gateway_status:<code>`.
+pub const ERR_GATEWAY_STATUS: &str = "gateway_status";
+/// The gateway could not be reached (AIC-FR-DRPC). The error text is
+/// `gateway_unreachable:<cause>`.
+pub const ERR_GATEWAY_UNREACHABLE: &str = "gateway_unreachable";
+/// The gateway answered 2xx with a body that is not a model list (AIC-FR-DRPC).
+pub const ERR_GATEWAY_NOT_A_MODEL_LIST: &str = "gateway_not_a_model_list";
+
 /// AIC-FR-04: how long a version probe may take before the child is killed.
 /// Generous enough for a cold start of a Node-based CLI, short enough that a
 /// hung binary cannot wedge the settings surface.
@@ -177,6 +192,7 @@ pub fn is_valid_oauth_token(token: &str) -> bool {
 
 mod catalog;
 mod commands;
+mod gateway;
 mod launch;
 mod logs;
 mod operations;
@@ -186,6 +202,7 @@ mod runner;
 
 pub use catalog::*;
 pub use commands::*;
+pub use gateway::*;
 pub use launch::*;
 use logs::*;
 pub use operations::*;

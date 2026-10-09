@@ -88,6 +88,11 @@ pub(super) fn key_presence(
     if !worth_probing {
         return false;
     }
+    // AIC-FR-15 / AIC-FR-WNQR: Claude Code's `state` follows the credential of
+    // its authentication mode.
+    if descriptor.requires_oauth_token() && record.auth_mode == AuthMode::CustomGateway {
+        return present.has(GATEWAY_SECRET_ID);
+    }
     present.has(&record.vendor)
 }
 
@@ -99,11 +104,14 @@ pub(super) fn key_presence(
 /// `ASV-application-secret-vault.md` ASV-FR-32). Asking about the rest together
 /// costs the same single vault access as asking about one (ASV-FR-30).
 pub fn vendor_presence(secrets: &dyn SecretStore) -> KeyPresence {
-    let ids: Vec<&str> = VENDORS
+    let mut ids: Vec<&str> = VENDORS
         .iter()
         .filter(|d| d.holds_credential())
         .map(|d| d.vendor)
         .collect();
+    // AIC-FR-20: Claude Code holds a second credential, asked after in the same
+    // single vault access.
+    ids.push(GATEWAY_SECRET_ID);
     KeyPresence::resolve(secrets, &ids)
 }
 
@@ -167,6 +175,22 @@ pub fn integrations_from(
                 .unwrap_or_else(|| AgenticRecord::empty(descriptor.vendor));
             let has_key = key_presence(present, &stored, descriptor);
             let state = state_of(&stored, descriptor, probe, has_key);
+            let gateway = descriptor.requires_oauth_token();
+            let configured = stored.binary_path.as_deref().is_some_and(|p| !p.is_empty());
+            // AIC-FR-25: the OAuth token's presence and the gateway token's
+            // presence are two facts. A credential that is absent reads as
+            // unavailable only for the mode that needs it.
+            let subscription_present = gateway && present.has(&stored.vendor);
+            let gateway_present = gateway && present.has(GATEWAY_SECRET_ID);
+            let gateway_key_state = match (
+                gateway_present,
+                configured && stored.auth_mode == AuthMode::CustomGateway,
+            ) {
+                _ if !gateway => KeyState::Unset,
+                (true, _) => KeyState::Set,
+                (false, true) => KeyState::Unavailable,
+                (false, false) => KeyState::Unset,
+            };
             // AIC-FR-25: the credential fields follow the credential, not the
             // kind. Codex and OpenCode hold nothing, so they never report a
             // credential as set or as missing.
@@ -176,8 +200,10 @@ pub fn integrations_from(
                 // Claude Code's token is mandatory, so "no entry" reads as
                 // unavailable once a path is stored and as unset before that —
                 // an unconfigured tab is not a broken one.
-                let configured = stored.binary_path.as_deref().is_some_and(|p| !p.is_empty());
-                match (has_key, configured) {
+                match (
+                    subscription_present,
+                    configured && stored.auth_mode == AuthMode::Subscription,
+                ) {
                     (true, _) => KeyState::Set,
                     (false, true) => KeyState::Unavailable,
                     (false, false) => KeyState::Unset,
@@ -214,6 +240,12 @@ pub fn integrations_from(
                 } else {
                     None
                 },
+                auth_mode: gateway.then_some(stored.auth_mode),
+                gateway_base_url: gateway.then(|| stored.gateway_base_url.clone()).flatten(),
+                gateway_token_var: gateway.then(|| stored.gateway_token_var.clone()).flatten(),
+                gateway_key_state,
+                gateway_masked_hint: gateway.then(|| stored.gateway_masked_hint.clone()).flatten(),
+                env_vars: if gateway { stored.env_vars.clone() } else { Vec::new() },
                 key_required: descriptor.key_required,
                 state,
                 version: stored.version.clone(),
@@ -470,7 +502,9 @@ pub(super) fn agentic_probe_error(e: ProbeError) -> String {
     match e {
         ProbeError::Unreachable(_) => ERR_UNREACHABLE.to_string(),
         ProbeError::Rejected => ERR_REJECTED.to_string(),
-        ProbeError::NotExpectedKind => ERR_NOT_AN_AGENT_ENDPOINT.to_string(),
+        // Produced only for a request that asks for the status, which no
+        // agent-endpoint verification does.
+        ProbeError::NotExpectedKind | ProbeError::Status(_) => ERR_NOT_AN_AGENT_ENDPOINT.to_string(),
         ProbeError::TimedOut => ERR_TIMED_OUT.to_string(),
         ProbeError::TlsUntrusted(failure) => failure.wire(),
     }

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { listen } from "@tauri-apps/api/event";
 
 import App from "./App";
+import { resetLogBufferForTest } from "./logging";
 import { resetAppPreferencesCache } from "./state/appPreferences";
 import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
 import { cancelAllScheduledWrites } from "./state/writeSchedule";
@@ -205,6 +206,7 @@ beforeEach(() => {
   listenMock.mockClear();
   invokeMock.mockReset();
   invokeMock.mockImplementation(async (cmd: string) => defaultInvoke(cmd));
+  resetLogBufferForTest();
   openUrlMock.mockClear();
   resetAppPreferencesCache();
   resetLayoutPreferencesCache();
@@ -218,6 +220,7 @@ beforeEach(() => {
 afterEach(() => {
   cancelAllScheduledWrites();
   cleanup();
+  resetLogBufferForTest();
   vi.unstubAllGlobals();
 });
 
@@ -231,6 +234,28 @@ async function fireMenu(event: string) {
     listeners[event]?.({ payload: null });
   });
 }
+
+// The commands sent so far, without the background log flush. The flush runs
+// on its own timer, so it is not an operation of the panel.
+function invokeCommands(): string[] {
+  return invokeMock.mock.calls
+    .map((call) => String(call[0]))
+    .filter((cmd) => cmd !== "append_log_records");
+}
+
+// What the picker reads and sends once while it starts.
+const STARTUP_COMMANDS = [
+  "list_recent_projects",
+  "load_app_preferences",
+  "set_save_menu_state",
+  "set_find_menu_state",
+  "list_in_flight_operations",
+  "get_uncommitted_diff_totals",
+  "load_project_tree",
+  "list_drafts",
+  "get_notification_permission",
+  "center_picker",
+];
 
 const aboutDialog = () => screen.queryByRole("dialog", { name: "About Synthesis" });
 
@@ -287,19 +312,18 @@ describe("About panel over the Project picker", () => {
   it("ABT-FR-SDFA: opening and closing the panel calls no backend operation and writes nothing", async () => {
     render(<App />);
     await screen.findByText("acme");
-    await waitFor(() => expect(invokeMock).toHaveBeenCalled());
-    // Let the startup reads finish, so the baseline does not move underneath.
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait for each startup read, so the baseline does not move underneath.
+    await waitFor(() => {
+      for (const cmd of STARTUP_COMMANDS) expect(invokeCommands()).toContain(cmd);
     });
-    const before = invokeMock.mock.calls.length;
+    const before = invokeCommands().length;
 
     await fireMenu("menu:about");
     await screen.findByRole("dialog", { name: "About Synthesis" });
     await userEvent.keyboard("{Escape}");
 
     expect(aboutDialog()).toBeNull();
-    expect(invokeMock.mock.calls.length).toBe(before);
+    expect(invokeCommands()).toHaveLength(before);
     expect(openUrlMock).not.toHaveBeenCalled();
   });
 });

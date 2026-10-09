@@ -695,7 +695,8 @@ describe("the AI API level", () => {
     render(<BothLevels />);
     expect(await apiLevel().findByText(/✗ boom/)).toBeInTheDocument();
     // The other level is unaffected.
-    expect(await agenticLevel().findAllByRole("tab")).toHaveLength(5);
+    const vendorStrip = await agenticLevel().findByRole("tablist", { name: "Agentic AI" });
+    await waitFor(() => expect(within(vendorStrip).getAllByRole("tab")).toHaveLength(5));
   });
 });
 

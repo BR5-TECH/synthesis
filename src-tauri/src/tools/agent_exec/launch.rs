@@ -139,7 +139,7 @@ impl AgentCliExecutor {
 
         // --- 5. Launch material, from AIC and nowhere else -------------------
         let credential =
-            agentic::resolve_agent_launch_credential(context.integrations, &vendor)
+            agentic::resolve_agent_launch_credential(context.store, context.integrations, &vendor)
                 .map_err(AgentExecutionError::CredentialUnavailable)?;
 
         // EAC-FR-ZKMR: the execution directory alone decides the shape. Where
@@ -157,7 +157,9 @@ impl AgentCliExecutor {
             read_only: false,
         }];
         let mut env: BTreeMap<String, SecretString> = BTreeMap::new();
-        let mut env_names: Vec<&str> = Vec::new();
+        let mut env_names: Vec<String> = Vec::new();
+        // AIC-FR-ISOC: the variables whose values a record may not carry.
+        let mut masked_env: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         let mut env_literals: Vec<(String, String)> = Vec::new();
         // EAC-FR-29 bars the Codex configuration path from a record as firmly as
         // it bars Claude's token, and this vendor's credential is a directory
@@ -166,12 +168,17 @@ impl AgentCliExecutor {
         let mut masked_paths: Vec<String> = Vec::new();
 
         match credential {
-            AgentLaunchCredential::ClaudeOauthToken(token) => {
+            AgentLaunchCredential::ClaudeEnvironment(variables) => {
                 // EAC-FR-15: the *name* goes in the argv, the value goes in the
-                // client process's environment, and Docker forwards it. The
-                // secret never reaches an argument vector.
-                env_names.push(CLAUDE_TOKEN_ENV);
-                env.insert(CLAUDE_TOKEN_ENV.to_string(), token);
+                // client process's environment, and Docker forwards it. No
+                // value reaches an argument vector.
+                for variable in variables {
+                    if variable.masked {
+                        masked_env.insert(variable.name.clone());
+                    }
+                    env_names.push(variable.name.clone());
+                    env.insert(variable.name, variable.value);
+                }
             }
             AgentLaunchCredential::CodexConfigMount { source, target } => {
                 let source = descriptor::mount_source(&source).ok_or(
@@ -387,6 +394,23 @@ impl AgentCliExecutor {
             // the vendor enforces where its CLI can.
             request.task.result_contract,
         );
+        // EAC-FR-OWPP: a variable the executor sets itself is not overridden by
+        // one of the launch environment. The name is logged and the value is not.
+        let dropped = drop_executor_set_variables(
+            &mut env_names,
+            &mut env,
+            &mut masked_env,
+            &env_literals,
+        );
+        if !dropped.is_empty() {
+            logging::log_warn(
+                sink,
+                &BUFFER,
+                &[Domain::Ai, Domain::Backend],
+                "agent launch variable not passed because the executor sets it",
+                log_fields! { "variables" => dropped.join(",") },
+            );
+        }
         let container_name = descriptor::unique_container_name();
         // EAC-FR-10 / EAC-FR-39: one specification, composed from the
         // descriptor, the named constants, and the project's image. The Docker
@@ -400,7 +424,7 @@ impl AgentCliExecutor {
             host_gid,
             workdir: workspace.clone(),
             mounts: mounts.clone(),
-            env_names: env_names.iter().map(|n| (*n).to_string()).collect(),
+            env_names: env_names.clone(),
             env_literals: env_literals.clone(),
             vendor_args: vendor_args.clone(),
         };
@@ -413,8 +437,9 @@ impl AgentCliExecutor {
         // below it, so the observer and the failure excerpt cannot come to
         // disagree about what a record may say.
         let secrets: Vec<String> = env
-            .values()
-            .map(|value| value.expose().to_string())
+            .iter()
+            .filter(|(name, _)| masked_env.contains(name.as_str()))
+            .map(|(_, value)| value.expose().to_string())
             .chain(masked_paths.iter().cloned())
             .chain(std::iter::once(assigned_session_id.clone()))
             .chain(resume_session.map(str::to_string))
@@ -798,4 +823,29 @@ impl AgentCliExecutor {
             ),
         }
     }
+}
+
+/// EAC-FR-OWPP: remove from the launch environment every variable whose name an
+/// executor-set variable already uses, and return those names.
+///
+/// Pure so the rule is testable without a launch: the executor-set names that
+/// can collide with an author's entry are the repository variables, which exist
+/// only for a directory inside a Git repository.
+pub(super) fn drop_executor_set_variables(
+    env_names: &mut Vec<String>,
+    env: &mut BTreeMap<String, SecretString>,
+    masked_env: &mut std::collections::BTreeSet<String>,
+    env_literals: &[(String, String)],
+) -> Vec<String> {
+    let dropped: Vec<String> = env_names
+        .iter()
+        .filter(|name| env_literals.iter().any(|(set, _)| set == *name))
+        .cloned()
+        .collect();
+    env_names.retain(|name| !dropped.contains(name));
+    for name in &dropped {
+        env.remove(name);
+        masked_env.remove(name);
+    }
+    dropped
 }

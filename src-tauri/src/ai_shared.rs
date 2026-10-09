@@ -594,6 +594,10 @@ pub struct ProbeRequest<'a> {
     pub models_path: &'a str,
     /// How strictly the response is read (AAP-FR-MDLQ).
     pub models_format: ModelsFormat,
+    /// AIC-FR-DRPC: report any answer that is not 2xx as `ProbeError::Status`
+    /// with its code, instead of folding it into one of the author-facing
+    /// distinctions below. Set by the Claude Code gateway check alone.
+    pub report_status: bool,
 }
 
 /// The shape a model listing must have.
@@ -625,6 +629,9 @@ pub enum ProbeError {
     TimedOut,
     /// The TLS check refused its certificate (AAP-FR-HZTB).
     TlsUntrusted(crate::tls::TlsFailure),
+    /// The endpoint answered with this status (AIC-FR-DRPC). Produced only for
+    /// a request that sets `report_status`.
+    Status(u16),
 }
 
 /// Reaching an endpoint, narrowed to the one question both levels ask of it:
@@ -743,10 +750,14 @@ pub struct HttpEndpointProber;
 
 impl EndpointProber for HttpEndpointProber {
     fn probe(&self, request: &ProbeRequest<'_>) -> Result<Vec<ModelOption>, ProbeError> {
-        let agent: ureq::Agent = crate::tls::ureq_config()
-            .timeout_global(Some(PROBE_TIMEOUT))
-            .build()
-            .into();
+        let mut config = crate::tls::ureq_config().timeout_global(Some(PROBE_TIMEOUT));
+        if request.report_status {
+            // AIC-FR-DRPC: a redirect is an answer to report, never a hop to
+            // follow. The credential would otherwise travel to the host the
+            // redirect names, and ureq drops only `Authorization` on the way.
+            config = config.max_redirects(0).max_redirects_will_error(false);
+        }
+        let agent: ureq::Agent = config.build().into();
 
         let url = format!("{}{}", request.base_url, request.models_path);
         let mut call = agent.get(&url).header("User-Agent", "synthesis");
@@ -760,7 +771,13 @@ impl EndpointProber for HttpEndpointProber {
         }
 
         let mut response = match call.call() {
+            Ok(r) if request.report_status && !r.status().is_success() => {
+                return Err(ProbeError::Status(r.status().as_u16()))
+            }
             Ok(r) => r,
+            Err(ureq::Error::StatusCode(code)) if request.report_status => {
+                return Err(ProbeError::Status(code))
+            }
             Err(ureq::Error::StatusCode(code)) => return Err(probe_failure_for_status(code)),
             Err(ureq::Error::Timeout(_)) => return Err(ProbeError::TimedOut),
             Err(e) => {

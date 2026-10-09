@@ -53,6 +53,8 @@ const LITERAL_EXAMPLES = new Set([
   // (GLS-FR-KVNP). A capitalised specimen would show the author something they
   // could not type.
   "https://relay.example.com",
+  // A gateway address is a URL on the same terms (AII-FR-PHFX).
+  "https://gateway.example.com",
 ]);
 
 describe("a placeholder reads as a phrase in sentence case", () => {

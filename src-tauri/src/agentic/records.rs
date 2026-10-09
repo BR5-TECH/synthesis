@@ -44,6 +44,31 @@ pub enum IntegrationState {
     KeyUnavailable,
 }
 
+/// Claude Code's authentication mode (AIC-FR-WNQR). A record that stores no
+/// mode reads as `Subscription`.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthMode {
+    #[default]
+    Subscription,
+    CustomGateway,
+}
+
+impl AuthMode {
+    fn is_subscription(&self) -> bool {
+        *self == AuthMode::Subscription
+    }
+
+    /// The wire spelling, which `VerifyConfig::auth_mode` carries.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "subscription" => Some(AuthMode::Subscription),
+            "custom_gateway" => Some(AuthMode::CustomGateway),
+            _ => None,
+        }
+    }
+}
+
 /// The persisted half of an integration — what `synthesis.toml` carries
 /// (`GSS-global-settings-storage.md` GSS-FR-14).
 ///
@@ -71,6 +96,24 @@ pub struct AgenticRecord {
     /// credential, and for an API deployment configured with no key at all.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub masked_hint: Option<String>,
+    /// Claude Code only (AIC-FR-WNQR).
+    #[serde(skip_serializing_if = "AuthMode::is_subscription")]
+    pub auth_mode: AuthMode,
+    /// Claude Code only: the normalized gateway base URL (AIC-FR-YXAB).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gateway_base_url: Option<String>,
+    /// Claude Code only: the variable name the gateway token is passed under
+    /// (AIC-FR-CVPW).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gateway_token_var: Option<String>,
+    /// Claude Code only: the last four characters of the gateway token, and
+    /// the only text derived from it that reaches this store (AIC-FR-20).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gateway_masked_hint: Option<String>,
+    /// Claude Code only: the author's `NAME=value` entries (AIC-FR-XTEZ). Author
+    /// configuration, not credentials.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub env_vars: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -127,6 +170,13 @@ pub struct AgenticIntegration {
     pub base_url: Option<String>,
     pub key_state: KeyState,
     pub masked_hint: Option<String>,
+    /// AIC-FR-WNQR: `None` for every vendor but Claude Code.
+    pub auth_mode: Option<AuthMode>,
+    pub gateway_base_url: Option<String>,
+    pub gateway_token_var: Option<String>,
+    pub gateway_key_state: KeyState,
+    pub gateway_masked_hint: Option<String>,
+    pub env_vars: Vec<String>,
     pub key_required: bool,
     pub state: IntegrationState,
     pub version: Option<String>,
@@ -261,6 +311,19 @@ pub struct VerifyConfig {
     /// Claude Code only. `Some` means the author supplied a new token; `None`
     /// means they are keeping the one already stored (AIC-FR-26).
     pub oauth_token: Option<String>,
+    /// Claude Code only: `subscription` or `custom_gateway`. Absent means
+    /// `subscription` (AIC-FR-WNQR, AIC-FR-UFNB).
+    pub auth_mode: Option<String>,
+    /// Claude Code, gateway mode only (AIC-FR-UFNB).
+    pub gateway_base_url: Option<String>,
+    /// Claude Code, gateway mode only (AIC-FR-CVPW).
+    pub gateway_token_var: Option<String>,
+    /// Claude Code, gateway mode only: `Some` is a new token, `None` keeps the
+    /// stored one (AIC-FR-IOWS).
+    pub gateway_token: Option<String>,
+    /// Claude Code only: `Some` replaces the stored list, `None` keeps it
+    /// (AIC-FR-SXVA).
+    pub env_vars: Option<Vec<String>>,
 }
 
 impl std::fmt::Debug for VerifyConfig {
@@ -270,6 +333,13 @@ impl std::fmt::Debug for VerifyConfig {
             .field("base_url", &self.base_url)
             .field("api_key", &redacted(&self.api_key))
             .field("oauth_token", &redacted(&self.oauth_token))
+            .field("auth_mode", &self.auth_mode)
+            .field("gateway_base_url", &self.gateway_base_url)
+            .field("gateway_token_var", &self.gateway_token_var)
+            .field("gateway_token", &redacted(&self.gateway_token))
+            // A count, never the entries: a value is author text and may
+            // carry anything (AIC-FR-SXVA).
+            .field("env_vars", &self.env_vars.as_ref().map(Vec::len))
             .finish()
     }
 }

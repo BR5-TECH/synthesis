@@ -26,6 +26,12 @@ export type AgenticVendorId =
  */
 export type AgenticKind = "cli" | "api";
 
+/**
+ * Claude Code's authentication mode (AIC-FR-WNQR): a subscription's OAuth token,
+ * or a Custom Gateway's URL and token. Null on every other vendor's record.
+ */
+export type ClaudeAuthMode = "subscription" | "custom_gateway";
+
 /** Where a stored binary path came from (AIC-FR-07). CLI kind only. */
 export type AgenticPathOrigin = "detected" | "user_supplied" | "unset";
 
@@ -130,8 +136,24 @@ export interface AgenticIntegration {
    * and OpenCode hold nothing, so they always read `unset` with a null hint.
    */
   keyState: KeyState;
-  /** The last four characters of the credential, and the only text derived from it. */
+  /**
+   * The last four characters of the credential, and the only text derived from
+   * it. For Claude Code this describes the OAuth token; the gateway token has
+   * its own pair below.
+   */
   maskedHint: string | null;
+  /** Claude Code only (AIC-FR-25); null on every other record. */
+  authMode?: ClaudeAuthMode | null;
+  /** Claude Code only: the stored gateway base URL (AIC-FR-YXAB). */
+  gatewayBaseUrl?: string | null;
+  /** Claude Code only: the variable the gateway token is passed under (AIC-FR-CVPW). */
+  gatewayTokenVar?: string | null;
+  /** Claude Code only: whether the gateway token is readable (AIC-FR-25). */
+  gatewayKeyState?: KeyState;
+  /** Claude Code only: the last four characters of the gateway token. */
+  gatewayMaskedHint?: string | null;
+  /** Claude Code only: the author's `NAME=value` entries (AIC-FR-XTEZ). */
+  envVars?: string[];
   /** Whether this vendor requires a credential at all — true for Claude Code. */
   keyRequired: boolean;
   state: AgenticState;
@@ -201,6 +223,19 @@ export interface AgenticVerifyConfig {
    * any other vendor rejects `wrong_config_kind`.
    */
   oauthToken?: string | null;
+  /**
+   * Claude Code only (AIC-FR-UFNB). Absent means `subscription`. The gateway
+   * fields below are sent only with `custom_gateway`, and `oauthToken` only
+   * without it; the backend refuses the other combination as
+   * `wrong_config_kind`.
+   */
+  authMode?: ClaudeAuthMode;
+  gatewayBaseUrl?: string | null;
+  gatewayTokenVar?: string | null;
+  /** Present when the author typed a new token; absent keeps the stored one (AIC-FR-IOWS). */
+  gatewayToken?: string | null;
+  /** Present when the entries changed; absent keeps the stored list (AIC-FR-SXVA). */
+  envVars?: string[];
 }
 
 /**

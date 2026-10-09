@@ -240,6 +240,10 @@ export function backendFor(invokeMock: Mock) {
       async (cmd: string, args?: Record<string, unknown>) => {
         if (overrides[cmd]) return overrides[cmd](args);
         switch (cmd) {
+          // The log flush the section's own emitters start. Answered, not
+          // rejected, so no test depends on a swallowed rejection.
+          case "append_log_records":
+            return undefined;
           case "list_ai_api_integrations":
             return api;
           case "list_agentic_integrations":

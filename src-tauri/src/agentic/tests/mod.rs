@@ -367,3 +367,4 @@ mod keychain;
 mod record_shape;
 mod oauth_token;
 mod launch_handoff;
+mod gateway;

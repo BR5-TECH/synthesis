@@ -325,6 +325,7 @@ fn the_production_prober_sends_the_bearer_secret_to_v1_models_and_reads_strictly
             auth: AuthStyle::Bearer,
             models_path: "/v1/models",
             models_format: ModelsFormat::Gateway,
+            report_status: false,
         })
     };
 

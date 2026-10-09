@@ -161,6 +161,7 @@ pub(super) fn verify_api(
             auth: descriptor.auth,
             models_path: descriptor.models_path,
             models_format: crate::ai_shared::ModelsFormat::Lenient,
+            report_status: false,
         })
         .map_err(agentic_probe_error)?;
 
@@ -235,6 +236,18 @@ pub(super) fn resolve_supplied_token(
     }
 }
 
+/// AIC-FR-UFNB: does the payload carry a field of Claude Code's gateway shape?
+fn carries_gateway_fields(config: &VerifyConfig) -> bool {
+    config.gateway_base_url.is_some()
+        || config.gateway_token_var.is_some()
+        || config.gateway_token.is_some()
+}
+
+/// AIC-FR-25: does the payload carry a field that only Claude Code has?
+fn carries_claude_only_fields(config: &VerifyConfig) -> bool {
+    config.auth_mode.is_some() || carries_gateway_fields(config) || config.env_vars.is_some()
+}
+
 /// AIC-FR-06: a successful verification of either kind is what commits a
 /// configuration. A failure persists nothing.
 pub fn verify_integration_impl(
@@ -249,22 +262,59 @@ pub fn verify_integration_impl(
     // accepts. Refusing the wrong shape rather than ignoring the surplus field
     // is what keeps a UI bug from silently verifying against a stale value — and
     // what stops a credential meant for one vendor from being handed to another.
-    let (verified, supplied_token) = match descriptor.kind {
+    let mut mode = AuthMode::Subscription;
+    let mut gateway: Option<GatewayPlan> = None;
+    let (mut verified, supplied_token) = match descriptor.kind {
         VendorKind::Cli => {
             if config.base_url.is_some() || config.api_key.is_some() {
                 return Err(ERR_WRONG_CONFIG_KIND.into());
             }
+            let claude = descriptor.requires_oauth_token();
+            if !claude && carries_claude_only_fields(config) {
+                return Err(ERR_WRONG_CONFIG_KIND.into());
+            }
+            if claude {
+                // AIC-FR-WNQR / AIC-FR-UFNB: the mode names the shape, and a
+                // field of the other shape is refused rather than ignored.
+                mode = match config.auth_mode.as_deref() {
+                    None => AuthMode::Subscription,
+                    Some(raw) => AuthMode::parse(raw).ok_or(ERR_WRONG_CONFIG_KIND)?,
+                };
+                match mode {
+                    AuthMode::Subscription => {
+                        if carries_gateway_fields(config) {
+                            return Err(ERR_WRONG_CONFIG_KIND.into());
+                        }
+                    }
+                    AuthMode::CustomGateway => {
+                        if config.oauth_token.is_some() {
+                            return Err(ERR_WRONG_CONFIG_KIND.into());
+                        }
+                        gateway = Some(plan_gateway(ai, config)?);
+                    }
+                }
+                if let Some(entries) = config.env_vars.as_deref() {
+                    validate_env_vars(entries)?;
+                }
+            }
             // Everything about the token is settled before the binary runs, so a
             // value that is not a token costs neither a process spawn nor a
             // keychain round trip (AIC-FR-27).
-            let supplied = resolve_supplied_token(ai, descriptor, config.oauth_token.as_deref())?;
+            let supplied = if gateway.is_some() {
+                None
+            } else {
+                resolve_supplied_token(ai, descriptor, config.oauth_token.as_deref())?
+            };
             (
                 verify_cli(ai, descriptor, config.path.as_deref().unwrap_or(""))?,
                 supplied,
             )
         }
         VendorKind::Api => {
-            if config.path.is_some() || config.oauth_token.is_some() {
+            if config.path.is_some()
+                || config.oauth_token.is_some()
+                || carries_claude_only_fields(config)
+            {
                 return Err(ERR_WRONG_CONFIG_KIND.into());
             }
             (
@@ -278,6 +328,24 @@ pub fn verify_integration_impl(
             )
         }
     };
+
+    // AIC-FR-PADP: after the binary has verified, the gateway is asked once.
+    // The models it lists replace the bundled catalog (AIC-FR-08).
+    if let Some(plan) = gateway.as_ref() {
+        let token = match plan.supplied_token.clone() {
+            Some(token) => token,
+            None => ai
+                .secrets
+                .get(GATEWAY_SECRET_ID)
+                .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
+                .ok_or(ERR_TOKEN_MISSING)?,
+        };
+        let listed = check_gateway(ai, &plan.base_url, &plan.token_var, &token)?;
+        if !listed.is_empty() {
+            verified.models = listed;
+            verified.models_origin = ModelsOrigin::Probed;
+        }
+    }
 
     let _guard = ai
         .write_lock
@@ -318,6 +386,13 @@ pub fn verify_integration_impl(
                     .set(vendor, token)
                     .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
             }
+            // AIC-FR-YXAB: the gateway token has a vault entry of its own, and
+            // a subscription verification never reaches it.
+            if let Some(token) = gateway.as_ref().and_then(|g| g.supplied_token.as_deref()) {
+                ai.secrets
+                    .set(GATEWAY_SECRET_ID, token)
+                    .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
+            }
         }
     }
 
@@ -341,6 +416,20 @@ pub fn verify_integration_impl(
             Some(token) => record.masked_hint = Some(mask_hint(token)),
             None if descriptor.requires_oauth_token() => {}
             None => record.masked_hint = verified.masked_hint,
+        }
+        if descriptor.requires_oauth_token() {
+            // AIC-FR-WNQR / AIC-FR-YXAB / AIC-FR-SXVA.
+            record.auth_mode = mode;
+            if let Some(plan) = gateway.as_ref() {
+                record.gateway_base_url = Some(plan.base_url.clone());
+                record.gateway_token_var = Some(plan.token_var.clone());
+                if let Some(token) = plan.supplied_token.as_deref() {
+                    record.gateway_masked_hint = gateway_hint(token);
+                }
+            }
+            if let Some(entries) = config.env_vars.as_ref() {
+                record.env_vars = entries.clone();
+            }
         }
         record.version = verified.version;
         record.verified_at = Some(now_iso8601());
@@ -552,8 +641,8 @@ pub fn set_active_impl(
 }
 
 /// AIC-FR-14: return a vendor to `unconfigured`, deleting the keychain entry of
-/// every vendor that holds one — an API-kind vendor's key or Claude Code's OAuth
-/// token — as part of the same operation. Idempotent. A cleared vendor that was
+/// every vendor that holds one — an API-kind vendor's key or both of Claude
+/// Code's tokens — as part of the same operation. Idempotent. A cleared vendor that was
 /// active leaves nothing active; a project override naming it is left recorded
 /// and stops resolving.
 pub fn clear_integration_impl(
@@ -574,6 +663,12 @@ pub fn clear_integration_impl(
     if descriptor.holds_credential() {
         ai.secrets
             .delete(vendor)
+            .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
+    }
+    // AIC-FR-14: Claude Code's gateway token goes with its OAuth token.
+    if descriptor.requires_oauth_token() {
+        ai.secrets
+            .delete(GATEWAY_SECRET_ID)
             .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
     }
     let (mut records, active) = store.load_agentic_registry()?;

@@ -143,7 +143,7 @@ The **Git** panel can also show the tasks with the status "Ready" in a GitHub Pr
 - **An agent image for each project.** The project names it in `.synthesis/project.toml`. The reference Dockerfiles are in `docker/agent-images/`.
 - **An AI API for discussions.** Synthesis supports OpenRouter, Anthropic, OpenAI, and a custom gateway. You give a base URL, an API key, and a model.
 - **A coding agent for graduation.** Install its CLI on your computer. Synthesis runs the CLI once to verify it.
-  - Claude Code: an OAuth token.
+  - Claude Code: an OAuth token for a subscription, or the base URL and token of your own gateway.
   - Codex: your existing Codex login. Synthesis mounts your Codex home directory into the container.
 - **A GitHub token (optional).** It is necessary for pull requests, issues, GitHub Project tasks, and Git operations over HTTPS. The GitHub functions work only with github.com.
 

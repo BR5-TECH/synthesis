@@ -1,6 +1,6 @@
-//! The Custom gateway's `text.format` tolerance (`CVL-conversation-loop.md`
-//! CVL-FR-TQRD) and the typed classification of framework errors (CVL-FR-21,
-//! CVL-FR-18).
+//! The Custom gateway's tolerances for `text.format` and for `output_text`
+//! parts without text (`CVL-conversation-loop.md` CVL-FR-TQRD), and the typed
+//! classification of framework errors (CVL-FR-21, CVL-FR-18).
 //!
 //! The unit tests assert the repair on bodies alone. The wire tests make one
 //! call through the production seam to a loopback server and observe what the
@@ -12,11 +12,15 @@ use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::AtomicBool;
 
-use super::super::responses_repair::{is_responses_route, repair_text_format};
+use super::super::responses_repair::{is_responses_route, repair_reply, ReplyRepairs};
 
 fn repaired(body: serde_json::Value) -> Option<serde_json::Value> {
+    repaired_with(body).map(|(fixed, _)| fixed)
+}
+
+fn repaired_with(body: serde_json::Value) -> Option<(serde_json::Value, ReplyRepairs)> {
     let bytes = serde_json::to_vec(&body).unwrap();
-    repair_text_format(&bytes).map(|fixed| serde_json::from_slice(&fixed).unwrap())
+    repair_reply(&bytes).map(|(fixed, repairs)| (serde_json::from_slice(&fixed).unwrap(), repairs))
 }
 
 // CVL-FR-TQRD: a `text` object with no `format` is read as plain text, and the
@@ -62,16 +66,107 @@ fn every_other_body_is_left_as_it_is() {
         br#"{"text":null}"#.to_vec(),
         br#"{"text":"plain"}"#.to_vec(),
         br#"[{"text":{}}]"#.to_vec(),
+        br#"[{"type":"message","content":[{"type":"output_text","text":null}]}]"#.to_vec(),
+        br#"{"output":[{"type":"message","content":[{"type":"output_text","text":"a"},{"type":"output_text","text":""},{"type":"refusal","refusal":"no"}]}]}"#.to_vec(),
+        br#"{"output":{"type":"message","content":[{"type":"output_text","text":null}]}}"#.to_vec(),
+        // Both tolerances read the top level alone, not a nested object.
+        br#"{"response":{"text":{},"output":[{"type":"message","content":[{"type":"output_text","text":null}]}]}}"#.to_vec(),
+        // Only a null or absent `text` is removed, not any other non-string.
+        br#"{"output":[{"type":"message","content":[{"type":"output_text","text":5},{"type":"output_text","text":{"value":"x"}}]}]}"#.to_vec(),
         b"not json at all".to_vec(),
         Vec::new(),
     ];
     for body in untouched {
         assert!(
-            repair_text_format(&body).is_none(),
+            repair_reply(&body).is_none(),
             "{}",
             String::from_utf8_lossy(&body)
         );
     }
+}
+
+// CVL-FR-TQRD: an `output_text` part whose `text` is null or absent is removed
+// from its `message` item. The item stays, also with no parts, and every other
+// part keeps its place.
+#[test]
+fn an_output_text_part_without_text_is_removed() {
+    let (fixed, repairs) = repaired_with(serde_json::json!({
+        "text": { "format": { "type": "text" } },
+        "output": [
+            {
+                "type": "message",
+                "id": "msg_1",
+                "content": [{ "type": "output_text", "text": null, "annotations": [] }]
+            },
+            {
+                "type": "message",
+                "id": "msg_2",
+                "content": [
+                    { "type": "output_text", "text": "Kept." },
+                    { "type": "output_text", "annotations": [] },
+                    { "type": "refusal", "refusal": "Also kept." },
+                    { "type": "output_text", "text": "" }
+                ]
+            }
+        ],
+    }))
+    .expect("the body is repaired");
+    assert_eq!(
+        fixed,
+        serde_json::json!({
+            "text": { "format": { "type": "text" } },
+            "output": [
+                { "type": "message", "id": "msg_1", "content": [] },
+                {
+                    "type": "message",
+                    "id": "msg_2",
+                    "content": [
+                        { "type": "output_text", "text": "Kept." },
+                        { "type": "refusal", "refusal": "Also kept." },
+                        { "type": "output_text", "text": "" }
+                    ]
+                }
+            ],
+        })
+    );
+    assert_eq!(repairs, ReplyRepairs { text_format: false, null_text_parts: 2 });
+}
+
+// CVL-FR-TQRD: only `message` items lose parts. An item of another type keeps
+// a part without text, and so does a part of another type.
+#[test]
+fn only_output_text_parts_of_message_items_are_removed() {
+    let other_items = serde_json::json!({
+        "text": { "format": { "type": "text" } },
+        "output": [
+            { "type": "function_call", "id": "fc_1", "call_id": "c", "name": "n", "arguments": "{}", "text": null },
+            { "type": "reasoning", "id": "rs_1", "summary": [], "content": [{ "type": "output_text", "text": null }] },
+            { "type": "web_search_call", "content": [{ "type": "output_text", "text": null }] },
+            { "type": "message", "content": [{ "type": "summary_text", "text": null }] },
+            { "type": "message" }
+        ],
+    });
+    assert_eq!(repaired(other_items), None);
+}
+
+// CVL-FR-TQRD: one body can need both tolerances, and both are reported.
+#[test]
+fn both_tolerances_apply_to_one_body() {
+    let (fixed, repairs) = repaired_with(serde_json::json!({
+        "text": {},
+        "output": [{ "type": "message", "content": [{ "type": "output_text", "text": null }] }],
+    }))
+    .expect("the body is repaired");
+    assert_eq!(
+        fixed,
+        serde_json::json!({
+            "text": { "format": { "type": "text" } },
+            "output": [{ "type": "message", "content": [] }],
+        })
+    );
+    assert_eq!(repairs, ReplyRepairs { text_format: true, null_text_parts: 1 });
+    assert!(repairs.any());
+    assert!(!ReplyRepairs::default().any());
 }
 
 // CVL-FR-TQRD: the route check names the Responses path alone.
@@ -104,8 +199,8 @@ fn only_the_custom_gateway_is_configured_to_repair() {
         accepts_image_input: false,
         model_mode: Some(ModelMode::Responses),
     };
-    assert!(openai_adapter_config(&endpoint("custom")).repair_text_format);
-    assert!(!openai_adapter_config(&endpoint("openai")).repair_text_format);
+    assert!(openai_adapter_config(&endpoint("custom")).repair_replies);
+    assert!(!openai_adapter_config(&endpoint("openai")).repair_replies);
 }
 
 // CVL-FR-21: a body the framework could not decode is `decode`, which is
@@ -284,7 +379,7 @@ fn a_custom_gateway_reply_with_an_empty_text_object_delivers_its_answer() {
     assert!(seen.starts_with("POST /v1/responses "), "{seen}");
     let reply = outcome.expect("the repaired reply is read");
     assert_eq!(reply.text, "The answer.");
-    assert!(reply.text_format_repaired);
+    assert_eq!(reply.reply_repairs, ReplyRepairs { text_format: true, null_text_parts: 0 });
 }
 
 // CVL-FR-TQRD: a Custom gateway reply that already has a format is read as it
@@ -299,7 +394,7 @@ fn a_custom_gateway_reply_with_a_format_is_not_repaired() {
     );
     let reply = outcome.expect("the reply is read");
     assert_eq!(reply.text, "The answer.");
-    assert!(!reply.text_format_repaired);
+    assert!(!reply.reply_repairs.any());
 }
 
 // CVL-FR-TQRD, CVL-FR-21: no other provider receives the tolerance. The same
@@ -343,11 +438,11 @@ fn an_unrestricted_custom_model_is_repaired_on_the_responses_route() {
     assert!(seen.starts_with("POST /v1/responses "), "{seen}");
     let reply = outcome.expect("the repaired reply is read");
     assert_eq!(reply.text, "The answer.");
-    assert!(reply.text_format_repaired);
+    assert!(reply.reply_repairs.text_format);
 }
 
 // CVL-FR-TQRD: a Chat Completions reply of the Custom gateway passes unchanged,
-// even when it carries a top-level `text` object of its own.
+// even when it carries a top-level `text` object and a part without text.
 #[test]
 fn a_chat_completions_reply_is_not_repaired() {
     let body = serde_json::json!({
@@ -361,13 +456,115 @@ fn a_chat_completions_reply_is_not_repaired() {
             "finish_reason": "stop"
         }],
         "text": {},
+        "output": [{ "type": "message", "content": [{ "type": "output_text", "text": null }] }],
     })
     .to_string();
     let (seen, outcome) = call("custom", Some(ModelMode::Chat), "http://{addr}", body);
     assert!(seen.starts_with("POST /v1/chat/completions "), "{seen}");
     let reply = outcome.expect("the chat reply is read");
     assert_eq!(reply.text, "The answer.");
-    assert!(!reply.text_format_repaired);
+    assert!(!reply.reply_repairs.any());
+}
+
+/// The reply the gateway sent: a message whose one part has `"text": null`,
+/// optionally beside a valid tool call, and `"text": {}`.
+fn null_text_reply(with_tool_call: bool) -> String {
+    let mut output = vec![serde_json::json!({
+        "type": "message",
+        "id": "msg_example",
+        "status": "completed",
+        "role": "assistant",
+        "content": [{ "type": "output_text", "text": null, "annotations": [] }]
+    })];
+    if with_tool_call {
+        output.push(serde_json::json!({
+            "type": "function_call",
+            "id": "call_example",
+            "call_id": "call_example",
+            "name": "example_tool",
+            "arguments": "{\"id\": \"example\"}",
+            "status": "completed"
+        }));
+    }
+    serde_json::json!({
+        "id": "resp_example",
+        "object": "response",
+        "created_at": 1700000000,
+        "status": "completed",
+        "error": null,
+        "incomplete_details": null,
+        "instructions": null,
+        "model": "example-model",
+        "output": output,
+        "tools": [],
+        "text": {},
+        "usage": {
+            "input_tokens": 10,
+            "input_tokens_details": { "cached_tokens": 0 },
+            "output_tokens": 5,
+            "output_tokens_details": { "reasoning_tokens": 0 },
+            "total_tokens": 15
+        }
+    })
+    .to_string()
+}
+
+// CVL-FR-TQRD: the Custom gateway reply with a null-text part beside a tool
+// call delivers the tool call, and the loop is told what was repaired.
+#[test]
+fn a_custom_gateway_reply_with_a_null_text_part_delivers_its_tool_call() {
+    let (seen, outcome) = call("custom", RESPONSES, "http://{addr}", null_text_reply(true));
+    assert!(seen.starts_with("POST /v1/responses "), "{seen}");
+    let reply = outcome.expect("the repaired reply is read");
+    assert_eq!(reply.text, "");
+    assert_eq!(reply.tool_calls.len(), 1);
+    let tool_call = &reply.tool_calls[0];
+    assert_eq!(tool_call.function.name, "example_tool");
+    assert_eq!(tool_call.call_id.as_deref(), Some("call_example"));
+    assert_eq!(tool_call.function.arguments, serde_json::json!({ "id": "example" }));
+    assert_eq!(reply.reply_repairs, ReplyRepairs { text_format: true, null_text_parts: 1 });
+}
+
+// CVL-FR-TQRD: a part with text beside a part without text keeps its text. The
+// body has a format, so the second tolerance is the only one applied.
+#[test]
+fn a_custom_gateway_message_keeps_the_parts_that_have_text() {
+    let mut body: serde_json::Value = serde_json::from_str(&null_text_reply(false)).unwrap();
+    body["text"] = serde_json::json!({ "format": { "type": "text" } });
+    body["output"][0]["content"] = serde_json::json!([
+        { "type": "output_text", "text": "The answer.", "annotations": [] },
+        { "type": "output_text", "text": null, "annotations": [] }
+    ]);
+    let (_, outcome) = call("custom", RESPONSES, "http://{addr}", body.to_string());
+    let reply = outcome.expect("the repaired reply is read");
+    assert_eq!(reply.text, "The answer.");
+    assert_eq!(reply.reply_repairs, ReplyRepairs { text_format: false, null_text_parts: 1 });
+}
+
+// CVL-FR-TQRD, CVL-FR-21: a reply that has nothing left after the repair is the
+// framework's empty reply, not a reply that could not be read, and the failure
+// still tells the loop what was repaired.
+#[test]
+fn a_custom_gateway_reply_with_only_a_null_text_part_is_an_empty_reply() {
+    let (_, outcome) = call("custom", RESPONSES, "http://{addr}", null_text_reply(false));
+    let failure = outcome.expect_err("nothing is left to deliver");
+    assert_eq!(failure.failure, FAIL_EMPTY_REPLY);
+    assert_eq!(failure.class, class::EMPTY_REPLY);
+    assert_eq!(failure.reply_repairs, ReplyRepairs { text_format: true, null_text_parts: 1 });
+}
+
+// CVL-FR-TQRD, CVL-FR-21: the same reply on `openai` gets no tolerance and is
+// a reply that could not be read. The body has a format, so only the part
+// without text can make the framework refuse it.
+#[test]
+fn the_null_text_reply_on_openai_is_an_invalid_response() {
+    let mut body: serde_json::Value = serde_json::from_str(&null_text_reply(true)).unwrap();
+    body["text"] = serde_json::json!({ "format": { "type": "text" } });
+    let (_, outcome) = call("openai", RESPONSES, "http://{addr}/v1", body.to_string());
+    let failure = outcome.expect_err("openai gets no repair");
+    assert_eq!(failure.failure, FAIL_INVALID_RESPONSE);
+    assert_eq!(failure.class, class::DECODE);
+    assert!(!failure.reply_repairs.any());
 }
 
 // CVL-FR-21, CVL-FR-13: a reply with no message and no tool call is
@@ -409,8 +606,12 @@ fn a_turn_whose_reply_could_not_be_read_is_offered_again_and_not_repeated() {
     assert_eq!(require(&failed, "retrying"), "false");
 }
 
-/// A seam whose one reply the Custom gateway repair changed.
-struct RepairedReply;
+/// A seam whose one reply the Custom gateway repair changed. With `refused`,
+/// the framework still refused the repaired reply as empty.
+struct RepairedReply {
+    repairs: ReplyRepairs,
+    refused: bool,
+}
 
 impl CompletionSeam for RepairedReply {
     fn complete(
@@ -420,33 +621,71 @@ impl CompletionSeam for RepairedReply {
         _endpoint: &AiApiCall,
         _timeout: Duration,
     ) -> Result<ModelReply, CallFailure> {
+        if self.refused {
+            return Err(CallFailure {
+                reply_repairs: self.repairs,
+                ..CallFailure::from(FAIL_EMPTY_REPLY)
+            });
+        }
         Ok(ModelReply {
             text: "A private answer.".into(),
-            text_format_repaired: true,
+            reply_repairs: self.repairs,
             ..Default::default()
         })
     }
 }
 
-// CVL-FR-TQRD: a repaired reply is recorded at warning level with the provider
-// and the model, and with no part of the reply.
-#[test]
-fn a_repaired_reply_is_recorded_without_its_content() {
-    let h = Harness::with_patient_seam(Box::new(RepairedReply));
+/// Run one turn on a `RepairedReply` seam, and give back the turn's end state
+/// and its record of the repair.
+fn repaired_turn(
+    repairs: ReplyRepairs,
+    refused: bool,
+) -> (AgentTurnState, crate::logging::LogRecord) {
+    let h = Harness::with_patient_seam(Box::new(RepairedReply { repairs, refused }));
     h.create_agent("scribe", "Argue about structure.");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
         .dispatch("scribe", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     let ended = wait_for_terminal(&h, &turn.id);
-    assert_eq!(ended.state, AgentTurnState::Delivered);
+    let record = wait_for_record(&turn.id, "provider reply was repaired before it was read");
+    (ended.state, record)
+}
 
-    let record = wait_for_record(
-        &turn.id,
-        "provider reply had no text format and was read as plain text",
-    );
+// CVL-FR-TQRD: a reply where only parts without text were removed is recorded,
+// and each field names its own tolerance.
+#[test]
+fn a_reply_with_only_removed_parts_is_recorded() {
+    let repairs = ReplyRepairs { text_format: false, null_text_parts: 1 };
+    let (state, record) = repaired_turn(repairs, false);
+    assert_eq!(state, AgentTurnState::Delivered);
+    assert_eq!(require(&record, "textFormat"), "false");
+    assert_eq!(require(&record, "nullTextParts"), "1");
+}
+
+// CVL-FR-TQRD, CVL-FR-21: a repaired reply that the framework still refused is
+// recorded as repaired, so the log shows why the reply came back empty.
+#[test]
+fn a_repaired_reply_that_still_fails_is_recorded() {
+    let repairs = ReplyRepairs { text_format: true, null_text_parts: 1 };
+    let (state, record) = repaired_turn(repairs, true);
+    assert_eq!(state, AgentTurnState::Failed);
+    assert_eq!(record.level, crate::logging::LogLevel::Warn);
+    assert_eq!(require(&record, "textFormat"), "true");
+    assert_eq!(require(&record, "nullTextParts"), "1");
+}
+
+// CVL-FR-TQRD: a repaired reply is recorded at warning level with the provider
+// and the model, and with no part of the reply.
+#[test]
+fn a_repaired_reply_is_recorded_without_its_content() {
+    let repairs = ReplyRepairs { text_format: true, null_text_parts: 2 };
+    let (state, record) = repaired_turn(repairs, false);
+    assert_eq!(state, AgentTurnState::Delivered);
     assert_eq!(record.level, crate::logging::LogLevel::Warn);
     assert_eq!(require(&record, "agent"), "scribe");
+    assert_eq!(require(&record, "textFormat"), "true");
+    assert_eq!(require(&record, "nullTextParts"), "2");
     assert!(!require(&record, "provider").is_empty());
     assert!(!require(&record, "model").is_empty());
     let rendered = format!("{record:?}");

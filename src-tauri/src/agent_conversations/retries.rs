@@ -116,26 +116,32 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 reply
             });
         // CVL-FR-TQRD: a reply the Custom gateway repair changed. Recorded for
-        // every answered attempt, usable or not, so a gateway that keeps
-        // returning `"text": {}` is visible in the log. The provider and the
-        // model alone, never any part of the reply.
-        if let Ok(reply) = &outcome {
-            if reply.text_format_repaired {
-                logging::log_warn(
-                    app,
-                    turns.buffer(),
-                    &[Domain::Ai, Domain::Remote],
-                    "provider reply had no text format and was read as plain text",
-                    log_fields! {
-                        "turnId" => &plan.turn_id,
-                        "agent" => &plan.agent.nickname,
-                        "provider" => &endpoint.provider,
-                        "model" => model_label,
-                        "modelCall" => model_calls,
-                        "attempt" => attempt,
-                    },
-                );
-            }
+        // every answered attempt, usable or not, and also when the framework
+        // still refused the repaired reply, so a gateway that keeps returning
+        // `"text": {}` or parts without text is visible in the log. The
+        // provider, the model and what was repaired, never any part of the
+        // reply.
+        let repairs = match &outcome {
+            Ok(reply) => reply.reply_repairs,
+            Err(failure) => failure.reply_repairs,
+        };
+        if repairs.any() {
+            logging::log_warn(
+                app,
+                turns.buffer(),
+                &[Domain::Ai, Domain::Remote],
+                "provider reply was repaired before it was read",
+                log_fields! {
+                    "turnId" => &plan.turn_id,
+                    "agent" => &plan.agent.nickname,
+                    "provider" => &endpoint.provider,
+                    "model" => model_label,
+                    "modelCall" => model_calls,
+                    "attempt" => attempt,
+                    "textFormat" => repairs.text_format,
+                    "nullTextParts" => repairs.null_text_parts,
+                },
+            );
         }
         let failure = match outcome {
             Ok(reply) if reply_is_usable(&reply, at_bound, &plan.request.tools) => {

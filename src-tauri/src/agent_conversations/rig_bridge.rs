@@ -140,7 +140,7 @@ pub(super) mod rig_seam {
                 native_entries_dropped: 0,
                 input_tokens: input_tokens_of(&response.usage),
                 // The carrier sets this where it repaired the reply.
-                text_format_repaired: false,
+                reply_repairs: Default::default(),
             }),
             Err(e) => Err(classify_completion_error(&e)),
         }
@@ -349,9 +349,10 @@ pub(super) enum OpenAiRoute {
 pub(super) struct OpenAiAdapterConfig {
     pub base_url: String,
     pub route: OpenAiRoute,
-    /// CVL-FR-TQRD: whether a Responses reply gets the `text.format` repair.
-    /// Set for the Custom gateway alone.
-    pub repair_text_format: bool,
+    /// CVL-FR-TQRD: whether a Responses reply gets the tolerances of the Custom
+    /// gateway (`text.format` and `output_text` parts without text). Set for
+    /// the Custom gateway alone.
+    pub repair_replies: bool,
 }
 
 /// AAP-FR-ADPX / CVL-FR-ZPGW: the adapter configuration an endpoint calls for.
@@ -365,7 +366,7 @@ pub(super) fn openai_adapter_config(endpoint: &AiApiCall) -> OpenAiAdapterConfig
         return OpenAiAdapterConfig {
             base_url: endpoint.base_url.clone(),
             route: OpenAiRoute::Unrestricted,
-            repair_text_format: false,
+            repair_replies: false,
         };
     }
     OpenAiAdapterConfig {
@@ -375,7 +376,7 @@ pub(super) fn openai_adapter_config(endpoint: &AiApiCall) -> OpenAiAdapterConfig
             Some(crate::ai_shared::ModelMode::Responses) => OpenAiRoute::Responses,
             None => OpenAiRoute::Unrestricted,
         },
-        repair_text_format: true,
+        repair_replies: true,
     }
 }
 
@@ -401,7 +402,7 @@ async fn carry_openai(
     // them. Every other provider's client passes its replies unchanged.
     let http_client = super::responses_repair::ResponsesRepair::new(
         http_client,
-        config.repair_text_format,
+        config.repair_replies,
     );
     let repair = http_client.clone();
     let client = rig::providers::openai::Client::builder()
@@ -423,10 +424,14 @@ async fn carry_openai(
     };
     result
         .map(|mut reply| {
-            reply.text_format_repaired = repair.repaired();
+            reply.reply_repairs = repair.repairs();
             reply
         })
-        .map_err(|failure| with_recorded_tls(failure, &tls_record))
+        .map_err(|mut failure| {
+            // A repaired reply the framework still refused is recorded too.
+            failure.reply_repairs = repair.repairs();
+            with_recorded_tls(failure, &tls_record)
+        })
 }
 
 /// CVL-FR-36: make the call, and narrow the provider-native entries it carries

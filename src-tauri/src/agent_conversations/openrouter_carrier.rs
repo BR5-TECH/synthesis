@@ -130,6 +130,7 @@ pub(super) fn openrouter_failure(error: &openrouter_rs::error::OpenRouterError) 
                 // find out how much that is.
                 provider_message: Some(truncated(&context.message, PROVIDER_MESSAGE_LIMIT)),
                 tls: None,
+                reply_repairs: Default::default(),
             }
         }
         // A transport failure carries no structure at all, so the text-scanning
@@ -251,7 +252,7 @@ pub(super) fn reply_from_openrouter(
         native_usage,
         native_entries_dropped: 0,
         // CVL-FR-TQRD: the repair belongs to the Custom gateway alone.
-        text_format_repaired: false,
+        reply_repairs: Default::default(),
         served_by,
         // CVL-FR-28: what this one call presented, as this client counted it.
         // A count of zero is read as not counted, on the same terms

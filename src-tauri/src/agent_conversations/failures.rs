@@ -158,6 +158,10 @@ pub struct CallFailure {
     /// CVL-FR-21 / AAP-FR-HZTB: the host and the cause, present only on
     /// [`class::TLS`]. Nothing of the request is in it.
     pub tls: Option<crate::tls::TlsFailure>,
+    /// CVL-FR-TQRD: what the Custom gateway repair changed in the reply before
+    /// the framework refused it. The default on every failure where the repair
+    /// changed nothing, or where no reply came back.
+    pub reply_repairs: super::responses_repair::ReplyRepairs,
 }
 
 impl CallFailure {
@@ -170,6 +174,10 @@ impl CallFailure {
             provider_request_id: None,
             provider_message: None,
             tls: None,
+            reply_repairs: super::responses_repair::ReplyRepairs {
+                text_format: false,
+                null_text_parts: 0,
+            },
         }
     }
 

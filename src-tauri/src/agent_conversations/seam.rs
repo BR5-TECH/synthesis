@@ -107,10 +107,10 @@ pub struct ModelReply {
     /// price, and a provider that declines to report one leaves this absent so
     /// the direction reads unavailable rather than as a confident zero.
     pub output_tokens: Option<u64>,
-    /// CVL-FR-TQRD: whether the Custom gateway repair changed this reply before
+    /// CVL-FR-TQRD: what the Custom gateway repair changed in this reply before
     /// the framework read it. The loop records it, because the carrier has no
     /// access to the log.
-    pub text_format_repaired: bool,
+    pub reply_repairs: super::responses_repair::ReplyRepairs,
 }
 
 /// CVL-FR-31: one tool the provider ran on its own account, and what it

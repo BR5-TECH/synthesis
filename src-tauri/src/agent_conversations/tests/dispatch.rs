@@ -147,7 +147,7 @@ fn the_call_carries_the_agents_own_model_and_reasoning_not_the_providers() {
 
 #[test]
 fn the_assembled_request_is_the_same_shape_whichever_client_would_carry_it() {
-    // CVL-FR-10. Which client carries the call is
+    // CVL-FR-10, CVL-FR-HBNW, CVL-FR-KXTQ. Which client carries the call is
     // `RigCompletion::complete`'s match on the provider; asserted here is the
     // claim that makes that match safe — the request `rig` assembles is
     // identical whichever provider it was assembled for.
@@ -202,16 +202,20 @@ fn the_assembled_request_is_the_same_shape_whichever_client_would_carry_it() {
         .collect();
     // The prompt occupies the instruction position and the input the single user
     // message, for every provider alike (CVL-FR-10).
-    for built in &shapes {
+    for (provider, built) in ["openrouter", "anthropic", "openai", "custom"].iter().zip(&shapes) {
         assert_eq!(built.preamble.as_deref(), Some(request.instructions.as_str()));
         assert_eq!(built.model.as_deref(), Some("m"));
         assert_eq!(built.chat_history.len(), 1, "one user message, never more");
         assert_eq!(built.chat_history.len(), shapes[0].chat_history.len());
         assert!(built.tools.is_empty(), "an agent here answers, never acts");
-        assert_eq!(
-            built.additional_params,
-            Some(serde_json::json!({ "reasoning": { "effort": "high" } })),
-        );
+        // CVL-FR-HBNW: the reasoning object is not a parameter of the Anthropic
+        // Messages API, so only that provider receives none.
+        let expected = (*provider != "anthropic")
+            .then(|| serde_json::json!({ "reasoning": { "effort": "high" } }));
+        assert_eq!(built.additional_params, expected, "{provider}");
+        // CVL-FR-KXTQ: the Anthropic limit is set on that provider's model, so
+        // the shared request carries no limit for any provider.
+        assert_eq!(built.max_tokens, None, "{provider}");
     }
     // CVL-FR-01, CVL-FR-37, CVL-FR-39: and the whole assembled request is the same one whichever head
     // was named, so the split reaches nothing the request presents.

@@ -288,7 +288,7 @@ fn aap_ts08_an_endpoint_that_lists_nothing_falls_back_to_the_bundled_catalog() {
         "an empty list degrades the models, not the verification"
     );
     assert_eq!(rec.models_origin, ModelsOrigin::Catalog);
-    assert!(rec.models.iter().any(|m| m.id == "claude-opus-5"));
+    assert!(rec.models.iter().any(|m| m.id == "claude-opus-5-5"));
 
     let h2 = ok_harness();
     let rec2 = verify_integration_impl(

@@ -58,8 +58,15 @@ pub(super) mod rig_seam {
     /// The reasoning the agent asked for, in the shape an OpenAI-compatible
     /// endpoint takes it. `None` sends nothing at all, leaving the model to its
     /// own default (AAP-FR-31).
+    ///
+    /// CVL-FR-HBNW: an Anthropic call carries no reasoning parameter. The
+    /// Messages API refuses an unknown top-level field, and `rig` flattens these
+    /// params into the top level of the body.
     fn reasoning_params(endpoint: &AiApiCall) -> Option<serde_json::Value> {
         use ai_api::ReasoningChoice;
+        if endpoint.provider == "anthropic" {
+            return None;
+        }
         match endpoint.reasoning.as_ref()? {
             ReasoningChoice::Off => Some(serde_json::json!({ "reasoning": { "enabled": false } })),
             ReasoningChoice::On => Some(serde_json::json!({ "reasoning": { "enabled": true } })),
@@ -268,6 +275,10 @@ async fn carry_anthropic(
 /// the bound of CVL-FR-16. Named as a lifetime left unset rather than as one
 /// chosen, because the client offers exactly two and the long one is the other.
 ///
+/// CVL-FR-KXTQ: the output-token limit is set here on every model. `rig` knows
+/// a default only for the model ids in its own table, and without a limit it
+/// refuses the call before it sends a request.
+///
 /// Separated from [`carry_anthropic`] so what is asked for is readable without a
 /// network call: the flags below are what a request carries, and a test asserts
 /// them directly rather than inferring them from a response.
@@ -276,10 +287,16 @@ pub(super) fn anthropic_model(
     endpoint: &AiApiCall,
 ) -> rig::providers::anthropic::completion::CompletionModel {
     use rig::client::CompletionClient;
-    client
+    let mut model = client
         .completion_model(endpoint.model_id.clone().unwrap_or_default())
-        .with_automatic_caching()
+        .with_automatic_caching();
+    model.default_max_tokens = Some(ANTHROPIC_MAX_OUTPUT_TOKENS);
+    model
 }
+
+/// CVL-FR-KXTQ: the output-token limit of every Anthropic call. All current
+/// Anthropic models accept it.
+pub(super) const ANTHROPIC_MAX_OUTPUT_TOKENS: u64 = 32_000;
 
 /// Which conversation route the OpenAI-compatible adapter takes (CVL-FR-ZPGW).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

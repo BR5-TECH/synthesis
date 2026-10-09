@@ -203,6 +203,11 @@ pub const PROVIDERS: &[AiApiProvider] = &[
         models_format: ModelsFormat::Lenient,
         key_required: true,
         model_catalog: &[
+            ("claude-opus-5-5", "Claude Opus 5.5", true),
+            ("claude-sonnet-5-5", "Claude Sonnet 5.5", true),
+            ("claude-haiku-5-5", "Claude Haiku 5.5", true),
+            // AAP-FR-35: the earlier generation stays, because a probe still
+            // lists it and this catalog is the only source of its image input.
             ("claude-opus-5", "Claude Opus 5", true),
             ("claude-sonnet-5", "Claude Sonnet 5", true),
             ("claude-haiku-4-5", "Claude Haiku 4.5", true),

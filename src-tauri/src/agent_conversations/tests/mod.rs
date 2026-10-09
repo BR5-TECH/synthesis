@@ -595,6 +595,7 @@ mod support;
 // than that.
 use support::*;
 
+mod anthropic_carrier;
 mod asking_author;
 mod question_set_turns;
 mod builders;

@@ -749,6 +749,7 @@ fn a_refusal_naming_a_server_tool_narrows_the_entries_and_a_plain_400_does_not()
         provider_code: Some(400),
         provider_request_id: Some("req_1".into()),
         provider_message: Some(message.into()),
+        tls: None,
     };
     assert!(refuses_a_server_tool(&refusal("Server tool request failed")));
     assert!(

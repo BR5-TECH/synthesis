@@ -221,7 +221,7 @@ pub struct HttpRelayProbe;
 
 impl RelayProbe for HttpRelayProbe {
     fn health(&self, health_url: &str) -> Result<RelayHealth, String> {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
+        let agent: ureq::Agent = crate::tls::ureq_config()
             .timeout_global(Some(VERIFY_TIMEOUT))
             .build()
             .into();
@@ -236,7 +236,11 @@ impl RelayProbe for HttpRelayProbe {
             // answering the health contract.
             Err(ureq::Error::StatusCode(_)) => return Err(ERR_NOT_A_RELAY.to_string()),
             Err(ureq::Error::Timeout(_)) => return Err(ERR_TIMED_OUT.to_string()),
-            Err(_) => return Err(ERR_UNREACHABLE.to_string()),
+            // AAP-FR-LRTC: a refused certificate is its own typed error.
+            Err(e) => {
+                return Err(crate::tls::ureq_wire(&e, health_url)
+                    .unwrap_or_else(|| ERR_UNREACHABLE.to_string()))
+            }
         };
 
         let body = response

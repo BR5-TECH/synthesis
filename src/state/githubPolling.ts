@@ -5,6 +5,7 @@
  *
  * Kept free of React so each rule is tested as a function of the view alone.
  */
+import { tlsErrorMessage } from "../tlsError";
 import type {
   GithubNewIssue,
   GithubPollingInterval,
@@ -69,6 +70,9 @@ export function refusalCode(error: unknown): string {
 
 /** GPP-FR-SUFH: the displayable text of a refusal, by its code. */
 export function githubPollingErrorMessage(error: unknown): string {
+  // AAP-FR-LRTC: a refused certificate names its host and its cause.
+  const tls = tlsErrorMessage(error);
+  if (tls) return tls;
   const code = refusalCode(error);
   return ERROR_TEXT[code] ?? `The GitHub operation failed (${code || "unknown error"}).`;
 }

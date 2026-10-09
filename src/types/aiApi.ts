@@ -120,6 +120,8 @@ export const AI_ERRORS = {
   baseUrlInvalid: "base_url_invalid",
   keyMissing: "key_missing",
   unreachable: "unreachable",
+  // The wire text is `tls_untrusted:<cause>:<host>` (AAP-FR-HZTB); see `tlsError.ts`.
+  tlsUntrusted: "tls_untrusted",
   rejected: "rejected",
   notAnAgentEndpoint: "not_an_agent_endpoint",
   notAnAiEndpoint: "not_an_ai_endpoint",

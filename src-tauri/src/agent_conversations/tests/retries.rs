@@ -518,6 +518,9 @@ fn the_recovery_registry_answers_for_a_conversation_and_carries_nothing_else() {
         "activeToolCalls",
         // AGC-FR-37: carried on every payload a turn appears in.
         "imagesOmitted",
+        // AGC-FR-RWPT: carried, and null unless the turn failed on a refused
+        // certificate.
+        "tlsFailure",
     ];
     expected.sort_unstable();
     assert_eq!(keys, expected, "the entry is the turn and nothing beside it");
@@ -925,4 +928,67 @@ fn nothing_an_author_can_reach_varies_the_retry_policy() {
     for forbidden in ["retry", "backoff", "attempt", "jitter"] {
         assert!(!text.contains(forbidden), "an agent names {forbidden}");
     }
+}
+
+#[test]
+fn a_refused_certificate_fails_the_turn_with_host_and_cause_and_is_not_repeated() {
+    // AGC-FR-RWPT, AGC-FR-15, AGC-FR-31, CVL-FR-18, CVL-FR-21.
+    let h = Harness::new(vec![Err(FAIL_TLS_UNTRUSTED); MAX_ATTEMPTS]);
+    h.create_agent("arch", "");
+    let (terminal, thread) = run_one(&h, "arch");
+
+    assert_eq!(terminal.state, AgentTurnState::Failed);
+    assert_eq!(terminal.failure.as_deref(), Some(FAIL_TLS_UNTRUSTED));
+    assert_eq!(
+        terminal.tls_failure,
+        Some(AgentTlsFailure { host: "provider.test".into(), cause: "unknown_issuer".into() }),
+    );
+    assert!(terminal.retry_permitted, "a refused certificate is recoverable");
+    assert_eq!(h.seam.call_count(), 1, "the same certificate is not asked for again");
+    assert_eq!(h.threads("spec.md")[0].comments.len(), 1, "the thread gained no line");
+    let entries = h.turns().recoverable_failures(None);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].id, terminal.id);
+    assert_eq!(entries[0].tls_failure, terminal.tls_failure);
+    assert_eq!(entries[0].trigger_comment_id, thread.comments[0].id);
+}
+
+#[test]
+fn a_turn_that_fails_for_another_reason_carries_no_tls_failure() {
+    // AGC-FR-RWPT.
+    let h = Harness::new(vec![Err(FAIL_UNREACHABLE); MAX_ATTEMPTS]);
+    h.create_agent("arch", "");
+    let (terminal, _) = run_one(&h, "arch");
+    assert_eq!(terminal.failure.as_deref(), Some(FAIL_UNREACHABLE));
+    assert_eq!(terminal.tls_failure, None);
+}
+
+#[test]
+fn a_transport_failure_of_a_client_that_refused_a_certificate_is_a_tls_failure() {
+    // CVL-FR-21, AAP-FR-HZTB, AAP-FR-BDKS: `rig` and `openrouter-rs` flatten the
+    // TLS error to text, so the record of the client the call used decides.
+    let connect = || CallFailure::unreachable(class::CONNECT);
+    let record = crate::tls::TlsRecord::new();
+    assert_eq!(with_recorded_tls(connect(), &record), connect(), "nothing was refused");
+
+    let refusal = crate::tls::TlsFailure::new("gw.test", crate::tls::TlsCause::Expired);
+    record.set_for_test(refusal.clone());
+    let failure = with_recorded_tls(connect(), &record);
+    assert_eq!(failure.failure, FAIL_TLS_UNTRUSTED);
+    assert_eq!(failure.class, class::TLS);
+    assert_eq!(failure.tls, Some(refusal.clone()));
+
+    // The record outranks the text classification, which can read a host name
+    // as a status.
+    record.set_for_test(refusal);
+    let misread = CallFailure::new(FAIL_TIMED_OUT, class::PROVIDER_TIMEOUT);
+    assert_eq!(with_recorded_tls(misread, &record).failure, FAIL_TLS_UNTRUSTED);
+
+    // A provider that answered with a status had a good handshake.
+    record.set_for_test(crate::tls::TlsFailure::new("gw.test", crate::tls::TlsCause::Other));
+    let answered = CallFailure {
+        status: Some(401),
+        ..CallFailure::new(FAIL_REJECTED, class::AUTH)
+    };
+    assert_eq!(with_recorded_tls(answered.clone(), &record), answered);
 }

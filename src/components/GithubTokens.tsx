@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import * as api from "../api";
 import { Icon } from "./icons";
+import { tlsErrorMessage } from "../tlsError";
 import { GITHUB_TOKEN_ERRORS, type GithubTokenRecord } from "../types";
 
 /**
@@ -18,6 +19,9 @@ import { GITHUB_TOKEN_ERRORS, type GithubTokenRecord } from "../types";
 /** Render a typed backend rejection as text that says what to do about it. */
 export function tokenErrorMessage(e: unknown): string {
   const raw = typeof e === "string" ? e : e instanceof Error ? e.message : "";
+  // AAP-FR-LRTC: a refused certificate names its host and its cause.
+  const tls = tlsErrorMessage(raw);
+  if (tls) return tls;
   switch (raw) {
     // GHA-FR-10: the three rejections are deliberately distinguishable — a bad
     // token, a network that never answered, and a keychain that refused are

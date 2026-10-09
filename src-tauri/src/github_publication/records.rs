@@ -19,6 +19,8 @@ pub const ERR_ISSUES_INACCESSIBLE: &str = "issues_inaccessible";
 pub const ERR_ISSUES_DISABLED: &str = "issues_disabled";
 pub const ERR_ISSUES_CREATE_FORBIDDEN: &str = "issues_create_forbidden";
 pub const ERR_TOKEN_UNAVAILABLE: &str = "token_unavailable";
+/// AAP-FR-LRTC: the TLS check refused GitHub's certificate.
+pub const ERR_TLS_UNTRUSTED: &str = "tls_untrusted";
 pub const ERR_ATTEMPT_IN_PROGRESS: &str = "attempt_in_progress";
 pub const ERR_NO_ATTEMPT: &str = "no_attempt";
 pub const ERR_GITHUB_UNREACHABLE: &str = "github_unreachable";
@@ -281,6 +283,9 @@ pub enum RemoteEligibility {
     IssuesDisabled,
     IssuesCreateForbidden,
     TokenUnavailable,
+    /// The TLS check refused GitHub's certificate (AAP-FR-LRTC). The remote's
+    /// own `reason` names the host and the cause.
+    TlsUntrusted,
 }
 
 impl RemoteEligibility {
@@ -293,6 +298,7 @@ impl RemoteEligibility {
             RemoteEligibility::IssuesDisabled => ERR_ISSUES_DISABLED,
             RemoteEligibility::IssuesCreateForbidden => ERR_ISSUES_CREATE_FORBIDDEN,
             RemoteEligibility::TokenUnavailable => ERR_TOKEN_UNAVAILABLE,
+            RemoteEligibility::TlsUntrusted => ERR_TLS_UNTRUSTED,
         }
     }
 
@@ -316,6 +322,9 @@ impl RemoteEligibility {
             RemoteEligibility::TokenUnavailable => {
                 Some("No GitHub token is available for this project.")
             }
+            RemoteEligibility::TlsUntrusted => {
+                Some("The certificate of GitHub is not trusted.")
+            }
         }
     }
 }
@@ -338,6 +347,22 @@ pub struct PublicationRemote {
     pub repository_name: Option<String>,
     pub eligibility: RemoteEligibility,
     pub reason: Option<String>,
+    /// AAP-FR-LRTC: the host and cause of a refused certificate. Set only where
+    /// `eligibility` is `TlsUntrusted`. It is not sent to the frontend; the
+    /// refusal text carries it instead.
+    #[serde(skip)]
+    pub tls_failure: Option<crate::tls::TlsFailure>,
+}
+
+impl PublicationRemote {
+    /// GHP-FR-ZRFP / AAP-FR-LRTC: the typed error a refusal on this remote
+    /// returns. A refused certificate gives `tls_untrusted:<cause>:<host>`.
+    pub fn refusal_code(&self) -> String {
+        match &self.tls_failure {
+            Some(failure) => failure.wire(),
+            None => self.eligibility.error_code().to_string(),
+        }
+    }
 }
 
 /// GHP-FR-NDSB: how the reported selection was reached.

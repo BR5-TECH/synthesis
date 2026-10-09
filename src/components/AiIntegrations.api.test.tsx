@@ -310,6 +310,56 @@ describe("the AI API level", () => {
     );
   });
 
+  it("AII-FR-09: a refused certificate names the host and the cause in the status line", async () => {
+    let failure = "tls_untrusted:unknown_issuer:gateway.corp.example";
+    backend(
+      {
+        api: [
+          apiVerified("anthropic", "https://api.anthropic.com/v1"),
+          ...API_ALL.slice(1).map((p) => apiIntegration(p)),
+        ],
+      },
+      {
+        verify_ai_api_integration: () => {
+          throw failure;
+        },
+      },
+    );
+    render(<BothLevels />);
+    const user = userEvent.setup();
+    await openApiTab(user, apiLevel(), /Anthropic/);
+
+    await user.type(await apiLevel().findByLabelText("API key"), "sk-secret");
+    await user.click(apiLevel().getByRole("button", { name: "Verify" }));
+    await waitFor(() =>
+      expect(apiLevel().getByTestId("ai-api-status")).toHaveTextContent(
+        /certificate of gateway\.corp\.example is not trusted.*issuer.*unknown/i,
+      ),
+    );
+    expect(apiLevel().getByTestId("ai-api-status")).not.toHaveTextContent(
+      /could not be reached/i,
+    );
+    expect(apiLevel().getByTestId("ai-api-status")).not.toHaveTextContent(
+      "sk-secret",
+    );
+
+    failure = "tls_untrusted:expired:gateway.corp.example";
+    await user.click(apiLevel().getByRole("button", { name: "Verify" }));
+    await waitFor(() =>
+      expect(apiLevel().getByTestId("ai-api-status")).toHaveTextContent(
+        /gateway\.corp\.example.*expired/i,
+      ),
+    );
+
+    failure = "tls_untrusted:hostname_mismatch:gateway.corp.example";
+    await user.click(apiLevel().getByRole("button", { name: "Verify" }));
+    await waitFor(() =>
+      expect(apiLevel().getByTestId("ai-api-status")).toHaveTextContent(
+        /gateway\.corp\.example.*host name/i,
+      ),
+    );
+  });
+
   it("returns to an unverified presentation when a field is edited (AII-FR-11)", async () => {
     // AII-FR-11: and no operation is invoked by the edit itself.
     backend({

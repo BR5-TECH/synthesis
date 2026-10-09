@@ -263,6 +263,15 @@ describe("relayVerifyMessage", () => {
     );
     expect(relayVerifyMessage(null)).toBe("The relay could not be verified.");
   });
+
+  it("AAP-FR-LRTC: a refused certificate names the host and the cause", () => {
+    const wire = "tls_untrusted:unknown_issuer:relay.corp.test";
+    for (const rejection of [wire, `Error: ${wire}`, new Error(wire)]) {
+      const text = relayVerifyMessage(rejection);
+      expect(text).toContain("relay.corp.test");
+      expect(text).toMatch(/issuer.*unknown/);
+    }
+  });
 });
 
 describe("relayStatusLine", () => {

@@ -152,8 +152,27 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 # opens a path itself. It extracts embedded text only and does no OCR.
 pdf-extract = "0.12"
 
+# AAP-FR-WMCX / AAP-FR-QLNV / AAP-FR-MXJD: one TLS trust setup for every outbound
+# HTTP(S) path. The roots are the operating system store (read live on each
+# start) plus the bundled Mozilla roots. `ureq`, the `rig` clients, and the
+# `openrouter-rs` client are all built from that one list, so each of them is
+# named here only to reach its client builder. `rustls` builds the verifier
+# of the two `reqwest` clients and gives the error types the others are
+# classified by.
+rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
+rustls-native-certs = "0.8"
+webpki-root-certs = "1"
+# The same `reqwest` versions `rig-core` (0.13) and `openrouter-rs` (0.12)
+# use. Each is named so the application can build the client those crates
+# are handed, with the shared roots.
+reqwest013 = { package = "reqwest", version = "0.13", default-features = false, features = ["rustls", "http2"] }
+reqwest012 = { package = "reqwest", version = "0.12", default-features = false, features = ["rustls-tls"] }
+
 [dev-dependencies]
 tempfile = "3"
+# AAP-FR-HZTB: the TLS tests run a local HTTPS server under a certificate they
+# generate, so every cause code is produced by a real handshake.
+rcgen = { version = "0.13", default-features = false, features = ["pem", "ring"] }
 # AGC-FR-27: `rig::test_utils::MockCompletionModel` is the scripted completion
 # model the whole agent-conversation suite runs against, so no test spends a
 # token or leaves the machine. Enabled here rather than in `[dependencies]` so

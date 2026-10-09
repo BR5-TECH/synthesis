@@ -281,6 +281,7 @@ impl TurnRegistry {
             trigger_comment_id: trigger_comment_id.to_string(),
             state: AgentTurnState::Running,
             failure: None,
+            tls_failure: None,
             // AGC-FR-31: set only where the turn terminates on a recoverable
             // failure and becomes its conversation's registry entry.
             retry_permitted: false,
@@ -672,6 +673,17 @@ impl TurnRegistry {
     pub(super) fn note_images_omitted(&self, turn_id: &str, omitted: bool) {
         if let Some(live) = self.lock().live.get_mut(turn_id) {
             live.turn.images_omitted = omitted;
+        }
+    }
+
+    /// AGC-FR-RWPT: record the host and the cause of a refused certificate on
+    /// the live turn, before it terminates.
+    pub(super) fn note_tls_failure(&self, turn_id: &str, tls: &crate::tls::TlsFailure) {
+        if let Some(live) = self.lock().live.get_mut(turn_id) {
+            live.turn.tls_failure = Some(AgentTlsFailure {
+                host: tls.host.clone(),
+                cause: tls.cause.as_str().to_string(),
+            });
         }
     }
 

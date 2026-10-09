@@ -530,6 +530,7 @@ fn agc_ts58_the_notice_registry_replaces_and_retires_its_entry() {
         trigger_comment_id: "c1".into(),
         state: AgentTurnState::Delivered,
         failure: None,
+        tls_failure: None,
         retry_permitted: false,
         started_at: "2026-01-01T00:00:00Z".into(),
         ended_at: Some("2026-01-01T00:00:01Z".into()),

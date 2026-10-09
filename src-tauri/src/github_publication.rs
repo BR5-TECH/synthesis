@@ -247,7 +247,7 @@ fn get_draft_publication_impl<R: tauri::Runtime>(
                     Some(_) => PublicationEligibility::publishable(),
                     None => {
                         let code = remotes::refusal_for(&resolution.remotes);
-                        PublicationEligibility::refused(code, remotes::refusal_reason(code))
+                        PublicationEligibility::refused(&code, remotes::refusal_reason(&code))
                     }
                 }
             }
@@ -643,6 +643,7 @@ fn resolve_draft_publication_conflict_impl<R: tauri::Runtime>(
                 repository_name: Some(attempt.repository_name.clone()),
                 eligibility: RemoteEligibility::Eligible,
                 reason: None,
+                tls_failure: None,
             };
             // GHP-FR-YPGL: the saved choice travels to the new attempt, which
             // replaces the old one in a single write.

@@ -323,6 +323,24 @@ pub(super) fn classify_provider_error(message: &str) -> CallFailure {
     CallFailure::unreachable(class::TRANSPORT_OTHER)
 }
 
+/// AAP-FR-HZTB / CVL-FR-21: a call whose client's verifier refused a
+/// certificate failed for that reason.
+///
+/// `rig` and `openrouter-rs` flatten a TLS error into text, so the cause is read
+/// from the record of the client the call used. The record is the evidence, and
+/// it is read ahead of the text classification, which can mistake a host name or
+/// a port for a status. A provider that answered with a status had a good
+/// handshake, so a failure that carries a status is left as it is.
+pub(super) fn with_recorded_tls(failure: CallFailure, record: &crate::tls::TlsRecord) -> CallFailure {
+    if failure.status.is_some() {
+        return failure;
+    }
+    match record.take() {
+        Some(tls) => CallFailure::tls_untrusted(tls),
+        None => failure,
+    }
+}
+
 /// CVL-FR-35: how much of a provider's own message a record carries.
 ///
 /// Long enough for the sentence a provider leads with, which is the part that

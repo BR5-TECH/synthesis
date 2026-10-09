@@ -623,6 +623,8 @@ pub enum ProbeError {
     NotExpectedKind,
     /// It did not answer within `PROBE_TIMEOUT`.
     TimedOut,
+    /// The TLS check refused its certificate (AAP-FR-HZTB).
+    TlsUntrusted(crate::tls::TlsFailure),
 }
 
 /// Reaching an endpoint, narrowed to the one question both levels ask of it:
@@ -741,7 +743,7 @@ pub struct HttpEndpointProber;
 
 impl EndpointProber for HttpEndpointProber {
     fn probe(&self, request: &ProbeRequest<'_>) -> Result<Vec<ModelOption>, ProbeError> {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
+        let agent: ureq::Agent = crate::tls::ureq_config()
             .timeout_global(Some(PROBE_TIMEOUT))
             .build()
             .into();
@@ -761,7 +763,12 @@ impl EndpointProber for HttpEndpointProber {
             Ok(r) => r,
             Err(ureq::Error::StatusCode(code)) => return Err(probe_failure_for_status(code)),
             Err(ureq::Error::Timeout(_)) => return Err(ProbeError::TimedOut),
-            Err(e) => return Err(ProbeError::Unreachable(e.to_string())),
+            Err(e) => {
+                return Err(match crate::tls::ureq_failure(&e, &url) {
+                    Some(failure) => ProbeError::TlsUntrusted(failure),
+                    None => ProbeError::Unreachable(e.to_string()),
+                })
+            }
         };
 
         let body = response

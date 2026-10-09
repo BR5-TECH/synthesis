@@ -13,6 +13,7 @@
  */
 import { Icon } from "../icons";
 import type { AgentTurn, Discussion } from "../../types";
+import { failedTurnDetail } from "./messages";
 
 export interface ThreadActionsProps {
   thread: Discussion;
@@ -148,6 +149,14 @@ export function TurnOutcomes({
         <p className="comment__body comment__body--failed">
           {failedTurn.nickname} could not produce a response.
         </p>
+        {failedTurnDetail(failedTurn) && (
+          <p
+            className="comment__body comment__body--failed"
+            data-testid="comment-failed-tls"
+          >
+            {failedTurnDetail(failedTurn)}
+          </p>
+        )}
         {/* CTA-FR-XZUO: a locked thread takes no further contribution and so no
             further turn — the backend would refuse this `discussion_locked`, and a
             control whose only outcome is a refusal is worse than none. A

@@ -205,6 +205,15 @@ impl AgentTurnState {
     }
 }
 
+/// AGC-FR-RWPT: why the provider's certificate was refused. The host has no port,
+/// path, or user information, and nothing else of the request is in it.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentTlsFailure {
+    pub host: String,
+    pub cause: String,
+}
+
 /// One agent, answering one message, in one conversation (AGC-FR-01).
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -219,6 +228,9 @@ pub struct AgentTurn {
     pub trigger_comment_id: String,
     pub state: AgentTurnState,
     pub failure: Option<String>,
+    /// AGC-FR-RWPT: the host and the cause of a refused certificate. Present
+    /// only when `failure` is `tls_untrusted`.
+    pub tls_failure: Option<AgentTlsFailure>,
     /// AGC-FR-31: true only while this turn is its conversation's **current**
     /// recoverable failure.
     ///

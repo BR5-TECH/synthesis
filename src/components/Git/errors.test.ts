@@ -57,4 +57,14 @@ describe("the typed rejections of the Git panel (GIT-FR-UDKY, GIT-FR-GAMV, GIT-F
     );
     expect(rejectionMessage("")).toBe("The operation failed.");
   });
+
+  it("AAP-FR-LRTC: a refused certificate names the host and the cause, and is not cut at its first colon", () => {
+    const wire = "tls_untrusted:unknown_issuer:api.github.com";
+    expect(parseRejection(wire)).toEqual({ code: wire, detail: null });
+    for (const rejection of [wire, `Error: ${wire}`, new Error(wire)]) {
+      const text = rejectionMessage(rejection, { branch: "feature" });
+      expect(text).toContain("api.github.com");
+      expect(text).toMatch(/issuer.*unknown/);
+    }
+  });
 });

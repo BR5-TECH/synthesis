@@ -21,6 +21,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import * as api from "../api";
 import { logWarn } from "../logging";
+import { tlsErrorMessage } from "../tlsError";
 import type { RelayEndpoint } from "../types";
 
 /**
@@ -34,6 +35,9 @@ import type { RelayEndpoint } from "../types";
  */
 export function relayVerifyMessage(error: unknown): string {
   const raw = String(error instanceof Error ? error.message : (error ?? ""));
+  // AAP-FR-LRTC: a refused certificate names its host and its cause.
+  const tls = tlsErrorMessage(raw);
+  if (tls) return tls;
   const known: [string, string][] = [
     ["endpoint_empty", "Give the address of the relay to reach."],
     [

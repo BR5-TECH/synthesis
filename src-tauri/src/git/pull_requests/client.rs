@@ -27,7 +27,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How a request to GitHub failed. A fixed set, so no transport message (which
 /// can echo the request, and so the credential) ever reaches a caller.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum GithubFailure {
     /// HTTP 404 or 410: GitHub has no such resource for this token.
     NotFound,
@@ -36,6 +36,8 @@ pub(crate) enum GithubFailure {
     /// Anything else: no answer in time, a transport error, another status, or
     /// a body that is not the JSON GitHub documents.
     Unreachable,
+    /// The TLS check refused GitHub's certificate (AAP-FR-HZTB).
+    TlsUntrusted(crate::tls::TlsFailure),
 }
 
 /// How a write to GitHub failed (GTC-FR-YQAE). Like [`GithubFailure`] it is a
@@ -52,6 +54,8 @@ pub(crate) enum GithubWriteFailure {
     Invalid(String),
     /// Anything else.
     Unreachable,
+    /// The TLS check refused GitHub's certificate (AAP-FR-HZTB).
+    TlsUntrusted(crate::tls::TlsFailure),
 }
 
 /// One authenticated read of GitHub's REST API.
@@ -79,7 +83,7 @@ pub(crate) struct HttpGithubPullRequests;
 /// An agent that returns a non-2xx answer as a response, so the body of a 422
 /// can be read for the reason GitHub gave.
 fn write_agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
+    crate::tls::ureq_config()
         .timeout_global(Some(REQUEST_TIMEOUT))
         .timeout_connect(Some(CONNECT_TIMEOUT))
         .redirect_auth_headers(ureq::config::RedirectAuthHeaders::SameHost)
@@ -92,7 +96,7 @@ fn write_agent() -> ureq::Agent {
 }
 
 fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
+    crate::tls::ureq_config()
         .timeout_global(Some(REQUEST_TIMEOUT))
         .timeout_connect(Some(CONNECT_TIMEOUT))
         // A redirect can only carry the token to the host that issued it.
@@ -106,7 +110,10 @@ pub(crate) fn classify(error: &ureq::Error) -> GithubFailure {
     match error {
         ureq::Error::StatusCode(401 | 403) => GithubFailure::Rejected,
         ureq::Error::StatusCode(404 | 410) => GithubFailure::NotFound,
-        _ => GithubFailure::Unreachable,
+        other => match crate::tls::ureq_failure(other, API) {
+            Some(failure) => GithubFailure::TlsUntrusted(failure),
+            None => GithubFailure::Unreachable,
+        },
     }
 }
 
@@ -130,7 +137,10 @@ impl GithubPullRequests for HttpGithubPullRequests {
             .header("User-Agent", "synthesis")
             .header("Content-Type", "application/json")
             .send(payload)
-            .map_err(|_| GithubWriteFailure::Unreachable)?;
+            .map_err(|error| match crate::tls::ureq_failure(&error, API) {
+                Some(failure) => GithubWriteFailure::TlsUntrusted(failure),
+                None => GithubWriteFailure::Unreachable,
+            })?;
         let status = response.status().as_u16();
         let text = response
             .body_mut()

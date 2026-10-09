@@ -251,13 +251,20 @@ async fn carry_anthropic(
     request: rig::completion::CompletionRequest,
     endpoint: AiApiCall,
 ) -> Result<ModelReply, CallFailure> {
+    // AAP-FR-WMCX: the client is given the shared HTTP client, so it keeps no
+    // trust setup of its own.
+    let (http_client, tls_record) = crate::tls::rig_http_client()
+        .map_err(|_| CallFailure::unreachable(class::CONNECT))?;
     let client = rig::providers::anthropic::Client::builder()
         .api_key(endpoint.api_key.clone().unwrap_or_default())
         .base_url(&endpoint.base_url)
+        .http_client(http_client)
         .build()
         .map_err(|_| CallFailure::unreachable(class::CONNECT))?;
     let model = anthropic_model(&client, &endpoint);
-    rig_seam::run_model(model, request).await
+    rig_seam::run_model(model, request)
+        .await
+        .map_err(|failure| with_recorded_tls(failure, &tls_record))
 }
 
 /// CVL-FR-23: the Anthropic completion model a turn's calls are carried by, with
@@ -357,13 +364,18 @@ async fn carry_openai(
 ) -> Result<ModelReply, CallFailure> {
     use rig::client::CompletionClient;
     let config = openai_adapter_config(&endpoint);
+    // AAP-FR-WMCX: the client is given the shared HTTP client, so it keeps no
+    // trust setup of its own.
+    let (http_client, tls_record) = crate::tls::rig_http_client()
+        .map_err(|_| CallFailure::unreachable(class::CONNECT))?;
     let client = rig::providers::openai::Client::builder()
         .api_key(endpoint.api_key.clone().unwrap_or_default())
         .base_url(&config.base_url)
+        .http_client(http_client)
         .build()
         .map_err(|_| CallFailure::unreachable(class::CONNECT))?;
     let model_id = endpoint.model_id.clone().unwrap_or_default();
-    match config.route {
+    let result = match config.route {
         // The client's own route is Responses, which is also the only route a
         // `responses` model permits, so one arm serves both.
         OpenAiRoute::Unrestricted | OpenAiRoute::Responses => {
@@ -372,7 +384,8 @@ async fn carry_openai(
         OpenAiRoute::ChatCompletions => {
             rig_seam::run_model(client.completions_api().completion_model(model_id), request).await
         }
-    }
+    };
+    result.map_err(|failure| with_recorded_tls(failure, &tls_record))
 }
 
 /// CVL-FR-36: make the call, and narrow the provider-native entries it carries

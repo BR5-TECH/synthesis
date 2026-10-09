@@ -253,6 +253,8 @@ pub struct GithubIdentity {
 pub enum VerifyError {
     Rejected,
     Unreachable(String),
+    /// The TLS check refused GitHub's certificate (AAP-FR-HZTB).
+    TlsUntrusted(crate::tls::TlsFailure),
 }
 
 pub trait GithubVerifier: Send + Sync {
@@ -268,7 +270,7 @@ pub struct HttpGithubVerifier;
 
 impl GithubVerifier for HttpGithubVerifier {
     fn verify(&self, secret: &str) -> Result<VerifiedIdentity, VerifyError> {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
+        let agent: ureq::Agent = crate::tls::ureq_config()
             .timeout_global(Some(std::time::Duration::from_secs(15)))
             .build()
             .into();
@@ -287,7 +289,12 @@ impl GithubVerifier for HttpGithubVerifier {
             Ok(r) => r,
             // A 4xx/5xx arrives here as a status error rather than an `Ok`.
             Err(ureq::Error::StatusCode(code)) => return Err(verify_failure_for_status(code)),
-            Err(e) => return Err(VerifyError::Unreachable(e.to_string())),
+            Err(e) => {
+                return Err(match crate::tls::ureq_failure(&e, GITHUB_USER_API) {
+                    Some(failure) => VerifyError::TlsUntrusted(failure),
+                    None => VerifyError::Unreachable(e.to_string()),
+                })
+            }
         };
 
         // The granted scopes ride on a response header. A fine-grained token
@@ -586,6 +593,7 @@ pub fn add_token_impl(
         Ok(identity) => identity,
         Err(VerifyError::Rejected) => return Err(ERR_INVALID_TOKEN.into()),
         Err(VerifyError::Unreachable(_)) => return Err(ERR_GITHUB_UNREACHABLE.into()),
+        Err(VerifyError::TlsUntrusted(failure)) => return Err(failure.wire()),
     };
 
     // GTS-FR-05: an omitted label is derived from the account now that
@@ -682,6 +690,7 @@ pub fn validate_token_impl(
         // Leaving the record untouched is what keeps a flaky network from
         // relabelling a good token as bad.
         Err(VerifyError::Unreachable(_)) => return Err(ERR_GITHUB_UNREACHABLE.into()),
+        Err(VerifyError::TlsUntrusted(failure)) => return Err(failure.wire()),
     }
 
     let record = records[index].clone();

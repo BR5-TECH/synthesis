@@ -370,7 +370,9 @@ describe("what the window refuses to show", () => {
     );
     await backend.appended({ runId: "r1", stream: "activity", latestSequence: 4 });
     await screen.findByText("four");
-    expect(screen.getByTestId("glw-match-count")).toHaveTextContent("4 matches");
+    await waitFor(() =>
+      expect(screen.getByTestId("glw-match-count")).toHaveTextContent("4 matches"),
+    );
     await backend.appended({ runId: "r1", stream: "activity", latestSequence: 3 });
     await waitFor(() => expect(appends).toBe(2));
     expect(screen.getByTestId("glw-match-count")).toHaveTextContent("4 matches");

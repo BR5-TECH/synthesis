@@ -472,6 +472,7 @@ pub(super) fn agentic_probe_error(e: ProbeError) -> String {
         ProbeError::Rejected => ERR_REJECTED.to_string(),
         ProbeError::NotExpectedKind => ERR_NOT_AN_AGENT_ENDPOINT.to_string(),
         ProbeError::TimedOut => ERR_TIMED_OUT.to_string(),
+        ProbeError::TlsUntrusted(failure) => failure.wire(),
     }
 }
 

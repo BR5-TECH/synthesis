@@ -169,7 +169,7 @@ pub fn claim(
             &configuration.field_id,
             &configuration.in_progress_option_id,
         )
-        .map_err(|_| ClaimFailure::code(ERR_STATUS_UPDATE_FAILED))?;
+        .map_err(|e| ClaimFailure::code(crate::tls::keep_tls(e, ERR_STATUS_UPDATE_FAILED)))?;
     // GPP-FR-DHQM: the pending claim comes before the draft. Where the disk
     // refuses it, the claim goes back to the caller to hold in memory.
     let mut pending = GithubPendingClaim {

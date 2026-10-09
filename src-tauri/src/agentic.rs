@@ -88,6 +88,9 @@ pub const ERR_BASE_URL_INVALID: &str = "base_url_invalid";
 pub const ERR_KEY_MISSING: &str = "key_missing";
 /// The host could not be reached (AIC-FR-22).
 pub const ERR_UNREACHABLE: &str = "unreachable";
+/// The TLS check refused the host's certificate. The error text is
+/// `tls_untrusted:<cause>:<host>` (AIC-FR-22, AAP-FR-HZTB).
+pub const ERR_TLS_UNTRUSTED: &str = "tls_untrusted";
 /// The endpoint answered and refused the credentials (AIC-FR-22).
 pub const ERR_REJECTED: &str = "rejected";
 /// The URL answered, but not as an agent-execution endpoint (AIC-FR-22).

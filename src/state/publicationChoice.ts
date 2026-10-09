@@ -6,6 +6,7 @@
  * One function, so the band of a standing attempt and a record of Draft
  * Information say the same thing about the same choice.
  */
+import { tlsErrorMessage } from "../tlsError";
 import type { PublicationChoice, PublicationMismatch } from "../types";
 
 /**
@@ -79,6 +80,9 @@ const PUBLICATION_ERROR_TEXT: Record<string, string> = {
 };
 
 export function publicationErrorText(raw: string): string {
+  // AAP-FR-LRTC: a refused certificate names its host and its cause.
+  const tls = tlsErrorMessage(raw);
+  if (tls) return tls;
   const text = raw.startsWith("Error: ") ? raw.slice(7) : raw;
   const known = PUBLICATION_ERROR_TEXT[text.trim()];
   return known ? `${known} (${text.trim()})` : raw;

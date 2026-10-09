@@ -65,6 +65,9 @@ pub(super) fn log_turn_ended<R: tauri::Runtime>(
             // One of AGC-FR-15's own values, never a provider's message.
             "failure" => turn.failure.as_deref().unwrap_or("none"),
             "retryPermitted" => turn.retry_permitted,
+            // AGC-FR-RWPT: the host and the cause of a refused certificate.
+            "tlsHost" => turn.tls_failure.as_ref().map(|t| t.host.as_str()),
+            "tlsCause" => turn.tls_failure.as_ref().map(|t| t.cause.as_str()),
             "originKind" => turn.origin.kind().as_str(),
             "discussionId" => turn.origin.discussion_id(),
             // CVL-FR-28: the two counts separately, because a turn that made

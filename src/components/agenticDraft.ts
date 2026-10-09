@@ -195,7 +195,14 @@ export function agenticStatus(
     const origin =
       integration.pathOrigin === "detected" ? "detected" : "you supplied this path";
     const version = integration.version ? ` · ${integration.version}` : "";
-    // AII-FR-DKDC: a verified gateway says how many models it listed.
+    // AII-FR-DKDC: a verified gateway says how many models it listed, or that
+    // the author accepted it with no check (AIC-FR-KWMV).
+    if (integration.authMode === "custom_gateway" && integration.gatewayCheckSkipped) {
+      return {
+        text: `gateway not checked · accepted by you · ${origin} · verified${version}`,
+        tone: "ok",
+      };
+    }
     if (integration.authMode === "custom_gateway") {
       const count = gatewayModelCount(integration);
       const models = `${count} ${count === 1 ? "model" : "models"}`;

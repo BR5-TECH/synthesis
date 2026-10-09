@@ -5,6 +5,7 @@
 @import "./kit/notes.css";
 @import "./kit/notes-cont.css";
 @import "./kit/filterable-select.css";
+@import "./kit/joined-field.css";
 @import "./kit/conversation-presentation.css";
 @import "./kit/discussion-questions.css";
 @import "./kit/discussion-stream.css";

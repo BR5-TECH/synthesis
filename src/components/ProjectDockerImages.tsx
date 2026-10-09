@@ -586,7 +586,7 @@ export function ProjectDockerImages() {
             Image
           </span>
           <div
-            className="docker-ref"
+            className="joined-field"
             role="group"
             aria-labelledby="docker-image-label"
           >
@@ -594,7 +594,7 @@ export function ProjectDockerImages() {
               id="docker-image-name"
               type="text"
               aria-label="Image name"
-              className="docker-ref__name"
+              className="joined-field__part"
               spellCheck={false}
               autoComplete="off"
               value={draft.imageName}
@@ -604,14 +604,14 @@ export function ProjectDockerImages() {
               }
               onBlur={() => void persist(status.vendor)}
             />
-            <span className="docker-ref__sep" aria-hidden="true">
+            <span className="joined-field__sep" aria-hidden="true">
               :
             </span>
             <input
               id="docker-image-tag"
               type="text"
               aria-label="Tag (optional)"
-              className="docker-ref__tag"
+              className="joined-field__part joined-field__part--tag"
               spellCheck={false}
               autoComplete="off"
               value={draft.tag}

@@ -9,10 +9,12 @@ import {
   type AgenticTurnKind,
   type AgenticIntegration,
   type AgenticVendorId,
+  type AgenticVerifyConfig,
 } from "../types";
-import { logWarn } from "../logging";
+import { logInfo, logWarn } from "../logging";
 import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
-import { aiErrorMessage } from "./aiErrorMessage";
+import { aiErrorMessage, isGatewayCheckFailure } from "./aiErrorMessage";
+import { GatewayCheckFailedDialog } from "./GatewayCheckFailedDialog";
 import { FilterableSelect, type FilterableOption } from "./FilterableSelect";
 import {
   BACKEND_DEFAULT_LABEL,
@@ -56,6 +58,16 @@ export function AgenticAiIntegrations() {
   const [configErrors, setConfigErrors] = useState<Record<string, string>>({});
   const [actionErrors, setActionErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Record<string, Busy>>({});
+  /**
+   * AII-FR-ZQTB: the gateway verification whose check failed, while the author
+   * decides whether to accept the gateway anyway. It holds a typed token only
+   * until that decision (AII-FR-53).
+   */
+  const [gatewayRetry, setGatewayRetry] = useState<{
+    target: AgenticVendorId;
+    config: AgenticVerifyConfig;
+    message: string;
+  } | null>(null);
   /** Vendors detection has already run for, so it runs once per tab. */
   const [detected, setDetected] = useState<Record<string, boolean>>({});
   /** What detection returned per vendor, so the field can say so (AII-FR-17). */
@@ -166,33 +178,73 @@ export function AgenticAiIntegrations() {
     }
   };
 
-  // AII-FR-20 / FR-21: the explicit action, and the only one that commits. The
-  // config carries the fields of the tab's own kind and no others (AII-FR-16).
-  const onVerify = async (target: AgenticVendorId, kind: "cli" | "api") => {
+  // AII-FR-20 / FR-21: the explicit action, and the only one that commits.
+  // Resolves with the rejection, or with null on success.
+  const submitVerify = async (
+    target: AgenticVendorId,
+    config: AgenticVerifyConfig,
+  ): Promise<{ error: unknown } | null> => {
     setBusy((prev) => ({ ...prev, [target]: "verifying" }));
     setConfigErrors((prev) => ({ ...prev, [target]: "" }));
     try {
-      const draft = drafts[target] ?? emptyDraft();
-      const key = draft.apiKey.trim();
-      const stored = integrations?.find((i) => i.vendor === target);
-      // AIC-FR-26: `{ path, oauthToken }` when the author supplied a new token,
-      // `{ path }` when they are keeping the stored one — which the section can
-      // send without ever having read it. Claude Code adds the open sub-tab's
-      // shape (AII-FR-IUUM, AII-FR-DKDC).
-      const config =
-        kind === "cli"
-          ? cliConfigFor(stored, draft)
-          : { baseUrl: draft.baseUrl, apiKey: key === "" ? null : key };
       const updated = await api.verifyAgenticIntegration(target, config);
       replace(updated);
       // Clears the token field along with the rest of the candidate: the
       // submission is over, so the value has no reason to still be here
       // (AII-FR-53).
       setDrafts((prev) => ({ ...prev, [target]: draftFor(updated) }));
+      return null;
     } catch (e) {
       setConfigErrors((prev) => ({ ...prev, [target]: aiErrorMessage(e) }));
+      return { error: e };
     } finally {
       setBusy((prev) => ({ ...prev, [target]: "idle" }));
+    }
+  };
+
+  // The config carries the fields of the tab's own kind and no others
+  // (AII-FR-16).
+  const onVerify = async (target: AgenticVendorId, kind: "cli" | "api") => {
+    const draft = drafts[target] ?? emptyDraft();
+    const key = draft.apiKey.trim();
+    const stored = integrations?.find((i) => i.vendor === target);
+    // AIC-FR-26: `{ path, oauthToken }` when the author supplied a new token,
+    // `{ path }` when they are keeping the stored one — which the section can
+    // send without ever having read it. Claude Code adds the open sub-tab's
+    // shape (AII-FR-IUUM, AII-FR-DKDC).
+    const config: AgenticVerifyConfig =
+      kind === "cli"
+        ? cliConfigFor(stored, draft)
+        : { baseUrl: draft.baseUrl, apiKey: key === "" ? null : key };
+    const failure = await submitVerify(target, config);
+    // AII-FR-ZQTB: a failed gateway check, and only that failure, asks the
+    // author whether to accept the gateway without the check.
+    if (
+      failure &&
+      config.authMode === "custom_gateway" &&
+      isGatewayCheckFailure(failure.error)
+    ) {
+      logInfo(["frontend"], "gateway check failed; asking the author", {
+        vendor: target,
+      });
+      setGatewayRetry({ target, config, message: aiErrorMessage(failure.error) });
+    }
+  };
+
+  // AII-FR-ZQTB: Accept anyway sends the same payload with the check skipped
+  // (AIC-FR-KWMV). Every other route invokes nothing and keeps the failure.
+  const onGatewayRetrySettle = (accept: boolean) => {
+    const pending = gatewayRetry;
+    setGatewayRetry(null);
+    if (!pending) return;
+    // Focus goes back to the row the author was working on, and not to the
+    // start of the window.
+    document.getElementById(`agentic-gateway-token-${pending.target}`)?.focus();
+    logInfo(["frontend"], accept ? "gateway accepted without the check" : "gateway check failure kept", {
+      vendor: pending.target,
+    });
+    if (accept) {
+      void submitVerify(pending.target, { ...pending.config, skipGatewayCheck: true });
     }
   };
 
@@ -698,6 +750,12 @@ export function AgenticAiIntegrations() {
             </div>
           )}
         </div>
+      )}
+      {gatewayRetry && (
+        <GatewayCheckFailedDialog
+          message={gatewayRetry.message}
+          onSettle={onGatewayRetrySettle}
+        />
       )}
     </section>
   );

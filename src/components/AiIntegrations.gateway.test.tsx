@@ -406,11 +406,39 @@ describe("the candidate and its lifetime (AII-FR-21, AII-FR-22, AII-FR-53)", () 
 });
 
 describe("what each tab renders and carries (AII-FR-49, AII-FR-30, AII-FR-PHFX, AII-FR-EJMG)", () => {
-  it("AII-FR-PHFX: Verify sits on the token row, and the name field shows the stored name", async () => {
+  it("AII-FR-PHFX: the name and the token share one joined frame, Verify follows it, and the name shows the stored name", async () => {
     backend({ agentic: withClaude(gatewayVerified({ gatewayTokenVar: "ANTHROPIC_API_KEY" })) });
     await openLevel();
     expect(gatewayVar()).toHaveValue("ANTHROPIC_API_KEY");
-    expect(gatewayToken().parentElement).toBe(verifyButton().parentElement);
+    const frame = agenticLevel().getByRole("group", { name: "Token" });
+    expect(frame).toContainElement(gatewayVar());
+    expect(frame).toContainElement(gatewayToken());
+    expect(frame).toHaveTextContent("=");
+    // SET-FR-21: the same joined frame as the Docker image name and tag.
+    expect(frame).toHaveClass("joined-field");
+    expect(gatewayVar().compareDocumentPosition(gatewayToken()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(frame).not.toContainElement(verifyButton());
+    expect(frame.parentElement).toBe(verifyButton().parentElement);
+    expect(frame.compareDocumentPosition(verifyButton()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(agenticLevel().getByLabelText("Token variable name")).toBe(gatewayVar());
+    expect(agenticLevel().getByLabelText("Gateway token")).toBe(gatewayToken());
+  });
+
+  it("AII-FR-PHFX, AII-FR-HOKG: the row's one note names a wrong name before a wrong token", async () => {
+    backend({ agentic: withClaude(gatewayVerified()) });
+    const user = await openLevel();
+    await user.click(gatewayToken());
+    await user.paste("two words");
+    await user.clear(gatewayVar());
+    await user.type(gatewayVar(), "1BAD");
+    const note = agenticLevel().getByTestId("agentic-gateway-note");
+    expect(note).toHaveTextContent(/A variable name uses letters, digits, and underscores/);
+    expect(gatewayVar()).toHaveAttribute("aria-invalid", "true");
+    expect(gatewayToken()).toHaveAttribute("aria-invalid", "true");
+    await user.clear(gatewayVar());
+    await user.type(gatewayVar(), "GOOD_NAME");
+    expect(note).toHaveTextContent(/no spaces or control characters/);
+    expect(gatewayVar()).not.toHaveAttribute("aria-invalid");
   });
 
   it("AII-FR-49, AII-FR-16: no other tab renders a gateway, token, or environment field", async () => {

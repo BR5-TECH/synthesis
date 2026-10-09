@@ -110,6 +110,10 @@ pub struct AgenticRecord {
     /// the only text derived from it that reaches this store (AIC-FR-20).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gateway_masked_hint: Option<String>,
+    /// Claude Code only: true when the author accepted the gateway with no
+    /// gateway check (AIC-FR-KWMV).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub gateway_check_skipped: bool,
     /// Claude Code only: the author's `NAME=value` entries (AIC-FR-XTEZ). Author
     /// configuration, not credentials.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -176,6 +180,8 @@ pub struct AgenticIntegration {
     pub gateway_token_var: Option<String>,
     pub gateway_key_state: KeyState,
     pub gateway_masked_hint: Option<String>,
+    /// AIC-FR-KWMV: `false` for every vendor but Claude Code (AIC-FR-25).
+    pub gateway_check_skipped: bool,
     pub env_vars: Vec<String>,
     pub key_required: bool,
     pub state: IntegrationState,
@@ -324,6 +330,9 @@ pub struct VerifyConfig {
     /// Claude Code only: `Some` replaces the stored list, `None` keeps it
     /// (AIC-FR-SXVA).
     pub env_vars: Option<Vec<String>>,
+    /// Claude Code, gateway mode only: `Some(true)` verifies the binary and
+    /// sends no request to the gateway (AIC-FR-KWMV).
+    pub skip_gateway_check: Option<bool>,
 }
 
 impl std::fmt::Debug for VerifyConfig {
@@ -340,6 +349,7 @@ impl std::fmt::Debug for VerifyConfig {
             // A count, never the entries: a value is author text and may
             // carry anything (AIC-FR-SXVA).
             .field("env_vars", &self.env_vars.as_ref().map(Vec::len))
+            .field("skip_gateway_check", &self.skip_gateway_check)
             .finish()
     }
 }

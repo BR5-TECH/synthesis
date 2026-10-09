@@ -140,6 +140,9 @@ pub const ERR_GATEWAY_STATUS: &str = "gateway_status";
 pub const ERR_GATEWAY_UNREACHABLE: &str = "gateway_unreachable";
 /// The gateway answered 2xx with a body that is not a model list (AIC-FR-DRPC).
 pub const ERR_GATEWAY_NOT_A_MODEL_LIST: &str = "gateway_not_a_model_list";
+/// The gateway did not answer in time (AIC-FR-DRPC). A code of its own, so that
+/// it is not mistaken for a binary run that timed out.
+pub const ERR_GATEWAY_TIMED_OUT: &str = "gateway_timed_out";
 
 /// AIC-FR-04: how long a version probe may take before the child is killed.
 /// Generous enough for a cold start of a Node-based CLI, short enough that a

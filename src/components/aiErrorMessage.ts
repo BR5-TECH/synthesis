@@ -1,5 +1,5 @@
 import { AI_ERRORS } from "../types";
-import { tlsErrorMessage } from "../tlsError";
+import { rejectionText, tlsErrorMessage, TLS_UNTRUSTED } from "../tlsError";
 
 /**
  * AII-FR-DKDC, AII-FR-HOKG: the failures of Claude Code's Custom Gateway. Their
@@ -25,6 +25,8 @@ function gatewayErrorMessage(raw: string): string | null {
       return `The gateway could not be reached: ${detail || "no cause given"}`;
     case AI_ERRORS.gatewayNotAModelList:
       return "The gateway answered, but not with a model list.";
+    case AI_ERRORS.gatewayTimedOut:
+      return "The gateway did not answer in time.";
     case AI_ERRORS.tokenVarInvalid:
       return "The token variable name is not valid. Use letters, digits, and underscores, and do not start with a digit.";
     case AI_ERRORS.envVarInvalid:
@@ -34,6 +36,24 @@ function gatewayErrorMessage(raw: string): string | null {
     default:
       return null;
   }
+}
+
+/**
+ * AII-FR-ZQTB: is this rejection a failure of the gateway check, and not of the
+ * binary or of a field? Only the gateway check sends a request, so a refused
+ * certificate in gateway mode is one too (AIC-FR-DRPC).
+ */
+export function isGatewayCheckFailure(e: unknown): boolean {
+  const raw = rejectionText(e);
+  const colon = raw.indexOf(":");
+  const code = colon === -1 ? raw : raw.slice(0, colon);
+  return (
+    code === AI_ERRORS.gatewayStatus ||
+    code === AI_ERRORS.gatewayUnreachable ||
+    code === AI_ERRORS.gatewayTimedOut ||
+    code === AI_ERRORS.gatewayNotAModelList ||
+    code === TLS_UNTRUSTED
+  );
 }
 
 /**

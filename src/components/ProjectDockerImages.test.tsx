@@ -163,6 +163,12 @@ describe("Project settings → Docker (SET-FR-21..SET-FR-27)", () => {
     expect(screen.getByLabelText("Tag (optional)")).toHaveValue("");
     expect(screen.getByLabelText("Dockerfile (optional)")).toHaveValue("");
     expect(buildButton()).toBeDisabled();
+    // SET-FR-21: the name and the tag are one joined frame, the tag second.
+    const frame = screen.getByRole("group", { name: "Image" });
+    expect(frame).toHaveClass("joined-field");
+    expect(frame).toContainElement(screen.getByLabelText("Image name"));
+    expect(frame).toContainElement(screen.getByLabelText("Tag (optional)"));
+    expect(screen.getByLabelText("Tag (optional)")).toHaveClass("joined-field__part--tag");
   });
 
   it("SET-FR-22, SET-FR-24, SET-FR-08: fields persist at once, and a refused path renders inline", async () => {

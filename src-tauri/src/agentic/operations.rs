@@ -241,6 +241,7 @@ fn carries_gateway_fields(config: &VerifyConfig) -> bool {
     config.gateway_base_url.is_some()
         || config.gateway_token_var.is_some()
         || config.gateway_token.is_some()
+        || config.skip_gateway_check.is_some()
 }
 
 /// AIC-FR-25: does the payload carry a field that only Claude Code has?
@@ -330,8 +331,9 @@ pub fn verify_integration_impl(
     };
 
     // AIC-FR-PADP: after the binary has verified, the gateway is asked once.
-    // The models it lists replace the bundled catalog (AIC-FR-08).
-    if let Some(plan) = gateway.as_ref() {
+    // The models it lists replace the bundled catalog (AIC-FR-08). AIC-FR-KWMV:
+    // an author who accepted the gateway without the check keeps the catalog.
+    if let Some(plan) = gateway.as_ref().filter(|plan| !plan.skip_check) {
         let token = match plan.supplied_token.clone() {
             Some(token) => token,
             None => ai
@@ -420,6 +422,9 @@ pub fn verify_integration_impl(
         if descriptor.requires_oauth_token() {
             // AIC-FR-WNQR / AIC-FR-YXAB / AIC-FR-SXVA.
             record.auth_mode = mode;
+            // AIC-FR-KWMV: a checked verification and a subscription one both
+            // clear the flag.
+            record.gateway_check_skipped = gateway.as_ref().is_some_and(|plan| plan.skip_check);
             if let Some(plan) = gateway.as_ref() {
                 record.gateway_base_url = Some(plan.base_url.clone());
                 record.gateway_token_var = Some(plan.token_var.clone());

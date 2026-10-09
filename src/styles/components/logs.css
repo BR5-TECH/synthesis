@@ -334,55 +334,6 @@
   color: var(--fg-4);
 }
 
-/* SET-FR-21: an image name and its tag are one reference, so they are one
-   frame joined by the colon that writes them — and the tag takes the width a
-   tag needs rather than a second full-width row. */
-.docker-ref {
-  display: flex;
-  align-items: stretch;
-  box-sizing: border-box;
-  height: var(--ctl-h-md);
-  background: var(--bg-canvas);
-  border: 1px solid var(--border-2);
-  border-radius: var(--r-sm);
-  transition: border-color var(--dur-fast) var(--ease-out),
-              box-shadow var(--dur-fast) var(--ease-out);
-}
-.docker-ref:hover { border-color: var(--border-3); }
-.docker-ref:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--ring);
-}
-.docker-ref__name,
-.docker-ref__tag {
-  font-family: var(--font-mono);
-  font-size: var(--fs-ui-sm);
-  color: var(--fg-1);
-  background: none;
-  border: 0;
-  outline: none;
-  min-width: 0;
-  padding: 0 var(--sp-2);
-}
-.docker-ref__name { flex: 1 1 auto; }
-/* Wide enough for `latest`, a semantic version, or a short branch name, which
-   is every tag this project writes. */
-.docker-ref__tag { flex: 0 0 100px; width: 100px; padding-left: 0; }
-.docker-ref__name::placeholder,
-.docker-ref__tag::placeholder { color: var(--fg-4); }
-/* The colon is written against the tag, and a rule divides the two halves —
-   a colon floating in the gap between them joins nothing. */
-.docker-ref__sep {
-  display: flex;
-  align-items: center;
-  padding-left: var(--sp-2);
-  border-left: 1px solid var(--border-1);
-  font-family: var(--font-mono);
-  font-size: var(--fs-ui-sm);
-  color: var(--fg-4);
-  user-select: none;
-}
-
 /* SET-FR-23: what the tab's configuration is worth. One line under the fields
    it qualifies. */
 .docker-state {

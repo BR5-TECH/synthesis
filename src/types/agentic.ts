@@ -152,6 +152,8 @@ export interface AgenticIntegration {
   gatewayKeyState?: KeyState;
   /** Claude Code only: the last four characters of the gateway token. */
   gatewayMaskedHint?: string | null;
+  /** Claude Code only: the author accepted the gateway with no gateway check (AIC-FR-KWMV). */
+  gatewayCheckSkipped?: boolean;
   /** Claude Code only: the author's `NAME=value` entries (AIC-FR-XTEZ). */
   envVars?: string[];
   /** Whether this vendor requires a credential at all — true for Claude Code. */
@@ -236,6 +238,8 @@ export interface AgenticVerifyConfig {
   gatewayToken?: string | null;
   /** Present when the entries changed; absent keeps the stored list (AIC-FR-SXVA). */
   envVars?: string[];
+  /** Gateway mode only: `true` verifies the binary and asks no gateway (AIC-FR-KWMV). */
+  skipGatewayCheck?: boolean;
 }
 
 /**

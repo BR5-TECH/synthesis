@@ -157,7 +157,7 @@ pub(super) fn gateway_probe_error(e: ProbeError) -> String {
             format!("{ERR_GATEWAY_UNREACHABLE}:{cause}")
         }
         ProbeError::NotExpectedKind => ERR_GATEWAY_NOT_A_MODEL_LIST.to_string(),
-        ProbeError::TimedOut => ERR_TIMED_OUT.to_string(),
+        ProbeError::TimedOut => ERR_GATEWAY_TIMED_OUT.to_string(),
         ProbeError::TlsUntrusted(failure) => failure.wire(),
     }
 }
@@ -168,6 +168,8 @@ pub(super) struct GatewayPlan {
     pub token_var: String,
     /// A token the author supplied, trimmed. `None` keeps the stored one.
     pub supplied_token: Option<String>,
+    /// AIC-FR-KWMV: the author accepted the gateway with no gateway check.
+    pub skip_check: bool,
 }
 
 /// AIC-FR-UFNB / AIC-FR-CVPW / AIC-FR-IOWS: settle a gateway payload's shape,
@@ -211,6 +213,7 @@ pub(super) fn plan_gateway(
         base_url,
         token_var,
         supplied_token,
+        skip_check: config.skip_gateway_check == Some(true),
     })
 }
 

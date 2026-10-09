@@ -199,7 +199,7 @@ fn a_failed_gateway_check_is_typed_and_persists_nothing() {
         (ProbeError::Status(401), "gateway_status:401"),
         (ProbeError::Unreachable("connection refused".into()), "gateway_unreachable:connection refused"),
         (ProbeError::NotExpectedKind, "gateway_not_a_model_list"),
-        (ProbeError::TimedOut, "timed_out"),
+        (ProbeError::TimedOut, "gateway_timed_out"),
     ];
     for (failure, expected) in cases {
         let h = harness(

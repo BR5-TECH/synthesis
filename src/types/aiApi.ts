@@ -124,6 +124,7 @@ export const AI_ERRORS = {
   gatewayStatus: "gateway_status",
   gatewayUnreachable: "gateway_unreachable",
   gatewayNotAModelList: "gateway_not_a_model_list",
+  gatewayTimedOut: "gateway_timed_out",
   // Endpoint verification, both levels (AIC-FR-22 / AAP-FR-05).
   baseUrlEmpty: "base_url_empty",
   baseUrlInvalid: "base_url_invalid",

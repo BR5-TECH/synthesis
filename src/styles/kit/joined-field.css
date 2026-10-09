@@ -1,0 +1,52 @@
+/* Two fields that write one value, in one frame joined by the character that
+   writes them: an image name and its tag (`name:tag`, SET-FR-21), or a variable
+   name and its token (`NAME=token`, AII-FR-PHFX). One part takes the rest of the
+   row, and the other part takes the width that its content needs. */
+.joined-field {
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  height: var(--ctl-h-md);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  transition: border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out);
+}
+.joined-field:hover { border-color: var(--border-3); }
+.joined-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.joined-field__part {
+  flex: 1 1 auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+  background: none;
+  border: 0;
+  outline: none;
+  min-width: 0;
+  padding: 0 var(--sp-2);
+}
+.joined-field__part::placeholder { color: var(--fg-4); }
+/* Wide enough for `latest`, a semantic version, or a short branch name, which
+   is every tag this project writes. */
+.joined-field__part--tag { flex: 0 0 100px; width: 100px; }
+/* Wide enough for `ANTHROPIC_AUTH_TOKEN`, the default name. */
+.joined-field__part--var { flex: 0 0 23ch; width: 23ch; }
+/* The joining character is written against the part after it, and a rule
+   divides the two halves: a character in the gap between them joins nothing. */
+.joined-field__sep {
+  display: flex;
+  align-items: center;
+  padding-left: var(--sp-2);
+  border-left: 1px solid var(--border-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-4);
+  user-select: none;
+}
+.joined-field__sep + .joined-field__part { padding-left: 0; }

@@ -6670,6 +6670,25 @@ function graduationChanged(run: any): any {
  * did *not* call — "clicking away made no second rename call" is otherwise
  * invisible from the page, since a refused call changes nothing either.
  */
+/** SET-FR-21: the Docker section's per-vendor images (`load_project_docker_images`). */
+const mockDockerImages: Array<Record<string, any>> = [
+  {
+    vendor: "claude_code", configuration: "configured", imageName: "acme/agent", tag: "latest",
+    imageReference: "acme/agent:latest", dockerfile: null, dockerfileState: "absent",
+    dockerfileProblem: null, graduationState: "usable",
+  },
+  {
+    vendor: "codex", configuration: "unset", imageName: "", tag: null, imageReference: null,
+    dockerfile: null, dockerfileState: "absent", dockerfileProblem: null,
+    graduationState: "image_name_missing",
+  },
+  {
+    vendor: "opencode", configuration: "unset", imageName: "", tag: null, imageReference: null,
+    dockerfile: null, dockerfileState: "absent", dockerfileProblem: null,
+    graduationState: "execution_unsupported",
+  },
+];
+
 const invokeLog: Array<{ cmd: string; args: Record<string, any> }> = [];
 (globalThis as Record<string, unknown>).__invokeLog = invokeLog;
 
@@ -9363,12 +9382,64 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     }
     case "detect_agentic_cli_binary":
       return { path: "/opt/homebrew/bin/claude" };
+    // SET-FR-21 / PSS-FR-29: the project's Docker images, so the Docker section
+    // of Project settings renders its joined `name:tag` field. Claude Code is
+    // configured with a tag; the other vendors are unset.
+    case "load_project_docker_images":
+      return mockDockerImages;
+    case "load_docker_backend":
+      return {
+        mode: "bollard",
+        endpoint: "automatic",
+        cliPath: null,
+        state: "verified",
+        serverVersion: "27.1.1",
+        verifiedAt: "2026-07-27T10:00:00Z",
+      };
+    case "load_project_image_build_in_flight":
+      return null;
+    case "save_project_vendor_image": {
+      const entry = (a.entry ?? {}) as { imageName?: string; tag?: string | null };
+      const status = mockDockerImages.find((s) => s.vendor === a.vendor);
+      if (!status) throw "unknown_vendor";
+      status.imageName = entry.imageName ?? "";
+      status.tag = entry.tag ?? null;
+      status.configuration = status.imageName ? "configured" : "unset";
+      status.imageReference = status.imageName
+        ? status.tag ? `${status.imageName}:${status.tag}` : status.imageName
+        : null;
+      return status;
+    }
     case "verify_agentic_integration": {
       // AIC-FR-26 / AIC-FR-27: the typed refusals, so the surface can be driven
       // through them. A malformed or missing token is rejected before anything
       // would have been stored, exactly as the backend does.
       const config = (a.config ?? {}) as Record<string, unknown>;
       const record = agentics.find((i) => i.vendor === a.vendor) ?? agentics[0];
+      // AIC-FR-KWMV / AII-FR-ZQTB: Custom Gateway mode. A base URL that names
+      // Bedrock stands for a gateway that does not answer `GET /v1/models`, so
+      // its check fails unless the author accepted it without the check.
+      if (record.kind === "cli" && config.authMode === "custom_gateway") {
+        const baseUrl = typeof config.gatewayBaseUrl === "string" ? config.gatewayBaseUrl : "";
+        const gatewayToken =
+          typeof config.gatewayToken === "string" ? config.gatewayToken.trim() : null;
+        const ext = record as Record<string, unknown>;
+        if (gatewayToken === null && ext.gatewayKeyState !== "set") throw "token_missing";
+        const skip = config.skipGatewayCheck === true;
+        if (!skip && baseUrl.includes("bedrock")) throw "gateway_status:400";
+        ext.authMode = "custom_gateway";
+        ext.gatewayBaseUrl = baseUrl;
+        ext.gatewayTokenVar = config.gatewayTokenVar ?? "ANTHROPIC_AUTH_TOKEN";
+        if (gatewayToken !== null) {
+          ext.gatewayKeyState = "set";
+          ext.gatewayMaskedHint = gatewayToken.slice(-4);
+        }
+        ext.gatewayCheckSkipped = skip;
+        if (skip) record.modelsOrigin = "catalog";
+        if (typeof config.path === "string") record.binaryPath = config.path;
+        record.state = "verified";
+        return record;
+      }
       if (record.kind === "cli" && record.keyRequired) {
         const token = typeof config.oauthToken === "string" ? config.oauthToken.trim() : null;
         if (token === null && record.keyState !== "set") throw "token_missing";

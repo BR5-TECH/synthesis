@@ -261,6 +261,7 @@ function GatewayRows({
   const urlComplaint = gatewayUrlValidation(draft.gatewayUrl);
   const varComplaint = gatewayTokenVarValidation(draft.gatewayTokenVar);
   const tokenComplaint = gatewayTokenValidation(draft.gatewayToken);
+  const rowComplaint = varComplaint || tokenComplaint;
   const stored = integration.gatewayKeyState === "set";
   return (
     <>
@@ -281,61 +282,73 @@ function GatewayRows({
           onChange={(e) => onEdit({ gatewayUrl: e.target.value })}
         />
       </Field>
-      <Field
-        id={`agentic-gateway-var-${vendor}`}
-        label="Token variable name"
-        note={varComplaint}
-        warn
-      >
-        <input
-          id={`agentic-gateway-var-${vendor}`}
-          className="input input--mono"
-          data-testid="agentic-gateway-token-var"
-          spellCheck={false}
-          autoComplete="off"
-          aria-invalid={varComplaint !== "" || undefined}
-          value={draft.gatewayTokenVar}
-          onChange={(e) => onEdit({ gatewayTokenVar: e.target.value })}
-        />
-      </Field>
-      <Field
-        id={`agentic-gateway-token-${vendor}`}
-        label="Token"
-        noteId={`agentic-gateway-note-${vendor}`}
-        noteTestId="agentic-gateway-note"
-        warn={tokenComplaint !== ""}
-        note={
-          tokenComplaint ||
-          (stored
-            ? "Leave empty to re-verify with the stored token."
-            : "Required — passed to Claude Code under the variable named above.")
-        }
-        marginBottom={10}
-      >
+      {/* AII-FR-PHFX: the variable name and the token write one variable,
+          `NAME=token`, so they are one frame joined by the `=` that writes
+          them, like the image name and tag of SET-FR-21. The name takes the
+          width it needs and the token takes the rest. */}
+      <div className="picker-field" style={{ marginBottom: 10 }}>
+        <span className="picker-field__label" id={`agentic-gateway-token-label-${vendor}`}>
+          Token
+        </span>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <input
-            id={`agentic-gateway-token-${vendor}`}
-            type="password"
-            className="input input--mono"
-            data-testid="agentic-gateway-token"
-            spellCheck={false}
-            autoComplete="off"
-            aria-invalid={tokenComplaint !== "" || undefined}
-            aria-describedby={`agentic-gateway-note-${vendor}`}
-            placeholder={
-              stored
-                ? integration.gatewayMaskedHint
-                  ? `•••• ${integration.gatewayMaskedHint}`
-                  : "a token is stored"
-                : "required"
-            }
-            value={draft.gatewayToken}
-            onChange={(e) => onEdit({ gatewayToken: e.target.value })}
-            style={{ flex: 1 }}
-          />
+          <div
+            className="joined-field"
+            role="group"
+            aria-labelledby={`agentic-gateway-token-label-${vendor}`}
+            data-testid="agentic-gateway-credential"
+          >
+            <input
+              id={`agentic-gateway-var-${vendor}`}
+              className="joined-field__part joined-field__part--var"
+              data-testid="agentic-gateway-token-var"
+              aria-label="Token variable name"
+              spellCheck={false}
+              autoComplete="off"
+              aria-invalid={varComplaint !== "" || undefined}
+              aria-describedby={`agentic-gateway-note-${vendor}`}
+              value={draft.gatewayTokenVar}
+              onChange={(e) => onEdit({ gatewayTokenVar: e.target.value })}
+            />
+            <span className="joined-field__sep" aria-hidden="true">
+              =
+            </span>
+            <input
+              id={`agentic-gateway-token-${vendor}`}
+              type="password"
+              className="joined-field__part"
+              data-testid="agentic-gateway-token"
+              aria-label="Gateway token"
+              spellCheck={false}
+              autoComplete="off"
+              aria-invalid={tokenComplaint !== "" || undefined}
+              aria-describedby={`agentic-gateway-note-${vendor}`}
+              placeholder={
+                stored
+                  ? integration.gatewayMaskedHint
+                    ? `•••• ${integration.gatewayMaskedHint}`
+                    : "a token is stored"
+                  : "required"
+              }
+              value={draft.gatewayToken}
+              onChange={(e) => onEdit({ gatewayToken: e.target.value })}
+            />
+          </div>
           {verifyButton}
         </div>
-      </Field>
+        {/* AII-FR-HOKG: one note for the row. A wrong name is named first,
+            then a wrong token, then what an empty token field means. */}
+        <div
+          id={`agentic-gateway-note-${vendor}`}
+          className="t-ui-xs"
+          data-testid="agentic-gateway-note"
+          style={{ marginTop: 4, color: toneColor(rowComplaint ? "warn" : "muted") }}
+        >
+          {rowComplaint ||
+            (stored
+              ? "Leave empty to re-verify with the stored token."
+              : "Required — passed to Claude Code under the variable name on the left.")}
+        </div>
+      </div>
     </>
   );
 }

@@ -245,6 +245,7 @@ pub fn integrations_from(
                 gateway_token_var: gateway.then(|| stored.gateway_token_var.clone()).flatten(),
                 gateway_key_state,
                 gateway_masked_hint: gateway.then(|| stored.gateway_masked_hint.clone()).flatten(),
+                gateway_check_skipped: gateway && stored.gateway_check_skipped,
                 env_vars: if gateway { stored.env_vars.clone() } else { Vec::new() },
                 key_required: descriptor.key_required,
                 state,

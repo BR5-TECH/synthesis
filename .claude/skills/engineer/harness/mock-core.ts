@@ -9425,9 +9425,13 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           typeof config.gatewayToken === "string" ? config.gatewayToken.trim() : null;
         const ext = record as Record<string, unknown>;
         if (gatewayToken === null && ext.gatewayKeyState !== "set") throw "token_missing";
-        const skip = config.skipGatewayCheck === true;
-        if (!skip && baseUrl.includes("bedrock")) throw "gateway_status:400";
+        // AIC-FR-QHLN: a Bedrock gateway is never asked, so it never fails the
+        // check and is never marked as accepted without it.
+        const api = config.gatewayApi === "bedrock" ? "bedrock" : "anthropic";
+        const skip = api === "anthropic" && config.skipGatewayCheck === true;
+        if (api === "anthropic" && !skip && baseUrl.includes("bedrock")) throw "gateway_status:400";
         ext.authMode = "custom_gateway";
+        ext.gatewayApi = api;
         ext.gatewayBaseUrl = baseUrl;
         ext.gatewayTokenVar = config.gatewayTokenVar ?? "ANTHROPIC_AUTH_TOKEN";
         if (gatewayToken !== null) {
@@ -9435,7 +9439,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           ext.gatewayMaskedHint = gatewayToken.slice(-4);
         }
         ext.gatewayCheckSkipped = skip;
-        if (skip) record.modelsOrigin = "catalog";
+        if (skip || api === "bedrock") record.modelsOrigin = "catalog";
         if (typeof config.path === "string") record.binaryPath = config.path;
         record.state = "verified";
         return record;

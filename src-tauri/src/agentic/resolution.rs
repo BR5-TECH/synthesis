@@ -242,6 +242,9 @@ pub fn integrations_from(
                 },
                 auth_mode: gateway.then_some(stored.auth_mode),
                 gateway_base_url: gateway.then(|| stored.gateway_base_url.clone()).flatten(),
+                // AIC-FR-QHLN: null for a subscription record.
+                gateway_api: (gateway && stored.auth_mode == AuthMode::CustomGateway)
+                    .then_some(stored.gateway_api),
                 gateway_token_var: gateway.then(|| stored.gateway_token_var.clone()).flatten(),
                 gateway_key_state,
                 gateway_masked_hint: gateway.then(|| stored.gateway_masked_hint.clone()).flatten(),

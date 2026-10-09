@@ -50,6 +50,11 @@ pub(super) fn log_verify_attempt<S: LogSink + Clone + Send + 'static>(
             "envVars" => config.env_vars.as_ref().map_or(0, Vec::len),
             // AIC-FR-KWMV: the author accepted the gateway with no check.
             "skipGatewayCheck" => config.skip_gateway_check == Some(true),
+            // AIC-FR-QHLN: the API shape, or "unrecognised" — never author text.
+            "gatewayApi" => match config.gateway_api.as_deref() {
+                None => "anthropic",
+                Some(raw) => GatewayApi::parse(raw).map_or("unrecognised", |_| raw),
+            },
         },
     );
 }
@@ -75,6 +80,7 @@ pub(super) fn log_verify_outcome<S: LogSink + Clone + Send + 'static>(
                 "models" => integration.models.len(),
                 "authMode" => format!("{:?}", integration.auth_mode),
                 "gatewayCheckSkipped" => integration.gateway_check_skipped,
+                "gatewayApi" => format!("{:?}", integration.gateway_api),
                 "durationMs" => duration_ms,
             },
         ),

@@ -306,7 +306,6 @@ impl HostDockerCli {
     /// unavailable by [`DockerRuntime::ensure_available`] rather than as
     /// missing — two different corrections for the author.
     async fn starts(program: &str) -> bool {
-        eprintln!("SPAWN_PROBE {program}");
         let run = tokio::process::Command::new(program)
             .arg("--version")
             .stdin(Stdio::null())
@@ -528,15 +527,25 @@ extern "C" {
 // The Docker Engine, over Bollard
 // ---------------------------------------------------------------------------
 
-/// EAC-FR-39: the runtime seam bound to the **Docker Engine** at the endpoint
-/// the author configured and verified (GSS-FR-36, GSS-FR-40).
-///
-/// It creates and starts the *same* [`ContainerSpec`](super::descriptor::ContainerSpec)
-/// the Docker CLI backend renders into a `docker run` vector — the same mounts,
-/// the same working directory, the same user mapping, the same capabilities and
-/// security options, the same network, and the same stdin and stream handling —
-/// so which backend a machine uses changes how Docker is reached and nothing
-/// about what the agent runs in.
+/// EAC-FR-15: the Engine backend's environment for one container, in the
+/// Engine API's `NAME=value` form. Each name the spec passes takes its value
+/// from `env`, in the spec's order, and the executor's own literals follow.
+pub(crate) fn engine_env(
+    spec: &super::descriptor::ContainerSpec,
+    env: &BTreeMap<String, SecretString>,
+) -> Vec<String> {
+    let mut entries: Vec<String> = Vec::new();
+    for name in &spec.env_names {
+        if let Some(value) = env.get(name) {
+            entries.push(format!("{name}={}", value.expose()));
+        }
+    }
+    for (name, value) in &spec.env_literals {
+        entries.push(format!("{name}={value}"));
+    }
+    entries
+}
+
 /// EAC-FR-10 / EAC-FR-ZKMR: the Engine backend's rendering of one
 /// [`ContainerSpec`], composed apart from the connection that sends it.
 ///
@@ -591,6 +600,15 @@ pub(crate) fn engine_config(
     }
 }
 
+/// EAC-FR-39: the runtime seam bound to the **Docker Engine** at the endpoint
+/// the author configured and verified (GSS-FR-36, GSS-FR-40).
+///
+/// It creates and starts the *same* [`ContainerSpec`](super::descriptor::ContainerSpec)
+/// the Docker CLI backend renders into a `docker run` vector — the same mounts,
+/// the same working directory, the same user mapping, the same capabilities and
+/// security options, the same network, and the same stdin and stream handling —
+/// so which backend a machine uses changes how Docker is reached and nothing
+/// about what the agent runs in.
 pub struct BollardDocker {
     /// Read by the connection this backend opens, which is compiled out under
     /// `cfg(test)` — the suite must run identically with and without a Docker
@@ -696,17 +714,7 @@ impl DockerRuntime for BollardDocker {
             // process's own environment here, so a secret still never reaches
             // an argument vector (EAC-FR-15) — there is no argument vector at
             // all on this path.
-            let mut env: Vec<String> = Vec::new();
-            for name in &spec.env_names {
-                if let Some(value) = request.env.get(name) {
-                    env.push(format!("{name}={}", value.expose()));
-                }
-            }
-            for (name, value) in &spec.env_literals {
-                env.push(format!("{name}={value}"));
-            }
-
-            let config = engine_config(spec, env);
+            let config = engine_config(spec, engine_env(spec, request.env));
 
             let create = bollard::query_parameters::CreateContainerOptionsBuilder::default()
                 .name(&spec.name)

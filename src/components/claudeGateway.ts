@@ -4,7 +4,7 @@
 // AII-FR-HOKG). Every check is structural and local: it invokes no operation
 // and reaches no service, and no message quotes what the author typed.
 
-import type { AgenticIntegration } from "../types";
+import type { AgenticIntegration, GatewayApi } from "../types";
 
 /** AII-FR-PHFX: the token variable name a fresh Custom Gateway sub-tab shows. */
 export const DEFAULT_GATEWAY_TOKEN_VAR = "ANTHROPIC_AUTH_TOKEN";
@@ -15,6 +15,8 @@ const VISIBLE_ASCII = /^[\x21-\x7e]+$/;
 
 /** The fields both sub-tabs of the Claude Code tab keep beyond the OAuth token. */
 export interface GatewayFields {
+  /** AII-FR-PHFX: the API shape chosen in the Custom Gateway sub-tab. */
+  gatewayApi: GatewayApi;
   gatewayUrl: string;
   gatewayTokenVar: string;
   /** Lives in the field it was typed into, and only until a submission resolves (AII-FR-53). */

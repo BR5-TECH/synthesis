@@ -69,6 +69,34 @@ impl AuthMode {
     }
 }
 
+/// The API shape a Claude Code gateway serves (AIC-FR-QHLN). A record that
+/// stores none reads as `Anthropic`.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GatewayApi {
+    /// The Anthropic Messages API, reached through `ANTHROPIC_BASE_URL`.
+    #[default]
+    Anthropic,
+    /// The Amazon Bedrock runtime API, reached through
+    /// `ANTHROPIC_BEDROCK_BASE_URL` with AWS signing turned off.
+    Bedrock,
+}
+
+impl GatewayApi {
+    fn is_anthropic(&self) -> bool {
+        *self == GatewayApi::Anthropic
+    }
+
+    /// The wire spelling, which `VerifyConfig::gateway_api` carries.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "anthropic" => Some(GatewayApi::Anthropic),
+            "bedrock" => Some(GatewayApi::Bedrock),
+            _ => None,
+        }
+    }
+}
+
 /// The persisted half of an integration — what `synthesis.toml` carries
 /// (`GSS-global-settings-storage.md` GSS-FR-14).
 ///
@@ -102,6 +130,9 @@ pub struct AgenticRecord {
     /// Claude Code only: the normalized gateway base URL (AIC-FR-YXAB).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gateway_base_url: Option<String>,
+    /// Claude Code only: the API shape the gateway serves (AIC-FR-QHLN).
+    #[serde(skip_serializing_if = "GatewayApi::is_anthropic")]
+    pub gateway_api: GatewayApi,
     /// Claude Code only: the variable name the gateway token is passed under
     /// (AIC-FR-CVPW).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -177,6 +208,8 @@ pub struct AgenticIntegration {
     /// AIC-FR-WNQR: `None` for every vendor but Claude Code.
     pub auth_mode: Option<AuthMode>,
     pub gateway_base_url: Option<String>,
+    /// AIC-FR-QHLN: `None` for every vendor but Claude Code in gateway mode.
+    pub gateway_api: Option<GatewayApi>,
     pub gateway_token_var: Option<String>,
     pub gateway_key_state: KeyState,
     pub gateway_masked_hint: Option<String>,
@@ -322,6 +355,9 @@ pub struct VerifyConfig {
     pub auth_mode: Option<String>,
     /// Claude Code, gateway mode only (AIC-FR-UFNB).
     pub gateway_base_url: Option<String>,
+    /// Claude Code, gateway mode only: `anthropic` or `bedrock`. Absent means
+    /// `anthropic` (AIC-FR-QHLN).
+    pub gateway_api: Option<String>,
     /// Claude Code, gateway mode only (AIC-FR-CVPW).
     pub gateway_token_var: Option<String>,
     /// Claude Code, gateway mode only: `Some` is a new token, `None` keeps the
@@ -344,6 +380,7 @@ impl std::fmt::Debug for VerifyConfig {
             .field("oauth_token", &redacted(&self.oauth_token))
             .field("auth_mode", &self.auth_mode)
             .field("gateway_base_url", &self.gateway_base_url)
+            .field("gateway_api", &self.gateway_api)
             .field("gateway_token_var", &self.gateway_token_var)
             .field("gateway_token", &redacted(&self.gateway_token))
             // A count, never the entries: a value is author text and may

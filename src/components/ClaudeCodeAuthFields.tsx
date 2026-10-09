@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { AgenticIntegration, ClaudeAuthMode } from "../types";
+import type { AgenticIntegration, ClaudeAuthMode, GatewayApi } from "../types";
 import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
 import { toneColor, type Busy } from "./aiIntegrationsShared";
 import { canVerifyAgentic, oauthTokenValidation, type AgenticDraft } from "./agenticDraft";
@@ -19,6 +19,12 @@ import {
  * committed until Verify succeeds, and Verify submits the open sub-tab's fields
  * and no other's (AII-FR-IUUM).
  */
+
+/** AII-FR-PHFX: the API shapes a gateway can serve, in the order they render. */
+const GATEWAY_APIS: ReadonlyArray<{ api: GatewayApi; label: string }> = [
+  { api: "anthropic", label: "Anthropic" },
+  { api: "bedrock", label: "Bedrock" },
+];
 
 const SUB_TABS: ReadonlyArray<{ mode: ClaudeAuthMode; label: string }> = [
   { mode: "subscription", label: "Subscription" },
@@ -158,7 +164,9 @@ export function ClaudeCredentialRows({
         warn={env.error !== ""}
         note={
           env.error ||
-          "One NAME=value on each line. Stored in the settings file, so put credentials in the token field."
+          (draft.authMode === "custom_gateway" && draft.gatewayApi === "bedrock"
+            ? "One NAME=value on each line. Stored in the settings file, so put credentials in the token field. Optional for Bedrock: AWS_REGION, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_HAIKU_MODEL."
+            : "One NAME=value on each line. Stored in the settings file, so put credentials in the token field.")
         }
         marginBottom={4}
       >
@@ -265,6 +273,32 @@ function GatewayRows({
   const stored = integration.gatewayKeyState === "set";
   return (
     <>
+      {/* AII-FR-PHFX: which API the gateway serves. A choice is an edit like
+          the others, and it invokes nothing (AII-FR-22). */}
+      <div className="picker-field" style={{ marginBottom: 10 }}>
+        <span className="picker-field__label" id={`agentic-gateway-api-label-${vendor}`}>
+          API
+        </span>
+        <div
+          role="group"
+          aria-labelledby={`agentic-gateway-api-label-${vendor}`}
+          style={{ display: "flex", gap: 4 }}
+        >
+          {GATEWAY_APIS.map((option) => (
+            <button
+              key={option.api}
+              type="button"
+              className="btn btn--ghost btn--sm"
+              aria-pressed={draft.gatewayApi === option.api}
+              data-testid={`agentic-gateway-api-${option.api}`}
+              style={settingsTabStyle(draft.gatewayApi === option.api)}
+              onClick={() => onEdit({ gatewayApi: option.api })}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <Field
         id={`agentic-gateway-url-${vendor}`}
         label="Base URL"

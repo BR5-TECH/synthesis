@@ -109,6 +109,7 @@ export function claudeDraftEdited(
   if (draft.authMode === "subscription") return draft.oauthToken.trim() !== "";
   return (
     draft.gatewayToken.trim() !== "" ||
+    draft.gatewayApi !== (i.gatewayApi ?? "anthropic") ||
     draft.gatewayUrl.trim() !== (i.gatewayBaseUrl ?? "") ||
     draft.gatewayTokenVar.trim() !==
       (i.gatewayTokenVar ?? DEFAULT_GATEWAY_TOKEN_VAR)
@@ -123,6 +124,7 @@ export function draftForIntegration(i: AgenticIntegration): AgenticDraft {
     apiKey: "",
     oauthToken: "",
     authMode: i.authMode ?? "subscription",
+    gatewayApi: i.gatewayApi ?? "anthropic",
     gatewayUrl: i.gatewayBaseUrl ?? "",
     gatewayTokenVar: i.gatewayTokenVar ?? DEFAULT_GATEWAY_TOKEN_VAR,
     gatewayToken: "",
@@ -197,6 +199,13 @@ export function agenticStatus(
     const version = integration.version ? ` · ${integration.version}` : "";
     // AII-FR-DKDC: a verified gateway says how many models it listed, or that
     // the author accepted it with no check (AIC-FR-KWMV).
+    // AII-FR-DKDC / AIC-FR-QHLN: a Bedrock gateway has no model list to ask.
+    if (integration.authMode === "custom_gateway" && integration.gatewayApi === "bedrock") {
+      return {
+        text: `Bedrock gateway · not checked · ${origin} · verified${version}`,
+        tone: "ok",
+      };
+    }
     if (integration.authMode === "custom_gateway" && integration.gatewayCheckSkipped) {
       return {
         text: `gateway not checked · accepted by you · ${origin} · verified${version}`,
@@ -249,6 +258,7 @@ export function emptyDraft(): AgenticDraft {
     oauthToken: "",
     authMode: "subscription",
     gatewayUrl: "",
+    gatewayApi: "anthropic",
     gatewayTokenVar: DEFAULT_GATEWAY_TOKEN_VAR,
     gatewayToken: "",
     envText: "",
@@ -272,6 +282,7 @@ export function cliConfigFor(
   if (!integration || !rendersOauthTokenField(integration)) return config;
   if (draft.authMode === "custom_gateway") {
     config.authMode = "custom_gateway";
+    config.gatewayApi = draft.gatewayApi;
     config.gatewayBaseUrl = draft.gatewayUrl.trim();
     config.gatewayTokenVar = draft.gatewayTokenVar.trim();
     const token = draft.gatewayToken.trim();

@@ -229,6 +229,7 @@ describe("verifying a Custom Gateway (AII-FR-DKDC)", () => {
       config: {
         path: "/usr/bin/claude",
         authMode: "custom_gateway",
+        gatewayApi: "anthropic",
         gatewayBaseUrl: GATEWAY_URL,
         gatewayTokenVar: "ANTHROPIC_AUTH_TOKEN",
         gatewayToken: GATEWAY_TOKEN,
@@ -257,6 +258,7 @@ describe("verifying a Custom Gateway (AII-FR-DKDC)", () => {
     expect(config).toEqual({
       path: "/usr/bin/claude",
       authMode: "custom_gateway",
+      gatewayApi: "anthropic",
       gatewayBaseUrl: GATEWAY_URL,
       gatewayTokenVar: "ANTHROPIC_AUTH_TOKEN",
     });
@@ -562,6 +564,7 @@ describe("the pure rules", () => {
     expect(cliConfigFor(stored, draft)).toEqual({
       path: "/p",
       authMode: "custom_gateway",
+      gatewayApi: "anthropic",
       gatewayBaseUrl: "https://g.example",
       gatewayTokenVar: "MY_VAR",
       gatewayToken: "tok",

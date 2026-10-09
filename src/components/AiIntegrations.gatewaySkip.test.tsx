@@ -178,6 +178,7 @@ describe("the confirmation a failed gateway check opens (AII-FR-ZQTB)", () => {
     expect(first).toEqual({
       path: "/usr/bin/claude",
       authMode: "custom_gateway",
+      gatewayApi: "anthropic",
       gatewayBaseUrl: GATEWAY_URL,
       gatewayTokenVar: "ANTHROPIC_AUTH_TOKEN",
       gatewayToken: GATEWAY_TOKEN,
@@ -232,6 +233,7 @@ describe("the confirmation a failed gateway check opens (AII-FR-ZQTB)", () => {
     expect(first).toEqual({
       path: "/usr/bin/claude",
       authMode: "custom_gateway",
+      gatewayApi: "anthropic",
       gatewayBaseUrl: GATEWAY_URL,
       gatewayTokenVar: "ANTHROPIC_AUTH_TOKEN",
       envVars: ["HTTPS_PROXY=http://proxy:3128"],

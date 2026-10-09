@@ -58,6 +58,7 @@ mod durable;
 mod observers;
 mod contracts;
 mod gateway_env;
+mod env_values;
 
 /// The sample well-formed token AIC's own suite uses (AIC-FR-27). It is a fake value.
 const SAMPLE_TOKEN: &str = "sk-ant-oat01-FAKE-TEST-TOKEN-NOT-A-REAL-CREDENTIAL-000000000000000000000000000000000000000-ygAA";

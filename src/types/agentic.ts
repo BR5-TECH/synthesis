@@ -32,6 +32,9 @@ export type AgenticKind = "cli" | "api";
  */
 export type ClaudeAuthMode = "subscription" | "custom_gateway";
 
+/** AIC-FR-QHLN: the API shape a Claude Code gateway serves. */
+export type GatewayApi = "anthropic" | "bedrock";
+
 /** Where a stored binary path came from (AIC-FR-07). CLI kind only. */
 export type AgenticPathOrigin = "detected" | "user_supplied" | "unset";
 
@@ -146,6 +149,8 @@ export interface AgenticIntegration {
   authMode?: ClaudeAuthMode | null;
   /** Claude Code only: the stored gateway base URL (AIC-FR-YXAB). */
   gatewayBaseUrl?: string | null;
+  /** Claude Code in gateway mode only: the API shape the gateway serves (AIC-FR-QHLN). */
+  gatewayApi?: GatewayApi | null;
   /** Claude Code only: the variable the gateway token is passed under (AIC-FR-CVPW). */
   gatewayTokenVar?: string | null;
   /** Claude Code only: whether the gateway token is readable (AIC-FR-25). */
@@ -232,6 +237,8 @@ export interface AgenticVerifyConfig {
    * `wrong_config_kind`.
    */
   authMode?: ClaudeAuthMode;
+  /** Gateway mode only: absent means `anthropic` (AIC-FR-QHLN). */
+  gatewayApi?: GatewayApi;
   gatewayBaseUrl?: string | null;
   gatewayTokenVar?: string | null;
   /** Present when the author typed a new token; absent keeps the stored one (AIC-FR-IOWS). */

@@ -13,6 +13,12 @@ pub const GATEWAY_SECRET_ID: &str = "claude_code_gateway";
 pub const DEFAULT_GATEWAY_TOKEN_VAR: &str = "ANTHROPIC_AUTH_TOKEN";
 /// AIC-FR-XZCS: the variable the gateway base URL is passed under.
 pub const GATEWAY_BASE_URL_VAR: &str = "ANTHROPIC_BASE_URL";
+/// AIC-FR-XZCS: the variables that make Claude Code send Bedrock runtime
+/// requests to the gateway and sign none of them with AWS credentials.
+pub const BEDROCK_FLAG_VAR: &str = "CLAUDE_CODE_USE_BEDROCK";
+pub const BEDROCK_SKIP_AUTH_VAR: &str = "CLAUDE_CODE_SKIP_BEDROCK_AUTH";
+/// AIC-FR-XZCS: the variable a Bedrock gateway base URL is passed under.
+pub const BEDROCK_BASE_URL_VAR: &str = "ANTHROPIC_BEDROCK_BASE_URL";
 /// AIC-FR-XZCS: the variable the subscription token is passed under.
 pub const OAUTH_TOKEN_VAR: &str = "CLAUDE_CODE_OAUTH_TOKEN";
 /// AIC-FR-PADP: the path appended to the gateway base URL.
@@ -74,8 +80,16 @@ pub fn is_reserved_variable(name: &str) -> bool {
 /// AIC-FR-CVPW: the token variable name a payload carries, defaulted.
 pub(super) fn resolve_token_var(raw: Option<&str>) -> Result<String, String> {
     let name = raw.map(str::trim).filter(|n| !n.is_empty()).unwrap_or(DEFAULT_GATEWAY_TOKEN_VAR);
+    // The launch sets these names itself, in one API or the other (AIC-FR-XZCS),
+    // so a token under one of them would replace that variable.
+    let launch_sets = [
+        GATEWAY_BASE_URL_VAR,
+        BEDROCK_BASE_URL_VAR,
+        BEDROCK_FLAG_VAR,
+        BEDROCK_SKIP_AUTH_VAR,
+    ];
     if !is_valid_variable_name(name)
-        || name.eq_ignore_ascii_case(GATEWAY_BASE_URL_VAR)
+        || launch_sets.iter().any(|set| name.eq_ignore_ascii_case(set))
         || is_reserved_variable(name)
     {
         return Err(ERR_TOKEN_VAR_INVALID.into());
@@ -168,8 +182,24 @@ pub(super) struct GatewayPlan {
     pub token_var: String,
     /// A token the author supplied, trimmed. `None` keeps the stored one.
     pub supplied_token: Option<String>,
+    /// AIC-FR-QHLN: the API shape the gateway serves.
+    pub api: GatewayApi,
     /// AIC-FR-KWMV: the author accepted the gateway with no gateway check.
     pub skip_check: bool,
+}
+
+impl GatewayPlan {
+    /// AIC-FR-PADP / AIC-FR-KWMV / AIC-FR-QHLN: only an Anthropic gateway that
+    /// the author did not accept without the check is asked for its models.
+    pub fn runs_check(&self) -> bool {
+        self.api == GatewayApi::Anthropic && !self.skip_check
+    }
+
+    /// AIC-FR-KWMV: the flag a record keeps. A Bedrock gateway is never
+    /// checked, so the flag says nothing about it and stays false.
+    pub fn check_skipped(&self) -> bool {
+        self.api == GatewayApi::Anthropic && self.skip_check
+    }
 }
 
 /// AIC-FR-UFNB / AIC-FR-CVPW / AIC-FR-IOWS: settle a gateway payload's shape,
@@ -189,6 +219,10 @@ pub(super) fn plan_gateway(
     if base_url.contains(['?', '#']) {
         return Err(ERR_BASE_URL_INVALID.into());
     }
+    let api = match config.gateway_api.as_deref() {
+        None => GatewayApi::Anthropic,
+        Some(raw) => GatewayApi::parse(raw).ok_or(ERR_WRONG_CONFIG_KIND)?,
+    };
     let token_var = resolve_token_var(config.gateway_token_var.as_deref())?;
     let supplied_token = match config.gateway_token.as_deref() {
         Some(raw) => {
@@ -213,6 +247,7 @@ pub(super) fn plan_gateway(
         base_url,
         token_var,
         supplied_token,
+        api,
         skip_check: config.skip_gateway_check == Some(true),
     })
 }
@@ -288,7 +323,16 @@ pub(super) fn compose_launch_environment(
                 .as_deref()
                 .filter(|u| !u.is_empty())
                 .ok_or(ERR_REGISTRY_UNAVAILABLE)?;
-            set_variable(&mut variables, GATEWAY_BASE_URL_VAR, url, false);
+            match record.gateway_api {
+                GatewayApi::Anthropic => {
+                    set_variable(&mut variables, GATEWAY_BASE_URL_VAR, url, false);
+                }
+                GatewayApi::Bedrock => {
+                    set_variable(&mut variables, BEDROCK_FLAG_VAR, "1", false);
+                    set_variable(&mut variables, BEDROCK_SKIP_AUTH_VAR, "1", false);
+                    set_variable(&mut variables, BEDROCK_BASE_URL_VAR, url, false);
+                }
+            }
             let name = resolve_token_var(record.gateway_token_var.as_deref())
                 .unwrap_or_else(|_| DEFAULT_GATEWAY_TOKEN_VAR.to_string());
             set_variable(&mut variables, &name, credential.expose(), true);

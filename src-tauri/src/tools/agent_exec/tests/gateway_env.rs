@@ -184,3 +184,56 @@ fn a_gateway_launch_without_its_token_creates_no_container() {
     );
     assert_eq!(runtime.launched(), 0, "no container was created");
 }
+
+/// EAC-FR-15, EAC-FR-OWPP, CCP-FR-20 (AIC-FR-XZCS, AIC-FR-QHLN) — a Bedrock
+/// gateway launch passes the Bedrock variables and the token, each by name, with
+/// their values on the client process, and no `ANTHROPIC_BASE_URL`.
+#[test]
+fn a_bedrock_gateway_launch_passes_the_bedrock_variables() {
+    let harness = harness_for("claude_code");
+    let config = VerifyConfig {
+        path: Some("/usr/bin/claude".into()),
+        auth_mode: Some("custom_gateway".into()),
+        gateway_api: Some("bedrock".into()),
+        gateway_base_url: Some(GATEWAY_URL.into()),
+        gateway_token: Some(GATEWAY_TOKEN.into()),
+        env_vars: Some(vec!["AWS_REGION=eu-west-1".into()]),
+        ..Default::default()
+    };
+    verify_integration_impl(&harness.store, &harness.ai, "claude_code", &config)
+        .expect("gateway verifies");
+    let runtime = RecordingRuntime::replying(&valid_claude_stdout());
+    run(&harness, runtime.clone(), task("go")).expect("runs");
+    let recorded = runtime.only_run();
+
+    let value = |name: &str| recorded.env.get(name).map(String::as_str);
+    assert_eq!(value("CLAUDE_CODE_USE_BEDROCK"), Some("1"));
+    assert_eq!(value("CLAUDE_CODE_SKIP_BEDROCK_AUTH"), Some("1"));
+    assert_eq!(value("ANTHROPIC_BEDROCK_BASE_URL"), Some(GATEWAY_URL));
+    assert_eq!(value("ANTHROPIC_AUTH_TOKEN"), Some(GATEWAY_TOKEN));
+    assert_eq!(value("AWS_REGION"), Some("eu-west-1"));
+    assert!(!recorded.env.contains_key("ANTHROPIC_BASE_URL"));
+    assert!(!recorded.env.contains_key("CLAUDE_CODE_OAUTH_TOKEN"));
+    assert_eq!(recorded.env.len(), 5);
+
+    let named: Vec<&str> = recorded
+        .argv
+        .windows(2)
+        .filter(|pair| pair[0] == "--env" && !pair[1].contains('='))
+        .map(|pair| pair[1].as_str())
+        .collect();
+    assert_eq!(
+        named,
+        vec![
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
+            "ANTHROPIC_BEDROCK_BASE_URL",
+            "ANTHROPIC_AUTH_TOKEN",
+            "AWS_REGION",
+        ]
+    );
+    let argv = recorded.argv.join(" ");
+    for value in [GATEWAY_TOKEN, GATEWAY_URL, "eu-west-1"] {
+        assert!(!argv.contains(value), "a value reached the argv");
+    }
+}

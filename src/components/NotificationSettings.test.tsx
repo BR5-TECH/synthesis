@@ -245,12 +245,16 @@ describe("the operating system's disposition (GLS-FR-26)", () => {
     ).toBeNull();
   });
 
-  it("disables the switch entirely on a platform with no notification centre", async () => {
+  it("GLS-FR-26: disables the switch entirely on a platform with no notification centre", async () => {
     wireBackend({ permission: "unsupported" });
     renderSection();
     const box = await screen.findByRole("checkbox");
     await waitFor(() => expect(box).toBeDisabled());
     expect(screen.getByText(/no notification centre/)).toBeInTheDocument();
+    // GLS-FR-26: the statement also names a run outside an application bundle.
+    expect(
+      screen.getByText(/cannot post notifications/),
+    ).toHaveTextContent(/not running from an application bundle/);
   });
 
   it("treats a platform that cannot answer as unsupported", async () => {

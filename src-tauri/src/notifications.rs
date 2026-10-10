@@ -72,6 +72,10 @@ pub struct NotificationRequest {
     /// key matches one still showing replaces it in place (NTD-FR-06).
     pub key: String,
     pub title: String,
+    /// The short line beneath the title; names the project (NTF-FR-QGSV).
+    /// Absent on the wire reads as empty.
+    #[serde(default)]
+    pub subtitle: String,
     pub body: String,
     /// Opaque; never parsed here (NTD-FR-08).
     pub payload: String,
@@ -156,12 +160,11 @@ pub trait NotificationSink: Send + Sync {
     /// Whether the platform can genuinely **replace** a showing notification in
     /// place, rather than merely being asked to show a second one (NTD-FR-06).
     ///
-    /// macOS answers `false`: `mac-notification-sys` offers neither retraction
-    /// nor a notification identity to reuse. This is why dedup happens a layer
-    /// up, in [`post_through`]: a repeat post carrying the same words is never
-    /// handed to the platform at all, so the common case — a reporter saying
-    /// "still running" over and over — is one banner and one waiting thread. A
-    /// post whose words genuinely changed IS shown again, and on a `false`
+    /// macOS answers `true`: one id gives one platform identifier, and the
+    /// centre replaces what it shows under it. The other desktops answer
+    /// `false`. Dedup happens a layer up either way, in [`post_through`]: a
+    /// repeat post carrying the same words is never handed to the platform at
+    /// all. A post whose words changed IS shown again, and on a `false`
     /// platform the superseded banner stays until the author clears it. The
     /// registry invariant holds throughout — one slot, one id, the latest
     /// payload — so a click on either banner routes to the current target.
@@ -194,8 +197,7 @@ pub fn post_through(
     if posted.unchanged {
         // NTD-FR-06: the platform is never handed a notification that repeats
         // what it is already showing. The registry has taken the newer payload,
-        // so the banner already up now routes to the current target and the
-        // thread already waiting on it is the only one there needs to be.
+        // so the banner already up now routes to the current target.
         return Ok(posted);
     }
     let click = make_click(posted.id.clone());
@@ -224,7 +226,15 @@ struct Showing {
     /// skipped, rather than becoming a second banner saying what the first one
     /// already says (NTD-FR-06).
     title: String,
+    subtitle: String,
     body: String,
+}
+
+impl Showing {
+    /// NTD-FR-06: whether `other` shows the author the same words.
+    fn same_words(&self, other: &Showing) -> bool {
+        self.title == other.title && self.subtitle == other.subtitle && self.body == other.body
+    }
 }
 
 #[derive(Default)]
@@ -256,10 +266,9 @@ pub struct Posted {
     /// True when the replacement says exactly what the showing one already says.
     ///
     /// The platform is not asked to show it again: a second banner repeating the
-    /// first word for word tells the author nothing, and on a platform with no
-    /// retraction it would also mean a second blocked thread waiting on a click
-    /// nobody needs. A reporter that posts "still running" every second
-    /// therefore occupies one banner and one thread however long it runs.
+    /// first word for word tells the author nothing. A reporter that posts
+    /// "still running" every second therefore occupies one banner however long
+    /// it runs.
     pub unchanged: bool,
 }
 
@@ -276,6 +285,7 @@ impl NotificationRegistry {
             key: request.key.clone(),
             payload: request.payload.clone(),
             title: request.title.clone(),
+            subtitle: request.subtitle.clone(),
             body: request.body.clone(),
         };
         if let Some(existing) = inner.by_key.get(&request.key).cloned() {
@@ -287,7 +297,7 @@ impl NotificationRegistry {
             let unchanged = inner
                 .showing
                 .get(&existing)
-                .is_some_and(|prev| prev.title == showing.title && prev.body == showing.body);
+                .is_some_and(|prev| prev.same_words(&showing));
             inner.showing.insert(existing.clone(), showing);
             return Posted {
                 id: existing,
@@ -379,106 +389,35 @@ impl NotificationRegistry {
 // The production sink
 // ---------------------------------------------------------------------------
 
-/// The real notification centre.
-///
-/// Held as Tauri state alongside the registry so both the commands and the
-/// application-exit hook can reach it.
-pub struct OsSink;
+// Most of these decisions serve the macOS sink only. They compile, and are
+// tested, on every platform.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod platform;
 
 #[cfg(target_os = "macos")]
-impl NotificationSink for OsSink {
-    fn deliver(
-        &self,
-        id: &str,
-        request: &NotificationRequest,
-        on_click: Box<dyn FnOnce() + Send>,
-    ) -> Result<(), PostError> {
-        let title = request.title.clone();
-        let body = request.body.clone();
-        let id = id.to_string();
-        // `wait_for_click` makes `send()` block until the author interacts or
-        // the banner goes, which is the only way this platform reports a click
-        // at all — so every posted notification owns a thread for as long as it
-        // is showing. Posting itself stays asynchronous (NTD-FR-17): the caller
-        // gets its id back from `post_notification` without waiting on any of
-        // this.
-        std::thread::Builder::new()
-            .name(format!("notification-{id}"))
-            .spawn(move || {
-                let mut notification = mac_notification_sys::Notification::default();
-                notification
-                    .title(title.as_str())
-                    .message(body.as_str())
-                    .wait_for_click(true);
-                match notification.send() {
-                    Ok(mac_notification_sys::NotificationResponse::Click) => on_click(),
-                    // Every other response is a dismissal or an interaction this
-                    // application offers no action for. NTD-FR-11: dismissing
-                    // emits nothing and raises no window.
-                    Ok(_) => {}
-                    Err(_) => {}
-                }
-            })
-            .map_err(|_| PostError::DeliveryFailed)?;
-        Ok(())
-    }
-
-    fn retract(&self, _id: &str) {
-        // `mac-notification-sys` exposes no retraction. The registry has already
-        // forgotten the id by the time this is called, so the contract that
-        // matters — that a click no longer routes — holds regardless; what may
-        // linger is the banner in Notification Center.
-    }
-
-    /// NTD-FR-06 is only partially achievable here: with no retraction and no
-    /// reusable notification identity, a replacement is a second banner. The
-    /// registry still keeps one slot, one id, and the latest payload, so a click
-    /// on either banner routes to the same, current target.
-    fn supports_replacement(&self) -> bool {
-        false
-    }
-
-    fn permission(&self) -> PermissionState {
-        // This platform answers notification permission at the moment of
-        // delivery rather than through a queryable API, so the honest report is
-        // that the application has a working centre to post into. A refusal
-        // surfaces as a delivery that shows nothing, which is why `GLS-FR-26`
-        // states the disposition rather than promising it.
-        PermissionState::Granted
-    }
-
-    fn request_permission(&self) -> PermissionState {
-        self.permission()
-    }
-}
+mod macos;
+#[cfg(target_os = "macos")]
+pub use macos::OsSink;
 
 #[cfg(not(target_os = "macos"))]
-impl NotificationSink for OsSink {
-    fn deliver(
-        &self,
-        _id: &str,
-        request: &NotificationRequest,
-        _on_click: Box<dyn FnOnce() + Send>,
-    ) -> Result<(), PostError> {
-        // Delivery without an activation channel: `on_click` is dropped, never
-        // invoked, so a notification posted here shows and is never routed from.
-        let mut notification = notify_rust::Notification::new();
-        notification.summary(&request.title).body(&request.body);
-        notification
-            .show()
-            .map(|_| ())
-            .map_err(|_| PostError::DeliveryFailed)
-    }
+mod desktop;
+#[cfg(not(target_os = "macos"))]
+pub use desktop::OsSink;
 
-    fn retract(&self, _id: &str) {}
-
-    fn permission(&self) -> PermissionState {
-        PermissionState::Granted
-    }
-
-    fn request_permission(&self) -> PermissionState {
-        self.permission()
-    }
+/// NTD-FR-DMYR: connect the platform's notification centre while the
+/// application starts. Called from the `setup` hook, which runs before the
+/// application finishes launching.
+pub fn install(app: &tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    macos::install(app);
+    #[cfg(not(target_os = "macos"))]
+    log_debug(
+        app,
+        &BUFFER,
+        &[Domain::Backend],
+        "notification centre installed",
+        log_fields! { "activation" => false },
+    );
 }
 
 /// The sink the commands post through. Boxed so a test can hold a different one
@@ -591,20 +530,54 @@ pub fn withdraw_all_on_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 // Tauri commands (NTD contract surface)
 // ---------------------------------------------------------------------------
 
+/// Run `work` on a blocking worker thread rather than on the thread the
+/// command arrived on.
+///
+/// A synchronous command runs on the main thread on macOS, and every answer of
+/// the notification centre arrives through a completion handler. A wait for
+/// one there would freeze the window, and a wait for the permission prompt
+/// would freeze it until the author answers (NTD non-functional requirements).
+/// `None` when the worker could not finish, which is logged.
+async fn off_main_thread<T: Send + 'static>(
+    app: &tauri::AppHandle,
+    operation: &'static str,
+    work: impl FnOnce(tauri::AppHandle) -> T + Send + 'static,
+) -> Option<T> {
+    let handle = app.clone();
+    match tauri::async_runtime::spawn_blocking(move || work(handle)).await {
+        Ok(value) => Some(value),
+        Err(e) => {
+            log_error(
+                app,
+                &BUFFER,
+                &[Domain::Backend],
+                "notification operation did not finish",
+                log_fields! { "operation" => operation, "error" => e.to_string() },
+            );
+            None
+        }
+    }
+}
+
 /// NTD-FR-02: the platform's current disposition. Prompts for nothing, persists
 /// nothing, and never returns an error.
 #[tauri::command]
-pub fn get_notification_permission(notifier: State<'_, Notifier>) -> PermissionState {
-    notifier.0.permission()
+pub async fn get_notification_permission(app: tauri::AppHandle) -> PermissionState {
+    off_main_thread(&app, "get permission", |app| {
+        app.state::<Notifier>().0.permission()
+    })
+    .await
+    .unwrap_or(PermissionState::Unsupported)
 }
 
 /// NTD-FR-03: the only operation here that can present a permission prompt.
 #[tauri::command]
-pub fn request_notification_permission(
-    app: tauri::AppHandle,
-    notifier: State<'_, Notifier>,
-) -> PermissionState {
-    let state = notifier.0.request_permission();
+pub async fn request_notification_permission(app: tauri::AppHandle) -> PermissionState {
+    let state = off_main_thread(&app, "request permission", |app| {
+        app.state::<Notifier>().0.request_permission()
+    })
+    .await
+    .unwrap_or(PermissionState::Unsupported);
     log_info(
         &app,
         &BUFFER,
@@ -619,16 +592,23 @@ pub fn request_notification_permission(
 /// under the same key. Posts nothing while permission is anything other than
 /// granted, and never prompts on its own.
 #[tauri::command]
-pub fn post_notification(
+pub async fn post_notification(
     request: NotificationRequest,
     app: tauri::AppHandle,
-    registry: State<'_, NotificationRegistry>,
-    notifier: State<'_, Notifier>,
 ) -> Result<PostedNotification, String> {
-    let handle = app.clone();
-    let posted = match post_through(&registry, notifier.0.as_ref(), &request, move |id| {
-        Box::new(move || deliver_activation(&handle, &id))
-    }) {
+    let key = request.key.clone();
+    let outcome = off_main_thread(&app, "post", move |app| {
+        let handle = app.clone();
+        post_through(
+            &app.state::<NotificationRegistry>(),
+            app.state::<Notifier>().0.as_ref(),
+            &request,
+            move |id| Box::new(move || deliver_activation(&handle, &id)),
+        )
+    })
+    .await
+    .unwrap_or(Err(PostError::DeliveryFailed));
+    let posted = match outcome {
         Ok(posted) => posted,
         Err(error) => {
             // NTD-FR-14: a refusal is not an error the author asked a question
@@ -638,7 +618,7 @@ pub fn post_notification(
                 &BUFFER,
                 &[Domain::Backend],
                 "notification not posted",
-                log_fields! { "key" => request.key.as_str(), "error" => error.code() },
+                log_fields! { "key" => key.as_str(), "error" => error.code() },
             );
             if error == PostError::DeliveryFailed {
                 log_warn(
@@ -646,17 +626,17 @@ pub fn post_notification(
                     &BUFFER,
                     &[Domain::Backend],
                     "notification delivery failed",
-                    log_fields! { "key" => request.key.as_str() },
+                    log_fields! { "key" => key.as_str() },
                 );
             }
             return Err(error.code().to_string());
         }
     };
 
-    // Title and body are author-facing text a surface composed, and the payload
-    // is an address: neither is logged by value. The key names *what* was
-    // raised about, which is what a reader debugging a missing notification
-    // needs (LGC-FR-16).
+    // Title, subtitle and body are author-facing text a surface composed, and
+    // the payload is an address: none is logged by value. The key names *what*
+    // was raised about, which is what a reader debugging a missing
+    // notification needs (LGC-FR-16).
     log_info(
         &app,
         &BUFFER,
@@ -664,7 +644,7 @@ pub fn post_notification(
         "notification posted",
         log_fields! {
             "notificationId" => posted.id.as_str(),
-            "key" => request.key.as_str(),
+            "key" => key.as_str(),
             "replaced" => posted.replaced,
             // Whether the platform was actually handed anything. A reader
             // asking "why did I not see that?" is otherwise looking at a line

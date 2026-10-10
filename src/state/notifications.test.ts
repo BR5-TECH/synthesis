@@ -8,7 +8,9 @@ import {
   notifyArrived,
   postedAddresses,
   notificationGate,
+  projectSubtitle,
   raiseNotification,
+  readNotificationPermission,
   resetNotifications,
   retractNotification,
   setNotificationPermissionGranted,
@@ -18,6 +20,7 @@ import {
   type WindowSnapshot,
 } from "./notifications";
 import { mintAddress, parseAddress } from "./notificationAddress";
+import { resetLogBufferForTest } from "../logging";
 import {
   hasRunIndication,
   indicatedAddresses,
@@ -72,6 +75,9 @@ const fileAddress = mintAddress(PROJECT, WORKTREE, {
 
 let postCounter = 0;
 beforeEach(() => {
+  // A successful raise logs, and the log flush timer must not reach the next
+  // test.
+  resetLogBufferForTest();
   invokeMock.mockReset();
   postCounter = 0;
   invokeMock.mockImplementation(async (cmd: string) => {
@@ -472,6 +478,8 @@ describe("raising (NTF-FR-01 / NTF-FR-02 / NTF-FR-23)", () => {
       {
         key: "run:abc",
         title: "A run finished",
+        // NTF-FR-QGSV: the facility adds the project's name.
+        subtitle: "acme",
         body: "It took an hour.",
         payload: dashboard,
       },
@@ -772,5 +780,118 @@ describe("the gate is live, not a snapshot (NTF-FR-12)", () => {
     setNotificationPermissionGranted(true);
     await expect(raiseNotification(raiseFor(dashboard))).resolves.toBe(true);
     expect(posts()).toHaveLength(1);
+  });
+});
+
+describe("the subtitle names the project (NTF-FR-QGSV)", () => {
+  beforeEach(() => {
+    resetNotifications();
+    resetTabIndications();
+    configureNotifications({
+      snapshot: () => backgrounded,
+      resolveTab: () => null,
+    });
+    setNotificationPermissionGranted(true);
+  });
+
+  it("NTF-FR-QGSV: names the project by the last segment of its key", async () => {
+    expect(await raiseNotification(raiseFor(dashboard))).toBe(true);
+    expect(posts()[0].subtitle).toBe("acme");
+    // The raise's own words reach the backend unchanged beside it.
+    expect(posts()[0].title).toBe("A run finished");
+    expect(posts()[0].body).toBe("It took an hour.");
+  });
+
+  it("NTF-FR-QGSV: names the project the address names, not the open one", async () => {
+    const elsewhere = mintAddress("/dev/other-project", "/dev/other-project", {
+      kind: "dashboard",
+    });
+    await raiseNotification({ ...raiseFor(elsewhere), key: "elsewhere" });
+    expect(posts()[0].subtitle).toBe("other-project");
+  });
+
+  it("NTF-FR-QGSV: every surface's raise gets the same subtitle for one project", async () => {
+    await raiseNotification({ ...raiseFor(dashboard), key: "a" });
+    await raiseNotification({ ...raiseFor(fileAddress), key: "b" });
+    await raiseNotification({
+      ...raiseFor(mintAddress(PROJECT, WORKTREE, { kind: "run", runId: "r1" })),
+      key: "c",
+    });
+    expect(posts().map((p) => p.subtitle)).toEqual(["acme", "acme", "acme"]);
+  });
+
+  it("NTF-FR-QGSV: a subtitle a surface tries to send is ignored", async () => {
+    const raise = { ...raiseFor(dashboard), subtitle: "something else" } as Raise;
+    await raiseNotification(raise);
+    expect(posts()[0].subtitle).toBe("acme");
+  });
+
+  it.each([
+    ["/dev/acme", "acme"],
+    ["/dev/acme/", "acme"],
+    ["/dev/acme//", "acme"],
+    ["C:\\dev\\acme", "acme"],
+    ["C:\\dev\\acme\\", "acme"],
+    ["C:\\dev/acme", "acme"],
+    ["~/dev/acme", "acme"],
+    ["/dev/проект", "проект"],
+    ["acme", "acme"],
+    ["/", ""],
+  ])("NTF-FR-QGSV: the key %s gives the name %s", (projectKey, name) => {
+    const address = parseAddress(mintAddress(projectKey, projectKey, { kind: "dashboard" }));
+    expect(address).not.toBeNull();
+    expect(projectSubtitle(address!)).toBe(name);
+  });
+});
+
+describe("reading the permission (NTF-FR-13, NTF-FR-WUUY)", () => {
+  type Answer = { resolve: (state: string) => void; reject: (e: unknown) => void };
+
+  /** Each permission read waits for the test to answer it. */
+  const deferReads = () => {
+    const answers: Answer[] = [];
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "get_notification_permission") {
+        return new Promise((resolve, reject) => answers.push({ resolve, reject }));
+      }
+      return Promise.resolve(undefined);
+    });
+    return answers;
+  };
+
+  beforeEach(() => {
+    resetNotifications();
+  });
+
+  it("NTF-FR-WUUY: the read started last decides, whatever order the answers come in", async () => {
+    const answers = deferReads();
+    const startup = readNotificationPermission("startup");
+    const focus = readNotificationPermission("window focus");
+    answers[1].resolve("denied");
+    await focus;
+    answers[0].resolve("granted");
+    await startup;
+    expect(notificationGate().permissionGranted).toBe(false);
+    expect(invokeMock.mock.calls.some((c) => c[0] === "request_notification_permission")).toBe(
+      false,
+    );
+  });
+
+  it("NTF-FR-WUUY: a read that fails closes the gate", async () => {
+    setNotificationPermissionGranted(true);
+    const answers = deferReads();
+    const read = readNotificationPermission("window focus");
+    answers[0].reject(new Error("no backend"));
+    await read;
+    expect(notificationGate().permissionGranted).toBe(false);
+  });
+
+  it("NTF-FR-13: a read still in flight at a reset does not apply", async () => {
+    const answers = deferReads();
+    const read = readNotificationPermission("startup");
+    resetNotifications();
+    answers[0].resolve("granted");
+    await read;
+    expect(notificationGate().permissionGranted).toBe(false);
   });
 });

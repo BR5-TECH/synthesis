@@ -36,7 +36,7 @@ import {
   notifyArrived,
   raiseNotification,
   retractNotification,
-  setNotificationPermissionGranted,
+  readNotificationPermission,
   setNotificationsEnabled,
   withdrawForRoot,
 } from "../state/notifications";
@@ -150,14 +150,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
     });
     // NTF-FR-13: the state is *read* at startup. Nothing here requests it, so a
     // permission prompt never appears because the application started.
-    void api
-      .getNotificationPermission()
-      .then((state) => {
-        if (!cancelled) setNotificationPermissionGranted(state === "granted");
-      })
-      .catch(() => {
-        if (!cancelled) setNotificationPermissionGranted(false);
-      });
+    void readNotificationPermission("startup");
     return () => {
       cancelled = true;
     };
@@ -191,16 +184,17 @@ export function useAppNotifications(deps: AppNotificationDeps) {
         setNotificationsEnabled(prefs.notificationsEnabled ?? true);
         setSelectionFollowsTab(prefs.selectionFollowsTab ?? true);
       });
-      void api
-        .getNotificationPermission()
-        .then((state) => {
-          if (!cancelled) setNotificationPermissionGranted(state === "granted");
-        })
-        .catch(() => {
-          if (!cancelled) setNotificationPermissionGranted(false);
-        });
+      void readNotificationPermission("settings changed");
     };
     void onAppPreferencesChanged(reseed).then(keep);
+    // NTF-FR-WUUY: the author may change the permission in the operating
+    // system's settings while away, so it is read again when the main window
+    // gets focus. Reading is not requesting: no prompt originates here.
+    const rereadPermission = () => {
+      void readNotificationPermission("window focus");
+    };
+    window.addEventListener("focus", rereadPermission);
+    unlisten.push(() => window.removeEventListener("focus", rereadPermission));
     // A settings window opening or closing is the other moment the author may
     // have changed one of these, the permission in particular, which no
     // preferences write announces.
@@ -220,8 +214,10 @@ export function useAppNotifications(deps: AppNotificationDeps) {
         rehearsalTimers.current.delete(timer);
         void raiseNotification({
           key: "notifications:rehearsal",
-          title: "Synthesis",
-          body: "This is what a notification looks like. Click it to come back.",
+          // NTF-FR-FPLB: the title says what happened. The operating system
+          // already shows the application's name above it.
+          title: "Test notification",
+          body: "Click it to come back to Global settings.",
           address,
         });
       }, REHEARSAL_DELAY_MS);

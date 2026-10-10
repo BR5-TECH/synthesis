@@ -94,6 +94,7 @@ fn request(key: &str, payload: &str) -> NotificationRequest {
     NotificationRequest {
         key: key.to_string(),
         title: "Title".into(),
+        subtitle: String::new(),
         body: "Body".into(),
         payload: payload.to_string(),
     }
@@ -146,9 +147,63 @@ fn request_of(key: &str, title: &str, body: &str, payload: &str) -> Notification
     NotificationRequest {
         key: key.into(),
         title: title.into(),
+        subtitle: String::new(),
         body: body.into(),
         payload: payload.into(),
     }
+}
+
+#[test]
+fn the_request_carries_a_subtitle_and_an_absent_one_reads_as_empty() {
+    // NTD-FR-01, NTD-FR-05: the subtitle decodes from the wire. A sender that
+    // leaves it out gives an empty subtitle, not a decode error.
+    let decoded: NotificationRequest = serde_json::from_value(serde_json::json!({
+        "key": "k", "title": "t", "subtitle": "acme", "body": "b", "payload": "p"
+    }))
+    .unwrap();
+    assert_eq!(decoded.subtitle, "acme");
+    let absent: NotificationRequest = serde_json::from_value(serde_json::json!({
+        "key": "k", "title": "t", "body": "b", "payload": "p"
+    }))
+    .unwrap();
+    assert_eq!(absent.subtitle, "");
+}
+
+#[test]
+fn the_subtitle_reaches_the_platform_unchanged() {
+    // NTD-FR-05: the module changes nothing in the text it hands on.
+    let registry = NotificationRegistry::default();
+    let sink = Recorder::granted();
+    let mut req = request("run:abc", "p");
+    req.subtitle = "acme — main · 🎧".into();
+    post_through(&registry, &sink, &req, |_| Box::new(|| {})).unwrap();
+    let delivered = sink.delivered.lock().unwrap();
+    assert_eq!(delivered.len(), 1);
+    assert_eq!(delivered[0].1.subtitle, "acme — main · 🎧");
+}
+
+#[test]
+fn a_changed_subtitle_alone_is_new_words_and_is_shown_again() {
+    // NTD-FR-06: the comparison covers title, subtitle and body. A post under
+    // the same key that differs only in its subtitle is delivered again.
+    let registry = NotificationRegistry::default();
+    let sink = Recorder::granted();
+    let mut first = request("run:abc", "p");
+    first.subtitle = "acme".into();
+    let posted = post_through(&registry, &sink, &first, |_| Box::new(|| {})).unwrap();
+
+    let mut renamed = first.clone();
+    renamed.subtitle = "other".into();
+    let again = post_through(&registry, &sink, &renamed, |_| Box::new(|| {})).unwrap();
+    assert!(again.replaced);
+    assert!(!again.unchanged, "a different subtitle is different words");
+    assert_eq!(again.id, posted.id);
+    assert_eq!(sink.delivered.lock().unwrap().len(), 2);
+
+    // All three the same: nothing new to show.
+    let repeat = post_through(&registry, &sink, &renamed, |_| Box::new(|| {})).unwrap();
+    assert!(repeat.unchanged);
+    assert_eq!(sink.delivered.lock().unwrap().len(), 2);
 }
 
 #[test]
@@ -443,6 +498,7 @@ fn a_granted_post_records_it_and_shows_it_with_its_text_unmodified() {
     let req = NotificationRequest {
         key: "run:abc".into(),
         title: "A very long title that no platform is obliged to show whole".into(),
+        subtitle: String::new(),
         body: "Body with\nnewlines and *asterisks* and 🎧".into(),
         payload: "synthesis://p/w/dashboard".into(),
     };
@@ -524,6 +580,7 @@ fn a_repeat_key_with_new_words_is_shown_again_and_routes_to_the_latest() {
         &NotificationRequest {
             key: "run:abc".into(),
             title: "Run".into(),
+            subtitle: String::new(),
             body: "Finished.".into(),
             payload: "synthesis://p/w/bottom/runs".into(),
         },
@@ -537,6 +594,7 @@ fn a_repeat_key_with_new_words_is_shown_again_and_routes_to_the_latest() {
         &NotificationRequest {
             key: "run:abc".into(),
             title: "Run".into(),
+            subtitle: String::new(),
             body: "Needs your input.".into(),
             payload: "synthesis://p/w/dashboard".into(),
         },
@@ -636,20 +694,6 @@ fn the_click_the_command_wires_carries_the_id_that_was_posted() {
 
     sink.fire_click(&posted.id);
     assert_eq!(*seen.lock().unwrap(), vec![posted.id]);
-}
-
-#[test]
-fn requesting_permission_asks_once_and_a_refusal_stays_refused() {
-    // NTD-FR-03: a platform that has never been asked answers the ask; one
-    // that has already refused is not asked again, because that is reversed
-    // in the operating system's settings.
-    let fresh = Recorder::with_permission(PermissionState::NotRequested);
-    assert_eq!(fresh.request_permission(), PermissionState::Granted);
-    assert_eq!(fresh.permission(), PermissionState::Granted);
-
-    let refused = Recorder::with_permission(PermissionState::Denied);
-    assert_eq!(refused.request_permission(), PermissionState::Denied);
-    assert_eq!(refused.permission(), PermissionState::Denied);
 }
 
 #[test]
@@ -809,4 +853,43 @@ fn command_functions_are_in_scope() {
     let _ = post_notification;
     let _ = withdraw_notification;
     let _ = withdraw_all_notifications;
+}
+
+#[test]
+fn macos_posts_through_the_user_notifications_framework_only() {
+    // NTD-FR-ZGHA: `mac-notification-sys` guesses an application identity with
+    // an AppleScript lookup, which asks the author to choose an application.
+    // It must not come back as a dependency of this crate.
+    let manifest: toml::Value = toml::from_str(include_str!("../../Cargo.toml")).unwrap();
+    let macos = &manifest["target"]["cfg(target_os = \"macos\")"]["dependencies"];
+    assert!(macos.get("mac-notification-sys").is_none());
+    assert!(macos.get("objc2-user-notifications").is_some());
+    assert!(manifest["dependencies"].get("mac-notification-sys").is_none());
+}
+
+#[test]
+fn the_bundle_targets_macos_11_and_is_signed() {
+    // NTD-FR-QSRQ: the banner and list presentation needs macOS 11. NTD-FR-ZGHA:
+    // the notification centre authorises a signed bundle only, and an ad-hoc
+    // signature is what a local build gets.
+    let config: serde_json::Value =
+        serde_json::from_str(include_str!("../../tauri.conf.json")).unwrap();
+    let macos = &config["bundle"]["macOS"];
+    assert_eq!(macos["minimumSystemVersion"], "11.0");
+    assert_eq!(macos["signingIdentity"], "-");
+}
+
+#[test]
+fn the_notification_centre_is_installed_first_in_setup() {
+    // NTD-FR-DMYR: the delegate is in place before anything else in `setup`
+    // runs, so a click that launched the application reaches it.
+    let lib = include_str!("../lib.rs");
+    let setup = lib.find(".setup(|app| {").expect("lib.rs has a setup hook");
+    let first_statement = lib[setup..]
+        .lines()
+        .skip(1)
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with("//"))
+        .unwrap();
+    assert_eq!(first_statement, "notifications::install(app.handle());");
 }

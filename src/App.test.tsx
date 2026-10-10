@@ -21,6 +21,7 @@ import App from "./App";
 import { resetAppPreferencesCache } from "./state/appPreferences";
 import { mintAddress } from "./state/notificationAddress";
 import {
+  notificationGate,
   resetNotifications,
   setNotificationPermissionGranted,
   setNotificationsEnabled,
@@ -222,6 +223,57 @@ describe("Vertical panel splitter wiring (SNV-FR-33 / SNV-FR-37)", () => {
   });
 });
 
+describe("the permission is read again on focus (NTF-FR-WUUY)", () => {
+  const reads = () =>
+    invokeMock.mock.calls.filter((c) => c[0] === "get_notification_permission").length;
+
+  beforeEach(() => {
+    resetNotifications();
+  });
+  afterEach(() => {
+    resetNotifications();
+  });
+
+  it("NTF-FR-WUUY, NTF-FR-13: reads the permission again when the main window gets focus, and asks for nothing", async () => {
+    render(<App />);
+    await enterIde();
+    await waitFor(() => expect(notificationGate().permissionGranted).toBe(true));
+
+    // The author turned notifications off in the operating system's settings
+    // while away from the window.
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) =>
+      cmd === "get_notification_permission"
+        ? "denied"
+        : defaultInvoke(cmd, args as Record<string, unknown>),
+    );
+    const before = reads();
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    await waitFor(() =>
+      expect(notificationGate().permissionGranted).toBe(false),
+    );
+    expect(reads()).toBe(before + 1);
+    expect(
+      invokeMock.mock.calls.some(
+        (c) => c[0] === "request_notification_permission",
+      ),
+    ).toBe(false);
+  });
+
+  it("NTF-FR-WUUY: stops reading on focus once the shell is gone", async () => {
+    const { unmount } = render(<App />);
+    await enterIde();
+    unmount();
+    const before = reads();
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(reads()).toBe(before);
+  });
+});
+
 describe("the notification rehearsal the settings window asks for (GLS-FR-27)", () => {
   const posts = () =>
     invokeMock.mock.calls
@@ -241,10 +293,12 @@ describe("the notification rehearsal the settings window asks for (GLS-FR-27)", 
   });
   afterEach(() => {
     vi.useRealTimers();
+    // The `document.hasFocus` spies of these tests must not reach the next.
+    vi.restoreAllMocks();
     resetNotifications();
   });
 
-  it("NTF-FR-25, NTF-FR-17, GLS-FR-27: posts after the delay, even once that window has gone", async () => {
+  it("NTF-FR-25, NTF-FR-17, GLS-FR-27, NTF-FR-FPLB, NTF-FR-QGSV: posts after the delay, even once that window has gone", async () => {
     // The whole point of the rehearsal is that the author leaves before it
     // fires, and closing the Global settings window is one of the ways they may
     // leave (SWN-FR-01). The delay and the raise therefore live HERE rather
@@ -270,6 +324,11 @@ describe("the notification rehearsal the settings window asks for (GLS-FR-27)", 
     expect(posts()).toHaveLength(1);
     expect(posts()[0].key).toBe("notifications:rehearsal");
     expect(posts()[0].payload).toBe(address());
+    // NTF-FR-FPLB: the title says what happened, not the application's name.
+    expect(posts()[0].title).toBe("Test notification");
+    expect(posts()[0].body).toBe("Click it to come back to Global settings.");
+    // NTF-FR-QGSV: the shell's own name for the open project is the subtitle.
+    expect(posts()[0].subtitle).toBe("acme");
   });
 
   it("NTF-FR-25, NTF-FR-08: posts nothing while that window keeps focus for the whole delay", async () => {

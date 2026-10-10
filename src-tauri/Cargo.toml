@@ -192,11 +192,35 @@ tauri = { version = "2", features = ["test"] }
 # replace a notification in place (NTD-FR-06) — and whose `permission_state()`
 # is hardcoded to `Granted` rather than asked of the platform (NTD-FR-02).
 #
-# macOS: `mac-notification-sys` is the only one of the three that returns a
-# `NotificationResponse`, which is what makes activation real rather than
-# synthesised. `wait_for_click` blocks, so every post owns a thread.
+# macOS: `UNUserNotificationCenter`, reached through `objc2-user-notifications`.
+# It posts under the bundle's own identity (NTD-FR-ZGHA), reports the real
+# permission, replaces and removes by identifier, and reports a click through a
+# delegate. All three crates are already in the tree as Tauri's own
+# dependencies. `objc2/exception` lets `notifications::macos` catch an
+# Objective-C exception instead of letting it end the process.
 [target.'cfg(target_os = "macos")'.dependencies]
-mac-notification-sys = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = [
+  "std",
+  "NSArray",
+  "NSBundle",
+  "NSError",
+  "NSSet",
+  "NSString",
+] }
+objc2-user-notifications = { version = "0.3", default-features = false, features = [
+  "std",
+  "bitflags",
+  "block2",
+  "UNNotification",
+  "UNNotificationAction",
+  "UNNotificationCategory",
+  "UNNotificationContent",
+  "UNNotificationRequest",
+  "UNNotificationResponse",
+  "UNNotificationSettings",
+  "UNNotificationTrigger",
+  "UNUserNotificationCenter",
+] }
 # SWN-FR-02: a settings window blocks the window that opened it. macOS has no
 # disabled window, and Tauri's own `set_enabled` blocks with a half-opaque
 # sheet, which greys out the parent and the settings window over it — against
@@ -205,7 +229,7 @@ mac-notification-sys = "0.6"
 # reached through these three. All are already in the tree as Tauri's own
 # dependencies, at the versions `tauri-runtime-wry` asks for, so nothing is
 # added to the build.
-objc2 = "0.6"
+objc2 = { version = "0.6", features = ["exception"] }
 block2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = [
   "block2",

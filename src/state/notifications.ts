@@ -255,6 +255,17 @@ export interface FacilityContext {
 let context: FacilityContext | null = null;
 
 /**
+ * NTF-FR-QGSV: the subtitle every posted notification carries — the display
+ * name of the project the address names, which is the last segment of its key.
+ * The backend names an open project by the same rule, so a notification about
+ * any project, open or not, reads as the shell names it.
+ */
+export function projectSubtitle(address: NotificationAddress): string {
+  const segments = address.projectKey.split(/[\\/]/).filter((s) => s !== "");
+  return segments[segments.length - 1] ?? "";
+}
+
+/**
  * NTF-FR-11 / NTF-FR-12: the switch and the platform's disposition.
  *
  * Held **here** rather than in the shell's React state, because both are read at
@@ -277,9 +288,37 @@ export function setNotificationsEnabled(next: boolean): void {
   enabled = next;
 }
 
+/**
+ * Counts the writes to `permissionGranted`. A read applies its answer only
+ * while no later read or write started, so a slow read never overwrites
+ * newer information.
+ */
+let permissionWrites = 0;
+
 /** NTD-FR-02: what the platform last told us, from startup or a request. */
 export function setNotificationPermissionGranted(next: boolean): void {
+  permissionWrites += 1;
   permissionGranted = next;
+}
+
+/**
+ * NTF-FR-13 / NTF-FR-WUUY: read the platform's disposition into the gate.
+ * Reading is not requesting, so this never shows a prompt. A read that fails
+ * closes the gate. When reads overlap, the one started last decides.
+ */
+export async function readNotificationPermission(reason: string): Promise<void> {
+  permissionWrites += 1;
+  const write = permissionWrites;
+  let granted = false;
+  try {
+    granted = (await api.getNotificationPermission()) === "granted";
+  } catch (e) {
+    logWarn(["frontend"], "notification permission read failed", {
+      reason,
+      error: String(e),
+    });
+  }
+  if (write === permissionWrites) permissionGranted = granted;
 }
 
 /** Tests and diagnostics: the gate as it currently stands. */
@@ -327,6 +366,8 @@ export function resetNotifications(): void {
   postedByKey.clear();
   enabled = true;
   permissionGranted = false;
+  // A read still in flight from before the reset must not apply.
+  permissionWrites += 1;
 }
 
 /**
@@ -391,16 +432,22 @@ export async function raiseNotification(raise: Raise): Promise<boolean> {
   }
 
   try {
+    // NTF-FR-QGSV: derived here and nowhere else, so every notification has
+    // one shape whatever surface raised it. `decidePost` posts nothing for an
+    // address that does not parse, so this address parses.
+    const parsed = parseAddress(raise.address);
+    const subtitle = parsed ? projectSubtitle(parsed) : "";
     const posted = await api.postNotification({
       key: raise.key,
       title: raise.title,
+      subtitle,
       body: raise.body,
       payload: raise.address,
     });
     postedByAddress.set(raise.address, posted.id);
     postedByKey.set(raise.key, posted.id);
-    // The title and body are author-facing text and the address names a path,
-    // so neither is logged by value (LGC-FR-16).
+    // The title, subtitle and body are author-facing text and the address
+    // names a path, so none is logged by value (LGC-FR-16).
     logInfo(["frontend"], "notification raised", { key: raise.key });
     return true;
   } catch (e) {

@@ -293,6 +293,11 @@ export interface NotificationRequest {
    */
   key: string;
   title: string;
+  /**
+   * NTF-FR-QGSV: the project's name, on the line beneath the title. Only the
+   * notification facility sets it; a raise carries none.
+   */
+  subtitle: string;
   body: string;
   /**
    * The `synthesis://` address, carried opaquely: the backend never parses it

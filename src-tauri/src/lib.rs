@@ -188,6 +188,9 @@ pub fn run() {
         // window survives nothing (SWN-FR-04 persists not even its position).
         .manage(settings_window::SettingsWindows::default())
         .setup(|app| {
+            // NTD-FR-DMYR: first, so a click that launched the application
+            // reaches the notification delegate.
+            notifications::install(app.handle());
             // FSA-FR-21: the pre-project instance — `app_data_dir()` and a
             // session temp directory, symlinks refused. It is what serves the
             // recent-projects list and the log buffer before any project root

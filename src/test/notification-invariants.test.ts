@@ -112,3 +112,18 @@ describe("nothing outside the application can address it (NTD-FR-20)", () => {
     expect(cargo).not.toMatch(/^\s*tauri-plugin-deep-link/m);
   });
 });
+
+describe("one shape for every notification (NTF-FR-QGSV)", () => {
+  it("NTF-FR-QGSV: sets the subtitle in the facility and nowhere else", () => {
+    // NTF-FR-QGSV: "only this facility derives the subtitle. No surface
+    // supplies or overrides it". A raise that set its own would make one
+    // notification read differently from the others.
+    const offenders = sourceFiles(SRC)
+      .filter((f) => f !== join("src", "state", "notifications.ts"))
+      .filter((f) => !f.startsWith(join("src", "types") + sep))
+      .filter((f) => /\bsubtitle\s*:/.test(readFileSync(f, "utf8")))
+      .filter((f) => /\braiseNotification\b|\bpostNotification\b/.test(readFileSync(f, "utf8")));
+
+    expect(offenders).toEqual([]);
+  });
+});

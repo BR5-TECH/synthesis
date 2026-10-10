@@ -61,6 +61,8 @@ export function turnFailureMessage(raw: string): string {
       return "The certificate of the agent's provider is not trusted.";
     case AGENT_TURN_FAILURES.invalidResponse:
       return "The agent's provider answered with a reply the app could not read.";
+    case AGENT_TURN_FAILURES.invalidRequest:
+      return "The app could not make a request for the agent's provider.";
     default:
       return raw;
   }

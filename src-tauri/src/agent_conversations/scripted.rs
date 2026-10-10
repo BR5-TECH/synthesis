@@ -51,6 +51,10 @@ pub struct ScriptedReply {
     pub served_by: Option<String>,
     /// CVL-FR-28: what this call presented, as a provider that counts it says.
     pub prompt_tokens: Option<u64>,
+    /// CVL-FR-EKHH: where set, each tool call gets the `call_id` of this prefix
+    /// and its position, as a Responses provider gives one. `None` stands for a
+    /// provider that gives no `call_id`.
+    pub call_id_prefix: Option<String>,
 }
 
 /// CVL-FR-31: one tool a scripted provider ran for itself.
@@ -79,6 +83,7 @@ impl ScriptedReply {
             native_usage: None,
             served_by: None,
             prompt_tokens: None,
+            call_id_prefix: None,
         }
     }
 
@@ -92,6 +97,7 @@ impl ScriptedReply {
             native_usage: None,
             served_by: None,
             prompt_tokens: None,
+            call_id_prefix: None,
         }
     }
 
@@ -168,6 +174,13 @@ impl ScriptedReply {
     /// Ask for a further tool in the same reply (CVL-FR-12).
     pub fn and_calls(mut self, name: &str, arguments: serde_json::Value) -> Self {
         self.tools.push((name.to_string(), arguments));
+        self
+    }
+
+    /// CVL-FR-EKHH: give each tool call of this reply a `call_id`, as the
+    /// Responses route does. The call at position `n` gets `{prefix}{n}`.
+    pub fn with_call_ids(mut self, prefix: &str) -> Self {
+        self.call_id_prefix = Some(prefix.to_string());
         self
     }
 }
@@ -506,11 +519,17 @@ impl CompletionSeam for ScriptedCompletion {
                         parts.push(rig::completion::message::AssistantContent::text(&reply.text));
                     }
                     for (index, (name, arguments)) in reply.tools.iter().enumerate() {
-                        parts.push(rig::completion::message::AssistantContent::tool_call(
+                        let mut call = rig::completion::message::ToolCall::new(
                             format!("call-{index}"),
-                            name,
-                            arguments.clone(),
-                        ));
+                            rig::completion::message::ToolFunction {
+                                name: name.clone(),
+                                arguments: arguments.clone(),
+                            },
+                        );
+                        if let Some(prefix) = &reply.call_id_prefix {
+                            call = call.with_call_id(format!("{prefix}{index}"));
+                        }
+                        parts.push(rig::completion::message::AssistantContent::ToolCall(call));
                     }
                     rig::test_utils::MockCompletionModel::from_turns([
                         rig::test_utils::MockTurn::from_contents(parts)

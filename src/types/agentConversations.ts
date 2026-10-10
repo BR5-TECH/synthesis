@@ -68,6 +68,11 @@ export const AGENT_TURN_FAILURES = {
    * Recoverable: the author can retry, but the loop does not repeat it.
    */
   invalidResponse: "invalid_response",
+  /**
+   * CVL-FR-21: the app could not build the request, so nothing was sent.
+   * Recoverable: the author can retry, but the loop does not repeat it.
+   */
+  invalidRequest: "invalid_request",
 } as const;
 
 export type AgentTurnFailure =

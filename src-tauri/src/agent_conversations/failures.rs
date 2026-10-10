@@ -38,6 +38,9 @@ pub const FAIL_KEYCHAIN_UNAVAILABLE: &str = "keychain_unavailable";
 pub const FAIL_TLS_UNTRUSTED: &str = "tls_untrusted";
 /// The provider answered with a reply that could not be read (CVL-FR-21).
 pub const FAIL_INVALID_RESPONSE: &str = "invalid_response";
+/// The framework refused to build the request, so nothing was sent
+/// (CVL-FR-21).
+pub const FAIL_INVALID_REQUEST: &str = "invalid_request";
 /// Every command here answers only while a project is open.
 pub const ERR_NO_PROJECT_OPEN: &str = "no_project_open";
 /// `cancel_agent_turn` was given an id no turn carries.
@@ -119,6 +122,9 @@ pub mod class {
     pub const TLS: &str = "tls";
     /// A reply the provider returned that could not be read (CVL-FR-21).
     pub const DECODE: &str = "decode";
+    /// A request the framework refused to build before it sent anything
+    /// (CVL-FR-21).
+    pub const REQUEST: &str = "request";
 }
 
 /// CVL-FR-21: one failed attempt, reduced to what is safe to report.
@@ -197,10 +203,11 @@ impl CallFailure {
     /// CVL-FR-18: whether repeating the same call, against the same exchange,
     /// could plausibly succeed.
     ///
-    /// Five failures are recoverable: `unreachable` — where a name that will
+    /// Six failures are recoverable: `unreachable` — where a name that will
     /// not resolve, a connection that will not open, and a connection reset
     /// mid-answer all surface — the provider-call `timed_out` of CVL-FR-17,
-    /// `empty_reply`, `tls_untrusted`, and `invalid_response`. Only the first
+    /// `empty_reply`, `tls_untrusted`, `invalid_response`, and
+    /// `invalid_request`. Only the first
     /// three are repeated by the loop itself ([`Self::repeatable`]). Everything
     /// else names a condition of the application rather than of the call, and
     /// calling again changes none of them.
@@ -212,7 +219,8 @@ impl CallFailure {
     /// certificate is recoverable but is not repeated: the same certificate is
     /// refused again until the author changes the trust on the machine. A reply
     /// that could not be read is not repeated either: the endpoint returns the
-    /// same shape again.
+    /// same shape again. A request that could not be built is not repeated: the
+    /// same exchange builds the same request again.
     pub fn repeatable(&self) -> bool {
         is_repeated_automatically(self.failure)
     }
@@ -227,6 +235,7 @@ impl From<&'static str> for CallFailure {
             FAIL_REJECTED => class::AUTH,
             FAIL_EMPTY_REPLY => class::EMPTY_REPLY,
             FAIL_INVALID_RESPONSE => class::DECODE,
+            FAIL_INVALID_REQUEST => class::REQUEST,
             _ => class::TRANSPORT_OTHER,
         };
         Self::new(failure, class)
@@ -249,6 +258,7 @@ pub fn is_recoverable(failure: &str) -> bool {
             | FAIL_EMPTY_REPLY
             | FAIL_TLS_UNTRUSTED
             | FAIL_INVALID_RESPONSE
+            | FAIL_INVALID_REQUEST
     )
 }
 

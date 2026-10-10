@@ -153,7 +153,9 @@ pub(super) mod rig_seam {
     /// is read.
     ///
     /// A body the framework could not decode is `decode`: the provider answered,
-    /// so it is not `unreachable`. The framework's own report of a reply with no
+    /// so it is not `unreachable`. A request the framework refused to build is
+    /// `request`: nothing was sent, so it is not `unreachable` either. The
+    /// framework's own report of a reply with no
     /// message and no tool call is `empty_reply`. Only an error whose kind does
     /// not settle its class goes to the text classification. No text of the
     /// error goes into the failure.
@@ -161,6 +163,12 @@ pub(super) mod rig_seam {
         use rig::completion::CompletionError;
         match error {
             CompletionError::JsonError(_) => CallFailure::new(FAIL_INVALID_RESPONSE, class::DECODE),
+            // CVL-FR-21: the framework refused to build the request, so nothing
+            // reached the provider. Its text can carry part of the request, so
+            // it is not read.
+            CompletionError::RequestError(_) => {
+                CallFailure::new(FAIL_INVALID_REQUEST, class::REQUEST)
+            }
             CompletionError::ResponseError(message) if message == EMPTY_RESPONSE_MESSAGE => {
                 CallFailure::from(FAIL_EMPTY_REPLY)
             }

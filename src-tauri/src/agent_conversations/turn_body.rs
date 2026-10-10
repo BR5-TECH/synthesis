@@ -384,8 +384,12 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 activity.finish_all(app, turns, &plan.turn_id);
                 return Err(end);
             }
-            exchange.push(rig::completion::Message::tool_result(
+            // CVL-FR-EKHH: every result carries the id of its call and, where
+            // the provider gave one, its `call_id`. The Responses route matches
+            // a result to its call by `call_id` and refuses a request without it.
+            exchange.push(rig::completion::Message::tool_result_with_call_id(
                 call.id.clone(),
+                call.call_id.clone(),
                 result,
             ));
         }
@@ -414,8 +418,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 None
             };
             if let Some(message) = one_at_a_time {
-                exchange.push(rig::completion::Message::tool_result(
+                exchange.push(rig::completion::Message::tool_result_with_call_id(
                     call.id.clone(),
+                    call.call_id.clone(),
                     message.to_string(),
                 ));
                 // CVL-FR-33: a refusal is a result produced, so the call leaves
@@ -432,8 +437,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());
             let result = dispatch_tool(app, turns, plan, call, remaining);
             activity.finish(app, turns, &plan.turn_id, index);
-            exchange.push(rig::completion::Message::tool_result(
+            exchange.push(rig::completion::Message::tool_result_with_call_id(
                 call.id.clone(),
+                call.call_id.clone(),
                 result,
             ));
         }

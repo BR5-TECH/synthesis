@@ -34,4 +34,10 @@ describe("what a typed failure says", () => {
       "The agent's provider answered with a reply the app could not read.",
     );
   });
+
+  it("AGC-FR-15: a request the app could not build has its own message", () => {
+    expect(turnFailureMessage("invalid_request")).toBe(
+      "The app could not make a request for the agent's provider.",
+    );
+  });
 });

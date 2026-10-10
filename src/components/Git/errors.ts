@@ -10,6 +10,7 @@
  */
 
 import { tlsErrorMessage } from "../../tlsError";
+import { GITHUB_HOST_MISMATCH_MESSAGE } from "../../types/github";
 
 export const GIT_ERRORS = {
   notARepository: "not a git repository",
@@ -32,6 +33,7 @@ export const GIT_ERRORS = {
   githubUnreachable: "github_unreachable",
   tokenSelectionRequired: "github_token_selection_required",
   tokenMissing: "github_token_missing",
+  hostMismatch: "github_host_mismatch",
   streamBusy: "stream_busy",
   streamHasRuns: "stream_has_runs",
   streamActive: "stream_active",
@@ -134,13 +136,15 @@ export function rejectionMessage(
     case GIT_ERRORS.noRemote:
       return "This repository has no remote configured.";
     case GIT_ERRORS.notGithubRemote:
-      return "The remote of this repository is not on github.com.";
+      return "The remote of this repository is not on a GitHub host.";
     case GIT_ERRORS.pullRequestNotFound:
       return "That pull request does not exist any more.";
     case GIT_ERRORS.tokenRejected:
       return "GitHub rejected the token of this project. Check it in Global settings → GitHub.";
     case GIT_ERRORS.githubUnreachable:
       return "Could not reach GitHub. Check the network and try again.";
+    case GIT_ERRORS.hostMismatch:
+      return GITHUB_HOST_MISMATCH_MESSAGE;
     case GIT_ERRORS.tokenSelectionRequired:
       return "Choose which GitHub token this project should use.";
     case GIT_ERRORS.tokenSelectionCancelled:

@@ -21,6 +21,7 @@ mod app_claims;
 mod app_polling;
 mod claiming;
 mod client_parsing;
+mod enterprise_hosts;
 mod logging_and_secrets;
 mod polling_rules;
 mod session_rules;
@@ -39,7 +40,7 @@ pub(super) fn project() -> TempDir {
 }
 
 pub(super) fn repo() -> RepositoryRef {
-    RepositoryRef { owner: "acme".into(), name: "widgets".into() }
+    RepositoryRef { host: "github.com".into(), owner: "acme".into(), name: "widgets".into() }
 }
 
 pub(super) fn key(dir: &TempDir) -> SessionKey {
@@ -249,6 +250,7 @@ pub(super) fn context<'a>(
 
 pub(super) fn link(number: u64) -> crate::drafts::GithubIssueLink {
     crate::drafts::GithubIssueLink {
+        repository_host: "github.com".into(),
         repository_owner: "acme".into(),
         repository_name: "widgets".into(),
         issue_number: number,
@@ -260,6 +262,7 @@ pub(super) fn link(number: u64) -> crate::drafts::GithubIssueLink {
 
 pub(super) fn pending(number: u64, draft_id: Option<&str>) -> GithubPendingClaim {
     GithubPendingClaim {
+        repository_host: "github.com".into(),
         repository_owner: "acme".into(),
         repository_name: "widgets".into(),
         issue_number: number,

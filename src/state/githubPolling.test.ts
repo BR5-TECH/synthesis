@@ -158,6 +158,13 @@ describe("GIT-FR-NQTZ: refusal text", () => {
     expect(githubPollingErrorMessage("something_new")).toContain("something_new");
   });
 
+  it("GHA-FR-LBLM: a host mismatch is stated, and no remote text does not claim github.com only", () => {
+    expect(githubPollingErrorMessage("github_host_mismatch")).toBe(
+      "The project token belongs to another GitHub host than this remote. Pick or add a token for the host of the remote.",
+    );
+    expect(githubPollingErrorMessage("no_github_remote")).not.toContain("github.com");
+  });
+
   it("AAP-FR-LRTC: a refused certificate names the host and the cause", () => {
     const wire = "tls_untrusted:unknown_issuer:api.github.com";
     for (const rejection of [wire, `Error: ${wire}`, new Error(wire)]) {

@@ -534,6 +534,7 @@ fn a_shadow_draft_refuses_an_accepted_change() {
         &f.root,
         &f.draft_id,
         drafts::GithubIssueLink {
+            repository_host: "github.com".into(),
             repository_owner: "acme".into(),
             repository_name: "widgets".into(),
             issue_number: 4,

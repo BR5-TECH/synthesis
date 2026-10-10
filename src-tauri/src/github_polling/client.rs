@@ -111,6 +111,12 @@ pub fn paginate<T>(
 
 /// The GitHub operations polling performs.
 pub trait GithubProjects: Send + Sync {
+    /// A client for the GraphQL API of `host` (normalized), or `None` where this
+    /// client serves every host itself, as a test double does (GPP-FR-HSTD).
+    fn for_host(&self, _host: &str) -> Option<std::sync::Arc<dyn GithubProjects>> {
+        None
+    }
+
     /// GPP-FR-WYRP: the viewer's own Projects. Changes nothing on GitHub.
     fn viewer_projects(&self, secret: &str) -> Result<Paged<GithubProjectOption>, String>;
 
@@ -153,10 +159,11 @@ pub struct GithubProjectsSeam(pub std::sync::Arc<dyn GithubProjects>);
 
 impl Default for GithubProjectsSeam {
     fn default() -> Self {
-        GithubProjectsSeam(std::sync::Arc::new(HttpGithubProjects))
+        GithubProjectsSeam(std::sync::Arc::new(HttpGithubProjects { url: GRAPHQL.to_string() }))
     }
 }
 
+/// The GraphQL URL of `github.com`, the URL of the default client.
 const GRAPHQL: &str = "https://api.github.com/graphql";
 /// The whole request budget of one call (GPP non-functional requirements).
 const TIMEOUT: Duration = Duration::from_secs(20);
@@ -165,8 +172,18 @@ pub const MAX_ITEM_PAGES: usize = 20;
 /// The most Project pages one listing reads per owner, 100 Projects each.
 pub const MAX_PROJECT_PAGES: usize = 10;
 
-/// The production client.
-pub struct HttpGithubProjects;
+/// The production client, bound to the GraphQL URL of one host
+/// (GTS-FR-PDWB, GPP-FR-HSTD).
+pub struct HttpGithubProjects {
+    url: String,
+}
+
+impl HttpGithubProjects {
+    /// The client for the GraphQL API of `host` (normalized).
+    pub fn for_graphql_host(host: &str) -> Self {
+        Self { url: crate::github_tokens::github_graphql_url(host) }
+    }
+}
 
 fn agent() -> ureq::Agent {
     crate::tls::ureq_config().timeout_global(Some(TIMEOUT)).build().into()
@@ -174,10 +191,10 @@ fn agent() -> ureq::Agent {
 
 /// One GraphQL request. GPP-FR-WKZF: a transport error never reaches a caller
 /// verbatim, because `ureq`'s own message can echo the request it made.
-fn graphql(secret: &str, query: &str, variables: Value) -> Result<Value, String> {
+fn graphql(url: &str, secret: &str, query: &str, variables: Value) -> Result<Value, String> {
     let payload = json!({ "query": query, "variables": variables });
     let response = agent()
-        .post(GRAPHQL)
+        .post(url)
         .header("Authorization", &format!("Bearer {secret}"))
         .header("Accept", "application/vnd.github+json")
         .header("Content-Type", "application/json")
@@ -191,7 +208,7 @@ fn graphql(secret: &str, query: &str, variables: Value) -> Result<Value, String>
         Err(ureq::Error::StatusCode(_)) => return Err(ERR_REQUEST_FAILED.to_string()),
         // AAP-FR-LRTC: a refused certificate is its own typed error.
         Err(e) => {
-            return Err(crate::tls::ureq_wire(&e, GRAPHQL)
+            return Err(crate::tls::ureq_wire(&e, url)
                 .unwrap_or_else(|| ERR_GITHUB_UNREACHABLE.to_string()))
         }
     };
@@ -380,12 +397,16 @@ pub fn fetched_issue_of(response: &Value) -> Result<Option<FetchedIssue>, String
 }
 
 impl GithubProjects for HttpGithubProjects {
+    fn for_host(&self, host: &str) -> Option<std::sync::Arc<dyn GithubProjects>> {
+        Some(std::sync::Arc::new(HttpGithubProjects::for_graphql_host(host)))
+    }
+
     fn viewer_projects(&self, secret: &str) -> Result<Paged<GithubProjectOption>, String> {
         let query = format!(
             "query($cursor: String) {{ viewer {{ projectsV2(first: 100, after: $cursor) {{ {PROJECT_FIELDS} }} }} }}"
         );
         paginate(MAX_PROJECT_PAGES, |cursor| {
-            let response = graphql(secret, &query, json!({ "cursor": cursor }))?;
+            let response = graphql(&self.url, secret, &query, json!({ "cursor": cursor }))?;
             let connection =
                 response.get("data").and_then(|d| d.get("viewer")).and_then(|v| v.get("projectsV2"));
             if connection.is_none() {
@@ -406,7 +427,7 @@ impl GithubProjects for HttpGithubProjects {
              ... on User {{ projectsV2(first: 100, after: $cursor) {{ {PROJECT_FIELDS} }} }} }} }}"
         );
         paginate(MAX_PROJECT_PAGES, |cursor| {
-            let response = graphql(secret, &query, json!({ "owner": owner, "cursor": cursor }))?;
+            let response = graphql(&self.url, secret, &query, json!({ "owner": owner, "cursor": cursor }))?;
             let connection = response
                 .get("data")
                 .and_then(|d| d.get("repositoryOwner"))
@@ -421,7 +442,7 @@ impl GithubProjects for HttpGithubProjects {
     fn project_shape(&self, secret: &str, project_id: &str) -> Result<ProjectShape, String> {
         let query = "query($id: ID!) { node(id: $id) { ... on ProjectV2 { title \
                      field(name: \"Status\") { ... on ProjectV2SingleSelectField { id options { id name } } } } } }";
-        shape_of(&graphql(secret, query, json!({ "id": project_id }))?)
+        shape_of(&graphql(&self.url, secret, query, json!({ "id": project_id }))?)
     }
 
     fn project_items(&self, secret: &str, project_id: &str) -> Result<Paged<ProjectItem>, String> {
@@ -432,7 +453,7 @@ impl GithubProjects for HttpGithubProjects {
                      content { ... on Issue { number title url state issueType { name } \
                      repository { name owner { login } } } } } } } } }";
         paginate(MAX_ITEM_PAGES, |cursor| {
-            let response = graphql(secret, query, json!({ "id": project_id, "cursor": cursor }))?;
+            let response = graphql(&self.url, secret, query, json!({ "id": project_id, "cursor": cursor }))?;
             items_page_of(&response)
         })
     }
@@ -451,6 +472,7 @@ impl GithubProjects for HttpGithubProjects {
                      fieldValueByName(name: \"Status\") { \
                      ... on ProjectV2ItemFieldSingleSelectValue { name optionId } } } } } } }";
         let response = graphql(
+            &self.url,
             secret,
             query,
             json!({ "owner": owner, "name": repo, "number": number }),
@@ -471,6 +493,7 @@ impl GithubProjects for HttpGithubProjects {
                      fieldId: $field, value: { singleSelectOptionId: $option } }) { \
                      projectV2Item { id } } }";
         let response = graphql(
+            &self.url,
             secret,
             query,
             json!({ "project": project_id, "item": item_id, "field": field_id, "option": option_id }),

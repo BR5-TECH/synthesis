@@ -18,6 +18,7 @@ function token(over: Partial<GithubTokenRecord> = {}): GithubTokenRecord {
     accountLogin: "raver119",
     scopes: ["repo", "workflow"],
     maskedHint: "a3f9",
+    host: "github.com",
     addedAt: "2026-03-12T10:00:00Z",
     lastVerifiedAt: null,
     state: "valid",
@@ -51,6 +52,21 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("GitHub token picker", () => {
+  it("GHA-FR-15, GHA-FR-LBLM: a row shows its domain only when it is not github.com", async () => {
+    backend([
+      token({ id: "t1", label: "personal" }),
+      token({ id: "t2", label: "company", host: "company.ghe.com" }),
+    ]);
+    render(
+      <GithubTokenPicker projectName="acme" onCancel={vi.fn()} onConfirm={vi.fn()} />,
+    );
+    const rows = await screen.findAllByTestId("picker-token-row");
+    expect(within(rows[0]).queryByTestId("token-host")).not.toBeInTheDocument();
+    expect(within(rows[1]).getByTestId("token-host")).toHaveTextContent(
+      "company.ghe.com",
+    );
+  });
+
   it("GHA-FR-15, GHA-FR-16 binds the chosen token and reports back so the caller can proceed", async () => {
     // GHA-FR-15 / GHA-FR-16: the operation that opened the picker runs once a
     // token has been bound.

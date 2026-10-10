@@ -19,6 +19,8 @@ pub const ERR_ISSUES_INACCESSIBLE: &str = "issues_inaccessible";
 pub const ERR_ISSUES_DISABLED: &str = "issues_disabled";
 pub const ERR_ISSUES_CREATE_FORBIDDEN: &str = "issues_create_forbidden";
 pub const ERR_TOKEN_UNAVAILABLE: &str = "token_unavailable";
+/// GTS-FR-OBAS: the project token belongs to another host than the remote.
+pub const ERR_HOST_MISMATCH: &str = crate::github_tokens::ERR_HOST_MISMATCH;
 /// AAP-FR-LRTC: the TLS check refused GitHub's certificate.
 pub const ERR_TLS_UNTRUSTED: &str = "tls_untrusted";
 pub const ERR_ATTEMPT_IN_PROGRESS: &str = "attempt_in_progress";
@@ -50,6 +52,7 @@ pub const ERR_INVALID_PUBLICATION_SETTINGS: &str = "invalid_publication_settings
 #[serde(rename_all = "camelCase")]
 pub struct PublicationRepository {
     pub remote_name: String,
+    pub repository_host: String,
     pub repository_owner: String,
     pub repository_name: String,
 }
@@ -211,6 +214,10 @@ pub struct PublicationRecord {
     /// Always `github` today. Carried rather than assumed so a second provider
     /// does not have to migrate every stored record.
     pub provider: String,
+    /// GHP-FR-HSTB: absent in a record written before hosts existed, which
+    /// reads as `github.com`.
+    #[serde(default = "crate::github_tokens::default_host")]
+    pub repository_host: String,
     pub repository_owner: String,
     pub repository_name: String,
     pub issue_number: u64,
@@ -244,6 +251,10 @@ pub struct PublicationAttempt {
     pub remote_name: String,
     /// Canonicalized (GHP-FR-BXTU), so it never carries an embedded credential.
     pub remote_url: String,
+    /// GHP-FR-HSTB: absent in an attempt written before hosts existed, which
+    /// reads as `github.com`.
+    #[serde(default = "crate::github_tokens::default_host")]
+    pub repository_host: String,
     pub repository_owner: String,
     pub repository_name: String,
     pub state: AttemptState,
@@ -283,6 +294,9 @@ pub enum RemoteEligibility {
     IssuesDisabled,
     IssuesCreateForbidden,
     TokenUnavailable,
+    /// The project token belongs to another host than the remote (GTS-FR-OBAS).
+    /// No request is made for the remote.
+    HostMismatch,
     /// The TLS check refused GitHub's certificate (AAP-FR-LRTC). The remote's
     /// own `reason` names the host and the cause.
     TlsUntrusted,
@@ -298,6 +312,7 @@ impl RemoteEligibility {
             RemoteEligibility::IssuesDisabled => ERR_ISSUES_DISABLED,
             RemoteEligibility::IssuesCreateForbidden => ERR_ISSUES_CREATE_FORBIDDEN,
             RemoteEligibility::TokenUnavailable => ERR_TOKEN_UNAVAILABLE,
+            RemoteEligibility::HostMismatch => ERR_HOST_MISMATCH,
             RemoteEligibility::TlsUntrusted => ERR_TLS_UNTRUSTED,
         }
     }
@@ -322,6 +337,9 @@ impl RemoteEligibility {
             RemoteEligibility::TokenUnavailable => {
                 Some("No GitHub token is available for this project.")
             }
+            RemoteEligibility::HostMismatch => Some(
+                "The token of this project belongs to another GitHub host than this remote.",
+            ),
             RemoteEligibility::TlsUntrusted => {
                 Some("The certificate of GitHub is not trusted.")
             }
@@ -343,6 +361,7 @@ pub struct PublicationRemote {
     pub name: String,
     pub url: String,
     pub kind: RemoteKind,
+    pub repository_host: Option<String>,
     pub repository_owner: Option<String>,
     pub repository_name: Option<String>,
     pub eligibility: RemoteEligibility,

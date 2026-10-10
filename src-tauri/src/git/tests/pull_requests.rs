@@ -126,7 +126,7 @@ impl SecretStore for FixedSecret {
 struct NoVerifier;
 
 impl GithubVerifier for NoVerifier {
-    fn verify(&self, _secret: &str) -> Result<VerifiedIdentity, VerifyError> {
+    fn verify(&self, _host: &str, _secret: &str) -> Result<VerifiedIdentity, VerifyError> {
         Err(VerifyError::Unreachable("not used".into()))
     }
 }
@@ -139,6 +139,15 @@ fn record(id: &str) -> GithubTokenRecord {
 pub(super) fn token_ready() -> (GlobalSettingsStore, GithubTokens) {
     let store = GlobalSettingsStore::in_memory();
     store.save_github_token_registry(vec![record("a")]).unwrap();
+    (store, GithubTokens::new(Box::new(FixedSecret), Box::new(NoVerifier)))
+}
+
+/// A project that resolves one stored token of `host` to `SECRET`.
+pub(super) fn token_on(host: &str) -> (GlobalSettingsStore, GithubTokens) {
+    let store = GlobalSettingsStore::in_memory();
+    let mut stored = record("a");
+    stored.host = host.to_string();
+    store.save_github_token_registry(vec![stored]).unwrap();
     (store, GithubTokens::new(Box::new(FixedSecret), Box::new(NoVerifier)))
 }
 

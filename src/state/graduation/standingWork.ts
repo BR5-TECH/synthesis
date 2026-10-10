@@ -163,6 +163,8 @@ function pushRefusalReason(code: string | undefined): string {
     case "github_token_missing":
     case "github_token_selection_required":
       return "this project resolves no credential for the remote";
+    case "github_host_mismatch":
+      return "the credential this project names belongs to another host than the remote";
     case "unknown_token":
       return "the credential this project names is not there any more";
     case "keychain_unavailable":

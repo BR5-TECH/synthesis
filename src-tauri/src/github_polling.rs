@@ -23,7 +23,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use crate::fs::RootFs;
-use crate::github_tokens::{self, GithubTokens};
+use crate::github_tokens::{self, GithubTokens, ProjectToken};
 use crate::global_settings::GlobalSettingsStore;
 use crate::log_fields;
 use crate::logging::{self, Domain, Fields, LogBuffer};
@@ -107,34 +107,46 @@ fn is_live<R: Runtime>(app: &AppHandle<R>, key: &SessionKey) -> bool {
 #[cfg(test)]
 pub(crate) struct TestSecret(pub String);
 
-/// GPP-FR-WOIM: the project's token, or `None`. The secret is passed to the
-/// client and never stored, returned, or logged.
-fn project_secret<R: Runtime>(app: &AppHandle<R>, project_key: &str) -> Option<String> {
+/// GPP-FR-WOIM: the project's token and its host, or `None`. The secret is
+/// passed to the client and never stored, returned, or logged.
+fn project_token<R: Runtime>(app: &AppHandle<R>, project_key: &str) -> Option<ProjectToken> {
     #[cfg(test)]
     if let Some(secret) = app.try_state::<TestSecret>() {
-        return Some(secret.0.clone());
+        return Some(ProjectToken {
+            secret: secret.0.clone(),
+            host: github_tokens::DEFAULT_HOST.to_string(),
+        });
     }
     let store = app.state::<GlobalSettingsStore>();
     let tokens = app.state::<GithubTokens>();
-    github_tokens::resolve_github_token_secret(&store, &tokens, project_key).ok()
+    github_tokens::resolve_project_token(&store, &tokens, project_key).ok()
 }
 
-fn require_secret<R: Runtime>(app: &AppHandle<R>, project_key: &str) -> Result<String, String> {
-    project_secret(app, project_key)
+fn require_token<R: Runtime>(app: &AppHandle<R>, project_key: &str) -> Result<ProjectToken, String> {
+    project_token(app, project_key)
         .ok_or_else(|| crate::github_publication::ERR_TOKEN_UNAVAILABLE.to_string())
 }
 
-fn projects_client<R: Runtime>(app: &AppHandle<R>) -> std::sync::Arc<dyn GithubProjects> {
-    app.state::<GithubProjectsSeam>().0.clone()
+/// The Projects client for the GraphQL API of `host` (GPP-FR-HSTD).
+fn projects_client<R: Runtime>(
+    app: &AppHandle<R>,
+    host: &str,
+) -> std::sync::Arc<dyn GithubProjects> {
+    let client = app.state::<GithubProjectsSeam>().0.clone();
+    client.for_host(host).unwrap_or(client)
 }
 
 /// GPP-FR-RGNM: the polling repository, through GitHub publication.
 fn resolve_repository<R: Runtime>(
     app: &AppHandle<R>,
-    secret: Option<&str>,
+    token: Option<&ProjectToken>,
 ) -> Result<RepositoryRef, String> {
-    let resolved = crate::github_publication::resolve_publication_repository_with(app, secret)?;
-    Ok(RepositoryRef { owner: resolved.repository_owner, name: resolved.repository_name })
+    let resolved = crate::github_publication::resolve_publication_repository_with(app, token)?;
+    Ok(RepositoryRef {
+        host: resolved.repository_host,
+        owner: resolved.repository_owner,
+        name: resolved.repository_name,
+    })
 }
 
 /// The repository the session already resolved, or a fresh resolution that
@@ -142,13 +154,13 @@ fn resolve_repository<R: Runtime>(
 fn session_repository<R: Runtime>(
     app: &AppHandle<R>,
     ctx: &Context,
-    secret: Option<&str>,
+    token: Option<&ProjectToken>,
 ) -> Result<RepositoryRef, String> {
     let known = state(app).slot().session_for(&ctx.key).and_then(|s| s.repository.clone());
     if let Some(repository) = known {
         return Ok(repository);
     }
-    let repository = resolve_repository(app, secret)?;
+    let repository = resolve_repository(app, token)?;
     state(app).slot().remember_repository(&ctx.key, &repository);
     Ok(repository)
 }
@@ -192,7 +204,12 @@ fn all_pending_claims(root: &RootFs, held: Vec<GithubPendingClaim>) -> Vec<Githu
     for claim in held {
         let on_disk = claims
             .iter()
-            .any(|c| c.names(&claim.repository_owner, &claim.repository_name, claim.issue_number));
+            .any(|c| c.names(
+                &claim.repository_host,
+                &claim.repository_owner,
+                &claim.repository_name,
+                claim.issue_number,
+            ));
         if !on_disk {
             claims.push(claim);
         }
@@ -244,18 +261,18 @@ pub(crate) fn list_projects_impl<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<Vec<GithubProjectOption>, String> {
     let ctx = context(app)?;
-    let secret = require_secret(app, &ctx.project_key)
+    let token = require_token(app, &ctx.project_key)
         .map_err(|code| report(app, "list_projects", &code, None))?;
-    let client = projects_client(app);
+    let client = projects_client(app, &token.host);
     let viewer = client
-        .viewer_projects(&secret)
+        .viewer_projects(&token.secret)
         .map_err(|code| report(app, "list_projects", &code, None))?;
     let mut truncated = viewer.truncated;
     let mut projects = viewer.items;
     // The repository owner's Projects are listed where a repository resolves;
     // the viewer's own are listed either way.
-    if let Ok(repository) = resolve_repository(app, Some(&secret)) {
-        match client.owner_projects(&secret, &repository.owner) {
+    if let Ok(repository) = resolve_repository(app, Some(&token)) {
+        match client.owner_projects(&token.secret, &repository.owner) {
             Ok(owned) => {
                 truncated |= owned.truncated;
                 projects.extend(owned.items);
@@ -326,8 +343,12 @@ pub(crate) fn set_settings_impl<R: Runtime>(
     if let Some(project_id) = project_node_id.as_deref() {
         // GPP-FR-IURX: validated at once. A validation that cannot reach
         // GitHub leaves the configuration unchecked rather than invalid.
-        let checked = require_secret(app, &ctx.project_key).and_then(|secret| {
-            match eligibility::read_configuration(projects_client(app).as_ref(), &secret, project_id) {
+        let checked = require_token(app, &ctx.project_key).and_then(|token| {
+            match eligibility::read_configuration(
+                projects_client(app, &token.host).as_ref(),
+                &token.secret,
+                project_id,
+            ) {
                 Ok(valid) => Ok(GithubPollingConfiguration::valid(&valid.title)),
                 Err(failure) if is_configuration_error(&failure.code) => {
                     Ok(GithubPollingConfiguration::invalid(&failure.code, failure.project_title))
@@ -432,12 +453,12 @@ pub(crate) fn fetch_poll<R: Runtime>(
     app: &AppHandle<R>,
     begun: &Begun<R>,
 ) -> Result<PollSuccess, PollFailure> {
-    let secret = require_secret(app, &begun.ctx.project_key).map_err(PollFailure::code)?;
-    let repository = resolve_repository(app, Some(&secret)).map_err(PollFailure::code)?;
+    let token = require_token(app, &begun.ctx.project_key).map_err(PollFailure::code)?;
+    let repository = resolve_repository(app, Some(&token)).map_err(PollFailure::code)?;
     eligibility::poll_once(
         &begun.ctx.root,
-        projects_client(app).as_ref(),
-        &secret,
+        projects_client(app, &token.host).as_ref(),
+        &token.secret,
         &repository,
         &begun.ticket.project_id,
     )
@@ -530,23 +551,23 @@ pub(crate) fn claim_impl<R: Runtime>(
     let settings = load_github_polling_settings_from(&ctx.root).map_err(|c| fail(&c))?;
     // GPP-FR-ANDE: claims refuse on the terms polls do.
     let project_id = state(app).slot().require_pollable(&ctx.key, &settings).map_err(|c| fail(&c))?;
-    let secret = require_secret(app, &ctx.project_key).map_err(|c| fail(&c))?;
-    let repository = session_repository(app, &ctx, Some(&secret)).map_err(|c| fail(&c))?;
+    let token = require_token(app, &ctx.project_key).map_err(|c| fail(&c))?;
+    let repository = session_repository(app, &ctx, Some(&token)).map_err(|c| fail(&c))?;
     let state = state(app);
     let _guard = state
         .claims
-        .acquire(IssueKey::new(&repository.owner, &repository.name, number))
+        .acquire(IssueKey::new(&repository.host, &repository.owner, &repository.name, number))
         .map_err(|c| fail(&c))?;
     let generation = state.slot().generation();
     let held = state.slot().unsaved_claims(&ctx.key);
     let claim_ctx = claims::ClaimContext {
         root: &ctx.root,
-        secret: &secret,
+        secret: &token.secret,
         repository: &repository,
         project_id: &project_id,
     };
     let now = crate::notes::now_rfc3339();
-    let result = match claims::claim(&claim_ctx, projects_client(app).as_ref(), number, &now, &held) {
+    let result = match claims::claim(&claim_ctx, projects_client(app, &token.host).as_ref(), number, &now, &held) {
         Ok(outcome) => {
             settle_claim(app, &ctx.root, &outcome);
             if !outcome.saved {
@@ -602,15 +623,22 @@ pub(crate) fn retry_impl<R: Runtime>(
             return Err(fail(ERR_CONFIGURATION_INVALID));
         }
     }
-    let secret = require_secret(app, &ctx.project_key).map_err(|c| fail(&c))?;
-    let repository = session_repository(app, &ctx, Some(&secret)).map_err(|c| fail(&c))?;
+    let token = require_token(app, &ctx.project_key).map_err(|c| fail(&c))?;
+    let repository = session_repository(app, &ctx, Some(&token)).map_err(|c| fail(&c))?;
     let state = state(app);
     let _guard = state
         .claims
-        .acquire(IssueKey::new(&repository.owner, &repository.name, number))
+        .acquire(IssueKey::new(&repository.host, &repository.owner, &repository.name, number))
         .map_err(|c| fail(&c))?;
     let held = state.slot().unsaved_claims(&ctx.key);
-    let outcome = claims::retry(&ctx.root, &secret, &repository, projects_client(app).as_ref(), number, &held);
+    let outcome = claims::retry(
+        &ctx.root,
+        &token.secret,
+        &repository,
+        projects_client(app, &token.host).as_ref(),
+        number,
+        &held,
+    );
     let result = match outcome {
         Ok(outcome) => {
             settle_claim(app, &ctx.root, &outcome);
@@ -643,8 +671,8 @@ pub async fn acknowledge_github_claim(issue_number: u64, app: tauri::AppHandle) 
 pub(crate) fn acknowledge_impl<R: Runtime>(app: &AppHandle<R>, number: u64) -> Result<(), String> {
     let fail = |code: &str| report(app, "acknowledge", code, Some(number));
     let ctx = context(app)?;
-    let secret = project_secret(app, &ctx.project_key);
-    let repository = session_repository(app, &ctx, secret.as_deref()).map_err(|c| fail(&c))?;
+    let token = project_token(app, &ctx.project_key);
+    let repository = session_repository(app, &ctx, token.as_ref()).map_err(|c| fail(&c))?;
     let was_held = state(app).slot().forget_unsaved(&ctx.key, &repository, number);
     // A claim held only in memory has nothing on disk to remove, and a disk
     // that refused it may still refuse a write.
@@ -672,8 +700,8 @@ pub async fn open_github_task_issue(issue_number: u64, app: tauri::AppHandle) ->
 fn listed_issue_url_impl<R: Runtime>(app: &AppHandle<R>, number: u64) -> Result<String, String> {
     let fail = |code: &str| report(app, "open_issue", code, Some(number));
     let ctx = context(app)?;
-    let secret = project_secret(app, &ctx.project_key);
-    let repository = session_repository(app, &ctx, secret.as_deref()).map_err(|c| fail(&c))?;
+    let token = project_token(app, &ctx.project_key);
+    let repository = session_repository(app, &ctx, token.as_ref()).map_err(|c| fail(&c))?;
     let (tasks, held) = {
         let state = state(app);
         let slot = state.slot();

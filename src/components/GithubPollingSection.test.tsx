@@ -101,6 +101,28 @@ describe("the GitHub polling section", () => {
     expect(labels).toEqual(["None", "Roadmap — acme (#3)", "Ops board — kira (#1)"]);
   });
 
+  it("SET-FR-HSTF: the section works for a GitHub Enterprise host, asks for no host input, and states a host mismatch from the backend", async () => {
+    state = pollingView({
+      repository: { host: "company.ghe.com", owner: "acme", name: "platform" },
+      configuration: {
+        state: "invalid",
+        errorCode: "github_host_mismatch",
+        error: null,
+        projectTitle: "Roadmap",
+      },
+    });
+    render(<GithubPollingSection />);
+    await waitFor(() => expect(projectSelect().value).toBe("P1"));
+    const labels = Array.from(projectSelect().options).map((o) => o.textContent);
+    expect(labels).toEqual(["None", "Roadmap — acme (#3)", "Ops board — kira (#1)"]);
+    const section = screen.getByTestId("settings-github-polling");
+    expect(section.querySelectorAll("input")).toHaveLength(0);
+    expect(screen.queryByLabelText(/domain|host/i)).toBeNull();
+    expect(screen.getByTestId("github-polling-configuration")).toHaveTextContent(
+      "belongs to another GitHub host than this remote",
+    );
+  });
+
   it("SET-FR-NLIX: the interval is Off, 1, 5, 15, 30, or 60 minutes", async () => {
     render(<GithubPollingSection />);
     await waitFor(() => expect(intervalSelect().value).toBe("5"));

@@ -12,7 +12,7 @@ fn gts_ts06_a_record_whose_secret_vanished_lists_as_unavailable() {
     // GTS-FR-07 / GTS-FR-08: retained rather than pruned — a row the author
     // can remove deliberately beats a token that silently disappeared.
     let Harness { store, tokens, secrets, .. } = harness(FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]));
-    let added = add_token_impl(&store, &tokens, "work", "ghp_secret_1234").unwrap();
+    let added = add_token_impl(&store, &tokens, "work", "ghp_secret_1234", "").unwrap();
     assert_eq!(list_tokens_impl(&store, &tokens).unwrap()[0].state, TokenState::Valid);
 
     secrets.forget(&added.id);
@@ -35,7 +35,7 @@ fn gts_ts05_a_revoked_token_becomes_invalid_and_stays_stored() {
         "raver119",
         &["repo"],
     ));
-    let added = add_token_impl(&store, &tokens, "work", "ghp_secret_1234").unwrap();
+    let added = add_token_impl(&store, &tokens, "work", "ghp_secret_1234", "").unwrap();
 
     // The token is revoked on GitHub: it stops being recognised.
     verifier.revoke("ghp_secret_1234");
@@ -112,7 +112,7 @@ fn renaming_onto_another_label_is_refused_and_changes_nothing() {
 fn gts_ts07_removal_drops_both_halves_and_is_idempotent() {
     // GTS-FR-08, GTS-FR-14.
     let Harness { store, tokens, secrets, .. } = harness(FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]));
-    let added = add_token_impl(&store, &tokens, "work", "ghp_secret_1234").unwrap();
+    let added = add_token_impl(&store, &tokens, "work", "ghp_secret_1234", "").unwrap();
 
     remove_token_impl(&store, &tokens, &added.id).unwrap();
     remove_token_impl(&store, &tokens, &added.id).unwrap();

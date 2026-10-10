@@ -13,6 +13,7 @@ fn the_record_wire_shape_is_camel_case_and_carries_no_secret_field() {
     let json = serde_json::to_value(GithubTokenRecord {
         id: "a".into(),
         label: "work".into(),
+        host: "company.ghe.com".into(),
         account_login: Some("raver119".into()),
         account_display_name: Some("Demo Author".into()),
         account_email: Some("author@example.com".into()),
@@ -26,6 +27,7 @@ fn the_record_wire_shape_is_camel_case_and_carries_no_secret_field() {
     for key in [
         "id",
         "label",
+        "host",
         "accountLogin",
         "accountDisplayName",
         "accountEmail",
@@ -38,6 +40,7 @@ fn the_record_wire_shape_is_camel_case_and_carries_no_secret_field() {
         assert!(json.get(key).is_some(), "missing {key} in {json}");
     }
     assert_eq!(json.get("state").unwrap(), "valid");
+    assert_eq!(json.get("host").unwrap(), "company.ghe.com");
     // There is no field a secret could ride in. The two account fields added
     // for GTS-FR-16 describe a *person* — a display name and an email GitHub
     // publishes — so they widen what is known about the account without
@@ -46,7 +49,7 @@ fn the_record_wire_shape_is_camel_case_and_carries_no_secret_field() {
     assert!(json.get("token").is_none());
     assert_eq!(
         json.as_object().unwrap().len(),
-        10,
+        11,
         "an added field must be a deliberate contract change: {json}"
     );
 }
@@ -78,8 +81,9 @@ fn a_registry_written_before_a_field_existed_still_loads() {
 #[test]
 fn the_token_creation_url_carries_the_scopes_the_operations_need() {
     // GTS-FR-11 / GTS-FR-12.
-    assert!(TOKEN_CREATION_URL.starts_with("https://github.com/settings/tokens/new?"));
-    let query = TOKEN_CREATION_URL.split_once('?').unwrap().1;
+    let url = token_creation_url("github.com");
+    assert!(url.starts_with("https://github.com/settings/tokens/new?"));
+    let query = url.split_once('?').unwrap().1;
     let scopes: std::collections::HashSet<&str> = query
         .split('&')
         .find_map(|p| p.strip_prefix("scopes="))

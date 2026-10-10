@@ -127,14 +127,14 @@ fn resolving_a_secret_reports_the_same_distinction_the_ui_routes_on() {
         harness(FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]));
 
     assert_eq!(
-        resolve_github_token_secret(&store, &tokens, "/dev/acme").unwrap_err(),
+        resolve_github_token_secret(&store, &tokens, "/dev/acme", "github.com").unwrap_err(),
         ERR_TOKEN_MISSING
     );
 
-    add_token_impl(&store, &tokens, "work", "ghp_secret_1234").unwrap();
+    add_token_impl(&store, &tokens, "work", "ghp_secret_1234", "").unwrap();
     // One token: used implicitly, no prompt.
     assert_eq!(
-        resolve_github_token_secret(&store, &tokens, "/dev/acme").unwrap(),
+        resolve_github_token_secret(&store, &tokens, "/dev/acme", "github.com").unwrap(),
         "ghp_secret_1234"
     );
 
@@ -147,7 +147,7 @@ fn resolving_a_secret_reports_the_same_distinction_the_ui_routes_on() {
         })
         .unwrap();
     assert_eq!(
-        resolve_github_token_secret(&store, &tokens, "/dev/acme").unwrap_err(),
+        resolve_github_token_secret(&store, &tokens, "/dev/acme", "github.com").unwrap_err(),
         ERR_SELECTION_REQUIRED
     );
 }
@@ -155,11 +155,11 @@ fn resolving_a_secret_reports_the_same_distinction_the_ui_routes_on() {
 #[test]
 fn resolving_a_bound_token_whose_secret_is_gone_refuses_rather_than_sending_nothing() {
     let Harness { store, tokens, secrets, .. } = harness(FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]));
-    let added = add_token_impl(&store, &tokens, "work", "ghp_secret_1234").unwrap();
+    let added = add_token_impl(&store, &tokens, "work", "ghp_secret_1234", "").unwrap();
     secrets.forget(&added.id);
 
     assert_eq!(
-        resolve_github_token_secret(&store, &tokens, "/dev/acme").unwrap_err(),
+        resolve_github_token_secret(&store, &tokens, "/dev/acme", "github.com").unwrap_err(),
         ERR_KEYCHAIN_UNAVAILABLE
     );
 }

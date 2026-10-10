@@ -9,7 +9,9 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-/// The one host a token is ever sent to (GTC-FR-DWVY).
+/// The API base of `github.com`. A request to another host goes through a client
+/// that `GithubPullRequests::for_host` returns, which holds that host's base
+/// (GTC-FR-DWVY, GTS-FR-PDWB).
 pub(crate) const API: &str = "https://api.github.com";
 
 /// Rows GitHub returns on one page. Its largest allowed value.
@@ -75,10 +77,22 @@ pub(crate) trait GithubPullRequests: Send + Sync {
     ) -> Result<Value, GithubWriteFailure> {
         Err(GithubWriteFailure::Unreachable)
     }
+
+    /// A client for the API of `host` (normalized), or `None` where this client
+    /// serves every host itself, as a test double does.
+    fn for_host(&self, _host: &str) -> Option<Box<dyn GithubPullRequests>> {
+        None
+    }
 }
 
-/// The production client.
+/// The production client for `github.com`. `for_host` gives the client of any
+/// other host.
 pub(crate) struct HttpGithubPullRequests;
+
+/// The production client for the API base of one host.
+pub(crate) struct HostedGithubPullRequests {
+    api: String,
+}
 
 /// An agent that returns a non-2xx answer as a response, so the body of a 422
 /// can be read for the reason GitHub gave.
@@ -106,11 +120,17 @@ fn agent() -> ureq::Agent {
 }
 
 /// Map a transport error to a fixed failure. Never reads the error's text.
+#[cfg(test)]
 pub(crate) fn classify(error: &ureq::Error) -> GithubFailure {
+    classify_at(error, API)
+}
+
+/// [`classify`] for the API base `api`.
+pub(crate) fn classify_at(error: &ureq::Error, api: &str) -> GithubFailure {
     match error {
         ureq::Error::StatusCode(401 | 403) => GithubFailure::Rejected,
         ureq::Error::StatusCode(404 | 410) => GithubFailure::NotFound,
-        other => match crate::tls::ureq_failure(other, API) {
+        other => match crate::tls::ureq_failure(other, api) {
             Some(failure) => GithubFailure::TlsUntrusted(failure),
             None => GithubFailure::Unreachable,
         },
@@ -124,59 +144,89 @@ impl GithubPullRequests for HttpGithubPullRequests {
         path: &str,
         body: &Value,
     ) -> Result<Value, GithubWriteFailure> {
-        if !path.starts_with('/') {
-            return Err(GithubWriteFailure::Unreachable);
-        }
-        let url = format!("{API}{path}");
-        let payload = serde_json::to_string(body).map_err(|_| GithubWriteFailure::Unreachable)?;
-        let mut response = write_agent()
-            .post(&url)
-            .header("Authorization", &format!("Bearer {secret}"))
-            .header("Accept", "application/vnd.github+json")
-            .header("X-GitHub-Api-Version", "2022-11-28")
-            .header("User-Agent", "synthesis")
-            .header("Content-Type", "application/json")
-            .send(payload)
-            .map_err(|error| match crate::tls::ureq_failure(&error, API) {
-                Some(failure) => GithubWriteFailure::TlsUntrusted(failure),
-                None => GithubWriteFailure::Unreachable,
-            })?;
-        let status = response.status().as_u16();
-        let text = response
-            .body_mut()
-            .read_to_string()
-            .map_err(|_| GithubWriteFailure::Unreachable)?;
-        match status {
-            200..=299 => serde_json::from_str(&text).map_err(|_| GithubWriteFailure::Unreachable),
-            401 | 403 => Err(GithubWriteFailure::Rejected),
-            404 | 410 => Err(GithubWriteFailure::NotFound),
-            422 => Err(GithubWriteFailure::Invalid(invalid_reason(&text))),
-            _ => Err(GithubWriteFailure::Unreachable),
-        }
+        post_at(API, secret, path, body)
     }
 
     fn get_json(&self, secret: &str, path: &str) -> Result<Value, GithubFailure> {
-        // The host is fixed here, so the token cannot be sent anywhere else.
-        if !path.starts_with('/') {
-            return Err(GithubFailure::Unreachable);
-        }
-        let url = format!("{API}{path}");
-        let mut response = agent()
-            .get(&url)
-            .header("Authorization", &format!("Bearer {secret}"))
-            .header("Accept", "application/vnd.github+json")
-            .header("X-GitHub-Api-Version", "2022-11-28")
-            // GitHub rejects a request with no User-Agent, which would
-            // otherwise read as a bad token.
-            .header("User-Agent", "synthesis")
-            .call()
-            .map_err(|error| classify(&error))?;
-        let body = response
-            .body_mut()
-            .read_to_string()
-            .map_err(|_| GithubFailure::Unreachable)?;
-        serde_json::from_str(&body).map_err(|_| GithubFailure::Unreachable)
+        get_at(API, secret, path)
     }
+
+    fn for_host(&self, host: &str) -> Option<Box<dyn GithubPullRequests>> {
+        Some(Box::new(HostedGithubPullRequests {
+            api: crate::github_tokens::github_api_base(host),
+        }))
+    }
+}
+
+impl GithubPullRequests for HostedGithubPullRequests {
+    fn post_json(
+        &self,
+        secret: &str,
+        path: &str,
+        body: &Value,
+    ) -> Result<Value, GithubWriteFailure> {
+        post_at(&self.api, secret, path, body)
+    }
+
+    fn get_json(&self, secret: &str, path: &str) -> Result<Value, GithubFailure> {
+        get_at(&self.api, secret, path)
+    }
+}
+
+fn post_at(api: &str, secret: &str, path: &str, body: &Value) -> Result<Value, GithubWriteFailure> {
+    if !path.starts_with('/') {
+        return Err(GithubWriteFailure::Unreachable);
+    }
+    let url = format!("{api}{path}");
+    let payload = serde_json::to_string(body).map_err(|_| GithubWriteFailure::Unreachable)?;
+    let mut response = write_agent()
+        .post(&url)
+        .header("Authorization", &format!("Bearer {secret}"))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "synthesis")
+        .header("Content-Type", "application/json")
+        .send(payload)
+        .map_err(|error| match crate::tls::ureq_failure(&error, api) {
+            Some(failure) => GithubWriteFailure::TlsUntrusted(failure),
+            None => GithubWriteFailure::Unreachable,
+        })?;
+    let status = response.status().as_u16();
+    let text = response
+        .body_mut()
+        .read_to_string()
+        .map_err(|_| GithubWriteFailure::Unreachable)?;
+    match status {
+        200..=299 => serde_json::from_str(&text).map_err(|_| GithubWriteFailure::Unreachable),
+        401 | 403 => Err(GithubWriteFailure::Rejected),
+        404 | 410 => Err(GithubWriteFailure::NotFound),
+        422 => Err(GithubWriteFailure::Invalid(invalid_reason(&text))),
+        _ => Err(GithubWriteFailure::Unreachable),
+    }
+}
+
+fn get_at(api: &str, secret: &str, path: &str) -> Result<Value, GithubFailure> {
+    // The API base is fixed by the client, so the token cannot be sent
+    // anywhere else.
+    if !path.starts_with('/') {
+        return Err(GithubFailure::Unreachable);
+    }
+    let url = format!("{api}{path}");
+    let mut response = agent()
+        .get(&url)
+        .header("Authorization", &format!("Bearer {secret}"))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        // GitHub rejects a request with no User-Agent, which would
+        // otherwise read as a bad token.
+        .header("User-Agent", "synthesis")
+        .call()
+        .map_err(|error| classify_at(&error, api))?;
+    let body = response
+        .body_mut()
+        .read_to_string()
+        .map_err(|_| GithubFailure::Unreachable)?;
+    serde_json::from_str(&body).map_err(|_| GithubFailure::Unreachable)
 }
 
 /// The reasons of a 422 answer, joined: the `message` of GitHub's body and each

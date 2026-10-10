@@ -5,6 +5,7 @@ use super::*;
 
 fn link() -> drafts::GithubIssueLink {
     drafts::GithubIssueLink {
+        repository_host: "github.com".into(),
         repository_owner: "acme".into(),
         repository_name: "widgets".into(),
         issue_number: 4,

@@ -6,6 +6,7 @@
  * Kept free of React so each rule is tested as a function of the view alone.
  */
 import { tlsErrorMessage } from "../tlsError";
+import { GITHUB_HOST_MISMATCH_MESSAGE } from "../types/github";
 import type {
   GithubNewIssue,
   GithubPollingInterval,
@@ -33,7 +34,9 @@ const ERROR_TEXT: Record<string, string> = {
   in_progress_option_missing:
     "The “Status” field of the selected GitHub Project has no option named exactly “In Progress”.",
   no_remote_configured: "This repository has no remote, so there is no GitHub repository to poll.",
-  no_github_remote: "No remote of this repository is on github.com.",
+  no_github_remote: "No remote of this repository is on a GitHub host.",
+  github_host_mismatch:
+    GITHUB_HOST_MISMATCH_MESSAGE,
   token_unavailable:
     "No GitHub token is available for this project. Add or select one in settings.",
   issues_inaccessible: "The GitHub token cannot read the issues of this repository.",

@@ -7,7 +7,11 @@
  * Information say the same thing about the same choice.
  */
 import { tlsErrorMessage } from "../tlsError";
-import type { PublicationChoice, PublicationMismatch } from "../types";
+import {
+  GITHUB_HOST_MISMATCH_MESSAGE,
+  type PublicationChoice,
+  type PublicationMismatch,
+} from "../types";
 
 /**
  * A choice in words: root or sub-issue, then the Type and the milestone where
@@ -64,6 +68,7 @@ export function describeMismatches(mismatches: PublicationMismatch[]): string {
  * always has.
  */
 const PUBLICATION_ERROR_TEXT: Record<string, string> = {
+  github_host_mismatch: GITHUB_HOST_MISMATCH_MESSAGE,
   parent_issue_unavailable:
     "The parent issue is missing, closed, or no longer usable. Abandon any standing attempt and publish again with another parent.",
   issue_type_unavailable: "GitHub does not offer the selected issue Type.",

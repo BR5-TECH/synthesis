@@ -162,6 +162,10 @@ pub fn open_attempt_with(
         marker,
         remote_name: remote.name.clone(),
         remote_url: remote.url.clone(),
+        repository_host: remote
+            .repository_host
+            .clone()
+            .unwrap_or_else(crate::github_tokens::default_host),
         repository_owner: remote.repository_owner.clone().unwrap_or_default(),
         repository_name: remote.repository_name.clone().unwrap_or_default(),
         state: AttemptState::Open,
@@ -214,6 +218,10 @@ pub fn restart_attempt(
         marker,
         remote_name: remote.name.clone(),
         remote_url: remote.url.clone(),
+        repository_host: remote
+            .repository_host
+            .clone()
+            .unwrap_or_else(crate::github_tokens::default_host),
         repository_owner: remote.repository_owner.clone().unwrap_or_default(),
         repository_name: remote.repository_name.clone().unwrap_or_default(),
         state: AttemptState::Open,
@@ -240,6 +248,7 @@ pub fn clear_attempt(root: &fs::RootFs, draft_id: &str) -> Result<(), String> {
 pub fn record_of(attempt: &PublicationAttempt, issue: &IssueRef) -> PublicationRecord {
     PublicationRecord {
         provider: "github".to_string(),
+        repository_host: attempt.repository_host.clone(),
         repository_owner: attempt.repository_owner.clone(),
         repository_name: attempt.repository_name.clone(),
         issue_number: issue.number,
@@ -715,10 +724,11 @@ pub fn persist_choice(
 ///
 /// The publication store is committed to the project's repository, so a record
 /// reaches this machine from whoever else works on the project. Being named by
-/// a record is therefore not enough on its own: the address must also be a
-/// `github.com` issue address, so a tampered or hostile store cannot make the
-/// author open a `file:` URL or a custom scheme by activating an issue link.
-pub fn is_openable_issue_url(url: &str) -> bool {
+/// a record is therefore not enough on its own: the address must also be an
+/// HTTPS issue address on `host`, the repository host the record or the link
+/// names, so a tampered or hostile store cannot make the author open a `file:`
+/// URL or a custom scheme by activating an issue link.
+pub fn is_openable_issue_url(url: &str, host: &str) -> bool {
     let Some(rest) = url.strip_prefix("https://") else {
         return false;
     };
@@ -727,7 +737,7 @@ pub fn is_openable_issue_url(url: &str) -> bool {
     };
     // No userinfo, and the host itself rather than a look-alike prefix.
     !authority.contains('@')
-        && authority.eq_ignore_ascii_case("github.com")
+        && authority.eq_ignore_ascii_case(host)
         && path.contains("/issues/")
 }
 
@@ -739,7 +749,20 @@ pub fn resolution_for(
     secret: Option<&str>,
     client: &dyn GithubIssues,
 ) -> PublicationRemoteResolution {
-    let classified = remotes::classify(configured, secret, client);
+    let token = secret.map(|secret| (secret, crate::github_tokens::DEFAULT_HOST));
+    resolution_hosted(root, configured, token, &[], client)
+}
+
+/// [`resolution_for`] with a token that belongs to a host, and the hosts of
+/// every stored token (GHP-FR-BXTU).
+pub fn resolution_hosted(
+    root: &fs::RootFs,
+    configured: &[ConfiguredRemote],
+    token: Option<(&str, &str)>,
+    known_hosts: &[String],
+    client: &dyn GithubIssues,
+) -> PublicationRemoteResolution {
+    let classified = remotes::classify_hosted(configured, token, known_hosts, client, true);
     let persisted = crate::project_settings::load_publication_remote_selection_from(root);
     remotes::resolve(classified, persisted)
 }
@@ -767,7 +790,20 @@ pub fn resolve_repository_from(
     secret: Option<&str>,
     client: &dyn GithubIssues,
 ) -> Result<PublicationRepository, String> {
-    let resolution = resolution_for(root, configured, secret, client);
+    let token = secret.map(|secret| (secret, crate::github_tokens::DEFAULT_HOST));
+    resolve_repository_hosted(root, configured, token, &[], client)
+}
+
+/// [`resolve_repository_from`] with a token that belongs to a host, and the
+/// hosts of every stored token.
+pub fn resolve_repository_hosted(
+    root: &fs::RootFs,
+    configured: &[ConfiguredRemote],
+    token: Option<(&str, &str)>,
+    known_hosts: &[String],
+    client: &dyn GithubIssues,
+) -> Result<PublicationRepository, String> {
+    let resolution = resolution_hosted(root, configured, token, known_hosts, client);
     let selected = resolution
         .selection
         .as_deref()
@@ -775,11 +811,13 @@ pub fn resolve_repository_from(
     match selected {
         Some(PublicationRemote {
             name,
+            repository_host: Some(host),
             repository_owner: Some(owner),
             repository_name: Some(repo),
             ..
         }) => Ok(PublicationRepository {
             remote_name: name.clone(),
+            repository_host: host.clone(),
             repository_owner: owner.clone(),
             repository_name: repo.clone(),
         }),
@@ -788,11 +826,19 @@ pub fn resolve_repository_from(
 }
 
 /// GHP-FR-MJTB: whether `url` is one this draft holds — in a record of its
-/// publication history, or in its GitHub-shadow issue link (DRS-FR-XDWS) —
-/// and a `github.com` issue address.
+/// publication history, or in its GitHub-shadow issue link (DRS-FR-XDWS) — and
+/// an HTTPS issue address on the repository host of that record or link.
 pub fn is_recorded_issue_url(root: &fs::RootFs, draft_id: &str, url: &str) -> Result<bool, String> {
     let publication = store::read_store(root, draft_id)?;
-    let recorded = publication.publication.iter().any(|record| record.issue_url == url)
-        || crate::drafts::github_issue_link(root, draft_id).is_some_and(|link| link.issue_url == url);
-    Ok(recorded && is_openable_issue_url(url))
+    let from_record = publication
+        .publication
+        .iter()
+        .find(|record| record.issue_url == url)
+        .map(|record| record.repository_host.clone());
+    let host = from_record.or_else(|| {
+        crate::drafts::github_issue_link(root, draft_id)
+            .filter(|link| link.issue_url == url)
+            .map(|link| link.repository_host)
+    });
+    Ok(host.is_some_and(|host| is_openable_issue_url(url, &host)))
 }

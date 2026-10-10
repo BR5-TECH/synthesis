@@ -188,24 +188,18 @@ where
     // GTC-FR-09 / GTC-FR-10: the credential is resolved BEFORE any transport is
     // opened, so a project that resolves no token makes no network request and
     // the typed refusal reaches the caller unchanged.
-    let token = if is_github_https_remote(&url) {
-        Some(
-            github_tokens::resolve_github_token_secret(store, tokens, project_key).inspect_err(
-                |e| {
-                    log_failure(
-                        sink,
-                        buffer,
-                        TRANSFER,
-                        MSG_PUSH_FAILED,
-                        e,
-                        log_fields! { "remote" => &remote_name, "branch" => &branch },
-                    )
-                },
-            )?,
-        )
-    } else {
-        None
-    };
+    let token = github_tokens::resolve_remote_token(store, tokens, project_key, &url).inspect_err(
+        |e| {
+            log_failure(
+                sink,
+                buffer,
+                TRANSFER,
+                MSG_PUSH_FAILED,
+                e,
+                log_fields! { "remote" => &remote_name, "branch" => &branch },
+            )
+        },
+    )?;
 
     let line = |text: String| {
         emit(

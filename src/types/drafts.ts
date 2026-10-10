@@ -47,6 +47,8 @@ export type DraftStatus =
  * every edit of it with `draft_github_shadow`.
  */
 export interface GithubIssueLink {
+  /** Normalized host. A link stored without one reads as `github.com`. */
+  repositoryHost?: string;
   repositoryOwner: string;
   repositoryName: string;
   issueNumber: number;

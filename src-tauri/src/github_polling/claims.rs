@@ -32,7 +32,7 @@ pub fn pending_claim(
     number: u64,
     held: &[GithubPendingClaim],
 ) -> Option<GithubPendingClaim> {
-    let names = |claim: &GithubPendingClaim| claim.names(&repository.owner, &repository.name, number);
+    let names = |claim: &GithubPendingClaim| claim.names(&repository.host, &repository.owner, &repository.name, number);
     load_github_pending_claims_from(root)
         .into_iter()
         .find(names)
@@ -44,7 +44,12 @@ pub fn pending_claim(
 fn put_claim(root: &RootFs, claim: &GithubPendingClaim) -> Result<(), String> {
     update_github_pending_claims(root, |claims| {
         claims.retain(|c| {
-            !c.names(&claim.repository_owner, &claim.repository_name, claim.issue_number)
+            !c.names(
+                &claim.repository_host,
+                &claim.repository_owner,
+                &claim.repository_name,
+                claim.issue_number,
+            )
         });
         claims.push(claim.clone());
     })
@@ -76,19 +81,21 @@ fn shadow_for(
     claim: &GithubPendingClaim,
     issue: &FetchedIssue,
 ) -> Result<(GithubClaimResult, bool), String> {
-    let (owner, name) = (&claim.repository_owner, &claim.repository_name);
+    let (host, owner, name) =
+        (&claim.repository_host, &claim.repository_owner, &claim.repository_name);
     // A draft the pending claim already names, where it still exists.
     if let Some(id) = claim.draft_id.as_deref() {
         if let Ok(record) = crate::drafts::read_draft_record(root, id) {
-            if record.github_issue.as_ref().is_some_and(|l| l.names(owner, name, claim.issue_number)) {
+            if record.github_issue.as_ref().is_some_and(|l| l.names(host, owner, name, claim.issue_number)) {
                 return Ok((GithubClaimResult { draft_id: record.id, draft_name: record.name }, false));
             }
         }
     }
-    if let Some(existing) = crate::drafts::find_github_shadow(root, owner, name, claim.issue_number) {
+    if let Some(existing) = crate::drafts::find_github_shadow(root, host, owner, name, claim.issue_number) {
         return Ok((GithubClaimResult { draft_id: existing.id, draft_name: existing.name }, false));
     }
     let link = GithubIssueLink {
+        repository_host: host.clone(),
         repository_owner: owner.clone(),
         repository_name: name.clone(),
         issue_number: claim.issue_number,
@@ -173,6 +180,7 @@ pub fn claim(
     // GPP-FR-DHQM: the pending claim comes before the draft. Where the disk
     // refuses it, the claim goes back to the caller to hold in memory.
     let mut pending = GithubPendingClaim {
+        repository_host: ctx.repository.host.clone(),
         repository_owner: ctx.repository.owner.clone(),
         repository_name: ctx.repository.name.clone(),
         issue_number: issue.number,
@@ -206,7 +214,7 @@ pub fn retry(
 ) -> Result<ClaimOutcome, String> {
     let on_disk = load_github_pending_claims_from(root)
         .into_iter()
-        .find(|c| c.names(&repository.owner, &repository.name, number));
+        .find(|c| c.names(&repository.host, &repository.owner, &repository.name, number));
     let from_disk = on_disk.is_some();
     let Some(mut pending) = on_disk.or_else(|| pending_claim(root, repository, number, held)) else {
         return Err(ERR_NO_PENDING_CLAIM.to_string());
@@ -232,7 +240,7 @@ pub fn acknowledge(root: &RootFs, repository: &RepositoryRef, number: u64) -> Re
     let mut found = false;
     update_github_pending_claims(root, |claims| {
         let before = claims.len();
-        claims.retain(|c| !c.names(&repository.owner, &repository.name, number));
+        claims.retain(|c| !c.names(&repository.host, &repository.owner, &repository.name, number));
         found = claims.len() != before;
     })
     .map_err(|_| ERR_PENDING_CLAIM_WRITE_FAILED.to_string())?;

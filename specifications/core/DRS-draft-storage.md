@@ -14,6 +14,7 @@ All operations below are Tauri commands invoked by the UI. The quoted name is th
 DraftStatus = "active" | "archived" | "graduated" | "published" | "github_shadow"
 
 GithubIssueLink {
+  repository_host,     // normalized host; absent in a stored link, which reads as github.com
   repository_owner,
   repository_name,
   issue_number,
@@ -83,6 +84,7 @@ The draft-owned **publication store** of DRS-FR-EJBM, whose records `GHP-github-
 ```
 DraftPublicationRecord {     // one successful GitHub publication
   provider,                  // "github"
+  repository_host,           // normalized host; absent in a stored record, which reads as github.com
   repository_owner,
   repository_name,
   issue_number,
@@ -96,6 +98,7 @@ DraftPublicationAttempt {    // the draft's one standing attempt (DRS-FR-EJBM)
   marker,                    // opaque, unique, stable for the attempt
   remote_name,
   remote_url,                // canonicalized
+  repository_host,           // normalized host; absent in a stored attempt, which reads as github.com
   repository_owner,
   repository_name,
   state,                     // "open" | "awaiting_choice"

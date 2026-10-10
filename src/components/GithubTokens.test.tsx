@@ -21,6 +21,7 @@ function token(over: Partial<GithubTokenRecord> = {}): GithubTokenRecord {
     accountLogin: "raver119",
     scopes: ["repo", "workflow"],
     maskedHint: "a3f9",
+    host: "github.com",
     addedAt: "2026-03-12T10:00:00Z",
     lastVerifiedAt: "2026-03-12T10:00:00Z",
     state: "valid",
@@ -148,7 +149,9 @@ describe("Add token dialog", () => {
       screen.getByRole("button", { name: /Open GitHub token page/ }),
     );
 
-    expect(invokeMock).toHaveBeenCalledWith("open_github_token_creation_page");
+    expect(invokeMock).toHaveBeenCalledWith("open_github_token_creation_page", {
+      host: "",
+    });
     expect(dialog).toBeInTheDocument();
     expect(screen.getByLabelText(/^Label/)).toHaveValue("work laptop");
   });
@@ -199,7 +202,7 @@ describe("Add token dialog", () => {
     // created record rather than being guessed client-side.
     backend([], {
       add_github_token: (args) => {
-        expect(args).toEqual({ label: "", secret: "ghp_good" });
+        expect(args).toEqual({ label: "", secret: "ghp_good", host: "" });
         return token({ id: "new", label: "raver119" });
       },
     });
@@ -230,10 +233,123 @@ describe("Add token dialog", () => {
     expect(invokeMock).toHaveBeenCalledWith("add_github_token", {
       label: "work",
       secret: "ghp_good",
+      host: "",
     });
     const row = screen.getByTestId("github-token-row");
     expect(within(row).getByText("work")).toBeInTheDocument();
     expect(within(row).getByTestId("token-identity")).toHaveTextContent("@raver119");
+  });
+
+  it("GHA-FR-PGPY: the domain field sits above the hand-off, shows the github.com placeholder, and is not prefilled", async () => {
+    backend([]);
+    const dialog = await openDialog();
+
+    const domain = screen.getByLabelText("Domain");
+    expect(domain).toHaveAttribute("placeholder", "github.com");
+    expect(domain).toHaveValue("");
+    const handOff = screen.getByRole("button", { name: /Open GitHub token page/ });
+    expect(
+      domain.compareDocumentPosition(handOff) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      domain.compareDocumentPosition(screen.getByLabelText("Token")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(dialog).toBeInTheDocument();
+  });
+
+  it("GHA-FR-PGPY, GHA-FR-07: an empty domain does not gate Add, and Add stays enabled by the secret alone", async () => {
+    backend([]);
+    await openDialog();
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText("Token"), "ghp_abc123");
+    expect(screen.getByLabelText("Domain")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Add" })).toBeEnabled();
+  });
+
+  it("GHA-FR-PGPY, GHA-FR-08: submit sends the domain exactly as typed and the new row shows its domain", async () => {
+    const created = token({ id: "new", label: "work", host: "company.ghe.com" });
+    backend([], { add_github_token: () => created });
+    await openDialog();
+
+    await userEvent.type(screen.getByLabelText("Domain"), " Company.GHE.com ");
+    await userEvent.type(screen.getByLabelText("Token"), "ghp_good");
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(invokeMock).toHaveBeenCalledWith("add_github_token", {
+      label: "",
+      secret: "ghp_good",
+      host: " Company.GHE.com ",
+    });
+    expect(screen.getByTestId("token-host")).toHaveTextContent("company.ghe.com");
+  });
+
+  it("GHA-FR-FUSZ, GHA-FR-06: the hand-off sends the domain as typed and leaves the dialog open", async () => {
+    backend([]);
+    const dialog = await openDialog();
+
+    await userEvent.type(screen.getByLabelText("Domain"), "company.ghe.com");
+    await userEvent.click(
+      screen.getByRole("button", { name: /Open GitHub token page/ }),
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith("open_github_token_creation_page", {
+      host: "company.ghe.com",
+    });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByLabelText("Domain")).toHaveValue("company.ghe.com");
+  });
+
+  it("GHA-FR-FUSZ, GHA-FR-OGNL: an invalid_host answer to the hand-off renders inline and keeps the dialog open", async () => {
+    backend([], {
+      open_github_token_creation_page: () => {
+        throw GITHUB_TOKEN_ERRORS.invalidHost;
+      },
+    });
+    await openDialog();
+
+    await userEvent.type(screen.getByLabelText("Domain"), "not a host");
+    await userEvent.type(screen.getByLabelText("Token"), "ghp_keep");
+    await userEvent.click(
+      screen.getByRole("button", { name: /Open GitHub token page/ }),
+    );
+
+    expect(await screen.findByTestId("add-token-error")).toHaveTextContent(
+      "That domain is not a valid host.",
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText("Domain")).toHaveValue("not a host");
+    expect(screen.getByLabelText("Token")).toHaveValue("ghp_keep");
+  });
+
+  it("GHA-FR-OGNL: invalid_host on submit renders above the actions, keeps label and domain, and clears the secret", async () => {
+    backend([], {
+      add_github_token: () => {
+        throw GITHUB_TOKEN_ERRORS.invalidHost;
+      },
+    });
+    await openDialog();
+
+    await userEvent.type(screen.getByLabelText("Domain"), "bad host");
+    await userEvent.type(screen.getByLabelText(/^Label/), "work");
+    await userEvent.type(screen.getByLabelText("Token"), "ghp_secret");
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    const error = await screen.findByTestId("add-token-error");
+    expect(error).toHaveTextContent("That domain is not a valid host.");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText("Domain")).toHaveValue("bad host");
+    expect(screen.getByLabelText(/^Label/)).toHaveValue("work");
+    expect(screen.getByLabelText("Token")).toHaveValue("");
+    expect(screen.queryByTestId("github-token-row")).not.toBeInTheDocument();
+    // The error sits in the body, before the action row.
+    const actions = screen.getByRole("button", { name: "Cancel" }).parentElement!;
+    expect(
+      error.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("GHA-FR-10 keeps the dialog open on a rejection, preserving the label and clearing the token", async () => {
@@ -327,6 +443,38 @@ describe("Add token dialog", () => {
         /keychain is unavailable/,
       ),
     );
+  });
+});
+
+describe("Token row domain", () => {
+  it("GHA-FR-02: a github.com token shows no domain line", async () => {
+    backend([token()]);
+    render(<GithubTokens />);
+    await screen.findByTestId("github-token-row");
+    expect(screen.queryByTestId("token-host")).not.toBeInTheDocument();
+  });
+
+  it("GHA-FR-02: a missing or empty host reads as github.com and shows no domain line", async () => {
+    backend([
+      token({ id: "a", label: "empty", host: "" }),
+      token({ id: "b", label: "missing", host: undefined as unknown as string }),
+    ]);
+    render(<GithubTokens />);
+    await screen.findAllByTestId("github-token-row");
+    expect(screen.queryByTestId("token-host")).not.toBeInTheDocument();
+  });
+
+  it("GHA-FR-02: a GitHub Enterprise token shows its domain on its own line below the identity line", async () => {
+    backend([token({ host: "company.ghe.com" })]);
+    render(<GithubTokens />);
+    const row = await screen.findByTestId("github-token-row");
+    const host = within(row).getByTestId("token-host");
+    expect(host).toHaveTextContent("company.ghe.com");
+    const identity = within(row).getByTestId("token-identity");
+    expect(identity).not.toHaveTextContent("company.ghe.com");
+    expect(
+      identity.compareDocumentPosition(host) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });
 
@@ -474,6 +622,21 @@ describe("the secret never reaches the DOM (GHA-FR-03 / GHA-FR-09)", () => {
     expect(screen.getByLabelText("Token")).toHaveAttribute(
       "type",
       "password",
+    );
+  });
+});
+
+describe("tokenErrorMessage host errors", () => {
+  it("GHA-FR-OGNL: invalid_host has its own text", () => {
+    expect(tokenErrorMessage(GITHUB_TOKEN_ERRORS.invalidHost)).toBe(
+      "That domain is not a valid host.",
+    );
+  });
+
+  it("GHA-FR-LBLM: github_host_mismatch says the token belongs to another host and names the fix", () => {
+    const text = tokenErrorMessage(GITHUB_TOKEN_ERRORS.hostMismatch);
+    expect(text).toBe(
+      "The project token belongs to another GitHub host than this remote. Pick or add a token for the host of the remote.",
     );
   });
 });

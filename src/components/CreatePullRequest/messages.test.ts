@@ -56,6 +56,12 @@ describe("the words of the Create a PR window", () => {
     );
   });
 
+  it("GHA-FR-LBLM: a host mismatch reads as a sentence", () => {
+    expect(pullRequestFailureMessage("github_host_mismatch")).toBe(
+      "The project token belongs to another GitHub host than this remote. Pick or add a token for the host of the remote.",
+    );
+  });
+
   it("CPR-FR-SQGZ: a branch the local read does not find is the repository's, not GitHub's", () => {
     expect(pullRequestHeadReadMessage("unknown branch", "feature", "gone")).toBe(
       "This repository holds no branch feature, or no branch gone.",

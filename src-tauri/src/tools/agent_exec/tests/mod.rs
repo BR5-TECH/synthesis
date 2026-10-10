@@ -525,6 +525,13 @@ const PROJECT_KEY: &str = "/dev/acme";
 /// production AIC path rather than by writing the registry directly — so what
 /// the executor resolves is what a real project would resolve.
 fn harness_for(vendor: &str) -> Harness {
+    harness_verified_with(vendor, None)
+}
+
+/// A harness whose project resolves to `vendor`, verified with `config` in
+/// place of the vendor's default payload. A Claude Code gateway payload stores
+/// no binary path (AIC-FR-QHLN).
+fn harness_verified_with(vendor: &str, config: Option<VerifyConfig>) -> Harness {
     let home = tempfile::tempdir().expect("home");
     let workspace = tempfile::tempdir().expect("workspace");
     std::fs::create_dir_all(home.path().join(".codex")).expect("codex login dir");
@@ -558,11 +565,11 @@ fn harness_for(vendor: &str) -> Harness {
     .with_home(home.path());
 
     let store = GlobalSettingsStore::in_memory();
-    let config = VerifyConfig {
+    let config = config.unwrap_or_else(|| VerifyConfig {
         path: Some(binary.to_string()),
         oauth_token: (vendor == "claude_code").then(|| SAMPLE_TOKEN.to_string()),
         ..Default::default()
-    };
+    });
     verify_integration_impl(&store, &ai, vendor, &config).expect("vendor verifies");
     agentic::set_active_impl(&store, &ai, vendor).expect("vendor activates");
 

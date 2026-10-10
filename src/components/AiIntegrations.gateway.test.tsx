@@ -3,10 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import userEvent from "@testing-library/user-event";
 
 import { AgenticAiIntegrations } from "./AiIntegrations";
-import { emptyDraft, cliConfigFor, claudeDraftEdited } from "./agenticDraft";
+import { agenticStatus, emptyDraft, cliConfigFor, claudeDraftEdited, draftForIntegration } from "./agenticDraft";
 import {
   canVerifyGateway,
-  gatewayModelCount,
   gatewayTokenValidation,
   gatewayTokenVarValidation,
   parseEnvText,
@@ -43,22 +42,25 @@ beforeEach(() => {
 afterEach(cleanup);
 
 const GATEWAY_TOKEN = "gw-FAKE-TEST-TOKEN-NOT-A-CREDENTIAL-k2Qz";
-const GATEWAY_URL = "https://gateway.example.com";
+const GATEWAY_URL = "https://llm-gateway.example.com/bedrock";
 
-/** A Claude Code record that last verified in gateway mode. */
+/**
+ * A Claude Code record that last verified in gateway mode. A gateway runs no
+ * binary, so it holds no path and no version, and the bundled model list
+ * (AIC-FR-QHLN).
+ */
 function gatewayVerified(over: Record<string, unknown> = {}) {
   return cliVerified("claude_code", "/usr/bin/claude", {
+    binaryPath: null,
+    pathOrigin: "unset",
+    version: null,
     authMode: "custom_gateway",
     gatewayBaseUrl: GATEWAY_URL,
     gatewayTokenVar: "ANTHROPIC_AUTH_TOKEN",
     gatewayKeyState: "set",
     gatewayMaskedHint: "k2Qz",
     envVars: [],
-    modelsOrigin: "probed",
-    models: [
-      { id: "claude-a", label: "Claude A" },
-      { id: "claude-b", label: "Claude B" },
-    ],
+    modelsOrigin: "catalog",
     ...over,
   });
 }
@@ -126,7 +128,9 @@ describe("the Claude Code sub-tabs (AII-FR-IUUM)", () => {
     expect(gatewayToken()).toHaveAttribute("placeholder", "•••• k2Qz");
     expect(agenticLevel().getByTestId("agentic-gateway-note")).toHaveTextContent(/Leave empty to re-verify/);
     expect(envField()).toHaveValue("HTTPS_PROXY=http://proxy:3128");
-    expect(status()).toHaveTextContent(/gateway answered · 2 models · .*verified · 2\.1\.4/);
+    expect(status()).toHaveTextContent("Bedrock gateway · token stored · verified");
+    // AII-FR-IUUM: a gateway runs no binary, so the sub-tab renders no binary field.
+    expect(agenticLevel().queryByLabelText("Binary")).not.toBeInTheDocument();
   });
 
   it("AII-FR-PHFX: the fields come in the order URL, variable name, token, and a fresh tab prefills the default name", async () => {
@@ -149,7 +153,6 @@ describe("the Custom Gateway checks (AII-FR-HOKG)", () => {
     backend();
     const user = await openLevel();
     await user.click(tab(/Custom Gateway/));
-    await user.type(agenticLevel().getByLabelText("Binary"), "/usr/bin/claude");
     const commandsBefore = commandsSoFar();
 
     expect(verifyButton()).toBeDisabled();
@@ -203,7 +206,7 @@ describe("the Custom Gateway checks (AII-FR-HOKG)", () => {
 });
 
 describe("verifying a Custom Gateway (AII-FR-DKDC)", () => {
-  it("AII-FR-DKDC, AII-FR-IUUM, AII-FR-53: submits the gateway shape only, then shows the count and a masked hint", async () => {
+  it("AII-FR-DKDC, AII-FR-IUUM, AII-FR-53: submits the gateway shape only, with no path, then shows the gateway line and a masked hint", async () => {
     backend(
       {},
       {
@@ -215,21 +218,18 @@ describe("verifying a Custom Gateway (AII-FR-DKDC)", () => {
     await user.click(agenticLevel().getByTestId("agentic-oauth-token"));
     await user.paste(SAMPLE_TOKEN);
     await user.click(tab(/Custom Gateway/));
-    await user.type(agenticLevel().getByLabelText("Binary"), "/usr/bin/claude");
     await user.click(gatewayUrl());
     await user.paste(`  ${GATEWAY_URL}  `);
     await user.click(gatewayToken());
     await user.paste(GATEWAY_TOKEN);
 
     await user.click(verifyButton());
-    await waitFor(() => expect(status()).toHaveTextContent(/gateway answered · 2 models/));
+    await waitFor(() => expect(status()).toHaveTextContent("Bedrock gateway · token stored · verified"));
 
     expect(argsOf("verify_agentic_integration")).toEqual({
       vendor: "claude_code",
       config: {
-        path: "/usr/bin/claude",
         authMode: "custom_gateway",
-        gatewayApi: "anthropic",
         gatewayBaseUrl: GATEWAY_URL,
         gatewayTokenVar: "ANTHROPIC_AUTH_TOKEN",
         gatewayToken: GATEWAY_TOKEN,
@@ -256,9 +256,7 @@ describe("verifying a Custom Gateway (AII-FR-DKDC)", () => {
     await waitFor(() => expect(argsOf("verify_agentic_integration")).toBeDefined());
     const config = (argsOf("verify_agentic_integration") as { config: Record<string, unknown> }).config;
     expect(config).toEqual({
-      path: "/usr/bin/claude",
       authMode: "custom_gateway",
-      gatewayApi: "anthropic",
       gatewayBaseUrl: GATEWAY_URL,
       gatewayTokenVar: "ANTHROPIC_AUTH_TOKEN",
     });
@@ -266,8 +264,8 @@ describe("verifying a Custom Gateway (AII-FR-DKDC)", () => {
     expect("envVars" in config).toBe(false);
   });
 
-  it("AII-FR-DKDC: a failure states the HTTP status or the network error, and changes nothing stored", async () => {
-    let failure = "gateway_status:404";
+  it("AII-FR-DKDC: a failure states the typed failure, and changes nothing stored", async () => {
+    let failure = "token_var_invalid";
     backend(
       { agentic: withClaude(gatewayVerified()) },
       {
@@ -280,17 +278,15 @@ describe("verifying a Custom Gateway (AII-FR-DKDC)", () => {
     await user.click(gatewayToken());
     await user.paste(GATEWAY_TOKEN);
     await user.click(verifyButton());
-    await waitFor(() => expect(status()).toHaveTextContent(/The gateway answered with HTTP 404\. Check the base URL\./));
+    await waitFor(() => expect(status()).toHaveTextContent(/token variable name is not valid/));
     expect(gatewayToken()).toHaveAttribute("placeholder", "•••• k2Qz");
     expect(levelText()).not.toContain(GATEWAY_TOKEN);
 
-    failure = "gateway_unreachable:connection refused";
+    failure = "keychain_unavailable";
     await user.click(verifyButton());
-    await waitFor(() => expect(status()).toHaveTextContent(/The gateway could not be reached: connection refused/));
-
-    failure = "gateway_status:401";
-    await user.click(verifyButton());
-    await waitFor(() => expect(status()).toHaveTextContent(/HTTP 401\. Check the token and the token variable name\./));
+    await waitFor(() => expect(status()).toHaveTextContent(aiErrorMessage("keychain_unavailable")));
+    expect(status()).not.toHaveTextContent(/· verified/);
+    expect(agenticLevel().queryByRole("dialog")).not.toBeInTheDocument();
     expect(levelText()).not.toContain(GATEWAY_TOKEN);
   });
 });
@@ -375,9 +371,12 @@ describe("the candidate and its lifetime (AII-FR-21, AII-FR-22, AII-FR-53)", () 
     expect(status()).toHaveTextContent(/· verified/);
     expect(status()).not.toHaveTextContent(/Not verified/);
     await user.click(tab(/^Subscription$/));
-    expect(status()).toHaveTextContent(/Not verified/);
+    // The record stores no binary, so the Subscription sub-tab looks for one
+    // (AII-FR-17). Either way it no longer reads as verified.
+    await waitFor(() => expect(status()).not.toHaveTextContent(/· verified/));
+    await waitFor(() => expect(status()).not.toHaveTextContent(/Looking for the binary/));
     await user.click(tab(/Custom Gateway/));
-    expect(status()).toHaveTextContent(/gateway answered/);
+    expect(status()).toHaveTextContent("Bedrock gateway · token stored · verified");
   });
 
   it("AII-FR-27: a gateway token that can no longer be read says so", async () => {
@@ -486,13 +485,22 @@ describe("what each tab renders and carries (AII-FR-49, AII-FR-30, AII-FR-PHFX, 
     expect(values).not.toContain(GATEWAY_TOKEN);
   });
 
-  it("AII-FR-EJMG: the note on where entries are stored shows in both sub-tabs", async () => {
+  it("AII-FR-EJMG: the note on where entries are stored shows in both sub-tabs, and the gateway one names the Bedrock entries", async () => {
     backend();
     const user = await openLevel();
     const note = () => agenticLevel().getByTestId("agentic-env-note");
     expect(note()).toHaveTextContent(/Stored in the settings file/);
+    const bedrockNames = [
+      "AWS_REGION",
+      "ANTHROPIC_DEFAULT_OPUS_MODEL",
+      "ANTHROPIC_DEFAULT_SONNET_MODEL",
+      "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    ];
+    for (const name of bedrockNames) expect(note().textContent).not.toContain(name);
     await user.click(tab(/Custom Gateway/));
     expect(note()).toHaveTextContent(/Stored in the settings file/);
+    // The gateway sub-tab names the optional Bedrock entries.
+    for (const name of bedrockNames) expect(note()).toHaveTextContent(name);
   });
 
   it("AII-FR-51, AII-FR-HOKG: a bad environment line leaves Verify unavailable in the Subscription sub-tab too", async () => {
@@ -504,15 +512,61 @@ describe("what each tab renders and carries (AII-FR-49, AII-FR-30, AII-FR-PHFX, 
     expect(agenticLevel().getByTestId("agentic-env-note")).toHaveTextContent("Line 1 is not written as NAME=value.");
   });
 
-  it("AII-FR-DKDC: the success line counts one model and no models in their own words", async () => {
-    backend({ agentic: withClaude(gatewayVerified({ models: [{ id: "only", label: "Only" }] })) });
+  it("AII-FR-DKDC: the success line names no model count and no version", async () => {
+    backend({ agentic: withClaude(gatewayVerified({ version: "2.1.4", modelsOrigin: "probed" })) });
     await openLevel();
-    expect(status()).toHaveTextContent(/gateway answered · 1 model · /);
-    cleanup();
-    invokeMock.mockReset();
-    backend({ agentic: withClaude(gatewayVerified({ modelsOrigin: "catalog" })) });
-    await openLevel();
-    expect(status()).toHaveTextContent(/gateway answered · 0 models · /);
+    expect(status()).toHaveTextContent("Bedrock gateway · token stored · verified");
+    expect(status()).not.toHaveTextContent(/model|2\.1\.4/);
+  });
+
+  it("AII-FR-IUUM, AII-FR-DKDC: the gateway sub-tab needs no binary to verify, and sends no path", async () => {
+    backend({}, { verify_agentic_integration: () => gatewayVerified() });
+    const user = await openLevel();
+    await user.click(tab(/Custom Gateway/));
+    expect(agenticLevel().queryByLabelText("Binary")).not.toBeInTheDocument();
+    await user.click(gatewayUrl());
+    await user.paste(GATEWAY_URL);
+    await user.click(gatewayToken());
+    await user.paste(GATEWAY_TOKEN);
+    expect(status()).toHaveTextContent("Not verified — verify this gateway before use.");
+    expect(verifyButton()).toBeEnabled();
+    await user.click(verifyButton());
+    await waitFor(() => expect(status()).toHaveTextContent("Bedrock gateway · token stored · verified"));
+    expect("path" in (argsOf("verify_agentic_integration") as { config: object }).config).toBe(false);
+  });
+
+  it("AII-FR-17: a detection still running does not hold up the gateway sub-tab", async () => {
+    let finish: (value: unknown) => void = () => {};
+    backend(
+      {},
+      {
+        detect_agentic_cli_binary: () => new Promise((resolve) => (finish = resolve)),
+        verify_agentic_integration: () => gatewayVerified(),
+      },
+    );
+    const user = await openLevel();
+    await waitFor(() => expect(status()).toHaveTextContent("Looking for the binary…"));
+    await user.click(tab(/Custom Gateway/));
+    expect(status()).not.toHaveTextContent("Looking for the binary…");
+    await user.click(gatewayUrl());
+    await user.paste(GATEWAY_URL);
+    await user.click(gatewayToken());
+    await user.paste(GATEWAY_TOKEN);
+    expect(verifyButton()).toBeEnabled();
+    // The detection ends, and the Subscription sub-tab reports what it found.
+    finish({ path: null });
+    await user.click(tab(/^Subscription$/));
+    await waitFor(() => expect(status()).toHaveTextContent(/No binary found/));
+  });
+
+  it("AII-FR-17: a gateway record opens with no detection, and Subscription detects once it is open", async () => {
+    backend({ agentic: withClaude(gatewayVerified()) });
+    const user = await openLevel();
+    await waitFor(() => expect(status()).toHaveTextContent("Bedrock gateway · token stored · verified"));
+    expect(commandsSoFar()).not.toContain("detect_agentic_cli_binary");
+    await user.click(tab(/^Subscription$/));
+    await waitFor(() => expect(commandsSoFar()).toContain("detect_agentic_cli_binary"));
+    expect(agenticLevel().getByLabelText("Binary")).toBeInTheDocument();
   });
 });
 
@@ -540,14 +594,12 @@ describe("the pure rules", () => {
     expect(parseEnvText("").entries).toEqual([]);
   });
 
-  it("AII-FR-HOKG, AII-FR-DKDC: Verify gating and the model count read the record", () => {
+  it("AII-FR-HOKG: Verify gating reads the record", () => {
     const stored = gatewayVerified();
     const fields = { ...emptyDraft(), gatewayUrl: GATEWAY_URL };
     expect(canVerifyGateway(stored, fields)).toBe(true);
     expect(canVerifyGateway({ ...stored, gatewayKeyState: "unset" }, fields)).toBe(false);
     expect(canVerifyGateway({ ...stored, gatewayKeyState: "unset" }, { ...fields, gatewayToken: "tok" })).toBe(true);
-    expect(gatewayModelCount(stored)).toBe(2);
-    expect(gatewayModelCount({ ...stored, modelsOrigin: "catalog" })).toBe(0);
   });
 
   it("AII-FR-IUUM: the submitted shape follows the open sub-tab", () => {
@@ -562,12 +614,18 @@ describe("the pure rules", () => {
       oauthToken: SAMPLE_TOKEN,
     };
     expect(cliConfigFor(stored, draft)).toEqual({
-      path: "/p",
       authMode: "custom_gateway",
-      gatewayApi: "anthropic",
       gatewayBaseUrl: "https://g.example",
       gatewayTokenVar: "MY_VAR",
       gatewayToken: "tok",
+    });
+    // AII-FR-DKDC: edited entries travel with the gateway shape too.
+    expect(cliConfigFor(stored, { ...draft, envText: "AWS_REGION=eu-west-1" })).toEqual({
+      authMode: "custom_gateway",
+      gatewayBaseUrl: "https://g.example",
+      gatewayTokenVar: "MY_VAR",
+      gatewayToken: "tok",
+      envVars: ["AWS_REGION=eu-west-1"],
     });
     expect(cliConfigFor(stored, { ...draft, authMode: "subscription", envText: "X=1" })).toEqual({
       path: "/p",
@@ -577,11 +635,12 @@ describe("the pure rules", () => {
     // Codex and OpenCode send the path alone.
     expect(cliConfigFor(agenticIntegration("codex" as AgenticVendorId), draft)).toEqual({ path: "/p" });
     expect(claudeDraftEdited(stored, { ...draft, gatewayUrl: GATEWAY_URL, gatewayTokenVar: "ANTHROPIC_AUTH_TOKEN", gatewayToken: "" })).toBe(false);
+    // AIC-FR-QHLN: a gateway status ignores the path, which a gateway does not use.
+    const gatewayDraft = { ...draftForIntegration(stored), path: "/anything" };
+    expect(agenticStatus(stored, gatewayDraft, "idle", "", false).text).toBe("Bedrock gateway · token stored · verified");
   });
 
   it("AII-FR-DKDC: the gateway failures read as plain text and quote nothing the author typed", () => {
-    expect(aiErrorMessage("gateway_status:500")).toBe("The gateway answered with HTTP 500.");
-    expect(aiErrorMessage("gateway_not_a_model_list")).toMatch(/not with a model list/);
     expect(aiErrorMessage("env_var_invalid:2")).toMatch(/entry 2 is not written as NAME=value/);
     expect(aiErrorMessage("env_var_reserved:PATH")).toMatch(/^PATH is set by Synthesis/);
     expect(aiErrorMessage("token_var_invalid")).toMatch(/token variable name is not valid/);

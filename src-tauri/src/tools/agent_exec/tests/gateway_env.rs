@@ -24,8 +24,9 @@ fn gateway_harness(token_var: Option<&str>, entries: &[&str]) -> Harness {
     harness
 }
 
-/// EAC-FR-05, EAC-FR-15, CCP-FR-20 — gateway mode passes the URL, the token under the
-/// author's name, and the author's entries; each by name, and none by value.
+/// EAC-FR-05, EAC-FR-15, CCP-FR-20 — gateway mode passes the Bedrock variables,
+/// the token under the author's name, and the author's entries; each by name, and
+/// none by value.
 #[test]
 fn a_gateway_launch_passes_every_variable_by_name() {
     let harness = gateway_harness(
@@ -36,17 +37,18 @@ fn a_gateway_launch_passes_every_variable_by_name() {
     let outcome = run(&harness, runtime.clone(), task("go")).expect("runs");
     let recorded = runtime.only_run();
 
-    assert_eq!(recorded.env.get("ANTHROPIC_BASE_URL").map(String::as_str), Some(GATEWAY_URL));
+    assert_eq!(recorded.env.get("ANTHROPIC_BEDROCK_BASE_URL").map(String::as_str), Some(GATEWAY_URL));
+    assert!(!recorded.env.contains_key("ANTHROPIC_BASE_URL"));
     assert_eq!(recorded.env.get("ANTHROPIC_API_KEY").map(String::as_str), Some(GATEWAY_TOKEN));
     assert_eq!(recorded.env.get("HTTPS_PROXY").map(String::as_str), Some(LONG_VALUE));
     assert!(
         !recorded.env.contains_key("CLAUDE_CODE_OAUTH_TOKEN"),
         "the subscription token is not used in this mode"
     );
-    assert_eq!(recorded.env.len(), 3);
+    assert_eq!(recorded.env.len(), 5);
 
     let argv = recorded.argv.join(" ");
-    for name in ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "HTTPS_PROXY"] {
+    for name in ["ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_API_KEY", "HTTPS_PROXY"] {
         assert!(recorded.argv.contains(&name.to_string()), "{name} is named in the argv");
     }
     for value in [GATEWAY_TOKEN, GATEWAY_URL, LONG_VALUE] {
@@ -64,7 +66,16 @@ fn a_gateway_launch_passes_every_variable_by_name() {
         .filter(|pair| pair[0] == "--env" && !pair[1].contains('='))
         .map(|pair| pair[1].as_str())
         .collect();
-    assert_eq!(named, vec!["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "HTTPS_PROXY"]);
+    assert_eq!(
+        named,
+        vec![
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
+            "ANTHROPIC_BEDROCK_BASE_URL",
+            "ANTHROPIC_API_KEY",
+            "HTTPS_PROXY",
+        ]
+    );
     assert_eq!(recorded.argv.iter().filter(|a| *a == "--mount").count(), 2);
 
     // EAC-FR-15, EAC-FR-29: nothing the launch logged carries a value.
@@ -185,23 +196,24 @@ fn a_gateway_launch_without_its_token_creates_no_container() {
     assert_eq!(runtime.launched(), 0, "no container was created");
 }
 
-/// EAC-FR-15, EAC-FR-OWPP, CCP-FR-20 (AIC-FR-XZCS, AIC-FR-QHLN) — a Bedrock
-/// gateway launch passes the Bedrock variables and the token, each by name, with
-/// their values on the client process, and no `ANTHROPIC_BASE_URL`.
+/// EAC-FR-15, EAC-FR-29, CCP-FR-20 (AIC-FR-30, AIC-FR-QHLN, AIC-FR-XZCS) — a
+/// Claude Code configured as a gateway only, with no binary path ever stored,
+/// launches with the four Bedrock variables, and the launch record names them
+/// and carries no value.
 #[test]
-fn a_bedrock_gateway_launch_passes_the_bedrock_variables() {
-    let harness = harness_for("claude_code");
-    let config = VerifyConfig {
-        path: Some("/usr/bin/claude".into()),
-        auth_mode: Some("custom_gateway".into()),
-        gateway_api: Some("bedrock".into()),
-        gateway_base_url: Some(GATEWAY_URL.into()),
-        gateway_token: Some(GATEWAY_TOKEN.into()),
-        env_vars: Some(vec!["AWS_REGION=eu-west-1".into()]),
-        ..Default::default()
-    };
-    verify_integration_impl(&harness.store, &harness.ai, "claude_code", &config)
-        .expect("gateway verifies");
+fn a_gateway_only_configuration_launches_and_logs_the_variable_names() {
+    let harness = harness_verified_with(
+        "claude_code",
+        Some(VerifyConfig {
+            auth_mode: Some("custom_gateway".into()),
+            gateway_base_url: Some(GATEWAY_URL.into()),
+            gateway_token: Some(GATEWAY_TOKEN.into()),
+            ..Default::default()
+        }),
+    );
+    let (records, _) = harness.store.load_agentic_registry().unwrap();
+    assert_eq!(records[0].binary_path, None, "no binary path is stored");
+
     let runtime = RecordingRuntime::replying(&valid_claude_stdout());
     run(&harness, runtime.clone(), task("go")).expect("runs");
     let recorded = runtime.only_run();
@@ -211,29 +223,33 @@ fn a_bedrock_gateway_launch_passes_the_bedrock_variables() {
     assert_eq!(value("CLAUDE_CODE_SKIP_BEDROCK_AUTH"), Some("1"));
     assert_eq!(value("ANTHROPIC_BEDROCK_BASE_URL"), Some(GATEWAY_URL));
     assert_eq!(value("ANTHROPIC_AUTH_TOKEN"), Some(GATEWAY_TOKEN));
-    assert_eq!(value("AWS_REGION"), Some("eu-west-1"));
     assert!(!recorded.env.contains_key("ANTHROPIC_BASE_URL"));
-    assert!(!recorded.env.contains_key("CLAUDE_CODE_OAUTH_TOKEN"));
-    assert_eq!(recorded.env.len(), 5);
+    assert_eq!(recorded.env.len(), 4);
 
-    let named: Vec<&str> = recorded
+    // The launch record of this container names the variables and nothing more.
+    let container = recorded
         .argv
         .windows(2)
-        .filter(|pair| pair[0] == "--env" && !pair[1].contains('='))
-        .map(|pair| pair[1].as_str())
-        .collect();
+        .find(|pair| pair[0] == "--name")
+        .map(|pair| pair[1].clone())
+        .expect("a container name");
+    let page = super::super::log_buffer()
+        .query(&crate::logging::LogFilter::default(), None, 20_000)
+        .expect("query");
+    let start = page
+        .records
+        .into_iter()
+        .find(|record| {
+            record.message == "agent execution starting"
+                && record.fields.get("container").and_then(|v| v.as_str()) == Some(container.as_str())
+        })
+        .expect("the launch record of this container");
     assert_eq!(
-        named,
-        vec![
-            "CLAUDE_CODE_USE_BEDROCK",
-            "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
-            "ANTHROPIC_BEDROCK_BASE_URL",
-            "ANTHROPIC_AUTH_TOKEN",
-            "AWS_REGION",
-        ]
+        start.fields.get("variables").and_then(|v| v.as_str()),
+        Some("CLAUDE_CODE_USE_BEDROCK,CLAUDE_CODE_SKIP_BEDROCK_AUTH,ANTHROPIC_BEDROCK_BASE_URL,ANTHROPIC_AUTH_TOKEN")
     );
-    let argv = recorded.argv.join(" ");
-    for value in [GATEWAY_TOKEN, GATEWAY_URL, "eu-west-1"] {
-        assert!(!argv.contains(value), "a value reached the argv");
+    let rendered = serde_json::to_string(&start).expect("serialise");
+    for value in [GATEWAY_TOKEN, GATEWAY_URL] {
+        assert!(!rendered.contains(value), "a value reached the launch record");
     }
 }

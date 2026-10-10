@@ -1,7 +1,8 @@
-//! Claude Code's Custom Gateway mode: field checks, the gateway request, and the
-//! launch environment (`AIC-agentic-integrations.md` AIC-FR-WNQR, AIC-FR-UFNB,
-//! AIC-FR-CVPW, AIC-FR-IOWS, AIC-FR-PADP, AIC-FR-DRPC, AIC-FR-XTEZ, AIC-FR-SXVA,
-//! AIC-FR-XZCS, AIC-FR-ISOC).
+//! Claude Code's Custom Gateway mode: field checks and the launch environment of
+//! a gateway that serves the Amazon Bedrock runtime API
+//! (`AIC-agentic-integrations.md` AIC-FR-WNQR, AIC-FR-UFNB, AIC-FR-CVPW,
+//! AIC-FR-IOWS, AIC-FR-QHLN, AIC-FR-XTEZ, AIC-FR-SXVA, AIC-FR-XZCS,
+//! AIC-FR-ISOC).
 
 use super::*;
 
@@ -11,8 +12,9 @@ pub const GATEWAY_SECRET_ID: &str = "claude_code_gateway";
 /// AIC-FR-CVPW: the variable name the gateway token takes when the author names
 /// none.
 pub const DEFAULT_GATEWAY_TOKEN_VAR: &str = "ANTHROPIC_AUTH_TOKEN";
-/// AIC-FR-XZCS: the variable the gateway base URL is passed under.
-pub const GATEWAY_BASE_URL_VAR: &str = "ANTHROPIC_BASE_URL";
+/// AIC-FR-XZCS / AIC-FR-XTEZ: the Anthropic API base URL variable. No launch
+/// passes it, and no author entry or token variable name may use it.
+pub const ANTHROPIC_BASE_URL_VAR: &str = "ANTHROPIC_BASE_URL";
 /// AIC-FR-XZCS: the variables that make Claude Code send Bedrock runtime
 /// requests to the gateway and sign none of them with AWS credentials.
 pub const BEDROCK_FLAG_VAR: &str = "CLAUDE_CODE_USE_BEDROCK";
@@ -21,13 +23,6 @@ pub const BEDROCK_SKIP_AUTH_VAR: &str = "CLAUDE_CODE_SKIP_BEDROCK_AUTH";
 pub const BEDROCK_BASE_URL_VAR: &str = "ANTHROPIC_BEDROCK_BASE_URL";
 /// AIC-FR-XZCS: the variable the subscription token is passed under.
 pub const OAUTH_TOKEN_VAR: &str = "CLAUDE_CODE_OAUTH_TOKEN";
-/// AIC-FR-PADP: the path appended to the gateway base URL.
-const GATEWAY_MODELS_PATH: &str = "/v1/models";
-/// AIC-FR-PADP: the variable name that makes the token travel as `x-api-key`.
-const API_KEY_VAR: &str = "ANTHROPIC_API_KEY";
-
-/// The longest network cause a typed failure carries.
-const CAUSE_LIMIT: usize = 200;
 
 /// Names the Docker client process reads, which a variable passed by name would
 /// overwrite there, plus the session-state directory variable the executor owns
@@ -54,6 +49,8 @@ const RESERVED_NAMES: &[&str] = &[
     "LOCPATH",
     "NLSPATH",
     "CLAUDE_CONFIG_DIR",
+    // AIC-FR-XTEZ: no launch passes it (AIC-FR-XZCS).
+    ANTHROPIC_BASE_URL_VAR,
 ];
 const RESERVED_PREFIXES: &[&str] = &["DOCKER_", "LD_", "DYLD_", "XDG_"];
 
@@ -80,10 +77,11 @@ pub fn is_reserved_variable(name: &str) -> bool {
 /// AIC-FR-CVPW: the token variable name a payload carries, defaulted.
 pub(super) fn resolve_token_var(raw: Option<&str>) -> Result<String, String> {
     let name = raw.map(str::trim).filter(|n| !n.is_empty()).unwrap_or(DEFAULT_GATEWAY_TOKEN_VAR);
-    // The launch sets these names itself, in one API or the other (AIC-FR-XZCS),
-    // so a token under one of them would replace that variable.
+    // The launch sets the Bedrock names itself and never passes the Anthropic
+    // base URL (AIC-FR-XZCS), so a token under one of them would replace a
+    // launch variable or pass the one name no launch passes.
     let launch_sets = [
-        GATEWAY_BASE_URL_VAR,
+        ANTHROPIC_BASE_URL_VAR,
         BEDROCK_BASE_URL_VAR,
         BEDROCK_FLAG_VAR,
         BEDROCK_SKIP_AUTH_VAR,
@@ -126,80 +124,12 @@ pub(super) fn validate_env_vars(entries: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-/// AIC-FR-PADP: the authentication style the token variable name implies.
-pub(super) fn auth_style_for(token_var: &str) -> AuthStyle {
-    if token_var == API_KEY_VAR {
-        AuthStyle::AnthropicApiKey
-    } else {
-        AuthStyle::Bearer
-    }
-}
-
-/// AIC-FR-PADP / AIC-FR-DRPC: send the one `GET <base>/v1/models` and read the
-/// answer. Returns the models the gateway listed.
-pub(super) fn check_gateway(
-    ai: &AgenticIntegrations,
-    base_url: &str,
-    token_var: &str,
-    token: &str,
-) -> Result<Vec<ModelOption>, String> {
-    ai.prober
-        .probe(&ProbeRequest {
-            base_url,
-            api_key: Some(token),
-            auth: auth_style_for(token_var),
-            models_path: GATEWAY_MODELS_PATH,
-            models_format: crate::ai_shared::ModelsFormat::Lenient,
-            report_status: true,
-        })
-        .map_err(gateway_probe_error)
-}
-
-/// AIC-FR-DRPC: the typed failure of a gateway check.
-pub(super) fn gateway_probe_error(e: ProbeError) -> String {
-    match e {
-        ProbeError::Status(code) => format!("{ERR_GATEWAY_STATUS}:{code}"),
-        // `Rejected` is a status answer by another name; the check asks for the
-        // status itself, so this arm only keeps the match total.
-        ProbeError::Rejected => format!("{ERR_GATEWAY_STATUS}:401"),
-        ProbeError::Unreachable(cause) => {
-            let cause: String = cause
-                .chars()
-                .map(|c| if c.is_control() { ' ' } else { c })
-                .take(CAUSE_LIMIT)
-                .collect();
-            format!("{ERR_GATEWAY_UNREACHABLE}:{cause}")
-        }
-        ProbeError::NotExpectedKind => ERR_GATEWAY_NOT_A_MODEL_LIST.to_string(),
-        ProbeError::TimedOut => ERR_GATEWAY_TIMED_OUT.to_string(),
-        ProbeError::TlsUntrusted(failure) => failure.wire(),
-    }
-}
-
 /// What a gateway payload settles before anything is run or written.
 pub(super) struct GatewayPlan {
     pub base_url: String,
     pub token_var: String,
     /// A token the author supplied, trimmed. `None` keeps the stored one.
     pub supplied_token: Option<String>,
-    /// AIC-FR-QHLN: the API shape the gateway serves.
-    pub api: GatewayApi,
-    /// AIC-FR-KWMV: the author accepted the gateway with no gateway check.
-    pub skip_check: bool,
-}
-
-impl GatewayPlan {
-    /// AIC-FR-PADP / AIC-FR-KWMV / AIC-FR-QHLN: only an Anthropic gateway that
-    /// the author did not accept without the check is asked for its models.
-    pub fn runs_check(&self) -> bool {
-        self.api == GatewayApi::Anthropic && !self.skip_check
-    }
-
-    /// AIC-FR-KWMV: the flag a record keeps. A Bedrock gateway is never
-    /// checked, so the flag says nothing about it and stays false.
-    pub fn check_skipped(&self) -> bool {
-        self.api == GatewayApi::Anthropic && self.skip_check
-    }
 }
 
 /// AIC-FR-UFNB / AIC-FR-CVPW / AIC-FR-IOWS: settle a gateway payload's shape,
@@ -219,10 +149,6 @@ pub(super) fn plan_gateway(
     if base_url.contains(['?', '#']) {
         return Err(ERR_BASE_URL_INVALID.into());
     }
-    let api = match config.gateway_api.as_deref() {
-        None => GatewayApi::Anthropic,
-        Some(raw) => GatewayApi::parse(raw).ok_or(ERR_WRONG_CONFIG_KIND)?,
-    };
     let token_var = resolve_token_var(config.gateway_token_var.as_deref())?;
     let supplied_token = match config.gateway_token.as_deref() {
         Some(raw) => {
@@ -247,8 +173,6 @@ pub(super) fn plan_gateway(
         base_url,
         token_var,
         supplied_token,
-        api,
-        skip_check: config.skip_gateway_check == Some(true),
     })
 }
 
@@ -323,16 +247,11 @@ pub(super) fn compose_launch_environment(
                 .as_deref()
                 .filter(|u| !u.is_empty())
                 .ok_or(ERR_REGISTRY_UNAVAILABLE)?;
-            match record.gateway_api {
-                GatewayApi::Anthropic => {
-                    set_variable(&mut variables, GATEWAY_BASE_URL_VAR, url, false);
-                }
-                GatewayApi::Bedrock => {
-                    set_variable(&mut variables, BEDROCK_FLAG_VAR, "1", false);
-                    set_variable(&mut variables, BEDROCK_SKIP_AUTH_VAR, "1", false);
-                    set_variable(&mut variables, BEDROCK_BASE_URL_VAR, url, false);
-                }
-            }
+            // AIC-FR-QHLN: the gateway serves the Amazon Bedrock runtime API,
+            // and Claude Code signs no request to it with AWS credentials.
+            set_variable(&mut variables, BEDROCK_FLAG_VAR, "1", false);
+            set_variable(&mut variables, BEDROCK_SKIP_AUTH_VAR, "1", false);
+            set_variable(&mut variables, BEDROCK_BASE_URL_VAR, url, false);
             let name = resolve_token_var(record.gateway_token_var.as_deref())
                 .unwrap_or_else(|_| DEFAULT_GATEWAY_TOKEN_VAR.to_string());
             set_variable(&mut variables, &name, credential.expose(), true);

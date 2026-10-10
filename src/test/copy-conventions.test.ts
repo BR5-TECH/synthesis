@@ -54,7 +54,7 @@ const LITERAL_EXAMPLES = new Set([
   // could not type.
   "https://relay.example.com",
   // A gateway address is a URL on the same terms (AII-FR-PHFX).
-  "https://gateway.example.com",
+  "https://llm-gateway.example.com/bedrock",
 ]);
 
 describe("a placeholder reads as a phrase in sentence case", () => {

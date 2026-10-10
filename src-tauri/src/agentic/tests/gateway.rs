@@ -1,5 +1,5 @@
 //! Claude Code's Custom Gateway mode (AIC-FR-WNQR, AIC-FR-UFNB, AIC-FR-CVPW,
-//! AIC-FR-IOWS, AIC-FR-PADP, AIC-FR-DRPC, AIC-FR-YXAB, AIC-FR-XTEZ, AIC-FR-SXVA,
+//! AIC-FR-IOWS, AIC-FR-QHLN, AIC-FR-YXAB, AIC-FR-XTEZ, AIC-FR-SXVA,
 //! AIC-FR-XZCS, AIC-FR-ISOC).
 
 use super::*;
@@ -47,7 +47,7 @@ fn value_of<'a>(variables: &'a [LaunchVariable], name: &str) -> Option<&'a Launc
     variables.iter().find(|v| v.name == name)
 }
 
-// AIC-FR-WNQR, AIC-FR-UFNB, AIC-FR-CVPW, AIC-FR-IOWS, AIC-FR-PADP, AIC-FR-YXAB:
+// AIC-FR-WNQR, AIC-FR-UFNB, AIC-FR-CVPW, AIC-FR-IOWS, AIC-FR-QHLN, AIC-FR-YXAB:
 // a gateway verification commits the mode, the normalized URL, the default
 // token variable name, and the hint, and puts the token in its own vault entry.
 #[test]
@@ -61,49 +61,10 @@ fn a_gateway_verification_commits_the_mode_the_fields_and_the_token() {
     assert_eq!(record.gateway_key_state, KeyState::Set);
     assert_eq!(record.gateway_masked_hint.as_deref(), Some("k2Qz"));
     assert_eq!(record.state, IntegrationState::Verified);
-    assert_eq!(record.models.len(), 2);
-    assert_eq!(record.models_origin, ModelsOrigin::Probed);
+    assert!(!record.models.is_empty());
+    assert_eq!(record.models_origin, ModelsOrigin::Catalog);
     assert_eq!(h.keys.get_raw("claude_code_gateway").as_deref(), Some(GATEWAY_TOKEN));
     assert_eq!(h.keys.get_raw("claude_code"), None, "the OAuth token is not touched");
-}
-
-// AIC-FR-PADP: one GET of <base>/v1/models with the token as a bearer token, and
-// as x-api-key for the ANTHROPIC_API_KEY variable name.
-#[test]
-fn the_gateway_check_asks_the_models_route_with_the_style_the_variable_name_implies() {
-    let prober = FakeProber::returning(&[("m", "M")]);
-    let h = harness(
-        FakeFs::with_executable(&["/usr/bin/claude"]),
-        FakeRunner::saying("/usr/bin/claude", "claude 2.1.4"),
-        prober.clone(),
-        FakeKeychain::new(),
-    );
-    verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).unwrap();
-    let mut config = gateway_config(Some(GATEWAY_TOKEN));
-    config.gateway_token_var = Some("ANTHROPIC_API_KEY".into());
-    verify(&h, &config).unwrap();
-
-    let calls = prober.calls.lock().unwrap().clone();
-    assert_eq!(calls.len(), 2);
-    assert_eq!(calls[0].0, "https://gateway.example.com/v1/models");
-    assert_eq!(calls[0].1.as_deref(), Some(GATEWAY_TOKEN));
-    assert_eq!(calls[0].2, AuthStyle::Bearer);
-    assert_eq!(calls[1].2, AuthStyle::AnthropicApiKey);
-}
-
-// AIC-FR-08, AIC-FR-PADP: a gateway that lists nothing degrades to the bundled
-// catalog and does not fail the verification.
-#[test]
-fn a_gateway_that_lists_no_models_falls_back_to_the_catalog() {
-    let h = harness(
-        FakeFs::with_executable(&["/usr/bin/claude"]),
-        FakeRunner::saying("/usr/bin/claude", "claude 2.1.4"),
-        FakeProber::returning(&[]),
-        FakeKeychain::new(),
-    );
-    let record = verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).unwrap();
-    assert_eq!(record.models_origin, ModelsOrigin::Catalog);
-    assert!(!record.models.is_empty());
 }
 
 // AIC-FR-UFNB: a field of the other shape is refused, never ignored.
@@ -189,40 +150,6 @@ fn a_gateway_reverification_keeps_the_stored_token() {
     assert_eq!(record.gateway_masked_hint.as_deref(), Some("k2Qz"));
     assert_eq!(record.gateway_token_var.as_deref(), Some("ANTHROPIC_AUTH_TOKEN"));
     assert!(h.keys.calls_for("claude_code_gateway").is_empty(), "the token was not rewritten");
-}
-
-// AIC-FR-DRPC, AIC-FR-06: each failure has a typed text and persists nothing.
-#[test]
-fn a_failed_gateway_check_is_typed_and_persists_nothing() {
-    let cases = vec![
-        (ProbeError::Status(404), "gateway_status:404"),
-        (ProbeError::Status(401), "gateway_status:401"),
-        (ProbeError::Unreachable("connection refused".into()), "gateway_unreachable:connection refused"),
-        (ProbeError::NotExpectedKind, "gateway_not_a_model_list"),
-        (ProbeError::TimedOut, "gateway_timed_out"),
-    ];
-    for (failure, expected) in cases {
-        let h = harness(
-            FakeFs::with_executable(&["/usr/bin/claude"]),
-            FakeRunner::saying("/usr/bin/claude", "claude 2.1.4"),
-            FakeProber::failing(failure),
-            FakeKeychain::new(),
-        );
-        assert_eq!(verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).unwrap_err(), expected);
-        assert_eq!(h.keys.get_raw("claude_code_gateway"), None, "{expected}: no token stored");
-        let (records, _) = h.store.load_agentic_registry().unwrap();
-        assert!(records.is_empty(), "{expected}: the registry is unchanged");
-    }
-}
-
-// AIC-FR-DRPC: a network cause is one bounded line.
-#[test]
-fn a_network_cause_is_one_bounded_line() {
-    let long = format!("line one\nline two {}", "x".repeat(500));
-    let text = gateway_probe_error(ProbeError::Unreachable(long));
-    assert!(text.starts_with("gateway_unreachable:line one line two"));
-    assert!(!text.contains('\n'));
-    assert!(text.len() < 260);
 }
 
 // AIC-FR-XTEZ: entries are checked, and a bad one is named by its number or its
@@ -360,9 +287,18 @@ fn the_gateway_launch_environment_has_the_url_and_the_token_and_no_oauth_token()
 
     let variables = environment_of(&h);
     let names: Vec<&str> = variables.iter().map(|v| v.name.as_str()).collect();
-    assert_eq!(names, vec!["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY"]);
-    assert_eq!(value_of(&variables, "ANTHROPIC_BASE_URL").unwrap().value.expose(), GATEWAY_URL);
-    assert!(!value_of(&variables, "ANTHROPIC_BASE_URL").unwrap().masked);
+    assert_eq!(
+        names,
+        vec![
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
+            "ANTHROPIC_BEDROCK_BASE_URL",
+            "ANTHROPIC_API_KEY",
+        ]
+    );
+    let url = value_of(&variables, "ANTHROPIC_BEDROCK_BASE_URL").unwrap();
+    assert_eq!(url.value.expose(), GATEWAY_URL);
+    assert!(!url.masked);
     let token = value_of(&variables, "ANTHROPIC_API_KEY").unwrap();
     assert_eq!(token.value.expose(), GATEWAY_TOKEN);
     assert!(token.masked);
@@ -377,7 +313,7 @@ fn the_authors_entries_follow_and_win() {
     let h = gateway_harness();
     let mut config = gateway_config(Some(GATEWAY_TOKEN));
     config.env_vars = Some(vec![
-        "ANTHROPIC_BASE_URL=https://override.example.com".into(),
+        "ANTHROPIC_BEDROCK_BASE_URL=https://override.example.com".into(),
         "SHORT=abc".into(),
         "LONG=abcdefgh".into(),
         "SHORT=xyz".into(),
@@ -385,9 +321,9 @@ fn the_authors_entries_follow_and_win() {
     verify(&h, &config).unwrap();
 
     let variables = environment_of(&h);
-    let url = value_of(&variables, "ANTHROPIC_BASE_URL").unwrap();
+    let url = value_of(&variables, "ANTHROPIC_BEDROCK_BASE_URL").unwrap();
     assert_eq!(url.value.expose(), "https://override.example.com");
-    assert_eq!(variables[0].name, "ANTHROPIC_BASE_URL", "a replaced value keeps its place");
+    assert_eq!(variables[2].name, "ANTHROPIC_BEDROCK_BASE_URL", "a replaced value keeps its place");
     assert_eq!(value_of(&variables, "SHORT").unwrap().value.expose(), "xyz");
     assert!(!value_of(&variables, "SHORT").unwrap().masked);
     assert!(value_of(&variables, "LONG").unwrap().masked);
@@ -454,12 +390,8 @@ fn the_gateway_token_and_the_entry_values_reach_no_record_or_rendering() {
     assert!(!format!("{credential:?}").contains(GATEWAY_TOKEN));
 
     // A failed verification quotes none of it either.
-    let failing = harness(
-        FakeFs::with_executable(&["/usr/bin/claude"]),
-        FakeRunner::saying("/usr/bin/claude", "claude 2.1.4"),
-        FakeProber::failing(ProbeError::Status(500)),
-        FakeKeychain::new(),
-    );
+    let failing = gateway_harness();
+    failing.keys.lock_it();
     let error = verify(&failing, &config).unwrap_err();
     assert!(!error.contains(GATEWAY_TOKEN));
 }
@@ -490,54 +422,10 @@ fn the_presence_query_covers_the_gateway_token() {
     assert!(!present.has("claude_code"), "the OAuth token was never stored");
 }
 
-// AIC-FR-DRPC, AIC-FR-06, AIC-FR-WNQR: a failed gateway verification against a
-// working subscription record changes nothing: not the mode, not the entries,
-// not a token.
+// AIC-FR-YXAB, AIC-FR-XZCS: the stored and the launched URL carry no trailing
+// slash, and the gateway is not asked.
 #[test]
-fn a_failed_gateway_verification_leaves_a_working_subscription_record_as_it_was() {
-    let prober = FakeProber::failing(ProbeError::Status(502));
-    let h = harness(
-        FakeFs::with_executable(&["/usr/bin/claude"]),
-        FakeRunner::saying("/usr/bin/claude", "claude 2.1.4"),
-        prober,
-        FakeKeychain::new(),
-    );
-    let mut first = claude_config(Some(SAMPLE_TOKEN));
-    first.env_vars = Some(vec!["KEEP=me-please".into()]);
-    verify(&h, &first).unwrap();
-    let before = stored_record(&h);
-
-    let mut gateway = gateway_config(Some(GATEWAY_TOKEN));
-    gateway.env_vars = Some(vec!["OTHER=value".into()]);
-    assert_eq!(verify(&h, &gateway).unwrap_err(), "gateway_status:502");
-
-    assert_eq!(stored_record(&h), before);
-    assert_eq!(before.auth_mode, AuthMode::Subscription);
-    assert_eq!(h.keys.get_raw("claude_code_gateway"), None);
-    assert_eq!(h.keys.get_raw("claude_code").as_deref(), Some(SAMPLE_TOKEN));
-}
-
-// AIC-FR-PADP: the gateway is asked only after the binary has verified.
-#[test]
-fn a_binary_that_fails_never_reaches_the_gateway() {
-    let prober = FakeProber::returning(&[("m", "M")]);
-    let h = harness(
-        FakeFs::with_executable(&["/usr/bin/claude"]),
-        FakeRunner::saying("/usr/bin/claude", "not the expected program"),
-        prober.clone(),
-        FakeKeychain::new(),
-    );
-    assert_eq!(
-        verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).unwrap_err(),
-        ERR_NOT_THE_EXPECTED_CLI
-    );
-    assert!(prober.calls.lock().unwrap().is_empty());
-}
-
-// AIC-FR-YXAB, AIC-FR-PADP: the stored and the requested URL carry no trailing
-// slash.
-#[test]
-fn the_base_url_is_normalized_before_it_is_stored_and_asked() {
+fn the_base_url_is_normalized_before_it_is_stored_and_launched() {
     let prober = FakeProber::returning(&[("m", "M")]);
     let h = harness(
         FakeFs::with_executable(&["/usr/bin/claude"]),
@@ -549,7 +437,9 @@ fn the_base_url_is_normalized_before_it_is_stored_and_asked() {
     config.gateway_base_url = Some("  https://gateway.example.com/  ".into());
     let record = verify(&h, &config).unwrap();
     assert_eq!(record.gateway_base_url.as_deref(), Some(GATEWAY_URL));
-    assert_eq!(prober.calls.lock().unwrap()[0].0, "https://gateway.example.com/v1/models");
+    let launch = environment_of(&h);
+    assert_eq!(value_of(&launch, "ANTHROPIC_BEDROCK_BASE_URL").unwrap().value.expose(), GATEWAY_URL);
+    assert!(prober.calls.lock().unwrap().is_empty(), "the gateway is not asked");
     assert_eq!(h.keys.calls_for("claude_code_gateway"), vec!["set"], "one whole-object write");
 }
 
@@ -602,7 +492,9 @@ fn a_blank_variable_name_means_the_default_and_a_kept_token_is_the_one_sent() {
     let mut again = gateway_config(None);
     again.gateway_token_var = Some("  ".into());
     assert_eq!(verify(&h, &again).unwrap().gateway_token_var.as_deref(), Some("ANTHROPIC_AUTH_TOKEN"));
-    assert_eq!(prober.calls.lock().unwrap()[1].1.as_deref(), Some(GATEWAY_TOKEN));
+    let launch = environment_of(&h);
+    assert_eq!(value_of(&launch, "ANTHROPIC_AUTH_TOKEN").unwrap().value.expose(), GATEWAY_TOKEN);
+    assert!(prober.calls.lock().unwrap().is_empty());
 }
 
 // AIC-FR-UFNB, AIC-FR-25: every pairing of a field with the wrong shape or the
@@ -721,7 +613,16 @@ fn the_handoff_checks_a_hand_edited_registry_again() {
     });
     let variables = environment_of(&h);
     let names: Vec<&str> = variables.iter().map(|v| v.name.as_str()).collect();
-    assert_eq!(names, vec!["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "FINE"]);
+    assert_eq!(
+        names,
+        vec![
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
+            "ANTHROPIC_BEDROCK_BASE_URL",
+            "ANTHROPIC_AUTH_TOKEN",
+            "FINE",
+        ]
+    );
     assert_eq!(value_of(&variables, "ANTHROPIC_AUTH_TOKEN").unwrap().value.expose(), GATEWAY_TOKEN);
 
     // A gateway record with no URL would send the token to the CLI's default host.
@@ -753,23 +654,23 @@ fn the_masked_flag_follows_where_the_value_came_from() {
     let h = gateway_harness();
     verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).unwrap();
     let variables = environment_of(&h);
-    assert!(!value_of(&variables, "ANTHROPIC_BASE_URL").unwrap().masked);
+    assert!(!value_of(&variables, "ANTHROPIC_BEDROCK_BASE_URL").unwrap().masked);
 
     let mut config = gateway_config(None);
     config.env_vars = Some(vec![
-        "ANTHROPIC_BASE_URL=https://override.example.com".into(),
+        "ANTHROPIC_BEDROCK_BASE_URL=https://override.example.com".into(),
         "SEVEN77=1234567".into(),
         "EIGHT88=12345678".into(),
     ]);
     verify(&h, &config).unwrap();
     let variables = environment_of(&h);
-    assert!(value_of(&variables, "ANTHROPIC_BASE_URL").unwrap().masked);
+    assert!(value_of(&variables, "ANTHROPIC_BEDROCK_BASE_URL").unwrap().masked);
     assert!(!value_of(&variables, "SEVEN77").unwrap().masked);
     assert!(value_of(&variables, "EIGHT88").unwrap().masked);
 }
 
-// AIC-FR-15, AIC-FR-24: a locked vault makes a gateway record unavailable, and a
-// missing path wins over a missing token.
+// AIC-FR-15, AIC-FR-24, AIC-FR-QHLN: a locked vault makes a gateway record
+// unavailable, and a missing binary does not matter to a gateway record.
 #[test]
 fn a_gateway_record_degrades_by_the_same_rules_as_a_subscription_record() {
     let h = gateway_harness();
@@ -779,12 +680,18 @@ fn a_gateway_record_degrades_by_the_same_rules_as_a_subscription_record() {
     let listed = list_integrations_impl(&h.store, &h.ai).unwrap();
     assert_eq!(find(&listed, "claude_code").state, IntegrationState::KeyUnavailable);
 
+    // A path stored by an earlier subscription verification stays, and its
+    // binary going away does not matter to the gateway record.
     let h = gateway_harness();
+    verify(&h, &claude_config(Some(SAMPLE_TOKEN))).unwrap();
     verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).unwrap();
-    h.keys.wipe("claude_code_gateway");
+    assert_eq!(stored_record(&h).binary_path.as_deref(), Some("/usr/bin/claude"));
     h.fs.remove("/usr/bin/claude");
     let listed = list_integrations_impl(&h.store, &h.ai).unwrap();
-    assert_eq!(find(&listed, "claude_code").state, IntegrationState::Missing);
+    assert_eq!(find(&listed, "claude_code").state, IntegrationState::Verified);
+    h.keys.wipe("claude_code_gateway");
+    let listed = list_integrations_impl(&h.store, &h.ai).unwrap();
+    assert_eq!(find(&listed, "claude_code").state, IntegrationState::KeyUnavailable);
 
     // Subscription mode with its token gone, while a gateway token is held.
     let h = gateway_harness();
@@ -796,91 +703,4 @@ fn a_gateway_record_degrades_by_the_same_rules_as_a_subscription_record() {
     assert_eq!(claude.state, IntegrationState::KeyUnavailable);
     assert_eq!(claude.key_state, KeyState::Unavailable);
     assert_eq!(claude.gateway_key_state, KeyState::Set);
-}
-
-// AIC-FR-DRPC: a refused certificate is reported as `tls_untrusted` with its
-// cause and host.
-#[test]
-fn a_refused_certificate_is_a_tls_failure_and_not_a_network_error() {
-    let failure = crate::tls::TlsFailure::new("gateway.example.com", crate::tls::TlsCause::Expired);
-    let h = harness(
-        FakeFs::with_executable(&["/usr/bin/claude"]),
-        FakeRunner::saying("/usr/bin/claude", "claude 2.1.4"),
-        FakeProber::failing(ProbeError::TlsUntrusted(failure.clone())),
-        FakeKeychain::new(),
-    );
-    assert_eq!(verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).unwrap_err(), failure.wire());
-}
-
-// AIC-FR-PADP, AIC-FR-DRPC: the production prober, against a loopback server,
-// reports a status as a status, sends `x-api-key` for the ANTHROPIC_API_KEY
-// style, reads a body that is not a model list as such, and does not follow a
-// redirect, so the token goes to no host the author did not name.
-#[test]
-fn the_production_prober_reports_statuses_and_follows_no_redirect() {
-    use crate::ai_shared::{HttpEndpointProber, ModelsFormat};
-    use std::io::{Read, Write};
-    use std::net::TcpListener;
-
-    fn serve(answer: String) -> (String, std::thread::JoinHandle<String>) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = format!("http://{}", listener.local_addr().unwrap());
-        let handle = std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut received = vec![0u8; 4096];
-            let n = stream.read(&mut received).unwrap();
-            let _ = stream.write_all(answer.as_bytes());
-            String::from_utf8_lossy(&received[..n]).to_lowercase()
-        });
-        (url, handle)
-    }
-    let respond = |status: &str, extra: &str, body: &str| {
-        format!(
-            "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n{extra}\r\n{body}",
-            body.len()
-        )
-    };
-    let probe = |url: &str, auth: AuthStyle| {
-        HttpEndpointProber.probe(&ProbeRequest {
-            base_url: url,
-            api_key: Some(GATEWAY_TOKEN),
-            auth,
-            models_path: "/v1/models",
-            models_format: ModelsFormat::Lenient,
-            report_status: true,
-        })
-    };
-
-    let (url, server) = serve(respond("404 Not Found", "", "{}"));
-    assert_eq!(probe(&url, AuthStyle::Bearer).unwrap_err(), ProbeError::Status(404));
-    let seen = server.join().unwrap();
-    assert!(seen.starts_with("get /v1/models "), "{seen}");
-    assert!(seen.contains(&format!("authorization: bearer {}", GATEWAY_TOKEN.to_lowercase())), "{seen}");
-
-    let (url, server) = serve(respond("401 Unauthorized", "", "{}"));
-    assert_eq!(probe(&url, AuthStyle::AnthropicApiKey).unwrap_err(), ProbeError::Status(401));
-    let seen = server.join().unwrap();
-    assert!(seen.contains(&format!("x-api-key: {}", GATEWAY_TOKEN.to_lowercase())), "{seen}");
-    assert!(seen.contains("anthropic-version"), "{seen}");
-    assert!(!seen.contains("authorization:"), "{seen}");
-
-    let (url, server) = serve(respond("200 OK", "", "{}"));
-    assert_eq!(probe(&url, AuthStyle::Bearer).unwrap_err(), ProbeError::NotExpectedKind);
-    server.join().unwrap();
-
-    let (url, server) = serve(respond("200 OK", "", r#"{"data":[{"id":"a"},{"id":"b"}]}"#));
-    assert_eq!(probe(&url, AuthStyle::Bearer).unwrap().len(), 2);
-    server.join().unwrap();
-
-    // A redirect to a second server: reported, and never followed.
-    let elsewhere = TcpListener::bind("127.0.0.1:0").unwrap();
-    elsewhere.set_nonblocking(true).unwrap();
-    let target = format!("http://{}/stolen", elsewhere.local_addr().unwrap());
-    let (url, server) = serve(respond("302 Found", &format!("location: {target}\r\n"), ""));
-    assert_eq!(probe(&url, AuthStyle::AnthropicApiKey).unwrap_err(), ProbeError::Status(302));
-    server.join().unwrap();
-    assert!(
-        matches!(elsewhere.accept(), Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock),
-        "the redirect target was contacted"
-    );
 }

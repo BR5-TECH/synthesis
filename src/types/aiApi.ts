@@ -115,16 +115,12 @@ export const AI_ERRORS = {
   // seeing one means the guard was bypassed.
   tokenMissing: "token_missing",
   tokenMalformed: "token_malformed",
-  // Claude Code's Custom Gateway (AIC-FR-CVPW, AIC-FR-XTEZ, AIC-FR-DRPC). The
+  // Claude Code's Custom Gateway (AIC-FR-CVPW, AIC-FR-XTEZ). The
   // wire text of the ones that follow carries a detail after a colon, so they
   // are matched by prefix in `aiErrorMessage`.
   tokenVarInvalid: "token_var_invalid",
   envVarInvalid: "env_var_invalid",
   envVarReserved: "env_var_reserved",
-  gatewayStatus: "gateway_status",
-  gatewayUnreachable: "gateway_unreachable",
-  gatewayNotAModelList: "gateway_not_a_model_list",
-  gatewayTimedOut: "gateway_timed_out",
   // Endpoint verification, both levels (AIC-FR-22 / AAP-FR-05).
   baseUrlEmpty: "base_url_empty",
   baseUrlInvalid: "base_url_invalid",

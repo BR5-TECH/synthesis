@@ -9416,31 +9416,24 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       // would have been stored, exactly as the backend does.
       const config = (a.config ?? {}) as Record<string, unknown>;
       const record = agentics.find((i) => i.vendor === a.vendor) ?? agentics[0];
-      // AIC-FR-KWMV / AII-FR-ZQTB: Custom Gateway mode. A base URL that names
-      // Bedrock stands for a gateway that does not answer `GET /v1/models`, so
-      // its check fails unless the author accepted it without the check.
+      // AIC-FR-QHLN: Custom Gateway mode. The gateway serves the Amazon
+      // Bedrock runtime API, so a verification runs no binary and asks no
+      // gateway: it checks the token and commits.
       if (record.kind === "cli" && config.authMode === "custom_gateway") {
         const baseUrl = typeof config.gatewayBaseUrl === "string" ? config.gatewayBaseUrl : "";
         const gatewayToken =
           typeof config.gatewayToken === "string" ? config.gatewayToken.trim() : null;
         const ext = record as Record<string, unknown>;
         if (gatewayToken === null && ext.gatewayKeyState !== "set") throw "token_missing";
-        // AIC-FR-QHLN: a Bedrock gateway is never asked, so it never fails the
-        // check and is never marked as accepted without it.
-        const api = config.gatewayApi === "bedrock" ? "bedrock" : "anthropic";
-        const skip = api === "anthropic" && config.skipGatewayCheck === true;
-        if (api === "anthropic" && !skip && baseUrl.includes("bedrock")) throw "gateway_status:400";
         ext.authMode = "custom_gateway";
-        ext.gatewayApi = api;
         ext.gatewayBaseUrl = baseUrl;
         ext.gatewayTokenVar = config.gatewayTokenVar ?? "ANTHROPIC_AUTH_TOKEN";
         if (gatewayToken !== null) {
           ext.gatewayKeyState = "set";
           ext.gatewayMaskedHint = gatewayToken.slice(-4);
         }
-        ext.gatewayCheckSkipped = skip;
-        if (skip || api === "bedrock") record.modelsOrigin = "catalog";
-        if (typeof config.path === "string") record.binaryPath = config.path;
+        record.modelsOrigin = "catalog";
+        record.version = null;
         record.state = "verified";
         return record;
       }

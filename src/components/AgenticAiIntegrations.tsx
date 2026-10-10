@@ -11,10 +11,9 @@ import {
   type AgenticVendorId,
   type AgenticVerifyConfig,
 } from "../types";
-import { logInfo, logWarn } from "../logging";
+import { logWarn } from "../logging";
 import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
-import { aiErrorMessage, isGatewayCheckFailure } from "./aiErrorMessage";
-import { GatewayCheckFailedDialog } from "./GatewayCheckFailedDialog";
+import { aiErrorMessage } from "./aiErrorMessage";
 import { FilterableSelect, type FilterableOption } from "./FilterableSelect";
 import {
   BACKEND_DEFAULT_LABEL,
@@ -58,16 +57,6 @@ export function AgenticAiIntegrations() {
   const [configErrors, setConfigErrors] = useState<Record<string, string>>({});
   const [actionErrors, setActionErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Record<string, Busy>>({});
-  /**
-   * AII-FR-ZQTB: the gateway verification whose check failed, while the author
-   * decides whether to accept the gateway anyway. It holds a typed token only
-   * until that decision (AII-FR-53).
-   */
-  const [gatewayRetry, setGatewayRetry] = useState<{
-    target: AgenticVendorId;
-    config: AgenticVerifyConfig;
-    message: string;
-  } | null>(null);
   /** Vendors detection has already run for, so it runs once per tab. */
   const [detected, setDetected] = useState<Record<string, boolean>>({});
   /** What detection returned per vendor, so the field can say so (AII-FR-17). */
@@ -127,10 +116,18 @@ export function AgenticAiIntegrations() {
     );
   }, []);
 
+  // AII-FR-17 / AII-FR-IUUM: the Custom Gateway sub-tab renders no binary
+  // field, so detection waits until the Subscription sub-tab is open.
+  const gatewayOpen =
+    current !== null &&
+    rendersOauthTokenField(current) &&
+    (drafts[current.vendor]?.authMode ?? current.authMode) === "custom_gateway";
+
   // AII-FR-17: a CLI tab with no stored path asks the backend to find one, once.
   // Detection persists nothing, so a value it produces is still only a candidate.
   useEffect(() => {
     if (!current || current.kind !== "cli" || detected[current.vendor]) return;
+    if (gatewayOpen) return;
     if (current.binaryPath) return;
     const target = current.vendor;
     setDetected((prev) => ({ ...prev, [target]: true }));
@@ -155,7 +152,7 @@ export function AgenticAiIntegrations() {
         setDetectionEmpty((prev) => ({ ...prev, [target]: true }));
       })
       .finally(() => setBusy((prev) => ({ ...prev, [target]: "idle" })));
-  }, [current, detected]);
+  }, [current, detected, gatewayOpen]);
 
   // AII-FR-22: editing returns the tab to an unverified presentation without
   // invoking anything.
@@ -179,11 +176,10 @@ export function AgenticAiIntegrations() {
   };
 
   // AII-FR-20 / FR-21: the explicit action, and the only one that commits.
-  // Resolves with the rejection, or with null on success.
   const submitVerify = async (
     target: AgenticVendorId,
     config: AgenticVerifyConfig,
-  ): Promise<{ error: unknown } | null> => {
+  ): Promise<void> => {
     setBusy((prev) => ({ ...prev, [target]: "verifying" }));
     setConfigErrors((prev) => ({ ...prev, [target]: "" }));
     try {
@@ -193,10 +189,8 @@ export function AgenticAiIntegrations() {
       // submission is over, so the value has no reason to still be here
       // (AII-FR-53).
       setDrafts((prev) => ({ ...prev, [target]: draftFor(updated) }));
-      return null;
     } catch (e) {
       setConfigErrors((prev) => ({ ...prev, [target]: aiErrorMessage(e) }));
-      return { error: e };
     } finally {
       setBusy((prev) => ({ ...prev, [target]: "idle" }));
     }
@@ -216,36 +210,7 @@ export function AgenticAiIntegrations() {
       kind === "cli"
         ? cliConfigFor(stored, draft)
         : { baseUrl: draft.baseUrl, apiKey: key === "" ? null : key };
-    const failure = await submitVerify(target, config);
-    // AII-FR-ZQTB: a failed gateway check, and only that failure, asks the
-    // author whether to accept the gateway without the check.
-    if (
-      failure &&
-      config.authMode === "custom_gateway" &&
-      isGatewayCheckFailure(failure.error)
-    ) {
-      logInfo(["frontend"], "gateway check failed; asking the author", {
-        vendor: target,
-      });
-      setGatewayRetry({ target, config, message: aiErrorMessage(failure.error) });
-    }
-  };
-
-  // AII-FR-ZQTB: Accept anyway sends the same payload with the check skipped
-  // (AIC-FR-KWMV). Every other route invokes nothing and keeps the failure.
-  const onGatewayRetrySettle = (accept: boolean) => {
-    const pending = gatewayRetry;
-    setGatewayRetry(null);
-    if (!pending) return;
-    // Focus goes back to the row the author was working on, and not to the
-    // start of the window.
-    document.getElementById(`agentic-gateway-token-${pending.target}`)?.focus();
-    logInfo(["frontend"], accept ? "gateway accepted without the check" : "gateway check failure kept", {
-      vendor: pending.target,
-    });
-    if (accept) {
-      void submitVerify(pending.target, { ...pending.config, skipGatewayCheck: true });
-    }
+    await submitVerify(target, config);
   };
 
   // AII-FR-23: selections apply at once. A null `turnKind` sets the default
@@ -456,56 +421,60 @@ export function AgenticAiIntegrations() {
                   }
                 />
               )}
-              <div
-                className="picker-field"
-                style={{ marginBottom: hasTokenField ? 10 : 4 }}
-              >
-                <label
-                  className="picker-field__label"
-                  htmlFor={`agentic-path-${current.vendor}`}
+              {/* AII-FR-IUUM: the Custom Gateway sub-tab runs no binary, so it
+                  renders no binary field. */}
+              {!(hasTokenField && draft.authMode === "custom_gateway") && (
+                <div
+                  className="picker-field"
+                  style={{ marginBottom: hasTokenField ? 10 : 4 }}
                 >
-                  Binary
-                </label>
-                {/* AII-FR-16: Verify occupies the same position in every tab,
-                    so this row centres its controls exactly as the token row
-                    and the API key row do. Without it Verify sits 3px higher
-                    here than on the Claude Code tab. */}
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input
-                    id={`agentic-path-${current.vendor}`}
-                    className="input input--mono"
-                    spellCheck={false}
-                    autoComplete="off"
-                    placeholder={`path to the ${current.displayName} CLI`}
-                    value={draft.path}
-                    onChange={(e) =>
-                      onEditDraft(current.vendor, { path: e.target.value })
-                    }
-                    style={{ flex: 1 }}
-                  />
-                  {/* AII-FR-18: a path of the author's own, typed or picked. */}
-                  <button
-                    className="btn btn--ghost btn--sm"
-                    onClick={() => void onBrowse(current.vendor)}
+                  <label
+                    className="picker-field__label"
+                    htmlFor={`agentic-path-${current.vendor}`}
                   >
-                    Browse…
-                  </button>
-                  {/* AII-FR-49: where a token field follows, Verify sits on it
-                      instead, so the path and the credential are submitted as
-                      one act rather than two. */}
-                  {!hasTokenField && (
-                    <button
-                      className="btn btn--default btn--sm"
-                      disabled={
-                        vendorBusy === "verifying" || vendorBusy === "detecting"
+                    Binary
+                  </label>
+                  {/* AII-FR-16: Verify occupies the same position in every tab,
+                      so this row centres its controls exactly as the token row
+                      and the API key row do. Without it Verify sits 3px higher
+                      here than on the Claude Code tab. */}
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      id={`agentic-path-${current.vendor}`}
+                      className="input input--mono"
+                      spellCheck={false}
+                      autoComplete="off"
+                      placeholder={`path to the ${current.displayName} CLI`}
+                      value={draft.path}
+                      onChange={(e) =>
+                        onEditDraft(current.vendor, { path: e.target.value })
                       }
-                      onClick={() => void onVerify(current.vendor, "cli")}
+                      style={{ flex: 1 }}
+                    />
+                    {/* AII-FR-18: a path of the author's own, typed or picked. */}
+                    <button
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => void onBrowse(current.vendor)}
                     >
-                      {vendorBusy === "verifying" ? "Verifying…" : "Verify"}
+                      Browse…
                     </button>
-                  )}
+                    {/* AII-FR-49: where a token field follows, Verify sits on it
+                        instead, so the path and the credential are submitted as
+                        one act rather than two. */}
+                    {!hasTokenField && (
+                      <button
+                        className="btn btn--default btn--sm"
+                        disabled={
+                          vendorBusy === "verifying" || vendorBusy === "detecting"
+                        }
+                        onClick={() => void onVerify(current.vendor, "cli")}
+                      >
+                        {vendorBusy === "verifying" ? "Verifying…" : "Verify"}
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* AII-FR-49 .. AII-FR-53, AII-FR-PHFX, AII-FR-EJMG: the open
                   sub-tab's credential row and the shared environment field.
@@ -750,12 +719,6 @@ export function AgenticAiIntegrations() {
             </div>
           )}
         </div>
-      )}
-      {gatewayRetry && (
-        <GatewayCheckFailedDialog
-          message={gatewayRetry.message}
-          onSettle={onGatewayRetrySettle}
-        />
       )}
     </section>
   );

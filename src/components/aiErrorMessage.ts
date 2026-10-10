@@ -1,32 +1,17 @@
 import { AI_ERRORS } from "../types";
-import { rejectionText, tlsErrorMessage, TLS_UNTRUSTED } from "../tlsError";
+import { tlsErrorMessage } from "../tlsError";
 
 /**
- * AII-FR-DKDC, AII-FR-HOKG: the failures of Claude Code's Custom Gateway. Their
- * wire text carries a detail after the first colon — a status, a network cause,
- * a variable name, or an entry number — so they are read by prefix. The detail
- * is text the backend chose; nothing the author typed is quoted back.
+ * AII-FR-DKDC, AII-FR-HOKG: the failures of Claude Code's Custom Gateway fields.
+ * Their wire text carries a detail after the first colon — a variable name or an
+ * entry number — so they are read by prefix. The detail is text the backend
+ * chose; nothing the author typed is quoted back.
  */
 function gatewayErrorMessage(raw: string): string | null {
   const colon = raw.indexOf(":");
   const code = colon === -1 ? raw : raw.slice(0, colon);
   const detail = colon === -1 ? "" : raw.slice(colon + 1);
   switch (code) {
-    case AI_ERRORS.gatewayStatus: {
-      const hint =
-        detail === "401" || detail === "403"
-          ? " Check the token and the token variable name."
-          : detail === "404"
-            ? " Check the base URL."
-            : "";
-      return `The gateway answered with HTTP ${detail}.${hint}`;
-    }
-    case AI_ERRORS.gatewayUnreachable:
-      return `The gateway could not be reached: ${detail || "no cause given"}`;
-    case AI_ERRORS.gatewayNotAModelList:
-      return "The gateway answered, but not with a model list.";
-    case AI_ERRORS.gatewayTimedOut:
-      return "The gateway did not answer in time.";
     case AI_ERRORS.tokenVarInvalid:
       return "The token variable name is not valid. Use letters, digits, and underscores, and do not start with a digit.";
     case AI_ERRORS.envVarInvalid:
@@ -36,24 +21,6 @@ function gatewayErrorMessage(raw: string): string | null {
     default:
       return null;
   }
-}
-
-/**
- * AII-FR-ZQTB: is this rejection a failure of the gateway check, and not of the
- * binary or of a field? Only the gateway check sends a request, so a refused
- * certificate in gateway mode is one too (AIC-FR-DRPC).
- */
-export function isGatewayCheckFailure(e: unknown): boolean {
-  const raw = rejectionText(e);
-  const colon = raw.indexOf(":");
-  const code = colon === -1 ? raw : raw.slice(0, colon);
-  return (
-    code === AI_ERRORS.gatewayStatus ||
-    code === AI_ERRORS.gatewayUnreachable ||
-    code === AI_ERRORS.gatewayTimedOut ||
-    code === AI_ERRORS.gatewayNotAModelList ||
-    code === TLS_UNTRUSTED
-  );
 }
 
 /**

@@ -36,6 +36,7 @@ import { Image } from "@tiptap/extension-image";
 import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Markdown } from "tiptap-markdown";
+import { LiteralBacktick } from "./markdownBacktick";
 
 /** The shape `tiptap-markdown` calls a node's serializer with. */
 type SerializerState = { text: (value: string, escape?: boolean) => void };
@@ -154,6 +155,9 @@ export function markdownExtensions(extra: Extensions = []): Extensions {
   return [
     StarterKit.configure({ undoRedo: false, text: false }),
     LiteralText,
+    // EDT-FR-FDGH: one backtick key press is one backtick, so the inline-code
+    // and code-fence input rules see what the author typed.
+    LiteralBacktick,
     // EDT-FR-68: the constructs this project's Markdown is written in, each
     // modelled so it renders as itself and round-trips as itself.
     // An image sits in the line of prose that carries it, so it must be an

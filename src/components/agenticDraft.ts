@@ -11,7 +11,6 @@ import {
   canVerifyGateway,
   envEdited,
   envTextOf,
-  gatewayModelCount,
   parseEnvText,
   type GatewayFields,
 } from "./claudeGateway";
@@ -109,7 +108,6 @@ export function claudeDraftEdited(
   if (draft.authMode === "subscription") return draft.oauthToken.trim() !== "";
   return (
     draft.gatewayToken.trim() !== "" ||
-    draft.gatewayApi !== (i.gatewayApi ?? "anthropic") ||
     draft.gatewayUrl.trim() !== (i.gatewayBaseUrl ?? "") ||
     draft.gatewayTokenVar.trim() !==
       (i.gatewayTokenVar ?? DEFAULT_GATEWAY_TOKEN_VAR)
@@ -124,7 +122,6 @@ export function draftForIntegration(i: AgenticIntegration): AgenticDraft {
     apiKey: "",
     oauthToken: "",
     authMode: i.authMode ?? "subscription",
-    gatewayApi: i.gatewayApi ?? "anthropic",
     gatewayUrl: i.gatewayBaseUrl ?? "",
     gatewayTokenVar: i.gatewayTokenVar ?? DEFAULT_GATEWAY_TOKEN_VAR,
     gatewayToken: "",
@@ -147,10 +144,29 @@ export function agenticStatus(
   detectedPath: string | null = null,
 ): Status {
   if (busy === "verifying") return { text: "Verifying…", tone: "muted" };
-  if (busy === "detecting") return { text: "Looking for the binary…", tone: "muted" };
+  // AII-FR-17: detection belongs to the Subscription sub-tab. A Custom Gateway
+  // opened while it runs does not report it.
+  const gatewayOpen = rendersOauthTokenField(integration) && draft.authMode === "custom_gateway";
+  if (busy === "detecting" && !gatewayOpen) {
+    return { text: "Looking for the binary…", tone: "muted" };
+  }
   if (error) return { text: error, tone: "warn" };
 
   if (integration.kind === "cli") {
+    // AII-FR-DKDC / AIC-FR-QHLN: a Custom Gateway runs no binary, so its status
+    // follows the gateway fields and the gateway token alone.
+    if (rendersOauthTokenField(integration) && draft.authMode === "custom_gateway") {
+      if (claudeDraftEdited(integration, draft) || integration.state === "unconfigured") {
+        return { text: "Not verified — verify this gateway before use.", tone: "muted" };
+      }
+      if (integration.state === "key_unavailable") {
+        return {
+          text: "The stored gateway token can no longer be read. Enter one and verify again.",
+          tone: "warn",
+        };
+      }
+      return { text: "Bedrock gateway · token stored · verified", tone: "ok" };
+    }
     const stored = integration.binaryPath ?? "";
     const candidate = draft.path.trim();
     // A newly typed token is an edit like any other: it returns the tab to an
@@ -186,10 +202,8 @@ export function agenticStatus(
     }
     if (integration.state === "key_unavailable") {
       return {
-        text:
-          integration.authMode === "custom_gateway"
-            ? "The stored gateway token can no longer be read. Enter one and verify again."
-            : "The stored OAuth token can no longer be read. Enter one and verify again.",
+        // A gateway record returns above, so only the OAuth token is left here.
+        text: "The stored OAuth token can no longer be read. Enter one and verify again.",
         tone: "warn",
       };
     }
@@ -197,29 +211,6 @@ export function agenticStatus(
     const origin =
       integration.pathOrigin === "detected" ? "detected" : "you supplied this path";
     const version = integration.version ? ` · ${integration.version}` : "";
-    // AII-FR-DKDC: a verified gateway says how many models it listed, or that
-    // the author accepted it with no check (AIC-FR-KWMV).
-    // AII-FR-DKDC / AIC-FR-QHLN: a Bedrock gateway has no model list to ask.
-    if (integration.authMode === "custom_gateway" && integration.gatewayApi === "bedrock") {
-      return {
-        text: `Bedrock gateway · not checked · ${origin} · verified${version}`,
-        tone: "ok",
-      };
-    }
-    if (integration.authMode === "custom_gateway" && integration.gatewayCheckSkipped) {
-      return {
-        text: `gateway not checked · accepted by you · ${origin} · verified${version}`,
-        tone: "ok",
-      };
-    }
-    if (integration.authMode === "custom_gateway") {
-      const count = gatewayModelCount(integration);
-      const models = `${count} ${count === 1 ? "model" : "models"}`;
-      return {
-        text: `gateway answered · ${models} · ${origin} · verified${version}`,
-        tone: "ok",
-      };
-    }
     return { text: `${origin} · verified${version}`, tone: "ok" };
   }
 
@@ -258,7 +249,6 @@ export function emptyDraft(): AgenticDraft {
     oauthToken: "",
     authMode: "subscription",
     gatewayUrl: "",
-    gatewayApi: "anthropic",
     gatewayTokenVar: DEFAULT_GATEWAY_TOKEN_VAR,
     gatewayToken: "",
     envText: "",
@@ -278,19 +268,23 @@ export function cliConfigFor(
   integration: AgenticIntegration | undefined,
   draft: AgenticDraft,
 ): AgenticVerifyConfig {
-  const config: AgenticVerifyConfig = { path: draft.path };
-  if (!integration || !rendersOauthTokenField(integration)) return config;
-  if (draft.authMode === "custom_gateway") {
-    config.authMode = "custom_gateway";
-    config.gatewayApi = draft.gatewayApi;
+  if (integration && rendersOauthTokenField(integration) && draft.authMode === "custom_gateway") {
+    // AII-FR-DKDC / AIC-FR-QHLN: a gateway verification runs no binary, so it
+    // carries no path.
+    const config: AgenticVerifyConfig = { authMode: "custom_gateway" };
     config.gatewayBaseUrl = draft.gatewayUrl.trim();
     config.gatewayTokenVar = draft.gatewayTokenVar.trim();
     const token = draft.gatewayToken.trim();
     if (token !== "") config.gatewayToken = token;
-  } else {
-    const token = draft.oauthToken.trim();
-    if (token !== "") config.oauthToken = token;
+    if (envEdited(integration, draft.envText)) {
+      config.envVars = parseEnvText(draft.envText).entries;
+    }
+    return config;
   }
+  const config: AgenticVerifyConfig = { path: draft.path };
+  if (!integration || !rendersOauthTokenField(integration)) return config;
+  const token = draft.oauthToken.trim();
+  if (token !== "") config.oauthToken = token;
   if (envEdited(integration, draft.envText)) {
     config.envVars = parseEnvText(draft.envText).entries;
   }

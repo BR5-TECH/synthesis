@@ -457,6 +457,10 @@ impl AgentCliExecutor {
                 // afterwards. Generated, and not sensitive.
                 "container" => container_name.as_str(),
                 "resumed" => resume_session.is_some(),
+                // EAC-FR-15 / AIC-FR-SXVA: the names of the variables passed to
+                // the container, so a reader can see which ones a turn had.
+                // Names only: a value is never logged.
+                "variables" => env_names.join(","),
                 // EAC-FR-ZKMR: which shape this launch took. Every path a turn
                 // reports means one thing in the aligned shape and another in
                 // the fallback one, so a reader who does not know which is

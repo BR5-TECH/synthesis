@@ -455,7 +455,6 @@ fn the_endpoint_prober_reports_an_untrusted_certificate_as_tls_untrusted() {
             auth: AuthStyle::Bearer,
             models_path: "/models",
             models_format: ModelsFormat::Lenient,
-            report_status: false,
         })
         .expect_err("the certificate is from no trusted root");
     assert_eq!(
@@ -480,7 +479,6 @@ fn the_openrouter_prober_reports_an_untrusted_certificate_as_tls_untrusted() {
             auth: AuthStyle::Bearer,
             models_path: "/models",
             models_format: ModelsFormat::Lenient,
-            report_status: false,
         })
         .expect_err("the certificate is from no trusted root");
     assert_eq!(

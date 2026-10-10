@@ -1,6 +1,6 @@
-//! Claude Code's Custom Gateway in front of the Amazon Bedrock runtime API
-//! (AIC-FR-QHLN, AIC-FR-UFNB, AIC-FR-PADP, AIC-FR-KWMV, AIC-FR-YXAB,
-//! AIC-FR-XZCS, AIC-FR-ISOC, AIC-FR-25).
+//! Claude Code's Custom Gateway, which serves the Amazon Bedrock runtime API and
+//! is reached from the container alone (AIC-FR-QHLN, AIC-FR-UFNB, AIC-FR-CVPW,
+//! AIC-FR-XTEZ, AIC-FR-XZCS, AIC-FR-ISOC, AIC-FR-15, AIC-FR-30).
 
 use super::*;
 
@@ -8,20 +8,18 @@ use super::*;
 const GATEWAY_TOKEN: &str = "gw-FAKE-TEST-TOKEN-NOT-A-CREDENTIAL-k2Qz";
 const GATEWAY_URL: &str = "https://llm-gateway.example.com/bedrock";
 
-fn claude_harness(prober: std::sync::Arc<FakeProber>) -> Harness {
-    harness(
-        FakeFs::with_executable(&["/usr/bin/claude"]),
-        FakeRunner::saying("/usr/bin/claude", "claude 2.1.4"),
-        prober,
-        FakeKeychain::new(),
-    )
+/// A machine with no Claude Code binary at all, and a runner and a prober that
+/// record any call made to them.
+fn no_binary_harness() -> (Harness, Arc<FakeRunner>, Arc<FakeProber>) {
+    let runner = FakeRunner::saying("/usr/bin/claude", "claude 2.1.4");
+    let prober = FakeProber::failing(ProbeError::Unreachable("must not be asked".into()));
+    let h = harness(FakeFs::with_executable(&[]), runner.clone(), prober.clone(), FakeKeychain::new());
+    (h, runner, prober)
 }
 
-fn bedrock_config(token: Option<&str>) -> VerifyConfig {
+fn gateway_config(token: Option<&str>) -> VerifyConfig {
     VerifyConfig {
-        path: Some("/usr/bin/claude".into()),
         auth_mode: Some("custom_gateway".into()),
-        gateway_api: Some("bedrock".into()),
         gateway_base_url: Some(GATEWAY_URL.into()),
         gateway_token: token.map(str::to_string),
         ..Default::default()
@@ -52,220 +50,172 @@ fn described(variables: &[LaunchVariable]) -> Vec<(String, String, bool)> {
         .collect()
 }
 
-// AIC-FR-QHLN, AIC-FR-YXAB: a Bedrock verification asks no gateway, keeps the
-// catalog, and commits the API with the other gateway fields and the token.
+// AIC-FR-QHLN, AIC-FR-UFNB, AIC-FR-YXAB: a gateway verifies on a machine with no
+// binary. It runs nothing, asks nothing, and commits the fields and the token
+// with the bundled catalog and no version.
 #[test]
-fn a_bedrock_verification_asks_no_gateway_and_commits_the_api() {
-    let prober = FakeProber::failing(ProbeError::Status(400));
-    let h = claude_harness(prober.clone());
+fn a_gateway_verifies_with_no_binary_and_runs_nothing() {
+    let (h, runner, prober) = no_binary_harness();
 
-    let record = verify(&h, &bedrock_config(Some(GATEWAY_TOKEN))).expect("verifies");
+    let record = verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).expect("verifies");
 
+    assert!(runner.calls.lock().unwrap().is_empty(), "no binary was run");
     assert!(prober.calls.lock().unwrap().is_empty(), "the gateway was not asked");
     assert_eq!(record.state, IntegrationState::Verified);
-    assert_eq!(record.gateway_api, Some(GatewayApi::Bedrock));
+    assert_eq!(record.auth_mode, Some(AuthMode::CustomGateway));
     assert_eq!(record.gateway_base_url.as_deref(), Some(GATEWAY_URL));
     assert_eq!(record.gateway_token_var.as_deref(), Some("ANTHROPIC_AUTH_TOKEN"));
     assert_eq!(record.gateway_masked_hint.as_deref(), Some("k2Qz"));
+    assert_eq!(record.gateway_key_state, KeyState::Set);
     assert_eq!(record.models_origin, ModelsOrigin::Catalog);
     assert!(!record.models.is_empty());
-    assert!(!record.gateway_check_skipped);
-    assert_eq!(stored_record(&h).gateway_api, GatewayApi::Bedrock);
+    assert_eq!(record.version, None);
+    assert_eq!(record.binary_path, None);
     assert_eq!(h.keys.get_raw("claude_code_gateway").as_deref(), Some(GATEWAY_TOKEN));
 }
 
-// AIC-FR-QHLN, AIC-FR-KWMV: the skip flag changes nothing in a Bedrock payload.
+// AIC-FR-UFNB, AIC-FR-QHLN: a path in a gateway payload is ignored, and a
+// stored path is kept as it is.
 #[test]
-fn the_skip_flag_does_not_mark_a_bedrock_gateway() {
-    let prober = FakeProber::returning(&[("m", "M")]);
-    let h = claude_harness(prober.clone());
-    let mut config = bedrock_config(Some(GATEWAY_TOKEN));
-    config.skip_gateway_check = Some(true);
+fn a_gateway_verification_ignores_the_path_and_keeps_the_stored_one() {
+    let (h, runner, _) = no_binary_harness();
+    let (mut records, active) = h.store.load_agentic_registry().unwrap();
+    records.push(AgenticRecord {
+        binary_path: Some("/opt/old/claude".into()),
+        path_origin: PathOrigin::UserSupplied,
+        ..AgenticRecord::empty("claude_code")
+    });
+    h.store.save_agentic_registry(records, active).unwrap();
+
+    let mut config = gateway_config(Some(GATEWAY_TOKEN));
+    config.path = Some("/nowhere/claude".into());
     let record = verify(&h, &config).expect("verifies");
-    assert!(prober.calls.lock().unwrap().is_empty(), "the gateway was not asked");
-    assert_eq!(record.models_origin, ModelsOrigin::Catalog);
-    assert!(!record.gateway_check_skipped);
-    assert!(!stored_record(&h).gateway_check_skipped);
+
+    assert!(runner.calls.lock().unwrap().is_empty());
+    assert_eq!(record.binary_path.as_deref(), Some("/opt/old/claude"));
+    assert_eq!(stored_record(&h).path_origin, PathOrigin::UserSupplied);
+    assert_eq!(record.state, IntegrationState::Verified, "the stored path is not checked");
 }
 
-// AIC-FR-QHLN: the field checks and the binary still run for Bedrock.
+// AIC-FR-QHLN, AIC-FR-IOWS, AIC-FR-UFNB, AIC-FR-XTEZ: the field checks still run,
+// and a refused payload persists nothing.
 #[test]
-fn a_bedrock_verification_keeps_every_other_check() {
-    let h = claude_harness(FakeProber::returning(&[("m", "M")]));
-    assert_eq!(verify(&h, &bedrock_config(None)).unwrap_err(), ERR_TOKEN_MISSING);
-    let mut no_url = bedrock_config(Some(GATEWAY_TOKEN));
+fn a_gateway_verification_keeps_every_field_check() {
+    let (h, _, _) = no_binary_harness();
+    assert_eq!(verify(&h, &gateway_config(None)).unwrap_err(), ERR_TOKEN_MISSING);
+    assert_eq!(verify(&h, &gateway_config(Some("two words"))).unwrap_err(), ERR_TOKEN_MALFORMED);
+    let mut no_url = gateway_config(Some(GATEWAY_TOKEN));
     no_url.gateway_base_url = Some(" ".into());
     assert_eq!(verify(&h, &no_url).unwrap_err(), ERR_BASE_URL_EMPTY);
-    let mut bad_var = bedrock_config(Some(GATEWAY_TOKEN));
+    let mut bad_var = gateway_config(Some(GATEWAY_TOKEN));
     bad_var.gateway_token_var = Some("1BAD".into());
     assert_eq!(verify(&h, &bad_var).unwrap_err(), ERR_TOKEN_VAR_INVALID);
-    let mut reserved = bedrock_config(Some(GATEWAY_TOKEN));
-    reserved.env_vars = Some(vec!["PATH=/tmp".into()]);
-    assert_eq!(verify(&h, &reserved).unwrap_err(), "env_var_reserved:PATH");
+    let mut bad_entry = gateway_config(Some(GATEWAY_TOKEN));
+    bad_entry.env_vars = Some(vec!["no equals sign".into()]);
+    assert_eq!(verify(&h, &bad_entry).unwrap_err(), "env_var_invalid:1");
 
-    let wrong_binary = harness(
+    let (records, _) = h.store.load_agentic_registry().unwrap();
+    assert!(records.is_empty(), "no refusal persisted anything");
+    assert_eq!(h.keys.get_raw("claude_code_gateway"), None);
+}
+
+// AIC-FR-UFNB, AIC-FR-QHLN: a payload from an older build, which still names an
+// API shape and a skip flag, verifies as a Bedrock gateway and asks nothing.
+#[test]
+fn an_older_payload_verifies_as_a_bedrock_gateway() {
+    let (h, runner, prober) = no_binary_harness();
+    let config: VerifyConfig = serde_json::from_str(&format!(
+        r#"{{"path":"/usr/bin/claude","authMode":"custom_gateway","gatewayBaseUrl":"{GATEWAY_URL}","gatewayToken":"{GATEWAY_TOKEN}","gatewayApi":"anthropic","skipGatewayCheck":true}}"#
+    ))
+    .unwrap();
+    verify(&h, &config).expect("verifies");
+    assert!(runner.calls.lock().unwrap().is_empty());
+    assert!(prober.calls.lock().unwrap().is_empty());
+    let names: Vec<String> = environment_of(&h).into_iter().map(|v| v.name.clone()).collect();
+    assert_eq!(
+        names,
+        vec!["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_SKIP_BEDROCK_AUTH", "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_AUTH_TOKEN"]
+    );
+}
+
+// AIC-FR-QHLN, AIC-FR-XZCS: a settings file written by an older build, with an
+// API shape and a skip flag on the record, loads and launches the Bedrock four.
+#[test]
+fn an_older_registry_record_launches_the_bedrock_variables() {
+    let (h, _, _) = no_binary_harness();
+    verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).unwrap();
+    let written = toml::to_string(&stored_record(&h)).unwrap();
+    let older = format!("{written}\ngatewayApi = \"anthropic\"\ngatewayCheckSkipped = true\n");
+    let read: AgenticRecord = toml::from_str(&older).expect("an older record loads");
+    let (_, active) = h.store.load_agentic_registry().unwrap();
+    h.store.save_agentic_registry(vec![read], active).unwrap();
+
+    let names: Vec<String> = environment_of(&h).into_iter().map(|v| v.name.clone()).collect();
+    assert_eq!(
+        names,
+        vec!["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_SKIP_BEDROCK_AUTH", "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_AUTH_TOKEN"]
+    );
+}
+
+// AIC-FR-06, AIC-FR-WNQR: a gateway verification that fails leaves a working
+// subscription configuration exactly as it was.
+#[test]
+fn a_failed_gateway_verification_leaves_a_subscription_record_as_it_was() {
+    let h = harness(
         FakeFs::with_executable(&["/usr/bin/claude"]),
-        FakeRunner::saying("/usr/bin/claude", "not the expected program"),
+        FakeRunner::saying("/usr/bin/claude", "claude 2.1.4"),
         FakeProber::returning(&[("m", "M")]),
         FakeKeychain::new(),
     );
-    assert_eq!(
-        verify(&wrong_binary, &bedrock_config(Some(GATEWAY_TOKEN))).unwrap_err(),
-        ERR_NOT_THE_EXPECTED_CLI
-    );
-    let (records, _) = h.store.load_agentic_registry().unwrap();
-    assert!(records.is_empty(), "no field failure persisted anything");
-    let (records, _) = wrong_binary.store.load_agentic_registry().unwrap();
-    assert!(records.is_empty(), "the binary failure persisted nothing");
-    assert_eq!(wrong_binary.keys.get_raw("claude_code_gateway"), None);
-}
-
-// AIC-FR-QHLN, AIC-FR-UFNB: an unknown API, and the API in a subscription or
-// another vendor's payload, are the wrong kind.
-#[test]
-fn the_api_outside_its_values_and_its_payload_is_the_wrong_kind() {
-    let h = claude_harness(FakeProber::returning(&[("m", "M")]));
-    for value in ["vertex", "Bedrock", " bedrock", ""] {
-        let mut unknown = bedrock_config(Some(GATEWAY_TOKEN));
-        unknown.gateway_api = Some(value.into());
-        assert_eq!(verify(&h, &unknown).unwrap_err(), ERR_WRONG_CONFIG_KIND, "{value:?}");
-    }
-
     let mut subscription = claude_config(Some(SAMPLE_TOKEN));
-    subscription.gateway_api = Some("anthropic".into());
-    assert_eq!(verify(&h, &subscription).unwrap_err(), ERR_WRONG_CONFIG_KIND);
+    subscription.env_vars = Some(vec!["HTTPS_PROXY=http://proxy:3128".into()]);
+    verify(&h, &subscription).unwrap();
+    let before = stored_record(&h);
 
-    let codex = all_clis_harness();
-    let mut for_codex = cli_config("/usr/bin/codex");
-    for_codex.gateway_api = Some("bedrock".into());
+    let mut bad_var = gateway_config(Some(GATEWAY_TOKEN));
+    bad_var.gateway_token_var = Some("1BAD".into());
+    assert_eq!(verify(&h, &bad_var).unwrap_err(), ERR_TOKEN_VAR_INVALID);
+    assert_eq!(stored_record(&h), before);
+
+    h.keys.lock_it();
     assert_eq!(
-        verify_integration_impl(&codex.store, &codex.ai, "codex", &for_codex).unwrap_err(),
-        ERR_WRONG_CONFIG_KIND
+        verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).unwrap_err(),
+        ERR_KEYCHAIN_UNAVAILABLE
     );
+    assert_eq!(stored_record(&h), before);
+    assert_eq!(h.keys.get_raw("claude_code").as_deref(), Some(SAMPLE_TOKEN));
+    assert_eq!(h.keys.get_raw("claude_code_gateway"), None);
 }
 
-// AIC-FR-QHLN, AIC-FR-PADP: an explicit or absent `anthropic` still asks the
-// gateway, and a record that stores no API reads as `anthropic`.
+// AIC-FR-XTEZ, AIC-FR-XZCS: `ANTHROPIC_BASE_URL` is reserved in subscription
+// mode too, and a hand-edited subscription entry of that name is skipped.
 #[test]
-fn an_anthropic_gateway_is_still_asked_and_is_the_default() {
-    let prober = FakeProber::returning(&[("m", "M")]);
-    let h = claude_harness(prober.clone());
-    let mut explicit = bedrock_config(Some(GATEWAY_TOKEN));
-    explicit.gateway_api = Some("anthropic".into());
-    assert_eq!(verify(&h, &explicit).unwrap().gateway_api, Some(GatewayApi::Anthropic));
-    let mut absent = bedrock_config(None);
-    absent.gateway_api = None;
-    assert_eq!(verify(&h, &absent).unwrap().gateway_api, Some(GatewayApi::Anthropic));
-    assert_eq!(prober.calls.lock().unwrap().len(), 2);
+fn subscription_mode_never_passes_anthropic_base_url_either() {
+    let h = harness(
+        FakeFs::with_executable(&["/usr/bin/claude"]),
+        FakeRunner::saying("/usr/bin/claude", "claude 2.1.4"),
+        FakeProber::returning(&[("m", "M")]),
+        FakeKeychain::new(),
+    );
+    let mut config = claude_config(Some(SAMPLE_TOKEN));
+    config.env_vars = Some(vec!["ANTHROPIC_BASE_URL=https://other.example.com".into()]);
+    assert_eq!(verify(&h, &config).unwrap_err(), "env_var_reserved:ANTHROPIC_BASE_URL");
 
-    let written = toml::to_string(&stored_record(&h)).unwrap();
-    assert!(!written.contains("gatewayApi"), "the default is not written");
-    let read: AgenticRecord = toml::from_str("vendor = \"claude_code\"\n").unwrap();
-    assert_eq!(read.gateway_api, GatewayApi::Anthropic);
-}
-
-// AIC-FR-QHLN, AIC-FR-YXAB: a Bedrock gateway is written to the settings file,
-// and reads back as Bedrock, so a relaunch does not send the token to the
-// other API.
-#[test]
-fn a_bedrock_gateway_survives_the_settings_file() {
-    let record = AgenticRecord {
-        auth_mode: AuthMode::CustomGateway,
-        gateway_api: GatewayApi::Bedrock,
-        gateway_base_url: Some(GATEWAY_URL.into()),
-        ..AgenticRecord::empty("claude_code")
-    };
-    let written = toml::to_string(&record).unwrap();
-    assert!(written.contains("gatewayApi = \"bedrock\""), "{written}");
-    let read: AgenticRecord = toml::from_str(&written).unwrap();
-    assert_eq!(read, record);
-}
-
-// AIC-FR-QHLN, AIC-FR-IOWS: a Bedrock re-verification with no token keeps the
-// stored token, its hint, and the launch environment.
-#[test]
-fn a_bedrock_reverification_keeps_the_stored_token() {
-    let prober = FakeProber::returning(&[("m", "M")]);
-    let h = claude_harness(prober.clone());
-    verify(&h, &bedrock_config(Some(GATEWAY_TOKEN))).unwrap();
-    let record = verify(&h, &bedrock_config(None)).expect("re-verifies");
-
-    assert!(prober.calls.lock().unwrap().is_empty());
-    assert_eq!(record.gateway_masked_hint.as_deref(), Some("k2Qz"));
-    assert_eq!(h.keys.calls_for("claude_code_gateway"), vec!["set"], "the token was not rewritten");
-    let token = environment_of(&h)
-        .into_iter()
-        .find(|v| v.name == "ANTHROPIC_AUTH_TOKEN")
-        .expect("the token variable");
-    assert_eq!(token.value.expose(), GATEWAY_TOKEN);
-}
-
-// AIC-FR-QHLN and the logging rule: the API field of a verification log is a
-// fixed word, and never the text a payload carried.
-#[test]
-fn the_api_log_field_never_carries_payload_text() {
-    use crate::logging::{LogBuffer, LogFilter, LogSink};
-
-    #[derive(Clone, Default)]
-    struct Silent;
-    impl LogSink for Silent {
-        fn publish(&self, _state: &crate::logging::BufferState) {}
-    }
-
-    static TEST_BUFFER: LogBuffer = LogBuffer::new();
-    let h = claude_harness(FakeProber::returning(&[("m", "M")]));
-    let smuggled = "gw-SMUGGLED-FAKE-VALUE-NOT-A-CREDENTIAL";
-    let mut config = bedrock_config(Some(GATEWAY_TOKEN));
-    config.gateway_api = Some(smuggled.into());
-    log_verify_attempt(&Silent, &TEST_BUFFER, "claude_code", &config);
-    let refused = verify(&h, &config);
-    log_verify_outcome(&Silent, &TEST_BUFFER, "claude_code", &refused, 1);
-    let accepted = verify(&h, &bedrock_config(Some(GATEWAY_TOKEN)));
-    log_verify_outcome(&Silent, &TEST_BUFFER, "claude_code", &accepted, 1);
-
-    let _ = TEST_BUFFER.take_pending_flush(Instant::now() + Duration::from_secs(1));
-    let (text, _) = TEST_BUFFER.export_text(&LogFilter::default()).unwrap();
-    assert!(text.contains("unrecognised"), "{text}");
-    assert!(text.contains("Bedrock"), "the outcome names the API");
-    for forbidden in [smuggled, GATEWAY_TOKEN, "k2Qz"] {
-        assert!(!text.contains(forbidden), "a log record carried {forbidden:?}");
-    }
-}
-
-// AIC-FR-QHLN, AIC-FR-25: only Claude Code in gateway mode reports an API.
-#[test]
-fn only_a_claude_gateway_record_reports_an_api() {
-    let h = claude_harness(FakeProber::returning(&[("m", "M")]));
-    verify(&h, &bedrock_config(Some(GATEWAY_TOKEN))).unwrap();
-    for integration in list_integrations_impl(&h.store, &h.ai).unwrap() {
-        let expected = (integration.vendor == "claude_code").then_some(GatewayApi::Bedrock);
-        assert_eq!(integration.gateway_api, expected, "{}", integration.vendor);
-    }
-
-    // A hand-edited file that puts a Bedrock gateway on another vendor's record.
+    verify(&h, &claude_config(Some(SAMPLE_TOKEN))).unwrap();
     let (mut records, active) = h.store.load_agentic_registry().unwrap();
-    records.push(AgenticRecord {
-        auth_mode: AuthMode::CustomGateway,
-        gateway_api: GatewayApi::Bedrock,
-        ..AgenticRecord::empty("codex")
-    });
+    records[0].env_vars = vec!["ANTHROPIC_BASE_URL=https://other.example.com".into()];
     h.store.save_agentic_registry(records, active).unwrap();
-    let listed = list_integrations_impl(&h.store, &h.ai).unwrap();
-    let codex = listed.iter().find(|i| i.vendor == "codex").unwrap();
-    assert_eq!(codex.gateway_api, None, "another vendor reports none");
-
-    let record = verify(&h, &claude_config(Some(SAMPLE_TOKEN))).unwrap();
-    assert_eq!(record.gateway_api, None, "a subscription record reports none");
+    let names: Vec<String> = environment_of(&h).into_iter().map(|v| v.name.clone()).collect();
+    assert_eq!(names, vec!["CLAUDE_CODE_OAUTH_TOKEN"]);
 }
 
-// AIC-FR-XZCS, AIC-FR-ISOC: the Bedrock launch environment, in order, with only
-// the token masked, and no `ANTHROPIC_BASE_URL`.
+// AIC-FR-XZCS, AIC-FR-ISOC, CCP-FR-20: the gateway launch passes the three
+// Bedrock variables and the token, in that order, with only the token masked,
+// and no `ANTHROPIC_BASE_URL`.
 #[test]
-fn the_bedrock_launch_environment_has_the_bedrock_variables() {
-    let h = claude_harness(FakeProber::returning(&[("m", "M")]));
-    let mut config = bedrock_config(Some(GATEWAY_TOKEN));
-    config.env_vars = Some(vec!["AWS_REGION=eu-west-1".into()]);
-    verify(&h, &config).unwrap();
+fn the_gateway_launch_environment_is_the_bedrock_four() {
+    let (h, _, _) = no_binary_harness();
+    verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).unwrap();
 
     assert_eq!(
         described(&environment_of(&h)),
@@ -274,92 +224,141 @@ fn the_bedrock_launch_environment_has_the_bedrock_variables() {
             ("CLAUDE_CODE_SKIP_BEDROCK_AUTH".into(), "1".into(), false),
             ("ANTHROPIC_BEDROCK_BASE_URL".into(), GATEWAY_URL.into(), false),
             ("ANTHROPIC_AUTH_TOKEN".into(), GATEWAY_TOKEN.into(), true),
-            ("AWS_REGION".into(), "eu-west-1".into(), true),
         ]
     );
 }
 
-// AIC-FR-XZCS: an author entry replaces a Bedrock variable of the same name in
-// its place, and a renamed token travels under the new name.
+// AIC-FR-XZCS: an author entry follows and replaces a Bedrock variable of the
+// same name in its place, and a renamed token travels under its name.
 #[test]
-fn an_author_entry_replaces_a_bedrock_variable() {
-    let h = claude_harness(FakeProber::returning(&[("m", "M")]));
-    let mut config = bedrock_config(Some(GATEWAY_TOKEN));
+fn an_author_entry_follows_and_replaces_a_bedrock_variable() {
+    let (h, _, _) = no_binary_harness();
+    let mut config = gateway_config(Some(GATEWAY_TOKEN));
     config.gateway_token_var = Some("GATEWAY_KEY".into());
-    config.env_vars = Some(vec!["CLAUDE_CODE_SKIP_BEDROCK_AUTH=0".into()]);
+    config.env_vars = Some(vec!["CLAUDE_CODE_SKIP_BEDROCK_AUTH=0".into(), "AWS_REGION=eu-west-1".into()]);
     verify(&h, &config).unwrap();
 
-    // AIC-FR-ISOC: a replacing entry takes the masking rule of an entry.
-    config.env_vars = Some(vec![
-        "CLAUDE_CODE_SKIP_BEDROCK_AUTH=0".into(),
-        "ANTHROPIC_BEDROCK_BASE_URL=https://other.example.com".into(),
-    ]);
-    config.gateway_token = None;
-    verify(&h, &config).unwrap();
     assert_eq!(
         described(&environment_of(&h)),
         vec![
             ("CLAUDE_CODE_USE_BEDROCK".into(), "1".into(), false),
             ("CLAUDE_CODE_SKIP_BEDROCK_AUTH".into(), "0".into(), false),
-            ("ANTHROPIC_BEDROCK_BASE_URL".into(), "https://other.example.com".into(), true),
+            ("ANTHROPIC_BEDROCK_BASE_URL".into(), GATEWAY_URL.into(), false),
             ("GATEWAY_KEY".into(), GATEWAY_TOKEN.into(), true),
+            ("AWS_REGION".into(), "eu-west-1".into(), true),
         ]
     );
 }
 
-// AIC-FR-XZCS, AIC-FR-QHLN: changing the API back to Anthropic returns the
-// launch to `ANTHROPIC_BASE_URL`, and keeps the URL, the name, and the token.
+// AIC-FR-XTEZ, AIC-FR-XZCS: `ANTHROPIC_BASE_URL` is reserved in any case, so no
+// author entry can pass it, and a hand-edited entry of that name is skipped.
 #[test]
-fn switching_back_to_anthropic_restores_the_anthropic_launch() {
-    let h = claude_harness(FakeProber::returning(&[("m", "M")]));
-    verify(&h, &bedrock_config(Some(GATEWAY_TOKEN))).unwrap();
-    let mut back = bedrock_config(None);
-    back.gateway_api = Some("anthropic".into());
-    verify(&h, &back).unwrap();
-
-    let names: Vec<String> = environment_of(&h).iter().map(|v| v.name.clone()).collect();
-    assert_eq!(names, vec!["ANTHROPIC_BASE_URL".to_string(), "ANTHROPIC_AUTH_TOKEN".to_string()]);
-    let record = stored_record(&h);
-    assert_eq!(record.gateway_api, GatewayApi::Anthropic);
-    assert_eq!(record.gateway_base_url.as_deref(), Some(GATEWAY_URL));
-    assert_eq!(record.gateway_token_var.as_deref(), Some("ANTHROPIC_AUTH_TOKEN"));
-    assert_eq!(record.gateway_masked_hint.as_deref(), Some("k2Qz"));
-    assert_eq!(h.keys.get_raw("claude_code_gateway").as_deref(), Some(GATEWAY_TOKEN));
-}
-
-// AIC-FR-UFNB: the payload names the API `gatewayApi` on the wire, and the view
-// spells it in snake case.
-#[test]
-fn the_api_has_its_wire_names() {
-    let config: VerifyConfig =
-        serde_json::from_str(r#"{"authMode":"custom_gateway","gatewayApi":"bedrock"}"#).unwrap();
-    assert_eq!(config.gateway_api.as_deref(), Some("bedrock"));
-    let view = AgenticIntegration {
-        gateway_api: Some(GatewayApi::Bedrock),
-        ..Default::default()
-    };
-    assert!(serde_json::to_string(&view).unwrap().contains(r#""gatewayApi":"bedrock""#));
-}
-
-// AIC-FR-CVPW: a token variable name that the launch sets itself is refused in
-// either API and in any case, so the token can never replace a base URL or a
-// Bedrock flag.
-#[test]
-fn a_token_variable_name_the_launch_sets_is_refused() {
-    let h = claude_harness(FakeProber::returning(&[("m", "M")]));
-    for api in ["anthropic", "bedrock"] {
-        for name in [
-            "ANTHROPIC_BASE_URL",
-            "ANTHROPIC_BEDROCK_BASE_URL",
-            "CLAUDE_CODE_USE_BEDROCK",
-            "claude_code_skip_bedrock_auth",
-        ] {
-            let mut config = bedrock_config(Some(GATEWAY_TOKEN));
-            config.gateway_api = Some(api.into());
-            config.gateway_token_var = Some(name.into());
-            assert_eq!(verify(&h, &config).unwrap_err(), ERR_TOKEN_VAR_INVALID, "{api}: {name}");
-        }
+fn no_launch_passes_anthropic_base_url() {
+    let (h, _, _) = no_binary_harness();
+    for name in ["ANTHROPIC_BASE_URL", "anthropic_base_url"] {
+        let mut config = gateway_config(Some(GATEWAY_TOKEN));
+        config.env_vars = Some(vec![format!("{name}=https://other.example.com")]);
+        assert_eq!(verify(&h, &config).unwrap_err(), format!("env_var_reserved:{name}"));
     }
-    let (records, _) = h.store.load_agentic_registry().unwrap();
-    assert!(records.is_empty(), "no refusal persisted anything");
+    verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).unwrap();
+    let (mut records, active) = h.store.load_agentic_registry().unwrap();
+    records[0].env_vars = vec!["ANTHROPIC_BASE_URL=https://other.example.com".into()];
+    h.store.save_agentic_registry(records, active).unwrap();
+
+    let names: Vec<String> = environment_of(&h).into_iter().map(|v| v.name.clone()).collect();
+    assert!(!names.iter().any(|n| n.eq_ignore_ascii_case("ANTHROPIC_BASE_URL")), "{names:?}");
+}
+
+// AIC-FR-CVPW: a token variable name that the launch sets itself, or the one no
+// launch passes, is refused in any case.
+#[test]
+fn a_token_variable_name_the_launch_owns_is_refused() {
+    let (h, _, _) = no_binary_harness();
+    for name in [
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_BEDROCK_BASE_URL",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "claude_code_skip_bedrock_auth",
+    ] {
+        let mut config = gateway_config(Some(GATEWAY_TOKEN));
+        config.gateway_token_var = Some(name.into());
+        assert_eq!(verify(&h, &config).unwrap_err(), ERR_TOKEN_VAR_INVALID, "{name}");
+    }
+}
+
+// AIC-FR-15, AIC-FR-QHLN: a gateway record's state follows its URL and its
+// token, never a binary path.
+#[test]
+fn a_gateway_state_follows_the_url_and_the_token() {
+    let (h, _, _) = no_binary_harness();
+    verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).unwrap();
+    let state = || {
+        list_integrations_impl(&h.store, &h.ai)
+            .unwrap()
+            .into_iter()
+            .find(|i| i.vendor == "claude_code")
+            .unwrap()
+    };
+    assert_eq!(state().state, IntegrationState::Verified);
+
+    h.keys.delete("claude_code_gateway").unwrap();
+    assert_eq!(state().state, IntegrationState::KeyUnavailable);
+    assert_eq!(state().gateway_key_state, KeyState::Unavailable);
+
+    let (mut records, active) = h.store.load_agentic_registry().unwrap();
+    records[0].gateway_base_url = None;
+    h.store.save_agentic_registry(records, active).unwrap();
+    assert_eq!(state().state, IntegrationState::Unconfigured);
+}
+
+// AIC-FR-30, AIC-FR-QHLN: a gateway configuration resolves an invocation with
+// no binary path.
+#[test]
+fn a_gateway_invocation_needs_no_binary_path() {
+    let (h, _, _) = no_binary_harness();
+    verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).unwrap();
+    set_active_impl(&h.store, &h.ai, "claude_code").unwrap();
+
+    match resolve_agentic_invocation(&h.store, &h.ai, "/dev/acme", None).expect("resolves") {
+        AgenticInvocation::Cli { vendor, binary_path, .. } => {
+            assert_eq!(vendor, "claude_code");
+            assert_eq!(binary_path, "");
+        }
+        other => panic!("expected a CLI invocation, got {other:?}"),
+    }
+}
+
+// AIC-FR-QHLN, AIC-FR-WNQR: a return to subscription verifies the binary again,
+// and a later gateway verification keeps the path it stored.
+#[test]
+fn subscription_still_verifies_the_binary_and_a_gateway_keeps_its_path() {
+    let runner = FakeRunner::saying("/usr/bin/claude", "claude 2.1.4");
+    let h = harness(
+        FakeFs::with_executable(&["/usr/bin/claude"]),
+        runner.clone(),
+        FakeProber::returning(&[("m", "M")]),
+        FakeKeychain::new(),
+    );
+    verify(&h, &claude_config(Some(SAMPLE_TOKEN))).expect("subscription verifies");
+    let runs = runner.calls.lock().unwrap().len();
+    assert!(runs > 0, "the subscription verification ran the binary");
+
+    // AIC-FR-30: a subscription invocation carries its path.
+    set_active_impl(&h.store, &h.ai, "claude_code").unwrap();
+    let path_of = || match resolve_agentic_invocation(&h.store, &h.ai, "/dev/acme", None).unwrap() {
+        AgenticInvocation::Cli { binary_path, .. } => binary_path,
+        other => panic!("expected a CLI invocation, got {other:?}"),
+    };
+    assert_eq!(path_of(), "/usr/bin/claude");
+    let origin = stored_record(&h).path_origin;
+
+    let record = verify(&h, &gateway_config(Some(GATEWAY_TOKEN))).expect("gateway verifies");
+    assert_eq!(runner.calls.lock().unwrap().len(), runs, "the gateway ran nothing");
+    assert_eq!(record.binary_path.as_deref(), Some("/usr/bin/claude"));
+    assert_eq!(stored_record(&h).path_origin, origin, "the path origin is kept");
+    // AIC-FR-QHLN: the gateway record carries no version and the catalog.
+    assert_eq!(record.version, None);
+    assert_eq!(record.models_origin, ModelsOrigin::Catalog);
+    // AIC-FR-30: a gateway invocation carries no path, even with one stored.
+    assert_eq!(path_of(), "");
 }

@@ -161,7 +161,6 @@ pub(super) fn verify_api(
             auth: descriptor.auth,
             models_path: descriptor.models_path,
             models_format: crate::ai_shared::ModelsFormat::Lenient,
-            report_status: false,
         })
         .map_err(agentic_probe_error)?;
 
@@ -241,8 +240,6 @@ fn carries_gateway_fields(config: &VerifyConfig) -> bool {
     config.gateway_base_url.is_some()
         || config.gateway_token_var.is_some()
         || config.gateway_token.is_some()
-        || config.gateway_api.is_some()
-        || config.skip_gateway_check.is_some()
 }
 
 /// AIC-FR-25: does the payload carry a field that only Claude Code has?
@@ -266,7 +263,7 @@ pub fn verify_integration_impl(
     // what stops a credential meant for one vendor from being handed to another.
     let mut mode = AuthMode::Subscription;
     let mut gateway: Option<GatewayPlan> = None;
-    let (mut verified, supplied_token) = match descriptor.kind {
+    let (verified, supplied_token) = match descriptor.kind {
         VendorKind::Cli => {
             if config.base_url.is_some() || config.api_key.is_some() {
                 return Err(ERR_WRONG_CONFIG_KIND.into());
@@ -299,18 +296,34 @@ pub fn verify_integration_impl(
                     validate_env_vars(entries)?;
                 }
             }
-            // Everything about the token is settled before the binary runs, so a
-            // value that is not a token costs neither a process spawn nor a
-            // keychain round trip (AIC-FR-27).
-            let supplied = if gateway.is_some() {
-                None
+            if gateway.is_some() {
+                // AIC-FR-QHLN: every turn runs Claude Code inside Docker, so a
+                // gateway verification runs no host binary and asks nothing of
+                // the gateway. The stored path is kept as it is.
+                (
+                    VerifiedConfig {
+                        binary_path: None,
+                        path_origin: PathOrigin::Unset,
+                        base_url: None,
+                        api_key: None,
+                        masked_hint: None,
+                        version: None,
+                        models: catalog_models(descriptor),
+                        models_origin: ModelsOrigin::Catalog,
+                    },
+                    None,
+                )
             } else {
-                resolve_supplied_token(ai, descriptor, config.oauth_token.as_deref())?
-            };
-            (
-                verify_cli(ai, descriptor, config.path.as_deref().unwrap_or(""))?,
-                supplied,
-            )
+                // Everything about the token is settled before the binary runs,
+                // so a value that is not a token costs neither a process spawn
+                // nor a keychain round trip (AIC-FR-27).
+                let supplied =
+                    resolve_supplied_token(ai, descriptor, config.oauth_token.as_deref())?;
+                (
+                    verify_cli(ai, descriptor, config.path.as_deref().unwrap_or(""))?,
+                    supplied,
+                )
+            }
         }
         VendorKind::Api => {
             if config.path.is_some()
@@ -330,26 +343,6 @@ pub fn verify_integration_impl(
             )
         }
     };
-
-    // AIC-FR-PADP: after the binary has verified, the gateway is asked once.
-    // The models it lists replace the bundled catalog (AIC-FR-08). AIC-FR-KWMV:
-    // an author who accepted the gateway without the check keeps the catalog.
-    // AIC-FR-QHLN: a Bedrock gateway has no model list route to ask.
-    if let Some(plan) = gateway.as_ref().filter(|plan| plan.runs_check()) {
-        let token = match plan.supplied_token.clone() {
-            Some(token) => token,
-            None => ai
-                .secrets
-                .get(GATEWAY_SECRET_ID)
-                .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
-                .ok_or(ERR_TOKEN_MISSING)?,
-        };
-        let listed = check_gateway(ai, &plan.base_url, &plan.token_var, &token)?;
-        if !listed.is_empty() {
-            verified.models = listed;
-            verified.models_origin = ModelsOrigin::Probed;
-        }
-    }
 
     let _guard = ai
         .write_lock
@@ -410,8 +403,11 @@ pub fn verify_integration_impl(
     };
     {
         let record = &mut records[index];
-        record.binary_path = verified.binary_path;
-        record.path_origin = verified.path_origin;
+        // AIC-FR-QHLN: a gateway verification keeps the stored path.
+        if gateway.is_none() {
+            record.binary_path = verified.binary_path;
+            record.path_origin = verified.path_origin;
+        }
         record.base_url = verified.base_url;
         // A new token brings a new hint; a verification that kept the stored
         // token keeps the hint describing it, because the hint describes what is
@@ -424,11 +420,7 @@ pub fn verify_integration_impl(
         if descriptor.requires_oauth_token() {
             // AIC-FR-WNQR / AIC-FR-YXAB / AIC-FR-SXVA.
             record.auth_mode = mode;
-            // AIC-FR-KWMV: a checked verification and a subscription one both
-            // clear the flag.
-            record.gateway_check_skipped = gateway.as_ref().is_some_and(GatewayPlan::check_skipped);
             if let Some(plan) = gateway.as_ref() {
-                record.gateway_api = plan.api;
                 record.gateway_base_url = Some(plan.base_url.clone());
                 record.gateway_token_var = Some(plan.token_var.clone());
                 if let Some(token) = plan.supplied_token.as_deref() {
@@ -807,11 +799,19 @@ pub fn resolve_agentic_invocation(
 
     match descriptor.kind {
         VendorKind::Cli => {
-            let binary_path = record
-                .binary_path
-                .clone()
-                .filter(|p| !p.is_empty())
-                .ok_or(ERR_NONE_SELECTED)?;
+            // AIC-FR-30 / AIC-FR-QHLN: the executor never runs the stored path,
+            // so Claude Code in gateway mode resolves with none.
+            let gateway_mode =
+                descriptor.requires_oauth_token() && record.auth_mode == AuthMode::CustomGateway;
+            let binary_path = if gateway_mode {
+                String::new()
+            } else {
+                record
+                    .binary_path
+                    .clone()
+                    .filter(|p| !p.is_empty())
+                    .ok_or(ERR_NONE_SELECTED)?
+            };
             // AIC-FR-29: a CLI invocation is a path, a model, and an effort. No
             // token is read here and none is carried out — Claude Code's stored
             // token is stored and nothing more, and transporting it to a

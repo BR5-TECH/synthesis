@@ -32,9 +32,6 @@ export type AgenticKind = "cli" | "api";
  */
 export type ClaudeAuthMode = "subscription" | "custom_gateway";
 
-/** AIC-FR-QHLN: the API shape a Claude Code gateway serves. */
-export type GatewayApi = "anthropic" | "bedrock";
-
 /** Where a stored binary path came from (AIC-FR-07). CLI kind only. */
 export type AgenticPathOrigin = "detected" | "user_supplied" | "unset";
 
@@ -149,16 +146,12 @@ export interface AgenticIntegration {
   authMode?: ClaudeAuthMode | null;
   /** Claude Code only: the stored gateway base URL (AIC-FR-YXAB). */
   gatewayBaseUrl?: string | null;
-  /** Claude Code in gateway mode only: the API shape the gateway serves (AIC-FR-QHLN). */
-  gatewayApi?: GatewayApi | null;
   /** Claude Code only: the variable the gateway token is passed under (AIC-FR-CVPW). */
   gatewayTokenVar?: string | null;
   /** Claude Code only: whether the gateway token is readable (AIC-FR-25). */
   gatewayKeyState?: KeyState;
   /** Claude Code only: the last four characters of the gateway token. */
   gatewayMaskedHint?: string | null;
-  /** Claude Code only: the author accepted the gateway with no gateway check (AIC-FR-KWMV). */
-  gatewayCheckSkipped?: boolean;
   /** Claude Code only: the author's `NAME=value` entries (AIC-FR-XTEZ). */
   envVars?: string[];
   /** Whether this vendor requires a credential at all — true for Claude Code. */
@@ -237,16 +230,12 @@ export interface AgenticVerifyConfig {
    * `wrong_config_kind`.
    */
   authMode?: ClaudeAuthMode;
-  /** Gateway mode only: absent means `anthropic` (AIC-FR-QHLN). */
-  gatewayApi?: GatewayApi;
   gatewayBaseUrl?: string | null;
   gatewayTokenVar?: string | null;
   /** Present when the author typed a new token; absent keeps the stored one (AIC-FR-IOWS). */
   gatewayToken?: string | null;
   /** Present when the entries changed; absent keeps the stored list (AIC-FR-SXVA). */
   envVars?: string[];
-  /** Gateway mode only: `true` verifies the binary and asks no gateway (AIC-FR-KWMV). */
-  skipGatewayCheck?: boolean;
 }
 
 /**

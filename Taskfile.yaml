@@ -38,7 +38,7 @@ tasks:
       - task: '{{.PLATFORM_TASK}}'
 
   build:macos:
-    desc: 'Bundle the desktop application on a macOS host: pnpm tauri build --bundles app.'
+    desc: 'Bundle the desktop application on a macOS host: pnpm tauri build --bundles app, then the linkage check.'
     dir: '{{.ROOT_DIR}}'
     preconditions:
       # A native-host task. It builds for the host it runs on, names no target
@@ -60,6 +60,10 @@ tasks:
       # The output stays in the build directory. The task installs nothing and
       # copies nothing out of the repository (TSK-FR-12).
       - pnpm tauri build --bundles app
+      # The linkage check (TSK-FR-07, NLL-FR-NPMB). A bundle that loads a
+      # library from outside the system and the bundle cannot start under the
+      # hardened runtime, so the task fails for it.
+      - sh tools/macos-linkage/check-linkage.sh src-tauri/target/release/bundle/macos/synthesis.app/Contents/MacOS/synthesis
 
   build:linux:
     desc: 'Bundle the desktop application on a Linux host: pnpm tauri build.'

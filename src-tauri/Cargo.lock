@@ -4987,6 +4987,8 @@ dependencies = [
  "ignore",
  "keyring",
  "libc",
+ "libgit2-sys",
+ "libz-sys",
  "notify-debouncer-mini",
  "notify-rust",
  "objc2",

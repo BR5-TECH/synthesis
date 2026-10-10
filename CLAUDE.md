@@ -74,4 +74,5 @@ Instrument new code with the logging helpers — `src/logging.ts` (`logDebug`/`l
 ## Toolchain
 
 - Rust pinned via `src-tauri/rust-toolchain.toml` (channel `1.95`). The dep tree requires rustc ≥ 1.95 (`rig-core` 0.44 declares it; `time-macros` and `idna_adapter` need edition 2024); older toolchains fail to build it.
+- Native libraries on macOS: every `-sys` dependency must compile its library into the executable (`vendored`/`static` feature in the `cfg(target_os = "macos")` table of `src-tauri/Cargo.toml`). The bundle is signed with the hardened runtime, so a Homebrew or other host dylib makes the app crash at launch. `task build:macos` fails on such a link (`tools/macos-linkage/check-linkage.sh`). See `specifications/infra/NLL-native-library-linkage.md`.
 - Node/pnpm: pnpm 10+ uses `pnpm-workspace.yaml` as the install-script allowlist (`allowBuilds`). Adding a new dep with a postinstall script may require allowlisting it there.

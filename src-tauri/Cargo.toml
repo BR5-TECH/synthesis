@@ -245,16 +245,21 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
   "NSScreen",
   "NSGraphics",
 ] }
-# The `ssh` feature of `git2` links OpenSSL through `libssh2-sys`. On macOS,
-# HTTPS in `libgit2` uses SecureTransport, not OpenSSL. Without `vendored`,
-# `openssl-sys` links the dylib of the host. On a developer Mac, that dylib is
-# in `/opt/homebrew`. Notifications need `signingIdentity` in
-# `tauri.conf.json`. With it, the bundle is signed with the hardened runtime.
-# Library validation then refuses the Homebrew dylib, and dyld stops the app at
-# launch. A Mac without the same Homebrew package also does not have the dylib.
-# `vendored` compiles OpenSSL into the binary. Cargo applies the feature to the
-# one `openssl-sys` in the tree, which `git2` also uses.
+# NLL-FR-VMBF, NLL-FR-LTEO: on macOS, every native library is compiled into the
+# executable. Notifications need `signingIdentity` in `tauri.conf.json`, so the
+# bundle is signed with the hardened runtime. Library validation then refuses a
+# library from the build host, for example a Homebrew dylib, and dyld stops the
+# app at launch. Without these features, each crate below can link such a
+# library: `libgit2-sys` and `libz-sys` through pkg-config, `openssl-sys`
+# through its Homebrew probe. Cargo applies each feature to the one copy of the
+# crate in the tree, which `git2` also uses. On macOS, HTTPS in `libgit2` uses
+# SecureTransport. Only `libssh2-sys` uses OpenSSL.
+# NLL-FR-AVJK: a new dependency that brings a native library adds its
+# `vendored` or `static` feature here. `task build:macos` runs
+# `tools/macos-linkage/check-linkage.sh`, which fails on a library it misses.
+libgit2-sys = { version = "0.18", features = ["vendored"] }
 openssl-sys = { version = "0.9", features = ["vendored"] }
+libz-sys = { version = "1", features = ["static"] }
 
 # Every other desktop: delivery without an activation channel. `notify-rust`'s
 # `wait_for_action` is XDG-only and its Windows path returns no handle at all,

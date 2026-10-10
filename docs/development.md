@@ -66,7 +66,7 @@ runs no platform task, builds nothing, and cross-compiles nothing.
 
 | Task | Command | Working directory | Supported host | Output |
 | --- | --- | --- | --- | --- |
-| `build:macos` | `pnpm tauri build --bundles app` | the repository root | macOS only | the `.app` bundle, under `src-tauri/target/release/bundle/macos/` |
+| `build:macos` | `pnpm tauri build --bundles app`, then `sh tools/macos-linkage/check-linkage.sh` on the bundle's executable | the repository root | macOS only | the `.app` bundle, under `src-tauri/target/release/bundle/macos/` |
 | `build:linux` | `pnpm tauri build` | the repository root | Linux only | Tauri's default Linux bundle selection, under `src-tauri/target/release/bundle/` |
 | `build:windows` | `pnpm tauri build` | the repository root | Windows only | Tauri's default Windows bundle selection, under `src-tauri/target/release/bundle/` |
 
@@ -76,6 +76,19 @@ runs no platform task, builds nothing, and cross-compiles nothing.
 `src-tauri/tauri.conf.json` configures for its host: the Debian package, the RPM
 package, and the AppImage on Linux; the MSI installer and the NSIS installer on
 Windows.
+
+**`build:macos` checks the linkage of the bundle.** After the build, it runs
+[`tools/macos-linkage/check-linkage.sh`](../tools/macos-linkage/check-linkage.sh)
+on `synthesis.app/Contents/MacOS/synthesis`. The check reads each library the
+executable loads (`otool -L`). Each library must be a system library (in
+`/System/Library/` or `/usr/lib/`) or be inside the bundle. Otherwise the task
+fails, names each library that does not pass, and states that the bundle cannot
+start. The bundle is signed with the hardened runtime, and library validation
+refuses every other library, for example a Homebrew dylib. For that reason,
+`src-tauri/Cargo.toml` compiles every native library into the executable on
+macOS (`vendored` or `static` features). A new dependency that brings a native
+library must do the same. See
+[`NLL-native-library-linkage.md`](../specifications/infra/NLL-native-library-linkage.md).
 
 **These are native-host tasks.** Each builds for the host it runs on, names no
 target triple, and configures no cross-compilation toolchain. Cross-compilation
@@ -117,7 +130,7 @@ Each host adds its own:
 
 | Host | Operating-system SDK | Compiler and linker | Bundling and signing |
 | --- | --- | --- | --- |
-| macOS | the Xcode command line tools, which carry the macOS SDK | `clang` and `ld` from those tools | The `app` target needs no extra tool. The bundle is unsigned unless the environment supplies an Apple signing identity, and this task supplies none and notarizes nothing. |
+| macOS | the Xcode command line tools, which carry the macOS SDK and `otool` | `clang` and `ld` from those tools, plus `perl` and `make` (in `/usr/bin`) to compile OpenSSL from source | The `app` target needs no extra tool. The bundle is signed ad hoc (`signingIdentity` `"-"` in `src-tauri/tauri.conf.json`) with the hardened runtime. The task supplies no Apple signing identity and notarizes nothing. |
 | Linux | the WebKitGTK 4.1 and GTK 3 development packages, which carry the headers Tauri links against | `cc` and `ld`, plus `pkg-config` to find the packages above | The Debian and RPM targets need the packaging tools of the host distribution, and the AppImage target needs network access on its first run, because the Tauri CLI obtains its tooling then. |
 | Windows | the Windows SDK, and the WebView2 runtime at run time | the MSVC build tools, which carry `link.exe` | The MSI target needs the WiX toolset and the NSIS target needs NSIS. The Tauri CLI obtains each on its first run, so that run needs network access. The installers are unsigned unless the environment supplies a signing certificate, and this task supplies none. |
 

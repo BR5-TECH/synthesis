@@ -23,7 +23,8 @@ docs/development.md   the documentation of every task
 ### The tasks
 ```text
 task build           the platform task that matches the host, and no other
-task build:macos     pnpm tauri build --bundles app      repository root, macOS host
+task build:macos     pnpm tauri build --bundles app,     repository root, macOS host
+                     then the linkage check
 task build:linux     pnpm tauri build                    repository root, Linux host
 task build:windows   pnpm tauri build                    repository root, Windows host
 task docker          the three local image builds        repository root
@@ -59,7 +60,7 @@ One value is resolved once for each invocation of `task docker`, and it is the t
 4. **TSK-FR-04** Every task runs without a prompt, reads no interactive input, and reports its outcome as its exit status: zero when every command it ran succeeded, non-zero otherwise. A User and an AI agent therefore run the same command and read the same result.
 5. **TSK-FR-05** `build` reads the operating system of the host it runs on and runs exactly one platform task: `build:macos` on macOS, `build:linux` on Linux, `build:windows` on Windows. It runs no second platform task, and it holds no build command of its own.
 6. **TSK-FR-06** `build` on a host that is none of the three fails with a non-zero exit status and one diagnostic that names the operating system it detected and the three supported hosts. It runs no platform task, builds nothing, and cross-compiles nothing.
-7. **TSK-FR-07** `build:macos` runs `pnpm tauri build --bundles app` with the repository root as its working directory. The `app` bundle target is Tauri's supported macOS `.app` bundle, and the task's output is that bundle.
+7. **TSK-FR-07** `build:macos` runs `pnpm tauri build --bundles app` and then the linkage check of `NLL-native-library-linkage.md` NLL-FR-NPMB on the bundle's main executable, both with the repository root as their working directory. The `app` bundle target is Tauri's supported macOS `.app` bundle, and the task's output is that bundle.
 8. **TSK-FR-08** `build:linux` runs `pnpm tauri build` with the repository root as its working directory. The command names no bundle target, so the output is Tauri's default Linux bundle selection.
 9. **TSK-FR-09** `build:windows` runs `pnpm tauri build` with the repository root as its working directory. The command names no bundle target, so the output is Tauri's default Windows bundle selection.
 10. **TSK-FR-10** The three platform tasks are native-host tasks. Each builds for the host it runs on, names no target triple, and configures no cross-compilation toolchain. A platform task that is started directly on a host that does not support its target fails with a non-zero exit status and one diagnostic that names the task, the host it found, and the host it needs. It does not build another platform's bundle instead.

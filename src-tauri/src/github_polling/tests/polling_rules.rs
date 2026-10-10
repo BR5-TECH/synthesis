@@ -35,6 +35,7 @@ fn a_kept_row_carries_everything_the_panel_renders() {
     assert_eq!(
         rows,
         vec![GithubReadyTask {
+            repository_host: "github.com".into(),
             repository_owner: "acme".into(),
             repository_name: "widgets".into(),
             issue_number: 12,
@@ -122,6 +123,7 @@ fn an_issue_a_shadow_draft_or_a_pending_claim_names_is_excluded() {
 
     // The same issue number in another repository is not excluded.
     let other = vec![GithubReadyTask {
+        repository_host: "github.com".into(),
         repository_owner: "other".into(),
         repository_name: "widgets".into(),
         issue_number: 1,

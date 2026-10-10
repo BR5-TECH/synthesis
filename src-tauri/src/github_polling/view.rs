@@ -22,6 +22,7 @@ pub fn shadow_rows(drafts: &[DraftSummary]) -> Vec<GithubShadowDraftRow> {
                     DraftStatus::Graduated => DraftStatus::Graduated,
                     _ => DraftStatus::GithubShadow,
                 },
+                repository_host: link.repository_host.clone(),
                 repository_owner: link.repository_owner.clone(),
                 repository_name: link.repository_name.clone(),
                 issue_number: link.issue_number,
@@ -47,6 +48,7 @@ pub fn build_view(
     let links: Vec<GithubIssueLink> = shadows
         .iter()
         .map(|row| GithubIssueLink {
+            repository_host: row.repository_host.clone(),
             repository_owner: row.repository_owner.clone(),
             repository_name: row.repository_name.clone(),
             issue_number: row.issue_number,

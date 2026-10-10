@@ -7,6 +7,7 @@ use crate::drafts::DraftStatus;
 
 fn link(number: u64) -> crate::drafts::GithubIssueLink {
     crate::drafts::GithubIssueLink {
+        repository_host: "github.com".into(),
         repository_owner: "acme".into(),
         repository_name: "widgets".into(),
         issue_number: number,
@@ -83,6 +84,7 @@ fn the_publication_repository_resolves_without_a_draft() {
     assert_eq!(
         resolved,
         PublicationRepository {
+            repository_host: "github.com".into(),
             remote_name: "origin".into(),
             repository_owner: "acme".into(),
             repository_name: "ydan-widgets".into(),

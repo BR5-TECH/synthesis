@@ -96,6 +96,7 @@ pub fn eligible_tasks(items: &[ProjectItem], repository: &RepositoryRef) -> Vec<
                 item.status.as_deref(),
             );
             eligible.then(|| GithubReadyTask {
+                repository_host: repository.host.clone(),
                 repository_owner: issue.repository_owner.clone(),
                 repository_name: issue.repository_name.clone(),
                 issue_number: issue.number,
@@ -117,10 +118,14 @@ pub fn exclude_claimed(
     tasks
         .into_iter()
         .filter(|task| {
-            let (owner, name, number) =
-                (&task.repository_owner, &task.repository_name, task.issue_number);
-            !shadows.iter().any(|link| link.names(owner, name, number))
-                && !pending.iter().any(|claim| claim.names(owner, name, number))
+            let (host, owner, name, number) = (
+                &task.repository_host,
+                &task.repository_owner,
+                &task.repository_name,
+                task.issue_number,
+            );
+            !shadows.iter().any(|link| link.names(host, owner, name, number))
+                && !pending.iter().any(|claim| claim.names(host, owner, name, number))
         })
         .collect()
 }
@@ -165,7 +170,7 @@ pub fn poll_once(
 /// GPP-FR-WOLE: the URL of one listed issue, or `issue_not_listed`.
 ///
 /// The issue must be held by the snapshot rows or by a pending claim, and its
-/// URL must be a `github.com` issue address of the polling repository.
+/// URL must be an HTTPS issue address of the polling repository on its host.
 pub fn listed_issue_url(
     number: u64,
     repository: &RepositoryRef,
@@ -176,6 +181,7 @@ pub fn listed_issue_url(
         .iter()
         .find(|t| {
             t.issue_number == number
+                && t.repository_host.eq_ignore_ascii_case(&repository.host)
                 && t.repository_owner.eq_ignore_ascii_case(&repository.owner)
                 && t.repository_name.eq_ignore_ascii_case(&repository.name)
         })
@@ -183,7 +189,7 @@ pub fn listed_issue_url(
     let from_claims = || {
         pending
             .iter()
-            .find(|c| c.names(&repository.owner, &repository.name, number))
+            .find(|c| c.names(&repository.host, &repository.owner, &repository.name, number))
             .map(|c| c.issue_url.clone())
     };
     let url = from_tasks.or_else(from_claims).ok_or(ERR_ISSUE_NOT_LISTED)?;
@@ -193,9 +199,9 @@ pub fn listed_issue_url(
     }
 }
 
-/// GPP-FR-WOLE: a `github.com` issue address of the polling repository.
+/// GPP-FR-WOLE: an HTTPS issue address of the polling repository on its host.
 pub fn is_repository_issue_url(url: &str, repository: &RepositoryRef) -> bool {
-    if !crate::github_publication::flow::is_openable_issue_url(url) {
+    if !crate::github_publication::flow::is_openable_issue_url(url, &repository.host) {
         return false;
     }
     let Some(path) = url.strip_prefix("https://").and_then(|rest| rest.split_once('/')) else {

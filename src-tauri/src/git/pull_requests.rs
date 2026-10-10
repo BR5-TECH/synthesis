@@ -6,8 +6,8 @@
 //! request's header and description, and one pull request's full timeline. Each
 //! one finds the owner and the repository of the project's primary remote,
 //! resolves the project's GitHub token (GTC-FR-09, GTC-FR-10) before any
-//! request is made, and reads `api.github.com` through the `GithubPullRequests`
-//! trait. None of them writes anything, and none of them keeps the token.
+//! request is made, and reads the API of the host of the remote through the
+//! `GithubPullRequests` trait. None of them writes anything, and none of them keeps the token.
 //!
 //! The commands are `async` and run their blocking reads on a worker thread, so
 //! a slow GitHub never holds the thread that serves `invoke` calls.
@@ -23,7 +23,7 @@ use std::time::Instant;
 use tauri::{Manager, State};
 
 use crate::changes::{self};
-use crate::github_publication::remotes::parse_github_remote;
+use crate::github_publication::remotes::parse_remote_repository;
 use crate::github_tokens::{self, GithubTokens};
 use crate::global_settings::GlobalSettingsStore;
 use crate::log_fields;
@@ -41,7 +41,7 @@ pub use model::{
     PullRequestTimelineItem,
 };
 
-/// The remote is not on `github.com`, so there are no pull requests to read.
+/// The remote is not on a GitHub host, so there are no pull requests to read.
 pub const ERR_NOT_A_GITHUB_REMOTE: &str = "not_a_github_remote";
 /// GitHub has no pull request of that number.
 pub const ERR_PULL_REQUEST_NOT_FOUND: &str = "pull_request_not_found";
@@ -55,6 +55,7 @@ const MSG_READ_DONE: &str = "pull request read finished";
 
 /// The repository a read is about, and the credential it presents.
 struct Target {
+    host: String,
     owner: String,
     repo: String,
     secret: String,
@@ -87,12 +88,17 @@ fn resolve_target(
         .find_remote(&remote_name)
         .map(|remote| remote.url().unwrap_or_default().to_string())
         .map_err(|_| ERR_NO_REMOTE_CONFIGURED.to_string())?;
-    let (owner, name) = parse_github_remote(&url)
-        .filter(|(owner, name)| is_path_safe(owner) && is_path_safe(name))
+    let parsed = parse_remote_repository(&url)
+        .filter(|parsed| is_path_safe(&parsed.owner) && is_path_safe(&parsed.repo))
+        .filter(|parsed| {
+            github_tokens::is_github_host(&parsed.host, &github_tokens::known_github_hosts(store))
+        })
         .ok_or_else(|| ERR_NOT_A_GITHUB_REMOTE.to_string())?;
-    // The secret exists only for the length of this operation (GTC-FR-09).
-    let secret = github_tokens::resolve_github_token_secret(store, tokens, project_key)?;
-    Ok(Target { owner, repo: name, secret })
+    // The secret exists only for the length of this operation (GTC-FR-09). A
+    // token of another host is refused before any request (GTC-FR-FSLC).
+    let secret =
+        github_tokens::resolve_github_token_secret(store, tokens, project_key, &parsed.host)?;
+    Ok(Target { host: parsed.host, owner: parsed.owner, repo: parsed.repo, secret })
 }
 
 /// The typed error of a failed request. `missing` is what a 404 means to the
@@ -128,8 +134,9 @@ fn run_reported<S, T>(
     buffer: &'static LogBuffer,
     operation: &str,
     mut fields: Fields,
+    client: &dyn GithubPullRequests,
     resolve: impl FnOnce() -> Result<Target, String>,
-    work: impl FnOnce(&Target) -> Result<T, String>,
+    work: impl FnOnce(&Target, &dyn GithubPullRequests) -> Result<T, String>,
     outcome: impl FnOnce(&T) -> Fields,
 ) -> Result<T, String>
 where
@@ -142,7 +149,11 @@ where
     let result = resolve().and_then(|target| {
         fields.insert("owner".to_string(), serde_json::json!(target.owner));
         fields.insert("repo".to_string(), serde_json::json!(target.repo));
-        work(&target)
+        fields.insert("host".to_string(), serde_json::json!(target.host));
+        // The client that sends the request is the one of the host of the
+        // remote (GTC-FR-XUAC).
+        let scoped = client.for_host(&target.host);
+        work(&target, scoped.as_deref().unwrap_or(client))
     });
     fields.insert("durationMs".to_string(), serde_json::json!(duration_ms(started)));
     match &result {
@@ -199,8 +210,9 @@ where
         buffer,
         "list_pull_requests",
         log_fields! { "state" => state },
+        client,
         || resolve_target(root, store, tokens, project_key),
-        |target| {
+        |target, client| {
             let path = format!(
                 "/repos/{}/{}/pulls?state={state}&sort=updated&direction=desc",
                 target.owner, target.repo
@@ -244,8 +256,9 @@ where
         buffer,
         "get_pull_request_detail",
         log_fields! { "number" => id },
+        client,
         || resolve_target(root, store, tokens, project_key),
-        |target| {
+        |target, client| {
             let path = format!("/repos/{}/{}/pulls/{id}", target.owner, target.repo);
             let body = client
                 .get_json(&target.secret, &path)
@@ -282,8 +295,9 @@ where
         buffer,
         "list_pull_request_timeline",
         log_fields! { "number" => id },
+        client,
         || resolve_target(root, store, tokens, project_key),
-        |target| {
+        |target, client| {
             let base = format!("/repos/{}/{}", target.owner, target.repo);
             let read = |path: String| {
                 read_pages(client, &target.secret, &path)

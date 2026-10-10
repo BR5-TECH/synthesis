@@ -32,8 +32,6 @@ pub const ERR_PULL_REQUEST_REJECTED: &str = "pull_request_rejected";
 /// The words GitHub uses when a pull request for the same branches is open.
 const ALREADY_EXISTS: &str = "pull request already exists";
 
-/// The only host a created pull request's page may be on.
-const PAGE_PREFIX: &str = "https://github.com/";
 
 /// GTC-FR-YQAE: the typed error of a failed write.
 fn write_error(failure: GithubWriteFailure) -> String {
@@ -101,8 +99,9 @@ where
         buffer,
         "create_pull_request",
         log_fields! { "head" => head, "base" => base, "draft" => draft },
+        client,
         || resolve_target(root, store, tokens, project_key),
-        |target| {
+        |target, client| {
             let path = format!("/repos/{}/{}/pulls", target.owner, target.repo);
             let request = json!({
                 "title": title,
@@ -114,7 +113,7 @@ where
             let answer = client
                 .post_json(&target.secret, &path, &request)
                 .map_err(write_error)?;
-            created_from_json(&answer)
+            created_from_json(&answer, &target.host)
                 .ok_or_else(|| github_tokens::ERR_GITHUB_UNREACHABLE.to_string())
         },
         |created| log_fields! { "number" => created.number },
@@ -123,10 +122,12 @@ where
 
 /// The number and the page of the pull request GitHub answered with. Nothing
 /// else of the answer is kept.
-fn created_from_json(value: &serde_json::Value) -> Option<CreatedPullRequest> {
+fn created_from_json(value: &serde_json::Value, host: &str) -> Option<CreatedPullRequest> {
     let number = value.get("number")?.as_u64()?;
     let url = value.get("html_url")?.as_str()?;
-    url.starts_with(PAGE_PREFIX)
+    // The only host a created pull request's page may be on is the host of the
+    // remote (GTC-FR-XUAC).
+    url.starts_with(&format!("https://{host}/"))
         .then(|| CreatedPullRequest { number, url: url.to_string() })
 }
 

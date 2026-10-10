@@ -36,6 +36,12 @@ export interface GithubTokenRecord {
   scopes: string[];
   /** The secret's last four characters. */
   maskedHint: string;
+  /**
+   * GTS host: the normalized GitHub host this token belongs to, for example
+   * `github.com` or `company.ghe.com`. Treat a missing or empty value as
+   * `github.com` (see `githubHostOf`).
+   */
+  host: string;
   addedAt: string;
   lastVerifiedAt: string | null;
   state: GithubTokenState;
@@ -90,7 +96,28 @@ export const GITHUB_TOKEN_ERRORS = {
    * rather than to add one.
    */
   identityUnresolved: "github_identity_unresolved",
+  /** The domain typed in the Add token dialog is not a valid host (GHA-FR-OGNL). */
+  invalidHost: "invalid_host",
+  /**
+   * The token of the project belongs to another host than the remote of the
+   * project (GHA-FR-LBLM). It is not a selection problem, so it never opens the
+   * picker.
+   */
+  hostMismatch: "github_host_mismatch",
 } as const;
+
+/** GHA-FR-LBLM: the words every surface uses for `github_host_mismatch`. */
+export const GITHUB_HOST_MISMATCH_MESSAGE =
+  "The project token belongs to another GitHub host than this remote. Pick or add a token for the host of the remote.";
+
+/** The host of `github.com`, which is the default and is not shown in the UI. */
+export const DEFAULT_GITHUB_HOST = "github.com";
+
+/** The host of a token record. A missing or empty host means `github.com`. */
+export function githubHostOf(token: { host?: string | null }): string {
+  const host = (token.host ?? "").trim().toLowerCase();
+  return host === "" ? DEFAULT_GITHUB_HOST : host;
+}
 
 /**
  * The typed errors a remote operation rejects with beyond the token vocabulary

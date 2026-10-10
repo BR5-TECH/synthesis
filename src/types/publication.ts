@@ -19,6 +19,7 @@ export type PublicationErrorCode =
   | "issues_disabled"
   | "issues_create_forbidden"
   | "token_unavailable"
+  | "github_host_mismatch"
   | "tls_untrusted"
   | "attempt_in_progress"
   | "no_attempt"
@@ -118,6 +119,8 @@ export interface PublicationMetadata {
  */
 export interface PublicationRecord {
   provider: string;
+  /** Normalized host. A record stored without one reads as `github.com`. */
+  repositoryHost?: string;
   repositoryOwner: string;
   repositoryName: string;
   issueNumber: number;
@@ -134,6 +137,8 @@ export type PublicationAttemptState = "open" | "awaiting_choice";
 /** GHP-FR-RUYT: what is on disk before the first GitHub request. */
 export interface PublicationAttempt {
   marker: string;
+  /** Normalized host. An attempt stored without one reads as `github.com`. */
+  repositoryHost?: string;
   remoteName: string;
   remoteUrl: string;
   repositoryOwner: string;
@@ -153,12 +158,15 @@ export type PublicationRemoteEligibility =
   | "issues_disabled"
   | "issues_create_forbidden"
   | "token_unavailable"
+  | "host_mismatch"
   | "tls_untrusted";
 
 export interface PublicationRemote {
   name: string;
   url: string;
   kind: "github" | "other";
+  /** Null when `kind` is `other`. */
+  repositoryHost: string | null;
   repositoryOwner: string | null;
   repositoryName: string | null;
   eligibility: PublicationRemoteEligibility;

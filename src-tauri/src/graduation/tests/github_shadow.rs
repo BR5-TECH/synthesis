@@ -9,6 +9,7 @@ impl Fixture {
         let access = self.app.state::<crate::fs::FsAccessState>().get().expect("an instance");
         let root = crate::fs::RootFs::new(self.root(), access);
         let link = crate::drafts::GithubIssueLink {
+            repository_host: "github.com".into(),
             repository_owner: "acme".into(),
             repository_name: "widgets".into(),
             issue_number: 4,

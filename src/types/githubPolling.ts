@@ -34,6 +34,7 @@ export interface GithubPollingConfiguration {
 
 /** GPP-FR-XSKT: one eligible issue of the last successful poll. */
 export interface GithubReadyTask {
+  repositoryHost: string;
   repositoryOwner: string;
   repositoryName: string;
   issueNumber: number;
@@ -44,6 +45,7 @@ export interface GithubReadyTask {
 
 /** GPP-FR-DHQM: a claim whose local steps are not acknowledged yet. */
 export interface GithubPendingClaim {
+  repositoryHost: string;
   repositoryOwner: string;
   repositoryName: string;
   issueNumber: number;
@@ -58,6 +60,7 @@ export interface GithubShadowDraftRow {
   draftId: string;
   name: string;
   status: "github_shadow" | "graduated";
+  repositoryHost: string;
   repositoryOwner: string;
   repositoryName: string;
   issueNumber: number;
@@ -71,7 +74,7 @@ export interface GithubShadowDraftRow {
 export interface GithubPollingView {
   settings: GithubPollingSettings;
   configuration: GithubPollingConfiguration;
-  repository: { owner: string; name: string } | null;
+  repository: { host: string; owner: string; name: string } | null;
   polling: boolean;
   tasks: GithubReadyTask[];
   stale: boolean;

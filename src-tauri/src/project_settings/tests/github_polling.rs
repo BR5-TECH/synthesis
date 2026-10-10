@@ -14,6 +14,7 @@ fn fresh() -> (TempDir, crate::fs::RootFs) {
 
 fn claim(number: u64, draft: Option<&str>) -> GithubPendingClaim {
     GithubPendingClaim {
+        repository_host: "github.com".into(),
         repository_owner: "acme".into(),
         repository_name: "widgets".into(),
         issue_number: number,

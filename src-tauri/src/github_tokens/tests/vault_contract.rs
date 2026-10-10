@@ -27,7 +27,7 @@ fn gts_ts18_legacy_secrets_are_adopted_on_the_first_read() {
     );
     store.save_github_token_binding("proj", "a").unwrap();
 
-    let secret = resolve_github_token_secret(&store, &tokens, "proj").unwrap();
+    let secret = resolve_github_token_secret(&store, &tokens, "proj", "github.com").unwrap();
 
     assert_eq!(secret, "ghp_secret_a");
     assert!(keyring.legacy(LEGACY_KEYCHAIN_SERVICE, "a").is_none());
@@ -111,7 +111,7 @@ fn gts_ts15_every_vault_write_failure_is_one_keychain_unavailable() {
             FakeVerifier::accepting("ghp_new_secret", "raver119", &["repo"]),
         );
 
-        let err = match add_token_impl(&store, &tokens, "second", "ghp_new_secret") {
+        let err = match add_token_impl(&store, &tokens, "second", "ghp_new_secret", "") {
             Err(err) => err,
             Ok(record) => panic!("provoked {name} but the add succeeded: {}", record.id),
         };
@@ -179,7 +179,7 @@ fn asv_ts05_the_binding_is_in_the_file_and_the_secret_is_in_the_vault() {
 
     // A stored token, a binding for the project, and a project-scoped
     // secret written straight at its own vault path.
-    let added = add_token_impl(&store, &tokens, "work", "ghp_supersecret1234").unwrap();
+    let added = add_token_impl(&store, &tokens, "work", "ghp_supersecret1234", "").unwrap();
     set_binding_impl(&store, "acme", &added.id).unwrap();
     vault
         .apply_secret_mutations(&[Mutation::Set {
@@ -229,7 +229,7 @@ fn gts_ts15_every_vault_failure_refuses_a_read_the_same_way() {
         store.save_github_token_binding("proj", "a").unwrap();
 
         assert_eq!(
-            resolve_github_token_secret(&store, &tokens, "proj"),
+            resolve_github_token_secret(&store, &tokens, "proj", "github.com"),
             Err(ERR_KEYCHAIN_UNAVAILABLE.to_string()),
             "provoked {name}"
         );
@@ -258,9 +258,9 @@ fn no_vault_error_code_reaches_the_ipc_boundary() {
         store.save_github_token_binding("proj", "a").unwrap();
 
         let errors = [
-            add_token_impl(&store, &tokens, "second", "ghp_new_secret").err(),
+            add_token_impl(&store, &tokens, "second", "ghp_new_secret", "").err(),
             remove_token_impl(&store, &tokens, "a").err(),
-            resolve_github_token_secret(&store, &tokens, "proj").err(),
+            resolve_github_token_secret(&store, &tokens, "proj", "github.com").err(),
             validate_token_impl(&store, &tokens, "a").err(),
         ];
         for error in errors.into_iter().flatten() {
@@ -297,7 +297,7 @@ fn a_malformed_vault_value_does_not_refuse_an_add() {
         FakeVerifier::accepting("ghp_new_secret", "raver119", &["repo"]),
     );
 
-    let added = add_token_impl(&store, &tokens, "work", "ghp_new_secret").unwrap();
+    let added = add_token_impl(&store, &tokens, "work", "ghp_new_secret", "").unwrap();
 
     assert_eq!(added.label, "work");
     let object = keyring.object();
@@ -306,7 +306,7 @@ fn a_malformed_vault_value_does_not_refuse_an_add() {
         Some("not an AppSecrets object")
     );
     assert_eq!(
-        resolve_github_token_secret(&store, &tokens, "proj").unwrap(),
+        resolve_github_token_secret(&store, &tokens, "proj", "github.com").unwrap(),
         "ghp_new_secret"
     );
 }

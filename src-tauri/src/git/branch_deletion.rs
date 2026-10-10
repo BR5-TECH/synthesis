@@ -340,19 +340,22 @@ pub fn delete_branch_at<R: tauri::Runtime>(
     // project's token needs one (GTC-FR-09), and only when there is a remote
     // branch to delete.
     let token = match (&resolved.remote, delete_remote) {
-        (Some(target), true) if is_github_https_remote(&target.url) => Some(
-            crate::github_tokens::resolve_github_token_secret(store, tokens, project_key)
-                .inspect_err(|error| {
-                    log_failure(
-                        app,
-                        buffer,
-                        TRANSFER,
-                        MSG_DELETE_REFUSED,
-                        error,
-                        log_fields! { "branch" => resolved.branch.as_str() },
-                    )
-                })?,
-        ),
+        (Some(target), true) => crate::github_tokens::resolve_remote_token(
+            store,
+            tokens,
+            project_key,
+            &target.url,
+        )
+        .inspect_err(|error| {
+            log_failure(
+                app,
+                buffer,
+                TRANSFER,
+                MSG_DELETE_REFUSED,
+                error,
+                log_fields! { "branch" => resolved.branch.as_str() },
+            )
+        })?,
         _ => None,
     };
 

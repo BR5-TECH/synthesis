@@ -283,7 +283,14 @@ impl SessionSlot {
             return;
         }
         let claims = &mut self.session.unsaved_claims;
-        claims.retain(|c| !c.names(&claim.repository_owner, &claim.repository_name, claim.issue_number));
+        claims.retain(|c| {
+            !c.names(
+                &claim.repository_host,
+                &claim.repository_owner,
+                &claim.repository_name,
+                claim.issue_number,
+            )
+        });
         claims.push(claim);
     }
 
@@ -294,7 +301,7 @@ impl SessionSlot {
         }
         let claims = &mut self.session.unsaved_claims;
         let before = claims.len();
-        claims.retain(|c| !c.names(&repository.owner, &repository.name, number));
+        claims.retain(|c| !c.names(&repository.host, &repository.owner, &repository.name, number));
         claims.len() != before
     }
 }

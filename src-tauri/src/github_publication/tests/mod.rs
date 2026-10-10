@@ -17,6 +17,7 @@ use super::*;
 mod attempts;
 mod client_rules;
 mod eligibility;
+mod enterprise_hosts;
 mod github_shadow;
 mod publication_choice;
 mod publication_commands;
@@ -359,6 +360,7 @@ impl GithubIssues for FakeGithub {
 /// The one eligible GitHub remote most tests publish to.
 pub(super) fn origin() -> PublicationRemote {
     PublicationRemote {
+        repository_host: Some("github.com".to_string()),
         name: "origin".to_string(),
         url: "github.com/acme/widgets".to_string(),
         kind: RemoteKind::Github,

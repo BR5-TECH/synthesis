@@ -110,10 +110,11 @@ pub fn github_shadow_drafts(root: &fs::RootFs) -> Vec<DraftSummary> {
         .collect()
 }
 
-/// GPP-FR-XPUO: the shadow draft that names issue `number` of `owner/name`,
-/// if one exists.
+/// GPP-FR-XPUO: the shadow draft that names issue `number` of `owner/name` on
+/// `host`, if one exists.
 pub fn find_github_shadow(
     root: &fs::RootFs,
+    host: &str,
     owner: &str,
     name: &str,
     number: u64,
@@ -122,7 +123,7 @@ pub fn find_github_shadow(
         draft
             .github_issue
             .as_ref()
-            .is_some_and(|link| link.names(owner, name, number))
+            .is_some_and(|link| link.names(host, owner, name, number))
     })
 }
 

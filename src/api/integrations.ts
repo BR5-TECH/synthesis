@@ -42,11 +42,11 @@ export const listGithubTokens = () =>
  *
  * This is the one call in the frontend that carries a secret, and it carries it
  * in one direction. Rejects with `invalid_token`, `duplicate_label`,
- * `github_unreachable`, or `keychain_unavailable` (see `GITHUB_TOKEN_ERRORS`);
+ * `invalid_host`, `github_unreachable`, or `keychain_unavailable` (see `GITHUB_TOKEN_ERRORS`);
  * on any of them nothing was stored.
  */
-export const addGithubToken = (label: string, secret: string) =>
-  invoke<GithubTokenRecord>("add_github_token", { label, secret });
+export const addGithubToken = (label: string, secret: string, host: string) =>
+  invoke<GithubTokenRecord>("add_github_token", { label, secret, host });
 
 /** GTS-FR-07: re-check a stored token and return its refreshed record. */
 export const validateGithubToken = (id: string) =>
@@ -65,8 +65,8 @@ export const removeGithubToken = (id: string) =>
  * Synthesis needs pre-selected. Transmits nothing and receives nothing — the
  * token comes back only by the author pasting it (GHA-FR-06).
  */
-export const openGithubTokenCreationPage = () =>
-  invoke<void>("open_github_token_creation_page");
+export const openGithubTokenCreationPage = (host: string) =>
+  invoke<void>("open_github_token_creation_page", { host });
 
 /** GTS-FR-10: how the open project resolves a token, and whether to prompt. */
 export const getProjectGithubTokenBinding = () =>

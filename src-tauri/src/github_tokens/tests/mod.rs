@@ -134,7 +134,7 @@ impl FakeVerifier {
 }
 
 impl GithubVerifier for FakeVerifier {
-    fn verify(&self, secret: &str) -> Result<VerifiedIdentity, VerifyError> {
+    fn verify(&self, _host: &str, secret: &str) -> Result<VerifiedIdentity, VerifyError> {
         if self.unreachable {
             return Err(VerifyError::Unreachable("no route to host".into()));
         }
@@ -188,8 +188,8 @@ impl SecretStore for ArcSecrets {
 
 struct ArcVerifier(Arc<FakeVerifier>);
 impl GithubVerifier for ArcVerifier {
-    fn verify(&self, secret: &str) -> Result<VerifiedIdentity, VerifyError> {
-        self.0.verify(secret)
+    fn verify(&self, host: &str, secret: &str) -> Result<VerifiedIdentity, VerifyError> {
+        self.0.verify(host, secret)
     }
 }
 
@@ -228,6 +228,7 @@ mod masking;
 mod binding_resolution;
 mod adding;
 mod listing;
+mod host_rules;
 mod bindings;
 mod identity;
 mod wire_shapes;

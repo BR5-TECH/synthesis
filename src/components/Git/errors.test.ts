@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseRejection, rejectionMessage, rejectionPaths } from "./errors";
+import { isTokenMissing, isTokenSelectionRequired, parseRejection, rejectionMessage, rejectionPaths } from "./errors";
 
 describe("the typed rejections of the Git panel (GIT-FR-UDKY, GIT-FR-GAMV, GIT-FR-TFAU)", () => {
   it("GIT-FR-UDKY: parses a code, a detail, an Error and a bare code", () => {
@@ -39,7 +39,8 @@ describe("the typed rejections of the Git panel (GIT-FR-UDKY, GIT-FR-GAMV, GIT-F
     ["branch_in_active_worktree", { branch: "b" }, "Branch b is checked out in the active worktree."],
     ["branch_belongs_to_work_stream: s1", { branch: "b" }, "Branch b belongs to a work stream."],
     ["no remote configured", {}, "This repository has no remote configured."],
-    ["not_a_github_remote", {}, "not on github.com"],
+    ["not_a_github_remote", {}, "not on a GitHub host"],
+    ["github_host_mismatch", {}, "The project token belongs to another GitHub host than this remote. Pick or add a token for the host of the remote."],
     ["github_token_rejected", {}, "GitHub rejected the token"],
     ["github_unreachable", {}, "Could not reach GitHub."],
     ["github_token_missing", {}, "Add one in Global settings → GitHub."],
@@ -49,6 +50,14 @@ describe("the typed rejections of the Git panel (GIT-FR-UDKY, GIT-FR-GAMV, GIT-F
     ["stream_unmerged: 1", {}, "1 commit its base branch does not hold"],
   ])("GIT-FR-UDKY: %s reads as a sentence", (raw, subject, sentence) => {
     expect(rejectionMessage(raw, subject)).toContain(sentence);
+  });
+
+  it("GHA-FR-LBLM, GIT-FR-UDKY: a host mismatch is not a token selection or a missing token", () => {
+    expect(isTokenSelectionRequired("github_host_mismatch")).toBe(false);
+    expect(isTokenMissing("github_host_mismatch")).toBe(false);
+    expect(rejectionMessage("github_host_mismatch")).toBe(
+      "The project token belongs to another GitHub host than this remote. Pick or add a token for the host of the remote.",
+    );
   });
 
   it("GIT-FR-TFAU: a code the panel has no words for is shown whole", () => {

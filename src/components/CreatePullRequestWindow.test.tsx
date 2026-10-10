@@ -361,7 +361,7 @@ describe("failures (CPR-FR-SQEP, CPR-FR-VZUZ, CPR-FR-FGGU, CPR-FR-VZNE)", () => 
     ["unknown branch", /does not hold the head branch or the base branch/],
     ["pull_request_title_required", /needs a title/],
     ["no remote configured", /no remote configured/],
-    ["not_a_github_remote", /not on github\.com/],
+    ["not_a_github_remote", /not on a GitHub host/],
     ["github_token_rejected", /rejected the token/],
     ["github_unreachable", /Could not reach GitHub/],
     ["pull_request_rejected: No commits between main and feature", /GitHub refused the pull request: No commits between main and feature/],
@@ -381,6 +381,19 @@ describe("failures (CPR-FR-SQEP, CPR-FR-VZUZ, CPR-FR-FGGU, CPR-FR-VZNE)", () => 
     await userEvent.click(await screen.findByTestId("create-pr-global-settings"));
     expect(h.onOpenGlobalSettings).toHaveBeenCalledTimes(1);
     expect(h.onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId("create-pr-window")).toBeInTheDocument();
+  });
+
+  it("GHA-FR-LBLM: a host mismatch shows inline, opens no picker, and offers no settings route", async () => {
+    create = async () => Promise.reject("github_host_mismatch");
+    const h = mount();
+    await ready();
+    await userEvent.click(submit());
+    expect(await screen.findByTestId("create-pr-failure")).toHaveTextContent(
+      "The project token belongs to another GitHub host than this remote. Pick or add a token for the host of the remote.",
+    );
+    expect(h.onRequestToken).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("create-pr-global-settings")).toBeNull();
     expect(screen.getByTestId("create-pr-window")).toBeInTheDocument();
   });
 

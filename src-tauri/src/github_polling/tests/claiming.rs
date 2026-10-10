@@ -208,14 +208,14 @@ fn claims_of_one_issue_do_not_overlap() {
     assert!(fake.calls().is_empty());
 
     let guards = ClaimGuards::default();
-    let held = guards.acquire(IssueKey::new("acme", "widgets", 4)).unwrap();
+    let held = guards.acquire(IssueKey::new("github.com", "acme", "widgets", 4)).unwrap();
     assert_eq!(
-        guards.acquire(IssueKey::new("ACME", "Widgets", 4)).err(),
+        guards.acquire(IssueKey::new("github.com", "ACME", "Widgets", 4)).err(),
         Some(ERR_CLAIM_IN_PROGRESS.to_string())
     );
-    assert!(guards.acquire(IssueKey::new("acme", "widgets", 5)).is_ok(), "another issue runs");
+    assert!(guards.acquire(IssueKey::new("github.com", "acme", "widgets", 5)).is_ok(), "another issue runs");
     drop(held);
-    assert!(guards.acquire(IssueKey::new("acme", "widgets", 4)).is_ok(), "released");
+    assert!(guards.acquire(IssueKey::new("github.com", "acme", "widgets", 4)).is_ok(), "released");
 }
 
 /// GPP-FR-BSLI / GPP-FR-IGER: a pending claim survives a reload of the store

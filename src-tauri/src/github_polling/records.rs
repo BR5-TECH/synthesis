@@ -152,6 +152,7 @@ impl GithubPollingConfiguration {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GithubReadyTask {
+    pub repository_host: String,
     pub repository_owner: String,
     pub repository_name: String,
     pub issue_number: u64,
@@ -167,6 +168,7 @@ pub struct GithubShadowDraftRow {
     pub draft_id: String,
     pub name: String,
     pub status: crate::drafts::DraftStatus,
+    pub repository_host: String,
     pub repository_owner: String,
     pub repository_name: String,
     pub issue_number: u64,
@@ -178,6 +180,7 @@ pub struct GithubShadowDraftRow {
 /// GPP-FR-RGNM: the polling repository.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct RepositoryRef {
+    pub host: String,
     pub owner: String,
     pub name: String,
 }
@@ -222,21 +225,32 @@ pub struct GithubPollingChanged {
     pub new_issues: Vec<NewIssue>,
 }
 
-/// The identity of one issue: repository owner and name (lowercase), and the
-/// issue number (GPP-FR-QCAM, GPP-FR-YROY).
+/// The identity of one issue: repository host, owner and name (lowercase), and
+/// the issue number (GPP-FR-QCAM, GPP-FR-YROY).
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct IssueKey {
+    pub host: String,
     pub owner: String,
     pub name: String,
     pub number: u64,
 }
 
 impl IssueKey {
-    pub fn new(owner: &str, name: &str, number: u64) -> Self {
-        Self { owner: owner.to_ascii_lowercase(), name: name.to_ascii_lowercase(), number }
+    pub fn new(host: &str, owner: &str, name: &str, number: u64) -> Self {
+        Self {
+            host: host.to_ascii_lowercase(),
+            owner: owner.to_ascii_lowercase(),
+            name: name.to_ascii_lowercase(),
+            number,
+        }
     }
 
     pub fn of_task(task: &GithubReadyTask) -> Self {
-        Self::new(&task.repository_owner, &task.repository_name, task.issue_number)
+        Self::new(
+            &task.repository_host,
+            &task.repository_owner,
+            &task.repository_name,
+            task.issue_number,
+        )
     }
 }

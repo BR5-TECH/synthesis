@@ -5,6 +5,7 @@ use super::*;
 
 fn link(number: u64) -> GithubIssueLink {
     GithubIssueLink {
+        repository_host: "github.com".into(),
         repository_owner: "acme".into(),
         repository_name: "widgets".into(),
         issue_number: number,
@@ -116,6 +117,7 @@ fn the_link_is_reported_everywhere_and_never_removed() {
     assert_eq!(
         json["githubIssue"],
         serde_json::json!({
+            "repositoryHost": "github.com",
             "repositoryOwner": "acme", "repositoryName": "widgets", "issueNumber": 3,
             "issueUrl": "https://github.com/acme/widgets/issues/3",
             "projectNodeId": "PVT_1", "claimState": "claimed"

@@ -21,7 +21,7 @@ fn gss_ts18_a_real_add_leaves_no_secret_anywhere_in_synthesis_toml() {
     );
 
     let store = GlobalSettingsStore::with_path(path.clone());
-    let record = add_token_impl(&store, &tokens, "work", secret).unwrap();
+    let record = add_token_impl(&store, &tokens, "work", secret, "").unwrap();
 
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(
@@ -58,7 +58,7 @@ fn an_unavailable_state_is_derived_rather_than_written_into_the_record() {
         "raver119",
         &["repo"],
     ));
-    let added = add_token_impl(&store, &tokens, "work", "ghp_secret_1234").unwrap();
+    let added = add_token_impl(&store, &tokens, "work", "ghp_secret_1234", "").unwrap();
 
     secrets.forget(&added.id);
     let reported = validate_token_impl(&store, &tokens, &added.id).unwrap();
@@ -120,7 +120,7 @@ fn concurrent_adds_do_not_lose_records_or_admit_a_duplicate_label() {
     for i in 0..8 {
         let (store, tokens) = (store.clone(), tokens.clone());
         handles.push(std::thread::spawn(move || {
-            add_token_impl(&store, &tokens, &format!("token-{i}"), secret)
+            add_token_impl(&store, &tokens, &format!("token-{i}"), secret, "")
         }));
     }
     for h in handles {
@@ -137,7 +137,7 @@ fn concurrent_adds_do_not_lose_records_or_admit_a_duplicate_label() {
     for _ in 0..8 {
         let (store, tokens) = (store.clone(), tokens.clone());
         handles.push(std::thread::spawn(move || {
-            add_token_impl(&store, &tokens, "contested", secret)
+            add_token_impl(&store, &tokens, "contested", secret, "")
         }));
     }
     let outcomes: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();

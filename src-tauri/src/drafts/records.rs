@@ -121,6 +121,10 @@ pub enum GithubClaimState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GithubIssueLink {
+    /// The normalized host of the repository. Absent in a record stored before
+    /// hosts existed, which reads as `github.com` (GTS-FR-VRYL).
+    #[serde(default = "crate::github_tokens::default_host")]
+    pub repository_host: String,
     pub repository_owner: String,
     pub repository_name: String,
     pub issue_number: u64,
@@ -130,10 +134,12 @@ pub struct GithubIssueLink {
 }
 
 impl GithubIssueLink {
-    /// Whether this link names the issue `number` of `owner/name`. The
-    /// repository match is case-insensitive, as GitHub's own is.
-    pub fn names(&self, owner: &str, name: &str, number: u64) -> bool {
+    /// Whether this link names the issue `number` of `owner/name` on `host`.
+    /// The host and repository matches are case-insensitive, as GitHub's own
+    /// is. The same issue number on another host is another issue.
+    pub fn names(&self, host: &str, owner: &str, name: &str, number: u64) -> bool {
         self.issue_number == number
+            && self.repository_host.eq_ignore_ascii_case(host)
             && self.repository_owner.eq_ignore_ascii_case(owner)
             && self.repository_name.eq_ignore_ascii_case(name)
     }

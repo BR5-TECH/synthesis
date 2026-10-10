@@ -174,7 +174,7 @@ fn only_a_github_issue_address_may_be_opened() {
         "https://github.com/acme/widgets/issues/1",
         "https://GitHub.com/acme/widgets/issues/4181",
     ] {
-        assert!(flow::is_openable_issue_url(safe), "{safe}");
+        assert!(flow::is_openable_issue_url(safe, "github.com"), "{safe}");
     }
     for unsafe_url in [
         "file:///etc/passwd",
@@ -185,7 +185,7 @@ fn only_a_github_issue_address_may_be_opened() {
         "javascript:alert(1)",
         "https://github.com",
     ] {
-        assert!(!flow::is_openable_issue_url(unsafe_url), "{unsafe_url}");
+        assert!(!flow::is_openable_issue_url(unsafe_url, "github.com"), "{unsafe_url}");
     }
 }
 

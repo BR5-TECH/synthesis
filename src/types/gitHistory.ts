@@ -126,7 +126,7 @@ export interface PullRequestSummary {
 /** GTC-FR-MMFM: the pull request GitHub created. */
 export interface CreatedPullRequest {
   number: number;
-  /** The address of its page on github.com. */
+  /** The address of its page on the GitHub host of the repository. */
   url: string;
 }
 

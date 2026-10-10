@@ -288,7 +288,7 @@ fn the_view_excludes_rows_claimed_since_the_poll() {
         assert!(json.get(field).is_some(), "{field}");
     }
     assert_eq!(json["configuration"]["state"], "valid");
-    assert_eq!(json["repository"], serde_json::json!({ "owner": "acme", "name": "widgets" }));
+    assert_eq!(json["repository"], serde_json::json!({ "host": "github.com", "owner": "acme", "name": "widgets" }));
 }
 
 /// GPP-FR-DATH: a repository resolved under a key that is no longer the

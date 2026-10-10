@@ -30,7 +30,7 @@
  * than of survival (EDT-FR-68).
  */
 import { Extension, Node } from "@tiptap/react";
-import type { Extensions } from "@tiptap/react";
+import type { Extensions, Mark } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Image } from "@tiptap/extension-image";
 import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
@@ -103,6 +103,24 @@ export const TightTaskList = Extension.create({
 });
 
 /**
+ * StarterKit with the Code mark's own exit turned off (EDT-FR-CCBX).
+ *
+ * Tiptap's exit moves out of inline code with the right arrow only at the end
+ * of a paragraph, and inserts a space to do it. `LiteralBacktick` closes the
+ * open span in place, wherever it ends, so the two must not both act on the
+ * same key press.
+ */
+const MarkdownStarterKit = StarterKit.extend({
+  addExtensions() {
+    return (this.parent?.() ?? []).map((extension) =>
+      extension.name === "code"
+        ? (extension as Mark).extend({ exitable: false })
+        : extension,
+    );
+  },
+});
+
+/**
  * EDT-FR-18: a leading YAML frontmatter block (`---` fences), matched verbatim
  * so that an untouched one round-trips byte-for-byte.
  *
@@ -153,10 +171,10 @@ export function getMarkdown(editor: {
  */
 export function markdownExtensions(extra: Extensions = []): Extensions {
   return [
-    StarterKit.configure({ undoRedo: false, text: false }),
+    MarkdownStarterKit.configure({ undoRedo: false, text: false }),
     LiteralText,
-    // EDT-FR-FDGH: one backtick key press is one backtick, so the inline-code
-    // and code-fence input rules see what the author typed.
+    // EDT-FR-FDGH, EDT-FR-VCOH, EDT-FR-LLBU: the backtick key opens, closes and
+    // wraps inline code, and the platform adds no backtick of its own.
     LiteralBacktick,
     // EDT-FR-68: the constructs this project's Markdown is written in, each
     // modelled so it renders as itself and round-trips as itself.

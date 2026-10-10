@@ -1441,7 +1441,55 @@ const proposalsByDraft: Record<string, any[]> = {
       decidedAt: "2026-07-28T09:58:00Z",
     },
   ],
+  // DCR-FR-LGHZ / DCR-FR-TSNW: three insertions whose `lead` quotes Markdown
+  // links and an escape, the last one starting inside a link destination and
+  // ending at the end of the prompt.
+  "d-18": [
+    {
+      id: "prop-3",
+      draftId: "d-18",
+      path: "Mirror selection.md",
+      agent,
+      rationale: "Each section now says what happens when a mirror does not answer.",
+      threadId: "disc-1",
+      commentId: "disc-1-c3",
+      state: "pending",
+      candidateEdited: false,
+      legacy: false,
+      hunkCount: 3,
+      counts: { pending: 3, accepted: 0, rejected: 0, discussing: 0 },
+      ledger: [
+        { id: "h-31", kind: "add", state: "pending", edited: false, revision: 0 },
+        { id: "h-32", kind: "add", state: "pending", edited: false, revision: 0 },
+        { id: "h-33", kind: "add", state: "pending", edited: false, revision: 0 },
+      ],
+      createdAt: "2026-08-27T10:00:00Z",
+    },
+  ],
 };
+
+/** The proposal row with this id, whichever draft holds it. */
+function findProposalRow(id: string): any {
+  return Object.values(proposalsByDraft)
+    .flat()
+    .find((p) => p.id === id);
+}
+
+/** DCR-FR-LGHZ: the prompt `d-18`'s proposal is anchored in. */
+const MIRROR_PROMPT =
+  "## Purpose\n\nThe tool should talk to every mirror.\n\n## Steps\n\n- User types a mirror, with a placeholder of [mirror.org](http://mirror.org) \n\n## Rules\n\n- [mirror.org](http://mirror.org) stays the default. Hosts like \\*.mirror.net are an option.\n- Saved mirrors keep working since [mirror.org](http://mirror.org) is a default.";
+
+/** An insertion after `lead`, hinted at the end of `lead` in `MIRROR_PROMPT`. */
+function mirrorInsertion(id: string, lead: string, after: string): any {
+  const end = MIRROR_PROMPT.indexOf(lead) + lead.length;
+  return {
+    id,
+    kind: "add",
+    revision: 0,
+    after,
+    anchor: { lead, trail: "", hint_start: end, hint_end: end },
+  };
+}
 
 /**
  * DCP-FR-08: the proposed text, keyed by proposal.
@@ -1560,6 +1608,23 @@ const proposalHunks: Record<string, any[]> = {
         "Only worktrees this project created. A worktree made by hand is left alone.",
       anchor: { lead: "## Scope\n\n", trail: "\n", hint_start: 210, hint_end: 241 },
     },
+  ],
+  "prop-3": [
+    mirrorInsertion(
+      "h-31",
+      "## Purpose\n\nThe tool should talk to every mirror.",
+      " A mirror that does not answer is skipped.",
+    ),
+    mirrorInsertion(
+      "h-32",
+      "## Steps\n\n- User types a mirror, with a placeholder of [mirror.org](http://mirror.org) ",
+      "\n- The tool checks that the mirror answers.",
+    ),
+    mirrorInsertion(
+      "h-33",
+      MIRROR_PROMPT.slice(MIRROR_PROMPT.indexOf("rror.org) stays the default.")),
+      "\n- A mirror that stops answering is reported.",
+    ),
   ],
 };
 
@@ -2089,6 +2154,15 @@ const drafts = [
     folder: "backend",
     updatedAt: "2026-08-26T11:00:00Z",
   },
+  /** DCR-FR-LGHZ: the draft whose pending proposal quotes Markdown links. */
+  {
+    id: "d-18",
+    name: "Mirror selection",
+    status: "active",
+    folder: "UI",
+    updatedAt: "2026-08-27T10:00:00Z",
+    hasPendingProposal: true,
+  },
   /**
    * GPP-FR-XPUO / DRP-FR-ZRJJ: a draft a claim of a GitHub Task created. It sits
    * at the drafts root and is read-only for its whole life.
@@ -2243,6 +2317,14 @@ const draftRecords: Record<string, Record<string, unknown>> = {
     status: "graduating",
     createdAt: "2026-08-26T09:00:00Z",
     updatedAt: "2026-08-26T11:00:00Z",
+  },
+  "d-18": {
+    id: "d-18",
+    name: "Mirror selection",
+    promptPath: "Mirror selection.md",
+    status: "active",
+    createdAt: "2026-08-27T09:00:00Z",
+    updatedAt: "2026-08-27T10:00:00Z",
   },
   /** GPP-FR-XPUO / DRS-FR-XDWS: the seeded GitHub-shadow draft. */
   "gh-1": {
@@ -2427,6 +2509,7 @@ const draftBodies: Record<string, string> = {
         `Paragraph ${i + 1}. The command grew out of the worktree work and has never been written down properly. This paragraph stands between the two proposed changes so that neither is on screen while the other is.`,
     ).join("\n\n") +
     "\n\n## Scope\n\nWorktrees this project created.\n",
+  "Mirror selection.md": MIRROR_PROMPT,
   "Icon button sizing.md": `# Icon button sizing
 
 The sizing table, drawn inline: ![the sizing table](../assets/8f3a91c2.png) and
@@ -2472,6 +2555,7 @@ const draftFiles: Record<string, string[]> = {
   "d-11": ["Session restore.md"],
   "d-12": ["Attachment thumbnails.md"],
   "d-13": ["Log rotation.md"],
+  "d-18": ["Mirror selection.md"],
   // GPP-FR-XPUO / DRS-FR-XDWS: the seeded GitHub-shadow draft.
   "gh-1": ["Cache invalidation.md"],
 };
@@ -8451,7 +8535,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const id = String(a.proposalId ?? "");
       const hunks = proposalHunks[id];
       if (hunks === undefined) throw "proposal_not_found";
-      const row = (proposalsByDraft["d-1"] ?? []).find((p) => p.id === id);
+      const row = findProposalRow(id);
       const prompt = draftBodies[row?.path ?? ""] ?? ORIGINAL_PROMPT;
       const resolutions = hunks.map((h) => {
         const before = String(h.before ?? "");
@@ -8485,7 +8569,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const id = String(a.proposalId ?? "");
       const hunks = proposalHunks[id];
       if (hunks === undefined) throw "proposal_not_found";
-      const row = (proposalsByDraft["d-1"] ?? []).find((p) => p.id === id);
+      const row = findProposalRow(id);
       if (row && row.state !== "pending") throw "already_decided";
       if (harnessFlag("candidateWriteFails")) throw "write_failed";
       const target = hunks.find((h) => h.id === String(a.hunkId ?? ""));
@@ -8508,7 +8592,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
      */
     case "set_draft_change_hunk_discussing": {
       const id = String(a.proposalId ?? "");
-      const row = (proposalsByDraft["d-1"] ?? []).find((p) => p.id === id);
+      const row = findProposalRow(id);
       if (!row) throw "proposal_not_found";
       const ledgerRow = row.ledger?.find((r: any) => r.id === String(a.hunkId ?? ""));
       if (!ledgerRow) throw "hunk_not_found";
@@ -8535,7 +8619,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "reject_draft_change_hunk": {
       const id = String(a.proposalId ?? "");
       const accepted = cmd === "accept_draft_change_hunk";
-      const row = (proposalsByDraft["d-1"] ?? []).find((p) => p.id === id);
+      const row = findProposalRow(id);
       if (!row) throw "proposal_not_found";
       const hunkId = String(a.hunkId ?? "");
       const ledgerRow = row.ledger?.find((r: any) => r.id === hunkId);
@@ -8590,7 +8674,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
      */
     case "decline_draft_change_proposal": {
       const id = String(a.proposalId ?? "");
-      const row = (proposalsByDraft["d-1"] ?? []).find((p) => p.id === id);
+      const row = findProposalRow(id);
       if (!row) throw "proposal_not_found";
       if (row.state !== "pending") throw "already_decided";
       for (const r of row.ledger ?? []) {

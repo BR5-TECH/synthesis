@@ -147,8 +147,17 @@ export function findRange(
   needle: string,
   hint: number,
 ): PosRange | null {
-  const wanted = reduce(needle);
-  if (wanted.text === "") return null;
+  return findReduced(index, reducedDoc, reduce(needle).text, hint);
+}
+
+/** `findRange` for a needle that is already reduced. */
+function findReduced(
+  index: DocText,
+  reducedDoc: Reduced,
+  wanted: string,
+  hint: number,
+): PosRange | null {
+  if (wanted === "") return null;
 
   // The hint is an offset into the prompt's source; the search runs over the
   // reduced form. It is only a tie-breaker, so an approximate one is enough —
@@ -156,7 +165,7 @@ export function findRange(
   let best = -1;
   let bestDistance = Infinity;
   for (let from = 0; ; ) {
-    const at = reducedDoc.text.indexOf(wanted.text, from);
+    const at = reducedDoc.text.indexOf(wanted, from);
     if (at === -1) break;
     const distance = Math.abs((reducedDoc.map[at] ?? at) - hint);
     if (distance < bestDistance) {
@@ -168,7 +177,7 @@ export function findRange(
   if (best === -1) return null;
 
   const start = reducedDoc.map[best];
-  const last = reducedDoc.map[best + wanted.text.length - 1];
+  const last = reducedDoc.map[best + wanted.length - 1];
   if (start === undefined || last === undefined) return null;
   return spanToPositions(index, start, last);
 }
@@ -226,6 +235,63 @@ export interface PlaceableHunk {
 }
 
 /**
+ * DCR-FR-LGHZ, DCR-FR-TSNW: the texts a change is searched for, each already
+ * rendered by the Editor's parser (`./hunkNeedle`). Null where a text could not
+ * be rendered.
+ */
+export interface RenderedNeedles {
+  before: string | null;
+  lead: string | null;
+  /** The lead without its first line (`leadTail`), or null where none is left. */
+  leadTail: string | null;
+}
+
+/**
+ * DCR-FR-TSNW: the fewest words a shortened lead keeps. Fewer words match too
+ * many places for the hint to choose between them reliably.
+ */
+const MIN_LEAD_WORDS = 3;
+
+/** The number of words `text` holds once reduced. */
+function wordCount(text: string): number {
+  const reduced = reduce(text).text;
+  return reduced === "" ? 0 : reduced.split(" ").length;
+}
+
+/**
+ * DCR-FR-TSNW: the place an insertion's lead ends, found with as much of the
+ * lead's end as the document holds.
+ *
+ * Words come off the start one at a time, and the first remainder found wins.
+ */
+function findLeadSuffix(
+  index: DocText,
+  reducedDoc: Reduced,
+  lead: string,
+  hint: number,
+): PosRange | null {
+  const words = reduce(lead).text.split(" ");
+  for (let drop = 1; words.length - drop >= MIN_LEAD_WORDS; drop += 1) {
+    const range = findReduced(index, reducedDoc, words.slice(drop).join(" "), hint);
+    if (range !== null) return { from: range.to, to: range.to };
+  }
+  return null;
+}
+
+/** The first of the candidate texts the document holds, in order. */
+function firstFound(
+  find: (needle: string) => PosRange | null,
+  candidates: (string | null)[],
+): PosRange | null {
+  for (const needle of candidates) {
+    if (needle === null || needle === "") continue;
+    const range = find(needle);
+    if (range !== null) return range;
+  }
+  return null;
+}
+
+/**
  * Where a change sits in the document, or null where it cannot be placed.
  *
  * DCR-FR-05: a change is placed by its **kind**, which is how the backend
@@ -235,18 +301,35 @@ export interface PlaceableHunk {
  * author reading a rewrite as an addition. A replacement or a deletion naming
  * no text is a change this surface cannot draw, and it says so (DCR-FR-31)
  * rather than drawing half of it.
+ *
+ * DCR-FR-LGHZ: the rendered text is searched first. The source text comes after
+ * it, so a change found by the source alone is still drawn.
  */
 export function placeHunk(
   index: DocText,
   reducedDoc: Reduced,
   hunk: PlaceableHunk,
+  rendered?: RenderedNeedles,
 ): PosRange | null {
   if (hunk.kind === "add") {
     // An insertion names no text of its own, so it is placed at the end of the
     // text it follows — or at the head of a prompt that holds none.
-    return hunk.lead === ""
-      ? { from: 1, to: 1 }
-      : findAfter(index, reducedDoc, hunk.lead, hunk.hint);
+    if (hunk.lead === "") return { from: 1, to: 1 };
+    // DCR-FR-TSNW: a tail is a shortened lead, so it keeps as many words.
+    const tail = rendered?.leadTail ?? null;
+    const usableTail =
+      tail !== null && wordCount(tail) >= MIN_LEAD_WORDS ? tail : null;
+    const found = firstFound(
+      (lead) => findAfter(index, reducedDoc, lead, hunk.hint),
+      [rendered?.lead ?? null, usableTail, hunk.lead],
+    );
+    if (found !== null) return found;
+    // DCR-FR-TSNW: only the end of a lead must match. A tail that renders to
+    // nothing (a rule, an image) holds no words, so the next text is tried.
+    return firstFound(
+      (lead) => findLeadSuffix(index, reducedDoc, lead, hunk.hint),
+      [rendered?.leadTail ?? null, rendered?.lead ?? null, hunk.lead],
+    );
   }
   if (hunk.before === "") {
     // DCR-FR-KDSV: a legacy proposal is one replacement covering the whole
@@ -254,5 +337,8 @@ export function placeHunk(
     // no text to strike and one place its proposed text can go.
     return reducedDoc.text === "" ? { from: 1, to: 1 } : null;
   }
-  return findRange(index, reducedDoc, hunk.before, hunk.hint);
+  return firstFound(
+    (before) => findRange(index, reducedDoc, before, hunk.hint),
+    [rendered?.before ?? null, hunk.before],
+  );
 }

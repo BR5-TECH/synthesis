@@ -525,6 +525,15 @@ html, body {
   border-radius: var(--r-xs);
   color: var(--fg-1);
 }
+/* EDT-FR-LLBU: the virtual closing backtick of an open inline-code span. It
+   sits inside the span, so an empty span still shows as a small code run, and
+   it is faint and unselectable because it is not content. */
+.doc .code-ghost {
+  color: var(--fg-4);
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+}
 /* A fenced block is its own paragraph rather than a run inside one, so it takes
    the Source role whole — face, size, and line height. */
 .doc pre {

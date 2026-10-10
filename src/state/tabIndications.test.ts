@@ -100,6 +100,9 @@ function openStrip(tabs: Tab[], active: string, worktree = WORKTREE) {
     // Focused, so the post policy is doing real work rather than waving
     // everything through — the indication must hold up beside it.
     focused: true,
+    // Only a settings window holds focus, so a raise goes to the OS channel
+    // (NTF-FR-WMBD) and these tests can count its posts.
+    mainFocused: false,
     projectKey: PROJECT,
     worktree,
     activeTarget: targetForTab(tabs.find((t) => t.id === active) ?? tabs[0]),
@@ -124,6 +127,7 @@ function openStrip(tabs: Tab[], active: string, worktree = WORKTREE) {
 
 const raise = (key: string, address: string): Raise => ({
   key,
+  level: "Info",
   title: "Something happened",
   body: "in a tab you are not reading",
   address,
@@ -432,6 +436,7 @@ describe("the enable switch governs the posting alone (NTF-FR-29)", () => {
     configureNotifications({
       snapshot: () => ({
         focused: false,
+        mainFocused: false,
         projectKey: PROJECT,
         worktree: WORKTREE,
         activeTarget: null,
@@ -836,6 +841,7 @@ describe("the Runs toggle carries a run's attention (NTF-FR-39 / SNV-FR-70)", ()
     configureNotifications({
       snapshot: () => ({
         focused: true,
+        mainFocused: true,
         projectKey: PROJECT,
         worktree: WORKTREE,
         activeTarget: null,
@@ -852,12 +858,14 @@ describe("the Runs toggle carries a run's attention (NTF-FR-39 / SNV-FR-70)", ()
 
     await raiseNotification({
       key: "run:artifact-window",
+      level: "Warn",
       title: "Graduation · Waiting on you",
       body: "It has a question.",
       address: runAddress("artifact-window"),
     });
     await raiseNotification({
       key: "run:notes-cleanup",
+      level: "Warn",
       title: "Graduation · Ready to review",
       body: "It finished.",
       address: runAddress("notes-cleanup"),
@@ -891,6 +899,7 @@ describe("the Runs toggle carries a run's attention (NTF-FR-39 / SNV-FR-70)", ()
     configureNotifications({
       snapshot: () => ({
         focused: true,
+        mainFocused: true,
         projectKey: PROJECT,
         worktree: WORKTREE,
         activeTarget: null,
@@ -904,6 +913,7 @@ describe("the Runs toggle carries a run's attention (NTF-FR-39 / SNV-FR-70)", ()
     });
     await raiseNotification({
       key: "run:artifact-window",
+      level: "Info",
       title: "t",
       body: "b",
       address: runAddress("artifact-window"),

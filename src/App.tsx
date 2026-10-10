@@ -11,6 +11,7 @@ import { useDraftEditingObserver } from "./hooks/useDraftEditingObserver";
 import { useMainWindowState } from "./hooks/useMainWindowState";
 import { useAppOverlays } from "./hooks/useAppOverlays";
 import { useAppNotifications } from "./hooks/useAppNotifications";
+import { NotificationToasts } from "./components/NotificationToasts";
 import { useThemePreference } from "./hooks/useThemePreference";
 import { useFontRoles } from "./hooks/useFontRoles";
 import { useShellSession } from "./hooks/useShellSession";
@@ -385,18 +386,24 @@ function App() {
             picker, which stays mounted beneath it and so is unchanged when the
             panel closes. */}
         {overlays.aboutOpen && <AboutPanel onClose={overlays.closeAbout} />}
+        {/* NTF-FR-20: the toast of an activation made while no project is open
+            shows over the picker. */}
+        <NotificationToasts onActivate={notifications.activate} />
       </div>
     );
   }
 
   return (
     <GitTransferProvider value={gitTransfer}>
+      {/* NTF-FR-HZNF / NTF-FR-21: the notification toast stack. Mounted at the
+          window root, beside the shell, so it shows over the picker too. It
+          takes no focus and is outside the single-overlay rule (SNV-FR-56). */}
+      <NotificationToasts onActivate={notifications.activate} />
       <AppShell
         s={s}
         overlays={overlays}
         vpanel={vpanel}
         bpanel={bpanel}
-        notifications={notifications}
         operations={operations}
         diffTotals={diffTotals}
         projectFolders={projectFolders}

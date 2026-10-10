@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import { makeRun } from "../../test/graduationFixtures";
 import type { GraduationInterruptionReason } from "../../types/graduation";
-import { raiseStatement, raisesForRun } from "./escalations";
+import { raiseLevel, raiseStatement, raisesForRun } from "./escalations";
 import { conditionSentence, interruptionCause, isFailureStop } from "./stages";
 
 function interrupted(reason: GraduationInterruptionReason) {
@@ -115,5 +115,24 @@ describe("the raise of an interrupted run", () => {
   it("GRU-FR-FJZD: an interrupted run with no recorded cause still names the run", () => {
     const run = makeRun("r1", "interrupted");
     expect(raiseStatement(run)).toBe(`“${run.input.draftName}” stopped.`);
+  });
+});
+
+describe("the level of a run's raise (NTF-FR-24, GRU-FR-BLSS)", () => {
+  it("NTF-FR-24, GRU-FR-BLSS: a run that waits on the author or whose publication stopped raises Warn", () => {
+    expect(raiseLevel(makeRun("r1", "awaiting_author"))).toBe("Warn");
+    expect(raiseLevel(makeRun("r1", "blocked"))).toBe("Warn");
+  });
+
+  it("NTF-FR-24, GRU-FR-BLSS: a completed or discarded run raises Info", () => {
+    expect(raiseLevel(makeRun("r1", "completed"))).toBe("Info");
+    expect(raiseLevel(makeRun("r1", "discarded"))).toBe("Info");
+  });
+
+  it("NTF-FR-24, GRU-FR-BLSS: a failed run and a run interrupted on a failure reason raise Error", () => {
+    expect(raiseLevel(makeRun("r1", "failed"))).toBe("Error");
+    for (const reason of FAILURES) {
+      expect(raiseLevel(interrupted(reason))).toBe("Error");
+    }
   });
 });

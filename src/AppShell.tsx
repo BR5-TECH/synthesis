@@ -26,7 +26,6 @@ import { Viewport } from "./components/Viewport";
 import { BottomPanel } from "./components/BottomPanel";
 import { StatusBar } from "./components/StatusBar";
 import { Toast } from "./components/Toast";
-import { NotificationStatement } from "./components/NotificationStatement";
 import { NewFileModal } from "./components/NewFileModal";
 import { AboutPanel } from "./components/AboutPanel";
 import { NewFolderModal } from "./components/NewFolderModal";
@@ -52,7 +51,6 @@ import {
   NEW_AGENT_ITEM,
   formatSectionAddress,
 } from "./settingsWindow";
-import { useNotifications } from "./hooks/useNotifications";
 import type { useDiscussionAnnouncement } from "./state/discussionAnnouncer";
 import type { TabAttention } from "./components/TabStrip";
 import { CreatePullRequestWindow } from "./components/CreatePullRequestWindow";
@@ -73,7 +71,6 @@ export interface AppShellProps {
   overlays: ReturnType<typeof useAppOverlays>;
   vpanel: ReturnType<typeof useVerticalPanel>;
   bpanel: ReturnType<typeof useBottomPanel>;
-  notifications: ReturnType<typeof useNotifications>;
   operations: ReturnType<typeof useInFlightOperations>;
   diffTotals: ReturnType<typeof useDiffTotals>;
   projectFolders: ReturnType<typeof useProjectFolders>;
@@ -98,7 +95,6 @@ export function AppShell(props: AppShellProps) {
     overlays,
     vpanel,
     bpanel,
-    notifications,
     operations,
     diffTotals,
     projectFolders,
@@ -816,19 +812,11 @@ export function AppShell(props: AppShellProps) {
         />
       )}
 
-      {/* NTF-FR-20 / NTF-FR-21: what an activation says when its address
-          cannot be reached. Anchored in the shell rather than in a tab, and
-          outside the single-overlay rule (SNV-FR-56) — it takes no focus and
-          intercepts no pointer event. */}
       {/* CPR-FR-ITWJ / CPR-FR-RDJP: what a created pull request leaves. A status
           of the shell, outside the single-overlay rule (SNV-FR-56). */}
       <PullRequestNotice
         notice={pullRequestNotice}
         onDismiss={dismissPullRequestNotice}
-      />
-      <NotificationStatement
-        message={notifications.statement}
-        onDismiss={notifications.dismissStatement}
       />
 
       {/* CVP-FR-43: every reveal is announced, so a conversation is followed

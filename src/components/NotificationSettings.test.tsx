@@ -386,6 +386,7 @@ describe("the rehearsal (GLS-FR-27)", () => {
     configureNotifications({
       snapshot: () => ({
         focused: true,
+        mainFocused: true,
         projectKey: TARGET.projectKey,
         worktree: TARGET.worktree,
         activeTarget: { kind: "settings", which: "global" },

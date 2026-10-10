@@ -325,7 +325,7 @@ export function sameRoot(
 }
 
 /**
- * A short, author-facing name for what an address points at, for the statement
+ * A short, author-facing name for what an address points at, for the unreachable-address toast
  * of NTF-FR-20 to say what could not be reached.
  *
  * Deliberately not the whole address: an author reads "that artifact is no

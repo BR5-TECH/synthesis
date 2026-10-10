@@ -2,13 +2,13 @@
  * The notification facility (`NTF-notifications.md`).
  *
  * One API every surface asks for the author's attention through (NTF-FR-01), and
- * the policy that decides whether a raise becomes an OS notification at all
- * (NTF-FR-08 through NTF-FR-11). There is no second route to the notification
+ * the policy that decides whether a raise becomes a toast, an OS notification,
+ * or nothing (NTF-FR-08 through NTF-FR-11, NTF-FR-WMBD). There is no second route to the notification
  * centre: `api.postNotification` is reached from here and nowhere else, which is
  * what makes the policy structural rather than a convention each caller
  * remembers.
  *
- * The decision itself is [`decidePost`] — a pure function of the raise and a
+ * The decision itself is [`decideDelivery`] — a pure function of the raise and a
  * snapshot of the window, so every branch of the policy is testable without a
  * window, a backend, or a notification centre.
  */
@@ -20,6 +20,14 @@ import {
   type NotificationAddress,
   type NotificationTarget,
 } from "./notificationAddress";
+import {
+  clearToasts,
+  removeToastsForAddress,
+  removeToastsForKey,
+  resetToasts,
+  showToast,
+  type NotificationLevel,
+} from "./toasts";
 import {
   clearIndicationsForAddress,
   clearIndicationsForKey,
@@ -36,6 +44,11 @@ import {
  */
 export interface Raise {
   key: string;
+  /**
+   * NTF-FR-KTRQ: set by the raising surface. The facility never derives it, and
+   * the OS notification does not carry it.
+   */
+  level: NotificationLevel;
   title: string;
   body: string;
   /** Where the author lands on activation — mint it with `mintAddress`. */
@@ -57,6 +70,12 @@ export interface WindowSnapshot {
    * the author anywhere else.
    */
   focused: boolean;
+  /**
+   * NTF-FR-WMBD: whether the **main window** holds OS focus. A toast shows only
+   * then. When only a settings window holds focus, `focused` is true and this is
+   * false, so the raise goes to the operating system.
+   */
+  mainFocused: boolean;
   /** The open project's key, or null while the Project picker is showing. */
   projectKey: string | null;
   /** The active worktree's path, or null with no project open. */
@@ -99,9 +118,11 @@ export type SuppressionReason =
   | "already-looking"
   | "unparseable-address";
 
-export type PostDecision =
-  | { post: true }
-  | { post: false; reason: SuppressionReason };
+/** NTF-FR-WMBD: where a raise goes. Never both. */
+export type DeliveryDecision =
+  | { channel: "toast" }
+  | { channel: "os" }
+  | { channel: "none"; reason: SuppressionReason };
 
 /**
  * Whether the author is already looking at what `address` names (NTF-FR-08).
@@ -160,39 +181,44 @@ export function isAlreadyVisible(
 }
 
 /**
- * NTF-FR-08 through NTF-FR-11: the whole post policy, as one pure function.
+ * NTF-FR-08 through NTF-FR-11, NTF-FR-WMBD, NTF-FR-PCVX: the whole delivery
+ * policy, as one pure function.
  *
- * Order matters and is the contract's: the switch and the permission are
- * absolute (NTF-FR-11), so neither is overridden by the window being in the
- * background. Only then does focus enter it.
+ * Order matters and is the contract's. Suppression comes first and governs both
+ * channels (NTF-FR-08). Then the main window's focus picks the channel. Only the
+ * OS channel is gated by the switch and the permission (NTF-FR-11), so a toast
+ * shows with notifications switched off.
  */
-export function decidePost(
+export function decideDelivery(
   raise: Raise,
   snapshot: WindowSnapshot,
   options: { enabled: boolean; permissionGranted: boolean },
-): PostDecision {
-  if (!options.enabled) return { post: false, reason: "disabled" };
-  if (!options.permissionGranted) return { post: false, reason: "permission" };
-
+): DeliveryDecision {
   const address = parseAddress(raise.address);
   // A raise nobody could ever be routed from is not worth interrupting for.
-  if (!address) return { post: false, reason: "unparseable-address" };
+  if (!address) return { channel: "none", reason: "unparseable-address" };
 
-  // NTF-FR-08: an unfocused window always posts. NTF-FR-09: so does a raise
-  // made while no project is open, the picker never being where a target lives
-  // — which falls out of `isAlreadyVisible`, since a null project key matches
-  // no address.
-  if (!snapshot.focused) return { post: true };
+  // NTF-FR-08: an unfocused application is never suppressed. NTF-FR-09: nor is a
+  // raise made while no project is open, the picker never being where a target
+  // lives — which falls out of `isAlreadyVisible`, since a null project key
+  // matches no address.
+  if (snapshot.focused && isAlreadyVisible(address, snapshot)) {
+    return { channel: "none", reason: "already-looking" };
+  }
 
-  return isAlreadyVisible(address, snapshot)
-    ? { post: false, reason: "already-looking" }
-    : { post: true };
+  if (snapshot.mainFocused) return { channel: "toast" };
+
+  if (!options.enabled) return { channel: "none", reason: "disabled" };
+  if (!options.permissionGranted) {
+    return { channel: "none", reason: "permission" };
+  }
+  return { channel: "os" };
 }
 
 /**
  * NTF-FR-26 through NTF-FR-29: whether this raise marks a tab.
  *
- * Deliberately independent of [`decidePost`] rather than a branch of it. The two
+ * Deliberately independent of [`decideDelivery`] rather than a branch of it. The two
  * surfaces answer the same question for authors in two different places, and the
  * gates that stop one do not stop the other: the enable switch and the operating
  * system's permission withhold the **posting** alone (NTF-FR-11), so an eligible
@@ -364,6 +390,7 @@ export function resetNotifications(): void {
   context = null;
   postedByAddress.clear();
   postedByKey.clear();
+  resetToasts();
   enabled = true;
   permissionGranted = false;
   // A read still in flight from before the reset must not apply.
@@ -376,7 +403,7 @@ export function resetNotifications(): void {
  * A request rather than an instruction — the facility decides whether anything
  * is posted, and a raise that becomes nothing is the ordinary case rather than a
  * failure. Never throws and never blocks the caller (NTF-FR-23): the returned
- * promise resolves to whether a notification was posted, which callers are free
+ * promise resolves to whether an OS notification was posted, which callers are free
  * to ignore and which nothing in the UI surfaces.
  */
 export async function raiseNotification(raise: Raise): Promise<boolean> {
@@ -409,9 +436,9 @@ export async function raiseNotification(raise: Raise): Promise<boolean> {
     });
   }
 
-  let decision: PostDecision;
+  let decision: DeliveryDecision;
   try {
-    decision = decidePost(raise, context.snapshot(), {
+    decision = decideDelivery(raise, context.snapshot(), {
       enabled,
       permissionGranted,
     });
@@ -420,7 +447,7 @@ export async function raiseNotification(raise: Raise): Promise<boolean> {
     return false;
   }
 
-  if (!decision.post) {
+  if (decision.channel === "none") {
     // NTF-FR-10: suppression is silent to the author. It is not silent to the
     // Logs panel, which is where someone asking "why didn't it notify me?" will
     // look — and the reason is the whole answer to that question.
@@ -431,9 +458,30 @@ export async function raiseNotification(raise: Raise): Promise<boolean> {
     return false;
   }
 
+  if (decision.channel === "toast") {
+    // NTF-FR-WMBD: the main window holds focus, so the toast is the whole
+    // delivery and nothing is posted to the operating system.
+    showToast({
+      key: raise.key,
+      level: raise.level,
+      title: raise.title,
+      body: raise.body,
+      address: raise.address,
+    });
+    logInfo(["frontend"], "toast raised", {
+      key: raise.key,
+      level: raise.level,
+    });
+    return false;
+  }
+
+  // NTF-FR-ZSIK: a raise of the OS channel is the newer word on its key, so a
+  // toast still showing for that key is stale.
+  removeToastsForKey(raise.key);
+
   try {
     // NTF-FR-QGSV: derived here and nowhere else, so every notification has
-    // one shape whatever surface raised it. `decidePost` posts nothing for an
+    // one shape whatever surface raised it. `decideDelivery` posts nothing for an
     // address that does not parse, so this address parses.
     const parsed = parseAddress(raise.address);
     const subtitle = parsed ? projectSubtitle(parsed) : "";
@@ -474,6 +522,7 @@ export async function raiseNotification(raise: Raise): Promise<boolean> {
  */
 export function notifyArrived(address: string): void {
   clearIndicationsForAddress(address);
+  removeToastsForAddress(address);
   const id = postedByAddress.get(address);
   if (!id) return;
   postedByAddress.delete(address);
@@ -510,6 +559,7 @@ export function notifyArrived(address: string): void {
  */
 export function retractNotification(key: string): void {
   clearIndicationsForKey(key);
+  removeToastsForKey(key);
   const id = postedByKey.get(key);
   if (!id) return;
   postedByKey.delete(key);
@@ -529,6 +579,9 @@ export function retractNotification(key: string): void {
  */
 export function withdrawForRoot(projectKey: string, worktree: string): void {
   clearIndicationsForRoot(projectKey, worktree);
+  // NTF-FR-15: no toast survives a project or worktree change, whatever its
+  // address, the unreachable-address toast having none.
+  clearToasts();
   for (const [address, id] of [...postedByAddress]) {
     const parsed = parseAddress(address);
     if (!parsed) continue;
@@ -558,4 +611,4 @@ export function postedAddresses(): string[] {
 }
 
 export { mintAddress, parseAddress };
-export type { NotificationAddress, NotificationTarget };
+export type { NotificationAddress, NotificationLevel, NotificationTarget };

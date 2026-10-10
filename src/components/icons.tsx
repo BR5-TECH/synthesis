@@ -479,6 +479,22 @@ export const Icon = {
       <path d="M12 17.5v.01" />
     </I>
   ),
+  /** NTF-FR-DGLS: the level icon of an Info toast. */
+  Info: (p: IconProps) => (
+    <I data-icon="info" {...p}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5" />
+      <path d="M12 7.5v.01" />
+    </I>
+  ),
+  /** NTF-FR-DGLS: the level icon of an Error toast. */
+  ErrorCircle: (p: IconProps) => (
+    <I data-icon="error-circle" {...p}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9 9l6 6" />
+      <path d="M15 9l-6 6" />
+    </I>
+  ),
   Check: (p: IconProps) => (
     <I {...p}>
       <path d="M4 12.5 9 17.5 20 6.5" />

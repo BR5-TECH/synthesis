@@ -11,7 +11,7 @@
  * therefore testable without a shell, a backend, or a notification centre; the
  * hook below only performs what it returns.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { onNotificationActivated } from "../events";
 import { logInfo } from "../logging";
 import {
@@ -20,6 +20,7 @@ import {
   type NotificationTarget,
 } from "../state/notificationAddress";
 import { forgetPosted } from "../state/notifications";
+import { showToast } from "../state/toasts";
 
 /** What the shell knows about the open project when an activation arrives. */
 export interface ActivationContext {
@@ -34,7 +35,7 @@ export interface ActivationContext {
 /** What the shell should do about an activation. */
 export type ActivationOutcome =
   | { kind: "open"; target: NotificationTarget }
-  /** NTF-FR-19: change nothing, and state what could not be reached. */
+  /** NTF-FR-19: change nothing, and show what could not be reached. */
   | { kind: "state"; message: string };
 
 /**
@@ -105,18 +106,21 @@ export interface ActivationHandlers {
   openProjectSettings: () => void;
 }
 
+/** NTF-FR-20: the key of the toast that says an address cannot be reached. */
+export const UNREACHABLE_ADDRESS_KEY = "unreachable-address";
+
 /**
  * Subscribe to activations and route them.
  *
- * Returns the statement of NTF-FR-20 and its dismissal, which the shell renders
- * through `NotificationStatement`.
+ * Returns `activate`, which routes one address. The OS notification's activation
+ * and the click on a toast both go through it, so the two do exactly the same
+ * thing (NTF-FR-FNXO). An address that cannot be reached shows the Warn toast of
+ * NTF-FR-20 and changes nothing else.
  */
 export function useNotifications(
   context: ActivationContext,
   handlers: ActivationHandlers,
-): { statement: string | null; dismissStatement: () => void } {
-  const [statement, setStatement] = useState<string | null>(null);
-
+): { activate: (payload: string, key: string) => void } {
   // The subscription is established once and must not be torn down and rebuilt
   // every time the open project or a handler identity changes — an activation
   // landing in that gap would be lost, and a notification clicked exactly once
@@ -127,6 +131,65 @@ export function useNotifications(
   contextRef.current = context;
   handlersRef.current = handlers;
 
+  const activate = useCallback((payload: string, key: string) => {
+    const outcome = resolveActivation(payload, contextRef.current);
+    const h = handlersRef.current;
+    if (outcome.kind === "state") {
+      logInfo(["frontend"], "notification activation could not be routed", {
+        key,
+      });
+      // NTF-FR-20: a Warn toast with no address, so a click on it only
+      // dismisses it.
+      showToast(
+        {
+          key: UNREACHABLE_ADDRESS_KEY,
+          level: "Warn",
+          title: outcome.message,
+          body: "",
+          address: null,
+        },
+        // The author just acted, so the answer takes the next free slot even
+        // when other toasts wait.
+        { priority: true },
+      );
+      return;
+    }
+
+    logInfo(["frontend"], "notification activation routed", {
+      key,
+      targetKind: outcome.target.kind,
+    });
+    // NTF-FR-18: exactly the navigation the author's own equivalent gesture
+    // performs, and no more.
+    switch (outcome.target.kind) {
+      case "dashboard":
+        h.openDashboard();
+        break;
+      case "file":
+        h.openFile(outcome.target.path);
+        break;
+      case "draft":
+        h.openDraft(outcome.target.draftId);
+        break;
+      // NTF-FR-17 / GRU-FR-BLSS: a `run` address opens the bottom panel on the
+      // Runs surface's graduation section with that run selected. It marks no
+      // tab (NTF-FR-28): a run is not a file and has none.
+      case "run":
+        h.openRun(outcome.target.runId);
+        break;
+      case "panel":
+        h.openPanelSurface(outcome.target.surface);
+        break;
+      case "bottom":
+        h.openBottomSurface(outcome.target.surface);
+        break;
+      case "settings":
+        if (outcome.target.which === "global") h.openGlobalSettings();
+        else h.openProjectSettings();
+        break;
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
@@ -136,50 +199,7 @@ export function useNotifications(
       // activation (NTD-FR-10), so the facility must stop believing it is
       // showing or NTF-FR-14 would later withdraw an id that is long gone.
       forgetPosted(activation.payload);
-
-      const outcome = resolveActivation(activation.payload, contextRef.current);
-      const h = handlersRef.current;
-      if (outcome.kind === "state") {
-        logInfo(["frontend"], "notification activation could not be routed", {
-          key: activation.key,
-        });
-        setStatement(outcome.message);
-        return;
-      }
-
-      logInfo(["frontend"], "notification activation routed", {
-        key: activation.key,
-        targetKind: outcome.target.kind,
-      });
-      // NTF-FR-18: exactly the navigation the author's own equivalent gesture
-      // performs, and no more.
-      switch (outcome.target.kind) {
-        case "dashboard":
-          h.openDashboard();
-          break;
-        case "file":
-          h.openFile(outcome.target.path);
-          break;
-        case "draft":
-          h.openDraft(outcome.target.draftId);
-          break;
-        // NTF-FR-17 / GRU-FR-BLSS: a `run` address opens the bottom panel on the
-        // Runs surface's graduation section with that run selected. It marks no
-        // tab (NTF-FR-28): a run is not a file and has none.
-        case "run":
-          h.openRun(outcome.target.runId);
-          break;
-        case "panel":
-          h.openPanelSurface(outcome.target.surface);
-          break;
-        case "bottom":
-          h.openBottomSurface(outcome.target.surface);
-          break;
-        case "settings":
-          if (outcome.target.which === "global") h.openGlobalSettings();
-          else h.openProjectSettings();
-          break;
-      }
+      activate(activation.payload, activation.key);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
@@ -189,8 +209,7 @@ export function useNotifications(
       cancelled = true;
       unlisten?.();
     };
-  }, []);
+  }, [activate]);
 
-  const dismissStatement = useCallback(() => setStatement(null), []);
-  return { statement, dismissStatement };
+  return { activate };
 }

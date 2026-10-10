@@ -168,6 +168,38 @@ describe("GitHub polling in the main window", () => {
     );
   });
 
+  it("NTF-FR-JLXL, NTF-FR-WMBD, NTF-FR-KTRQ: with the main window focused the raise is an Info toast and posts nothing", async () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    render(<App />);
+    await enterIde();
+    act(() =>
+      fireBusEvent("github-polling-changed", {
+        newIssues: [{ issueNumber: 42, title: "Add retry" }],
+      }),
+    );
+    const toast = await screen.findByTestId("notification-toast");
+    expect(toast).toHaveAttribute("data-level", "Info");
+    expect(toast).toHaveAttribute("role", "status");
+    expect(toast).toHaveAttribute("data-key", "github-ready-tasks");
+    expect(posts()).toHaveLength(0);
+  });
+
+  it("NTF-FR-FNXO: a click on the toast opens the Git panel and the toast goes away", async () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    render(<App />);
+    await enterIde();
+    act(() =>
+      fireBusEvent("github-polling-changed", {
+        newIssues: [{ issueNumber: 42, title: "Add retry" }],
+      }),
+    );
+    await userEvent.click(await screen.findByTestId("notification-toast-target"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("notification-toast")).toBeNull(),
+    );
+    expect(await screen.findByRole("tab", { name: /Ready tasks/ })).toBeInTheDocument();
+  });
+
   it("NTF-FR-JLXL: more than three new issues name their count", async () => {
     render(<App />);
     await enterIde();

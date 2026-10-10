@@ -1,0 +1,20 @@
+/* ---------- Notification toasts (NTF-notifications.md) ---------- */
+/* NTF-FR-OPCD: a toast fades in over a short time. Under reduced motion it
+   appears at once. */
+.ntf-toast {
+  animation: ntf-toast-in 160ms ease-out;
+}
+@keyframes ntf-toast-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ntf-toast {
+    animation: none;
+  }
+}
+.ntf-toast__target:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}

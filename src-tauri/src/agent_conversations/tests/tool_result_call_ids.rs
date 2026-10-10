@@ -6,8 +6,9 @@
 
 use super::*;
 
-/// The `id` and the `call_id` of every tool result in an exchange, in order.
-fn result_ids(exchange: &[rig::completion::Message]) -> Vec<(String, Option<String>)> {
+/// The call id and the tool name of every tool result in an exchange, in
+/// order.
+fn result_ids(exchange: &[rig::completion::Message]) -> Vec<(String, String)> {
     exchange
         .iter()
         .flat_map(|message| match message {
@@ -16,7 +17,7 @@ fn result_ids(exchange: &[rig::completion::Message]) -> Vec<(String, Option<Stri
         })
         .filter_map(|part| match part {
             rig::completion::message::UserContent::ToolResult(result) => {
-                Some((result.id, result.call_id))
+                Some((result.call.to_string(), result.name.to_string()))
             }
             _ => None,
         })
@@ -37,8 +38,8 @@ fn reply_reaching_every_result() -> ScriptedReply {
 }
 
 // CVL-FR-EKHH, CVL-FR-12, CVL-FR-15: a refused ending call, a call refused as
-// one too many, and a dispatched call each give a result with the id and the
-// `call_id` of its own call.
+// one too many, and a dispatched call each give a result with the id of its
+// own call, unchanged, and the name of its tool.
 #[test]
 fn every_tool_result_carries_the_call_id_of_its_call() {
     let h = Harness::scripted(vec![
@@ -55,18 +56,18 @@ fn every_tool_result_carries_the_call_id_of_its_call() {
     assert_eq!(
         result_ids(&exchanges[1]),
         vec![
-            ("call-0".to_string(), Some("call_x-0".to_string())),
-            ("call-1".to_string(), Some("call_x-1".to_string())),
-            ("call-2".to_string(), Some("call_x-2".to_string())),
+            ("call_x-0".to_string(), crate::tools::ask_user_comment::NAME.to_string()),
+            ("call_x-1".to_string(), crate::tools::ask_user_comment::NAME.to_string()),
+            ("call_x-2".to_string(), crate::tools::skill_list::NAME.to_string()),
         ],
     );
     assert_eq!(tool_results(&exchanges[1]).len(), 3);
 }
 
-// CVL-FR-EKHH: a call that has no `call_id` gives its result none, so the
-// requests of a provider that gives none do not change.
+// CVL-FR-EKHH: whatever id the provider gave a call, its result carries that
+// id unchanged.
 #[test]
-fn a_call_without_a_call_id_gives_its_result_none() {
+fn a_result_carries_whatever_id_the_provider_gave_its_call() {
     let h = Harness::scripted(vec![
         Ok(reply_reaching_every_result()),
         Ok(ScriptedReply::answer("Done.")),
@@ -79,16 +80,16 @@ fn a_call_without_a_call_id_gives_its_result_none() {
     assert_eq!(
         result_ids(&h.seam.exchanges()[1]),
         vec![
-            ("call-0".to_string(), None),
-            ("call-1".to_string(), None),
-            ("call-2".to_string(), None),
+            ("call-0".to_string(), crate::tools::ask_user_comment::NAME.to_string()),
+            ("call-1".to_string(), crate::tools::ask_user_comment::NAME.to_string()),
+            ("call-2".to_string(), crate::tools::skill_list::NAME.to_string()),
         ],
     );
 }
 
 // CVL-FR-EKHH: the exchange after a tool call builds a request on the OpenAI
 // Responses route, and each `function_call_output` names the `call_id` of its
-// `function_call`. Without the `call_id`, the framework refuses to build it.
+// `function_call`.
 #[test]
 fn the_exchange_after_a_tool_call_builds_a_responses_request() {
     let h = Harness::scripted(vec![
@@ -104,13 +105,7 @@ fn the_exchange_after_a_tool_call_builds_a_responses_request() {
     let (request, endpoint) = &requests[1];
     let exchange = &h.seam.exchanges()[1];
     let built = rig_seam::build_completion_request(request, exchange, endpoint);
-    let converted = rig::providers::openai::responses_api::CompletionRequest::try_from((
-        "model".to_string(),
-        built,
-    ))
-    .expect("the Responses route builds the request");
-
-    let wire = serde_json::to_value(&converted).expect("the request serializes");
+    let wire = responses_body(built);
     let items = wire["input"].as_array().expect("the request has input items");
     let of_type = |kind: &str| -> Vec<&serde_json::Value> {
         items.iter().filter(|item| item["type"] == kind).collect()
@@ -124,4 +119,23 @@ fn the_exchange_after_a_tool_call_builds_a_responses_request() {
     let expected = vec!["call_x-0", "call_x-1", "call_x-2"];
     assert_eq!(call_ids("function_call"), expected, "{wire}");
     assert_eq!(call_ids("function_call_output"), expected, "{wire}");
+}
+
+/// The JSON body the OpenAI Responses route sends for `built`, encoded by the
+/// framework's own wire.
+pub(super) fn responses_body(built: rig::completion::CompletionRequest) -> serde_json::Value {
+    use rig::wire::Wire;
+    let wire = rig::providers::openai::responses_api::wire::Responses::new(
+        rig::providers::openai::OpenAIConfig::new("not-a-real-key"),
+        "model",
+    );
+    let encoded = wire
+        .encode(built, rig::wire::Mode::Unary)
+        .expect("the Responses route builds the request");
+    match encoded.request.body() {
+        rig::wire::Body::Bytes(bytes) => {
+            serde_json::from_slice(bytes).expect("the request body is JSON")
+        }
+        rig::wire::Body::Multipart(_) => panic!("a completion body is JSON"),
+    }
 }

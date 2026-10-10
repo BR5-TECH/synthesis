@@ -1,7 +1,6 @@
 //! Tests for the `fs` module.
 
 use super::*;
-use serde::Deserialize;
 use tempfile::TempDir;
 
 // -----------------------------------------------------------------
@@ -50,37 +49,6 @@ fn ts2_discover_project_root_returns_not_a_project_when_none_exists() {
         "expected NotAProject, got {err:?}"
     );
 }
-
-// -----------------------------------------------------------------
-// FSA-FR-06: read_toml typed errors.
-// -----------------------------------------------------------------
-#[derive(Debug, Deserialize, serde::Serialize, PartialEq)]
-struct SampleConfig {
-    name: String,
-    count: i64,
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #[test]
 fn merge_gitignore_appends_in_required_order() {
@@ -304,21 +272,6 @@ fn fr1_browse_result_serializes_selected_with_path_field() {
     );
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // PST-FR-26's decision half, testable without a Tauri runtime: which paths
 // the command layer refuses before invoking any primitive, and why. The
 // reason is what the ERROR record carries, so both arms matter.
@@ -355,11 +308,6 @@ fn resolve_inside_separates_escape_from_symlink_and_admits_ordinary_paths() {
     assert_eq!(resolve_inside(root, "docs/../docs/a.md"), Ok(()));
 }
 
-
-
-
-
-
 #[test]
 fn is_valid_basename_accepts_plain_and_rejects_paths() {
     assert!(is_valid_basename("a.md"));
@@ -373,16 +321,7 @@ fn is_valid_basename_accepts_plain_and_rejects_paths() {
 // FSA-FR-14: create_dir
 // -----------------------------------------------------------------------
 
-
-
-
-
-
 // -----------------------------------------------------------------
 // FSA-FR-15: append_lines.
 // -----------------------------------------------------------------
-
-
-
-
 

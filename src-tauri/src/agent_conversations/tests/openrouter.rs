@@ -158,7 +158,7 @@ fn content_shape(message: &openrouter_rs::api::chat::Message) -> &'static str {
 #[test]
 fn the_bridge_carries_a_tool_definition_into_the_sdks_shape() {
     let definition = rig::completion::ToolDefinition {
-        name: "search_specifications".into(),
+        name: rig::completion::message::ToolName::new("search_specifications").expect("a tool name"),
         description: "Find the specifications most relevant to a topic.".into(),
         parameters: serde_json::json!({ "type": "object", "properties": {} }),
     };
@@ -176,41 +176,26 @@ fn the_bridge_carries_a_tool_definition_into_the_sdks_shape() {
 fn the_bridge_carries_a_whole_exchange_in_order_with_its_ids_intact() {
     // The shape a turn's second round actually has: preamble, the input, the
     // reply that asked for two tools, and a result for each.
-    let request = rig::completion::CompletionRequest {
-        model: Some("m".into()),
-        preamble: Some("PREAMBLE".into()),
-        chat_history: rig::OneOrMany::many(vec![
-            rig::completion::Message::user("INPUT"),
-            rig::completion::Message::Assistant {
-                id: None,
-                content: rig::OneOrMany::many(vec![
-                    rig::completion::message::AssistantContent::text("Looking."),
-                    rig::completion::message::AssistantContent::ToolCall(rig_tool_call(
-                        "call-0",
-                        "list_skills",
-                        serde_json::json!({}),
-                    )),
-                    rig::completion::message::AssistantContent::ToolCall(rig_tool_call(
-                        "call-1",
-                        "read_file",
-                        serde_json::json!({ "path": "a.md" }),
-                    )),
-                ])
-                .expect("content"),
-            },
-            rig::completion::Message::tool_result("call-0", "SKILLS"),
-            rig::completion::Message::tool_result("call-1", "FILE"),
-        ])
-        .expect("history"),
-        documents: Vec::new(),
-        tools: Vec::new(),
-        temperature: None,
-        max_tokens: None,
-        tool_choice: None,
-        additional_params: None,
-        output_schema: None,
-        record_telemetry_content: false,
-    };
+    let request = rig::completion::CompletionRequest::from(vec![
+        rig::completion::Message::user("INPUT"),
+        rig::completion::Message::Assistant(rig::completion::message::AssistantMessage::new(vec![
+            rig::completion::message::AssistantContent::text("Looking."),
+            rig::completion::message::AssistantContent::ToolCall(rig_tool_call(
+                "call-0",
+                "list_skills",
+                serde_json::json!({}),
+            )),
+            rig::completion::message::AssistantContent::ToolCall(rig_tool_call(
+                "call-1",
+                "read_file",
+                serde_json::json!({ "path": "a.md" }),
+            )),
+        ])),
+        tool_result_message("call-0", "list_skills", "SKILLS"),
+        tool_result_message("call-1", "read_file", "FILE"),
+    ])
+    .model::<String>(Some("m".into()))
+    .preamble("PREAMBLE");
 
     let carried = openrouter_bridge::messages_out(&request, &unsplit());
     use openrouter_rs::types::Role;
@@ -256,30 +241,20 @@ fn exchange_after_rounds_with_input(
     let mut history = vec![rig::completion::Message::user(input)];
     for round in 0..rounds {
         let id = format!("call-{round}");
-        history.push(rig::completion::Message::Assistant {
-            id: None,
-            content: rig::OneOrMany::one(rig::completion::message::AssistantContent::ToolCall(
-                rig_tool_call(&id, "list_skills", serde_json::json!({})),
-            )),
-        });
-        history.push(rig::completion::Message::tool_result(
-            id,
-            format!("RESULT-{round}"),
+        history.push(rig::completion::Message::Assistant(
+            rig::completion::message::AssistantMessage::new(vec![
+                rig::completion::message::AssistantContent::ToolCall(rig_tool_call(
+                    &id,
+                    "list_skills",
+                    serde_json::json!({}),
+                )),
+            ]),
         ));
+        history.push(tool_result_message(&id, "list_skills", format!("RESULT-{round}")));
     }
-    rig::completion::CompletionRequest {
-        model: Some("m".into()),
-        preamble: Some("PREAMBLE".into()),
-        chat_history: rig::OneOrMany::many(history).expect("a non-empty exchange"),
-        documents: Vec::new(),
-        tools: Vec::new(),
-        temperature: None,
-        max_tokens: None,
-        tool_choice: None,
-        additional_params: None,
-        output_schema: None,
-        record_telemetry_content: false,
-    }
+    rig::completion::CompletionRequest::from(history)
+        .model::<String>(Some("m".into()))
+        .preamble("PREAMBLE")
 }
 
 #[test]
@@ -567,10 +542,8 @@ fn the_anthropic_carrier_asks_for_caching_at_the_short_lifetime() {
     // told". Asserted on the model the carrier builds rather than on a response,
     // so what a request asks for is pinned without a network call — and so the
     // five-minute lifetime cannot be lengthened without a test noticing.
-    let client = rig::providers::anthropic::Client::builder()
-        .api_key("not-a-real-key")
-        .build()
-        .expect("a client needs no network to build");
+    let client = rig::providers::anthropic::AnthropicConfig::new("not-a-real-key")
+        .connect(rig_reqwest::ReqwestClient::from(reqwest013::Client::new()));
     let endpoint = AiApiCall {
         turn_timeout_ms: None,
         provider: "anthropic".into(),
@@ -581,14 +554,21 @@ fn the_anthropic_carrier_asks_for_caching_at_the_short_lifetime() {
         accepts_image_input: false,
                     model_mode: None,
     };
+    let request = AgentRequest::default();
+    let built = anthropic_request(build_completion_request(
+        &request,
+        &opening_exchange(&request, false),
+        &endpoint,
+    ));
+    assert_eq!(
+        built.options.cache,
+        Some(rig::completion::CacheRetention::Short),
+        "the provider is told to cache what each call presents, for the short lifetime",
+    );
     let model = anthropic_model(&client, &endpoint);
     assert!(
-        model.automatic_caching,
-        "the provider is told to cache what each call presents",
-    );
-    assert!(
-        model.automatic_caching_ttl.is_none(),
-        "the lifetime is the short one, which is what an unset TTL asks for",
+        model.wire.static_prefix_cache_ttl.is_none() && !model.wire.prompt_caching,
+        "no fixed breakpoint and no other lifetime is asked for",
     );
 }
 
@@ -598,7 +578,9 @@ fn an_exchange_with_no_preamble_marks_the_input_rather_than_the_wrong_message() 
     // preamble costs the prompt its mark rather than moving it onto whatever
     // happens to sit first.
     let mut request = exchange_after_rounds(1);
-    request.preamble = None;
+    request
+        .chat_history
+        .retain(|message| !matches!(message, rig::completion::Message::System { .. }));
     let carried = openrouter_bridge::messages_out(&request, &unsplit());
     assert!(matches!(
         carried[0].role,
@@ -622,47 +604,40 @@ fn the_bridge_round_trips_a_tool_calls_arguments_through_the_sdks_json_string() 
     assert_eq!(out.function.name, "read_file");
 
     let back = openrouter_bridge::tool_call_in(&out);
-    assert_eq!(back.id, "call-0");
+    assert_eq!(back.id.to_string(), "call-0");
     assert_eq!(back.function.name, "read_file");
     assert_eq!(
-        back.function.arguments, arguments,
+        back.function.arguments_value(), arguments,
         "arguments survive the trip through the SDK's JSON string",
     );
 }
 
+// TLC-FR-SPRR
 #[test]
-fn arguments_the_provider_sent_unparseably_become_null_rather_than_ending_the_turn() {
-    // The tool the call names decides what to do with arguments it cannot use,
-    // and that refusal reaches the model as a result it can correct (CVL-FR-14)
-    // — a better answer than ending the conversation in the bridge.
+fn arguments_the_provider_sent_unparseably_are_kept_as_sent_rather_than_ending_the_turn() {
+    // The boundary that dispatches the call refuses it before the tool runs,
+    // and that refusal reaches the model as a result it can correct
+    // (CVL-FR-14) — a better answer than ending the conversation in the bridge.
     let mangled = openrouter_rs::types::ToolCall::new("call-0", "read_file", "{not json");
     let back = openrouter_bridge::tool_call_in(&mangled);
     assert_eq!(back.function.name, "read_file");
-    assert_eq!(back.function.arguments, serde_json::Value::Null);
+    assert_eq!(back.function.invalid_arguments.as_deref(), Some("{not json"));
 }
 
 #[test]
 fn an_assistant_reply_with_calls_and_no_prose_still_carries_its_calls() {
     // The ordinary middle of a loop: a model that asked for a tool and said
     // nothing. Dropping the message would strand the results that follow it.
-    let request = rig::completion::CompletionRequest {
-        model: Some("m".into()),
-        preamble: None,
-        chat_history: rig::OneOrMany::one(rig::completion::Message::Assistant {
-            id: None,
-            content: rig::OneOrMany::one(rig::completion::message::AssistantContent::ToolCall(
-                rig_tool_call("call-0", "list_skills", serde_json::json!({})),
+    let request = rig::completion::CompletionRequest::from(vec![rig::completion::Message::Assistant(
+        rig::completion::message::AssistantMessage::new(vec![
+            rig::completion::message::AssistantContent::ToolCall(rig_tool_call(
+                "call-0",
+                "list_skills",
+                serde_json::json!({}),
             )),
-        }),
-        documents: Vec::new(),
-        tools: Vec::new(),
-        temperature: None,
-        max_tokens: None,
-        tool_choice: None,
-        additional_params: None,
-        output_schema: None,
-        record_telemetry_content: false,
-    };
+        ]),
+    )])
+    .model::<String>(Some("m".into()));
     let carried = openrouter_bridge::messages_out(&request, &unsplit());
     assert_eq!(carried.len(), 1, "no preamble, so the reply alone");
     assert_eq!(

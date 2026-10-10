@@ -196,9 +196,9 @@ const SHAPE_KEYS: usize = 12;
 /// it says the model invented a field — and repeating it buys a reader nothing
 /// that the mark does not already tell them.
 ///
-/// An object wider than [`SHAPE_KEYS`] is read in the order a JSON object holds
-/// its fields, which is by name, so a very wide argument set is reported by its
-/// first fields by name rather than by the order the model wrote them.
+/// An object is read by field name, whatever order it holds its fields in, so
+/// a very wide argument set is reported by its first fields by name rather
+/// than by the order the model wrote them.
 pub fn argument_shape(value: &serde_json::Value, schema: &serde_json::Value) -> String {
     let mut declared = std::collections::BTreeSet::new();
     collect_declared(schema, &mut declared);
@@ -272,7 +272,12 @@ fn write_shape(
                 return;
             }
             out.push('{');
-            for (index, (key, held)) in fields.iter().take(SHAPE_KEYS).enumerate() {
+            // Read by name, whatever order the object holds its fields in, so
+            // two calls that differ only in the order the model wrote them
+            // record one shape (TLC-FR-14).
+            let mut by_name: Vec<_> = fields.iter().collect();
+            by_name.sort_by(|a, b| a.0.cmp(b.0));
+            for (index, (key, held)) in by_name.into_iter().take(SHAPE_KEYS).enumerate() {
                 if index > 0 {
                     out.push(',');
                 }

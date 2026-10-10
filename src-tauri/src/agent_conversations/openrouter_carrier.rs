@@ -123,7 +123,7 @@ pub(super) fn openrouter_failure(error: &openrouter_rs::error::OpenRouterError) 
                 failure,
                 class,
                 status: Some(status),
-                provider_code: context.api_code,
+                provider_code: context.api_code.map(|code| code.to_string()),
                 provider_request_id: context.request_id.clone(),
                 // CVL-FR-35: bounded, because a provider is free to answer with
                 // as much text as it likes and a log line is not the place to
@@ -255,9 +255,9 @@ pub(super) fn reply_from_openrouter(
         reply_repairs: Default::default(),
         served_by,
         // CVL-FR-28: what this one call presented, as this client counted it.
-        // A count of zero is read as not counted, on the same terms
-        // `input_tokens_of` reads an all-zero report: no call presents nothing,
-        // every one of them carrying at least the compiled prompt.
+        // This client reduces a missing count to zero, so a count of zero is
+        // read as not counted: no call presents nothing, every one of them
+        // carrying at least the compiled prompt.
         prompt_tokens: response
             .usage
             .as_ref()
@@ -277,6 +277,22 @@ pub(super) fn reply_from_openrouter(
         // uncached would be a confident claim that caching had not landed, which
         // is the one thing the record must not say when it does not know.
         input_tokens: None,
+        // CVL-FR-28: this client reports no cache-write and no reasoning
+        // count, and no request identifier of its own on an answered call.
+        cache_write_tokens: None,
+        reasoning_tokens: None,
+        provider_request_id: None,
+        response_id: Some(response.id.clone()).filter(|id| !id.is_empty()),
+        response_model: Some(response.model.clone()).filter(|model| !model.is_empty()),
+        finish_reason: response
+            .choices
+            .first()
+            .and_then(|choice| choice.finish_reason())
+            .and_then(|reason| serde_json::to_value(reason).ok())
+            .and_then(|reason| reason.as_str().map(str::to_string)),
+        // The exchange takes this reply back as its text and its calls: this
+        // client returns no framework turn.
+        turn: None,
         text,
         tool_calls: response
             .choices
@@ -298,7 +314,7 @@ pub(super) fn reply_from_openrouter(
 pub(super) mod openrouter_bridge {
     use openrouter_rs::api::chat::Message as OrMessage;
     use openrouter_rs::types::Role;
-    use rig::completion::message::{AssistantContent, ToolCall, ToolFunction, UserContent};
+    use rig::completion::message::{AssistantContent, ToolCall, ToolFunction, ToolName, UserContent};
     use rig::completion::{Message, ToolDefinition};
 
     /// One tool definition, in the SDK's shape (CVL-FR-10).
@@ -438,9 +454,8 @@ pub(super) mod openrouter_bridge {
         hints: &CacheHints,
     ) -> Vec<OrMessage> {
         let mut out = Vec::new();
-        if let Some(preamble) = request.preamble.as_ref().filter(|p| !p.is_empty()) {
-            out.push(OrMessage::new(Role::System, preamble.as_str()));
-        }
+        // The compiled prompt is the request's leading system message, which
+        // the `Message::System` arm below emits in its place.
         for message in request.chat_history.iter() {
             match message {
                 Message::User { content } => {
@@ -467,7 +482,7 @@ pub(super) mod openrouter_bridge {
                             UserContent::ToolResult(result) => {
                                 flush(&mut text, &mut out);
                                 out.push(OrMessage::tool_response(
-                                    &result.id,
+                                    &result.call.to_string(),
                                     render_tool_result(result),
                                 ));
                             }
@@ -476,10 +491,10 @@ pub(super) mod openrouter_bridge {
                     }
                     flush(&mut text, &mut out);
                 }
-                Message::Assistant { content, .. } => {
+                Message::Assistant(turn) => {
                     let mut text = String::new();
                     let mut calls = Vec::new();
-                    for part in content.iter() {
+                    for part in turn.content.iter() {
                         match part {
                             AssistantContent::Text(t) => text.push_str(&t.text),
                             AssistantContent::ToolCall(call) => calls.push(tool_call_out(call)),
@@ -613,29 +628,30 @@ pub(super) mod openrouter_bridge {
     /// what the provider sent in the first place.
     pub(in crate::agent_conversations) fn tool_call_out(call: &ToolCall) -> openrouter_rs::types::ToolCall {
         openrouter_rs::types::ToolCall::new(
-            call.id.clone(),
-            call.function.name.clone(),
-            call.function.arguments.to_string(),
+            call.id.to_string(),
+            call.function.name.to_string(),
+            call.function.arguments_value().to_string(),
         )
     }
 
     /// A call the model just asked for, in `rig`'s shape so the loop handles
     /// every provider's identically (CVL-FR-10).
     ///
-    /// Arguments arrive as a JSON *string* and are parsed back into a value. A
-    /// string that does not parse becomes `null` rather than failing the turn:
-    /// the tool it names decides what to do with arguments it cannot use, and
-    /// that refusal reaches the model as a result it can correct (CVL-FR-14),
-    /// which is a better answer than ending the conversation here.
+    /// Arguments arrive as a JSON *string* and are read by the framework. A
+    /// string that is not an object is kept beside the call as the model sent
+    /// it rather than failing the turn: the boundary that dispatches the call
+    /// refuses it before the tool runs (TLC-FR-SPRR), and that refusal reaches
+    /// the model as a result it can correct (CVL-FR-14), which is a better
+    /// answer than ending the conversation here.
+    ///
+    /// A call with an empty name keeps the name `unknown`: the framework holds
+    /// no empty tool name, and no tool by that name is on offer, so the model
+    /// is told it named nothing it was given.
     pub fn tool_call_in(call: &openrouter_rs::types::ToolCall) -> ToolCall {
-        ToolCall::new(
-            call.id.clone(),
-            ToolFunction {
-                name: call.function.name.clone(),
-                arguments: serde_json::from_str(&call.function.arguments)
-                    .unwrap_or(serde_json::Value::Null),
-            },
-        )
+        let name = ToolName::new(call.function.name.clone())
+            .or_else(|_| ToolName::new("unknown"))
+            .expect("a non-empty tool name");
+        ToolCall::from_wire(call.id.clone(), ToolFunction::parse(name, &call.function.arguments))
     }
 }
 

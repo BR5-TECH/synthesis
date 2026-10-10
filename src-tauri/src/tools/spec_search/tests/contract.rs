@@ -10,7 +10,7 @@ use super::*;
 fn the_tool_is_a_portable_tool_named_for_the_contract() {
     let app = closed_project();
     let tool = SpecSearchTool::new(app.handle().clone());
-    let definition = rig::tool::portable_tool_definition(&tool);
+    let definition = rig::tool::tool_definition(&tool);
 
     assert_eq!(
         <SpecSearchTool<tauri::test::MockRuntime> as PortableTool>::NAME,

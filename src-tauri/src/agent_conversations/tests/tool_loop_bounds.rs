@@ -32,7 +32,7 @@ fn a_turn_runs_inside_an_agent_session_that_ends_with_it() {
         })
         .find_map(|part| match part {
             rig::completion::message::UserContent::ToolResult(result) => match result.content.first() {
-                rig::completion::message::ToolResultContent::Text(text) => Some(text.text.clone()),
+                Some(rig::completion::message::ToolResultContent::Text(text)) => Some(text.text.clone()),
                 _ => None,
             },
             _ => None,
@@ -596,35 +596,76 @@ fn a_failed_turn_reports_the_split_like_any_other() {
     assert_eq!(require(&ended, "uncachedInputTokens"), "3000");
 }
 
+// CVL-FR-WQZD
 #[test]
-fn a_zero_valued_usage_report_reads_as_no_report_at_all() {
-    // CVL-FR-28. `rig` reduces a missing usage report to a zero-valued `Usage`
-    // rather than an absent one, so the mapping has to read all-zero as "would
-    // not say" — a call that genuinely consumed no input tokens does not exist,
-    // every call carrying at least the compiled prompt.
-    let mut silent = rig::completion::Usage::new();
-    silent.input_tokens = 0;
-    silent.cached_input_tokens = 0;
-    assert_eq!(rig_seam::input_tokens_of(&silent), None);
-
-    let mut reported = rig::completion::Usage::new();
-    reported.input_tokens = 120;
-    reported.cached_input_tokens = 4_000;
+fn input_tokens_split_the_reported_input_total_into_cache_reads_and_the_rest() {
+    // The input total counts every prompt token, cache reads and cache writes
+    // included, on every provider. The cached part is the cache reads, and the
+    // uncached part is the total less the cache reads and the cache writes.
+    let reported = rig::completion::Usage::new()
+        .input_tokens(5_000)
+        .cached_input_tokens(4_000)
+        .cache_creation_input_tokens(300);
     assert_eq!(
         rig_seam::input_tokens_of(&reported),
         Some(InputTokens {
             cached: 4_000,
-            uncached: 120,
+            uncached: 700,
+        }),
+    );
+
+    // A provider that reports no cache counter at all billed the whole input
+    // at the full rate.
+    let uncached = rig::completion::Usage::new().input_tokens(1_200);
+    assert_eq!(
+        rig_seam::input_tokens_of(&uncached),
+        Some(InputTokens {
+            cached: 0,
+            uncached: 1_200,
+        }),
+    );
+
+    // Cache reads and writes above the input total leave nothing uncached,
+    // never a negative count.
+    let over = rig::completion::Usage::new()
+        .input_tokens(100)
+        .cached_input_tokens(80)
+        .cache_creation_input_tokens(50);
+    assert_eq!(
+        rig_seam::input_tokens_of(&over),
+        Some(InputTokens {
+            cached: 80,
+            uncached: 0,
         }),
     );
 
     // A call that read everything from the cache still reported something.
-    let mut all_cached = rig::completion::Usage::new();
-    all_cached.cached_input_tokens = 4_000;
+    let all_cached = rig::completion::Usage::new()
+        .input_tokens(4_000)
+        .cached_input_tokens(4_000);
     assert_eq!(
         rig_seam::input_tokens_of(&all_cached),
         Some(InputTokens {
             cached: 4_000,
+            uncached: 0,
+        }),
+    );
+}
+
+// CVL-FR-WQZD
+#[test]
+fn an_absent_input_total_reads_as_no_report_rather_than_as_zero() {
+    // A direction the provider declined to report is absent, never zero —
+    // also when it reported a cache counter beside it.
+    assert_eq!(rig_seam::input_tokens_of(&rig::completion::Usage::new()), None);
+    let cache_alone = rig::completion::Usage::new().cached_input_tokens(4_000);
+    assert_eq!(rig_seam::input_tokens_of(&cache_alone), None);
+    // A reported zero is a report.
+    let zero = rig::completion::Usage::new().input_tokens(0);
+    assert_eq!(
+        rig_seam::input_tokens_of(&zero),
+        Some(InputTokens {
+            cached: 0,
             uncached: 0,
         }),
     );

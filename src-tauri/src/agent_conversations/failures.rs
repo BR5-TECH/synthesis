@@ -141,10 +141,11 @@ pub struct CallFailure {
     pub class: &'static str,
     /// Present only on [`class::HTTP_STATUS`].
     pub status: Option<u16>,
-    /// CVL-FR-35: the error code the provider itself chose, where it answered
-    /// with a structured error rather than with a transport failure. A number of
-    /// the provider's own vocabulary — nothing of the request is in it.
-    pub provider_code: Option<i64>,
+    /// CVL-FR-35: the error code the provider itself chose, as text, where it
+    /// answered with a structured error rather than with a transport failure.
+    /// A word or a number of the provider's own vocabulary — nothing of the
+    /// request is in it.
+    pub provider_code: Option<String>,
     /// CVL-FR-35: the provider's own identifier for the request that failed.
     /// Opaque, and the one field that lets a failure here be matched to the
     /// provider's own record of it.

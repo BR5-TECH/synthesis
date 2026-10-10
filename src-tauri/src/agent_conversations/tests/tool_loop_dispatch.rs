@@ -267,7 +267,7 @@ fn several_tools_asked_for_at_once_are_all_dispatched_before_the_next_call() {
         })
         .flat_map(|content| content.iter())
         .filter_map(|part| match part {
-            rig::completion::message::UserContent::ToolResult(result) => Some(result.id.clone()),
+            rig::completion::message::UserContent::ToolResult(result) => Some(result.call.to_string()),
             _ => None,
         })
         .collect();
@@ -417,7 +417,7 @@ fn a_tool_refusal_is_fed_back_and_the_turn_still_delivers() {
         })
         .expect("the refusal came back as a tool result");
     let text = match refusal.content.first() {
-        rig::completion::message::ToolResultContent::Text(text) => text.text.clone(),
+        Some(rig::completion::message::ToolResultContent::Text(text)) => text.text.clone(),
         _ => panic!("a tool result is text"),
     };
     assert_eq!(
@@ -449,7 +449,7 @@ fn a_tool_the_model_invented_is_reported_to_it_rather_than_ending_the_turn() {
         })
         .find_map(|part| match part {
             rig::completion::message::UserContent::ToolResult(result) => match result.content.first() {
-                rig::completion::message::ToolResultContent::Text(text) => Some(text.text.clone()),
+                Some(rig::completion::message::ToolResultContent::Text(text)) => Some(text.text.clone()),
                 _ => None,
             },
             _ => None,

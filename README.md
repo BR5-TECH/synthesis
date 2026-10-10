@@ -154,7 +154,7 @@ Synthesis keeps all secrets in one entry of the operating-system keyring. It doe
 You need:
 
 - Node.js and pnpm 10 or later. The CI pipeline uses Node.js 26 and pnpm 11.
-- The Rust toolchain that `src-tauri/rust-toolchain.toml` pins (channel `1.88`).
+- The Rust toolchain that `src-tauri/rust-toolchain.toml` pins (channel `1.95`).
 - The system packages for Tauri on your operating system. The list for each host is in `docs/development.md`.
 - Optional: the [Task](https://taskfile.dev) runner, Python 3, and Docker.
 

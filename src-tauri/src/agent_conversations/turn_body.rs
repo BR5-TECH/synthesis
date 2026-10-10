@@ -384,12 +384,12 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 activity.finish_all(app, turns, &plan.turn_id);
                 return Err(end);
             }
-            // CVL-FR-EKHH: every result carries the id of its call and, where
-            // the provider gave one, its `call_id`. The Responses route matches
-            // a result to its call by `call_id` and refuses a request without it.
-            exchange.push(rig::completion::Message::tool_result_with_call_id(
+            // CVL-FR-EKHH: every result carries the id of its call, unchanged,
+            // and the name of the tool. The Responses route matches a result to
+            // its call by `call_id`, which is that id.
+            exchange.push(rig::completion::Message::tool_result(
                 call.id.clone(),
-                call.call_id.clone(),
+                call.function.name.clone(),
                 result,
             ));
         }
@@ -418,9 +418,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 None
             };
             if let Some(message) = one_at_a_time {
-                exchange.push(rig::completion::Message::tool_result_with_call_id(
+                exchange.push(rig::completion::Message::tool_result(
                     call.id.clone(),
-                    call.call_id.clone(),
+                    call.function.name.clone(),
                     message.to_string(),
                 ));
                 // CVL-FR-33: a refusal is a result produced, so the call leaves
@@ -437,9 +437,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());
             let result = dispatch_tool(app, turns, plan, call, remaining);
             activity.finish(app, turns, &plan.turn_id, index);
-            exchange.push(rig::completion::Message::tool_result_with_call_id(
+            exchange.push(rig::completion::Message::tool_result(
                 call.id.clone(),
-                call.call_id.clone(),
+                call.function.name.clone(),
                 result,
             ));
         }

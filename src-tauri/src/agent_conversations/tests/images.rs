@@ -335,7 +335,7 @@ fn cvl_ts65_the_first_user_message_carries_ordered_content_parts() {
 
     // CVL-FR-07 / CVL-FR-10: the preamble carries the compiled prompt alone.
     let built = build_completion_request(&request, &exchange, &any_endpoint());
-    assert_eq!(built.preamble.as_deref(), Some("The compiled prompt."));
+    assert_eq!(built.system_instructions(), Some("The compiled prompt."));
 }
 
 /// CVL-FR-20, CVL-FR-37, CVL-FR-38: a text-only endpoint is sent the request a text-only turn always

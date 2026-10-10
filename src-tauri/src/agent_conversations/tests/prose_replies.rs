@@ -9,7 +9,7 @@ use super::super::prose_tool_calls::tool_written_as_prose;
 
 fn tool(name: &str, parameters: serde_json::Value) -> rig::completion::ToolDefinition {
     rig::completion::ToolDefinition {
-        name: name.into(),
+        name: rig::completion::message::ToolName::new(name).expect("a tool name"),
         description: String::new(),
         parameters,
     }

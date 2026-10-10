@@ -10,7 +10,7 @@ use super::*;
 fn the_tool_is_a_portable_tool_named_for_the_contract() {
     let app = closed_project();
     let tool = FileReadTool::new(app.handle().clone(), "identity");
-    let definition = rig::tool::portable_tool_definition(&tool);
+    let definition = rig::tool::tool_definition(&tool);
 
     assert_eq!(
         <FileReadTool<tauri::test::MockRuntime> as PortableTool>::NAME,

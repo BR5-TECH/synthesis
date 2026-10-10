@@ -226,7 +226,7 @@ fn assign(root: &crate::fs::RootFs, entries: &[(&str, ArtifactType)]) {
 fn it_is_a_portable_tool_with_no_command_or_event_of_its_own() {
     // PPC-FR-01.
     let f = Fixture::new();
-    let definition = rig::tool::portable_tool_definition(&f.tool());
+    let definition = rig::tool::tool_definition(&f.tool());
     assert_eq!(definition.name, NAME);
     assert_eq!(
         <ProposePromptChangesTool<tauri::test::MockRuntime> as PortableTool>::NAME,
@@ -247,8 +247,8 @@ fn its_definition_is_byte_identical_wherever_it_appears() {
     // PPC-FR-02.
     let one = Fixture::new();
     let two = Fixture::new();
-    let a = rig::tool::portable_tool_definition(&one.tool());
-    let b = rig::tool::portable_tool_definition(&two.tool_for(
+    let a = rig::tool::tool_definition(&one.tool());
+    let b = rig::tool::tool_definition(&two.tool_for(
         ConversationOrigin::stub_artifact(two.thread_id.clone(), "a.md", true),
     ));
     assert_eq!(a.name, b.name);

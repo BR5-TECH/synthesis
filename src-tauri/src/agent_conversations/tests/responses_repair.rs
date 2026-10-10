@@ -208,32 +208,34 @@ fn only_the_custom_gateway_is_configured_to_repair() {
 #[test]
 fn a_body_the_framework_could_not_decode_is_an_invalid_response() {
     let json = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
-    let failure = rig_seam::classify_completion_error(&rig::completion::CompletionError::JsonError(json));
+    let failure =
+        rig_seam::classify_completion_error(&rig::ProviderError::Json(std::sync::Arc::new(json)));
     assert_eq!(failure.failure, FAIL_INVALID_RESPONSE);
     assert_eq!(failure.class, class::DECODE);
     assert_eq!(failure.status, None);
     assert_eq!(failure.provider_message, None);
 }
 
-// CVL-FR-21, CVL-FR-13: the framework's report of a reply with no message and
-// no tool call is `empty_reply`, and not `unreachable`.
+// CVL-FR-21: a reply that decoded but does not answer the request is
+// `decode`, which is `invalid_response`, and its text does not reach the
+// failure.
 #[test]
-fn the_frameworks_empty_reply_is_an_empty_reply() {
-    let error = rig::completion::CompletionError::ResponseError(
-        rig_seam::EMPTY_RESPONSE_MESSAGE.to_string(),
-    );
+fn a_reply_that_does_not_answer_the_request_is_an_invalid_response() {
+    let error = rig::ProviderError::Response("connection refused: HTTP 503".into());
     let failure = rig_seam::classify_completion_error(&error);
-    assert_eq!(failure.failure, FAIL_EMPTY_REPLY);
-    assert_eq!(failure.class, class::EMPTY_REPLY);
+    assert_eq!(failure.failure, FAIL_INVALID_RESPONSE);
+    assert_eq!(failure.class, class::DECODE);
+    assert_eq!(failure.status, None);
+    assert_eq!(failure.provider_message, None);
 }
 
 // CVL-FR-21: an error whose kind does not settle its class still goes to the
 // text classification.
 #[test]
 fn an_error_of_another_kind_is_classified_from_its_text() {
-    let other = rig::completion::CompletionError::ResponseError("something else".into());
+    let other = rig::ProviderError::Provider("something else".into());
     assert_eq!(rig_seam::classify_completion_error(&other).failure, FAIL_UNREACHABLE);
-    let refused = rig::completion::CompletionError::ProviderError("HTTP 503 unavailable".into());
+    let refused = rig::ProviderError::Provider("HTTP 503 unavailable".into());
     let failure = rig_seam::classify_completion_error(&refused);
     assert_eq!(failure.class, class::HTTP_STATUS);
     assert_eq!(failure.status, Some(503));
@@ -251,8 +253,8 @@ fn an_invalid_response_is_offered_again_but_not_repeated() {
 }
 
 /// One loopback server that answers exactly one HTTP request.
-struct OneShot {
-    addr: SocketAddr,
+pub(super) struct OneShot {
+    pub(super) addr: SocketAddr,
     accepted: Arc<AtomicBool>,
     handle: std::thread::JoinHandle<String>,
 }
@@ -263,7 +265,7 @@ impl OneShot {
     /// it, so that case fails in the test and does not hang. The connection is
     /// made only while the server still waits, so it cannot reach a listener
     /// another test bound to the same port after this one closed.
-    fn request_line(self) -> String {
+    pub(super) fn request_line(self) -> String {
         if !self.accepted.load(Ordering::SeqCst) {
             drop(TcpStream::connect(self.addr));
         }
@@ -274,7 +276,7 @@ impl OneShot {
 /// Serve exactly one HTTP request on loopback with the given status and body,
 /// and hand back the request line. A connection that sends nothing gives an
 /// empty string, which is how a call that never reached the server shows.
-fn answer_once(status: &'static str, body: String) -> OneShot {
+pub(super) fn answer_once(status: &'static str, body: String) -> OneShot {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let accepted = Arc::new(AtomicBool::new(false));
@@ -341,7 +343,7 @@ fn responses_reply(text: serde_json::Value) -> String {
     .to_string()
 }
 
-fn call(
+pub(super) fn call(
     provider: &str,
     mode: Option<ModelMode>,
     base_url: &str,
@@ -358,7 +360,7 @@ fn call(
         accepts_image_input: false,
         model_mode: mode,
     };
-    let request = AgentRequest::default();
+    let request = wire_request();
     let exchange = opening_exchange(&request, false);
     let outcome = RigCompletion.complete(&request, &exchange, &endpoint, Duration::from_secs(20));
     (server.request_line(), outcome)
@@ -397,11 +399,11 @@ fn a_custom_gateway_reply_with_a_format_is_not_repaired() {
     assert!(!reply.reply_repairs.any());
 }
 
-// CVL-FR-TQRD, CVL-FR-21: no other provider receives the tolerance. The same
-// body on `openai` is a reply that could not be read, not a host that could not
-// be reached.
+// CVL-FR-TQRD: no other provider receives the tolerance. The same body on
+// `openai` reaches the framework as the provider sent it, and the framework
+// reads it on its own terms.
 #[test]
-fn the_same_reply_on_openai_is_an_invalid_response() {
+fn the_same_reply_on_openai_gets_no_repair() {
     let (seen, outcome) = call(
         "openai",
         RESPONSES,
@@ -409,10 +411,9 @@ fn the_same_reply_on_openai_is_an_invalid_response() {
         responses_reply(serde_json::json!({})),
     );
     assert!(seen.starts_with("POST /v1/responses "), "{seen}");
-    let failure = outcome.expect_err("openai gets no repair");
-    assert_eq!(failure.failure, FAIL_INVALID_RESPONSE);
-    assert_eq!(failure.class, class::DECODE);
-    assert!(!failure.repeatable());
+    let reply = outcome.expect("the framework reads the reply");
+    assert_eq!(reply.text, "The answer.");
+    assert!(!reply.reply_repairs.any(), "openai gets no repair");
 }
 
 // CVL-FR-21: a Custom gateway reply that is not a Responses body at all is an
@@ -520,8 +521,8 @@ fn a_custom_gateway_reply_with_a_null_text_part_delivers_its_tool_call() {
     assert_eq!(reply.tool_calls.len(), 1);
     let tool_call = &reply.tool_calls[0];
     assert_eq!(tool_call.function.name, "example_tool");
-    assert_eq!(tool_call.call_id.as_deref(), Some("call_example"));
-    assert_eq!(tool_call.function.arguments, serde_json::json!({ "id": "example" }));
+    assert_eq!(tool_call.id.to_string(), "call_example");
+    assert_eq!(tool_call.function.arguments_value(), serde_json::json!({ "id": "example" }));
     assert_eq!(reply.reply_repairs, ReplyRepairs { text_format: true, null_text_parts: 1 });
 }
 
@@ -541,44 +542,44 @@ fn a_custom_gateway_message_keeps_the_parts_that_have_text() {
     assert_eq!(reply.reply_repairs, ReplyRepairs { text_format: false, null_text_parts: 1 });
 }
 
-// CVL-FR-TQRD, CVL-FR-21: a reply that has nothing left after the repair is the
-// framework's empty reply, not a reply that could not be read, and the failure
-// still tells the loop what was repaired.
+// CVL-FR-TQRD, CVL-FR-UALC: a reply that has nothing left after the repair
+// holds no message and no tool call, which the loop takes as `empty_reply`,
+// and the reply still tells the loop what was repaired.
 #[test]
-fn a_custom_gateway_reply_with_only_a_null_text_part_is_an_empty_reply() {
+fn a_custom_gateway_reply_with_only_a_null_text_part_has_nothing_to_deliver() {
     let (_, outcome) = call("custom", RESPONSES, "http://{addr}", null_text_reply(false));
-    let failure = outcome.expect_err("nothing is left to deliver");
-    assert_eq!(failure.failure, FAIL_EMPTY_REPLY);
-    assert_eq!(failure.class, class::EMPTY_REPLY);
-    assert_eq!(failure.reply_repairs, ReplyRepairs { text_format: true, null_text_parts: 1 });
+    let reply = outcome.expect("the repaired reply is read");
+    assert_eq!(reply.text, "");
+    assert!(reply.tool_calls.is_empty(), "nothing is left to deliver");
+    assert_eq!(reply.reply_repairs, ReplyRepairs { text_format: true, null_text_parts: 1 });
 }
 
-// CVL-FR-TQRD, CVL-FR-21: the same reply on `openai` gets no tolerance and is
-// a reply that could not be read. The body has a format, so only the part
-// without text can make the framework refuse it.
+// CVL-FR-TQRD: the same reply on `openai` gets no tolerance. The body has a
+// format, so only the part without text differs from an ordinary reply.
 #[test]
-fn the_null_text_reply_on_openai_is_an_invalid_response() {
+fn the_null_text_reply_on_openai_gets_no_repair() {
     let mut body: serde_json::Value = serde_json::from_str(&null_text_reply(true)).unwrap();
     body["text"] = serde_json::json!({ "format": { "type": "text" } });
     let (_, outcome) = call("openai", RESPONSES, "http://{addr}/v1", body.to_string());
-    let failure = outcome.expect_err("openai gets no repair");
-    assert_eq!(failure.failure, FAIL_INVALID_RESPONSE);
-    assert_eq!(failure.class, class::DECODE);
-    assert!(!failure.reply_repairs.any());
+    let reply = outcome.expect("the framework reads the reply");
+    assert_eq!(reply.tool_calls.len(), 1);
+    assert!(!reply.reply_repairs.any(), "openai gets no repair");
 }
 
-// CVL-FR-21, CVL-FR-13: a reply with no message and no tool call is
-// `empty_reply`, as the framework itself words it, and not `unreachable`.
+// CVL-FR-UALC, CVL-FR-13: a reply with no message and no tool call reaches the
+// loop as a reply with neither, which the loop takes as `empty_reply`, and not
+// as `unreachable`.
 #[test]
-fn a_reply_with_no_output_is_an_empty_reply() {
+fn a_reply_with_no_output_has_nothing_to_deliver() {
     let mut body: serde_json::Value =
         serde_json::from_str(&responses_reply(serde_json::json!({ "format": { "type": "text" } })))
             .unwrap();
     body["output"] = serde_json::json!([]);
     let (_, outcome) = call("custom", RESPONSES, "http://{addr}", body.to_string());
-    let failure = outcome.expect_err("an empty reply is a failure of the call");
-    assert_eq!(failure.failure, FAIL_EMPTY_REPLY);
-    assert_eq!(failure.class, class::EMPTY_REPLY);
+    let reply = outcome.expect("an empty reply is read");
+    assert_eq!(reply.text, "");
+    assert!(reply.tool_calls.is_empty());
+    assert_eq!(reply.turn, None, "nothing of it goes back into the exchange");
 }
 
 // CVL-FR-18, AGC-FR-15, AGC-FR-31: a turn whose reply could not be read fails

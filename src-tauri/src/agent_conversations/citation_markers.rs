@@ -82,7 +82,28 @@ pub(super) fn strip_reply_citation_markers(reply: &mut ModelReply) -> usize {
         reply.text = clean;
     }
     for call in &mut reply.tool_calls {
-        removed += strip_value(&mut call.function.arguments);
+        removed += call.function.arguments.values_mut().map(strip_value).sum::<usize>();
+    }
+    // CVL-FR-ETAH: the turn that goes back into the exchange carries the same
+    // text and the same calls, so the markers leave it too. Counted once, from
+    // the reply above.
+    if let Some(turn) = &mut reply.turn {
+        use rig::completion::message::AssistantContent;
+        for block in &mut turn.content {
+            match block {
+                AssistantContent::Text(text) => {
+                    if let Cow::Owned(clean) = strip_citation_markers(&text.text) {
+                        text.text = clean;
+                    }
+                }
+                AssistantContent::ToolCall(call) => {
+                    call.function.arguments.values_mut().for_each(|value| {
+                        strip_value(value);
+                    });
+                }
+                _ => {}
+            }
+        }
     }
     removed
 }

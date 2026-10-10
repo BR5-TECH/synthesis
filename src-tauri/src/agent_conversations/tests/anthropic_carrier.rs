@@ -41,13 +41,10 @@ fn every_reasoning_choice() -> Vec<Option<ReasoningChoice>> {
 
 // CVL-FR-KXTQ: every model gets the limit of this module, also a model id that
 // `rig` has no default for and a model id that it has a different default for.
-// CVL-FR-23: the limit does not remove the caching that the carrier asks for.
 #[test]
 fn every_anthropic_model_carries_the_fixed_output_token_limit() {
-    let client = rig::providers::anthropic::Client::builder()
-        .api_key("not-a-real-key")
-        .build()
-        .expect("a client needs no network to build");
+    let client = rig::providers::anthropic::AnthropicConfig::new("not-a-real-key")
+        .connect(rig_reqwest::ReqwestClient::from(reqwest013::Client::new()));
     for model_id in [
         "claude-opus-5-5",
         "claude-sonnet-5-5",
@@ -59,12 +56,23 @@ fn every_anthropic_model_carries_the_fixed_output_token_limit() {
     ] {
         let endpoint = anthropic_endpoint("https://example.invalid", model_id, None);
         let model = anthropic_model(&client, &endpoint);
-        assert_eq!(model.default_max_tokens, Some(32_000), "{model_id:?}");
-        assert!(
-            model.automatic_caching,
-            "{model_id:?}: caching is still asked for"
-        );
+        assert_eq!(model.wire.default_max_tokens, Some(32_000), "{model_id:?}");
     }
+}
+
+// CVL-FR-23: an Anthropic request asks for the provider's short cache
+// retention, which the provider applies at the boundary it advances itself.
+// The limit of CVL-FR-KXTQ does not remove it.
+#[test]
+fn an_anthropic_request_asks_for_the_short_cache_retention() {
+    let request = AgentRequest::default();
+    let exchange = opening_exchange(&request, false);
+    let endpoint = anthropic_endpoint("https://example.invalid", "claude-opus-5-5", None);
+    let built = anthropic_request(build_completion_request(&request, &exchange, &endpoint));
+    assert_eq!(
+        built.options.cache,
+        Some(rig::completion::CacheRetention::Short)
+    );
 }
 
 // CVL-FR-HBNW: no reasoning choice puts a parameter on an Anthropic request.
@@ -160,7 +168,7 @@ fn an_anthropic_call_reaches_the_messages_api_with_the_limit_and_no_reasoning() 
             effort: "high".into(),
         }),
     );
-    let request = AgentRequest::default();
+    let request = wire_request();
     let exchange = opening_exchange(&request, false);
     let outcome = RigCompletion.complete(&request, &exchange, &endpoint, Duration::from_secs(20));
     // A call refused before it is sent leaves the server waiting for a
@@ -187,8 +195,21 @@ fn an_anthropic_call_reaches_the_messages_api_with_the_limit_and_no_reasoning() 
     assert_eq!(json["model"], "claude-opus-5-5");
     assert_eq!(json["max_tokens"], 32_000);
     assert!(json.get("reasoning").is_none(), "{body}");
+    // CVL-FR-23: the short retention, at the boundary the provider advances.
+    assert_eq!(
+        json["cache_control"],
+        serde_json::json!({ "type": "ephemeral" }),
+        "{body}"
+    );
+    // CVL-FR-HBNW: the framework's default for a model its catalog marks for
+    // it is adaptive thinking.
+    assert_eq!(json["thinking"]["type"], "adaptive", "{body}");
 
+    // CVL-FR-35: the refusal is recorded in the provider's own terms.
     let failure = outcome.expect_err("the loopback server refuses");
+    assert_eq!(failure.status, Some(400));
+    assert_eq!(failure.provider_code.as_deref(), Some("invalid_request_error"));
+    assert_eq!(failure.provider_message.as_deref(), Some("refused"));
     assert!(
         !format!("{failure:?}").contains(SECRET),
         "no secret in the failure"

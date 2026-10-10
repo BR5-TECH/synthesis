@@ -131,7 +131,7 @@ RUN apt-get update \
 # directory, which needs its parent writable and nothing else, so a recursive
 # `a+w` would add nothing but a compiler an agent can overwrite. Both values are
 # container paths, so AVI-FR-10 is unaffected.
-ARG RUST_VERSION=1.88.0
+ARG RUST_VERSION=1.95.0
 ARG RUSTUP_VERSION=1.29.0
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo

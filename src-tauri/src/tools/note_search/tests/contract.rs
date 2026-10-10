@@ -17,7 +17,7 @@ fn is_a_portable_tool_named_search_notes() {
         <NoteSearchTool<tauri::test::MockRuntime> as PortableTool>::NAME,
         NAME
     );
-    assert_eq!(rig::tool::portable_tool_definition(&tool).name, NAME);
+    assert_eq!(rig::tool::tool_definition(&tool).name, NAME);
 
     // Absent from `invoke_handler`, and no event belongs to it. The claim rests
     // on an ABSENCE, so it is asserted against the handler's own text.

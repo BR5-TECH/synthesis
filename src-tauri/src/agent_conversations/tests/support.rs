@@ -325,11 +325,11 @@ pub(super) fn native_traffic(
     let mut results = Vec::new();
     let mut native_ids: Vec<String> = Vec::new();
     for message in exchange {
-        if let rig::completion::Message::Assistant { content, .. } = message {
+        if let rig::completion::Message::Assistant(rig::completion::message::AssistantMessage { content, .. }) = message {
             for part in content.iter() {
                 if let AssistantContent::ToolCall(call) = part {
                     if call.function.name.starts_with("openrouter:") {
-                        native_ids.push(call.id.clone());
+                        native_ids.push(call.id.to_string());
                     }
                 }
             }
@@ -337,13 +337,13 @@ pub(super) fn native_traffic(
     }
     for message in exchange {
         match message {
-            rig::completion::Message::Assistant { content, .. } => {
+            rig::completion::Message::Assistant(rig::completion::message::AssistantMessage { content, .. }) => {
                 for part in content.iter() {
                     if let AssistantContent::ToolCall(call) = part {
                         if call.function.name.starts_with("openrouter:") {
                             calls.push((
-                                call.function.name.clone(),
-                                call.function.arguments.to_string(),
+                                call.function.name.to_string(),
+                                call.function.arguments_value().to_string(),
                             ));
                         }
                     }
@@ -352,7 +352,7 @@ pub(super) fn native_traffic(
             rig::completion::Message::User { content } => {
                 for part in content.iter() {
                     if let UserContent::ToolResult(result) = part {
-                        if native_ids.contains(&result.id) {
+                        if native_ids.contains(&result.call.to_string()) {
                             let text: String = result
                                 .content
                                 .iter()
@@ -361,7 +361,7 @@ pub(super) fn native_traffic(
                                     _ => None,
                                 })
                                 .collect();
-                            results.push((result.id.clone(), text));
+                            results.push((result.call.to_string(), text));
                         }
                     }
                 }
@@ -422,17 +422,49 @@ pub(super) fn require(record: &LogRecord, key: &str) -> String {
 }
 
 
+/// A request a wire test carries: a compiled prompt and one input section.
+/// The framework refuses a request whose only message holds no text, and a
+/// real turn always carries its input.
+pub(super) fn wire_request() -> AgentRequest {
+    AgentRequest {
+        instructions: compile_prompt(OriginKind::ArtifactComment, "Argue.", ""),
+        input: vec![InputSection {
+            tag: TAG_CURRENT_COMMENT.into(),
+            attributes: Vec::new(),
+            body: "What do you think?".into(),
+            truncated: false,
+            parts: Vec::new(),
+        }],
+        tools: Vec::new(),
+        native_tools: Vec::new(),
+        stable_head_sections: 0,
+    }
+}
+
+/// A tool result answering the call `id` to the tool `name`.
+pub(super) fn tool_result_message(
+    id: &str,
+    name: &str,
+    text: impl Into<String>,
+) -> rig::completion::Message {
+    rig::completion::Message::tool_result(
+        rig::completion::message::CallId::from_wire(id),
+        rig::completion::message::ToolName::new(name).expect("a tool name"),
+        text,
+    )
+}
+
 pub(super) fn rig_tool_call(
     id: &str,
     name: &str,
     arguments: serde_json::Value,
 ) -> rig::completion::message::ToolCall {
-    rig::completion::message::ToolCall::new(
-        id.to_string(),
-        rig::completion::message::ToolFunction {
-            name: name.into(),
+    rig::completion::message::ToolCall::from_wire(
+        id,
+        rig::completion::message::ToolFunction::new(
+            rig::completion::message::ToolName::new(name).expect("a tool name"),
             arguments,
-        },
+        ),
     )
 }
 
@@ -518,7 +550,7 @@ pub(super) fn tool_results(exchange: &[rig::completion::Message]) -> Vec<String>
         })
         .filter_map(|part| match part {
             rig::completion::message::UserContent::ToolResult(result) => {
-                match result.content.first() {
+                match result.content.first()? {
                     rig::completion::message::ToolResultContent::Text(text) => {
                         Some(text.text.clone())
                     }
@@ -660,13 +692,7 @@ impl CompletionSeam for ToolThenGated {
         if exchange.len() == 1 {
             return Ok(ModelReply {
                 text: String::new(),
-                tool_calls: vec![rig::completion::message::ToolCall::new(
-                    "call-0".to_string(),
-                    rig::completion::message::ToolFunction {
-                        name: "list_skills".into(),
-                        arguments: serde_json::json!({}),
-                    },
-                )],
+                tool_calls: vec![rig_tool_call("call-0", "list_skills", serde_json::json!({}))],
                 native_calls: Vec::new(),
                 native_usage: None,
             native_entries_dropped: 0,
@@ -675,6 +701,7 @@ impl CompletionSeam for ToolThenGated {
             prompt_tokens: None,
             output_tokens: None,
                 input_tokens: None,
+                ..Default::default()
             });
         }
         let (lock, cvar) = &*self.gate;
@@ -693,6 +720,7 @@ impl CompletionSeam for ToolThenGated {
             prompt_tokens: None,
             output_tokens: None,
             input_tokens: None,
+            ..Default::default()
         })
     }
 }

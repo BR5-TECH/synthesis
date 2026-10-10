@@ -52,7 +52,7 @@ fn the_tool_is_a_portable_tool_named_search_skills() {
     // SST-FR-01.
     let app = closed_project();
     let definition =
-        rig::tool::portable_tool_definition(&SkillSearchTool::new(app.handle().clone()));
+        rig::tool::tool_definition(&SkillSearchTool::new(app.handle().clone()));
 
     assert_eq!(definition.name, "search_skills");
     assert_eq!(
@@ -67,7 +67,7 @@ fn the_definition_is_the_fixed_text_and_the_documented_schema() {
     // SST-FR-02.
     let app = closed_project();
     let definition =
-        rig::tool::portable_tool_definition(&SkillSearchTool::new(app.handle().clone()));
+        rig::tool::tool_definition(&SkillSearchTool::new(app.handle().clone()));
 
     assert_eq!(definition.description, DESCRIPTION);
 
@@ -308,7 +308,8 @@ fn a_match_carries_exactly_the_documented_fields_and_no_body() {
     let first = output.skills.first().expect("a match");
 
     let value = serde_json::to_value(first).unwrap();
-    let keys: Vec<&str> = value.as_object().unwrap().keys().map(|k| k.as_str()).collect();
+    let mut keys: Vec<&str> = value.as_object().unwrap().keys().map(|k| k.as_str()).collect();
+    keys.sort_unstable();
     assert_eq!(
         keys,
         vec!["description", "ecosystem", "name", "path", "score"],

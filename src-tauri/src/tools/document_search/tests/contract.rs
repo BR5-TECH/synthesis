@@ -9,7 +9,7 @@ use super::*;
 fn the_definition_is_the_documented_one() {
     let fixture = DocFixture::new();
     let tool = SearchDocumentsTool::new(fixture.fixture.handle());
-    let definition = rig::tool::portable_tool_definition(&tool);
+    let definition = rig::tool::tool_definition(&tool);
     assert_eq!(definition.name, "search_documents");
     assert_eq!(NAME, "search_documents");
     assert_eq!(definition.description, DESCRIPTION);

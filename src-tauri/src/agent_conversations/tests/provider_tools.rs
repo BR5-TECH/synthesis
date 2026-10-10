@@ -22,15 +22,19 @@ fn the_helpers_that_look_for_provider_traffic_find_it_when_it_is_there() {
     use rig::completion::message::AssistantContent;
     let exchange = vec![
         rig::completion::Message::user("the input"),
-        rig::completion::Message::Assistant {
-            id: None,
-            content: rig::OneOrMany::one(AssistantContent::tool_call(
-                "call_abc".to_string(),
-                "openrouter:web_search".to_string(),
+        rig::completion::Message::Assistant(rig::completion::message::AssistantMessage::new(vec![
+            AssistantContent::tool_call(
+                "call_abc",
+                rig::completion::message::ToolName::new("openrouter:web_search")
+                    .expect("a tool name"),
                 serde_json::json!({ "query": "a" }),
-            )),
-        },
-        rig::completion::Message::tool_result("call_abc".to_string(), "A result".to_string()),
+            ),
+        ])),
+        rig::completion::Message::tool_result(
+            rig::completion::message::CallId::from_wire("call_abc"),
+            rig::completion::message::ToolName::new("openrouter:web_search").expect("a tool name"),
+            "A result".to_string(),
+        ),
     ];
 
     let (calls, results) = native_traffic(&exchange);
@@ -577,7 +581,7 @@ fn a_structured_provider_refusal_keeps_the_code_the_id_and_the_reason() {
     assert_eq!(refused.failure, FAIL_UNREACHABLE);
     assert_eq!(refused.class, class::HTTP_STATUS);
     assert_eq!(refused.status, Some(400));
-    assert_eq!(refused.provider_code, Some(400));
+    assert_eq!(refused.provider_code.as_deref(), Some("400"));
     assert_eq!(refused.provider_request_id.as_deref(), Some("req_abc123"));
     assert_eq!(
         refused.provider_message.as_deref(),
@@ -746,7 +750,7 @@ fn a_refusal_naming_a_server_tool_narrows_the_entries_and_a_plain_400_does_not()
         failure: FAIL_UNREACHABLE,
         class: class::HTTP_STATUS,
         status: Some(400),
-        provider_code: Some(400),
+        provider_code: Some("400".into()),
         provider_request_id: Some("req_1".into()),
         provider_message: Some(message.into()),
         tls: None,

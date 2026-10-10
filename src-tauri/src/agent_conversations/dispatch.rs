@@ -42,7 +42,7 @@ pub(super) struct TurnPlan {
     pub(super) request: AgentRequest,
     /// CVL-FR-08: the same six the request carries definitions of, in the form
     /// the loop dispatches by name.
-    pub(super) tools: Vec<rig::tool::PortableDynamicTool>,
+    pub(super) tools: Vec<rig::tool::DynamicTool>,
     /// CVL-FR-13 / CVL-FR-28: how many **logical** `complete` invocations the
     /// loop has made — the rounds of the loop, one per reply the model is asked
     /// for. Kept here rather than returned because both the success and the

@@ -193,10 +193,20 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                         // than guessed at. The name of a service, never anything
                         // the model composed (CVL-FR-26).
                         "servedUpstream" => reply.served_by.as_deref().unwrap_or("not reported"),
-                        "promptTokens" => reply
-                            .prompt_tokens
-                            .map(|tokens| tokens.to_string())
-                            .unwrap_or_else(|| "not reported".to_string()),
+                        "promptTokens" => reported(reply.prompt_tokens),
+                        // CVL-FR-28: the rest of what the provider counted for
+                        // this call, its own identifiers for the response and
+                        // the request, the model it says answered, and why the
+                        // reply ended. Counts and identifiers, never content
+                        // (CVL-FR-26); what the provider did not give is named
+                        // as not reported rather than guessed at.
+                        "outputTokens" => reported(reply.output_tokens),
+                        "cacheWriteTokens" => reported(reply.cache_write_tokens),
+                        "reasoningTokens" => reported(reply.reasoning_tokens),
+                        "responseId" => bounded_identifier(reply.response_id.as_deref()),
+                        "providerRequestId" => bounded_identifier(reply.provider_request_id.as_deref()),
+                        "responseModel" => bounded_identifier(reply.response_model.as_deref()),
+                        "finishReason" => bounded_identifier(reply.finish_reason.as_deref()),
                         // CVL-FR-31 / TLC-FR-26: how much the provider ran for
                         // itself while carrying this call. Counts alone — no
                         // query, no address, and no part of what came back
@@ -227,6 +237,27 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 // happened at all, which is the one case these records exist
                 // for.
                 log_native_calls(app, turns, plan, endpoint, model_calls, &rejected);
+                // CVL-FR-28 / CVL-FR-UALC: why the reply held nothing to
+                // deliver, as far as the provider said — a refusal or filtered
+                // content ends with its own reason — and the provider's own
+                // identifiers for it. Identifiers and a reason, never content.
+                logging::log_warn(
+                    app,
+                    turns.buffer(),
+                    &[Domain::Ai, Domain::Backend],
+                    "model reply held nothing to deliver",
+                    log_fields! {
+                        "turnId" => &plan.turn_id,
+                        "agent" => &plan.agent.nickname,
+                        "provider" => &endpoint.provider,
+                        "model" => model_label,
+                        "modelCall" => model_calls,
+                        "attempt" => attempt,
+                        "finishReason" => bounded_identifier(rejected.finish_reason.as_deref()),
+                        "responseId" => bounded_identifier(rejected.response_id.as_deref()),
+                        "providerRequestId" => bounded_identifier(rejected.provider_request_id.as_deref()),
+                    },
+                );
                 if rejected.tool_calls.is_empty() {
                     if let Some(tool) = tool_written_as_prose(&rejected.text, &plan.request.tools) {
                         // CVL-FR-UJXD: the tool it meant, and never the text.
@@ -323,7 +354,7 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 // error. Neither is anything it echoed back of what was sent,
                 // and the id is what takes a refusal to the provider's own
                 // record of it instead of to a reproduction attempt.
-                "providerCode" => failure.provider_code,
+                "providerCode" => failure.provider_code.as_deref(),
                 "providerRequestId" => failure.provider_request_id.as_deref(),
                 // CVL-FR-35: why the provider refused, in its own words, from a
                 // structured error alone.
@@ -419,8 +450,16 @@ fn wait_before_retry<R: tauri::Runtime>(
 /// A provider matches a result to the call it answers by the call's id, so the
 /// calls have to go back exactly as they arrived; dropping them and sending only
 /// the results would leave every result unattached.
+///
+/// CVL-FR-ETAH: the reply goes back as the framework returned it — its thinking
+/// and the provider's own identifiers included — so the next round presents it
+/// to the provider unchanged. A reply whose client returned no such turn is
+/// rebuilt from its text and its calls.
 pub(super) fn assistant_message(reply: &ModelReply) -> rig::completion::Message {
-    use rig::completion::message::AssistantContent;
+    use rig::completion::message::{AssistantContent, AssistantMessage};
+    if let Some(turn) = &reply.turn {
+        return rig::completion::Message::Assistant(turn.clone());
+    }
     let mut parts = Vec::new();
     if !reply.text.is_empty() {
         parts.push(AssistantContent::text(&reply.text));
@@ -428,12 +467,30 @@ pub(super) fn assistant_message(reply: &ModelReply) -> rig::completion::Message 
     for call in &reply.tool_calls {
         parts.push(AssistantContent::ToolCall(call.clone()));
     }
-    rig::completion::Message::Assistant {
-        id: None,
-        // Only called where the reply asked for at least one tool, so `parts` is
-        // never empty; the fallback keeps `rig`'s non-empty invariant without a
-        // panic if that ever stops being true.
-        content: rig::OneOrMany::many(parts)
-            .unwrap_or_else(|_| rig::OneOrMany::one(AssistantContent::text(&reply.text))),
+    // Only called where the reply asked for at least one tool, so `parts` is
+    // never empty; the fallback keeps `rig`'s non-empty rule without a panic if
+    // that ever stops being true.
+    if parts.is_empty() {
+        parts.push(AssistantContent::text(&reply.text));
     }
+    rig::completion::Message::Assistant(AssistantMessage::new(parts))
+}
+
+/// CVL-FR-28: an identifier or a reason the provider gave, or `not reported`
+/// where it gave none. Bounded, because a provider chooses its length.
+fn bounded_identifier(value: Option<&str>) -> String {
+    match value {
+        Some(value) => truncated(value, IDENTIFIER_LIMIT),
+        None => "not reported".to_string(),
+    }
+}
+
+/// The most characters of a provider's identifier or reason a record keeps.
+const IDENTIFIER_LIMIT: usize = 120;
+
+/// CVL-FR-28: a count the provider gave, or `not reported` where it gave none.
+fn reported(tokens: Option<u64>) -> String {
+    tokens
+        .map(|tokens| tokens.to_string())
+        .unwrap_or_else(|| "not reported".to_string())
 }

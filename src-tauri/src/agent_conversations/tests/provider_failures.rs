@@ -495,13 +495,7 @@ impl CompletionSeam for NativeThenGated {
         if exchange.len() == 1 {
             return Ok(ModelReply {
                 text: String::new(),
-                tool_calls: vec![rig::completion::message::ToolCall::new(
-                    "call-0".to_string(),
-                    rig::completion::message::ToolFunction {
-                        name: crate::tools::skill_list::NAME.into(),
-                        arguments: serde_json::json!({}),
-                    },
-                )],
+                tool_calls: vec![super::support::rig_tool_call("call-0", crate::tools::skill_list::NAME, serde_json::json!({}))],
                 native_calls: vec![NativeToolCall {
                     id: "call_1".into(),
                     name: "openrouter:web_search".into(),
@@ -515,6 +509,7 @@ impl CompletionSeam for NativeThenGated {
             prompt_tokens: None,
             output_tokens: None,
                 input_tokens: None,
+                ..Default::default()
             });
         }
         let (lock, cvar) = &*self.gate;
@@ -533,6 +528,7 @@ impl CompletionSeam for NativeThenGated {
             prompt_tokens: None,
             output_tokens: None,
             input_tokens: None,
+            ..Default::default()
         })
     }
 }

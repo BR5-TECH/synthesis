@@ -110,8 +110,8 @@ Every platform task needs all of these:
   nothing.
 - The **Rust toolchain** that
   [`src-tauri/rust-toolchain.toml`](../src-tauri/rust-toolchain.toml) pins, which
-  is channel `1.88` and is the repository's single pin. The dependency tree
-  needs edition 2024, so an older toolchain fails.
+  is channel `1.95` and is the repository's single pin. The dependency tree
+  needs rustc 1.95 and edition 2024, so an older toolchain fails.
 
 Each host adds its own:
 

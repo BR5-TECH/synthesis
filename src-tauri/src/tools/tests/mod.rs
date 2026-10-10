@@ -45,35 +45,35 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
     let handle2 = handle.clone();
     let handle3 = handle.clone();
     vec![
-        rig::tool::portable_tool_definition(&skill_search::SkillSearchTool::new(handle.clone())),
-        rig::tool::portable_tool_definition(&skill_list::SkillListTool::new(handle.clone())),
-        rig::tool::portable_tool_definition(&skill_load::SkillLoadTool::new(handle.clone())),
-        rig::tool::portable_tool_definition(&spec_search::SpecSearchTool::new(handle.clone())),
-        rig::tool::portable_tool_definition(&file_read::FileReadTool::new(
+        rig::tool::tool_definition(&skill_search::SkillSearchTool::new(handle.clone())),
+        rig::tool::tool_definition(&skill_list::SkillListTool::new(handle.clone())),
+        rig::tool::tool_definition(&skill_load::SkillLoadTool::new(handle.clone())),
+        rig::tool::tool_definition(&spec_search::SpecSearchTool::new(handle.clone())),
+        rig::tool::tool_definition(&file_read::FileReadTool::new(
             handle.clone(),
             "definitions",
         )),
-        rig::tool::portable_tool_definition(&draft_search::DraftSearchTool::new(
+        rig::tool::tool_definition(&draft_search::DraftSearchTool::new(
             handle.clone(),
             "definitions",
         )),
-        rig::tool::portable_tool_definition(&draft_read::DraftReadTool::new(
+        rig::tool::tool_definition(&draft_read::DraftReadTool::new(
             handle.clone(),
             "definitions",
         )),
-        rig::tool::portable_tool_definition(&note_search::NoteSearchTool::new(
+        rig::tool::tool_definition(&note_search::NoteSearchTool::new(
             handle.clone(),
             "definitions",
         )),
-        rig::tool::portable_tool_definition(&document_search::SearchDocumentsTool::new(
+        rig::tool::tool_definition(&document_search::SearchDocumentsTool::new(
             handle.clone(),
         )),
-        rig::tool::portable_tool_definition(&document_get::GetDocumentTool::new(handle.clone())),
+        rig::tool::tool_definition(&document_get::GetDocumentTool::new(handle.clone())),
         // RGF-FR-02 / ESU-FR-19: both are constructed against one graduation
         // run, so this one needs a run id and an execution directory to exist
         // at all. Neither reaches the schema — two instances built for two runs
         // return byte-identical definitions.
-        rig::tool::portable_tool_definition(
+        rig::tool::tool_definition(
             &read_graduation_file::ReadGraduationFileTool::new(
                 handle.clone(),
                 "run-definitions",
@@ -84,7 +84,7 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
         // AUC-FR-02: constructed per turn, so this one needs a conversation to
         // be bound to. Its *definition* is fixed application data all the same,
         // which is what every test over this list checks.
-        rig::tool::portable_tool_definition(&ask_user_comment::AskUserCommentTool::new(
+        rig::tool::tool_definition(&ask_user_comment::AskUserCommentTool::new(
             handle,
             crate::agent_conversations::OwnedRoots { worktree: crate::fs::RootFs::for_root(&std::env::temp_dir()), store: crate::fs::RootFs::for_root(&std::env::temp_dir()) },
             crate::agent_conversations::ConversationOrigin::stub_artifact("definitions", "a.md", true),
@@ -100,7 +100,7 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
         // fixed on exactly the same terms. Bound to a draft origin because that
         // is the only kind it is ever attached to (CVL-FR-08) — the binding does
         // not reach the definition, which is what this list is about.
-        rig::tool::portable_tool_definition(&propose_draft_changes::ProposeDraftChangesTool::new(
+        rig::tool::tool_definition(&propose_draft_changes::ProposeDraftChangesTool::new(
             handle2,
             crate::agent_conversations::OwnedRoots { worktree: crate::fs::RootFs::for_root(&std::env::temp_dir()), store: crate::fs::RootFs::for_root(&std::env::temp_dir()) },
             crate::agent_conversations::ConversationOrigin::stub_draft("definitions", "definitions", false),
@@ -116,7 +116,7 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
         // every convention this list checks. Bound to a discussion origin
         // because that is the only kind it is ever attached to (CVL-FR-08,
         // ADQ-FR-LFDX) — the binding does not reach the definition.
-        rig::tool::portable_tool_definition(
+        rig::tool::tool_definition(
             &ask_discussion_questions::AskDiscussionQuestionsTool::new(
                 handle3,
                 crate::agent_conversations::OwnedRoots { worktree: crate::fs::RootFs::for_root(&std::env::temp_dir()), store: crate::fs::RootFs::for_root(&std::env::temp_dir()) },

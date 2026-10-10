@@ -73,5 +73,5 @@ Instrument new code with the logging helpers — `src/logging.ts` (`logDebug`/`l
 
 ## Toolchain
 
-- Rust pinned via `src-tauri/rust-toolchain.toml` (channel `1.88`). The dep tree (notably `time-macros`, `idna_adapter`) requires edition 2024 / rustc ≥ 1.88; older toolchains will fail to download crates.
+- Rust pinned via `src-tauri/rust-toolchain.toml` (channel `1.95`). The dep tree requires rustc ≥ 1.95 (`rig-core` 0.44 declares it; `time-macros` and `idna_adapter` need edition 2024); older toolchains fail to build it.
 - Node/pnpm: pnpm 10+ uses `pnpm-workspace.yaml` as the install-script allowlist (`allowBuilds`). Adding a new dep with a postinstall script may require allowlisting it there.

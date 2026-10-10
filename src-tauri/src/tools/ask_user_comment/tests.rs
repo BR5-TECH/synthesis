@@ -188,11 +188,11 @@ fn rendered_records(buffer: &LogBuffer) -> String {
 #[test]
 fn is_a_portable_tool_named_ask_user_comment() {
     let fixture = Fixture::new();
-    let definition = rig::tool::portable_tool_definition(&fixture.tool());
+    let definition = rig::tool::tool_definition(&fixture.tool());
     assert_eq!(definition.name, "ask_user_comment");
     assert_eq!(
         <AskUserCommentTool<tauri::test::MockRuntime> as PortableTool>::NAME,
-        definition.name,
+        definition.name.as_str(),
         "AUC-FR-01: NAME and ToolDefinition.name are one string",
     );
 }
@@ -206,7 +206,7 @@ fn definition_is_identical_across_turns_agents_and_conversations() {
     let one = Fixture::new();
     let two = Fixture::new();
 
-    let a = rig::tool::portable_tool_definition(&one.tool());
+    let a = rig::tool::tool_definition(&one.tool());
     // A different conversation, a different agent, a different project.
     let other = {
         AskUserCommentTool::new(
@@ -222,7 +222,7 @@ fn definition_is_identical_across_turns_agents_and_conversations() {
             Arc::new(AtomicBool::new(false)),
         )
     };
-    let b = rig::tool::portable_tool_definition(&other);
+    let b = rig::tool::tool_definition(&other);
 
     assert_eq!(a.description, b.description, "AUC-FR-02");
     assert_eq!(a.parameters, b.parameters, "AUC-FR-02");

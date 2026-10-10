@@ -86,7 +86,7 @@ fn is_a_portable_tool_named_read_draft() {
         NAME
     );
     assert_eq!(
-        rig::tool::portable_tool_definition(&fixture.tool()).name,
+        rig::tool::tool_definition(&fixture.tool()).name,
         NAME
     );
 }
@@ -95,7 +95,7 @@ fn is_a_portable_tool_named_read_draft() {
 #[test]
 fn definition_declares_one_parameter_and_no_other() {
     let fixture = DraftFixture::new();
-    let definition = rig::tool::portable_tool_definition(&fixture.tool());
+    let definition = rig::tool::tool_definition(&fixture.tool());
     assert_eq!(definition.description, DESCRIPTION);
 
     let schema = definition.parameters;

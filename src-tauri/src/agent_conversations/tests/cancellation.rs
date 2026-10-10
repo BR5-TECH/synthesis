@@ -247,6 +247,7 @@ impl CompletionSeam for GatedCompletion {
             prompt_tokens: None,
             output_tokens: None,
             input_tokens: None,
+            ..Default::default()
         })
     }
 }

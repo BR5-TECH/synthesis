@@ -17,7 +17,7 @@ fn is_a_portable_tool_named_search_drafts() {
         <DraftSearchTool<tauri::test::MockRuntime> as PortableTool>::NAME,
         NAME
     );
-    assert_eq!(rig::tool::portable_tool_definition(&tool).name, NAME);
+    assert_eq!(rig::tool::tool_definition(&tool).name, NAME);
 
     // DST-FR-01: `crate::drafts`' Tauri command of the same name is the panel's
     // own substring filter and answers on its own terms. Two operations, two
@@ -92,7 +92,7 @@ fn every_result_comes_from_the_delegated_search_and_nothing_else() {
 #[test]
 fn definition_is_the_fixed_contract_surface() {
     let fixture = DraftFixture::new();
-    let definition = rig::tool::portable_tool_definition(&fixture.tool());
+    let definition = rig::tool::tool_definition(&fixture.tool());
     assert_eq!(definition.description, DESCRIPTION);
     assert!(DESCRIPTION.contains("Only current live prompts are searched"));
 

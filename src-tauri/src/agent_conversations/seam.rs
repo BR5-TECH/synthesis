@@ -65,6 +65,12 @@ pub struct ModelReply {
     pub text: String,
     /// The tools it asked for, in the order it asked for them (CVL-FR-12).
     pub tool_calls: Vec<rig::completion::message::ToolCall>,
+    /// CVL-FR-ETAH: the reply as the framework returned it — its text, its
+    /// tool calls, its thinking, and the provider's own identifiers for each —
+    /// which is what goes back into the exchange when the reply asks for tools.
+    /// `None` where the client returned no such turn, and for a reply the
+    /// framework reports as failed (CVL-FR-UALC).
+    pub turn: Option<rig::completion::message::AssistantMessage>,
     /// CVL-FR-31: the tools the **provider** executed for itself while carrying
     /// this call, each with the result it produced, in the order they arrived.
     /// The loop dispatches none of them and appends none of them to the
@@ -107,6 +113,22 @@ pub struct ModelReply {
     /// price, and a provider that declines to report one leaves this absent so
     /// the direction reads unavailable rather than as a confident zero.
     pub output_tokens: Option<u64>,
+    /// CVL-FR-28: the part of the input the provider wrote to its cache, as it
+    /// counted it, or `None` where it counted nothing.
+    pub cache_write_tokens: Option<u64>,
+    /// CVL-FR-28: the part of the output the model spent on reasoning, as the
+    /// provider counted it, or `None` where it counted nothing.
+    pub reasoning_tokens: Option<u64>,
+    /// CVL-FR-28: the provider's own identifier for this response.
+    pub response_id: Option<String>,
+    /// CVL-FR-28: the provider's own identifier for the request, which is what
+    /// takes a call to the provider's own record of it.
+    pub provider_request_id: Option<String>,
+    /// CVL-FR-28: the model the provider says answered.
+    pub response_model: Option<String>,
+    /// CVL-FR-28: why the reply ended, in the framework's vocabulary or the
+    /// provider's own word.
+    pub finish_reason: Option<String>,
     /// CVL-FR-TQRD: what the Custom gateway repair changed in this reply before
     /// the framework read it. The loop records it, because the carrier has no
     /// access to the log.
@@ -195,9 +217,9 @@ pub struct InputTokens {
 /// The single seam through which a model is reached, and the only place in this
 /// module that touches the network.
 ///
-/// Object-safe by design. `rig`'s own `CompletionModel` is generic over its
-/// response types and returns `impl Future`, so it cannot be a trait object —
-/// this is the erased façade over it. The production implementation
+/// Object-safe by design, and synchronous: `rig`'s own model is async and is
+/// driven on a thread each call owns, under the provider-call deadline — this
+/// is the façade over it. The production implementation
 /// ([`RigCompletion`]) assembles a `rig::completion::CompletionRequest` and
 /// drives whichever provider client carries it; a build under test substitutes
 /// [`ScriptedCompletion`], which drives `rig`'s own `MockCompletionModel`

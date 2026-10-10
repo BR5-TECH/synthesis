@@ -17,7 +17,7 @@ These are the project-specific rules that are easy to miss and expensive to get 
 - **Crate name `synthesis_lib`.** The library crate's `_lib` suffix avoids a Windows binary-name clash. Renaming it is a regression.
 - **Port 1420 coupling.** `vite.config.ts` (`strictPort: true`) and `src-tauri/tauri.conf.json` (`devUrl`) must agree on port 1420. Don't change one without the other; if a spec demands a port change, surface it to the user rather than silently editing both.
 - **Vite watcher ignores `src-tauri/**`.** Keep that ignore — removing it causes HMR loops on Rust build artifacts.
-- **Rust toolchain is pinned** via `src-tauri/rust-toolchain.toml` (edition 2024 / rustc ≥ 1.88). The dep tree requires it; use the pinned toolchain.
+- **Rust toolchain is pinned** via `src-tauri/rust-toolchain.toml` (edition 2024 / rustc ≥ 1.95). The dep tree requires it; use the pinned toolchain.
 
 ## Logging
 

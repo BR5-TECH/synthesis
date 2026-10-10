@@ -97,7 +97,7 @@ fn no_tool_is_reachable_from_the_frontend() {
 
 #[test]
 fn every_tool_name_is_snake_case_unique_and_matches_its_definition() {
-    let names: Vec<String> = definitions().into_iter().map(|d| d.name).collect();
+    let names: Vec<String> = definitions().into_iter().map(|d| d.name.to_string()).collect();
 
     // The `NAME` constant and what a provider receives are the same string.
     assert_eq!(
@@ -379,9 +379,9 @@ fn definitions_are_identical_across_instances_and_project_states() {
     let open = demo_project();
     let closed = closed_project();
 
-    let a = rig::tool::portable_tool_definition(&skill_search::SkillSearchTool::new(open.handle()));
-    let b = rig::tool::portable_tool_definition(&skill_search::SkillSearchTool::new(open.handle()));
-    let c = rig::tool::portable_tool_definition(&skill_search::SkillSearchTool::new(
+    let a = rig::tool::tool_definition(&skill_search::SkillSearchTool::new(open.handle()));
+    let b = rig::tool::tool_definition(&skill_search::SkillSearchTool::new(open.handle()));
+    let c = rig::tool::tool_definition(&skill_search::SkillSearchTool::new(
         closed.handle().clone(),
     ));
 
@@ -392,17 +392,20 @@ fn definitions_are_identical_across_instances_and_project_states() {
         a.parameters, c.parameters,
         "TLC-FR-05: a definition is compiled-in data, not derived from project state",
     );
+    // Byte-identical as well as equal: two equal JSON objects can hold their
+    // fields in different orders, and a provider sees the bytes.
+    assert_eq!(a.parameters.to_string(), c.parameters.to_string());
 
-    let l1 = rig::tool::portable_tool_definition(&skill_list::SkillListTool::new(open.handle()));
-    let l2 = rig::tool::portable_tool_definition(&skill_list::SkillListTool::new(
+    let l1 = rig::tool::tool_definition(&skill_list::SkillListTool::new(open.handle()));
+    let l2 = rig::tool::tool_definition(&skill_list::SkillListTool::new(
         closed.handle().clone(),
     ));
     assert_eq!(l1.description, l2.description);
     assert_eq!(l1.parameters, l2.parameters);
 
-    let k1 = rig::tool::portable_tool_definition(&skill_load::SkillLoadTool::new(open.handle()));
+    let k1 = rig::tool::tool_definition(&skill_load::SkillLoadTool::new(open.handle()));
     let k2 =
-        rig::tool::portable_tool_definition(&skill_load::SkillLoadTool::new(closed.handle().clone()));
+        rig::tool::tool_definition(&skill_load::SkillLoadTool::new(closed.handle().clone()));
     assert_eq!(k1.description, k2.description);
     assert_eq!(k1.parameters, k2.parameters);
 }
@@ -694,8 +697,8 @@ fn shape_of(value: serde_json::Value) -> String {
 // not declare is the mark and never the name — `line` here is the mistake, and
 // that it was made is the whole of what a reader needs.
 //
-// A JSON object holds its fields by name, so the fields read back in that order
-// rather than in the order they were written.
+// The fields are read by name, whatever order the object holds them in, so
+// they read back in that order rather than in the order they were written.
 #[test]
 fn an_argument_shape_names_the_fields_and_the_kinds_and_no_value() {
     let shape = shape_of(serde_json::json!({
@@ -832,4 +835,28 @@ fn a_list_is_reported_by_its_length_and_its_first_entry() {
         shape_of(serde_json::json!({ "hunks": [1, "A SECRET", { "kind": "add" }] })),
         "{hunks:[number](3)}",
     );
+}
+
+// TLC-FR-14: the fields are read by name, whatever order the object holds them
+// in, so an argument set wider than the bound is reported by its first fields
+// by name rather than by the fields the model wrote first.
+#[test]
+fn a_wide_argument_set_is_reported_by_its_first_fields_by_name() {
+    let names: Vec<String> = (0..14).map(|index| format!("f{index:02}")).collect();
+    let mut properties = serde_json::Map::new();
+    for name in &names {
+        properties.insert(name.clone(), serde_json::json!({ "type": "string" }));
+    }
+    let schema = serde_json::json!({ "type": "object", "properties": properties });
+    let mut sent = serde_json::Map::new();
+    for name in names.iter().rev() {
+        sent.insert(name.clone(), serde_json::json!("x"));
+    }
+    let shape = crate::tools::argument_shape(&serde_json::Value::Object(sent), &schema);
+    let expected = names[..12]
+        .iter()
+        .map(|name| format!("{name}:string"))
+        .collect::<Vec<_>>()
+        .join(",");
+    assert_eq!(shape, format!("{{{expected},…}}"));
 }

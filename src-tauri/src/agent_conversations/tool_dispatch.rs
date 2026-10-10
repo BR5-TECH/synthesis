@@ -15,8 +15,13 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
     call: &rig::completion::message::ToolCall,
     remaining: Duration,
 ) -> String {
-    let name = call.function.name.clone();
-    let Some(tool) = plan.tools.iter().find(|tool| tool.name() == name).cloned() else {
+    let name = call.function.name.to_string();
+    let Some(tool) = plan
+        .tools
+        .iter()
+        .find(|tool| tool.name().as_str() == name)
+        .cloned()
+    else {
         // Not a defect in the project — the model named something that is not on
         // offer, which the definitions it was given already contradict.
         logging::log_warn(
@@ -30,12 +35,22 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
     };
 
     let started = std::time::Instant::now();
-    let arguments = call.function.arguments.clone();
-    // The tools are synchronous underneath (each resolves before its future is
-    // polled), so this neither blocks on I/O nor holds the deadline open; it is
-    // the same owned-thread pattern the model calls use, for the same reason —
-    // a nested runtime inside a Tokio worker panics at runtime.
-    let outcome = block_on_with_timeout(async move { Ok(tool.execute(arguments).await) }, remaining);
+    let sent = arguments_as_sent(&call.function);
+    let outcome = if call.function.invalid_arguments.is_some() {
+        // TLC-FR-SPRR: arguments the model sent as anything but an object are
+        // refused before the tool runs, also when the framework recovered some
+        // fields of a cut-off object — a tool that ran on them would act on
+        // half of what the model meant to send.
+        Ok(Err(undecodable_arguments()))
+    } else {
+        let arguments = call.function.arguments_value();
+        // The tools are synchronous underneath (each resolves before its
+        // future is polled), so this neither blocks on I/O nor holds the
+        // deadline open; it is the same owned-thread pattern the model calls
+        // use, for the same reason — a nested runtime inside a Tokio worker
+        // panics at runtime.
+        block_on_with_timeout(async move { Ok(tool.execute(arguments).await) }, remaining)
+    };
 
     match outcome {
         Ok(Ok(output)) => {
@@ -72,7 +87,7 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
                 let schema = plan
                     .tools
                     .iter()
-                    .find(|tool| tool.name() == name)
+                    .find(|tool| tool.name().as_str() == name)
                     .map(|tool| tool.definition().parameters)
                     .unwrap_or(serde_json::Value::Null);
                 logging::log_warn(
@@ -92,10 +107,7 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
                         // record cannot say a further call may succeed after
                         // the boundary stops saying so.
                         "retryable" => error.retryable().unwrap_or(false),
-                        "argShape" => crate::tools::argument_shape(
-                            &call.function.arguments,
-                            &schema,
-                        ),
+                        "argShape" => crate::tools::argument_shape(&sent, &schema),
                     },
                 );
             }
@@ -165,6 +177,20 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
             "That tool could not be run. Answer with what you already have, or continue without it."
                 .to_string()
         }
+    }
+}
+
+/// TLC-FR-SPRR: the arguments of a call as the model sent them.
+///
+/// The framework keeps a call's arguments as an object and holds the text the
+/// model sent beside it when that text was not one. The shape of a refused call
+/// is read from what the model sent, so text that is JSON reads as its own
+/// kind and text that is not JSON reads as `string`.
+pub(super) fn arguments_as_sent(function: &rig::completion::message::ToolFunction) -> serde_json::Value {
+    match &function.invalid_arguments {
+        Some(text) => serde_json::from_str(text)
+            .unwrap_or_else(|_| serde_json::Value::String(String::new())),
+        None => function.arguments_value(),
     }
 }
 

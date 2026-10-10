@@ -95,7 +95,11 @@ fontdb = "0.24.0"
 #
 # Aliased to `rig` because that is the crate's own name for itself throughout
 # its documentation; the package is `rig-core`.
-rig = { package = "rig-core", version = "0.41" }
+rig = { package = "rig-core", version = "0.44" }
+# The HTTP transport the `rig` clients send through. `rig-core` holds no HTTP
+# client of its own; this crate wraps the `reqwest013` client that `tls` builds
+# with the shared roots, so a `rig` client trusts what every other path trusts.
+rig-reqwest = { version = "0.44", default-features = false, features = ["rustls"] }
 # BMI-FR-02: the scoring, tokenisation, and stemming behind the nine in-memory
 # indexes of `bm25_index`. `k1`, `b`, and the stemmer set are this crate's, and
 # the spec deliberately leaves them to it.
@@ -165,7 +169,7 @@ pdf-extract = "0.12"
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
 rustls-native-certs = "0.8"
 webpki-root-certs = "1"
-# The same `reqwest` versions `rig-core` (0.13) and `openrouter-rs` (0.12)
+# The same `reqwest` versions `rig-reqwest` (0.13) and `openrouter-rs` (0.12)
 # use. Each is named so the application can build the client those crates
 # are handed, with the shared roots.
 reqwest013 = { package = "reqwest", version = "0.13", default-features = false, features = ["rustls", "http2"] }
@@ -180,7 +184,7 @@ rcgen = { version = "0.13", default-features = false, features = ["pem", "ring"]
 # model the whole agent-conversation suite runs against, so no test spends a
 # token or leaves the machine. Enabled here rather than in `[dependencies]` so
 # the mock is not compiled into the shipped binary.
-rig = { package = "rig-core", version = "0.41", features = ["test-utils"] }
+rig = { package = "rig-core", version = "0.44", features = ["test-utils"] }
 # `tauri/test` provides `mock_app`, so the command bodies and the menu-event
 # relay can be exercised against a real (headless) app handle rather than only
 # through their extracted pure helpers.
@@ -241,6 +245,16 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
   "NSScreen",
   "NSGraphics",
 ] }
+# The `ssh` feature of `git2` links OpenSSL through `libssh2-sys`. On macOS,
+# HTTPS in `libgit2` uses SecureTransport, not OpenSSL. Without `vendored`,
+# `openssl-sys` links the dylib of the host. On a developer Mac, that dylib is
+# in `/opt/homebrew`. Notifications need `signingIdentity` in
+# `tauri.conf.json`. With it, the bundle is signed with the hardened runtime.
+# Library validation then refuses the Homebrew dylib, and dyld stops the app at
+# launch. A Mac without the same Homebrew package also does not have the dylib.
+# `vendored` compiles OpenSSL into the binary. Cargo applies the feature to the
+# one `openssl-sys` in the tree, which `git2` also uses.
+openssl-sys = { version = "0.9", features = ["vendored"] }
 
 # Every other desktop: delivery without an activation channel. `notify-rust`'s
 # `wait_for_action` is XDG-only and its Windows path returns no handle at all,
@@ -249,8 +263,9 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
 # no centre at all; this is the middle case — delivery works, clicking does not).
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 # `=4.17.0`, not `4.17`: a bare version string is a CARET requirement, so
-# `4.17` resolves to 4.18.x — the very version whose MSRV of 1.89 exceeds this
-# repo's pinned 1.88 toolchain, which is the whole reason for constraining it.
+# `4.17` resolves to 4.18.x. The pin was set because 4.18 needs rustc 1.89; the
+# pinned toolchain is now 1.95, so the pin stays only until 4.18 is verified on
+# Linux.
 # Defaults are left ON deliberately: `default = ["z"]` is the zbus/D-Bus
 # backend, and disabling it leaves Linux with no way to post at all.
 notify-rust = "=4.17.0"

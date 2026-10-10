@@ -32,7 +32,7 @@ fn paths(output: &SkillListOutput) -> Vec<&str> {
 fn the_tool_is_a_portable_tool_named_list_skills() {
     // SLT-FR-01.
     let app = closed_project();
-    let definition = rig::tool::portable_tool_definition(&SkillListTool::new(app.handle().clone()));
+    let definition = rig::tool::tool_definition(&SkillListTool::new(app.handle().clone()));
 
     assert_eq!(definition.name, "list_skills");
     assert_eq!(
@@ -46,7 +46,7 @@ fn the_tool_is_a_portable_tool_named_list_skills() {
 fn the_definition_is_the_fixed_text_and_a_schema_declaring_no_parameters() {
     // SLT-FR-02, SLT-FR-03.
     let app = closed_project();
-    let definition = rig::tool::portable_tool_definition(&SkillListTool::new(app.handle().clone()));
+    let definition = rig::tool::tool_definition(&SkillListTool::new(app.handle().clone()));
 
     assert_eq!(definition.description, DESCRIPTION);
 
@@ -307,12 +307,13 @@ fn an_entry_carries_exactly_the_documented_fields_and_its_path_resolves() {
     let entry = output.skills.first().expect("an entry");
 
     let value = serde_json::to_value(entry).unwrap();
-    let keys: Vec<&str> = value
+    let mut keys: Vec<&str> = value
         .as_object()
         .unwrap()
         .keys()
         .map(|k| k.as_str())
         .collect();
+    keys.sort_unstable();
     assert_eq!(
         keys,
         vec!["description", "ecosystem", "name", "path"],

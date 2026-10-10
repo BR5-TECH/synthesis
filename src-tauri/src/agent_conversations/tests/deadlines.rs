@@ -618,13 +618,17 @@ fn the_boundary_and_the_marks_stand_on_every_round() {
         assert_eq!(parts[1].1, None);
 
         let id = format!("call-{round}");
-        exchange.push(rig::completion::Message::Assistant {
-            id: None,
-            content: rig::OneOrMany::one(rig::completion::message::AssistantContent::ToolCall(
-                rig_tool_call(&id, "list_skills", serde_json::json!({})),
-            )),
-        });
-        exchange.push(rig::completion::Message::tool_result(id, "RESULT"));
+        let call = rig_tool_call(&id, "list_skills", serde_json::json!({}));
+        exchange.push(rig::completion::Message::Assistant(
+            rig::completion::message::AssistantMessage::new(vec![
+                rig::completion::message::AssistantContent::ToolCall(call.clone()),
+            ]),
+        ));
+        exchange.push(rig::completion::Message::tool_result(
+            call.id.clone(),
+            call.function.name.clone(),
+            "RESULT",
+        ));
     }
 }
 
@@ -689,6 +693,15 @@ fn an_answer_carries_the_upstream_it_names_and_is_remembered_by_it() {
     let reply = openrouter_reply(model, Some("Anthropic"), 4_000);
     assert_eq!(reply.served_by.as_deref(), Some("Anthropic"));
     assert_eq!(reply.prompt_tokens, Some(4_000));
+    // CVL-FR-28: the provider's own identifiers for the response, the model it
+    // says answered, and why the reply ended. This client reports no
+    // cache-write or reasoning count and no request id of its own.
+    assert_eq!(reply.response_id.as_deref(), Some("gen-1"));
+    assert_eq!(reply.response_model.as_deref(), Some("m"));
+    assert_eq!(reply.finish_reason.as_deref(), Some("stop"));
+    assert_eq!(reply.cache_write_tokens, None);
+    assert_eq!(reply.reasoning_tokens, None);
+    assert_eq!(reply.provider_request_id, None);
     assert_eq!(
         upstream_for(model).as_deref(),
         Some("Anthropic"),
@@ -793,7 +806,7 @@ fn the_openrouter_call_presents_the_search_entry_in_its_tool_array() {
             parts: Vec::new(),
         }],
         tools: vec![rig::completion::ToolDefinition {
-            name: "read_file".into(),
+            name: rig::completion::message::ToolName::new("read_file").expect("a tool name"),
             description: "Read a file.".into(),
             parameters: serde_json::json!({ "type": "object", "properties": {} }),
         }],

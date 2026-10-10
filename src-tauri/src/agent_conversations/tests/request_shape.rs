@@ -72,7 +72,7 @@ fn the_request_carries_the_compiled_prompt_and_the_input_alone() {
     // handed rather than on the request alone, because composing and carrying
     // are separate steps and either could drop a part.
     let built = build_completion_request(request, &opening_exchange(request, false), &any_endpoint());
-    assert_eq!(built.preamble.as_deref(), Some(request.instructions.as_str()));
+    assert_eq!(built.system_instructions(), Some(request.instructions.as_str()));
 
     let rendered = render_input(request);
     assert!(rendered.contains("Some artifact source here."));
@@ -92,7 +92,7 @@ fn the_request_carries_the_compiled_prompt_and_the_input_alone() {
     // …and the rendering is what the provider is actually handed. Without this
     // the whole message half could be dropped, or replaced by one section's
     // body, and every assertion above would still hold (CVL-FR-10).
-    let carried = rig_user_text(&built.chat_history.first());
+    let carried = rig_user_text(built.chat_history.last().expect("the input message"));
     assert_eq!(carried, rendered);
     assert!(carried.contains("<discussion_history>"));
 }
@@ -800,8 +800,7 @@ fn nothing_a_participant_wrote_reaches_the_instruction_position() {
     }
     assert_eq!(
         build_completion_request(request, &opening_exchange(request, false), &any_endpoint())
-            .preamble
-            .as_deref(),
+            .system_instructions(),
         Some(request.instructions.as_str()),
     );
 }

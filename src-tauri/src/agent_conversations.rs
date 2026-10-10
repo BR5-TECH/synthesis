@@ -465,7 +465,7 @@ fn conversation_tools<R: tauri::Runtime>(
     asked: &Arc<AtomicBool>,
     asked_questions: &Arc<AtomicBool>,
     proposed: &Arc<AtomicBool>,
-) -> Vec<rig::tool::PortableDynamicTool> {
+) -> Vec<rig::tool::DynamicTool> {
     let mut tools = vec![
         erase_tool(crate::tools::spec_search::SpecSearchTool::new(app.clone())),
         erase_tool(crate::tools::file_read::FileReadTool::new(

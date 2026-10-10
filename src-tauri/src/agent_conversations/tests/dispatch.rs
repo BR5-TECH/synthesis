@@ -203,9 +203,9 @@ fn the_assembled_request_is_the_same_shape_whichever_client_would_carry_it() {
     // The prompt occupies the instruction position and the input the single user
     // message, for every provider alike (CVL-FR-10).
     for (provider, built) in ["openrouter", "anthropic", "openai", "custom"].iter().zip(&shapes) {
-        assert_eq!(built.preamble.as_deref(), Some(request.instructions.as_str()));
+        assert_eq!(built.system_instructions(), Some(request.instructions.as_str()));
         assert_eq!(built.model.as_deref(), Some("m"));
-        assert_eq!(built.chat_history.len(), 1, "one user message, never more");
+        assert_eq!(built.chat_history.len(), 2, "the prompt and one user message, never more");
         assert_eq!(built.chat_history.len(), shapes[0].chat_history.len());
         assert!(built.tools.is_empty(), "an agent here answers, never acts");
         // CVL-FR-HBNW: the reasoning object is not a parameter of the Anthropic

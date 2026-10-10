@@ -7,14 +7,14 @@
 use super::*;
 
 /// Text that stands for a part of the request in a framework error.
-const REQUEST_TEXT: &str = "Tool result `call_id` is required for OpenAI Responses API";
+const REQUEST_TEXT: &str = "the tool result for `call-0` (list_skills) has no content";
 
 // CVL-FR-21: a request the framework refused to build is `request`, which is
 // `invalid_request`, classified by its kind. Its text does not reach the
 // failure.
 #[test]
 fn a_request_the_framework_refused_to_build_is_an_invalid_request() {
-    let error = rig::completion::CompletionError::RequestError(REQUEST_TEXT.into());
+    let error = rig::ProviderError::request(REQUEST_TEXT);
     let failure = rig_seam::classify_completion_error(&error);
     assert_eq!(failure.failure, FAIL_INVALID_REQUEST);
     assert_eq!(failure.class, class::REQUEST);
@@ -28,9 +28,7 @@ fn a_request_the_framework_refused_to_build_is_an_invalid_request() {
 // text classification would read as a transport failure.
 #[test]
 fn a_refused_request_is_not_classified_from_its_text() {
-    let error = rig::completion::CompletionError::RequestError(
-        "connection refused: dns error, HTTP 503".into(),
-    );
+    let error = rig::ProviderError::request("connection refused: dns error, HTTP 503");
     let failure = rig_seam::classify_completion_error(&error);
     assert_eq!(failure.failure, FAIL_INVALID_REQUEST);
     assert_eq!(failure.class, class::REQUEST);
@@ -94,17 +92,11 @@ fn the_production_seam_reports_a_refused_responses_request_as_invalid_request() 
         accepts_image_input: false,
         model_mode: Some(crate::ai_shared::ModelMode::Responses),
     };
-    let request = AgentRequest::default();
+    let request = wire_request();
     let mut exchange = opening_exchange(&request, false);
-    // A call and its result without a `call_id`: the shape that the Responses
-    // route refuses to build.
-    exchange.push(rig::completion::Message::Assistant {
-        id: None,
-        content: rig::OneOrMany::one(rig::completion::message::AssistantContent::ToolCall(
-            rig_tool_call("call-0", crate::tools::skill_list::NAME, serde_json::json!({})),
-        )),
-    });
-    exchange.push(rig::completion::Message::tool_result("call-0", "No skills."));
+    // A user message that holds no content: the shape the framework refuses
+    // to build a request from.
+    exchange.push(rig::completion::Message::User { content: Vec::new() });
 
     let failure = RigCompletion
         .complete(&request, &exchange, &endpoint, Duration::from_secs(20))

@@ -53,7 +53,7 @@ tasks:
       - sh: command -v pnpm
         msg: 'task build:macos: the prerequisite "pnpm" is missing. No "pnpm" executable is on PATH.'
       - sh: command -v cargo
-        msg: 'task build:macos: the prerequisite "cargo" is missing. No "cargo" executable is on PATH. The toolchain must be the one src-tauri/rust-toolchain.toml pins, which is channel 1.88.'
+        msg: 'task build:macos: the prerequisite "cargo" is missing. No "cargo" executable is on PATH. The toolchain must be the one src-tauri/rust-toolchain.toml pins, which is channel 1.95.'
       - sh: pnpm exec tauri --version
         msg: 'task build:macos: the prerequisite "the Tauri CLI" cannot be resolved. Run "pnpm install" to obtain it.'
     cmds:
@@ -72,7 +72,7 @@ tasks:
       - sh: command -v pnpm
         msg: 'task build:linux: the prerequisite "pnpm" is missing. No "pnpm" executable is on PATH.'
       - sh: command -v cargo
-        msg: 'task build:linux: the prerequisite "cargo" is missing. No "cargo" executable is on PATH. The toolchain must be the one src-tauri/rust-toolchain.toml pins, which is channel 1.88.'
+        msg: 'task build:linux: the prerequisite "cargo" is missing. No "cargo" executable is on PATH. The toolchain must be the one src-tauri/rust-toolchain.toml pins, which is channel 1.95.'
       - sh: pnpm exec tauri --version
         msg: 'task build:linux: the prerequisite "the Tauri CLI" cannot be resolved. Run "pnpm install" to obtain it.'
     cmds:
@@ -91,7 +91,7 @@ tasks:
       - sh: command -v pnpm
         msg: 'task build:windows: the prerequisite "pnpm" is missing. No "pnpm" executable is on PATH.'
       - sh: command -v cargo
-        msg: 'task build:windows: the prerequisite "cargo" is missing. No "cargo" executable is on PATH. The toolchain must be the one src-tauri/rust-toolchain.toml pins, which is channel 1.88.'
+        msg: 'task build:windows: the prerequisite "cargo" is missing. No "cargo" executable is on PATH. The toolchain must be the one src-tauri/rust-toolchain.toml pins, which is channel 1.95.'
       - sh: pnpm exec tauri --version
         msg: 'task build:windows: the prerequisite "the Tauri CLI" cannot be resolved. Run "pnpm install" to obtain it.'
     cmds:

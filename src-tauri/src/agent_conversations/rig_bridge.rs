@@ -459,6 +459,10 @@ pub(super) fn anthropic_model(
 /// Anthropic models accept it.
 pub(super) const ANTHROPIC_MAX_OUTPUT_TOKENS: u64 = 32_000;
 
+/// CVL-FR-FHFM: the output-token limit of every Custom gateway call. Current
+/// Claude 5, GPT-5.6, GPT-6, and GPT-6.1 models accept it.
+pub(super) const CUSTOM_MAX_OUTPUT_TOKENS: u64 = 128_000;
+
 /// Which conversation route the OpenAI-compatible adapter takes (CVL-FR-ZPGW).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum OpenAiRoute {
@@ -483,6 +487,9 @@ pub(super) struct OpenAiAdapterConfig {
     /// gateway (`text.format` and `output_text` parts without text). Set for
     /// the Custom gateway alone.
     pub repair_replies: bool,
+    /// CVL-FR-FHFM / CVL-FR-KXTQ: the output-token limit every call states.
+    /// Set for the Custom gateway alone.
+    pub max_output_tokens: Option<u64>,
 }
 
 /// AAP-FR-ADPX / CVL-FR-ZPGW: the adapter configuration an endpoint calls for.
@@ -497,6 +504,7 @@ pub(super) fn openai_adapter_config(endpoint: &AiApiCall) -> OpenAiAdapterConfig
             base_url: endpoint.base_url.clone(),
             route: OpenAiRoute::Unrestricted,
             repair_replies: false,
+            max_output_tokens: None,
         };
     }
     OpenAiAdapterConfig {
@@ -507,6 +515,24 @@ pub(super) fn openai_adapter_config(endpoint: &AiApiCall) -> OpenAiAdapterConfig
             None => OpenAiRoute::Unrestricted,
         },
         repair_replies: true,
+        max_output_tokens: Some(CUSTOM_MAX_OUTPUT_TOKENS),
+    }
+}
+
+/// CVL-FR-FHFM: the request an OpenAI-compatible call carries, with the limit
+/// of its adapter configuration.
+///
+/// The framework writes the limit in the field of the route: `max_output_tokens`
+/// on Responses, and `max_tokens` or `max_completion_tokens` on Chat
+/// Completions, as the model id calls for. A configuration without a limit
+/// leaves the request as it is.
+pub(super) fn openai_request(
+    request: rig::completion::CompletionRequest,
+    config: &OpenAiAdapterConfig,
+) -> rig::completion::CompletionRequest {
+    match config.max_output_tokens {
+        Some(limit) => request.max_tokens(limit),
+        None => request,
     }
 }
 
@@ -523,6 +549,7 @@ async fn carry_openai(
     endpoint: AiApiCall,
 ) -> Result<ModelReply, CallFailure> {
     let config = openai_adapter_config(&endpoint);
+    let request = openai_request(request, &config);
     // AAP-FR-WMCX: the client is given the shared HTTP client, so it keeps no
     // trust setup of its own.
     let (http_client, tls_record) = crate::tls::rig_http_client()

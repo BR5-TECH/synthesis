@@ -72,6 +72,8 @@ export interface StreamMergeCommit {
   streamId: string;
   /** Its name, for the window's own heading. */
   streamName: string;
+  /** CMW-FR-KQLV: the message the window opens with. Empty where none is handed. */
+  defaultMessage?: string;
 }
 
 /** The three answers the inclusion step offers (CMW-FR-13). */
@@ -186,7 +188,8 @@ export function CommitMessageModal({
   // a set that changed under a message already written would leave the message
   // describing something else.
   const committing_set = resolveInclusion(files, hidden, answer ?? "no");
-  const [message, setMessage] = useState("");
+  // CMW-FR-KQLV: a merge may hand the window a default message.
+  const [message, setMessage] = useState(streamMerge?.defaultMessage ?? "");
   const [error, setError] = useState<string | null>(null);
   // CMW-FR-07: the window stays mounted with its inputs and actions inert while
   // the commit runs, so nothing can be submitted twice and nothing can dismiss

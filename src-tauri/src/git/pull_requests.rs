@@ -6,36 +6,41 @@
 //! request's header and description, and one pull request's full timeline. Each
 //! one finds the owner and the repository of the project's primary remote,
 //! resolves the project's GitHub token (GTC-FR-09, GTC-FR-10) before any
-//! request is made, and reads `api.github.com` through the `GithubPullRequests`
-//! trait. None of them writes anything, and none of them keeps the token.
+//! request is made, and reads the API of the host of the remote through the
+//! `GithubPullRequests` trait. None of them writes anything, and none of them keeps the token.
 //!
 //! The commands are `async` and run their blocking reads on a worker thread, so
 //! a slow GitHub never holds the thread that serves `invoke` calls.
 
 pub(crate) mod client;
+pub(crate) mod create;
 mod model;
 mod timeline;
 
-use std::path::Path;
 use std::time::Instant;
 
 use tauri::{Manager, State};
 
 use crate::changes::{self};
-use crate::github_publication::remotes::parse_github_remote;
+use crate::github_publication::remotes::parse_remote_repository;
 use crate::github_tokens::{self, GithubTokens};
 use crate::global_settings::GlobalSettingsStore;
 use crate::log_fields;
 use crate::logging::{self, Fields, LogBuffer, LogLevel, LogSink};
 use crate::project::ProjectState;
 
-use super::{duration_ms, ERR_NO_REMOTE_CONFIGURED, TRANSFER};
+use super::{duration_ms, GithubAccess, ERR_NO_REMOTE_CONFIGURED, TRANSFER};
 use client::{read_pages, GithubFailure, GithubPullRequests, HttpGithubPullRequests};
+pub use create::{
+    PullRequestHeadState, ERR_PULL_REQUEST_EXISTS, ERR_PULL_REQUEST_REJECTED,
+    ERR_PULL_REQUEST_TITLE_REQUIRED,
+};
 pub use model::{
-    PullRequestDetail, PullRequestSummary, PullRequestTimeline, PullRequestTimelineItem,
+    CreatedPullRequest, PullRequestDetail, PullRequestSummary, PullRequestTimeline,
+    PullRequestTimelineItem,
 };
 
-/// The remote is not on `github.com`, so there are no pull requests to read.
+/// The remote is not on a GitHub host, so there are no pull requests to read.
 pub const ERR_NOT_A_GITHUB_REMOTE: &str = "not_a_github_remote";
 /// GitHub has no pull request of that number.
 pub const ERR_PULL_REQUEST_NOT_FOUND: &str = "pull_request_not_found";
@@ -49,18 +54,25 @@ const MSG_READ_DONE: &str = "pull request read finished";
 
 /// The repository a read is about, and the credential it presents.
 struct Target {
+    host: String,
     owner: String,
     repo: String,
     secret: String,
+}
+
+/// What a pull request operation reads with: the project and the source of its
+/// token, and the client that sends the requests.
+#[derive(Clone, Copy)]
+pub(crate) struct PullRequestAccess<'a> {
+    pub(crate) project: GithubAccess<'a>,
+    pub(crate) client: &'a dyn GithubPullRequests,
 }
 
 /// Is `part` safe to place in a request path? GitHub names are letters, digits,
 /// `-`, `_` and `.`. Anything else is not an owner or a repository of GitHub.
 fn is_path_safe(part: &str) -> bool {
     !part.is_empty()
-        && part
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        && part.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
 /// Find the repository of the primary remote and resolve the token.
@@ -68,12 +80,8 @@ fn is_path_safe(part: &str) -> bool {
 /// The checks run in the order of what they cost: nothing leaves the machine
 /// until the remote is known to be on GitHub and the token is known to exist
 /// (GTC-FR-05, GTC-FR-10).
-fn resolve_target(
-    root: &Path,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
-    project_key: &str,
-) -> Result<Target, String> {
+fn resolve_target(project: GithubAccess<'_>) -> Result<Target, String> {
+    let GithubAccess { root, store, tokens, project_key } = project;
     let repo = changes::open_repo(root)?;
     let remote_name =
         changes::primary_remote_name(&repo).ok_or_else(|| ERR_NO_REMOTE_CONFIGURED.to_string())?;
@@ -81,12 +89,17 @@ fn resolve_target(
         .find_remote(&remote_name)
         .map(|remote| remote.url().unwrap_or_default().to_string())
         .map_err(|_| ERR_NO_REMOTE_CONFIGURED.to_string())?;
-    let (owner, name) = parse_github_remote(&url)
-        .filter(|(owner, name)| is_path_safe(owner) && is_path_safe(name))
+    let parsed = parse_remote_repository(&url)
+        .filter(|parsed| is_path_safe(&parsed.owner) && is_path_safe(&parsed.repo))
+        .filter(|parsed| {
+            github_tokens::is_github_host(&parsed.host, &github_tokens::known_github_hosts(store))
+        })
         .ok_or_else(|| ERR_NOT_A_GITHUB_REMOTE.to_string())?;
-    // The secret exists only for the length of this operation (GTC-FR-09).
-    let secret = github_tokens::resolve_github_token_secret(store, tokens, project_key)?;
-    Ok(Target { owner, repo: name, secret })
+    // The secret exists only for the length of this operation (GTC-FR-09). A
+    // token of another host is refused before any request (GTC-FR-FSLC).
+    let secret =
+        github_tokens::resolve_github_token_secret(store, tokens, project_key, &parsed.host)?;
+    Ok(Target { host: parsed.host, owner: parsed.owner, repo: parsed.repo, secret })
 }
 
 /// The typed error of a failed request. `missing` is what a 404 means to the
@@ -96,6 +109,7 @@ fn failure_error(failure: GithubFailure, missing: &str) -> String {
         GithubFailure::NotFound => missing.to_string(),
         GithubFailure::Rejected => ERR_GITHUB_TOKEN_REJECTED.to_string(),
         GithubFailure::Unreachable => github_tokens::ERR_GITHUB_UNREACHABLE.to_string(),
+        GithubFailure::TlsUntrusted(failure) => failure.wire(),
     }
 }
 
@@ -105,20 +119,26 @@ fn is_refusal(error: &str) -> bool {
     super::is_refusal(error)
         || matches!(
             error,
-            ERR_NOT_A_GITHUB_REMOTE | ERR_INVALID_PULL_REQUEST_STATE | ERR_PULL_REQUEST_NOT_FOUND
+            ERR_NOT_A_GITHUB_REMOTE
+                | ERR_INVALID_PULL_REQUEST_STATE
+                | ERR_PULL_REQUEST_NOT_FOUND
+                | ERR_PULL_REQUEST_EXISTS
+                | ERR_PULL_REQUEST_TITLE_REQUIRED
         )
+        || error.starts_with(ERR_PULL_REQUEST_REJECTED)
 }
 
-/// Run one read and report it. `work` gets the resolved target; `outcome` turns
-/// its result into the counts the record carries. Records hold names, numbers,
-/// and counts only: never the token, never text of a pull request.
+/// Run one read and report it. The target is resolved from `access`, and `work`
+/// gets it; `outcome` turns its result into the counts the record carries.
+/// Records hold names, numbers, and counts only: never the token, never text of
+/// a pull request.
 fn run_reported<S, T>(
     sink: &S,
     buffer: &'static LogBuffer,
     operation: &str,
     mut fields: Fields,
-    resolve: impl FnOnce() -> Result<Target, String>,
-    work: impl FnOnce(&Target) -> Result<T, String>,
+    access: &PullRequestAccess<'_>,
+    work: impl FnOnce(&Target, &dyn GithubPullRequests) -> Result<T, String>,
     outcome: impl FnOnce(&T) -> Fields,
 ) -> Result<T, String>
 where
@@ -128,10 +148,15 @@ where
     fields.insert("operation".to_string(), serde_json::json!(operation));
     logging::log_debug(sink, buffer, TRANSFER, "pull request read started", fields.clone());
 
-    let result = resolve().and_then(|target| {
+    let client = access.client;
+    let result = resolve_target(access.project).and_then(|target| {
         fields.insert("owner".to_string(), serde_json::json!(target.owner));
         fields.insert("repo".to_string(), serde_json::json!(target.repo));
-        work(&target)
+        fields.insert("host".to_string(), serde_json::json!(target.host));
+        // The client that sends the request is the one of the host of the
+        // remote (GTC-FR-XUAC).
+        let scoped = client.for_host(&target.host);
+        work(&target, scoped.as_deref().unwrap_or(client))
     });
     fields.insert("durationMs".to_string(), serde_json::json!(duration_ms(started)));
     match &result {
@@ -152,11 +177,7 @@ where
 pub(crate) fn list_pull_requests_reported<S>(
     sink: &S,
     buffer: &'static LogBuffer,
-    root: &Path,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
-    project_key: &str,
-    client: &dyn GithubPullRequests,
+    access: &PullRequestAccess<'_>,
     state: &str,
 ) -> Result<Vec<PullRequestSummary>, String>
 where
@@ -188,8 +209,8 @@ where
         buffer,
         "list_pull_requests",
         log_fields! { "state" => state },
-        || resolve_target(root, store, tokens, project_key),
-        |target| {
+        access,
+        |target, client| {
             let path = format!(
                 "/repos/{}/{}/pulls?state={state}&sort=updated&direction=desc",
                 target.owner, target.repo
@@ -218,11 +239,7 @@ where
 pub(crate) fn get_pull_request_detail_reported<S>(
     sink: &S,
     buffer: &'static LogBuffer,
-    root: &Path,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
-    project_key: &str,
-    client: &dyn GithubPullRequests,
+    access: &PullRequestAccess<'_>,
     id: u64,
 ) -> Result<PullRequestDetail, String>
 where
@@ -233,8 +250,8 @@ where
         buffer,
         "get_pull_request_detail",
         log_fields! { "number" => id },
-        || resolve_target(root, store, tokens, project_key),
-        |target| {
+        access,
+        |target, client| {
             let path = format!("/repos/{}/{}/pulls/{id}", target.owner, target.repo);
             let body = client
                 .get_json(&target.secret, &path)
@@ -256,11 +273,7 @@ where
 pub(crate) fn list_pull_request_timeline_reported<S>(
     sink: &S,
     buffer: &'static LogBuffer,
-    root: &Path,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
-    project_key: &str,
-    client: &dyn GithubPullRequests,
+    access: &PullRequestAccess<'_>,
     id: u64,
 ) -> Result<PullRequestTimeline, String>
 where
@@ -271,8 +284,8 @@ where
         buffer,
         "list_pull_request_timeline",
         log_fields! { "number" => id },
-        || resolve_target(root, store, tokens, project_key),
-        |target| {
+        access,
+        |target, client| {
             let base = format!("/repos/{}/{}", target.owner, target.repo);
             let read = |path: String| {
                 read_pages(client, &target.secret, &path)
@@ -312,16 +325,16 @@ pub async fn list_pull_requests(
     tauri::async_runtime::spawn_blocking(move || {
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
-        list_pull_requests_reported(
-            &app,
-            &logging::BUFFER,
-            &root,
-            &store,
-            &tokens,
-            &project_key,
-            &HttpGithubPullRequests,
-            &state,
-        )
+        let access = PullRequestAccess {
+            project: GithubAccess {
+                root: &root,
+                store: &store,
+                tokens: &tokens,
+                project_key: &project_key,
+            },
+            client: &HttpGithubPullRequests,
+        };
+        list_pull_requests_reported(&app, &logging::BUFFER, &access, &state)
     })
     .await
     .map_err(join_error)?
@@ -339,16 +352,16 @@ pub async fn get_pull_request_detail(
     tauri::async_runtime::spawn_blocking(move || {
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
-        get_pull_request_detail_reported(
-            &app,
-            &logging::BUFFER,
-            &root,
-            &store,
-            &tokens,
-            &project_key,
-            &HttpGithubPullRequests,
-            id,
-        )
+        let access = PullRequestAccess {
+            project: GithubAccess {
+                root: &root,
+                store: &store,
+                tokens: &tokens,
+                project_key: &project_key,
+            },
+            client: &HttpGithubPullRequests,
+        };
+        get_pull_request_detail_reported(&app, &logging::BUFFER, &access, id)
     })
     .await
     .map_err(join_error)?
@@ -366,16 +379,65 @@ pub async fn list_pull_request_timeline(
     tauri::async_runtime::spawn_blocking(move || {
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
-        list_pull_request_timeline_reported(
-            &app,
-            &logging::BUFFER,
-            &root,
-            &store,
-            &tokens,
-            &project_key,
-            &HttpGithubPullRequests,
-            id,
-        )
+        let access = PullRequestAccess {
+            project: GithubAccess {
+                root: &root,
+                store: &store,
+                tokens: &tokens,
+                project_key: &project_key,
+            },
+            client: &HttpGithubPullRequests,
+        };
+        list_pull_request_timeline_reported(&app, &logging::BUFFER, &access, id)
+    })
+    .await
+    .map_err(join_error)?
+}
+
+/// GTC-FR-MMFM: open a pull request on the primary GitHub remote.
+#[tauri::command]
+pub async fn create_pull_request(
+    title: String,
+    body: String,
+    base: String,
+    head: String,
+    draft: bool,
+    app: tauri::AppHandle,
+    project: State<'_, ProjectState>,
+) -> Result<CreatedPullRequest, String> {
+    let root = project.require_root()?;
+    let project_key = project.slot_key();
+    tauri::async_runtime::spawn_blocking(move || {
+        let store = app.state::<GlobalSettingsStore>();
+        let tokens = app.state::<GithubTokens>();
+        let access = PullRequestAccess {
+            project: GithubAccess {
+                root: &root,
+                store: &store,
+                tokens: &tokens,
+                project_key: &project_key,
+            },
+            client: &HttpGithubPullRequests,
+        };
+        let request =
+            create::NewPullRequest { title: &title, body: &body, base: &base, head: &head, draft };
+        create::create_pull_request_reported(&app, &logging::BUFFER, &access, &request)
+    })
+    .await
+    .map_err(join_error)?
+}
+
+/// GTC-FR-NEIW: what stands between a local branch and a pull request for it.
+#[tauri::command]
+pub async fn get_pull_request_head_state(
+    head: String,
+    base: Option<String>,
+    app: tauri::AppHandle,
+    project: State<'_, ProjectState>,
+) -> Result<create::PullRequestHeadState, String> {
+    let root = project.require_root()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        create::head_state_reported(&app, &logging::BUFFER, &root, &head, base.as_deref())
     })
     .await
     .map_err(join_error)?

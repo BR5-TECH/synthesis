@@ -50,9 +50,7 @@ fn a_candidate_save_replaces_the_candidate_and_changes_nothing_of_the_draft() {
     let events = f.watch_proposals();
 
     let baseline = f.candidate(&proposal.id).checksum;
-    let saved = f
-        .save_candidate(&proposal.id, REWRITTEN, &baseline)
-        .expect("saved");
+    let saved = f.save_candidate(&proposal.id, REWRITTEN, &baseline).expect("saved");
 
     // The candidate is the author's text, byte for byte, and the checksum
     // reported is the one their next save will name as its baseline.
@@ -85,13 +83,10 @@ fn the_edited_flag_describes_the_text_rather_than_the_history() {
     let origin = proposal.origin_checksum.clone().expect("stamped");
     assert_eq!(origin, f.candidate(&proposal.id).checksum);
 
-    let saved = f
-        .save_candidate(&proposal.id, REWRITTEN, &origin)
-        .expect("saved");
+    let saved = f.save_candidate(&proposal.id, REWRITTEN, &origin).expect("saved");
     assert!(f.record_of(&proposal.id).candidate_edited);
 
-    f.save_candidate(&proposal.id, PROPOSED, &saved.checksum)
-        .expect("restored");
+    f.save_candidate(&proposal.id, PROPOSED, &saved.checksum).expect("restored");
     assert!(
         !f.record_of(&proposal.id).candidate_edited,
         "restoring the agent's own bytes clears the flag",
@@ -107,9 +102,7 @@ fn a_candidate_save_against_a_stale_baseline_writes_nothing() {
     let stale = f.candidate(&proposal.id).checksum;
 
     // Another window gets there first.
-    let fresh = f
-        .save_candidate(&proposal.id, REWRITTEN, &stale)
-        .expect("the first save lands");
+    let fresh = f.save_candidate(&proposal.id, REWRITTEN, &stale).expect("the first save lands");
 
     let err = f
         .save_candidate(&proposal.id, "something else entirely\n", &stale)
@@ -130,9 +123,7 @@ fn a_candidate_save_against_a_decided_proposal_is_refused() {
     let baseline = f.candidate(&proposal.id).checksum;
     f.decline_with(&proposal.id, None).expect("declined");
 
-    let err = f
-        .save_candidate(&proposal.id, REWRITTEN, &baseline)
-        .expect_err("refused");
+    let err = f.save_candidate(&proposal.id, REWRITTEN, &baseline).expect_err("refused");
     assert_eq!(err, ERR_ALREADY_DECIDED);
     assert_eq!(f.candidate(&proposal.id).content, PROPOSED);
 
@@ -150,8 +141,7 @@ fn accepting_an_edited_candidate_lands_the_authors_text_and_says_so() {
     let f = Fixture::new();
     let proposal = f.pending();
     let baseline = f.candidate(&proposal.id).checksum;
-    f.save_candidate(&proposal.id, REWRITTEN, &baseline)
-        .expect("saved");
+    f.save_candidate(&proposal.id, REWRITTEN, &baseline).expect("saved");
 
     f.accept(&proposal.id).expect("accepted");
     assert_eq!(f.file_body(), REWRITTEN);
@@ -208,16 +198,11 @@ fn a_candidate_save_that_cannot_write_leaves_the_candidate_as_it_was() {
     std::fs::remove_file(&content).expect("clear the way");
     std::fs::create_dir(&content).expect("occupy the path");
 
-    let err = f
-        .save_candidate(&proposal.id, REWRITTEN, &baseline)
-        .expect_err("refused");
+    let err = f.save_candidate(&proposal.id, REWRITTEN, &baseline).expect_err("refused");
     // Either the checksum could not be taken over a directory or the write
     // itself failed; both are typed refusals rather than a panic, and neither
     // leaves a candidate behind.
-    assert!(
-        err == ERR_WRITE_FAILED || err == ERR_PROPOSAL_NOT_FOUND,
-        "unexpected refusal: {err}",
-    );
+    assert!(err == ERR_WRITE_FAILED || err == ERR_PROPOSAL_NOT_FOUND, "unexpected refusal: {err}",);
     assert_eq!(f.record_of(&proposal.id).state, ProposalState::Pending);
     assert!(!f.record_of(&proposal.id).candidate_edited);
 }
@@ -240,8 +225,7 @@ fn a_candidate_save_emits_no_drafts_changed_and_restamps_nothing() {
     let before = f.draft_updated_at();
 
     let baseline = f.candidate(&proposal.id).checksum;
-    f.save_candidate(&proposal.id, REWRITTEN, &baseline)
-        .expect("saved");
+    f.save_candidate(&proposal.id, REWRITTEN, &baseline).expect("saved");
 
     assert!(seen.lock().unwrap_or_else(|e| e.into_inner()).is_empty());
     assert_eq!(f.draft_updated_at(), before);
@@ -264,12 +248,7 @@ fn a_proposals_stored_participant_round_trips_its_title_snapshot() {
     let listed = f.list_through_command();
     assert_eq!(listed.len(), 1);
     match &listed[0].agent {
-        Participant::Agent {
-            agent_id,
-            handle,
-            model,
-            title,
-        } => {
+        Participant::Agent { agent_id, handle, model, title } => {
             assert_eq!(agent_id, "agent-1");
             assert_eq!(handle, "arch");
             assert_eq!(model.as_deref(), Some("m"));
@@ -325,9 +304,7 @@ fn a_stored_participant_predating_the_snapshot_reads_back_carrying_none() {
 fn with_project(f: &Fixture) {
     use tauri::Manager;
     f.app.manage(crate::project::ProjectState::default());
-    f.app
-        .state::<crate::project::ProjectState>()
-        .set_root(f.root.path().to_path_buf());
+    f.app.state::<crate::project::ProjectState>().set_root(f.root.path().to_path_buf());
 }
 
 /// The draft's statistics, after the asynchronous writer has caught up.

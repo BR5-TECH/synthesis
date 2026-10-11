@@ -36,9 +36,7 @@ fn a_skill_added_since_the_last_pass_is_not_yet_loadable_and_an_edited_body_is_c
     // ...and reachable once a pass has run, which is what makes the assertion
     // above one about staleness rather than about an unwritable fixture.
     fixture.reindex();
-    assert!(call(&fixture, "latecomer", None)
-        .unwrap()
-        .contains("# Latecomer"));
+    assert!(call(&fixture, "latecomer", None).unwrap().contains("# Latecomer"));
 
     // The body, by contrast, is read at call time: an edit since the pass that
     // admitted the skill is returned as the file reads now.
@@ -77,10 +75,10 @@ fn a_call_resolves_without_waiting_on_an_index_pass() {
         indexer.mount(&crate::fs::RootFs::for_root(&root));
     }
 
-    let refusal = block_on(SkillLoadTool::new(handle).call(LoadSkillArgs {
-        name: "settled".to_string(),
-        ecosystem: None,
-    }))
+    let refusal = block_on(
+        SkillLoadTool::new(handle)
+            .call(LoadSkillArgs { name: "settled".to_string(), ecosystem: None }),
+    )
     .unwrap_err();
     assert_eq!(
         refusal,
@@ -166,10 +164,7 @@ fn snapshot(root: &std::path::Path) -> Vec<(String, Vec<u8>, std::time::SystemTi
                 walk(&path, base, out);
             } else if let (Ok(bytes), Ok(meta)) = (std::fs::read(&path), std::fs::metadata(&path)) {
                 out.push((
-                    path.strip_prefix(base)
-                        .unwrap_or(&path)
-                        .to_string_lossy()
-                        .to_string(),
+                    path.strip_prefix(base).unwrap_or(&path).to_string_lossy().to_string(),
                     bytes,
                     meta.modified().unwrap_or(std::time::UNIX_EPOCH),
                 ));
@@ -181,4 +176,3 @@ fn snapshot(root: &std::path::Path) -> Vec<(String, Vec<u8>, std::time::SystemTi
     out.sort();
     out
 }
-

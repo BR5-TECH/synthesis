@@ -50,14 +50,14 @@ mod access_build;
 mod access_handles;
 mod access_readonly;
 mod access_state;
-mod access_types;
-mod bounded_read;
 #[cfg(test)]
 mod access_tests;
+mod access_types;
+pub mod author_tree;
+mod bounded_read;
 #[cfg(test)]
 pub mod case_probe;
 pub mod error;
-pub mod author_tree;
 pub mod owned_tree;
 #[cfg(test)]
 pub mod permission_probe;
@@ -105,8 +105,6 @@ pub fn discover_project_root<P: AsRef<Path>>(start_path: P) -> FsResult<PathBuf>
 // FSA-FR-04 / FSA-FR-05: atomic writes; FSA-FR-06: typed read errors
 // ---------------------------------------------------------------------------
 
-
-
 /// The read mechanics alone, with no symlink check of their own.
 ///
 /// `FsAccess` calls this after its own gate has run (FSA-FR-10 / FSA-FR-17 /
@@ -116,23 +114,22 @@ pub fn discover_project_root<P: AsRef<Path>>(start_path: P) -> FsResult<PathBuf>
 fn read_bytes_at(path: &Path) -> FsResult<Vec<u8>> {
     match fs::read(path) {
         Ok(bytes) => Ok(bytes),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Err(FsError::NotFound {
-            path: path.to_path_buf(),
-        }),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            Err(FsError::NotFound { path: path.to_path_buf() })
+        }
         Err(e) => Err(FsError::Io(e)),
     }
 }
 
-
 /// The atomic-write mechanics alone, with no symlink check of their own — the
 /// companion of `read_bytes_at`, called by `FsAccess` once its gate has run.
 fn write_bytes_at(target: &Path, bytes: &[u8]) -> FsResult<()> {
-    let parent = target
-        .parent()
-        .ok_or_else(|| FsError::Io(io::Error::new(
+    let parent = target.parent().ok_or_else(|| {
+        FsError::Io(io::Error::new(
             io::ErrorKind::InvalidInput,
             format!("write target {target:?} has no parent directory"),
-        )))?;
+        ))
+    })?;
 
     // FSA-FR-05: create parent on demand. `create_dir_all` is a no-op if it
     // already exists, and is the cheapest correct option.
@@ -186,7 +183,6 @@ fn sibling_tmp_path(target: &Path) -> PathBuf {
     parent.join(format!(".{stem}.tmp.{pid}.{nanos}"))
 }
 
-
 /// The append mechanics alone, with no symlink check of their own — called by
 /// `FsAccess::append_lines` once its gate has run.
 fn append_lines_at(target: &Path, lines: &[String]) -> FsResult<()> {
@@ -203,11 +199,8 @@ fn append_lines_at(target: &Path, lines: &[String]) -> FsResult<()> {
         buf.push_str(line);
         buf.push('\n');
     }
-    let mut file = fs::OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(target)
-        .map_err(FsError::Io)?;
+    let mut file =
+        fs::OpenOptions::new().append(true).create(true).open(target).map_err(FsError::Io)?;
     file.write_all(buf.as_bytes()).map_err(FsError::Io)?;
     file.flush().map_err(FsError::Io)?;
     // FSA-FR-15: the append answers only once the bytes are on the device. A
@@ -218,37 +211,27 @@ fn append_lines_at(target: &Path, lines: &[String]) -> FsResult<()> {
     Ok(())
 }
 
-
 /// `read_text` without a symlink check of its own — called by
 /// `FsAccess::read_text` once its gate has run.
 fn read_text_at(path: &Path) -> FsResult<String> {
     let bytes = read_bytes_at(path)?;
-    String::from_utf8(bytes).map_err(|e| FsError::Utf8 {
-        path: path.to_path_buf(),
-        source: e.utf8_error(),
-    })
+    String::from_utf8(bytes)
+        .map_err(|e| FsError::Utf8 { path: path.to_path_buf(), source: e.utf8_error() })
 }
-
-
-
 
 /// `read_toml` without a symlink check of its own — called by
 /// `FsAccess::read_toml` once its gate has run.
 fn read_toml_at<T: DeserializeOwned>(path: &Path) -> FsResult<T> {
     let text = read_text_at(path)?;
-    toml::from_str(&text).map_err(|e| FsError::Toml {
-        path: path.to_path_buf(),
-        message: e.to_string(),
-    })
+    toml::from_str(&text)
+        .map_err(|e| FsError::Toml { path: path.to_path_buf(), message: e.to_string() })
 }
 
 /// `write_toml_atomic` without a symlink check of its own — called by
 /// `FsAccess::write_toml_atomic` once its gate has run.
 fn write_toml_at<T: Serialize>(path: &Path, value: &T) -> FsResult<()> {
-    let s = toml::to_string(value).map_err(|e| FsError::Toml {
-        path: path.to_path_buf(),
-        message: e.to_string(),
-    })?;
+    let s = toml::to_string(value)
+        .map_err(|e| FsError::Toml { path: path.to_path_buf(), message: e.to_string() })?;
     write_bytes_at(path, s.as_bytes())
 }
 
@@ -256,16 +239,13 @@ fn write_toml_at<T: Serialize>(path: &Path, value: &T) -> FsResult<()> {
 // FSA-FR-07: streaming SHA-256 checksum
 // ---------------------------------------------------------------------------
 
-
 /// `sha256_file` without a symlink check of its own — called by
 /// `FsAccess::sha256_file` once its gate has run.
 fn sha256_file_at(path: &Path) -> FsResult<String> {
     let mut file = match fs::File::open(path) {
         Ok(f) => f,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return Err(FsError::NotFound {
-                path: path.to_path_buf(),
-            });
+            return Err(FsError::NotFound { path: path.to_path_buf() });
         }
         Err(e) => return Err(FsError::Io(e)),
     };
@@ -340,13 +320,8 @@ const REQUIRED_GITIGNORE_ENTRIES: &[&str] = &["/cache/", "/local.toml", "/propos
 /// drafts folder an author named `cache`, and `proposals/` excludes every
 /// draft's own `proposals/`. Removing them is part of the same migration the
 /// `drafts/` entry gets (per `DRS-draft-storage.md` DRS-FR-ISPI).
-const SUPERSEDED_GITIGNORE_ENTRIES: &[&str] = &[
-    "cache/",
-    "cache",
-    "local.toml",
-    "proposals/",
-    "proposals",
-];
+const SUPERSEDED_GITIGNORE_ENTRIES: &[&str] =
+    &["cache/", "cache", "local.toml", "proposals/", "proposals"];
 
 /// FSA-FR-08: the entries that ignore `.synthesis/drafts/`, removed wherever an
 /// older project's ignore file still carries one (per `DRS-draft-storage.md`
@@ -411,7 +386,6 @@ fn remove_superseded_entries(existing: &str) -> String {
     out
 }
 
-
 /// Pure helper backing `ensure_gitignored`. Given existing gitignore content
 /// and a list of required entries, returns the merged content: existing
 /// content unchanged, with any missing entries appended (one per line, in
@@ -434,17 +408,14 @@ pub fn merge_gitignore(existing: &str, required: &[&str]) -> String {
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .collect();
 
-    let missing: Vec<&str> = required
-        .iter()
-        .copied()
-        .filter(|e| !present.contains(*e))
-        .collect();
+    let missing: Vec<&str> = required.iter().copied().filter(|e| !present.contains(*e)).collect();
 
     if missing.is_empty() {
         return existing.to_string();
     }
 
-    let mut out = String::with_capacity(existing.len() + missing.iter().map(|e| e.len() + 1).sum::<usize>());
+    let mut out =
+        String::with_capacity(existing.len() + missing.iter().map(|e| e.len() + 1).sum::<usize>());
     out.push_str(existing);
     // Make sure we're starting on a fresh line before appending.
     if !out.is_empty() && !out.ends_with('\n') {
@@ -554,11 +525,7 @@ pub fn resolve_under<R: AsRef<Path>, P: AsRef<Path>>(root: R, rel: P) -> FsResul
 
     // Build the candidate as `root.join(rel)` and then resolve syntactic
     // components, tracking that we never "pop" above the root.
-    let combined = if rel.is_absolute() {
-        rel.to_path_buf()
-    } else {
-        root.join(rel)
-    };
+    let combined = if rel.is_absolute() { rel.to_path_buf() } else { root.join(rel) };
 
     // Normalize the root to component form so we can compare prefixes.
     let root_components: Vec<Component> = root.components().collect();
@@ -626,10 +593,7 @@ pub fn resolve_under<R: AsRef<Path>, P: AsRef<Path>>(root: R, rel: P) -> FsResul
     // Sanity check: the resolved path must start with the root's components.
     let resolved_path: PathBuf = resolved.iter().collect();
     if !resolved_path.starts_with(root) {
-        return Err(FsError::PathEscape {
-            root: root.to_path_buf(),
-            rel: rel.to_path_buf(),
-        });
+        return Err(FsError::PathEscape { root: root.to_path_buf(), rel: rel.to_path_buf() });
     }
     Ok(resolved_path)
 }
@@ -689,30 +653,18 @@ fn ensure_no_symlink_under(root: &Path, target: &Path) -> FsResult<()> {
 /// Performs no mutation and reads no file content — it exists so a caller can
 /// refuse *before* invoking any primitive, which is what makes the refusal
 /// all-or-nothing for multi-step operations.
-pub fn resolve_inside<R: AsRef<Path>, P: AsRef<Path>>(
-    root: R,
-    rel: P,
-) -> Result<(), &'static str> {
+pub fn resolve_inside<R: AsRef<Path>, P: AsRef<Path>>(root: R, rel: P) -> Result<(), &'static str> {
     let target = resolve_under(&root, &rel).map_err(|_| "escape")?;
     ensure_no_symlink_under(root.as_ref(), &target).map_err(|_| "symlink")?;
     Ok(())
 }
 
-
-
-
 /// Reject a `rename_path` `new_name` that is not a bare basename: empty, a `.`
 /// or `..` component, or containing any path separator. Pure so the validation
 /// is unit-testable on its own (FSA-FR-12).
 fn is_valid_basename(name: &str) -> bool {
-    !name.is_empty()
-        && name != "."
-        && name != ".."
-        && !name.contains('/')
-        && !name.contains('\\')
+    !name.is_empty() && name != "." && name != ".." && !name.contains('/') && !name.contains('\\')
 }
-
-
 
 /// Copy a single file from `src` to `dst`, failing with `FsError::AlreadyExists`
 /// rather than overwriting if `dst` springs into existence after `copy_path`'s
@@ -720,26 +672,15 @@ fn is_valid_basename(name: &str) -> bool {
 /// not a racy userspace check — enforces "must not exist".
 fn copy_file_no_overwrite(src: &Path, dst: &Path) -> FsResult<()> {
     let mut reader = fs::File::open(src).map_err(FsError::Io)?;
-    let mut writer = match fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(dst)
-    {
+    let mut writer = match fs::OpenOptions::new().write(true).create_new(true).open(dst) {
         Ok(f) => f,
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-            return Err(FsError::AlreadyExists {
-                path: dst.to_path_buf(),
-            });
+            return Err(FsError::AlreadyExists { path: dst.to_path_buf() });
         }
         Err(e) => return Err(FsError::Io(e)),
     };
     io::copy(&mut reader, &mut writer).map(|_| ()).map_err(FsError::Io)
 }
-
-
-
-
-
 
 // ---------------------------------------------------------------------------
 // FSA-FR-01: dialog plugin return-shape helper (Tauri-touching, pure)
@@ -762,9 +703,7 @@ pub enum BrowseResult {
 /// covered by a unit test without invoking a real dialog.
 pub fn map_dialog_result(maybe_path: Option<PathBuf>) -> BrowseResult {
     match maybe_path {
-        Some(p) => BrowseResult::Selected {
-            path: p.to_string_lossy().into_owned(),
-        },
+        Some(p) => BrowseResult::Selected { path: p.to_string_lossy().into_owned() },
         None => BrowseResult::Cancelled,
     }
 }

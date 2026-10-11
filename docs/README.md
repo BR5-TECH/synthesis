@@ -46,7 +46,7 @@ and the backend sends updates back as Tauri events.
 
 | Path | Component |
 | --- | --- |
-| `src/` | The frontend. One entry point, `src/main.tsx`, starts the main window or one of the two settings windows. |
+| `src/` | The frontend. One entry point, `src/main.tsx`, starts the main window or the Settings window. |
 | `src-tauri/` | The backend crate `synthesis_lib`, and a small `main.rs` binary. |
 | `server/` | `synthesis-server`, a standalone Axum service. It shares no code with `src-tauri/`. See [`server/README.md`](../server/README.md). |
 | `docker/agent-images/` | The reference images for Claude Code and Codex, and `manifest.toml`. See [`docker/agent-images/README.md`](../docker/agent-images/README.md). |
@@ -203,8 +203,8 @@ frontend as events.
 
 - **Tauri capabilities.**
   [`src-tauri/capabilities/default.json`](../src-tauri/capabilities/default.json)
-  sets what the main window can call. `settings-windows.json` gives the two
-  settings windows a smaller set.
+  sets what the main window can call. `settings-windows.json` gives the Settings
+  window a smaller set.
 - **Filesystem.** All backend disk access goes through `FsAccess` in
   [`src-tauri/src/fs/`](../src-tauri/src/fs/). It accepts only absolute paths
   below its allowed roots. The main instance has four roots: the active
@@ -227,7 +227,7 @@ frontend as events.
 
 ## Build, test, and CI
 
-- [`Taskfile.yaml`](../Taskfile.yaml) holds the eight tasks. The reference is in
+- [`Taskfile.yaml`](../Taskfile.yaml) holds the twelve tasks. The reference is in
   [`development.md`](development.md).
 - [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on each pull
   request. It has five lanes: frontend, backend, mock CLI, server, and

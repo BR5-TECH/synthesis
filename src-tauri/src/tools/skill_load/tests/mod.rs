@@ -13,7 +13,9 @@ use super::*;
 use crate::logging::{Domain, LogBuffer, LogFilter, LogLevel};
 use crate::skills::Ecosystem;
 use crate::tools::tests::block_on;
-use crate::tools::tests::{closed_project, collision_project, demo_project, mounted, write_skill, Fixture};
+use crate::tools::tests::{
+    closed_project, collision_project, demo_project, mounted, write_skill, Fixture,
+};
 use crate::tools::{ToolRefusal, NO_PROJECT_OPEN, SKILL_NOT_FOUND, SKILL_UNREADABLE};
 
 mod body;
@@ -23,10 +25,11 @@ mod failures;
 mod log_records;
 mod resolution;
 
-
 fn call(fixture: &Fixture, name: &str, ecosystem: Option<&str>) -> Result<String, ToolRefusal> {
-    block_on(SkillLoadTool::new(fixture.handle()).call(LoadSkillArgs {
-        name: name.to_string(),
-        ecosystem: ecosystem.map(str::to_string),
-    }))
+    block_on(
+        SkillLoadTool::new(fixture.handle()).call(LoadSkillArgs {
+            name: name.to_string(),
+            ecosystem: ecosystem.map(str::to_string),
+        }),
+    )
 }

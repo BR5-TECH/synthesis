@@ -23,23 +23,20 @@ fn a_call_reports_a_byte_count_and_never_the_name_path_or_instructions() {
     let fixture = mounted(dir);
     LSK_BUFFER.clear();
 
-    let body = block_on(
-        SkillLoadTool::with_buffer(fixture.handle(), &LSK_BUFFER).call(LoadSkillArgs {
+    let body =
+        block_on(SkillLoadTool::with_buffer(fixture.handle(), &LSK_BUFFER).call(LoadSkillArgs {
             name: "analyst".to_string(),
             ecosystem: Some("claude".to_string()),
-        }),
-    )
-    .unwrap();
+        }))
+        .unwrap();
     assert!(
         body.len() != body.chars().count(),
         "the fixture must distinguish bytes from characters",
     );
 
     block_on(
-        SkillLoadTool::with_buffer(fixture.handle(), &LSK_BUFFER).call(LoadSkillArgs {
-            name: "a skill nobody wrote".to_string(),
-            ecosystem: None,
-        }),
+        SkillLoadTool::with_buffer(fixture.handle(), &LSK_BUFFER)
+            .call(LoadSkillArgs { name: "a skill nobody wrote".to_string(), ecosystem: None }),
     )
     .unwrap_err();
 
@@ -90,10 +87,7 @@ fn a_call_reports_a_byte_count_and_never_the_name_path_or_instructions() {
         "Анализ",
         "Author requirement documents",
     ] {
-        assert!(
-            !serialised.contains(leaked),
-            "LSK-FR-19: a record must not carry {leaked:?}",
-        );
+        assert!(!serialised.contains(leaked), "LSK-FR-19: a record must not carry {leaked:?}",);
     }
 }
 
@@ -108,14 +102,8 @@ fn every_refusal_this_tool_can_produce_is_logged_under_its_own_reason() {
         (ToolRefusal::SkillNotFound, "skill_not_found"),
         (ToolRefusal::SkillUnreadable, "skill_unreadable"),
         (ToolRefusal::SkillNameNotUnique, "skill_name_not_unique"),
-        (
-            ToolRefusal::SkillAmbiguous(vec![Ecosystem::Claude]),
-            "skill_ambiguous",
-        ),
-        (
-            ToolRefusal::InvalidArguments(BLANK_NAME),
-            "invalid_arguments",
-        ),
+        (ToolRefusal::SkillAmbiguous(vec![Ecosystem::Claude]), "skill_ambiguous"),
+        (ToolRefusal::InvalidArguments(BLANK_NAME), "invalid_arguments"),
     ];
     let mut seen = std::collections::HashSet::new();
     for (refusal, reason) in &reasons {
@@ -130,10 +118,8 @@ fn every_refusal_this_tool_can_produce_is_logged_under_its_own_reason() {
     let fixture = collision_project();
     LSK_BUFFER.clear();
     let _ = block_on(
-        SkillLoadTool::with_buffer(fixture.handle(), &LSK_BUFFER).call(LoadSkillArgs {
-            name: "review".to_string(),
-            ecosystem: None,
-        }),
+        SkillLoadTool::with_buffer(fixture.handle(), &LSK_BUFFER)
+            .call(LoadSkillArgs { name: "review".to_string(), ecosystem: None }),
     );
     let records = LSK_BUFFER
         .query(

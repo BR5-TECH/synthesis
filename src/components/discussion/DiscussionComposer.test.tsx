@@ -49,7 +49,7 @@ function discussion(id = "d1"): Discussion {
   };
 }
 
-const archAgent: ProjectAgent = {
+const archAgent: ProjectAgent = { scope: "project" as const,
   agent: {
     id: "a1",
     nickname: "arch",

@@ -33,10 +33,7 @@ fn a_rename_reports_both_paths_and_a_plain_edit_reports_none() {
     let plain = entry(&set, "plain.md");
     assert_eq!(plain.previous_path, None);
     let json = serde_json::to_value(plain).unwrap();
-    assert!(
-        json.get("previousPath").is_none(),
-        "absent, not null, for every other status"
-    );
+    assert!(json.get("previousPath").is_none(), "absent, not null, for every other status");
 }
 
 #[test]

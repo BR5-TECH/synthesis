@@ -5,14 +5,8 @@ use crate::global_settings::GlobalSettingsStore;
 
 fn sources() -> Vec<StoredSource> {
     vec![
-        StoredSource {
-            kind: SourceKind::Folder,
-            path: "/refs/manuals".to_string(),
-        },
-        StoredSource {
-            kind: SourceKind::File,
-            path: "/elsewhere/paper.pdf".to_string(),
-        },
+        StoredSource { kind: SourceKind::Folder, path: "/refs/manuals".to_string() },
+        StoredSource { kind: SourceKind::File, path: "/elsewhere/paper.pdf".to_string() },
         StoredSource {
             kind: SourceKind::File,
             path: "/work/project/docs/in-project.md".to_string(),
@@ -70,10 +64,7 @@ fn the_store_holds_references_only() {
     store
         .save_document_sources(
             "/repo",
-            vec![StoredSource {
-                kind: SourceKind::File,
-                path: doc.to_string_lossy().into_owned(),
-            }],
+            vec![StoredSource { kind: SourceKind::File, path: doc.to_string_lossy().into_owned() }],
         )
         .unwrap();
     let toml = std::fs::read_to_string(&path).unwrap();
@@ -94,19 +85,12 @@ fn the_sources_coexist_with_the_other_per_project_facts() {
     let path = dir.path().join("synthesis.toml");
     {
         let store = GlobalSettingsStore::with_path(path.clone());
-        store
-            .save_project_layout("/repo", crate::layout::LayoutPreferences::default())
-            .unwrap();
+        store.save_project_layout("/repo", crate::layout::LayoutPreferences::default()).unwrap();
         store.save_document_sources("/repo", sources()).unwrap();
-        store
-            .save_project_agent_enrolment("/repo", vec!["agent-1".to_string()])
-            .unwrap();
+        store.save_agentic_override("/repo", "codex").unwrap();
     }
     let reloaded = GlobalSettingsStore::with_path(path);
     assert_eq!(reloaded.load_document_sources("/repo").unwrap(), sources());
-    assert_eq!(
-        reloaded.load_project_agent_enrolment("/repo").unwrap(),
-        vec!["agent-1".to_string()]
-    );
+    assert_eq!(reloaded.load_agentic_override("/repo").unwrap(), Some("codex".to_string()));
     assert!(reloaded.load_project_layout("/repo").unwrap().is_some());
 }

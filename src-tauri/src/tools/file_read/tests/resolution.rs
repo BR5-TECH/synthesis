@@ -64,9 +64,7 @@ fn the_agent_instance_holds_no_root_an_app_data_path_could_land_in() {
     );
 
     let climb = pathdiff_climb(&project.root, &app_data.join("synthesis.toml"));
-    let refusal = project
-        .at(&climb)
-        .expect_err("app_data is outside the project (RFT-FR-04)");
+    let refusal = project.at(&climb).expect_err("app_data is outside the project (RFT-FR-04)");
     assert_eq!(refusal, ToolRefusal::PathOutsideProject);
 }
 
@@ -84,25 +82,16 @@ fn the_read_goes_through_the_filesystem_helper() {
     const SOURCE: &str = include_str!("../../file_read.rs");
     // The suite lives in its own file, so SOURCE is the module and nothing else.
     let body = SOURCE;
-    for forbidden in [
-        "std::fs::",
-        "fs::read_to_string",
-        "File::open",
-        "read_dir",
-    ] {
+    for forbidden in ["std::fs::", "fs::read_to_string", "File::open", "read_dir"] {
         assert!(
             !body.contains(forbidden),
             "`{forbidden}` bypasses the helper that owns containment (RFT-FR-05)",
         );
     }
-    assert!(
-        body.contains("access.read_text"),
-        "the read is the instance's own (RFT-FR-05)",
-    );
+    assert!(body.contains("access.read_text"), "the read is the instance's own (RFT-FR-05)",);
     assert_eq!(
         body.matches("access.read_text").count(),
         1,
         "exactly one read of the file (RFT-FR-05, and the spec's I/O posture)",
     );
 }
-

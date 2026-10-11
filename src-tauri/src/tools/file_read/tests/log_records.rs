@@ -33,10 +33,7 @@ fn a_call_logs_the_path_asked_for_and_its_byte_count_and_leaks_no_contents() {
         let records = records_of(&RFT_BUFFER, domain);
         assert_eq!(records.len(), 2, "one INFO and one WARN under {domain:?}");
 
-        let info = records
-            .iter()
-            .find(|r| r.level == LogLevel::Info)
-            .expect("the success");
+        let info = records.iter().find(|r| r.level == LogLevel::Info).expect("the success");
         assert_eq!(info.fields["tool"], serde_json::json!(NAME));
         assert_eq!(info.fields["bytes"], serde_json::json!(text.len()));
         // The argument the call carried, unchanged (RFT-FR-20).
@@ -45,10 +42,7 @@ fn a_call_logs_the_path_asked_for_and_its_byte_count_and_leaks_no_contents() {
         // the two differ and this pins which one is reported.
         assert_ne!(text.len(), text.chars().count());
 
-        let warn = records
-            .iter()
-            .find(|r| r.level == LogLevel::Warn)
-            .expect("the refusal");
+        let warn = records.iter().find(|r| r.level == LogLevel::Warn).expect("the refusal");
         assert_eq!(warn.fields["tool"], serde_json::json!(NAME));
         assert_eq!(warn.fields["reason"], serde_json::json!("file_not_found"));
         // The path that was refused, which is what a model has to correct.
@@ -65,10 +59,7 @@ fn a_call_logs_the_path_asked_for_and_its_byte_count_and_leaks_no_contents() {
     // are not (RFT-FR-20).
     let rendered = rendered_records(&RFT_BUFFER);
     for leak in ["α∫∂", "β√ç", "424242", "31337", "424_242"] {
-        assert!(
-            !rendered.contains(leak),
-            "a log record carried {leak:?} (RFT-FR-20)",
-        );
+        assert!(!rendered.contains(leak), "a log record carried {leak:?} (RFT-FR-20)",);
     }
 }
 
@@ -83,12 +74,8 @@ fn the_path_is_recorded_as_the_model_spelled_it() {
     // the model asked for, so it carries the argument rather than the trimmed
     // form `resolve` works on or the absolute path the read ran against.
     for path in ["src/a.ts", "  src/a.ts  ", "src/./nested/../a.ts"] {
-        block_on(tool.call(ReadFileArgs {
-            path: path.to_string(),
-            offset: None,
-            limit: None,
-        }))
-        .expect("all three reach src/a.ts");
+        block_on(tool.call(ReadFileArgs { path: path.to_string(), offset: None, limit: None }))
+            .expect("all three reach src/a.ts");
     }
 
     let recorded: Vec<_> = records_of(&RFT_SPELLING_BUFFER, Domain::Ai)
@@ -105,7 +92,8 @@ fn the_path_is_recorded_as_the_model_spelled_it() {
         "the argument unchanged, padding and all (RFT-FR-20)",
     );
     assert!(
-        !rendered_records(&RFT_SPELLING_BUFFER).contains(&project.root.to_string_lossy().to_string()),
+        !rendered_records(&RFT_SPELLING_BUFFER)
+            .contains(&project.root.to_string_lossy().to_string()),
         "the resolved absolute path is not what a record carries (RFT-FR-20)",
     );
 }
@@ -120,12 +108,8 @@ fn a_refusal_raised_before_the_path_is_resolved_still_names_it() {
     // No project, so `run` refuses before `read` is entered and before any path
     // is resolved. The record still says which file was asked for, that being
     // the whole of what makes it followable (RFT-FR-20).
-    block_on(tool.call(ReadFileArgs {
-        path: "src/a.ts".to_string(),
-        offset: None,
-        limit: None,
-    }))
-    .expect_err("no project is open (RFT-FR-17)");
+    block_on(tool.call(ReadFileArgs { path: "src/a.ts".to_string(), offset: None, limit: None }))
+        .expect_err("no project is open (RFT-FR-17)");
 
     for domain in [Domain::Ai, Domain::Backend] {
         let records = records_of(&RFT_CLOSED_BUFFER, domain);
@@ -149,12 +133,9 @@ fn a_pathological_path_costs_the_record_none_of_its_other_fields() {
     // leaving it naming neither the tool nor the reason.
     let huge = "../".repeat(crate::logging::MAX_RECORD_BYTES);
     assert!(huge.len() > crate::logging::MAX_RECORD_BYTES);
-    let refusal = block_on(tool.call(ReadFileArgs {
-        path: huge.clone(),
-        offset: None,
-        limit: None,
-    }))
-    .expect_err("a path of nothing but `..` leaves the root");
+    let refusal =
+        block_on(tool.call(ReadFileArgs { path: huge.clone(), offset: None, limit: None }))
+            .expect_err("a path of nothing but `..` leaves the root");
     assert_eq!(refusal, ToolRefusal::PathOutsideProject);
 
     let records = records_of(&RFT_OVERSIZE_BUFFER, Domain::Ai);
@@ -194,4 +175,3 @@ fn bounding_a_path_never_cuts_a_character_in_half() {
     assert_eq!(logged_path(&over), format!("{exactly}…"));
     assert_eq!(logged_path(&over).chars().count(), LOGGED_PATH_LIMIT + 1);
 }
-

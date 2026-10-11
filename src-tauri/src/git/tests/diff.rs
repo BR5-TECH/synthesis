@@ -12,14 +12,9 @@ fn path_scope_diffs_the_working_tree_against_head() {
     f.commit("A");
     f.write("a.md", "one\nTWO\nthree\n");
 
-    let payload = diff_for_scope(
-        &f.root(),
-        &DiffScope::Path {
-            path: "a.md".into(),
-            previous_path: None,
-        },
-    )
-    .unwrap();
+    let payload =
+        diff_for_scope(&f.root(), &DiffScope::Path { path: "a.md".into(), previous_path: None })
+            .unwrap();
     assert!(!payload.is_binary);
     assert_eq!(payload.hunks.len(), 1);
     assert!(payload.hunks[0].header.starts_with("@@"));
@@ -43,20 +38,12 @@ fn path_scope_covers_staged_and_unstaged_alike() {
     f.stage_all();
     f.write("a.md", "one\nstaged\nunstaged\n");
 
-    let payload = diff_for_scope(
-        &f.root(),
-        &DiffScope::Path {
-            path: "a.md".into(),
-            previous_path: None,
-        },
-    )
-    .unwrap();
+    let payload =
+        diff_for_scope(&f.root(), &DiffScope::Path { path: "a.md".into(), previous_path: None })
+            .unwrap();
     let lines = all_lines(&payload);
     assert!(lines.contains(&("add".to_string(), "staged".to_string())), "{lines:?}");
-    assert!(
-        lines.contains(&("add".to_string(), "unstaged".to_string())),
-        "{lines:?}"
-    );
+    assert!(lines.contains(&("add".to_string(), "unstaged".to_string())), "{lines:?}");
 }
 
 #[test]
@@ -68,14 +55,9 @@ fn path_scope_shows_only_the_requested_file() {
     f.write("a.md", "a\nchanged\n");
     f.write("b.md", "b\nalso changed\n");
 
-    let payload = diff_for_scope(
-        &f.root(),
-        &DiffScope::Path {
-            path: "a.md".into(),
-            previous_path: None,
-        },
-    )
-    .unwrap();
+    let payload =
+        diff_for_scope(&f.root(), &DiffScope::Path { path: "a.md".into(), previous_path: None })
+            .unwrap();
     let lines = all_lines(&payload);
     assert!(lines.contains(&("add".to_string(), "changed".to_string())));
     assert!(
@@ -97,11 +79,7 @@ fn branch_scope_diffs_against_the_merge_base() {
 
     let payload = diff_for_scope(
         &f.root(),
-        &DiffScope::Branch {
-            path: "a.md".into(),
-            target_branch: main,
-            previous_path: None,
-        },
+        &DiffScope::Branch { path: "a.md".into(), target_branch: main, previous_path: None },
     )
     .unwrap();
     let lines = all_lines(&payload);
@@ -159,10 +137,7 @@ fn an_untracked_file_diffs_as_all_additions() {
 
     let payload = diff_for_scope(
         &f.root(),
-        &DiffScope::Path {
-            path: "fresh.md".into(),
-            previous_path: None,
-        },
+        &DiffScope::Path { path: "fresh.md".into(), previous_path: None },
     )
     .unwrap();
     let lines = all_lines(&payload);
@@ -184,10 +159,7 @@ fn binary_content_yields_a_marker_and_no_hunks() {
 
     let payload = diff_for_scope(
         &f.root(),
-        &DiffScope::Path {
-            path: "logo.png".into(),
-            previous_path: None,
-        },
+        &DiffScope::Path { path: "logo.png".into(), previous_path: None },
     )
     .unwrap();
     assert!(payload.is_binary);
@@ -202,28 +174,18 @@ fn an_unchanged_path_yields_an_empty_payload_rather_than_an_error() {
     f.write("a.md", "a\n");
     f.commit("A");
 
-    let payload = diff_for_scope(
-        &f.root(),
-        &DiffScope::Path {
-            path: "a.md".into(),
-            previous_path: None,
-        },
-    )
-    .unwrap();
+    let payload =
+        diff_for_scope(&f.root(), &DiffScope::Path { path: "a.md".into(), previous_path: None })
+            .unwrap();
     assert_eq!(payload, DiffPayload::empty());
 }
 
 #[test]
 fn a_non_repository_is_the_typed_error() {
     let dir = TempDir::new().unwrap();
-    let err = diff_for_scope(
-        dir.path(),
-        &DiffScope::Path {
-            path: "a.md".into(),
-            previous_path: None,
-        },
-    )
-    .unwrap_err();
+    let err =
+        diff_for_scope(dir.path(), &DiffScope::Path { path: "a.md".into(), previous_path: None })
+            .unwrap_err();
     assert_eq!(err, ERR_NOT_A_REPO);
 }
 
@@ -243,10 +205,7 @@ fn a_nested_project_still_diffs_only_the_requested_file() {
 
     let payload = diff_for_scope(
         &f.root().join("proj"),
-        &DiffScope::Path {
-            path: "a.md".into(),
-            previous_path: None,
-        },
+        &DiffScope::Path { path: "a.md".into(), previous_path: None },
     )
     .unwrap();
     let lines = all_lines(&payload);
@@ -272,10 +231,7 @@ fn a_nested_projects_binary_sibling_does_not_blank_a_text_diff() {
 
     let payload = diff_for_scope(
         &f.root().join("proj"),
-        &DiffScope::Path {
-            path: "a.md".into(),
-            previous_path: None,
-        },
+        &DiffScope::Path { path: "a.md".into(), previous_path: None },
     )
     .unwrap();
     assert!(!payload.is_binary, "the requested file is text");
@@ -291,11 +247,7 @@ fn a_rename_diffs_as_a_rename_rather_than_a_whole_file_addition() {
     let body: String = (1..=30).map(|i| format!("stable line {i}\n")).collect();
     f.write("src-tauri/main.rs", &body);
     f.commit("A");
-    std::fs::rename(
-        f.root().join("src-tauri/main.rs"),
-        f.root().join("src-tauri/lib.rs"),
-    )
-    .unwrap();
+    std::fs::rename(f.root().join("src-tauri/main.rs"), f.root().join("src-tauri/lib.rs")).unwrap();
     f.write("src-tauri/lib.rs", &body.replace("stable line 1\n", "edited line 1\n"));
 
     let payload = diff_for_scope(
@@ -308,10 +260,7 @@ fn a_rename_diffs_as_a_rename_rather_than_a_whole_file_addition() {
     .unwrap();
     let lines = all_lines(&payload);
     let added = lines.iter().filter(|(k, _)| k == "add").count();
-    assert!(
-        added < 5,
-        "a rename with one edited line must not read as 30 additions: {lines:?}"
-    );
+    assert!(added < 5, "a rename with one edited line must not read as 30 additions: {lines:?}");
     assert!(lines.contains(&("add".to_string(), "edited line 1".to_string())), "{lines:?}");
     assert!(lines.contains(&("del".to_string(), "stable line 1".to_string())), "{lines:?}");
 }
@@ -331,16 +280,9 @@ fn get_diff_leaves_the_repository_byte_identical() {
 
     let before = crate::changes::tests_support::snapshot(f.root());
     for scope in [
-        DiffScope::Path {
-            path: "a.md".into(),
-            previous_path: None,
-        },
+        DiffScope::Path { path: "a.md".into(), previous_path: None },
         DiffScope::Staged,
-        DiffScope::Branch {
-            path: "a.md".into(),
-            target_branch: main,
-            previous_path: None,
-        },
+        DiffScope::Branch { path: "a.md".into(), target_branch: main, previous_path: None },
     ] {
         diff_for_scope(&f.root(), &scope).unwrap();
     }
@@ -365,11 +307,7 @@ fn a_branch_scope_in_a_nested_project_diffs_only_its_own_file() {
 
     let payload = diff_for_scope(
         &f.root().join("proj"),
-        &DiffScope::Branch {
-            path: "a.md".into(),
-            target_branch: main,
-            previous_path: None,
-        },
+        &DiffScope::Branch { path: "a.md".into(), target_branch: main, previous_path: None },
     )
     .unwrap();
     let lines = all_lines(&payload);
@@ -385,18 +323,12 @@ fn an_unborn_head_diffs_a_brand_new_file_as_additions() {
     f.write("first.md", "one\ntwo\n");
     let payload = diff_for_scope(
         &f.root(),
-        &DiffScope::Path {
-            path: "first.md".into(),
-            previous_path: None,
-        },
+        &DiffScope::Path { path: "first.md".into(), previous_path: None },
     )
     .unwrap();
     assert_eq!(
         all_lines(&payload),
-        vec![
-            ("add".to_string(), "one".to_string()),
-            ("add".to_string(), "two".to_string()),
-        ]
+        vec![("add".to_string(), "one".to_string()), ("add".to_string(), "two".to_string()),]
     );
 }
 
@@ -409,10 +341,7 @@ fn a_project_below_the_repo_root_diffs_its_own_path() {
 
     let payload = diff_for_scope(
         &f.root().join("proj"),
-        &DiffScope::Path {
-            path: "a.md".into(),
-            previous_path: None,
-        },
+        &DiffScope::Path { path: "a.md".into(), previous_path: None },
     )
     .unwrap();
     let lines = all_lines(&payload);

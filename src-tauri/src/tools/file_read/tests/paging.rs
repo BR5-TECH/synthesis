@@ -26,13 +26,7 @@ fn a_large_file_is_returned_whole() {
 fn offset_and_limit_select_lines_and_clamp_out_of_range_values() {
     let project = project();
     let page = |offset: Option<i64>, limit: Option<i64>| {
-        project
-            .read(ReadFileArgs {
-                path: "long.txt".to_string(),
-                offset,
-                limit,
-            })
-            .unwrap()
+        project.read(ReadFileArgs { path: "long.txt".to_string(), offset, limit }).unwrap()
     };
 
     assert_eq!(page(Some(0), Some(1)), "line 0\n");
@@ -42,17 +36,9 @@ fn offset_and_limit_select_lines_and_clamp_out_of_range_values() {
         "line 0\n",
         "a negative offset is clamped to the first line (RFT-FR-07)",
     );
-    assert_eq!(
-        page(Some(10), Some(0)),
-        "line 10\n",
-        "a limit below 1 is clamped to 1 (RFT-FR-08)",
-    );
+    assert_eq!(page(Some(10), Some(0)), "line 10\n", "a limit below 1 is clamped to 1 (RFT-FR-08)",);
     assert_eq!(page(Some(10), Some(-3)), "line 10\n");
-    assert_eq!(
-        page(Some(0), None),
-        hundred_lines(),
-        "an absent limit runs to the end (RFT-FR-08)",
-    );
+    assert_eq!(page(Some(0), None), hundred_lines(), "an absent limit runs to the end (RFT-FR-08)",);
 }
 
 #[test]
@@ -60,11 +46,7 @@ fn a_range_past_the_end_returns_what_exists_and_an_offset_past_it_returns_nothin
     let project = project();
     let page = |offset: i64, limit: Option<i64>| {
         project
-            .read(ReadFileArgs {
-                path: "long.txt".to_string(),
-                offset: Some(offset),
-                limit,
-            })
+            .read(ReadFileArgs { path: "long.txt".to_string(), offset: Some(offset), limit })
             .unwrap()
     };
 
@@ -126,10 +108,7 @@ fn whole_and_paged_reads_are_both_bare_text() {
     assert_eq!(paged, "line 40\nline 41\nline 42\n");
     assert!(!paged.contains("long.txt"));
     assert!(!paged.contains('['), "no range marker (RFT-FR-10)");
-    assert!(
-        whole.contains(&paged),
-        "a paged read differs only in which characters it carries",
-    );
+    assert!(whole.contains(&paged), "a paged read differs only in which characters it carries",);
 }
 
 // ---------------------------------------------------------------------------
@@ -141,20 +120,12 @@ fn a_range_carries_each_lines_own_terminator() {
     let project = project();
 
     let crlf = project
-        .read(ReadFileArgs {
-            path: "crlf.txt".to_string(),
-            offset: Some(1),
-            limit: Some(2),
-        })
+        .read(ReadFileArgs { path: "crlf.txt".to_string(), offset: Some(1), limit: Some(2) })
         .unwrap();
     assert_eq!(crlf, "two\r\nthree\r\n", "CRLF reads back as CRLF (RFT-FR-11)");
 
     let lf = project
-        .read(ReadFileArgs {
-            path: "long.txt".to_string(),
-            offset: Some(1),
-            limit: Some(2),
-        })
+        .read(ReadFileArgs { path: "long.txt".to_string(), offset: Some(1), limit: Some(2) })
         .unwrap();
     assert_eq!(lf, "line 1\nline 2\n");
 
@@ -170,10 +141,7 @@ fn a_range_carries_each_lines_own_terminator() {
             limit: Some(1),
         })
         .unwrap();
-    assert_eq!(
-        tail, "gamma",
-        "a final line with no terminator gets none (RFT-FR-11)",
-    );
+    assert_eq!(tail, "gamma", "a final line with no terminator gets none (RFT-FR-11)",);
 }
 
 #[test]
@@ -187,12 +155,7 @@ fn multi_byte_text_is_cut_on_line_boundaries_not_byte_counts() {
     );
 
     let middle = project
-        .read(ReadFileArgs {
-            path: "multibyte.txt".to_string(),
-            offset: Some(1),
-            limit: Some(1),
-        })
+        .read(ReadFileArgs { path: "multibyte.txt".to_string(), offset: Some(1), limit: Some(1) })
         .unwrap();
     assert_eq!(middle, "β√ç\n");
 }
-

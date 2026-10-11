@@ -156,10 +156,7 @@ fn a_commit_holds_what_the_working_copy_holds_and_not_what_an_envelope_claimed()
 fn a_revise_review_sends_its_findings_into_the_next_work_turn() {
     Scenario::named("revise then ready")
         .work_turn(Script::reports_success().writes("src/panel.ts", "export const panel = 1;\n"))
-        .review_turn(Script::answers_revise(
-            ReviewSeverity::Major,
-            "The empty state is not there.",
-        ))
+        .review_turn(Script::answers_revise(ReviewSeverity::Major, "The empty state is not there."))
         .work_turn(Script::reports_success().writes("src/panel.ts", "export const panel = 2;\n"))
         .review_turn(Script::answers_ready("The empty state is there now."))
         .run()
@@ -190,10 +187,7 @@ fn a_revise_review_sends_its_findings_into_the_next_work_turn() {
 fn two_revise_reviews_rest_the_run_for_the_author_with_no_third_pass() {
     Scenario::named("two revise reviews")
         .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
-        .review_turn(Script::answers_revise(
-            ReviewSeverity::Major,
-            "The empty state is not there.",
-        ))
+        .review_turn(Script::answers_revise(ReviewSeverity::Major, "The empty state is not there."))
         .work_turn(Script::reports_success().writes("src/panel.ts", "2\n"))
         .review_turn(Script::answers_revise(
             ReviewSeverity::Critical,
@@ -212,7 +206,7 @@ fn two_revise_reviews_rest_the_run_for_the_author_with_no_third_pass() {
         // GRL-FR-BRJO: the loop creates no commit, and a run resting for the
         // author has not been through the commit path either.
         .expect_commits(0)
-        .expect_stream_released();
+        .expect_stream_held();
 }
 
 // ---------------------------------------------------------------------------
@@ -305,7 +299,7 @@ fn an_agent_reported_failure_the_review_passes_still_completes_the_run() {
         .review_turn(Script::answers_ready("The work answers the prompt."))
         .run()
         .expect_state(GraduationRunState::Completed)
-        .expect_agent_account_contains("The formatter would not run")
+        .expect_agent_report_contains("The formatter would not run")
         .expect_commits(1)
         .expect_stream_released();
 }
@@ -316,8 +310,8 @@ fn an_agent_reported_failure_the_review_passes_still_completes_the_run() {
 
 // GTE-FR-TCUW, GTE-FR-PFEO / GRL-FR-VBCL, GXD-FR-HGSU, GXD-FR-BJYT,
 // GXD-FR-XPUR: an escalation ends the turn without a review, persists the
-// ordered questions, releases the stream, and the answers reach the next turn
-// of the same pass.
+// ordered questions, keeps the stream and the slot, and the answers reach the
+// next turn of the same pass.
 #[test]
 fn an_escalation_rests_the_run_and_its_answers_continue_the_same_pass() {
     Scenario::named("escalation and answer")
@@ -336,7 +330,7 @@ fn an_escalation_rests_the_run_and_its_answers_continue_the_same_pass() {
             "Which panel is meant, the editor's or the library's?",
             "Should the empty state be translated?",
         ])
-        .expect_stream_released()
+        .expect_stream_held()
         .expect_commits(0)
         .answered(
             &["The editor's.", "No."],
@@ -368,7 +362,7 @@ fn a_review_turn_escalates_on_the_same_terms_a_work_turn_does() {
         .run()
         .expect_state(GraduationRunState::AwaitingAuthor)
         .expect_escalation_questions(&["Is the panel's own test suite the one to run?"])
-        .expect_stream_released()
+        .expect_stream_held()
         .expect_commits(0);
 }
 
@@ -399,8 +393,7 @@ fn a_second_unreadable_verdict_blocks_the_run_with_the_named_code() {
         .expect_stream_held()
         .expect_dispatch(1, |d| d.has_no_field("correction"))
         .expect_dispatch(2, |d| {
-            d.part("review")
-                .field_contains("correction", "could not be read");
+            d.part("review").field_contains("correction", "could not be read");
         });
 }
 
@@ -427,10 +420,10 @@ fn one_unreadable_verdict_is_asked_again_and_the_run_goes_on() {
 // GTE-FR-RSQD, GTE-FR-PFEO / GRL-FR-ZDKP, GRD-FR-SWOJ, GXD-FR-QGYA,
 // GXD-FR-NRWD, GRD-FR-PUXO, GLG-FR-RLQZ, GXD-FR-WJOW: a turn
 // stopped where it stood leaves the run interrupted, commits what it wrote as
-// an abandoned turn, keeps the checkpoint, and releases the stream. The
+// an abandoned turn, keeps the checkpoint, and keeps the stream. The
 // interruption is produced by the harness rather than waited for.
 #[test]
-fn a_cancelled_turn_commits_its_work_as_abandoned_and_releases_the_stream() {
+fn a_cancelled_turn_commits_its_work_as_abandoned_and_keeps_the_stream() {
     Scenario::named("cancellation")
         .work_turn(Script::is_cancelled().writes("src/half-done.ts", "as far as it got\n"))
         .run()
@@ -446,7 +439,7 @@ fn a_cancelled_turn_commits_its_work_as_abandoned_and_releases_the_stream() {
         .expect_commits(1)
         .expect_committed_paths(&["src/half-done.ts"])
         .expect_commit_message_contains(0, "Abandoned graduation turn")
-        .expect_stream_released()
+        .expect_stream_held()
         // GXD-FR-QGYA: the checkpoint is written before the run is reported as
         // stopped, so what the turn wrote is readable from the store rather
         // than only from the commit.
@@ -480,7 +473,7 @@ fn a_timed_out_turn_rests_the_run_rather_than_failing_it() {
         .expect_commits(1)
         .expect_commit_message_contains(0, "Abandoned graduation turn")
         .expect_checkpoint_paths(&["src/half-done.ts"])
-        .expect_stream_released()
+        .expect_stream_held()
         // GXD-FR-MTVR: the turn ran under the timeout the project configured.
         .expect_dispatch(0, |d| d.execution_timeout_ms(1_000));
 }
@@ -491,9 +484,9 @@ fn a_timed_out_turn_rests_the_run_rather_than_failing_it() {
 #[test]
 fn a_turn_that_could_not_be_launched_rests_the_run_and_ends_nothing() {
     Scenario::named("unlaunchable turn")
-        .work_turn(Script::cannot_launch(
-            AgentExecutionError::ExecutionDirectoryInvalid(DirectoryProblem::Inaccessible),
-        ))
+        .work_turn(Script::cannot_launch(AgentExecutionError::ExecutionDirectoryInvalid(
+            DirectoryProblem::Inaccessible,
+        )))
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("launch_failed")
@@ -501,7 +494,7 @@ fn a_turn_that_could_not_be_launched_rests_the_run_and_ends_nothing() {
         .expect_interrupted_record("launch_failed", "error", &[])
         .expect_interrupted_record_lacks("process_outcome")
         .expect_dispatch_count(1)
-        .expect_stream_released()
+        .expect_stream_held()
         .expect_commits(0);
 }
 
@@ -516,10 +509,7 @@ fn a_turn_that_could_not_be_launched_rests_the_run_and_ends_nothing() {
 fn a_stopped_run_resumes_from_its_checkpoint_without_repeating_a_pass() {
     Scenario::named("resume from checkpoint")
         .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
-        .review_turn(Script::answers_revise(
-            ReviewSeverity::Major,
-            "The empty state is not there.",
-        ))
+        .review_turn(Script::answers_revise(ReviewSeverity::Major, "The empty state is not there."))
         // The second pass is stopped where it stands.
         .work_turn(Script::is_cancelled().writes("src/panel.ts", "2\n"))
         .run()

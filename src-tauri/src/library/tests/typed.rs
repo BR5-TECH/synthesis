@@ -92,13 +92,8 @@ fn create_typed_file_impl_outranks_an_inherited_folder_type() {
     let dir = tempfile::TempDir::new().unwrap();
     let root = &crate::fs::RootFs::for_root(dir.path());
     std::fs::create_dir_all(root.join("pipelines")).unwrap();
-    scanning::assign(
-        root,
-        "pipelines",
-        scanning::ArtifactType::Spec,
-        scanning::Scope::Folder,
-    )
-    .unwrap();
+    scanning::assign(root, "pipelines", scanning::ArtifactType::Spec, scanning::Scope::Folder)
+        .unwrap();
 
     let node = create_typed_file_impl(
         root,
@@ -131,10 +126,7 @@ fn create_typed_file_impl_refuses_a_collision_without_touching_the_existing_file
     .unwrap_err();
 
     assert!(err.contains("already exists"), "{err}");
-    assert_eq!(
-        std::fs::read_to_string(root.join("specifications/overview.md")).unwrap(),
-        "mine"
-    );
+    assert_eq!(std::fs::read_to_string(root.join("specifications/overview.md")).unwrap(), "mine");
     assert!(scanning::load_assignments(root).assignments.is_empty());
 }
 
@@ -167,9 +159,7 @@ fn create_typed_file_impl_rolls_the_file_back_when_the_assignment_cannot_be_writ
     // rescanned tree holds no node for it.
     std::fs::remove_dir_all(root.join(".synthesis/library.toml")).unwrap();
     assert!(
-        !scanning::load_assignments(root)
-            .assignments
-            .contains_key("specifications/overview.md"),
+        !scanning::load_assignments(root).assignments.contains_key("specifications/overview.md"),
         "no assignment survives for a path the project does not have"
     );
     assert!(
@@ -208,8 +198,7 @@ fn create_typed_file_impl_requires_a_type_and_a_bare_basename() {
 
     for bad in ["a/b.md", "a\\b.md", "", "   ", ".."] {
         assert!(
-            create_typed_file_impl(root, None, bad, Some(scanning::ArtifactType::Spec))
-                .is_err(),
+            create_typed_file_impl(root, None, bad, Some(scanning::ArtifactType::Spec)).is_err(),
             "{bad:?} must be refused"
         );
     }
@@ -263,7 +252,7 @@ fn create_typed_file_impl_creates_no_draft_and_reads_no_draft_template() {
         crate::project_settings::ProjectConfig {
             line_endings: crate::project_settings::LineEndings::Lf,
             draft_template: Some("# Context\n".to_string()),
-                        ..Default::default()
+            ..Default::default()
         },
     )
     .unwrap();
@@ -293,10 +282,7 @@ fn create_typed_file_impl_creates_no_draft_and_reads_no_draft_template() {
     assert_eq!(scanning::load_assignments(root).assignments.len(), 8);
     // The template is still exactly what it was; nothing read or rewrote it.
     assert_eq!(
-        crate::project_settings::load_project_config_from(root)
-            .unwrap()
-            .draft_template
-            .as_deref(),
+        crate::project_settings::load_project_config_from(root).unwrap().draft_template.as_deref(),
         Some("# Context\n")
     );
 }

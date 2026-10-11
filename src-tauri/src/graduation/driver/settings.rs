@@ -80,9 +80,7 @@ impl LoopSettings {
     /// The same, for a window that starts at `floor`.
     pub fn pass_limit_from(&self, run: &GraduationRun, floor: u32) -> u32 {
         if run.is_merge() {
-            floor
-                .max(1)
-                .saturating_add(crate::graduation::MERGE_PASS_BUDGET.max(1) - 1)
+            floor.max(1).saturating_add(crate::graduation::MERGE_PASS_BUDGET.max(1) - 1)
         } else {
             self.pass_limit(floor)
         }
@@ -121,19 +119,13 @@ mod tests {
         // a whole budget again without repeating a completed pass.
         assert_eq!(two.pass_limit(3), 4);
 
-        let one = LoopSettings {
-            pass_budget: 1,
-            ..LoopSettings::default()
-        };
+        let one = LoopSettings { pass_budget: 1, ..LoopSettings::default() };
         assert_eq!(one.pass_limit(1), 1);
         assert_eq!(one.pass_limit(5), 5);
 
         // A budget nobody could have meant is read as one pass rather than as
         // none, so a run always makes progress.
-        let none = LoopSettings {
-            pass_budget: 0,
-            ..LoopSettings::default()
-        };
+        let none = LoopSettings { pass_budget: 0, ..LoopSettings::default() };
         assert_eq!(none.pass_limit(1), 1);
     }
 }

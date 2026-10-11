@@ -75,7 +75,7 @@ export function projectAgent(
   availability: ProjectAgent["availability"] = "ready",
   title = "",
 ): ProjectAgent {
-  return {
+  return { scope: "project" as const,
     availability,
     agent: {
       id,

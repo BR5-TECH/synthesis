@@ -22,9 +22,7 @@ fn list_branches_marks_the_active_worktrees_branch_current_and_carries_no_worktr
     assert_eq!(current.len(), 1, "exactly one branch is current: {listed:?}");
     assert_eq!(current[0].name, main);
     assert!(listed.iter().any(|b| b.name == "develop" && b.kind == "local"));
-    assert!(listed
-        .iter()
-        .any(|b| b.name == "origin/experiment" && b.kind == "remote"));
+    assert!(listed.iter().any(|b| b.name == "origin/experiment" && b.kind == "remote"));
 
     // The wire shape carries no worktree association — that belongs to
     // WTC's richer listing.
@@ -177,12 +175,7 @@ fn a_checkout_from_a_linked_worktree_is_refused_and_changes_nothing() {
 
     assert_eq!(err, crate::worktree::ERR_CHECKOUT_NOT_IN_LINKED_WORKTREE);
     assert_eq!(
-        Repository::open(&alpha)
-            .unwrap()
-            .head()
-            .unwrap()
-            .shorthand()
-            .unwrap(),
+        Repository::open(&alpha).unwrap().head().unwrap().shorthand().unwrap(),
         "alpha",
         "the linked worktree is still on the branch it exists to hold"
     );
@@ -315,10 +308,7 @@ fn the_branch_listing_is_the_same_from_every_worktree() {
         n.sort();
         n
     };
-    assert_eq!(
-        names(branches_for(&f.root()).unwrap()),
-        names(branches_for(&alpha).unwrap()),
-    );
+    assert_eq!(names(branches_for(&f.root()).unwrap()), names(branches_for(&alpha).unwrap()),);
     // …and `current` follows the worktree it was asked from.
     let from_linked = branches_for(&alpha).unwrap();
     let current: Vec<&GitBranch> = from_linked.iter().filter(|b| b.is_current).collect();
@@ -338,19 +328,16 @@ fn a_branch_with_a_worktree_is_still_a_valid_comparison_target() {
     f.write("a.md", "one\nfrom feature\n");
     f.commit();
     // Give `main` a worktree of its own.
-    crate::worktree::create_worktree_at(
-        &f.root(),
-        &main,
-        &f.sibling("wt-main").to_string_lossy(),
-    )
-    .unwrap();
+    crate::worktree::create_worktree_at(&f.root(), &main, &f.sibling("wt-main").to_string_lossy())
+        .unwrap();
 
     let options = crate::changes::comparison_branches(&f.root()).unwrap();
     assert!(
         options.iter().any(|b| b.name == main),
         "a branch with a worktree is still offered as a target: {options:?}"
     );
-    let set = crate::changes::branch_change_set(&crate::fs::RootFs::for_root(f.root()), &main).unwrap();
+    let set =
+        crate::changes::branch_change_set(&crate::fs::RootFs::for_root(f.root()), &main).unwrap();
     assert!(
         set.entries.iter().any(|e| e.path == "a.md"),
         "and comparing against it returns a normal change set: {set:?}"

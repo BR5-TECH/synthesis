@@ -51,8 +51,8 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    log_tool_refusal_with, log_tool_success, require_open_project, ToolRefusal,
-    PROPOSAL_NO_CHANGE, PROPOSAL_RATIONALE_BLANK,
+    log_tool_refusal_with, log_tool_success, require_open_project, ToolRefusal, PROPOSAL_NO_CHANGE,
+    PROPOSAL_RATIONALE_BLANK,
 };
 
 use crate::agent_conversations::ConversationOrigin;
@@ -386,21 +386,15 @@ fn refusal_for(refusal: RecordRefusal) -> ToolRefusal {
         // carrying eight changes and refused for one of them is a call the
         // model cannot correct without being told which — it would send the
         // same eight again, and does.
-        RecordRefusal::HunkAnchorLost { at, of } => ToolRefusal::InvalidArgumentsAt {
-            message: PROPOSAL_TEXT_NOT_FOUND,
-            at,
-            of,
-        },
-        RecordRefusal::HunkAmbiguous { at, of } => ToolRefusal::InvalidArgumentsAt {
-            message: PROPOSAL_TEXT_NOT_UNIQUE,
-            at,
-            of,
-        },
-        RecordRefusal::HunkOverlap { at, of } => ToolRefusal::InvalidArgumentsAt {
-            message: PROPOSAL_HUNKS_OVERLAP,
-            at,
-            of,
-        },
+        RecordRefusal::HunkAnchorLost { at, of } => {
+            ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_TEXT_NOT_FOUND, at, of }
+        }
+        RecordRefusal::HunkAmbiguous { at, of } => {
+            ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_TEXT_NOT_UNIQUE, at, of }
+        }
+        RecordRefusal::HunkOverlap { at, of } => {
+            ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_HUNKS_OVERLAP, at, of }
+        }
         RecordRefusal::ThreadLocked => ToolRefusal::ProposalConversationLocked,
         RecordRefusal::NotRecorded => ToolRefusal::ProposalNotRecorded,
     }
@@ -436,14 +430,7 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
         author: Participant,
         proposed: Arc<AtomicBool>,
     ) -> Self {
-        ProposeDraftChangesTool {
-            app,
-            roots,
-            origin,
-            author,
-            proposed,
-            buffer: &BUFFER,
-        }
+        ProposeDraftChangesTool { app, roots, origin, author, proposed, buffer: &BUFFER }
     }
 
     /// The same tool, reporting into `buffer`.
@@ -454,10 +441,7 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
     }
 
     /// The whole call, with its logging (TLC-FR-14, PDC-FR-18).
-    fn run(
-        &self,
-        args: ProposeDraftChangesArgs,
-    ) -> Result<ProposeDraftChangesOutput, ToolRefusal> {
+    fn run(&self, args: ProposeDraftChangesArgs) -> Result<ProposeDraftChangesOutput, ToolRefusal> {
         // PDC-FR-18: the draft and the conversation, bound at construction rather
         // than composed by the model, plus `path` — this tool's one loggable
         // argument, because a record about a proposed rewrite is unfollowable
@@ -553,16 +537,9 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
         // unable to propose anything at all — every call it made answered by a
         // refusal about a change that is not there.
         use crate::draft_proposals::RevisionTarget;
-        let named = args
-            .revises
-            .as_deref()
-            .map(str::trim)
-            .filter(|id| !id.is_empty());
+        let named = args.revises.as_deref().map(str::trim).filter(|id| !id.is_empty());
         let target = named.map(|id| {
-            (
-                id,
-                crate::draft_proposals::revision_target(&self.roots.worktree, draft_id, id),
-            )
+            (id, crate::draft_proposals::revision_target(&self.roots.worktree, draft_id, id))
         });
         if let Some((_, RevisionTarget::NoSuchChange)) = target {
             return Err(ToolRefusal::InvalidArguments(PROPOSAL_NO_SUCH_CHANGE));
@@ -577,7 +554,7 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
             }
             let outcome = crate::draft_proposals::revise_hunk_impl(
                 &self.roots.worktree,
-                &draft_id,
+                draft_id,
                 revises,
                 &proposed[0],
             );
@@ -619,13 +596,8 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
         }
 
         let mut file_rel = String::new();
-        let target = target_for(
-            &self.roots.store,
-            &self.origin,
-            draft_id,
-            thread_id,
-            &mut file_rel,
-        )?;
+        let target =
+            target_for(&self.roots.store, &self.origin, draft_id, thread_id, &mut file_rel)?;
 
         // PDC-FR-11: the candidate and the comment are one act, and neither this
         // tool nor the model performs either write — `crate::draft_proposals`

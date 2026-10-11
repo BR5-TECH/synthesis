@@ -65,6 +65,12 @@ pub struct ModelReply {
     pub text: String,
     /// The tools it asked for, in the order it asked for them (CVL-FR-12).
     pub tool_calls: Vec<rig::completion::message::ToolCall>,
+    /// CVL-FR-ETAH: the reply as the framework returned it — its text, its
+    /// tool calls, its thinking, and the provider's own identifiers for each —
+    /// which is what goes back into the exchange when the reply asks for tools.
+    /// `None` where the client returned no such turn, and for a reply the
+    /// framework reports as failed (CVL-FR-UALC).
+    pub turn: Option<rig::completion::message::AssistantMessage>,
     /// CVL-FR-31: the tools the **provider** executed for itself while carrying
     /// this call, each with the result it produced, in the order they arrived.
     /// The loop dispatches none of them and appends none of them to the
@@ -107,6 +113,26 @@ pub struct ModelReply {
     /// price, and a provider that declines to report one leaves this absent so
     /// the direction reads unavailable rather than as a confident zero.
     pub output_tokens: Option<u64>,
+    /// CVL-FR-28: the part of the input the provider wrote to its cache, as it
+    /// counted it, or `None` where it counted nothing.
+    pub cache_write_tokens: Option<u64>,
+    /// CVL-FR-28: the part of the output the model spent on reasoning, as the
+    /// provider counted it, or `None` where it counted nothing.
+    pub reasoning_tokens: Option<u64>,
+    /// CVL-FR-28: the provider's own identifier for this response.
+    pub response_id: Option<String>,
+    /// CVL-FR-28: the provider's own identifier for the request, which is what
+    /// takes a call to the provider's own record of it.
+    pub provider_request_id: Option<String>,
+    /// CVL-FR-28: the model the provider says answered.
+    pub response_model: Option<String>,
+    /// CVL-FR-28: why the reply ended, in the framework's vocabulary or the
+    /// provider's own word.
+    pub finish_reason: Option<String>,
+    /// CVL-FR-TQRD: what the Custom gateway repair changed in this reply before
+    /// the framework read it. The loop records it, because the carrier has no
+    /// access to the log.
+    pub reply_repairs: super::responses_repair::ReplyRepairs,
 }
 
 /// CVL-FR-31: one tool the provider ran on its own account, and what it
@@ -191,9 +217,9 @@ pub struct InputTokens {
 /// The single seam through which a model is reached, and the only place in this
 /// module that touches the network.
 ///
-/// Object-safe by design. `rig`'s own `CompletionModel` is generic over its
-/// response types and returns `impl Future`, so it cannot be a trait object —
-/// this is the erased façade over it. The production implementation
+/// Object-safe by design, and synchronous: `rig`'s own model is async and is
+/// driven on a thread each call owns, under the provider-call deadline — this
+/// is the façade over it. The production implementation
 /// ([`RigCompletion`]) assembles a `rig::completion::CompletionRequest` and
 /// drives whichever provider client carries it; a build under test substitutes
 /// [`ScriptedCompletion`], which drives `rig`'s own `MockCompletionModel`
@@ -203,6 +229,8 @@ pub struct InputTokens {
 /// it stands at that moment. The tools reach no network of their own, so a
 /// turn's whole outbound footprint is the calls made here.
 pub trait CompletionSeam: Send + Sync {
+    // Reason: `CallFailure` is the error of the whole completion seam; a box would change about 26 signatures.
+    #[allow(clippy::result_large_err)]
     fn complete(
         &self,
         request: &AgentRequest,
@@ -321,6 +349,27 @@ pub(super) fn classify_provider_error(message: &str) -> CallFailure {
     // CVL-FR-21: matching none of them is normalized all the same, and the
     // redacted category is the whole of what survives.
     CallFailure::unreachable(class::TRANSPORT_OTHER)
+}
+
+/// AAP-FR-HZTB / CVL-FR-21: a call whose client's verifier refused a
+/// certificate failed for that reason.
+///
+/// `rig` and `openrouter-rs` flatten a TLS error into text, so the cause is read
+/// from the record of the client the call used. The record is the evidence, and
+/// it is read ahead of the text classification, which can mistake a host name or
+/// a port for a status. A provider that answered with a status had a good
+/// handshake, so a failure that carries a status is left as it is.
+pub(super) fn with_recorded_tls(
+    failure: CallFailure,
+    record: &crate::tls::TlsRecord,
+) -> CallFailure {
+    if failure.status.is_some() {
+        return failure;
+    }
+    match record.take() {
+        Some(tls) => CallFailure::tls_untrusted(tls),
+        None => failure,
+    }
 }
 
 /// CVL-FR-35: how much of a provider's own message a record carries.

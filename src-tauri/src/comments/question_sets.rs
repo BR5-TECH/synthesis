@@ -145,9 +145,7 @@ pub fn question_set_lock(thread_id: &str) -> std::sync::MutexGuard<'static, ()> 
     let locks = LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
     let mutex = {
         let mut guard = locks.lock().unwrap_or_else(|e| e.into_inner());
-        *guard
-            .entry(thread_id.to_string())
-            .or_insert_with(|| Box::leak(Box::new(Mutex::new(()))))
+        *guard.entry(thread_id.to_string()).or_insert_with(|| Box::leak(Box::new(Mutex::new(()))))
     };
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -191,15 +189,11 @@ pub fn discussion_ref_of(discussion: &Discussion) -> Option<DiscussionRef> {
         return None;
     }
     Some(match &discussion.target {
-        DiscussionTarget::Note { note_id } => DiscussionRef::Note {
-            note_id: note_id.clone(),
-        },
-        DiscussionTarget::Draft { draft_id } => DiscussionRef::Draft {
-            draft_id: draft_id.clone(),
-        },
-        DiscussionTarget::Artifact { artifact_id } => DiscussionRef::Artifact {
-            artifact_id: artifact_id.clone(),
-        },
+        DiscussionTarget::Note { note_id } => DiscussionRef::Note { note_id: note_id.clone() },
+        DiscussionTarget::Draft { draft_id } => DiscussionRef::Draft { draft_id: draft_id.clone() },
+        DiscussionTarget::Artifact { artifact_id } => {
+            DiscussionRef::Artifact { artifact_id: artifact_id.clone() }
+        }
     })
 }
 
@@ -222,11 +216,7 @@ pub fn read_question_set(
 ) -> Option<PendingQuestionSet> {
     let thread = read_discussion_by_id(root, worktree, thread_id)?;
     let discussion = discussion_ref_of(&thread)?;
-    let path = discussion
-        .thread_ref()
-        .scope
-        .question_set_path(root, thread_id)
-        .ok()?;
+    let path = discussion.thread_ref().scope.question_set_path(root, thread_id).ok()?;
     let bytes = root.read_bytes(&path).ok()?;
     serde_json::from_slice::<PendingQuestionSet>(&bytes).ok()
 }
@@ -249,10 +239,7 @@ pub fn read_discussion_question_set<R: tauri::Runtime>(
         // is asking an ordinary question.
         return Ok(None);
     };
-    let path = discussion
-        .thread_ref()
-        .scope
-        .question_set_path(&root, &thread_id)?;
+    let path = discussion.thread_ref().scope.question_set_path(&root, &thread_id)?;
     let Ok(bytes) = root.read_bytes(&path) else {
         return Ok(None);
     };

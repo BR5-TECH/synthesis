@@ -12,6 +12,7 @@ import { AgentsChromeControl } from "./Agents";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { WorktreeSelector, type SwitchOutcome } from "./WorktreeSelector";
 import { WorkStreamSelector } from "./WorkStreamSelector";
+import type { PullRequestSource } from "./CreatePullRequest/types";
 import { PushControl } from "./PushControl";
 import { Library } from "./Library";
 import { DocumentsPanel } from "./Documents";
@@ -27,6 +28,7 @@ import type { TabAttention } from "./TabStrip";
 import type { RollbackFile } from "./RollbackConfirm";
 import { THEME_CHOICES } from "./GlobalSettings";
 import type {
+  AgentScope,
   BottomSurface,
   CommitOutcome,
   DocumentEntry,
@@ -72,7 +74,10 @@ interface TopChromeProps {
   onRequestMergeCommit: (
     streamId: string,
     streamName: string,
+    defaultMessage?: string,
   ) => Promise<string | null>;
+  // WSS-FR-KHGP: open the Create a PR window for a work stream.
+  onCreatePullRequest?: (source: PullRequestSource) => void;
   // WSS-FR-OMAP: a merge refused for uncommitted work routes to the Changes
   // panel, which is where that work is settled.
   onOpenChanges: () => void;
@@ -101,11 +106,11 @@ interface TopChromeProps {
   // WTS-FR-35 / GHA-FR-19: where the note sends the author when no token is
   // stored at all and there is nothing to pick between.
   onOpenGlobalSettings: () => void;
-  // AGT-FR-06 / AGT-FR-07: a roster row, and its add action, open the Global
-  // settings window on its Agents section with an editor open — that agent's, or a
-  // fresh one for `null`.
-  onOpenAgentInSettings: (agentId: string | null) => void;
-  // AGT-FR-08: where the roster's empty state names agents as being enrolled.
+  // AGT-FR-06 / AGT-FR-07: a roster row, and its add action, open the Settings
+  // window on the Project Agents or the Personal Agents section of the agent's
+  // scope, with an editor open — that agent's, or a fresh one for `null`.
+  onOpenAgentInSettings: (agentId: string | null, scope: AgentScope) => void;
+  // AGT-FR-08: where the roster's empty state names agents as being described.
   onOpenProjectSettings: () => void;
   // SNV-FR-56: the roster's open state, owned by the shell like `searchOpen`.
   agentsRosterOpen: boolean;
@@ -121,6 +126,7 @@ export function TopChrome({
   activeWorktree,
   onSwitchWorktree,
   onRequestMergeCommit,
+  onCreatePullRequest,
   onOpenChanges,
   onOpenRun,
   themePref,
@@ -254,6 +260,7 @@ export function TopChrome({
             return { ok: false as const, error: outcome.cancelled ? undefined : outcome.error };
           }}
           onRequestMergeCommit={onRequestMergeCommit}
+          onCreatePullRequest={onCreatePullRequest}
           onOpenChanges={onOpenChanges}
           onOpenRun={onOpenRun}
         />
@@ -361,8 +368,8 @@ export function TopChrome({
         {/* SNV-FR-59: the trailing cluster holds the agents control and then the
             theme selector, in that fixed order — the two things that belong to
             the author rather than to the repository. The control is present
-            whenever a project is open, whether or not that project has enrolled
-            anyone (AGT-FR-02); its count, its roster, and everything the roster
+            whenever a project is open, whether or not that project has any
+            agent (AGT-FR-02); its count, its roster, and everything the roster
             offers are owned by `AGT-agents.md`. */}
         <AgentsChromeControl
           // SNV-FR-56: the roster is a floating overlay of the main window, so
@@ -827,6 +834,8 @@ interface VPanelProps {
   onRequestGithubToken?: () => Promise<boolean>;
   // CHG-FR-45 / GHA-FR-19: no token stored at all — route to where one is added.
   onOpenGlobalSettings?: () => void;
+  // CHG-FR-UPFP: open the Create a PR window for the current branch.
+  onCreatePullRequest?: (source: PullRequestSource) => void;
   // SNV-FR-67: the Changes panel publishes each comparison it loads, so the
   // shell can resolve a Diff tab's file before activating that panel.
   onChangeSetLoaded?: (paths: string[]) => void;
@@ -858,6 +867,7 @@ export function VPanel({
   onRequestRollback,
   onRequestGithubToken,
   onOpenGlobalSettings,
+  onCreatePullRequest: onCreatePullRequestFromPanel,
   onChangeSetLoaded,
   onViewSpecMap,
   onOpenDraft,
@@ -924,6 +934,7 @@ export function VPanel({
         onRequestRollback={onRequestRollback}
         onRequestGithubToken={onRequestGithubToken}
         onOpenGlobalSettings={onOpenGlobalSettings}
+        onCreatePullRequest={onCreatePullRequestFromPanel}
       />
     );
   if (surface === "comments")

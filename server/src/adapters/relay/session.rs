@@ -187,10 +187,7 @@ mod tests {
     #[test]
     fn each_handle_state_carries_its_own_refusal() {
         assert_eq!(HandleState::Active.refusal(), None);
-        assert_eq!(
-            HandleState::Pending.refusal(),
-            Some(ReasonCode::HandleNotFound)
-        );
+        assert_eq!(HandleState::Pending.refusal(), Some(ReasonCode::HandleNotFound));
         assert_eq!(
             HandleState::Invalid(InvalidReason::Revoked).refusal(),
             Some(ReasonCode::HandleRevoked)

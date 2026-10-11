@@ -23,10 +23,7 @@ pub fn name(field: &str, value: &str) -> Result<String, DomainError> {
         return Err(DomainError::invalid_field(field, "the value is empty"));
     }
     if trimmed.chars().count() > NAME_LIMIT {
-        return Err(DomainError::invalid_field(
-            field,
-            "the value is longer than 200 characters",
-        ));
+        return Err(DomainError::invalid_field(field, "the value is longer than 200 characters"));
     }
     Ok(trimmed.to_string())
 }
@@ -39,10 +36,7 @@ pub fn email(field: &str, value: &str) -> Result<String, DomainError> {
         return Err(DomainError::invalid_field(field, "the value is empty"));
     }
     if trimmed.chars().count() > EMAIL_LIMIT {
-        return Err(DomainError::invalid_field(
-            field,
-            "the value is longer than 320 characters",
-        ));
+        return Err(DomainError::invalid_field(field, "the value is longer than 320 characters"));
     }
     let mut parts = trimmed.split('@');
     let local = parts.next().unwrap_or_default();
@@ -72,10 +66,9 @@ pub fn page_size(value: Option<usize>) -> Result<usize, DomainError> {
     match value {
         None => Ok(DEFAULT_PAGE_SIZE),
         Some(0) => Err(DomainError::invalid_field("limit", "the value is zero")),
-        Some(size) if size > MAXIMUM_PAGE_SIZE => Err(DomainError::invalid_field(
-            "limit",
-            "the value is above the maximum of 500",
-        )),
+        Some(size) if size > MAXIMUM_PAGE_SIZE => {
+            Err(DomainError::invalid_field("limit", "the value is above the maximum of 500"))
+        }
         Some(size) => Ok(size),
     }
 }

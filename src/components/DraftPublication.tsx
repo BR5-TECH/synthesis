@@ -12,6 +12,7 @@
  */
 import { useState } from "react";
 import { Icon } from "./icons";
+import { GITHUB_HOST_MISMATCH_MESSAGE } from "../types/github";
 import { Modal } from "./DraftsPanelParts";
 import { PublicationChooser } from "./PublicationChooser";
 import {
@@ -348,9 +349,9 @@ export function PublicationRemotePicker({
                   </label>
                   {/* NAW-FR-RVGT: the exact reason, beneath the entry it is
                       about, rather than the entry being dropped. */}
-                  {!eligible && remote.reason && (
+                  {!eligible && (remote.reason || remote.eligibility === "host_mismatch") && (
                     <p className="t-ui-xs draft-publication-picker__reason">
-                      {remote.reason}
+                      {remote.reason || GITHUB_HOST_MISMATCH_MESSAGE}
                     </p>
                   )}
                 </li>

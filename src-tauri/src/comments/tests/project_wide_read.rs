@@ -43,8 +43,17 @@ fn list_all_returns_every_thread_with_its_artifact_most_recent_first() {
     let older = open(root, "specs/a.md", anchor(0, 3, "one"), "first", "2024-01-01T00:00:00Z");
     let locked = open(root, "specs/b.md", anchor(0, 3, "two"), "second", "2024-01-02T00:00:00Z");
     let resolved = open(root, "specs/b.md", anchor(9, 12, "six"), "third", "2024-01-03T00:00:00Z");
-    set_lock_in(root, "specs/b.md", &locked.id, true, &human("raver119"), "2024-01-04T00:00:00Z").unwrap();
-    set_resolution_in(root, "specs/b.md", &resolved.id, true, &human("raver119"), "2024-01-05T00:00:00Z").unwrap();
+    set_lock_in(root, "specs/b.md", &locked.id, true, &human("raver119"), "2024-01-04T00:00:00Z")
+        .unwrap();
+    set_resolution_in(
+        root,
+        "specs/b.md",
+        &resolved.id,
+        true,
+        &human("raver119"),
+        "2024-01-05T00:00:00Z",
+    )
+    .unwrap();
 
     let items = list_all_discussions_in(root, root);
     assert_eq!(items.len(), 3, "no thread is withheld for its lock or resolution");
@@ -94,7 +103,9 @@ fn a_log_with_no_thread_opened_names_no_artifact_and_is_dropped() {
     write_raw_log(
         root,
         "specs/orphan.md",
-        &[r#"{"v":1,"eventId":"e1","threadId":"t1","at":"2024-06-01T00:00:00Z","by":{"kind":"human","login":"raver119"},"type":"comment_added","commentId":"c1","body":"stranded","quotes":[]}"#],
+        &[
+            r#"{"v":1,"eventId":"e1","threadId":"t1","at":"2024-06-01T00:00:00Z","by":{"kind":"human","login":"raver119"},"type":"comment_added","commentId":"c1","body":"stranded","quotes":[]}"#,
+        ],
     );
 
     let items = list_all_discussions_in(root, root);
@@ -206,5 +217,6 @@ fn list_all_on_a_project_with_no_comments_folder_is_empty() {
     assert!(list_all_discussions_in(
         &crate::fs::RootFs::for_root(dir.path()),
         &crate::fs::RootFs::for_root(dir.path()),
-    ).is_empty());
+    )
+    .is_empty());
 }

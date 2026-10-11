@@ -283,18 +283,30 @@ impl SessionSlot {
             return;
         }
         let claims = &mut self.session.unsaved_claims;
-        claims.retain(|c| !c.names(&claim.repository_owner, &claim.repository_name, claim.issue_number));
+        claims.retain(|c| {
+            !c.names(
+                &claim.repository_host,
+                &claim.repository_owner,
+                &claim.repository_name,
+                claim.issue_number,
+            )
+        });
         claims.push(claim);
     }
 
     /// GPP-FR-BSLI: drop the held claim of one issue; whether one was held.
-    pub fn forget_unsaved(&mut self, key: &SessionKey, repository: &RepositoryRef, number: u64) -> bool {
+    pub fn forget_unsaved(
+        &mut self,
+        key: &SessionKey,
+        repository: &RepositoryRef,
+        number: u64,
+    ) -> bool {
         if self.key.as_ref() != Some(key) {
             return false;
         }
         let claims = &mut self.session.unsaved_claims;
         let before = claims.len();
-        claims.retain(|c| !c.names(&repository.owner, &repository.name, number));
+        claims.retain(|c| !c.names(&repository.host, &repository.owner, &repository.name, number));
         claims.len() != before
     }
 }

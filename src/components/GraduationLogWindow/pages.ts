@@ -15,19 +15,21 @@ import type {
   GraduationLogStream,
 } from "../../types";
 
+/** GLW-FR-FPUX / GLW-FR-HCOI: the one stream the window reads and names. */
+export const ACTIVITY_STREAM: GraduationLogStream = "activity";
+
 export interface PageScope {
   runId: string;
   phaseId: string;
   entry: LogScopeEntry | null;
-  stream: GraduationLogStream;
 }
 
-/** GLW-FR-VRTC: whether a page answers for the selected run, phase, scope, and stream. */
+/** GLW-FR-VRTC: whether a page answers for the selected run, phase, scope, and the activity stream. */
 export function pageIsFor(page: GraduationLogPage, scope: PageScope): boolean {
   if (!scope.entry) return false;
   if (page.runId !== scope.runId) return false;
   if (page.phaseId !== scope.phaseId) return false;
-  if (page.stream !== scope.stream) return false;
+  if (page.stream !== ACTIVITY_STREAM) return false;
   const wanted = scopeOf(scope.entry);
   if (page.scope.kind !== wanted.kind) return false;
   return (

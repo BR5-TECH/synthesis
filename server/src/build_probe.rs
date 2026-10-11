@@ -55,11 +55,7 @@ mod tests {
     // `None` instead of panicking or propagating an error.
     #[test]
     fn a_program_that_is_absent_returns_no_value() {
-        let captured = capture(
-            "synthesis-no-such-program-exists-here",
-            &["--version"],
-            here(),
-        );
+        let captured = capture("synthesis-no-such-program-exists-here", &["--version"], here());
         assert_eq!(captured, None);
     }
 
@@ -84,10 +80,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn output_is_returned_without_its_surrounding_white_space() {
-        assert_eq!(
-            capture("echo", &["  v1.4.0  "], here()),
-            Some("v1.4.0".to_string())
-        );
+        assert_eq!(capture("echo", &["  v1.4.0  "], here()), Some("v1.4.0".to_string()));
     }
 
     // A working directory that does not exist makes the spawn itself fail.

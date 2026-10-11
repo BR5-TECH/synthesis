@@ -108,14 +108,9 @@ pub fn parameters() -> serde_json::Value {
 /// names none of the four (LSK-FR-07).
 pub fn parse_ecosystem(value: &str) -> Option<Ecosystem> {
     let value = value.trim();
-    [
-        Ecosystem::Claude,
-        Ecosystem::Codex,
-        Ecosystem::Github,
-        Ecosystem::Opencode,
-    ]
-    .into_iter()
-    .find(|e| e.as_str().eq_ignore_ascii_case(value))
+    [Ecosystem::Claude, Ecosystem::Codex, Ecosystem::Github, Ecosystem::Opencode]
+        .into_iter()
+        .find(|e| e.as_str().eq_ignore_ascii_case(value))
 }
 
 // ---------------------------------------------------------------------------
@@ -139,20 +134,15 @@ pub fn resolve(
 
     // LSK-FR-05: matched on the normalization the whole group shares, so a
     // model retyping a name it was shown reaches the skill it meant.
-    let by_name: Vec<&SkillDescriptor> = skills
-        .iter()
-        .filter(|s| normalize_skill_name(&s.name) == wanted)
-        .collect();
+    let by_name: Vec<&SkillDescriptor> =
+        skills.iter().filter(|s| normalize_skill_name(&s.name) == wanted).collect();
 
     // LSK-FR-07: the filter narrows, and a value naming none of the four
     // narrows to nothing rather than being refused as malformed.
     let candidates: Vec<&SkillDescriptor> = match args.ecosystem.as_deref() {
         None => by_name,
         Some(requested) => match parse_ecosystem(requested) {
-            Some(ecosystem) => by_name
-                .into_iter()
-                .filter(|s| s.ecosystem == ecosystem)
-                .collect(),
+            Some(ecosystem) => by_name.into_iter().filter(|s| s.ecosystem == ecosystem).collect(),
             None => Vec::new(),
         },
     };
@@ -245,9 +235,7 @@ pub fn read_instructions(
 ) -> Result<String, ToolRefusal> {
     let abs = crate::fs::resolve_under(root.path(), &skill.path)
         .map_err(|_| ToolRefusal::SkillUnreadable)?;
-    let text = root
-        .read_text(&abs)
-        .map_err(|_| ToolRefusal::SkillUnreadable)?;
+    let text = root.read_text(&abs).map_err(|_| ToolRefusal::SkillUnreadable)?;
     Ok(strip_frontmatter(&text).to_string())
 }
 
@@ -279,10 +267,7 @@ impl<R: tauri::Runtime> SkillLoadTool<R> {
     /// TLC-FR-19: this tool's own constructor. A caller attaches it by name;
     /// there is no registry that would attach it on anyone's behalf.
     pub fn new(app: tauri::AppHandle<R>) -> Self {
-        SkillLoadTool {
-            app,
-            buffer: &BUFFER,
-        }
+        SkillLoadTool { app, buffer: &BUFFER }
     }
 
     /// The same tool, reporting into `buffer`.

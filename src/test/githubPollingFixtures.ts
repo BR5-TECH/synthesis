@@ -10,6 +10,7 @@ import type {
 
 export function readyTask(over: Partial<GithubReadyTask> = {}): GithubReadyTask {
   return {
+    repositoryHost: "github.com",
     repositoryOwner: "acme",
     repositoryName: "platform",
     issueNumber: 42,
@@ -24,6 +25,7 @@ export function pendingClaim(
   over: Partial<GithubPendingClaim> = {},
 ): GithubPendingClaim {
   return {
+    repositoryHost: "github.com",
     repositoryOwner: "acme",
     repositoryName: "platform",
     issueNumber: 17,
@@ -42,6 +44,7 @@ export function shadowRow(
     draftId: "gh-1",
     name: "Cache invalidation",
     status: "github_shadow",
+    repositoryHost: "github.com",
     repositoryOwner: "acme",
     repositoryName: "platform",
     issueNumber: 9,
@@ -64,7 +67,7 @@ export function pollingView(
       error: null,
       projectTitle: "Roadmap",
     },
-    repository: { owner: "acme", name: "platform" },
+    repository: { host: "github.com", owner: "acme", name: "platform" },
     polling: false,
     tasks: [readyTask()],
     stale: false,

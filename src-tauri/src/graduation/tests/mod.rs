@@ -23,16 +23,20 @@ use crate::tools::agent_exec::{
     AgentExecution, AgentExecutionError, AgentExecutionRequest, ProcessOutcome, TurnKind,
 };
 
+mod activity_stream;
 mod blocking;
+mod collaborators;
 mod commit_retitle;
 mod direct;
 mod direct_message;
 mod e2e;
 mod github_shadow;
+mod hold;
 mod live_index;
 mod log_read_command;
 mod log_reads;
 mod logs;
+mod loop_account;
 mod loop_driven;
 mod merge_handoff;
 mod merge_input;
@@ -48,6 +52,8 @@ mod scheduler;
 mod standing_work;
 mod state_machine;
 mod stream_hold;
+
+use collaborators::{EveryKeyIsThere, EverythingIsThere, NoCli, NoEndpoint};
 
 type Runtime = tauri::test::MockRuntime;
 
@@ -121,10 +127,7 @@ impl Fixture {
             .state::<crate::fs::FsAccessState>()
             .install_for_worktree_and(&root, &store_root)
             .expect("two real directories");
-        let access = handle
-            .state::<crate::fs::FsAccessState>()
-            .get()
-            .expect("an instance");
+        let access = handle.state::<crate::fs::FsAccessState>().get().expect("an instance");
         let state = handle.state::<crate::project::ProjectState>();
         state.set_root_with_access(root.clone(), Some(access));
         state.set_anchor(root.to_string_lossy().into_owned());
@@ -132,11 +135,7 @@ impl Fixture {
         // suite writes into its own tempdir (RMS-FR-ZXHM).
         state.set_store(root.clone());
 
-        Fixture {
-            app: handle,
-            project,
-            store,
-        }
+        Fixture { app: handle, project, store }
     }
 
     fn root(&self) -> PathBuf {
@@ -183,11 +182,7 @@ impl Fixture {
             )
             .expect("a registry");
 
-        let access = self
-            .app
-            .state::<crate::fs::FsAccessState>()
-            .get()
-            .expect("an instance");
+        let access = self.app.state::<crate::fs::FsAccessState>().get().expect("an instance");
         let root = crate::fs::RootFs::new(self.root(), access);
         crate::project_settings::save_project_vendor_image_to(
             &root,
@@ -196,6 +191,7 @@ impl Fixture {
                 image_name: "acme/agent".into(),
                 tag: Some("latest".into()),
                 dockerfile: None,
+                build_context: None,
             },
         )
         .expect("an image");
@@ -218,7 +214,7 @@ impl Fixture {
 
     /// A work stream on the production path.
     fn stream(&self, name: &str) -> crate::streams::WorkStream {
-        crate::streams::create_work_stream(self.app.clone(), name.to_string(), None)
+        crate::streams::create_work_stream(self.app.clone(), name.to_string(), None, None)
             .expect("a stream")
     }
 
@@ -228,16 +224,9 @@ impl Fixture {
     /// (`DRS-draft-storage.md` DRS-FR-ZLBK), so a run whose source draft the
     /// fixture never made is counted nowhere.
     fn draft(&self, name: &str) -> String {
-        let access = self
-            .app
-            .state::<crate::fs::FsAccessState>()
-            .get()
-            .expect("an instance");
+        let access = self.app.state::<crate::fs::FsAccessState>().get().expect("an instance");
         let root = crate::fs::RootFs::new(self.root(), access);
-        crate::drafts::create_draft_at_root(&root, Some(name))
-            .expect("a draft")
-            .draft
-            .id
+        crate::drafts::create_draft_at_root(&root, Some(name)).expect("a draft").draft.id
     }
 
     /// A queued run over a captured prompt, on the production record shape.
@@ -298,9 +287,7 @@ impl Fixture {
     }
 
     fn project_key(&self) -> String {
-        self.app
-            .state::<crate::project::ProjectState>()
-            .slot_key()
+        self.app.state::<crate::project::ProjectState>().slot_key()
     }
 
     /// Drive one run to rest, with the agent scripted.
@@ -358,16 +345,11 @@ fn init_repo(root: &Path) -> git2::Repository {
     std::fs::write(root.join("README.md"), "seed\n").unwrap();
     std::fs::write(root.join(".gitignore"), "target/\n").unwrap();
     let mut index = repo.index().expect("index");
-    index
-        .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-        .expect("add");
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).expect("add");
     index.write().expect("write");
-    let tree = repo
-        .find_tree(index.write_tree().expect("tree"))
-        .expect("tree");
+    let tree = repo.find_tree(index.write_tree().expect("tree")).expect("tree");
     let signature = repo.signature().expect("signature");
-    repo.commit(Some("HEAD"), &signature, &signature, "seed", &tree, &[])
-        .expect("commit");
+    repo.commit(Some("HEAD"), &signature, &signature, "seed", &tree, &[]).expect("commit");
     drop(index);
     drop(tree);
     repo
@@ -516,6 +498,15 @@ impl Turn {
     }
 }
 
+/// What a scripted turn reports while it runs: two activities the durable
+/// stream excludes and two it keeps.
+const SCRIPTED_ACTIVITY: [(&str, &str, &str); 4] = [
+    ("executor", "invocation", "docker run the-secret-argument-vector"),
+    ("executor", "task", "the whole task document"),
+    ("stdout", "message", "the scripted turn ran"),
+    ("executor", "finished", "completed in 1 ms"),
+];
+
 /// What the loop asked of one turn, and what that turn found in front of it.
 #[derive(Clone, Debug)]
 struct Seen {
@@ -527,6 +518,8 @@ struct Seen {
     directory: PathBuf,
     /// GXD-FR-IOZU: whether the dispatch carried an activity sink.
     had_activity: bool,
+    /// GXD-FR-IOZU: whether the dispatch carried the durable activity sink.
+    had_durable_output: bool,
     /// GXD-FR-MTVR: the execution timeout this dispatch was composed under.
     timeout_ms: u64,
     /// GRL-FR-DXLU: the instruction the turn was handed, whole.
@@ -549,30 +542,19 @@ struct Seen {
 
 impl Seen {
     fn instruction_field(&self, key: &str) -> Option<String> {
-        self.input
-            .get(key)
-            .and_then(|v| v.as_str())
-            .map(str::to_string)
+        self.input.get(key).and_then(|v| v.as_str()).map(str::to_string)
     }
 
     /// How many entries a list field holds, whatever their shape.
     fn list_len(&self, key: &str) -> usize {
-        self.input
-            .get(key)
-            .and_then(|v| v.as_array())
-            .map(|list| list.len())
-            .unwrap_or(0)
+        self.input.get(key).and_then(|v| v.as_array()).map(|list| list.len()).unwrap_or(0)
     }
 
     fn path_list(&self, key: &str) -> Vec<String> {
         self.input
             .get(key)
             .and_then(|v| v.as_array())
-            .map(|list| {
-                list.iter()
-                    .filter_map(|v| v.as_str().map(str::to_string))
-                    .collect()
-            })
+            .map(|list| list.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
             .unwrap_or_default()
     }
 }
@@ -604,10 +586,7 @@ impl ScriptedDispatch {
 
     /// The turns of one part, in the order the loop dispatched them.
     fn of_part(&self, part: &str) -> Vec<Seen> {
-        self.seen()
-            .into_iter()
-            .filter(|seen| seen.part == part)
-            .collect()
+        self.seen().into_iter().filter(|seen| seen.part == part).collect()
     }
 }
 
@@ -646,20 +625,11 @@ fn read_git_state(directory: &Path) -> (Option<String>, Vec<String>, Option<Stri
     let Ok(repo) = git2::Repository::open(directory) else {
         return (None, Vec::new(), None);
     };
-    let head = repo
-        .head()
-        .ok()
-        .and_then(|h| h.peel_to_commit().ok())
-        .map(|c| c.id().to_string());
-    let head_tree = repo
-        .head()
-        .ok()
-        .and_then(|h| h.peel_to_commit().ok())
-        .and_then(|c| c.tree().ok());
+    let head = repo.head().ok().and_then(|h| h.peel_to_commit().ok()).map(|c| c.id().to_string());
+    let head_tree =
+        repo.head().ok().and_then(|h| h.peel_to_commit().ok()).and_then(|c| c.tree().ok());
     let mut opts = git2::DiffOptions::new();
-    opts.include_untracked(true)
-        .recurse_untracked_dirs(true)
-        .include_ignored(false);
+    opts.include_untracked(true).recurse_untracked_dirs(true).include_ignored(false);
     let mut diff_paths: Vec<String> = Vec::new();
     if let Ok(diff) = repo.diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts)) {
         for delta in diff.deltas() {
@@ -676,9 +646,7 @@ fn read_git_state(directory: &Path) -> (Option<String>, Vec<String>, Option<Stri
     // The checkout is thrown away when the turn ends, so staging it here costs
     // nothing and is the cheapest way to name the tree it holds.
     let worktree_tree = repo.index().ok().and_then(|mut index| {
-        index
-            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-            .ok()?;
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).ok()?;
         index.write_tree().ok().map(|oid| oid.to_string())
     });
     (head, diff_paths, worktree_tree)
@@ -697,23 +665,13 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
         let request = std::sync::Arc::new(request);
         let (head, diff_paths, worktree_tree) = read_git_state(&directory);
         self.seen.lock().unwrap().push(Seen {
-            part: input
-                .get("part")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string(),
-            purpose: input
-                .get("purpose")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string(),
-            pass: input
-                .get("pass")
-                .and_then(|v| v.as_u64())
-                .unwrap_or_default() as u32,
+            part: input.get("part").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            purpose: input.get("purpose").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            pass: input.get("pass").and_then(|v| v.as_u64()).unwrap_or_default() as u32,
             turn_kind: request.turn_kind,
             directory: directory.clone(),
             had_activity: request.activity.is_some(),
+            had_durable_output: request.durable_output.is_some(),
             timeout_ms: request.task.execution.timeout_ms,
             instruction: request.task.instruction.clone(),
             input,
@@ -762,17 +720,42 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
             if let Some(side_effect) = turn.side_effect.as_ref() {
                 side_effect();
             }
-            // EAC-FR-34: the executor reports what it did through the sink it
-            // was given, so a test can assert the caller is actually watching.
-            if let Some(sink) = request.activity.as_ref() {
-                sink.activity(crate::tools::agent_exec::AgentActivityEvent {
-                    at: crate::notes::now_rfc3339(),
-                    channel: "scripted",
-                    kind: "turn",
-                    summary: "the scripted turn ran".to_string(),
-                    payload: String::new(),
-                    payload_truncated: false,
-                });
+            // EAC-FR-32 / EAC-FR-34 / EAC-FR-VSNM: the executor reports what it
+            // did through the sinks it was given. The live sink receives every
+            // kind with its payload. The durable sink receives the safe kinds
+            // alone, without a payload, and the first failure it answers ends
+            // delivery and stops the turn (EAC-FR-DWGS, EAC-FR-IRKZ, EAC-FR-DUTR).
+            let mut durable_failure = None;
+            for (channel, kind, summary) in SCRIPTED_ACTIVITY {
+                let at = crate::notes::now_rfc3339();
+                if let Some(sink) = request.activity.as_ref() {
+                    sink.activity(crate::tools::agent_exec::AgentActivityEvent {
+                        at: at.clone(),
+                        channel,
+                        kind,
+                        summary: summary.to_string(),
+                        payload: format!("RAW PAYLOAD OF {kind}"),
+                        payload_truncated: false,
+                    });
+                }
+                let Some(durable) = request.durable_output.as_ref() else {
+                    continue;
+                };
+                if durable_failure.is_some() || !crate::tools::agent_exec::is_safe_kind(kind) {
+                    continue;
+                }
+                if let Err(failure) = durable.record(crate::tools::agent_exec::DurableActivity {
+                    record_id: crate::notes::new_note_id(),
+                    at,
+                    channel,
+                    kind,
+                    summary: summary.to_string(),
+                }) {
+                    durable_failure = Some(failure);
+                }
+            }
+            if let Some(failure) = durable_failure {
+                return Err(AgentExecutionError::DurableOutputFailed(failure));
             }
             // EAC-FR-25: the executor honours the cancellation token, so a turn
             // stopped while it ran reports that rather than an answer.
@@ -901,74 +884,8 @@ fn execution(
         stderr: CapturedStream::default(),
         duration_ms: 0,
         resume_unavailable: false,
-        session: session.then(|| SessionRef {
-            session_id: Some("s1".to_string()),
-            continuation_token: None,
-        }),
+        session: session
+            .then(|| SessionRef { session_id: Some("s1".to_string()), continuation_token: None }),
         container_removed: true,
-    }
-}
-
-// ---------------------------------------------------------------------------
-// The collaborators the image preflight reads through (GSU-FR-HIPF)
-// ---------------------------------------------------------------------------
-
-/// Every binary the registry names is there and runnable. The preflight reads
-/// this rather than the machine, so a fixture that says yes is what makes a
-/// configured vendor resolve.
-struct EverythingIsThere;
-
-impl crate::agentic::FileProbe for EverythingIsThere {
-    fn exists(&self, _path: &Path) -> bool {
-        true
-    }
-    fn is_executable(&self, _path: &Path) -> bool {
-        true
-    }
-    fn dir_exists(&self, _path: &Path) -> bool {
-        true
-    }
-}
-
-/// Nothing here runs a child process: the preflight probes nothing, and a test
-/// that reached this would be launching something.
-struct NoCli;
-
-impl crate::agentic::CliRunner for NoCli {
-    fn run(
-        &self,
-        _path: &Path,
-        _args: &[&str],
-        _timeout: std::time::Duration,
-    ) -> Result<crate::agentic::CliOutput, crate::agentic::RunError> {
-        panic!("no turn of these tests runs a binary")
-    }
-}
-
-/// The same for the network.
-struct NoEndpoint;
-
-impl crate::ai_shared::EndpointProber for NoEndpoint {
-    fn probe(
-        &self,
-        _request: &crate::ai_shared::ProbeRequest,
-    ) -> Result<Vec<crate::ai_shared::ModelOption>, crate::ai_shared::ProbeError> {
-        panic!("no turn of these tests contacts an endpoint")
-    }
-}
-
-/// A vault that holds a credential for every vendor, and hands none of it to
-/// anything: the preflight asks whether one is present and never what it is.
-struct EveryKeyIsThere;
-
-impl crate::ai_shared::SecretStore for EveryKeyIsThere {
-    fn set(&self, _id: &str, _secret: &str) -> Result<(), crate::ai_shared::SecretUnavailable> {
-        Ok(())
-    }
-    fn get(&self, _id: &str) -> Result<Option<String>, crate::ai_shared::SecretUnavailable> {
-        Ok(Some("a credential this test never reads".into()))
-    }
-    fn delete(&self, _id: &str) -> Result<(), crate::ai_shared::SecretUnavailable> {
-        Ok(())
     }
 }

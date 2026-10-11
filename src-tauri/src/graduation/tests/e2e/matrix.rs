@@ -80,10 +80,8 @@ fn declared_tests() -> BTreeSet<String> {
             }
             if expecting {
                 if let Some(rest) = trimmed.strip_prefix("fn ") {
-                    let name: String = rest
-                        .chars()
-                        .take_while(|c| c.is_alphanumeric() || *c == '_')
-                        .collect();
+                    let name: String =
+                        rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
                     names.insert(name);
                 }
                 expecting = false;
@@ -150,19 +148,15 @@ fn the_coverage_matrix_and_the_suite_name_the_same_tests() {
     // And every name the matrix cites is a test that exists. Only the matrix
     // section is read: the sections above it name the scenario language's own
     // methods, which are not tests and are not meant to be.
-    let matrix = readme
-        .split_once("## Coverage matrix")
-        .expect("the README holds a coverage matrix")
-        .1;
+    let matrix =
+        readme.split_once("## Coverage matrix").expect("the README holds a coverage matrix").1;
     let cited: BTreeSet<String> = matrix
         .split('`')
         .skip(1)
         .step_by(2)
         .filter(|token| {
             token.matches('_').count() >= 2
-                && token
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+                && token.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
         })
         .map(str::to_string)
         .collect();

@@ -4,8 +4,8 @@
 //! One part of `../tests/mod.rs`, which holds the harness these all run
 //! against and the rule they are all written under.
 
-use super::*;
 use super::asking_author::{folded_discussion, run_draft_turn};
+use super::*;
 
 // ---------------------------------------------------------------------------
 // The question set (ADQ-FR-LFDX … ADQ-FR-FQPA, AUC-FR-QSVN)
@@ -45,11 +45,7 @@ fn a_turn_that_records_a_question_set_ends_on_that_call_and_appends_nothing() {
         "CVL-FR-15: the turn ends awaiting the author's answers",
     );
     assert_eq!(turn.failure, None, "recording a set is not a failure");
-    assert_eq!(
-        h.seam.requests().len(),
-        1,
-        "CVL-FR-15: the loop makes no further model call",
-    );
+    assert_eq!(h.seam.requests().len(), 1, "CVL-FR-15: the loop makes no further model call",);
 
     // ADQ-FR-DHZK: the discussion's log is what it was — the opening comment and
     // nothing else.
@@ -89,11 +85,7 @@ fn a_refused_question_set_ends_nothing_and_the_turn_answers_with_what_it_has() {
         AgentTurnState::Delivered,
         "CVL-FR-14: a tool refusal is not a turn's failure and ends nothing",
     );
-    assert_eq!(
-        h.seam.requests().len(),
-        2,
-        "the loop carried on and asked the model again",
-    );
+    assert_eq!(h.seam.requests().len(), 2, "the loop carried on and asked the model again",);
     // ADQ-FR-CJRM: nothing was recorded, so the author is never shown a set the
     // agent did not mean to ask.
     assert!(crate::comments::read_question_set(&h.root(), &h.root(), &thread.id).is_none());
@@ -116,11 +108,7 @@ fn a_reply_asking_for_a_set_and_a_question_makes_one_contribution() {
     // The set went out and the comment did not: one contribution, not two.
     assert!(crate::comments::read_question_set(&h.root(), &h.root(), &thread.id).is_some());
     let folded = folded_discussion(&h, &draft_id, &thread.id);
-    assert_eq!(
-        folded.comments.len(),
-        1,
-        "the second turn-ending call was carried out as well",
-    );
+    assert_eq!(folded.comments.len(), 1, "the second turn-ending call was carried out as well",);
 }
 
 /// AUC-FR-QSVN: `ask_user_comment` refuses while a set stands, appends no
@@ -145,11 +133,7 @@ fn asking_one_question_is_refused_while_a_question_set_stands() {
     assert!(crate::comments::read_question_set(&h.root(), &h.root(), &thread.id).is_some());
 
     let second = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     let settled = wait_for_terminal(&h, &second.id);
 

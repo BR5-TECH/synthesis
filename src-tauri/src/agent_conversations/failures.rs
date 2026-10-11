@@ -33,6 +33,14 @@ pub const FAIL_TIMED_OUT: &str = "timed_out";
 pub const FAIL_EMPTY_REPLY: &str = "empty_reply";
 /// The OS credential store would not produce the provider's key.
 pub const FAIL_KEYCHAIN_UNAVAILABLE: &str = "keychain_unavailable";
+/// The provider's certificate is not trusted (AGC-FR-RWPT). The turn also
+/// carries the host and the cause.
+pub const FAIL_TLS_UNTRUSTED: &str = "tls_untrusted";
+/// The provider answered with a reply that could not be read (CVL-FR-21).
+pub const FAIL_INVALID_RESPONSE: &str = "invalid_response";
+/// The framework refused to build the request, so nothing was sent
+/// (CVL-FR-21).
+pub const FAIL_INVALID_REQUEST: &str = "invalid_request";
 /// Every command here answers only while a project is open.
 pub const ERR_NO_PROJECT_OPEN: &str = "no_project_open";
 /// `cancel_agent_turn` was given an id no turn carries.
@@ -110,6 +118,13 @@ pub mod class {
     pub const TRANSPORT_OTHER: &str = "transport_other";
     /// The endpoint answered and refused the credentials.
     pub const AUTH: &str = "auth";
+    /// The TLS check refused the endpoint's certificate (CVL-FR-21).
+    pub const TLS: &str = "tls";
+    /// A reply the provider returned that could not be read (CVL-FR-21).
+    pub const DECODE: &str = "decode";
+    /// A request the framework refused to build before it sent anything
+    /// (CVL-FR-21).
+    pub const REQUEST: &str = "request";
 }
 
 /// CVL-FR-21: one failed attempt, reduced to what is safe to report.
@@ -126,10 +141,11 @@ pub struct CallFailure {
     pub class: &'static str,
     /// Present only on [`class::HTTP_STATUS`].
     pub status: Option<u16>,
-    /// CVL-FR-35: the error code the provider itself chose, where it answered
-    /// with a structured error rather than with a transport failure. A number of
-    /// the provider's own vocabulary — nothing of the request is in it.
-    pub provider_code: Option<i64>,
+    /// CVL-FR-35: the error code the provider itself chose, as text, where it
+    /// answered with a structured error rather than with a transport failure.
+    /// A word or a number of the provider's own vocabulary — nothing of the
+    /// request is in it.
+    pub provider_code: Option<String>,
     /// CVL-FR-35: the provider's own identifier for the request that failed.
     /// Opaque, and the one field that lets a failure here be matched to the
     /// provider's own record of it.
@@ -146,6 +162,13 @@ pub struct CallFailure {
     /// object rather than through a rendered request, and it is what makes a
     /// refusal readable rather than merely counted.
     pub provider_message: Option<String>,
+    /// CVL-FR-21 / AAP-FR-HZTB: the host and the cause, present only on
+    /// [`class::TLS`]. Nothing of the request is in it.
+    pub tls: Option<crate::tls::TlsFailure>,
+    /// CVL-FR-TQRD: what the Custom gateway repair changed in the reply before
+    /// the framework refused it. The default on every failure where the repair
+    /// changed nothing, or where no reply came back.
+    pub reply_repairs: super::responses_repair::ReplyRepairs,
 }
 
 impl CallFailure {
@@ -157,7 +180,17 @@ impl CallFailure {
             provider_code: None,
             provider_request_id: None,
             provider_message: None,
+            tls: None,
+            reply_repairs: super::responses_repair::ReplyRepairs {
+                text_format: false,
+                null_text_parts: 0,
+            },
         }
+    }
+
+    /// AGC-FR-RWPT: a certificate the TLS check refused.
+    pub fn tls_untrusted(failure: crate::tls::TlsFailure) -> Self {
+        Self { tls: Some(failure), ..Self::new(FAIL_TLS_UNTRUSTED, class::TLS) }
     }
 
     /// A host that could not be reached, of the given class.
@@ -168,13 +201,26 @@ impl CallFailure {
     /// CVL-FR-18: whether repeating the same call, against the same exchange,
     /// could plausibly succeed.
     ///
-    /// Only three failures are recoverable: `unreachable` — where a name that
-    /// will not resolve, a connection that will not open, and a connection reset
-    /// mid-answer all surface — the provider-call `timed_out` of CVL-FR-17, and
-    /// `empty_reply`. Everything else names a condition of the application
-    /// rather than of the call, and calling again changes none of them.
+    /// Six failures are recoverable: `unreachable` — where a name that will
+    /// not resolve, a connection that will not open, and a connection reset
+    /// mid-answer all surface — the provider-call `timed_out` of CVL-FR-17,
+    /// `empty_reply`, `tls_untrusted`, `invalid_response`, and
+    /// `invalid_request`. Only the first
+    /// three are repeated by the loop itself ([`Self::repeatable`]). Everything
+    /// else names a condition of the application rather than of the call, and
+    /// calling again changes none of them.
     pub fn recoverable(&self) -> bool {
         is_recoverable(self.failure)
+    }
+
+    /// CVL-FR-18: whether the loop repeats the call by itself. A refused
+    /// certificate is recoverable but is not repeated: the same certificate is
+    /// refused again until the author changes the trust on the machine. A reply
+    /// that could not be read is not repeated either: the endpoint returns the
+    /// same shape again. A request that could not be built is not repeated: the
+    /// same exchange builds the same request again.
+    pub fn repeatable(&self) -> bool {
+        is_repeated_automatically(self.failure)
     }
 }
 
@@ -186,13 +232,15 @@ impl From<&'static str> for CallFailure {
             FAIL_TIMED_OUT => class::PROVIDER_TIMEOUT,
             FAIL_REJECTED => class::AUTH,
             FAIL_EMPTY_REPLY => class::EMPTY_REPLY,
+            FAIL_INVALID_RESPONSE => class::DECODE,
+            FAIL_INVALID_REQUEST => class::REQUEST,
             _ => class::TRANSPORT_OTHER,
         };
         Self::new(failure, class)
     }
 }
 
-/// CVL-FR-18: the three recoverable values of the failure vocabulary.
+/// CVL-FR-18: the recoverable values of the failure vocabulary.
 ///
 /// `timed_out` is recoverable **here** because every value this function is
 /// asked about came out of one `complete` invocation, where the only deadline
@@ -201,6 +249,19 @@ impl From<&'static str> for CallFailure {
 /// which is why the whole-turn `timed_out` stays non-recoverable while sharing a
 /// spelling with the retryable one.
 pub fn is_recoverable(failure: &str) -> bool {
+    matches!(
+        failure,
+        FAIL_UNREACHABLE
+            | FAIL_TIMED_OUT
+            | FAIL_EMPTY_REPLY
+            | FAIL_TLS_UNTRUSTED
+            | FAIL_INVALID_RESPONSE
+            | FAIL_INVALID_REQUEST
+    )
+}
+
+/// CVL-FR-18: the three recoverable values the loop repeats by itself.
+pub fn is_repeated_automatically(failure: &str) -> bool {
     matches!(failure, FAIL_UNREACHABLE | FAIL_TIMED_OUT | FAIL_EMPTY_REPLY)
 }
 
@@ -273,7 +334,11 @@ impl Default for RetryPolicy {
 ///
 /// `attempt` is the 1-based number of the attempt **about to be made**, so the
 /// first retry is attempt 2 and reads `bases[0]`.
-pub(super) fn backoff_delay(policy: &RetryPolicy, attempt: usize, jitter: &dyn JitterSource) -> Duration {
+pub(super) fn backoff_delay(
+    policy: &RetryPolicy,
+    attempt: usize,
+    jitter: &dyn JitterSource,
+) -> Duration {
     // CVL-FR-19: the first retry takes the base delay and each retry after it
     // doubles the one before. The ceiling below is what bounds the schedule,
     // whatever budget the project holds.

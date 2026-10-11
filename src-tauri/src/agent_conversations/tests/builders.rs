@@ -9,7 +9,6 @@ use super::*;
 // AGC-FR-06, AGC-FR-07: the draft builder
 // ---------------------------------------------------------------------------
 
-
 #[test]
 fn the_draft_builder_gathers_the_one_prompt_the_thread_is_anchored_in() {
     // AGC-FR-06, AGC-FR-07.
@@ -21,7 +20,8 @@ fn the_draft_builder_gathers_the_one_prompt_the_thread_is_anchored_in() {
         .expect("write the commented file");
     let thread = seed_draft_thread(&h, &draft_id, &file_rel);
 
-    let sections = build_input(Roots::same(&h.root()),
+    let sections = build_input(
+        Roots::same(&h.root()),
         &ConversationOrigin::of(&thread),
         &thread.comments[0].id,
     );
@@ -39,18 +39,13 @@ fn the_draft_builder_gathers_the_one_prompt_the_thread_is_anchored_in() {
     );
     assert!(artifact.body.contains("Hello from the anchor."));
 
-    assert!(section_of(&sections, TAG_DISCUSSION_HISTORY)
-        .body
-        .contains("characters 0..5"));
-    assert!(section_of(&sections, TAG_CURRENT_COMMENT)
-        .body
-        .contains("@arch is this two specs?"));
+    assert!(section_of(&sections, TAG_DISCUSSION_HISTORY).body.contains("characters 0..5"));
+    assert!(section_of(&sections, TAG_CURRENT_COMMENT).body.contains("@arch is this two specs?"));
 }
 
 // ---------------------------------------------------------------------------
 // AGC-FR-05, AGC-FR-06, AGC-FR-07 / AGC-FR-11, AGC-FR-12: the discussion builder
 // ---------------------------------------------------------------------------
-
 
 #[test]
 fn the_discussion_builder_gathers_the_prompt_and_no_anchor() {
@@ -59,16 +54,11 @@ fn the_discussion_builder_gathers_the_prompt_and_no_anchor() {
     // prompt, and there is no anchor to open the history with, an absent one
     // being nothing to report.
     let h = Harness::new(vec![]);
-    let (_draft_id, thread) = seed_discussion(
-        &h,
-        &["first thought", "second thought", "@arch and now what?"],
-    );
+    let (_draft_id, thread) =
+        seed_discussion(&h, &["first thought", "second thought", "@arch and now what?"]);
     let trigger = thread.comments.last().unwrap().id.clone();
 
-    let sections = build_input(Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        &trigger,
-    );
+    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &trigger);
     assert_eq!(tags_of(&sections), INPUT_TAGS.map(str::to_string).to_vec());
 
     let artifact = section_of(&sections, TAG_ARTIFACT);
@@ -106,9 +96,7 @@ fn the_discussion_builder_gathers_the_prompt_and_no_anchor() {
         );
     }
 
-    assert!(section_of(&sections, TAG_CURRENT_COMMENT)
-        .body
-        .contains("and now what?"));
+    assert!(section_of(&sections, TAG_CURRENT_COMMENT).body.contains("and now what?"));
 }
 
 #[test]
@@ -125,8 +113,10 @@ fn a_local_participants_comment_reaches_the_agent_as_me() {
         "written as me".to_string(),
         Vec::new(),
         Vec::new(),
-        &crate::comments::Participant::local_human(),
-        "2026-01-01T00:05:00Z",
+        crate::comments::Stamp {
+            by: &crate::comments::Participant::local_human(),
+            at: "2026-01-01T00:05:00Z",
+        },
     )
     .expect("local reply");
     let local_id = thread.comments.last().unwrap().id.clone();
@@ -140,18 +130,13 @@ fn a_local_participants_comment_reaches_the_agent_as_me() {
             excerpt: "written as me".to_string(),
         }],
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:06:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:06:00Z" },
     )
     .expect("trigger");
     let trigger = thread.comments.last().unwrap().id.clone();
     assert_ne!(first_id, trigger);
 
-    let sections = build_input(
-        Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        &trigger,
-    );
+    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &trigger);
 
     let history = section_of(&sections, TAG_DISCUSSION_HISTORY);
     assert!(
@@ -202,28 +187,18 @@ fn an_artifact_section_names_the_type_the_library_shows_for_the_same_path() {
         let thread = crate::comments::open_discussion_in(
             &root,
             &root,
-            &crate::comments::DiscussionTarget::Artifact {
-                artifact_id: artifact_id.to_string(),
-            },
+            &crate::comments::DiscussionTarget::Artifact { artifact_id: artifact_id.to_string() },
             None,
             "@arch what is this?".into(),
             Vec::new(),
-            &human("ada"),
-            "2026-01-01T00:00:00Z",
+            crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
         )
         .expect("discussion");
         let trigger = thread.comments[0].id.clone();
-        build_input(
-            Roots::same(&root),
-            &ConversationOrigin::of(&thread),
-            &trigger,
-        )
+        build_input(Roots::same(&root), &ConversationOrigin::of(&thread), &trigger)
     };
 
-    assert_eq!(
-        type_of(&discussion_on(".claude/skills/deploy/SKILL.md")).as_deref(),
-        Some("skill"),
-    );
+    assert_eq!(type_of(&discussion_on(".claude/skills/deploy/SKILL.md")).as_deref(), Some("skill"),);
     // Unclassified names nothing rather than naming the absence: a value for it
     // would be a ninth type in a set of eight.
     assert_eq!(type_of(&discussion_on("notes/thing.md")), None);
@@ -237,10 +212,7 @@ fn an_artifact_section_names_the_type_the_library_shows_for_the_same_path() {
         crate::scanning::Scope::File,
     )
     .expect("assign");
-    assert_eq!(
-        type_of(&discussion_on("notes/thing.md")).as_deref(),
-        Some("scenario"),
-    );
+    assert_eq!(type_of(&discussion_on("notes/thing.md")).as_deref(), Some("scenario"),);
 
     // AGC-FR-07 is about *every* builder, so the anchored one says it too — an
     // agent answering a remark pinned to a passage of a skill is answering about
@@ -281,14 +253,11 @@ fn a_drafts_sections_name_the_type_its_own_prompt_declares() {
     let discussion = crate::comments::open_discussion_in(
         &root,
         &root,
-        &crate::comments::DiscussionTarget::Draft {
-            draft_id: draft_id.clone(),
-        },
+        &crate::comments::DiscussionTarget::Draft { draft_id: draft_id.clone() },
         None,
         "@arch what now?".into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
     let whole_draft = build_input(
@@ -323,14 +292,11 @@ fn a_drafts_sections_name_the_type_its_own_prompt_declares() {
     let stray = crate::comments::open_discussion_in(
         &root,
         &root,
-        &crate::comments::DiscussionTarget::Draft {
-            draft_id: loose.draft.id.clone(),
-        },
+        &crate::comments::DiscussionTarget::Draft { draft_id: loose.draft.id.clone() },
         None,
         "@arch and this?".into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:02:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:02:00Z" },
     )
     .expect("discussion");
     assert_eq!(
@@ -353,11 +319,10 @@ fn the_discussion_builder_bounds_and_survives_what_it_cannot_read() {
     let trigger = thread.comments[0].id.clone();
 
     // Within the bound to begin with.
-    assert!(!section_of(
-        &build_input(Roots::same(&h.root()), &origin, &trigger),
-        TAG_ARTIFACT
-    )
-    .truncated);
+    assert!(
+        !section_of(&build_input(Roots::same(&h.root()), &origin, &trigger), TAG_ARTIFACT)
+            .truncated
+    );
 
     // A prompt exceeding the bound says so in its own text rather than being
     // silently halved.
@@ -368,17 +333,15 @@ fn the_discussion_builder_bounds_and_survives_what_it_cannot_read() {
         &"x".repeat(SECTION_MAX_CHARS + 1),
     )
     .expect("write");
-    let artifact = section_of(&build_input(Roots::same(&h.root()), &origin, &trigger), TAG_ARTIFACT).clone();
+    let artifact =
+        section_of(&build_input(Roots::same(&h.root()), &origin, &trigger), TAG_ARTIFACT).clone();
     assert!(artifact.truncated);
     assert!(artifact.body.contains("partial"));
 
     // A prompt that does not decode as UTF-8 yields no `artifact` section at
     // all, and the turn proceeds on its history alone.
-    let files = h
-        .root()
-        .join(format!(".synthesis/drafts/{draft_id}/files"));
-    std::fs::write(files.join("artifact-window.md"), [0xff, 0xfe, 0xfd])
-        .expect("invalid utf-8");
+    let files = h.root().join(format!(".synthesis/drafts/{draft_id}/files"));
+    std::fs::write(files.join("artifact-window.md"), [0xff, 0xfe, 0xfd]).expect("invalid utf-8");
     let sections = build_input(Roots::same(&h.root()), &origin, &trigger);
     assert_eq!(
         tags_of(&sections),
@@ -394,18 +357,11 @@ fn a_discussion_turn_proceeds_on_its_history_when_no_file_can_be_read() {
     let h = Harness::new(vec![Ok("Answering from the conversation alone.".into())]);
     h.create_agent("arch", "");
     let (draft_id, thread) = seed_discussion(&h, &["@arch what now?"]);
-    let files = h
-        .root()
-        .join(format!(".synthesis/drafts/{draft_id}/files"));
-    std::fs::write(files.join("artifact-window.md"), [0xff, 0xfe, 0xfd])
-        .expect("invalid utf-8");
+    let files = h.root().join(format!(".synthesis/drafts/{draft_id}/files"));
+    std::fs::write(files.join("artifact-window.md"), [0xff, 0xfe, 0xfd]).expect("invalid utf-8");
 
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     h.settle();
 
@@ -435,9 +391,7 @@ fn a_discussion_whose_thread_cannot_be_found_fails_context_unavailable() {
     assert_eq!(terminal.failure.as_deref(), Some(FAIL_CONTEXT_UNAVAILABLE));
     assert!(h.seam.requests().is_empty(), "no model was reached");
     assert_eq!(
-        crate::comments::fold_discussion(&h.root(), &draft_id)[0]
-            .comments
-            .len(),
+        crate::comments::fold_discussion(&h.root(), &draft_id)[0].comments.len(),
         1,
         "nothing was appended",
     );
@@ -459,9 +413,7 @@ fn a_discussions_attachments_are_named_and_never_carried() {
     let thread = crate::comments::open_discussion_in(
         &h.root(),
         &h.root(),
-        &crate::comments::DiscussionTarget::Draft {
-            draft_id: draft_id.clone(),
-        },
+        &crate::comments::DiscussionTarget::Draft { draft_id: draft_id.clone() },
         None,
         format!("@arch {POISON}"),
         vec![crate::comments::AttachmentInput::Inline {
@@ -472,17 +424,11 @@ fn a_discussions_attachments_are_named_and_never_carried() {
                 base64::engine::general_purpose::STANDARD.encode(b"bytes")
             },
         }],
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
 
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&thread),
-        &thread.comments[0].id,
-    )
-    .expect("dispatch");
+    h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id).expect("dispatch");
     h.settle();
 
     let (request, _) = &h.seam.requests()[0];
@@ -512,12 +458,7 @@ fn an_agents_answer_lands_in_the_discussion_it_was_asked_in() {
     h.create_agent("arch", "");
     let (draft_id, thread) = seed_discussion(&h, &["@arch where should graduation live?"]);
 
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&thread),
-        &thread.comments[0].id,
-    )
-    .expect("dispatch");
+    h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id).expect("dispatch");
     h.settle();
 
     let folded = crate::comments::fold_discussion(&h.root(), &draft_id);
@@ -551,19 +492,12 @@ fn a_locked_discussion_refuses_a_turn_before_it_is_registered() {
     .expect("lock");
 
     assert_eq!(
-        h.dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
-        .unwrap_err(),
+        h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id,).unwrap_err(),
         FAIL_THREAD_LOCKED,
     );
     assert!(h.turns().in_flight(None).is_empty());
     assert_eq!(
-        crate::comments::fold_discussion(&h.root(), &draft_id)[0]
-            .comments
-            .len(),
+        crate::comments::fold_discussion(&h.root(), &draft_id)[0].comments.len(),
         1,
         "nothing was appended",
     );

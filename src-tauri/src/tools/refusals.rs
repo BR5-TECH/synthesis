@@ -99,7 +99,8 @@ pub const EMPTY_NOTE_QUERY: &str = "The query must describe the topic you want t
 pub const EMPTY_DOCUMENT_QUERY: &str = "The query must describe the topic you want reference documents about. Call again with a short plain-language description of it.";
 
 /// GDT-FR-IPJG: the model sent no document id to read.
-pub const DOCUMENT_ID_BLANK: &str = "The id must name a document. Give the id exactly as a search for documents reported it.";
+pub const DOCUMENT_ID_BLANK: &str =
+    "The id must name a document. Give the id exactly as a search for documents reported it.";
 
 /// GDT-FR-MVHY: the call carried a byte range and a line range together.
 pub const DOCUMENT_BOTH_RANGE_FORMS: &str = "Use either a byte range or a line range, not both. Call again with byte_offset and byte_length, or with line_offset and line_limit.";
@@ -115,11 +116,13 @@ pub const DOCUMENT_NOT_FOUND: &str = "No document with that id is in the user's 
 ///
 /// Not retryable, and says what happened without a path: the file was moved,
 /// deleted, or made unreadable, and no argument the model composes changes that.
-pub const DOCUMENT_UNAVAILABLE: &str = "That document is unavailable. Its file was moved, deleted, or cannot be read.";
+pub const DOCUMENT_UNAVAILABLE: &str =
+    "That document is unavailable. Its file was moved, deleted, or cannot be read.";
 
 /// GDT-FR-HREW: the document is readable and holds no text to return, which is
 /// a PDF made of images or one the extractor could not parse.
-pub const DOCUMENT_NO_TEXT: &str = "That document has no text that can be extracted. It may be a scanned PDF made of images.";
+pub const DOCUMENT_NO_TEXT: &str =
+    "That document has no text that can be extracted. It may be a scanned PDF made of images.";
 
 /// RDT-FR-11: the model sent no draft to read.
 pub const DRAFT_ID_BLANK: &str =
@@ -130,7 +133,8 @@ pub const DRAFT_ID_BLANK: &str =
 /// Retryable, and says how to recover in the same breath: a misremembered id is
 /// corrected on the next call, and a model that cannot remember one at all has
 /// `search_drafts` to find it again.
-pub const DRAFT_NOT_FOUND: &str = "No draft exists with that ID in the open project. Check the ID or search for the draft again.";
+pub const DRAFT_NOT_FOUND: &str =
+    "No draft exists with that ID in the open project. Check the ID or search for the draft again.";
 
 /// RDT-FR-13: the draft's `files/` is not the single prompt DRS-FR-11 requires.
 ///
@@ -153,7 +157,8 @@ pub const DRAFT_INCONSISTENT: &str = "That draft does not contain its required s
 pub const DRAFT_PROMPT_UNREADABLE: &str = "That draft's prompt could not be read. It may not be text, or it may have changed since it was found.";
 
 /// AUC-FR-06: the model asked the author nothing.
-pub const QUESTION_BLANK: &str = "The question must say what you want to know. Write it as you would write it to a colleague.";
+pub const QUESTION_BLANK: &str =
+    "The question must say what you want to know. Write it as you would write it to a colleague.";
 
 /// AUC-FR-10: the conversation takes no further comments (CMS-FR-17).
 ///
@@ -663,8 +668,9 @@ impl ToolRefusal {
     pub fn reason(&self) -> &'static str {
         match self {
             ToolRefusal::NoProjectOpen => "no_project_open",
-            ToolRefusal::InvalidArguments(_)
-            | ToolRefusal::InvalidArgumentsAt { .. } => "invalid_arguments",
+            ToolRefusal::InvalidArguments(_) | ToolRefusal::InvalidArgumentsAt { .. } => {
+                "invalid_arguments"
+            }
             ToolRefusal::InvalidQuestion(..) => "invalid_arguments",
             ToolRefusal::SkillNotFound => "skill_not_found",
             ToolRefusal::SkillAmbiguous(_) => "skill_ambiguous",

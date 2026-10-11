@@ -14,7 +14,8 @@ fn ts1_a_search_streams_documented_hits_and_a_terminal_event() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     write(root, "notes/a.md", "nothing here\nfind me on line two\n");
 
-    let (sink, reason) = search(root, "find me", SearchMode::LiteralInsensitive, SearchScope::Capped);
+    let (sink, reason) =
+        search(root, "find me", SearchMode::LiteralInsensitive, SearchScope::Capped);
     assert_eq!(reason, EndReason::Completed);
     assert_eq!(sink.end_reason(), EndReason::Completed);
 
@@ -26,10 +27,7 @@ fn ts1_a_search_streams_documented_hits_and_a_terminal_event() {
     }
     assert_eq!(json.get("matchKind").and_then(|v| v.as_str()), Some("content"));
     assert_eq!(json.get("line").and_then(|v| v.as_u64()), Some(2));
-    assert_eq!(
-        json.get("snippet").and_then(|v| v.as_str()),
-        Some("find me on line two")
-    );
+    assert_eq!(json.get("snippet").and_then(|v| v.as_str()), Some("find me on line two"));
 
     // The events serialise with the payload field names the frontend reads.
     let payload = serde_json::to_value(&SearchEndedPayload {

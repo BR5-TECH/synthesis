@@ -94,16 +94,10 @@ fn a_pdf_is_read_as_base64_bytes() {
     std::fs::write(&path, &bytes).unwrap();
     docs.add_file("paper.pdf");
     docs.refresh();
-    let read = docs
-        .collection
-        .read_document_pdf(&docs.fs, &docs.id_of("paper.pdf"))
-        .unwrap();
+    let read = docs.collection.read_document_pdf(&docs.fs, &docs.id_of("paper.pdf")).unwrap();
     assert_eq!(read.name, "paper.pdf");
     assert_eq!(read.revision, crate::fs::sha256_bytes(&bytes));
-    assert_eq!(
-        base64::engine::general_purpose::STANDARD.decode(read.bytes_base64).unwrap(),
-        bytes
-    );
+    assert_eq!(base64::engine::general_purpose::STANDARD.decode(read.bytes_base64).unwrap(), bytes);
 }
 
 // DCL-FR-GLUS: the text of a Markdown or text document is the file text, and the
@@ -115,11 +109,8 @@ fn document_text_serves_files_and_extracted_pdf_text() {
     docs.write("b.pdf", "extracted pdf text");
     docs.add_folder(".");
     docs.refresh();
-    let text = |name: &str| {
-        docs.collection
-            .document_text(&docs.fs, &docs.log, &docs.id_of(name))
-            .unwrap()
-    };
+    let text =
+        |name: &str| docs.collection.document_text(&docs.fs, &docs.log, &docs.id_of(name)).unwrap();
     assert_eq!(text("a.md"), "markdown text");
     assert_eq!(text("b.pdf"), "extracted pdf text");
 }
@@ -313,22 +304,15 @@ fn the_real_extractor_reads_embedded_pdf_text() {
     for name in ["real.pdf", "fake.pdf"] {
         collection
             .add_sources(
-                &[StoredSource {
-                    kind: SourceKind::File,
-                    path: docs.path_of(name),
-                }],
+                &[StoredSource { kind: SourceKind::File, path: docs.path_of(name) }],
                 &|_, _| Ok(()),
             )
             .unwrap();
     }
     collection.refresh(&docs.fs, &docs.log, &|_| {});
-    let text = collection
-        .document_text(&docs.fs, &docs.log, &docs.id_of("real.pdf"))
-        .unwrap();
+    let text = collection.document_text(&docs.fs, &docs.log, &docs.id_of("real.pdf")).unwrap();
     assert!(text.contains("Hello Documents"), "{text:?}");
-    let err = collection
-        .document_text(&docs.fs, &docs.log, &docs.id_of("fake.pdf"))
-        .unwrap_err();
+    let err = collection.document_text(&docs.fs, &docs.log, &docs.id_of("fake.pdf")).unwrap_err();
     assert_eq!(err.code(), "no_text");
     assert_eq!(docs.log.count(LogLevel::Warn), 1, "one WARN, for the file that is not a PDF");
     assert!(!docs.log.everything().contains("fake.pdf"));

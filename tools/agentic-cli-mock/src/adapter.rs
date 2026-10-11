@@ -52,10 +52,7 @@ impl HeadlessTokenAdapter {
     /// empty list would require nothing, so it is rejected at construction
     /// rather than silently accepting every invocation.
     pub const fn requiring(id: &'static str, tokens: &'static [&'static str]) -> Self {
-        assert!(
-            !tokens.is_empty(),
-            "an adapter requiring no token would validate nothing"
-        );
+        assert!(!tokens.is_empty(), "an adapter requiring no token would validate nothing");
         HeadlessTokenAdapter { id, tokens }
     }
 }
@@ -66,21 +63,17 @@ impl ToolAdapter for HeadlessTokenAdapter {
     }
 
     fn validate(&self, received: &[&OsStr]) -> Option<Mismatch> {
-        let present = self.tokens.iter().all(|token| {
-            received
-                .iter()
-                .any(|arg| arg.as_encoded_bytes() == token.as_bytes())
-        });
+        let present = self
+            .tokens
+            .iter()
+            .all(|token| received.iter().any(|arg| arg.as_encoded_bytes() == token.as_bytes()));
 
         if present {
             None
         } else {
             // ACM-FR-24: the record names the category and nothing else. Which
             // token was wanted is documented, not disclosed per-run.
-            Some(Mismatch::new(
-                Check::Adapter,
-                MismatchType::MissingHeadlessArgument,
-            ))
+            Some(Mismatch::new(Check::Adapter, MismatchType::MissingHeadlessArgument))
         }
     }
 }
@@ -141,10 +134,7 @@ mod tests {
     #[test]
     fn the_registry_ships_each_layer_and_each_whole_stack() {
         let ids: Vec<_> = REGISTRY.iter().map(|a| a.id()).collect();
-        assert_eq!(
-            ids,
-            vec!["claude", "codex", "docker", "docker+claude", "docker+codex"]
-        );
+        assert_eq!(ids, vec!["claude", "codex", "docker", "docker+claude", "docker+codex"]);
     }
 
     /// A composite adapter replaces the runtime *and* the vendor it launches,
@@ -173,17 +163,11 @@ mod tests {
         // would each have accepted it.
         let runtime_only = os(&["run", "--rm", "img@sha256:abc"]);
         assert!(stack.validate(&refs(&runtime_only)).is_some());
-        assert!(resolve(REGISTRY, "docker")
-            .unwrap()
-            .validate(&refs(&runtime_only))
-            .is_none());
+        assert!(resolve(REGISTRY, "docker").unwrap().validate(&refs(&runtime_only)).is_none());
 
         let vendor_only = os(&["-p", "--output-format", "json"]);
         assert!(stack.validate(&refs(&vendor_only)).is_some());
-        assert!(resolve(REGISTRY, "claude")
-            .unwrap()
-            .validate(&refs(&vendor_only))
-            .is_none());
+        assert!(resolve(REGISTRY, "claude").unwrap().validate(&refs(&vendor_only)).is_none());
 
         // And the codex stack wants its own vendor token, not Claude's.
         let codex_stack = resolve(REGISTRY, "docker+codex").unwrap();
@@ -198,14 +182,8 @@ mod tests {
         assert_eq!(resolve(REGISTRY, "claude").map(|a| a.id()), Some("claude"));
         assert_eq!(resolve(REGISTRY, "codex").map(|a| a.id()), Some("codex"));
         assert_eq!(resolve(REGISTRY, "docker").map(|a| a.id()), Some("docker"));
-        assert_eq!(
-            resolve(REGISTRY, "docker+claude").map(|a| a.id()),
-            Some("docker+claude")
-        );
-        assert_eq!(
-            resolve(REGISTRY, "docker+codex").map(|a| a.id()),
-            Some("docker+codex")
-        );
+        assert_eq!(resolve(REGISTRY, "docker+claude").map(|a| a.id()), Some("docker+claude"));
+        assert_eq!(resolve(REGISTRY, "docker+codex").map(|a| a.id()), Some("docker+codex"));
         assert!(resolve(REGISTRY, "opencode").is_none());
         assert!(resolve(REGISTRY, "Claude").is_none());
         assert!(resolve(REGISTRY, "").is_none());
@@ -216,11 +194,9 @@ mod tests {
     fn claude_accepts_dash_p_wherever_it_appears() {
         let claude = resolve(REGISTRY, "claude").unwrap();
 
-        for vector in [
-            os(&["-p", "prompt"]),
-            os(&["prompt", "-p"]),
-            os(&["--model", "opus", "-p", "prompt"]),
-        ] {
+        for vector in
+            [os(&["-p", "prompt"]), os(&["prompt", "-p"]), os(&["--model", "opus", "-p", "prompt"])]
+        {
             assert!(claude.validate(&refs(&vector)).is_none());
         }
     }
@@ -238,10 +214,7 @@ mod tests {
         ] {
             let mismatch = claude.validate(&refs(&vector)).expect("should fail");
             assert_eq!(mismatch.check, Check::Adapter);
-            assert_eq!(
-                mismatch.mismatch_type,
-                MismatchType::MissingHeadlessArgument
-            );
+            assert_eq!(mismatch.mismatch_type, MismatchType::MissingHeadlessArgument);
             // ACM-FR-25: an adapter failure reports no location and no lengths.
             assert_eq!(mismatch.index, None);
             assert_eq!(mismatch.name, None);
@@ -261,12 +234,7 @@ mod tests {
 
         // The obsolete mock-only flag is no longer accepted, so a call site
         // still emitting it fails the adapter rather than passing silently.
-        for vector in [
-            os(&["-exec", "run"]),
-            os(&["--exec", "run"]),
-            os(&["-p"]),
-            os(&["Exec"]),
-        ] {
+        for vector in [os(&["-exec", "run"]), os(&["--exec", "run"]), os(&["-p"]), os(&["Exec"])] {
             assert!(codex.validate(&refs(&vector)).is_some());
         }
     }
@@ -276,18 +244,13 @@ mod tests {
     fn docker_requires_the_literal_run_token() {
         let docker = resolve(REGISTRY, "docker").unwrap();
 
-        assert!(docker
-            .validate(&refs(&os(&["run", "--rm", "img", "exec"])))
-            .is_none());
+        assert!(docker.validate(&refs(&os(&["run", "--rm", "img", "exec"]))).is_none());
         assert!(docker.validate(&refs(&os(&["--rm", "run"]))).is_none());
 
         for vector in [os(&["create", "img"]), os(&["--run"]), os(&["Run"]), os(&[])] {
             let mismatch = docker.validate(&refs(&vector)).expect("should fail");
             assert_eq!(mismatch.check, Check::Adapter);
-            assert_eq!(
-                mismatch.mismatch_type,
-                MismatchType::MissingHeadlessArgument
-            );
+            assert_eq!(mismatch.mismatch_type, MismatchType::MissingHeadlessArgument);
         }
     }
 

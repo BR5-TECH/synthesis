@@ -13,10 +13,7 @@ const RUN: &str = "gunsupported1";
 
 fn tip_ids(fx: &Fixture, stream: &WorkStream) -> (git2::Oid, git2::Oid) {
     let repo = fx.repo();
-    (
-        tip_of(&repo, &stream.base_branch),
-        tip_of(&repo, &stream.branch),
-    )
+    (tip_of(&repo, &stream.base_branch), tip_of(&repo, &stream.branch))
 }
 
 /// The request is refused as an unsupported conflict, and nothing was written:
@@ -42,9 +39,7 @@ fn assert_unsupported_and_untouched(
 fn both_publications() -> [StreamMergePublication; 2] {
     [
         StreamMergePublication::Uncommitted,
-        StreamMergePublication::Commit {
-            message: "never lands".into(),
-        },
+        StreamMergePublication::Commit { message: "never lands".into() },
     ]
 }
 
@@ -142,12 +137,7 @@ fn a_conflict_over_a_submodule_is_refused_before_the_preflight() {
 }
 
 fn current_branch(fx: &Fixture) -> String {
-    fx.repo()
-        .head()
-        .unwrap()
-        .shorthand()
-        .expect("a branch name")
-        .to_string()
+    fx.repo().head().unwrap().shorthand().expect("a branch name").to_string()
 }
 
 // WKS-FR-UCMR: the stream adds a file where the base holds a directory. One tree

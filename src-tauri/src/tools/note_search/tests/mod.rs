@@ -41,22 +41,14 @@ struct NoteFixture {
 impl NoteFixture {
     fn new() -> Self {
         let fixture = crate::tools::tests::empty_project();
-        let root = fixture
-            .app
-            .state::<crate::bm25_index::Bm25Indexer>()
-            .root()
-            .expect("mounted");
+        let root = fixture.app.state::<crate::bm25_index::Bm25Indexer>().root().expect("mounted");
         let session = agent_session(&fixture.app, &root, "note-search");
         NoteFixture { fixture, session }
     }
 
     fn root(&self) -> crate::fs::RootFs {
-        let root = self
-            .fixture
-            .app
-            .state::<crate::bm25_index::Bm25Indexer>()
-            .root()
-            .expect("mounted");
+        let root =
+            self.fixture.app.state::<crate::bm25_index::Bm25Indexer>().root().expect("mounted");
         crate::fs::RootFs::for_root(&root)
     }
 
@@ -104,30 +96,21 @@ impl NoteFixture {
     }
 
     fn search(&self, query: &str, limit: Option<i64>) -> Vec<NoteMatch> {
-        block_on(self.tool().call(NoteSearchArgs {
-            query: query.into(),
-            limit,
-        }))
-        .expect("the call succeeds")
-        .notes
+        block_on(self.tool().call(NoteSearchArgs { query: query.into(), limit }))
+            .expect("the call succeeds")
+            .notes
     }
 
     fn refusal(&self, query: &str, limit: Option<i64>) -> rig::tool::ToolExecutionError {
         let tool = self.tool();
-        let error = block_on(tool.call(NoteSearchArgs {
-            query: query.into(),
-            limit,
-        }))
-        .expect_err("the call refuses");
+        let error = block_on(tool.call(NoteSearchArgs { query: query.into(), limit }))
+            .expect_err("the call refuses");
         tool.map_error(error)
     }
 }
 
 fn entity(entity_id: &str) -> NoteScope {
-    NoteScope::Entity {
-        entity_id: entity_id.to_string(),
-        entity_path: entity_id.to_string(),
-    }
+    NoteScope::Entity { entity_id: entity_id.to_string(), entity_path: entity_id.to_string() }
 }
 
 fn ids(matches: &[NoteMatch]) -> Vec<String> {
@@ -166,4 +149,3 @@ fn hit(note_id: &str, score: f32) -> crate::bm25_index::ChunkHit {
         text: "whatever the pass captured".to_string(),
     }
 }
-

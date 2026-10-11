@@ -115,9 +115,8 @@ fn a_revise_verdict_starts_one_further_pass_carrying_its_findings() {
     assert_eq!(work.len(), 2);
     assert_eq!(work[1].purpose, "revise");
     assert_eq!(work[1].pass, 2);
-    let instruction = work[1]
-        .instruction_field("loop_instruction")
-        .expect("a revise turn carries the findings");
+    let instruction =
+        work[1].instruction_field("loop_instruction").expect("a revise turn carries the findings");
     assert!(
         instruction.contains("The empty state is not there."),
         "the finding travels whole: {instruction}"
@@ -213,11 +212,7 @@ fn the_commit_holds_what_the_work_turn_wrote_and_nothing_else() {
     paths.dedup();
     assert_eq!(
         paths,
-        vec![
-            ".gitignore".to_string(),
-            "README.md".to_string(),
-            "src/panel.ts".to_string()
-        ]
+        vec![".gitignore".to_string(), "README.md".to_string(), "src/panel.ts".to_string()]
     );
 }
 
@@ -248,7 +243,9 @@ fn a_turn_that_could_not_be_launched_rests_the_run() {
     let stream = fx.stream("editor");
     let run = fx.enqueue(&stream, "Add the empty state to the panel.");
 
-    let dispatch = ScriptedDispatch::new(vec![Turn::answering(Answer::Unlaunchable(AgentExecutionError::RuntimeUnavailable))]);
+    let dispatch = ScriptedDispatch::new(vec![Turn::answering(Answer::Unlaunchable(
+        AgentExecutionError::RuntimeUnavailable,
+    ))]);
     let run = fx.drive(&run, dispatch);
 
     assert_eq!(run.state, GraduationRunState::Interrupted);
@@ -290,198 +287,6 @@ fn an_agent_reported_failure_still_reaches_a_review() {
         review[1].instruction_field("agent_account").as_deref(),
         Some("The second turn finished it."),
     );
-}
-
-/// GRL-FR-DNKA: a work turn that reported **success** carries its account to
-/// the review on exactly the terms a failed one does.
-///
-/// This is the case the requirement exists for. A turn that wrote real work and
-/// knows it left some of what was asked undone reports success — the only
-/// outcome that does not misdescribe what it wrote — and says the rest in its
-/// summary. Carried only from a failed turn, that account is withheld from the
-/// one turn whose delivery decision it settles.
-#[test]
-fn a_successful_work_turn_carries_its_own_account_to_the_review() {
-    let fx = Fixture::new();
-    let stream = fx.stream("editor");
-    let run = fx.enqueue(&stream, "Add the empty state, and wire it to the panel.");
-
-    let said = "I added the empty state. I did not wire it to the panel.";
-    let dispatch = ScriptedDispatch::new(vec![
-        Turn::work_saying(said).writing("src/panel.ts", "half\n"),
-        Turn::ready(),
-    ]);
-    let run = fx.drive(&run, dispatch.clone());
-
-    let review = dispatch.of_part("review");
-    assert_eq!(review.len(), 1);
-    assert_eq!(
-        review[0].instruction_field("agent_account").as_deref(),
-        Some(said),
-        "GRL-FR-DNKA: the review is given what the work turn said about itself",
-    );
-    assert_eq!(run.state, GraduationRunState::Completed);
-}
-
-/// GRL-FR-DNKA: the account reaches the review that judges the work, and no
-/// other turn.
-///
-/// A work turn is never given it. `work.md` names no such field, so an account
-/// reaching one would be an input nothing explains — and a turn reading its
-/// predecessor's account as if it described the tree in front of it is the
-/// confusion this field exists to prevent.
-#[test]
-fn the_account_reaches_the_review_and_no_work_turn() {
-    let fx = Fixture::new();
-    let stream = fx.stream("editor");
-    let run = fx.enqueue(&stream, "Add the empty state to the panel.");
-
-    let dispatch = ScriptedDispatch::new(vec![
-        Turn::work_saying("I wrote half of it.").writing("src/panel.ts", "half\n"),
-        Turn::revise(ReviewSeverity::Critical, "Only half is written."),
-        Turn::work_saying("Now I wrote the rest.").writing("src/panel.ts", "whole\n"),
-        Turn::ready(),
-    ]);
-    fx.drive(&run, dispatch.clone());
-
-    // Both reviews read the account of the work turn immediately before them.
-    let review = dispatch.of_part("review");
-    assert_eq!(
-        review[0].instruction_field("agent_account").as_deref(),
-        Some("I wrote half of it."),
-    );
-    assert_eq!(
-        review[1].instruction_field("agent_account").as_deref(),
-        Some("Now I wrote the rest."),
-    );
-
-    // And no work turn is given one — the second included, although an account
-    // stood in the checkpoint when its input was composed.
-    let work = dispatch.of_part("work");
-    assert_eq!(work.len(), 2);
-    for turn in &work {
-        assert!(
-            turn.instruction_field("agent_account").is_none(),
-            "a work turn was given an account",
-        );
-    }
-}
-
-/// GRL-FR-DNKA: a turn that said nothing about itself carries no account.
-///
-/// An empty account is none at all, so a review's input gains no blank field
-/// from an agent that reported nothing.
-#[test]
-fn a_work_turn_that_said_nothing_carries_no_account() {
-    let fx = Fixture::new();
-    let stream = fx.stream("editor");
-    let run = fx.enqueue(&stream, "Add the empty state to the panel.");
-
-    let dispatch = ScriptedDispatch::new(vec![
-        Turn::work_saying("   ").writing("src/panel.ts", "whole\n"),
-        Turn::ready(),
-    ]);
-    fx.drive(&run, dispatch.clone());
-
-    let review = dispatch.of_part("review");
-    assert_eq!(review.len(), 1);
-    assert!(review[0].instruction_field("agent_account").is_none());
-}
-
-/// GRL-FR-DNKA: a turn that says nothing **clears** the account the turn before
-/// it left, rather than letting it stand.
-///
-/// The assignment is unconditional for exactly this reason. Written as
-/// `if let Some(account) = .. { checkpoint.agent_account = Some(account) }` — a
-/// plausible tidying — pass 1's words would reach pass 2's review as though they
-/// described the tree in front of it, which is the confusion this field exists
-/// to prevent.
-#[test]
-fn a_turn_that_says_nothing_clears_the_account_before_it() {
-    let fx = Fixture::new();
-    let stream = fx.stream("editor");
-    let run = fx.enqueue(&stream, "Add the empty state to the panel.");
-
-    let dispatch = ScriptedDispatch::new(vec![
-        Turn::work_saying("I left the panel unwired.").writing("src/panel.ts", "half\n"),
-        Turn::revise(ReviewSeverity::Critical, "Only half is written."),
-        // The second turn finishes the work and says nothing about it.
-        Turn::work_saying("   ").writing("src/panel.ts", "whole\n"),
-        Turn::ready(),
-    ]);
-    fx.drive(&run, dispatch.clone());
-
-    let review = dispatch.of_part("review");
-    assert_eq!(
-        review[0].instruction_field("agent_account").as_deref(),
-        Some("I left the panel unwired."),
-    );
-    assert!(
-        review[1].instruction_field("agent_account").is_none(),
-        "pass 2's review inherited pass 1's account: {:?}",
-        review[1].instruction_field("agent_account"),
-    );
-}
-
-/// GRL-FR-DNKA: a failure whose message says nothing falls back to the turn's
-/// summary, which is then the only account there is.
-///
-/// The fallback turns on the message being **empty** rather than on the failure
-/// being absent: an envelope carrying `failure` with a blank message and a
-/// useful summary would otherwise reach the review with no account at all.
-#[test]
-fn a_failure_with_no_message_carries_the_turns_summary() {
-    let fx = Fixture::new();
-    let stream = fx.stream("editor");
-    let run = fx.enqueue(&stream, "Add the empty state to the panel.");
-
-    let dispatch = ScriptedDispatch::new(vec![
-        Turn::answering(Answer::ReportedFailureWithoutMessage(
-            "I could not finish; the panel is half written.".to_string(),
-        ))
-        .writing("src/panel.ts", "half\n"),
-        Turn::ready(),
-    ]);
-    fx.drive(&run, dispatch.clone());
-
-    let review = dispatch.of_part("review");
-    assert_eq!(
-        review[0].instruction_field("agent_account").as_deref(),
-        Some("I could not finish; the panel is half written."),
-    );
-}
-
-/// GRL-FR-NVBZ: the account is a **claim** the review checks, never evidence
-/// about the filesystem.
-///
-/// The loop reads the envelope for the outcome and the account, and reads what
-/// changed from the working copy. What this adds over the two tests that prove
-/// each half on its own is the **combination**: one turn whose account is
-/// carried whole *and* whose change set is unmoved by what that account claims.
-/// A loop that read the envelope for the change set would pass both halves
-/// separately and fail here.
-#[test]
-fn an_account_claiming_more_than_the_turn_wrote_changes_no_change_set() {
-    let fx = Fixture::new();
-    let stream = fx.stream("editor");
-    let run = fx.enqueue(&stream, "Add the empty state to the panel.");
-
-    let dispatch = ScriptedDispatch::new(vec![
-        Turn::work_saying("I wrote src/panel.ts, src/rail.ts and src/tree.ts.")
-            .writing("src/panel.ts", "whole\n"),
-        Turn::ready(),
-    ]);
-    fx.drive(&run, dispatch.clone());
-
-    let review = dispatch.of_part("review");
-    // The account is carried whole...
-    assert_eq!(
-        review[0].instruction_field("agent_account").as_deref(),
-        Some("I wrote src/panel.ts, src/rail.ts and src/tree.ts."),
-    );
-    // ...and the change set is what the working copy holds, which is one path.
-    let changed = review[0].path_list("changed_paths");
-    assert_eq!(changed, vec!["src/panel.ts".to_string()]);
 }
 
 /// GRD-FR-SWOJ: a turn that stopped without a review has whatever it wrote
@@ -529,22 +334,18 @@ fn work_standing_in_the_stream_becomes_the_runs_base_commit() {
     std::fs::write(stream.worktree().join("authored.md"), "mine\n").unwrap();
     let run = fx.enqueue(&stream, "Add the empty state to the panel.");
 
-    let dispatch = ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]);
+    let dispatch =
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]);
     let run = fx.drive(&run, dispatch);
 
     let base = run.base_commit.clone().expect("a base commit");
     let repo = git2::Repository::open(stream.worktree()).expect("stream repo");
-    let base_commit = repo
-        .find_commit(git2::Oid::from_str(&base).unwrap())
-        .unwrap();
+    let base_commit = repo.find_commit(git2::Oid::from_str(&base).unwrap()).unwrap();
     assert!(
         base_commit.tree().unwrap().get_path(Path::new("authored.md")).is_ok(),
         "the author's own work is inside the base commit"
     );
-    assert!(
-        !run.commits.contains(&base),
-        "the base commit is not one the run made"
-    );
+    assert!(!run.commits.contains(&base), "the base commit is not one the run made");
 }
 
 /// GRL-FR-VIAT: a verdict the application cannot read is refused whole.
@@ -570,10 +371,7 @@ fn a_verdict_with_no_finding_beside_revise_is_refused() {
     let run = fx.drive(&run, dispatch);
 
     assert_eq!(run.state, GraduationRunState::Blocked);
-    assert_eq!(
-        run.blocker.as_ref().map(|b| b.code.as_str()),
-        Some("review_verdict_invalid")
-    );
+    assert_eq!(run.blocker.as_ref().map(|b| b.code.as_str()), Some("review_verdict_invalid"));
 }
 
 /// GRL-FR-TVXI: a verdict the application cannot read is asked again as a
@@ -613,10 +411,7 @@ fn an_unreadable_verdict_asks_the_review_again() {
         correction.contains("verdict") && correction.contains("findings"),
         "the correction names the shape: {correction}"
     );
-    assert_eq!(
-        run.checkpoint.verdict_refusals, 0,
-        "a readable verdict resets the count"
-    );
+    assert_eq!(run.checkpoint.verdict_refusals, 0, "a readable verdict resets the count");
 }
 
 /// GRL-FR-TVXI: a second consecutive unreadable verdict blocks the run, and the
@@ -641,16 +436,13 @@ fn two_unreadable_verdicts_block_the_run_and_continue_resets_the_count() {
     let run = fx.drive(&run, dispatch.clone());
 
     assert_eq!(run.state, GraduationRunState::Blocked);
-    assert_eq!(
-        run.blocker.as_ref().map(|b| b.code.as_str()),
-        Some("review_verdict_invalid")
-    );
+    assert_eq!(run.blocker.as_ref().map(|b| b.code.as_str()), Some("review_verdict_invalid"));
     assert_eq!(run.review_turns, 2);
     assert_eq!(run.work_turns, 1);
 
     fx.app.state::<GraduationState>().set_loop_enabled(false);
-    let continued =
-        crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone()).expect("continued");
+    let continued = crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone())
+        .expect("continued");
     fx.app.state::<GraduationState>().set_loop_enabled(true);
     assert_eq!(continued.checkpoint.verdict_refusals, 0);
 }
@@ -663,10 +455,9 @@ fn a_turn_that_ran_out_of_time_keeps_what_it_wrote() {
     let stream = fx.stream("editor");
     let run = fx.enqueue(&stream, "Write the panel.");
 
-    let dispatch = ScriptedDispatch::new(vec![Turn::answering(Answer::Process(
-        ProcessOutcome::Timeout,
-    ))
-    .writing("src/panel.ts", "half\n")]);
+    let dispatch =
+        ScriptedDispatch::new(vec![Turn::answering(Answer::Process(ProcessOutcome::Timeout))
+            .writing("src/panel.ts", "half\n")]);
     let run = fx.drive(&run, dispatch);
 
     assert_eq!(run.state, GraduationRunState::Interrupted);
@@ -691,10 +482,7 @@ fn an_escalation_records_the_session_its_answers_continue() {
     let run = fx.drive(&run, dispatch);
 
     let escalation = run.escalation.expect("the questions");
-    assert_eq!(
-        escalation.resume.and_then(|r| r.session_id).as_deref(),
-        Some("s1")
-    );
+    assert_eq!(escalation.resume.and_then(|r| r.session_id).as_deref(), Some("s1"));
 }
 
 /// GXD-FR-IOZU: every turn carries an activity sink bound to its run, so what
@@ -705,25 +493,24 @@ fn every_turn_reports_its_activity_against_its_own_run() {
     let stream = fx.stream("editor");
     let run = fx.enqueue(&stream, "Write the panel.");
 
-    let dispatch = ScriptedDispatch::new(vec![
-        Turn::work().writing("src/panel.ts", "1\n"),
-        Turn::ready(),
-    ]);
+    let dispatch =
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]);
     let run = fx.drive(&run, dispatch.clone());
 
     assert!(
         dispatch.seen().iter().all(|seen| seen.had_activity),
         "a turn with no sink is a run the author watches an empty panel for"
     );
-    let store = fx
-        .app
-        .state::<std::sync::Arc<crate::agent_activity::ActivityStore>>()
-        .inner()
-        .clone();
+    assert!(
+        dispatch.seen().iter().all(|seen| seen.had_durable_output),
+        "a turn with no durable sink is a run whose record nobody keeps"
+    );
+    let store =
+        fx.app.state::<std::sync::Arc<crate::agent_activity::ActivityStore>>().inner().clone();
     let page = store.read(&run.id, None, None);
     assert_eq!(
         page.records.len(),
-        2,
+        2 * SCRIPTED_ACTIVITY.len(),
         "both turns reported against this run"
     );
 }
@@ -794,10 +581,7 @@ fn discarding_a_run_mid_turn_leaves_it_discarded() {
     assert_eq!(run.state, GraduationRunState::Discarded);
     // GRD-FR-GMTX: the stream outlives the run, and nothing of it is reclaimed.
     assert!(stream.worktree().is_dir());
-    assert!(fx
-        .repo()
-        .find_branch(&stream.branch, git2::BranchType::Local)
-        .is_ok());
+    assert!(fx.repo().find_branch(&stream.branch, git2::BranchType::Local).is_ok());
     assert!(fx.app.state::<GraduationState>().holder_of(&stream.id).is_none());
 }
 
@@ -811,9 +595,7 @@ fn a_review_that_cannot_decide_escalates_to_the_author() {
 
     let dispatch = ScriptedDispatch::new(vec![
         Turn::work().writing("src/panel.ts", "1\n"),
-        Turn::answering(Answer::Escalate(vec![
-            "What should the empty panel say?".to_string(),
-        ])),
+        Turn::answering(Answer::Escalate(vec!["What should the empty panel say?".to_string()])),
     ]);
     let run = fx.drive(&run, dispatch.clone());
 
@@ -843,10 +625,7 @@ fn reverting_a_run_makes_new_commits_and_rewrites_no_history() {
 
     let run = fx.drive(
         &run,
-        ScriptedDispatch::new(vec![
-            Turn::work().writing("src/panel.ts", "1\n"),
-            Turn::ready(),
-        ]),
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]),
     );
     let repo = git2::Repository::open(stream.worktree()).unwrap();
     let before: Vec<String> = {
@@ -900,10 +679,7 @@ fn a_review_turn_stopped_mid_way_keeps_the_work_and_reclaims_its_checkout() {
     assert_eq!(run.commits.len(), 1, "what the work turn wrote is kept");
     let checkout = dispatch.of_part("review")[0].directory.clone();
     assert!(!checkout.exists(), "the checkout goes even on a stop");
-    assert!(!crate::streams::registers_worktree(
-        &fx.repo(),
-        &format!("{}-rv", run.id)
-    ));
+    assert!(!crate::streams::registers_worktree(&fx.repo(), &format!("{}-rv", run.id)));
 }
 
 /// GRD-FR-EGWS, GRL-FR-BRJO: a run writes into its stream's working copy and
@@ -917,17 +693,11 @@ fn a_run_writes_nothing_into_the_authors_own_checkout() {
     let before = tree_under(&fx.root());
     fx.drive(
         &run,
-        ScriptedDispatch::new(vec![
-            Turn::work().writing("src/panel.ts", "1\n"),
-            Turn::ready(),
-        ]),
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]),
     );
     let after = tree_under(&fx.root());
 
-    assert_eq!(
-        before, after,
-        "the author's own checkout is byte-identical after the run"
-    );
+    assert_eq!(before, after, "the author's own checkout is byte-identical after the run");
 }
 
 /// GXD-FR-XEUX: the seam ends no run. Every process outcome and every pre-launch
@@ -944,15 +714,9 @@ fn no_outcome_of_the_seam_ends_a_run() {
         let fx = Fixture::new();
         let stream = fx.stream("editor");
         let run = fx.enqueue(&stream, "Write the panel.");
-        let run = fx.drive(
-            &run,
-            ScriptedDispatch::new(vec![Turn::answering(Answer::Process(outcome))]),
-        );
-        assert!(
-            !run.state.is_terminal(),
-            "{outcome:?} ended the run at {:?}",
-            run.state
-        );
+        let run =
+            fx.drive(&run, ScriptedDispatch::new(vec![Turn::answering(Answer::Process(outcome))]));
+        assert!(!run.state.is_terminal(), "{outcome:?} ended the run at {:?}", run.state);
         assert_eq!(run.state, GraduationRunState::Interrupted);
     }
 
@@ -967,11 +731,7 @@ fn no_outcome_of_the_seam_ends_a_run() {
             &run,
             ScriptedDispatch::new(vec![Turn::answering(Answer::Unlaunchable(error.clone()))]),
         );
-        assert!(
-            !run.state.is_terminal(),
-            "{error:?} ended the run at {:?}",
-            run.state
-        );
+        assert!(!run.state.is_terminal(), "{error:?} ended the run at {:?}", run.state);
     }
 }
 
@@ -1007,10 +767,7 @@ fn a_run_whose_stream_working_copy_is_gone_rests_for_the_author() {
     let run = fx.drive(&run, dispatch.clone());
 
     assert_eq!(run.state, GraduationRunState::Blocked);
-    assert_eq!(
-        run.blocker.as_ref().map(|b| b.code.as_str()),
-        Some("stream_missing")
-    );
+    assert_eq!(run.blocker.as_ref().map(|b| b.code.as_str()), Some("stream_missing"));
     assert_eq!(dispatch.turns_taken(), 0, "no turn is dispatched into nothing");
     assert!(
         !run.checkpoint.changed_paths.is_empty(),

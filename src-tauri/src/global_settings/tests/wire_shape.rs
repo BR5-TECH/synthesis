@@ -150,12 +150,7 @@ fn production_cap_keeps_exactly_cap_unpinned_evicting_oldest() {
     let n = RECENT_UNPINNED_CAP + 5;
     let entries: Vec<RecentProjectEntry> = (0..n)
         .map(|i| {
-            entry(
-                &format!("u{i:03}"),
-                &format!("2026-01-01T00:{:02}:00Z", i % 60),
-                false,
-                false,
-            )
+            entry(&format!("u{i:03}"), &format!("2026-01-01T00:{:02}:00Z", i % 60), false, false)
         })
         .collect();
 
@@ -167,17 +162,17 @@ fn production_cap_keeps_exactly_cap_unpinned_evicting_oldest() {
     );
     let names: Vec<&str> = out.iter().map(|e| e.name.as_str()).collect();
     assert!(!names.contains(&"u000"), "oldest must be evicted");
-    assert!(
-        names.contains(&format!("u{:03}", n - 1).as_str()),
-        "newest must be retained"
-    );
+    assert!(names.contains(&format!("u{:03}", n - 1).as_str()), "newest must be retained");
 }
 
 // ---- derive_id_from_source -----------------------------------------
 
 #[test]
 fn derive_id_strips_path_and_git_suffix() {
-    assert_eq!(derive_id_from_source("git@github.com:org/markdown-toolbar.git"), "markdown-toolbar");
+    assert_eq!(
+        derive_id_from_source("git@github.com:org/markdown-toolbar.git"),
+        "markdown-toolbar"
+    );
     assert_eq!(derive_id_from_source("https://example.com/plugins/git-pr"), "git-pr");
     assert_eq!(derive_id_from_source("/local/path/mcp-bridge/"), "mcp-bridge");
     assert_eq!(derive_id_from_source("plain"), "plain");

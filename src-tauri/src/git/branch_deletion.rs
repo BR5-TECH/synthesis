@@ -164,9 +164,7 @@ fn resolve<R: tauri::Runtime>(
     // WTC-FR-BHFE: the enumeration as it stands now, with the stream facts.
     let mut worktrees = crate::worktree::context_for(root)?.worktrees;
     crate::streams::decorate_worktrees(app, &mut worktrees);
-    let holder = worktrees
-        .into_iter()
-        .find(|w| w.branch.as_deref() == Some(name));
+    let holder = worktrees.into_iter().find(|w| w.branch.as_deref() == Some(name));
     // The primary worktree is checked before the active one: the primary is
     // usually the active one too, and it is the stronger statement.
     if let Some(held) = &holder {
@@ -192,9 +190,8 @@ fn resolve<R: tauri::Runtime>(
         (None, Some(owner)) => Some(owner.worktree()),
         _ => None,
     };
-    let uncommitted = tree
-        .map(|path| crate::streams::uncommitted_paths_of(&path))
-        .unwrap_or_default();
+    let uncommitted =
+        tree.map(|path| crate::streams::uncommitted_paths_of(&path)).unwrap_or_default();
     Ok(Resolved {
         branch: name.to_string(),
         worktree: holder,
@@ -283,18 +280,15 @@ pub fn inspect_branch_deletion_reported<R: tauri::Runtime>(
 ///
 /// GTC-FR-NPCT: emits `"branches changed"` once when the branch was removed,
 /// including when the remote leg failed, and nothing on a refusal.
-#[allow(clippy::too_many_arguments)]
 pub fn delete_branch_at<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     buffer: &'static LogBuffer,
-    root: &Path,
-    project_key: &str,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
+    access: GithubAccess<'_>,
     name: &str,
     delete_remote: bool,
     discard_uncommitted: bool,
 ) -> Result<BranchDeletionOutcome, String> {
+    let GithubAccess { root, store, tokens, project_key } = access;
     let started = Instant::now();
     logging::log_info(
         app,
@@ -330,18 +324,15 @@ pub fn delete_branch_at<R: tauri::Runtime>(
                 "uncommittedCount" => resolved.uncommitted.len(),
             },
         );
-        return Err(format!(
-            "{ERR_WORKTREE_DIRTY}: {}",
-            resolved.uncommitted.join(", ")
-        ));
+        return Err(format!("{ERR_WORKTREE_DIRTY}: {}", resolved.uncommitted.join(", ")));
     }
 
     // GTC-FR-FSRQ: before any change. Only a remote that authenticates with the
     // project's token needs one (GTC-FR-09), and only when there is a remote
     // branch to delete.
     let token = match (&resolved.remote, delete_remote) {
-        (Some(target), true) if is_github_https_remote(&target.url) => Some(
-            crate::github_tokens::resolve_github_token_secret(store, tokens, project_key)
+        (Some(target), true) => {
+            crate::github_tokens::resolve_remote_token(store, tokens, project_key, &target.url)
                 .inspect_err(|error| {
                     log_failure(
                         app,
@@ -351,8 +342,8 @@ pub fn delete_branch_at<R: tauri::Runtime>(
                         error,
                         log_fields! { "branch" => resolved.branch.as_str() },
                     )
-                })?,
-        ),
+                })?
+        }
         _ => None,
     };
 
@@ -409,9 +400,7 @@ fn carry_out<R: tauri::Runtime>(
     let mut local = main
         .find_branch(&resolved.branch, BranchType::Local)
         .map_err(|_| ERR_UNKNOWN_BRANCH.to_string())?;
-    local
-        .delete()
-        .map_err(|e| format!("failed to delete the branch: {e}"))?;
+    local.delete().map_err(|e| format!("failed to delete the branch: {e}"))?;
 
     let remote = match (&resolved.remote, delete_remote) {
         (Some(target), true) => {
@@ -430,11 +419,7 @@ fn carry_out<R: tauri::Runtime>(
             error: None,
         },
     };
-    Ok(BranchDeletionOutcome {
-        branch: resolved.branch.clone(),
-        removed_worktree_path,
-        remote,
-    })
+    Ok(BranchDeletionOutcome { branch: resolved.branch.clone(), removed_worktree_path, remote })
 }
 
 // ---------------------------------------------------------------------------
@@ -474,10 +459,7 @@ pub async fn delete_branch(
         delete_branch_at(
             &app,
             &logging::BUFFER,
-            &root,
-            &project_key,
-            &store,
-            &tokens,
+            GithubAccess { root: &root, store: &store, tokens: &tokens, project_key: &project_key },
             &name,
             delete_remote,
             discard_uncommitted,

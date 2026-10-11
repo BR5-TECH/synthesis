@@ -21,10 +21,7 @@ fn aap_ts21_no_descriptor_or_record_carries_a_modality() {
     let list = list_integrations_impl(&h.store, &h.ai).unwrap();
     let as_text = serde_json::to_string(&list).unwrap().to_lowercase();
     for absent in ["modality", "voice", "embedding"] {
-        assert!(
-            !as_text.contains(absent),
-            "no record may carry a {absent} field"
-        );
+        assert!(!as_text.contains(absent), "no record may carry a {absent} field");
     }
     // AAP-FR-21 is about the **kind of endpoint** this module can describe,
     // and AAP-FR-35 puts one image-related field on a model: whether the
@@ -34,10 +31,7 @@ fn aap_ts21_no_descriptor_or_record_carries_a_modality() {
     // substring, which would now forbid the capability the later
     // requirement adds.
     for absent in ["image_endpoint", "imagegeneration", "\"image\":"] {
-        assert!(
-            !as_text.contains(absent),
-            "no record may describe an image endpoint ({absent})"
-        );
+        assert!(!as_text.contains(absent), "no record may describe an image endpoint ({absent})");
     }
     assert!(
         as_text.contains("acceptsimageinput"),
@@ -50,9 +44,8 @@ fn aap_ts21_no_descriptor_or_record_carries_a_modality() {
 /// A model whose probe declares its own input modalities.
 fn with_modalities(id: &str, modalities: Option<&[&str]>) -> ModelOption {
     let declared = modalities.map(|m| m.iter().map(|s| s.to_string()).collect::<Vec<_>>());
-    ModelOption::new(id, id).with_declared_image_input(
-        crate::ai_shared::image_input_declared(declared.as_deref()),
-    )
+    ModelOption::new(id, id)
+        .with_declared_image_input(crate::ai_shared::image_input_declared(declared.as_deref()))
 }
 
 #[test]
@@ -100,6 +93,39 @@ fn aap_ts36_the_shipped_catalog_settles_what_the_probe_left_unsaid() {
     assert!(!by("some/unknown-model"), "neither declared anything about this one");
 }
 
+// AAP-FR-35: the Anthropic probe declares no input modalities, so the shipped
+// catalog settles them. It names the current generation and also the earlier
+// one, which a probe still lists and a stored selection can still name.
+#[test]
+fn the_anthropic_catalog_settles_image_input_for_both_generations() {
+    let ids = [
+        "claude-opus-5-5",
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5",
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-haiku-4-5",
+    ];
+    let prober = FakeProber::returning(&[]);
+    prober.set_rich_models(ids.iter().map(|id| with_modalities(id, None)).collect());
+    let h = harness(prober, FakeKeychain::new());
+    verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "anthropic",
+        "https://api.anthropic.com/v1",
+        Some("sk-ant-1234"),
+    )
+    .unwrap();
+
+    let listed = list_integrations_impl(&h.store, &h.ai).unwrap();
+    let models = &find(&listed, "anthropic").models;
+    for id in ids {
+        let model = models.iter().find(|m| m.id == id).unwrap();
+        assert!(model.accepts_image_input, "{id}");
+    }
+}
+
 #[test]
 fn aap_ts36_resolve_returns_the_flag_of_the_model_it_resolved() {
     // AAP-FR-35: the caller about to build a request learns the capability of
@@ -114,8 +140,7 @@ fn aap_ts36_resolve_returns_the_flag_of_the_model_it_resolved() {
     verify_openrouter(&h);
 
     for (model, expected) in [("sees/pictures", true), ("text/only", false)] {
-        let call =
-            resolve_ai_api_endpoint(&h.store, &h.ai, "openrouter", model, None).unwrap();
+        let call = resolve_ai_api_endpoint(&h.store, &h.ai, "openrouter", model, None).unwrap();
         assert_eq!(call.accepts_image_input, expected, "{model}");
         assert_eq!(call.model_id.as_deref(), Some(model));
         assert_eq!(call.base_url, "https://openrouter.ai/api/v1");
@@ -193,4 +218,3 @@ fn aap_ts24_a_bundled_catalog_carries_no_reasoning_at_all() {
         );
     }
 }
-

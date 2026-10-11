@@ -147,6 +147,12 @@ pub struct TurnRegistry {
     /// when a project closes or a worktree changes (LGC-FR-15) and the tests of
     /// those paths run alongside these.
     pub(super) buffer: &'static LogBuffer,
+    /// The threads of the turns this registry ran. Test-only: a test joins them
+    /// to know that every turn has fully ended, including the release of its
+    /// progress operation, without a wait on time. The application keeps no
+    /// handle, and each turn thread stays detached.
+    #[cfg(test)]
+    turn_threads: Mutex<Vec<std::thread::JoinHandle<()>>>,
 }
 
 /// CVL-FR-PDXK: what one turn is bounded by, read before that turn runs.
@@ -176,6 +182,8 @@ impl TurnRegistry {
             jitter: Box::new(SystemJitter),
             retry: RetryPolicy::default(),
             buffer: &logging::BUFFER,
+            #[cfg(test)]
+            turn_threads: Mutex::new(Vec::new()),
         }
     }
 
@@ -219,10 +227,7 @@ impl TurnRegistry {
         app: &tauri::AppHandle<R>,
         provider_timeout_ms: Option<u64>,
     ) -> TurnBounds {
-        let mut bounds = TurnBounds {
-            timeout: self.timeout,
-            retry: self.retry,
-        };
+        let mut bounds = TurnBounds { timeout: self.timeout, retry: self.retry };
         use tauri::Manager;
         let root = app
             .try_state::<crate::project::ProjectState>()
@@ -281,6 +286,7 @@ impl TurnRegistry {
             trigger_comment_id: trigger_comment_id.to_string(),
             state: AgentTurnState::Running,
             failure: None,
+            tls_failure: None,
             // AGC-FR-31: set only where the turn terminates on a recoverable
             // failure and becomes its conversation's registry entry.
             retry_permitted: false,
@@ -443,10 +449,7 @@ impl TurnRegistry {
             // nothing is owed on.
             inner.awaiting.insert(
                 turn.id.clone(),
-                Awaiting {
-                    turn: turn.clone(),
-                    project_key: live.project_key,
-                },
+                Awaiting { turn: turn.clone(), project_key: live.project_key },
             );
         } else {
             inner.remember_terminated(turn.clone());
@@ -562,7 +565,11 @@ impl TurnRegistry {
     /// An agent that is gone is owed nothing. Silent for the same reason
     /// [`retire_awaiting`](Self::retire_awaiting) is: the turn's terminal event
     /// has already been emitted.
-    pub(super) fn discard_awaiting_for_agent(&self, agent_id: &str, project_key: Option<&str>) -> usize {
+    pub(super) fn discard_awaiting_for_agent(
+        &self,
+        agent_id: &str,
+        project_key: Option<&str>,
+    ) -> usize {
         let mut inner = self.lock();
         let before = inner.awaiting.len();
         inner.awaiting.retain(|_, a| {
@@ -608,7 +615,7 @@ impl TurnRegistry {
         // Ids are `turn-<n>` from a monotonic counter, so the numeric suffix is
         // the registration order. `started_at` has one-second resolution and
         // would tie for turns dispatched together by one post.
-        turns.sort_by(|a, b| ordinal(&b.id).cmp(&ordinal(&a.id)));
+        turns.sort_by_key(|turn| std::cmp::Reverse(ordinal(&turn.id)));
         turns
     }
 
@@ -629,18 +636,16 @@ impl TurnRegistry {
     /// `retry_permitted` — so the terminal event of AGC-FR-21 publishes the same
     /// thing `list_recoverable_agent_turn_failures` would return, and a consumer
     /// watching events and one reading the query can never disagree.
-    pub(super) fn remember_recoverable(&self, mut turn: AgentTurn, project_key: String) -> AgentTurn {
+    pub(super) fn remember_recoverable(
+        &self,
+        mut turn: AgentTurn,
+        project_key: String,
+    ) -> AgentTurn {
         turn.retry_permitted = true;
         let mut inner = self.lock();
         let key = turn.origin.discussion_id().to_string();
         // The displaced entry keeps its terminal state; only the offer moves.
-        inner.recoverable.insert(
-            key,
-            Recoverable {
-                turn: turn.clone(),
-                project_key,
-            },
-        );
+        inner.recoverable.insert(key, Recoverable { turn: turn.clone(), project_key });
         turn
     }
 
@@ -649,7 +654,10 @@ impl TurnRegistry {
     /// An `origin` narrows to that conversation; `None` returns every entry
     /// anywhere. A turn returned here is not outstanding, so `list_agent_turns`
     /// returns it under neither form.
-    pub(super) fn recoverable_failures(&self, origin: Option<&ConversationOrigin>) -> Vec<AgentTurn> {
+    pub(super) fn recoverable_failures(
+        &self,
+        origin: Option<&ConversationOrigin>,
+    ) -> Vec<AgentTurn> {
         let inner = self.lock();
         let mut turns: Vec<AgentTurn> = inner
             .recoverable
@@ -660,7 +668,7 @@ impl TurnRegistry {
             .collect();
         // Registration order, as `in_flight` sorts: `ended_at` has one-second
         // resolution and would tie for two turns that failed together.
-        turns.sort_by(|a, b| ordinal(&b.id).cmp(&ordinal(&a.id)));
+        turns.sort_by_key(|turn| std::cmp::Reverse(ordinal(&turn.id)));
         turns
     }
 
@@ -672,6 +680,17 @@ impl TurnRegistry {
     pub(super) fn note_images_omitted(&self, turn_id: &str, omitted: bool) {
         if let Some(live) = self.lock().live.get_mut(turn_id) {
             live.turn.images_omitted = omitted;
+        }
+    }
+
+    /// AGC-FR-RWPT: record the host and the cause of a refused certificate on
+    /// the live turn, before it terminates.
+    pub(super) fn note_tls_failure(&self, turn_id: &str, tls: &crate::tls::TlsFailure) {
+        if let Some(live) = self.lock().live.get_mut(turn_id) {
+            live.turn.tls_failure = Some(AgentTlsFailure {
+                host: tls.host.clone(),
+                cause: tls.cause.as_str().to_string(),
+            });
         }
     }
 
@@ -687,10 +706,7 @@ impl TurnRegistry {
         if turn.images_omitted {
             inner.image_notices.insert(
                 key,
-                Recoverable {
-                    turn: turn.clone(),
-                    project_key: project_key.to_string(),
-                },
+                Recoverable { turn: turn.clone(), project_key: project_key.to_string() },
             );
         } else {
             inner.image_notices.remove(&key);
@@ -711,7 +727,7 @@ impl TurnRegistry {
             .filter(|turn| origin.is_none_or(|o| &turn.origin == o))
             .cloned()
             .collect();
-        turns.sort_by(|a, b| ordinal(&b.id).cmp(&ordinal(&a.id)));
+        turns.sort_by_key(|turn| std::cmp::Reverse(ordinal(&turn.id)));
         turns
     }
 
@@ -728,10 +744,7 @@ impl TurnRegistry {
             .iter()
             .find(|(_, entry)| entry.turn.id == turn_id)
             .map(|(key, _)| key.clone())?;
-        inner
-            .recoverable
-            .remove(&key)
-            .map(|entry| (entry.turn, entry.project_key))
+        inner.recoverable.remove(&key).map(|entry| (entry.turn, entry.project_key))
     }
 
     /// AGC-FR-31: retire the entry a conversation holds, because a later
@@ -748,7 +761,11 @@ impl TurnRegistry {
 
     /// AGC-FR-31: discard the entries belonging to an agent that is gone, on the
     /// terms its awaiting registrations are discarded (AGR-FR-11, AGR-FR-15).
-    pub(super) fn discard_recoverable_for_agent(&self, agent_id: &str, project_key: Option<&str>) -> usize {
+    pub(super) fn discard_recoverable_for_agent(
+        &self,
+        agent_id: &str,
+        project_key: Option<&str>,
+    ) -> usize {
         let mut inner = self.lock();
         let before = inner.recoverable.len();
         inner.recoverable.retain(|_, entry| {
@@ -763,9 +780,7 @@ impl TurnRegistry {
     pub(super) fn discard_recoverable_for_note(&self, note_id: &str) -> usize {
         let mut inner = self.lock();
         let before = inner.recoverable.len();
-        inner
-            .recoverable
-            .retain(|_, entry| origin_note_id(&entry.turn.origin) != Some(note_id));
+        inner.recoverable.retain(|_, entry| origin_note_id(&entry.turn.origin) != Some(note_id));
         before - inner.recoverable.len()
     }
 
@@ -787,9 +802,7 @@ impl TurnRegistry {
     pub(super) fn discard_awaiting_for_note(&self, note_id: &str) -> usize {
         let mut inner = self.lock();
         let before = inner.awaiting.len();
-        inner
-            .awaiting
-            .retain(|_, a| origin_note_id(&a.turn.origin) != Some(note_id));
+        inner.awaiting.retain(|_, a| origin_note_id(&a.turn.origin) != Some(note_id));
         before - inner.awaiting.len()
     }
 
@@ -813,6 +826,34 @@ impl TurnRegistry {
 
     pub(super) fn all_turn_ids(&self) -> Vec<String> {
         self.lock().live.keys().cloned().collect()
+    }
+
+    /// Keep the thread of a dispatched turn so that a test can join it. The
+    /// application keeps nothing, so the thread stays detached.
+    #[cfg(not(test))]
+    pub(super) fn keep_turn_thread(&self, _thread: std::thread::JoinHandle<()>) {}
+
+    /// Keep the thread of a dispatched turn so that a test can join it.
+    #[cfg(test)]
+    pub(super) fn keep_turn_thread(&self, thread: std::thread::JoinHandle<()>) {
+        self.turn_threads.lock().unwrap_or_else(|e| e.into_inner()).push(thread);
+    }
+
+    /// Block until every turn thread this registry ran has returned. After this,
+    /// each turn has done all of its work, including the release of its progress
+    /// operation. A thread that panicked is joined like any other.
+    #[cfg(test)]
+    pub(super) fn join_turn_threads(&self) {
+        loop {
+            let threads =
+                std::mem::take(&mut *self.turn_threads.lock().unwrap_or_else(|e| e.into_inner()));
+            if threads.is_empty() {
+                return;
+            }
+            for thread in threads {
+                let _ = thread.join();
+            }
+        }
     }
 
     /// How many of the AGC-FR-25 slots are free right now.
@@ -841,9 +882,7 @@ impl TurnRegistry {
             available = cvar.wait(available).unwrap_or_else(|e| e.into_inner());
         }
         *available -= 1;
-        PermitGuard {
-            permits: self.permits.clone(),
-        }
+        PermitGuard { permits: self.permits.clone() }
     }
 }
 
@@ -865,11 +904,7 @@ impl Inner {
 }
 
 fn ordinal(turn_id: &str) -> u64 {
-    turn_id
-        .rsplit('-')
-        .next()
-        .and_then(|n| n.parse().ok())
-        .unwrap_or(0)
+    turn_id.rsplit('-').next().and_then(|n| n.parse().ok()).unwrap_or(0)
 }
 
 pub(super) struct PermitGuard {

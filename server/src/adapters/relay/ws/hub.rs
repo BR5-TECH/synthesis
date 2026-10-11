@@ -105,20 +105,14 @@ impl Hub {
     pub fn put_worker(&self, instance_id: &str, connection_id: &str, sink: Sink) -> Option<Sink> {
         let replaced = self.lock().workers.insert(
             instance_id.to_string(),
-            WorkerSink {
-                connection_id: connection_id.to_string(),
-                sink,
-            },
+            WorkerSink { connection_id: connection_id.to_string(), sink },
         );
         replaced.map(|previous| previous.sink)
     }
 
     /// The sink of the worker that holds the route now.
     pub fn worker(&self, instance_id: &str) -> Option<Sink> {
-        self.lock()
-            .workers
-            .get(instance_id)
-            .map(|worker| worker.sink.clone())
+        self.lock().workers.get(instance_id).map(|worker| worker.sink.clone())
     }
 
     /// Drops the sink of a worker connection, when that connection still holds
@@ -136,13 +130,7 @@ impl Hub {
 
     /// Records the sink of a client socket.
     pub fn put_client(&self, socket_id: u64, handle: &str, sink: Sink) {
-        self.lock().clients.insert(
-            socket_id,
-            ClientSink {
-                handle: handle.to_string(),
-                sink,
-            },
-        );
+        self.lock().clients.insert(socket_id, ClientSink { handle: handle.to_string(), sink });
     }
 
     /// Drops the sink of a client socket.
@@ -190,11 +178,7 @@ impl Hub {
         }
         state.registrations.insert(
             socket_id,
-            RegistrationSink {
-                registration_id: registration_id.to_string(),
-                handle: None,
-                sink,
-            },
+            RegistrationSink { registration_id: registration_id.to_string(), handle: None, sink },
         );
         true
     }
@@ -315,11 +299,7 @@ mod tests {
 
         assert_eq!(hub.clients_of("h-1").len(), 2);
         assert_eq!(hub.clients_of_all(&["h-1".to_string()]).len(), 2);
-        assert_eq!(
-            hub.clients_of_all(&["h-1".to_string(), "h-2".to_string()])
-                .len(),
-            3
-        );
+        assert_eq!(hub.clients_of_all(&["h-1".to_string(), "h-2".to_string()]).len(), 3);
 
         hub.drop_client(1);
         assert_eq!(hub.clients_of("h-1").len(), 1);

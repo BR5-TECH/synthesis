@@ -21,24 +21,15 @@ fn aap_ts25_a_reasoning_choice_persists_and_null_returns_the_model_default() {
         &h.store,
         &h.ai,
         "openrouter",
-        Some(ReasoningChoice::Effort {
-            effort: "medium".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "medium".into() }),
     )
     .unwrap();
-    assert_eq!(
-        rec.selected_reasoning,
-        Some(ReasoningChoice::Effort {
-            effort: "medium".into()
-        })
-    );
+    assert_eq!(rec.selected_reasoning, Some(ReasoningChoice::Effort { effort: "medium".into() }));
     // It survives a relaunch — the registry is the only thing holding it.
     let list = list_integrations_impl(&h.store, &h.ai).unwrap();
     assert_eq!(
         find(&list, "openrouter").selected_reasoning,
-        Some(ReasoningChoice::Effort {
-            effort: "medium".into()
-        })
+        Some(ReasoningChoice::Effort { effort: "medium".into() })
     );
 
     let cleared = set_reasoning_impl(&h.store, &h.ai, "openrouter", None).unwrap();
@@ -68,24 +59,21 @@ fn aap_ts26_every_incompatible_choice_is_refused_with_its_own_reason() {
     // A model that declares no reasoning at all.
     set_model_impl(&h.store, &h.ai, "openrouter", Some("plain/model")).unwrap();
     assert_eq!(
-        set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(ReasoningChoice::On))
-            .unwrap_err(),
+        set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(ReasoningChoice::On)).unwrap_err(),
         ERR_REASONING_UNSUPPORTED
     );
 
     // A level outside the selected model's ladder.
     set_model_impl(&h.store, &h.ai, "openrouter", Some("ladder/model")).unwrap();
     assert_eq!(
-        set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(effort("medium")))
-            .unwrap_err(),
+        set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(effort("medium"))).unwrap_err(),
         ERR_UNKNOWN_EFFORT
     );
 
     // Switching off a model that cannot stop reasoning.
     set_model_impl(&h.store, &h.ai, "openrouter", Some("mandatory/model")).unwrap();
     assert_eq!(
-        set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(ReasoningChoice::Off))
-            .unwrap_err(),
+        set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(ReasoningChoice::Off)).unwrap_err(),
         ERR_REASONING_MANDATORY
     );
     // ...while on is fine for the same model.
@@ -94,9 +82,7 @@ fn aap_ts26_every_incompatible_choice_is_refused_with_its_own_reason() {
     // A refusal leaves the stored choice exactly as it was.
     set_model_impl(&h.store, &h.ai, "openrouter", Some("ladder/model")).unwrap();
     set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(effort("high"))).unwrap();
-    assert!(
-        set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(effort("nope"))).is_err()
-    );
+    assert!(set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(effort("nope"))).is_err());
     let list = list_integrations_impl(&h.store, &h.ai).unwrap();
     assert_eq!(
         find(&list, "openrouter").selected_reasoning,
@@ -125,16 +111,12 @@ fn aap_ts27_a_level_this_application_never_heard_of_is_still_selectable() {
         &h.store,
         &h.ai,
         "openrouter",
-        Some(ReasoningChoice::Effort {
-            effort: "ludicrous".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "ludicrous".into() }),
     )
     .unwrap();
     assert_eq!(
         rec.selected_reasoning,
-        Some(ReasoningChoice::Effort {
-            effort: "ludicrous".into()
-        })
+        Some(ReasoningChoice::Effort { effort: "ludicrous".into() })
     );
 
     // And a level this application *does* know, that the model does not
@@ -144,9 +126,7 @@ fn aap_ts27_a_level_this_application_never_heard_of_is_still_selectable() {
             &h.store,
             &h.ai,
             "openrouter",
-            Some(ReasoningChoice::Effort {
-                effort: "medium".into()
-            })
+            Some(ReasoningChoice::Effort { effort: "medium".into() })
         )
         .unwrap_err(),
         ERR_UNKNOWN_EFFORT
@@ -170,9 +150,7 @@ fn aap_ts28_a_choice_the_new_model_cannot_honour_falls_back_to_its_default() {
         &h.store,
         &h.ai,
         "openrouter",
-        Some(ReasoningChoice::Effort {
-            effort: "max".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "max".into() }),
     )
     .unwrap();
 
@@ -189,17 +167,13 @@ fn aap_ts28_a_choice_the_new_model_cannot_honour_falls_back_to_its_default() {
         &h.store,
         &h.ai,
         "openrouter",
-        Some(ReasoningChoice::Effort {
-            effort: "high".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "high".into() }),
     )
     .unwrap();
     let rec = set_model_impl(&h.store, &h.ai, "openrouter", Some("poor/model")).unwrap();
     assert_eq!(
         rec.selected_reasoning,
-        Some(ReasoningChoice::Effort {
-            effort: "high".into()
-        }),
+        Some(ReasoningChoice::Effort { effort: "high".into() }),
         "a level both models offer survives the change"
     );
 
@@ -215,17 +189,10 @@ fn aap_ts28_a_choice_the_new_model_cannot_honour_falls_back_to_its_default() {
         &h.store,
         &h.ai,
         "openrouter",
-        Some(ReasoningChoice::Effort {
-            effort: "max".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "max".into() }),
     )
     .unwrap();
-    prober.set_rich_models(vec![with_ladder(
-        "rich/model",
-        &["high"],
-        Some("high"),
-        false,
-    )]);
+    prober.set_rich_models(vec![with_ladder("rich/model", &["high"], Some("high"), false)]);
     let rec = verify_openrouter(&h);
     assert_eq!(rec.selected_model.as_deref(), Some("rich/model"));
     assert_eq!(
@@ -240,9 +207,7 @@ fn aap_ts28_every_way_a_refreshed_descriptor_can_invalidate_a_choice() {
     // stored choice through each arm of `reasoning_error`, not just the
     // effort one. Each case starts from a working configuration and asserts
     // the choice does not survive the refresh.
-    let effort_choice = ReasoningChoice::Effort {
-        effort: "high".into(),
-    };
+    let effort_choice = ReasoningChoice::Effort { effort: "high".into() };
 
     // 1. The model itself is gone from the refreshed list. `selected_model`
     //    is cleared first, which leaves no capability known at all — the
@@ -252,8 +217,7 @@ fn aap_ts28_every_way_a_refreshed_descriptor_can_invalidate_a_choice() {
     let h = harness(prober.clone(), FakeKeychain::new());
     verify_openrouter(&h);
     set_model_impl(&h.store, &h.ai, "openrouter", Some("a/model")).unwrap();
-    set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(effort_choice.clone()))
-        .unwrap();
+    set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(effort_choice.clone())).unwrap();
     prober.set_rich_models(vec![with_ladder("other/model", &["high"], Some("high"), false)]);
     let rec = verify_openrouter(&h);
     assert_eq!(rec.selected_model, None, "the model went with the refresh");
@@ -269,8 +233,7 @@ fn aap_ts28_every_way_a_refreshed_descriptor_can_invalidate_a_choice() {
     let h = harness(prober.clone(), FakeKeychain::new());
     verify_openrouter(&h);
     set_model_impl(&h.store, &h.ai, "openrouter", Some("a/model")).unwrap();
-    set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(ReasoningChoice::Off))
-        .unwrap();
+    set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(ReasoningChoice::Off)).unwrap();
     prober.set_rich_models(vec![ladderless("a/model", true)]);
     let rec = verify_openrouter(&h);
     assert_eq!(rec.selected_model.as_deref(), Some("a/model"));
@@ -285,15 +248,11 @@ fn aap_ts28_every_way_a_refreshed_descriptor_can_invalidate_a_choice() {
     let h = harness(prober.clone(), FakeKeychain::new());
     verify_openrouter(&h);
     set_model_impl(&h.store, &h.ai, "openrouter", Some("a/model")).unwrap();
-    set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(ReasoningChoice::On))
-        .unwrap();
+    set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(ReasoningChoice::On)).unwrap();
     prober.set_rich_models(vec![ModelOption::new("a/model", "A model")]);
     let rec = verify_openrouter(&h);
     assert_eq!(rec.selected_model.as_deref(), Some("a/model"));
-    assert_eq!(
-        rec.selected_reasoning, None,
-        "a model that no longer reasons carries no depth"
-    );
+    assert_eq!(rec.selected_reasoning, None, "a model that no longer reasons carries no depth");
 }
 
 #[test]
@@ -310,15 +269,12 @@ fn a_choice_a_model_can_honour_is_accepted_in_each_permissive_shape() {
     verify_openrouter(&h);
 
     set_model_impl(&h.store, &h.ai, "openrouter", Some("ladder/model")).unwrap();
-    let rec =
-        set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(ReasoningChoice::On))
-            .unwrap();
+    let rec = set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(ReasoningChoice::On)).unwrap();
     assert_eq!(rec.selected_reasoning, Some(ReasoningChoice::On));
 
     set_model_impl(&h.store, &h.ai, "openrouter", Some("plain/model")).unwrap();
     let rec =
-        set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(ReasoningChoice::Off))
-            .unwrap();
+        set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(ReasoningChoice::Off)).unwrap();
     assert_eq!(rec.selected_reasoning, Some(ReasoningChoice::Off));
 
     // AAP-FR-30 / the store: each unit-variant shape survives a round trip
@@ -340,12 +296,7 @@ fn a_choice_a_model_can_honour_is_accepted_in_each_permissive_shape() {
 #[test]
 fn aap_ts29_a_reasoning_choice_is_per_provider_and_clearing_removes_it() {
     let prober = FakeProber::returning(&[]);
-    prober.set_rich_models(vec![with_ladder(
-        "a/model",
-        &["high", "low"],
-        Some("high"),
-        false,
-    )]);
+    prober.set_rich_models(vec![with_ladder("a/model", &["high", "low"], Some("high"), false)]);
     let h = harness(prober, FakeKeychain::new());
     verify_openrouter(&h);
     set_model_impl(&h.store, &h.ai, "openrouter", Some("a/model")).unwrap();
@@ -353,9 +304,7 @@ fn aap_ts29_a_reasoning_choice_is_per_provider_and_clearing_removes_it() {
         &h.store,
         &h.ai,
         "openrouter",
-        Some(ReasoningChoice::Effort {
-            effort: "low".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "low".into() }),
     )
     .unwrap();
 
@@ -378,27 +327,19 @@ fn aap_ts29_a_reasoning_choice_is_per_provider_and_clearing_removes_it() {
         &h.store,
         &h.ai,
         "anthropic",
-        Some(ReasoningChoice::Effort {
-            effort: "high".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "high".into() }),
     )
     .unwrap();
 
     // Changing one leaves the other's own value exactly where it was.
-    set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(ReasoningChoice::On))
-        .unwrap();
+    set_reasoning_impl(&h.store, &h.ai, "openrouter", Some(ReasoningChoice::On)).unwrap();
     let list = list_integrations_impl(&h.store, &h.ai).unwrap();
     assert_eq!(
         find(&list, "anthropic").selected_reasoning,
-        Some(ReasoningChoice::Effort {
-            effort: "high".into()
-        }),
+        Some(ReasoningChoice::Effort { effort: "high".into() }),
         "one provider's choice is not the other's"
     );
-    assert_eq!(
-        find(&list, "openrouter").selected_reasoning,
-        Some(ReasoningChoice::On)
-    );
+    assert_eq!(find(&list, "openrouter").selected_reasoning, Some(ReasoningChoice::On));
 
     // AAP-FR-30: clearing takes the choice with the rest of the record.
     let list = clear_integration_impl(&h.store, &h.ai, "openrouter").unwrap();
@@ -411,12 +352,7 @@ fn aap_ts29_a_reasoning_choice_is_per_provider_and_clearing_removes_it() {
 #[test]
 fn aap_ts30_resolve_carries_the_reasoning_choice_alongside_the_endpoint() {
     let prober = FakeProber::returning(&[]);
-    prober.set_rich_models(vec![with_ladder(
-        "a/model",
-        &["high", "low"],
-        Some("high"),
-        false,
-    )]);
+    prober.set_rich_models(vec![with_ladder("a/model", &["high", "low"], Some("high"), false)]);
     let h = harness(prober, FakeKeychain::new());
     verify_openrouter(&h);
     set_model_impl(&h.store, &h.ai, "openrouter", Some("a/model")).unwrap();
@@ -424,21 +360,14 @@ fn aap_ts30_resolve_carries_the_reasoning_choice_alongside_the_endpoint() {
         &h.store,
         &h.ai,
         "openrouter",
-        Some(ReasoningChoice::Effort {
-            effort: "high".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "high".into() }),
     )
     .unwrap();
 
     let call = resolve_ai_api_call(&h.store, &h.ai, "some-project").unwrap();
     assert_eq!(call.provider, "openrouter");
     assert_eq!(call.model_id.as_deref(), Some("a/model"));
-    assert_eq!(
-        call.reasoning,
-        Some(ReasoningChoice::Effort {
-            effort: "high".into()
-        })
-    );
+    assert_eq!(call.reasoning, Some(ReasoningChoice::Effort { effort: "high".into() }));
 
     // AAP-FR-31: a null choice sends nothing at all.
     set_reasoning_impl(&h.store, &h.ai, "openrouter", None).unwrap();
@@ -448,4 +377,3 @@ fn aap_ts30_resolve_carries_the_reasoning_choice_alongside_the_endpoint() {
     // And the key still never reaches a debug line (AAP-FR-07).
     assert!(!format!("{call:?}").contains("sk-or-1234"));
 }
-

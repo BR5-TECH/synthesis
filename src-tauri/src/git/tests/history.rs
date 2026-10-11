@@ -8,8 +8,7 @@ use super::*;
 /// A signature at a fixed instant, so the order of a history is the order the
 /// test wrote and never the order of the wall clock.
 fn signature_at(seconds: i64) -> git2::Signature<'static> {
-    git2::Signature::new("Ada Lovelace", "ada@example.com", &git2::Time::new(seconds, 0))
-        .unwrap()
+    git2::Signature::new("Ada Lovelace", "ada@example.com", &git2::Time::new(seconds, 0)).unwrap()
 }
 
 /// One commit on `HEAD` at `seconds`. A file given as `Some` is written and
@@ -41,22 +40,14 @@ pub(super) fn commit_at(
     index.write().unwrap();
     let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
     let sig = signature_at(seconds);
-    let parents: Vec<git2::Commit> = repo
-        .head()
-        .ok()
-        .and_then(|h| h.peel_to_commit().ok())
-        .into_iter()
-        .collect();
+    let parents: Vec<git2::Commit> =
+        repo.head().ok().and_then(|h| h.peel_to_commit().ok()).into_iter().collect();
     let refs: Vec<&git2::Commit> = parents.iter().collect();
-    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &refs)
-        .unwrap()
+    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &refs).unwrap()
 }
 
 fn file_named<'a>(files: &'a [CommitFile], path: &str) -> &'a CommitFile {
-    files
-        .iter()
-        .find(|f| f.path == path)
-        .unwrap_or_else(|| panic!("{path} is not in {files:?}"))
+    files.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("{path} is not in {files:?}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -205,12 +196,8 @@ fn a_commit_that_is_no_branch_tip_has_no_refs_and_the_wire_names_are_camel_case(
     let mut keys: Vec<&str> = json.as_object().unwrap().keys().map(String::as_str).collect();
     keys.sort();
     assert_eq!(keys, vec!["branch", "commits", "headId", "isDetached"]);
-    let mut commit_keys: Vec<&str> = json["commits"][0]
-        .as_object()
-        .unwrap()
-        .keys()
-        .map(String::as_str)
-        .collect();
+    let mut commit_keys: Vec<&str> =
+        json["commits"][0].as_object().unwrap().keys().map(String::as_str).collect();
     commit_keys.sort();
     assert_eq!(
         commit_keys,
@@ -280,7 +267,10 @@ fn a_commit_lists_what_it_added_changed_deleted_renamed_and_flags_a_binary_file(
     assert_eq!(json["previousPath"], "moved/old.txt");
     assert_eq!(json["status"], "renamed");
     assert_eq!(json["isBinary"], false);
-    assert!(serde_json::to_value(file_named(&files, "fresh.txt")).unwrap().get("previousPath").is_none());
+    assert!(serde_json::to_value(file_named(&files, "fresh.txt"))
+        .unwrap()
+        .get("previousPath")
+        .is_none());
 }
 
 // GTC-FR-YCEV
@@ -375,10 +365,7 @@ fn a_commit_file_diff_of_a_root_commit_is_all_additions() {
     let lines = all_lines(&payload);
     assert_eq!(
         lines,
-        vec![
-            ("add".to_string(), "one".to_string()),
-            ("add".to_string(), "two".to_string())
-        ]
+        vec![("add".to_string(), "one".to_string()), ("add".to_string(), "two".to_string())]
     );
 }
 

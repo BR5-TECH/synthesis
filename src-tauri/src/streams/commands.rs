@@ -14,12 +14,8 @@ struct StreamsChangedPayload {
 }
 
 pub(super) fn announce<R: tauri::Runtime>(app: &tauri::AppHandle<R>, project_key: &str) {
-    let _ = app.emit(
-        WORK_STREAMS_CHANGED,
-        StreamsChangedPayload {
-            project_key: project_key.to_string(),
-        },
-    );
+    let _ = app
+        .emit(WORK_STREAMS_CHANGED, StreamsChangedPayload { project_key: project_key.to_string() });
 }
 
 /// The store every operation here reads and writes.
@@ -44,7 +40,9 @@ pub(super) fn store_fs<R: tauri::Runtime>(
 }
 
 /// The open project's root, or the typed refusal.
-pub(super) fn project_root<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<std::path::PathBuf, String> {
+pub(super) fn project_root<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<std::path::PathBuf, String> {
     let state = app
         .try_state::<crate::project::ProjectState>()
         .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
@@ -70,10 +68,7 @@ pub(super) fn stream_has_live_run<R: tauri::Runtime>(
 ) -> bool {
     stream.is_busy()
         || crate::graduation::project_queue(app).is_some_and(|queue| {
-            queue
-                .runs
-                .iter()
-                .any(|run| run.stream_id == stream.id && !run.state.is_terminal())
+            queue.runs.iter().any(|run| run.stream_id == stream.id && !run.state.is_terminal())
         })
 }
 
@@ -83,6 +78,7 @@ pub fn create_work_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     name: String,
     base_branch: Option<String>,
+    temporary: Option<bool>,
 ) -> Result<WorkStream, String> {
     let buffer = &crate::logging::BUFFER;
     let root = project_root(&app)?;
@@ -99,13 +95,23 @@ pub fn create_work_stream<R: tauri::Runtime>(
     // WKS-FR-HRUZ: a name no other live stream of the project holds.
     let slug = slug_of(&name);
     if slug.is_empty() {
-        return Err(refuse(&app, "work stream name refused", "", ERR_STREAM_NAME_INVALID.to_string()));
+        return Err(refuse(
+            &app,
+            "work stream name refused",
+            "",
+            ERR_STREAM_NAME_INVALID.to_string(),
+        ));
     }
     let branch = branch_name_for(&name);
     let key = project_key(&app);
     let existing = store::list_streams(&fs, &store, &key);
     if existing.iter().any(|s| s.branch == branch) {
-        return Err(refuse(&app, "work stream name refused", "", ERR_STREAM_NAME_TAKEN.to_string()));
+        return Err(refuse(
+            &app,
+            "work stream name refused",
+            "",
+            ERR_STREAM_NAME_TAKEN.to_string(),
+        ));
     }
 
     // WKS-FR-PWNR: the active worktree's branch where the request names none.
@@ -165,6 +171,8 @@ pub fn create_work_stream<R: tauri::Runtime>(
         created_at: crate::notes::now_rfc3339(),
         busy_run_id: None,
         is_missing: false,
+        // WKS-FR-KCTR: an omitted flag makes a stream that is not temporary.
+        temporary: temporary.unwrap_or(false),
     };
     if let Err(reason) = store::write_stream(&fs, &store, &stream) {
         return Err(fail_and_reclaim(&app, &fs, &main, &store, created, &stream_id, reason));
@@ -175,7 +183,11 @@ pub fn create_work_stream<R: tauri::Runtime>(
         buffer,
         &[Domain::Backend],
         "work stream created",
-        log_fields! { "stream_id" => stream.id.clone(), "branch" => stream.branch.clone() },
+        log_fields! {
+            "stream_id" => stream.id.clone(),
+            "branch" => stream.branch.clone(),
+            "temporary" => stream.temporary
+        },
     );
     announce(&app, &key);
     // WKS-FR-SPVK: the stream's branch is new to every branch listing.
@@ -286,7 +298,9 @@ pub fn get_work_stream<R: tauri::Runtime>(
     let key = project_key(&app);
     store::read_stream(&fs, &store, &stream_id)
         .filter(|stream| stream.project_key == key)
-        .ok_or_else(|| refuse(&app, "work stream not found", &stream_id, ERR_UNKNOWN_STREAM.to_string()))
+        .ok_or_else(|| {
+            refuse(&app, "work stream not found", &stream_id, ERR_UNKNOWN_STREAM.to_string())
+        })
 }
 
 /// WKS-FR-DHOP: a refusal is a failure path, and every one of them is recorded.
@@ -331,7 +345,9 @@ pub fn delete_work_stream<R: tauri::Runtime>(
     let key = project_key(&app);
     let stream = store::read_stream(&fs, &store, &stream_id)
         .filter(|stream| stream.project_key == key)
-        .ok_or_else(|| refuse(&app, "work stream not found", &stream_id, ERR_UNKNOWN_STREAM.to_string()))?;
+        .ok_or_else(|| {
+            refuse(&app, "work stream not found", &stream_id, ERR_UNKNOWN_STREAM.to_string())
+        })?;
 
     // The exclusive hold every write of this module takes, held across the
     // read, the check and the write together: without it two callers each
@@ -341,16 +357,18 @@ pub fn delete_work_stream<R: tauri::Runtime>(
 
     // WKS-FR-OVLQ: refused while a run holds it.
     if stream.is_busy() {
-        return Err(refuse(&app, "work stream deletion refused", &stream_id, ERR_STREAM_BUSY.to_string()));
+        return Err(refuse(
+            &app,
+            "work stream deletion refused",
+            &stream_id,
+            ERR_STREAM_BUSY.to_string(),
+        ));
     }
     // WKS-FR-OVLQ: refused while the project holds a run of it that has not
     // ended, a direct run that targets its working copy included. `force`
     // reaches neither this nor the busy refusal above.
     if crate::graduation::project_queue(&app).is_some_and(|queue| {
-        queue
-            .runs
-            .iter()
-            .any(|run| run.stream_id == stream.id && !run.state.is_terminal())
+        queue.runs.iter().any(|run| run.stream_id == stream.id && !run.state.is_terminal())
     }) {
         return Err(refuse(
             &app,
@@ -376,15 +394,13 @@ pub fn delete_work_stream<R: tauri::Runtime>(
     // refused, and the refusal names how many. Counted with force too, so the
     // record of a forced deletion says how many commits it dropped.
     let ahead = git::ahead_of_base(&main, &stream);
-    if !force {
-        if ahead > 0 {
-            return Err(refuse(
-                &app,
-                "work stream deletion refused",
-                &stream_id,
-                format!("{ERR_STREAM_UNMERGED}: {ahead}"),
-            ));
-        }
+    if !force && ahead > 0 {
+        return Err(refuse(
+            &app,
+            "work stream deletion refused",
+            &stream_id,
+            format!("{ERR_STREAM_UNMERGED}: {ahead}"),
+        ));
     }
 
     // WKS-FR-DBXN: uncommitted paths are discarded only on the author's word.
@@ -402,11 +418,10 @@ pub fn delete_work_stream<R: tauri::Runtime>(
         return Err(format!("{ERR_STREAM_DIRTY}: {}", uncommitted.join(", ")));
     }
 
-    let mut stranded =
-        git::remove_worktree(&fs, &main, &stream.worktree(), Some(&stream.id))
-            .err()
-            .map(|_| vec![stream.worktree_path.clone()])
-            .unwrap_or_default();
+    let mut stranded = git::remove_worktree(&fs, &main, &stream.worktree(), Some(&stream.id))
+        .err()
+        .map(|_| vec![stream.worktree_path.clone()])
+        .unwrap_or_default();
     if git::delete_branch(&main, &stream.branch).is_err() {
         stranded.push(stream.branch.clone());
     }
@@ -479,7 +494,9 @@ pub fn get_work_stream_uncommitted_paths<R: tauri::Runtime>(
     let key = project_key(&app);
     let stream = store::read_stream(&fs, &store, &stream_id)
         .filter(|stream| stream.project_key == key)
-        .ok_or_else(|| refuse(&app, "work stream not found", &stream_id, ERR_UNKNOWN_STREAM.to_string()))?;
+        .ok_or_else(|| {
+            refuse(&app, "work stream not found", &stream_id, ERR_UNKNOWN_STREAM.to_string())
+        })?;
     let paths = git::uncommitted_paths(&stream.worktree(), false);
     logging::log_debug(
         &app,

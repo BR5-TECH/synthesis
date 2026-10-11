@@ -96,9 +96,13 @@ export function rosterOf(roster: Roster): AgentRoster {
  * the author never typed.
  */
 export function agentRoster(agents: readonly ProjectAgent[]): AgentRoster {
+  // AGT-FR-RWHL: a Personal agent that a Project agent shadows is addressed by
+  // no tag in this project, so it contributes no nickname — the Project agent
+  // of the same nickname is the one a tag reaches.
+  const addressable = agents.filter((a) => a.availability !== "shadowed");
   return {
-    nicknames: agents.map((a) => a.agent.nickname),
-    ready: agents.filter((a) => a.availability === "ready").map((a) => a.agent.nickname),
+    nicknames: addressable.map((a) => a.agent.nickname),
+    ready: addressable.filter((a) => a.availability === "ready").map((a) => a.agent.nickname),
   };
 }
 

@@ -14,6 +14,7 @@ All operations below are Tauri commands invoked by the UI. The quoted name is th
 DraftStatus = "active" | "archived" | "graduated" | "published" | "github_shadow"
 
 GithubIssueLink {
+  repository_host,     // normalized host; absent in a stored link, which reads as github.com
   repository_owner,
   repository_name,
   issue_number,
@@ -83,6 +84,7 @@ The draft-owned **publication store** of DRS-FR-EJBM, whose records `GHP-github-
 ```
 DraftPublicationRecord {     // one successful GitHub publication
   provider,                  // "github"
+  repository_host,           // normalized host; absent in a stored record, which reads as github.com
   repository_owner,
   repository_name,
   issue_number,
@@ -96,6 +98,7 @@ DraftPublicationAttempt {    // the draft's one standing attempt (DRS-FR-EJBM)
   marker,                    // opaque, unique, stable for the attempt
   remote_name,
   remote_url,                // canonicalized
+  repository_host,           // normalized host; absent in a stored attempt, which reads as github.com
   repository_owner,
   repository_name,
   state,                     // "open" | "awaiting_choice"
@@ -217,6 +220,7 @@ Every command errors with a typed "no project open" when no project is open, wit
 
 48. **DRS-FR-KQTW** A draft is `graduated` while **any** graduation run of that draft has committed its work onto a work stream or onto a direct run's pinned branch and is not `discarded`, and the status is **released** the moment every one of those runs is `discarded`. The status records work a run put on a stream or a pinned branch and a run that is still answerable for it; a run the author discarded is neither, so the prompt it was written from goes back to being a prompt the author may work on and graduate again. Release is a **resolution against the project's graduation queue** and not a second write path: the status is resolved on the same queue read that fills the `DraftGraduation` of DRS-FR-18, a record that says `graduated` while no run holds that status is reported as `active`, no read rewrites a record to release one (DRS-FR-38), and the stored value is normalised by the next `set_draft_status` the released draft accepts. Publication history releases nothing and holds nothing: a draft with publication records is released on exactly these terms, and the release reads `active` rather than `published` (DRS-FR-VKQO). A released draft is an **ordinary active draft in every respect**: `save_draft_file_contents`, `rename_draft`, `set_draft_status`, `move_draft_to_folder`, and `delete_draft` all succeed against it, the accepted-proposal write path of `DHS-draft-history.md` DHS-FR-15 and the asset writes of `DAS-draft-assets.md` DAS-FR-25 reach it again, and a fresh `start_graduation` is admitted over it (per `GSU-graduation-start.md` GSU-FR-IJEE). An `interrupted` run releases nothing, being non-terminal and therefore holding the draft locked by DRS-FR-19 instead, and a run that reached `implemented` or `implementation_accepted` holds the status for as long as the project holds that run. **Release removes nothing.** The specification files the discarded or failed run published stay in the project exactly as it left them, the run's own record stays readable in full (per `GRD-graduation.md` GRD-FR-LGDV), and nothing under the draft's folder is touched by the release: the draft becomes writable again and no byte of it changes at the moment it does.
 49. **DRS-FR-NZSQ** A direct graduation run reaches this module on exactly the terms a stream run does. It locks the draft in every non-terminal state, sets `graduated` when it commits (DRS-FR-20), releases the status when every committing run is `discarded` (DRS-FR-KQTW), and changes no draft file.
+50. **DRS-FR-CFJJ** A draft whose queued run is **removed** (per `GRD-graduation.md` GRD-FR-EPWW) is an ordinary **active** draft at once. It is unlocked, it carries no `DraftGraduation`, and `list_drafts` reports it with no run-state tag. The removal emits `"drafts changed"` for it (DRS-FR-22). No byte of the draft changes.
 49. **DRS-FR-DGMI** `.synthesis/drafts/.gitattributes` marks `*.jsonl` for union merge, the pattern carrying no slash so it reaches every depth beneath the drafts root. This module ensures the file exists **before the first draft is created and before the first append anywhere inside the folder**, preserving any entry already in it (DRS-FR-KORQ).
     - *Why:* Union merge is what lets two checkouts that both appended to one draft's log concatenate their lines instead of presenting a conflict.
 50. **DRS-FR-KORQ** A module appending a draft-owned log reaches the ensure of DRS-FR-DGMI **through this module** and writes the attributes file itself at no point. A migrated project whose drafts already exist therefore gets the file on its next draft-owned append, without a draft being created.

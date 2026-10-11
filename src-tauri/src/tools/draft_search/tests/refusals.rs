@@ -15,11 +15,9 @@ fn blank_query_refuses_rather_than_returning_nothing() {
     fixture.reindex();
 
     for query in ["", "   ", "\n\t"] {
-        let error = block_on(fixture.tool().call(DraftSearchArgs {
-            query: query.into(),
-            limit: None,
-        }))
-        .expect_err("a blank query refuses");
+        let error =
+            block_on(fixture.tool().call(DraftSearchArgs { query: query.into(), limit: None }))
+                .expect_err("a blank query refuses");
         assert_eq!(error, ToolRefusal::InvalidArguments(EMPTY_DRAFT_QUERY));
         let execution = error.to_execution_error();
         assert_eq!(execution.kind(), rig::tool::ToolErrorKind::InvalidArgs);
@@ -33,11 +31,8 @@ fn blank_query_refuses_rather_than_returning_nothing() {
 fn no_open_project_refuses() {
     let app = crate::tools::tests::closed_project();
     let tool = DraftSearchTool::new(app.handle().clone(), "closed");
-    let error = block_on(tool.call(DraftSearchArgs {
-        query: "teardown".into(),
-        limit: None,
-    }))
-    .expect_err("a closed project refuses");
+    let error = block_on(tool.call(DraftSearchArgs { query: "teardown".into(), limit: None }))
+        .expect_err("a closed project refuses");
     assert_eq!(error, ToolRefusal::NoProjectOpen);
     let execution = error.to_execution_error();
     assert_eq!(execution.kind(), rig::tool::ToolErrorKind::NotFound);
@@ -70,10 +65,7 @@ fn never_blocks_on_an_index_pass() {
     let fixture = DraftFixture::new();
     fixture.draft("unindexed", "# Plan\n\nteardown\n");
     // No reindex at all: the drafts index has never seen this prompt.
-    assert!(
-        fixture.search("teardown", None).is_empty(),
-        "answers from the index as it stands"
-    );
+    assert!(fixture.search("teardown", None).is_empty(), "answers from the index as it stands");
     fixture.reindex();
     assert_eq!(fixture.search("teardown", None).len(), 1);
 }
@@ -91,10 +83,7 @@ fn follows_the_index_in_every_direction() {
     crate::drafts::save_draft_file_impl(&root, &id, "evolving.md", "# Plan\n\nsarcophagus only\n")
         .expect("the prompt writes");
     fixture.reindex();
-    assert!(
-        fixture.search("teardown", None).is_empty(),
-        "the superseded text stops matching"
-    );
+    assert!(fixture.search("teardown", None).is_empty(), "the superseded text stops matching");
     let m = fixture.search("sarcophagus", None).remove(0);
     assert!(m.excerpt.contains("sarcophagus only"));
     assert!(

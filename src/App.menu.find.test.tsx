@@ -221,7 +221,7 @@ async function enterIde() {
   // The picker is the startup surface; open a recent to reach the IDE shell.
   const recent = await screen.findByText("acme");
   await userEvent.click(recent);
-  await screen.findByRole("button", { name: "Global settings" });
+  await screen.findByRole("button", { name: "Settings" });
 }
 
 // Fire a captured menu event the way the backend's `on_menu_event` -> `emit`

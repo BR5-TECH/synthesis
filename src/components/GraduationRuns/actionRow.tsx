@@ -1,19 +1,28 @@
 /**
  * The selected run's action row
  * (`../../../specifications/ui/GRU-graduation-runs.md` GRU-FR-XQVG,
- * GRU-FR-DVWY, GRU-FR-WDWB, GRU-FR-KQPE, GRU-FR-ZMHB, GRU-FR-PVXD).
+ * GRU-FR-DVWY, GRU-FR-WDWB, GRU-FR-KQPE, GRU-FR-ZMHB, GRU-FR-PVXD,
+ * GRU-FR-CLFA).
  *
  * The row's controls, the refusal of an act one of them issued, and where
  * keyboard focus goes when that act settles stand here together, beside the
  * controls the rules are about.
  */
 
-import { useEffect, useRef, type MutableRefObject } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 
 import * as api from "../../api";
-import { actionsFor, canRestart, isResume } from "../../state/graduation";
+import {
+  actionsFor,
+  canRestart,
+  isResume,
+  isTerminalRun,
+  removalStatement,
+  runsRemovedByDiscard,
+  runTitle,
+} from "../../state/graduation";
 import type { RunAction } from "../../state/graduation/runState";
-import type { GraduationRun } from "../../types";
+import type { GraduationQueue, GraduationRun } from "../../types";
 import { RestartRegionControl } from "./restart";
 
 /** The action-row control an act was issued from, and the run it acted on. */
@@ -42,6 +51,8 @@ const COUNTERPART: Partial<Record<RunAction, RunAction>> = {
 
 export interface RunActionRowProps {
   run: GraduationRun;
+  /** GRU-FR-CLFA: the runs the project holds, for the runs a discard removes. */
+  queue?: GraduationQueue | null;
   busy: boolean;
   act: RunAct;
   onOpenDraft?: (draftId: string) => void;
@@ -58,6 +69,7 @@ export interface RunActionRowProps {
 
 export function RunActionRow({
   run,
+  queue = null,
   busy,
   act,
   onOpenDraft,
@@ -69,6 +81,15 @@ export function RunActionRow({
 }: RunActionRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const refusalRef = useRef<HTMLParagraphElement>(null);
+  // GRU-FR-CLFA: the act that waits for the author's confirmation, where it
+  // would remove runs queued behind this one.
+  const [confirming, setConfirming] = useState<"discard" | "revert" | null>(null);
+  const removed = runsRemovedByDiscard(queue, run);
+  // A revert of a run that has ended ends nothing, so it removes nothing.
+  const removedByRevert = isTerminalRun(run.state) ? [] : removed;
+  useEffect(() => {
+    setConfirming(null);
+  }, [run.id, run.state]);
 
   // GRU-FR-ZMHB / GRU-FR-PVXD: the row's controls were disabled while the act
   // ran, which drops focus to the page body. Once it settles, focus comes back
@@ -166,11 +187,13 @@ export function RunActionRow({
                   data-action={action}
                   disabled={busy}
                   onClick={() =>
-                    act(
-                      "Reverted the run's commits.",
-                      () => api.revertGraduationRun(run.id),
-                      from(action),
-                    )
+                    removedByRevert.length > 0
+                      ? setConfirming("revert")
+                      : act(
+                          "Reverted the run's commits.",
+                          () => api.revertGraduationRun(run.id),
+                          from(action),
+                        )
                   }
                 >
                   Revert
@@ -185,11 +208,13 @@ export function RunActionRow({
                   data-action={action}
                   disabled={busy}
                   onClick={() =>
-                    act(
-                      "Discarded the run.",
-                      () => api.discardGraduationRun(run.id),
-                      from(action),
-                    )
+                    removed.length > 0
+                      ? setConfirming("discard")
+                      : act(
+                          "Discarded the run.",
+                          () => api.discardGraduationRun(run.id),
+                          from(action),
+                        )
                   }
                 >
                   Discard run
@@ -219,6 +244,55 @@ export function RunActionRow({
           }
         })}
       </div>
+      {/* GRU-FR-CLFA: the runs the act removes are named before it is invoked,
+          and their drafts are said to return to the active drafts. */}
+      {confirming && (
+        <div
+          className="graduation-restart"
+          role="group"
+          aria-label={confirming === "discard" ? "Confirm discard" : "Confirm revert"}
+          data-testid="graduation-removal-confirm"
+        >
+          <p className="graduation-restart__ask">
+            {confirming === "discard"
+              ? `Discard “${runTitle(run)}”? `
+              : `Revert “${runTitle(run)}” and end it? `}
+            {removalStatement(confirming === "discard" ? removed : removedByRevert)}
+          </p>
+          <div className="graduation-restart__actions">
+            <button
+              type="button"
+              className="btn btn--sm btn--ghost"
+              onClick={() => setConfirming(null)}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn--sm btn--danger"
+              data-action={confirming}
+              disabled={busy}
+              onClick={async () => {
+                await (confirming === "discard"
+                  ? act(
+                      "Discarded the run.",
+                      () => api.discardGraduationRun(run.id),
+                      from("discard"),
+                    )
+                  : act(
+                      "Reverted the run's commits.",
+                      () => api.revertGraduationRun(run.id),
+                      from("revert"),
+                    ));
+                setConfirming(null);
+              }}
+            >
+              {confirming === "discard" ? "Discard run" : "Revert run"}
+            </button>
+          </div>
+        </div>
+      )}
       {/* GRU-FR-KQPE: beside the row that issued it, where the author is
           looking, rather than at the top of a region they scrolled down. */}
       {refusal && (

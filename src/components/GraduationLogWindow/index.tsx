@@ -2,13 +2,13 @@
  * The graduation log window
  * (`../../../specifications/ui/GLW-graduation-log-window.md`).
  *
- * A modal overlay opened from one stage of one run's stage row (GLW-FR-ALZI).
- * It is bound to that run and that stage and to no other: it holds no run
+ * A modal overlay opened from one phase of one run's stage row (GLW-FR-ALZI).
+ * It is bound to that run and that phase and to no other: it holds no run
  * selector, changes no run state, and the only operation it invokes is the read
- * of one page of one stream (GLW-FR-BLWH, GLW-FR-OPQQ).
+ * of one page of the activity stream (GLW-FR-BLWH, GLW-FR-OPQQ, GLW-FR-FPUX).
  *
  * It knows no stage id, no stage label, and no stage count (GLW-FR-MZUP): the
- * stage is the descriptor the row passed it.
+ * phase is the descriptor the row passed it.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -16,7 +16,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { runTitle } from "../../state/graduation/merge";
 import { openingEntry, scopeEntries } from "../../state/graduation/logScopes";
 import type { ProgressStage } from "../../state/runProgress";
-import type { GraduationLogStream, GraduationRun } from "../../types";
+import type { GraduationRun } from "../../types";
 import { Icon } from "../icons";
 import {
   EmptyState,
@@ -25,7 +25,6 @@ import {
   NoMatchState,
   PersistenceFailureState,
   UnavailableState,
-  streamLabel,
 } from "./viewport";
 import { useLogScope } from "./useLogScope";
 
@@ -35,9 +34,6 @@ export const SEARCH_DEBOUNCE_MS = 200;
 const END_SLACK_PX = 8;
 /** How near the leading edge the viewport must be to ask for an older page. */
 const OLDER_TRIGGER_PX = 48;
-
-/** GLW-FR-FPUX: the two positions of the stream toggle, and no third. */
-const STREAMS: GraduationLogStream[] = ["source", "structured"];
 
 export interface GraduationLogWindowProps {
   /** GLW-FR-BLWH: the run whose stage the author activated, and no other. */
@@ -57,13 +53,10 @@ export function GraduationLogWindow({
 }: GraduationLogWindowProps) {
   const entries = useMemo(() => scopeEntries(run, stage.id), [run, stage.id]);
 
-  // GLW-FR-TMRQ: the window opens on Source, for every run and every stage,
-  // and the position is remembered from no other window.
-  const [stream, setStream] = useState<GraduationLogStream>("source");
-  // GLW-FR-XZQM: the opening selection is settled once, from the index the run
-  // record already carries, and no later stream change moves it.
+  // GLW-FR-XZQM: the opening selection is settled once, from the activity
+  // index the run record already carries, and no later growth of it moves it.
   const [selectedKey, setSelectedKey] = useState<string | null>(
-    () => openingEntry(run, stage.id, "source")?.key ?? null,
+    () => openingEntry(run, stage.id)?.key ?? null,
   );
   const selected =
     entries.find((entry) => entry.key === selectedKey) ?? entries[0] ?? null;
@@ -79,16 +72,15 @@ export function GraduationLogWindow({
     runId: run.id,
     phaseId: stage.id,
     entry: selected,
-    stream,
     query,
   });
 
-  // GLW-FR-KWHL: changing the run, the stage, the scope, or the stream releases
-  // follow to its opening position for the new scope, which is the end.
+  // GLW-FR-KWHL: changing the run, the phase, or the scope releases follow to
+  // its opening position for the new scope, which is the end.
   const [following, setFollowing] = useState(true);
   useEffect(() => {
     setFollowing(true);
-  }, [run.id, stage.id, selected?.key, stream]);
+  }, [run.id, stage.id, selected?.key]);
 
   const viewport = useRef<HTMLDivElement | null>(null);
   /**
@@ -149,7 +141,7 @@ export function GraduationLogWindow({
   }, [loadOlder, state.entries]);
 
   // GLW-FR-ONEV / GLW-FR-OOYK: focus moves into the overlay and stays there,
-  // Escape closes it, and closing returns focus to the stage that opened it.
+  // Escape closes it, and closing returns focus to the phase that opened it.
   useEffect(() => {
     const opener = returnFocus ?? (document.activeElement as HTMLElement | null);
     const focusables = () =>
@@ -225,10 +217,10 @@ export function GraduationLogWindow({
         className="modal glw"
         role="dialog"
         aria-modal="true"
-        // GLW-FR-OMZA: the run and the stage in the visible title and in the
+        // GLW-FR-OMZA: the run and the phase in the visible title and in the
         // accessible name, so a reader who opened it from one of three progress
         // bars is told which one they are in.
-        aria-label={`Log of ${runTitle(run)}, stage ${stage.label}`}
+        aria-label={`Agent activity of ${runTitle(run)}, phase ${stage.label}`}
         data-testid="graduation-log-window"
         data-run={run.id}
         data-phase={stage.id}
@@ -243,32 +235,11 @@ export function GraduationLogWindow({
         </div>
 
         <div className="glw__controls">
-          {/* GLW-FR-FPUX / GLW-FR-PHBA: two positions, exactly one selected,
-              carried in words and in accessible semantics. */}
-          <div
-            className="glw__streams"
-            role="group"
-            aria-label="Log stream"
-            data-testid="glw-stream-toggle"
-          >
-            {STREAMS.map((candidate) => (
-              <button
-                key={candidate}
-                type="button"
-                className="btn btn--ghost btn--sm"
-                aria-pressed={stream === candidate}
-                data-selected={stream === candidate ? "true" : undefined}
-                onClick={() => setStream(candidate)}
-              >
-                {streamLabel(candidate)}
-              </button>
-            ))}
-          </div>
           <input
             className="input glw__search"
             type="search"
-            aria-label="Search this log"
-            placeholder="Search this log"
+            aria-label="Search this activity"
+            placeholder="Search this activity"
             value={queryInput}
             onChange={(event) => setQueryInput(event.target.value)}
             data-testid="glw-search"
@@ -284,8 +255,8 @@ export function GraduationLogWindow({
         </div>
 
         <div className="glw__body">
-          {/* GLW-FR-CKLZ: the passes that entered this stage, and after them
-              the run-level entry where the stage holds one. */}
+          {/* GLW-FR-CKLZ: the passes that entered this phase, and after them
+              the run-level entry where the phase holds one. */}
           <div
             className="glw__passes"
             role="group"
@@ -296,7 +267,7 @@ export function GraduationLogWindow({
             <p className="glw__passes-head t-meta">Passes</p>
             {entries.length === 0 && (
               <p className="t-meta" data-testid="glw-no-passes">
-                This stage recorded no pass.
+                This phase recorded no pass.
               </p>
             )}
             {entries.map((entry) => (
@@ -311,7 +282,7 @@ export function GraduationLogWindow({
                 // is never named as a pass or numbered as one.
                 aria-label={
                   entry.kind === "run_level"
-                    ? "Run-level output of this stage"
+                    ? "Run-level agent activity of this phase"
                     : `Pass ${entry.pass}`
                 }
                 onClick={() => setSelectedKey(entry.key)}
@@ -326,7 +297,10 @@ export function GraduationLogWindow({
             ref={viewport}
             onScroll={onScroll}
             tabIndex={0}
-            aria-label={`${stage.label} log`}
+            role="region"
+            // GLW-FR-OMZA / GLW-FR-DDXJ: the region names the phase and the
+            // selected entry, in words.
+            aria-label={`${stage.label} agent activity, ${selected?.label ?? "no entry"}`}
             data-testid="glw-viewport"
             data-following={following ? "true" : "false"}
           >
@@ -358,11 +332,10 @@ export function GraduationLogWindow({
             <ViewportBody
               entryLabel={
                 selected?.kind === "run_level"
-                  ? "This stage's run-level output"
-                  : (selected?.label ?? "This stage")
+                  ? "The run-level entry"
+                  : (selected?.label ?? "This phase")
               }
               query={query}
-              stream={stream}
               state={state}
               onRetry={reload}
             />
@@ -390,13 +363,11 @@ function ViewportBody({
   entryLabel,
   query,
   state,
-  stream,
   onRetry,
 }: {
   entryLabel: string;
   query: string;
   state: ReturnType<typeof useLogScope>["state"];
-  stream: GraduationLogStream;
   onRetry: () => void;
 }) {
   if (state.loading && state.entries.length === 0) return <LoadingState />;
@@ -418,7 +389,7 @@ function ViewportBody({
   }
   if (state.search === "search_no_match") return <NoMatchState query={query} />;
   if (state.entries.length === 0) {
-    return <EmptyState entryLabel={entryLabel} stream={stream} />;
+    return <EmptyState entryLabel={entryLabel} />;
   }
-  return <LogRows entries={state.entries} stream={stream} />;
+  return <LogRows entries={state.entries} />;
 }

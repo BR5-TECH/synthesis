@@ -23,12 +23,8 @@ use crate::adapters::relay::ws::{next_frame, Outgoing};
 /// Runs one client connection.
 pub async fn run(mut incoming: SplitStream<WebSocket>, sink: Sink, state: HttpState) {
     let connection_id = state.ids.next().to_string();
-    let outgoing = Outgoing {
-        protocol: Protocol::Client,
-        sink,
-        connection_id,
-        logs: Arc::clone(&state.logs),
-    };
+    let outgoing =
+        Outgoing { protocol: Protocol::Client, sink, connection_id, logs: Arc::clone(&state.logs) };
     let socket_id = state.hub.next_socket_id();
 
     let Some(frame) = next_frame(&mut incoming, Protocol::Client, &outgoing).await else {
@@ -81,9 +77,7 @@ fn attach(
         }
     };
 
-    state
-        .hub
-        .put_client(socket_id, &handle, outgoing.sink.clone());
+    state.hub.put_client(socket_id, &handle, outgoing.sink.clone());
     outgoing.send(
         "client_attached",
         request_id,
@@ -97,12 +91,7 @@ fn attach(
     let announced = state.hub.worker(&instance_id).is_some_and(|worker| {
         deliver(
             &worker,
-            envelope::frame(
-                Protocol::Worker,
-                "client_attach",
-                None,
-                json!({ "handle": handle }),
-            ),
+            envelope::frame(Protocol::Worker, "client_attach", None, json!({ "handle": handle })),
         )
     });
     if !announced {
@@ -233,10 +222,7 @@ fn forward(
     // WSK-FR-WJIC: the frames of the worker table above are notifications, so
     // the request identifier of the client's own frame does not travel with
     // them.
-    if !deliver(
-        &worker,
-        envelope::frame(Protocol::Worker, frame_type, None, body),
-    ) {
+    if !deliver(&worker, envelope::frame(Protocol::Worker, frame_type, None, body)) {
         return outgoing.fail(ReasonCode::DeliveryFailed, request_id);
     }
     true

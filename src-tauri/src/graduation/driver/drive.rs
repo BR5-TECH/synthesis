@@ -3,9 +3,9 @@
 use super::stops::Stop;
 use super::turns::*;
 use super::*;
-use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
-use std::path::PathBuf;
 use crate::graduation::is_worktree_queue_key;
+use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
+use std::path::{Path, PathBuf};
 
 /// What the loop does after a turn.
 pub(super) enum Step {
@@ -32,34 +32,37 @@ pub fn spawn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run_id: &str, stream_
 /// a scenario that let it happen fails and one that expected it can say the
 /// stream was free.
 #[cfg(test)]
-fn intercepted<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run_id: &str, stream_id: &str) -> bool {
+fn intercepted<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run_id: &str,
+    stream_id: &str,
+) -> bool {
     let Some(tripwire) = app.try_state::<SpawnTripwire>() else {
         return false;
     };
-    if app
-        .try_state::<GraduationState>()
-        .is_some_and(|state| state.loop_enabled())
-    {
+    if app.try_state::<GraduationState>().is_some_and(|state| state.loop_enabled()) {
         let unclaimed = app
             .try_state::<GraduationState>()
             .is_some_and(|state| state.holder_of(stream_id).is_none());
         let unmarked = is_worktree_queue_key(stream_id)
             || crate::streams::stream_of(app, stream_id)
                 .is_some_and(|stream| stream.busy_run_id.is_none());
-        let unreconciled = app
-            .try_state::<crate::streams::StreamState>()
-            .is_none_or(|state| {
-                !(state.has_update_job(stream_id)
-                    || state.is_merging(stream_id)
-                    || state.is_updating(stream_id))
-            });
+        let unreconciled = app.try_state::<crate::streams::StreamState>().is_none_or(|state| {
+            !(state.has_update_job(stream_id)
+                || state.is_merging(stream_id)
+                || state.is_updating(stream_id))
+        });
         tripwire.record(run_id, unclaimed && unmarked && unreconciled);
     }
     true
 }
 
 #[cfg(not(test))]
-fn intercepted<R: tauri::Runtime>(_app: &tauri::AppHandle<R>, _run_id: &str, _stream_id: &str) -> bool {
+fn intercepted<R: tauri::Runtime>(
+    _app: &tauri::AppHandle<R>,
+    _run_id: &str,
+    _stream_id: &str,
+) -> bool {
     false
 }
 
@@ -74,19 +77,13 @@ pub struct SpawnTripwire {
 #[cfg(test)]
 impl SpawnTripwire {
     fn record(&self, run_id: &str, stream_free: bool) {
-        let mut attempts = self
-            .attempts
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut attempts = self.attempts.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         attempts.push((run_id.to_string(), stream_free));
     }
 
     /// Every attempt recorded so far, and none of them afterwards.
     pub(crate) fn take(&self) -> Vec<(String, bool)> {
-        let mut attempts = self
-            .attempts
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut attempts = self.attempts.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         std::mem::take(&mut *attempts)
     }
 }
@@ -128,11 +125,23 @@ fn claim<R: tauri::Runtime>(
         return None;
     }
     let limit = crate::graduation::scheduler::concurrency_limit(app);
-    let direct = crate::graduation::load_run(app, run_id)
-        .map(|run| run.is_direct())
-        .unwrap_or(false);
+    let direct =
+        crate::graduation::load_run(app, run_id).map(|run| run.is_direct()).unwrap_or(false);
+    // GRD-FR-BNTC, GRD-FR-KKKN: the stored runs say which run holds this queue
+    // and which runs hold a slot. A run at rest holds both as a run at work does.
+    let (holders, other_holder) = stored_holds(app, run_id, stream_id);
+    if let Some(holder) = other_holder {
+        logging::log_debug(
+            app,
+            &crate::logging::BUFFER,
+            &[Domain::Backend],
+            "graduation refused a claim: another run holds the queue",
+            log_fields! { "run_id" => run_id.to_string(), "holder" => holder },
+        );
+        return None;
+    }
     let cancellation = CancellationToken::new();
-    if !state.claim(stream_id, run_id, direct, limit, cancellation.clone()) {
+    if !state.claim_with_holders(stream_id, run_id, direct, limit, &holders, cancellation.clone()) {
         return None;
     }
     // GRD-FR-ZVNO: an ordinary worktree has no stream record to mark busy; its
@@ -157,6 +166,35 @@ fn claim<R: tauri::Runtime>(
     Some(cancellation)
 }
 
+/// GRD-FR-BNTC, GRD-FR-KKKN: from the run order's index, the runs that hold a
+/// project slot and the run, other than this one, that holds this queue.
+fn stored_holds<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run_id: &str,
+    queue_key: &str,
+) -> (std::collections::BTreeSet<String>, Option<String>) {
+    let project_key = crate::graduation::queue::project_key(app);
+    let (Ok(fs), Ok(base)) = (crate::graduation::store_fs(app), crate::graduation::store_base(app))
+    else {
+        return (std::collections::BTreeSet::new(), None);
+    };
+    let index = crate::graduation::read_queue_index(&fs, &base, &project_key);
+    let holders = index
+        .runs
+        .iter()
+        .filter(|entry| entry.holds_slot())
+        .map(|entry| entry.run_id.clone())
+        .collect();
+    let other = index
+        .runs
+        .iter()
+        .find(|entry| {
+            entry.holds_queue() && entry.run_id != run_id && entry.queue_key() == queue_key
+        })
+        .map(|entry| entry.run_id.clone());
+    (holders, other)
+}
+
 /// Drive one claimed run to rest, on a runtime of this thread's own.
 fn drive_blocking<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
@@ -165,10 +203,7 @@ fn drive_blocking<R: tauri::Runtime>(
     cancellation: CancellationToken,
     dispatch: &dyn seams::GraduationDispatch<R>,
 ) {
-    if let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    {
+    if let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() {
         runtime.block_on(async {
             drive(app, run_id, cancellation, dispatch).await;
         });
@@ -195,38 +230,37 @@ fn release_logs<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run_id: &str) {
     logs::release(app, run_id);
 }
 
-/// Give the stream back, and start whatever waits behind this run.
+/// End the claim of this loop, and offer the project's slots again.
 ///
-/// GRD-FR-BNTC: a run resting `blocked` still holds its stream. The condition is
-/// one the author clears, and the work it left standing in the working copy is
-/// what they clear it against — so the queue waits rather than starting the run
-/// behind it on top of that work.
+/// GRD-FR-BNTC: a run at rest still holds its queue and its project slot, in
+/// `blocked`, `awaiting_author`, `interrupted` and `failed` alike. The work it
+/// left standing in the working copy is what the author clears the stop against,
+/// so the queue waits rather than starting the run behind it on top of that
+/// work. Only a run that is `completed` or `discarded` gives the stream back.
 fn release_and_advance<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run_id: &str,
     stream_id: &str,
 ) {
-    let holds = crate::graduation::load_run(app, run_id)
-        .map(|run| run.holds_stream())
-        .unwrap_or(false);
+    let holds =
+        crate::graduation::load_run(app, run_id).map(|run| run.holds_queue()).unwrap_or(false);
+    if let Some(state) = app.try_state::<GraduationState>() {
+        state.release_run(stream_id, run_id);
+    }
     if holds {
         logging::log_info(
             app,
             &crate::logging::BUFFER,
             &[Domain::Backend],
-            "graduation left a stream held by a run at rest",
+            "graduation left a queue held by a run at rest",
             log_fields! { "run_id" => run_id.to_string(), "stream_id" => stream_id.to_string() },
         );
-        return;
-    }
-    if let Some(state) = app.try_state::<GraduationState>() {
-        state.release(stream_id);
-    }
-    if !is_worktree_queue_key(stream_id) {
+    } else if !is_worktree_queue_key(stream_id) {
         let _ = crate::streams::release_stream(app, stream_id, run_id);
     }
-    // The stream and its project slot are free, so the oldest eligible run of
-    // the project may start, whichever queue it waits in (GRD-FR-NYSH).
+    // A `failed` run frees its project slot, and a finished run frees its queue
+    // too, so the oldest eligible run of the project may start, whichever queue
+    // it waits in (GRD-FR-NYSH).
     crate::graduation::advance_all_queues(app);
 }
 
@@ -288,11 +322,8 @@ async fn drive<R: tauri::Runtime>(
     let Some(worktree) = worktree else {
         // GXD-FR-TJRV: the phase the run stopped in stays the phase it
         // resumes at, so a missing working copy does not move it.
-        let resume_part = run
-            .checkpoint
-            .resume_part
-            .clone()
-            .unwrap_or_else(|| phases::PART_WORK.to_string());
+        let resume_part =
+            run.checkpoint.resume_part.clone().unwrap_or_else(|| phases::PART_WORK.to_string());
         let (code, message, clears_by) = if run.is_direct() {
             (
                 "direct_worktree_missing",
@@ -340,12 +371,11 @@ async fn drive<R: tauri::Runtime>(
     // not change while the run rested, so a work turn would spend a container to
     // decide again what nobody reported a problem with — which is the reasoning
     // the verdict-refusal loop below already stands on.
-    let mut resume_at_review =
-        run.checkpoint.resume_part.as_deref() == Some(phases::PART_REVIEW);
+    let mut resume_at_review = run.checkpoint.resume_part.as_deref() == Some(phases::PART_REVIEW);
     // GRD-FR-JSBE: a merge run whose apply was blocked resumes at the apply. No
     // turn is dispatched and no pass is spent.
-    let mut resume_at_apply = run.is_merge()
-        && run.checkpoint.resume_part.as_deref() == Some(phases::PART_APPLY);
+    let mut resume_at_apply =
+        run.is_merge() && run.checkpoint.resume_part.as_deref() == Some(phases::PART_APPLY);
     // The pointer is spent the moment it is read. Leaving it set would make a
     // later interruption of this same run skip a work turn it never stopped in.
     if run.checkpoint.resume_part.is_some() {
@@ -479,16 +509,19 @@ async fn work_turn<R: tauri::Runtime>(
     let input = task_input::compose_input(run, phases::PART_WORK, purpose);
     if let Err(reason) = input.validate(run.checkpoint.pass_limit) {
         note_blocked(app, run, "task_invalid");
-        let _ = transitions::block(app, run, "task_invalid", reason, "Continue the run.", phases::PART_WORK);
+        let _ = transitions::block(
+            app,
+            run,
+            "task_invalid",
+            reason,
+            "Continue the run.",
+            phases::PART_WORK,
+        );
         return Step::Stop;
     }
     // GRL-FR-ISIL: a resumed turn continues the pass it was in, so a pass
     // already open is kept rather than opened again.
-    run.observability.open_pass(
-        run.pass(),
-        pass_task(run),
-        crate::notes::now_rfc3339(),
-    );
+    run.observability.open_pass(run.pass(), pass_task(run), crate::notes::now_rfc3339());
     let _ = transitions::enter_stage(
         app,
         run,
@@ -510,17 +543,9 @@ async fn work_turn<R: tauri::Runtime>(
     }
 
     let limit_ms = settings.execution_timeout_ms;
-    let outcome = execute(
-        app,
-        run,
-        worktree,
-        phases::PART_WORK,
-        input,
-        settings,
-        cancellation,
-        dispatch,
-    )
-    .await;
+    let turn =
+        TurnRequest { execution_directory: worktree, part: phases::PART_WORK, input, settings };
+    let outcome = execute(app, run, turn, cancellation, dispatch).await;
     let step = settle_turn(app, run, worktree, outcome, GraduationEscalationOrigin::Work, limit_ms);
     if matches!(step, Step::Continue)
         && !logs::emit(
@@ -543,10 +568,7 @@ async fn work_turn<R: tauri::Runtime>(
 /// is identical for every run and every project (GRL-FR-DXLU), so a record
 /// carrying it would say nothing about this pass.
 fn pass_task(run: &GraduationRun) -> String {
-    run.checkpoint
-        .loop_instruction
-        .clone()
-        .unwrap_or_else(|| run.input.prompt.clone())
+    run.checkpoint.loop_instruction.clone().unwrap_or_else(|| run.input.prompt.clone())
 }
 
 /// GRL-FR-OTRH / GRL-FR-YKRI: the turn that judges what the work turn wrote,
@@ -595,7 +617,14 @@ async fn review_turn<R: tauri::Runtime>(
         }
         if let Err(reason) = input.validate(run.checkpoint.pass_limit) {
             note_blocked(app, run, "task_invalid");
-        let _ = transitions::block(app, run, "task_invalid", reason, "Continue the run.", phases::PART_REVIEW);
+            let _ = transitions::block(
+                app,
+                run,
+                "task_invalid",
+                reason,
+                "Continue the run.",
+                phases::PART_REVIEW,
+            );
             return Step::Stop;
         }
         run.review_turns += 1;
@@ -629,17 +658,13 @@ async fn review_turn<R: tauri::Runtime>(
             }
         };
         let limit_ms = settings.execution_timeout_ms;
-        let outcome = execute(
-            app,
-            run,
-            &checkout,
-            phases::PART_REVIEW,
+        let turn = TurnRequest {
+            execution_directory: &checkout,
+            part: phases::PART_REVIEW,
             input,
             settings,
-            cancellation,
-            dispatch,
-        )
-        .await;
+        };
+        let outcome = execute(app, run, turn, cancellation, dispatch).await;
         // GRL-FR-YKRI: removed when the turn ends, whatever it decided.
         //
         // A release that does not finish is reported rather than dropped. What
@@ -659,9 +684,14 @@ async fn review_turn<R: tauri::Runtime>(
             );
         }
 
-        let execution =
-            match settle_execution(app, run, worktree, outcome, GraduationEscalationOrigin::Review, limit_ms)
-        {
+        let execution = match settle_execution(
+            app,
+            run,
+            worktree,
+            outcome,
+            GraduationEscalationOrigin::Review,
+            limit_ms,
+        ) {
             Some(execution) => execution,
             None => return Step::Stop,
         };
@@ -737,8 +767,7 @@ async fn review_turn<R: tauri::Runtime>(
         && verdict.findings.iter().all(|f| f.severity == ReviewSeverity::Minor);
 
     if verdict.verdict == ReviewOutcome::Ready || advisory {
-        run.observability
-            .settle_pass(&verdict, None, crate::notes::now_rfc3339());
+        run.observability.settle_pass(&verdict, None, crate::notes::now_rfc3339());
         // GRD-FR-AQNW: the counterpart of the commit of a draft run, for a merge
         // run, is the apply of the merge onto the base branch.
         if run.is_merge() {
@@ -764,11 +793,7 @@ pub(super) fn revise_or_rest<R: tauri::Runtime>(
     // GRL-FR-GQAB: the findings travel whole into the next work turn, in the
     // order the review returned them.
     let instruction = compose_instruction(verdict);
-    run.observability.settle_pass(
-        verdict,
-        Some(instruction.clone()),
-        crate::notes::now_rfc3339(),
-    );
+    run.observability.settle_pass(verdict, Some(instruction.clone()), crate::notes::now_rfc3339());
     run.checkpoint.loop_instruction = Some(instruction);
 
     if run.pass() >= run.checkpoint.pass_limit.max(1) {
@@ -787,17 +812,24 @@ pub(super) fn revise_or_rest<R: tauri::Runtime>(
     Step::Continue
 }
 
+/// One turn to dispatch: where it runs, which part of the loop it is, its
+/// input, and the settings read for this dispatch.
+struct TurnRequest<'a> {
+    execution_directory: &'a Path,
+    part: &'a str,
+    input: task_input::GraduationTaskInput,
+    settings: settings::LoopSettings,
+}
+
 /// GXD-FR-KXXB: one turn is one call through the dispatch seam.
 async fn execute<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &GraduationRun,
-    execution_directory: &PathBuf,
-    part: &str,
-    input: task_input::GraduationTaskInput,
-    settings: settings::LoopSettings,
+    turn: TurnRequest<'_>,
     cancellation: &CancellationToken,
     dispatch: &dyn seams::GraduationDispatch<R>,
 ) -> Result<AgentExecution, AgentExecutionError> {
+    let TurnRequest { execution_directory, part, input, settings } = turn;
     let task = AgentTaskRequest {
         protocol_version: PROTOCOL_VERSION,
         instruction: prompts::instruction_for_run(run, part).to_string(),
@@ -813,14 +845,17 @@ async fn execute<R: tauri::Runtime>(
         },
     };
     let request = AgentExecutionRequest {
-        execution_directory: execution_directory.clone(),
+        execution_directory: execution_directory.to_path_buf(),
         task,
         supplementary_mount: None,
         turn_kind: task_input::turn_kind_for_run(run, part),
         cancellation: cancellation.clone(),
         // GXD-FR-IOZU: what the agent does reaches the run it is doing it for.
         // A turn with no sink is a run the author watches an empty panel for.
-        activity: activity_sink(app, run, part),
+        activity: activity_sink(app, run),
+        // GXD-FR-IOZU / GLG-FR-QKVI: the record of what the agent did, which
+        // the executor must deliver durably and acknowledged.
+        durable_output: Some(durable_sink(app, run, part)),
     };
     // GXD-FR-CYIW / GRD-FR-NHRY: the interval is the turn's own execution, from
     // the moment it is dispatched to the moment it returns. Held on this stack,
@@ -845,44 +880,41 @@ async fn execute<R: tauri::Runtime>(
             },
         );
     }
-    let outcome = dispatch
-        .dispatch_graduation_turn(app, &run.project_key, request)
-        .await;
+    let outcome = dispatch.dispatch_graduation_turn(app, &run.project_key, request).await;
     recorder.finish(app, run);
     outcome
 }
 
-/// GXD-FR-IOZU: the activity sink one turn of this run reports through.
+/// GXD-FR-IOZU: the live activity sink one turn of this run reports through.
 ///
 /// `None` where the application holds no activity store, which costs the live
 /// panel and nothing else: no turn is refused over it.
 fn activity_sink<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &GraduationRun,
-    part: &str,
 ) -> Option<Arc<dyn crate::tools::agent_exec::AgentActivitySink>> {
-    let mut sinks: Vec<Arc<dyn crate::tools::agent_exec::AgentActivitySink>> = Vec::new();
     // AGV: the live panel, which is bounded and evicted.
-    if let Some(store) = app
+    let store = app
         .try_state::<Arc<crate::agent_activity::ActivityStore>>()
-        .map(|state| state.inner().clone())
-    {
-        let fs = crate::graduation::store_fs(app).ok();
-        sinks.push(Arc::new(crate::agent_activity::RunActivitySink::new(
-            app, &run.id, store, fs,
-        )));
-    }
-    // GRS-FR-JQOO: the durable copy, which is retained for the lifetime of the
-    // run record and is what the author reads a finished run back from.
-    sinks.push(Arc::new(logs::GraduationSourceSink::new(
-        app,
-        &run.id,
-        source_producer(part),
-    )));
-    Some(Arc::new(logs::CompositeSink::of(sinks)))
+        .map(|state| state.inner().clone())?;
+    let fs = crate::graduation::store_fs(app).ok();
+    Some(Arc::new(crate::agent_activity::RunActivitySink::new(app, &run.id, store, fs)))
 }
 
-/// GRS-FR-KJVN: which producer a turn's output is attributed to.
+/// GXD-FR-IOZU / GLG-FR-QKVI: the durable activity sink one turn of this run
+/// reports through.
+///
+/// GRS-FR-JQOO: the record is retained for the lifetime of the run record and
+/// is what the author reads a finished run back from.
+fn durable_sink<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &GraduationRun,
+    part: &str,
+) -> Arc<dyn crate::tools::agent_exec::DurableOutputSink> {
+    Arc::new(logs::GraduationActivitySink::new(app, run, source_producer(part)))
+}
+
+/// GRS-FR-KJVN: which producer a turn's activity is attributed to.
 fn source_producer(part: &str) -> GraduationLogProducer {
     match part {
         phases::PART_REVIEW => GraduationLogProducer::ReviewTurn,

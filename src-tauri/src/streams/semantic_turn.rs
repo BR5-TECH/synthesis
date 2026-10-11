@@ -203,10 +203,9 @@ async fn execute<R: tauri::Runtime>(
         // GXD-FR-IOZU: an update turn is agent work the author waits on, so what
         // it does reaches the same panel every other turn's work reaches.
         activity: update_activity_sink(app, attempt_id),
+        durable_output: None,
     };
-    dispatch
-        .dispatch_graduation_turn(app, project_key, request)
-        .await
+    dispatch.dispatch_graduation_turn(app, project_key, request).await
 }
 
 /// GXD-FR-IOZU: the activity sink one update turn reports through.
@@ -221,8 +220,5 @@ fn update_activity_sink<R: tauri::Runtime>(
         .try_state::<Arc<crate::agent_activity::ActivityStore>>()
         .map(|state| state.inner().clone())?;
     let fs = commands::store_fs(app).ok();
-    Some(Arc::new(crate::agent_activity::RunActivitySink::new(
-        app, attempt_id, store, fs,
-    )))
+    Some(Arc::new(crate::agent_activity::RunActivitySink::new(app, attempt_id, store, fs)))
 }
-

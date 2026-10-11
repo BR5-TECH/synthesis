@@ -55,9 +55,9 @@ pub mod draft_search;
 pub mod escalate_to_user;
 pub mod file_read;
 pub mod note_search;
-pub mod read_graduation_file;
 pub mod propose_draft_changes;
 pub mod propose_prompt_changes;
+pub mod read_graduation_file;
 pub mod refusals;
 pub mod skill_list;
 pub mod skill_load;
@@ -101,12 +101,9 @@ impl ProviderNativeTool {
     /// The entry for one capability. Constructed from a constant its own module
     /// owns rather than from anything composed per call (TLC-FR-22).
     pub fn new(tool_type: &str) -> Self {
-        Self {
-            tool_type: tool_type.to_string(),
-        }
+        Self { tool_type: tool_type.to_string() }
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // Shared naming (SST-FR-12, SLT-FR-13, LSK-FR-05)
@@ -196,9 +193,9 @@ const SHAPE_KEYS: usize = 12;
 /// it says the model invented a field — and repeating it buys a reader nothing
 /// that the mark does not already tell them.
 ///
-/// An object wider than [`SHAPE_KEYS`] is read in the order a JSON object holds
-/// its fields, which is by name, so a very wide argument set is reported by its
-/// first fields by name rather than by the order the model wrote them.
+/// An object is read by field name, whatever order it holds its fields in, so
+/// a very wide argument set is reported by its first fields by name rather
+/// than by the order the model wrote them.
 pub fn argument_shape(value: &serde_json::Value, schema: &serde_json::Value) -> String {
     let mut declared = std::collections::BTreeSet::new();
     collect_declared(schema, &mut declared);
@@ -272,7 +269,12 @@ fn write_shape(
                 return;
             }
             out.push('{');
-            for (index, (key, held)) in fields.iter().take(SHAPE_KEYS).enumerate() {
+            // Read by name, whatever order the object holds its fields in, so
+            // two calls that differ only in the order the model wrote them
+            // record one shape (TLC-FR-14).
+            let mut by_name: Vec<_> = fields.iter().collect();
+            by_name.sort_by(|a, b| a.0.cmp(b.0));
+            for (index, (key, held)) in by_name.into_iter().take(SHAPE_KEYS).enumerate() {
                 if index > 0 {
                     out.push(',');
                 }
@@ -362,9 +364,8 @@ pub fn require_open_project<'a, R: tauri::Runtime>(
     // `try_state` rather than `state`: a mock app in another module's test
     // manages only the stores that test needs, and a panic here would be a far
     // worse answer than the refusal this returns anyway.
-    let indexer = app
-        .try_state::<crate::bm25_index::Bm25Indexer>()
-        .ok_or(ToolRefusal::NoProjectOpen)?;
+    let indexer =
+        app.try_state::<crate::bm25_index::Bm25Indexer>().ok_or(ToolRefusal::NoProjectOpen)?;
     if indexer.root().is_none() {
         return Err(ToolRefusal::NoProjectOpen);
     }
@@ -392,9 +393,7 @@ pub fn require_project_root<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     session: &str,
 ) -> Result<crate::fs::RootFs, ToolRefusal> {
-    let root = require_open_project(app)?
-        .root()
-        .ok_or(ToolRefusal::NoProjectOpen)?;
+    let root = require_open_project(app)?.root().ok_or(ToolRefusal::NoProjectOpen)?;
     // `try_state`, not `state`: a mock app in another module's test manages only
     // what that test needs, and a panic here would be a far worse answer than
     // the refusal this returns anyway.

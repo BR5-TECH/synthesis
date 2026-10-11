@@ -70,7 +70,9 @@ fn a_retry_after_a_lost_response_reuses_the_issue_rather_than_duplicating_it() {
     // The first create landed on GitHub; the response never came back, so the
     // attempt is still standing.
     let content = flow::issue_content(&f.root, &f.id, "pub-1").unwrap();
-    f.github.create_issue("s", "acme", "widgets", &content.title, &content.body, &Default::default()).unwrap();
+    f.github
+        .create_issue("s", "acme", "widgets", &content.title, &content.body, &Default::default())
+        .unwrap();
     f.github.calls.lock().unwrap().clear();
 
     let outcome = f.publish(&attempt).unwrap();
@@ -117,13 +119,17 @@ fn a_retry_over_an_edited_draft_asks_rather_than_editing() {
     let f = fixture("Do the thing.\n");
     let attempt = f.attempt("pub-1");
     let stale = flow::issue_content(&f.root, &f.id, "pub-1").unwrap();
-    f.github.create_issue("s", "acme", "widgets", &stale.title, &stale.body, &Default::default()).unwrap();
+    f.github
+        .create_issue("s", "acme", "widgets", &stale.title, &stale.body, &Default::default())
+        .unwrap();
 
     save_prompt(&f.root, &f.id, "Do the other thing.\n");
     f.github.calls.lock().unwrap().clear();
 
     let outcome = f.publish(&attempt).unwrap();
-    let PublicationOutcome::RecoveryRequired { issue_number, issue_url, marker, mismatches } = outcome else {
+    let PublicationOutcome::RecoveryRequired { issue_number, issue_url, marker, mismatches } =
+        outcome
+    else {
         panic!("recovery")
     };
     assert_eq!(issue_number, 1);
@@ -142,13 +148,14 @@ fn update_existing_edits_the_issue_and_records_one_entry() {
     let f = fixture("Do the thing.\n");
     let attempt = f.attempt("pub-1");
     let stale = flow::issue_content(&f.root, &f.id, "pub-1").unwrap();
-    f.github.create_issue("s", "acme", "widgets", &stale.title, &stale.body, &Default::default()).unwrap();
+    f.github
+        .create_issue("s", "acme", "widgets", &stale.title, &stale.body, &Default::default())
+        .unwrap();
     save_prompt(&f.root, &f.id, "Do the other thing.\n");
     crate::drafts::rename_draft_impl(&f.root, &f.id, "Widget window v2").unwrap();
     f.github.calls.lock().unwrap().clear();
 
-    let outcome =
-        flow::update_existing(&f.root, &f.id, &attempt, "secret", &f.github).unwrap();
+    let outcome = flow::update_existing(&f.root, &f.id, &attempt, "secret", &f.github).unwrap();
     let PublicationOutcome::Published { record } = outcome else { panic!("published") };
     assert_eq!(record.issue_number, 1);
     assert_eq!(record.marker, "pub-1");
@@ -194,7 +201,9 @@ fn a_failed_edit_appends_nothing_and_keeps_the_attempt() {
     let f = fixture("Do the thing.\n");
     let attempt = f.attempt("pub-1");
     let stale = flow::issue_content(&f.root, &f.id, "pub-1").unwrap();
-    f.github.create_issue("s", "acme", "widgets", &stale.title, &stale.body, &Default::default()).unwrap();
+    f.github
+        .create_issue("s", "acme", "widgets", &stale.title, &stale.body, &Default::default())
+        .unwrap();
     save_prompt(&f.root, &f.id, "Do the other thing.\n");
     f.publish(&attempt).unwrap();
     assert_eq!(f.store().attempt.unwrap().state, AttemptState::AwaitingChoice);
@@ -216,15 +225,10 @@ fn a_failed_edit_appends_nothing_and_keeps_the_attempt() {
 /// markers are never the same value.
 #[test]
 fn every_attempt_takes_a_marker_of_its_own() {
-    let markers: std::collections::HashSet<String> =
-        (0..64).map(|_| flow::new_marker()).collect();
+    let markers: std::collections::HashSet<String> = (0..64).map(|_| flow::new_marker()).collect();
     assert_eq!(markers.len(), 64);
     assert!(markers.iter().all(|m| m.starts_with("pub-")));
     // And the marker line is the fixed format the issue body carries.
     let one = markers.iter().next().unwrap();
-    assert_eq!(
-        flow::marker_line(one),
-        format!("<!-- synthesis-publication-marker: {one} -->")
-    );
+    assert_eq!(flow::marker_line(one), format!("<!-- synthesis-publication-marker: {one} -->"));
 }
-

@@ -199,11 +199,7 @@ pub fn health_url(url: &str) -> Result<String, String> {
     // The base path is kept, so a relay behind a path prefix is verified where
     // it actually answers rather than at the origin above it. A query and a
     // fragment name no part of a route, so both are dropped.
-    let base = rest[authority.len()..]
-        .split(['?', '#'])
-        .next()
-        .unwrap_or("")
-        .trim_end_matches('/');
+    let base = rest[authority.len()..].split(['?', '#']).next().unwrap_or("").trim_end_matches('/');
     Ok(format!("{scheme}://{authority}{base}/v1/health"))
 }
 
@@ -221,28 +217,23 @@ pub struct HttpRelayProbe;
 
 impl RelayProbe for HttpRelayProbe {
     fn health(&self, health_url: &str) -> Result<RelayHealth, String> {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .timeout_global(Some(VERIFY_TIMEOUT))
-            .build()
-            .into();
+        let agent: ureq::Agent =
+            crate::tls::ureq_config().timeout_global(Some(VERIFY_TIMEOUT)).build().into();
 
-        let mut response = match agent
-            .get(health_url)
-            .header("User-Agent", "synthesis")
-            .call()
-        {
+        let mut response = match agent.get(health_url).header("User-Agent", "synthesis").call() {
             Ok(response) => response,
             // A relay that answers with a status is reachable but is not
             // answering the health contract.
             Err(ureq::Error::StatusCode(_)) => return Err(ERR_NOT_A_RELAY.to_string()),
             Err(ureq::Error::Timeout(_)) => return Err(ERR_TIMED_OUT.to_string()),
-            Err(_) => return Err(ERR_UNREACHABLE.to_string()),
+            // AAP-FR-LRTC: a refused certificate is its own typed error.
+            Err(e) => {
+                return Err(crate::tls::ureq_wire(&e, health_url)
+                    .unwrap_or_else(|| ERR_UNREACHABLE.to_string()))
+            }
         };
 
-        let body = response
-            .body_mut()
-            .read_to_string()
-            .map_err(|_| ERR_UNREACHABLE.to_string())?;
+        let body = response.body_mut().read_to_string().map_err(|_| ERR_UNREACHABLE.to_string())?;
         parse_health(&body)
     }
 }
@@ -262,10 +253,7 @@ pub fn parse_health(body: &str) -> Result<RelayHealth, String> {
         .iter()
         .filter_map(|value| value.as_str().map(str::to_string))
         .collect();
-    Ok(RelayHealth {
-        version: version.to_string(),
-        capabilities,
-    })
+    Ok(RelayHealth { version: version.to_string(), capabilities })
 }
 
 /// The seam the verification runs through, held as Tauri state.
@@ -275,9 +263,7 @@ pub struct RelayEndpointSeams {
 
 impl Default for RelayEndpointSeams {
     fn default() -> Self {
-        RelayEndpointSeams {
-            probe: Arc::new(HttpRelayProbe),
-        }
+        RelayEndpointSeams { probe: Arc::new(HttpRelayProbe) }
     }
 }
 

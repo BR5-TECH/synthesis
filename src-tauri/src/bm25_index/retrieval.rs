@@ -19,11 +19,8 @@ pub fn search_snapshot(
     if limit == 0 || query.trim().is_empty() {
         return Vec::new();
     }
-    let selected: Vec<IndexId> = if indexes.is_empty() {
-        IndexId::ALL.to_vec()
-    } else {
-        indexes.to_vec()
-    };
+    let selected: Vec<IndexId> =
+        if indexes.is_empty() { IndexId::ALL.to_vec() } else { indexes.to_vec() };
     let mut hits: Vec<ChunkHit> = Vec::new();
     for ((index, _), engine) in snapshot.shards.iter() {
         if !selected.contains(index) {
@@ -38,9 +35,7 @@ pub fn search_snapshot(
                 // instead, and a skill descriptor has none either — its file
                 // may be gitignored and so absent from the scan entirely
                 // (DSL-FR-06).
-                node_id: index
-                    .is_artifact_index()
-                    .then(|| key.path.clone()),
+                node_id: index.is_artifact_index().then(|| key.path.clone()),
                 draft_id: key.draft_id.clone(),
                 // BMI-FR-28: a note's identity within its index is its id, so
                 // the `path` slot of the key carries it and this is where it
@@ -79,6 +74,11 @@ pub fn search_snapshot(
 /// `#[tauri::command]` (BMI-FR-01): it is reached by the backend modules that
 /// retrieve against the indexes, never over the wire. It has no consumer yet —
 /// the AI integrations that will call it are not yet specified.
-pub fn search(indexer: &Bm25Indexer, indexes: &[IndexId], query: &str, limit: usize) -> Vec<ChunkHit> {
+pub fn search(
+    indexer: &Bm25Indexer,
+    indexes: &[IndexId],
+    query: &str,
+    limit: usize,
+) -> Vec<ChunkHit> {
     search_snapshot(&indexer.snapshot(), indexes, query, limit)
 }

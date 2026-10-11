@@ -123,12 +123,34 @@ describe("what the rail remembers", () => {
     makeRun("r3", "completed"),
   ];
 
-  it("GRH-FR-WDSH: a selection the listing no longer holds falls back to the first row", async () => {
+  it("GRH-FR-WDSH, GRU-FR-CASZ: a selection the project no longer holds falls back to the empty state, and the next selection ends it", async () => {
     queue = makeQueue(three());
     await openAll();
     await userEvent.click(await screen.findByRole("button", { name: "Run r3" }));
     queue = makeQueue([makeRun("r1", "working"), makeRun("r2", "queued")]);
     await fire("graduation-queue-changed");
+    await waitFor(() =>
+      expect(document.querySelector('[aria-current="true"]')).toBeNull(),
+    );
+    expect(screen.queryByTestId("graduation-provenance")).toBeNull();
+    // The rail still lists the runs that remain, and the empty state stays
+    // through a later reload.
+    expect(screen.getByRole("button", { name: "Run r1" })).toBeInTheDocument();
+    await fire("graduation-queue-changed");
+    expect(document.querySelector('[aria-current="true"]')).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Run r2" }));
+    await waitFor(() =>
+      expect(
+        document.querySelector('[aria-current="true"]')?.getAttribute("aria-label"),
+      ).toBe("Run r2"),
+    );
+  });
+
+  it("GRH-FR-WDSH: a selection the view hides, which the project still holds, falls back to the first row", async () => {
+    queue = makeQueue(three());
+    await openAll();
+    await userEvent.click(await screen.findByRole("button", { name: "Run r3" }));
+    await pickSelector("Run view", "in-flight");
     await waitFor(() =>
       expect(
         document.querySelector('[aria-current="true"]')?.getAttribute("aria-label"),

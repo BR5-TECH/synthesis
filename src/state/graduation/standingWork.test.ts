@@ -114,6 +114,7 @@ describe("a push the remote did not take", () => {
       "github_unreachable",
       "github_token_missing",
       "github_token_selection_required",
+      "github_host_mismatch",
       "unknown_token",
       "keychain_unavailable",
       "github_identity_unresolved",

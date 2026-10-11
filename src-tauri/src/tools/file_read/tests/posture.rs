@@ -54,10 +54,7 @@ fn the_tool_reads_the_disk_rather_than_the_last_pass() {
         .paths(crate::bm25_index::IndexId::Spec);
     let _ = indexed; // the pass's view, deliberately not consulted by the tool
     std::fs::remove_file(project.root.join("src/a.ts")).unwrap();
-    assert_eq!(
-        project.at("src/a.ts").expect_err("gone from disk"),
-        ToolRefusal::FileNotFound,
-    );
+    assert_eq!(project.at("src/a.ts").expect_err("gone from disk"), ToolRefusal::FileNotFound,);
 }
 
 // ---------------------------------------------------------------------------
@@ -75,11 +72,8 @@ fn reading_changes_nothing_including_modification_times() {
 
     for path in ["src/a.ts", "long.txt", "crlf.txt", "multibyte.txt"] {
         let _ = project.at(path);
-        let _ = project.read(ReadFileArgs {
-            path: path.to_string(),
-            offset: Some(1),
-            limit: Some(2),
-        });
+        let _ =
+            project.read(ReadFileArgs { path: path.to_string(), offset: Some(1), limit: Some(2) });
     }
 
     assert_eq!(
@@ -95,4 +89,3 @@ fn reading_changes_nothing_including_modification_times() {
         );
     }
 }
-

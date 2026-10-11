@@ -165,7 +165,7 @@ export function NotificationSettings({
     const address = mintAddress(
       rehearsalTarget.projectKey,
       rehearsalTarget.worktree,
-      { kind: "settings", which: "global" },
+      { kind: "settings", scope: "global", section: "notifications" },
     );
     void emitSettingsRehearsalRequested(address);
     logInfo(["frontend"], "notification rehearsal requested", {
@@ -226,7 +226,10 @@ export function NotificationSettings({
         )}
         {permission === "unsupported" && (
           <p className="t-ui-xs t-muted">
-            This system has no notification centre Synthesis can post to.
+            {/* GLS-FR-26: also a development run outside an application bundle. */}
+            This build of Synthesis cannot post notifications: the system has no
+            notification centre it can reach, or the application is not running
+            from an application bundle.
           </p>
         )}
         {permission === "granted" && (

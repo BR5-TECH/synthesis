@@ -29,11 +29,7 @@ pub(crate) struct TurnScript {
 
 impl TurnScript {
     fn of(answer: Answer) -> Self {
-        Self {
-            inner: Turn::answering(answer),
-            changes_setting: None,
-            hooks: Vec::new(),
-        }
+        Self { inner: Turn::answering(answer), changes_setting: None, hooks: Vec::new() }
     }
 
     // -- answers -------------------------------------------------------------
@@ -81,7 +77,11 @@ impl TurnScript {
         Self::answers_verdict(ReviewOutcome::Ready, "   ", Vec::new())
     }
 
-    fn answers_verdict(verdict: ReviewOutcome, rationale: &str, findings: Vec<ReviewFinding>) -> Self {
+    fn answers_verdict(
+        verdict: ReviewOutcome,
+        rationale: &str,
+        findings: Vec<ReviewFinding>,
+    ) -> Self {
         Self::of(Answer::Verdict(ReviewVerdict {
             verdict,
             rationale: rationale.to_string(),
@@ -99,9 +99,7 @@ impl TurnScript {
 
     /// GRL-FR-VBCL: the turn stops to ask the author something.
     pub(crate) fn escalates(questions: &[&str]) -> Self {
-        Self::of(Answer::Escalate(
-            questions.iter().map(|q| q.to_string()).collect(),
-        ))
+        Self::of(Answer::Escalate(questions.iter().map(|q| q.to_string()).collect()))
     }
 
     /// The same, under a reason the scenario names.
@@ -148,9 +146,7 @@ impl TurnScript {
     /// GXD-FR-LBYG: an envelope claiming a change set of its own, which the
     /// loop must not read as evidence about the filesystem.
     pub(crate) fn claims_paths(paths: &[&str]) -> Self {
-        Self::of(Answer::ClaimingPaths(
-            paths.iter().map(|p| p.to_string()).collect(),
-        ))
+        Self::of(Answer::ClaimingPaths(paths.iter().map(|p| p.to_string()).collect()))
     }
 
     // -- effects -------------------------------------------------------------
@@ -255,7 +251,11 @@ impl TurnScript {
 
     /// GRD-FR-BNTC: a run the scenario enqueued is driven while this turn
     /// runs, under a script of its own.
-    pub(crate) fn starting_another_run(self, label: &'static str, scripts: Vec<TurnScript>) -> Self {
+    pub(crate) fn starting_another_run(
+        self,
+        label: &'static str,
+        scripts: Vec<TurnScript>,
+    ) -> Self {
         let held = Mutex::new(Some(scripts));
         self.then(move |ctx| {
             let scripts = held.lock().unwrap().take().unwrap_or_default();

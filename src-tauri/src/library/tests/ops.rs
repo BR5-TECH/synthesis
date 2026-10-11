@@ -38,24 +38,15 @@ fn every_command_that_writes_an_assignment_publishes_the_classification() {
     // site's existence, which has no runtime observable of its own here.
     const SOURCE: &str = include_str!("../../library.rs");
     let body_of = |marker: &str| -> String {
-        let after = SOURCE
-            .split_once(marker)
-            .unwrap_or_else(|| panic!("the {marker} command"))
-            .1;
+        let after = SOURCE.split_once(marker).unwrap_or_else(|| panic!("the {marker} command")).1;
         // The command's closing brace is at column 0, so the first "\n}\n"
         // ends the body.
-        after
-            .split_once("\n}\n")
-            .expect("the end of the command body")
-            .0
-            .to_string()
+        after.split_once("\n}\n").expect("the end of the command body").0.to_string()
     };
 
-    for marker in [
-        "pub fn assign_artifact_type(",
-        "pub fn clear_artifact_type(",
-        "pub fn create_folder(",
-    ] {
+    for marker in
+        ["pub fn assign_artifact_type(", "pub fn clear_artifact_type(", "pub fn create_folder("]
+    {
         assert!(
             body_of(marker).contains("republish_classification("),
             "{marker} writes an assignment, so it must publish the \
@@ -126,10 +117,7 @@ fn delete_path_impl_counts_entries_the_scan_would_hide() {
         "the scan must hide the gitignored contents for this test to mean anything"
     );
     // ...and the delete still refuses, because it asked the filesystem.
-    assert_eq!(
-        delete_path_impl(root, "vendor", false).unwrap_err(),
-        ERR_NOT_EMPTY
-    );
+    assert_eq!(delete_path_impl(root, "vendor", false).unwrap_err(), ERR_NOT_EMPTY);
     assert!(root.join("vendor").join("lib.js").exists());
 }
 
@@ -241,7 +229,8 @@ fn a_rename_carries_the_renamed_artifacts_comment_threads_across() {
             display_name: None,
             email: None,
         },
-        "2026-01-01T00:00:00Z")
+        "2026-01-01T00:00:00Z",
+    )
     .unwrap();
 
     rename_path_impl(root, root, "specs/a.md", "b.md").unwrap();
@@ -267,10 +256,7 @@ fn a_failed_rename_leaves_the_notes_alone() {
     std::fs::write(root.join("b.md"), b"B").unwrap();
     crate::notes::create_note_in(
         root,
-        crate::notes::NoteScope::Entity {
-            entity_id: "a.md".into(),
-            entity_path: "a.md".into(),
-        },
+        crate::notes::NoteScope::Entity { entity_id: "a.md".into(), entity_path: "a.md".into() },
         "note".into(),
         None,
         None,
@@ -294,10 +280,7 @@ fn deleting_an_entity_leaves_its_notes_in_place_to_be_reattached() {
     std::fs::write(root.join("a.md"), b"A").unwrap();
     crate::notes::create_note_in(
         root,
-        crate::notes::NoteScope::Entity {
-            entity_id: "a.md".into(),
-            entity_path: "a.md".into(),
-        },
+        crate::notes::NoteScope::Entity { entity_id: "a.md".into(), entity_path: "a.md".into() },
         "survives the file".into(),
         None,
         None,
@@ -322,10 +305,7 @@ fn copy_path_into_folder_impl_copies_keeps_source_and_rejects_collision() {
     std::fs::write(root.join("src.md"), b"content").unwrap();
     std::fs::create_dir_all(root.join("dst")).unwrap();
     copy_path_into_folder_impl(root, "src.md", "dst").unwrap();
-    assert_eq!(
-        std::fs::read_to_string(root.join("dst").join("src.md")).unwrap(),
-        "content"
-    );
+    assert_eq!(std::fs::read_to_string(root.join("dst").join("src.md")).unwrap(), "content");
     assert!(root.join("src.md").exists(), "copy leaves the source in place");
     // A second copy collides with the now-existing destination.
     assert!(copy_path_into_folder_impl(root, "src.md", "dst").is_err());

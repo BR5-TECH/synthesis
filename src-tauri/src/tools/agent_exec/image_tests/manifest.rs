@@ -33,10 +33,7 @@ fn no_image_identity_is_named_outside_the_manifest() {
             ("descriptor.rs", include_str!("../descriptor.rs")),
             ("runtime.rs", include_str!("../runtime.rs")),
         ] {
-            assert!(
-                !source.contains(version.as_str()),
-                "{name} hardcodes {vendor}'s CLI version"
-            );
+            assert!(!source.contains(version.as_str()), "{name} hardcodes {vendor}'s CLI version");
         }
     }
 
@@ -60,10 +57,7 @@ fn no_image_identity_is_named_outside_the_manifest() {
         .expect("the descriptor struct ends")
         .0;
     for field in ["image_ref", "image_digest"] {
-        assert!(
-            !struct_body.contains(field),
-            "a vendor execution descriptor carries no {field}"
-        );
+        assert!(!struct_body.contains(field), "a vendor execution descriptor carries no {field}");
     }
     for gated in [
         "#[cfg(test)]\nconst MANIFEST_TOML",
@@ -91,15 +85,9 @@ fn nothing_in_the_application_writes_the_shipped_manifest() {
         ("agent_exec.rs", include_str!("../../agent_exec.rs")),
         ("runtime.rs", include_str!("../runtime.rs")),
         ("images.rs", include_str!("../../../project_settings/images.rs")),
-        (
-            "image_builder.rs",
-            include_str!("../../../project_settings/image_builder.rs"),
-        ),
+        ("image_builder.rs", include_str!("../../../project_settings/image_builder.rs")),
     ] {
-        assert!(
-            !source.contains("manifest.toml"),
-            "{name} names the shipped manifest at all"
-        );
+        assert!(!source.contains("manifest.toml"), "{name} names the shipped manifest at all");
     }
     // And no path anywhere in the build or the launch reaches a registry: the
     // build surface is local-only (PSS-FR-26), so the tokens that would take it
@@ -109,16 +97,12 @@ fn nothing_in_the_application_writes_the_shipped_manifest() {
         ("descriptor.rs", include_str!("../descriptor.rs")),
         ("runtime.rs", include_str!("../runtime.rs")),
         ("images.rs", include_str!("../../../project_settings/images.rs")),
-        (
-            "image_builder.rs",
-            include_str!("../../../project_settings/image_builder.rs"),
-        ),
+        ("image_builder.rs", include_str!("../../../project_settings/image_builder.rs")),
     ] {
         // The production half alone: a module's own suite names the very
         // tokens it is asserting the absence of.
-        let production = source
-            .split_once("\n#[cfg(test)]\nmod tests {")
-            .map_or(source, |(before, _)| before);
+        let production =
+            source.split_once("\n#[cfg(test)]\nmod tests {").map_or(source, |(before, _)| before);
         let code: String = production
             .lines()
             .filter(|line| !line.trim_start().starts_with("//"))
@@ -153,7 +137,7 @@ fn each_image_declares_a_workspace_and_no_volume_or_port() {
     for (vendor, dockerfile) in dockerfiles() {
         let directives = directives(dockerfile);
         assert!(
-            directives.iter().any(|d| *d == "WORKDIR /workspace"),
+            directives.contains(&"WORKDIR /workspace"),
             "{vendor} does not set /workspace as its working directory"
         );
         for forbidden in ["VOLUME", "EXPOSE"] {
@@ -213,14 +197,8 @@ fn no_dockerfile_bakes_in_a_credential() {
         // The *values* are each owned by the requirement that introduces them
         // and asserted at that requirement's own test; what this owns is that
         // there is nothing else, in whatever order the file sets them.
-        const DEFINED: [&str; 6] = [
-            "CARGO_HOME",
-            "HOME",
-            "PATH",
-            "PLAYWRIGHT_BROWSERS_PATH",
-            "PNPM_HOME",
-            "RUSTUP_HOME",
-        ];
+        const DEFINED: [&str; 6] =
+            ["CARGO_HOME", "HOME", "PATH", "PLAYWRIGHT_BROWSERS_PATH", "PNPM_HOME", "RUSTUP_HOME"];
         let mut names: Vec<String> = env_assignments(dockerfile)
             .iter()
             .map(|assignment| {
@@ -336,10 +314,7 @@ fn the_verify_command_refuses_the_sentinel_and_checks_what_the_manifest_claims()
     // because what a `-sys` build script needs is an answer.
     assert!(VERIFY_SH.contains("pkg-config --exists"));
     for module in ["glib-2.0", "gtk+-3.0", "webkit2gtk-4.1", "openssl"] {
-        assert!(
-            VERIFY_SH.contains(module),
-            "verify.sh does not ask pkg-config for {module}"
-        );
+        assert!(VERIFY_SH.contains(module), "verify.sh does not ask pkg-config for {module}");
     }
     // Deliberately not asserted here: the file's executable bit. Reading it
     // needs a direct `std::fs` call, and `FSA-FR-19`'s guard rightly refuses
@@ -406,10 +381,7 @@ fn a_published_image_is_addressed_by_digest_and_an_unpublished_one_by_its_tag() 
         // The same repository under a moved tag resolves to the same pinned
         // address, because the tag contributes nothing to it.
         let moved = descriptor::ImageManifestEntry {
-            image_ref: format!(
-                "{}:99.99.99",
-                published.image_ref.rsplit_once(':').unwrap().0
-            ),
+            image_ref: format!("{}:99.99.99", published.image_ref.rsplit_once(':').unwrap().0),
             ..published.clone()
         };
         assert_eq!(moved.launch_reference(), pinned);
@@ -432,9 +404,8 @@ fn a_published_image_is_addressed_by_digest_and_an_unpublished_one_by_its_tag() 
         // route has no digest to prevent it with.
         let launched = unpublished.launch_reference();
         let tag = launched.rsplit_once(':').expect("a tag").1;
-        let revision = tag
-            .strip_prefix(&format!("{}-", unpublished.cli_version))
-            .unwrap_or_else(|| {
+        let revision =
+            tag.strip_prefix(&format!("{}-", unpublished.cli_version)).unwrap_or_else(|| {
                 panic!("{vendor}'s tag {tag:?} does not name its CLI version and a build revision")
             });
         assert!(
@@ -452,11 +423,7 @@ fn the_manifest_parses_and_holds_an_entry_per_executable_vendor() {
         let entry = descriptor::manifest_entry(vendor).expect("an entry per vendor");
         assert!(!entry.image_ref.is_empty());
         assert!(entry.image_digest.starts_with("sha256:"));
-        assert_eq!(
-            entry.image_digest.len(),
-            "sha256:".len() + 64,
-            "a digest is 64 hex characters"
-        );
+        assert_eq!(entry.image_digest.len(), "sha256:".len() + 64, "a digest is 64 hex characters");
         assert!(!entry.cli_version.is_empty());
     }
     // No entry for a vendor the executor cannot run.

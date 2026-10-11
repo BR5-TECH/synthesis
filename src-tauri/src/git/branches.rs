@@ -45,13 +45,9 @@ pub fn branches_for(root: &Path) -> Result<Vec<GitBranch>, String> {
 
     let mut locals: Vec<GitBranch> = Vec::new();
     let mut remotes: Vec<GitBranch> = Vec::new();
-    for (branch_type, out) in [
-        (BranchType::Local, &mut locals),
-        (BranchType::Remote, &mut remotes),
-    ] {
-        let iter = repo
-            .branches(Some(branch_type))
-            .map_err(|_| ERR_NOT_A_REPO.to_string())?;
+    for (branch_type, out) in [(BranchType::Local, &mut locals), (BranchType::Remote, &mut remotes)]
+    {
+        let iter = repo.branches(Some(branch_type)).map_err(|_| ERR_NOT_A_REPO.to_string())?;
         for item in iter {
             let Ok((branch, _)) = item else { continue };
             let Ok(Some(name)) = branch.name() else {
@@ -73,8 +69,7 @@ pub fn branches_for(root: &Path) -> Result<Vec<GitBranch>, String> {
                 } else {
                     "remote".to_string()
                 },
-                is_current: branch_type == BranchType::Local
-                    && current.as_deref() == Some(name),
+                is_current: branch_type == BranchType::Local && current.as_deref() == Some(name),
             });
         }
     }
@@ -224,20 +219,20 @@ impl CheckoutTarget {
                 repo.find_branch(upstream, BranchType::Remote)
             }
         };
-        branch
-            .and_then(|b| b.get().peel_to_commit())
-            .map_err(|_| ERR_UNKNOWN_BRANCH.to_string())
+        branch.and_then(|b| b.get().peel_to_commit()).map_err(|_| ERR_UNKNOWN_BRANCH.to_string())
     }
 }
 
-pub(crate) fn resolve_checkout_target(repo: &Repository, name: &str) -> Result<CheckoutTarget, String> {
+pub(crate) fn resolve_checkout_target(
+    repo: &Repository,
+    name: &str,
+) -> Result<CheckoutTarget, String> {
     if repo.find_branch(name, BranchType::Local).is_ok() {
         return Ok(CheckoutTarget::Local(name.to_string()));
     }
     // Not a local branch — it has to be a remote-tracking one, checked out
     // under its short name (`origin/experiment` -> `experiment`).
-    repo.find_branch(name, BranchType::Remote)
-        .map_err(|_| ERR_UNKNOWN_BRANCH.to_string())?;
+    repo.find_branch(name, BranchType::Remote).map_err(|_| ERR_UNKNOWN_BRANCH.to_string())?;
     let short = name.split_once('/').map(|(_, rest)| rest).unwrap_or(name);
     if short.is_empty() {
         return Err(ERR_UNKNOWN_BRANCH.to_string());
@@ -247,8 +242,5 @@ pub(crate) fn resolve_checkout_target(repo: &Repository, name: &str) -> Result<C
     if repo.find_branch(short, BranchType::Local).is_ok() {
         return Ok(CheckoutTarget::Local(short.to_string()));
     }
-    Ok(CheckoutTarget::FromRemote {
-        short: short.to_string(),
-        upstream: name.to_string(),
-    })
+    Ok(CheckoutTarget::FromRemote { short: short.to_string(), upstream: name.to_string() })
 }

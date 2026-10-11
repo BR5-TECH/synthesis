@@ -12,15 +12,16 @@ use tauri::Manager;
 use tempfile::TempDir;
 
 use super::client::*;
-use super::{client, view};
 use super::eligibility::*;
 use super::records::*;
 use super::session::*;
+use super::{client, view};
 
 mod app_claims;
 mod app_polling;
 mod claiming;
 mod client_parsing;
+mod enterprise_hosts;
 mod logging_and_secrets;
 mod polling_rules;
 mod session_rules;
@@ -39,7 +40,7 @@ pub(super) fn project() -> TempDir {
 }
 
 pub(super) fn repo() -> RepositoryRef {
-    RepositoryRef { owner: "acme".into(), name: "widgets".into() }
+    RepositoryRef { host: "github.com".into(), owner: "acme".into(), name: "widgets".into() }
 }
 
 pub(super) fn key(dir: &TempDir) -> SessionKey {
@@ -47,7 +48,10 @@ pub(super) fn key(dir: &TempDir) -> SessionKey {
 }
 
 pub(super) fn settings(project: Option<&str>) -> GithubPollingSettings {
-    GithubPollingSettings { project_node_id: project.map(str::to_string), interval_minutes: Some(5) }
+    GithubPollingSettings {
+        project_node_id: project.map(str::to_string),
+        interval_minutes: Some(5),
+    }
 }
 
 pub(super) fn valid_shape() -> ProjectShape {
@@ -249,6 +253,7 @@ pub(super) fn context<'a>(
 
 pub(super) fn link(number: u64) -> crate::drafts::GithubIssueLink {
     crate::drafts::GithubIssueLink {
+        repository_host: "github.com".into(),
         repository_owner: "acme".into(),
         repository_name: "widgets".into(),
         issue_number: number,
@@ -260,6 +265,7 @@ pub(super) fn link(number: u64) -> crate::drafts::GithubIssueLink {
 
 pub(super) fn pending(number: u64, draft_id: Option<&str>) -> GithubPendingClaim {
     GithubPendingClaim {
+        repository_host: "github.com".into(),
         repository_owner: "acme".into(),
         repository_name: "widgets".into(),
         issue_number: number,
@@ -318,9 +324,7 @@ impl crate::github_publication::GithubIssues for OpenRepositories {
         _: &str,
         _: &str,
         _: u64,
-        _: &str,
-        _: &str,
-        _: &crate::github_publication::client::IssueFields,
+        _: &crate::github_publication::client::IssueEdit<'_>,
     ) -> Result<crate::github_publication::IssueRef, String> {
         unreachable!("polling never edits an issue")
     }
@@ -353,7 +357,15 @@ impl crate::github_publication::GithubIssues for OpenRepositories {
     ) -> Result<Vec<crate::github_publication::PublicationMilestone>, String> {
         unreachable!("polling never lists milestones")
     }
-    fn link_sub_issue(&self, _: &str, _: &str, _: &str, _: u64, _: u64, _: bool) -> Result<(), String> {
+    fn link_sub_issue(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: u64,
+        _: u64,
+        _: bool,
+    ) -> Result<(), String> {
         unreachable!("polling never links a sub-issue")
     }
     fn unlink_sub_issue(&self, _: &str, _: &str, _: &str, _: u64, _: u64) -> Result<(), String> {
@@ -396,7 +408,7 @@ impl Harness {
         app.manage(super::GithubPollingState::with_buffer(buffer));
         app.manage(super::TestSecret(SECRET.into()));
         let harness = Harness { app, dir, store, fake };
-        harness.open(&harness.dir.path().to_path_buf());
+        harness.open(harness.dir.path());
         harness
     }
 
@@ -436,4 +448,3 @@ impl Harness {
         self.fake.calls().iter().filter(|c| f(c)).count()
     }
 }
-

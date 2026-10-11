@@ -1,8 +1,9 @@
 //! The project's committed Docker image configuration
 //! (`specifications/core/PSS-project-settings-storage.md` PSS-FR-22..PSS-FR-30).
 //!
-//! One entry per agentic CLI vendor, each an image name, an optional tag, and an
-//! optional project-relative Dockerfile. It is **project-public**: the image a
+//! One entry per agentic CLI vendor, each an image name, an optional tag, an
+//! optional project-relative Dockerfile, and an optional build context
+//! (PSS-FR-BCTX). It is **project-public**: the image a
 //! project's agentic work runs in is a property of the project that everyone who
 //! checks it out shares, so it is committed with `.synthesis/project.toml` and
 //! resolves from the active worktree like every other project-public value
@@ -11,8 +12,8 @@
 //!
 //! A configured Dockerfile can be **built locally** (PSS-FR-26), through the
 //! backend the author already verified and never through one this module probes
-//! for. The build targets the entry's image reference, takes the project root as
-//! its context, and pushes, publishes, and logs in to nothing: there is no code
+//! for. The build targets the entry's image reference, takes the entry's build
+//! context (the project root by default), and pushes, publishes, and logs in to nothing: there is no code
 //! path here that reaches a registry at all.
 
 use std::collections::BTreeMap;
@@ -56,6 +57,8 @@ pub const ERR_IMAGE_NAME_EMPTY: &str = "image_name_empty";
 pub const ERR_DOCKERFILE_ABSOLUTE: &str = "dockerfile_absolute";
 pub const ERR_DOCKERFILE_ESCAPES_PROJECT_ROOT: &str = "dockerfile_escapes_project_root";
 pub const ERR_DOCKERFILE_NOT_A_REGULAR_FILE: &str = "dockerfile_not_a_regular_file";
+/// PSS-FR-BCTX: a build context that does not name an existing folder.
+pub const ERR_BUILD_CONTEXT_NOT_A_DIRECTORY: &str = "build_context_not_a_directory";
 /// PSS-FR-26: a build asked for on a vendor that configures no Dockerfile.
 pub const ERR_DOCKERFILE_UNSET: &str = "dockerfile_unset";
 /// PSS-FR-29: a project builds one image at a time.
@@ -85,6 +88,10 @@ pub struct ProjectVendorImage {
     /// PSS-FR-24: optional, and project-relative.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dockerfile: Option<String>,
+    /// PSS-FR-BCTX: optional. Absent means the project root. Project-relative
+    /// or absolute, and it may lie outside the project.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub build_context: Option<String>,
 }
 
 impl ProjectVendorImage {
@@ -104,16 +111,17 @@ impl ProjectVendorImage {
     fn normalised(&self) -> ProjectVendorImage {
         ProjectVendorImage {
             image_name: self.image_name.trim().to_string(),
-            tag: self
-                .tag
-                .as_ref()
-                .map(|t| t.trim().to_string())
-                .filter(|t| !t.is_empty()),
+            tag: self.tag.as_ref().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()),
             dockerfile: self
                 .dockerfile
                 .as_ref()
                 .map(|d| d.trim().to_string())
                 .filter(|d| !d.is_empty()),
+            build_context: self
+                .build_context
+                .as_ref()
+                .map(|c| c.trim().to_string())
+                .filter(|c| !c.is_empty()),
         }
     }
 }
@@ -134,6 +142,17 @@ pub enum VendorImageConfiguration {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DockerfileState {
+    #[default]
+    Absent,
+    Valid,
+    Invalid,
+}
+
+/// PSS-FR-25: an absent build context (the project root), a configured one that
+/// names an existing folder, or a configured one that no longer does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BuildContextState {
     #[default]
     Absent,
     Valid,
@@ -186,6 +205,8 @@ pub struct ProjectVendorImageStatus {
     pub dockerfile: Option<String>,
     pub dockerfile_state: DockerfileState,
     pub dockerfile_problem: Option<DockerfileProblem>,
+    pub build_context: Option<String>,
+    pub build_context_state: BuildContextState,
     pub graduation_state: VendorGraduationState,
 }
 
@@ -380,6 +401,8 @@ pub fn status_for(
             dockerfile: None,
             dockerfile_state: DockerfileState::Absent,
             dockerfile_problem: None,
+            build_context: None,
+            build_context_state: BuildContextState::Absent,
             graduation_state: if is_executable_vendor(vendor) {
                 VendorGraduationState::ImageNameMissing
             } else {
@@ -393,6 +416,14 @@ pub fn status_for(
         Some(path) => match validate_dockerfile(root, path) {
             Ok(()) => (DockerfileState::Valid, None),
             Err(problem) => (DockerfileState::Invalid, Some(problem)),
+        },
+    };
+
+    let build_context_state = match entry.build_context.as_deref() {
+        None => BuildContextState::Absent,
+        Some(context) => match validate_build_context(root, context) {
+            Ok(_) => BuildContextState::Valid,
+            Err(_) => BuildContextState::Invalid,
         },
     };
 
@@ -419,6 +450,8 @@ pub fn status_for(
         dockerfile: entry.dockerfile.clone(),
         dockerfile_state,
         dockerfile_problem,
+        build_context: entry.build_context.clone(),
+        build_context_state,
         graduation_state,
     }
 }
@@ -438,7 +471,88 @@ pub fn validate_entry(
     if let Some(dockerfile) = entry.dockerfile.as_deref() {
         validate_dockerfile(root, dockerfile).map_err(|p| p.refusal().to_string())?;
     }
+    if let Some(context) = entry.build_context.as_deref() {
+        validate_build_context(root, context)?;
+    }
     Ok(entry)
+}
+
+/// The canonical form of an existing directory, or `None` when the path does
+/// not name one.
+///
+/// The directory is reached through a grant limited to that directory alone
+/// (`FSA-filesystem-access.md`), the same way [`image_builder::pack_context`]
+/// reaches a context. Building the grant is what proves the folder exists, and
+/// the grant's own root is the canonical spelling.
+fn existing_directory(path: &Path) -> Option<PathBuf> {
+    let access = crate::fs::FsAccess::builder().allow_root(path).build().ok()?;
+    access.roots().last().cloned()
+}
+
+/// PSS-FR-BCTX: resolve a configured build context to the folder it names.
+///
+/// A relative value resolves against the project root and may leave it. An
+/// absolute value is taken as given. The folder must exist; anything else is
+/// refused with `build_context_not_a_directory`. Returns the canonical path.
+pub fn validate_build_context(root: &crate::fs::RootFs, context: &str) -> Result<PathBuf, String> {
+    let path = Path::new(context);
+    let resolved = if path.is_absolute() { path.to_path_buf() } else { root.path().join(path) };
+    existing_directory(&resolved).ok_or_else(|| ERR_BUILD_CONTEXT_NOT_A_DIRECTORY.to_string())
+}
+
+/// PSS-FR-BDFX: where the Dockerfile sits relative to the build context.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DockerfilePlacement {
+    /// Inside the context. Carries the path relative to the context, with `/`
+    /// as the separator, which is what the Engine build option takes.
+    InContext(String),
+    /// Outside the context. The Engine build adds the file to the archive under
+    /// [`PSS_DOCKERFILE_NAME`].
+    Outside,
+}
+
+/// PSS-FR-BDFX: the unique name of a Dockerfile that lies outside the context.
+pub const PSS_DOCKERFILE_NAME: &str = ".pss-Dockerfile";
+
+/// PSS-FR-BDFX: decide where the Dockerfile sits relative to the context.
+///
+/// Both paths are compared in canonical form where they exist, so two
+/// spellings of one folder (`/tmp` and `/private/tmp`) do not read as two
+/// places. A path that does not exist is compared as written.
+pub fn dockerfile_placement(
+    project_root: &Path,
+    context_root: &Path,
+    dockerfile: &str,
+) -> DockerfilePlacement {
+    let project = existing_directory(project_root).unwrap_or_else(|| project_root.to_path_buf());
+    let context = existing_directory(context_root).unwrap_or_else(|| context_root.to_path_buf());
+    // The Dockerfile path is project-relative and cannot leave the project
+    // (PSS-FR-24), so joining it to the canonical project root is exact.
+    // A `..` segment that stays inside the project is legal, so the path is
+    // folded lexically before it is compared with the context.
+    let mut file = project;
+    for component in Path::new(dockerfile).components() {
+        match component {
+            Component::Normal(name) => file.push(name),
+            Component::ParentDir => {
+                file.pop();
+            }
+            _ => {}
+        }
+    }
+    match file.strip_prefix(&context) {
+        Ok(relative) => {
+            let parts: Vec<String> = relative
+                .components()
+                .filter_map(|c| match c {
+                    Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
+                    _ => None,
+                })
+                .collect();
+            DockerfilePlacement::InContext(parts.join("/"))
+        }
+        Err(_) => DockerfilePlacement::Outside,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -458,15 +572,38 @@ pub const BUILD_TAG_FLAG: &str = "--tag";
 /// and nothing else. There is no `--push`, no `login`, and no publish
 /// subcommand anywhere in this module, so a build cannot reach a registry by
 /// any argument this function could be asked to produce.
-pub fn docker_build_args(dockerfile: &str, image_reference: &str, context_root: &Path) -> Vec<String> {
+pub fn docker_build_args(
+    dockerfile: &str,
+    image_reference: &str,
+    context_root: &Path,
+) -> Vec<String> {
     vec![
         BUILD_SUBCOMMAND.to_string(),
         BUILD_FILE_FLAG.to_string(),
         dockerfile.to_string(),
         BUILD_TAG_FLAG.to_string(),
         image_reference.to_string(),
-        context_root.to_string_lossy().to_string(),
+        cli_path(context_root),
     ]
+}
+
+/// A path as the Docker CLI takes it. A Windows verbatim prefix (`\\?\C:\`),
+/// which a canonical path carries, is removed because the CLI reads it badly.
+fn cli_path(path: &Path) -> String {
+    let text = path.to_string_lossy().to_string();
+    match text.strip_prefix(r"\\?\") {
+        Some(plain) if plain.chars().nth(1) == Some(':') => plain.to_string(),
+        _ => text,
+    }
+}
+
+/// PSS-FR-BDFX: the value of the Engine build option `dockerfile`: the path
+/// relative to the context, or the unique name when the file lies outside it.
+pub fn engine_dockerfile_option(placement: &DockerfilePlacement) -> &str {
+    match placement {
+        DockerfilePlacement::InContext(relative) => relative.as_str(),
+        DockerfilePlacement::Outside => PSS_DOCKERFILE_NAME,
+    }
 }
 
 /// One build, fully described.
@@ -477,8 +614,14 @@ pub struct ImageBuildRequest {
     pub image_reference: String,
     /// Project-relative, exactly as the entry records it.
     pub dockerfile: String,
-    /// The build context: the project root (PSS-FR-26).
+    /// The project root: the active worktree root at the time of the build
+    /// (PSS-FR-26). A relative Dockerfile path resolves against it.
+    pub project_root: PathBuf,
+    /// The build context: the folder the entry's build context names, or the
+    /// project root when it names none (PSS-FR-BCTX).
     pub context_root: PathBuf,
+    /// PSS-FR-BDFX: where the Dockerfile sits relative to the context.
+    pub placement: DockerfilePlacement,
 }
 
 /// Where a build reports what it is doing, and where it asks whether it has been
@@ -719,7 +862,8 @@ pub fn run_prepared_build(
 pub fn prepare_build(
     entry: Option<&ProjectVendorImage>,
     backend: Result<ResolvedDockerBackend, String>,
-    context_root: PathBuf,
+    project_root: PathBuf,
+    context_root: Result<PathBuf, String>,
     vendor: &str,
     operation_id: &str,
     registry: &ImageBuildRegistry,
@@ -728,17 +872,17 @@ pub fn prepare_build(
         return Err(ERR_UNKNOWN_VENDOR.to_string());
     }
     let entry = entry.ok_or_else(|| ERR_IMAGE_NAME_EMPTY.to_string())?;
-    let image_reference = entry
-        .image_reference()
-        .ok_or_else(|| ERR_IMAGE_NAME_EMPTY.to_string())?;
-    let dockerfile = entry
-        .dockerfile
-        .clone()
-        .ok_or_else(|| ERR_DOCKERFILE_UNSET.to_string())?;
+    let image_reference =
+        entry.image_reference().ok_or_else(|| ERR_IMAGE_NAME_EMPTY.to_string())?;
+    let dockerfile = entry.dockerfile.clone().ok_or_else(|| ERR_DOCKERFILE_UNSET.to_string())?;
     // GSS-FR-40: an unverified backend refuses and starts nothing. Read rather
     // than probed, so a daemon that is merely stopped is the build's own
     // failure and not this refusal.
     let backend = backend?;
+    // PSS-FR-26: a context that no longer names a folder refuses before the
+    // build slot is claimed.
+    let context_root = context_root?;
+    let placement = dockerfile_placement(&project_root, &context_root, &dockerfile);
     let cancel = registry.claim(vendor, operation_id)?;
     Ok(PreparedBuild {
         request: ImageBuildRequest {
@@ -746,7 +890,9 @@ pub fn prepare_build(
             operation_id: operation_id.to_string(),
             image_reference,
             dockerfile,
+            project_root,
             context_root,
+            placement,
         },
         backend,
         cancel,

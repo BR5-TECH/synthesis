@@ -9,7 +9,7 @@ use super::*;
 fn the_definition_is_the_documented_one() {
     let fixture = DocFixture::new();
     let tool = SearchDocumentsTool::new(fixture.fixture.handle());
-    let definition = rig::tool::portable_tool_definition(&tool);
+    let definition = rig::tool::tool_definition(&tool);
     assert_eq!(definition.name, "search_documents");
     assert_eq!(NAME, "search_documents");
     assert_eq!(definition.description, DESCRIPTION);
@@ -26,10 +26,7 @@ fn the_definition_is_the_documented_one() {
         .as_str()
         .unwrap()
         .contains("how the vendor API rate limits requests"));
-    assert!(properties["limit"]["description"]
-        .as_str()
-        .unwrap()
-        .contains("Defaults to 5"));
+    assert!(properties["limit"]["description"].as_str().unwrap().contains("Defaults to 5"));
 }
 
 // SDT-FR-ZWJW: a match carries exactly `id`, `name`, `folder`, `format`,
@@ -73,11 +70,8 @@ fn refusals_have_the_documented_kinds_and_messages() {
 
     let app = closed_project();
     let tool = SearchDocumentsTool::new(app.handle().clone());
-    let error = block_on(tool.call(SearchDocumentsArgs {
-        query: "anything".into(),
-        limit: None,
-    }))
-    .unwrap_err();
+    let error = block_on(tool.call(SearchDocumentsArgs { query: "anything".into(), limit: None }))
+        .unwrap_err();
     assert_eq!(error, ToolRefusal::NoProjectOpen);
     assert_eq!(error.kind(), ToolErrorKind::NotFound);
     assert!(!error.retryable());

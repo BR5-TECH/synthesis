@@ -45,10 +45,8 @@ impl IndexLock {
         // GRB-FR-QIHE: the lock file sits outside the worktree root, so it is
         // held through an instance whose one allowed root is the git directory
         // rather than by a bare path call (FSA-FR-18).
-        let fs = fsa::FsAccess::builder()
-            .allow_root(&git_dir)
-            .build()
-            .map_err(|e| e.to_string())?;
+        let fs =
+            fsa::FsAccess::builder().allow_root(&git_dir).build().map_err(|e| e.to_string())?;
         if git_dir.join("index.lock").exists() {
             return Ok(None);
         }
@@ -90,15 +88,12 @@ mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let repo = repo_at(dir.path());
 
-        let held = IndexLock::try_acquire(&repo)
-            .expect("the instance builds")
-            .expect("the lock is free");
+        let held =
+            IndexLock::try_acquire(&repo).expect("the instance builds").expect("the lock is free");
         assert!(held.path().exists(), "the lock file is created");
 
         assert!(
-            IndexLock::try_acquire(&repo)
-                .expect("the instance builds")
-                .is_none(),
+            IndexLock::try_acquire(&repo).expect("the instance builds").is_none(),
             "a second holder is refused rather than blocked"
         );
 
@@ -106,9 +101,7 @@ mod tests {
         drop(held);
         assert!(!path.exists(), "the release is the drop");
         assert!(
-            IndexLock::try_acquire(&repo)
-                .expect("the instance builds")
-                .is_some(),
+            IndexLock::try_acquire(&repo).expect("the instance builds").is_some(),
             "the lock is free again"
         );
     }
@@ -120,9 +113,7 @@ mod tests {
         std::fs::write(repo.path().join("index.lock"), b"").unwrap();
 
         assert!(
-            IndexLock::try_acquire(&repo)
-                .expect("the instance builds")
-                .is_none(),
+            IndexLock::try_acquire(&repo).expect("the instance builds").is_none(),
             "Git's own lock is a refusal, and this never takes it itself"
         );
     }

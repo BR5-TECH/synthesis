@@ -12,10 +12,7 @@ fn only_a_401_or_403_is_evidence_about_the_token() {
     // redirect classified as `Rejected` would tell an author their perfectly
     // good token is bad.
     for code in [401u16, 403] {
-        assert!(matches!(
-            verify_failure_for_status(code),
-            VerifyError::Rejected
-        ));
+        assert!(matches!(verify_failure_for_status(code), VerifyError::Rejected));
     }
     for code in [404u16, 429, 500, 502, 302] {
         assert!(
@@ -43,7 +40,7 @@ fn a_verifier_error_carrying_the_secret_never_reaches_the_caller() {
     // into it. The typed error the command returns must be the bare code.
     struct Leaky;
     impl GithubVerifier for Leaky {
-        fn verify(&self, secret: &str) -> Result<VerifiedIdentity, VerifyError> {
+        fn verify(&self, _host: &str, secret: &str) -> Result<VerifiedIdentity, VerifyError> {
             Err(VerifyError::Unreachable(format!(
                 "failed GET https://api.github.com/user with Bearer {secret}"
             )))
@@ -52,7 +49,7 @@ fn a_verifier_error_carrying_the_secret_never_reaches_the_caller() {
     let store = GlobalSettingsStore::in_memory();
     let tokens = GithubTokens::new(Box::new(FakeSecrets::default()), Box::new(Leaky));
 
-    let err = add_token_impl(&store, &tokens, "work", "ghp_super_secret_1234").unwrap_err();
+    let err = add_token_impl(&store, &tokens, "work", "ghp_super_secret_1234", "").unwrap_err();
     assert_eq!(err, ERR_GITHUB_UNREACHABLE);
     assert!(
         !err.contains("ghp_super_secret"),

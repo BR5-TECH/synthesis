@@ -66,14 +66,14 @@ fn no_verification_record_carries_the_key_or_even_its_hint() {
     // what a caller remembered not to pass.
     let secret = "sk-live-do-not-log-me-9f3c";
     let hint = "qzqz";
-    log_verify_attempt(&NullSink, &TEST_BUFFER, "probe-openai", "https://api.openai.com/v1", Some(secret));
-    log_verify_outcome(
+    log_verify_attempt(
         &NullSink,
         &TEST_BUFFER,
         "probe-openai",
-        &Err(ERR_REJECTED.to_string()),
-        41,
+        "https://api.openai.com/v1",
+        Some(secret),
     );
+    log_verify_outcome(&NullSink, &TEST_BUFFER, "probe-openai", &Err(ERR_REJECTED.to_string()), 41);
     log_verify_outcome(
         &NullSink,
         &TEST_BUFFER,
@@ -108,10 +108,7 @@ fn no_verification_record_carries_the_key_or_even_its_hint() {
         "even the masked hint stays out: four characters of a credential are \
          worth nothing to a reader and travel as far as the log does",
     );
-    assert_eq!(
-        attempt.fields.get("keySupplied"),
-        Some(&serde_json::json!(true)),
-    );
+    assert_eq!(attempt.fields.get("keySupplied"), Some(&serde_json::json!(true)),);
     assert_eq!(
         attempt.fields.get("baseUrl"),
         Some(&serde_json::json!("https://api.openai.com/v1")),
@@ -146,7 +143,13 @@ fn an_empty_key_field_is_reported_as_no_key_supplied() {
     let none = record_reading("verifying ai api integration", "probe-blank");
     assert_eq!(none.fields.get("keySupplied"), Some(&serde_json::json!(false)));
 
-    log_verify_attempt(&NullSink, &TEST_BUFFER, "probe-blank", "http://localhost:11434/v1", Some("   "));
+    log_verify_attempt(
+        &NullSink,
+        &TEST_BUFFER,
+        "probe-blank",
+        "http://localhost:11434/v1",
+        Some("   "),
+    );
     let blank = record_reading("verifying ai api integration", "probe-blank");
     assert_eq!(
         blank.fields.get("keySupplied"),
@@ -195,9 +198,7 @@ fn a_reasoning_choice_reads_as_one_field() {
     assert_eq!(reasoning_label(Some(&ReasoningChoice::Off)), "off");
     assert_eq!(reasoning_label(Some(&ReasoningChoice::On)), "on");
     assert_eq!(
-        reasoning_label(Some(&ReasoningChoice::Effort {
-            effort: "high".into()
-        })),
+        reasoning_label(Some(&ReasoningChoice::Effort { effort: "high".into() })),
         "effort:high",
     );
 }
@@ -231,15 +232,11 @@ fn a_credential_pasted_into_the_base_url_field_never_reaches_a_record() {
     // satisfy every absence assertion below. The endpoint is still
     // recognisable in each, which is the point of logging it at all.
     assert_eq!(
-        record_reading("verifying ai api integration", "probe-url")
-            .fields
-            .get("baseUrl"),
+        record_reading("verifying ai api integration", "probe-url").fields.get("baseUrl"),
         Some(&serde_json::json!("https://api.openai.com/v1")),
     );
     assert_eq!(
-        record_reading("verifying ai api integration", "probe-url-query")
-            .fields
-            .get("baseUrl"),
+        record_reading("verifying ai api integration", "probe-url-query").fields.get("baseUrl"),
         Some(&serde_json::json!("https://gateway.example/v1")),
     );
     let text = buffer_text();
@@ -279,11 +276,7 @@ fn a_listing_reports_a_provider_whose_key_has_gone_missing() {
         ]),
     );
 
-    let record = record_where(
-        "ai api integrations listed",
-        "active",
-        "probe-listing-active",
-    );
+    let record = record_where("ai api integrations listed", "active", "probe-listing-active");
     assert_eq!(record.level, crate::logging::LogLevel::Debug);
     assert_eq!(record.fields.get("total"), Some(&serde_json::json!(3)));
     assert_eq!(record.fields.get("verified"), Some(&serde_json::json!(1)));
@@ -304,19 +297,11 @@ fn a_project_resolution_reports_an_override_that_is_being_ignored() {
             override_provider: Some("probe-resolution-named".into()),
         },
     );
-    let record = record_reading(
-        "project ai api integration resolved",
-        "probe-resolution-effective",
-    );
+    let record =
+        record_reading("project ai api integration resolved", "probe-resolution-effective");
     assert_eq!(record.level, crate::logging::LogLevel::Debug);
-    assert_eq!(
-        record.fields.get("resolution"),
-        Some(&serde_json::json!("override_unavailable")),
-    );
-    assert_eq!(
-        record.fields.get("override"),
-        Some(&serde_json::json!("probe-resolution-named")),
-    );
+    assert_eq!(record.fields.get("resolution"), Some(&serde_json::json!("override_unavailable")),);
+    assert_eq!(record.fields.get("override"), Some(&serde_json::json!("probe-resolution-named")),);
 
     // Nothing resolving reads as such rather than as an absent field.
     log_project_resolution(
@@ -328,11 +313,8 @@ fn a_project_resolution_reports_an_override_that_is_being_ignored() {
             override_provider: None,
         },
     );
-    let nothing = record_where(
-        "project ai api integration resolved",
-        "resolution",
-        "none_configured",
-    );
+    let nothing =
+        record_where("project ai api integration resolved", "resolution", "none_configured");
     assert_eq!(nothing.message, "project ai api integration resolved");
     assert_eq!(nothing.fields.get("provider"), Some(&serde_json::json!("none")));
     assert_eq!(nothing.fields.get("override"), Some(&serde_json::json!("none")));

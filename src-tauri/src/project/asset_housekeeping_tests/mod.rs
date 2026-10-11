@@ -4,9 +4,7 @@
 /// This file's production half — everything above the test modules, which
 /// name the same functions and would otherwise be read as call sites.
 fn production_half(file: &str) -> &str {
-    &file[..file
-        .find("mod asset_housekeeping_tests")
-        .expect("this module")]
+    &file[..file.find("mod asset_housekeeping_tests").expect("this module")]
 }
 
 /// PST-FR-30 / DAS-FR-19: opening a project and closing one each schedule a
@@ -22,16 +20,11 @@ fn production_half(file: &str) -> &str {
 fn pst_ts34_a_close_schedules_housekeeping_before_it_unmounts() {
     const FILE: &str = include_str!("../../project.rs");
     let source = production_half(FILE);
-    let close = source
-        .find("pub fn close_project")
-        .expect("the close command");
+    let close = source.find("pub fn close_project").expect("the close command");
     let body = &source[close..];
-    let scheduled = body
-        .find("sweep_project_draft_assets")
-        .expect("PST-FR-30: a close schedules the pass");
-    let unmounted = body
-        .find("deactivate_project(")
-        .expect("the unmount");
+    let scheduled =
+        body.find("sweep_project_draft_assets").expect("PST-FR-30: a close schedules the pass");
+    let unmounted = body.find("deactivate_project(").expect("the unmount");
     assert!(
         scheduled < unmounted,
         "PST-FR-30: the pass is scheduled before the unmount releases the \
@@ -41,9 +34,7 @@ fn pst_ts34_a_close_schedules_housekeeping_before_it_unmounts() {
     // PST-FR-30 / DAS-FR-19: and an open schedules one too, together with
     // the application-start pass that runs once after the active project
     // has been loaded.
-    let activate = source
-        .find("fn activate_project")
-        .expect("the activation");
+    let activate = source.find("fn activate_project").expect("the activation");
     let after = &source[activate..close.max(activate)];
     assert!(
         after.contains("sweep_project_draft_assets"),
@@ -68,12 +59,8 @@ fn pst_ts34_a_close_schedules_housekeeping_before_it_unmounts() {
 fn pst_ts_cdym_an_open_migrates_the_ignore_file_and_a_remount_does_not() {
     const FILE: &str = include_str!("../../project.rs");
     let source = production_half(FILE);
-    let remount = source
-        .find("fn remount_content_root")
-        .expect("the remount");
-    let activate = source
-        .find("fn activate_project")
-        .expect("the activation");
+    let remount = source.find("fn remount_content_root").expect("the remount");
+    let activate = source.find("fn activate_project").expect("the activation");
     assert!(
         source[activate..].contains("ensure_gitignored"),
         "PST-FR-CDYM: opening a project brings the ignore file up to date, \
@@ -130,10 +117,7 @@ fn pst_ts34_neither_lifecycle_step_waits_on_the_pass_or_reads_its_answer() {
     let source = production_half(FILE);
     for call in source.match_indices("sweep_project_draft_assets") {
         let line_start = source[..call.0].rfind('\n').map(|i| i + 1).unwrap_or(0);
-        let line_end = source[call.0..]
-            .find('\n')
-            .map(|i| call.0 + i)
-            .unwrap_or(source.len());
+        let line_end = source[call.0..].find('\n').map(|i| call.0 + i).unwrap_or(source.len());
         let line = source[line_start..line_end].trim();
         // A statement, not an expression anything is bound from: the answer
         // is an acknowledgement and this path neither reads it nor waits on
@@ -142,9 +126,6 @@ fn pst_ts34_neither_lifecycle_step_waits_on_the_pass_or_reads_its_answer() {
             line.starts_with("crate::draft_assets::sweep_project_draft_assets("),
             "the pass is scheduled and nothing is taken from it: {line:?}",
         );
-        assert!(
-            line.ends_with(");"),
-            "and nothing is bound from it: {line:?}",
-        );
+        assert!(line.ends_with(");"), "and nothing is bound from it: {line:?}",);
     }
 }

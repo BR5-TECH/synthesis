@@ -6,7 +6,7 @@
 //! behind several others — so nothing here reads a path set the author was
 //! shown: it acts on what stands in the stream at this moment.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
@@ -149,9 +149,7 @@ fn await_push(
             Ok(outcome) => return outcome,
             // The thread ended without reporting, which only a panic inside it
             // does. The run goes on, as it does for every other push failure.
-            Err(RecvTimeoutError::Disconnected) => {
-                return Err(ERR_PUSH_UNAVAILABLE.to_string())
-            }
+            Err(RecvTimeoutError::Disconnected) => return Err(ERR_PUSH_UNAVAILABLE.to_string()),
             Err(RecvTimeoutError::Timeout) => {
                 if cancellation.is_cancelled() {
                     return Err(ERR_PUSH_ABANDONED.to_string());
@@ -167,7 +165,7 @@ fn await_push(
 /// The transfer itself, on the thread that waits for no run.
 fn push_now<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    worktree: &PathBuf,
+    worktree: &Path,
     project_key: &str,
 ) -> Result<(), String> {
     let (Some(store), Some(tokens), Some(registry)) = (
@@ -183,10 +181,7 @@ fn push_now<R: tauri::Runtime>(
         &crate::logging::BUFFER,
         &emit,
         &registry,
-        worktree,
-        &store,
-        &tokens,
-        project_key,
+        crate::git::GithubAccess { root: worktree, store: &store, tokens: &tokens, project_key },
     )
 }
 

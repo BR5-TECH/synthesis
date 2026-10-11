@@ -18,10 +18,7 @@ const ALL: [TurnKind; 5] = [
 #[test]
 fn the_turn_kinds_are_five_names_and_the_merge_kinds_are_named_as_such() {
     let names: Vec<&str> = ALL.iter().map(|kind| kind.as_str()).collect();
-    assert_eq!(
-        names,
-        vec!["work", "review", "semantic_rebase", "merge_work", "merge_review"]
-    );
+    assert_eq!(names, vec!["work", "review", "semantic_rebase", "merge_work", "merge_review"]);
     let mut distinct = names.clone();
     distinct.sort();
     distinct.dedup();
@@ -52,10 +49,22 @@ fn a_merge_launch_carries_the_work_or_review_model_and_effort() {
         ("review", "haiku", "high"),
         ("semantic_rebase", "sonnet", "xhigh"),
     ] {
-        agentic::set_model_impl(&harness.store, &harness.ai, "claude_code", Some(kind), Some(model))
-            .expect("a model per kind");
-        agentic::set_effort_impl(&harness.store, &harness.ai, "claude_code", Some(kind), Some(effort))
-            .expect("an effort per kind");
+        agentic::set_model_impl(
+            &harness.store,
+            &harness.ai,
+            "claude_code",
+            Some(kind),
+            Some(model),
+        )
+        .expect("a model per kind");
+        agentic::set_effort_impl(
+            &harness.store,
+            &harness.ai,
+            "claude_code",
+            Some(kind),
+            Some(effort),
+        )
+        .expect("an effort per kind");
     }
     let argv_of = |kind: TurnKind| -> Vec<String> {
         let runtime =
@@ -64,10 +73,8 @@ fn a_merge_launch_carries_the_work_or_review_model_and_effort() {
         runtime.only_run().argv
     };
     let after = |argv: &[String], flag: &str| -> String {
-        let at = argv
-            .iter()
-            .position(|a| a == flag)
-            .unwrap_or_else(|| panic!("no {flag} in {argv:?}"));
+        let at =
+            argv.iter().position(|a| a == flag).unwrap_or_else(|| panic!("no {flag} in {argv:?}"));
         argv[at + 1].clone()
     };
 
@@ -114,8 +121,14 @@ fn a_merge_review_falls_back_as_a_review_does() {
     let harness = harness_for("claude_code");
     agentic::set_model_impl(&harness.store, &harness.ai, "claude_code", None, Some("opus"))
         .expect("the default model");
-    agentic::set_model_impl(&harness.store, &harness.ai, "claude_code", Some("work"), Some("sonnet"))
-        .expect("a work model");
+    agentic::set_model_impl(
+        &harness.store,
+        &harness.ai,
+        "claude_code",
+        Some("work"),
+        Some("sonnet"),
+    )
+    .expect("a work model");
     let model_of = |kind: TurnKind| -> String {
         let runtime =
             RecordingRuntime::replying(&stdout_for("claude_code", &envelope_json("success")));
@@ -178,18 +191,12 @@ fn a_mount_masks_whatever_kind_carries_it() {
         run_as(
             &harness,
             runtime.clone(),
-            Some(SupplementaryMount::SemanticRebaseArtifact {
-                host_path: bundle.clone(),
-            }),
+            Some(SupplementaryMount::SemanticRebaseArtifact { host_path: bundle.clone() }),
             None,
             kind,
         )
         .expect("runs");
-        runtime
-            .only_run()
-            .argv
-            .iter()
-            .any(|a| a.contains("repository-mask"))
+        runtime.only_run().argv.iter().any(|a| a.contains("repository-mask"))
     };
     for kind in ALL {
         assert!(masked_with_mount(kind), "a mount masks {kind:?}");

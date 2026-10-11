@@ -7,7 +7,9 @@
 
 use tauri::Manager;
 
-use super::commands::{announce, project_key, project_root, refuse, store, store_fs, stream_has_live_run};
+use super::commands::{
+    announce, project_key, project_root, refuse, store, store_fs, stream_has_live_run,
+};
 use super::update_record::{StreamUpdateCommit, StreamUpdateStrategy};
 use super::*;
 use crate::graduation::GraduationEscalationAnswer;
@@ -26,7 +28,9 @@ fn stream_of<R: tauri::Runtime>(
     let key = project_key(app);
     store::read_stream(&fs, &store, stream_id)
         .filter(|stream| stream.project_key == key)
-        .ok_or_else(|| refuse(app, "work stream not found", stream_id, ERR_UNKNOWN_STREAM.to_string()))
+        .ok_or_else(|| {
+            refuse(app, "work stream not found", stream_id, ERR_UNKNOWN_STREAM.to_string())
+        })
 }
 
 /// The stream's update record, or the typed refusal where the stream is unknown.
@@ -53,10 +57,9 @@ fn missing_at<R: tauri::Runtime>(
     let Ok(main) = git::primary_repo(&root) else {
         return Vec::new();
     };
-    let (Some(head), Ok(base)) = (
-        update_git::branch_tip(&main, &stream.branch),
-        git2::Oid::from_str(pinned),
-    ) else {
+    let (Some(head), Ok(base)) =
+        (update_git::branch_tip(&main, &stream.branch), git2::Oid::from_str(pinned))
+    else {
         return Vec::new();
     };
     update_git::missing_commits(&main, head, base)
@@ -89,13 +92,13 @@ pub fn update_work_stream<R: tauri::Runtime>(
 /// the commits the stream is missing, and the author's decisions.
 pub(crate) trait UpdateStart<R: tauri::Runtime>:
     FnOnce(
-        &tauri::AppHandle<R>,
-        &WorkStream,
-        StreamUpdateStrategy,
-        String,
-        Vec<StreamUpdateCommit>,
-        Vec<StreamMergeDecision>,
-    ) -> Result<StreamUpdateRecord, String>
+    &tauri::AppHandle<R>,
+    &WorkStream,
+    StreamUpdateStrategy,
+    String,
+    Vec<StreamUpdateCommit>,
+    Vec<StreamMergeDecision>,
+) -> Result<StreamUpdateRecord, String>
 {
 }
 
@@ -132,9 +135,7 @@ pub(crate) fn scripted_update_start<R: tauri::Runtime>(
             decisions,
             dispatch,
         )?;
-        handle
-            .join()
-            .map_err(|_| "the update thread did not rest".to_string())?;
+        handle.join().map_err(|_| "the update thread did not rest".to_string())?;
         Ok(record)
     }
 }
@@ -370,10 +371,7 @@ pub fn clear_work_stream_update<R: tauri::Runtime>(
     let running = update_record::read_update(&fs, &store, &stream_id)
         .map(|record| record.state.is_running())
         .unwrap_or(false)
-        || held
-            .as_ref()
-            .map(|state| state.is_updating(&stream_id))
-            .unwrap_or(false);
+        || held.as_ref().map(|state| state.is_updating(&stream_id)).unwrap_or(false);
     if running {
         return Err(refuse(
             &app,

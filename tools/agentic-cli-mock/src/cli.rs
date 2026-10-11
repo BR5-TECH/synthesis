@@ -78,18 +78,12 @@ pub fn parse<'a>(
     // Resolve the tool before reporting anything else, so a record for a later
     // problem can carry it.
     let Some(tool) = tool else {
-        return Err(InvocationError {
-            tool: None,
-            mismatch_type: MismatchType::MissingToolOption,
-        });
+        return Err(InvocationError { tool: None, mismatch_type: MismatchType::MissingToolOption });
     };
     let tool = tool.to_string_lossy().into_owned();
 
     let Some(adapter) = adapter::resolve(registry, &tool) else {
-        return Err(InvocationError {
-            tool: None,
-            mismatch_type: MismatchType::UnknownTool,
-        });
+        return Err(InvocationError { tool: None, mismatch_type: MismatchType::UnknownTool });
     };
 
     if undefined_option {
@@ -106,11 +100,7 @@ pub fn parse<'a>(
         });
     };
 
-    Ok(Invocation {
-        adapter,
-        scenario_path: PathBuf::from(scenario_path),
-        tool_args,
-    })
+    Ok(Invocation { adapter, scenario_path: PathBuf::from(scenario_path), tool_args })
 }
 
 enum Consumed {
@@ -122,16 +112,10 @@ enum Consumed {
 /// Returns what happened and how far to advance. The advance is part of the
 /// result because an option with no value available must not step over the
 /// token that follows it — that token may be the terminator.
-fn take_value(
-    argv: &[OsString],
-    index: usize,
-    slot: &mut Option<OsString>,
-) -> (Consumed, usize) {
+fn take_value(argv: &[OsString], index: usize, slot: &mut Option<OsString>) -> (Consumed, usize) {
     // ACM-FR-04: `--` terminates the mock's own options, so it is never
     // swallowed as one of their values.
-    let value = argv
-        .get(index + 1)
-        .filter(|value| value.as_os_str() != OsStr::new(TERMINATOR));
+    let value = argv.get(index + 1).filter(|value| value.as_os_str() != OsStr::new(TERMINATOR));
 
     let Some(value) = value else {
         // No value available. A repeat is still a repeat — ACM-FR-03 makes
@@ -196,13 +180,19 @@ mod tests {
     #[test]
     fn every_token_after_the_terminator_is_a_received_argument() {
         let invocation = parse_ok(&[
-            "--tool", "claude", "--scenario", "s.json", "--", "-p", "", "--tool", "-p", "--",
+            "--tool",
+            "claude",
+            "--scenario",
+            "s.json",
+            "--",
+            "-p",
+            "",
+            "--tool",
+            "-p",
+            "--",
             "--scenario",
         ]);
-        assert_eq!(
-            invocation.tool_args,
-            os(&["-p", "", "--tool", "-p", "--", "--scenario"])
-        );
+        assert_eq!(invocation.tool_args, os(&["-p", "", "--tool", "-p", "--", "--scenario"]));
     }
 
     #[test]
@@ -250,11 +240,7 @@ mod tests {
             vec!["stray", "--tool", "claude", "--scenario", "s.json"],
         ] {
             let error = parse_err(&args);
-            assert_eq!(
-                error.mismatch_type,
-                MismatchType::UnknownOption,
-                "for {args:?}"
-            );
+            assert_eq!(error.mismatch_type, MismatchType::UnknownOption, "for {args:?}");
         }
     }
 
@@ -276,21 +262,13 @@ mod tests {
 
     #[test]
     fn a_repeated_option_is_a_configuration_error() {
-        let error = parse_err(&[
-            "--tool", "claude", "--tool", "codex", "--scenario", "s.json",
-        ]);
+        let error = parse_err(&["--tool", "claude", "--tool", "codex", "--scenario", "s.json"]);
         assert_eq!(error.mismatch_type, MismatchType::UnknownOption);
         // The first occurrence is what resolved, so the record can still name it.
         assert_eq!(error.tool.as_deref(), Some("claude"));
 
-        let error = parse_err(&[
-            "--tool",
-            "claude",
-            "--scenario",
-            "a.json",
-            "--scenario",
-            "b.json",
-        ]);
+        let error =
+            parse_err(&["--tool", "claude", "--scenario", "a.json", "--scenario", "b.json"]);
         assert_eq!(error.mismatch_type, MismatchType::UnknownOption);
     }
 
@@ -314,11 +292,7 @@ mod tests {
             vec!["--scenario", "s.json", "--tool", "claude", "--tool"],
         ] {
             let error = parse_err(&args);
-            assert_eq!(
-                error.mismatch_type,
-                MismatchType::UnknownOption,
-                "for {args:?}"
-            );
+            assert_eq!(error.mismatch_type, MismatchType::UnknownOption, "for {args:?}");
         }
     }
 
@@ -326,9 +300,8 @@ mod tests {
     /// follows must not be stepped over.
     #[test]
     fn a_repeat_just_before_the_terminator_does_not_swallow_it() {
-        let error = parse_err(&[
-            "--tool", "claude", "--scenario", "s.json", "--scenario", "--", "-p",
-        ]);
+        let error =
+            parse_err(&["--tool", "claude", "--scenario", "s.json", "--scenario", "--", "-p"]);
         assert_eq!(error.mismatch_type, MismatchType::UnknownOption);
     }
 
@@ -352,9 +325,8 @@ mod tests {
     /// A repeated option *after* the terminator is just an argument.
     #[test]
     fn options_repeated_after_the_terminator_are_not_repeats() {
-        let invocation = parse_ok(&[
-            "--tool", "claude", "--scenario", "s.json", "--", "--tool", "codex",
-        ]);
+        let invocation =
+            parse_ok(&["--tool", "claude", "--scenario", "s.json", "--", "--tool", "codex"]);
         assert_eq!(invocation.adapter.id(), "claude");
         assert_eq!(invocation.tool_args, os(&["--tool", "codex"]));
     }

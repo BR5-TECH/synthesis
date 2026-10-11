@@ -32,24 +32,19 @@ pub const PROGRESS_KIND_GIT: &str = "git";
 /// of everything this module publishes.
 pub(crate) const FETCH_LABEL: &str = "Fetching branches";
 
-/// Is `url` a `github.com` HTTPS remote — the one case GTC-FR-09 authenticates
-/// with the token the open project resolves?
+/// Is `url` an HTTPS remote on `github.com` or on a `*.ghe.com` host — a case
+/// GTC-FR-09 authenticates with the token the open project resolves? A host that
+/// only a stored token names is decided by `github_tokens::resolve_remote_token`.
 ///
 /// An `ssh://git@github.com/...` or `git@github.com:owner/repo` remote is
 /// deliberately **not** one: SSH authenticates with the author's own key, which
 /// is what GTC-FR-09 means by a remote that "authenticates as it otherwise
 /// would". Presenting a personal access token to it would fail regardless.
 pub fn is_github_https_remote(url: &str) -> bool {
-    let Some(rest) = url.strip_prefix("https://") else {
-        return false;
-    };
-    // A URL may already carry userinfo (`https://user:pw@github.com/...`); the
-    // host is what follows the last `@`, not what precedes the first `/`.
-    let authority = rest.split('/').next().unwrap_or("");
-    let host = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
-    // Strip any port before comparing, so `github.com:443` still matches.
-    let host = host.split_once(':').map_or(host, |(h, _)| h);
-    host.eq_ignore_ascii_case("github.com")
+    // The host is what follows the last `@` of the authority, and a port is
+    // stripped, so `https://user:pw@github.com:443/...` still matches.
+    github_tokens::host::https_remote_host(url)
+        .is_some_and(|host| github_tokens::host::is_github_family_host(&host))
 }
 
 /// GTC-FR-14: the two failures a transfer can end in that the caller presents
@@ -178,17 +173,14 @@ pub(crate) fn next_credential(
 }
 
 /// Install the credential chain on `callbacks`.
-pub(crate) fn install_credentials<'cb>(callbacks: &mut git2::RemoteCallbacks<'cb>, token: Option<&'cb str>) {
+pub(crate) fn install_credentials<'cb>(
+    callbacks: &mut git2::RemoteCallbacks<'cb>,
+    token: Option<&'cb str>,
+) {
     let chain = credential_chain(token);
     let cursor = Cell::new(0usize);
     callbacks.credentials(move |_url, username_from_url, allowed| {
-        next_credential(
-            &chain,
-            &cursor,
-            token,
-            username_from_url.unwrap_or("git"),
-            allowed,
-        )
+        next_credential(&chain, &cursor, token, username_from_url.unwrap_or("git"), allowed)
     });
 }
 
@@ -200,9 +192,8 @@ pub(crate) fn fetch_with_prune(
     remote_name: &str,
     token: Option<&str>,
 ) -> Result<(), String> {
-    let mut remote = repo
-        .find_remote(remote_name)
-        .map_err(|_| ERR_NO_REMOTE_CONFIGURED.to_string())?;
+    let mut remote =
+        repo.find_remote(remote_name).map_err(|_| ERR_NO_REMOTE_CONFIGURED.to_string())?;
 
     let mut callbacks = git2::RemoteCallbacks::new();
     install_credentials(&mut callbacks, token);
@@ -219,9 +210,7 @@ pub(crate) fn fetch_with_prune(
     // what maps its `refs/heads/*` onto this repository's remote-tracking refs.
     // Naming a refspec here instead would quietly ignore a repository that
     // fetches a narrower set than the default.
-    remote
-        .fetch::<&str>(&[], Some(&mut opts), None)
-        .map_err(|e| classify_transfer_error(&e))
+    remote.fetch::<&str>(&[], Some(&mut opts), None).map_err(|e| classify_transfer_error(&e))
 }
 
 /// **The** fetch primitive (GTC-FR-12): update the repository's remote-tracking
@@ -277,27 +266,21 @@ where
     //
     // The secret is obtained at the moment of the operation and lives no longer
     // than this call: it is never cached and never part of a return payload.
-    let token = if is_github_https_remote(&url) {
-        // The refusal is logged here rather than left to the caller: it is the
-        // one failure that happens *before* a transfer, and the record is what
-        // explains a refresh that reached no remote at all.
-        Some(
-            github_tokens::resolve_github_token_secret(store, tokens, project_key).inspect_err(
-                |e| {
-                    log_failure(
-                        sink,
-                        buffer,
-                        TRANSFER,
-                        MSG_FETCH_FAILED,
-                        e,
-                        log_fields! { "remote" => &remote_name },
-                    )
-                },
-            )?,
-        )
-    } else {
-        None
-    };
+    //
+    // The refusal is logged here rather than left to the caller: it is the one
+    // failure that happens *before* a transfer, and the record is what explains
+    // a refresh that reached no remote at all.
+    let token =
+        github_tokens::resolve_remote_token(store, tokens, project_key, &url).inspect_err(|e| {
+            log_failure(
+                sink,
+                buffer,
+                TRANSFER,
+                MSG_FETCH_FAILED,
+                e,
+                log_fields! { "remote" => &remote_name },
+            )
+        })?;
 
     // The remote's *name*, never its URL, and a boolean for the credential —
     // whether a token was presented is the thing worth knowing, and the secret
@@ -326,14 +309,7 @@ where
 
     let fields = log_fields! { "remote" => &remote_name, "durationMs" => duration_ms(started) };
     match &result {
-        Ok(()) => log_ok(
-            sink,
-            buffer,
-            LogLevel::Info,
-            TRANSFER,
-            "remote branches fetched",
-            fields,
-        ),
+        Ok(()) => log_ok(sink, buffer, LogLevel::Info, TRANSFER, "remote branches fetched", fields),
         Err(error) => log_failure(sink, buffer, TRANSFER, MSG_FETCH_FAILED, error, fields),
     }
     result

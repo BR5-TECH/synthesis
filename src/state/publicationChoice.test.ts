@@ -52,4 +52,16 @@ describe("publication choice wording", () => {
     expect(publicationErrorText("Error: sub_issue_link_failed")).toContain("(sub_issue_link_failed)");
     expect(publicationErrorText("github_unreachable")).toBe("github_unreachable");
   });
+
+  it("GHA-FR-LBLM: a host mismatch refusal is stated and keeps its code", () => {
+    const text = publicationErrorText("Error: github_host_mismatch");
+    expect(text).toContain("The project token belongs to another GitHub host than this remote. Pick or add a token for the host of the remote.");
+    expect(text).toContain("(github_host_mismatch)");
+  });
+
+  it("AAP-FR-LRTC: a refused certificate names its host and its cause", () => {
+    expect(
+      publicationErrorText("Error: tls_untrusted:unknown_issuer:api.github.com"),
+    ).toBe("The certificate of api.github.com is not trusted: the issuer of the certificate is unknown.");
+  });
 });

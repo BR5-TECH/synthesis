@@ -19,7 +19,7 @@ use crate::global_settings::GlobalSettingsStore;
 use crate::logging::LogLevel;
 
 use super::log::DocLog;
-use super::manager::{DocumentsCollection, RefreshOutcome};
+use super::manager::{DocumentsCollection, Persist, RefreshOutcome};
 use super::model::{
     format_of, DocumentsError, DocumentsSnapshot, PickDocumentSourcesResult, PickMode, SourceKind,
     StoredSource,
@@ -37,10 +37,9 @@ pub const DOCUMENTS_CHANGED: &str = "documents-changed";
 /// changes no source and only asks for one refresh (DCL-FR-XHSJ). The refresh
 /// runs in the background, so the mount never waits for it.
 pub fn on_content_root_mounted<R: tauri::Runtime>(app: &tauri::AppHandle<R>, project_key: &str) {
-    let (Some(collection), Some(_)) = (
-        app.try_state::<DocumentsCollection>(),
-        app.try_state::<DocumentsWatcher>(),
-    ) else {
+    let (Some(collection), Some(_)) =
+        (app.try_state::<DocumentsCollection>(), app.try_state::<DocumentsWatcher>())
+    else {
         return;
     };
     if project_key.is_empty() {
@@ -61,11 +60,7 @@ pub fn on_content_root_mounted<R: tauri::Runtime>(app: &tauri::AppHandle<R>, pro
                 crate::log_fields! { "sources" => count },
             );
         } else {
-            app.log(
-                LogLevel::Error,
-                "document sources could not be read",
-                crate::log_fields! {},
-            );
+            app.log(LogLevel::Error, "document sources could not be read", crate::log_fields! {});
         }
     }
     request_refresh(app);
@@ -82,11 +77,7 @@ pub fn on_project_closed<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     if let Some(collection) = app.try_state::<DocumentsCollection>() {
         if collection.is_open() {
             collection.close();
-            app.log(
-                LogLevel::Info,
-                "documents collection closed",
-                crate::log_fields! {},
-            );
+            app.log(LogLevel::Info, "documents collection closed", crate::log_fields! {});
         }
     }
     if let Some(watcher) = app.try_state::<DocumentsWatcher>() {
@@ -115,17 +106,12 @@ pub fn request_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
         };
         loop {
             while watcher.pending.swap(false, Ordering::SeqCst) {
-                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    run_refresh(&app)
-                }));
+                let outcome =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_refresh(&app)));
                 if outcome.is_err() {
                     // DCL-FR-UPFP: a failed refresh is an `ERROR` record. The
                     // thread carries on, so the next change still refreshes.
-                    app.log(
-                        LogLevel::Error,
-                        "documents refresh failed",
-                        crate::log_fields! {},
-                    );
+                    app.log(LogLevel::Error, "documents refresh failed", crate::log_fields! {});
                 }
             }
             watcher.running.store(false, Ordering::SeqCst);
@@ -144,14 +130,10 @@ pub fn request_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 /// and read, replace the snapshot, announce a changed snapshot, feed the index,
 /// and bring the watch in line with the sources.
 pub fn run_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> RefreshOutcome {
-    let (Some(collection), Some(fs)) = (
-        app.try_state::<DocumentsCollection>(),
-        app.try_state::<FsAccessState>(),
-    ) else {
-        return RefreshOutcome {
-            changed: None,
-            stale: true,
-        };
+    let (Some(collection), Some(fs)) =
+        (app.try_state::<DocumentsCollection>(), app.try_state::<FsAccessState>())
+    else {
+        return RefreshOutcome { changed: None, stale: true };
     };
     if collection.is_open() && collection.snapshot() == Err(DocumentsError::StoreUnavailable) {
         retry_store(app);
@@ -208,9 +190,7 @@ pub fn add_sources<R: tauri::Runtime>(
     requested: &[StoredSource],
 ) -> Result<DocumentsSnapshot, DocumentsError> {
     let started = std::time::Instant::now();
-    let collection = app
-        .try_state::<DocumentsCollection>()
-        .ok_or(DocumentsError::NoProjectOpen)?;
+    let collection = app.try_state::<DocumentsCollection>().ok_or(DocumentsError::NoProjectOpen)?;
     let persist = persister(app);
     let added = collection
         .add_sources(requested, &*persist)
@@ -237,9 +217,7 @@ pub fn remove_source<R: tauri::Runtime>(
     path: &str,
 ) -> Result<DocumentsSnapshot, DocumentsError> {
     let started = std::time::Instant::now();
-    let collection = app
-        .try_state::<DocumentsCollection>()
-        .ok_or(DocumentsError::NoProjectOpen)?;
+    let collection = app.try_state::<DocumentsCollection>().ok_or(DocumentsError::NoProjectOpen)?;
     let persist = persister(app);
     let removed = collection
         .remove_source(path, &*persist)
@@ -269,9 +247,7 @@ pub fn add_picked_sources<R: tauri::Runtime>(
     mode: PickMode,
     picked: Option<Vec<PathBuf>>,
 ) -> Result<PickDocumentSourcesResult, DocumentsError> {
-    let collection = app
-        .try_state::<DocumentsCollection>()
-        .ok_or(DocumentsError::NoProjectOpen)?;
+    let collection = app.try_state::<DocumentsCollection>().ok_or(DocumentsError::NoProjectOpen)?;
     let Some(paths) = picked else {
         app.log(
             LogLevel::Info,
@@ -293,11 +269,7 @@ pub fn add_picked_sources<R: tauri::Runtime>(
         );
     }
     let snapshot = add_sources(app, &sources)?;
-    Ok(PickDocumentSourcesResult {
-        cancelled: false,
-        ignored_count,
-        snapshot,
-    })
+    Ok(PickDocumentSourcesResult { cancelled: false, ignored_count, snapshot })
 }
 
 /// DCL-FR-VXXI, DCL-FR-FGGU: the sources a picker result stands for, and how
@@ -309,20 +281,12 @@ pub fn sources_from_picked(mode: PickMode, paths: &[PathBuf]) -> (Vec<StoredSour
     for path in paths {
         let text = path.to_string_lossy().into_owned();
         match mode {
-            PickMode::Folder => sources.push(StoredSource {
-                kind: SourceKind::Folder,
-                path: text,
-            }),
+            PickMode::Folder => sources.push(StoredSource { kind: SourceKind::Folder, path: text }),
             PickMode::Files => {
-                let name = path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default();
+                let name =
+                    path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                 if format_of(&name).is_some() {
-                    sources.push(StoredSource {
-                        kind: SourceKind::File,
-                        path: text,
-                    });
+                    sources.push(StoredSource { kind: SourceKind::File, path: text });
                 } else {
                     ignored += 1;
                 }
@@ -345,13 +309,10 @@ fn mode_name(mode: PickMode) -> &'static str {
 /// DCL-FR-VWSG: the key is the one the change began for, which the collection
 /// passes in, so a project switch during the write cannot move the list into
 /// another project's slot.
-fn persister<'a, R: tauri::Runtime>(
-    app: &'a tauri::AppHandle<R>,
-) -> Box<dyn Fn(&str, &[StoredSource]) -> Result<(), String> + 'a> {
+fn persister<'a, R: tauri::Runtime>(app: &'a tauri::AppHandle<R>) -> Box<Persist<'a>> {
     Box::new(move |key: &str, list: &[StoredSource]| {
-        let store = app
-            .try_state::<GlobalSettingsStore>()
-            .ok_or("the settings store is not available")?;
+        let store =
+            app.try_state::<GlobalSettingsStore>().ok_or("the settings store is not available")?;
         store.save_document_sources(key, list.to_vec())
     })
 }
@@ -369,11 +330,7 @@ pub fn retry_store<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
     };
     let recovered = collection.retry_store(&|key| store.load_document_sources(key).map_err(|_| ()));
     if recovered {
-        app.log(
-            LogLevel::Info,
-            "document sources are readable again",
-            crate::log_fields! {},
-        );
+        app.log(LogLevel::Info, "document sources are readable again", crate::log_fields! {});
     }
     recovered
 }

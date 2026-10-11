@@ -59,10 +59,7 @@ fn branch_option_serialises_camel_case() {
         is_default: true,
     })
     .unwrap();
-    assert_eq!(
-        json,
-        serde_json::json!({ "name": "main", "isCurrent": false, "isDefault": true })
-    );
+    assert_eq!(json, serde_json::json!({ "name": "main", "isCurrent": false, "isDefault": true }));
 }
 
 #[test]
@@ -92,10 +89,7 @@ fn uncommitted_changes_are_found_in_a_linked_worktree() {
     let repo = fx.repo();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     repo.branch("feature", &head, false).unwrap();
-    let reference = repo
-        .find_branch("feature", BranchType::Local)
-        .unwrap()
-        .into_reference();
+    let reference = repo.find_branch("feature", BranchType::Local).unwrap().into_reference();
     let mut opts = git2::WorktreeAddOptions::new();
     opts.reference(Some(&reference));
     repo.worktree("feature", &wt_path, Some(&opts)).unwrap();

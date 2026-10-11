@@ -28,36 +28,16 @@ pub struct PassScope {
 }
 
 impl PassScope {
-    pub const ALL: PassScope = PassScope {
-        artifacts: true,
-        drafts: true,
-        notes: true,
-        documents: true,
-    };
-    pub const ARTIFACTS: PassScope = PassScope {
-        artifacts: true,
-        drafts: false,
-        notes: false,
-        documents: false,
-    };
-    pub const DRAFTS: PassScope = PassScope {
-        artifacts: false,
-        drafts: true,
-        notes: false,
-        documents: false,
-    };
-    pub const NOTES: PassScope = PassScope {
-        artifacts: false,
-        drafts: false,
-        notes: true,
-        documents: false,
-    };
-    pub const DOCUMENTS: PassScope = PassScope {
-        artifacts: false,
-        drafts: false,
-        notes: false,
-        documents: true,
-    };
+    pub const ALL: PassScope =
+        PassScope { artifacts: true, drafts: true, notes: true, documents: true };
+    pub const ARTIFACTS: PassScope =
+        PassScope { artifacts: true, drafts: false, notes: false, documents: false };
+    pub const DRAFTS: PassScope =
+        PassScope { artifacts: false, drafts: true, notes: false, documents: false };
+    pub const NOTES: PassScope =
+        PassScope { artifacts: false, drafts: false, notes: true, documents: false };
+    pub const DOCUMENTS: PassScope =
+        PassScope { artifacts: false, drafts: false, notes: false, documents: true };
 
     pub(super) fn merge(self, other: PassScope) -> PassScope {
         PassScope {

@@ -121,15 +121,12 @@ fn an_escalated_update_is_answered_and_the_answers_reach_the_next_turn() {
 // settle nothing end the update `conflicted`, naming the path, with neither
 // branch moved. The author's retry grants three more turns.
 #[test]
-fn three_semantic_turns_that_settle_nothing_leave_the_update_conflicted_and_a_retry_grants_three_more() {
+fn three_semantic_turns_that_settle_nothing_leave_the_update_conflicted_and_a_retry_grants_three_more(
+) {
     conflicting("update bound spent")
         .updated(
             StreamUpdateStrategy::MergeSource,
-            vec![
-                Script::reports_success(),
-                Script::reports_success(),
-                Script::reports_success(),
-            ],
+            vec![Script::reports_success(), Script::reports_success(), Script::reports_success()],
         )
         .expect_update_state(StreamUpdateState::Conflicted)
         .expect_dispatch_count(3)
@@ -149,10 +146,7 @@ fn three_semantic_turns_that_settle_nothing_leave_the_update_conflicted_and_a_re
 #[test]
 fn a_cancelled_update_moves_neither_branch() {
     conflicting("cancelled update")
-        .updated(
-            StreamUpdateStrategy::MergeSource,
-            vec![settling().cancelling_the_update()],
-        )
+        .updated(StreamUpdateStrategy::MergeSource, vec![settling().cancelling_the_update()])
         .expect_update_state(StreamUpdateState::Cancelled)
         .expect_update_failure("update_cancelled")
         .expect_dispatch_count(1)
@@ -212,7 +206,7 @@ fn an_update_is_refused_while_the_stream_holds_a_resting_run() {
         .work_turn(Script::escalates(&["Which panel is meant?"]))
         .run()
         .expect_state(GraduationRunState::AwaitingAuthor)
-        .expect_stream_released()
+        .expect_stream_held()
         .committing_on_the_base("base-only.txt", "from the base\n")
         .updated(StreamUpdateStrategy::MergeSource, Vec::new())
         .expect_reconciliation_refused("stream_busy")
@@ -260,11 +254,7 @@ fn answers_and_retries_are_refused_while_the_stream_holds_a_live_run() {
     conflicting("update retry beside a live run")
         .updated(
             StreamUpdateStrategy::MergeSource,
-            vec![
-                Script::reports_success(),
-                Script::reports_success(),
-                Script::reports_success(),
-            ],
+            vec![Script::reports_success(), Script::reports_success(), Script::reports_success()],
         )
         .expect_update_state(StreamUpdateState::Conflicted)
         .enqueuing_on_the_stream("waiting", "Write the header.")

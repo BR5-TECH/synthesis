@@ -31,9 +31,15 @@ import type {
 // Graduation runs execute in one and commit onto it, so consecutive runs stack
 // with no reconciliation between them.
 
-/** WKS-FR-KDXF: create a stream, or create nothing. */
-export const createWorkStream = (name: string, baseBranch?: string) =>
-  invoke<WorkStream>("create_work_stream", { name, baseBranch });
+/**
+ * WKS-FR-KDXF / WKS-FR-KCTR: create a stream, or create nothing. A stream is
+ * temporary only where the request says so.
+ */
+export const createWorkStream = (
+  name: string,
+  baseBranch?: string,
+  temporary = false,
+) => invoke<WorkStream>("create_work_stream", { name, baseBranch, temporary });
 
 /** WKS-FR-SGCM: every live stream of the project, with what each holds. */
 export const listWorkStreams = () =>

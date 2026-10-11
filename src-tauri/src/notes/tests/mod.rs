@@ -10,10 +10,7 @@ fn temp_root() -> tempfile::TempDir {
 }
 
 fn entity(id: &str) -> NoteScope {
-    NoteScope::Entity {
-        entity_id: id.into(),
-        entity_path: String::new(),
-    }
+    NoteScope::Entity { entity_id: id.into(), entity_path: String::new() }
 }
 
 fn touch(root: &Path, rel: &str) {
@@ -27,7 +24,6 @@ fn touch(root: &Path, rel: &str) {
 fn create(root: &crate::fs::RootFs, scope: NoteScope, body: &str, at: &str) -> Note {
     create_note_in(root, scope, body.into(), None, None, at).unwrap()
 }
-
 
 /// Open a discussion on a note through the comment store, which is where
 /// the association lives (CMS-FR-62).
@@ -49,7 +45,6 @@ fn discuss(root: &crate::fs::RootFs, note_id: &str, body: &str) -> String {
     .0
     .id
 }
-
 
 mod body_bound;
 mod channel;

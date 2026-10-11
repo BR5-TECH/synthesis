@@ -1,5 +1,5 @@
 /**
- * One page of one of a run's two log streams
+ * One page of one of a run's two log streams, `activity` and `structured`
  * (`../../specifications/core/GRS-graduation-run-log-storage.md`).
  *
  * The window reads these and holds no source of truth of its own
@@ -10,7 +10,8 @@
 
 import type { GraduationLogFailure } from "./graduation";
 
-export type GraduationLogStream = "source" | "structured";
+/** GLW-FR-FPUX: the window reads `activity`; `structured` is the observability file. */
+export type GraduationLogStream = "activity" | "structured";
 
 /** GRS contract surface: what a read's pass scope names. */
 export type GraduationLogPassScope =

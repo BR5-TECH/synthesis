@@ -35,7 +35,7 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "export_logs",
     // Picker window re-centering on re-show (PPK-FR-12).
     "center_picker",
-    // The two settings child windows (SWN-settings-windows.md SWN-FR-13,
+    // The Settings child window (SWN-settings-windows.md SWN-FR-13,
     // SWN-FR-08).
     "open_settings_window",
     "finish_settings_close",
@@ -251,6 +251,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "inspect_branch_deletion",
     "delete_branch",
     "list_pull_requests",
+    "create_pull_request",
+    "get_pull_request_head_state",
     "get_pull_request_detail",
     "list_pull_request_timeline",
     // The single working-tree status primitive, which the graduation start
@@ -350,13 +352,11 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // Conversational agents (AGR-agent-registry.md / AGT-agents.md).
     // `resolve_project_agent` is deliberately absent: it is the read path a
     // dispatch takes and must stay unreachable from the frontend (AGR-FR-18).
-    "list_agents",
+    "list_personal_agents",
+    "list_project_agents",
     "create_agent",
     "update_agent",
     "delete_agent",
-    "list_project_agents",
-    "enrol_project_agent",
-    "remove_project_agent",
     // Agent conversations (AGC-agent-conversations.md / CMT-comments.md).
     // `build_input` and the completion seam are likewise absent: one reads the
     // material under discussion, the other reaches a model with a key

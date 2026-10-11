@@ -67,7 +67,10 @@ pub fn follow_rename(
             if dir.join(&new_name).exists() {
                 continue;
             }
-            if root.rename_under(root.path(), format!("{COMMENTS_REL}/{old_name}"), &new_name).is_ok() {
+            if root
+                .rename_under(root.path(), format!("{COMMENTS_REL}/{old_name}"), &new_name)
+                .is_ok()
+            {
                 moved += 1;
             }
         }
@@ -100,11 +103,7 @@ pub(super) fn relative_files(root: &fsa::RootFs, dir: &Path, prefix: String) -> 
     };
     for entry in entries {
         let name = entry.name.clone();
-        let rel = if prefix.is_empty() {
-            name
-        } else {
-            format!("{prefix}/{name}")
-        };
+        let rel = if prefix.is_empty() { name } else { format!("{prefix}/{name}") };
         let path = dir.join(&entry.name);
         let Ok(meta) = root.file_info(&path) else {
             continue;

@@ -16,17 +16,11 @@ fn cms_ts68_read_attachment_bytes_matches_the_surface_read_and_fetches_nothing()
     let thread = open_discussion_in(
         root,
         root,
-        &DiscussionTarget::Draft {
-            draft_id: draft.clone(),
-        },
+        &DiscussionTarget::Draft { draft_id: draft.clone() },
         None,
         "look at this".into(),
-        vec![
-            inline_png("diff.png", png),
-            url_png("https://example.test/a.png", Some("spec v2")),
-        ],
-        &human("raver119"),
-        "2026-01-01T00:00:00Z",
+        vec![inline_png("diff.png", png), url_png("https://example.test/a.png", Some("spec v2"))],
+        Stamp { by: &human("raver119"), at: "2026-01-01T00:00:00Z" },
     )
     .unwrap();
     let digest = match only_attachments(&thread)[0] {
@@ -34,18 +28,14 @@ fn cms_ts68_read_attachment_bytes_matches_the_surface_read_and_fetches_nothing()
         other => panic!("expected a blob, got {other:?}"),
     };
 
-    let internal =
-        read_attachment_bytes(root, root, &thread.id, &digest, Some(&draft)).unwrap();
-    let surface =
-        read_attachment_in(root, attachment_scope(&thread), &thread, &digest).unwrap();
+    let internal = read_attachment_bytes(root, root, &thread.id, &digest, Some(&draft)).unwrap();
+    let surface = read_attachment_in(root, attachment_scope(&thread), &thread, &digest).unwrap();
     assert_eq!(internal, surface, "one path with one set of rules");
     assert_eq!(internal.media_type, "image/png");
     assert_eq!(internal.filename, "diff.png");
     use base64::Engine as _;
     assert_eq!(
-        base64::engine::general_purpose::STANDARD
-            .decode(internal.data.as_bytes())
-            .unwrap(),
+        base64::engine::general_purpose::STANDARD.decode(internal.data.as_bytes()).unwrap(),
         png,
     );
 
@@ -95,12 +85,8 @@ fn opening_a_discussion_writes_the_reserved_log_and_carries_no_anchor() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     let draft = make_draft(root, "artifact-window");
 
-    let thread = open_discussion(
-        root,
-        &draft,
-        "rework the graduation part",
-        "2026-02-01T00:00:00Z",
-    );
+    let thread =
+        open_discussion(root, &draft, "rework the graduation part", "2026-02-01T00:00:00Z");
 
     let lines = discussion_log_lines(root, &draft);
     assert_eq!(lines.len(), 2, "one opening and one comment, in one append");
@@ -117,14 +103,8 @@ fn opening_a_discussion_writes_the_reserved_log_and_carries_no_anchor() {
 
     // CMS-FR-55: the filename is reserved rather than derived, and lives
     // inside the draft's own committed folder.
-    assert!(draft_comments_dir(root, &draft)
-        .unwrap()
-        .join(DISCUSSION_LOG_NAME)
-        .is_file());
-    assert!(
-        !comments_dir(root).exists(),
-        "nothing was written into the committed comments folder",
-    );
+    assert!(draft_comments_dir(root, &draft).unwrap().join(DISCUSSION_LOG_NAME).is_file());
+    assert!(!comments_dir(root).exists(), "nothing was written into the committed comments folder",);
 
     // CMS-FR-58: a second discussion joins the same log, and the two read
     // back in the order they were begun.
@@ -154,10 +134,7 @@ fn a_whole_target_discussion_serializes_a_fragment_target_that_is_present_and_nu
 
     let json = serde_json::to_value(&thread).expect("a thread serializes");
     let object = json.as_object().expect("an object");
-    assert!(
-        object.contains_key("fragmentTarget"),
-        "the field is present, not skipped: {json}",
-    );
+    assert!(object.contains_key("fragmentTarget"), "the field is present, not skipped: {json}",);
     assert!(object["fragmentTarget"].is_null());
     assert_eq!(object["target"]["kind"], serde_json::json!("draft"));
     assert_eq!(object["target"]["draftId"], serde_json::json!(draft));
@@ -166,13 +143,7 @@ fn a_whole_target_discussion_serializes_a_fragment_target_that_is_present_and_nu
     }
 
     // A fragment discussion still carries the fragment itself.
-    let anchored = open(
-        root,
-        "DRS.md",
-        anchor(0, 3, "abc"),
-        "a passage",
-        "2026-02-01T00:00:00Z",
-    );
+    let anchored = open(root, "DRS.md", anchor(0, 3, "abc"), "a passage", "2026-02-01T00:00:00Z");
     let anchored = serde_json::to_value(&anchored).expect("a thread serializes");
     assert_eq!(anchored["fragmentTarget"]["quote"], serde_json::json!("abc"));
 
@@ -207,13 +178,9 @@ fn a_discussion_takes_every_operation_an_anchored_thread_takes() {
         target,
         &thread.id,
         "agreed".into(),
-        vec![CommentQuote {
-            comment_id: first_comment.clone(),
-            excerpt: "first".into(),
-        }],
+        vec![CommentQuote { comment_id: first_comment.clone(), excerpt: "first".into() }],
         vec![inline_png("shot.png", b"bytes")],
-        &human("raver119"),
-        "2026-02-01T00:01:00Z",
+        Stamp { by: &human("raver119"), at: "2026-02-01T00:01:00Z" },
     )
     .unwrap();
     assert_eq!(replied.comments.len(), 2);
@@ -266,21 +233,11 @@ fn a_discussion_takes_every_operation_an_anchored_thread_takes() {
         "2026-02-01T00:04:00Z",
     )
     .unwrap();
-    assert!(matches!(
-        answered.comments.last().unwrap().author,
-        Participant::Agent { .. }
-    ));
+    assert!(matches!(answered.comments.last().unwrap().author, Participant::Agent { .. }));
 
     // CMS-FR-17: and a lock stops the agent exactly as it stops a person.
-    set_lock_to(
-        root,
-        target,
-        &thread.id,
-        true,
-        &human("raver119"),
-        "2026-02-01T00:05:00Z",
-    )
-    .unwrap();
+    set_lock_to(root, target, &thread.id, true, &human("raver119"), "2026-02-01T00:05:00Z")
+        .unwrap();
     let before = discussion_log_lines(root, &draft).len();
     assert_eq!(
         append_agent_comment_to(
@@ -368,9 +325,7 @@ fn a_whole_target_discussion_reaches_no_per_file_listing() {
         assert!(listed.iter().all(|t| t.id != discussion.id));
     }
     assert!(
-        list_all_draft_fragment_discussions_in(root, &draft)
-            .iter()
-            .all(|t| t.id != discussion.id),
+        list_all_draft_fragment_discussions_in(root, &draft).iter().all(|t| t.id != discussion.id),
         "the reserved log is not one of the per-file logs",
     );
     let all = list_all_discussions_in(root, root);
@@ -392,14 +347,11 @@ fn a_discussion_needs_a_draft_and_the_reserved_name_collides_with_nothing() {
         open_discussion_in(
             root,
             root,
-            &DiscussionTarget::Draft {
-                draft_id: "no-such-draft".to_string(),
-            },
+            &DiscussionTarget::Draft { draft_id: "no-such-draft".to_string() },
             None,
             "hello".into(),
             vec![inline_png("shot.png", b"bytes")],
-            &human("raver119"),
-            "2026-02-01T00:00:00Z",
+            Stamp { by: &human("raver119"), at: "2026-02-01T00:00:00Z" }
         )
         .unwrap_err(),
         ERR_DRAFT_NOT_FOUND,
@@ -413,15 +365,10 @@ fn a_discussion_needs_a_draft_and_the_reserved_name_collides_with_nothing() {
     // produce the reserved name however the author names a file.
     let draft = make_draft(root, "artifact-window");
     assert_ne!(format!("{}.jsonl", log_id("discussion")), DISCUSSION_LOG_NAME);
-    assert_ne!(
-        format!("{}.jsonl", log_id("discussion.jsonl")),
-        DISCUSSION_LOG_NAME,
-    );
+    assert_ne!(format!("{}.jsonl", log_id("discussion.jsonl")), DISCUSSION_LOG_NAME,);
     let discussion = open_discussion(root, &draft, "first", "2026-02-01T00:00:00Z");
-    let derived = ThreadRef::draft_file(&draft, "discussion")
-        .scope
-        .log_path(root, "discussion")
-        .unwrap();
+    let derived =
+        ThreadRef::draft_file(&draft, "discussion").scope.log_path(root, "discussion").unwrap();
     assert_ne!(
         derived,
         discussion_log_path(root, &draft).unwrap(),
@@ -481,14 +428,11 @@ fn an_attachment_read_is_confined_to_the_scope_its_caller_names() {
     let discussion = open_discussion_in(
         root,
         root,
-        &DiscussionTarget::Draft {
-            draft_id: draft.clone(),
-        },
+        &DiscussionTarget::Draft { draft_id: draft.clone() },
         None,
         "look".into(),
         vec![inline_png("shot.png", png)],
-        &human("raver119"),
-        "2026-02-01T00:00:00Z",
+        Stamp { by: &human("raver119"), at: "2026-02-01T00:00:00Z" },
     )
     .unwrap();
 
@@ -496,10 +440,7 @@ fn an_attachment_read_is_confined_to_the_scope_its_caller_names() {
     let found = locate_discussion_for_attachment(root, root, &discussion.id, Some(&draft))
         .expect("the discussion is in that draft");
     assert_eq!(found.id, discussion.id);
-    assert_eq!(
-        attachment_scope(&found),
-        LogScope::Draft { draft_id: &draft },
-    );
+    assert_eq!(attachment_scope(&found), LogScope::Draft { draft_id: &draft },);
 
     // One discussion has one identity: named with no draft, or with a draft that
     // does not hold it, the id still resolves to the same record, and the scope
@@ -560,8 +501,7 @@ fn an_opening_event_of_the_wrong_kind_for_its_log_folds_to_nothing() {
         ]
     };
     assert!(
-        fold_events_for(FoldTarget::DraftDiscussion { draft_id: "d1" }, anchored("t1"))
-            .is_empty(),
+        fold_events_for(FoldTarget::DraftDiscussion { draft_id: "d1" }, anchored("t1")).is_empty(),
         "an anchored thread in the reserved discussion log is not served",
     );
 
@@ -573,9 +513,7 @@ fn an_opening_event_of_the_wrong_kind_for_its_log_folds_to_nothing() {
             at: "2026-02-01T00:00:00Z".into(),
             by: human("raver119"),
             body: EventBody::DiscussionOpened {
-                target: Some(DiscussionTarget::Draft {
-                    draft_id: "d1".into(),
-                }),
+                target: Some(DiscussionTarget::Draft { draft_id: "d1".into() }),
                 draft_id: None,
                 fragment_target: None,
             },

@@ -38,7 +38,8 @@ fn the_settings_are_project_public_and_leave_polling_alone() {
         "lineEndings = \"crlf\"\n\n[plugins]\nenabled = [\"git-pr\"]\n",
     )
     .unwrap();
-    let polling = GithubPollingSettings { project_node_id: Some("PVT_1".into()), interval_minutes: Some(15) };
+    let polling =
+        GithubPollingSettings { project_node_id: Some("PVT_1".into()), interval_minutes: Some(15) };
     save_github_polling_settings_to(&root, &polling).unwrap();
 
     let saved = GithubPublicationSettings {
@@ -72,7 +73,10 @@ fn an_invalid_stored_value_reads_as_its_default() {
         "[githubPublication]\nparentIssueTypes = [\"  \", \"\"]\nsubIssueType = \"  \"\nsubIssueMilestonePolicy = \"sometimes\"\n",
     )
     .unwrap();
-    assert_eq!(load_github_publication_settings_from(&root).unwrap(), GithubPublicationSettings::default());
+    assert_eq!(
+        load_github_publication_settings_from(&root).unwrap(),
+        GithubPublicationSettings::default()
+    );
 
     std::fs::write(
         dir.path().join(".synthesis/project.toml"),
@@ -95,7 +99,9 @@ fn a_malformed_store_stays_the_typed_error() {
         load_github_publication_settings_from(&root),
         Err(ERR_MALFORMED_PROJECT_CONFIG.to_string())
     );
-    assert!(save_github_publication_settings_to(&root, &GithubPublicationSettings::default()).is_err());
+    assert!(
+        save_github_publication_settings_to(&root, &GithubPublicationSettings::default()).is_err()
+    );
     assert_eq!(project_toml(&dir), "not = [valid");
 }
 
@@ -104,10 +110,8 @@ fn a_malformed_store_stays_the_typed_error() {
 #[test]
 fn the_project_config_save_carries_the_settings_through() {
     let (_dir, root) = fresh();
-    let saved = GithubPublicationSettings {
-        parent_issue_types: vec!["Epic".into()],
-        ..Default::default()
-    };
+    let saved =
+        GithubPublicationSettings { parent_issue_types: vec!["Epic".into()], ..Default::default() };
     save_github_publication_settings_to(&root, &saved).unwrap();
     let mut config = load_project_config_from(&root).unwrap();
     config.line_endings = LineEndings::Crlf;

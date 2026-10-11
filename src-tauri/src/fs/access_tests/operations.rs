@@ -113,9 +113,7 @@ fn ts25_file_info_names_a_link_as_a_link_but_refuses_a_linked_ancestor() {
     fs::create_dir_all(&dir).unwrap();
     write_raw(&dir.join("f.md"), "inner");
     symlink(&dir, root.join("linkdir")).unwrap();
-    let err = access
-        .file_info(root.join("linkdir").join("f.md"))
-        .unwrap_err();
+    let err = access.file_info(root.join("linkdir").join("f.md")).unwrap_err();
     assert!(matches!(err, FsError::SymlinkRefused { .. }), "got {err:?}");
 }
 
@@ -160,9 +158,7 @@ fn ts26_create_file_honours_both_modes_and_refuses_the_rest() {
     // Outside every root: refused, nothing created.
     let outside = TempDir::new().unwrap();
     let denied = outside.path().join("x.txt");
-    let err = access
-        .create_file(&denied, CreateMode::Exclusive)
-        .unwrap_err();
+    let err = access.create_file(&denied, CreateMode::Exclusive).unwrap_err();
     assert!(matches!(err, FsError::EscapesAllowedRoots { .. }), "got {err:?}");
     assert!(!denied.exists());
 }
@@ -201,10 +197,7 @@ fn ts27_open_file_modes_behave_as_specified() {
     let missing = root.join("gone").join("nope.txt");
     let err = access.open_file(&missing, OpenMode::ReadOnly).unwrap_err();
     assert!(matches!(err, FsError::NotFound { .. }), "got {err:?}");
-    assert!(
-        !root.join("gone").exists(),
-        "ReadOnly must not create parent directories"
-    );
+    assert!(!root.join("gone").exists(), "ReadOnly must not create parent directories");
 
     // Append and Truncate each create the file when absent.
     for (name, mode) in [("a.txt", OpenMode::Append), ("t.txt", OpenMode::Truncate)] {
@@ -236,10 +229,7 @@ fn ts28_a_handle_enforces_its_mode_on_every_call_and_flushes_on_drop() {
     {
         let mut h = access.open_file(&p, OpenMode::ReadOnly).unwrap();
         let err = h.write_all(b"nope").unwrap_err();
-        assert!(
-            matches!(err, FsError::WrongMode { attempted: "write", .. }),
-            "got {err:?}"
-        );
+        assert!(matches!(err, FsError::WrongMode { attempted: "write", .. }), "got {err:?}");
     }
     assert_eq!(fs::read_to_string(&p).unwrap(), "original");
 
@@ -248,10 +238,7 @@ fn ts28_a_handle_enforces_its_mode_on_every_call_and_flushes_on_drop() {
         let mut h = access.open_file(&p, OpenMode::Append).unwrap();
         let mut buf = Vec::new();
         let err = h.read_to_end(&mut buf).unwrap_err();
-        assert!(
-            matches!(err, FsError::WrongMode { attempted: "read", .. }),
-            "got {err:?}"
-        );
+        assert!(matches!(err, FsError::WrongMode { attempted: "read", .. }), "got {err:?}");
         assert!(buf.is_empty());
         assert_eq!(h.mode(), OpenMode::Append);
     }
@@ -340,10 +327,7 @@ fn ts19_a_tree_holding_a_link_is_refused_before_anything_is_removed_or_copied() 
     assert!(matches!(err, FsError::SymlinkRefused { .. }), "got {err:?}");
 
     // The refusal happened before anything was removed or written.
-    assert_eq!(
-        fs::read_to_string(tree.join("a").join("b").join("keep.md")).unwrap(),
-        "keep"
-    );
+    assert_eq!(fs::read_to_string(tree.join("a").join("b").join("keep.md")).unwrap(), "keep");
     assert!(
         fs::symlink_metadata(tree.join("a").join("b").join("l"))
             .unwrap()
@@ -385,9 +369,7 @@ fn ts15_copy_never_overwrites_and_both_paths_go_through_the_gate() {
     assert!(!denied.exists());
 
     // Negative: a *source* outside every root, likewise.
-    let err = access
-        .copy_path(outside.path().join("nope.md"), root.join("in.md"))
-        .unwrap_err();
+    let err = access.copy_path(outside.path().join("nope.md"), root.join("in.md")).unwrap_err();
     assert!(matches!(err, FsError::EscapesAllowedRoots { .. }), "got {err:?}");
     assert!(!root.join("in.md").exists(), "nothing may be written for a refused source");
 
@@ -402,4 +384,3 @@ fn ts15_copy_never_overwrites_and_both_paths_go_through_the_gate() {
     );
     assert!(d.join("child").is_dir(), "and the directory is untouched");
 }
-

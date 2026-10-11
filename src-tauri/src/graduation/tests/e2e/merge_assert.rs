@@ -86,7 +86,10 @@ impl Outcome {
                 "[{}] the merge was refused with {reason:?}, not {code:?}",
                 self.name
             ),
-            Ok(answer) => panic!("[{}] the merge was accepted ({answer:?}), but {code} was expected", self.name),
+            Ok(answer) => panic!(
+                "[{}] the merge was accepted ({answer:?}), but {code} was expected",
+                self.name
+            ),
         }
         self
     }
@@ -96,8 +99,9 @@ impl Outcome {
     /// WKS-FR-PZKD: the run store and the queue index hold no merge run, and the
     /// run store holds nothing a run did not make.
     pub(crate) fn expect_no_merge_run(self) -> Self {
-        let queue = crate::graduation::list_graduation_queue(self.fx.app.clone())
-            .unwrap_or_else(|reason| panic!("[{}] the queue was not readable: {reason}", self.name));
+        let queue = crate::graduation::list_graduation_queue(self.fx.app.clone()).unwrap_or_else(
+            |reason| panic!("[{}] the queue was not readable: {reason}", self.name),
+        );
         assert!(
             queue.runs.iter().all(|run| !run.is_merge()),
             "[{}] the queue holds no merge run",
@@ -139,9 +143,7 @@ impl Outcome {
         let registered: Vec<String> = repo
             .worktrees()
             .map(|list| {
-                list.iter()
-                    .filter_map(|entry| entry.ok().flatten().map(str::to_string))
-                    .collect()
+                list.iter().filter_map(|entry| entry.ok().flatten().map(str::to_string)).collect()
             })
             .unwrap_or_default();
         assert!(
@@ -340,7 +342,10 @@ impl Outcome {
     }
 
     /// GRD-FR-KZPT: the publication the author chose is recorded on the run.
-    pub(crate) fn expect_publication(self, publication: &crate::streams::StreamMergePublication) -> Self {
+    pub(crate) fn expect_publication(
+        self,
+        publication: &crate::streams::StreamMergePublication,
+    ) -> Self {
         assert_eq!(
             &self.merge_data().publication,
             publication,
@@ -389,14 +394,29 @@ impl Outcome {
 
     /// GRD-FR-AQNW: the recorded result names the publication, the paths, and
     /// the commit where the publication made one.
-    pub(crate) fn expect_merge_result(self, published: &str, committed: bool, paths: &[&str]) -> Self {
+    pub(crate) fn expect_merge_result(
+        self,
+        published: &str,
+        committed: bool,
+        paths: &[&str],
+    ) -> Self {
         let result = self
             .merge_data()
             .result
             .unwrap_or_else(|| panic!("[{}] the run records a merge result", self.name));
         let published_as = serde_json::to_value(result.published).expect("a publication");
-        assert_eq!(published_as.as_str(), Some(published), "[{}] how the merge was published", self.name);
-        assert_eq!(result.commit.is_some(), committed, "[{}] whether the result names a commit", self.name);
+        assert_eq!(
+            published_as.as_str(),
+            Some(published),
+            "[{}] how the merge was published",
+            self.name
+        );
+        assert_eq!(
+            result.commit.is_some(),
+            committed,
+            "[{}] whether the result names a commit",
+            self.name
+        );
         let mut held = result.merged_paths.clone();
         held.sort();
         assert_eq!(held, sorted(paths), "[{}] the paths the result names", self.name);
@@ -437,7 +457,12 @@ impl Outcome {
             "[{}] the merge commit's parents are the pinned tips",
             self.name
         );
-        assert_eq!(head.message().unwrap_or_default(), message, "[{}] the merge commit's message", self.name);
+        assert_eq!(
+            head.message().unwrap_or_default(),
+            message,
+            "[{}] the merge commit's message",
+            self.name
+        );
         assert_eq!(
             self.run.commits.last().map(String::as_str),
             Some(head.id().to_string().as_str()),
@@ -463,11 +488,14 @@ impl Outcome {
 
     /// GRD-FR-AQNW: the base working copy holds the file, unstaged where the
     /// publication was `uncommitted`.
-    pub(crate) fn expect_base_working_copy_holds(self, path: &str, content: &str, unstaged: bool) -> Self {
+    pub(crate) fn expect_base_working_copy_holds(
+        self,
+        path: &str,
+        content: &str,
+        unstaged: bool,
+    ) -> Self {
         let root = self.fx.root();
-        let found = super::settings::guard(&root)
-            .read_text(root.join(path))
-            .unwrap_or_default();
+        let found = super::settings::guard(&root).read_text(root.join(path)).unwrap_or_default();
         assert_eq!(found, content, "[{}] what the base working copy holds at {path}", self.name);
         let repo = self.fx.repo();
         let status = repo
@@ -485,11 +513,7 @@ impl Outcome {
                 self.name
             );
         } else {
-            assert!(
-                status.is_empty(),
-                "[{}] {path} is committed and clean: {status:?}",
-                self.name
-            );
+            assert!(status.is_empty(), "[{}] {path} is committed and clean: {status:?}", self.name);
         }
         self
     }
@@ -508,7 +532,12 @@ impl Outcome {
             .merge_run
             .unwrap_or_else(|| panic!("[{}] the stream's row carries a merge run", self.name));
         assert_eq!(link.run_id, self.run.id, "[{}] the row names the run", self.name);
-        assert_eq!(link.name, self.merge_data().name, "[{}] the row carries the run's title", self.name);
+        assert_eq!(
+            link.name,
+            self.merge_data().name,
+            "[{}] the row carries the run's title",
+            self.name
+        );
         assert_eq!(link.state, state, "[{}] the row carries the run's state", self.name);
         self
     }
@@ -533,8 +562,9 @@ impl Outcome {
 
     /// GRD-FR-MRNQ: the queue holds this many runs, whatever their kind.
     pub(crate) fn expect_runs_in_the_queue(self, count: usize) -> Self {
-        let queue = crate::graduation::list_graduation_queue(self.fx.app.clone())
-            .unwrap_or_else(|reason| panic!("[{}] the queue was not readable: {reason}", self.name));
+        let queue = crate::graduation::list_graduation_queue(self.fx.app.clone()).unwrap_or_else(
+            |reason| panic!("[{}] the queue was not readable: {reason}", self.name),
+        );
         assert_eq!(queue.runs.len(), count, "[{}] the runs in the queue", self.name);
         self
     }
@@ -542,15 +572,19 @@ impl Outcome {
     /// GRD-FR-BHCS: the queue and the single-run read both answer for the merge
     /// run with its title and its merge data, as they do for every run.
     pub(crate) fn expect_listings_carry_the_merge_run(self) -> Self {
-        let queue = crate::graduation::list_graduation_queue(self.fx.app.clone())
-            .unwrap_or_else(|reason| panic!("[{}] the queue was not readable: {reason}", self.name));
+        let queue = crate::graduation::list_graduation_queue(self.fx.app.clone()).unwrap_or_else(
+            |reason| panic!("[{}] the queue was not readable: {reason}", self.name),
+        );
         let listed = queue
             .runs
             .iter()
             .find(|run| run.id == self.run.id)
             .unwrap_or_else(|| panic!("[{}] the queue lists the merge run", self.name));
-        let single = crate::graduation::get_graduation_run(self.fx.app.clone(), self.run.id.clone())
-            .unwrap_or_else(|reason| panic!("[{}] the run was not readable: {reason}", self.name));
+        let single =
+            crate::graduation::get_graduation_run(self.fx.app.clone(), self.run.id.clone())
+                .unwrap_or_else(|reason| {
+                    panic!("[{}] the run was not readable: {reason}", self.name)
+                });
         for run in [listed, &single] {
             assert_eq!(
                 run.merge.as_ref().map(|data| data.name.clone()),
@@ -579,10 +613,14 @@ impl Outcome {
         self
     }
 
-    /// GTE-FR-PFEO, GRD-FR-KKKN: how many project slots are held now.
+    /// GTE-FR-PFEO, GRD-FR-KKKN: how many project slots are held now, by the
+    /// claims of this process and by the stored runs together.
     pub(crate) fn expect_slots_in_use(self, count: usize) -> Self {
+        let app = &self.fx.app;
+        let queue = crate::graduation::project_queue(app).expect("the project's queue");
+        let holders = crate::graduation::slot_holders(&queue);
         assert_eq!(
-            self.fx.app.state::<crate::graduation::GraduationState>().working_count(),
+            app.state::<crate::graduation::GraduationState>().slots_in_use(&holders),
             count,
             "[{}] the project slots held",
             self.name
@@ -633,8 +671,9 @@ impl Outcome {
     /// GRD-FR-RHNP: the merge run's place in its stream's queue, counted from
     /// the run that dispatches first.
     pub(crate) fn expect_queue_position(self, position: usize) -> Self {
-        let queue = crate::graduation::list_graduation_queue(self.fx.app.clone())
-            .unwrap_or_else(|reason| panic!("[{}] the queue was not readable: {reason}", self.name));
+        let queue = crate::graduation::list_graduation_queue(self.fx.app.clone()).unwrap_or_else(
+            |reason| panic!("[{}] the queue was not readable: {reason}", self.name),
+        );
         let members: Vec<&str> = queue
             .runs
             .iter()
@@ -652,11 +691,7 @@ impl Outcome {
 
     /// GRD-FR-JOFE: the run is filed away, so the stream's row no longer names it.
     pub(crate) fn expect_archived(self) -> Self {
-        assert!(
-            self.fx.reload(&self.run.id).archived,
-            "[{}] the run is archived",
-            self.name
-        );
+        assert!(self.fx.reload(&self.run.id).archived, "[{}] the run is archived", self.name);
         self
     }
 
@@ -673,9 +708,10 @@ impl Outcome {
             .get("runs")
             .and_then(|runs| runs.as_array())
             .and_then(|runs| {
-                runs.iter()
-                    .find(|entry| entry.get("run_id").and_then(|v| v.as_str()) == Some(self.run.id.as_str())
-                        || entry.get("runId").and_then(|v| v.as_str()) == Some(self.run.id.as_str()))
+                runs.iter().find(|entry| {
+                    entry.get("run_id").and_then(|v| v.as_str()) == Some(self.run.id.as_str())
+                        || entry.get("runId").and_then(|v| v.as_str()) == Some(self.run.id.as_str())
+                })
             })
             .unwrap_or_else(|| panic!("[{}] the index names the run", self.name));
         assert_eq!(

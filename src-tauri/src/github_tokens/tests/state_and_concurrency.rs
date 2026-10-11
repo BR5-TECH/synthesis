@@ -21,13 +21,10 @@ fn gss_ts18_a_real_add_leaves_no_secret_anywhere_in_synthesis_toml() {
     );
 
     let store = GlobalSettingsStore::with_path(path.clone());
-    let record = add_token_impl(&store, &tokens, "work", secret).unwrap();
+    let record = add_token_impl(&store, &tokens, "work", secret, "").unwrap();
 
     let text = std::fs::read_to_string(&path).unwrap();
-    assert!(
-        !text.contains(secret),
-        "the whole secret reached synthesis.toml: {text}"
-    );
+    assert!(!text.contains(secret), "the whole secret reached synthesis.toml: {text}");
     assert!(
         !text.contains("ghp_real_secret_value"),
         "a prefix of the secret reached synthesis.toml: {text}"
@@ -36,10 +33,7 @@ fn gss_ts18_a_real_add_leaves_no_secret_anywhere_in_synthesis_toml() {
     assert!(text.contains("a3f9"), "{text}");
     assert!(text.contains("work"), "{text}");
     // And the secret really is in the credential store instead.
-    assert_eq!(
-        secrets.entries.lock().unwrap().get(&record.id).map(String::as_str),
-        Some(secret)
-    );
+    assert_eq!(secrets.entries.lock().unwrap().get(&record.id).map(String::as_str), Some(secret));
 }
 
 // -- Derived vs stored state (GTS-FR-08) -----------------------------
@@ -48,17 +42,9 @@ fn gss_ts18_a_real_add_leaves_no_secret_anywhere_in_synthesis_toml() {
 fn an_unavailable_state_is_derived_rather_than_written_into_the_record() {
     // Persisting it would leave the row reading `unavailable` even after the
     // keychain entry came back, until someone pressed Verify again.
-    let Harness {
-        store,
-        tokens,
-        secrets,
-        ..
-    } = harness(FakeVerifier::accepting(
-        "ghp_secret_1234",
-        "raver119",
-        &["repo"],
-    ));
-    let added = add_token_impl(&store, &tokens, "work", "ghp_secret_1234").unwrap();
+    let Harness { store, tokens, secrets, .. } =
+        harness(FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]));
+    let added = add_token_impl(&store, &tokens, "work", "ghp_secret_1234", "").unwrap();
 
     secrets.forget(&added.id);
     let reported = validate_token_impl(&store, &tokens, &added.id).unwrap();
@@ -72,10 +58,7 @@ fn an_unavailable_state_is_derived_rather_than_written_into_the_record() {
     // The entry comes back (keychain unlocked, machine restored): the row
     // recovers on the next read with no further action from the author.
     secrets.set(&added.id, "ghp_secret_1234").unwrap();
-    assert_eq!(
-        list_tokens_impl(&store, &tokens).unwrap()[0].state,
-        TokenState::Valid
-    );
+    assert_eq!(list_tokens_impl(&store, &tokens).unwrap()[0].state, TokenState::Valid);
 }
 
 #[test]
@@ -85,18 +68,11 @@ fn removal_reports_a_broken_keychain_rather_than_orphaning_the_secret() {
     // nothing can ever delete. The typed error asks the author to retry once
     // the keychain is available, which is recoverable; an orphan is not.
     let store = GlobalSettingsStore::in_memory();
-    store
-        .save_github_token_registry(vec![record("a", "work")])
-        .unwrap();
-    let tokens = GithubTokens::new(
-        Box::new(FakeSecrets::broken()),
-        Box::new(FakeVerifier::rejecting()),
-    );
+    store.save_github_token_registry(vec![record("a", "work")]).unwrap();
+    let tokens =
+        GithubTokens::new(Box::new(FakeSecrets::broken()), Box::new(FakeVerifier::rejecting()));
 
-    assert_eq!(
-        remove_token_impl(&store, &tokens, "a").unwrap_err(),
-        ERR_KEYCHAIN_UNAVAILABLE
-    );
+    assert_eq!(remove_token_impl(&store, &tokens, "a").unwrap_err(), ERR_KEYCHAIN_UNAVAILABLE);
     assert_eq!(store.load_github_token_registry().unwrap().len(), 1);
 }
 
@@ -120,7 +96,7 @@ fn concurrent_adds_do_not_lose_records_or_admit_a_duplicate_label() {
     for i in 0..8 {
         let (store, tokens) = (store.clone(), tokens.clone());
         handles.push(std::thread::spawn(move || {
-            add_token_impl(&store, &tokens, &format!("token-{i}"), secret)
+            add_token_impl(&store, &tokens, &format!("token-{i}"), secret, "")
         }));
     }
     for h in handles {
@@ -137,7 +113,7 @@ fn concurrent_adds_do_not_lose_records_or_admit_a_duplicate_label() {
     for _ in 0..8 {
         let (store, tokens) = (store.clone(), tokens.clone());
         handles.push(std::thread::spawn(move || {
-            add_token_impl(&store, &tokens, "contested", secret)
+            add_token_impl(&store, &tokens, "contested", secret, "")
         }));
     }
     let outcomes: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
@@ -158,18 +134,14 @@ fn concurrent_adds_do_not_lose_records_or_admit_a_duplicate_label() {
 fn token_ids_are_never_repeated() {
     // The id is the keychain account name, so a reused one would hand a new
     // record the previous one's secret.
-    let ids: std::collections::HashSet<String> =
-        (0..10_000).map(|_| new_token_id()).collect();
+    let ids: std::collections::HashSet<String> = (0..10_000).map(|_| new_token_id()).collect();
     assert_eq!(ids.len(), 10_000);
 }
 
 #[test]
 fn a_mask_never_exposes_more_than_four_characters() {
     for secret in ["", "a", "abcd", "abcde", "ghp_0123456789abcdef", "é☃🔑xyz"] {
-        assert!(
-            mask_hint(secret).chars().count() <= 4,
-            "mask_hint({secret:?}) exposed too much"
-        );
+        assert!(mask_hint(secret).chars().count() <= 4, "mask_hint({secret:?}) exposed too much");
     }
 }
 

@@ -13,8 +13,6 @@ use tauri::Manager;
 // Fixtures
 // ---------------------------------------------------------------------------
 
-/// An artifact source the pass will index.
-
 /// A real directory to mount as a distinct content root.
 ///
 /// `mount` needs only the root's identity for the tests below, but a `RootFs`
@@ -22,11 +20,7 @@ use tauri::Manager;
 /// does not exist — so the fabricated `/tmp/a` markers these tests used become
 /// real, process-unique directories.
 fn scratch_root(name: &str) -> crate::fs::RootFs {
-    let p = std::env::temp_dir().join(format!(
-        "synthesis-bm25-{}-{}",
-        std::process::id(),
-        name
-    ));
+    let p = std::env::temp_dir().join(format!("synthesis-bm25-{}-{}", std::process::id(), name));
     std::fs::create_dir_all(&p).unwrap();
     crate::fs::RootFs::for_root(&p)
 }
@@ -124,10 +118,7 @@ fn tree_fingerprint(root: &std::path::Path) -> Vec<(String, String)> {
                 walk(&path, base, out);
             } else if let Ok(bytes) = std::fs::read(&path) {
                 let rel = path.strip_prefix(base).unwrap_or(&path);
-                out.push((
-                    rel.to_string_lossy().into_owned(),
-                    crate::fs::sha256_bytes(&bytes),
-                ));
+                out.push((rel.to_string_lossy().into_owned(), crate::fs::sha256_bytes(&bytes)));
             }
         }
     }
@@ -143,13 +134,14 @@ fn tree_fingerprint(root: &std::path::Path) -> Vec<(String, String)> {
 fn indexed(root: &std::path::Path) -> tauri::App<tauri::test::MockRuntime> {
     let app = mounted_app();
     let handle = app.handle().clone();
-    let indexer = app.state::<Bm25Indexer>();
-    indexer.mount(&crate::fs::RootFs::for_root(root));
-    let generation = indexer.generation();
-    indexer
-        .run_pass(&handle, &crate::fs::RootFs::for_root(root), PassScope::ALL, generation)
-        .expect("the pass publishes");
-    drop(indexer);
+    {
+        let indexer = app.state::<Bm25Indexer>();
+        indexer.mount(&crate::fs::RootFs::for_root(root));
+        let generation = indexer.generation();
+        indexer
+            .run_pass(&handle, &crate::fs::RootFs::for_root(root), PassScope::ALL, generation)
+            .expect("the pass publishes");
+    }
     app
 }
 

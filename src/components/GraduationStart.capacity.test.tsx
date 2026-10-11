@@ -190,7 +190,7 @@ describe("a project limit that is full", () => {
     await settled();
     await waitFor(() => expect(slotNote()).toBeInTheDocument());
     expect(screen.getByTestId("graduation-start-busy")).toHaveTextContent(
-      /A run is working in .editor-work. now/,
+      /A run holds .editor-work. now/,
     );
     expect(slotNote()).toHaveTextContent(/limit of 2 graduation runs/);
     expect(slotNote()).toHaveTextContent(/waits for a project slot too/);

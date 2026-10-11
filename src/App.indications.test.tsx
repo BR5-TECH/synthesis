@@ -380,9 +380,11 @@ describe("in-app tab indications (NTF-FR-26 / NTF-FR-32 / NTF-FR-33)", () => {
     expect(
       strip().querySelector(".tab[data-attention]")?.textContent,
     ).toContain("needs attention");
-    // NTF-FR-08, NTF-FR-26, NTF-FR-37's other half: the OS notification went out as well, the window
-    // being focused on a different tab (NTF-FR-08). Both surfaces, one raise.
-    expect(posts()).toHaveLength(1);
+    // NTF-FR-08, NTF-FR-26, NTF-FR-WMBD: the main window holds focus, so the
+    // toast is the channel and nothing went to the OS. Both in-window surfaces,
+    // one raise.
+    expect(posts()).toHaveLength(0);
+    expect(screen.getAllByTestId("notification-toast")).toHaveLength(1);
     // NTF-FR-35: reduced motion is on in this suite, so the emphasis is static
     // from the moment it appears rather than pulsing.
     expect(
@@ -422,12 +424,8 @@ describe("in-app tab indications (NTF-FR-26 / NTF-FR-32 / NTF-FR-33)", () => {
       ).toBe("Dashboard"),
     );
     expect(marked()).toEqual([]);
-    // NTF-FR-14: reaching the target withdrew its notification too.
-    await waitFor(() =>
-      expect(
-        invokeMock.mock.calls.filter((c) => c[0] === "withdraw_notification"),
-      ).toHaveLength(1),
-    );
+    // NTF-FR-14: reaching the target removed its toast too.
+    expect(screen.queryByTestId("notification-toast")).toBeNull();
   });
 
   /**

@@ -52,13 +52,13 @@ fn expanded_paths_keep_their_order_and_are_not_deduplicated_or_validated() {
     // PSS-FR-18: the store persists what it is given. Ordering is the
     // caller's, and nothing here inspects the filesystem.
     let dir = TempDir::new().unwrap();
-    let saved = library_state(
-        &["z", "a", "nested/deep/path"],
-        ArtifactTypeFilter::AllArtifacts,
-        "",
-    );
+    let saved =
+        library_state(&["z", "a", "nested/deep/path"], ArtifactTypeFilter::AllArtifacts, "");
     save_library_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), saved.clone()).unwrap();
-    assert_eq!(load_library_panel_state_from(&crate::fs::RootFs::for_root(dir.path())).expanded_paths, saved.expanded_paths);
+    assert_eq!(
+        load_library_panel_state_from(&crate::fs::RootFs::for_root(dir.path())).expanded_paths,
+        saved.expanded_paths
+    );
 }
 
 #[test]
@@ -148,7 +148,8 @@ fn saving_library_state_preserves_other_project_local_sections() {
         "[recentlyEdited]\nids = [\"a.md\", \"b.md\"]\n",
     )
     .unwrap();
-    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop")).unwrap();
+    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop"))
+        .unwrap();
     save_library_panel_state_to(
         &crate::fs::RootFs::for_root(dir.path()),
         library_state(&["specifications"], ArtifactTypeFilter::AllFiles, ""),
@@ -170,7 +171,8 @@ fn saving_library_state_preserves_other_project_local_sections() {
         "and so does the recently-edited MRU"
     );
     // And the reverse: a Changes write leaves the Library section alone.
-    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("main")).unwrap();
+    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("main"))
+        .unwrap();
     assert_eq!(
         load_library_panel_state_from(&crate::fs::RootFs::for_root(dir.path())).expanded_paths,
         vec!["specifications".to_string()]
@@ -216,11 +218,8 @@ fn one_damaged_field_does_not_cost_the_others() {
 fn a_library_section_of_the_wrong_shape_falls_back_and_a_save_repairs_it() {
     let dir = TempDir::new().unwrap();
     std::fs::create_dir_all(dir.path().join(".synthesis")).unwrap();
-    std::fs::write(
-        dir.path().join(".synthesis/local.toml"),
-        "library_panel = \"not-a-table\"\n",
-    )
-    .unwrap();
+    std::fs::write(dir.path().join(".synthesis/local.toml"), "library_panel = \"not-a-table\"\n")
+        .unwrap();
     assert_eq!(
         load_library_panel_state_from(&crate::fs::RootFs::for_root(dir.path())),
         LibraryPanelState::default()
@@ -268,8 +267,7 @@ fn library_state_deserialises_from_the_frontend_shape_and_from_a_partial_one() {
     .unwrap();
     assert_eq!(full, library_state(&["a", "b"], ArtifactTypeFilter::Skill, "x"));
     // A partial payload defaults the rest, and an empty object is legal.
-    let partial: LibraryPanelState =
-        serde_json::from_str(r#"{"expandedPaths":["a"]}"#).unwrap();
+    let partial: LibraryPanelState = serde_json::from_str(r#"{"expandedPaths":["a"]}"#).unwrap();
     assert_eq!(partial, library_state(&["a"], ArtifactTypeFilter::AllArtifacts, ""));
     let empty: LibraryPanelState = serde_json::from_str("{}").unwrap();
     assert_eq!(empty, LibraryPanelState::default());
@@ -323,8 +321,7 @@ fn the_wire_vocabulary_is_exactly_these_ten_strings() {
     );
     // And every one of them deserialises back to the variant it came from.
     for (variant, text) in all.iter().zip(wire.iter()) {
-        let parsed: ArtifactTypeFilter =
-            serde_json::from_str(&format!("\"{text}\"")).unwrap();
+        let parsed: ArtifactTypeFilter = serde_json::from_str(&format!("\"{text}\"")).unwrap();
         assert_eq!(&parsed, variant);
     }
 }

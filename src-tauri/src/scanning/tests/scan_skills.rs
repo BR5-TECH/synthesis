@@ -49,14 +49,8 @@ fn ts21_scan_carries_each_skills_declared_name() {
 fn ts21_declared_name_ignores_a_block_scalar_indicator() {
     // `name: |` opens a block scalar whose value is on the lines beneath;
     // reading the indicator would render a node as "|".
-    assert_eq!(
-        read_content_facts("---\nname: |\n  Code review\n---\n").declared_name,
-        None,
-    );
-    assert_eq!(
-        read_content_facts("---\nname: >\n  Code review\n---\n").declared_name,
-        None,
-    );
+    assert_eq!(read_content_facts("---\nname: |\n  Code review\n---\n").declared_name, None,);
+    assert_eq!(read_content_facts("---\nname: >\n  Code review\n---\n").declared_name, None,);
 }
 
 #[test]
@@ -85,13 +79,8 @@ fn tree_changed_payload_serializes_camelcase() {
     );
     // Always present: an empty list rather than an absent field, so a
     // consumer never has to tell "nothing removed" from "not reported".
-    let empty = serde_json::to_value(TreeChangedPayload {
-        change_count: 1,
-        removed_paths: Vec::new(),
-    })
-    .unwrap();
-    assert_eq!(
-        empty.get("removedPaths").and_then(|v| v.as_array()),
-        Some(&vec![])
-    );
+    let empty =
+        serde_json::to_value(TreeChangedPayload { change_count: 1, removed_paths: Vec::new() })
+            .unwrap();
+    assert_eq!(empty.get("removedPaths").and_then(|v| v.as_array()), Some(&vec![]));
 }

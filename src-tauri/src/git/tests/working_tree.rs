@@ -67,13 +67,8 @@ fn working_tree_status_keeps_both_sides_of_the_index_apart() {
     let index_before = std::fs::read(f.root().join(".git/index")).unwrap();
     let unstaged_before = std::fs::read(f.root().join("unstaged.md")).unwrap();
 
-    let status = working_tree_status_reported(
-        &NullSink,
-        own_buffer(),
-        &root,
-        None,
-    )
-    .expect("the status reads");
+    let status = working_tree_status_reported(&NullSink, own_buffer(), &root, None)
+        .expect("the status reads");
 
     assert_eq!(
         changes::canonicalize_lenient(Path::new(&status.worktree_path)),
@@ -83,14 +78,7 @@ fn working_tree_status_keeps_both_sides_of_the_index_apart() {
     let paths: Vec<&str> = status.entries.iter().map(|e| e.path.as_str()).collect();
     assert_eq!(
         paths,
-        vec![
-            "gone.md",
-            "new.md",
-            "staged.md",
-            "twice.md",
-            "unstaged.md",
-            "untracked.md"
-        ],
+        vec!["gone.md", "new.md", "staged.md", "twice.md", "unstaged.md", "untracked.md"],
         "exactly six entries, and the ignored file is absent"
     );
 
@@ -138,14 +126,8 @@ fn working_tree_status_keeps_both_sides_of_the_index_apart() {
 
     // GTC-FR-06 / GTC-FR-32: read-only.
     assert_eq!(f.repo().head().unwrap().target().unwrap(), before);
-    assert_eq!(
-        std::fs::read(f.root().join(".git/index")).unwrap(),
-        index_before
-    );
-    assert_eq!(
-        std::fs::read(f.root().join("unstaged.md")).unwrap(),
-        unstaged_before
-    );
+    assert_eq!(std::fs::read(f.root().join(".git/index")).unwrap(), index_before);
+    assert_eq!(std::fs::read(f.root().join("unstaged.md")).unwrap(), unstaged_before);
 }
 
 /// GTC-FR-29, GTC-FR-30, GTC-FR-32, GTC-FR-02, GTC-FR-06: the status names how many paths it read and no path of the set.
@@ -156,10 +138,7 @@ fn working_tree_status_records_a_count_and_no_path() {
     let buffer = own_buffer();
     working_tree_status_reported(&NullSink, buffer, &root, None).unwrap();
     let record = record_for(buffer, "working tree status read");
-    assert_eq!(
-        record.fields.get("entryCount"),
-        Some(&serde_json::json!(6))
-    );
+    assert_eq!(record.fields.get("entryCount"), Some(&serde_json::json!(6)));
     let text = buffer_text(buffer);
     assert!(!text.contains("unstaged.md"), "{text}");
     assert!(!text.contains("untracked.md"), "{text}");
@@ -196,8 +175,7 @@ fn a_conflicted_path_is_reported_rather_than_dropped() {
     {
         let repo = f.repo();
         repo.set_head_detached(base).unwrap();
-        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
-            .unwrap();
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force())).unwrap();
     }
     f.write("a.md", "ours\n");
     f.commit("ours");
@@ -217,10 +195,7 @@ fn a_conflicted_path_is_reported_rather_than_dropped() {
         conflicted.staged_status.is_some() || conflicted.unstaged_status.is_some(),
         "at least one side is non-null (GTC-FR-30): {conflicted:?}",
     );
-    assert!(
-        !entries.is_empty(),
-        "a worktree holding a conflict is never read as clean",
-    );
+    assert!(!entries.is_empty(), "a worktree holding a conflict is never read as clean",);
 }
 
 /// GTC-FR-29: a project nested below the repository root reports its own
@@ -257,13 +232,9 @@ fn the_guard_accepts_the_same_checkout_spelled_differently() {
     let root = crate::fs::RootFs::for_root(f.root());
     let active = crate::worktree::active_entry_for(&f.root()).unwrap().path;
 
-    for spelling in [
-        format!("{active}/"),
-        f.root().to_string_lossy().into_owned(),
-    ] {
-        let status =
-            working_tree_status_reported(&NullSink, own_buffer(), &root, Some(&spelling))
-                .unwrap_or_else(|e| panic!("{spelling:?} names the active worktree: {e}"));
+    for spelling in [format!("{active}/"), f.root().to_string_lossy().into_owned()] {
+        let status = working_tree_status_reported(&NullSink, own_buffer(), &root, Some(&spelling))
+            .unwrap_or_else(|e| panic!("{spelling:?} names the active worktree: {e}"));
         assert_eq!(status.entries.len(), 6);
     }
 }
@@ -294,8 +265,7 @@ fn an_unbound_commit_resolves_no_worktree_and_keeps_its_check_order() {
     // With an expectation the guard runs first, and outside a repository
     // there is no active worktree to compare against (GTC-FR-02).
     assert_eq!(
-        commit_named_paths(&root, "", &["a.md".into()], Some("/somewhere"))
-            .unwrap_err(),
+        commit_named_paths(&root, "", &["a.md".into()], Some("/somewhere")).unwrap_err(),
         ERR_NOT_A_REPO,
     );
 }
@@ -308,9 +278,8 @@ fn a_changed_worktree_refuses_the_status_read_and_the_commit() {
     let active = crate::worktree::active_entry_for(&f.root()).unwrap().path;
 
     // The identity the caller holds is the active one: served normally.
-    let status =
-        working_tree_status_reported(&NullSink, own_buffer(), &root, Some(&active))
-            .expect("the read is bound to the checkout it describes");
+    let status = working_tree_status_reported(&NullSink, own_buffer(), &root, Some(&active))
+        .expect("the read is bound to the checkout it describes");
     assert_eq!(status.entries.len(), 6);
 
     // A different checkout: refused, having read nothing.
@@ -331,19 +300,11 @@ fn a_changed_worktree_refuses_the_status_read_and_the_commit() {
     // still the identity that is reported.
     let index_before = std::fs::read(f.root().join(".git/index")).unwrap();
     let head_before = f.repo().head().unwrap().target().unwrap();
-    let error = commit_named_paths(
-        &root,
-        "",
-        &[],
-        Some(&elsewhere.to_string_lossy()),
-    )
-    .expect_err("the commit is refused");
+    let error = commit_named_paths(&root, "", &[], Some(&elsewhere.to_string_lossy()))
+        .expect_err("the commit is refused");
     assert!(is_worktree_identity_changed(&error), "{error}");
     assert_eq!(f.repo().head().unwrap().target().unwrap(), head_before);
-    assert_eq!(
-        std::fs::read(f.root().join(".git/index")).unwrap(),
-        index_before
-    );
+    assert_eq!(std::fs::read(f.root().join(".git/index")).unwrap(), index_before);
 
     // The same commit with no expectation at all commits exactly as before.
     let outcome = commit_named_paths(&root, "msg", &["unstaged.md".into()], None)

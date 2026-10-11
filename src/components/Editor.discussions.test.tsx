@@ -129,7 +129,7 @@ function anchored(over: Partial<Discussion> = {}): Discussion {
 }
 
 function projectAgent(nickname: string, id: string): ProjectAgent {
-  return {
+  return { scope: "project" as const,
     availability: "ready",
     agent: {
       id,

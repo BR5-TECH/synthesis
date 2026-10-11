@@ -54,10 +54,7 @@ impl ProjectWatcher {
 
     #[cfg(test)]
     pub fn is_active(&self) -> bool {
-        self.inner
-            .lock()
-            .map(|guard| guard.is_some())
-            .unwrap_or(false)
+        self.inner.lock().map(|guard| guard.is_some()).unwrap_or(false)
     }
 
     pub fn set(&self, debouncer: Debouncer<RecommendedWatcher>) {
@@ -190,9 +187,8 @@ pub fn start_watching<R: tauri::Runtime>(
     // a commit or a checkout alters every diff while touching no working-tree
     // file.
     let (git_dir_owned, extra_git_watch) = git_watch_targets(root);
-    let debouncer = new_debouncer(
-        Duration::from_millis(300),
-        move |result: DebounceEventResult| {
+    let debouncer =
+        new_debouncer(Duration::from_millis(300), move |result: DebounceEventResult| {
             // The debounced batch carries no event kinds (notify-mini collapses
             // create/modify/delete into `Any`), so we discriminate structural
             // from content changes via the per-artifact checksum tracker:
@@ -212,17 +208,12 @@ pub fn start_watching<R: tauri::Runtime>(
             // sources, computed before the early return below (which exists for
             // the tree/content channels, whose sources are working-tree only).
             // The debouncer's window is what coalesces a burst into one event.
-            let changes_count = changes::changes_change_count(
-                &result,
-                &root_owned,
-                git_dir_owned.as_deref(),
-            );
+            let changes_count =
+                changes::changes_change_count(&result, &root_owned, git_dir_owned.as_deref());
             if changes_count > 0 {
                 let _ = app_handle.emit(
                     crate::changes::CHANGES_UPDATED,
-                    ChangesUpdatedPayload {
-                        change_count: changes_count,
-                    },
+                    ChangesUpdatedPayload { change_count: changes_count },
                 );
             }
             let mut changed = scanning::changed_rel_paths(&result, &root_owned);
@@ -271,9 +262,7 @@ pub fn start_watching<R: tauri::Runtime>(
             // edit can change a file's classification through the frontmatter
             // tiebreak (ASC-FR-04), and a stale list would go on grouping that
             // file under the type it used to have (SCC-FR-08).
-            app_handle
-                .state::<scanning::CandidateStore>()
-                .invalidate();
+            app_handle.state::<scanning::CandidateStore>().invalidate();
             // BMI-FR-15 / BMI-FR-16 / BMI-FR-17 / BMI-FR-18: every change the
             // watcher sees — a creation, a deletion, a content edit, a pull
             // that rewrote half the tree — reaches the BM25 indexes here and
@@ -286,10 +275,7 @@ pub fn start_watching<R: tauri::Runtime>(
             // is what makes an edit to a gitignored `.claude/skills/*/SKILL.md`
             // — invisible to the tree, and so to every other consumer here —
             // still reach the skills index.
-            crate::bm25_index::request_pass(
-                &app_handle,
-                crate::bm25_index::PassScope::ARTIFACTS,
-            );
+            crate::bm25_index::request_pass(&app_handle, crate::bm25_index::PassScope::ARTIFACTS);
             let tracker = app_handle.state::<ContentTracker>();
             // PST-FR-35: whether what the Recently edited widget enumerates, or
             // how it orders, may have moved. Set from BOTH channels below — a
@@ -332,10 +318,7 @@ pub fn start_watching<R: tauri::Runtime>(
                         tracker.record(rel, &new_ck);
                         let _ = app_handle.emit(
                             ARTIFACT_CHANGED_EXTERNALLY,
-                            ArtifactChangedPayload {
-                                artifact_id: rel.clone(),
-                                checksum: new_ck,
-                            },
+                            ArtifactChangedPayload { artifact_id: rel.clone(), checksum: new_ck },
                         );
                     }
                     // Tracked self-write: silent, and never structural.
@@ -350,8 +333,7 @@ pub fn start_watching<R: tauri::Runtime>(
                 crate::dashboard::note_recently_edited_changed(&app_handle);
             }
             if !structural_paths.is_empty() || attribution_changed {
-                let removed_paths =
-                    scanning::removed_rel_paths(&structural_paths, &root_owned);
+                let removed_paths = scanning::removed_rel_paths(&structural_paths, &root_owned);
                 // The tree reload an attribution change causes has no path
                 // records of its own — the file is not a node, so the loop below
                 // never names it — which would leave a reader looking at a
@@ -386,11 +368,7 @@ pub fn start_watching<R: tauri::Runtime>(
                     // exists may have been created *or* had its content change
                     // in a way that re-classifies it. "changed" says the weaker
                     // true thing rather than the stronger false one.
-                    let action = if removed_paths.contains(rel) {
-                        "removed"
-                    } else {
-                        "changed"
-                    };
+                    let action = if removed_paths.contains(rel) { "removed" } else { "changed" };
                     // `DEBUG`: a tree change is detail that matters once you
                     // are already investigating one, and a single save or a
                     // branch checkout produces a burst of them. At `INFO` that
@@ -441,16 +419,14 @@ pub fn start_watching<R: tauri::Runtime>(
                         // a count no consumer has ever been handed — the shape a
                         // future truthiness gate would silently drop, dropping
                         // precisely the reload this exists to deliver.
-                        change_count: structural_paths.len()
-                            + usize::from(attribution_changed),
+                        change_count: structural_paths.len() + usize::from(attribution_changed),
                         // Structural only. The attribution file backs no tab, so
                         // it must never reach TAB-FR-19's close-removed pass.
                         removed_paths,
                     },
                 );
             }
-        },
-    );
+        });
     let mut debouncer = match debouncer {
         Ok(d) => d,
         Err(e) => {

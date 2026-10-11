@@ -25,11 +25,7 @@ fn agent_reported_failure_and_escalation_are_completed_executions() {
     let runtime = RecordingRuntime::replying(&claude_stdout(&envelope_json("escalation_required")));
     let outcome = run(&harness, runtime, task("go")).expect("ran");
     assert_eq!(outcome.process_outcome, ProcessOutcome::Completed);
-    let escalation = outcome
-        .response
-        .expect("envelope")
-        .escalation
-        .expect("escalation detail");
+    let escalation = outcome.response.expect("envelope").escalation.expect("escalation detail");
     // EAC-FR-22 / EAC-FR-36: the question list reaches the caller in the order
     // it was written, with every option's three fields intact.
     assert_eq!(escalation.questions.len(), 1);
@@ -43,10 +39,7 @@ fn agent_reported_failure_and_escalation_are_completed_executions() {
         vec!["a", "b"]
     );
     assert_eq!(escalation.questions[0].options[0].summary, "Take a");
-    assert_eq!(
-        escalation.questions[0].options[1].description,
-        "The second path."
-    );
+    assert_eq!(escalation.questions[0].options[1].description, "The second path.");
 }
 
 /// EAC-FR-22, EAC-FR-23 — a non-zero exit keeps its stderr and parses nothing.
@@ -136,16 +129,10 @@ fn an_invalid_envelope_record_carries_both_the_reason_and_the_excerpt() {
     });
 
     let outcome = run(&harness, runtime.clone(), task("go")).expect("ran");
-    assert_eq!(
-        outcome.process_outcome,
-        ProcessOutcome::InvalidStructuredOutput
-    );
+    assert_eq!(outcome.process_outcome, ProcessOutcome::InvalidStructuredOutput);
 
     let record = failure_record(&container_name(&runtime.only_run().argv));
-    assert_eq!(
-        record.fields["outcome"],
-        json!("invalid_structured_output")
-    );
+    assert_eq!(record.fields["outcome"], json!("invalid_structured_output"));
     // Both, on one record.
     assert!(
         record.fields["reason"].is_string(),
@@ -177,10 +164,7 @@ fn the_stderr_excerpt_is_bounded_masked_and_marked_when_it_is_a_tail() {
 
     // Short enough to carry whole, and carried whole — no marker, because there
     // is nothing above it that was dropped.
-    assert_eq!(
-        stderr_excerpt(b"Error: refused\n", false, &[]),
-        Some("Error: refused".to_string())
-    );
+    assert_eq!(stderr_excerpt(b"Error: refused\n", false, &[]), Some("Error: refused".to_string()));
 
     // Every occurrence, not the first.
     assert_eq!(
@@ -197,10 +181,7 @@ fn the_stderr_excerpt_is_bounded_masked_and_marked_when_it_is_a_tail() {
     // Over the bound: the tail is what is kept, the head is what is dropped, and
     // the marker says so. The head is marked, so "kept the tail" is asserted by
     // what is absent rather than only by a length.
-    let long = format!(
-        "HEAD-MARKER{}LAST-LINE",
-        "x".repeat(LIMIT_STDERR_EXCERPT * 2)
-    );
+    let long = format!("HEAD-MARKER{}LAST-LINE", "x".repeat(LIMIT_STDERR_EXCERPT * 2));
     let excerpt = stderr_excerpt(long.as_bytes(), false, &[]).expect("an excerpt");
     assert!(excerpt.starts_with('…'), "a tail did not say it was one");
     assert!(excerpt.ends_with("LAST-LINE"), "the tail was not the tail");
@@ -259,10 +240,7 @@ fn the_stderr_excerpt_is_bounded_masked_and_marked_when_it_is_a_tail() {
     let truncated_capture = format!("first line\nsecond line\n{head}");
     let excerpt =
         stderr_excerpt(truncated_capture.as_bytes(), true, &[secret]).expect("an excerpt");
-    assert!(
-        !excerpt.contains(head),
-        "half a credential survived the capture bound"
-    );
+    assert!(!excerpt.contains(head), "half a credential survived the capture bound");
     assert!(
         excerpt.ends_with("second line"),
         "the complete lines above the capture cut were dropped too"
@@ -322,12 +300,7 @@ fn a_codex_failure_excerpt_carries_no_credential_path() {
     // The container path the CLI knows the directory by, and the host path a
     // Docker diagnostic would name it by.
     let container_path = "/home/agent/.codex";
-    let host_path = harness
-        .home
-        .path()
-        .join(".codex")
-        .to_string_lossy()
-        .into_owned();
+    let host_path = harness.home.path().join(".codex").to_string_lossy().into_owned();
 
     let runtime = Arc::new(RecordingRuntime {
         script: Script::Reply {
@@ -353,21 +326,12 @@ fn a_codex_failure_excerpt_carries_no_credential_path() {
     // file writes to — a `<redacted>` another test produced would satisfy a scan
     // without this launch having masked anything.
     let record = failure_record(&container_name(&runtime.only_run().argv));
-    let excerpt = record.fields["stderr_excerpt"]
-        .as_str()
-        .expect("an excerpt")
-        .to_string();
+    let excerpt = record.fields["stderr_excerpt"].as_str().expect("an excerpt").to_string();
 
     // The diagnostic itself is what makes the record worth reading.
-    assert!(
-        excerpt.contains("MARKER-CODEX-e55a"),
-        "the excerpt did not reach the failure record"
-    );
+    assert!(excerpt.contains("MARKER-CODEX-e55a"), "the excerpt did not reach the failure record");
     // And neither spelling of the credential directory rode in with it.
-    assert!(
-        !excerpt.contains(container_path),
-        "the excerpt carried the Codex configuration path"
-    );
+    assert!(!excerpt.contains(container_path), "the excerpt carried the Codex configuration path");
     assert!(
         !excerpt.contains(host_path.as_str()),
         "the excerpt carried the host path the login was mounted from"
@@ -467,10 +431,7 @@ fn a_hanging_child_is_killed_by_the_deadline_and_by_cancellation() {
     let cancel_flag = marker.path().join("cancel-survived");
 
     let sh = HostDockerCli::with_program("sh");
-    let hang = [
-        "-c".to_string(),
-        format!("sleep 60; touch {}", deadline_flag.to_string_lossy()),
-    ];
+    let hang = ["-c".to_string(), format!("sleep 60; touch {}", deadline_flag.to_string_lossy())];
     let outcome = block_on(async {
         sh.run(RunRequest {
             argv: &hang,
@@ -494,10 +455,7 @@ fn a_hanging_child_is_killed_by_the_deadline_and_by_cancellation() {
     );
 
     // The same child, ended by the caller instead.
-    let hang = [
-        "-c".to_string(),
-        format!("sleep 60; touch {}", cancel_flag.to_string_lossy()),
-    ];
+    let hang = ["-c".to_string(), format!("sleep 60; touch {}", cancel_flag.to_string_lossy())];
     let token = CancellationToken::new();
     let flag = token.clone();
     std::thread::spawn(move || {
@@ -556,21 +514,9 @@ fn every_path_out_removes_its_container_under_a_fresh_name() {
     let mut names: Vec<String> = Vec::new();
 
     let scripts = [
-        Script::Reply {
-            stdout: valid_claude_stdout(),
-            stderr: String::new(),
-            exit_code: 0,
-        },
-        Script::Reply {
-            stdout: String::new(),
-            stderr: "boom".into(),
-            exit_code: 3,
-        },
-        Script::Reply {
-            stdout: "not json".into(),
-            stderr: String::new(),
-            exit_code: 0,
-        },
+        Script::Reply { stdout: valid_claude_stdout(), stderr: String::new(), exit_code: 0 },
+        Script::Reply { stdout: String::new(), stderr: "boom".into(), exit_code: 3 },
+        Script::Reply { stdout: "not json".into(), stderr: String::new(), exit_code: 0 },
         Script::TimeOut,
         Script::Cancel,
         Script::Terminate,

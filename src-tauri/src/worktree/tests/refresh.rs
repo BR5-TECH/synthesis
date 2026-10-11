@@ -52,15 +52,11 @@ fn the_local_half_of_a_refresh_completes_whatever_the_remote_leg_did() {
     // enumeration can report.
     f.branch("wip");
 
-    let skipped = refresh_outcome_for(&f.root(), || {
-        Err(crate::git::ERR_NO_REMOTE_CONFIGURED.to_string())
-    })
-    .unwrap();
+    let skipped =
+        refresh_outcome_for(&f.root(), || Err(crate::git::ERR_NO_REMOTE_CONFIGURED.to_string()))
+            .unwrap();
     assert_eq!(skipped.remote_state, REMOTE_SKIPPED);
-    assert_eq!(
-        skipped.remote_error, None,
-        "no remote is not a cause the author can act on"
-    );
+    assert_eq!(skipped.remote_error, None, "no remote is not a cause the author can act on");
     assert!(
         branch_names(&skipped.context.branches).contains(&"wip".to_string()),
         "the local half still reports a branch created since the last look"
@@ -129,7 +125,7 @@ fn a_refresh_changes_no_checkout_and_re_roots_nothing() {
     // which is not the claim — the claim is that it tears nothing down.
     let store = GlobalSettingsStore::in_memory();
     reroot(
-        &app.handle(),
+        app.handle(),
         &app.state::<ProjectState>(),
         &app.state::<ProjectWatcher>(),
         &store,
@@ -142,9 +138,7 @@ fn a_refresh_changes_no_checkout_and_re_roots_nothing() {
         app.state::<ProjectWatcher>().is_active(),
         "precondition: a watcher is mounted on the content root"
     );
-    let remembered = store
-        .load_active_worktree(&to_string_path(&f.root()))
-        .unwrap();
+    let remembered = store.load_active_worktree(&to_string_path(&f.root())).unwrap();
     assert_eq!(
         remembered,
         Some(to_string_path(&f.root())),
@@ -166,15 +160,13 @@ fn a_refresh_changes_no_checkout_and_re_roots_nothing() {
     let checkout_state = |root: PathBuf| {
         crate::changes::tests_support::snapshot(root)
             .into_iter()
-            .filter(|(path, _)| {
-                !path.starts_with(".git/refs/") && !path.starts_with(".git/logs/")
-            })
+            .filter(|(path, _)| !path.starts_with(".git/refs/") && !path.starts_with(".git/logs/"))
             .collect::<std::collections::BTreeMap<String, String>>()
     };
     let before_primary = checkout_state(f.root());
     let before_alpha = checkout_state(alpha.clone());
 
-    let outcome = refresh_and_announce(&app.handle(), &f.root(), || {
+    let outcome = refresh_and_announce(app.handle(), &f.root(), || {
         fake_fetch(&f, &["origin/feature-new"], &[]);
         Ok(())
     })
@@ -212,12 +204,7 @@ fn a_refresh_changes_no_checkout_and_re_roots_nothing() {
     // The remembered worktree is untouched because `refresh_and_announce`
     // takes no settings store at all — this reads back the value the reroot
     // above wrote, and would change only if a refresh gained that ability.
-    assert_eq!(
-        store
-            .load_active_worktree(&to_string_path(&f.root()))
-            .unwrap(),
-        remembered,
-    );
+    assert_eq!(store.load_active_worktree(&to_string_path(&f.root())).unwrap(), remembered,);
     assert_eq!(
         switched.load(Ordering::SeqCst),
         0,
@@ -229,11 +216,7 @@ fn a_refresh_changes_no_checkout_and_re_roots_nothing() {
         "the primary worktree's content, HEAD and index are untouched — only \
          the remote-tracking ref the fetch wrote differs"
     );
-    assert_eq!(
-        before_alpha,
-        checkout_state(alpha),
-        "and so are the linked worktree's"
-    );
+    assert_eq!(before_alpha, checkout_state(alpha), "and so are the linked worktree's");
 }
 
 #[test]
@@ -257,22 +240,12 @@ fn every_returning_refresh_emits_exactly_one_branches_changed() {
 
     for (label, result) in [
         ("refreshed", Ok(())),
-        (
-            "skipped",
-            Err(crate::git::ERR_NO_REMOTE_CONFIGURED.to_string()),
-        ),
-        (
-            "failed",
-            Err(crate::github_tokens::ERR_GITHUB_UNREACHABLE.to_string()),
-        ),
+        ("skipped", Err(crate::git::ERR_NO_REMOTE_CONFIGURED.to_string())),
+        ("failed", Err(crate::github_tokens::ERR_GITHUB_UNREACHABLE.to_string())),
     ] {
         count.store(0, Ordering::SeqCst);
-        refresh_and_announce(&app.handle(), &f.root(), || result).unwrap();
-        assert_eq!(
-            count.load(Ordering::SeqCst),
-            1,
-            "exactly one event for a {label} remote leg"
-        );
+        refresh_and_announce(app.handle(), &f.root(), || result).unwrap();
+        assert_eq!(count.load(Ordering::SeqCst), 1, "exactly one event for a {label} remote leg");
     }
 
     // The payload names the repository and nothing else: it is a signal, and
@@ -298,14 +271,10 @@ fn every_returning_refresh_emits_exactly_one_branches_changed() {
     let outside = TempDir::new().unwrap();
     count.store(0, Ordering::SeqCst);
     assert_eq!(
-        refresh_and_announce(&app.handle(), outside.path(), || Ok(())).unwrap_err(),
+        refresh_and_announce(app.handle(), outside.path(), || Ok(())).unwrap_err(),
         ERR_NOT_A_REPO
     );
-    assert_eq!(
-        count.load(Ordering::SeqCst),
-        0,
-        "a refresh refused under WTC-FR-02 emits nothing"
-    );
+    assert_eq!(count.load(Ordering::SeqCst), 0, "a refresh refused under WTC-FR-02 emits nothing");
 }
 
 #[test]
@@ -325,12 +294,7 @@ fn a_refresh_composes_the_real_fetch_primitive_end_to_end() {
     upstream.branch("spike");
 
     let f = Fixture::new();
-    f.repo()
-        .remote(
-            "origin",
-            &format!("file://{}", upstream.root().to_string_lossy()),
-        )
-        .unwrap();
+    f.repo().remote("origin", &format!("file://{}", upstream.root().to_string_lossy())).unwrap();
 
     let app = mock_app_on(&f.root(), &f.root());
     let store = GlobalSettingsStore::in_memory();
@@ -361,7 +325,7 @@ fn a_refresh_composes_the_real_fetch_primitive_end_to_end() {
         s.fetch_add(1, Ordering::SeqCst);
     });
 
-    let outcome = refresh_and_announce(&app.handle(), &f.root(), fetch).unwrap();
+    let outcome = refresh_and_announce(app.handle(), &f.root(), fetch).unwrap();
 
     assert_eq!(outcome.remote_state, REMOTE_REFRESHED);
     let listed = branch_names(&outcome.context.branches);
@@ -378,12 +342,7 @@ fn a_refresh_composes_the_real_fetch_primitive_end_to_end() {
     );
 
     // And a second refresh, after the remote deleted one, prunes it.
-    upstream
-        .repo()
-        .find_branch("spike", BranchType::Local)
-        .unwrap()
-        .delete()
-        .unwrap();
+    upstream.repo().find_branch("spike", BranchType::Local).unwrap().delete().unwrap();
     let fetch = || {
         crate::git::fetch_remote_branches(
             &handle,
@@ -395,7 +354,7 @@ fn a_refresh_composes_the_real_fetch_primitive_end_to_end() {
             "",
         )
     };
-    let outcome = refresh_and_announce(&app.handle(), &f.root(), fetch).unwrap();
+    let outcome = refresh_and_announce(app.handle(), &f.root(), fetch).unwrap();
     let listed = branch_names(&outcome.context.branches);
     assert!(
         listed.contains(&"origin/feature-new".to_string())
@@ -416,12 +375,7 @@ fn a_refresh_from_a_linked_worktree_offers_no_branches_but_still_fetches() {
     let f = Fixture::new();
     f.branch("alpha");
     let alpha = f.add_worktree("wt-alpha", "alpha");
-    f.repo()
-        .remote(
-            "origin",
-            &format!("file://{}", upstream.root().to_string_lossy()),
-        )
-        .unwrap();
+    f.repo().remote("origin", &format!("file://{}", upstream.root().to_string_lossy())).unwrap();
 
     let app = mock_app_on(&alpha, &f.root());
     let store = GlobalSettingsStore::in_memory();
@@ -429,7 +383,7 @@ fn a_refresh_from_a_linked_worktree_offers_no_branches_but_still_fetches() {
     let registry = crate::progress::ProgressRegistry::default();
     let handle = app.handle().clone();
 
-    let outcome = refresh_and_announce(&app.handle(), &alpha, || {
+    let outcome = refresh_and_announce(app.handle(), &alpha, || {
         crate::git::fetch_remote_branches(
             &handle,
             &crate::logging::BUFFER,
@@ -448,17 +402,11 @@ fn a_refresh_from_a_linked_worktree_offers_no_branches_but_still_fetches() {
         "a linked worktree offers none: {:?}",
         outcome.context.branches
     );
-    assert_eq!(
-        outcome.context.worktrees.len(),
-        2,
-        "while every worktree is still listed"
-    );
+    assert_eq!(outcome.context.worktrees.len(), 2, "while every worktree is still listed");
     // The fetch nonetheless happened — the ref is in the repository even
     // though this worktree cannot check it out.
     assert!(
-        f.repo()
-            .find_branch("origin/feature-new", BranchType::Remote)
-            .is_ok(),
+        f.repo().find_branch("origin/feature-new", BranchType::Remote).is_ok(),
         "the remote's branch was fetched"
     );
 }

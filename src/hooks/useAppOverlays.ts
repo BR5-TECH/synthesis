@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import { useSettingsWindows } from "./useSettingsWindows";
+import { usePullRequestWindow } from "./usePullRequestWindow";
 import type { useShellSession } from "./useShellSession";
 import type { CommitFile } from "../components/CommitMessageModal";
 import type { RollbackFile } from "../components/RollbackConfirm";
@@ -160,6 +161,9 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
     dismissRollbackWindow();
     dismissTabMenu();
     dismissGraduationOverlays();
+    // CPR-FR-IWDK: the Create a PR window is an overlay too. The window that
+    // asked for this picker is held by the hook rather than closed (CPR-FR-VZUZ).
+    pullRequest.dismissPullRequestWindow();
     // Re-opening while one is outstanding settles the previous caller rather
     // than dropping it: an abandoned `settle` leaves the Git panel awaiting a
     // promise nothing will ever resolve, with no note and no operation.
@@ -205,6 +209,8 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
   interface PendingStreamMerge {
     streamId: string;
     streamName: string;
+    /** CMW-FR-KQLV: the message the window opens with. */
+    defaultMessage?: string;
     settle: (message: string | null) => void;
   }
   const [streamMergeWindow, setStreamMergeWindow] =
@@ -212,7 +218,11 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
   // Mirrored in a ref for the reason the commit window's is: a caller left
   // unsettled is a promise the selector awaits forever.
   const streamMergeRef = useRef<PendingStreamMerge | null>(null);
-  const requestMergeCommit = (streamId: string, streamName: string) =>
+  const requestMergeCommit = (
+    streamId: string,
+    streamName: string,
+    defaultMessage?: string,
+  ) =>
     new Promise<string | null>((settle) => {
       // CMW-FR-01 / SNV-FR-56: opening this window closes every overlay the
       // shell owns, exactly as `openCommitWindow` does. The work stream
@@ -224,7 +234,7 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
       // Re-opening while one is outstanding settles the previous caller rather
       // than abandoning it.
       streamMergeRef.current?.settle(null);
-      const pending = { streamId, streamName, settle };
+      const pending = { streamId, streamName, defaultMessage, settle };
       streamMergeRef.current = pending;
       setStreamMergeWindow(pending);
     });
@@ -435,6 +445,7 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
       dismissTabMenu();
       dismissCommitWindow();
       dismissGraduationOverlays();
+      pullRequest.dismissPullRequestWindow();
       rollbackRef.current?.settle(false);
       const pending = { files, settle: resolve };
       rollbackRef.current = pending;
@@ -458,7 +469,26 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
     dismissTokenPicker();
     dismissTabMenu();
     dismissGraduationOverlays();
+    pullRequest.dismissPullRequestWindow();
   };
+
+  /**
+   * CPR-FR-FDVO: the Create a PR window. Opening it closes every other overlay
+   * of the shell, and the token picker it asks for takes its place for a moment
+   * (CPR-FR-VZUZ).
+   */
+  const pullRequest = usePullRequestWindow({
+    closeOthers: () => {
+      closeSiblingOverlays();
+      dismissCommitWindow();
+      dismissRollbackWindow();
+      if (streamMergeRef.current) settleStreamMergeWindow(null);
+      setAgentsRosterOpen(false);
+    },
+    requestToken: () =>
+      new Promise<boolean>((resolve) => openTokenPicker(null, resolve)),
+    projectPath: s.projectPath,
+  });
 
   /**
    * GSD-FR-QMTF: open the start dialog for a draft. Opening it closes every
@@ -562,5 +592,6 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
     aboutOpen,
     openAbout,
     closeAbout,
+    ...pullRequest,
   };
 }

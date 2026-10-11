@@ -24,35 +24,23 @@ struct DraftFixture {
 impl DraftFixture {
     fn new() -> Self {
         let fixture = crate::tools::tests::empty_project();
-        let root = fixture
-            .app
-            .state::<crate::bm25_index::Bm25Indexer>()
-            .root()
-            .expect("mounted");
+        let root = fixture.app.state::<crate::bm25_index::Bm25Indexer>().root().expect("mounted");
         let session = agent_session(&fixture.app, &root, "draft-read");
         DraftFixture { fixture, session }
     }
 
     fn root(&self) -> crate::fs::RootFs {
-        let root = self
-            .fixture
-            .app
-            .state::<crate::bm25_index::Bm25Indexer>()
-            .root()
-            .expect("mounted");
+        let root =
+            self.fixture.app.state::<crate::bm25_index::Bm25Indexer>().root().expect("mounted");
         crate::fs::RootFs::for_root(&root)
     }
 
     fn draft(&self, name: &str, body: &str) -> String {
         let root = self.root();
-        let created = crate::drafts::create_draft_at_root(&root, Some(name))
-            .expect("the scaffold completes");
+        let created =
+            crate::drafts::create_draft_at_root(&root, Some(name)).expect("the scaffold completes");
         let id = created.draft.id.clone();
-        let prompt = created
-            .draft
-            .prompt_path
-            .clone()
-            .expect("a created draft holds its prompt");
+        let prompt = created.draft.prompt_path.clone().expect("a created draft holds its prompt");
         crate::drafts::save_draft_file_impl(&root, &id, &prompt, body).expect("the prompt writes");
         id
     }
@@ -66,9 +54,7 @@ impl DraftFixture {
     }
 
     fn read(&self, draft_id: &str) -> Result<ReadDraftOutput, ToolRefusal> {
-        block_on(self.tool().call(ReadDraftArgs {
-            draft_id: draft_id.into(),
-        }))
+        block_on(self.tool().call(ReadDraftArgs { draft_id: draft_id.into() }))
     }
 }
 
@@ -81,36 +67,26 @@ impl DraftFixture {
 fn is_a_portable_tool_named_read_draft() {
     let fixture = DraftFixture::new();
     assert_eq!(NAME, "read_draft");
-    assert_eq!(
-        <DraftReadTool<tauri::test::MockRuntime> as PortableTool>::NAME,
-        NAME
-    );
-    assert_eq!(
-        rig::tool::portable_tool_definition(&fixture.tool()).name,
-        NAME
-    );
+    assert_eq!(<DraftReadTool<tauri::test::MockRuntime> as PortableTool>::NAME, NAME);
+    assert_eq!(rig::tool::tool_definition(&fixture.tool()).name, NAME);
 }
 
 /// RDT-FR-02: the fixed description, and a schema declaring `draftId` alone.
 #[test]
 fn definition_declares_one_parameter_and_no_other() {
     let fixture = DraftFixture::new();
-    let definition = rig::tool::portable_tool_definition(&fixture.tool());
+    let definition = rig::tool::tool_definition(&fixture.tool());
     assert_eq!(definition.description, DESCRIPTION);
 
     let schema = definition.parameters;
     assert_eq!(schema["required"], serde_json::json!(["draft_id"]));
-    assert_eq!(
-        schema["properties"]["draft_id"]["description"],
-        DRAFT_ID_DESCRIPTION
-    );
+    assert_eq!(schema["properties"]["draft_id"]["description"], DRAFT_ID_DESCRIPTION);
     // RDT-FR-04: nothing here selects a version, and RDT-FR-06 offers no paging.
     let properties = schema["properties"].as_object().expect("an object");
     assert_eq!(properties.len(), 1, "one parameter and no other");
-    for absent in [
-        "version", "entryId", "entry_id", "revision", "at", "path", "offset", "limit",
-        "draftId",
-    ] {
+    for absent in
+        ["version", "entryId", "entry_id", "revision", "at", "path", "offset", "limit", "draftId"]
+    {
         assert!(properties.get(absent).is_none(), "{absent} is not a parameter");
     }
 }
@@ -187,11 +163,7 @@ fn never_returns_sibling_storage() {
     let id = fixture.draft("surrounded", "# Plan\n\nthe live text\n");
     let dir = crate::drafts::draft_dir(&fixture.root(), &id).expect("resolves");
     std::fs::write(dir.join("proposals").join("p1.md"), "the candidate text\n").expect("write");
-    std::fs::write(
-        dir.join("proposals").join("p.content"),
-        "the comment text\n",
-    )
-    .expect("write");
+    std::fs::write(dir.join("proposals").join("p.content"), "the comment text\n").expect("write");
     std::fs::write(dir.join("conversation.jsonl"), "the conversation text\n").expect("write");
 
     let output = fixture.read(&id).expect("reads");
@@ -372,11 +344,7 @@ fn unknown_id_refuses_as_not_found() {
     let fixture = DraftFixture::new();
     fixture.draft("present", "# Plan\n\nbody\n");
 
-    for id in [
-        "01JQZ0000000000000000000AA",
-        "not-a-draft-id",
-        "../../etc/passwd",
-    ] {
+    for id in ["01JQZ0000000000000000000AA", "not-a-draft-id", "../../etc/passwd"] {
         let error = fixture.read(id).expect_err("an unknown id refuses");
         assert_eq!(error, ToolRefusal::DraftNotFound, "for {id:?}");
         let execution = error.to_execution_error();
@@ -521,10 +489,8 @@ fn an_empty_prompt_reads_as_empty_content() {
 fn no_open_project_refuses() {
     let app = crate::tools::tests::closed_project();
     let tool = DraftReadTool::new(app.handle().clone(), "closed");
-    let error = block_on(tool.call(ReadDraftArgs {
-        draft_id: "anything".into(),
-    }))
-    .expect_err("a closed project refuses");
+    let error = block_on(tool.call(ReadDraftArgs { draft_id: "anything".into() }))
+        .expect_err("a closed project refuses");
     assert_eq!(error, ToolRefusal::NoProjectOpen);
     let execution = error.to_execution_error();
     assert_eq!(execution.kind(), rig::tool::ToolErrorKind::NotFound);
@@ -538,10 +504,7 @@ fn answers_from_disk_rather_than_from_the_index() {
     let fixture = DraftFixture::new();
     let id = fixture.draft("unindexed", "# Plan\n\nbody\n");
     // No pass has ever seen this draft.
-    assert_eq!(
-        fixture.read(&id).expect("reads anyway").content,
-        "# Plan\n\nbody\n"
-    );
+    assert_eq!(fixture.read(&id).expect("reads anyway").content, "# Plan\n\nbody\n");
 
     fixture.fixture.reindex();
     crate::drafts::delete_draft_impl(&fixture.root(), &fixture.root(), &id).expect("deletes");
@@ -591,14 +554,9 @@ fn logs_the_draft_id_and_no_returned_material() {
     RDT_BUFFER.clear();
 
     let tool = fixture.logged(&RDT_BUFFER);
-    let output = block_on(tool.call(ReadDraftArgs {
-        draft_id: id.clone(),
-    }))
-    .expect("reads");
-    block_on(tool.call(ReadDraftArgs {
-        draft_id: "  missing-draft  ".into(),
-    }))
-    .expect_err("refuses");
+    let output = block_on(tool.call(ReadDraftArgs { draft_id: id.clone() })).expect("reads");
+    block_on(tool.call(ReadDraftArgs { draft_id: "  missing-draft  ".into() }))
+        .expect_err("refuses");
 
     // Querying either domain returns the same two records — a tool call is
     // work the backend performs because a model asked for it, and a reader
@@ -619,32 +577,16 @@ fn logs_the_draft_id_and_no_returned_material() {
     };
     let records = of_domain(Domain::Ai);
     assert_eq!(records.len(), 2, "one success and one refusal");
-    assert_eq!(
-        records,
-        of_domain(Domain::Backend),
-        "both domains return the same two records",
-    );
-    let success = records
-        .iter()
-        .find(|r| r.level == LogLevel::Info)
-        .expect("an INFO record");
+    assert_eq!(records, of_domain(Domain::Backend), "both domains return the same two records",);
+    let success = records.iter().find(|r| r.level == LogLevel::Info).expect("an INFO record");
     assert_eq!(success.fields["tool"], serde_json::json!(NAME));
     assert_eq!(success.fields["draft_id"], serde_json::json!(id));
-    assert_eq!(
-        success.fields["bytes"],
-        serde_json::json!(output.content.len())
-    );
+    assert_eq!(success.fields["bytes"], serde_json::json!(output.content.len()));
     // Pin the exact key set, so a field added to the shared helpers for another
     // tool cannot silently widen what this one records.
-    assert_eq!(
-        crate::tools::tests::sorted_keys(success),
-        vec!["bytes", "draft_id", "tool"],
-    );
+    assert_eq!(crate::tools::tests::sorted_keys(success), vec!["bytes", "draft_id", "tool"],);
 
-    let refusal = records
-        .iter()
-        .find(|r| r.level == LogLevel::Warn)
-        .expect("a WARN record");
+    let refusal = records.iter().find(|r| r.level == LogLevel::Warn).expect("a WARN record");
     assert_eq!(refusal.fields["reason"], serde_json::json!("draft_not_found"));
     assert_eq!(
         crate::tools::tests::sorted_keys(refusal),
@@ -659,18 +601,8 @@ fn logs_the_draft_id_and_no_returned_material() {
     // RDT-FR-17: no prompt, name, status, or prompt path in any record.
     for record in &records {
         let blob = serde_json::to_string(&record.fields).expect("serialises") + &record.message;
-        for leaked in [
-            "SecretName",
-            "confidential",
-            "prompt body",
-            "# Plan",
-            ".md",
-            "active",
-        ] {
-            assert!(
-                !blob.contains(leaked),
-                "{leaked:?} leaked into a log record: {blob}"
-            );
+        for leaked in ["SecretName", "confidential", "prompt body", "# Plan", ".md", "active"] {
+            assert!(!blob.contains(leaked), "{leaked:?} leaked into a log record: {blob}");
         }
     }
 }
@@ -684,12 +616,13 @@ fn logs_a_bounded_draft_id() {
     let fixture = DraftFixture::new();
     RDT_BOUND_BUFFER.clear();
 
-    block_on(fixture.logged(&RDT_BOUND_BUFFER).call(ReadDraftArgs {
-        draft_id: "x".repeat(20_000),
-    }))
+    block_on(
+        fixture.logged(&RDT_BOUND_BUFFER).call(ReadDraftArgs { draft_id: "x".repeat(20_000) }),
+    )
     .expect_err("refuses");
 
-    let records = RDT_BOUND_BUFFER.query(&LogFilter { min_level: LogLevel::Debug, ..LogFilter::default() }, None, 1000)
+    let records = RDT_BOUND_BUFFER
+        .query(&LogFilter { min_level: LogLevel::Debug, ..LogFilter::default() }, None, 1000)
         .expect("the buffer answers")
         .records;
     let record = records.first().expect("a record");

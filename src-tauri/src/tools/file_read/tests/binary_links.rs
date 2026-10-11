@@ -32,11 +32,7 @@ fn a_file_that_is_not_text_refuses_and_leaks_none_of_its_bytes() {
     // Not one byte of the file in the message or in what it logged. The path is
     // the model's own argument and is recorded (RFT-FR-20); the file's bytes are
     // the project's material and are not.
-    let rendered = format!(
-        "{}{}",
-        refusal,
-        rendered_records(&RFT_BINARY_BUFFER),
-    );
+    let rendered = format!("{}{}", refusal, rendered_records(&RFT_BINARY_BUFFER),);
     for fragment in [BINARY_MARKER, "CONFIDENTIAL"] {
         assert!(
             !rendered.contains(fragment),
@@ -83,9 +79,8 @@ fn a_link_and_a_path_through_one_are_both_refused() {
     std::os::unix::fs::symlink(project.root.join("src"), project.root.join("linkdir")).unwrap();
 
     for path in ["link.ts", "linkdir/a.ts"] {
-        let refusal = project
-            .at(path)
-            .unwrap_err_or_else(|| panic!("{path} must refuse (RFT-FR-16)"));
+        let refusal =
+            project.at(path).unwrap_err_or_else(|| panic!("{path} must refuse (RFT-FR-16)"));
         assert_eq!(refusal, ToolRefusal::PathThroughLink, "{path}");
         assert_eq!(refusal.kind(), ToolErrorKind::PermissionDenied);
         assert!(refusal.retryable());
@@ -110,4 +105,3 @@ impl<T: std::fmt::Debug, E> UnwrapErrOrElse<T, E> for Result<T, E> {
         }
     }
 }
-

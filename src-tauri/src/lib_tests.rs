@@ -32,6 +32,7 @@ const EVENT_NAMES: &[&str] = &[
     draft_proposals::PROPOSALS_CHANGED,
     prompt_proposals::PROMPT_PROPOSALS_CHANGED,
     agent_conversations::AGENT_TURN_STATE_CHANGED,
+    agents::AGENTS_CHANGED,
     comments::DISCUSSION_CHANGED,
     github_tokens::GITHUB_TOKENS_CHANGED,
     logging::LOG_RECORDS_APPENDED,
@@ -111,7 +112,9 @@ fn every_registered_command_is_named_in_command_names() {
         let Some(name) = entry.rsplit("::").next() else {
             continue;
         };
-        if name.is_empty() || !name.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c.is_ascii_digit()) {
+        if name.is_empty()
+            || !name.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c.is_ascii_digit())
+        {
             continue;
         }
         assert!(
@@ -184,12 +187,9 @@ fn no_vault_operation_is_reachable_from_the_frontend() {
         .split_once("])")
         .expect("end of generate_handler!")
         .0;
-    for operation in [
-        "read_secret",
-        "secret_presence",
-        "apply_secret_mutations",
-        "migrate_legacy_secrets",
-    ] {
+    for operation in
+        ["read_secret", "secret_presence", "apply_secret_mutations", "migrate_legacy_secrets"]
+    {
         assert!(
             !handler.contains(operation),
             "{operation} must never be a registered command: the vault's \
@@ -246,8 +246,8 @@ fn no_agent_conversation_internal_is_reachable_from_the_frontend() {
     // - `validate_ai_api_selection` is the rule an agent's stored selection
     //   is checked against, not something a frontend decides (AAP-FR-33).
     // - `resolve_project_agent` resolves a nickname against a project's
-    //   enrolment; registering it would let the frontend enumerate agents a
-    //   project never enrolled (AGR-FR-18).
+    //   roster; registering it would let the frontend probe which nicknames
+    //   a project reaches (AGR-FR-18).
     // - `build_input` reads the material under discussion and assembles
     //   what an agent is shown (AGC-FR-05).
     // - `append_as` / `append_as_scoped` / `append_agent_comment` are the
@@ -273,10 +273,7 @@ fn no_agent_conversation_internal_is_reachable_from_the_frontend() {
         // nothing the frontend can reach.
         "reserve_discussion_question_set",
     ] {
-        assert!(
-            !handler.contains(internal),
-            "{internal} must never be a registered command",
-        );
+        assert!(!handler.contains(internal), "{internal} must never be a registered command",);
         assert!(!COMMAND_NAMES.contains(&internal));
     }
 }
@@ -385,6 +382,8 @@ fn command_names_list_contains_layout_preferences_commands() {
         "inspect_branch_deletion",
         "delete_branch",
         "list_pull_requests",
+        "create_pull_request",
+        "get_pull_request_head_state",
         "get_pull_request_detail",
         "list_pull_request_timeline",
         "list_worktrees_and_branches",

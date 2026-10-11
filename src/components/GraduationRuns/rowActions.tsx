@@ -63,7 +63,7 @@ export function RowActions({
           disabled={busy}
           onClick={onPause}
           aria-label={`Pause “${name}”`}
-          title="Pause: stops the turn this run is doing now and gives its work stream back, so the next run in that queue starts. Its stage, its change set and its checkpoint are kept."
+          title="Pause: stops the turn this run is doing now. The run keeps its work stream and its project slot, so the runs behind it wait. Its stage, its change set and its checkpoint are kept."
         >
           <Icon.Pause size={12} />
         </button>
@@ -75,7 +75,7 @@ export function RowActions({
           disabled={busy}
           onClick={onContinue}
           aria-label={`${isResume(run) ? "Resume" : "Continue"} “${name}”`}
-          title="Returns this run to its stream's queue. It starts when that stream is free, and nothing running now is interrupted."
+          title="Continues this run at once, because it still holds its work stream and its project slot. Nothing running now is interrupted."
         >
           <Icon.Resume size={12} />
         </button>

@@ -249,8 +249,7 @@ pub(super) fn write_update(
     record: &StreamUpdateRecord,
 ) -> Result<(), String> {
     store::ensure_dir(fs, &store.updates_root())?;
-    fs.write_toml_atomic(store.update_record(&record.stream_id), record)
-        .map_err(|e| e.to_string())
+    fs.write_toml_atomic(store.update_record(&record.stream_id), record).map_err(|e| e.to_string())
 }
 
 /// WKS-FR-LRAV / WKS-FR-EIBC: remove one stream's update record.
@@ -304,11 +303,7 @@ pub(super) fn settle(
             record.state = StreamUpdateState::NothingToUpdate;
             record.decisions.clear();
         }
-        Ok(StreamUpdateOutcome::Updated {
-            attempt_id,
-            updated_paths,
-            semantic_turns,
-        }) => {
+        Ok(StreamUpdateOutcome::Updated { attempt_id, updated_paths, semantic_turns }) => {
             record.state = StreamUpdateState::Updated;
             record.attempt_id = attempt_id.clone();
             record.updated_paths = updated_paths.clone();
@@ -316,19 +311,12 @@ pub(super) fn settle(
             record.conflicts.clear();
             record.decisions.clear();
         }
-        Ok(StreamUpdateOutcome::Conflicted {
-            attempt_id,
-            conflicted_paths,
-        }) => {
+        Ok(StreamUpdateOutcome::Conflicted { attempt_id, conflicted_paths }) => {
             record.state = StreamUpdateState::Conflicted;
             record.attempt_id = attempt_id.clone();
             record.conflicts = conflicts_for(conflicts, conflicted_paths);
         }
-        Ok(StreamUpdateOutcome::Escalated {
-            attempt_id,
-            reason,
-            questions,
-        }) => {
+        Ok(StreamUpdateOutcome::Escalated { attempt_id, reason, questions }) => {
             record.state = StreamUpdateState::Escalated;
             record.attempt_id = attempt_id.clone();
             record.reason = reason.clone();
@@ -391,15 +379,13 @@ fn conflicts_for(planned: &[StreamMergeConflict], paths: &[String]) -> Vec<Strea
     paths
         .iter()
         .map(|path| {
-            planned
-                .iter()
-                .find(|c| &c.path == path)
-                .cloned()
-                .unwrap_or_else(|| StreamMergeConflict {
+            planned.iter().find(|c| &c.path == path).cloned().unwrap_or_else(|| {
+                StreamMergeConflict {
                     path: path.clone(),
                     base_change: String::new(),
                     stream_change: String::new(),
-                })
+                }
+            })
         })
         .collect()
 }

@@ -61,10 +61,7 @@ fn an_operation_serialises_to_the_documented_shape() {
     );
     let json = serde_json::to_value(&op).unwrap();
     assert_eq!(json.get("kind").and_then(|v| v.as_str()), Some("scan"));
-    assert_eq!(
-        json.get("label").and_then(|v| v.as_str()),
-        Some("Indexing project…")
-    );
+    assert_eq!(json.get("label").and_then(|v| v.as_str()), Some("Indexing project…"));
     assert_eq!(json.get("state").and_then(|v| v.as_str()), Some("running"));
     assert!(json.get("id").and_then(|v| v.as_str()).is_some());
     assert!(json.get("sequence").and_then(|v| v.as_u64()).is_some());
@@ -210,14 +207,8 @@ fn ids_and_sequences_never_repeat_across_a_session() {
         seen.push(op.id);
     }
     let (_, fresh) = register(&registry, "fresh", t0());
-    assert!(
-        !seen.contains(&fresh.id),
-        "a fresh id must match none of the earlier ones"
-    );
-    assert!(
-        fresh.sequence > highest,
-        "and its sequence must exceed every earlier one"
-    );
+    assert!(!seen.contains(&fresh.id), "a fresh id must match none of the earlier ones");
+    assert!(fresh.sequence > highest, "and its sequence must exceed every earlier one");
 }
 
 // -----------------------------------------------------------------------
@@ -252,15 +243,10 @@ fn a_subscriber_sees_registration_updates_and_exactly_one_terminal() {
         ],
         "a registration, three updates, and exactly one terminal event"
     );
-    assert!(
-        registry.in_flight().is_empty(),
-        "the derived in-flight set matches the command's"
-    );
+    assert!(registry.in_flight().is_empty(), "the derived in-flight set matches the command's");
 
     // PRG-FR-08: nothing further can be produced for a terminated id.
-    assert!(registry
-        .terminate(id, OperationState::Finished)
-        .is_empty());
+    assert!(registry.terminate(id, OperationState::Finished).is_empty());
     assert!(registry.update_at(id, Some(31), None, None, base).is_none());
 }
 
@@ -275,10 +261,7 @@ fn an_operation_faster_than_one_window_emits_exactly_two_events() {
     publish_all(&sink, &registry.terminate(id, OperationState::Finished));
 
     assert_eq!(sink.len(), 2);
-    assert_eq!(
-        sink.states(),
-        vec![OperationState::Running, OperationState::Finished]
-    );
+    assert_eq!(sink.states(), vec![OperationState::Running, OperationState::Finished]);
     assert!(registry.in_flight().is_empty());
 }
 
@@ -291,20 +274,14 @@ fn completed_never_decreases_and_never_exceeds_total() {
     let registry = ProgressRegistry::default();
     let base = t0();
     let (id, _) = registry.register_at("git", "Pushing…", None, Some(500), base);
-    registry
-        .update_at(id, Some(40), None, None, after(base, 100))
-        .unwrap();
+    registry.update_at(id, Some(40), None, None, after(base, 100)).unwrap();
 
     // Backwards is clamped to the previous value.
-    let ev = registry
-        .update_at(id, Some(10), None, None, after(base, 200))
-        .unwrap();
+    let ev = registry.update_at(id, Some(10), None, None, after(base, 200)).unwrap();
     assert_eq!(ev.completed, Some(40));
 
     // Past the total is clamped to the total.
-    let ev = registry
-        .update_at(id, Some(9_000), None, None, after(base, 300))
-        .unwrap();
+    let ev = registry.update_at(id, Some(9_000), None, None, after(base, 300)).unwrap();
     assert_eq!(ev.completed, Some(500));
     assert_eq!(ev.total, Some(500));
 }
@@ -318,16 +295,12 @@ fn an_indeterminate_operation_becomes_determinate_and_never_reverts() {
     let (id, registration) = registry.register_at("install", "Installing…", None, None, base);
     assert_eq!((registration.completed, registration.total), (None, None));
 
-    let ev = registry
-        .update_at(id, None, Some(12), None, after(base, 100))
-        .unwrap();
+    let ev = registry.update_at(id, None, Some(12), None, after(base, 100)).unwrap();
     assert_eq!(ev.total, Some(12));
     assert_eq!(ev.completed, Some(0), "a determinate operation carries both");
 
     // An update that names no total leaves the operation determinate.
-    let ev = registry
-        .update_at(id, Some(5), None, None, after(base, 200))
-        .unwrap();
+    let ev = registry.update_at(id, Some(5), None, None, after(base, 200)).unwrap();
     assert_eq!((ev.completed, ev.total), (Some(5), Some(12)));
     let terminal = registry.terminate(id, OperationState::Finished);
     assert_eq!(terminal.last().unwrap().total, Some(12));
@@ -366,11 +339,7 @@ fn a_burst_of_updates_collapses_but_keeps_the_latest_values() {
     assert_eq!(events.last().unwrap().state, OperationState::Finished);
     // The trailing flush: the last *update* delivered carries 1000, not the
     // value from whenever the last non-coalesced update happened to fall.
-    let last_update = events
-        .iter()
-        .rev()
-        .find(|e| e.state == OperationState::Running)
-        .unwrap();
+    let last_update = events.iter().rev().find(|e| e.state == OperationState::Running).unwrap();
     assert_eq!(
         last_update.completed,
         Some(1_000),
@@ -385,12 +354,8 @@ fn an_update_past_the_window_is_delivered_immediately() {
     let registry = ProgressRegistry::default();
     let base = t0();
     let (id, _) = registry.register_at("scan", "Indexing…", None, Some(10), base);
-    assert!(registry
-        .update_at(id, Some(1), None, None, base + COALESCE_WINDOW)
-        .is_some());
-    assert!(registry
-        .update_at(id, Some(2), None, None, base + COALESCE_WINDOW * 2)
-        .is_some());
+    assert!(registry.update_at(id, Some(1), None, None, base + COALESCE_WINDOW).is_some());
+    assert!(registry.update_at(id, Some(2), None, None, base + COALESCE_WINDOW * 2).is_some());
 }
 
 #[test]
@@ -406,9 +371,7 @@ fn a_coalesced_update_is_not_flushed_twice() {
         "inside the window: coalesced"
     );
     assert!(
-        registry
-            .update_at(id, Some(2), None, None, base + COALESCE_WINDOW)
-            .is_some(),
+        registry.update_at(id, Some(2), None, None, base + COALESCE_WINDOW).is_some(),
         "past the window: delivered, clearing the debt"
     );
     let events = registry.terminate(id, OperationState::Finished);
@@ -451,23 +414,14 @@ fn attribute_terminates_on_both_the_success_and_the_failure_path() {
 
     let ok: Result<u8, ()> = attribute(&sink, &registry, "scan", "Indexing…", None, || Ok(7));
     assert_eq!(ok, Ok(7));
-    assert_eq!(
-        sink.states(),
-        vec![OperationState::Running, OperationState::Finished]
-    );
+    assert_eq!(sink.states(), vec![OperationState::Running, OperationState::Finished]);
     assert!(registry.in_flight().is_empty());
 
     let err: Result<(), &str> =
         attribute(&sink, &registry, "git", "Pushing…", None, || Err("boom"));
     assert_eq!(err, Err("boom"));
-    assert_eq!(
-        sink.events.borrow().last().unwrap().state,
-        OperationState::Failed
-    );
-    assert!(
-        registry.in_flight().is_empty(),
-        "a failing operation still leaves the in-flight set"
-    );
+    assert_eq!(sink.events.borrow().last().unwrap().state, OperationState::Failed);
+    assert!(registry.in_flight().is_empty(), "a failing operation still leaves the in-flight set");
 }
 
 #[test]
@@ -480,21 +434,14 @@ fn attribute_terminates_an_operation_whose_work_panics() {
     let sink = Recorder::default();
 
     let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let _: Result<(), ()> =
-            attribute(&sink, &registry, "scan", "Indexing…", None, || {
-                panic!("the scan hit a filesystem race");
-            });
+        let _: Result<(), ()> = attribute(&sink, &registry, "scan", "Indexing…", None, || {
+            panic!("the scan hit a filesystem race");
+        });
     }));
 
     assert!(panicked.is_err(), "the panic is re-raised, not swallowed");
-    assert!(
-        registry.in_flight().is_empty(),
-        "and the operation still left the in-flight set"
-    );
-    assert_eq!(
-        sink.states(),
-        vec![OperationState::Running, OperationState::Failed]
-    );
+    assert!(registry.in_flight().is_empty(), "and the operation still left the in-flight set");
+    assert_eq!(sink.states(), vec![OperationState::Running, OperationState::Failed]);
 }
 
 #[test]
@@ -508,19 +455,11 @@ fn a_completed_reported_against_no_total_stays_indeterminate() {
     let base = t0();
     let (id, _) = registry.register_at("scan", "Indexing…", None, None, base);
 
-    let ev = registry
-        .update_at(id, Some(40), None, None, after(base, 100))
-        .unwrap();
-    assert_eq!(
-        (ev.completed, ev.total),
-        (None, None),
-        "still indeterminate, not half-determinate"
-    );
+    let ev = registry.update_at(id, Some(40), None, None, after(base, 100)).unwrap();
+    assert_eq!((ev.completed, ev.total), (None, None), "still indeterminate, not half-determinate");
 
     // And once a total does arrive the operation becomes determinate.
-    let ev = registry
-        .update_at(id, Some(40), Some(500), None, after(base, 200))
-        .unwrap();
+    let ev = registry.update_at(id, Some(40), Some(500), None, after(base, 200)).unwrap();
     assert_eq!((ev.completed, ev.total), (Some(40), Some(500)));
 }
 
@@ -539,11 +478,7 @@ fn terminated_operations_leave_nothing_behind() {
         registry.terminate(id, OperationState::Finished);
     }
     assert!(registry.in_flight().is_empty());
-    assert_eq!(
-        registry.lock().tracked.len(),
-        0,
-        "nothing accumulates across a session"
-    );
+    assert_eq!(registry.lock().tracked.len(), 0, "nothing accumulates across a session");
 }
 
 // -----------------------------------------------------------------------
@@ -561,10 +496,8 @@ fn a_content_root_change_terminates_only_that_roots_operations() {
     let a = PathBuf::from("/tmp/worktree-a");
     let b = PathBuf::from("/tmp/worktree-b");
 
-    let (_, scan_a) =
-        registry.register_at("scan", "Indexing…", Some(a.clone()), None, t0());
-    let (_, scan_b) =
-        registry.register_at("scan", "Indexing…", Some(b.clone()), None, t0());
+    let (_, scan_a) = registry.register_at("scan", "Indexing…", Some(a.clone()), None, t0());
+    let (_, scan_b) = registry.register_at("scan", "Indexing…", Some(b.clone()), None, t0());
     let (_, install) = registry.register_at("install", "Installing…", None, None, t0());
 
     terminate_scope_and_publish(&sink, &registry, &a);
@@ -572,10 +505,7 @@ fn a_content_root_change_terminates_only_that_roots_operations() {
     let remaining: Vec<String> = registry.in_flight().into_iter().map(|o| o.id).collect();
     assert!(!remaining.contains(&scan_a.id), "A's scan is gone");
     assert!(remaining.contains(&scan_b.id), "B's scan keeps running");
-    assert!(
-        remaining.contains(&install.id),
-        "an unscoped operation survives a project teardown"
-    );
+    assert!(remaining.contains(&install.id), "an unscoped operation survives a project teardown");
     assert_eq!(
         sink.states(),
         vec![OperationState::Cancelled],
@@ -608,10 +538,7 @@ fn an_unrecognised_kind_travels_verbatim_with_its_label() {
     assert_eq!(op.kind, "something-new");
     assert_eq!(op.label, "Doing a thing…");
     let json = serde_json::to_value(&op).unwrap();
-    assert_eq!(
-        json.get("kind").and_then(|v| v.as_str()),
-        Some("something-new")
-    );
+    assert_eq!(json.get("kind").and_then(|v| v.as_str()), Some("something-new"));
 }
 
 #[test]

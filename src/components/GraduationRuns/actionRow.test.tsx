@@ -1,7 +1,7 @@
 /**
  * The selected run's action row, driven through the whole section
  * (`../../../specifications/ui/GRU-graduation-runs.md` GRU-FR-DVWY,
- * GRU-FR-KQPE, GRU-FR-ZMHB, GRU-FR-PVXD).
+ * GRU-FR-KQPE, GRU-FR-ZMHB, GRU-FR-PVXD, GRU-FR-CLFA, GRU-FR-QYEE).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -113,10 +113,16 @@ describe("the selected run's action row", () => {
     await waitFor(() => expect(commands()).toContain("revert_graduation_run"));
   });
 
-  it("GRU-FR-DVWY: an awaiting-author, a discarded and a failed run that made commits offer Revert", async () => {
-    queue = makeQueue([makeRun("r1", "awaiting_author", { commits: ["c0ffee1"] })]);
+  it("GRU-FR-DVWY: a blocked, an awaiting-author, a discarded and a failed run that made commits offer Revert", async () => {
+    queue = makeQueue([makeRun("r0", "blocked", { commits: ["c0ffee1"] })]);
     await open();
     let region = await screen.findByRole("region", { name: "The selected run" });
+    expect(within(region).getByRole("button", { name: "Revert" })).toBeInTheDocument();
+    cleanup();
+
+    queue = makeQueue([makeRun("r1", "awaiting_author", { commits: ["c0ffee1"] })]);
+    await open();
+    region = await screen.findByRole("region", { name: "The selected run" });
     expect(within(region).getByRole("button", { name: "Revert" })).toBeInTheDocument();
     cleanup();
 
@@ -136,7 +142,7 @@ describe("the selected run's action row", () => {
     expect(within(region).getByRole("button", { name: "Revert" })).toBeInTheDocument();
   });
 
-  it("GRU-FR-DVWY: a queued run, a run that holds its stream and a run that made no commit offer no Revert", async () => {
+  it("GRU-FR-DVWY: a queued run, a run doing agent work and a run that made no commit offer no Revert", async () => {
     queue = makeQueue([makeRun("r1", "queued", { commits: ["c0ffee1"] })]);
     await open();
     let region = await screen.findByRole("region", { name: "The selected run" });
@@ -144,10 +150,16 @@ describe("the selected run's action row", () => {
     expect(within(region).queryByRole("button", { name: "Revert" })).toBeNull();
     cleanup();
 
-    queue = makeQueue([makeRun("r2", "blocked", { commits: ["c0ffee1"] })]);
+    queue = makeQueue([makeRun("r2", "working", { commits: ["c0ffee1"] })]);
     await open();
     region = await screen.findByRole("region", { name: "The selected run" });
-    expect(within(region).getByRole("button", { name: "Continue" })).toBeInTheDocument();
+    expect(within(region).getByRole("button", { name: "Pause" })).toBeInTheDocument();
+    expect(within(region).queryByRole("button", { name: "Revert" })).toBeNull();
+    cleanup();
+
+    queue = makeQueue([makeRun("r2b", "reviewing", { commits: ["c0ffee1"] })]);
+    await open();
+    region = await screen.findByRole("region", { name: "The selected run" });
     expect(within(region).queryByRole("button", { name: "Revert" })).toBeNull();
     cleanup();
 
@@ -156,6 +168,118 @@ describe("the selected run's action row", () => {
     region = await screen.findByRole("region", { name: "The selected run" });
     expect(within(region).getByRole("button", { name: "Continue" })).toBeInTheDocument();
     expect(within(region).queryByRole("button", { name: "Revert" })).toBeNull();
+  });
+
+  it("GRD-FR-MDQZ, GRD-FR-BNTC: the Pause tooltip says the run keeps its stream and its slot, and the runs behind it wait", async () => {
+    queue = makeQueue([makeRun("r1", "working")]);
+    await open();
+    const button = await screen.findByRole("button", { name: "Pause “Run r1”" });
+    const title = button.getAttribute("title") ?? "";
+    expect(title).toMatch(/keeps its work stream and its project slot/);
+    expect(title).toMatch(/runs behind it wait/);
+    expect(title).not.toMatch(/gives its work stream back/);
+  });
+
+  it("GRD-FR-CYIB, GRD-FR-BNTC: the Continue tooltip says the run continues at once, because it still holds its queue", async () => {
+    queue = makeQueue([makeRun("r1", "interrupted")]);
+    await open();
+    const button = await screen.findByRole("button", { name: /^(Continue|Resume) “Run r1”$/ });
+    const title = button.getAttribute("title") ?? "";
+    expect(title).toMatch(/Continues this run at once/);
+    expect(title).toMatch(/still holds its work stream and its project slot/);
+    expect(title).not.toMatch(/when that stream is free/);
+  });
+
+  it("GRU-FR-CLFA: the discard of a run with runs queued behind it names them and waits for a confirmation", async () => {
+    queue = makeQueue([
+      makeRun("r0", "completed"),
+      makeRun("r1", "awaiting_author"),
+      makeRun("r2", "queued"),
+      makeRun("r3", "queued", { autoStart: false }),
+    ]);
+    await open();
+    await userEvent.click(await screen.findByRole("button", { name: "Run r1" }));
+    const region = await screen.findByRole("region", { name: "The selected run" });
+    await userEvent.click(within(region).getByRole("button", { name: "Discard run" }));
+
+    const confirm = await within(region).findByTestId("graduation-removal-confirm");
+    expect(confirm).toHaveTextContent("Run r2");
+    expect(confirm).toHaveTextContent("Run r3");
+    expect(confirm).not.toHaveTextContent("Run r0");
+    expect(confirm).toHaveTextContent("Their drafts return to the active drafts, not graduated.");
+    expect(commands()).not.toContain("discard_graduation_run");
+
+    await userEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    expect(within(region).queryByTestId("graduation-removal-confirm")).toBeNull();
+    expect(commands()).not.toContain("discard_graduation_run");
+
+    await userEvent.click(within(region).getByRole("button", { name: "Discard run" }));
+    const again = await within(region).findByTestId("graduation-removal-confirm");
+    await userEvent.click(within(again).getByRole("button", { name: "Discard run" }));
+    await waitFor(() => expect(commands()).toContain("discard_graduation_run"));
+  });
+
+  it("GRU-FR-CLFA: a discard with no run queued behind it is invoked at once", async () => {
+    queue = makeQueue([makeRun("r1", "awaiting_author"), makeRun("r0", "completed")]);
+    await open();
+    const region = await screen.findByRole("region", { name: "The selected run" });
+    await userEvent.click(within(region).getByRole("button", { name: "Discard run" }));
+    await waitFor(() => expect(commands()).toContain("discard_graduation_run"));
+    expect(within(region).queryByTestId("graduation-removal-confirm")).toBeNull();
+  });
+
+  it("GRU-FR-CLFA: the revert of an interrupted run with runs queued behind it confirms, and a revert of a completed run does not", async () => {
+    queue = makeQueue([
+      makeRun("r1", "interrupted", { commits: ["c0ffee1"] }),
+      makeRun("r2", "queued"),
+    ]);
+    await open();
+    const region = await screen.findByRole("region", { name: "The selected run" });
+    await userEvent.click(within(region).getByRole("button", { name: "Revert" }));
+    const confirm = await within(region).findByTestId("graduation-removal-confirm");
+    expect(confirm).toHaveTextContent("Run r2");
+    expect(commands()).not.toContain("revert_graduation_run");
+    await userEvent.click(within(confirm).getByRole("button", { name: "Revert run" }));
+    await waitFor(() => expect(commands()).toContain("revert_graduation_run"));
+    cleanup();
+
+    invoked.mockClear();
+    queue = makeQueue([
+      makeRun("c1", "completed", { commits: ["c0ffee1"] }),
+      makeRun("c2", "queued"),
+    ]);
+    await openAll();
+    await userEvent.click(await screen.findByRole("button", { name: "Run c1" }));
+    const completed = await screen.findByRole("region", { name: "The selected run" });
+    await userEvent.click(within(completed).getByRole("button", { name: "Revert" }));
+    await waitFor(() => expect(commands()).toContain("revert_graduation_run"));
+    expect(within(completed).queryByTestId("graduation-removal-confirm")).toBeNull();
+  });
+
+  it("GRU-FR-CLFA: a run that never held its queue removes nothing, so its discard is not confirmed", async () => {
+    queue = makeQueue([makeRun("r1", "queued"), makeRun("r2", "queued")]);
+    await open();
+    const region = await screen.findByRole("region", { name: "The selected run" });
+    await userEvent.click(within(region).getByRole("button", { name: "Discard run" }));
+    await waitFor(() => expect(commands()).toContain("discard_graduation_run"));
+    expect(within(region).queryByTestId("graduation-removal-confirm")).toBeNull();
+  });
+
+  it("GRU-FR-QYEE: a failed run says that the runs queued behind it wait for its discard", async () => {
+    queue = makeQueue([makeRun("r1", "failed"), makeRun("r2", "queued")]);
+    await openAll();
+    await userEvent.click(await screen.findByRole("button", { name: "Run r1" }));
+    const region = await screen.findByRole("region", { name: "The selected run" });
+    expect(within(region).getByTestId("graduation-failed-hold")).toHaveTextContent(
+      "stay queued until you discard it",
+    );
+    expect(within(region).queryByRole("button", { name: /Restart/ })).toBeNull();
+    cleanup();
+
+    queue = makeQueue([makeRun("r3", "failed")]);
+    await openAll();
+    const alone = await screen.findByRole("region", { name: "The selected run" });
+    expect(within(alone).queryByTestId("graduation-failed-hold")).toBeNull();
   });
 
   it("GRU-FR-KQPE, GRU-FR-OZAR: a refused action renders beside the action row that issued it, brought into view", async () => {
@@ -271,7 +395,6 @@ describe("the selected run's action row", () => {
         interruption: {
           reason: "author_pause",
           detail: "You paused it.",
-          streamReleased: true,
           at: "2026-09-06T09:20:00Z",
         },
       }),

@@ -53,6 +53,7 @@ import {
   upsertDiscussionTurn,
 } from "../state/discussionSession";
 import { publishThread, publishThreads } from "../state/conversationThreads";
+import { useAgentRegistryRevision } from "../state/agentRegistry";
 import { useRecoverableFailures } from "./useRecoverableFailures";
 import { useImageNotices } from "./useImageNotices";
 import type { AnchoredThread } from "../state/commentAnchors";
@@ -278,6 +279,8 @@ export function useDiscussions(
   // The agent record carries the title each entry names (AGT-FR-43), so this is
   // the whole of what the picker needs.
   const hasShared = shared !== undefined;
+  // AGT-FR-NJXP: read again whenever an agent is created, edited, or deleted.
+  const agentsRevision = useAgentRegistryRevision();
   useEffect(() => {
     if (!enabled || hasShared) {
       if (!enabled) setAgents([]);
@@ -294,7 +297,7 @@ export function useDiscussions(
     return () => {
       cancelled = true;
     };
-  }, [enabled, hasShared]);
+  }, [enabled, hasShared, agentsRevision]);
 
   /**
    * NAW-FR-33 / CMT-FR-24: resolve who this machine writes as before the author

@@ -165,11 +165,7 @@ pub enum EventBody {
     TelemetryActivated,
     /// DSS-FR-RIDW: one settled foreground editing interval.
     #[serde(rename_all = "camelCase")]
-    EditingInterval {
-        interval_id: String,
-        started_at: String,
-        ended_at: String,
-    },
+    EditingInterval { interval_id: String, started_at: String, ended_at: String },
     /// AGC-FR-YQMD: one draft-scoped conversational agent turn.
     #[serde(rename_all = "camelCase")]
     ConversationTurn {
@@ -213,17 +209,10 @@ pub enum EventBody {
     },
     /// DHS-FR-ZQNM: one settled draft-history entry.
     #[serde(rename_all = "camelCase")]
-    DraftHistoryEntry {
-        entry_id: String,
-        seq: u32,
-        source_kind: HistorySourceKind,
-    },
+    DraftHistoryEntry { entry_id: String, seq: u32, source_kind: HistorySourceKind },
     /// DCP-FR-WTKA: one final draft change-proposal decision.
     #[serde(rename_all = "camelCase")]
-    ProposalDecision {
-        proposal_id: String,
-        decision: Decision,
-    },
+    ProposalDecision { proposal_id: String, decision: Decision },
 }
 
 impl EventBody {
@@ -297,19 +286,13 @@ pub struct Measure {
 
 impl Measure {
     pub fn unavailable() -> Measure {
-        Measure {
-            value: None,
-            availability: Availability::Unavailable,
-        }
+        Measure { value: None, availability: Availability::Unavailable }
     }
 
     pub fn of(value: u64, availability: Availability) -> Measure {
         match availability {
             Availability::Unavailable => Measure::unavailable(),
-            _ => Measure {
-                value: Some(value),
-                availability,
-            },
+            _ => Measure { value: Some(value), availability },
         }
     }
 }
@@ -324,10 +307,7 @@ pub struct TokenPair {
 
 impl TokenPair {
     pub fn unavailable() -> TokenPair {
-        TokenPair {
-            input: Measure::unavailable(),
-            output: Measure::unavailable(),
-        }
+        TokenPair { input: Measure::unavailable(), output: Measure::unavailable() }
     }
 }
 

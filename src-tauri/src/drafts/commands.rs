@@ -241,12 +241,8 @@ pub(crate) fn attach_graduation<R: tauri::Runtime>(
     };
     for summary in drafts.iter_mut() {
         summary.graduation = crate::graduation::draft_graduation(&queue, &summary.id);
-        summary.status = resolved_status(
-            &queue,
-            &summary.id,
-            summary.status,
-            summary.github_issue.is_some(),
-        );
+        summary.status =
+            resolved_status(&queue, &summary.id, summary.status, summary.github_issue.is_some());
     }
 }
 
@@ -440,14 +436,8 @@ pub fn read_draft_prompt(root: &fs::RootFs, id: &str) -> Result<DraftPrompt, Str
     // outcome. Folding it into the "not found" of a missing draft would have a
     // caller tell its user the draft does not exist, which is false and sends
     // them looking for an id they already had right.
-    let content = root
-        .read_text(&abs)
-        .map_err(|_| ERR_PROMPT_UNREADABLE.to_string())?;
-    Ok(DraftPrompt {
-        draft: record,
-        prompt_path,
-        content,
-    })
+    let content = root.read_text(&abs).map_err(|_| ERR_PROMPT_UNREADABLE.to_string())?;
+    Ok(DraftPrompt { draft: record, prompt_path, content })
 }
 
 #[tauri::command]
@@ -468,10 +458,7 @@ pub fn rename_draft(
     let record = rename_draft_impl(&root, &id, &name)?;
     // DRS-FR-09: a rename moves the primary file, so the file the draft is now
     // bound to is what changed on disk.
-    announce(
-        &app,
-        DraftChange::to(&id, record.prompt_path.clone().into_iter().collect()),
-    );
+    announce(&app, DraftChange::to(&id, record.prompt_path.clone().into_iter().collect()));
     Ok(record)
 }
 
@@ -566,4 +553,3 @@ pub fn save_draft_file_contents(
     announce(&app, DraftChange::to(&id, vec![path]));
     Ok(saved)
 }
-

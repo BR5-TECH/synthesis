@@ -62,8 +62,12 @@ fn the_current_branch_is_current_and_names_the_primary_worktree() {
 fn a_branch_in_a_linked_worktree_names_that_worktree() {
     let f = WorktreeFixture::new();
     f.branch("feature");
-    let path = crate::worktree::create_worktree_at(&f.root(), "feature", &f.sibling("wt-feature").to_string_lossy())
-        .unwrap();
+    let path = crate::worktree::create_worktree_at(
+        &f.root(),
+        "feature",
+        &f.sibling("wt-feature").to_string_lossy(),
+    )
+    .unwrap();
 
     let info = information(&f, "feature", "local", None).unwrap();
 
@@ -104,10 +108,7 @@ fn the_stream_that_owns_the_branch_is_carried_through_in_camel_case() {
         &f,
         "synthesis/stream/editor",
         "local",
-        Some(BranchStreamRef {
-            stream_id: "w1".into(),
-            stream_name: "Editor".into(),
-        }),
+        Some(BranchStreamRef { stream_id: "w1".into(), stream_name: "Editor".into() }),
     )
     .unwrap();
 
@@ -126,7 +127,12 @@ fn a_branch_lists_at_most_a_hundred_commits_newest_first() {
     let f = Fixture::new();
     let repo = f.repo();
     for n in 0..103 {
-        commit_at(&repo, &format!("c{n}"), 1_700_000_000 + n * 60, &[("a.md", Some(format!("{n}\n").as_bytes()))]);
+        commit_at(
+            &repo,
+            &format!("c{n}"),
+            1_700_000_000 + n * 60,
+            &[("a.md", Some(format!("{n}\n").as_bytes()))],
+        );
     }
     let branch = f.current_branch();
 
@@ -144,7 +150,10 @@ fn a_name_that_is_no_branch_of_that_kind_is_unknown_branch() {
     f.remote_ref("origin/experiment");
 
     assert_eq!(information(&f, "missing", "local", None).unwrap_err(), ERR_UNKNOWN_BRANCH);
-    assert_eq!(information(&f, "origin/experiment", "local", None).unwrap_err(), ERR_UNKNOWN_BRANCH);
+    assert_eq!(
+        information(&f, "origin/experiment", "local", None).unwrap_err(),
+        ERR_UNKNOWN_BRANCH
+    );
     assert_eq!(information(&f, &f.current(), "remote", None).unwrap_err(), ERR_UNKNOWN_BRANCH);
     assert_eq!(information(&f, "origin/HEAD", "remote", None).unwrap_err(), ERR_UNKNOWN_BRANCH);
     assert_eq!(information(&f, "", "local", None).unwrap_err(), ERR_UNKNOWN_BRANCH);

@@ -32,10 +32,7 @@ pub struct Recorder(Mutex<Vec<(LogLevel, String, Fields)>>);
 
 impl DocLog for Recorder {
     fn log(&self, level: LogLevel, message: &str, fields: Fields) {
-        self.0
-            .lock()
-            .unwrap()
-            .push((level, message.to_string(), fields));
+        self.0.lock().unwrap().push((level, message.to_string(), fields));
     }
 }
 
@@ -124,13 +121,8 @@ impl Docs {
     }
 
     pub fn add(&self, kind: SourceKind, relative: &str) {
-        let source = StoredSource {
-            kind,
-            path: self.path_of(relative),
-        };
-        self.collection
-            .add_sources(&[source], &|_, _| Ok(()))
-            .expect("the source is added");
+        let source = StoredSource { kind, path: self.path_of(relative) };
+        self.collection.add_sources(&[source], &|_, _| Ok(())).expect("the source is added");
     }
 
     pub fn remove(&self, relative: &str) {
@@ -142,10 +134,9 @@ impl Docs {
     /// One refresh, with the changes it announces collected.
     pub fn refresh(&self) -> Vec<DocumentsSnapshot> {
         let announced = Mutex::new(Vec::new());
-        self.collection
-            .refresh(&self.fs, &self.log, &|snapshot| {
-                announced.lock().unwrap().push(snapshot.clone())
-            });
+        self.collection.refresh(&self.fs, &self.log, &|snapshot| {
+            announced.lock().unwrap().push(snapshot.clone())
+        });
         announced.into_inner().unwrap()
     }
 
@@ -155,11 +146,7 @@ impl Docs {
 
     /// The names of the documents in the snapshot, in snapshot order.
     pub fn names(&self) -> Vec<String> {
-        self.snapshot()
-            .documents
-            .iter()
-            .map(|d| d.name.clone())
-            .collect()
+        self.snapshot().documents.iter().map(|d| d.name.clone()).collect()
     }
 
     pub fn id_of(&self, relative: &str) -> String {

@@ -74,7 +74,7 @@ pub fn run(
                 // ACM-FR-24: the path is never disclosed — it may itself be
                 // sensitive.
                 FailureRecord::configuration_error(Some(tool), MismatchType::Unreadable),
-            )
+            );
         }
     };
     let scenario: Scenario = match scenario::parse(&text) {
@@ -90,11 +90,7 @@ pub fn run(
     // 4. ACM-FR-17 / ACM-FR-19: adapter first, then the scenario's own
     //    expectations, in a fixed order. The first failure is the one reported,
     //    and either kind of failure is an expectation mismatch.
-    let received: Vec<&OsStr> = invocation
-        .tool_args
-        .iter()
-        .map(OsString::as_os_str)
-        .collect();
+    let received: Vec<&OsStr> = invocation.tool_args.iter().map(OsString::as_os_str).collect();
 
     let failure = invocation
         .adapter
@@ -118,10 +114,7 @@ pub fn run(
     if let Some(mismatch) = failure {
         // ACM-FR-26: no configured byte on either stream, and the configured
         // exit code is not used.
-        return emit_failure(
-            env.stderr,
-            FailureRecord::expectation_mismatch(tool, mismatch),
-        );
+        return emit_failure(env.stderr, FailureRecord::expectation_mismatch(tool, mismatch));
     }
 
     // 5. ACM-FR-21: the wait happens after every check has passed and before
@@ -169,11 +162,7 @@ mod tests {
         fn record(&self) -> Value {
             let text = String::from_utf8(self.stderr.clone()).expect("record is utf8");
             assert!(text.ends_with('\n'), "record must end with a newline");
-            assert_eq!(
-                text.matches('\n').count(),
-                1,
-                "record must be exactly one line"
-            );
+            assert_eq!(text.matches('\n').count(), 1, "record must be exactly one line");
             serde_json::from_str(text.trim_end()).expect("record is one JSON object")
         }
     }
@@ -183,16 +172,16 @@ mod tests {
         let path = directory.path().join("scenario.json");
         std::fs::write(&path, scenario_text).expect("write scenario");
 
-        let argv: Vec<OsString> = args
-            .iter()
-            .map(|a| {
-                if *a == "@scenario" {
-                    path.clone().into_os_string()
-                } else {
-                    OsString::from(*a)
-                }
-            })
-            .collect();
+        let argv: Vec<OsString> =
+            args.iter()
+                .map(|a| {
+                    if *a == "@scenario" {
+                        path.clone().into_os_string()
+                    } else {
+                        OsString::from(*a)
+                    }
+                })
+                .collect();
 
         invoke_raw(&argv, stdin)
     }
@@ -214,12 +203,7 @@ mod tests {
             run(argv, REGISTRY, &mut env)
         };
 
-        Outcome {
-            code,
-            stdout,
-            stderr,
-            slept: slept.into_inner(),
-        }
+        Outcome { code, stdout, stderr, slept: slept.into_inner() }
     }
 
     fn ok_scenario(args: &str) -> String {
@@ -245,12 +229,10 @@ mod tests {
 
     #[test]
     fn a_configured_non_reserved_exit_code_is_passed_through() {
-        let scenario = r#"{"version":1,"expected":{},"response":{"stdout":"o","stderr":"e","exit_code":42}}"#;
-        let outcome = invoke(
-            &["--tool", "codex", "--scenario", "@scenario", "--", "exec"],
-            scenario,
-            b"",
-        );
+        let scenario =
+            r#"{"version":1,"expected":{},"response":{"stdout":"o","stderr":"e","exit_code":42}}"#;
+        let outcome =
+            invoke(&["--tool", "codex", "--scenario", "@scenario", "--", "exec"], scenario, b"");
         assert_eq!(outcome.code, 42);
         assert_eq!(outcome.stdout, b"o");
         assert_eq!(outcome.stderr, b"e");
@@ -261,11 +243,8 @@ mod tests {
     fn an_empty_payload_writes_no_bytes() {
         let scenario =
             r#"{"version":1,"expected":{},"response":{"stdout":"","stderr":"","exit_code":7}}"#;
-        let outcome = invoke(
-            &["--tool", "claude", "--scenario", "@scenario", "--", "-p"],
-            scenario,
-            b"",
-        );
+        let outcome =
+            invoke(&["--tool", "claude", "--scenario", "@scenario", "--", "-p"], scenario, b"");
         assert_eq!(outcome.code, 7);
         assert!(outcome.stdout.is_empty());
         assert!(outcome.stderr.is_empty());
@@ -288,11 +267,8 @@ mod tests {
         }"#;
 
         // Adapter fails first.
-        let outcome = invoke(
-            &["--tool", "claude", "--scenario", "@scenario", "--", "wrong"],
-            scenario,
-            b"",
-        );
+        let outcome =
+            invoke(&["--tool", "claude", "--scenario", "@scenario", "--", "wrong"], scenario, b"");
         assert_eq!(outcome.code, EXIT_EXPECTATION_MISMATCH);
         assert_eq!(outcome.record()["check"], "adapter");
 
@@ -369,11 +345,8 @@ mod tests {
             "expected":{"args":["-p"],"required_args":[]},
             "response":{"stdout":"out","stderr":"","exit_code":0}
         }"#;
-        let outcome = invoke(
-            &["--tool", "claude", "--scenario", "@scenario", "--", "-p"],
-            scenario,
-            b"",
-        );
+        let outcome =
+            invoke(&["--tool", "claude", "--scenario", "@scenario", "--", "-p"], scenario, b"");
         assert_eq!(outcome.code, 0);
         assert_eq!(outcome.stdout, b"out");
     }
@@ -470,17 +443,9 @@ mod tests {
     fn each_invocation_error_reports_its_own_category() {
         let cases: [(&[&str], &str, bool); 4] = [
             (&["--scenario", "@scenario"], "missing_tool_option", false),
-            (
-                &["--tool", "opencode", "--scenario", "@scenario"],
-                "unknown_tool",
-                false,
-            ),
+            (&["--tool", "opencode", "--scenario", "@scenario"], "unknown_tool", false),
             (&["--tool", "claude"], "missing_scenario_option", true),
-            (
-                &["--tool", "claude", "--scenario", "@scenario", "--verbose"],
-                "unknown_option",
-                true,
-            ),
+            (&["--tool", "claude", "--scenario", "@scenario", "--verbose"], "unknown_option", true),
         ];
 
         for (args, expected, carries_tool) in cases {
@@ -490,11 +455,7 @@ mod tests {
             assert_eq!(record["kind"], "configuration_error");
             assert_eq!(record["check"], "scenario");
             assert_eq!(record["mismatch_type"], expected, "for {args:?}");
-            assert_eq!(
-                record.get("tool").is_some(),
-                carries_tool,
-                "tool presence for {args:?}"
-            );
+            assert_eq!(record.get("tool").is_some(), carries_tool, "tool presence for {args:?}");
         }
     }
 
@@ -543,11 +504,8 @@ mod tests {
     #[test]
     fn a_configured_delay_is_waited_out_before_the_response() {
         let scenario = r#"{"version":1,"expected":{},"response":{"stdout":"o","stderr":"","exit_code":0,"delay_ms":250}}"#;
-        let outcome = invoke(
-            &["--tool", "claude", "--scenario", "@scenario", "--", "-p"],
-            scenario,
-            b"",
-        );
+        let outcome =
+            invoke(&["--tool", "claude", "--scenario", "@scenario", "--", "-p"], scenario, b"");
         assert_eq!(outcome.slept, vec![Duration::from_millis(250)]);
         assert_eq!(outcome.stdout, b"o");
     }
@@ -556,11 +514,8 @@ mod tests {
     #[test]
     fn a_failing_run_does_not_wait() {
         let scenario = r#"{"version":1,"expected":{"args":["-p","x"]},"response":{"stdout":"o","stderr":"","exit_code":0,"delay_ms":5000}}"#;
-        let outcome = invoke(
-            &["--tool", "claude", "--scenario", "@scenario", "--", "-p"],
-            scenario,
-            b"",
-        );
+        let outcome =
+            invoke(&["--tool", "claude", "--scenario", "@scenario", "--", "-p"], scenario, b"");
         assert_eq!(outcome.code, EXIT_EXPECTATION_MISMATCH);
         assert!(outcome.slept.is_empty());
     }
@@ -659,10 +614,8 @@ mod tests {
         };
         assert_eq!(code, EXIT_EXPECTATION_MISMATCH);
         assert!(stdout.is_empty());
-        let record: Value = serde_json::from_str(
-            String::from_utf8(stderr).unwrap().trim_end(),
-        )
-        .unwrap();
+        let record: Value =
+            serde_json::from_str(String::from_utf8(stderr).unwrap().trim_end()).unwrap();
         assert_eq!(record["tool"], "demo");
         assert_eq!(record["check"], "adapter");
     }
@@ -690,12 +643,7 @@ mod tests {
 
         // One failure of each `check`, in turn.
         let cases: [(Vec<&str>, &str, &str, &[u8]); 5] = [
-            (
-                vec!["--scenario", "@scenario"],
-                "scenario",
-                &ok_scenario("[]"),
-                b"",
-            ),
+            (vec!["--scenario", "@scenario"], "scenario", &ok_scenario("[]"), b""),
             (
                 vec!["--tool", "claude", "--scenario", "@scenario", "--", "nope"],
                 "adapter",
@@ -729,27 +677,18 @@ mod tests {
             assert!(record.get("kind").is_some(), "kind for {expected_check}");
             assert!(record.get("code").is_some(), "code for {expected_check}");
             assert_eq!(record["check"], expected_check);
-            assert!(
-                record.get("mismatch_type").is_some(),
-                "mismatch_type for {expected_check}"
-            );
+            assert!(record.get("mismatch_type").is_some(), "mismatch_type for {expected_check}");
 
             // `index` and `name` belong only to the checks that have a location
             // and a caller-supplied label.
             if matches!(expected_check, "scenario" | "adapter" | "stdin") {
-                assert!(
-                    record.get("index").is_none(),
-                    "{expected_check} has no index"
-                );
+                assert!(record.get("index").is_none(), "{expected_check} has no index");
             }
             if expected_check != "required_args" {
                 assert!(record.get("name").is_none(), "{expected_check} has no name");
             }
             if matches!(expected_check, "scenario" | "adapter") {
-                assert!(
-                    record.get("expected_length").is_none(),
-                    "{expected_check} has no lengths"
-                );
+                assert!(record.get("expected_length").is_none(), "{expected_check} has no lengths");
                 assert!(record.get("actual_length").is_none());
             }
         }

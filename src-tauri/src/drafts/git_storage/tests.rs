@@ -87,9 +87,7 @@ impl Fixture {
         let repo = git2::Repository::init(fixture.root.path()).expect("a repository");
         let mut config = repo.config().expect("config");
         config.set_str("user.name", "An Author").expect("a name");
-        config
-            .set_str("user.email", "author@example.com")
-            .expect("an address");
+        config.set_str("user.email", "author@example.com").expect("an address");
         std::fs::write(fixture.root.path().join("README.md"), "the project\n").expect("a file");
         commit_everything(&repo, "the first commit");
         fixture
@@ -137,20 +135,12 @@ impl Fixture {
 
 fn commit_everything(repo: &git2::Repository, message: &str) {
     let mut index = repo.index().expect("an index");
-    index
-        .add_all(["*"], git2::IndexAddOption::DEFAULT, None)
-        .expect("an add");
+    index.add_all(["*"], git2::IndexAddOption::DEFAULT, None).expect("an add");
     index.write().expect("a written index");
-    let tree = repo
-        .find_tree(index.write_tree().expect("a tree"))
-        .expect("a tree");
+    let tree = repo.find_tree(index.write_tree().expect("a tree")).expect("a tree");
     let signature = repo.signature().expect("a signature");
-    let parents: Vec<git2::Commit> = repo
-        .head()
-        .ok()
-        .and_then(|head| head.peel_to_commit().ok())
-        .into_iter()
-        .collect();
+    let parents: Vec<git2::Commit> =
+        repo.head().ok().and_then(|head| head.peel_to_commit().ok()).into_iter().collect();
     let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
     repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &parent_refs)
         .expect("a commit");
@@ -158,9 +148,7 @@ fn commit_everything(repo: &git2::Repository, message: &str) {
 
 /// Whether Git ignores a project-relative path in the fixture's repository.
 fn ignored(f: &Fixture, rel: &str) -> bool {
-    f.repo()
-        .status_should_ignore(std::path::Path::new(rel))
-        .expect("an ignore answer")
+    f.repo().status_should_ignore(std::path::Path::new(rel)).expect("an ignore answer")
 }
 
 use crate::storage_floor::commit::DraftEvent;
@@ -269,11 +257,8 @@ fn a_creation_commits_its_draft_and_nothing_else() {
     let mut index = repo.index().expect("an index");
     index.add_path(std::path::Path::new("mine.md")).expect("a stage");
     index.write().expect("a written index");
-    std::fs::write(
-        root.path().join(".synthesis/drafts/notes-of-my-own.md"),
-        "not a draft\n",
-    )
-    .expect("the author's note");
+    std::fs::write(root.path().join(".synthesis/drafts/notes-of-my-own.md"), "not a draft\n")
+        .expect("the author's note");
 
     let created = crate::drafts::create_draft_impl(root, Some("a prompt"), None).expect("a draft");
     let id = created.draft.id.clone();
@@ -330,7 +315,8 @@ fn a_creation_commits_its_draft_and_nothing_else() {
 #[test]
 fn a_draft_is_created_with_no_conversation_log() {
     let f = Fixture::bare();
-    let created = crate::drafts::create_draft_impl(&f.root, Some("a prompt"), None).expect("a draft");
+    let created =
+        crate::drafts::create_draft_impl(&f.root, Some("a prompt"), None).expect("a draft");
     assert!(
         !f.root
             .path()
@@ -350,9 +336,8 @@ fn drs_ts_hrib_a_project_outside_git_writes_its_drafts_all_the_same() {
     let created = crate::drafts::create_draft_impl(root, Some("a prompt"), None).expect("a draft");
     f.commit_now();
 
-    let prompt = root
-        .path()
-        .join(format!(".synthesis/drafts/{}/files/a prompt.md", created.draft.id));
+    let prompt =
+        root.path().join(format!(".synthesis/drafts/{}/files/a prompt.md", created.draft.id));
     assert!(prompt.is_file(), "the draft is complete on disk for a later attempt");
     assert!(f.committed_paths().is_empty(), "and there is no repository to commit to");
 }
@@ -377,9 +362,7 @@ fn drs_ts_gwni_no_commit_is_taken_while_a_merge_stands() {
         "no commit lands inside an operation the author is in the middle of",
     );
     assert!(
-        root.path()
-            .join(format!(".synthesis/drafts/{}/draft.toml", created.draft.id))
-            .is_file(),
+        root.path().join(format!(".synthesis/drafts/{}/draft.toml", created.draft.id)).is_file(),
         "and the draft is complete on disk for the next attempt (DRS-FR-HRIB)",
     );
 }
@@ -399,18 +382,14 @@ fn drs_ts_afsu_a_linked_worktree_commits_its_own_drafts_and_moves_no_sibling() {
     // `git worktree add` needs.
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     repo.branch("linked", &head, false).expect("a branch");
-    let reference = repo
-        .find_branch("linked", git2::BranchType::Local)
-        .unwrap()
-        .into_reference();
+    let reference = repo.find_branch("linked", git2::BranchType::Local).unwrap().into_reference();
     let mut options = git2::WorktreeAddOptions::new();
     options.reference(Some(&reference));
     // Outside the primary worktree, so it is a second checkout rather than a
     // directory inside the one under test.
     let holder = TempDir::new().expect("a temporary folder");
     let linked_path = holder.path().join("linked");
-    repo.worktree("linked", &linked_path, Some(&options))
-        .expect("a linked worktree");
+    repo.worktree("linked", &linked_path, Some(&options)).expect("a linked worktree");
     let linked = RootFs::for_root(&linked_path);
     let primary_head = repo.head().unwrap().peel_to_commit().unwrap().id();
 
@@ -426,9 +405,7 @@ fn drs_ts_afsu_a_linked_worktree_commits_its_own_drafts_and_moves_no_sibling() {
         .tree()
         .expect("a tree");
     assert!(
-        committed
-            .get_path(std::path::Path::new(".synthesis/drafts"))
-            .is_ok(),
+        committed.get_path(std::path::Path::new(".synthesis/drafts")).is_ok(),
         "the worktree the draft was written in carries it",
     );
     // …and the primary worktree's branch has not moved, nor has its checkout
@@ -484,25 +461,20 @@ fn drs_ts_ispi_a_migrated_project_commits_the_drafts_it_already_had() {
     super::commit_event(root, id, "older", DraftEvent::GraduationStarted);
     f.commit_now();
     assert!(
-        !f.committed_paths()
-            .iter()
-            .any(|path| path.starts_with(".synthesis/drafts/")),
+        !f.committed_paths().iter().any(|path| path.starts_with(".synthesis/drafts/")),
         "an ignored path is invisible to a working-tree status",
     );
 
     // FSA-FR-08: the migration, which is the whole of what an existing project
     // needs — and which writes the ignore file and no other file.
-    root.ensure_gitignored(root.path().join(".synthesis"))
-        .expect("the migration");
+    root.ensure_gitignored(root.path().join(".synthesis")).expect("the migration");
     assert_eq!(
         std::fs::read_to_string(files.join("p.md")).expect("the prompt"),
         "an older prompt",
         "DRS-FR-ISPI: every draft file stays exactly where it was",
     );
     assert!(
-        !f.committed_paths()
-            .iter()
-            .any(|path| path.starts_with(".synthesis/drafts/")),
+        !f.committed_paths().iter().any(|path| path.starts_with(".synthesis/drafts/")),
         "DRS-FR-NRQQ: and the migration itself commits nothing",
     );
 
@@ -609,10 +581,7 @@ fn a_saved_prompt_waits_for_the_next_draft_event() {
     let object = head
         .tree()
         .expect("a tree")
-        .get_path(std::path::Path::new(&format!(
-            ".synthesis/drafts/{id}/files/{}",
-            created.file
-        )))
+        .get_path(std::path::Path::new(&format!(".synthesis/drafts/{id}/files/{}", created.file)))
         .expect("the prompt is committed")
         .to_object(&repo)
         .expect("an object");
@@ -647,4 +616,3 @@ fn a_private_writer_restores_the_ignore_file() {
     crate::github_publication::store::write_store(root, &id, &Default::default())
         .expect("the write does not fail because of the ignore file");
 }
-

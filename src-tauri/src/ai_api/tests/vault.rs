@@ -29,9 +29,7 @@ fn vault_harness_with(
     prober: Arc<FakeProber>,
 ) -> (GlobalSettingsStore, AiApiIntegrations) {
     let store = GlobalSettingsStore::in_memory();
-    store
-        .save_ai_api_registry(registry.clone(), active.map(str::to_string))
-        .unwrap();
+    store.save_ai_api_registry(registry.clone(), active.map(str::to_string)).unwrap();
     let vault = Arc::new(Vault::new(Box::new(keyring.clone())));
     vault.set_candidate_source(Box::new(move || migration_candidates(&registry)));
     let ai = AiApiIntegrations::new(
@@ -41,29 +39,17 @@ fn vault_harness_with(
     (store, ai)
 }
 
+/// One typed vault failure and the switch on the fake keyring that provokes it.
+type Provocation = (&'static str, Box<dyn Fn(&FakeKeyring)>);
+
 /// The five typed vault failures, each with the switch that provokes it.
-fn vault_provocations() -> Vec<(&'static str, Box<dyn Fn(&FakeKeyring)>)> {
+fn vault_provocations() -> Vec<Provocation> {
     vec![
-        (
-            "vault_unavailable",
-            Box::new(|k: &FakeKeyring| k.state().refuse_read = true),
-        ),
-        (
-            "vault_write_failed",
-            Box::new(|k: &FakeKeyring| k.state().refuse_write = true),
-        ),
-        (
-            "vault_verify_failed",
-            Box::new(|k: &FakeKeyring| k.state().mangle_next_writes = 1),
-        ),
-        (
-            "vault_malformed",
-            Box::new(|k: &FakeKeyring| k.set_entry("not an AppSecrets object")),
-        ),
-        (
-            "vault_unsupported_version",
-            Box::new(|k: &FakeKeyring| k.set_entry(r#"{"version":99}"#)),
-        ),
+        ("vault_unavailable", Box::new(|k: &FakeKeyring| k.state().refuse_read = true)),
+        ("vault_write_failed", Box::new(|k: &FakeKeyring| k.state().refuse_write = true)),
+        ("vault_verify_failed", Box::new(|k: &FakeKeyring| k.state().mangle_next_writes = 1)),
+        ("vault_malformed", Box::new(|k: &FakeKeyring| k.set_entry("not an AppSecrets object"))),
+        ("vault_unsupported_version", Box::new(|k: &FakeKeyring| k.set_entry(r#"{"version":99}"#))),
     ]
 }
 
@@ -88,10 +74,7 @@ fn aap_ts37_legacy_keys_are_adopted_on_the_first_listing() {
     keyring.set_legacy(LEGACY_KEYCHAIN_SERVICE, "anthropic", "sk-ant-key");
     let (store, ai) = vault_harness(
         &keyring,
-        vec![
-            verified_record("openai", "-key"),
-            verified_record("anthropic", "-key"),
-        ],
+        vec![verified_record("openai", "-key"), verified_record("anthropic", "-key")],
         None,
     );
 
@@ -109,14 +92,8 @@ fn aap_ts37_legacy_keys_are_adopted_on_the_first_listing() {
         .and_then(|v| v.get("providers"))
         .and_then(|v| v.as_object())
         .expect("the ai_api.providers namespace exists");
-    assert_eq!(
-        providers.get("openai").and_then(|v| v.as_str()),
-        Some("sk-openai-key")
-    );
-    assert_eq!(
-        providers.get("anthropic").and_then(|v| v.as_str()),
-        Some("sk-ant-key")
-    );
+    assert_eq!(providers.get("openai").and_then(|v| v.as_str()), Some("sk-openai-key"));
+    assert_eq!(providers.get("anthropic").and_then(|v| v.as_str()), Some("sk-ant-key"));
 }
 
 /// AAP-FR-36: a candidate is supplied for every configured provider,
@@ -133,11 +110,7 @@ fn aap_fr36_a_candidate_is_supplied_for_every_configured_provider() {
         assert_eq!(candidate.legacy_account, provider);
         assert_eq!(
             candidate.path,
-            vec![
-                "ai_api".to_string(),
-                "providers".to_string(),
-                provider.to_string()
-            ]
+            vec!["ai_api".to_string(), "providers".to_string(), provider.to_string()]
         );
     }
 }
@@ -146,19 +119,10 @@ fn aap_fr36_a_candidate_is_supplied_for_every_configured_provider() {
 /// leaves the record `key_unavailable` and never fails the listing.
 #[test]
 fn aap_ts19_every_vault_failure_downgrades_but_never_fails_the_listing() {
-    let provocations: Vec<(&str, Box<dyn Fn(&FakeKeyring)>)> = vec![
-        (
-            "vault_unavailable",
-            Box::new(|k: &FakeKeyring| k.state().refuse_read = true),
-        ),
-        (
-            "vault_malformed",
-            Box::new(|k: &FakeKeyring| k.set_entry("not an AppSecrets object")),
-        ),
-        (
-            "vault_unsupported_version",
-            Box::new(|k: &FakeKeyring| k.set_entry(r#"{"version":99}"#)),
-        ),
+    let provocations: Vec<Provocation> = vec![
+        ("vault_unavailable", Box::new(|k: &FakeKeyring| k.state().refuse_read = true)),
+        ("vault_malformed", Box::new(|k: &FakeKeyring| k.set_entry("not an AppSecrets object"))),
+        ("vault_unsupported_version", Box::new(|k: &FakeKeyring| k.set_entry(r#"{"version":99}"#))),
     ];
 
     for (name, provoke) in provocations {
@@ -166,10 +130,7 @@ fn aap_ts19_every_vault_failure_downgrades_but_never_fails_the_listing() {
         provoke(&keyring);
         let (store, ai) = vault_harness(
             &keyring,
-            vec![
-                verified_record("openai", "1234"),
-                verified_record("anthropic", "5678"),
-            ],
+            vec![verified_record("openai", "1234"), verified_record("anthropic", "5678")],
             None,
         );
 
@@ -235,8 +196,7 @@ fn aap_ts19_every_vault_write_failure_is_one_keychain_unavailable() {
         // The clear path, which deletes it.
         let keyring = FakeKeyring::default();
         provoke(&keyring);
-        let (store, ai) =
-            vault_harness(&keyring, vec![verified_record("openai", "1234")], None);
+        let (store, ai) = vault_harness(&keyring, vec![verified_record("openai", "1234")], None);
         let err = clear_integration_impl(&store, &ai, "openai").unwrap_err();
         assert_eq!(err, ERR_KEYCHAIN_UNAVAILABLE, "clear, provoked {name}");
         assert_eq!(
@@ -253,12 +213,8 @@ fn aap_ts19_every_vault_write_failure_is_one_keychain_unavailable() {
 fn a_malformed_vault_value_does_not_refuse_a_verification() {
     let keyring = FakeKeyring::default();
     keyring.set_entry("not an AppSecrets object");
-    let (store, ai) = vault_harness_with(
-        &keyring,
-        vec![],
-        None,
-        FakeProber::returning(&[("gpt-5", "GPT-5")]),
-    );
+    let (store, ai) =
+        vault_harness_with(&keyring, vec![], None, FakeProber::returning(&[("gpt-5", "GPT-5")]));
 
     let record = verify_integration_impl(
         &store,
@@ -325,10 +281,10 @@ fn no_vault_error_code_reaches_the_ipc_boundary() {
 }
 
 /// AAP-FR-02 read together with `ASV-application-secret-vault.md` ASV-FR-30:
-/// a listing costs **one** vault access however many providers it
-/// describes.
+/// a listing costs **no** keyring access once the vault cache is
+/// initialized, however many providers it describes (ASV-FR-DQHY).
 #[test]
-fn aap_fr02_a_listing_makes_one_vault_access() {
+fn aap_fr02_a_listing_makes_no_keyring_access_after_the_cache_is_initialized() {
     use crate::secret_vault::test_support::Call;
 
     let keyring = FakeKeyring::default();
@@ -341,14 +297,12 @@ fn aap_fr02_a_listing_makes_one_vault_access() {
         ],
         None,
     );
-    // Let migration run before the access is counted; it is the one
-    // sequence allowed to read more than once.
+    // The first listing initializes the vault cache.
     let _ = list_integrations_impl(&store, &ai).unwrap();
     let reads_before = keyring.count(&Call::Read);
 
     let list = list_integrations_impl(&store, &ai).unwrap();
 
     assert_eq!(list.len(), 4);
-    assert_eq!(keyring.count(&Call::Read) - reads_before, 1);
+    assert_eq!(keyring.count(&Call::Read) - reads_before, 0);
 }
-

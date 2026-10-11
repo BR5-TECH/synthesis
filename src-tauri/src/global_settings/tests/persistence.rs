@@ -93,13 +93,39 @@ fn record_recent_project_persists_across_reload() {
     let path = dir.path().join("synthesis.toml");
     {
         let store = GlobalSettingsStore::with_path(path.clone());
-        store
-            .record_recent_project("my-real-project", "/Users/me/code/my-real-project")
-            .unwrap();
+        store.record_recent_project("my-real-project", "/Users/me/code/my-real-project").unwrap();
     }
     let reloaded = GlobalSettingsStore::with_path(path);
     let recents = reloaded.list_recent_projects().unwrap();
     assert_eq!(recents.len(), 1);
     assert_eq!(recents[0].name, "my-real-project");
     assert_eq!(recents[0].path, "/Users/me/code/my-real-project");
+}
+
+// GSS-FR-WSZK: the Settings window size is unset until the author resizes the
+// window, survives a relaunch, and is untouched by a whole-record write of the
+// app preferences.
+#[test]
+fn settings_window_size_is_unset_then_stored_and_survives_reload() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("synthesis.toml");
+    {
+        let store = GlobalSettingsStore::with_path(path.clone());
+        assert_eq!(store.load_settings_window_size().unwrap(), None);
+        store.save_settings_window_size(960, 700).unwrap();
+        store
+            .save_app_preferences(AppPreferences { theme: Theme::Dark, ..Default::default() })
+            .unwrap();
+        assert_eq!(
+            store.load_settings_window_size().unwrap(),
+            Some(SettingsWindowSize { width: 960, height: 700 }),
+            "a whole-record write of the preferences leaves the size alone"
+        );
+    }
+    let reloaded = GlobalSettingsStore::with_path(path);
+    assert_eq!(
+        reloaded.load_settings_window_size().unwrap(),
+        Some(SettingsWindowSize { width: 960, height: 700 })
+    );
+    assert_eq!(reloaded.load_app_preferences().unwrap().theme, Theme::Dark);
 }

@@ -4,7 +4,8 @@ import { blocksFor, decl, sheet } from "./cssRules";
 /**
  * Stylesheet invariants of the graduation run region's layout: the pinned foot
  * bar, the bounded path lists, the open pass row that stays in view, and the
- * two columns of a wide region.
+ * two columns of a wide region. Also the destination toggle of the graduation
+ * start dialog.
  *
  * One part of the group `./cssRules.ts` heads. jsdom applies no stylesheet, so
  * a component test passes the same with each of these rules removed.
@@ -156,5 +157,31 @@ describe("the graduation run region's layout", () => {
     expect(decl(shown![1], "cursor")).toBe("col-resize");
     // A hit area wider than the rule it draws.
     expect(parseInt(decl(shown![1], "width") ?? "0", 10)).toBeGreaterThanOrEqual(7);
+  });
+});
+
+describe("the destination toggle of the graduation start dialog", () => {
+  it("GSD-FR-BZHW: the four segments are one row of equal width that does not wrap", () => {
+    const css = sheet("components.css");
+    const rows = blocksFor(css, ".graduation-start__destination-row");
+    // One rule only, so a second rule cannot bring a wrapping row back.
+    expect(rows).toHaveLength(1);
+    expect(decl(rows[0], "display")).toBe("grid");
+    expect(decl(rows[0], "grid-template-columns")).toBe("repeat(4, minmax(0, 1fr))");
+    const [option] = blocksFor(css, ".graduation-start__destination-option");
+    expect(option, "no rule for .graduation-start__destination-option").toBeDefined();
+    expect(decl(option, "white-space")).toBe("nowrap");
+    // A grid track does not shrink below the content of its item without this.
+    expect(decl(option, "min-width")).toBe("0");
+  });
+
+  it("GSD-FR-BZHW, GSD-FR-WMTD: the chosen segment shows by fill and by weight", () => {
+    const [chosen] = blocksFor(
+      sheet("components.css"),
+      '.graduation-start__destination-option[data-active="true"]',
+    );
+    expect(chosen, "no rule for the chosen segment").toBeDefined();
+    expect(decl(chosen, "background")).toBe("var(--bg-active)");
+    expect(decl(chosen, "font-weight")).toBe("var(--fw-semi)");
   });
 });

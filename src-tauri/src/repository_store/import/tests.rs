@@ -17,12 +17,7 @@ impl Fixture {
         let store_dir = tempfile::TempDir::new().expect("store");
         let worktree = RootFs::for_root(worktree_dir.path());
         let store = RootFs::for_root(store_dir.path());
-        Fixture {
-            worktree,
-            store,
-            _worktree_dir: worktree_dir,
-            _store_dir: store_dir,
-        }
+        Fixture { worktree, store, _worktree_dir: worktree_dir, _store_dir: store_dir }
     }
 
     /// A committed file of the worktree, as an earlier build left it.
@@ -67,21 +62,18 @@ fn event(event_id: &str, body: &str) -> String {
 fn rms_the_pass_imports_the_committed_logs_into_the_store() {
     let f = Fixture::new();
     f.legacy(".synthesis/comments/abc.jsonl", &format!("{}\n", event("e1", "one")));
-    f.legacy(
-        ".synthesis/comments/notes/n1/discussion.jsonl",
-        &format!("{}\n", event("e2", "two")),
-    );
+    f.legacy(".synthesis/comments/notes/n1/discussion.jsonl", &format!("{}\n", event("e2", "two")));
     f.draft(DRAFT);
-    f.legacy(&format!(".synthesis/statistics/{DRAFT}.jsonl"), &format!("{}\n", event("e3", "three")));
+    f.legacy(
+        &format!(".synthesis/statistics/{DRAFT}.jsonl"),
+        &format!("{}\n", event("e3", "three")),
+    );
 
     let outcome = f.run();
 
     assert_eq!(outcome.lines, 3);
     assert!(f.store_text("comments/abc.jsonl").expect("log").contains("e1"));
-    assert!(f
-        .store_text("comments/notes/n1/discussion.jsonl")
-        .expect("note log")
-        .contains("e2"));
+    assert!(f.store_text("comments/notes/n1/discussion.jsonl").expect("note log").contains("e2"));
     assert!(f.store_text(&format!("statistics/{DRAFT}.jsonl")).expect("stats").contains("e3"));
 }
 
@@ -138,10 +130,7 @@ fn rms_the_pass_carries_attachments_and_leaves_git_artifacts_behind() {
     let outcome = f.run();
 
     assert_eq!(outcome.files, 1);
-    assert_eq!(
-        f.store_text("comments/attachments/deadbeef").as_deref(),
-        Some("PNG-ish")
-    );
+    assert_eq!(f.store_text("comments/attachments/deadbeef").as_deref(), Some("PNG-ish"));
     assert!(
         f.store_text("comments/.gitattributes").is_none(),
         "a Git artifact belongs to no store"
@@ -166,16 +155,11 @@ fn rms_the_pass_removes_nothing_from_the_project() {
         format!(".synthesis/statistics/{DRAFT}.jsonl"),
         ".synthesis/comments/attachments/deadbeef".to_string(),
     ] {
-        assert!(
-            f.worktree.path().join(&rel).is_file(),
-            "{rel} is left exactly as it was"
-        );
+        assert!(f.worktree.path().join(&rel).is_file(), "{rel} is left exactly as it was");
     }
-    assert!(
-        std::fs::read_to_string(f.worktree.path().join(".synthesis/comments/abc.jsonl"))
-            .expect("log")
-            .contains("e1")
-    );
+    assert!(std::fs::read_to_string(f.worktree.path().join(".synthesis/comments/abc.jsonl"))
+        .expect("log")
+        .contains("e1"));
 }
 
 /// RMS-FR-JVEC: a draft's committed review folder is imported under that

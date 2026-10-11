@@ -59,11 +59,7 @@ pub struct BranchComparison {
 /// The two trees one comparison diffs, or the answer that there is none.
 enum Sides<'r> {
     SameAsBase,
-    Trees {
-        merge_base: git2::Oid,
-        old: git2::Tree<'r>,
-        new: git2::Tree<'r>,
-    },
+    Trees { merge_base: git2::Oid, old: git2::Tree<'r>, new: git2::Tree<'r> },
 }
 
 /// The tip of the branch `name` of `kind`, or `"unknown branch"`.
@@ -86,18 +82,13 @@ fn branch_tip<'r>(repo: &'r Repository, name: &str, kind: &str) -> Result<Commit
 /// remote's branch of that name, so a clone that never checked the default
 /// branch out still has a base. Neither is `no_comparison_base`.
 fn base_tip<'r>(repo: &'r Repository, base: &str) -> Result<Commit<'r>, String> {
-    let local = repo
-        .find_branch(base, BranchType::Local)
-        .ok()
-        .and_then(|b| b.get().peel_to_commit().ok());
+    let local =
+        repo.find_branch(base, BranchType::Local).ok().and_then(|b| b.get().peel_to_commit().ok());
     if let Some(commit) = local {
         return Ok(commit);
     }
     changes::primary_remote_name(repo)
-        .and_then(|remote| {
-            repo.find_branch(&format!("{remote}/{base}"), BranchType::Remote)
-                .ok()
-        })
+        .and_then(|remote| repo.find_branch(&format!("{remote}/{base}"), BranchType::Remote).ok())
         .and_then(|b| b.get().peel_to_commit().ok())
         .ok_or_else(|| ERR_NO_COMPARISON_BASE.to_string())
 }
@@ -132,9 +123,7 @@ fn sides<'r>(
         .find_commit(merge_base)
         .and_then(|c| c.tree())
         .map_err(|e| format!("failed to read the merge base tree: {e}"))?;
-    let new = tip
-        .tree()
-        .map_err(|e| format!("failed to read the branch tree: {e}"))?;
+    let new = tip.tree().map_err(|e| format!("failed to read the branch tree: {e}"))?;
     Ok((base, Sides::Trees { merge_base, old, new }))
 }
 

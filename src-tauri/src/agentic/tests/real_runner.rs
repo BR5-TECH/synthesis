@@ -26,11 +26,7 @@ fn the_real_runner_terminates_a_binary_that_never_answers() {
     let script = format!("sleep 30; touch {}", survived.to_string_lossy());
 
     let runner = RealCliRunner;
-    let result = runner.run(
-        Path::new("/bin/sh"),
-        &["-c", &script],
-        Duration::from_millis(200),
-    );
+    let result = runner.run(Path::new("/bin/sh"), &["-c", &script], Duration::from_millis(200));
     assert_eq!(result.unwrap_err(), RunError::TimedOut);
     assert!(
         !survived.exists(),
@@ -46,11 +42,7 @@ fn the_real_runner_drains_output_larger_than_a_pipe_buffer() {
     // timeout and comes back `TimedOut` instead of the output.
     let runner = RealCliRunner;
     let out = runner
-        .run(
-            Path::new("/bin/sh"),
-            &["-c", "yes ab | head -c 200000"],
-            Duration::from_secs(20),
-        )
+        .run(Path::new("/bin/sh"), &["-c", "yes ab | head -c 200000"], Duration::from_secs(20))
         .expect("a binary that merely produces a lot of output must succeed");
     assert!(
         out.stdout.len() >= 200_000,
@@ -97,11 +89,8 @@ fn identity_is_what_verification_confirms_not_the_mere_fact_of_running() {
     // regress silently.
     let claude = vendor_descriptor("claude_code").unwrap();
     let codex = vendor_descriptor("codex").unwrap();
-    let banner = |text: &str| CliOutput {
-        stdout: text.into(),
-        stderr: String::new(),
-        success: true,
-    };
+    let banner =
+        |text: &str| CliOutput { stdout: text.into(), stderr: String::new(), success: true };
 
     // Named in the banner: accepted however the file was renamed.
     assert!(identifies_vendor(claude, Path::new("/opt/x"), &banner("claude 2.1.4")));
@@ -115,21 +104,13 @@ fn identity_is_what_verification_confirms_not_the_mere_fact_of_running() {
     assert!(!identifies_vendor(claude, Path::new("/usr/bin/whatever"), &banner("0.4.12")));
     // And a bare version from a plausibly-named file is still refused when
     // the output is prose rather than a version.
-    assert!(!identifies_vendor(
-        claude,
-        Path::new("/usr/bin/claude"),
-        &banner("command not found")
-    ));
+    assert!(!identifies_vendor(claude, Path::new("/usr/bin/claude"), &banner("command not found")));
 
     // The banner is read from stderr too, because CLIs disagree about which
     // stream a version goes to.
     assert!(identifies_vendor(
         claude,
         Path::new("/opt/x"),
-        &CliOutput {
-            stdout: String::new(),
-            stderr: "claude 2.1.4".into(),
-            success: true,
-        }
+        &CliOutput { stdout: String::new(), stderr: "claude 2.1.4".into(), success: true }
     ));
 }

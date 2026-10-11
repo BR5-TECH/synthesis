@@ -5,7 +5,9 @@
 
 use tauri::Listener;
 
-use super::super::{begin_poll, fetch_poll, finish_poll, list_projects_impl, poll_impl, set_settings_impl};
+use super::super::{
+    begin_poll, fetch_poll, finish_poll, list_projects_impl, poll_impl, set_settings_impl,
+};
 use super::*;
 
 fn begun(h: &Harness) -> super::super::Begun<Mock> {
@@ -67,7 +69,7 @@ fn a_panicked_poll_clears_its_in_flight_mark() {
     .join();
     assert!(joined.is_err());
     assert!(!h.view().polling);
-    assert!(matches!(begin_poll(&h.handle()).unwrap(), Ok(_)), "a new poll starts");
+    assert!(begin_poll(&h.handle()).unwrap().is_ok(), "a new poll starts");
 }
 
 /// GPP-FR-ELWS: a settings write that races a poll discards its result.
@@ -152,7 +154,12 @@ fn a_settings_write_validates_and_records_the_configuration() {
 }
 
 fn option(id: &str) -> GithubProjectOption {
-    GithubProjectOption { node_id: id.into(), title: id.into(), owner_login: "acme".into(), number: 1 }
+    GithubProjectOption {
+        node_id: id.into(),
+        title: id.into(),
+        owner_login: "acme".into(),
+        number: 1,
+    }
 }
 
 /// GPP-FR-WYRP: the listing reads the viewer's and the repository owner's
@@ -164,7 +171,10 @@ fn the_listing_reads_viewer_and_owner_projects() {
     *h.fake.viewer.lock().unwrap() = vec![option("P1"), option("P2")];
     *h.fake.owned.lock().unwrap() = vec![option("P1"), option("P3")];
     let listed = list_projects_impl(&h.handle()).unwrap();
-    assert_eq!(listed.iter().map(|p| p.node_id.as_str()).collect::<Vec<_>>(), vec!["P1", "P2", "P3"]);
+    assert_eq!(
+        listed.iter().map(|p| p.node_id.as_str()).collect::<Vec<_>>(),
+        vec!["P1", "P2", "P3"]
+    );
     assert_eq!(h.fake.calls(), vec![Call::Viewer, Call::Owner("acme".into())]);
 
     git2::Repository::open(h.dir.path()).unwrap().remote_delete("origin").unwrap();
@@ -192,11 +202,17 @@ fn an_event_follows_every_change_of_the_view() {
     *h.fake.items.lock().unwrap() = Ok(vec![ready(4)]);
     poll_impl(&h.handle()).unwrap();
     let poll = take();
-    assert_eq!(poll.last().unwrap(), &serde_json::json!({ "newIssues": [{ "issueNumber": 4, "title": "Task 4" }] }));
+    assert_eq!(
+        poll.last().unwrap(),
+        &serde_json::json!({ "newIssues": [{ "issueNumber": 4, "title": "Task 4" }] })
+    );
 
     *h.fake.items.lock().unwrap() = Err(ERR_REQUEST_FAILED.into());
     poll_impl(&h.handle()).unwrap();
-    assert!(take().iter().all(|e| e["newIssues"] == serde_json::json!([])), "a failure names nothing");
+    assert!(
+        take().iter().all(|e| e["newIssues"] == serde_json::json!([])),
+        "a failure names nothing"
+    );
 
     h.fake.hold_issue(4, "Ready", Some("Task"), "OPEN");
     super::super::claim_impl(&h.handle(), 4).unwrap();
@@ -214,9 +230,11 @@ fn an_event_follows_every_change_of_the_view() {
 fn a_committed_run_makes_the_shadow_row_graduated() {
     let h = Harness::new();
     let root = h.root();
-    let draft = crate::drafts::create_github_shadow_draft(&root, "Task 1", "b", link(1)).unwrap().draft.id;
+    let draft =
+        crate::drafts::create_github_shadow_draft(&root, "Task 1", "b", link(1)).unwrap().draft.id;
     let handle = h.handle();
-    let mut run = crate::graduation::GraduationRun::new_for_test("g1", &draft, "2026-10-02T09:00:00Z");
+    let mut run =
+        crate::graduation::GraduationRun::new_for_test("g1", &draft, "2026-10-02T09:00:00Z");
     run.project_key = handle.state::<crate::project::ProjectState>().slot_key();
     run.commits = vec!["abc123".into()];
     run.state = crate::graduation::GraduationRunState::Completed;

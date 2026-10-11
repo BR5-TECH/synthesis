@@ -13,10 +13,7 @@ fn root(dir: &TempDir) -> crate::fs::RootFs {
 /// A filesystem instance allowed at this test's root and nowhere else, on the
 /// terms FSA-FR-19 binds every read and write in the backend to.
 fn guard(dir: &TempDir) -> crate::fs::FsAccess {
-    crate::fs::FsAccess::builder()
-        .allow_root(dir.path())
-        .build()
-        .expect("a real directory")
+    crate::fs::FsAccess::builder().allow_root(dir.path()).build().expect("a real directory")
 }
 
 /// The committed store, as bytes, so a test can put a value there that the
@@ -30,9 +27,7 @@ fn write_raw(dir: &TempDir, body: &str) {
 
 /// What the committed store holds, read back through the same instance.
 fn committed(dir: &TempDir) -> String {
-    guard(dir)
-        .read_text(project_toml_path(&root(dir)))
-        .expect("the settings file is readable")
+    guard(dir).read_text(project_toml_path(&root(dir))).expect("the settings file is readable")
 }
 
 // PSS-FR-TQMV, PSS-FR-HDBN, PSS-FR-WPKS, PSS-FR-ZLCF: an unconfigured project
@@ -138,10 +133,7 @@ fn a_write_carries_a_bound_through_unchanged_and_an_out_of_range_value_clears_it
     // Another section is persisted and says nothing about the bounds.
     save_project_config_to(
         &root(&dir),
-        ProjectConfig {
-            line_endings: LineEndings::Crlf,
-            ..Default::default()
-        },
+        ProjectConfig { line_endings: LineEndings::Crlf, ..Default::default() },
     )
     .unwrap();
     let config = load_project_config_from(&root(&dir)).unwrap();
@@ -152,19 +144,12 @@ fn a_write_carries_a_bound_through_unchanged_and_an_out_of_range_value_clears_it
     // A value outside the bounds clears the key.
     save_project_config_to(
         &root(&dir),
-        ProjectConfig {
-            retry_budget: Some(Some(0)),
-            ..Default::default()
-        },
+        ProjectConfig { retry_budget: Some(Some(0)), ..Default::default() },
     )
     .unwrap();
     let config = load_project_config_from(&root(&dir)).unwrap();
     assert_eq!(config.retry_budget, Some(None), "the key is gone");
-    assert_eq!(
-        config.execution_timeout_ms,
-        Some(Some(60_000)),
-        "the other bounds are untouched"
-    );
+    assert_eq!(config.execution_timeout_ms, Some(Some(60_000)), "the other bounds are untouched");
     let stored = committed(&dir);
     assert!(!stored.contains("retryBudget"));
 
@@ -172,10 +157,7 @@ fn a_write_carries_a_bound_through_unchanged_and_an_out_of_range_value_clears_it
     // the contract itself names.
     save_project_config_to(
         &root(&dir),
-        ProjectConfig {
-            execution_timeout_ms: Some(None),
-            ..Default::default()
-        },
+        ProjectConfig { execution_timeout_ms: Some(None), ..Default::default() },
     )
     .unwrap();
     let config = load_project_config_from(&root(&dir)).unwrap();
@@ -192,10 +174,7 @@ fn a_malformed_store_is_the_typed_error_and_reads_as_no_configuration() {
     let dir = TempDir::new().unwrap();
     write_raw(&dir, "this is not = = toml\n");
 
-    assert_eq!(
-        load_project_config_from(&root(&dir)).unwrap_err(),
-        ERR_MALFORMED_PROJECT_CONFIG
-    );
+    assert_eq!(load_project_config_from(&root(&dir)).unwrap_err(), ERR_MALFORMED_PROJECT_CONFIG);
     let shared = SharedLoopSettings::read(&root(&dir));
     assert_eq!(shared.execution_timeout_ms, None);
     assert_eq!(shared.provider_call_deadline_ms, None);

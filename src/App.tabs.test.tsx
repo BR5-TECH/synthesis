@@ -225,7 +225,7 @@ describe("Selection follows tab (SNV-FR-64 / SNV-FR-69)", () => {
 
     // SWN-FR-01 / SNV-FR-64: a settings window is no tab, so opening one is no
     // tab activation and the panel follows nothing.
-    await userEvent.click(screen.getByRole("button", { name: "Global settings" }));
+    await userEvent.click(screen.getByRole("button", { name: "Settings" }));
     await waitFor(() =>
       expect(
         invokeMock.mock.calls.some((c) => c[0] === "open_settings_window"),
@@ -508,7 +508,7 @@ describe("a work stream merge started from the shell (CMW-FR-KRVP, WSS-FR-TQBN)"
     await enterIde();
     await userEvent.click(await screen.findByTestId("stream-selector"));
     const menu = await screen.findByTestId("stream-menu");
-    await userEvent.click(within(menu).getByRole("button", { name: "Merge…" }));
+    await userEvent.click(within(menu).getByRole("button", { name: "Merge stream" }));
     const row = await screen.findByTestId("stream-row-w1");
     await userEvent.click(within(row).getByRole("button", { name: "Commit…" }));
     return screen.findByRole("dialog");

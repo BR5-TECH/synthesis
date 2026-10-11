@@ -32,6 +32,8 @@ pub enum ProbeOutcome {
     /// The repository accepts issues, and the scopes GitHub reports for this
     /// token hold none that may write one.
     CreateForbidden,
+    /// The TLS check refused GitHub's certificate (AAP-FR-LRTC).
+    TlsUntrusted(crate::tls::TlsCause),
 }
 
 /// An issue's parent, as GitHub reports it (GHP-FR-CMPR).
@@ -77,9 +79,23 @@ pub struct IssueFields {
     pub milestone: Option<u64>,
 }
 
+/// GHP-FR-OHGY: what an edit of one existing issue sends: the title, the body,
+/// and the metadata to change.
+pub struct IssueEdit<'a> {
+    pub title: &'a str,
+    pub body: &'a str,
+    pub fields: &'a IssueFields,
+}
+
 /// The GitHub operations publication performs. Every method takes the secret
 /// rather than holding it, so no implementation retains a credential.
 pub trait GithubIssues: Send + Sync {
+    /// A client for the API of `host` (normalized), or `None` where this client
+    /// serves every host itself, as a test double does (GHP-FR-HSTA).
+    fn for_host(&self, _host: &str) -> Option<std::sync::Arc<dyn GithubIssues>> {
+        None
+    }
+
     /// GHP-FR-MZPR: the read-only check. Mutates nothing.
     fn probe(&self, secret: &str, owner: &str, repo: &str) -> ProbeOutcome;
 
@@ -110,9 +126,7 @@ pub trait GithubIssues: Send + Sync {
         owner: &str,
         repo: &str,
         number: u64,
-        title: &str,
-        body: &str,
-        fields: &IssueFields,
+        edit: &IssueEdit<'_>,
     ) -> Result<IssueRef, String>;
 
     /// GHP-FR-RMVQ / GHP-FR-PWJG: one issue, or `None` where it does not exist.
@@ -175,20 +189,31 @@ pub struct GithubIssuesSeam(pub std::sync::Arc<dyn GithubIssues>);
 
 impl Default for GithubIssuesSeam {
     fn default() -> Self {
-        GithubIssuesSeam(std::sync::Arc::new(HttpGithubIssues))
+        GithubIssuesSeam(std::sync::Arc::new(HttpGithubIssues { api: API.to_string() }))
     }
 }
 
+/// The API base of `github.com`, the base of the default client.
 const API: &str = "https://api.github.com";
 /// The whole request budget. The UI has no way to cancel an in-flight `invoke`,
 /// so a hung network must not wedge the publish flow indefinitely.
 const TIMEOUT: Duration = Duration::from_secs(20);
 
-/// The production client.
-pub struct HttpGithubIssues;
+/// The production client, bound to the REST API base of one host
+/// (GTS-FR-PDWB, GHP-FR-HSTA).
+pub struct HttpGithubIssues {
+    api: String,
+}
+
+impl HttpGithubIssues {
+    /// The client for the API of `host` (normalized).
+    pub fn for_api_host(host: &str) -> Self {
+        Self { api: crate::github_tokens::github_api_base(host) }
+    }
+}
 
 fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder().timeout_global(Some(TIMEOUT)).build().into()
+    crate::tls::ureq_config().timeout_global(Some(TIMEOUT)).build().into()
 }
 
 /// Every request carries the same four headers. GitHub rejects a request with
@@ -245,6 +270,17 @@ pub fn transport_code(err: &ureq::Error) -> &'static str {
     }
 }
 
+/// [`transport_code`], except that a refused certificate becomes the typed error
+/// `tls_untrusted` with its host and cause (AAP-FR-LRTC).
+fn transport_error(err: &ureq::Error, api: &str) -> String {
+    crate::tls::ureq_wire(err, api).unwrap_or_else(|| transport_code(err).to_string())
+}
+
+/// The typed error `tls_untrusted` for a refused certificate, or `fallback`.
+fn transport_or(err: &ureq::Error, api: &str, fallback: &str) -> String {
+    crate::tls::ureq_wire(err, api).unwrap_or_else(|| fallback.to_string())
+}
+
 /// GHP-FR-RQDV: the scopes a response reports, or `None` where it reports none
 /// at all.
 ///
@@ -272,10 +308,7 @@ pub fn scopes_from_header(header: Option<&str>) -> Option<Vec<String>> {
 /// `permissions` are deliberately not read: they describe **code-write**
 /// access, and GHP-FR-RQDV requires only read access to a repository that
 /// accepts issues.
-pub fn issue_capability(
-    repository: &serde_json::Value,
-    scopes: Option<&[String]>,
-) -> ProbeOutcome {
+pub fn issue_capability(repository: &serde_json::Value, scopes: Option<&[String]>) -> ProbeOutcome {
     // A record with no `has_issues` at all is one this application cannot
     // decide from. That is a statement about neither the repository nor the
     // token, so it answers as an unreadable repository.
@@ -309,10 +342,7 @@ pub fn issue_capability(
 /// candidate's own body before one is accepted, whichever endpoint produced the
 /// candidates — a full-text index answers approximately.
 pub fn exact_match(items: &[serde_json::Value], marker: &str) -> Option<IssueRef> {
-    items
-        .iter()
-        .filter_map(issue_from_json)
-        .find(|issue| issue.body.contains(marker))
+    items.iter().filter_map(issue_from_json).find(|issue| issue.body.contains(marker))
 }
 
 pub fn issue_from_json(value: &serde_json::Value) -> Option<IssueRef> {
@@ -330,10 +360,7 @@ pub fn issue_from_json(value: &serde_json::Value) -> Option<IssueRef> {
             .and_then(|v| v.as_str())
             .map(str::to_string),
         milestone: value.get("milestone").and_then(milestone_from_json),
-        parent: value
-            .get("parent_issue_url")
-            .and_then(|v| v.as_str())
-            .and_then(parent_from_url),
+        parent: value.get("parent_issue_url").and_then(|v| v.as_str()).and_then(parent_from_url),
     })
 }
 
@@ -387,23 +414,33 @@ pub fn is_parent_candidate(issue: &IssueRef, types: &[String]) -> bool {
             .is_some_and(|t| types.iter().any(|wanted| wanted.eq_ignore_ascii_case(t)))
 }
 
-fn read_json(
-    mut response: ureq::http::Response<ureq::Body>,
-) -> Result<serde_json::Value, String> {
+fn read_json(mut response: ureq::http::Response<ureq::Body>) -> Result<serde_json::Value, String> {
     let body = response.body_mut().read_to_string().map_err(|_| ERR_GITHUB_UNREACHABLE)?;
     serde_json::from_str(&body).map_err(|_| ERR_GITHUB_UNREACHABLE.to_string())
 }
 
 impl GithubIssues for HttpGithubIssues {
+    fn for_host(&self, host: &str) -> Option<std::sync::Arc<dyn GithubIssues>> {
+        Some(std::sync::Arc::new(HttpGithubIssues::for_api_host(host)))
+    }
+
     fn probe(&self, secret: &str, owner: &str, repo: &str) -> ProbeOutcome {
+        let api = self.api.as_str();
         // One read. The repository record carries every fact the decision rests
         // on — whether Issues are on, whether the repository is archived,
         // whether it is private — and the response itself carries what GitHub
         // granted this token. Listing the repository's issues would add
         // nothing: that endpoint also lists pull requests, so it answers for a
         // repository with Issues turned off just the same.
-        let Ok(response) = get(secret, &format!("{API}/repos/{owner}/{repo}")) else {
-            return ProbeOutcome::IssuesUnreadable;
+        let response = match get(secret, &format!("{api}/repos/{owner}/{repo}")) {
+            Ok(response) => response,
+            // AAP-FR-LRTC: a refused certificate is not an unreadable repository.
+            Err(e) => {
+                return match crate::tls::classify_ureq(&e) {
+                    Some(cause) => ProbeOutcome::TlsUntrusted(cause),
+                    None => ProbeOutcome::IssuesUnreadable,
+                }
+            }
         };
         // Taken before the body, which consumes the response. A classic token
         // reports its scopes on this header; a fine-grained token sends none.
@@ -423,9 +460,10 @@ impl GithubIssues for HttpGithubIssues {
         repo: &str,
         marker: &str,
     ) -> Result<Option<IssueRef>, String> {
+        let api = self.api.as_str();
         let query = format!("repo:{owner}/{repo} in:body \"{marker}\"");
-        let url = format!("{API}/search/issues?per_page=20&q={}", urlencode(&query));
-        let response = get(secret, &url).map_err(|e| transport_code(&e).to_string())?;
+        let url = format!("{api}/search/issues?per_page=20&q={}", urlencode(&query));
+        let response = get(secret, &url).map_err(|e| transport_error(&e, api))?;
         let value = read_json(response)?;
         let items = value.get("items").and_then(|v| v.as_array()).cloned().unwrap_or_default();
         let found = match exact_match(&items, marker) {
@@ -439,11 +477,10 @@ impl GithubIssues for HttpGithubIssues {
             // a duplicate.
             None => {
                 let recent = format!(
-                    "{API}/repos/{owner}/{repo}/issues\
+                    "{api}/repos/{owner}/{repo}/issues\
                      ?state=all&sort=created&direction=desc&per_page=50"
                 );
-                let response =
-                    get(secret, &recent).map_err(|e| transport_code(&e).to_string())?;
+                let response = get(secret, &recent).map_err(|e| transport_error(&e, api))?;
                 let value = read_json(response)?;
                 let items = value.as_array().cloned().unwrap_or_default();
                 exact_match(&items, marker)
@@ -470,10 +507,11 @@ impl GithubIssues for HttpGithubIssues {
         body: &str,
         fields: &IssueFields,
     ) -> Result<IssueRef, String> {
-        let url = format!("{API}/repos/{owner}/{repo}/issues");
+        let api = self.api.as_str();
+        let url = format!("{api}/repos/{owner}/{repo}/issues");
         let payload = issue_payload(title, body, fields);
-        let response =
-            send_json(secret, "POST", &url, payload).map_err(|_| ERR_ISSUE_CREATE_FAILED)?;
+        let response = send_json(secret, "POST", &url, payload)
+            .map_err(|e| transport_or(&e, api, ERR_ISSUE_CREATE_FAILED))?;
         let value = read_json(response).map_err(|_| ERR_ISSUE_CREATE_FAILED.to_string())?;
         issue_from_json(&value).ok_or_else(|| ERR_ISSUE_CREATE_FAILED.to_string())
     }
@@ -484,14 +522,13 @@ impl GithubIssues for HttpGithubIssues {
         owner: &str,
         repo: &str,
         number: u64,
-        title: &str,
-        body: &str,
-        fields: &IssueFields,
+        edit: &IssueEdit<'_>,
     ) -> Result<IssueRef, String> {
-        let url = format!("{API}/repos/{owner}/{repo}/issues/{number}");
-        let payload = issue_payload(title, body, fields);
-        let response =
-            send_json(secret, "PATCH", &url, payload).map_err(|_| ERR_ISSUE_UPDATE_FAILED)?;
+        let api = self.api.as_str();
+        let url = format!("{api}/repos/{owner}/{repo}/issues/{number}");
+        let payload = issue_payload(edit.title, edit.body, edit.fields);
+        let response = send_json(secret, "PATCH", &url, payload)
+            .map_err(|e| transport_or(&e, api, ERR_ISSUE_UPDATE_FAILED))?;
         let value = read_json(response).map_err(|_| ERR_ISSUE_UPDATE_FAILED.to_string())?;
         issue_from_json(&value).ok_or_else(|| ERR_ISSUE_UPDATE_FAILED.to_string())
     }
@@ -503,16 +540,15 @@ impl GithubIssues for HttpGithubIssues {
         repo: &str,
         number: u64,
     ) -> Result<Option<IssueRef>, String> {
-        let url = format!("{API}/repos/{owner}/{repo}/issues/{number}");
+        let api = self.api.as_str();
+        let url = format!("{api}/repos/{owner}/{repo}/issues/{number}");
         match get(secret, &url) {
             Ok(response) => {
                 let value = read_json(response)?;
-                issue_from_json(&value)
-                    .map(Some)
-                    .ok_or_else(|| ERR_GITHUB_UNREACHABLE.to_string())
+                issue_from_json(&value).map(Some).ok_or_else(|| ERR_GITHUB_UNREACHABLE.to_string())
             }
             Err(ureq::Error::StatusCode(404 | 410)) => Ok(None),
-            Err(e) => Err(transport_code(&e).to_string()),
+            Err(e) => Err(transport_error(&e, api)),
         }
     }
 
@@ -523,17 +559,18 @@ impl GithubIssues for HttpGithubIssues {
         repo: &str,
         types: &[String],
     ) -> Result<Vec<IssueRef>, String> {
+        let api = self.api.as_str();
         let mut found: Vec<IssueRef> = Vec::new();
         for issue_type in types {
             for page in 1..=MAX_PAGES {
                 let url = format!(
-                    "{API}/repos/{owner}/{repo}/issues?state=open&type={}&per_page={PAGE_SIZE}&page={page}",
+                    "{api}/repos/{owner}/{repo}/issues?state=open&type={}&per_page={PAGE_SIZE}&page={page}",
                     urlencode(issue_type)
                 );
                 let response = get(secret, &url)
-                    .map_err(|_| ERR_PARENT_ISSUES_UNREADABLE.to_string())?;
-                let value = read_json(response)
-                    .map_err(|_| ERR_PARENT_ISSUES_UNREADABLE.to_string())?;
+                    .map_err(|e| transport_or(&e, api, ERR_PARENT_ISSUES_UNREADABLE))?;
+                let value =
+                    read_json(response).map_err(|_| ERR_PARENT_ISSUES_UNREADABLE.to_string())?;
                 let items = value.as_array().cloned().unwrap_or_default();
                 let rows = items.len();
                 for issue in items.iter().filter_map(issue_from_json) {
@@ -548,23 +585,24 @@ impl GithubIssues for HttpGithubIssues {
                 }
             }
         }
-        found.sort_by(|a, b| b.number.cmp(&a.number));
+        found.sort_by_key(|issue| std::cmp::Reverse(issue.number));
         Ok(found)
     }
 
     fn list_issue_types(&self, secret: &str, owner: &str) -> Result<Vec<String>, String> {
-        let url = format!("{API}/orgs/{owner}/issue-types");
+        let api = self.api.as_str();
+        let url = format!("{api}/orgs/{owner}/issue-types");
         match get(secret, &url) {
             Ok(response) => {
-                let value = read_json(response)
-                    .map_err(|_| ERR_ISSUE_TYPES_UNREADABLE.to_string())?;
+                let value =
+                    read_json(response).map_err(|_| ERR_ISSUE_TYPES_UNREADABLE.to_string())?;
                 Ok(issue_type_names(&value))
             }
             // GHP-FR-YSPJ: a user account has no organization to hold Types,
             // and GitHub answers 404 for it. That is an owner with no Type, not
             // a read that failed.
             Err(ureq::Error::StatusCode(404)) => Ok(Vec::new()),
-            Err(_) => Err(ERR_ISSUE_TYPES_UNREADABLE.to_string()),
+            Err(e) => Err(transport_or(&e, api, ERR_ISSUE_TYPES_UNREADABLE)),
         }
     }
 
@@ -574,15 +612,15 @@ impl GithubIssues for HttpGithubIssues {
         owner: &str,
         repo: &str,
     ) -> Result<Vec<PublicationMilestone>, String> {
+        let api = self.api.as_str();
         let mut found = Vec::new();
         for page in 1..=MAX_PAGES {
             let url = format!(
-                "{API}/repos/{owner}/{repo}/milestones?state=open&per_page={PAGE_SIZE}&page={page}"
+                "{api}/repos/{owner}/{repo}/milestones?state=open&per_page={PAGE_SIZE}&page={page}"
             );
             let response =
-                get(secret, &url).map_err(|_| ERR_MILESTONES_UNREADABLE.to_string())?;
-            let value =
-                read_json(response).map_err(|_| ERR_MILESTONES_UNREADABLE.to_string())?;
+                get(secret, &url).map_err(|e| transport_or(&e, api, ERR_MILESTONES_UNREADABLE))?;
+            let value = read_json(response).map_err(|_| ERR_MILESTONES_UNREADABLE.to_string())?;
             let items = value.as_array().cloned().unwrap_or_default();
             let rows = items.len();
             found.extend(items.iter().filter_map(milestone_from_json));
@@ -602,14 +640,15 @@ impl GithubIssues for HttpGithubIssues {
         sub_issue_id: u64,
         replace_parent: bool,
     ) -> Result<(), String> {
-        let url = format!("{API}/repos/{owner}/{repo}/issues/{parent_number}/sub_issues");
+        let api = self.api.as_str();
+        let url = format!("{api}/repos/{owner}/{repo}/issues/{parent_number}/sub_issues");
         let payload = serde_json::json!({
             "sub_issue_id": sub_issue_id,
             "replace_parent": replace_parent,
         });
         send_json(secret, "POST", &url, payload)
             .map(|_| ())
-            .map_err(|_| ERR_SUB_ISSUE_LINK_FAILED.to_string())
+            .map_err(|e| transport_or(&e, api, ERR_SUB_ISSUE_LINK_FAILED))
     }
 
     fn unlink_sub_issue(
@@ -620,11 +659,12 @@ impl GithubIssues for HttpGithubIssues {
         parent_number: u64,
         sub_issue_id: u64,
     ) -> Result<(), String> {
-        let url = format!("{API}/repos/{owner}/{repo}/issues/{parent_number}/sub_issue");
+        let api = self.api.as_str();
+        let url = format!("{api}/repos/{owner}/{repo}/issues/{parent_number}/sub_issue");
         let payload = serde_json::json!({ "sub_issue_id": sub_issue_id });
         send_json(secret, "DELETE", &url, payload)
             .map(|_| ())
-            .map_err(|_| ERR_SUB_ISSUE_LINK_FAILED.to_string())
+            .map_err(|e| transport_or(&e, api, ERR_SUB_ISSUE_LINK_FAILED))
     }
 }
 

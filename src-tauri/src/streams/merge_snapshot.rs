@@ -59,12 +59,9 @@ pub(super) fn capture(
 ) -> Result<Snapshot, String> {
     let base_commit = main.find_commit(base_oid).map_err(|e| e.to_string())?;
     let stream_commit = main.find_commit(stream_oid).map_err(|e| e.to_string())?;
-    let merge_base = main
-        .merge_base(base_oid, stream_oid)
-        .map_err(|e| e.to_string())?;
-    let mut merged = main
-        .merge_commits(&base_commit, &stream_commit, None)
-        .map_err(|e| e.to_string())?;
+    let merge_base = main.merge_base(base_oid, stream_oid).map_err(|e| e.to_string())?;
+    let mut merged =
+        main.merge_commits(&base_commit, &stream_commit, None).map_err(|e| e.to_string())?;
 
     let sides = conflict_sides(&merged);
     refuse_unsupported(&merged)?;
@@ -80,9 +77,7 @@ pub(super) fn capture(
     // A conflicted index cannot be written as a tree, so the conflicting paths
     // come out and the rendered files go in.
     for side in &sides {
-        merged
-            .remove_path(std::path::Path::new(&side.path))
-            .map_err(|e| e.to_string())?;
+        merged.remove_path(std::path::Path::new(&side.path)).map_err(|e| e.to_string())?;
     }
     for file in &rendered {
         let entry = git2::IndexEntry {
@@ -123,10 +118,8 @@ pub(super) fn capture(
     // A record that names only the path both sides moved away from is not a path
     // anybody has to settle: the renamed paths carry the conflict, and the old
     // path stands in no tree of the snapshot.
-    let sides: Vec<_> = sides
-        .into_iter()
-        .filter(|side| side.ours.is_some() || side.theirs.is_some())
-        .collect();
+    let sides: Vec<_> =
+        sides.into_iter().filter(|side| side.ours.is_some() || side.theirs.is_some()).collect();
     let unresolved_paths: Vec<String> = sides.iter().map(|side| side.path.clone()).collect();
     let conflicts: Vec<StreamMergeConflict> = sides
         .iter()
@@ -146,13 +139,7 @@ pub(super) fn capture(
     main.reference(&snapshot_ref(run_id), commit, true, "merge snapshot")
         .map_err(|e| e.to_string())?;
 
-    Ok(Snapshot {
-        commit,
-        merge_base,
-        changed_paths,
-        unresolved_paths,
-        conflicts,
-    })
+    Ok(Snapshot { commit, merge_base, changed_paths, unresolved_paths, conflicts })
 }
 
 /// WKS-FR-GKPX: the conflicts a text turn cannot reconcile are refused at the
@@ -174,9 +161,8 @@ pub(super) fn refuse_unsupported_between(
 ) -> Result<(), String> {
     let base_commit = main.find_commit(base_oid).map_err(|e| e.to_string())?;
     let stream_commit = main.find_commit(stream_oid).map_err(|e| e.to_string())?;
-    let merged = main
-        .merge_commits(&base_commit, &stream_commit, None)
-        .map_err(|e| e.to_string())?;
+    let merged =
+        main.merge_commits(&base_commit, &stream_commit, None).map_err(|e| e.to_string())?;
     refuse_unsupported(&merged)
 }
 
@@ -185,16 +171,8 @@ fn refuse_unsupported(merged: &git2::Index) -> Result<(), String> {
         return Ok(());
     };
     for conflict in conflicts.flatten() {
-        let entries = [
-            conflict.ancestor.as_ref(),
-            conflict.our.as_ref(),
-            conflict.their.as_ref(),
-        ];
-        if entries
-            .into_iter()
-            .flatten()
-            .any(|entry| matches!(entry.mode, 0o120000 | 0o160000))
-        {
+        let entries = [conflict.ancestor.as_ref(), conflict.our.as_ref(), conflict.their.as_ref()];
+        if entries.into_iter().flatten().any(|entry| matches!(entry.mode, 0o120000 | 0o160000)) {
             return Err(ERR_UNSUPPORTED_CONFLICT.to_string());
         }
         let Some(entry) = conflict.our.as_ref().or(conflict.their.as_ref()) else {
@@ -205,11 +183,9 @@ fn refuse_unsupported(merged: &git2::Index) -> Result<(), String> {
         let holds_directory = merged.iter().any(|other| {
             other.flags & 0x3000 == 0 && String::from_utf8_lossy(&other.path).starts_with(&under)
         });
-        let parent_is_file = path.match_indices('/').any(|(at, _)| {
-            merged
-                .get_path(std::path::Path::new(&path[..at]), 0)
-                .is_some()
-        });
+        let parent_is_file = path
+            .match_indices('/')
+            .any(|(at, _)| merged.get_path(std::path::Path::new(&path[..at]), 0).is_some());
         if holds_directory || parent_is_file {
             return Err(ERR_UNSUPPORTED_CONFLICT.to_string());
         }
@@ -237,14 +213,11 @@ fn paths_differing(
     base_oid: git2::Oid,
     tree_oid: git2::Oid,
 ) -> Result<Vec<String>, String> {
-    let base_tree = main
-        .find_commit(base_oid)
-        .and_then(|commit| commit.tree())
-        .map_err(|e| e.to_string())?;
+    let base_tree =
+        main.find_commit(base_oid).and_then(|commit| commit.tree()).map_err(|e| e.to_string())?;
     let tree = main.find_tree(tree_oid).map_err(|e| e.to_string())?;
-    let diff = main
-        .diff_tree_to_tree(Some(&base_tree), Some(&tree), None)
-        .map_err(|e| e.to_string())?;
+    let diff =
+        main.diff_tree_to_tree(Some(&base_tree), Some(&tree), None).map_err(|e| e.to_string())?;
     let mut paths: Vec<String> = Vec::new();
     for delta in diff.deltas() {
         for file in [delta.new_file(), delta.old_file()] {
@@ -276,19 +249,13 @@ fn render(
     if conflict.our.is_none() && conflict.their.is_none() {
         return Ok(None);
     }
-    let entry = conflict
-        .our
-        .as_ref()
-        .or(conflict.their.as_ref())
-        .or(conflict.ancestor.as_ref());
+    let entry = conflict.our.as_ref().or(conflict.their.as_ref()).or(conflict.ancestor.as_ref());
     let Some(entry) = entry else {
         return Ok(None);
     };
     let path = String::from_utf8_lossy(&entry.path).into_owned();
     let read = |entry: Option<&git2::IndexEntry>| -> Option<Vec<u8>> {
-        entry
-            .and_then(|entry| main.find_blob(entry.id).ok())
-            .map(|blob| blob.content().to_vec())
+        entry.and_then(|entry| main.find_blob(entry.id).ok()).map(|blob| blob.content().to_vec())
     };
     let ancestor = read(conflict.ancestor.as_ref());
     let ours = read(conflict.our.as_ref());

@@ -15,14 +15,10 @@ pub(super) fn build_app_menu<R: tauri::Runtime, M: tauri::Manager<R>>(
         MenuItem::with_id(manager, id, label, starts_enabled(id), accel)
     };
 
-    // SWN-FR-14: which submenu carries the two settings entries is the
+    // SWN-FR-14: which submenu carries the settings entry is the
     // platform's own convention, so both menus are built from the same order
     // tables with this one flag deciding between them.
     let macos = cfg!(target_os = "macos");
-    // The Project settings entry is held onto wherever it lands: it is taken
-    // out of its menu while no project is open and put back when one opens
-    // (SWN-FR-16), and a submenu's items cannot be looked up by id afterwards.
-    let mut project_settings = None;
 
     // Quit is a custom item, not `PredefinedMenuItem::quit`: the predefined role
     // hands the quit to the platform (on macOS, `NSApp terminate:`), which tears
@@ -35,11 +31,7 @@ pub(super) fn build_app_menu<R: tauri::Runtime, M: tauri::Manager<R>>(
         if spec.0 == MENU_ABOUT {
             app_builder = app_builder.item(&PredefinedMenuItem::separator(manager)?);
         }
-        let built = item(spec)?;
-        if spec.0 == MENU_PROJECT_SETTINGS {
-            project_settings = Some(built.clone());
-        }
-        app_builder = app_builder.item(&built);
+        app_builder = app_builder.item(&item(spec)?);
     }
     let app_menu = app_builder.build()?;
 
@@ -58,9 +50,6 @@ pub(super) fn build_app_menu<R: tauri::Runtime, M: tauri::Manager<R>>(
             Some(SaveSlot::SaveAll) => save_all = Some(built.clone()),
             None => {}
         }
-        if spec.0 == MENU_PROJECT_SETTINGS {
-            project_settings = Some(built.clone());
-        }
         file_builder = file_builder.item(&built);
     }
     // SNV-FR-23: a separator, then About (off macOS), then Exit.
@@ -69,12 +58,6 @@ pub(super) fn build_app_menu<R: tauri::Runtime, M: tauri::Manager<R>>(
         file_builder = file_builder.item(&item(spec)?);
     }
     let file_menu = file_builder.build()?;
-
-    let settings_owner = Some(if settings_menu_owner(macos) == SettingsMenuOwner::AppMenu {
-        app_menu.clone()
-    } else {
-        file_menu.clone()
-    });
 
     // Edit menu (SNV-FR-14): the six predefined roles, then a separator and the
     // two Editor-scoped find items (SNV-FR-43), whose handles are kept for the
@@ -119,15 +102,7 @@ pub(super) fn build_app_menu<R: tauri::Runtime, M: tauri::Manager<R>>(
         .item(&window_menu)
         .build()?;
 
-    Ok(BuiltMenu {
-        menu,
-        save,
-        save_all,
-        find,
-        find_replace,
-        project_settings,
-        settings_owner,
-    })
+    Ok(BuiltMenu { menu, save, save_all, find, find_replace })
 }
 
 /// Install the native Edit menu on the app (SNV-FR-14). Best-effort: a menu
@@ -136,17 +111,8 @@ pub fn install_app_menu<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result
     let built = build_app_menu(app)?;
     // Keep the live-enablement handles before the menu is handed over, so
     // `set_save_menu_state` has something to act on (SNV-FR-28 / SNV-FR-30).
-    app.state::<SaveMenuItems<R>>()
-        .store(built.save, built.save_all);
-    app.state::<FindMenuItems<R>>()
-        .store(built.find, built.find_replace);
-    // SWN-FR-16: the Project settings entry and the submenu it sits in, so it
-    // can be taken out while no project is open. It is built present and taken
-    // out by the first `set_project_settings_present(false)` the picker's own
-    // startup makes, rather than built absent — the two menus are then one
-    // order table rather than two.
-    app.state::<SettingsMenuItems<R>>()
-        .store(built.project_settings, built.settings_owner);
+    app.state::<SaveMenuItems<R>>().store(built.save, built.save_all);
+    app.state::<FindMenuItems<R>>().store(built.find, built.find_replace);
     app.set_menu(built.menu)?;
     Ok(())
 }

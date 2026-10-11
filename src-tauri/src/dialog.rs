@@ -27,9 +27,7 @@ pub async fn browse_for_folder(app: tauri::AppHandle) -> Result<fs::BrowseResult
         // The dialog plugin returns `Option<FilePath>`. We coerce to
         // `Option<PathBuf>` here to keep `fs::map_dialog_result` free of
         // Tauri-specific types (which matters for the synthesis-core split).
-        dialog
-            .blocking_pick_folder()
-            .and_then(|fp| fp.into_path().ok())
+        dialog.blocking_pick_folder().and_then(|fp| fp.into_path().ok())
     })
     .await
     .map_err(|e| format!("dialog task failed: {e}"))?;
@@ -48,10 +46,7 @@ pub async fn browse_for_folder(app: tauri::AppHandle) -> Result<fs::BrowseResult
 #[tauri::command]
 pub async fn browse_for_file(app: tauri::AppHandle) -> Result<fs::BrowseResult, String> {
     let picked = tauri::async_runtime::spawn_blocking(move || {
-        app.dialog()
-            .file()
-            .blocking_pick_file()
-            .and_then(|fp| fp.into_path().ok())
+        app.dialog().file().blocking_pick_file().and_then(|fp| fp.into_path().ok())
     })
     .await
     .map_err(|e| format!("dialog task failed: {e}"))?;
@@ -115,10 +110,7 @@ mod tests {
     // because `tauri-plugin-dialog` ships no mockable `blocking_save_file`.
     #[test]
     fn browse_for_save_path_shares_the_browse_result_contract() {
-        assert!(matches!(
-            fs::map_dialog_result(None),
-            fs::BrowseResult::Cancelled
-        ));
+        assert!(matches!(fs::map_dialog_result(None), fs::BrowseResult::Cancelled));
 
         // FSA-FR-16: resolving a destination writes NOTHING at it,
         // so a caller that never follows up leaves the filesystem untouched.
@@ -128,10 +120,7 @@ mod tests {
         let destination = tmp.path().join("synthesis-logs.jsonl");
         let resolved = fs::map_dialog_result(Some(destination.clone()));
         assert!(matches!(resolved, fs::BrowseResult::Selected { .. }));
-        assert!(
-            !destination.exists(),
-            "the save dialog resolves a path and creates nothing at it"
-        );
+        assert!(!destination.exists(), "the save dialog resolves a path and creates nothing at it");
         // And the cancellation branch likewise creates nothing anywhere.
         let _ = fs::map_dialog_result(None);
         assert_eq!(std::fs::read_dir(tmp.path()).unwrap().count(), 0);
@@ -141,9 +130,7 @@ mod tests {
         )));
         let v = serde_json::to_value(&chosen).unwrap();
         assert_eq!(
-            v.get("selected")
-                .and_then(|s| s.get("path"))
-                .and_then(|p| p.as_str()),
+            v.get("selected").and_then(|s| s.get("path")).and_then(|p| p.as_str()),
             Some("/Users/x/Desktop/synthesis-logs.jsonl"),
         );
     }
@@ -165,9 +152,6 @@ mod tests {
         let result = fs::map_dialog_result(picked);
         let v = serde_json::to_value(&result).unwrap();
         let inner = v.get("selected").expect("expected `selected` tag");
-        assert_eq!(
-            inner.get("path").and_then(|p| p.as_str()),
-            Some("/Users/x/dev/proj")
-        );
+        assert_eq!(inner.get("path").and_then(|p| p.as_str()), Some("/Users/x/dev/proj"));
     }
 }

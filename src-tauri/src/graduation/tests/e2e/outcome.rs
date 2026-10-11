@@ -84,11 +84,7 @@ impl Outcome {
 
     pub(crate) fn expect_turns(self, work: u32, review: u32) -> Self {
         assert_eq!(self.run.work_turns, work, "[{}] work turns spent", self.name);
-        assert_eq!(
-            self.run.review_turns, review,
-            "[{}] review turns spent",
-            self.name
-        );
+        assert_eq!(self.run.review_turns, review, "[{}] review turns spent", self.name);
         self
     }
 
@@ -104,12 +100,7 @@ impl Outcome {
 
     /// GRL-FR-GQAB: the findings the next work turn is to act on.
     pub(crate) fn expect_loop_instruction_contains(self, fragment: &str) -> Self {
-        let held = self
-            .run
-            .checkpoint
-            .loop_instruction
-            .clone()
-            .unwrap_or_default();
+        let held = self.run.checkpoint.loop_instruction.clone().unwrap_or_default();
         assert!(
             held.contains(fragment),
             "[{}] the checkpoint's instruction holds {fragment:?}, but it is {held:?}",
@@ -136,11 +127,7 @@ impl Outcome {
     }
 
     pub(crate) fn expect_no_escalation(self) -> Self {
-        assert!(
-            self.run.escalation.is_none(),
-            "[{}] the run holds no escalation",
-            self.name
-        );
+        assert!(self.run.escalation.is_none(), "[{}] the run holds no escalation", self.name);
         self
     }
 
@@ -157,12 +144,7 @@ impl Outcome {
 
     pub(crate) fn expect_blocker(self, code: &str) -> Self {
         let held = self.run.blocker.as_ref().map(|b| b.code.clone());
-        assert_eq!(
-            held.as_deref(),
-            Some(code),
-            "[{}] the blocker the run rests on",
-            self.name
-        );
+        assert_eq!(held.as_deref(), Some(code), "[{}] the blocker the run rests on", self.name);
         self
     }
 
@@ -180,11 +162,8 @@ impl Outcome {
     /// GRL-FR-XBUE / GRS-FR-KJVN: the run's own durable log says why it rested
     /// and what it spent, which is where the author reads it back.
     pub(crate) fn expect_rest_reason(self, reason: &str, pass_budget: u32) -> Self {
-        let records = super::super::lines_of(
-            &self.fx,
-            &self.run.id,
-            GraduationLogStream::Structured,
-        );
+        let records =
+            super::super::lines_of(&self.fx, &self.run.id, GraduationLogStream::Structured);
         let rested: Vec<&serde_json::Value> = records
             .iter()
             .filter(|record| {
@@ -195,12 +174,7 @@ impl Outcome {
                     == Some(reason)
             })
             .collect();
-        assert_eq!(
-            rested.len(),
-            1,
-            "[{}] the run's log states {reason:?} exactly once",
-            self.name
-        );
+        assert_eq!(rested.len(), 1, "[{}] the run's log states {reason:?} exactly once", self.name);
         assert_eq!(
             rested[0]
                 .get("fields")
@@ -238,26 +212,13 @@ impl Outcome {
     }
 
     pub(crate) fn expect_interruption(self, reason: &str) -> Self {
-        let held = self
-            .run
-            .interruption
-            .as_ref()
-            .map(|i| i.reason.as_str().to_string());
-        assert_eq!(
-            held.as_deref(),
-            Some(reason),
-            "[{}] why the run stopped",
-            self.name
-        );
+        let held = self.run.interruption.as_ref().map(|i| i.reason.as_str().to_string());
+        assert_eq!(held.as_deref(), Some(reason), "[{}] why the run stopped", self.name);
         self
     }
 
     pub(crate) fn expect_no_interruption(self) -> Self {
-        assert!(
-            self.run.interruption.is_none(),
-            "[{}] the run records no interruption",
-            self.name
-        );
+        assert!(self.run.interruption.is_none(), "[{}] the run records no interruption", self.name);
         self
     }
 
@@ -275,12 +236,7 @@ impl Outcome {
 
     /// What the author is told about the stop.
     pub(crate) fn expect_interruption_detail_contains(self, fragment: &str) -> Self {
-        let held = self
-            .run
-            .interruption
-            .as_ref()
-            .map(|i| i.detail.clone())
-            .unwrap_or_default();
+        let held = self.run.interruption.as_ref().map(|i| i.detail.clone()).unwrap_or_default();
         assert!(
             held.contains(fragment),
             "[{}] the interruption says {fragment:?}, but it says {held:?}",
@@ -308,7 +264,7 @@ impl Outcome {
     }
 
     /// GRL-FR-DNKA: the work turn's own account of what it did and did not do.
-    pub(crate) fn expect_agent_account_contains(self, fragment: &str) -> Self {
+    pub(crate) fn expect_agent_report_contains(self, fragment: &str) -> Self {
         let held = self.run.checkpoint.agent_account.clone().unwrap_or_default();
         assert!(
             held.contains(fragment),
@@ -327,11 +283,10 @@ impl Outcome {
         pushed: Option<bool>,
         push_failure: Option<&str>,
     ) -> Self {
-        let outcome = self
-            .run
-            .standing_work_outcome
-            .clone()
-            .unwrap_or_else(|| panic!("[{}] the run records its standing-work step", self.name));
+        let outcome =
+            self.run.standing_work_outcome.clone().unwrap_or_else(|| {
+                panic!("[{}] the run records its standing-work step", self.name)
+            });
         assert_eq!(
             outcome.commit.is_some(),
             committed,
@@ -350,11 +305,8 @@ impl Outcome {
 
     /// GRD-FR-HQPD: the standing commit is the run's base.
     pub(crate) fn expect_base_is_standing_commit(self) -> Self {
-        let standing = self
-            .run
-            .standing_work_outcome
-            .as_ref()
-            .and_then(|outcome| outcome.commit.clone());
+        let standing =
+            self.run.standing_work_outcome.as_ref().and_then(|outcome| outcome.commit.clone());
         assert!(standing.is_some(), "[{}] the standing work was committed", self.name);
         assert_eq!(
             self.run.base_commit, standing,
@@ -409,20 +361,15 @@ impl Outcome {
         self
     }
 
-    /// GRD-FR-BNTC: the run the focus moved from still holds its stream, in
-    /// memory and on the stream's durable record.
+    /// GRD-FR-BNTC: the run the focus moved from still holds its queue, in the
+    /// stored run and on the stream's durable record.
     pub(crate) fn expect_previous_holds_its_stream(self) -> Self {
         let previous = self.previous_run();
-        let holder = self
-            .fx
-            .app
-            .state::<crate::graduation::GraduationState>()
-            .holder_of(&previous.stream_id);
         let busy = crate::streams::stream_of(&self.fx.app, &previous.stream_id)
             .and_then(|stream| stream.busy_run_id);
         assert_eq!(
-            (holder.as_deref(), busy.as_deref()),
-            (Some(previous.id.as_str()), Some(previous.id.as_str())),
+            (previous.holds_queue(), busy.as_deref()),
+            (true, Some(previous.id.as_str())),
             "[{}] the run before this one still holds its stream",
             self.name
         );
@@ -436,6 +383,46 @@ impl Outcome {
             self.fx.reload(&other.run_id).state,
             state,
             "[{}] the state of the run labelled {label}",
+            self.name
+        );
+        self
+    }
+
+    /// GRD-FR-EPWW: a run the scenario enqueued beside its own was removed. Its
+    /// record, its place in the run order and its listing are gone, and its
+    /// draft is unlocked and carries no run-state tag (DRS-FR-CFJJ).
+    pub(crate) fn expect_run_removed(self, label: &'static str) -> Self {
+        let other = self.ctx.others.get(label);
+        assert!(
+            crate::graduation::load_run(&self.fx.app, &other.run_id).is_err(),
+            "[{}] the record of the run labelled {label} is deleted",
+            self.name
+        );
+        let queue = crate::graduation::project_queue(&self.fx.app).expect("the project's queue");
+        assert!(
+            !queue.runs.iter().any(|run| run.id == other.run_id),
+            "[{}] the run labelled {label} left the listing",
+            self.name
+        );
+        let index = crate::graduation::read_queue_index(
+            &crate::graduation::store_fs(&self.fx.app).expect("the store"),
+            &crate::graduation::store_base(&self.fx.app).expect("the store root"),
+            &self.fx.project_key(),
+        );
+        assert!(
+            !index.runs.iter().any(|entry| entry.run_id == other.run_id),
+            "[{}] the run labelled {label} left the run order",
+            self.name
+        );
+        let draft = format!("d-{label}");
+        assert!(
+            crate::graduation::draft_graduation(&queue, &draft).is_none(),
+            "[{}] the draft of the run labelled {label} carries no run-state tag",
+            self.name
+        );
+        assert!(
+            crate::graduation::require_unlocked_draft(&self.fx.app, &draft).is_ok(),
+            "[{}] the draft of the run labelled {label} is unlocked",
             self.name
         );
         self
@@ -487,7 +474,8 @@ impl Outcome {
     /// GRD-FR-DXWL: whether draft storage refuses a write to the run's draft.
     pub(crate) fn expect_draft_locked(self, locked: bool) -> Self {
         let refused =
-            crate::graduation::require_unlocked_draft(&self.fx.app, &self.run.input.draft_id).is_err();
+            crate::graduation::require_unlocked_draft(&self.fx.app, &self.run.input.draft_id)
+                .is_err();
         assert_eq!(refused, locked, "[{}] whether the draft is locked", self.name);
         self
     }
@@ -517,27 +505,14 @@ impl Outcome {
     ) -> Self {
         let seen = self.dispatches();
         let dispatch = seen.get(index).unwrap_or_else(|| {
-            panic!(
-                "[{}] dispatch {index} was never made; the loop made {}",
-                self.name,
-                seen.len()
-            )
+            panic!("[{}] dispatch {index} was never made; the loop made {}", self.name, seen.len())
         });
-        check(DispatchAssert {
-            scenario: self.name,
-            index,
-            seen: dispatch.clone(),
-        });
+        check(DispatchAssert { scenario: self.name, index, seen: dispatch.clone() });
         self
     }
 
     pub(crate) fn expect_dispatch_count(self, count: usize) -> Self {
-        assert_eq!(
-            self.dispatches().len(),
-            count,
-            "[{}] the dispatches the loop made",
-            self.name
-        );
+        assert_eq!(self.dispatches().len(), count, "[{}] the dispatches the loop made", self.name);
         self
     }
 }
@@ -547,11 +522,8 @@ impl Outcome {
     /// dispatch once the stream was free, and nothing else was offered.
     pub(crate) fn expect_queue_offered_dispatch(self, label: &'static str) -> Self {
         let other = self.ctx.others.get(label);
-        let attempts = self
-            .fx
-            .app
-            .state::<crate::graduation::driver::drive::SpawnTripwire>()
-            .take();
+        let attempts =
+            self.fx.app.state::<crate::graduation::driver::drive::SpawnTripwire>().take();
         assert_eq!(
             attempts,
             vec![(other.run_id.clone(), true)],

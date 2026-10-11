@@ -35,6 +35,10 @@ pub(super) struct PdfCacheEntry {
 /// that panics or fails (DCL-FR-VRTS).
 pub type Extractor = fn(&[u8]) -> Result<String, String>;
 
+/// The write of a changed source list to the store, under the project key that
+/// the change began for (DCL-FR-VWSG).
+pub type Persist<'a> = dyn Fn(&str, &[StoredSource]) -> Result<(), String> + 'a;
+
 fn default_extractor(bytes: &[u8]) -> Result<String, String> {
     pdf_extract::extract_text_from_mem(bytes).map_err(|e| e.to_string())
 }
@@ -223,10 +227,7 @@ impl DocumentsCollection {
     pub fn close(&self) {
         let mut inner = lock(&self.inner);
         let generation = inner.generation + 1;
-        *inner = Inner {
-            generation,
-            ..Inner::default()
-        };
+        *inner = Inner { generation, ..Inner::default() };
         drop(inner);
         self.fence_emitters();
     }
@@ -297,7 +298,7 @@ impl DocumentsCollection {
     pub fn add_sources(
         &self,
         requested: &[StoredSource],
-        persist: &dyn Fn(&str, &[StoredSource]) -> Result<(), String>,
+        persist: &Persist<'_>,
     ) -> Result<Vec<StoredSource>, DocumentsError> {
         let _mutation = lock(&self.mutation);
         let (generation, key, mut list) = self.begin_change()?;
@@ -337,7 +338,11 @@ impl DocumentsCollection {
     /// DCL-FR-VWSG: put a changed list in memory, but only while the project the
     /// change began for is still the open one. The list was stored under that
     /// project's key already, and no other project takes it.
-    fn apply_sources(&self, generation: u64, list: Vec<StoredSource>) -> Result<(), DocumentsError> {
+    fn apply_sources(
+        &self,
+        generation: u64,
+        list: Vec<StoredSource>,
+    ) -> Result<(), DocumentsError> {
         let mut inner = lock(&self.inner);
         if inner.generation != generation || !inner.open {
             return Err(DocumentsError::NoProjectOpen);
@@ -352,7 +357,7 @@ impl DocumentsCollection {
     pub fn remove_source(
         &self,
         path: &str,
-        persist: &dyn Fn(&str, &[StoredSource]) -> Result<(), String>,
+        persist: &Persist<'_>,
     ) -> Result<Option<StoredSource>, DocumentsError> {
         let _mutation = lock(&self.mutation);
         let (generation, project_key, mut list) = self.begin_change()?;
@@ -393,17 +398,9 @@ impl DocumentsCollection {
         let (generation, sources, previous_snapshot, previous_records) = {
             let inner = lock(&self.inner);
             if !inner.open || !inner.store_ok {
-                return RefreshOutcome {
-                    changed: None,
-                    stale: true,
-                };
+                return RefreshOutcome { changed: None, stale: true };
             }
-            (
-                inner.generation,
-                inner.sources.clone(),
-                inner.snapshot.clone(),
-                inner.records.clone(),
-            )
+            (inner.generation, inner.sources.clone(), inner.snapshot.clone(), inner.records.clone())
         };
 
         // FSA-FR-WBKZ: the instance follows the sources as they stand, so a
@@ -459,10 +456,7 @@ impl DocumentsCollection {
                 if !inner.open {
                     fs.discard_documents();
                 }
-                return RefreshOutcome {
-                    changed: None,
-                    stale: true,
-                };
+                return RefreshOutcome { changed: None, stale: true };
             }
             let changed = inner.snapshot != snapshot;
             inner.records = records;
@@ -481,17 +475,11 @@ impl DocumentsCollection {
                 inner.open && inner.generation == generation
             };
             if !current {
-                return RefreshOutcome {
-                    changed: None,
-                    stale: true,
-                };
+                return RefreshOutcome { changed: None, stale: true };
             }
             on_change(&snapshot);
         }
-        RefreshOutcome {
-            changed: changed.then_some(snapshot),
-            stale: false,
-        }
+        RefreshOutcome { changed: changed.then_some(snapshot), stale: false }
     }
 }
 
@@ -510,10 +498,9 @@ fn read_record(
         return unavailable_record(id, path, format, None);
     };
     let fingerprint = match access.file_info(PathBuf::from(path)) {
-        Ok(info) if info.kind == EntryKind::File => Some(Fingerprint {
-            size: info.size,
-            modified: info.modified,
-        }),
+        Ok(info) if info.kind == EntryKind::File => {
+            Some(Fingerprint { size: info.size, modified: info.modified })
+        }
         _ => None,
     };
     let Some(fingerprint) = fingerprint else {
@@ -625,11 +612,8 @@ fn log_refresh(
             );
         }
     }
-    let unavailable_documents = snapshot
-        .documents
-        .iter()
-        .filter(|d| d.status == Availability::Unavailable)
-        .count();
+    let unavailable_documents =
+        snapshot.documents.iter().filter(|d| d.status == Availability::Unavailable).count();
     log.log(
         LogLevel::Info,
         "documents refreshed",

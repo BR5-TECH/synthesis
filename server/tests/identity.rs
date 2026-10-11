@@ -18,10 +18,7 @@ fn team(api: &Api, name: &str) -> synthesis_server::domain::identity::Team {
         .identity
         .create_team(
             &api.administrator(),
-            CreateGroup {
-                name: name.to_string(),
-                ..Default::default()
-            },
+            CreateGroup { name: name.to_string(), ..Default::default() },
         )
         .expect("the team is written")
 }
@@ -83,19 +80,12 @@ fn a_field_that_breaks_a_limit_is_refused() {
     let application = api.application();
     let admin = api.administrator();
 
-    for (name, email) in [
-        ("   ", None),
-        ("A user", Some("not-an-address".to_string())),
-    ] {
+    for (name, email) in [("   ", None), ("A user", Some("not-an-address".to_string()))] {
         let refused = application
             .identity
             .create_user(
                 &admin,
-                CreateUser {
-                    display_name: name.to_string(),
-                    email,
-                    ..Default::default()
-                },
+                CreateUser { display_name: name.to_string(), email, ..Default::default() },
             )
             .expect_err("the field is refused");
         assert_eq!(refused.code(), "invalid_field");
@@ -315,11 +305,7 @@ fn an_expired_or_revoked_invitation_is_refused() {
         .expect("the invitation is written");
     let refused = application
         .memberships
-        .accept_invitation(
-            &Principal::member(invitee),
-            expired.id,
-            AcceptInvitation::default(),
-        )
+        .accept_invitation(&Principal::member(invitee), expired.id, AcceptInvitation::default())
         .expect_err("an expired invitation is refused");
     assert_eq!(refused.code(), "invitation_not_pending");
 
@@ -343,11 +329,7 @@ fn an_expired_or_revoked_invitation_is_refused() {
         .expect("the invitation is revoked");
     let refused = application
         .memberships
-        .accept_invitation(
-            &Principal::member(invitee),
-            revoked.id,
-            AcceptInvitation::default(),
-        )
+        .accept_invitation(&Principal::member(invitee), revoked.id, AcceptInvitation::default())
         .expect_err("a revoked invitation is refused");
     assert_eq!(refused.code(), "invitation_not_pending");
 
@@ -402,11 +384,7 @@ fn a_refused_acceptance_leaves_the_invitation_pending() {
 
     let refused = application
         .memberships
-        .accept_invitation(
-            &Principal::member(invitee),
-            invitation.id,
-            AcceptInvitation::default(),
-        )
+        .accept_invitation(&Principal::member(invitee), invitation.id, AcceptInvitation::default())
         .expect_err("the membership is a duplicate");
     assert_eq!(refused.code(), "duplicate_membership");
     assert_eq!(
@@ -431,17 +409,12 @@ fn a_referenced_record_is_not_deleted() {
         .identity
         .create_team(
             &Principal::member(owner),
-            CreateGroup {
-                name: "A team".to_string(),
-                ..Default::default()
-            },
+            CreateGroup { name: "A team".to_string(), ..Default::default() },
         )
         .expect("the owner writes a team");
 
-    let refused = application
-        .identity
-        .delete_user(&admin, owner)
-        .expect_err("the owner is referenced");
+    let refused =
+        application.identity.delete_user(&admin, owner).expect_err("the owner is referenced");
     assert_eq!(refused.code(), "referenced");
 }
 
@@ -468,10 +441,8 @@ fn a_device_is_registered_and_revoked() {
     assert_eq!(device.owner_id, owner);
     assert!(!device.is_revoked());
 
-    let revoked = application
-        .memberships
-        .revoke_device(&actor, device.id)
-        .expect("the device is revoked");
+    let revoked =
+        application.memberships.revoke_device(&actor, device.id).expect("the device is revoked");
     assert!(revoked.is_revoked());
     assert_eq!(revoked.id, device.id, "the identifier is stable");
 
@@ -530,10 +501,7 @@ fn an_unknown_membership_role_is_refused() {
             .update_membership(
                 &admin,
                 membership.id,
-                UpdateMembership {
-                    role: Some("chief".to_string()),
-                    ..Default::default()
-                },
+                UpdateMembership { role: Some("chief".to_string()), ..Default::default() },
             )
             .expect_err("an unknown role is refused on an update")
             .code(),

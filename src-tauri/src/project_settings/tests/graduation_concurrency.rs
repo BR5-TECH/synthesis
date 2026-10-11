@@ -29,10 +29,7 @@ fn limit_of(dir: &TempDir) -> GraduationConcurrency {
 fn save(dir: &TempDir, limit: Option<GraduationConcurrency>) {
     save_project_config_to(
         &root(dir),
-        ProjectConfig {
-            graduation_concurrency_limit: limit,
-            ..Default::default()
-        },
+        ProjectConfig { graduation_concurrency_limit: limit, ..Default::default() },
     )
     .expect("saved");
 }
@@ -61,10 +58,7 @@ fn a_stored_positive_integer_outside_the_listed_choices_is_preserved() {
     assert_eq!(limit_of(&dir), GraduationConcurrency::Limited(3));
     save_project_config_to(
         &root(&dir),
-        ProjectConfig {
-            line_endings: LineEndings::Crlf,
-            ..Default::default()
-        },
+        ProjectConfig { line_endings: LineEndings::Crlf, ..Default::default() },
     )
     .expect("saved");
     assert_eq!(limit_of(&dir), GraduationConcurrency::Limited(3));
@@ -104,10 +98,7 @@ fn a_malformed_stored_limit_is_repaired_to_one() {
 fn an_integer_below_one_is_written_as_one() {
     let dir = TempDir::new().unwrap();
     save(&dir, Some(GraduationConcurrency::Limited(0)));
-    assert_eq!(
-        stored(&dir).get("graduationConcurrencyLimit"),
-        Some(&toml::Value::Integer(1)),
-    );
+    assert_eq!(stored(&dir).get("graduationConcurrencyLimit"), Some(&toml::Value::Integer(1)),);
     let parsed: ProjectConfig =
         serde_json::from_str(r#"{"graduationConcurrencyLimit":-4}"#).unwrap();
     assert_eq!(parsed.graduation_concurrency_limit, Some(GraduationConcurrency::Limited(1)));
@@ -161,7 +152,9 @@ fn the_limit_crosses_the_seam_as_an_integer_or_the_named_text() {
     let parsed: ProjectConfig =
         serde_json::from_str(r#"{"graduationConcurrencyLimit":"unlimited"}"#).unwrap();
     assert_eq!(parsed.graduation_concurrency_limit, Some(GraduationConcurrency::Unlimited));
-    assert!(serde_json::from_str::<ProjectConfig>(r#"{"graduationConcurrencyLimit":"many"}"#).is_err());
+    assert!(
+        serde_json::from_str::<ProjectConfig>(r#"{"graduationConcurrencyLimit":"many"}"#).is_err()
+    );
 }
 
 // GRD-FR-KKKN: a finite limit permits a claim only while slots are free, and

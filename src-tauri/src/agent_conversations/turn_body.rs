@@ -26,6 +26,9 @@ pub(super) enum TurnEnd {
     /// mistake the two spellings invite.
     TimedOut,
     Failed(&'static str),
+    /// AGC-FR-RWPT: the provider's certificate was refused. Recoverable, and
+    /// carries the host and the cause the turn reports.
+    TlsUntrusted(crate::tls::TlsFailure),
     /// CVL-FR-15: the turn asked the author something and ended on it.
     ///
     /// Not a failure and not a delivery: the conversation gained the agent's
@@ -221,10 +224,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
 
     let answer = loop {
         check_cancelled(plan)?;
-        if deadline
-            .saturating_duration_since(std::time::Instant::now())
-            .is_zero()
-        {
+        if deadline.saturating_duration_since(std::time::Instant::now()).is_zero() {
             log_turn_out_of_time(app, turns, plan, model_calls);
             return Err(TurnEnd::TimedOut);
         }
@@ -242,10 +242,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             plan,
             &endpoint,
             &exchange,
-            bounds.retry,
-            deadline,
-            model_calls,
-            at_bound,
+            ModelCall { policy: bounds.retry, deadline, model_calls, at_bound },
         )?;
 
         // CVL-FR-31: what the provider ran for itself is reported and recorded
@@ -342,10 +339,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 // state: this turn left a durable set and no comment, so a
                 // reader looking for the agent's contribution in the log would
                 // otherwise find none and call the turn broken.
-                Some((
-                    TurnEnd::AskedQuestions,
-                    "agent recorded a question set",
-                ))
+                Some((TurnEnd::AskedQuestions, "agent recorded a question set"))
             } else if plan.proposed.load(Ordering::SeqCst) {
                 // One flag for both proposal tools: which of them a turn holds is
                 // decided by its origin kind (CVL-FR-08), so the flag alone says
@@ -381,8 +375,12 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 activity.finish_all(app, turns, &plan.turn_id);
                 return Err(end);
             }
+            // CVL-FR-EKHH: every result carries the id of its call, unchanged,
+            // and the name of the tool. The Responses route matches a result to
+            // its call by `call_id`, which is that id.
             exchange.push(rig::completion::Message::tool_result(
                 call.id.clone(),
+                call.function.name.clone(),
                 result,
             ));
         }
@@ -413,6 +411,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             if let Some(message) = one_at_a_time {
                 exchange.push(rig::completion::Message::tool_result(
                     call.id.clone(),
+                    call.function.name.clone(),
                     message.to_string(),
                 ));
                 // CVL-FR-33: a refusal is a result produced, so the call leaves
@@ -431,6 +430,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             activity.finish(app, turns, &plan.turn_id, index);
             exchange.push(rig::completion::Message::tool_result(
                 call.id.clone(),
+                call.function.name.clone(),
                 result,
             ));
         }

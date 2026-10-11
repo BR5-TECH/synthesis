@@ -27,18 +27,11 @@ fn main() {
     declare_rerun_conditions(&manifest_dir);
 
     let build_argument = std::env::var(BUILD_VERSION_ARGUMENT).ok();
-    let exact_tag = capture(
-        "git",
-        &["describe", "--tags", "--exact-match"],
-        &manifest_dir,
-    );
+    let exact_tag = capture("git", &["describe", "--tags", "--exact-match"], &manifest_dir);
     let short_hash = capture("git", &["rev-parse", "--short", "HEAD"], &manifest_dir);
 
-    let version = resolve_version(
-        build_argument.as_deref(),
-        exact_tag.as_deref(),
-        short_hash.as_deref(),
-    );
+    let version =
+        resolve_version(build_argument.as_deref(), exact_tag.as_deref(), short_hash.as_deref());
 
     println!("cargo:rustc-env=SYNTHESIS_SERVER_VERSION={version}");
 }
@@ -133,20 +126,14 @@ fn find_git_paths(start: &Path) -> Option<GitPaths> {
 
         // A normal checkout, where `.git` is the directory itself.
         if candidate.is_dir() {
-            return Some(GitPaths {
-                common_dir: common_dir_of(&candidate),
-                git_dir: candidate,
-            });
+            return Some(GitPaths { common_dir: common_dir_of(&candidate), git_dir: candidate });
         }
 
         // A linked worktree or a submodule, where `.git` is a file that names
         // the directory.
         if candidate.is_file() {
             if let Some(git_dir) = read_git_dir_pointer(&candidate, directory) {
-                return Some(GitPaths {
-                    common_dir: common_dir_of(&git_dir),
-                    git_dir,
-                });
+                return Some(GitPaths { common_dir: common_dir_of(&git_dir), git_dir });
             }
         }
     }
@@ -163,11 +150,7 @@ fn read_git_dir_pointer(pointer: &Path, base: &Path) -> Option<PathBuf> {
     }
 
     let path = PathBuf::from(target);
-    Some(if path.is_absolute() {
-        path
-    } else {
-        base.join(path)
-    })
+    Some(if path.is_absolute() { path } else { base.join(path) })
 }
 
 /// Reads the shared directory a worktree's directory points at.

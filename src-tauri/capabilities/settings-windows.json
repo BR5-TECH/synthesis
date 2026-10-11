@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "settings-windows",
-  "description": "Capability for the two settings child windows (SWN-settings-windows.md). Deliberately narrower than the main window's: a settings window is fixed at 800 x 600 and centred by the backend (SWN-FR-03, SWN-FR-04), so it needs none of the window-geometry permissions the shell uses to size, move, maximize, or full-screen itself.",
-  "windows": ["settings-global", "settings-project"],
+  "description": "Capability for the Settings child window (SWN-settings-windows.md). Deliberately narrower than the main window's: the window is sized, limited, and centred by the backend (SWN-FR-03, SWN-FR-04), so it needs none of the window-geometry permissions the shell uses to size, move, maximize, or full-screen itself.",
+  "windows": ["settings"],
   "permissions": [
     "core:default",
     "opener:default",

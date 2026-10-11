@@ -120,14 +120,12 @@ pub(super) static PDC_SEVERAL_LEAK_LOG: LogBuffer = LogBuffer::new();
 fn a_refused_call_records_which_refusal_and_the_shape_of_the_arguments() {
     let f = Fixture::new();
     PDC_REFUSAL_LOG.clear();
-    let refused = block_on(f.tool().with_buffer(&PDC_REFUSAL_LOG).call(
-        ProposeDraftChangesArgs {
-            path: FILE.into(),
-            rationale: RATIONALE.into(),
-            revises: None,
-            hunks: vec![],
-        },
-    ))
+    let refused = block_on(f.tool().with_buffer(&PDC_REFUSAL_LOG).call(ProposeDraftChangesArgs {
+        path: FILE.into(),
+        rationale: RATIONALE.into(),
+        revises: None,
+        hunks: vec![],
+    }))
     .unwrap_err();
     assert_eq!(refused.to_string(), PROPOSAL_NO_HUNKS);
 
@@ -256,10 +254,7 @@ fn a_call_with_no_path_reads_the_refusal_that_names_the_file() {
             serde_json::from_value(payload).expect("a path that is not there decodes");
         assert!(args.path.is_empty());
         let refused = block_on(f.tool().call(args)).unwrap_err();
-        assert_eq!(
-            refused.to_string(),
-            ToolRefusal::ProposalPathMissing.to_string(),
-        );
+        assert_eq!(refused.to_string(), ToolRefusal::ProposalPathMissing.to_string(),);
     }
 }
 

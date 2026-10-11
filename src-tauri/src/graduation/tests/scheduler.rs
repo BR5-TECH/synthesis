@@ -20,10 +20,7 @@ fn quiet_fixture() -> Fixture {
 fn set_limit(fx: &Fixture, limit: GraduationConcurrency) {
     crate::project_settings::save_project_config_to(
         &crate::fs::RootFs::for_root(fx.root()),
-        ProjectConfig {
-            graduation_concurrency_limit: Some(limit),
-            ..Default::default()
-        },
+        ProjectConfig { graduation_concurrency_limit: Some(limit), ..Default::default() },
     )
     .expect("the limit is saved");
 }
@@ -293,13 +290,8 @@ fn a_held_direct_run_does_not_wait_for_a_slot() {
 #[test]
 fn raising_the_saved_limit_offers_the_queues_a_dispatch() {
     let fx = Fixture::new();
-    fx.app
-        .manage(crate::graduation::driver::drive::SpawnTripwire::default());
-    let tripwire = || {
-        fx.app
-            .state::<crate::graduation::driver::drive::SpawnTripwire>()
-            .take()
-    };
+    fx.app.manage(crate::graduation::driver::drive::SpawnTripwire::default());
+    let tripwire = || fx.app.state::<crate::graduation::driver::drive::SpawnTripwire>().take();
     let (a, b) = (fx.stream("a"), fx.stream("b"));
     let _held = fx.enqueue_for(&a, "held", "d1");
     fx.hold_stream(&a.id);
@@ -308,10 +300,7 @@ fn raising_the_saved_limit_offers_the_queues_a_dispatch() {
 
     let save = |limit: GraduationConcurrency| {
         crate::project_settings::save_project_config(
-            ProjectConfig {
-                graduation_concurrency_limit: Some(limit),
-                ..Default::default()
-            },
+            ProjectConfig { graduation_concurrency_limit: Some(limit), ..Default::default() },
             fx.app.state::<crate::project::ProjectState>(),
             fx.app.clone(),
         )
@@ -362,17 +351,12 @@ fn a_blocked_run_keeps_its_slot() {
 #[test]
 fn discarding_a_blocked_run_offers_its_slot_to_another_queue() {
     let fx = Fixture::new();
-    fx.app
-        .manage(crate::graduation::driver::drive::SpawnTripwire::default());
+    fx.app.manage(crate::graduation::driver::drive::SpawnTripwire::default());
     let (a, b) = (fx.stream("a"), fx.stream("b"));
     let blocked = fx.enqueue_for(&a, "blocked", "d1");
     let waiting = fx.enqueue_for(&b, "waiting", "d2");
     block(&fx, &blocked);
-    let tripwire = || {
-        fx.app
-            .state::<crate::graduation::driver::drive::SpawnTripwire>()
-            .take()
-    };
+    let tripwire = || fx.app.state::<crate::graduation::driver::drive::SpawnTripwire>().take();
     tripwire();
 
     crate::graduation::discard_graduation_run(fx.app.clone(), blocked.id.clone())
@@ -387,16 +371,13 @@ fn discarding_a_blocked_run_offers_its_slot_to_another_queue() {
 #[test]
 fn lowering_the_saved_limit_dispatches_nothing() {
     let fx = Fixture::new();
-    fx.app
-        .manage(crate::graduation::driver::drive::SpawnTripwire::default());
+    fx.app.manage(crate::graduation::driver::drive::SpawnTripwire::default());
     set_limit(&fx, GraduationConcurrency::limited(3));
     let (a, b) = (fx.stream("a"), fx.stream("b"));
     fx.enqueue_for(&a, "held", "d1");
     fx.hold_stream(&a.id);
     fx.enqueue_for(&b, "waiting", "d2");
-    fx.app
-        .state::<crate::graduation::driver::drive::SpawnTripwire>()
-        .take();
+    fx.app.state::<crate::graduation::driver::drive::SpawnTripwire>().take();
 
     crate::project_settings::save_project_config(
         ProjectConfig {
@@ -407,10 +388,7 @@ fn lowering_the_saved_limit_dispatches_nothing() {
         fx.app.clone(),
     )
     .expect("saved");
-    let attempts = fx
-        .app
-        .state::<crate::graduation::driver::drive::SpawnTripwire>()
-        .take();
+    let attempts = fx.app.state::<crate::graduation::driver::drive::SpawnTripwire>().take();
     assert!(attempts.is_empty(), "{attempts:?}");
     assert_eq!(fx.app.state::<GraduationState>().working_count(), 1);
 }

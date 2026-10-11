@@ -15,11 +15,7 @@ pub fn format_rfc3339_utc(unix_seconds: i64) -> String {
     let days = unix_seconds.div_euclid(86_400);
     let secs_of_day = unix_seconds.rem_euclid(86_400);
     let (y, m, d) = civil_from_days(days);
-    let (h, min, s) = (
-        secs_of_day / 3600,
-        (secs_of_day % 3600) / 60,
-        secs_of_day % 60,
-    );
+    let (h, min, s) = (secs_of_day / 3600, (secs_of_day % 3600) / 60, secs_of_day % 60);
     format!("{y:04}-{m:02}-{d:02}T{h:02}:{min:02}:{s:02}Z")
 }
 
@@ -29,7 +25,7 @@ pub fn format_rfc3339_utc(unix_seconds: i64) -> String {
 fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let z = days + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as i64; // [0, 146096]
+    let doe = z - era * 146_097; // [0, 146096]
     let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
     let y = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
@@ -41,10 +37,8 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 
 /// The current instant as an RFC 3339 UTC timestamp.
 pub fn now_rfc3339() -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
+    let secs =
+        SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
     format_rfc3339_utc(secs)
 }
 
@@ -67,10 +61,8 @@ pub fn format_rfc3339_millis_utc(unix_millis: i64) -> String {
 /// The current instant as an RFC 3339 UTC timestamp with millisecond precision
 /// (LGC-FR-06).
 pub fn now_rfc3339_millis() -> String {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0);
+    let millis =
+        SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
     format_rfc3339_millis_utc(millis)
 }
 
@@ -88,10 +80,7 @@ pub fn now_rfc3339_millis() -> String {
 /// whose time has been set by hand — renders as the epoch rather than failing:
 /// the caller wants an ordering key, and refusing one would drop the entry.
 pub fn format_rfc3339_millis_from(time: SystemTime) -> String {
-    let millis = time
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0);
+    let millis = time.duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
     format_rfc3339_millis_utc(millis)
 }
 
@@ -108,10 +97,8 @@ static ID_COUNTER: AtomicU32 = AtomicU32::new(0);
 /// note in their own clone of the project at the same moment, which is what
 /// keeps notes from colliding when their branches merge.
 pub fn new_note_id() -> String {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
+    let millis =
+        SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
     let counter = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
     let mut hasher = RandomState::new().build_hasher();
     hasher.write_u64(millis);
@@ -127,7 +114,5 @@ pub fn new_note_id() -> String {
 pub(crate) fn is_valid_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
-        && id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }

@@ -118,6 +118,8 @@ export function remoteNote(outcome: RefreshOutcome): string | null {
       return "The remote refused the credential — local branches are up to date.";
     case GITHUB_TOKEN_ERRORS.keychainUnavailable:
       return "That GitHub token could not be read from the keychain.";
+    case GITHUB_TOKEN_ERRORS.hostMismatch:
+      return "The project token belongs to another GitHub host than this remote — local branches are up to date.";
     case GITHUB_TOKEN_ERRORS.githubUnreachable:
       return "Couldn't reach the remote — local branches are up to date.";
     case GIT_REMOTE_ERRORS.noRemoteConfigured:

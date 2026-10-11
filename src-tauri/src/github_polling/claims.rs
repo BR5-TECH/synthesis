@@ -32,7 +32,9 @@ pub fn pending_claim(
     number: u64,
     held: &[GithubPendingClaim],
 ) -> Option<GithubPendingClaim> {
-    let names = |claim: &GithubPendingClaim| claim.names(&repository.owner, &repository.name, number);
+    let names = |claim: &GithubPendingClaim| {
+        claim.names(&repository.host, &repository.owner, &repository.name, number)
+    };
     load_github_pending_claims_from(root)
         .into_iter()
         .find(names)
@@ -44,7 +46,12 @@ pub fn pending_claim(
 fn put_claim(root: &RootFs, claim: &GithubPendingClaim) -> Result<(), String> {
     update_github_pending_claims(root, |claims| {
         claims.retain(|c| {
-            !c.names(&claim.repository_owner, &claim.repository_name, claim.issue_number)
+            !c.names(
+                &claim.repository_host,
+                &claim.repository_owner,
+                &claim.repository_name,
+                claim.issue_number,
+            )
         });
         claims.push(claim.clone());
     })
@@ -76,19 +83,30 @@ fn shadow_for(
     claim: &GithubPendingClaim,
     issue: &FetchedIssue,
 ) -> Result<(GithubClaimResult, bool), String> {
-    let (owner, name) = (&claim.repository_owner, &claim.repository_name);
+    let (host, owner, name) =
+        (&claim.repository_host, &claim.repository_owner, &claim.repository_name);
     // A draft the pending claim already names, where it still exists.
     if let Some(id) = claim.draft_id.as_deref() {
         if let Ok(record) = crate::drafts::read_draft_record(root, id) {
-            if record.github_issue.as_ref().is_some_and(|l| l.names(owner, name, claim.issue_number)) {
-                return Ok((GithubClaimResult { draft_id: record.id, draft_name: record.name }, false));
+            if record
+                .github_issue
+                .as_ref()
+                .is_some_and(|l| l.names(host, owner, name, claim.issue_number))
+            {
+                return Ok((
+                    GithubClaimResult { draft_id: record.id, draft_name: record.name },
+                    false,
+                ));
             }
         }
     }
-    if let Some(existing) = crate::drafts::find_github_shadow(root, owner, name, claim.issue_number) {
+    if let Some(existing) =
+        crate::drafts::find_github_shadow(root, host, owner, name, claim.issue_number)
+    {
         return Ok((GithubClaimResult { draft_id: existing.id, draft_name: existing.name }, false));
     }
     let link = GithubIssueLink {
+        repository_host: host.clone(),
         repository_owner: owner.clone(),
         repository_name: name.clone(),
         issue_number: claim.issue_number,
@@ -98,10 +116,7 @@ fn shadow_for(
     };
     let created = crate::drafts::create_github_shadow_draft(root, &issue.title, &issue.body, link)
         .map_err(|_| ERR_SHADOW_CREATE_FAILED.to_string())?;
-    Ok((
-        GithubClaimResult { draft_id: created.draft.id, draft_name: created.draft.name },
-        true,
-    ))
+    Ok((GithubClaimResult { draft_id: created.draft.id, draft_name: created.draft.name }, true))
 }
 
 /// What a successful claim or retry did.
@@ -123,7 +138,8 @@ pub struct ClaimOutcome {
 pub struct ClaimFailure {
     pub code: String,
     pub project_title: Option<String>,
-    pub unsaved_claim: Option<GithubPendingClaim>,
+    /// Boxed to keep the error small.
+    pub unsaved_claim: Option<Box<GithubPendingClaim>>,
 }
 
 impl From<PollFailure> for ClaimFailure {
@@ -169,10 +185,11 @@ pub fn claim(
             &configuration.field_id,
             &configuration.in_progress_option_id,
         )
-        .map_err(|_| ClaimFailure::code(ERR_STATUS_UPDATE_FAILED))?;
+        .map_err(|e| ClaimFailure::code(crate::tls::keep_tls(e, ERR_STATUS_UPDATE_FAILED)))?;
     // GPP-FR-DHQM: the pending claim comes before the draft. Where the disk
     // refuses it, the claim goes back to the caller to hold in memory.
     let mut pending = GithubPendingClaim {
+        repository_host: ctx.repository.host.clone(),
         repository_owner: ctx.repository.owner.clone(),
         repository_name: ctx.repository.name.clone(),
         issue_number: issue.number,
@@ -182,7 +199,11 @@ pub fn claim(
         claimed_at: now.to_string(),
     };
     if let Err(code) = put_claim(ctx.root, &pending) {
-        return Err(ClaimFailure { code, project_title: None, unsaved_claim: Some(pending) });
+        return Err(ClaimFailure {
+            code,
+            project_title: None,
+            unsaved_claim: Some(Box::new(pending)),
+        });
     }
     // GPP-FR-XPUO / GPP-FR-CWGH: the shadow draft, then its id in the claim.
     let (result, created) = shadow_for(ctx.root, &pending, &issue).map_err(ClaimFailure::code)?;
@@ -206,9 +227,10 @@ pub fn retry(
 ) -> Result<ClaimOutcome, String> {
     let on_disk = load_github_pending_claims_from(root)
         .into_iter()
-        .find(|c| c.names(&repository.owner, &repository.name, number));
+        .find(|c| c.names(&repository.host, &repository.owner, &repository.name, number));
     let from_disk = on_disk.is_some();
-    let Some(mut pending) = on_disk.or_else(|| pending_claim(root, repository, number, held)) else {
+    let Some(mut pending) = on_disk.or_else(|| pending_claim(root, repository, number, held))
+    else {
         return Err(ERR_NO_PENDING_CLAIM.to_string());
     };
     // GPP-FR-TOED: the latest title and body. A re-fetch that fails keeps the
@@ -232,7 +254,7 @@ pub fn acknowledge(root: &RootFs, repository: &RepositoryRef, number: u64) -> Re
     let mut found = false;
     update_github_pending_claims(root, |claims| {
         let before = claims.len();
-        claims.retain(|c| !c.names(&repository.owner, &repository.name, number));
+        claims.retain(|c| !c.names(&repository.host, &repository.owner, &repository.name, number));
         found = claims.len() != before;
     })
     .map_err(|_| ERR_PENDING_CLAIM_WRITE_FAILED.to_string())?;

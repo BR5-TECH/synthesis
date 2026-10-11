@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 // ---------------------------------------------------------------------------
 // Declining, deciding twice, and the decision comment (PCP-FR-15 … PCP-FR-19)
 // ---------------------------------------------------------------------------
@@ -38,10 +37,7 @@ fn the_decision_comment_says_whose_candidate_was_decided() {
     let proposal = f.pending();
     f.accept(&proposal.id).expect("accepted");
     let decision = f.discussion().comments.last().cloned().expect("decision");
-    assert_eq!(
-        decision.body,
-        format!("Accepted the proposed change to `{PROMPT}`."),
-    );
+    assert_eq!(decision.body, format!("Accepted the proposed change to `{PROMPT}`."),);
 
     // …and a candidate the author rewrote says so instead.
     let g = Fixture::new();
@@ -51,11 +47,7 @@ fn the_decision_comment_says_whose_candidate_was_decided() {
         .expect("saved");
     g.accept(&other.id).expect("accepted");
     let decision = g.discussion().comments.last().cloned().expect("decision");
-    assert!(
-        decision.body.starts_with("Accepted an edited version"),
-        "{}",
-        decision.body,
-    );
+    assert!(decision.body.starts_with("Accepted an edited version"), "{}", decision.body,);
 
     // …and the offer and the answer stand in the order they were made.
     let thread = g.discussion();
@@ -70,27 +62,12 @@ fn a_locked_conversation_refuses_both_decisions_before_anything_is_written() {
     let proposal = f.pending();
     f.lock();
 
-    assert_eq!(
-        f.accept(&proposal.id).unwrap_err(),
-        comments::ERR_DISCUSSION_LOCKED,
-    );
+    assert_eq!(f.accept(&proposal.id).unwrap_err(), comments::ERR_DISCUSSION_LOCKED,);
     assert_eq!(f.artifact_body(), ORIGINAL);
-    assert!(
-        !f.dir().join(format!("{}.journal", proposal.id)).exists(),
-        "no journal was written",
-    );
-    assert_eq!(
-        read_proposal(&f.root, &proposal.id).unwrap().state,
-        PromptProposalState::Pending,
-    );
-    assert_eq!(
-        f.decline(&proposal.id).unwrap_err(),
-        comments::ERR_DISCUSSION_LOCKED,
-    );
-    assert_eq!(
-        read_proposal(&f.root, &proposal.id).unwrap().state,
-        PromptProposalState::Pending,
-    );
+    assert!(!f.dir().join(format!("{}.journal", proposal.id)).exists(), "no journal was written",);
+    assert_eq!(read_proposal(&f.root, &proposal.id).unwrap().state, PromptProposalState::Pending,);
+    assert_eq!(f.decline(&proposal.id).unwrap_err(), comments::ERR_DISCUSSION_LOCKED,);
+    assert_eq!(read_proposal(&f.root, &proposal.id).unwrap().state, PromptProposalState::Pending,);
 }
 
 #[test]
@@ -111,7 +88,11 @@ fn a_decided_proposal_is_decided_once() {
     assert_eq!(f.decline(&rejected.id).unwrap_err(), ERR_ALREADY_DECIDED);
 
     assert_eq!(f.artifact_body(), PROPOSED, "unchanged by every refusal");
-    assert_eq!(f.discussion().comments.len(), comments + 2, "the second proposal and its decline alone");
+    assert_eq!(
+        f.discussion().comments.len(),
+        comments + 2,
+        "the second proposal and its decline alone"
+    );
     // Two events for the second proposal's own life, and none for a refusal.
     assert_eq!(events.lock().unwrap().len(), 2);
 }
@@ -125,10 +106,7 @@ fn an_acceptance_refuses_a_target_that_has_gone_or_stopped_being_a_prompt() {
 
     assert_eq!(f.accept(&proposal.id).unwrap_err(), ERR_ARTIFACT_NOT_FOUND);
     assert!(!f.root.path().join(PROMPT).exists(), "no file was created");
-    assert_eq!(
-        read_proposal(&f.root, &proposal.id).unwrap().state,
-        PromptProposalState::Pending,
-    );
+    assert_eq!(read_proposal(&f.root, &proposal.id).unwrap().state, PromptProposalState::Pending,);
     // Declining is how such a one is cleared.
     f.decline(&proposal.id).expect("declined");
     assert!(!f.root.path().join(PROMPT).exists());
@@ -151,13 +129,8 @@ fn nothing_expires_and_a_decided_proposal_whose_artifact_is_gone_is_swept() {
         // A decided proposal against a second artifact, which then goes.
         let other = "prompts/other.md";
         write_file(&f.root, other, "# Other\n");
-        assign(
-            &f.root,
-            &[(PROMPT, ArtifactType::Prompt), (other, ArtifactType::Prompt)],
-        );
-        let proposal = f
-            .propose_against(other, "# Other\n\nBetter.\n")
-            .expect("recorded");
+        assign(&f.root, &[(PROMPT, ArtifactType::Prompt), (other, ArtifactType::Prompt)]);
+        let proposal = f.propose_against(other, "# Other\n\nBetter.\n").expect("recorded");
         f.decline(&proposal.id).expect("declined");
         std::fs::remove_file(f.root.path().join(other)).expect("delete");
         proposal

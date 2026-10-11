@@ -35,11 +35,7 @@ fn hand_off_with(
 }
 
 fn runs_of_the_project(fx: &Fixture) -> usize {
-    let fs = fx
-        .app
-        .state::<crate::fs::FsAccessState>()
-        .get()
-        .expect("instance");
+    let fs = fx.app.state::<crate::fs::FsAccessState>().get().expect("instance");
     let base = crate::graduation::StoreBase::new(canonical(fx.store.path()));
     let key = fx.app.state::<crate::project::ProjectState>().slot_key();
     crate::graduation::read_queue_index(&fs, &base, &key).runs.len()

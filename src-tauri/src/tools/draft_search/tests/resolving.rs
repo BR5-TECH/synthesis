@@ -46,9 +46,7 @@ fn prompt_path_is_informational_only() {
     // Passed as a draft id, it is the unknown-draft refusal.
     let as_id = crate::tools::draft_read::read(
         &root,
-        &crate::tools::draft_read::ReadDraftArgs {
-            draft_id: m.prompt_path.clone(),
-        },
+        &crate::tools::draft_read::ReadDraftArgs { draft_id: m.prompt_path.clone() },
     );
     assert_eq!(as_id.unwrap_err(), ToolRefusal::DraftNotFound);
 }
@@ -97,16 +95,11 @@ fn stale_and_inconsistent_hits_are_dropped() {
     let root = fixture.root();
     assert!(crate::tools::draft_read::read(
         &root,
-        &crate::tools::draft_read::ReadDraftArgs {
-            draft_id: matches[0].draft_id.clone()
-        }
+        &crate::tools::draft_read::ReadDraftArgs { draft_id: matches[0].draft_id.clone() }
     )
     .is_ok());
     // And the inconsistent one is exactly the condition DRS-FR-15 reports.
-    assert_eq!(
-        crate::drafts::draft_record(&root, &broken).unwrap_err(),
-        ERR_NOT_SINGLE_FILE
-    );
+    assert_eq!(crate::drafts::draft_record(&root, &broken).unwrap_err(), ERR_NOT_SINGLE_FILE);
 }
 
 /// DST-FR-14: the excerpt is the chunk's own text, unmodified.
@@ -121,12 +114,8 @@ fn excerpt_is_the_chunk_verbatim() {
     // form of this assertion that fails if the text is re-wrapped, trimmed, or
     // given a prefix.
     let indexer = fixture.fixture.app.state::<crate::bm25_index::Bm25Indexer>();
-    let raw = crate::bm25_index::search(
-        &indexer,
-        &[crate::bm25_index::IndexId::Drafts],
-        "teardown",
-        10,
-    );
+    let raw =
+        crate::bm25_index::search(&indexer, &[crate::bm25_index::IndexId::Drafts], "teardown", 10);
     let hit = raw
         .iter()
         .find(|h| h.draft_id.as_deref() == Some(m.draft_id.as_str()))

@@ -24,10 +24,7 @@ pub(super) fn substitute_session(stdout: &str, argv: &[String]) -> String {
 
 /// The value of `--session-id` in a generated vector, if it carries one.
 pub(super) fn assigned_session_id(argv: &[String]) -> Option<String> {
-    argv.iter()
-        .position(|a| a == "--session-id")
-        .and_then(|i| argv.get(i + 1))
-        .cloned()
+    argv.iter().position(|a| a == "--session-id").and_then(|i| argv.get(i + 1)).cloned()
 }
 
 /// The `did not complete` record this launch emitted, found by the container it
@@ -41,9 +38,8 @@ pub(super) fn assigned_session_id(argv: &[String]) -> Option<String> {
 pub(super) fn failure_record(container: &str) -> crate::logging::LogRecord {
     use crate::logging::LogFilter;
 
-    let page = super::super::log_buffer()
-        .query(&LogFilter::default(), None, 20_000)
-        .expect("query");
+    let page =
+        super::super::log_buffer().query(&LogFilter::default(), None, 20_000).expect("query");
     let mut found: Vec<_> = page
         .records
         .into_iter()
@@ -52,11 +48,7 @@ pub(super) fn failure_record(container: &str) -> crate::logging::LogRecord {
                 && record.fields.get("container").and_then(|v| v.as_str()) == Some(container)
         })
         .collect();
-    assert_eq!(
-        found.len(),
-        1,
-        "expected exactly one failure record for {container}"
-    );
+    assert_eq!(found.len(), 1, "expected exactly one failure record for {container}");
     found.remove(0)
 }
 
@@ -264,8 +256,7 @@ pub(super) fn run_with_cancel(
     task: AgentTaskRequest,
     cancellation: CancellationToken,
 ) -> Result<AgentExecution, AgentExecutionError> {
-    let executor = AgentCliExecutor::new(runtime)
-        .with_session_state_root(harness.sessions_root());
+    let executor = AgentCliExecutor::new(runtime).with_session_state_root(harness.sessions_root());
     block_on(executor.execute_agent_cli(
         &Silent,
         &harness.context(),
@@ -275,6 +266,7 @@ pub(super) fn run_with_cancel(
             task,
             cancellation,
             activity: None,
+            durable_output: None,
             supplementary_mount: None,
         },
     ))
@@ -312,8 +304,7 @@ pub(super) fn run_in(
     runtime: Arc<RecordingRuntime>,
     execution_directory: PathBuf,
 ) -> Result<AgentExecution, AgentExecutionError> {
-    let executor =
-        AgentCliExecutor::new(runtime).with_session_state_root(harness.sessions_root());
+    let executor = AgentCliExecutor::new(runtime).with_session_state_root(harness.sessions_root());
     block_on(executor.execute_agent_cli(
         &Silent,
         &harness.context(),
@@ -323,6 +314,7 @@ pub(super) fn run_in(
             task: task("go"),
             cancellation: CancellationToken::new(),
             activity: None,
+            durable_output: None,
             supplementary_mount: None,
         },
     ))
@@ -346,8 +338,7 @@ pub(super) fn run_as(
     activity: Option<Arc<dyn AgentActivitySink>>,
     turn_kind: super::super::TurnKind,
 ) -> Result<AgentExecution, AgentExecutionError> {
-    let executor =
-        AgentCliExecutor::new(runtime).with_session_state_root(harness.sessions_root());
+    let executor = AgentCliExecutor::new(runtime).with_session_state_root(harness.sessions_root());
     block_on(executor.execute_agent_cli(
         &Silent,
         &harness.context(),
@@ -357,6 +348,7 @@ pub(super) fn run_as(
             task: task("go"),
             cancellation: CancellationToken::new(),
             activity,
+            durable_output: None,
             supplementary_mount: mount,
         },
     ))
@@ -381,9 +373,7 @@ pub(super) fn repository_mounts_in(
     let executor = AgentCliExecutor::new(RecordingRuntime::replying(""))
         .with_session_state_root(harness.sessions_root());
     let workspace = if aligned {
-        crate::changes::canonicalize_lenient(directory)
-            .to_string_lossy()
-            .into_owned()
+        crate::changes::canonicalize_lenient(directory).to_string_lossy().into_owned()
     } else {
         descriptor::WORKSPACE_TARGET.to_string()
     };
@@ -406,7 +396,11 @@ pub(super) fn linked_worktree_at(root: &Path, worktree: &Path) -> (PathBuf, Path
 
 /// [`linked_worktree_at`] under a registration name of the caller's choosing, so
 /// two fixtures can be told apart by what a generated pointer names.
-pub(super) fn linked_worktree_named(root: &Path, worktree: &Path, name: &str) -> (PathBuf, PathBuf) {
+pub(super) fn linked_worktree_named(
+    root: &Path,
+    worktree: &Path,
+    name: &str,
+) -> (PathBuf, PathBuf) {
     let primary = root.join("primary");
     let repo = git2::Repository::init(&primary).expect("a primary checkout");
     // A worktree needs a commit to point at.
@@ -421,30 +415,21 @@ pub(super) fn linked_worktree_named(root: &Path, worktree: &Path, name: &str) ->
     // a path that is already there — so the worktree is added beside it and its
     // contents moved into place.
     let staged = root.join("staged-worktree");
-    repo.worktree(
-        name,
-        &staged,
-        Some(git2::WorktreeAddOptions::new().reference(None)),
-    )
-    .expect("a linked worktree");
+    repo.worktree(name, &staged, Some(git2::WorktreeAddOptions::new().reference(None)))
+        .expect("a linked worktree");
     std::fs::rename(staged.join(".git"), worktree.join(".git")).unwrap();
     // Canonical, which is what libgit2 records and what EAC-FR-ZKMR mounts the
     // store at. A raw spelling here would let an aligned turn assert over a
     // pointer naming a path its store mount does not carry.
-    let git_dir = crate::changes::canonicalize_lenient(&primary)
-        .join(".git/worktrees")
-        .join(name);
+    let git_dir = crate::changes::canonicalize_lenient(&primary).join(".git/worktrees").join(name);
     // The recorded gitdir names where the worktree now stands.
     std::fs::write(
         git_dir.join("gitdir"),
         format!("{}\n", worktree.join(".git").display()).as_bytes(),
     )
     .unwrap();
-    std::fs::write(
-        worktree.join(".git"),
-        format!("gitdir: {}\n", git_dir.display()).as_bytes(),
-    )
-    .unwrap();
+    std::fs::write(worktree.join(".git"), format!("gitdir: {}\n", git_dir.display()).as_bytes())
+        .unwrap();
     (primary.join(".git"), git_dir)
 }
 
@@ -498,8 +483,7 @@ pub(super) fn run_watching(
     task: AgentTaskRequest,
     sink: Arc<CollectedActivity>,
 ) -> Result<AgentExecution, AgentExecutionError> {
-    let executor = AgentCliExecutor::new(runtime)
-        .with_session_state_root(harness.sessions_root());
+    let executor = AgentCliExecutor::new(runtime).with_session_state_root(harness.sessions_root());
     block_on(executor.execute_agent_cli(
         &Silent,
         &harness.context(),
@@ -509,6 +493,7 @@ pub(super) fn run_watching(
             task,
             cancellation: CancellationToken::new(),
             activity: Some(sink),
+            durable_output: None,
             supplementary_mount: None,
         },
     ))

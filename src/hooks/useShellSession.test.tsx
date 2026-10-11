@@ -271,12 +271,11 @@ describe("useShellSession settings windows (SWN-FR-01, SWN-FR-13, SWN-FR-18)", (
     // tab of the main viewport, so the strip is exactly as it was.
     expect(result.current.tabs.map((t) => t.id)).toEqual(before);
     expect(invokeMock).toHaveBeenCalledWith("open_settings_window", {
-      kind: "global",
       section: null,
     });
   });
 
-  it("opens the Project settings window and adds no tab either", () => {
+  it("SWN-FR-01, SWN-FR-18: asks for the same one window whichever group it opens on, and adds no tab", () => {
     const { result } = renderHook(() => useShellSession());
     const before = result.current.tabs.map((t) => t.id);
 
@@ -284,26 +283,29 @@ describe("useShellSession settings windows (SWN-FR-01, SWN-FR-13, SWN-FR-18)", (
 
     expect(result.current.tabs.map((t) => t.id)).toEqual(before);
     expect(invokeMock).toHaveBeenCalledWith("open_settings_window", {
-      kind: "project",
       section: null,
     });
   });
 
   // SWN-FR-13: a route that names a section carries it through, so the window
   // it opens (or focuses) presents that section.
-  it("carries a named section to the window it asks for", () => {
+  it("SWN-FR-13, SWN-FR-HZWD: carries a named section, with its scope, to the window it asks for", () => {
     const { result } = renderHook(() => useShellSession());
 
     act(() => result.current.openGlobalSettings("agents:agent-1"));
     expect(invokeMock).toHaveBeenCalledWith("open_settings_window", {
-      kind: "global",
-      section: "agents:agent-1",
+      section: "global/agents:agent-1",
     });
 
-    act(() => result.current.openSettings("agents"));
+    act(() => result.current.openProjectSettings("agents"));
     expect(invokeMock).toHaveBeenCalledWith("open_settings_window", {
-      kind: "project",
-      section: "agents",
+      section: "project/agents",
+    });
+
+    // A section address handed over whole is carried as it is (SWN-FR-HZWD).
+    act(() => result.current.openSettings("project/graduation"));
+    expect(invokeMock).toHaveBeenCalledWith("open_settings_window", {
+      section: "project/graduation",
     });
   });
 
@@ -327,7 +329,7 @@ describe("useShellSession settings windows (SWN-FR-01, SWN-FR-13, SWN-FR-18)", (
     expect(result.current.tabs.map((t) => t.id)).toEqual(before);
   });
 
-  // SWN-FR-05 through SWN-FR-07: which window ends up on screen is one decision
+  // SWN-FR-05, SWN-FR-06: which window ends up on screen is one decision
   // and it is the backend's. This side asks every time and arbitrates nothing —
   // a second request is a second ask, not a no-op computed here.
   it("asks again rather than deciding for itself when asked twice", () => {

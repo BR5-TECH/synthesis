@@ -52,18 +52,12 @@ fn agent_runs_order_by_updated_at_most_recent_first_and_cap_at_five() {
     // Each row carries the run's persisted state, stage and condition —
     // nothing here derives any of them.
     assert_eq!(items[0].state, crate::graduation::GraduationRunState::Queued);
-    assert_eq!(
-        items[0].stage,
-        crate::graduation::observability::GraduationVisualStage::Queued
-    );
+    assert_eq!(items[0].stage, crate::graduation::observability::GraduationVisualStage::Queued);
     assert_eq!(
         items[0].stage_condition,
         crate::graduation::observability::GraduationStageCondition::Waiting
     );
-    assert_eq!(
-        items[1].state,
-        crate::graduation::GraduationRunState::Working
-    );
+    assert_eq!(items[1].state, crate::graduation::GraduationRunState::Working);
 }
 
 #[test]
@@ -75,10 +69,7 @@ fn agent_runs_break_a_tie_on_the_run_id_ascending() {
     let first = agent_runs_from(&runs, &HashMap::new());
     let second = agent_runs_from(&runs, &HashMap::new());
     assert_eq!(first, second, "the order is total, so it repeats");
-    assert_eq!(
-        first.iter().map(|i| i.run_id.as_str()).collect::<Vec<_>>(),
-        vec!["r-a", "r-b"],
-    );
+    assert_eq!(first.iter().map(|i| i.run_id.as_str()).collect::<Vec<_>>(), vec!["r-a", "r-b"],);
 }
 
 // PST-FR-33: a position is a position in ONE stream's queue. Runs of two
@@ -95,7 +86,7 @@ fn a_queue_place_is_counted_within_the_runs_own_stream() {
     let mut a2 = queued_run("r-a2", "d3", "2026-05-15T10:00:00Z");
     a2.stream_id = "w-a".into();
     a2.stream_name = "editor work".into();
-    let items = agent_runs_from(&vec![a1, b1, a2], &HashMap::new());
+    let items = agent_runs_from(&[a1, b1, a2], &HashMap::new());
 
     let item = |id: &str| items.iter().find(|i| i.run_id == id).unwrap();
     assert_eq!(item("r-a1").queue_position, Some(0));
@@ -156,9 +147,7 @@ fn only_a_queued_run_carries_its_place_in_the_queue() {
     ];
     let items = agent_runs_from(&runs, &HashMap::new());
 
-    let position = |id: &str| {
-        items.iter().find(|i| i.run_id == id).unwrap().queue_position
-    };
+    let position = |id: &str| items.iter().find(|i| i.run_id == id).unwrap().queue_position;
     assert_eq!(position("r-a"), None, "a running run holds no queue place");
     assert_eq!(position("r-b"), Some(0), "its index in the queue, not in this list");
     assert_eq!(position("r-c"), Some(1));

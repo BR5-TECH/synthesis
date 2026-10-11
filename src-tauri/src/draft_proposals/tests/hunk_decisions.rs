@@ -226,10 +226,24 @@ fn two_windows_accepting_two_changes_at_once_both_land() {
 
     std::thread::scope(|scope| {
         scope.spawn(|| {
-            let _ = decide(&app, root, root, id, Decision::Accept, Some(&a), None, &human());
+            let _ = decide(
+                &app,
+                root,
+                root,
+                id,
+                Verdict { decision: Decision::Accept, hunk: Some(&a), feedback: None },
+                &human(),
+            );
         });
         scope.spawn(|| {
-            let _ = decide(&app, root, root, id, Decision::Accept, Some(&b), None, &human());
+            let _ = decide(
+                &app,
+                root,
+                root,
+                id,
+                Verdict { decision: Decision::Accept, hunk: Some(&b), feedback: None },
+                &human(),
+            );
         });
     });
 

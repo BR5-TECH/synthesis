@@ -9,6 +9,7 @@ import type {
   PullRequestSummary,
   PullRequestTimeline,
 } from "../types";
+import type { PullRequestSource } from "./CreatePullRequest/types";
 import {
   FULL_TIMELINE,
   deferred,
@@ -53,6 +54,34 @@ beforeEach(() => {
         return { tokenId: "t1", resolution: "bound" };
       case "get_upstream_sync_state":
         return { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0 };
+      case "list_worktrees_and_branches":
+        return {
+          repositoryRoot: "/repo",
+          activeWorktreePath: "/repo",
+          worktrees: [
+            {
+              path: "/repo",
+              name: "repo",
+              branch: "feature",
+              headShortHash: "abc1234",
+              isDetached: false,
+              isActive: true,
+              isPrimary: true,
+              isMissing: false,
+            },
+          ],
+          branches: [],
+        };
+      case "get_pull_request_head_state":
+        return {
+          head: "feature",
+          base: "main",
+          hasRemote: true,
+          remoteBranchExists: true,
+          unpushed: 0,
+          uncommittedPaths: [],
+          aheadOfBase: 2,
+        };
       default:
         return undefined;
     }
@@ -64,12 +93,16 @@ afterEach(cleanup);
 const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd);
 const rows = () => screen.getAllByTestId("git-pr-row");
 
-const openPrs = async (token?: () => Promise<boolean>) => {
+const openPrs = async (
+  token?: () => Promise<boolean>,
+  onCreatePullRequest?: (source: PullRequestSource) => void,
+) => {
   render(
     <Git
       onSwitchWorktree={vi.fn(async () => ({ ok: true as const }))}
       canCheckOutBranches
       onRequestGithubToken={token}
+      onCreatePullRequest={onCreatePullRequest}
     />,
   );
   await userEvent.click(screen.getByRole("tab", { name: "PRs" }));
@@ -110,10 +143,51 @@ describe("the pull request list (GIT-FR-OBZW)", () => {
     expect(
       create.compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("GIT-FR-05, GIT-FR-GZUM, CPR-FR-FDVO: Create PR for current branch opens the shared window with the current branch as head and the default branch as base", async () => {
+    const onCreate = vi.fn();
+    await openPrs(undefined, onCreate);
+    const create = screen.getByTestId("git-create-pr");
+    await waitFor(() => expect(create).toHaveAttribute("data-state", "available"));
     await userEvent.click(create);
-    expect(await screen.findByTestId("git-auth-note-prs")).toHaveTextContent(
-      "not wired to a remote",
+
+    expect(onCreate).toHaveBeenCalledWith({
+      head: "feature",
+      base: "main",
+      title: "feature",
+    });
+    // The panel invokes neither creation operation itself (GIT-FR-GZUM).
+    expect(calls("create_pull_request")).toHaveLength(0);
+    expect(calls("get_project_github_token_binding")).toHaveLength(0);
+  });
+
+  it("GIT-FR-05, CHG-FR-UCRL: the button is unavailable, says why, and opens nothing while the branch holds no commit of its own", async () => {
+    const previous = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation(async (cmd: string, args: Record<string, unknown>) =>
+      cmd === "get_pull_request_head_state"
+        ? {
+            head: "feature",
+            base: "main",
+            hasRemote: true,
+            remoteBranchExists: false,
+            unpushed: null,
+            uncommittedPaths: [],
+            aheadOfBase: 0,
+          }
+        : previous(cmd, args),
     );
+    const onCreate = vi.fn();
+    await openPrs(undefined, onCreate);
+    const create = screen.getByTestId("git-create-pr");
+    await waitFor(() =>
+      expect(create).toHaveAccessibleDescription(
+        "This branch has no commit of its own yet.",
+      ),
+    );
+    expect(create).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(create);
+    expect(onCreate).not.toHaveBeenCalled();
   });
 
   it("GIT-FR-OBZW: shows loading, empty and failure states in words, with a retry", async () => {

@@ -6,7 +6,8 @@
 
 use super::*;
 use crate::git::pull_requests::client::{
-    classify, GithubFailure, GithubPullRequests, HttpGithubPullRequests, API, MAX_PAGES, PAGE_SIZE,
+    classify, GithubFailure, GithubPullRequests, GithubWriteFailure, HttpGithubPullRequests, API,
+    MAX_PAGES, PAGE_SIZE,
 };
 use crate::git::pull_requests::{
     ERR_GITHUB_TOKEN_REJECTED, ERR_INVALID_PULL_REQUEST_STATE, ERR_NOT_A_GITHUB_REMOTE,
@@ -30,6 +31,8 @@ pub(super) const PLATFORM: &str = "https://github.com/acme/platform.git";
 pub(super) struct FakeGithub {
     answers: Mutex<HashMap<String, Result<Value, GithubFailure>>>,
     requests: Mutex<Vec<(String, String)>>,
+    posts: Mutex<Vec<(String, String, Value)>>,
+    post_answer: Mutex<Option<Result<Value, GithubWriteFailure>>>,
 }
 
 impl FakeGithub {
@@ -54,23 +57,35 @@ impl FakeGithub {
         self.requests.lock().unwrap().clone()
     }
 
+    /// Answer the next writes with `answer`.
+    pub(super) fn answer_post(&self, answer: Result<Value, GithubWriteFailure>) {
+        *self.post_answer.lock().unwrap() = Some(answer);
+    }
+
+    /// Every `(secret, path, body)` this fake was asked to write, in order.
+    pub(super) fn posts(&self) -> Vec<(String, String, Value)> {
+        self.posts.lock().unwrap().clone()
+    }
+
     pub(super) fn paths(&self) -> Vec<String> {
         self.requests().into_iter().map(|(_, path)| path).collect()
     }
 }
 
 impl GithubPullRequests for FakeGithub {
+    fn post_json(
+        &self,
+        secret: &str,
+        path: &str,
+        body: &Value,
+    ) -> Result<Value, GithubWriteFailure> {
+        self.posts.lock().unwrap().push((secret.to_string(), path.to_string(), body.clone()));
+        self.post_answer.lock().unwrap().clone().unwrap_or(Err(GithubWriteFailure::Unreachable))
+    }
+
     fn get_json(&self, secret: &str, path: &str) -> Result<Value, GithubFailure> {
-        self.requests
-            .lock()
-            .unwrap()
-            .push((secret.to_string(), path.to_string()));
-        self.answers
-            .lock()
-            .unwrap()
-            .get(path)
-            .cloned()
-            .unwrap_or(Err(GithubFailure::Unreachable))
+        self.requests.lock().unwrap().push((secret.to_string(), path.to_string()));
+        self.answers.lock().unwrap().get(path).cloned().unwrap_or(Err(GithubFailure::Unreachable))
     }
 }
 
@@ -97,7 +112,7 @@ impl SecretStore for FixedSecret {
 struct NoVerifier;
 
 impl GithubVerifier for NoVerifier {
-    fn verify(&self, _secret: &str) -> Result<VerifiedIdentity, VerifyError> {
+    fn verify(&self, _host: &str, _secret: &str) -> Result<VerifiedIdentity, VerifyError> {
         Err(VerifyError::Unreachable("not used".into()))
     }
 }
@@ -113,13 +128,25 @@ pub(super) fn token_ready() -> (GlobalSettingsStore, GithubTokens) {
     (store, GithubTokens::new(Box::new(FixedSecret), Box::new(NoVerifier)))
 }
 
+/// A project that resolves one stored token of `host` to `SECRET`.
+pub(super) fn token_on(host: &str) -> (GlobalSettingsStore, GithubTokens) {
+    let store = GlobalSettingsStore::in_memory();
+    let mut stored = record("a");
+    stored.host = host.to_string();
+    store.save_github_token_registry(vec![stored]).unwrap();
+    (store, GithubTokens::new(Box::new(FixedSecret), Box::new(NoVerifier)))
+}
+
 /// A project that stores no token at all.
-fn token_missing() -> (GlobalSettingsStore, GithubTokens) {
-    (GlobalSettingsStore::in_memory(), GithubTokens::new(Box::new(FixedSecret), Box::new(NoVerifier)))
+pub(super) fn token_missing() -> (GlobalSettingsStore, GithubTokens) {
+    (
+        GlobalSettingsStore::in_memory(),
+        GithubTokens::new(Box::new(FixedSecret), Box::new(NoVerifier)),
+    )
 }
 
 /// A project that stores two tokens and has chosen neither.
-fn token_selection_required() -> (GlobalSettingsStore, GithubTokens) {
+pub(super) fn token_selection_required() -> (GlobalSettingsStore, GithubTokens) {
     let store = GlobalSettingsStore::in_memory();
     store.save_github_token_registry(vec![record("a"), record("b")]).unwrap();
     (store, GithubTokens::new(Box::new(FixedSecret), Box::new(NoVerifier)))
@@ -163,7 +190,18 @@ fn list(
     state: &str,
 ) -> Result<Vec<PullRequestSummary>, String> {
     list_pull_requests_reported(
-        &NullSink, buffer, &f.root(), &tokens.0, &tokens.1, "/dev/acme", github, state,
+        &NullSink,
+        buffer,
+        &PullRequestAccess {
+            project: GithubAccess {
+                root: &f.root(),
+                store: &tokens.0,
+                tokens: &tokens.1,
+                project_key: "/dev/acme",
+            },
+            client: github,
+        },
+        state,
     )
 }
 
@@ -175,7 +213,18 @@ fn detail(
     id: u64,
 ) -> Result<PullRequestDetail, String> {
     get_pull_request_detail_reported(
-        &NullSink, buffer, &f.root(), &tokens.0, &tokens.1, "/dev/acme", github, id,
+        &NullSink,
+        buffer,
+        &PullRequestAccess {
+            project: GithubAccess {
+                root: &f.root(),
+                store: &tokens.0,
+                tokens: &tokens.1,
+                project_key: "/dev/acme",
+            },
+            client: github,
+        },
+        id,
     )
 }
 
@@ -399,7 +448,18 @@ fn a_project_with_no_resolvable_token_makes_no_request() {
         assert_eq!(detail(&f, &github, tokens, buffer, 3).unwrap_err(), *expected);
         assert_eq!(
             list_pull_request_timeline_reported(
-                &NullSink, buffer, &f.root(), &tokens.0, &tokens.1, "/dev/acme", &github, 3,
+                &NullSink,
+                buffer,
+                &PullRequestAccess {
+                    project: GithubAccess {
+                        root: &f.root(),
+                        store: &tokens.0,
+                        tokens: &tokens.1,
+                        project_key: "/dev/acme"
+                    },
+                    client: &github
+                },
+                3,
             )
             .unwrap_err(),
             *expected
@@ -444,7 +504,9 @@ fn the_detail_carries_the_header_fields_and_the_description_as_written() {
     assert_eq!(got.closed_at.as_deref(), Some("2024-04-01T10:00:00Z"));
     assert_eq!(got.merged_at.as_deref(), Some("2024-04-01T10:00:00Z"));
     let wire = serde_json::to_value(&got).unwrap();
-    for key in ["isDraft", "headBranch", "baseBranch", "createdAt", "updatedAt", "closedAt", "mergedAt"] {
+    for key in
+        ["isDraft", "headBranch", "baseBranch", "createdAt", "updatedAt", "closedAt", "mergedAt"]
+    {
         assert!(wire.get(key).is_some(), "the contract field {key} is present");
     }
 }
@@ -522,22 +584,10 @@ fn the_production_client_reads_only_api_github_com_and_maps_statuses_to_fixed_fa
         HttpGithubPullRequests.get_json(SECRET, "@evil.example/x").unwrap_err(),
         GithubFailure::Unreachable
     );
-    assert_eq!(
-        classify(&ureq::Error::StatusCode(401)),
-        GithubFailure::Rejected
-    );
-    assert_eq!(
-        classify(&ureq::Error::StatusCode(403)),
-        GithubFailure::Rejected
-    );
-    assert_eq!(
-        classify(&ureq::Error::StatusCode(404)),
-        GithubFailure::NotFound
-    );
-    assert_eq!(
-        classify(&ureq::Error::StatusCode(500)),
-        GithubFailure::Unreachable
-    );
+    assert_eq!(classify(&ureq::Error::StatusCode(401)), GithubFailure::Rejected);
+    assert_eq!(classify(&ureq::Error::StatusCode(403)), GithubFailure::Rejected);
+    assert_eq!(classify(&ureq::Error::StatusCode(404)), GithubFailure::NotFound);
+    assert_eq!(classify(&ureq::Error::StatusCode(500)), GithubFailure::Unreachable);
 }
 
 // GTC-FR-DWVY, GTC-FR-11, GTC-FR-09
@@ -551,9 +601,9 @@ fn no_secret_reaches_a_returned_error_a_payload_or_the_log_buffer() {
     github.answer("/repos/acme/platform/pulls/2", Err(GithubFailure::Unreachable));
     github.answer("/repos/acme/platform/pulls/3", Err(GithubFailure::NotFound));
 
-    let mut returned = vec![
-        serde_json::to_string(&list(&f, &github, &token_ready(), buffer, "open").unwrap()).unwrap(),
-    ];
+    let mut returned =
+        vec![serde_json::to_string(&list(&f, &github, &token_ready(), buffer, "open").unwrap())
+            .unwrap()];
     for id in 1..=3 {
         returned.push(detail(&f, &github, &token_ready(), buffer, id).unwrap_err());
     }

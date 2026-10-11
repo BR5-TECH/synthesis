@@ -91,7 +91,7 @@ const row = async () => within(await openMenu()).getByTestId("stream-row-w1");
 /** Open the confirmation and take the route that leaves the result uncommitted. */
 const startUncommitted = async () => {
   const r = await row();
-  await userEvent.click(within(r).getByRole("button", { name: "Merge…" }));
+  await userEvent.click(within(r).getByRole("button", { name: "Merge stream" }));
   await userEvent.click(within(r).getByRole("button", { name: "Leave uncommitted" }));
   return r;
 };
@@ -251,7 +251,7 @@ describe("the answer of a call that settled (WSS-FR-KMHD, WSS-FR-PLVE)", () => {
     const r = await startUncommitted();
     await within(r).findByTestId("stream-merge-result-w1");
 
-    await userEvent.click(within(r).getByRole("button", { name: "Merge…" }));
+    await userEvent.click(within(r).getByRole("button", { name: "Merge stream" }));
     await userEvent.click(within(r).getByRole("button", { name: "Leave uncommitted" }));
     // The second call was refused, so the first answer is gone and the refusal
     // stands in its place.
@@ -387,7 +387,7 @@ describe("the stream's merge run (WSS-FR-OFCU, WSS-FR-DTYB, WSS-FR-RJTN, WSS-FR-
     expect(within(r).queryByRole("button", { name: /Continue/ })).toBeNull();
   });
 
-  it("WSS-FR-GBWE: a failed run says neither branch was written, points to Runs, and keeps Merge… offered", async () => {
+  it("WSS-FR-GBWE: a failed run says neither branch was written, points to Runs, and keeps Merge stream offered", async () => {
     const { r } = await withRun("failed");
     expect(r.textContent).toMatch(/Merge editor work failed/);
     expect(r.textContent).toMatch(/Neither branch was written/);
@@ -411,7 +411,7 @@ describe("the stream's merge run (WSS-FR-OFCU, WSS-FR-DTYB, WSS-FR-RJTN, WSS-FR-
     "blocked",
     "interrupted",
     "awaiting_author",
-  ])("WSS-FR-XRHT: Merge… and Update… are disabled while the merge run is %s", async (state) => {
+  ])("WSS-FR-XRHT: Merge stream and Update stream are disabled while the merge run is %s", async (state) => {
     // A stream the run holds is busy, which hides the action row; one it does
     // not hold (queued, interrupted, awaiting the author) shows both disabled.
     backend([
@@ -549,7 +549,7 @@ describe("the commit route and the typed refusals (WSS-FR-TQBN, WSS-FR-NPXC, WSS
     backend([summary({}, { aheadOfBase: 2 })], () => mergedResult({ commit: "a".repeat(40) }));
     renderSelector({ onRequestMergeCommit: vi.fn(async () => "merge the specs") });
     const r = await row();
-    await userEvent.click(within(r).getByRole("button", { name: "Merge…" }));
+    await userEvent.click(within(r).getByRole("button", { name: "Merge stream" }));
     await userEvent.click(within(r).getByRole("button", { name: "Commit…" }));
 
     await waitFor(() => expect(calls("merge_work_stream")).toHaveLength(1));
@@ -563,7 +563,7 @@ describe("the commit route and the typed refusals (WSS-FR-TQBN, WSS-FR-NPXC, WSS
     backend([summary({}, { aheadOfBase: 2 })]);
     renderSelector({ onRequestMergeCommit: vi.fn(async () => null) });
     const r = await row();
-    await userEvent.click(within(r).getByRole("button", { name: "Merge…" }));
+    await userEvent.click(within(r).getByRole("button", { name: "Merge stream" }));
     await userEvent.click(within(r).getByRole("button", { name: "Commit…" }));
 
     await waitFor(() => expect(screen.queryByTestId("stream-menu")).toBeNull());

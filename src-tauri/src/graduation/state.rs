@@ -70,10 +70,7 @@ impl Default for GraduationState {
 impl GraduationState {
     /// A state whose store stands under a root the caller names.
     pub fn rooted_at(root: PathBuf) -> Self {
-        Self {
-            root: Mutex::new(Some(root)),
-            ..Default::default()
-        }
+        Self { root: Mutex::new(Some(root)), ..Default::default() }
     }
 
     /// Whether a run may be dispatched at all.
@@ -85,8 +82,7 @@ impl GraduationState {
     /// hand uses this so no loop starts underneath it.
     #[cfg(test)]
     pub(crate) fn set_loop_enabled(&self, enabled: bool) {
-        self.loop_enabled
-            .store(enabled, std::sync::atomic::Ordering::SeqCst);
+        self.loop_enabled.store(enabled, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// The store root this state reads and writes under.
@@ -111,19 +107,46 @@ impl GraduationState {
     }
 
     /// GRD-FR-BNTC, GRD-FR-KKKN: claim a queue and a project slot for a run,
-    /// atomically.
-    ///
-    /// Refuses when the queue's stream or worktree already holds a run, when
-    /// this run already holds another queue, and when the project's limit has no
-    /// free slot. A limit lowered below the slots held refuses every claim until
-    /// enough are released (GRD-FR-IJKV). A refused claim changes nothing.
-    /// `direct` marks a run that works directly in a worktree (WTC-FR-FBJQ).
+    /// atomically, where the stored runs hold no slot.
     pub fn claim(
         &self,
         stream_id: &str,
         run_id: &str,
         direct: bool,
         limit: crate::project_settings::GraduationConcurrency,
+        cancellation: CancellationToken,
+    ) -> bool {
+        self.claim_with_holders(
+            stream_id,
+            run_id,
+            direct,
+            limit,
+            &std::collections::BTreeSet::new(),
+            cancellation,
+        )
+    }
+
+    /// GRD-FR-BNTC, GRD-FR-KKKN: claim a queue and a project slot for a run,
+    /// atomically.
+    ///
+    /// `holders` names the runs the stored records say hold a project slot. A
+    /// run at rest holds one as a run at work does, so the count is the claims of
+    /// this process together with those stored holders no claim names.
+    ///
+    /// Refuses when the queue's stream or worktree already holds a run, when
+    /// this run already holds another queue, and when the project's limit has no
+    /// free slot for a run that holds none. A run that already holds its slot
+    /// takes no new claim on the limit (GRD-FR-KKKN), so a limit lowered below
+    /// the slots held refuses the claims of other runs until enough are released
+    /// (GRD-FR-IJKV). A refused claim changes nothing. `direct` marks a run that
+    /// works directly in a worktree (WTC-FR-FBJQ).
+    pub fn claim_with_holders(
+        &self,
+        stream_id: &str,
+        run_id: &str,
+        direct: bool,
+        limit: crate::project_settings::GraduationConcurrency,
+        holders: &std::collections::BTreeSet<String>,
         cancellation: CancellationToken,
     ) -> bool {
         let Ok(mut running) = self.running.lock() else {
@@ -135,17 +158,13 @@ impl GraduationState {
         if running.values().any(|held| held.run_id == run_id) {
             return false;
         }
-        if !limit.permits(running.len()) {
+        let holds_already = holders.contains(run_id);
+        if !holds_already && !limit.permits(Self::slots_among(&running, holders)) {
             return false;
         }
         running.insert(
             stream_id.to_string(),
-            RunningRun {
-                run_id: run_id.to_string(),
-                cancellation,
-                stopped_because: None,
-                direct,
-            },
+            RunningRun { run_id: run_id.to_string(), cancellation, stopped_because: None, direct },
         );
         true
     }
@@ -156,10 +175,7 @@ impl GraduationState {
     /// dispatched, which the run order index does not yet show.
     pub fn direct_claim(&self) -> Option<String> {
         self.running.lock().ok().and_then(|running| {
-            running
-                .values()
-                .find(|held| held.direct)
-                .map(|held| held.run_id.clone())
+            running.values().find(|held| held.direct).map(|held| held.run_id.clone())
         })
     }
 
@@ -170,12 +186,19 @@ impl GraduationState {
         }
     }
 
+    /// Release a stream where this run is the one that holds the claim on it, so
+    /// a loop that is ending never drops the claim of another run.
+    pub fn release_run(&self, stream_id: &str, run_id: &str) {
+        if let Ok(mut running) = self.running.lock() {
+            if running.get(stream_id).is_some_and(|held| held.run_id == run_id) {
+                running.remove(stream_id);
+            }
+        }
+    }
+
     /// The run holding a stream right now.
     pub fn holder_of(&self, stream_id: &str) -> Option<String> {
-        self.running
-            .lock()
-            .ok()
-            .and_then(|r| r.get(stream_id).map(|held| held.run_id.clone()))
+        self.running.lock().ok().and_then(|r| r.get(stream_id).map(|held| held.run_id.clone()))
     }
 
     /// GRD-FR-XVUD: whether a loop of this process is behind the named run.
@@ -183,10 +206,7 @@ impl GraduationState {
     /// A run the store holds as working that this answers `false` for was held
     /// when the application stopped.
     pub fn is_driving(&self, run_id: &str) -> bool {
-        self.running
-            .lock()
-            .map(|r| r.values().any(|held| held.run_id == run_id))
-            .unwrap_or(false)
+        self.running.lock().map(|r| r.values().any(|held| held.run_id == run_id)).unwrap_or(false)
     }
 
     /// A loop of this process begins driving a run.
@@ -204,10 +224,8 @@ impl GraduationState {
         run_id: &str,
         register: impl FnOnce() -> Option<crate::progress::OperationId>,
     ) -> bool {
-        let mut operations = self
-            .operations
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut operations =
+            self.operations.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         if operations.contains_key(run_id) {
             return false;
         }
@@ -222,10 +240,7 @@ impl GraduationState {
 
     /// GRD-FR-ZHNV: take the run's operation, so it is ended exactly once.
     pub(super) fn take_operation(&self, run_id: &str) -> Option<crate::progress::OperationId> {
-        self.operations
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .remove(run_id)
+        self.operations.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).remove(run_id)
     }
 
     /// The loop of this process has returned from a run.
@@ -238,15 +253,32 @@ impl GraduationState {
     /// Whether a loop of this process is still inside the named run, whether or
     /// not it still holds the run's claim.
     pub fn is_looping(&self, run_id: &str) -> bool {
-        self.loops
-            .lock()
-            .map(|loops| loops.contains(run_id))
-            .unwrap_or(false)
+        self.loops.lock().map(|loops| loops.contains(run_id)).unwrap_or(false)
     }
 
-    /// GRD-FR-KKKN: how many project slots are held.
+    /// How many runs of this process hold a claim right now.
     pub fn working_count(&self) -> usize {
         self.running.lock().map(|r| r.len()).unwrap_or(0)
+    }
+
+    /// GRD-FR-KKKN: how many project slots are held, given the runs the stored
+    /// records say hold one.
+    pub fn slots_in_use(&self, holders: &std::collections::BTreeSet<String>) -> usize {
+        self.running
+            .lock()
+            .map(|running| Self::slots_among(&running, holders))
+            .unwrap_or(holders.len())
+    }
+
+    /// The claims of this process together with the stored holders no claim
+    /// names.
+    fn slots_among(
+        running: &BTreeMap<String, RunningRun>,
+        holders: &std::collections::BTreeSet<String>,
+    ) -> usize {
+        let unclaimed =
+            holders.iter().filter(|id| !running.values().any(|held| &held.run_id == *id)).count();
+        running.len() + unclaimed
     }
 
     /// GRD-FR-MDQZ: stop the turn one run is making, and say why.

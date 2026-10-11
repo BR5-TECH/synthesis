@@ -18,11 +18,7 @@ const ORIGINAL_TEXT: &str = "# Spec\n\nThe original three paragraphs.\n";
 const PROPOSED: &str = "# Spec\n\nA better opening.\n";
 
 fn human() -> Participant {
-    Participant::Human {
-        login: "raver119".into(),
-        display_name: None,
-        email: None,
-    }
+    Participant::Human { login: "raver119".into(), display_name: None, email: None }
 }
 
 fn agent() -> Participant {
@@ -58,27 +54,20 @@ impl Fixture {
         let mut parent = String::new();
         for segment in folder.split('/').filter(|s| !s.is_empty()) {
             drafts::create_drafts_folder_impl(&root, &parent, segment).expect("drafts folder");
-            parent = if parent.is_empty() {
-                segment.to_string()
-            } else {
-                format!("{parent}/{segment}")
-            };
+            parent =
+                if parent.is_empty() { segment.to_string() } else { format!("{parent}/{segment}") };
         }
-        let created =
-            drafts::create_draft_impl(&root, Some("spec"), Some(folder)).expect("draft");
+        let created = drafts::create_draft_impl(&root, Some("spec"), Some(folder)).expect("draft");
         let draft_id = created.draft.id.clone();
         assert_eq!(created.file, FILE);
         let thread = cms::open_discussion_in(
             &root,
             &root,
-            &DiscussionTarget::Draft {
-                draft_id: draft_id.clone(),
-            },
+            &DiscussionTarget::Draft { draft_id: draft_id.clone() },
             None,
             "@arch what would you change?".into(),
             Vec::new(),
-            &human(),
-            "2026-01-01T00:00:00Z",
+            cms::Stamp { by: &human(), at: "2026-01-01T00:00:00Z" },
         )
         .expect("discussion");
         Fixture {
@@ -103,9 +92,7 @@ impl Fixture {
     }
 
     fn prompt(&self) -> String {
-        drafts::load_draft_file_impl(&self.root, &self.draft_id, FILE)
-            .expect("prompt")
-            .body
+        drafts::load_draft_file_impl(&self.root, &self.draft_id, FILE).expect("prompt").body
     }
 
     fn write_prompt(&self, body: &str) {
@@ -207,7 +194,6 @@ impl Fixture {
     }
 }
 
-
 /// Leave the draft in exactly the state a process killed at `phase` leaves it.
 ///
 /// The staging itself lives beside the transaction it replays, so the two never
@@ -216,8 +202,7 @@ impl Fixture {
 /// produces.
 fn interrupt(f: &Fixture, proposal: &dcp::DraftChangeProposal, phase: Phase) -> Journal {
     let prior = f.prompt();
-    stage_for_test(&f.root, &f.draft_id, proposal, &prior, &human(), phase)
-        .expect("staged")
+    stage_for_test(&f.root, &f.draft_id, proposal, &prior, &human(), phase).expect("staged")
 }
 
 /// What `list_draft_history` does once its root is resolved (DHS-FR-18): the

@@ -19,12 +19,7 @@ pub fn list_integrations_impl(
     ai: &AgenticIntegrations,
 ) -> Result<Vec<AgenticIntegration>, String> {
     let (records, active) = store.load_agentic_registry()?;
-    Ok(integrations_from(
-        &records,
-        active.as_deref(),
-        &*ai.probe,
-        &vendor_presence(&*ai.secrets),
-    ))
+    Ok(integrations_from(&records, active.as_deref(), &*ai.probe, &vendor_presence(&*ai.secrets)))
 }
 
 /// AIC-FR-03: locate a candidate binary. Persists nothing, executes nothing, and
@@ -40,9 +35,7 @@ pub fn detect_binary_impl(
     let path_var = std::env::var("PATH").ok();
     let home = dirs::home_dir();
     let dirs = detection_directories(path_var.as_deref(), home.as_deref());
-    Ok(DetectedBinary {
-        path: detect_in(&dirs, descriptor.executable_names, &*ai.probe),
-    })
+    Ok(DetectedBinary { path: detect_in(&dirs, descriptor.executable_names, &*ai.probe) })
 }
 
 /// What a successful verification of either kind produced, before it is written.
@@ -80,10 +73,8 @@ pub(super) fn verify_cli(
         return Err(ERR_NOT_EXECUTABLE.into());
     }
 
-    let output = ai
-        .runner
-        .run(&binary, descriptor.version_args, VERIFY_TIMEOUT)
-        .map_err(|e| match e {
+    let output =
+        ai.runner.run(&binary, descriptor.version_args, VERIFY_TIMEOUT).map_err(|e| match e {
             RunError::NotFound => ERR_NOT_FOUND.to_string(),
             RunError::NotExecutable => ERR_NOT_EXECUTABLE.to_string(),
             RunError::TimedOut => ERR_TIMED_OUT.to_string(),
@@ -235,6 +226,18 @@ pub(super) fn resolve_supplied_token(
     }
 }
 
+/// AIC-FR-UFNB: does the payload carry a field of Claude Code's gateway shape?
+fn carries_gateway_fields(config: &VerifyConfig) -> bool {
+    config.gateway_base_url.is_some()
+        || config.gateway_token_var.is_some()
+        || config.gateway_token.is_some()
+}
+
+/// AIC-FR-25: does the payload carry a field that only Claude Code has?
+fn carries_claude_only_fields(config: &VerifyConfig) -> bool {
+    config.auth_mode.is_some() || carries_gateway_fields(config) || config.env_vars.is_some()
+}
+
 /// AIC-FR-06: a successful verification of either kind is what commits a
 /// configuration. A failure persists nothing.
 pub fn verify_integration_impl(
@@ -249,22 +252,72 @@ pub fn verify_integration_impl(
     // accepts. Refusing the wrong shape rather than ignoring the surplus field
     // is what keeps a UI bug from silently verifying against a stale value — and
     // what stops a credential meant for one vendor from being handed to another.
+    let mut mode = AuthMode::Subscription;
+    let mut gateway: Option<GatewayPlan> = None;
     let (verified, supplied_token) = match descriptor.kind {
         VendorKind::Cli => {
             if config.base_url.is_some() || config.api_key.is_some() {
                 return Err(ERR_WRONG_CONFIG_KIND.into());
             }
-            // Everything about the token is settled before the binary runs, so a
-            // value that is not a token costs neither a process spawn nor a
-            // keychain round trip (AIC-FR-27).
-            let supplied = resolve_supplied_token(ai, descriptor, config.oauth_token.as_deref())?;
-            (
-                verify_cli(ai, descriptor, config.path.as_deref().unwrap_or(""))?,
-                supplied,
-            )
+            let claude = descriptor.requires_oauth_token();
+            if !claude && carries_claude_only_fields(config) {
+                return Err(ERR_WRONG_CONFIG_KIND.into());
+            }
+            if claude {
+                // AIC-FR-WNQR / AIC-FR-UFNB: the mode names the shape, and a
+                // field of the other shape is refused rather than ignored.
+                mode = match config.auth_mode.as_deref() {
+                    None => AuthMode::Subscription,
+                    Some(raw) => AuthMode::parse(raw).ok_or(ERR_WRONG_CONFIG_KIND)?,
+                };
+                match mode {
+                    AuthMode::Subscription => {
+                        if carries_gateway_fields(config) {
+                            return Err(ERR_WRONG_CONFIG_KIND.into());
+                        }
+                    }
+                    AuthMode::CustomGateway => {
+                        if config.oauth_token.is_some() {
+                            return Err(ERR_WRONG_CONFIG_KIND.into());
+                        }
+                        gateway = Some(plan_gateway(ai, config)?);
+                    }
+                }
+                if let Some(entries) = config.env_vars.as_deref() {
+                    validate_env_vars(entries)?;
+                }
+            }
+            if gateway.is_some() {
+                // AIC-FR-QHLN: every turn runs Claude Code inside Docker, so a
+                // gateway verification runs no host binary and asks nothing of
+                // the gateway. The stored path is kept as it is.
+                (
+                    VerifiedConfig {
+                        binary_path: None,
+                        path_origin: PathOrigin::Unset,
+                        base_url: None,
+                        api_key: None,
+                        masked_hint: None,
+                        version: None,
+                        models: catalog_models(descriptor),
+                        models_origin: ModelsOrigin::Catalog,
+                    },
+                    None,
+                )
+            } else {
+                // Everything about the token is settled before the binary runs,
+                // so a value that is not a token costs neither a process spawn
+                // nor a keychain round trip (AIC-FR-27).
+                let supplied =
+                    resolve_supplied_token(ai, descriptor, config.oauth_token.as_deref())?;
+                (verify_cli(ai, descriptor, config.path.as_deref().unwrap_or(""))?, supplied)
+            }
         }
         VendorKind::Api => {
-            if config.path.is_some() || config.oauth_token.is_some() {
+            if config.path.is_some()
+                || config.oauth_token.is_some()
+                || carries_claude_only_fields(config)
+            {
                 return Err(ERR_WRONG_CONFIG_KIND.into());
             }
             (
@@ -279,10 +332,7 @@ pub fn verify_integration_impl(
         }
     };
 
-    let _guard = ai
-        .write_lock
-        .lock()
-        .map_err(|e| format!("agentic registry poisoned: {e}"))?;
+    let _guard = ai.write_lock.lock().map_err(|e| format!("agentic registry poisoned: {e}"))?;
 
     // AIC-FR-06 / AIC-FR-20: the credential reaches the keychain before the
     // registry is touched, so a keychain that refuses cannot leave behind a
@@ -304,18 +354,21 @@ pub fn verify_integration_impl(
     // still there until the new one lands and there is no observable moment
     // holding both or neither.
     match (descriptor.kind, verified.api_key.as_deref()) {
-        (VendorKind::Api, Some(key)) => ai
-            .secrets
-            .set(vendor, key)
-            .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?,
-        (VendorKind::Api, None) => ai
-            .secrets
-            .delete(vendor)
-            .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?,
+        (VendorKind::Api, Some(key)) => {
+            ai.secrets.set(vendor, key).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
+        }
+        (VendorKind::Api, None) => {
+            ai.secrets.delete(vendor).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
+        }
         (VendorKind::Cli, _) => {
             if let Some(token) = supplied_token.as_deref() {
+                ai.secrets.set(vendor, token).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
+            }
+            // AIC-FR-YXAB: the gateway token has a vault entry of its own, and
+            // a subscription verification never reaches it.
+            if let Some(token) = gateway.as_ref().and_then(|g| g.supplied_token.as_deref()) {
                 ai.secrets
-                    .set(vendor, token)
+                    .set(GATEWAY_SECRET_ID, token)
                     .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
             }
         }
@@ -331,8 +384,11 @@ pub fn verify_integration_impl(
     };
     {
         let record = &mut records[index];
-        record.binary_path = verified.binary_path;
-        record.path_origin = verified.path_origin;
+        // AIC-FR-QHLN: a gateway verification keeps the stored path.
+        if gateway.is_none() {
+            record.binary_path = verified.binary_path;
+            record.path_origin = verified.path_origin;
+        }
         record.base_url = verified.base_url;
         // A new token brings a new hint; a verification that kept the stored
         // token keeps the hint describing it, because the hint describes what is
@@ -341,6 +397,20 @@ pub fn verify_integration_impl(
             Some(token) => record.masked_hint = Some(mask_hint(token)),
             None if descriptor.requires_oauth_token() => {}
             None => record.masked_hint = verified.masked_hint,
+        }
+        if descriptor.requires_oauth_token() {
+            // AIC-FR-WNQR / AIC-FR-YXAB / AIC-FR-SXVA.
+            record.auth_mode = mode;
+            if let Some(plan) = gateway.as_ref() {
+                record.gateway_base_url = Some(plan.base_url.clone());
+                record.gateway_token_var = Some(plan.token_var.clone());
+                if let Some(token) = plan.supplied_token.as_deref() {
+                    record.gateway_masked_hint = gateway_hint(token);
+                }
+            }
+            if let Some(entries) = config.env_vars.as_ref() {
+                record.env_vars = entries.clone();
+            }
         }
         record.version = verified.version;
         record.verified_at = Some(now_iso8601());
@@ -366,12 +436,7 @@ pub fn verify_integration_impl(
     }
 
     store.save_agentic_registry(records.clone(), active.clone())?;
-    integrations_from(
-        &records,
-        active.as_deref(),
-        &*ai.probe,
-        &vendor_presence(&*ai.secrets),
-    )
+    integrations_from(&records, active.as_deref(), &*ai.probe, &vendor_presence(&*ai.secrets))
         .into_iter()
         .find(|i| i.vendor == vendor)
         .ok_or_else(|| ERR_UNKNOWN_VENDOR.to_string())
@@ -388,10 +453,7 @@ where
     F: FnOnce(&mut AgenticRecord) -> Result<(), String>,
 {
     vendor_descriptor(vendor).ok_or(ERR_UNKNOWN_VENDOR)?;
-    let _guard = ai
-        .write_lock
-        .lock()
-        .map_err(|e| format!("agentic registry poisoned: {e}"))?;
+    let _guard = ai.write_lock.lock().map_err(|e| format!("agentic registry poisoned: {e}"))?;
     let (mut records, active) = store.load_agentic_registry()?;
     let index = match records.iter().position(|r| r.vendor == vendor) {
         Some(i) => i,
@@ -402,12 +464,7 @@ where
     };
     apply(&mut records[index])?;
     store.save_agentic_registry(records.clone(), active.clone())?;
-    integrations_from(
-        &records,
-        active.as_deref(),
-        &*ai.probe,
-        &vendor_presence(&*ai.secrets),
-    )
+    integrations_from(&records, active.as_deref(), &*ai.probe, &vendor_presence(&*ai.secrets))
         .into_iter()
         .find(|i| i.vendor == vendor)
         .ok_or_else(|| ERR_UNKNOWN_VENDOR.to_string())
@@ -533,10 +590,7 @@ pub fn set_active_impl(
     vendor: &str,
 ) -> Result<Vec<AgenticIntegration>, String> {
     let descriptor = vendor_descriptor(vendor).ok_or(ERR_UNKNOWN_VENDOR)?;
-    let _guard = ai
-        .write_lock
-        .lock()
-        .map_err(|e| format!("agentic registry poisoned: {e}"))?;
+    let _guard = ai.write_lock.lock().map_err(|e| format!("agentic registry poisoned: {e}"))?;
     let (records, _) = store.load_agentic_registry()?;
     let present = vendor_presence(&*ai.secrets);
     let verified = records.iter().any(|r| {
@@ -552,8 +606,8 @@ pub fn set_active_impl(
 }
 
 /// AIC-FR-14: return a vendor to `unconfigured`, deleting the keychain entry of
-/// every vendor that holds one — an API-kind vendor's key or Claude Code's OAuth
-/// token — as part of the same operation. Idempotent. A cleared vendor that was
+/// every vendor that holds one — an API-kind vendor's key or both of Claude
+/// Code's tokens — as part of the same operation. Idempotent. A cleared vendor that was
 /// active leaves nothing active; a project override naming it is left recorded
 /// and stops resolving.
 pub fn clear_integration_impl(
@@ -562,19 +616,18 @@ pub fn clear_integration_impl(
     vendor: &str,
 ) -> Result<Vec<AgenticIntegration>, String> {
     let descriptor = vendor_descriptor(vendor).ok_or(ERR_UNKNOWN_VENDOR)?;
-    let _guard = ai
-        .write_lock
-        .lock()
-        .map_err(|e| format!("agentic registry poisoned: {e}"))?;
+    let _guard = ai.write_lock.lock().map_err(|e| format!("agentic registry poisoned: {e}"))?;
     // The delete comes first, for the same reason the write does in
     // verification: a keychain that refuses must leave the registry untouched
     // rather than dropping the record and stranding the credential (AIC-FR-24).
     // `delete` succeeds on an entry that is not there, which is what makes
     // clearing idempotent.
     if descriptor.holds_credential() {
-        ai.secrets
-            .delete(vendor)
-            .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
+        ai.secrets.delete(vendor).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
+    }
+    // AIC-FR-14: Claude Code's gateway token goes with its OAuth token.
+    if descriptor.requires_oauth_token() {
+        ai.secrets.delete(GATEWAY_SECRET_ID).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
     }
     let (mut records, active) = store.load_agentic_registry()?;
     records.retain(|r| r.vendor != vendor);
@@ -583,12 +636,7 @@ pub fn clear_integration_impl(
         other => other,
     };
     store.save_agentic_registry(records.clone(), active.clone())?;
-    Ok(integrations_from(
-        &records,
-        active.as_deref(),
-        &*ai.probe,
-        &vendor_presence(&*ai.secrets),
-    ))
+    Ok(integrations_from(&records, active.as_deref(), &*ai.probe, &vendor_presence(&*ai.secrets)))
 }
 
 /// AIC-FR-32: one migration candidate per vendor that holds a credential.
@@ -623,11 +671,8 @@ pub fn get_project_impl(
     // An empty key is "no project open" (`ProjectState::slot_key`), whose slot is
     // the shared default one — an override read from there would belong to no
     // project in particular.
-    let override_vendor = if project_key.is_empty() {
-        None
-    } else {
-        store.load_agentic_override(project_key)?
-    };
+    let override_vendor =
+        if project_key.is_empty() { None } else { store.load_agentic_override(project_key)? };
     Ok(resolve_project(
         &records,
         active.as_deref(),
@@ -697,18 +742,19 @@ pub fn resolve_agentic_invocation(
     };
     let descriptor = vendor_descriptor(&vendor).ok_or(ERR_NONE_SELECTED)?;
     let (records, _) = store.load_agentic_registry()?;
-    let record = records
-        .iter()
-        .find(|r| r.vendor == vendor)
-        .ok_or(ERR_NONE_SELECTED)?;
+    let record = records.iter().find(|r| r.vendor == vendor).ok_or(ERR_NONE_SELECTED)?;
 
     match descriptor.kind {
         VendorKind::Cli => {
-            let binary_path = record
-                .binary_path
-                .clone()
-                .filter(|p| !p.is_empty())
-                .ok_or(ERR_NONE_SELECTED)?;
+            // AIC-FR-30 / AIC-FR-QHLN: the executor never runs the stored path,
+            // so Claude Code in gateway mode resolves with none.
+            let gateway_mode =
+                descriptor.requires_oauth_token() && record.auth_mode == AuthMode::CustomGateway;
+            let binary_path = if gateway_mode {
+                String::new()
+            } else {
+                record.binary_path.clone().filter(|p| !p.is_empty()).ok_or(ERR_NONE_SELECTED)?
+            };
             // AIC-FR-29: a CLI invocation is a path, a model, and an effort. No
             // token is read here and none is carried out — Claude Code's stored
             // token is stored and nothing more, and transporting it to a
@@ -722,17 +768,12 @@ pub fn resolve_agentic_invocation(
             })
         }
         VendorKind::Api => {
-            let base_url = record
-                .base_url
-                .clone()
-                .filter(|u| !u.is_empty())
-                .ok_or(ERR_NONE_SELECTED)?;
+            let base_url =
+                record.base_url.clone().filter(|u| !u.is_empty()).ok_or(ERR_NONE_SELECTED)?;
             // The one place a key is read back out, and only for a caller that
             // is about to present it to the endpoint it belongs to.
             let api_key = if record.masked_hint.is_some() {
-                ai.secrets
-                    .get(&vendor)
-                    .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
+                ai.secrets.get(&vendor).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
             } else {
                 None
             };
@@ -746,4 +787,3 @@ pub fn resolve_agentic_invocation(
         }
     }
 }
-

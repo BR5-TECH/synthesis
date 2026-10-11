@@ -43,7 +43,8 @@ fn a_project_below_the_repo_root_compares_branches_within_the_project() {
     f.write("outside.md", "o\nalso feature\n");
     f.commit("E");
 
-    let set = branch_change_set(&crate::fs::RootFs::for_root(f.root().join("proj")), &main).unwrap();
+    let set =
+        branch_change_set(&crate::fs::RootFs::for_root(f.root().join("proj")), &main).unwrap();
     assert_eq!(
         paths(&set),
         vec!["a.md".to_string()],

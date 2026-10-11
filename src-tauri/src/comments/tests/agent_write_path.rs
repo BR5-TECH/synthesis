@@ -16,19 +16,9 @@ fn a_lock_refuses_an_agent_exactly_as_it_refuses_a_person() {
         "@arch can you tighten this?",
         "2026-01-01T00:00:00Z",
     );
-    set_lock_in(
-        root,
-        "specs/a.md",
-        &t.id,
-        true,
-        &human("ada"),
-        "2026-01-01T00:00:01Z",
-    )
-    .unwrap();
-    let lines_while_locked = std::fs::read_to_string(log_path(root, "specs/a.md").unwrap())
-        .unwrap()
-        .lines()
-        .count();
+    set_lock_in(root, "specs/a.md", &t.id, true, &human("ada"), "2026-01-01T00:00:01Z").unwrap();
+    let lines_while_locked =
+        std::fs::read_to_string(log_path(root, "specs/a.md").unwrap()).unwrap().lines().count();
 
     assert_eq!(
         append_agent_comment(
@@ -44,24 +34,13 @@ fn a_lock_refuses_an_agent_exactly_as_it_refuses_a_person() {
         ERR_DISCUSSION_LOCKED,
     );
     assert_eq!(
-        std::fs::read_to_string(log_path(root, "specs/a.md").unwrap())
-            .unwrap()
-            .lines()
-            .count(),
+        std::fs::read_to_string(log_path(root, "specs/a.md").unwrap()).unwrap().lines().count(),
         lines_while_locked,
         "a refused agent write gains the log no line",
     );
 
     // Unlocked, the same call appends one ordinary comment.
-    set_lock_in(
-        root,
-        "specs/a.md",
-        &t.id,
-        false,
-        &human("ada"),
-        "2026-01-01T00:00:03Z",
-    )
-    .unwrap();
+    set_lock_in(root, "specs/a.md", &t.id, false, &human("ada"), "2026-01-01T00:00:03Z").unwrap();
     let updated = append_agent_comment(
         root,
         LogScope::Artifact,
@@ -75,9 +54,7 @@ fn a_lock_refuses_an_agent_exactly_as_it_refuses_a_person() {
     assert_eq!(updated.comments.len(), 2);
     assert_eq!(updated.comments[1].body, "Shortened to two lines.");
     match &updated.comments[1].author {
-        Participant::Agent {
-            agent_id, handle, ..
-        } => {
+        Participant::Agent { agent_id, handle, .. } => {
             assert_eq!(agent_id, "a1");
             assert_eq!(handle, "arch");
         }
@@ -87,8 +64,7 @@ fn a_lock_refuses_an_agent_exactly_as_it_refuses_a_person() {
     // fields: a reader of the raw log can tell who appended it only from the
     // participant already stamped in `by`.
     let raw = std::fs::read_to_string(log_path(root, "specs/a.md").unwrap()).unwrap();
-    let last: serde_json::Value =
-        serde_json::from_str(raw.lines().last().unwrap()).unwrap();
+    let last: serde_json::Value = serde_json::from_str(raw.lines().last().unwrap()).unwrap();
     assert_eq!(last["type"], "comment_added");
     assert_eq!(last["by"]["kind"], "agent");
     assert!(last.get("isAgent").is_none());
@@ -102,19 +78,14 @@ fn a_draft_scoped_agent_comment_lands_in_the_store_under_the_drafts_id() {
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
     crate::drafts::create_drafts_folder_impl(root, "", "UI").unwrap();
-    let draft = crate::drafts::create_draft_impl(root, Some("spec"), Some("UI"))
-        .unwrap()
-        .draft;
+    let draft = crate::drafts::create_draft_impl(root, Some("spec"), Some("UI")).unwrap().draft;
     let draft_id = draft.id.as_str();
     let file_rel = "ui/spec.md";
     let log_dir = draft_comments_dir(root, draft_id).unwrap();
     // Pinned to the literal path, not just to whatever the resolver returns:
     // seeding and reading back through one function would pass whatever it
     // said, the bug included.
-    assert_eq!(
-        log_dir,
-        root.join("drafts").join(draft_id).join("comments"),
-    );
+    assert_eq!(log_dir, root.join("drafts").join(draft_id).join("comments"),);
     assert!(
         !root.join(DRAFTS_REL).join("UI").join(draft_id).join("comments").exists(),
         "and nothing sits inside the draft's own folder",
@@ -154,18 +125,11 @@ fn a_draft_scoped_agent_comment_lands_in_the_store_under_the_drafts_id() {
         !root.join(COMMENTS_REL).exists(),
         "nothing was written into the committed comments folder",
     );
-    let draft_target = DiscussionTarget::Draft {
-        draft_id: draft_id.to_string(),
-    };
-    assert_eq!(
-        locate_discussion_of(root, &draft_target, "t1").unwrap().fragment_path(),
-        file_rel,
-    );
+    let draft_target = DiscussionTarget::Draft { draft_id: draft_id.to_string() };
+    assert_eq!(locate_discussion_of(root, &draft_target, "t1").unwrap().fragment_path(), file_rel,);
     // CMS-FR-VJRP: nothing under the drafts root was written by this module,
     // the log standing outside the worktree altogether.
-    assert!(
-        !root.join(DRAFTS_REL).join("UI").join(draft_id).join("comments").exists(),
-    );
+    assert!(!root.join(DRAFTS_REL).join("UI").join(draft_id).join("comments").exists(),);
 }
 
 #[test]
@@ -174,19 +138,11 @@ fn a_thread_is_locatable_by_its_id_alone_in_both_scopes() {
     // conversation, not the file it is anchored in.
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
-    let t = open(
-        root,
-        "specs/a.md",
-        anchor(0, 3, "abc"),
-        "hello",
-        "2026-01-01T00:00:00Z",
-    );
+    let t = open(root, "specs/a.md", anchor(0, 3, "abc"), "hello", "2026-01-01T00:00:00Z");
     let found = read_discussion_by_id(root, root, &t.id).unwrap();
     assert_eq!(found.artifact_id(), Some("specs/a.md"));
     assert_eq!(found.id, t.id);
     assert!(read_discussion_by_id(root, root, "no-such-thread").is_none());
-    let draft_target = DiscussionTarget::Draft {
-        draft_id: "d1".to_string(),
-    };
+    let draft_target = DiscussionTarget::Draft { draft_id: "d1".to_string() };
     assert!(locate_discussion_of(root, &draft_target, &t.id).is_none());
 }

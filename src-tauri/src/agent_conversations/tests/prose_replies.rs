@@ -9,7 +9,7 @@ use super::super::prose_tool_calls::tool_written_as_prose;
 
 fn tool(name: &str, parameters: serde_json::Value) -> rig::completion::ToolDefinition {
     rig::completion::ToolDefinition {
-        name: name.into(),
+        name: rig::completion::message::ToolName::new(name).expect("a tool name"),
         description: String::new(),
         parameters,
     }
@@ -45,7 +45,8 @@ fn tools() -> Vec<rig::completion::ToolDefinition> {
     ]
 }
 
-const QUESTIONS: &str = r#"{"questions":[{"question":"One spec or two?","options":["one","two"]}]}"#;
+const QUESTIONS: &str =
+    r#"{"questions":[{"question":"One spec or two?","options":["one","two"]}]}"#;
 
 // CVL-FR-JPHT: a question set written out, bare or in one enclosing fence, is
 // the questions tool's call.
@@ -101,10 +102,7 @@ fn an_envelope_that_names_nothing_attached_is_not_recognised() {
 fn an_object_is_recognised_only_where_it_fits_a_schema() {
     let tools = tools();
     assert_eq!(tool_written_as_prose(r#"{"path":"x"}"#, &tools), Some("read_file"));
-    assert_eq!(
-        tool_written_as_prose(r#"{"query":"x"}"#, &tools),
-        Some("search_specifications"),
-    );
+    assert_eq!(tool_written_as_prose(r#"{"query":"x"}"#, &tools), Some("search_specifications"),);
     // An empty schema requiring nothing fits the empty object alone.
     assert_eq!(tool_written_as_prose("{}", &tools), Some("list_skills"));
     for text in [r#"{"path":"x","line":3}"#, r#"{"limit":5}"#, r#"{"timeout":30}"#] {
@@ -149,11 +147,7 @@ fn run_discussion(h: &Harness) -> (AgentTurn, String, Discussion) {
     h.create_agent("arch", "");
     let (draft_id, thread) = seed_discussion(h, &["@arch what would you change?"]);
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     (wait_for_terminal(h, &turn.id), draft_id, thread)
 }
@@ -227,9 +221,7 @@ fn a_tool_call_written_as_prose_on_every_attempt_ends_as_an_empty_reply() {
 #[test]
 fn a_tool_call_followed_by_a_citation_marker_is_still_recognised() {
     let h = Harness::scripted(vec![
-        Ok(ScriptedReply::answer(format!(
-            "{QUESTIONS}\u{E200}cite\u{E202}turn0search1\u{E201}"
-        ))),
+        Ok(ScriptedReply::answer(format!("{QUESTIONS}\u{E200}cite\u{E202}turn0search1\u{E201}"))),
         Ok(asks_questions()),
     ]);
     let (turn, _, _) = run_discussion(&h);
@@ -250,11 +242,9 @@ fn the_same_text_is_an_answer_where_the_questions_tool_is_not_attached() {
     assert_eq!(h.seam.call_count(), 1);
     let folded = folded(&h, "spec.md", &thread.id);
     assert_eq!(folded.comments.last().expect("answer").body, QUESTIONS);
-    assert!(
-        records_where("turnId", &turn.id)
-            .iter()
-            .all(|r| r.message != "agent wrote a tool call as prose"),
-    );
+    assert!(records_where("turnId", &turn.id)
+        .iter()
+        .all(|r| r.message != "agent wrote a tool call as prose"),);
 }
 
 // CVL-FR-12: prose that only holds JSON, or is JSON fitting no schema, is the

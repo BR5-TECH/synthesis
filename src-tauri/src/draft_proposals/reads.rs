@@ -14,7 +14,10 @@ use super::*;
 ///
 /// Reads records and never a `.content` file, so a draft carrying a long history
 /// of proposals costs a list no more than a draft carrying one.
-pub fn list_proposals_impl(root: &fs::RootFs, draft_id: &str) -> Result<Vec<DraftChangeProposal>, String> {
+pub fn list_proposals_impl(
+    root: &fs::RootFs,
+    draft_id: &str,
+) -> Result<Vec<DraftChangeProposal>, String> {
     // A draft that is not there is told apart from one holding no proposals: the
     // first is a caller error and the second is an ordinary empty list.
     drafts::read_draft_record(root, draft_id).map_err(|_| ERR_DRAFT_NOT_FOUND.to_string())?;
@@ -50,7 +53,10 @@ pub fn list_proposals_impl(root: &fs::RootFs, draft_id: &str) -> Result<Vec<Draf
 ///
 /// A proposal id alone is what a surface holds after reading a comment's
 /// attachment, so the lookup cannot require the draft as well.
-pub fn find_proposal(root: &fs::RootFs, proposal_id: &str) -> Option<(String, DraftChangeProposal)> {
+pub fn find_proposal(
+    root: &fs::RootFs,
+    proposal_id: &str,
+) -> Option<(String, DraftChangeProposal)> {
     if !is_valid_proposal_id(proposal_id) {
         return None;
     }
@@ -175,19 +181,9 @@ pub fn load_hunks_impl(root: &fs::RootFs, proposal_id: &str) -> Result<ProposalH
         .unwrap_or_default();
 
     let (doc, legacy) = read_hunk_document(root, &dir, proposal_id, &prompt)?;
-    let resolutions = doc
-        .resolve_all(&prompt)
-        .into_iter()
-        .map(HunkPlacement::from)
-        .collect();
-    Ok(ProposalHunks {
-        checksum: doc.checksum(),
-        hunks: doc.hunks,
-        resolutions,
-        legacy,
-    })
+    let resolutions = doc.resolve_all(&prompt).into_iter().map(HunkPlacement::from).collect();
+    Ok(ProposalHunks { checksum: doc.checksum(), hunks: doc.hunks, resolutions, legacy })
 }
-
 
 // ---------------------------------------------------------------------------
 // The read a turn assembles its input from (DCP-FR-HNWD)

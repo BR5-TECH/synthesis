@@ -1,21 +1,21 @@
 /**
- * A counter bumped whenever the agent registry or a project's enrolment
- * changes, so every surface showing them re-reads.
+ * A counter bumped whenever a Project agent or a Personal agent changes, so
+ * every surface showing them re-reads.
  *
  * The three surfaces of `AGT-agents.md` are peers with no shared parent below
- * `App`: the chrome roster lives in the top chrome, the Agents section in a
- * Global settings window, the enrolment section in a Project settings window — and
- * two of them are routinely on screen at once. Threading a callback between
+ * `App`: the chrome roster lives in the top chrome, the Personal Agents and the
+ * Project Agents sections in the Settings window — and two of them are
+ * routinely on screen at once. Threading a callback between
  * them would put agent plumbing in every layer in between, so the invalidation
  * travels as a module-level store instead, on the same `useSyncExternalStore`
  * pattern `diffModes` uses.
  *
- * Mostly a *counter* rather than the records themselves: the settings section
- * reads the whole registry while the chrome roster reads the open project's
- * enrolment, so for those two there is nothing one could hand the other. They
- * only need to be told to ask again.
+ * Mostly a *counter* rather than the records themselves: a settings section
+ * reads the agents of its own scope while the chrome roster reads both scopes
+ * of the open project, so for those there is nothing one could hand the other.
+ * They only need to be told to ask again.
  *
- * The one exception is the **enrolment itself**, which is published here by the
+ * The one exception is the **roster itself**, which is published here by the
  * chrome control that already reads it (AGT-FR-02) and read by surfaces that
  * must not read it for themselves. The Comments panel is why: AGT-FR-29 has a
  * tag render bold wherever a message body is rendered, the panel included, but
@@ -33,8 +33,8 @@ let revision = 0;
 const subscribers = new Set<() => void>();
 
 /**
- * Called after a write lands — an agent created, edited, or deleted, or one
- * enrolled in or withdrawn from a project. Not called for a *failed* write,
+ * Called after a write lands — an agent created, edited, or deleted, in either
+ * scope. Not called for a *failed* write,
  * which changed nothing for anyone to re-read.
  */
 export function notifyAgentRegistryChanged(): void {
@@ -63,7 +63,7 @@ export function useAgentRegistryRevision(): number {
 // ---------------------------------------------------------------------------
 
 /**
- * The open project's enrolled agents as the last read saw them.
+ * The open project's roster as the last read saw it.
  *
  * A module-level snapshot rather than a fetch, because every surface reading it
  * is one the specs give no call of its own. Empty until the chrome control's read
@@ -100,6 +100,7 @@ function sameRoster(
     (entry, i) =>
       entry.agent.id === b[i].agent.id &&
       entry.agent.nickname === b[i].agent.nickname &&
+      entry.scope === b[i].scope &&
       entry.availability === b[i].availability,
   );
 }

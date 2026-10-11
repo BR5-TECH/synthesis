@@ -41,10 +41,7 @@ fn only_a_creation_a_body_rewrite_and_a_deletion_surface_on_the_channel() {
     // A body rewrite surfaces.
     update_note(
         note.id.clone(),
-        NoteFields {
-            body: Some("the second body".to_string()),
-            ..Default::default()
-        },
+        NoteFields { body: Some("the second body".to_string()), ..Default::default() },
         app.handle().clone(),
         app.state::<ProjectState>(),
     )
@@ -58,28 +55,14 @@ fn only_a_creation_a_body_rewrite_and_a_deletion_surface_on_the_channel() {
             reminder: Some(Some("2027-01-01T00:00:00Z".to_string())),
             ..Default::default()
         },
-        NoteFields {
-            reminder: Some(None),
-            ..Default::default()
-        },
-        NoteFields {
-            scope: Some(NoteScope::Project),
-            ..Default::default()
-        },
+        NoteFields { reminder: Some(None), ..Default::default() },
+        NoteFields { scope: Some(NoteScope::Project), ..Default::default() },
         // And an update whose `body` is what the note already holds is no
         // rewrite at all (NTC-FR-06).
-        NoteFields {
-            body: Some("the second body".to_string()),
-            ..Default::default()
-        },
+        NoteFields { body: Some("the second body".to_string()), ..Default::default() },
     ] {
-        update_note(
-            note.id.clone(),
-            fields,
-            app.handle().clone(),
-            app.state::<ProjectState>(),
-        )
-        .expect("the update lands");
+        update_note(note.id.clone(), fields, app.handle().clone(), app.state::<ProjectState>())
+            .expect("the update lands");
         assert_eq!(
             indexer().take_note_changes(),
             Vec::new(),
@@ -91,19 +74,13 @@ fn only_a_creation_a_body_rewrite_and_a_deletion_surface_on_the_channel() {
     update_note_in(
         &crate::fs::RootFs::for_root(dir.path()),
         &note.id,
-        NoteFields {
-            scope: Some(entity("specifications/a.md")),
-            ..Default::default()
-        },
+        NoteFields { scope: Some(entity("specifications/a.md")), ..Default::default() },
         "2026-03-03T00:00:00Z",
     )
     .unwrap();
     indexer().take_note_changes();
-    std::fs::rename(
-        dir.path().join("specifications/a.md"),
-        dir.path().join("specifications/b.md"),
-    )
-    .unwrap();
+    std::fs::rename(dir.path().join("specifications/a.md"), dir.path().join("specifications/b.md"))
+        .unwrap();
     follow_rename(
         &crate::fs::RootFs::for_root(dir.path()),
         "specifications/a.md",
@@ -117,19 +94,12 @@ fn only_a_creation_a_body_rewrite_and_a_deletion_surface_on_the_channel() {
     // thing that could have spoken.
     update_note(
         note.id.clone(),
-        NoteFields {
-            body: Some("a".repeat(MAX_NOTE_BODY_BYTES + 1)),
-            ..Default::default()
-        },
+        NoteFields { body: Some("a".repeat(MAX_NOTE_BODY_BYTES + 1)), ..Default::default() },
         app.handle().clone(),
         app.state::<ProjectState>(),
     )
     .expect_err("over the bound");
-    assert_eq!(
-        indexer().take_note_changes(),
-        Vec::new(),
-        "a refused update surfaces nothing",
-    );
+    assert_eq!(indexer().take_note_changes(), Vec::new(), "a refused update surfaces nothing",);
     create_note(
         NoteScope::Project,
         "a".repeat(MAX_NOTE_BODY_BYTES + 1),
@@ -139,18 +109,11 @@ fn only_a_creation_a_body_rewrite_and_a_deletion_surface_on_the_channel() {
         app.state::<ProjectState>(),
     )
     .expect_err("over the bound");
-    assert_eq!(
-        indexer().take_note_changes(),
-        Vec::new(),
-        "a refused creation surfaces nothing",
-    );
+    assert_eq!(indexer().take_note_changes(), Vec::new(), "a refused creation surfaces nothing",);
     // An update naming a note that does not exist likewise.
     update_note(
         "no-such-note".to_string(),
-        NoteFields {
-            body: Some("anything".to_string()),
-            ..Default::default()
-        },
+        NoteFields { body: Some("anything".to_string()), ..Default::default() },
         app.handle().clone(),
         app.state::<ProjectState>(),
     )
@@ -197,10 +160,7 @@ fn a_note_write_and_a_note_refusal_are_both_reported_without_the_body() {
     .expect("the note is created");
     update_note(
         note.id.clone(),
-        NoteFields {
-            body: Some("a".repeat(MAX_NOTE_BODY_BYTES + 1)),
-            ..Default::default()
-        },
+        NoteFields { body: Some("a".repeat(MAX_NOTE_BODY_BYTES + 1)), ..Default::default() },
         app.handle().clone(),
         app.state::<ProjectState>(),
     )
@@ -232,7 +192,9 @@ fn a_note_write_and_a_note_refusal_are_both_reported_without_the_body() {
 
     let refused = records
         .iter()
-        .find(|r| r.message == "note could not be updated" && r.fields["noteId"] == note.id.as_str())
+        .find(|r| {
+            r.message == "note could not be updated" && r.fields["noteId"] == note.id.as_str()
+        })
         .expect("a refusal is reported");
     assert_eq!(refused.level, crate::logging::LogLevel::Warn);
     assert_eq!(
@@ -297,10 +259,7 @@ fn a_note_command_answers_the_same_with_nothing_consuming_the_channel() {
     assert_eq!(
         update_note(
             note.id.clone(),
-            NoteFields {
-                body: Some("still unheard".to_string()),
-                ..Default::default()
-            },
+            NoteFields { body: Some("still unheard".to_string()), ..Default::default() },
             app.handle().clone(),
             app.state::<ProjectState>(),
         )

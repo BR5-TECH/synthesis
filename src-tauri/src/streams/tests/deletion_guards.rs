@@ -98,10 +98,7 @@ fn a_stream_with_uncommitted_paths_is_refused_with_every_path_and_nothing_is_rem
     let refusal =
         delete_work_stream(fx.app.clone(), stream.id.clone(), false, false).expect_err("refused");
 
-    assert_eq!(
-        refusal,
-        format!("{ERR_STREAM_DIRTY}: README.md, nested/deep.txt, scratch.txt")
-    );
+    assert_eq!(refusal, format!("{ERR_STREAM_DIRTY}: README.md, nested/deep.txt, scratch.txt"));
     assert_intact(&fx, &stream);
 }
 
@@ -132,10 +129,7 @@ fn discarding_uncommitted_paths_deletes_the_stream_with_them() {
     assert!(!branch_names(&fx.repo()).contains(&stream.branch));
     assert!(worktree_names(&fx.repo()).is_empty());
     assert!(!Path::new(&stream.worktree_path).exists());
-    assert_eq!(
-        get_work_stream(fx.app.clone(), stream.id).expect_err("gone"),
-        ERR_UNKNOWN_STREAM
-    );
+    assert_eq!(get_work_stream(fx.app.clone(), stream.id).expect_err("gone"), ERR_UNKNOWN_STREAM);
 }
 
 // WKS-FR-EIBC, WKS-FR-DBXN
@@ -209,8 +203,7 @@ fn the_uncommitted_paths_of_a_stream_are_the_complete_sorted_set_and_nothing_is_
     dirty(&stream, "dir/a.txt");
     let before = files_under(Path::new(&stream.worktree_path));
 
-    let paths =
-        get_work_stream_uncommitted_paths(fx.app.clone(), stream.id.clone()).expect("read");
+    let paths = get_work_stream_uncommitted_paths(fx.app.clone(), stream.id.clone()).expect("read");
 
     assert_eq!(paths, vec!["README.md", "b.txt", "dir/a.txt"]);
     assert_eq!(before, files_under(Path::new(&stream.worktree_path)));

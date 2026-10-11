@@ -12,17 +12,8 @@ fn a_followed_rename_moves_the_note_without_touching_updated_at() {
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
     touch(root, "specifications/a.md");
-    let note = create(
-        root,
-        entity("specifications/a.md"),
-        "keep me",
-        "2026-01-01T00:00:00Z",
-    );
-    std::fs::rename(
-        root.join("specifications/a.md"),
-        root.join("specifications/b.md"),
-    )
-    .unwrap();
+    let note = create(root, entity("specifications/a.md"), "keep me", "2026-01-01T00:00:00Z");
+    std::fs::rename(root.join("specifications/a.md"), root.join("specifications/b.md")).unwrap();
 
     let moved = follow_rename(root, "specifications/a.md", "specifications/b.md");
     assert_eq!(moved, 1);

@@ -26,11 +26,7 @@ fn token(id: &str, login: Option<&str>) -> GithubTokenRecord {
 fn the_local_participant_is_one_fixed_human_without_a_github_account() {
     assert_eq!(
         Participant::local_human(),
-        Participant::Human {
-            login: String::new(),
-            display_name: Some("Me".into()),
-            email: None,
-        }
+        Participant::Human { login: String::new(), display_name: Some("Me".into()), email: None }
     );
     let wire = serde_json::to_value(Participant::local_human()).unwrap();
     assert_eq!(wire["kind"], "human");
@@ -44,10 +40,7 @@ fn the_local_participant_is_one_fixed_human_without_a_github_account() {
 #[test]
 fn an_empty_token_registry_writes_as_the_local_participant() {
     let store = store_with(Vec::new());
-    assert_eq!(
-        participant_for_slot(&store, "/dev/acme").unwrap(),
-        Participant::local_human()
-    );
+    assert_eq!(participant_for_slot(&store, "/dev/acme").unwrap(), Participant::local_human());
 }
 
 // CMS-FR-12: one token keeps GitHub attribution; several tokens keep the
@@ -100,12 +93,14 @@ fn comments_and_events_stamp_the_local_participant_and_keep_saved_authors() {
         "second".into(),
         Vec::new(),
         Vec::new(),
-        &github,
-        "2026-01-01T00:00:01Z",
+        Stamp { by: &github, at: "2026-01-01T00:00:01Z" },
     )
     .unwrap();
-    let locked = set_lock_in(root, "specs/a.md", &opened.id, true, &me, "2026-01-01T00:00:02Z").unwrap();
-    let resolved = set_resolution_in(root, "specs/a.md", &opened.id, true, &me, "2026-01-01T00:00:03Z").unwrap();
+    let locked =
+        set_lock_in(root, "specs/a.md", &opened.id, true, &me, "2026-01-01T00:00:02Z").unwrap();
+    let resolved =
+        set_resolution_in(root, "specs/a.md", &opened.id, true, &me, "2026-01-01T00:00:03Z")
+            .unwrap();
 
     assert_eq!(replied.comments[0].author, me);
     assert_eq!(replied.comments[1].author, github);

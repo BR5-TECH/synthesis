@@ -27,14 +27,21 @@ export const SETTINGS_TABLIST_STYLE: Readonly<CSSProperties> = Object.freeze({
 /**
  * One tab. Pair it with `className="btn btn--ghost btn--sm"`, which is where
  * the height, the padding, and the hover come from.
+ *
+ * A tab of a vendor that is not implemented yet keeps a grayed label also while
+ * it is selected (AII-FR-OTQY, SET-FR-GVED). The underline still shows which
+ * tab is open.
  */
-export function settingsTabStyle(selected: boolean): CSSProperties {
+export function settingsTabStyle(
+  selected: boolean,
+  unimplemented = false,
+): CSSProperties {
   return {
     borderRadius: "4px 4px 0 0",
     // Pulls the tab down onto the strip's hairline so a selected underline
     // replaces it rather than stacking two lines.
     marginBottom: -1,
     borderBottom: selected ? "2px solid var(--accent)" : "2px solid transparent",
-    color: selected ? "var(--fg-1)" : undefined,
+    color: unimplemented ? "var(--fg-4)" : selected ? "var(--fg-1)" : undefined,
   };
 }

@@ -26,20 +26,14 @@ fn default_branch_prefers_the_remote_head_then_main_then_master() {
     if initial != "main" {
         f.branch("main");
     }
-    assert_eq!(
-        default_branch(&f.repo()).unwrap(),
-        "main",
-        "`main` outranks `master`"
-    );
+    assert_eq!(default_branch(&f.repo()).unwrap(), "main", "`main` outranks `master`");
 
     // (1): a remote publishing HEAD outranks both.
     {
         let repo = f.repo();
-        repo.remote("origin", "https://example.invalid/repo.git")
-            .unwrap();
+        repo.remote("origin", "https://example.invalid/repo.git").unwrap();
         let head = repo.head().unwrap().peel_to_commit().unwrap();
-        repo.reference("refs/remotes/origin/trunk", head.id(), true, "test")
-            .unwrap();
+        repo.reference("refs/remotes/origin/trunk", head.id(), true, "test").unwrap();
         repo.reference_symbolic(
             "refs/remotes/origin/HEAD",
             "refs/remotes/origin/trunk",
@@ -61,16 +55,11 @@ fn comparison_branches_flag_current_and_default() {
     f.checkout("feature/x");
 
     let options = comparison_branches(&f.root()).unwrap();
-    let feature = options
-        .iter()
-        .find(|b| b.name == "feature/x")
-        .expect("the current branch is offered");
+    let feature =
+        options.iter().find(|b| b.name == "feature/x").expect("the current branch is offered");
     assert!(feature.is_current);
     assert!(!feature.is_default);
-    let main = options
-        .iter()
-        .find(|b| b.name == "main")
-        .expect("the default branch is offered");
+    let main = options.iter().find(|b| b.name == "main").expect("the default branch is offered");
     assert!(main.is_default);
     assert!(!main.is_current);
 }
@@ -86,10 +75,8 @@ fn comparison_branches_include_remote_tracking_branches() {
         let repo = f.repo();
         repo.remote("origin", "https://example.invalid/repo.git").unwrap();
         let head = repo.head().unwrap().peel_to_commit().unwrap();
-        repo.reference("refs/remotes/origin/main", head.id(), true, "test")
-            .unwrap();
-        repo.reference("refs/remotes/origin/release", head.id(), true, "test")
-            .unwrap();
+        repo.reference("refs/remotes/origin/main", head.id(), true, "test").unwrap();
+        repo.reference("refs/remotes/origin/release", head.id(), true, "test").unwrap();
         repo.reference_symbolic(
             "refs/remotes/origin/HEAD",
             "refs/remotes/origin/main",
@@ -109,10 +96,7 @@ fn comparison_branches_include_remote_tracking_branches() {
     );
     // A remote-tracking branch is never the checked-out one.
     assert!(
-        options
-            .iter()
-            .filter(|b| b.name.starts_with("origin/"))
-            .all(|b| !b.is_current),
+        options.iter().filter(|b| b.name.starts_with("origin/")).all(|b| !b.is_current),
         "{options:?}"
     );
     // Local branches sort ahead of remote-tracking ones.
@@ -154,8 +138,7 @@ fn unknown_branch_and_no_merge_base_are_typed_errors() {
         index.write().unwrap();
         let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
         let sig = repo.signature().unwrap();
-        repo.commit(Some("HEAD"), &sig, &sig, "orphan", &tree, &[])
-            .unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "orphan", &tree, &[]).unwrap();
     }
     // Back on the original branch, compare against the unrelated orphan.
     f.checkout("orphan");

@@ -18,7 +18,7 @@ use crate::logging::{self, LogBuffer, LogLevel};
 use crate::project::ProjectState;
 use crate::worktree::WorktreeEntry;
 
-use super::history::{commits_from, summarize, ref_tips, CommitSummary};
+use super::history::{commits_from, ref_tips, summarize, CommitSummary};
 use super::*;
 
 const MSG_BRANCH_INFO_FAILED: &str = "branch information failed";
@@ -96,28 +96,17 @@ pub fn branch_information_from(
     if name.is_empty() || (branch_type == BranchType::Remote && name.ends_with("/HEAD")) {
         return Err(ERR_UNKNOWN_BRANCH.to_string());
     }
-    let branch = repo
-        .find_branch(name, branch_type)
-        .map_err(|_| ERR_UNKNOWN_BRANCH.to_string())?;
-    let tip = branch
-        .get()
-        .peel_to_commit()
-        .map_err(|_| ERR_UNKNOWN_BRANCH.to_string())?;
+    let branch = repo.find_branch(name, branch_type).map_err(|_| ERR_UNKNOWN_BRANCH.to_string())?;
+    let tip = branch.get().peel_to_commit().map_err(|_| ERR_UNKNOWN_BRANCH.to_string())?;
     let is_local = branch_type == BranchType::Local;
 
     let upstream = if is_local {
-        branch
-            .upstream()
-            .ok()
-            .and_then(|u| u.name().ok().flatten().map(str::to_string))
+        branch.upstream().ok().and_then(|u| u.name().ok().flatten().map(str::to_string))
     } else {
         None
     };
-    let holder = if is_local {
-        worktrees.iter().find(|w| w.branch.as_deref() == Some(name))
-    } else {
-        None
-    };
+    let holder =
+        if is_local { worktrees.iter().find(|w| w.branch.as_deref() == Some(name)) } else { None };
     Ok(BranchInformation {
         name: name.to_string(),
         kind: kind.to_string(),
@@ -144,10 +133,8 @@ pub fn branch_information_reported<R: tauri::Runtime>(
     let result = (|| {
         let mut worktrees = crate::worktree::context_for(root)?.worktrees;
         crate::streams::decorate_worktrees(app, &mut worktrees);
-        let stream = crate::streams::stream_on_branch(app, name.trim()).map(|s| BranchStreamRef {
-            stream_id: s.id,
-            stream_name: s.name,
-        });
+        let stream = crate::streams::stream_on_branch(app, name.trim())
+            .map(|s| BranchStreamRef { stream_id: s.id, stream_name: s.name });
         branch_information_from(root, name, kind, &worktrees, stream)
     })();
     match &result {

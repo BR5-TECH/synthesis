@@ -8,32 +8,25 @@ use super::*;
 fn aic_ts17_an_override_belongs_to_one_project() {
     let fs = FakeFs::with_executable(&["/usr/bin/claude", "/usr/bin/codex"]);
     let runner = Arc::new(FakeRunner::default());
-    for (p, banner) in [
-        ("/usr/bin/claude", "claude 2.1.4"),
-        ("/usr/bin/codex", "codex 0.4.0"),
-    ] {
+    for (p, banner) in [("/usr/bin/claude", "claude 2.1.4"), ("/usr/bin/codex", "codex 0.4.0")] {
         runner.responses.lock().unwrap().insert(
             p.into(),
-            CliOutput {
-                stdout: banner.into(),
-                stderr: String::new(),
-                success: true,
-            },
+            CliOutput { stdout: banner.into(), stderr: String::new(), success: true },
         );
     }
-    let h = harness(
-        fs,
-        runner,
-        Arc::new(FakeProber::default()),
-        FakeKeychain::new(),
-    );
-    verify_integration_impl(&h.store, &h.ai, "claude_code", &cli_config_for("claude_code", "/usr/bin/claude"))
+    let h = harness(fs, runner, Arc::new(FakeProber::default()), FakeKeychain::new());
+    verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "claude_code",
+        &cli_config_for("claude_code", "/usr/bin/claude"),
+    )
+    .unwrap();
+    verify_integration_impl(&h.store, &h.ai, "codex", &cli_config_for("codex", "/usr/bin/codex"))
         .unwrap();
-    verify_integration_impl(&h.store, &h.ai, "codex", &cli_config_for("codex", "/usr/bin/codex")).unwrap();
     set_active_impl(&h.store, &h.ai, "claude_code").unwrap();
 
-    let overridden =
-        set_project_impl(&h.store, &h.ai, "/dev/acme", Some("codex")).unwrap();
+    let overridden = set_project_impl(&h.store, &h.ai, "/dev/acme", Some("codex")).unwrap();
     assert_eq!(overridden.resolution, ProjectResolution::Overridden);
     assert_eq!(overridden.vendor.as_deref(), Some("codex"));
 
@@ -46,28 +39,22 @@ fn aic_ts17_an_override_belongs_to_one_project() {
 fn aic_ts18_a_cleared_integration_leaves_its_override_recorded_but_unresolving() {
     let fs = FakeFs::with_executable(&["/usr/bin/claude", "/usr/bin/codex"]);
     let runner = Arc::new(FakeRunner::default());
-    for (p, banner) in [
-        ("/usr/bin/claude", "claude 2.1.4"),
-        ("/usr/bin/codex", "codex 0.4.0"),
-    ] {
+    for (p, banner) in [("/usr/bin/claude", "claude 2.1.4"), ("/usr/bin/codex", "codex 0.4.0")] {
         runner.responses.lock().unwrap().insert(
             p.into(),
-            CliOutput {
-                stdout: banner.into(),
-                stderr: String::new(),
-                success: true,
-            },
+            CliOutput { stdout: banner.into(), stderr: String::new(), success: true },
         );
     }
-    let h = harness(
-        fs,
-        runner,
-        Arc::new(FakeProber::default()),
-        FakeKeychain::new(),
-    );
-    verify_integration_impl(&h.store, &h.ai, "claude_code", &cli_config_for("claude_code", "/usr/bin/claude"))
+    let h = harness(fs, runner, Arc::new(FakeProber::default()), FakeKeychain::new());
+    verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "claude_code",
+        &cli_config_for("claude_code", "/usr/bin/claude"),
+    )
+    .unwrap();
+    verify_integration_impl(&h.store, &h.ai, "codex", &cli_config_for("codex", "/usr/bin/codex"))
         .unwrap();
-    verify_integration_impl(&h.store, &h.ai, "codex", &cli_config_for("codex", "/usr/bin/codex")).unwrap();
     set_active_impl(&h.store, &h.ai, "claude_code").unwrap();
     set_project_impl(&h.store, &h.ai, "/dev/acme", Some("codex")).unwrap();
 
@@ -91,8 +78,13 @@ fn aic_ts19_an_override_may_only_name_a_verified_integration() {
         Arc::new(FakeProber::default()),
         FakeKeychain::new(),
     );
-    verify_integration_impl(&h.store, &h.ai, "claude_code", &cli_config_for("claude_code", "/usr/bin/claude"))
-        .unwrap();
+    verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "claude_code",
+        &cli_config_for("claude_code", "/usr/bin/claude"),
+    )
+    .unwrap();
 
     assert_eq!(
         set_project_impl(&h.store, &h.ai, "/dev/acme", Some("codex")).unwrap_err(),
@@ -132,28 +124,22 @@ fn aic_ts20_an_override_is_one_fact_for_the_project_across_worktrees() {
     // what this pins is that the module never takes a worktree into account.
     let fs = FakeFs::with_executable(&["/usr/bin/claude", "/usr/bin/codex"]);
     let runner = Arc::new(FakeRunner::default());
-    for (p, banner) in [
-        ("/usr/bin/claude", "claude 2.1.4"),
-        ("/usr/bin/codex", "codex 0.4.0"),
-    ] {
+    for (p, banner) in [("/usr/bin/claude", "claude 2.1.4"), ("/usr/bin/codex", "codex 0.4.0")] {
         runner.responses.lock().unwrap().insert(
             p.into(),
-            CliOutput {
-                stdout: banner.into(),
-                stderr: String::new(),
-                success: true,
-            },
+            CliOutput { stdout: banner.into(), stderr: String::new(), success: true },
         );
     }
-    let h = harness(
-        fs,
-        runner,
-        Arc::new(FakeProber::default()),
-        FakeKeychain::new(),
-    );
-    verify_integration_impl(&h.store, &h.ai, "claude_code", &cli_config_for("claude_code", "/usr/bin/claude"))
+    let h = harness(fs, runner, Arc::new(FakeProber::default()), FakeKeychain::new());
+    verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "claude_code",
+        &cli_config_for("claude_code", "/usr/bin/claude"),
+    )
+    .unwrap();
+    verify_integration_impl(&h.store, &h.ai, "codex", &cli_config_for("codex", "/usr/bin/codex"))
         .unwrap();
-    verify_integration_impl(&h.store, &h.ai, "codex", &cli_config_for("codex", "/usr/bin/codex")).unwrap();
     set_active_impl(&h.store, &h.ai, "claude_code").unwrap();
     set_project_impl(&h.store, &h.ai, "/dev/acme", Some("codex")).unwrap();
 
@@ -177,8 +163,13 @@ fn an_explicit_choice_that_degrades_resolves_to_nothing_rather_than_falling_back
         FakeProber::returning(&[("claude-opus-5", "Claude Opus 5")]),
         FakeKeychain::new(),
     );
-    verify_integration_impl(&h.store, &h.ai, "claude_code", &cli_config_for("claude_code", "/usr/bin/claude"))
-        .unwrap();
+    verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "claude_code",
+        &cli_config_for("claude_code", "/usr/bin/claude"),
+    )
+    .unwrap();
     verify_integration_impl(
         &h.store,
         &h.ai,
@@ -230,14 +221,8 @@ fn a_key_required_api_agent_with_no_key_is_never_verified() {
         )
         .unwrap();
     let list = list_integrations_impl(&h.store, &h.ai).unwrap();
-    assert_eq!(
-        find(&list, "claude_agent_api").state,
-        IntegrationState::KeyUnavailable
-    );
-    assert_eq!(
-        set_active_impl(&h.store, &h.ai, "claude_agent_api").unwrap_err(),
-        ERR_NOT_VERIFIED
-    );
+    assert_eq!(find(&list, "claude_agent_api").state, IntegrationState::KeyUnavailable);
+    assert_eq!(set_active_impl(&h.store, &h.ai, "claude_agent_api").unwrap_err(), ERR_NOT_VERIFIED);
 
     // `custom_agent_api`'s key is optional, so the same shape is verified.
     let h2 = harness(
@@ -258,8 +243,5 @@ fn a_key_required_api_agent_with_no_key_is_never_verified() {
         )
         .unwrap();
     let list = list_integrations_impl(&h2.store, &h2.ai).unwrap();
-    assert_eq!(
-        find(&list, "custom_agent_api").state,
-        IntegrationState::Verified
-    );
+    assert_eq!(find(&list, "custom_agent_api").state, IntegrationState::Verified);
 }

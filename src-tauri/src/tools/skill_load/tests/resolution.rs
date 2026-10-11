@@ -22,11 +22,8 @@ fn the_only_file_read_is_one_the_registry_named() {
     std::fs::write(dir.path().join(".env"), "API_KEY=hunter2\n").unwrap();
     // A decoy *inside the skill's own folder*: the file an implementation that
     // walked the folder, or read a sibling alongside SKILL.md, would pick up.
-    std::fs::write(
-        dir.path().join(".claude/skills/analyst/NOTES.md"),
-        "DECOY SIBLING CONTENT\n",
-    )
-    .unwrap();
+    std::fs::write(dir.path().join(".claude/skills/analyst/NOTES.md"), "DECOY SIBLING CONTENT\n")
+        .unwrap();
     let fixture = mounted(dir);
 
     let loaded = call(&fixture, "analyst", None).unwrap();
@@ -69,15 +66,9 @@ fn the_module_enumerates_no_folder_of_its_own() {
         .collect::<Vec<_>>()
         .join("\n");
 
-    for forbidden in [
-        "read_dir",
-        "list_dir",
-        "SKILL_FOLDERS",
-        "SKILL_FILE",
-        "enumerate(",
-        "WalkDir",
-        "glob",
-    ] {
+    for forbidden in
+        ["read_dir", "list_dir", "SKILL_FOLDERS", "SKILL_FILE", "enumerate(", "WalkDir", "glob"]
+    {
         assert!(
             !code.contains(forbidden),
             "LSK-FR-03: skill_load must not discover paths itself, found {forbidden:?}",
@@ -190,17 +181,12 @@ fn a_name_is_matched_trimmed_and_without_regard_to_case() {
     let fixture = mounted(dir);
 
     for spelling in ["Analyst", "analyst", "  Analyst  ", "ANALYST", "aNaLySt"] {
-        assert!(
-            call(&fixture, spelling, None)
-                .unwrap_or_else(|e| panic!("LSK-FR-05: {spelling:?} must resolve, got {e:?}"))
-                .contains("The analyst body"),
-        );
+        assert!(call(&fixture, spelling, None)
+            .unwrap_or_else(|e| panic!("LSK-FR-05: {spelling:?} must resolve, got {e:?}"))
+            .contains("The analyst body"),);
     }
     // Not so forgiving that a different name resolves.
-    assert_eq!(
-        call(&fixture, "analysts", None).unwrap_err(),
-        ToolRefusal::SkillNotFound,
-    );
+    assert_eq!(call(&fixture, "analysts", None).unwrap_err(), ToolRefusal::SkillNotFound,);
 }
 
 // ---------------------------------------------------------------------------
@@ -259,9 +245,7 @@ fn the_ecosystem_argument_narrows_and_an_unknown_value_narrows_to_nothing() {
         );
     }
     // Spelled as the model was told, whatever the casing.
-    assert!(call(&fixture, "review", Some("Claude"))
-        .unwrap()
-        .contains("claude copy"));
+    assert!(call(&fixture, "review", Some("Claude")).unwrap().contains("claude copy"));
 }
 
 #[test]
@@ -298,10 +282,7 @@ fn a_unique_name_with_no_ecosystem_returns_that_skills_instructions() {
     let body = call(&fixture, "analyst", None).unwrap();
     // Equality, not `contains`: the whole body, and nothing from the three
     // `review` skills sitting beside it in the same project.
-    assert_eq!(
-        body,
-        "\n# Analyst\n\nFirst line of the analyst body.\n\nSecond paragraph.\n",
-    );
+    assert_eq!(body, "\n# Analyst\n\nFirst line of the analyst body.\n\nSecond paragraph.\n",);
 }
 
 // ---------------------------------------------------------------------------
@@ -339,11 +320,7 @@ fn an_ambiguous_name_refuses_naming_the_ecosystems_and_never_picks_one() {
 
     assert_eq!(
         refusal,
-        ToolRefusal::SkillAmbiguous(vec![
-            Ecosystem::Claude,
-            Ecosystem::Codex,
-            Ecosystem::Opencode
-        ]),
+        ToolRefusal::SkillAmbiguous(vec![Ecosystem::Claude, Ecosystem::Codex, Ecosystem::Opencode]),
         "LSK-FR-10: the tool never picks one",
     );
     let error = refusal.to_execution_error();
@@ -418,4 +395,3 @@ fn a_name_two_skills_in_one_ecosystem_share_is_refused_as_unresolvable() {
         ToolRefusal::SkillAmbiguous(_),
     ));
 }
-

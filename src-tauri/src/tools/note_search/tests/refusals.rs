@@ -17,7 +17,8 @@ fn a_hit_whose_note_no_longer_resolves_is_omitted_silently() {
     fixture.reindex();
     assert_eq!(fixture.search("teardown", Some(20)).len(), 3);
 
-    crate::notes::delete_note_in(&fixture.root(), &fixture.root(), &deleted).expect("the deletion lands");
+    crate::notes::delete_note_in(&fixture.root(), &fixture.root(), &deleted)
+        .expect("the deletion lands");
     // Made unreadable in place, so the index still holds its document.
     std::fs::write(
         fixture.root().join(format!(".synthesis/notes/{damaged}.toml")),
@@ -28,10 +29,9 @@ fn a_hit_whose_note_no_longer_resolves_is_omitted_silently() {
     let matches = fixture.search("teardown", Some(20));
     assert_eq!(ids(&matches), vec![kept], "exactly one match survives");
     // A success, not a refusal.
-    assert!(block_on(fixture.tool().call(NoteSearchArgs {
-        query: "teardown".into(),
-        limit: Some(20),
-    }))
+    assert!(block_on(
+        fixture.tool().call(NoteSearchArgs { query: "teardown".into(), limit: Some(20) })
+    )
     .is_ok());
 }
 
@@ -41,14 +41,14 @@ fn a_hit_whose_note_no_longer_resolves_is_omitted_silently() {
 #[test]
 fn every_matching_hit_dropped_is_an_empty_success_rather_than_a_refusal() {
     let fixture = NoteFixture::new();
-    let ids: Vec<String> = (0..3)
-        .map(|i| fixture.note(&format!("note {i} about the teardown")))
-        .collect();
+    let ids: Vec<String> =
+        (0..3).map(|i| fixture.note(&format!("note {i} about the teardown"))).collect();
     fixture.reindex();
     assert_eq!(fixture.search("teardown", Some(20)).len(), 3);
 
     // All three gone from under the index: one deleted, two made unreadable.
-    crate::notes::delete_note_in(&fixture.root(), &fixture.root(), &ids[0]).expect("the deletion lands");
+    crate::notes::delete_note_in(&fixture.root(), &fixture.root(), &ids[0])
+        .expect("the deletion lands");
     for id in &ids[1..] {
         std::fs::write(
             fixture.root().join(format!(".synthesis/notes/{id}.toml")),
@@ -57,11 +57,9 @@ fn every_matching_hit_dropped_is_an_empty_success_rather_than_a_refusal() {
         .unwrap();
     }
 
-    let output = block_on(fixture.tool().call(NoteSearchArgs {
-        query: "teardown".into(),
-        limit: Some(20),
-    }))
-    .expect("an answer rather than a failure");
+    let output =
+        block_on(fixture.tool().call(NoteSearchArgs { query: "teardown".into(), limit: Some(20) }))
+            .expect("an answer rather than a failure");
     assert!(
         output.notes.is_empty(),
         "every row was dropped, and that is an empty list rather than a refusal",
@@ -108,11 +106,8 @@ fn an_empty_or_blank_query_refuses_with_invalid_args() {
 fn no_project_open_is_the_shared_refusal() {
     let app = crate::tools::tests::closed_project();
     let tool = NoteSearchTool::new(app.handle().clone(), "closed");
-    let error = block_on(tool.call(NoteSearchArgs {
-        query: "teardown".into(),
-        limit: Some(3),
-    }))
-    .expect_err("no project is open");
+    let error = block_on(tool.call(NoteSearchArgs { query: "teardown".into(), limit: Some(3) }))
+        .expect_err("no project is open");
     let rendered = tool.map_error(error);
     assert_eq!(rendered.kind(), ToolErrorKind::NotFound);
     assert_eq!(rendered.retryable(), Some(false));
@@ -129,10 +124,8 @@ fn nothing_matching_and_no_note_at_all_are_both_empty_successes() {
 
     let bare = NoteFixture::new();
     bare.reindex();
-    let output = block_on(bare.tool().call(NoteSearchArgs {
-        query: "anything".into(),
-        limit: None,
-    }))
-    .expect("a worktree with no note is an answer rather than a failure");
+    let output =
+        block_on(bare.tool().call(NoteSearchArgs { query: "anything".into(), limit: None }))
+            .expect("a worktree with no note is an answer rather than a failure");
     assert!(output.notes.is_empty());
 }

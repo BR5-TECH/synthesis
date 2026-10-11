@@ -13,19 +13,12 @@ fn an_export_writes_the_whole_match_set_as_jsonl() {
     let buffer = LogBuffer::new();
     let mut batch = Vec::new();
     for n in 0..500 {
-        let level = if n % 4 == 0 {
-            LogLevel::Error
-        } else {
-            LogLevel::Info
-        };
+        let level = if n % 4 == 0 { LogLevel::Error } else { LogLevel::Info };
         batch.push(input(level, &[Domain::Backend], &format!("m{n}")));
     }
     append(&buffer, batch);
 
-    let errors_only = LogFilter {
-        min_level: LogLevel::Error,
-        ..Default::default()
-    };
+    let errors_only = LogFilter { min_level: LogLevel::Error, ..Default::default() };
     let (text, count) = buffer.export_text(&errors_only).unwrap();
     assert_eq!(count, 125);
     let lines: Vec<&str> = text.lines().collect();
@@ -50,10 +43,7 @@ fn an_export_writes_the_whole_match_set_as_jsonl() {
     assert_eq!(paged.matched_total, 125);
 
     // A filter matching nothing writes an empty file and returns zero.
-    let none = LogFilter {
-        query: Some("no-such-record".to_string()),
-        ..Default::default()
-    };
+    let none = LogFilter { query: Some("no-such-record".to_string()), ..Default::default() };
     assert_eq!(buffer.export_text(&none).unwrap(), (String::new(), 0));
 }
 
@@ -74,19 +64,11 @@ fn an_unwritable_destination_is_the_typed_export_failed() {
     // `dir` while the instance is rooted at `roots_elsewhere` is the whole
     // point of the user-choice write.
     let roots_elsewhere = tempfile::TempDir::new().unwrap();
-    let access = fs::FsAccess::builder()
-        .allow_root(roots_elsewhere.path())
-        .build()
-        .unwrap();
+    let access = fs::FsAccess::builder().allow_root(roots_elsewhere.path()).build().unwrap();
 
     // `write_export` now surfaces the REASON so the command can log it;
     // flattening to `EXPORT_FAILED` is `export_logs`' job (LGC-FR-19).
-    let err = write_export(
-        &access,
-        &blocker.join("nested").join("out.jsonl"),
-        "{}\n",
-    )
-    .unwrap_err();
+    let err = write_export(&access, &blocker.join("nested").join("out.jsonl"), "{}\n").unwrap_err();
     assert!(
         !err.is_empty() && err != EXPORT_FAILED,
         "the write half reports why, so the command has something to log; got {err:?}"

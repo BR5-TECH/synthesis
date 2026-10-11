@@ -38,15 +38,15 @@ pub(super) const MAX_COUNTED_NATIVE_REPORTS: u32 = 30;
 /// Arguments that do not decode are the tool's own `InvalidArgs` refusal, which
 /// reaches the model as a result it can correct (CVL-FR-14) rather than as
 /// anything that ends the turn.
-pub(super) fn erase_tool<T>(tool: T) -> rig::tool::PortableDynamicTool
+pub(super) fn erase_tool<T>(tool: T) -> rig::tool::DynamicTool
 where
     T: rig::tool::PortableTool + Send + Sync + 'static,
 {
-    use rig::tool::{IntoToolOutput, ToolErrorKind, ToolExecutionError};
+    use rig::tool::IntoToolOutput;
 
-    let definition = rig::tool::portable_tool_definition(&tool);
+    let definition = rig::tool::tool_definition(&tool);
     let tool = Arc::new(tool);
-    rig::tool::PortableDynamicTool::new(
+    rig::tool::DynamicTool::new(
         definition.name,
         definition.description,
         definition.parameters,
@@ -55,21 +55,7 @@ where
             Box::pin(async move {
                 let parsed = match serde_json::from_value::<T::Args>(arguments) {
                     Ok(parsed) => parsed,
-                    // The message names what a model can act on and carries no
-                    // Rust type name, no crate name, and nothing it sent
-                    // (TLC-FR-09).
-                    Err(_) => {
-                        return Err(ToolExecutionError::new(
-                            ToolErrorKind::InvalidArgs,
-                            "The arguments for that tool were not in the shape it expects. Check the tool's parameters and call it again.",
-                        )
-                        // TLC-FR-14: what tells this refusal apart from the ones
-                        // a tool authors itself, which all arrive under the same
-                        // kind. The dispatcher reads it to log the shape the
-                        // model sent, the tool having never run to log anything.
-                        .with_code(crate::tools::ARGUMENTS_UNDECODABLE)
-                        .with_retryable(true))
-                    }
+                    Err(_) => return Err(undecodable_arguments()),
                 };
                 match tool.call(parsed).await {
                     Ok(output) => output.into_tool_output(),
@@ -78,6 +64,23 @@ where
             })
         },
     )
+}
+
+/// TLC-FR-14 / TLC-FR-SPRR: the refusal of a call whose arguments do not
+/// decode into the tool's argument type, made before the tool runs.
+///
+/// The message names what a model can act on and carries no Rust type name, no
+/// crate name, and nothing it sent (TLC-FR-09).
+pub(super) fn undecodable_arguments() -> rig::tool::ToolExecutionError {
+    rig::tool::ToolExecutionError::new(
+        rig::tool::ToolErrorKind::InvalidArgs,
+        "The arguments for that tool were not in the shape it expects. Check the tool's parameters and call it again.",
+    )
+    // TLC-FR-14: what tells this refusal apart from the ones a tool authors
+    // itself, which all arrive under the same kind. The dispatcher reads it to
+    // log the shape the model sent, the tool having never run to log anything.
+    .with_code(crate::tools::ARGUMENTS_UNDECODABLE)
+    .with_retryable(true)
 }
 
 /// CVL-FR-30: the provider-native entries a turn is offered, decided by the

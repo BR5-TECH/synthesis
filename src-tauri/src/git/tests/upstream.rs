@@ -18,12 +18,7 @@ fn upstream_sync_state_reports_no_remote_when_none_is_configured() {
     let state = upstream_sync_state(&f.root()).unwrap();
     assert_eq!(
         state,
-        UpstreamSyncState {
-            has_remote: false,
-            has_upstream: false,
-            ahead: None,
-            behind: None,
-        }
+        UpstreamSyncState { has_remote: false, has_upstream: false, ahead: None, behind: None }
     );
 }
 
@@ -34,9 +29,7 @@ fn upstream_sync_state_reports_a_branch_that_has_never_been_published() {
     let f = Fixture::new();
     f.write("a.md", "one\n");
     f.commit("base");
-    f.repo()
-        .remote("origin", "https://github.com/acme/repo.git")
-        .unwrap();
+    f.repo().remote("origin", "https://github.com/acme/repo.git").unwrap();
     let state = upstream_sync_state(&f.root()).unwrap();
     assert!(state.has_remote);
     assert!(!state.has_upstream);
@@ -50,9 +43,7 @@ fn upstream_sync_state_counts_each_side_against_the_upstream() {
     let f = Fixture::new();
     f.write("a.md", "one\n");
     let base = f.commit("base");
-    f.repo()
-        .remote("origin", "https://github.com/acme/repo.git")
-        .unwrap();
+    f.repo().remote("origin", "https://github.com/acme/repo.git").unwrap();
     let branch = f.current_branch();
 
     {
@@ -61,26 +52,12 @@ fn upstream_sync_state_counts_each_side_against_the_upstream() {
         let sig = repo.signature().unwrap();
         let base_commit = repo.find_commit(base).unwrap();
         let remote_only = repo
-            .commit(
-                None,
-                &sig,
-                &sig,
-                "remote work",
-                &base_commit.tree().unwrap(),
-                &[&base_commit],
-            )
+            .commit(None, &sig, &sig, "remote work", &base_commit.tree().unwrap(), &[&base_commit])
             .unwrap();
-        repo.reference(
-            &format!("refs/remotes/origin/{branch}"),
-            remote_only,
-            true,
-            "test",
-        )
-        .unwrap();
+        repo.reference(&format!("refs/remotes/origin/{branch}"), remote_only, true, "test")
+            .unwrap();
         let mut local = repo.find_branch(&branch, BranchType::Local).unwrap();
-        local
-            .set_upstream(Some(&format!("origin/{branch}")))
-            .unwrap();
+        local.set_upstream(Some(&format!("origin/{branch}"))).unwrap();
     }
     // Two local commits the upstream does not have.
     f.write("a.md", "two\n");
@@ -99,9 +76,7 @@ fn upstream_sync_state_reports_a_detached_head_as_tracking_nothing() {
     let f = Fixture::new();
     f.write("a.md", "one\n");
     let base = f.commit("base");
-    f.repo()
-        .remote("origin", "https://github.com/acme/repo.git")
-        .unwrap();
+    f.repo().remote("origin", "https://github.com/acme/repo.git").unwrap();
     f.repo().set_head_detached(base).unwrap();
 
     let state = upstream_sync_state(&f.root()).unwrap();
@@ -115,9 +90,7 @@ fn upstream_sync_state_reports_an_unborn_branch_as_tracking_nothing() {
     // GTC-FR-21: a repository with a remote and no commits yet has no ref to
     // compare, and must read as "never published" rather than error.
     let f = Fixture::new();
-    f.repo()
-        .remote("origin", "https://github.com/acme/repo.git")
-        .unwrap();
+    f.repo().remote("origin", "https://github.com/acme/repo.git").unwrap();
     let state = upstream_sync_state(&f.root()).unwrap();
     assert!(state.has_remote);
     assert!(!state.has_upstream);
@@ -128,8 +101,5 @@ fn upstream_sync_state_reports_an_unborn_branch_as_tracking_nothing() {
 fn upstream_sync_state_outside_a_repository_is_the_typed_error() {
     // GTC-FR-02: what the Changes panel's inline state is keyed on.
     let dir = TempDir::new().unwrap();
-    assert_eq!(
-        upstream_sync_state(dir.path()).unwrap_err(),
-        ERR_NOT_A_REPO
-    );
+    assert_eq!(upstream_sync_state(dir.path()).unwrap_err(), ERR_NOT_A_REPO);
 }

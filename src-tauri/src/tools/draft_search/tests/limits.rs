@@ -107,10 +107,7 @@ fn overfetch_fills_the_limit_from_one_bounded_call() {
     }
     crowded.reindex();
     let got = crowded.search("teardown", Some(20)).len();
-    assert!(
-        got <= 20,
-        "never more than asked for, got {got}",
-    );
+    assert!(got <= 20, "never more than asked for, got {got}",);
 
     let sparse = DraftFixture::new();
     sparse.draft("a", "# Plan\n\nteardown\n");
@@ -159,16 +156,11 @@ fn a_match_carries_exactly_the_documented_fields() {
     // The exact key set is the assertion; an "and these are absent" loop beside
     // it would only restate what equality already pins (DST-FR-10). The wire
     // names are the field names, which is what the spec's output shape writes.
-    assert_eq!(
-        keys,
-        vec!["draft_id", "excerpt", "name", "prompt_path", "score", "status"]
-    );
+    assert_eq!(keys, vec!["draft_id", "excerpt", "name", "prompt_path", "score", "status"]);
 
     // TLC-FR-08: the collection sits under a named field, never a bare array.
-    let output = serde_json::to_value(DraftSearchOutput {
-        drafts: matches.clone(),
-    })
-    .expect("serialises");
+    let output =
+        serde_json::to_value(DraftSearchOutput { drafts: matches.clone() }).expect("serialises");
     assert!(output.get("drafts").is_some());
     assert!(output.is_object());
 }

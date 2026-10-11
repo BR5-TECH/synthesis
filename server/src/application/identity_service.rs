@@ -78,10 +78,7 @@ pub struct IdentityService {
 impl IdentityService {
     /// The service over the given ports.
     pub fn new(ports: Ports) -> Self {
-        IdentityService {
-            authority: Authority::new(ports.clone()),
-            ports,
-        }
+        IdentityService { authority: Authority::new(ports.clone()), ports }
     }
 
     /// The owner a create request names, which defaults to the caller.
@@ -110,10 +107,7 @@ impl IdentityService {
             Some(user.id) != except && user.identity.as_ref().is_some_and(|held| held == claim)
         });
         if taken {
-            Err(DomainError::invalid_field(
-                "issuer",
-                "another user holds that issuer and subject",
-            ))
+            Err(DomainError::invalid_field("issuer", "another user holds that issuer and subject"))
         } else {
             Ok(())
         }
@@ -126,19 +120,12 @@ impl IdentityApi for IdentityService {
 
         let id: UserId = self.ports.resolve_id("id", command.id.as_deref())?;
         let display_name = validation::name("display_name", &command.display_name)?;
-        let email = command
-            .email
-            .as_deref()
-            .map(|value| validation::email("email", value))
-            .transpose()?;
+        let email =
+            command.email.as_deref().map(|value| validation::email("email", value)).transpose()?;
         let role = match command.role.as_deref() {
             None | Some("member") => UserRole::Member,
             Some("administrator") => UserRole::Administrator,
-            Some(other) => {
-                return Err(DomainError::InvalidRole {
-                    role: other.to_string(),
-                })
-            }
+            Some(other) => return Err(DomainError::InvalidRole { role: other.to_string() }),
         };
         let identity = match (command.issuer.as_deref(), command.subject.as_deref()) {
             (None, None) => None,
@@ -175,8 +162,7 @@ impl IdentityApi for IdentityService {
 
     fn read_user(&self, principal: &Principal, id: UserId) -> Result<User, DomainError> {
         let user = self.ports.users.get(id)?;
-        self.authority
-            .require(principal, principal.user_id == id, "user.read")?;
+        self.authority.require(principal, principal.user_id == id, "user.read")?;
         Ok(user)
     }
 
@@ -185,9 +171,7 @@ impl IdentityApi for IdentityService {
         let visible = if principal.is_administrator {
             all
         } else {
-            all.into_iter()
-                .filter(|user| user.id == principal.user_id)
-                .collect()
+            all.into_iter().filter(|user| user.id == principal.user_id).collect()
         };
         paginate(visible, page)
     }
@@ -199,14 +183,11 @@ impl IdentityApi for IdentityService {
         command: UpdateUser,
     ) -> Result<User, DomainError> {
         self.ports.users.get(id)?;
-        self.authority
-            .require(principal, principal.user_id == id, "user.update")?;
+        self.authority.require(principal, principal.user_id == id, "user.update")?;
         // The role and the status are the administrator's to change: a user
         // does not raise its own role.
         if (command.role.is_some() || command.status.is_some()) && !principal.is_administrator {
-            return Err(DomainError::Forbidden {
-                permission: "user.update_role".to_string(),
-            });
+            return Err(DomainError::Forbidden { permission: "user.update_role".to_string() });
         }
 
         let now = self.ports.clock.now();
@@ -221,11 +202,7 @@ impl IdentityApi for IdentityService {
                 user.role = match role {
                     "member" => UserRole::Member,
                     "administrator" => UserRole::Administrator,
-                    other => {
-                        return Err(DomainError::InvalidRole {
-                            role: other.to_string(),
-                        })
-                    }
+                    other => return Err(DomainError::InvalidRole { role: other.to_string() }),
                 };
             }
             if let Some(status) = command.status.as_deref() {
@@ -251,38 +228,16 @@ impl IdentityApi for IdentityService {
 
         // SAS-FR-SGXQ: a user that owns a team, an organization, or a project
         // is not deleted while the reference stands.
-        if self
-            .ports
-            .teams
-            .list()
-            .iter()
-            .any(|team| team.owner_id == id)
-        {
-            return Err(DomainError::Referenced {
-                reason: "the user owns a team".to_string(),
-            });
+        if self.ports.teams.list().iter().any(|team| team.owner_id == id) {
+            return Err(DomainError::Referenced { reason: "the user owns a team".to_string() });
         }
-        if self
-            .ports
-            .organizations
-            .list()
-            .iter()
-            .any(|organization| organization.owner_id == id)
-        {
+        if self.ports.organizations.list().iter().any(|organization| organization.owner_id == id) {
             return Err(DomainError::Referenced {
                 reason: "the user owns an organization".to_string(),
             });
         }
-        if self
-            .ports
-            .projects
-            .list()
-            .iter()
-            .any(|project| project.owner_id == id)
-        {
-            return Err(DomainError::Referenced {
-                reason: "the user owns a project".to_string(),
-            });
+        if self.ports.projects.list().iter().any(|project| project.owner_id == id) {
+            return Err(DomainError::Referenced { reason: "the user owns a project".to_string() });
         }
 
         self.ports.users.remove(id).map(|_| ())
@@ -296,28 +251,19 @@ impl IdentityApi for IdentityService {
         let id: TeamId = self.ports.resolve_id("id", command.id.as_deref())?;
         let name = validation::name("name", &command.name)?;
         let owner_id = self.owner_of(principal, command.owner_id.as_ref())?;
-        self.authority
-            .require(principal, owner_id == principal.user_id, "team.create")?;
+        self.authority.require(principal, owner_id == principal.user_id, "team.create")?;
 
         let now = self.ports.clock.now();
-        self.ports.teams.insert(
-            id,
-            Team {
-                id,
-                name,
-                owner_id,
-                created_at: now.clone(),
-                updated_at: now,
-            },
-        )
+        self.ports
+            .teams
+            .insert(id, Team { id, name, owner_id, created_at: now.clone(), updated_at: now })
     }
 
     fn read_team(&self, principal: &Principal, id: TeamId) -> Result<Team, DomainError> {
         let team = self.ports.teams.get(id)?;
         self.authority.require(
             principal,
-            self.authority
-                .belongs(principal.user_id, TargetType::Team, id.raw()),
+            self.authority.belongs(principal.user_id, TargetType::Team, id.raw()),
             "team.read",
         )?;
         Ok(team)
@@ -331,9 +277,7 @@ impl IdentityApi for IdentityService {
             .into_iter()
             .filter(|team| {
                 principal.is_administrator
-                    || self
-                        .authority
-                        .belongs(principal.user_id, TargetType::Team, team.id.raw())
+                    || self.authority.belongs(principal.user_id, TargetType::Team, team.id.raw())
             })
             .collect();
         paginate(visible, page)
@@ -348,8 +292,7 @@ impl IdentityApi for IdentityService {
         self.ports.teams.get(id)?;
         self.authority.require(
             principal,
-            self.authority
-                .manages(principal.user_id, TargetType::Team, id.raw()),
+            self.authority.manages(principal.user_id, TargetType::Team, id.raw()),
             "team.update",
         )?;
         let owner_id = match command.owner_id.as_ref() {
@@ -372,8 +315,7 @@ impl IdentityApi for IdentityService {
 
     fn delete_team(&self, principal: &Principal, id: TeamId) -> Result<(), DomainError> {
         let team = self.ports.teams.get(id)?;
-        self.authority
-            .require(principal, team.owner_id == principal.user_id, "team.delete")?;
+        self.authority.require(principal, team.owner_id == principal.user_id, "team.delete")?;
 
         // SAS-FR-SGXQ: a team a grant addresses is not deleted.
         if self
@@ -405,22 +347,12 @@ impl IdentityApi for IdentityService {
         let id: OrganizationId = self.ports.resolve_id("id", command.id.as_deref())?;
         let name = validation::name("name", &command.name)?;
         let owner_id = self.owner_of(principal, command.owner_id.as_ref())?;
-        self.authority.require(
-            principal,
-            owner_id == principal.user_id,
-            "organization.create",
-        )?;
+        self.authority.require(principal, owner_id == principal.user_id, "organization.create")?;
 
         let now = self.ports.clock.now();
         self.ports.organizations.insert(
             id,
-            Organization {
-                id,
-                name,
-                owner_id,
-                created_at: now.clone(),
-                updated_at: now,
-            },
+            Organization { id, name, owner_id, created_at: now.clone(), updated_at: now },
         )
     }
 
@@ -432,8 +364,7 @@ impl IdentityApi for IdentityService {
         let organization = self.ports.organizations.get(id)?;
         self.authority.require(
             principal,
-            self.authority
-                .belongs(principal.user_id, TargetType::Organization, id.raw()),
+            self.authority.belongs(principal.user_id, TargetType::Organization, id.raw()),
             "organization.read",
         )?;
         Ok(organization)
@@ -470,8 +401,7 @@ impl IdentityApi for IdentityService {
         self.ports.organizations.get(id)?;
         self.authority.require(
             principal,
-            self.authority
-                .manages(principal.user_id, TargetType::Organization, id.raw()),
+            self.authority.manages(principal.user_id, TargetType::Organization, id.raw()),
             "organization.update",
         )?;
         let owner_id = match command.owner_id.as_ref() {
@@ -480,18 +410,16 @@ impl IdentityApi for IdentityService {
         };
 
         let now = self.ports.clock.now();
-        self.ports
-            .organizations
-            .update(id, &mut |organization: &mut Organization| {
-                if let Some(name) = command.name.as_deref() {
-                    organization.name = validation::name("name", name)?;
-                }
-                if let Some(owner) = owner_id {
-                    organization.owner_id = owner;
-                }
-                organization.updated_at = now.clone();
-                Ok(())
-            })
+        self.ports.organizations.update(id, &mut |organization: &mut Organization| {
+            if let Some(name) = command.name.as_deref() {
+                organization.name = validation::name("name", name)?;
+            }
+            if let Some(owner) = owner_id {
+                organization.owner_id = owner;
+            }
+            organization.updated_at = now.clone();
+            Ok(())
+        })
     }
 
     fn delete_organization(

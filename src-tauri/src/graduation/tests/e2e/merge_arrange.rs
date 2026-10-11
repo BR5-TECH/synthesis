@@ -20,29 +20,15 @@ use crate::streams::StreamMergePublication;
 pub(super) fn commit_file(repo: &git2::Repository, path: &str, content: &str) -> git2::Oid {
     let workdir = repo.workdir().expect("a working copy").to_path_buf();
     // The write creates its own parents (FSA-FR-05).
-    guard(&workdir)
-        .write_text_atomic(workdir.join(path), content)
-        .expect("the file is writable");
+    guard(&workdir).write_text_atomic(workdir.join(path), content).expect("the file is writable");
     let mut index = repo.index().expect("index");
-    index
-        .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-        .expect("the change is staged");
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).expect("the change is staged");
     index.write().expect("the index is written");
     let tree = repo.find_tree(index.write_tree().expect("a tree")).expect("a tree");
     let signature = repo.signature().expect("a signature");
-    let head = repo
-        .head()
-        .and_then(|head| head.peel_to_commit())
-        .expect("the branch head");
-    repo.commit(
-        Some("HEAD"),
-        &signature,
-        &signature,
-        &format!("Edit {path}"),
-        &tree,
-        &[&head],
-    )
-    .expect("the change is committed")
+    let head = repo.head().and_then(|head| head.peel_to_commit()).expect("the branch head");
+    repo.commit(Some("HEAD"), &signature, &signature, &format!("Edit {path}"), &tree, &[&head])
+        .expect("the change is committed")
 }
 
 /// Everything standing in a repository's working copy, committed. The settings
@@ -50,15 +36,10 @@ pub(super) fn commit_file(repo: &git2::Repository, path: &str, content: &str) ->
 /// uncommitted one would make the base working copy dirty.
 pub(super) fn commit_everything(repo: &git2::Repository, message: &str) {
     let mut index = repo.index().expect("index");
-    index
-        .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-        .expect("the change is staged");
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).expect("the change is staged");
     index.write().expect("the index is written");
     let tree = repo.find_tree(index.write_tree().expect("a tree")).expect("a tree");
-    let head = repo
-        .head()
-        .and_then(|head| head.peel_to_commit())
-        .expect("the branch head");
+    let head = repo.head().and_then(|head| head.peel_to_commit()).expect("the branch head");
     if head.tree_id() == tree.id() {
         return;
     }
@@ -69,9 +50,7 @@ pub(super) fn commit_everything(repo: &git2::Repository, message: &str) {
 
 /// A merge that makes one commit under a message of the author's.
 pub(super) fn as_one_commit() -> StreamMergePublication {
-    StreamMergePublication::Commit {
-        message: "Merge the feature stream".to_string(),
-    }
+    StreamMergePublication::Commit { message: "Merge the feature stream".to_string() }
 }
 
 /// A stream named `feature` whose branch and whose base branch both changed
@@ -149,10 +128,9 @@ impl Outcome {
     /// the stream working copy hold exactly what they held before the merge
     /// started.
     pub(crate) fn expect_live_state_unchanged(self) -> Self {
-        let before = self
-            .live_before
-            .clone()
-            .unwrap_or_else(|| panic!("[{}] no merge was started, so nothing was recorded", self.name));
+        let before = self.live_before.clone().unwrap_or_else(|| {
+            panic!("[{}] no merge was started, so nothing was recorded", self.name)
+        });
         assert_eq!(
             self.live_state(),
             before,

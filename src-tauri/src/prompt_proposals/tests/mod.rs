@@ -12,7 +12,7 @@ use tempfile::TempDir;
 
 use super::*;
 use crate::comments::{DiscussionTarget, Participant};
-use crate::scanning::{Assignment, ArtifactType, LibraryAssignments, Scope};
+use crate::scanning::{ArtifactType, Assignment, LibraryAssignments, Scope};
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -20,14 +20,11 @@ use crate::scanning::{Assignment, ArtifactType, LibraryAssignments, Scope};
 
 const PROMPT: &str = "prompts/review.md";
 const ORIGINAL: &str = "# Review\n\n## Steps\n\nRead the file, summarise it and file a note.\n";
-const PROPOSED: &str = "# Review\n\n## Steps\n\nRead the file.\n\nSummarise it, then file a note.\n";
+const PROPOSED: &str =
+    "# Review\n\n## Steps\n\nRead the file.\n\nSummarise it, then file a note.\n";
 
 fn human() -> Participant {
-    Participant::Human {
-        login: "raver119".into(),
-        display_name: None,
-        email: None,
-    }
+    Participant::Human { login: "raver119".into(), display_name: None, email: None }
 }
 
 fn agent() -> Participant {
@@ -57,14 +54,11 @@ impl Fixture {
         let thread = comments::open_discussion_in(
             &root,
             &root,
-            &DiscussionTarget::Artifact {
-                artifact_id: PROMPT.into(),
-            },
+            &DiscussionTarget::Artifact { artifact_id: PROMPT.into() },
             None,
             "@arch what would you change?".into(),
             Vec::new(),
-            &human(),
-            "2026-01-01T00:00:00Z",
+            comments::Stamp { by: &human(), at: "2026-01-01T00:00:00Z" },
         )
         .expect("discussion");
         Fixture {
@@ -129,16 +123,10 @@ impl Fixture {
         id: &str,
         feedback: Option<&str>,
     ) -> Result<PromptDecisionOutcome, String> {
-        decide(
-            &self.handle(),
-            &self.root,
-            &self.root,
-            id,
-            Decision::Accept,
-            feedback,
-            &human(),
-            &self.tracker,
-        )
+        let by = human();
+        let request =
+            DecisionRequest { proposal_id: id, decision: Decision::Accept, feedback, by: &by };
+        decide(&self.handle(), &self.root, &self.root, request, &self.tracker)
     }
 
     fn decline(&self, id: &str) -> Result<PromptDecisionOutcome, String> {
@@ -150,16 +138,10 @@ impl Fixture {
         id: &str,
         feedback: Option<&str>,
     ) -> Result<PromptDecisionOutcome, String> {
-        decide(
-            &self.handle(),
-            &self.root,
-            &self.root,
-            id,
-            Decision::Decline,
-            feedback,
-            &human(),
-            &self.tracker,
-        )
+        let by = human();
+        let request =
+            DecisionRequest { proposal_id: id, decision: Decision::Decline, feedback, by: &by };
+        decide(&self.handle(), &self.root, &self.root, request, &self.tracker)
     }
 
     fn dir(&self) -> std::path::PathBuf {
@@ -213,10 +195,11 @@ impl Fixture {
         let record = read_proposal(&self.root, proposal_id)?;
         let (_, discussion) = locate_thread(&self.root, &self.root, &record.thread_id)?;
         let comment_id = match &reconciled {
-            Reconciliation::Settled {
-                proposal_id: completed,
-                comment_id,
-            } if completed == proposal_id => comment_id.clone(),
+            Reconciliation::Settled { proposal_id: completed, comment_id }
+                if completed == proposal_id =>
+            {
+                comment_id.clone()
+            }
             _ => None,
         };
         Ok(PromptDecisionOutcome {
@@ -249,19 +232,13 @@ fn assign(root: &fs::RootFs, entries: &[(&str, ArtifactType)]) {
     for (rel, artifact_type) in entries {
         assignments.assignments.insert(
             (*rel).to_string(),
-            Assignment {
-                artifact_type: *artifact_type,
-                scope: Scope::File,
-            },
+            Assignment { artifact_type: *artifact_type, scope: Scope::File },
         );
     }
     let path = root.path().join(".synthesis");
     std::fs::create_dir_all(&path).expect("dirs");
-    std::fs::write(
-        path.join("library.toml"),
-        toml::to_string(&assignments).expect("toml"),
-    )
-    .expect("write");
+    std::fs::write(path.join("library.toml"), toml::to_string(&assignments).expect("toml"))
+        .expect("write");
 }
 
 // ---------------------------------------------------------------------------
@@ -304,9 +281,7 @@ fn stage_for_test(f: &Fixture, proposal: &PromptChangeProposal, committed: bool)
         comment_owed: true,
         ..proposal.clone()
     };
-    f.root
-        .write_toml_atomic(dir.join(format!("{}.toml", proposal.id)), &decided)
-        .expect("record");
+    f.root.write_toml_atomic(dir.join(format!("{}.toml", proposal.id)), &decided).expect("record");
     if committed {
         write_file(&f.root, PROMPT, &normalised);
     }

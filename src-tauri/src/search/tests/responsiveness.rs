@@ -18,11 +18,15 @@ fn ts19_a_search_over_no_candidates_ends_completed_with_no_hits() {
     let reason = run_search(
         &sink,
         &crate::fs::RootFs::for_root(dir.path()),
-        Arc::new(Vec::new()),
-        Arc::new(Matcher::compile("anything", SearchMode::LiteralInsensitive).unwrap()),
-        SearchScope::Capped,
+        SearchJob {
+            search_id: "s",
+            candidates: Arc::new(Vec::new()),
+            matcher: Arc::new(
+                Matcher::compile("anything", SearchMode::LiteralInsensitive).unwrap(),
+            ),
+            scope: SearchScope::Capped,
+        },
         &Stop::new(),
-        "s",
         &|_| {},
     );
     assert_eq!(reason, EndReason::Completed);

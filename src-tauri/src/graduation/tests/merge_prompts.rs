@@ -8,17 +8,16 @@
 use super::*;
 
 static MERGE_WORK: &str = include_str!("../../../../resources/prompts/graduation/merge-work.md");
-static MERGE_REVIEW: &str = include_str!("../../../../resources/prompts/graduation/merge-review.md");
+static MERGE_REVIEW: &str =
+    include_str!("../../../../resources/prompts/graduation/merge-review.md");
 
 /// Every `input.merge.<name>` a document names.
 fn context_fields_named(text: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for (index, _) in text.match_indices("input.merge.") {
         let rest = &text[index + "input.merge.".len()..];
-        let name: String = rest
-            .chars()
-            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-            .collect();
+        let name: String =
+            rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect();
         if !name.is_empty() {
             out.push(name);
         }
@@ -52,10 +51,9 @@ fn every_merge_context_field_a_merge_prompt_names_is_given_to_its_turn() {
     let work = context_fields(driver::PART_WORK);
     let review = context_fields(driver::PART_REVIEW);
 
-    for (name, source, carried) in [
-        ("merge-work.md", MERGE_WORK, &work),
-        ("merge-review.md", MERGE_REVIEW, &review),
-    ] {
+    for (name, source, carried) in
+        [("merge-work.md", MERGE_WORK, &work), ("merge-review.md", MERGE_REVIEW, &review)]
+    {
         let named = context_fields_named(source);
         assert!(!named.is_empty(), "{name} names no merge context field");
         for field in named {
@@ -135,7 +133,8 @@ fn a_merge_instruction_holds_no_authoring_comment_and_no_requirement_name() {
 fn the_merge_instructions_do_not_use_the_update_frame() {
     for (name, source) in [("merge-work.md", MERGE_WORK), ("merge-review.md", MERGE_REVIEW)] {
         let text = instruction(source);
-        for forbidden in ["/rebase", "semantic_reason", "unresolved_questions", "author_decisions"] {
+        for forbidden in ["/rebase", "semantic_reason", "unresolved_questions", "author_decisions"]
+        {
             assert!(!text.contains(forbidden), "{name} names `{forbidden}`");
         }
     }
@@ -152,7 +151,9 @@ fn the_merge_review_names_the_project_commands_and_invents_none() {
     let lower = text.to_lowercase();
     assert!(lower.contains("build and test commands"));
     assert!(
-        lower.contains("never return `ready` over a merge whose required commands you could not run"),
+        lower.contains(
+            "never return `ready` over a merge whose required commands you could not run"
+        ),
         "a command that cannot run is never a pass"
     );
     assert!(MERGE_WORK.contains("invent none"), "the work turn invents none either");

@@ -10,7 +10,7 @@ use super::*;
 fn the_tool_is_a_portable_tool_named_for_the_contract() {
     let app = closed_project();
     let tool = SpecSearchTool::new(app.handle().clone());
-    let definition = rig::tool::portable_tool_definition(&tool);
+    let definition = rig::tool::tool_definition(&tool);
 
     assert_eq!(
         <SpecSearchTool<tauri::test::MockRuntime> as PortableTool>::NAME,
@@ -42,11 +42,9 @@ fn the_description_and_schema_are_the_contract_surfaces_own_text() {
 
     // Pinned to the spec so a reworded description here fails rather than
     // silently drifting from the file the model's behaviour was designed against.
-    const SPEC: &str = include_str!(
-        "../../../../../specifications/tools/SPS-specification-search-tool.md"
-    );
+    const SPEC: &str =
+        include_str!("../../../../../specifications/tools/SPS-specification-search-tool.md");
     assert!(SPEC.contains(DESCRIPTION), "the description is the spec's");
     assert!(SPEC.contains(QUERY_DESCRIPTION));
     assert!(SPEC.contains(LIMIT_DESCRIPTION));
 }
-

@@ -16,10 +16,7 @@ static GPP_POLL_LOG: LogBuffer = LogBuffer::new();
 static GPP_CLAIM_LOG: LogBuffer = LogBuffer::new();
 
 fn failures(buffer: &LogBuffer) -> Vec<crate::logging::LogRecord> {
-    records(buffer)
-        .into_iter()
-        .filter(|r| r.message == "github polling operation failed")
-        .collect()
+    records(buffer).into_iter().filter(|r| r.message == "github polling operation failed").collect()
 }
 
 /// GPP-FR-WKZF / GPP-FR-PUXT: a failed poll and a failed claim each emit
@@ -37,7 +34,7 @@ fn every_failure_is_one_log_record_naming_operation_code_and_issue() {
     assert!(poll[0].domains.contains(&Domain::Backend));
     assert_eq!(poll[0].fields["operation"], "poll");
     assert_eq!(poll[0].fields["code"], ERR_GITHUB_UNREACHABLE);
-    assert!(poll[0].fields.get("issue").is_none());
+    assert!(!poll[0].fields.contains_key("issue"));
 
     let h = Harness::with_buffer(&GPP_CLAIM_LOG);
     h.select(Some(PROJECT));
@@ -79,9 +76,12 @@ fn the_secret_reaches_no_state_record_or_error() {
         PollStart::AlreadyRunning => unreachable!(),
     };
     slot.settle_poll(&ticket, Ok(found), "2026-10-02T10:00:00Z");
-    let outcome = claims::claim(&context(&root, &repository), &fake, 4, "2026-10-02T10:01:00Z", &[]).unwrap();
+    let outcome =
+        claims::claim(&context(&root, &repository), &fake, 4, "2026-10-02T10:01:00Z", &[]).unwrap();
     *fake.set_status_error.lock().unwrap() = Some(ERR_REQUEST_FAILED.into());
-    let refused = claims::claim(&context(&root, &repository), &fake, 6, "2026-10-02T10:02:00Z", &[]).unwrap_err();
+    let refused =
+        claims::claim(&context(&root, &repository), &fake, 6, "2026-10-02T10:02:00Z", &[])
+            .unwrap_err();
 
     let view = view::build_view(
         &slot,
@@ -92,7 +92,8 @@ fn the_secret_reaches_no_state_record_or_error() {
     );
     let mut everything = serde_json::to_string(&view).unwrap();
     everything.push_str(&refused.code);
-    everything.push_str(&std::fs::read_to_string(dir.path().join(".synthesis/local.toml")).unwrap());
+    everything
+        .push_str(&std::fs::read_to_string(dir.path().join(".synthesis/local.toml")).unwrap());
     let draft = crate::drafts::read_draft_record(&root, &outcome.result.draft_id).unwrap();
     everything.push_str(&serde_json::to_string(&draft).unwrap());
     assert!(!everything.contains(SECRET), "the secret leaked");

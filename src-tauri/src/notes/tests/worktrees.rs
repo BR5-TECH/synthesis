@@ -13,14 +13,33 @@ fn each_content_root_holds_its_own_notes() {
     // copies nothing between them.
     let a = temp_root();
     let b = temp_root();
-    create(&crate::fs::RootFs::for_root(a.path()), NoteScope::Project, "one", "2026-01-01T00:00:00Z");
-    create(&crate::fs::RootFs::for_root(a.path()), NoteScope::Project, "two", "2026-01-02T00:00:00Z");
-    create(&crate::fs::RootFs::for_root(b.path()), NoteScope::Project, "only", "2026-01-03T00:00:00Z");
+    create(
+        &crate::fs::RootFs::for_root(a.path()),
+        NoteScope::Project,
+        "one",
+        "2026-01-01T00:00:00Z",
+    );
+    create(
+        &crate::fs::RootFs::for_root(a.path()),
+        NoteScope::Project,
+        "two",
+        "2026-01-02T00:00:00Z",
+    );
+    create(
+        &crate::fs::RootFs::for_root(b.path()),
+        NoteScope::Project,
+        "only",
+        "2026-01-03T00:00:00Z",
+    );
 
-    assert_eq!(list_all_notes_in(
+    assert_eq!(
+        list_all_notes_in(
             &crate::fs::RootFs::for_root(a.path()),
             &crate::fs::RootFs::for_root(a.path()),
-        ).len(), 2);
+        )
+        .len(),
+        2
+    );
     let from_b = list_all_notes_in(
         &crate::fs::RootFs::for_root(b.path()),
         &crate::fs::RootFs::for_root(b.path()),
@@ -28,9 +47,7 @@ fn each_content_root_holds_its_own_notes() {
     assert_eq!(from_b.len(), 1);
     assert_eq!(from_b[0].note.body, "only");
     assert_eq!(
-        std::fs::read_dir(a.path().join(".synthesis/notes"))
-            .unwrap()
-            .count(),
+        std::fs::read_dir(a.path().join(".synthesis/notes")).unwrap().count(),
         2,
         "nothing was copied out of the other worktree"
     );

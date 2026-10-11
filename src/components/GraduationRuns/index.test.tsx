@@ -252,7 +252,6 @@ describe("the run region", () => {
         interruption: {
           reason: "application_shutdown",
           detail: "The application closed while it was working.",
-          streamReleased: true,
           at: "2026-09-06T09:20:00Z",
         },
       }),
@@ -272,7 +271,6 @@ describe("the run region", () => {
         interruption: {
           reason: "execution_timeout",
           detail: "The agent turn ran for 2 h and reached the execution time limit of 2 h.",
-          streamReleased: true,
           at: "2026-10-03T22:02:36Z",
         },
       }),
@@ -287,7 +285,7 @@ describe("the run region", () => {
       "Stopped — the turn reached its time limit",
     );
     await userEvent.click(within(notice).getByRole("button", { name: "Change the time limit" }));
-    expect(onOpenSettings).toHaveBeenCalledWith("graduation");
+    expect(onOpenSettings).toHaveBeenCalledWith("project/graduation");
     // GRU-FR-QLRQ: the route opens settings and does not continue the run.
     expect(commands()).not.toContain("continue_graduation_run");
   });
@@ -298,7 +296,6 @@ describe("the run region", () => {
         interruption: {
           reason: "agent_exited",
           detail: "The agent process stopped with exit code 137 before it gave an answer.",
-          streamReleased: true,
           at: "2026-10-03T22:02:36Z",
         },
       }),
@@ -665,7 +662,6 @@ describe("what the section reads, and when", () => {
         interruption: {
           reason: "author_pause",
           detail: "You paused it.",
-          streamReleased: true,
           at: "2026-09-06T09:20:00Z",
         },
       }),

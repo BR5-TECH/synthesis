@@ -70,9 +70,7 @@ fn a_project_resumes_the_worktree_it_was_last_working_in() {
     f.branch("alpha");
     let a = f.add_worktree("wt-alpha", "alpha");
     let store = GlobalSettingsStore::in_memory();
-    store
-        .save_active_worktree(&to_string_path(&f.root()), &to_string_path(&a))
-        .unwrap();
+    store.save_active_worktree(&to_string_path(&f.root()), &to_string_path(&a)).unwrap();
 
     let (resumed, fell_back) = resume_active_worktree(&store, &f.root(), &f.root());
     assert_eq!(resumed, a);
@@ -86,9 +84,7 @@ fn a_remembered_worktree_that_is_gone_falls_back_to_the_primary_and_says_so() {
     f.branch("alpha");
     let a = f.add_worktree("wt-alpha", "alpha");
     let store = GlobalSettingsStore::in_memory();
-    store
-        .save_active_worktree(&to_string_path(&f.root()), &to_string_path(&a))
-        .unwrap();
+    store.save_active_worktree(&to_string_path(&f.root()), &to_string_path(&a)).unwrap();
     fs::remove_dir_all(&a).unwrap();
 
     let (resumed, fell_back) = resume_active_worktree(&store, &f.root(), &f.root());
@@ -105,9 +101,7 @@ fn opening_a_linked_worktree_supersedes_the_remembered_one() {
     let a = f.add_worktree("wt-alpha", "alpha");
     let b = f.add_worktree("wt-beta", "beta");
     let store = GlobalSettingsStore::in_memory();
-    store
-        .save_active_worktree(&to_string_path(&f.root()), &to_string_path(&a))
-        .unwrap();
+    store.save_active_worktree(&to_string_path(&f.root()), &to_string_path(&a)).unwrap();
 
     let (resumed, fell_back) = resume_active_worktree(&store, &f.root(), &b);
     assert_eq!(resumed, b);

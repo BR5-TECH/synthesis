@@ -31,7 +31,7 @@ fn rerooting_tears_the_previous_root_down_and_remounts_on_the_new_one() {
     let before_alpha = crate::changes::tests_support::snapshot(alpha.clone());
 
     let context = reroot(
-        &app.handle(),
+        app.handle(),
         &app.state::<ProjectState>(),
         &app.state::<ProjectWatcher>(),
         &store,
@@ -73,10 +73,7 @@ fn rerooting_tears_the_previous_root_down_and_remounts_on_the_new_one() {
         matches!(err, crate::fs::FsError::EscapesAllowedRoots { .. }),
         "expected EscapesAllowedRoots for the outgoing root, got {err:?}"
     );
-    assert!(
-        !outgoing.join("fsa-probe.md").exists(),
-        "and the refused write created nothing there"
-    );
+    assert!(!outgoing.join("fsa-probe.md").exists(), "and the refused write created nothing there");
     std::fs::remove_file(canonical_alpha.join("fsa-probe.md")).unwrap();
 
     assert!(
@@ -173,7 +170,7 @@ fn rerooting_discards_the_outgoing_worktrees_skill_registry_and_builds_the_incom
 
     let store = GlobalSettingsStore::in_memory();
     reroot(
-        &app.handle(),
+        app.handle(),
         &app.state::<ProjectState>(),
         &app.state::<ProjectWatcher>(),
         &store,
@@ -188,10 +185,7 @@ fn rerooting_discards_the_outgoing_worktrees_skill_registry_and_builds_the_incom
         list_skills(&indexer).is_empty(),
         "the outgoing root's registry is discarded at the moment of the switch, \
          not whenever its replacement happens to finish: {:?}",
-        list_skills(&indexer)
-            .iter()
-            .map(|s| s.folder_name.clone())
-            .collect::<Vec<_>>()
+        list_skills(&indexer).iter().map(|s| s.folder_name.clone()).collect::<Vec<_>>()
     );
     assert!(
         search_skills(&indexer, "cartography", 10).is_empty(),
@@ -234,13 +228,8 @@ fn rerooting_terminates_operations_scoped_to_the_outgoing_worktree() {
 
     let app = mock_app_on(&f.root(), &f.root());
     let registry = app.state::<crate::progress::ProgressRegistry>();
-    let (_, on_a) = registry.register_at(
-        "scan",
-        "Indexing…",
-        Some(f.root()),
-        None,
-        std::time::Instant::now(),
-    );
+    let (_, on_a) =
+        registry.register_at("scan", "Indexing…", Some(f.root()), None, std::time::Instant::now());
     // An operation scoped to the INCOMING root, and one scoped to nothing at
     // all (a plugin install, PRG-FR-15) — neither may be swept up.
     let (_, on_b) = registry.register_at(
@@ -250,17 +239,12 @@ fn rerooting_terminates_operations_scoped_to_the_outgoing_worktree() {
         None,
         std::time::Instant::now(),
     );
-    let (_, unscoped) = registry.register_at(
-        "install",
-        "Installing…",
-        None,
-        None,
-        std::time::Instant::now(),
-    );
+    let (_, unscoped) =
+        registry.register_at("install", "Installing…", None, None, std::time::Instant::now());
     let store = GlobalSettingsStore::in_memory();
 
     reroot(
-        &app.handle(),
+        app.handle(),
         &app.state::<ProjectState>(),
         &app.state::<ProjectWatcher>(),
         &store,
@@ -300,7 +284,7 @@ fn rerooting_remembers_the_worktree_against_the_projects_anchor() {
     let store = GlobalSettingsStore::in_memory();
 
     reroot(
-        &app.handle(),
+        app.handle(),
         &app.state::<ProjectState>(),
         &app.state::<ProjectWatcher>(),
         &store,
@@ -309,9 +293,7 @@ fn rerooting_remembers_the_worktree_against_the_projects_anchor() {
     .unwrap();
 
     assert_eq!(
-        store
-            .load_active_worktree(&to_string_path(&f.root()))
-            .unwrap(),
+        store.load_active_worktree(&to_string_path(&f.root())).unwrap(),
         Some(to_string_path(&alpha)),
     );
 }
@@ -339,7 +321,7 @@ fn a_successful_switch_emits_exactly_one_context_changed_event() {
     });
 
     reroot(
-        &app.handle(),
+        app.handle(),
         &app.state::<ProjectState>(),
         &app.state::<ProjectWatcher>(),
         &GlobalSettingsStore::in_memory(),
@@ -372,11 +354,8 @@ fn a_refused_activation_emits_nothing_and_unmounts_nothing() {
     });
 
     let stranger = TempDir::new().unwrap();
-    let err = validate_activation_target(
-        &f.root(),
-        &stranger.path().to_string_lossy(),
-    )
-    .unwrap_err();
+    let err =
+        validate_activation_target(&f.root(), &stranger.path().to_string_lossy()).unwrap_err();
 
     assert_eq!(err, ERR_NOT_A_WORKTREE);
     assert_eq!(count.load(Ordering::SeqCst), 0, "a failed operation emits nothing");

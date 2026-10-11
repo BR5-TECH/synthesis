@@ -39,14 +39,16 @@ fn basename_empty_returns_input() {
 
 #[test]
 fn open_project_at_path_happy() {
-    let h = open_project_at_path_impl(&GlobalSettingsStore::in_memory(), "/tmp/foo".into()).unwrap();
+    let h =
+        open_project_at_path_impl(&GlobalSettingsStore::in_memory(), "/tmp/foo".into()).unwrap();
     assert_eq!(h.name, "foo");
     assert_eq!(h.path, "/tmp/foo");
 }
 
 #[test]
 fn open_project_at_path_trailing_slash_strips_in_name_only() {
-    let h = open_project_at_path_impl(&GlobalSettingsStore::in_memory(), "/tmp/foo/".into()).unwrap();
+    let h =
+        open_project_at_path_impl(&GlobalSettingsStore::in_memory(), "/tmp/foo/".into()).unwrap();
     assert_eq!(h.name, "foo");
     assert_eq!(h.path, "/tmp/foo/");
 }
@@ -63,26 +65,42 @@ fn open_project_at_path_whitespace_errors() {
 
 #[test]
 fn git_url_ssh_with_dot_git() {
-    let h = open_project_from_git_url_impl(&GlobalSettingsStore::in_memory(), "git@github.com:org/repo.git".into()).unwrap();
+    let h = open_project_from_git_url_impl(
+        &GlobalSettingsStore::in_memory(),
+        "git@github.com:org/repo.git".into(),
+    )
+    .unwrap();
     assert_eq!(h.name, "repo");
     assert_eq!(h.path, "~/dev/repo");
 }
 
 #[test]
 fn git_url_https_with_dot_git() {
-    let h = open_project_from_git_url_impl(&GlobalSettingsStore::in_memory(), "https://github.com/org/repo.git".into()).unwrap();
+    let h = open_project_from_git_url_impl(
+        &GlobalSettingsStore::in_memory(),
+        "https://github.com/org/repo.git".into(),
+    )
+    .unwrap();
     assert_eq!(h.name, "repo");
 }
 
 #[test]
 fn git_url_https_without_dot_git() {
-    let h = open_project_from_git_url_impl(&GlobalSettingsStore::in_memory(), "https://github.com/org/repo".into()).unwrap();
+    let h = open_project_from_git_url_impl(
+        &GlobalSettingsStore::in_memory(),
+        "https://github.com/org/repo".into(),
+    )
+    .unwrap();
     assert_eq!(h.name, "repo");
 }
 
 #[test]
 fn git_url_ssh_without_suffix() {
-    let h = open_project_from_git_url_impl(&GlobalSettingsStore::in_memory(), "git@github.com:org/repo".into()).unwrap();
+    let h = open_project_from_git_url_impl(
+        &GlobalSettingsStore::in_memory(),
+        "git@github.com:org/repo".into(),
+    )
+    .unwrap();
     assert_eq!(h.name, "repo");
 }
 
@@ -93,52 +111,95 @@ fn git_url_empty_errors() {
 
 #[test]
 fn git_url_whitespace_errors() {
-    assert!(open_project_from_git_url_impl(&GlobalSettingsStore::in_memory(), "   ".into()).is_err());
+    assert!(
+        open_project_from_git_url_impl(&GlobalSettingsStore::in_memory(), "   ".into()).is_err()
+    );
 }
 
 #[test]
 fn git_url_just_dot_git_errors() {
-    assert!(open_project_from_git_url_impl(&GlobalSettingsStore::in_memory(), ".git".into()).is_err());
+    assert!(
+        open_project_from_git_url_impl(&GlobalSettingsStore::in_memory(), ".git".into()).is_err()
+    );
 }
 
 #[test]
 fn git_url_trailing_slash_errors() {
-    assert!(open_project_from_git_url_impl(&GlobalSettingsStore::in_memory(), "https://github.com/org/repo.git/".into()).is_err());
+    assert!(open_project_from_git_url_impl(
+        &GlobalSettingsStore::in_memory(),
+        "https://github.com/org/repo.git/".into()
+    )
+    .is_err());
 }
 
 #[test]
 fn create_project_standalone_happy() {
-    let h = create_project_impl(&GlobalSettingsStore::in_memory(), "my-proj".into(), CreateMode::Standalone, "/tmp/x".into()).unwrap();
+    let h = create_project_impl(
+        &GlobalSettingsStore::in_memory(),
+        "my-proj".into(),
+        CreateMode::Standalone,
+        "/tmp/x".into(),
+    )
+    .unwrap();
     assert_eq!(h.name, "my-proj");
     assert_eq!(h.path, "/tmp/x");
 }
 
 #[test]
 fn create_project_colocated_happy() {
-    let h = create_project_impl(&GlobalSettingsStore::in_memory(), "my-proj".into(), CreateMode::Colocated, "/tmp/x".into()).unwrap();
+    let h = create_project_impl(
+        &GlobalSettingsStore::in_memory(),
+        "my-proj".into(),
+        CreateMode::Colocated,
+        "/tmp/x".into(),
+    )
+    .unwrap();
     assert_eq!(h.name, "my-proj");
 }
 
 #[test]
 fn create_project_trims_name() {
-    let h = create_project_impl(&GlobalSettingsStore::in_memory(), "  my-proj  ".into(), CreateMode::Standalone, "/tmp/x".into())
-        .unwrap();
+    let h = create_project_impl(
+        &GlobalSettingsStore::in_memory(),
+        "  my-proj  ".into(),
+        CreateMode::Standalone,
+        "/tmp/x".into(),
+    )
+    .unwrap();
     assert_eq!(h.name, "my-proj");
 }
 
 #[test]
 fn create_project_empty_name_errors() {
-    assert!(create_project_impl(&GlobalSettingsStore::in_memory(), "".into(), CreateMode::Standalone, "/tmp/x".into()).is_err());
+    assert!(create_project_impl(
+        &GlobalSettingsStore::in_memory(),
+        "".into(),
+        CreateMode::Standalone,
+        "/tmp/x".into()
+    )
+    .is_err());
 }
 
 #[test]
 fn create_project_whitespace_name_errors() {
-    assert!(create_project_impl(&GlobalSettingsStore::in_memory(), "   ".into(), CreateMode::Standalone, "/tmp/x".into()).is_err());
+    assert!(create_project_impl(
+        &GlobalSettingsStore::in_memory(),
+        "   ".into(),
+        CreateMode::Standalone,
+        "/tmp/x".into()
+    )
+    .is_err());
 }
 
 #[test]
 fn create_project_empty_target_errors() {
-    assert!(create_project_impl(&GlobalSettingsStore::in_memory(), "foo".into(), CreateMode::Standalone, "".into()).is_err());
+    assert!(create_project_impl(
+        &GlobalSettingsStore::in_memory(),
+        "foo".into(),
+        CreateMode::Standalone,
+        "".into()
+    )
+    .is_err());
 }
 
 #[test]
@@ -168,7 +229,11 @@ fn create_mode_rejects_unknown() {
 #[test]
 fn record_open_appends_opened_project_to_recents() {
     let store = GlobalSettingsStore::in_memory();
-    let handle = open_project_at_path_impl(&GlobalSettingsStore::in_memory(), "/Users/me/code/proj-a".into()).unwrap();
+    let handle = open_project_at_path_impl(
+        &GlobalSettingsStore::in_memory(),
+        "/Users/me/code/proj-a".into(),
+    )
+    .unwrap();
     record_open(&store, &handle);
     let recents = store.list_recent_projects().unwrap();
     assert_eq!(recents.len(), 1);
@@ -179,9 +244,13 @@ fn record_open_appends_opened_project_to_recents() {
 #[test]
 fn record_open_for_created_project_uses_handle_name_and_path() {
     let store = GlobalSettingsStore::in_memory();
-    let handle =
-        create_project_impl(&GlobalSettingsStore::in_memory(), "new-proj".into(), CreateMode::Standalone, "/tmp/new-proj".into())
-            .unwrap();
+    let handle = create_project_impl(
+        &GlobalSettingsStore::in_memory(),
+        "new-proj".into(),
+        CreateMode::Standalone,
+        "/tmp/new-proj".into(),
+    )
+    .unwrap();
     record_open(&store, &handle);
     let recents = store.list_recent_projects().unwrap();
     assert_eq!(recents.len(), 1);
@@ -193,8 +262,14 @@ fn record_open_for_created_project_uses_handle_name_and_path() {
 fn record_open_most_recent_open_sorts_first() {
     // Open A then B; the most recently opened (B) is first in recents.
     let store = GlobalSettingsStore::in_memory();
-    record_open(&store, &open_project_at_path_impl(&GlobalSettingsStore::in_memory(), "/tmp/a".into()).unwrap());
-    record_open(&store, &open_project_at_path_impl(&GlobalSettingsStore::in_memory(), "/tmp/b".into()).unwrap());
+    record_open(
+        &store,
+        &open_project_at_path_impl(&GlobalSettingsStore::in_memory(), "/tmp/a".into()).unwrap(),
+    );
+    record_open(
+        &store,
+        &open_project_at_path_impl(&GlobalSettingsStore::in_memory(), "/tmp/b".into()).unwrap(),
+    );
     let recents = store.list_recent_projects().unwrap();
     assert_eq!(recents.len(), 2);
     assert_eq!(recents[0].name, "b", "most-recently-opened project sorts first");
@@ -215,15 +290,12 @@ fn repo_fixture() -> (tempfile::TempDir, PathBuf) {
     drop(config);
     std::fs::write(root.join("a.md"), "one\n").unwrap();
     let mut index = repo.index().unwrap();
-    index
-        .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-        .unwrap();
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
     index.write().unwrap();
     {
         let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
         let sig = repo.signature().unwrap();
-        repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
-            .unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[]).unwrap();
     }
     drop(index);
     drop(repo);
@@ -244,16 +316,13 @@ fn opening_a_linked_worktree_resolves_to_the_repositorys_project() {
         let head = repo.head().unwrap().peel_to_commit().unwrap();
         repo.branch("alpha", &head, false).unwrap();
     }
-    crate::worktree::create_worktree_at(&primary, "alpha", &linked.to_string_lossy())
-        .unwrap();
+    crate::worktree::create_worktree_at(&primary, "alpha", &linked.to_string_lossy()).unwrap();
     let linked = crate::changes::canonicalize_lenient(&linked);
 
     let store = GlobalSettingsStore::in_memory();
-    let from_primary =
-        open_project_at_path_impl(&store, primary.to_string_lossy().into()).unwrap();
+    let from_primary = open_project_at_path_impl(&store, primary.to_string_lossy().into()).unwrap();
     record_open(&store, &from_primary);
-    let from_linked =
-        open_project_at_path_impl(&store, linked.to_string_lossy().into()).unwrap();
+    let from_linked = open_project_at_path_impl(&store, linked.to_string_lossy().into()).unwrap();
     record_open(&store, &from_linked);
 
     assert_eq!(
@@ -285,25 +354,20 @@ fn opening_the_anchor_resumes_the_worktree_the_project_was_last_in() {
         let head = repo.head().unwrap().peel_to_commit().unwrap();
         repo.branch("alpha", &head, false).unwrap();
     }
-    crate::worktree::create_worktree_at(&primary, "alpha", &linked.to_string_lossy())
-        .unwrap();
+    crate::worktree::create_worktree_at(&primary, "alpha", &linked.to_string_lossy()).unwrap();
     let linked = crate::changes::canonicalize_lenient(&linked);
 
     let store = GlobalSettingsStore::in_memory();
-    store
-        .save_active_worktree(&primary.to_string_lossy(), &linked.to_string_lossy())
-        .unwrap();
+    store.save_active_worktree(&primary.to_string_lossy(), &linked.to_string_lossy()).unwrap();
 
-    let handle =
-        open_project_at_path_impl(&store, primary.to_string_lossy().into()).unwrap();
+    let handle = open_project_at_path_impl(&store, primary.to_string_lossy().into()).unwrap();
     assert_eq!(handle.active_worktree_path, linked.to_string_lossy());
     assert!(!handle.remembered_worktree_unavailable);
 
     // And once that worktree is gone, the project falls back to the primary
     // and says so.
     std::fs::remove_dir_all(&linked).unwrap();
-    let fallback =
-        open_project_at_path_impl(&store, primary.to_string_lossy().into()).unwrap();
+    let fallback = open_project_at_path_impl(&store, primary.to_string_lossy().into()).unwrap();
     assert_eq!(fallback.active_worktree_path, primary.to_string_lossy());
     assert!(fallback.remembered_worktree_unavailable);
 }
@@ -329,11 +393,7 @@ fn the_slot_key_is_the_anchor_and_a_worktree_switch_does_not_change_it() {
     assert_eq!(state.slot_key(), "/dev/acme");
 
     state.set_root(PathBuf::from("/dev/acme-main"));
-    assert_eq!(
-        state.slot_key(),
-        "/dev/acme",
-        "the content root moved; the project did not"
-    );
+    assert_eq!(state.slot_key(), "/dev/acme", "the content root moved; the project did not");
 
     // With no project open the key is empty, which selects the global
     // default slot (PSS-FR-06).
@@ -376,11 +436,7 @@ fn deactivate_project_tears_down_all_project_state() {
     // Likewise the attribution baseline: recorded from a real file so the
     // teardown assertion below cannot pass against an already-empty store.
     std::fs::create_dir_all(dir.path().join(".synthesis")).unwrap();
-    std::fs::write(
-        dir.path().join(crate::scanning::LIBRARY_TOML_REL),
-        "[assignments]\n",
-    )
-    .unwrap();
+    std::fs::write(dir.path().join(crate::scanning::LIBRARY_TOML_REL), "[assignments]\n").unwrap();
     attribution.record_from_disk(&crate::fs::RootFs::for_root(dir.path()));
     assert!(
         attribution.current().is_some(),
@@ -399,20 +455,12 @@ fn deactivate_project_tears_down_all_project_state() {
     assert_eq!(tracker.len(), 1);
     // DRS-FR-42: a live drafts watch too, so its teardown assertion below is
     // not vacuous either.
-    let drafts_debouncer =
-        new_debouncer(Duration::from_millis(50), |_res: DebounceEventResult| {})
-            .expect("debouncer construction must succeed in a unit test");
+    let drafts_debouncer = new_debouncer(Duration::from_millis(50), |_res: DebounceEventResult| {})
+        .expect("debouncer construction must succeed in a unit test");
     drafts_watcher.set_for_test(drafts_debouncer);
     assert!(drafts_watcher.is_active(), "precondition: the drafts watch is live");
 
-    deactivate_project(
-        &project,
-        &watcher,
-        &tracker,
-        &drafts_watcher,
-        &candidates,
-        &attribution,
-    );
+    deactivate_project(&project, &watcher, &tracker, &drafts_watcher, &candidates, &attribution);
 
     assert_eq!(
         project.require_root().unwrap_err(),
@@ -488,23 +536,9 @@ fn deactivate_project_touches_no_file_and_is_idempotent() {
     let attribution = crate::scanning::AttributionBaseline::default();
     project.set_root(root.to_path_buf());
 
-    deactivate_project(
-        &project,
-        &watcher,
-        &tracker,
-        &drafts_watcher,
-        &candidates,
-        &attribution,
-    );
+    deactivate_project(&project, &watcher, &tracker, &drafts_watcher, &candidates, &attribution);
     // Idempotent: a second close over already-cleared state must not panic.
-    deactivate_project(
-        &project,
-        &watcher,
-        &tracker,
-        &drafts_watcher,
-        &candidates,
-        &attribution,
-    );
+    deactivate_project(&project, &watcher, &tracker, &drafts_watcher, &candidates, &attribution);
 
     assert_eq!(
         project.require_root().unwrap_err(),
@@ -548,18 +582,12 @@ fn rms_a_store_that_cannot_be_resolved_is_the_typed_refusal() {
     // The production install: an instance allowlisting the worktree alone, and
     // no named store, so resolving one reaches an application data root the
     // instance does not hold.
-    let access = crate::fs::FsAccess::builder()
-        .allow_root(dir.path())
-        .build()
-        .expect("access");
+    let access = crate::fs::FsAccess::builder().allow_root(dir.path()).build().expect("access");
     state.set_root_with_access(dir.path().to_path_buf(), Some(Arc::new(access)));
     state.set_anchor(dir.path().to_string_lossy().into_owned());
 
     assert!(state.require_root().is_ok(), "the content root still answers");
-    assert_eq!(
-        state.require_store().unwrap_err(),
-        crate::repository_store::ERR_STORE_UNAVAILABLE,
-    );
+    assert_eq!(state.require_store().unwrap_err(), crate::repository_store::ERR_STORE_UNAVAILABLE,);
 }
 
 /// RMS-FR-QJVT, RMS-FR-TCAF, RMS-FR-LPWG: the store is resolved from the
@@ -592,9 +620,8 @@ fn rms_the_store_follows_the_anchor_rather_than_the_active_worktree() {
         state.set_anchor(anchor.to_string_lossy().into_owned());
         // The identity `require_store` resolves — from the anchor, never from
         // the root it was just handed.
-        let identity = crate::repository_store::normalize_identity(std::path::Path::new(
-            &state.slot_key(),
-        ));
+        let identity =
+            crate::repository_store::normalize_identity(std::path::Path::new(&state.slot_key()));
         crate::repository_store::ensure_store_in(app_data.path(), &identity, &access)
             .expect("store")
     };
@@ -619,14 +646,8 @@ fn rms_the_store_follows_the_anchor_rather_than_the_active_worktree() {
 #[test]
 fn rms_mounting_a_content_root_schedules_the_import_pass() {
     let source = include_str!("../project.rs");
-    let after = source
-        .split_once("pub fn remount_content_root")
-        .expect("the mount")
-        .1;
-    let body = after
-        .split_once("\n}\n")
-        .expect("the end of the mount")
-        .0;
+    let after = source.split_once("pub fn remount_content_root").expect("the mount").1;
+    let body = after.split_once("\n}\n").expect("the end of the mount").0;
     assert!(
         body.contains("crate::repository_store::schedule_import(app)"),
         "the mount itself schedules one import pass",

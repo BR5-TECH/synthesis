@@ -50,7 +50,8 @@ fn every_configured_remote_is_reported_with_its_own_reason() {
         ],
         Some("secret"),
         &fake,
-     false);
+        false,
+    );
     assert_eq!(classified.len(), 2);
     assert_eq!(classified[0].eligibility, RemoteEligibility::IssuesCreateForbidden);
     assert!(classified[0].reason.as_deref().unwrap().contains("create issues"));
@@ -84,8 +85,12 @@ fn a_repository_that_accepts_no_issue_names_the_repository_in_its_reason() {
 #[test]
 fn without_a_token_no_request_is_made_and_every_github_remote_is_ineligible() {
     let fake = FakeGithub::publishable();
-    let classified =
-        remotes::classify_with(&[configured("origin", "https://github.com/acme/widgets")], None, &fake, false);
+    let classified = remotes::classify_with(
+        &[configured("origin", "https://github.com/acme/widgets")],
+        None,
+        &fake,
+        false,
+    );
     assert_eq!(classified[0].eligibility, RemoteEligibility::TokenUnavailable);
     assert!(fake.calls().is_empty());
 }
@@ -94,8 +99,12 @@ fn without_a_token_no_request_is_made_and_every_github_remote_is_ineligible() {
 #[test]
 fn one_eligible_remote_is_selected_automatically() {
     let fake = FakeGithub::publishable();
-    let classified =
-        remotes::classify_with(&[configured("origin", "https://github.com/acme/widgets")], Some("s"), &fake, false);
+    let classified = remotes::classify_with(
+        &[configured("origin", "https://github.com/acme/widgets")],
+        Some("s"),
+        &fake,
+        false,
+    );
     let resolution = remotes::resolve(classified, None);
     assert_eq!(resolution.selection.as_deref(), Some("origin"));
     assert_eq!(resolution.origin, SelectionOrigin::Automatic);
@@ -113,7 +122,8 @@ fn two_remotes_leave_the_choice_to_the_caller() {
         ],
         Some("s"),
         &fake,
-     false);
+        false,
+    );
     let resolution = remotes::resolve(classified, None);
     assert_eq!(resolution.selection.as_deref(), Some("origin"));
     assert_eq!(resolution.origin, SelectionOrigin::AttemptOnly);
@@ -132,7 +142,8 @@ fn a_persisted_choice_is_reused_while_name_and_url_still_match() {
         ],
         Some("s"),
         &fake,
-     false);
+        false,
+    );
     let persisted = PublicationRemoteSelection {
         name: "upstream".into(),
         url: "github.com/acme/upstream".into(),
@@ -154,18 +165,25 @@ fn a_renamed_repointed_or_ineligible_remote_invalidates_the_persisted_choice() {
             ],
             Some("s"),
             &FakeGithub::publishable(),
-         false)
+            false,
+        )
     };
     // Renamed: no remote of that name is enumerated any more.
     let renamed = remotes::resolve(
         eligible(),
-        Some(PublicationRemoteSelection { name: "fork".into(), url: "github.com/acme/upstream".into() }),
+        Some(PublicationRemoteSelection {
+            name: "fork".into(),
+            url: "github.com/acme/upstream".into(),
+        }),
     );
     assert_eq!(renamed.origin, SelectionOrigin::AttemptOnly);
     // Re-pointed: the name matches and the canonicalized URL does not.
     let repointed = remotes::resolve(
         eligible(),
-        Some(PublicationRemoteSelection { name: "upstream".into(), url: "github.com/acme/old".into() }),
+        Some(PublicationRemoteSelection {
+            name: "upstream".into(),
+            url: "github.com/acme/old".into(),
+        }),
     );
     assert_eq!(repointed.origin, SelectionOrigin::AttemptOnly);
     // The choice itself is still reported, so a surface can say what was stored.
@@ -175,10 +193,14 @@ fn a_renamed_repointed_or_ineligible_remote_invalidates_the_persisted_choice() {
         &[configured("upstream", "https://github.com/acme/upstream")],
         Some("s"),
         &FakeGithub::with_probe(ProbeOutcome::IssuesUnreadable),
-     false);
+        false,
+    );
     let refused = remotes::resolve(
         ineligible,
-        Some(PublicationRemoteSelection { name: "upstream".into(), url: "github.com/acme/upstream".into() }),
+        Some(PublicationRemoteSelection {
+            name: "upstream".into(),
+            url: "github.com/acme/upstream".into(),
+        }),
     );
     assert_eq!(refused.origin, SelectionOrigin::None);
     assert_eq!(refused.selection, None);
@@ -188,7 +210,12 @@ fn a_renamed_repointed_or_ineligible_remote_invalidates_the_persisted_choice() {
 #[test]
 fn a_resolution_with_no_selection_names_which_case_holds() {
     let of = |configured_remotes: &[ConfiguredRemote], probe| {
-        remotes::refusal_for(&remotes::classify_with(configured_remotes, Some("s"), &FakeGithub::with_probe(probe), false))
+        remotes::refusal_for(&remotes::classify_with(
+            configured_remotes,
+            Some("s"),
+            &FakeGithub::with_probe(probe),
+            false,
+        ))
     };
     assert_eq!(remotes::refusal_for(&[]), ERR_NO_REMOTE);
     assert_eq!(
@@ -196,15 +223,24 @@ fn a_resolution_with_no_selection_names_which_case_holds() {
         ERR_NO_GITHUB_REMOTE
     );
     assert_eq!(
-        of(&[configured("origin", "https://github.com/acme/widgets")], ProbeOutcome::IssuesUnreadable),
+        of(
+            &[configured("origin", "https://github.com/acme/widgets")],
+            ProbeOutcome::IssuesUnreadable
+        ),
         ERR_ISSUES_INACCESSIBLE
     );
     assert_eq!(
-        of(&[configured("origin", "https://github.com/acme/widgets")], ProbeOutcome::CreateForbidden),
+        of(
+            &[configured("origin", "https://github.com/acme/widgets")],
+            ProbeOutcome::CreateForbidden
+        ),
         ERR_ISSUES_CREATE_FORBIDDEN
     );
     assert_eq!(
-        of(&[configured("origin", "https://github.com/acme/widgets")], ProbeOutcome::IssuesDisabled),
+        of(
+            &[configured("origin", "https://github.com/acme/widgets")],
+            ProbeOutcome::IssuesDisabled
+        ),
         ERR_ISSUES_DISABLED
     );
     assert_eq!(
@@ -212,8 +248,8 @@ fn a_resolution_with_no_selection_names_which_case_holds() {
             &[configured("origin", "https://github.com/acme/widgets")],
             None,
             &FakeGithub::publishable(),
-        false,
-    )),
+            false,
+        )),
         ERR_TOKEN_UNAVAILABLE
     );
 }
@@ -245,7 +281,10 @@ fn every_ineligible_value_maps_to_one_code_and_one_sentence() {
     assert_eq!(RemoteEligibility::Eligible.reason(), None);
     assert_eq!(RemoteEligibility::Eligible.error_code(), "");
     // The two refusals that speak about the project rather than about a remote.
-    assert_eq!(remotes::refusal_reason(ERR_NO_REMOTE), "This project has no configured Git remote.");
+    assert_eq!(
+        remotes::refusal_reason(ERR_NO_REMOTE),
+        "This project has no configured Git remote."
+    );
     assert_eq!(remotes::refusal_reason(ERR_NO_GITHUB_REMOTE), "This project has no GitHub remote.");
     // A code no eligibility value stands for still answers with a sentence.
     assert_eq!(remotes::refusal_reason(ERR_GITHUB_UNREACHABLE), "Publication is not available.");
@@ -325,7 +364,8 @@ fn publishing_re_resolves_the_named_remote_and_refuses_an_ineligible_one() {
         &[configured("origin", "https://github.com/acme/widgets")],
         Some("s"),
         &FakeGithub::with_probe(ProbeOutcome::CreateForbidden),
-     false);
+        false,
+    );
     assert_eq!(
         flow::resolve_remote_for(&classified, "origin"),
         Err(ERR_ISSUES_CREATE_FORBIDDEN.to_string())
@@ -432,3 +472,43 @@ fn a_repository_the_author_has_just_changed_keeps_its_answer_until_the_cache_dro
     assert_eq!(remotes_of()[0].eligibility, RemoteEligibility::Eligible);
 }
 
+/// AAP-FR-LRTC, GHP-FR-ZRFP: a publication refused for an untrusted GitHub
+/// certificate carries the full typed error. It names the host and the cause,
+/// and the reason sentence read from it names them too.
+#[test]
+fn a_refused_github_certificate_refuses_the_publish_with_host_and_cause() {
+    use crate::tls::TlsCause;
+    let classified = remotes::classify_with(
+        &[configured("origin", "https://github.com/acme/widgets")],
+        Some("s"),
+        &FakeGithub::with_probe(ProbeOutcome::TlsUntrusted(TlsCause::UnknownIssuer)),
+        false,
+    );
+    let wire = "tls_untrusted:unknown_issuer:api.github.com";
+    assert_eq!(remotes::refusal_for(&classified), wire);
+    assert_eq!(flow::resolve_remote_for(&classified, "origin"), Err(wire.to_string()));
+    let reason = remotes::refusal_reason(wire);
+    assert!(reason.contains("api.github.com"), "{reason}");
+    assert!(reason.contains("issuer"), "{reason}");
+}
+
+/// AAP-FR-LRTC, GHP-FR-WNJC: where one remote has a refused certificate and
+/// another has a repository condition, the certificate is named first, with its
+/// cause.
+#[test]
+fn a_refused_certificate_is_named_before_a_repository_condition() {
+    use crate::tls::TlsCause;
+    let mut classified = remotes::classify_with(
+        &[configured("origin", "https://github.com/acme/widgets")],
+        Some("s"),
+        &FakeGithub::with_probe(ProbeOutcome::IssuesDisabled),
+        false,
+    );
+    classified.extend(remotes::classify_with(
+        &[configured("upstream", "https://github.com/acme/upstream")],
+        Some("s"),
+        &FakeGithub::with_probe(ProbeOutcome::TlsUntrusted(TlsCause::Expired)),
+        false,
+    ));
+    assert_eq!(remotes::refusal_for(&classified), "tls_untrusted:expired:api.github.com");
+}

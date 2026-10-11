@@ -61,15 +61,13 @@ fn append(buffer: &LogBuffer, inputs: Vec<LogInput>) {
 }
 
 fn all(buffer: &LogBuffer) -> LogPage {
-    buffer
-        .query(&LogFilter::default(), None, BUFFER_CAPACITY)
-        .unwrap()
+    buffer.query(&LogFilter::default(), None, BUFFER_CAPACITY).unwrap()
 }
 
-mod payload_shape;
-mod ordering;
-mod eviction;
-mod filters;
 mod coalescing;
+mod eviction;
 mod export;
+mod filters;
+mod ordering;
 mod paging;
+mod payload_shape;

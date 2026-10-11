@@ -13,28 +13,19 @@ fn a_match_carries_exactly_id_scope_body_and_score() {
     fixture.note("the teardown of the overlay");
     fixture.reindex();
 
-    let output = block_on(fixture.tool().call(NoteSearchArgs {
-        query: "teardown".into(),
-        limit: None,
-    }))
-    .expect("the call succeeds");
+    let output =
+        block_on(fixture.tool().call(NoteSearchArgs { query: "teardown".into(), limit: None }))
+            .expect("the call succeeds");
     let value = serde_json::to_value(&output).expect("serializes");
     let entry = &value["notes"][0];
     // The object's keys, sorted — `serde_json`'s map orders them itself, so the
     // claim is which four are present rather than what order they took.
-    let mut keys: Vec<&str> = entry
-        .as_object()
-        .expect("an object")
-        .keys()
-        .map(String::as_str)
-        .collect();
+    let mut keys: Vec<&str> =
+        entry.as_object().expect("an object").keys().map(String::as_str).collect();
     keys.sort();
     assert_eq!(keys, vec!["body", "id", "scope", "score"]);
     for absent in ["index", "path", "node_id", "nodeId", "chunk_ordinal", "chunkOrdinal"] {
-        assert!(
-            entry.get(absent).is_none(),
-            "a match must not carry {absent:?}",
-        );
+        assert!(entry.get(absent).is_none(), "a match must not carry {absent:?}",);
     }
     let rendered = serde_json::to_string(&value).unwrap();
     assert!(
@@ -59,9 +50,7 @@ fn the_body_is_the_whole_stored_body_byte_for_byte() {
     assert_eq!(matches[0].body, body, "byte for byte, and whole");
     assert_eq!(
         matches[0].body,
-        crate::notes::note_record(&fixture.root(), &id)
-            .expect("the note resolves")
-            .body,
+        crate::notes::note_record(&fixture.root(), &id).expect("the note resolves").body,
         "and it is what notes storage holds",
     );
 }
@@ -111,10 +100,7 @@ fn an_empty_note_contributes_no_document_and_is_found_by_nothing() {
     // A blank query refuses before it ever reaches the index (NST-FR-14), so an
     // empty note is unreachable from both directions.
     for query in ["", " "] {
-        assert_eq!(
-            fixture.refusal(query, None).kind(),
-            ToolErrorKind::InvalidArgs,
-        );
+        assert_eq!(fixture.refusal(query, None).kind(), ToolErrorKind::InvalidArgs,);
     }
 }
 
@@ -124,7 +110,8 @@ fn an_empty_note_contributes_no_document_and_is_found_by_nothing() {
 fn scope_and_body_are_the_current_record_rather_than_the_indexed_hit() {
     let fixture = NoteFixture::new();
     fixture.write("specifications/a.md", "# A\n\nnothing\n");
-    let attached = fixture.scoped_note(entity("specifications/a.md"), "teardown attached", None, None);
+    let attached =
+        fixture.scoped_note(entity("specifications/a.md"), "teardown attached", None, None);
     let project = fixture.note("teardown project wide");
     fixture.reindex();
 
@@ -143,18 +130,11 @@ fn scope_and_body_are_the_current_record_rather_than_the_indexed_hit() {
     // **model** reads, so it is asserted on the serialized form rather than on
     // Rust equality — a `serde` rename here would change the contract without
     // touching a single `PartialEq`.
-    let value = serde_json::to_value(NoteSearchOutput {
-        notes: matches.clone(),
-    })
-    .expect("serializes");
+    let value =
+        serde_json::to_value(NoteSearchOutput { notes: matches.clone() }).expect("serializes");
     let rendered = value["notes"].as_array().expect("an array").clone();
-    let scope_of = |id: &str| {
-        rendered
-            .iter()
-            .find(|m| m["id"] == id)
-            .expect("the match")["scope"]
-            .clone()
-    };
+    let scope_of =
+        |id: &str| rendered.iter().find(|m| m["id"] == id).expect("the match")["scope"].clone();
     assert_eq!(
         scope_of(&attached),
         serde_json::json!({

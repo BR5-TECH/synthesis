@@ -19,10 +19,7 @@ fn there_are_twelve_indexes_and_documents_is_one() {
     assert_eq!(IndexId::ALL.len(), 12);
     assert!(IndexId::ALL.contains(&IndexId::Documents));
     assert_eq!(IndexId::Documents.as_str(), "documents");
-    assert_eq!(
-        serde_json::to_value(IndexId::Documents).unwrap(),
-        serde_json::json!("documents")
-    );
+    assert_eq!(serde_json::to_value(IndexId::Documents).unwrap(), serde_json::json!("documents"));
     assert!(!IndexId::Documents.is_artifact_index(), "no scan node id");
 }
 
@@ -96,27 +93,22 @@ fn the_documents_index_is_separate_from_the_others() {
 fn a_documents_pass_replaces_adds_and_removes() {
     let first = pass(
         &IndexSet::default(),
-        vec![
-            document("doc-a", "wombat burrow", true),
-            document("doc-b", "echidna spines", true),
-        ],
+        vec![document("doc-a", "wombat burrow", true), document("doc-b", "echidna spines", true)],
         PassScope::DOCUMENTS,
     );
     assert_eq!(first.file_count(IndexId::Documents), 2);
 
     let (second, stats) = pass_with_stats(
         &first,
-        vec![
-            document("doc-a", "numbat termites", true),
-            document("doc-b", "echidna spines", true),
-        ],
+        vec![document("doc-a", "numbat termites", true), document("doc-b", "echidna spines", true)],
         PassScope::DOCUMENTS,
     );
     assert_eq!(stats.files_unchanged, 1);
     assert!(search_snapshot(&second, &[IndexId::Documents], "wombat", 5).is_empty());
     assert_eq!(search_snapshot(&second, &[IndexId::Documents], "numbat", 5).len(), 1);
 
-    let third = pass(&second, vec![document("doc-b", "echidna spines", true)], PassScope::DOCUMENTS);
+    let third =
+        pass(&second, vec![document("doc-b", "echidna spines", true)], PassScope::DOCUMENTS);
     assert_eq!(third.file_count(IndexId::Documents), 1);
     assert!(search_snapshot(&third, &[IndexId::Documents], "numbat", 5).is_empty());
 
@@ -132,7 +124,11 @@ fn a_documents_pass_replaces_adds_and_removes() {
 // than fatal, and drops what the index held for it.
 #[test]
 fn a_skipped_document_loses_its_chunks() {
-    let first = pass(&IndexSet::default(), vec![document("doc-a", "ibex horns", true)], PassScope::DOCUMENTS);
+    let first = pass(
+        &IndexSet::default(),
+        vec![document("doc-a", "ibex horns", true)],
+        PassScope::DOCUMENTS,
+    );
     let second = pass(
         &first,
         vec![SourceFile {

@@ -13,21 +13,16 @@ fn a_draft_path_cannot_escape_its_own_draft() {
     let other = draft(root, "other");
     save_draft_file_impl(root, &other, "other.md", "mine").unwrap();
 
-    for escape in [
-        format!("../../{other}/files/other.md"),
-        "/other.md".to_string(),
-        "..".to_string(),
-    ] {
+    for escape in
+        [format!("../../{other}/files/other.md"), "/other.md".to_string(), "..".to_string()]
+    {
         assert!(
             save_draft_file_impl(root, &id, &escape, "pwned").is_err(),
             "{escape:?} must be refused"
         );
         assert!(load_draft_file_impl(root, &id, &escape).is_err());
     }
-    assert_eq!(
-        load_draft_file_impl(root, &other, "other.md").unwrap().body,
-        "mine"
-    );
+    assert_eq!(load_draft_file_impl(root, &other, "other.md").unwrap().body, "mine");
 }
 
 #[cfg(unix)]
@@ -59,16 +54,9 @@ fn a_symlink_inside_a_draft_is_not_followed_out_of_it() {
         );
     }
 
-    assert_eq!(
-        std::fs::read_to_string(root.join("outside.md")).unwrap(),
-        "not yours"
-    );
-    assert_eq!(
-        std::fs::read_to_string(root.join("elsewhere/x.md")).unwrap(),
-        "also not yours"
-    );
+    assert_eq!(std::fs::read_to_string(root.join("outside.md")).unwrap(), "not yours");
+    assert_eq!(std::fs::read_to_string(root.join("elsewhere/x.md")).unwrap(), "also not yours");
 }
-
 
 #[test]
 fn an_invalid_draft_id_is_refused_before_it_reaches_the_filesystem() {

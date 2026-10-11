@@ -140,10 +140,7 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
 
     for refusal in &refusals {
         let message = refusal.to_string();
-        assert!(
-            message.ends_with('.'),
-            "a refusal is plain sentences: {message:?} (TLC-FR-09)",
-        );
+        assert!(message.ends_with('.'), "a refusal is plain sentences: {message:?} (TLC-FR-09)",);
         for forbidden in [
             "ToolRefusal",
             "Bm25Indexer",
@@ -164,7 +161,8 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         // example like 'src/main.ts' is the opposite: it shows a model the shape
         // of a valid argument, which TLC-FR-06 asks a parameter to do.
         for token in message.split_whitespace() {
-            let bare = token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '/' && c != '\\');
+            let bare =
+                token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '/' && c != '\\');
             assert!(
                 !bare.starts_with('/') && !bare.contains(":\\"),
                 "a refusal carries no absolute filesystem path: {message:?} (TLC-FR-09)",
@@ -204,12 +202,12 @@ fn every_declared_failure_returns_rather_than_panicking() {
         );
     }
     extra.push(
-        block_on(SpecSearchTool::new(open.handle()).call(
-            spec_search::SpecificationSearchArgs {
+        block_on(
+            SpecSearchTool::new(open.handle()).call(spec_search::SpecificationSearchArgs {
                 query: "  ".to_string(),
                 limit: None,
-            },
-        ))
+            }),
+        )
         .unwrap_err(),
     );
     extra.push(
@@ -230,20 +228,14 @@ fn every_declared_failure_returns_rather_than_panicking() {
 
     let outcomes: Vec<ToolRefusal> = vec![
         block_on(
-            skill_search::SkillSearchTool::new(closed_handle.clone()).call(
-                skill_search::SkillSearchArgs {
-                    query: "anything".to_string(),
-                    limit: None,
-                },
-            ),
+            skill_search::SkillSearchTool::new(closed_handle.clone())
+                .call(skill_search::SkillSearchArgs { query: "anything".to_string(), limit: None }),
         )
         .unwrap_err(),
-        block_on(skill_search::SkillSearchTool::new(open.handle()).call(
-            skill_search::SkillSearchArgs {
-                query: "   ".to_string(),
-                limit: None,
-            },
-        ))
+        block_on(
+            skill_search::SkillSearchTool::new(open.handle())
+                .call(skill_search::SkillSearchArgs { query: "   ".to_string(), limit: None }),
+        )
         .unwrap_err(),
         block_on(
             skill_list::SkillListTool::new(closed_handle.clone())
@@ -251,25 +243,19 @@ fn every_declared_failure_returns_rather_than_panicking() {
         )
         .unwrap_err(),
         block_on(
-            skill_load::SkillLoadTool::new(closed_handle).call(skill_load::LoadSkillArgs {
-                name: "analyst".to_string(),
-                ecosystem: None,
-            }),
+            skill_load::SkillLoadTool::new(closed_handle)
+                .call(skill_load::LoadSkillArgs { name: "analyst".to_string(), ecosystem: None }),
         )
         .unwrap_err(),
         block_on(
-            skill_load::SkillLoadTool::new(open.handle()).call(skill_load::LoadSkillArgs {
-                name: "  ".to_string(),
-                ecosystem: None,
-            }),
+            skill_load::SkillLoadTool::new(open.handle())
+                .call(skill_load::LoadSkillArgs { name: "  ".to_string(), ecosystem: None }),
         )
         .unwrap_err(),
-        block_on(
-            skill_load::SkillLoadTool::new(open.handle()).call(skill_load::LoadSkillArgs {
-                name: "no such skill".to_string(),
-                ecosystem: None,
-            }),
-        )
+        block_on(skill_load::SkillLoadTool::new(open.handle()).call(skill_load::LoadSkillArgs {
+            name: "no such skill".to_string(),
+            ecosystem: None,
+        }))
         .unwrap_err(),
     ];
     // Each `unwrap_err` above is the assertion; what is worth stating here is
@@ -298,12 +284,10 @@ fn no_open_project_reads_identically_from_every_tool() {
     let handle = app.handle().clone();
     let handle2 = handle.clone();
 
-    let search = block_on(skill_search::SkillSearchTool::new(handle.clone()).call(
-        skill_search::SkillSearchArgs {
-            query: "anything".to_string(),
-            limit: None,
-        },
-    ))
+    let search = block_on(
+        skill_search::SkillSearchTool::new(handle.clone())
+            .call(skill_search::SkillSearchArgs { query: "anything".to_string(), limit: None }),
+    )
     .unwrap_err();
     let list = block_on(
         skill_list::SkillListTool::new(handle.clone()).call(skill_list::SkillListArgs::default()),
@@ -313,29 +297,23 @@ fn no_open_project_reads_identically_from_every_tool() {
     // model told "no skill by that name" would conclude the project lacks a
     // skill it has.
     let load = block_on(
-        skill_load::SkillLoadTool::new(handle.clone()).call(skill_load::LoadSkillArgs {
-            name: "analyst".to_string(),
-            ecosystem: None,
-        }),
+        skill_load::SkillLoadTool::new(handle.clone())
+            .call(skill_load::LoadSkillArgs { name: "analyst".to_string(), ecosystem: None }),
     )
     .unwrap_err();
-    let specs = block_on(SpecSearchTool::new(handle.clone()).call(
-        spec_search::SpecificationSearchArgs {
+    let specs =
+        block_on(SpecSearchTool::new(handle.clone()).call(spec_search::SpecificationSearchArgs {
             query: "anything".to_string(),
             limit: None,
-        },
-    ))
-    .unwrap_err();
+        }))
+        .unwrap_err();
     // RFT-FR-17: no root to resolve a path against, so the shared refusal
     // rather than the not-found one a model would read as "the file is gone".
-    let read = block_on(
-        file_read::FileReadTool::new(handle, "no-session").call(file_read::ReadFileArgs {
-            path: "src/a.ts".to_string(),
-            offset: None,
-            limit: None,
-        }),
-    )
-    .unwrap_err();
+    let read =
+        block_on(file_read::FileReadTool::new(handle, "no-session").call(
+            file_read::ReadFileArgs { path: "src/a.ts".to_string(), offset: None, limit: None },
+        ))
+        .unwrap_err();
 
     // AUC-FR-13: the root this tool holds was bound when its turn began, and a
     // turn outlives the project closing under it — so it gates per call like
@@ -343,8 +321,15 @@ fn no_open_project_reads_identically_from_every_tool() {
     let ask = block_on(
         ask_user_comment::AskUserCommentTool::new(
             handle2,
-            crate::agent_conversations::OwnedRoots { worktree: crate::fs::RootFs::for_root(&std::env::temp_dir()), store: crate::fs::RootFs::for_root(&std::env::temp_dir()) },
-            crate::agent_conversations::ConversationOrigin::stub_artifact("no-project", "a.md", true),
+            crate::agent_conversations::OwnedRoots {
+                worktree: crate::fs::RootFs::for_root(std::env::temp_dir()),
+                store: crate::fs::RootFs::for_root(std::env::temp_dir()),
+            },
+            crate::agent_conversations::ConversationOrigin::stub_artifact(
+                "no-project",
+                "a.md",
+                true,
+            ),
             crate::comments::Participant::Agent {
                 agent_id: "no-project".into(),
                 handle: "no-project".into(),
@@ -410,10 +395,7 @@ fn a_correctable_argument_is_retryable_and_a_missing_project_is_not() {
         Some(true),
         "TLC-FR-11: a different name reaches a skill this project does have",
     );
-    assert_eq!(
-        ToolRefusal::SkillUnreadable.to_execution_error().retryable(),
-        Some(true),
-    );
+    assert_eq!(ToolRefusal::SkillUnreadable.to_execution_error().retryable(), Some(true),);
 }
 
 // ---------------------------------------------------------------------------
@@ -425,13 +407,12 @@ fn nothing_matched_and_nothing_present_are_successes_not_refusals() {
     let fixture = demo_project();
     let handle = fixture.handle();
 
-    let search = block_on(skill_search::SkillSearchTool::new(handle).call(
-        skill_search::SkillSearchArgs {
+    let search =
+        block_on(skill_search::SkillSearchTool::new(handle).call(skill_search::SkillSearchArgs {
             query: "zzzzz nonexistent terminology".to_string(),
             limit: None,
-        },
-    ))
-    .expect("nothing matched is an answer, not a failure (TLC-FR-12)");
+        }))
+        .expect("nothing matched is an answer, not a failure (TLC-FR-12)");
     assert!(search.skills.is_empty());
 
     let empty = empty_project();
@@ -472,33 +453,21 @@ fn a_call_reports_under_both_domains_and_leaks_nothing() {
     // One success and one refusal, from the same tool.
     let query = "review a specification for contradictions";
     let ok = block_on(
-        skill_search::SkillSearchTool::with_buffer(handle.clone(), &TLC_BUFFER).call(
-            skill_search::SkillSearchArgs {
-                query: query.to_string(),
-                limit: None,
-            },
-        ),
+        skill_search::SkillSearchTool::with_buffer(handle.clone(), &TLC_BUFFER)
+            .call(skill_search::SkillSearchArgs { query: query.to_string(), limit: None }),
     )
     .unwrap();
     assert!(!ok.skills.is_empty(), "the fixture matches this query");
 
     block_on(
-        skill_search::SkillSearchTool::with_buffer(handle, &TLC_BUFFER).call(
-            skill_search::SkillSearchArgs {
-                query: String::new(),
-                limit: None,
-            },
-        ),
+        skill_search::SkillSearchTool::with_buffer(handle, &TLC_BUFFER)
+            .call(skill_search::SkillSearchArgs { query: String::new(), limit: None }),
     )
     .unwrap_err();
 
     let ai = records(&TLC_BUFFER, Domain::Ai);
     let backend = records(&TLC_BUFFER, Domain::Backend);
-    assert_eq!(
-        ai.len(),
-        2,
-        "one INFO for the call and one WARN for the refusal (TLC-FR-14)",
-    );
+    assert_eq!(ai.len(), 2, "one INFO for the call and one WARN for the refusal (TLC-FR-14)",);
     assert_eq!(ai, backend, "TLC-FR-14: both domains return the same records");
 
     assert_eq!(ai[0].level, LogLevel::Info);
@@ -527,10 +496,7 @@ fn a_call_reports_under_both_domains_and_leaks_nothing() {
         ".claude/skills",
         "sarcophagus",
     ] {
-        assert!(
-            !serialised.contains(leaked),
-            "a record must not carry {leaked:?} (TLC-FR-14)",
-        );
+        assert!(!serialised.contains(leaked), "a record must not carry {leaked:?} (TLC-FR-14)",);
     }
 }
 
@@ -653,4 +619,3 @@ fn one_instance_serves_two_callers_without_either_observing_the_other() {
     assert_eq!(one.skills.first().map(|s| s.name.as_str()), Some("analyst"));
     assert_eq!(two.skills.first().map(|s| s.name.as_str()), Some("deployer"));
 }
-

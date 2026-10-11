@@ -16,10 +16,7 @@ fn the_diff_viewer_modes_default_to_unified_and_source() {
 
     let store = GlobalSettingsStore::in_memory();
     let loaded = store.load_app_preferences().unwrap();
-    assert_eq!(
-        loaded.diff_visualization_mode,
-        DiffVisualizationMode::Unified
-    );
+    assert_eq!(loaded.diff_visualization_mode, DiffVisualizationMode::Unified);
     assert_eq!(loaded.diff_rendering_mode, DiffRenderingMode::Source);
 }
 
@@ -55,10 +52,7 @@ fn a_record_written_before_the_diff_modes_existed_still_loads() {
     let decoded: AppPreferences =
         serde_json::from_str(r#"{"theme":"dark","mainWindowFullscreen":true}"#).unwrap();
     assert_eq!(decoded.theme, Theme::Dark);
-    assert_eq!(
-        decoded.diff_visualization_mode,
-        DiffVisualizationMode::Unified
-    );
+    assert_eq!(decoded.diff_visualization_mode, DiffVisualizationMode::Unified);
     assert_eq!(decoded.diff_rendering_mode, DiffRenderingMode::Source);
 }
 
@@ -93,9 +87,7 @@ fn gss_ts21_the_diff_modes_survive_a_relaunch_a_theme_write_and_another_project(
     // And two projects each get their own layout slot; neither carries a
     // diff mode, so the values are the same whichever project is open.
     for key in ["/projects/alpha", "/projects/beta"] {
-        reloaded
-            .save_project_layout(key, crate::layout::LayoutPreferences::default())
-            .unwrap();
+        reloaded.save_project_layout(key, crate::layout::LayoutPreferences::default()).unwrap();
         let prefs = reloaded.load_app_preferences().unwrap();
         assert_eq!(
             prefs.diff_visualization_mode,
@@ -241,14 +233,9 @@ fn gss_ts33_the_rail_width_defaults_and_survives_everything_but_its_own_write() 
     // open, because it lives outside the per-project slot.
     let reloaded = GlobalSettingsStore::with_path(path);
     for key in ["/projects/alpha", "/projects/beta"] {
-        reloaded
-            .save_project_layout(key, crate::layout::LayoutPreferences::default())
-            .unwrap();
+        reloaded.save_project_layout(key, crate::layout::LayoutPreferences::default()).unwrap();
         assert_eq!(
-            reloaded
-                .load_app_preferences()
-                .unwrap()
-                .graduation_rail_width_fraction,
+            reloaded.load_app_preferences().unwrap().graduation_rail_width_fraction,
             0.28,
             "the width is user-global, so {key} reads the same value",
         );
@@ -270,10 +257,7 @@ fn gss_ts33_the_rail_width_defaults_and_survives_everything_but_its_own_write() 
     editing.graduation_rail_width_fraction = 0.90;
     reloaded.save_app_preferences(editing).unwrap();
     assert_eq!(
-        reloaded
-            .load_app_preferences()
-            .unwrap()
-            .graduation_rail_width_fraction,
+        reloaded.load_app_preferences().unwrap().graduation_rail_width_fraction,
         0.90,
         "this module bounds nothing",
     );
@@ -379,10 +363,7 @@ fn the_paths_width_defaults_and_round_trips_untouched() {
     let mut editing = store.load_app_preferences().unwrap();
     editing.graduation_paths_width_fraction = 0.95;
     store.save_app_preferences(editing).unwrap();
-    assert_eq!(
-        store.load_app_preferences().unwrap().graduation_paths_width_fraction,
-        0.95
-    );
+    assert_eq!(store.load_app_preferences().unwrap().graduation_paths_width_fraction, 0.95);
 }
 
 // GSS-FR-QDNV / GSS-FR-17: the paths width is user-global, so it is no field

@@ -11,7 +11,6 @@
 import type {
   GraduationLogIndexes,
   GraduationLogPassScope,
-  GraduationLogStream,
   GraduationRun,
   GraduationStreamIndex,
 } from "../../types";
@@ -38,17 +37,18 @@ export function scopeOf(entry: LogScopeEntry): GraduationLogPassScope {
 }
 
 /**
- * GLW-FR-NFLN: a stable key for one selection.
+ * GLW-FR-NFLN: a stable key for one selection of run, phase, and scope.
  *
- * An answer that arrives carrying another key is discarded rather than merged.
+ * The window reads one stream only (GLW-FR-FPUX), so the stream is no part of
+ * the key. An answer that arrives carrying another key is discarded rather than
+ * merged.
  */
 export function scopeKey(
   runId: string,
   phaseId: string,
   entry: LogScopeEntry | null,
-  stream: GraduationLogStream,
 ): string {
-  return `${runId} ${phaseId} ${entry?.key ?? "none"} ${stream}`;
+  return `${runId} ${phaseId} ${entry?.key ?? "none"}`;
 }
 
 /** GRS-FR-MBED: a version this build does not recognise reads back no index. */
@@ -56,11 +56,20 @@ function indexesOf(
   logs: GraduationLogIndexes | undefined,
 ): GraduationStreamIndex[] {
   if (!logs || logs.logStorageVersion !== 1) return [];
-  return [logs.source, logs.structured].filter(Boolean);
+  return [logs.activity, logs.structured].filter(Boolean);
 }
 
 /**
- * GRU-FR-TQJW: a stage holds a log where any segment of either stream names it.
+ * GLW-FR-RVKT / GLW-FR-ELJO: the activity index alone, which is the one stream
+ * the window reads. A version this build does not recognise reads back none.
+ */
+function activitySegments(logs: GraduationLogIndexes | undefined) {
+  if (!logs || logs.logStorageVersion !== 1) return [];
+  return logs.activity?.segments ?? [];
+}
+
+/**
+ * GRU-FR-TQJW: a stage holds a log where any segment of either index names it.
  *
  * A segment naming a pass and a segment naming `pass = null` each count, so a
  * stage whose only output is run-level is still one the author may open.
@@ -144,17 +153,15 @@ export function passesInPhase(run: GraduationRun, phaseId: string): number[] {
 /**
  * GLW-FR-RVKT: whether the run-level entry stands in this phase's list.
  *
- * Both streams' indexes settle it, so the stream toggle adds and removes no
- * entry.
+ * The activity index alone settles it. A run-level segment of the structured
+ * index adds no entry, because the window does not read that stream.
  */
 export function hasRunLevelEntry(
   logs: GraduationLogIndexes | undefined,
   phaseId: string,
 ): boolean {
-  return indexesOf(logs).some((index) =>
-    (index.segments ?? []).some(
-      (segment) => segment.phaseId === phaseId && segment.pass === null,
-    ),
+  return activitySegments(logs).some(
+    (segment) => segment.phaseId === phaseId && segment.pass === null,
   );
 }
 
@@ -183,7 +190,7 @@ export function scopeEntries(
 /**
  * GLW-FR-ELJO / GLW-FR-YVKD / GLW-FR-XZQM: the entry the window opens on.
  *
- * The newest listed pass whose own records the selected stream's index holds;
+ * The newest listed pass whose own records the activity index holds;
  * where no listed pass holds one, the run-level entry where it stands, and the
  * newest listed pass otherwise. It reads the index the run record already
  * carries and makes no read of its own.
@@ -191,15 +198,12 @@ export function scopeEntries(
 export function openingEntry(
   run: GraduationRun,
   phaseId: string,
-  stream: GraduationLogStream,
 ): LogScopeEntry | null {
   const entries = scopeEntries(run, phaseId);
   const passes = entries.filter((entry) => entry.kind === "pass");
   const runLevel = entries.find((entry) => entry.kind === "run_level") ?? null;
 
-  const index =
-    run.logs?.logStorageVersion === 1 ? run.logs[stream] : undefined;
-  const segments = index?.segments ?? [];
+  const segments = activitySegments(run.logs);
   const holdsPass = (pass: number) =>
     segments.some(
       (segment) => segment.phaseId === phaseId && segment.pass === pass,

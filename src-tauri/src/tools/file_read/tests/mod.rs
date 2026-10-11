@@ -5,8 +5,8 @@
 
 use rig::tool::{PortableTool, ToolErrorKind};
 
-use tempfile::TempDir;
 use tauri::Manager;
+use tempfile::TempDir;
 
 use super::*;
 use crate::bm25_index::Bm25Indexer;
@@ -22,7 +22,6 @@ mod posture;
 mod refusals;
 mod resolution;
 mod slicing;
-
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -76,10 +75,7 @@ const BINARY_MARKER: &str = "CONFIDENTIALPIXELDATA";
 
 /// A hundred lines, each naming its own 0-based index.
 fn hundred_lines() -> String {
-    (0..100)
-        .map(|i| format!("line {i}\n"))
-        .collect::<Vec<_>>()
-        .concat()
+    (0..100).map(|i| format!("line {i}\n")).collect::<Vec<_>>().concat()
 }
 
 struct Project {
@@ -109,11 +105,7 @@ impl Project {
     }
 
     fn at(&self, path: &str) -> Result<String, ToolRefusal> {
-        self.read(ReadFileArgs {
-            path: path.to_string(),
-            offset: None,
-            limit: None,
-        })
+        self.read(ReadFileArgs { path: path.to_string(), offset: None, limit: None })
     }
 }
 
@@ -145,11 +137,5 @@ fn project() -> Project {
         .agent_session(&session)
         .expect("just opened");
     let temp = access.session_temp_dir().expect("the profile has one").to_path_buf();
-    Project {
-        fixture,
-        root,
-        access,
-        session,
-        temp,
-    }
+    Project { fixture, root, access, session, temp }
 }

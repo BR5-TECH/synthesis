@@ -17,12 +17,7 @@ fn aic_ts09_a_probe_enriches_the_list_and_never_fails_the_verification() {
             success: true,
         },
     );
-    let h = harness(
-        fs,
-        runner,
-        Arc::new(FakeProber::default()),
-        FakeKeychain::new(),
-    );
+    let h = harness(fs, runner, Arc::new(FakeProber::default()), FakeKeychain::new());
     let rec = verify_integration_impl(
         &h.store,
         &h.ai,
@@ -42,9 +37,13 @@ fn aic_ts09_a_probe_enriches_the_list_and_never_fails_the_verification() {
         Arc::new(FakeProber::default()),
         FakeKeychain::new(),
     );
-    let rec2 =
-        verify_integration_impl(&h2.store, &h2.ai, "claude_code", &cli_config_for("claude_code", "/usr/bin/claude"))
-            .unwrap();
+    let rec2 = verify_integration_impl(
+        &h2.store,
+        &h2.ai,
+        "claude_code",
+        &cli_config_for("claude_code", "/usr/bin/claude"),
+    )
+    .unwrap();
     assert_eq!(rec2.models_origin, ModelsOrigin::Catalog);
     assert_eq!(rec2.state, IntegrationState::Verified);
 }

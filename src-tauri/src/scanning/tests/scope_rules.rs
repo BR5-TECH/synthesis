@@ -51,10 +51,7 @@ fn ts10_scan_skips_git_gitignored_cache_and_attribution_file() {
         find(&tree, ".synthesis/notes/n1.toml").is_none(),
         "and no individual note file may surface in the Library (NTC-FR-16)"
     );
-    assert!(
-        find(&tree, ".synthesis/comments").is_none(),
-        "comments must be pruned"
-    );
+    assert!(find(&tree, ".synthesis/comments").is_none(), "comments must be pruned");
     assert!(
         find(&tree, ".synthesis/comments/a3f9.jsonl").is_none(),
         "and no comment log may surface in the Library (CMS-FR-29)"
@@ -62,9 +59,7 @@ fn ts10_scan_skips_git_gitignored_cache_and_attribution_file() {
     // ASC-FR-17 / SCC-FR-03: the candidate list is derived from this tree,
     // so the same prune keeps note bodies out of universal search results.
     assert!(
-        !candidate_files(&tree)
-            .iter()
-            .any(|c| c.path.starts_with(".synthesis/notes")),
+        !candidate_files(&tree).iter().any(|c| c.path.starts_with(".synthesis/notes")),
         "note files must not be search candidates"
     );
     assert!(

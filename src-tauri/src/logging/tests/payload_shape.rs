@@ -30,10 +30,7 @@ fn fields_are_flattened_so_a_consumer_never_recurses() {
     let fields = &all(&buffer).records[0].fields;
     assert_eq!(fields.len(), 3, "flattened, not dropped");
     for (key, value) in fields {
-        assert!(
-            !value.is_object() && !value.is_array(),
-            "{key} is still structured: {value}"
-        );
+        assert!(!value.is_object() && !value.is_array(), "{key} is still structured: {value}");
     }
     assert_eq!(fields["nested"], serde_json::json!("{\"b\":1}"));
     assert_eq!(fields["list"], serde_json::json!("[1,2,3]"));
@@ -43,14 +40,7 @@ fn fields_are_flattened_so_a_consumer_never_recurses() {
 
     // And the flattened text is searchable, so nothing became invisible.
     let hit = buffer
-        .query(
-            &LogFilter {
-                query: Some("\"b\":1".to_string()),
-                ..Default::default()
-            },
-            None,
-            10,
-        )
+        .query(&LogFilter { query: Some("\"b\":1".to_string()), ..Default::default() }, None, 10)
         .unwrap();
     assert_eq!(hit.records.len(), 1);
 }
@@ -83,27 +73,16 @@ fn a_record_serialises_to_the_documented_shape() {
     let page = all(&buffer);
     let json = serde_json::to_value(&page.records[0]).unwrap();
     assert_eq!(json.get("level").and_then(|v| v.as_str()), Some("ERROR"));
-    assert_eq!(
-        json.get("domains").unwrap(),
-        &serde_json::json!(["ai", "remote"])
-    );
+    assert_eq!(json.get("domains").unwrap(), &serde_json::json!(["ai", "remote"]));
     assert_eq!(json.get("message").and_then(|v| v.as_str()), Some("boom"));
     assert_eq!(json.get("sequence").and_then(|v| v.as_u64()), Some(0));
-    assert_eq!(
-        json.get("fields").unwrap().get("path").unwrap(),
-        &serde_json::json!("vendor/")
-    );
+    assert_eq!(json.get("fields").unwrap().get("path").unwrap(), &serde_json::json!("vendor/"));
 
     // The page's own shape, which the panel reads directly.
     let json = serde_json::to_value(&page).unwrap();
-    for key in [
-        "records",
-        "generation",
-        "matchedTotal",
-        "bufferTotal",
-        "droppedTotal",
-        "highestSequence",
-    ] {
+    for key in
+        ["records", "generation", "matchedTotal", "bufferTotal", "droppedTotal", "highestSequence"]
+    {
         assert!(json.get(key).is_some(), "page is missing {key}");
     }
 }
@@ -115,10 +94,7 @@ fn a_record_serialises_to_the_documented_shape() {
 #[test]
 fn a_record_carries_several_domains_and_an_empty_set_is_rejected() {
     let buffer = LogBuffer::new();
-    append(
-        &buffer,
-        vec![input(LogLevel::Warn, &[Domain::Ai, Domain::Remote], "retry")],
-    );
+    append(&buffer, vec![input(LogLevel::Warn, &[Domain::Ai, Domain::Remote], "retry")]);
     assert_eq!(all(&buffer).records[0].domains, vec![Domain::Ai, Domain::Remote]);
 
     let before = buffer.state().buffer_total;

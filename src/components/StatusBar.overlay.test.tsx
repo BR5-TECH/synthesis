@@ -30,7 +30,6 @@ function newestFirst(n: number): Operation[] {
 
 function props(overrides: Partial<StatusBarProps> = {}): StatusBarProps {
   return {
-    onGlobalSettings: vi.fn(),
     onSettings: vi.fn(),
     operations: [],
     overlayOpen: true,

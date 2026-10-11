@@ -219,7 +219,7 @@ describe("CMP-FR-06 … CMP-FR-09: what a row shows", () => {
     // roster whose current title *disagrees* with the snapshot is the only
     // thing that tells the two implementations apart.
     publishProjectAgents([
-      {
+      { scope: "project" as const,
         agent: {
           id: "claude_code",
           nickname: "claude",

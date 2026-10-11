@@ -61,10 +61,7 @@ fn opening_a_note_discussion_writes_its_own_committed_log() {
     // CMS-FR-37: `comments/notes/<note-id>/discussion.jsonl` inside the store.
     let lines = note_log_lines(root, &note);
     assert_eq!(lines.len(), 2, "one discussion_opened and one comment_added");
-    assert!(dir
-        .path()
-        .join(format!("comments/notes/{note}/discussion.jsonl"))
-        .is_file());
+    assert!(dir.path().join(format!("comments/notes/{note}/discussion.jsonl")).is_file());
 }
 
 /// CMS-FR-62, CMS-FR-52: idempotent, and the exclusion holds under repetition.
@@ -102,11 +99,7 @@ fn a_note_carries_at_most_one_discussion() {
     assert_eq!(second.id, first.id, "one conversation, not two");
     assert_eq!(second.comments.len(), 1, "no second opening comment");
     assert_eq!(second.comments[0].body, "the first opening");
-    assert_eq!(
-        note_log_lines(root, &note).len(),
-        2,
-        "the later body was written nowhere",
-    );
+    assert_eq!(note_log_lines(root, &note).len(), 2, "the later body was written nowhere",);
 }
 
 /// CMS-FR-62, CMS-FR-52 (concurrency half): two callers racing resolve to one thread
@@ -148,10 +141,7 @@ fn concurrent_openings_resolve_to_one_discussion() {
     });
 
     let first = &ids[0];
-    assert!(
-        ids.iter().all(|id| id == first),
-        "every caller got the same thread: {ids:?}",
-    );
+    assert!(ids.iter().all(|id| id == first), "every caller got the same thread: {ids:?}",);
     assert_eq!(
         note_log_lines(root, &note).len(),
         2,
@@ -197,10 +187,7 @@ fn a_note_discussion_refuses_an_unknown_note_an_empty_body_and_open_discussion()
     )
     .unwrap_err();
     assert_eq!(err, ERR_EMPTY_BODY);
-    assert!(
-        note_discussion_of(root, &note).is_none(),
-        "the note still carries no discussion",
-    );
+    assert!(note_discussion_of(root, &note).is_none(), "the note still carries no discussion",);
 
     // CMS-FR-57: `open_discussion_thread` cannot open a note's, before or
     // after it has one — it is the operation that could open a second.
@@ -208,14 +195,11 @@ fn a_note_discussion_refuses_an_unknown_note_an_empty_body_and_open_discussion()
         let err = open_discussion_in(
             root,
             root,
-            &DiscussionTarget::Note {
-                note_id: note.clone(),
-            },
+            &DiscussionTarget::Note { note_id: note.clone() },
             None,
             "by the wrong door".into(),
             Vec::new(),
-            &by,
-            "2025-03-04T11:00:00Z",
+            Stamp { by: &by, at: "2025-03-04T11:00:00Z" },
         )
         .unwrap_err();
         assert_eq!(err, ERR_NOT_SUPPORTED);
@@ -263,8 +247,7 @@ fn a_note_discussion_behaves_like_any_other_discussion() {
         "a reply".into(),
         Vec::new(),
         Vec::new(),
-        &by,
-        "2025-03-04T12:00:00Z",
+        Stamp { by: &by, at: "2025-03-04T12:00:00Z" },
     )
     .unwrap();
     append_agent_comment_to(
@@ -277,8 +260,7 @@ fn a_note_discussion_behaves_like_any_other_discussion() {
     )
     .unwrap();
     let (resolved, changed) =
-        set_resolution_to(root, target, &thread.id, true, &by, "2025-03-04T13:00:00Z")
-            .unwrap();
+        set_resolution_to(root, target, &thread.id, true, &by, "2025-03-04T13:00:00Z").unwrap();
     assert!(resolved.resolved && changed);
     let (locked, changed) =
         set_lock_to(root, target, &thread.id, true, &by, "2025-03-04T13:30:00Z").unwrap();
@@ -286,15 +268,9 @@ fn a_note_discussion_behaves_like_any_other_discussion() {
     assert_eq!(locked.comments.len(), 3, "opening, reply, agent answer");
 
     // CMS-FR-59: the one command a discussion refuses, in every scope.
-    let err = reanchor_to(
-        root,
-        target,
-        &thread.id,
-        anchor(0, 5, "intro"),
-        &by,
-        "2025-03-04T14:00:00Z",
-    )
-    .unwrap_err();
+    let err =
+        reanchor_to(root, target, &thread.id, anchor(0, 5, "intro"), &by, "2025-03-04T14:00:00Z")
+            .unwrap_err();
     assert_eq!(err, ERR_NOT_FRAGMENT_TARGETED);
 
     // CMS-FR-49: a blob attached in a note's conversation lands in that
@@ -312,8 +288,7 @@ fn a_note_discussion_behaves_like_any_other_discussion() {
             media_type: "image/png".into(),
             data: b64(b"PNGBYTES"),
         }],
-        &by,
-        "2025-03-04T14:30:00Z",
+        Stamp { by: &by, at: "2025-03-04T14:30:00Z" },
     );
     // The thread was locked above, so unlock it for this append.
     let _ = with_blob;
@@ -329,8 +304,7 @@ fn a_note_discussion_behaves_like_any_other_discussion() {
             media_type: "image/png".into(),
             data: b64(b"PNGBYTES"),
         }],
-        &by,
-        "2025-03-04T14:30:00Z",
+        Stamp { by: &by, at: "2025-03-04T14:30:00Z" },
     )
     .unwrap();
     let digest = match folded.comments.last().unwrap().attachments.first().unwrap() {
@@ -338,9 +312,7 @@ fn a_note_discussion_behaves_like_any_other_discussion() {
         other => panic!("expected a blob, got {other:?}"),
     };
     assert!(
-        dir.path()
-            .join(format!("comments/notes/{note}/attachments/{digest}"))
-            .is_file(),
+        dir.path().join(format!("comments/notes/{note}/attachments/{digest}")).is_file(),
         "the blob is in the note's own folder",
     );
     // Through the same two steps the command performs, so the Note arm of
@@ -360,7 +332,8 @@ fn a_note_discussion_behaves_like_any_other_discussion() {
     assert_eq!(read.id, thread.id);
     assert!(read.note_id().is_some());
     std::fs::write(dir.path().join("spec.md"), "a spec").unwrap();
-    let artifact_thread = open(root, "spec.md", anchor(0, 1, "a"), "pinned", "2025-03-04T15:00:00Z");
+    let artifact_thread =
+        open(root, "spec.md", anchor(0, 1, "a"), "pinned", "2025-03-04T15:00:00Z");
     let listed = list_all_discussions_in(root, root);
     let mut listed_ids: Vec<String> = listed.iter().map(|i| i.discussion.id.clone()).collect();
     listed_ids.sort();
@@ -417,7 +390,12 @@ fn listing_a_note_target_returns_its_one_discussion_or_none() {
     assert!(fold_note_discussion(root, &note).is_empty());
     let (thread, _) = get_or_create_note_discussion_in(
         root,
-        root, &note, "opening".into(), Vec::new(), &human("raver119"), "2025-03-04T11:00:00Z",
+        root,
+        &note,
+        "opening".into(),
+        Vec::new(),
+        &human("raver119"),
+        "2025-03-04T11:00:00Z",
     )
     .unwrap();
     let listed = fold_note_discussion(root, &note);
@@ -460,12 +438,22 @@ fn the_note_index_and_the_removal_are_scoped_to_one_note() {
 
     let (thread_a, _) = get_or_create_note_discussion_in(
         root,
-        root, &a, "about a".into(), Vec::new(), &by, "2025-03-04T11:00:00Z",
+        root,
+        &a,
+        "about a".into(),
+        Vec::new(),
+        &by,
+        "2025-03-04T11:00:00Z",
     )
     .unwrap();
     let (thread_b, _) = get_or_create_note_discussion_in(
         root,
-        root, &b, "about b".into(), Vec::new(), &by, "2025-03-04T11:00:00Z",
+        root,
+        &b,
+        "about b".into(),
+        Vec::new(),
+        &by,
+        "2025-03-04T11:00:00Z",
     )
     .unwrap();
     // A blob in each, so the removal is shown not to reach a neighbour's.
@@ -481,8 +469,7 @@ fn the_note_index_and_the_removal_are_scoped_to_one_note() {
                 media_type: "image/png".into(),
                 data: b64(b"PNGBYTES"),
             }],
-            &by,
-            "2025-03-04T12:00:00Z",
+            Stamp { by: &by, at: "2025-03-04T12:00:00Z" },
         )
         .unwrap();
     }
@@ -499,18 +486,12 @@ fn the_note_index_and_the_removal_are_scoped_to_one_note() {
 
     // CMS-FR-64.
     delete_note_discussion_in(root, &a).unwrap();
-    assert!(!dir
-        .path()
-        .join(format!("comments/notes/{a}"))
-        .exists());
+    assert!(!dir.path().join(format!("comments/notes/{a}")).exists());
     assert!(read_discussion_by_id(root, root, &thread_a.id).is_none());
     assert!(!note_discussion_index(root).contains_key(&a));
 
     // The neighbour is byte-for-byte what it was, blob included.
-    assert_eq!(
-        std::fs::read_to_string(b_dir.join("discussion.jsonl")).unwrap(),
-        b_before,
-    );
+    assert_eq!(std::fs::read_to_string(b_dir.join("discussion.jsonl")).unwrap(), b_before,);
     assert_eq!(
         std::fs::read_dir(b_dir.join("attachments")).unwrap().count(),
         1,
@@ -574,30 +555,23 @@ fn an_opening_racing_a_deletion_never_orphans_a_discussion() {
 
         let note_alive = crate::notes::note_exists(root, &note);
         let discussion = note_discussion_of(root, &note);
-        let folder = dir
-            .path()
-            .join(format!("comments/notes/{note}"));
+        let folder = dir.path().join(format!("comments/notes/{note}"));
 
         if note_alive {
             // The deletion lost, or refused: the note is whole, and it
             // carries whatever the opening produced.
-            assert_eq!(discussion.is_some(), opened, "a live note's discussion matches the opening");
+            assert_eq!(
+                discussion.is_some(),
+                opened,
+                "a live note's discussion matches the opening"
+            );
         } else {
             // The note is gone, so nothing may remain of a conversation
             // about it — whichever order the two ran in (NTC-FR-22).
             assert!(deleted, "the note is gone, so the deletion succeeded");
-            assert!(
-                discussion.is_none(),
-                "a deleted note has no discussion left",
-            );
-            assert!(
-                !folder.exists(),
-                "a deleted note leaves no conversation folder behind",
-            );
-            assert!(
-                !note_discussion_index(root).contains_key(&note),
-                "and no index entry",
-            );
+            assert!(discussion.is_none(), "a deleted note has no discussion left",);
+            assert!(!folder.exists(), "a deleted note leaves no conversation folder behind",);
+            assert!(!note_discussion_index(root).contains_key(&note), "and no index entry",);
         }
     }
 }

@@ -113,10 +113,7 @@ fn the_refresh_command_wires_the_real_primitive_and_the_anchors_slot_key() {
         "the token binding is keyed by the project's anchor, not by the \
          active worktree"
     );
-    assert!(
-        !body.contains("reroot("),
-        "a refresh re-roots nothing (WTC-FR-24)"
-    );
+    assert!(!body.contains("reroot("), "a refresh re-roots nothing (WTC-FR-24)");
 }
 
 #[test]
@@ -157,19 +154,10 @@ fn a_pruned_remote_ref_leaves_the_local_branch_that_tracked_it_intact() {
     .unwrap();
 
     let repo = f.repo();
-    let local = repo
-        .find_branch("spike", BranchType::Local)
-        .expect("the local branch survives the prune");
-    assert_eq!(
-        local.get().peel_to_commit().unwrap().id(),
-        head_before,
-        "with its commits intact"
-    );
-    assert_eq!(
-        context_for(&f.root()).unwrap().worktrees.len(),
-        1,
-        "and no worktree was removed"
-    );
+    let local =
+        repo.find_branch("spike", BranchType::Local).expect("the local branch survives the prune");
+    assert_eq!(local.get().peel_to_commit().unwrap().id(), head_before, "with its commits intact");
+    assert_eq!(context_for(&f.root()).unwrap().worktrees.len(), 1, "and no worktree was removed");
 }
 
 #[test]

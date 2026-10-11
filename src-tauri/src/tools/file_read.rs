@@ -81,9 +81,9 @@ fn lenient_integer<'de, D: serde::Deserializer<'de>>(
 ) -> Result<Option<i64>, D::Error> {
     let value = serde_json::Value::deserialize(deserializer)?;
     Ok(match value {
-        serde_json::Value::Number(number) => number
-            .as_i64()
-            .or_else(|| number.as_f64().map(|f| f.trunc() as i64)),
+        serde_json::Value::Number(number) => {
+            number.as_i64().or_else(|| number.as_f64().map(|f| f.trunc() as i64))
+        }
         serde_json::Value::String(text) => text
             .trim()
             .parse::<i64>()
@@ -279,11 +279,7 @@ impl<R: tauri::Runtime> FileReadTool<R> {
     /// TLC-FR-19: this tool's own constructor. A caller attaches it by name,
     /// naming the agent session whose reach this tool is to have.
     pub fn new(app: tauri::AppHandle<R>, session: impl Into<String>) -> Self {
-        FileReadTool {
-            app,
-            session: session.into(),
-            buffer: &BUFFER,
-        }
+        FileReadTool { app, session: session.into(), buffer: &BUFFER }
     }
 
     /// The same tool, reporting into `buffer`.
@@ -293,11 +289,7 @@ impl<R: tauri::Runtime> FileReadTool<R> {
         session: impl Into<String>,
         buffer: &'static LogBuffer,
     ) -> Self {
-        FileReadTool {
-            app,
-            session: session.into(),
-            buffer,
-        }
+        FileReadTool { app, session: session.into(), buffer }
     }
 
     /// This session's instance, as it stands right now (FSA-FR-29).
@@ -312,13 +304,9 @@ impl<R: tauri::Runtime> FileReadTool<R> {
         // `try_state`, not `state`: a mock app in another module's test manages
         // only what that test needs, and a panic here would be a far worse
         // answer than the refusal this returns anyway.
-        let state = self
-            .app
-            .try_state::<crate::fs::FsAccessState>()
-            .ok_or(ToolRefusal::NoProjectOpen)?;
-        state
-            .agent_session(&self.session)
-            .ok_or(ToolRefusal::NoProjectOpen)
+        let state =
+            self.app.try_state::<crate::fs::FsAccessState>().ok_or(ToolRefusal::NoProjectOpen)?;
+        state.agent_session(&self.session).ok_or(ToolRefusal::NoProjectOpen)
     }
 
     /// The whole call, with its logging (TLC-FR-14, RFT-FR-20).

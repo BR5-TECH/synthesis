@@ -40,18 +40,13 @@ fn a_note_file_whose_name_disagrees_with_its_id_is_skipped() {
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
     let note = create(root, NoteScope::Project, "well-formed", "2026-01-01T00:00:00Z");
-    let stored = std::fs::read_to_string(
-        root.join(".synthesis/notes").join(format!("{}.toml", note.id)),
-    )
-    .unwrap();
+    let stored =
+        std::fs::read_to_string(root.join(".synthesis/notes").join(format!("{}.toml", note.id)))
+            .unwrap();
     std::fs::write(root.join(".synthesis/notes/renamed.toml"), &stored).unwrap();
 
     let items = list_all_notes_in(root, root);
-    assert_eq!(
-        items.len(),
-        1,
-        "the mis-named copy is skipped rather than served twice: {items:?}"
-    );
+    assert_eq!(items.len(), 1, "the mis-named copy is skipped rather than served twice: {items:?}");
     assert!(root.join(".synthesis/notes/renamed.toml").exists());
 }
 
@@ -95,7 +90,8 @@ fn an_unusable_id_is_rejected_as_such_rather_than_reported_missing() {
         &crate::fs::RootFs::for_root(dir.path()),
         &crate::fs::RootFs::for_root(dir.path()),
         "../victim",
-    ).unwrap_err();
+    )
+    .unwrap_err();
     assert!(err.contains("invalid note id"), "{err}");
     assert_ne!(err, ERR_NOTE_NOT_FOUND);
 }

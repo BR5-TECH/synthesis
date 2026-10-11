@@ -22,10 +22,7 @@ fn file_revisions_return_both_sides_whole_rather_than_windowed() {
 
     let revisions = file_revisions_for_scope(
         &crate::fs::RootFs::for_root(f.root()),
-        &DiffScope::Path {
-            path: "notes.md".into(),
-            previous_path: None,
-        },
+        &DiffScope::Path { path: "notes.md".into(), previous_path: None },
     )
     .unwrap();
 
@@ -52,10 +49,7 @@ fn an_added_file_has_no_old_side_and_a_deleted_one_has_no_new_side() {
 
     let added = file_revisions_for_scope(
         &crate::fs::RootFs::for_root(f.root()),
-        &DiffScope::Path {
-            path: "added.md".into(),
-            previous_path: None,
-        },
+        &DiffScope::Path { path: "added.md".into(), previous_path: None },
     )
     .unwrap();
     assert_eq!(added.old, None);
@@ -63,10 +57,7 @@ fn an_added_file_has_no_old_side_and_a_deleted_one_has_no_new_side() {
 
     let removed = file_revisions_for_scope(
         &crate::fs::RootFs::for_root(f.root()),
-        &DiffScope::Path {
-            path: "removed.md".into(),
-            previous_path: None,
-        },
+        &DiffScope::Path { path: "removed.md".into(), previous_path: None },
     )
     .unwrap();
     assert_eq!(removed.old.as_deref(), Some("gone\n"));
@@ -84,10 +75,7 @@ fn an_emptied_file_reads_as_empty_text_rather_than_as_absent() {
 
     let revisions = file_revisions_for_scope(
         &crate::fs::RootFs::for_root(f.root()),
-        &DiffScope::Path {
-            path: "notes.md".into(),
-            previous_path: None,
-        },
+        &DiffScope::Path { path: "notes.md".into(), previous_path: None },
     )
     .unwrap();
     assert_eq!(revisions.new.as_deref(), Some(""));
@@ -103,11 +91,9 @@ fn a_binary_path_returns_neither_text_and_agrees_with_get_diff() {
     f.commit("seed");
     f.write_bytes("logo.png", b"\x89PNG\r\n\x1a\n\x00\x00different");
 
-    let scope = DiffScope::Path {
-        path: "logo.png".into(),
-        previous_path: None,
-    };
-    let revisions = file_revisions_for_scope(&crate::fs::RootFs::for_root(f.root()), &scope).unwrap();
+    let scope = DiffScope::Path { path: "logo.png".into(), previous_path: None };
+    let revisions =
+        file_revisions_for_scope(&crate::fs::RootFs::for_root(f.root()), &scope).unwrap();
     let diff = diff_for_scope(&f.root(), &scope).unwrap();
 
     assert!(revisions.is_binary);
@@ -129,18 +115,12 @@ fn a_renamed_entry_reads_its_old_side_from_the_pre_rename_path() {
 
     let revisions = file_revisions_for_scope(
         &crate::fs::RootFs::for_root(f.root()),
-        &DiffScope::Path {
-            path: "lib.rs".into(),
-            previous_path: Some("main.rs".into()),
-        },
+        &DiffScope::Path { path: "lib.rs".into(), previous_path: Some("main.rs".into()) },
     )
     .unwrap();
 
     assert_eq!(revisions.old.as_deref(), Some("fn main() {}\n"));
-    assert_eq!(
-        revisions.new.as_deref(),
-        Some("fn main() {}\nfn extra() {}\n")
-    );
+    assert_eq!(revisions.new.as_deref(), Some("fn main() {}\nfn extra() {}\n"));
 }
 
 #[test]
@@ -158,11 +138,7 @@ fn a_branch_scope_reads_its_old_side_from_the_merge_base() {
 
     let revisions = file_revisions_for_scope(
         &crate::fs::RootFs::for_root(f.root()),
-        &DiffScope::Branch {
-            path: "a.md".into(),
-            target_branch: base_branch,
-            previous_path: None,
-        },
+        &DiffScope::Branch { path: "a.md".into(), target_branch: base_branch, previous_path: None },
     )
     .unwrap();
 
@@ -183,7 +159,8 @@ fn the_staged_set_names_no_file_so_it_is_the_typed_error() {
     f.stage_all();
 
     assert_eq!(
-        file_revisions_for_scope(&crate::fs::RootFs::for_root(f.root()), &DiffScope::Staged).unwrap_err(),
+        file_revisions_for_scope(&crate::fs::RootFs::for_root(f.root()), &DiffScope::Staged)
+            .unwrap_err(),
         ERR_SCOPE_NOT_A_FILE,
     );
 }
@@ -196,10 +173,7 @@ fn file_revisions_outside_a_repository_are_the_typed_error() {
     assert_eq!(
         file_revisions_for_scope(
             &crate::fs::RootFs::for_root(dir.path()),
-            &DiffScope::Path {
-                path: "a.md".into(),
-                previous_path: None,
-            },
+            &DiffScope::Path { path: "a.md".into(), previous_path: None },
         )
         .unwrap_err(),
         ERR_NOT_A_REPO,
@@ -229,10 +203,7 @@ fn a_path_escaping_the_content_root_is_refused_rather_than_read() {
 
     let err = file_revisions_for_scope(
         &crate::fs::RootFs::for_root(f.root()),
-        &DiffScope::Path {
-            path: format!("../{name}"),
-            previous_path: None,
-        },
+        &DiffScope::Path { path: format!("../{name}"), previous_path: None },
     )
     .unwrap_err();
 
@@ -258,15 +229,9 @@ fn an_unreadable_path_is_an_error_rather_than_a_reported_deletion() {
 
     let result = file_revisions_for_scope(
         &crate::fs::RootFs::for_root(f.root()),
-        &DiffScope::Path {
-            path: "notes.md".into(),
-            previous_path: None,
-        },
+        &DiffScope::Path { path: "notes.md".into(), previous_path: None },
     );
-    assert!(
-        result.is_err(),
-        "a failed read must not be reported as a deletion: {result:?}"
-    );
+    assert!(result.is_err(), "a failed read must not be reported as a deletion: {result:?}");
 }
 
 #[test]
@@ -283,22 +248,17 @@ fn a_checkout_whose_line_endings_are_filtered_still_reads_as_unchanged() {
     // What the checkout holds under that attribute.
     f.write_bytes("notes.md", b"one\r\ntwo\r\nthree\r\n");
 
-    let scope = DiffScope::Path {
-        path: "notes.md".into(),
-        previous_path: None,
-    };
+    let scope = DiffScope::Path { path: "notes.md".into(), previous_path: None };
     let diff = diff_for_scope(&f.root(), &scope).unwrap();
-    let revisions = file_revisions_for_scope(&crate::fs::RootFs::for_root(f.root()), &scope).unwrap();
+    let revisions =
+        file_revisions_for_scope(&crate::fs::RootFs::for_root(f.root()), &scope).unwrap();
 
     assert!(
         diff.hunks.is_empty(),
         "the filtered comparison sees no change: {:?}",
         all_lines(&diff)
     );
-    assert_eq!(
-        revisions.old, revisions.new,
-        "so neither may the whole-file read"
-    );
+    assert_eq!(revisions.old, revisions.new, "so neither may the whole-file read");
     assert_eq!(revisions.new.as_deref(), Some("one\ntwo\nthree\n"));
 }
 
@@ -313,12 +273,10 @@ fn a_path_marked_undiffable_by_attributes_is_binary_to_both_operations() {
     f.commit("seed");
     f.write("data.dat", "plain text, edited\n");
 
-    let scope = DiffScope::Path {
-        path: "data.dat".into(),
-        previous_path: None,
-    };
+    let scope = DiffScope::Path { path: "data.dat".into(), previous_path: None };
     let diff = diff_for_scope(&f.root(), &scope).unwrap();
-    let revisions = file_revisions_for_scope(&crate::fs::RootFs::for_root(f.root()), &scope).unwrap();
+    let revisions =
+        file_revisions_for_scope(&crate::fs::RootFs::for_root(f.root()), &scope).unwrap();
 
     assert!(diff.is_binary, "get_diff honours the attribute");
     assert!(revisions.is_binary, "and so must the whole-file read");
@@ -340,10 +298,7 @@ fn a_nested_project_reads_both_sides_of_the_same_file() {
 
     let revisions = file_revisions_for_scope(
         &crate::fs::RootFs::for_root(f.root().join("proj")),
-        &DiffScope::Path {
-            path: "a.md".into(),
-            previous_path: None,
-        },
+        &DiffScope::Path { path: "a.md".into(), previous_path: None },
     )
     .unwrap();
 
@@ -399,12 +354,10 @@ fn file_revisions_read_the_active_worktree_and_no_other() {
     std::fs::write(linked.join("a.md"), "linked worktree content\n").unwrap();
     f.write("a.md", "primary worktree content\n");
 
-    let scope = DiffScope::Path {
-        path: "a.md".into(),
-        previous_path: None,
-    };
+    let scope = DiffScope::Path { path: "a.md".into(), previous_path: None };
     let primary = file_revisions_for_scope(&crate::fs::RootFs::for_root(f.root()), &scope).unwrap();
-    let from_linked = file_revisions_for_scope(&crate::fs::RootFs::for_root(linked), &scope).unwrap();
+    let from_linked =
+        file_revisions_for_scope(&crate::fs::RootFs::for_root(linked), &scope).unwrap();
 
     assert_eq!(primary.new.as_deref(), Some("primary worktree content\n"));
     assert_eq!(

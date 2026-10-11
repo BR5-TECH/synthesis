@@ -123,7 +123,10 @@ pub struct ReadDraftOutput {
 /// Consults no index, so a successful read reflects the newest persisted live
 /// prompt even while the drafts index is still catching up — the freshness
 /// `search_drafts` does not share.
-pub fn read(root: &crate::fs::RootFs, args: &ReadDraftArgs) -> Result<ReadDraftOutput, ToolRefusal> {
+pub fn read(
+    root: &crate::fs::RootFs,
+    args: &ReadDraftArgs,
+) -> Result<ReadDraftOutput, ToolRefusal> {
     // RDT-FR-11: a blank id names no draft and is the model's own to correct.
     // Checked before resolution so the refusal says which mistake was made
     // rather than reporting a draft that does not exist.
@@ -207,11 +210,7 @@ pub struct DraftReadTool<R: tauri::Runtime> {
 impl<R: tauri::Runtime> DraftReadTool<R> {
     /// TLC-FR-19: this tool's own constructor. A caller attaches it by name.
     pub fn new(app: tauri::AppHandle<R>, session: impl Into<String>) -> Self {
-        DraftReadTool {
-            app,
-            session: session.into(),
-            buffer: &BUFFER,
-        }
+        DraftReadTool { app, session: session.into(), buffer: &BUFFER }
     }
 
     /// The same tool, reporting into `buffer`.
@@ -221,11 +220,7 @@ impl<R: tauri::Runtime> DraftReadTool<R> {
         session: impl Into<String>,
         buffer: &'static LogBuffer,
     ) -> Self {
-        DraftReadTool {
-            app,
-            session: session.into(),
-            buffer,
-        }
+        DraftReadTool { app, session: session.into(), buffer }
     }
 
     /// The whole call, with its logging (TLC-FR-14, RDT-FR-17).

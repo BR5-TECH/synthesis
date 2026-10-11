@@ -71,10 +71,7 @@ impl EffectivePermissionsBody {
     pub fn new(user_id: UserId, permissions: Vec<Permission>) -> Self {
         EffectivePermissionsBody {
             user_id,
-            permissions: permissions
-                .into_iter()
-                .map(|permission| permission.as_str())
-                .collect(),
+            permissions: permissions.into_iter().map(|permission| permission.as_str()).collect(),
         }
     }
 }

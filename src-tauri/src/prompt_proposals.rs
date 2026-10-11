@@ -94,9 +94,7 @@ const JOURNAL_EXT: &str = "journal";
 pub fn is_valid_proposal_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
-        && id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 /// PCP-FR-01: the folder, resolved against the active worktree.
@@ -167,17 +165,11 @@ fn read_all(root: &fs::RootFs) -> Vec<PromptChangeProposal> {
 /// history of proposals costs a list no more than one carrying a single
 /// proposal.
 pub fn list_proposals_impl(root: &fs::RootFs, artifact_id: &str) -> Vec<PromptChangeProposal> {
-    read_all(root)
-        .into_iter()
-        .filter(|p| p.artifact_id == artifact_id)
-        .collect()
+    read_all(root).into_iter().filter(|p| p.artifact_id == artifact_id).collect()
 }
 
 /// One proposal's record by id.
-pub fn read_proposal(
-    root: &fs::RootFs,
-    proposal_id: &str,
-) -> Result<PromptChangeProposal, String> {
+pub fn read_proposal(root: &fs::RootFs, proposal_id: &str) -> Result<PromptChangeProposal, String> {
     if !is_valid_proposal_id(proposal_id) {
         return Err(ERR_PROPOSAL_NOT_FOUND.to_string());
     }
@@ -202,15 +194,11 @@ pub fn load_content_impl(
     read_proposal(root, proposal_id)?;
     let dir = proposals_dir(root)?;
     let path = at(&dir, proposal_id, CONTENT_EXT);
-    let content = root
-        .read_text(&path)
-        .map_err(|_| ERR_PROPOSAL_NOT_FOUND.to_string())?;
+    let content = root.read_text(&path).map_err(|_| ERR_PROPOSAL_NOT_FOUND.to_string())?;
     // The checksum is taken over the same file the text came from, so what the
     // caller holds and what it will name as its baseline describe one set of
     // bytes (PCP-FR-24, on PST-FR-15's terms).
-    let checksum = root
-        .sha256_file(&path)
-        .map_err(|_| ERR_PROPOSAL_NOT_FOUND.to_string())?;
+    let checksum = root.sha256_file(&path).map_err(|_| ERR_PROPOSAL_NOT_FOUND.to_string())?;
     Ok(PromptProposalContent { content, checksum })
 }
 
@@ -229,10 +217,7 @@ pub fn require_prompt_artifact(root: &fs::RootFs, artifact_id: &str) -> Result<P
     // `file_info`, not `Path::is_file`: the latter follows a symlink, so a link
     // at the id's path would pass as an artifact whose every guarded read is
     // refused (FSA-FR-17).
-    if !root
-        .file_info(&path)
-        .is_ok_and(|i| i.kind == fs::EntryKind::File)
-    {
+    if !root.file_info(&path).is_ok_and(|i| i.kind == fs::EntryKind::File) {
         return Err(ERR_ARTIFACT_NOT_FOUND.to_string());
     }
     if crate::artifacts::resolved_type(root, artifact_id)
@@ -284,9 +269,7 @@ fn artifact_lock(artifact_id: &str) -> std::sync::MutexGuard<'static, ()> {
     let locks = LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
     let mutex = {
         let mut guard = locks.lock().unwrap_or_else(|e| e.into_inner());
-        *guard
-            .entry(artifact_id.to_string())
-            .or_insert_with(|| Box::leak(Box::new(Mutex::new(()))))
+        *guard.entry(artifact_id.to_string()).or_insert_with(|| Box::leak(Box::new(Mutex::new(()))))
     };
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -310,17 +293,12 @@ fn try_acceptance_slot(proposal_id: &str) -> Option<AcceptanceSlot> {
     if !guard.insert(proposal_id.to_string()) {
         return None;
     }
-    Some(AcceptanceSlot {
-        proposal_id: proposal_id.to_string(),
-    })
+    Some(AcceptanceSlot { proposal_id: proposal_id.to_string() })
 }
 
 /// Whether an acceptance of this proposal is running right now.
 fn is_accepting(proposal_id: &str) -> bool {
-    in_flight()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .contains(proposal_id)
+    in_flight().lock().unwrap_or_else(|e| e.into_inner()).contains(proposal_id)
 }
 
 struct AcceptanceSlot {
@@ -329,10 +307,7 @@ struct AcceptanceSlot {
 
 impl Drop for AcceptanceSlot {
     fn drop(&mut self) {
-        in_flight()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(&self.proposal_id);
+        in_flight().lock().unwrap_or_else(|e| e.into_inner()).remove(&self.proposal_id);
     }
 }
 
@@ -354,10 +329,7 @@ fn locate_thread(
 ) -> Result<(String, bool), String> {
     let found = comments::read_discussion_by_id(store, root, thread_id)
         .ok_or(comments::ERR_DISCUSSION_NOT_FOUND)?;
-    let artifact_id = found
-        .artifact_id()
-        .ok_or(comments::ERR_DISCUSSION_NOT_FOUND)?
-        .to_string();
+    let artifact_id = found.artifact_id().ok_or(comments::ERR_DISCUSSION_NOT_FOUND)?.to_string();
     Ok((artifact_id, !found.is_fragment_targeted()))
 }
 
@@ -438,9 +410,7 @@ where
     // comparison with nothing in it wastes the one decision an artifact may hold
     // at a time. An empty candidate meets this on the one term every candidate
     // meets it on and on no term of its own.
-    let current = root
-        .read_text(&artifact_path)
-        .map_err(|_| RecordRefusal::ArtifactNotFound)?;
+    let current = root.read_text(&artifact_path).map_err(|_| RecordRefusal::ArtifactNotFound)?;
     if current == normalise_for_write(root, new.content) {
         return Err(RecordRefusal::NoChange);
     }
@@ -471,9 +441,8 @@ where
     // PCP-FR-22: stamped from the bytes that just landed rather than computed
     // over `new.content` in memory, so it describes the file a candidate save
     // will later checksum rather than the string this call was handed.
-    let origin_checksum = root
-        .sha256_file(at(&dir, &id, CONTENT_EXT))
-        .map_err(|_| RecordRefusal::NotRecorded)?;
+    let origin_checksum =
+        root.sha256_file(at(&dir, &id, CONTENT_EXT)).map_err(|_| RecordRefusal::NotRecorded)?;
 
     // PCP-FR-06: the comment id is minted **here**, before either write, so the
     // record can name the comment it will be announced by without the comment
@@ -501,10 +470,7 @@ where
         let _ = root.delete_under(&dir, format!("{id}.{RECORD_EXT}"), false);
     };
 
-    if root
-        .write_toml_atomic(at(&dir, &id, RECORD_EXT), &record)
-        .is_err()
-    {
+    if root.write_toml_atomic(at(&dir, &id, RECORD_EXT), &record).is_err() {
         cleanup();
         return Err(RecordRefusal::NotRecorded);
     }
@@ -521,8 +487,7 @@ where
         comment_id,
         new.rationale.to_string(),
         vec![attachment],
-        new.agent,
-        &now,
+        comments::Stamp { by: new.agent, at: &now },
     ) {
         Ok(thread) => thread,
         Err(error) => {
@@ -585,12 +550,7 @@ impl Decision {
 
 /// PCP-FR-16: the decision comment's body — the sentence, then the author's
 /// feedback where they wrote any.
-fn decision_body(
-    decision: Decision,
-    path: &str,
-    edited: bool,
-    feedback: Option<&str>,
-) -> String {
+fn decision_body(decision: Decision, path: &str, edited: bool, feedback: Option<&str>) -> String {
     let sentence = decision.sentence(path, edited);
     match feedback.map(str::trim).filter(|f| !f.is_empty()) {
         Some(feedback) => format!("{sentence}\n\n{feedback}"),
@@ -598,23 +558,29 @@ fn decision_body(
     }
 }
 
+/// The thread that receives the decision comment, and the author's own part of
+/// the decision (PCP-FR-12, PCP-FR-16).
+struct Acceptance<'a> {
+    thread_artifact: &'a str,
+    discussion: bool,
+    feedback: Option<&'a str>,
+    by: &'a Participant,
+}
+
 /// PCP-FR-12 / PCP-FR-14: accept a pending proposal, as one transaction with one
 /// commit point.
-#[allow(clippy::too_many_arguments)]
 fn accept_locked<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     root: &fs::RootFs,
     store: &fs::RootFs,
     record: &PromptChangeProposal,
-    thread_artifact: &str,
-    discussion: bool,
-    feedback: Option<&str>,
-    by: &Participant,
+    acceptance: Acceptance<'_>,
     tracker: &ContentTracker,
 ) -> Result<PromptDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
+    let Acceptance { thread_artifact, discussion, feedback, by } = acceptance;
     // PCP-FR-14: one acceptance of a proposal at a time. A second is refused
     // rather than interleaved.
     let Some(_slot) = try_acceptance_slot(&record.id) else {
@@ -655,18 +621,12 @@ where
     let prepared = || -> Result<Journal, String> {
         // PCP-FR-14: the artifact's whole current bytes, byte-for-byte and
         // unnormalised, written and then read back and checksummed.
-        let prior = root
-            .read_bytes(&artifact_path)
-            .map_err(|e| e.to_string())?;
+        let prior = root.read_bytes(&artifact_path).map_err(|e| e.to_string())?;
         root.write_bytes_atomic(at(&dir, &record.id, PRIOR_EXT), &prior)
             .map_err(|e| e.to_string())?;
-        let prior_sha256 = root
-            .sha256_file(at(&dir, &record.id, PRIOR_EXT))
-            .map_err(|e| e.to_string())?;
-        let journal = Journal {
-            prior_sha256,
-            ..journal.clone()
-        };
+        let prior_sha256 =
+            root.sha256_file(at(&dir, &record.id, PRIOR_EXT)).map_err(|e| e.to_string())?;
+        let journal = Journal { prior_sha256, ..journal.clone() };
         root.write_toml_atomic(at(&dir, &record.id, JOURNAL_EXT), &journal)
             .map_err(|e| e.to_string())?;
         // The record moves before the artifact does, so a journal on disk beside
@@ -705,12 +665,9 @@ where
     // exactly as the author's own typing does. It reaches the Dashboard's
     // Recently edited widget the same way too, by the modification time the
     // write gives the file (PST-FR-31).
-    if let Err(reason) = crate::artifacts::save_validated_artifact(
-        root,
-        &record.artifact_id,
-        &candidate,
-        tracker,
-    ) {
+    if let Err(reason) =
+        crate::artifacts::save_validated_artifact(root, &record.artifact_id, &candidate, tracker)
+    {
         // The one case with anything to undo, and what it undoes is this
         // module's own record rather than the author's file: the write is atomic
         // (FSA-FR-04), so a failure means it did not land.
@@ -764,19 +721,14 @@ where
 /// restoring, the write being the last fallible step and atomic. The rollback is
 /// read back and verified before the call returns, and the journal and `.prior`
 /// are removed only once it has been.
-fn roll_back(
-    root: &fs::RootFs,
-    dir: &Path,
-    record: &PromptChangeProposal,
-) -> Result<(), String> {
+fn roll_back(root: &fs::RootFs, dir: &Path, record: &PromptChangeProposal) -> Result<(), String> {
     let pending = PromptChangeProposal {
         state: PromptProposalState::Pending,
         decided_at: None,
         comment_owed: false,
         ..record.clone()
     };
-    root.write_toml_atomic(at(dir, &record.id, RECORD_EXT), &pending)
-        .map_err(|e| e.to_string())?;
+    root.write_toml_atomic(at(dir, &record.id, RECORD_EXT), &pending).map_err(|e| e.to_string())?;
     // Read back and verified: a rollback that cannot be shown to have happened
     // leaves the journal in place so the next reconciliation completes it.
     let verified = root
@@ -807,8 +759,7 @@ fn clear_owed(
         return Ok(record);
     }
     record.comment_owed = false;
-    root.write_toml_atomic(at(dir, proposal_id, RECORD_EXT), &record)
-        .map_err(|e| e.to_string())?;
+    root.write_toml_atomic(at(dir, proposal_id, RECORD_EXT), &record).map_err(|e| e.to_string())?;
     Ok(record)
 }
 
@@ -839,8 +790,7 @@ where
         journal.event_id.clone(),
         journal.comment_id.clone(),
         journal.comment_body.clone(),
-        &journal.comment_by,
-        &now_rfc3339(),
+        comments::Stamp { by: &journal.comment_by, at: &now_rfc3339() },
     )?;
     // AGC-FR-31 / CTA-FR-RUVS: the author's decision is a human-authored comment,
     // so it retires this conversation's offer to retry a failed turn exactly as
@@ -852,13 +802,13 @@ where
     Ok(())
 }
 
+mod commands;
 mod model;
 mod reconcile;
-mod commands;
 
+pub use commands::*;
 pub use model::*;
 pub use reconcile::*;
-pub use commands::*;
 
 #[cfg(test)]
 mod tests;

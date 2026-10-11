@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import * as api from "../api";
 import { Icon } from "./icons";
-import { GITHUB_TOKEN_ERRORS, type GithubTokenRecord } from "../types";
+import { tlsErrorMessage } from "../tlsError";
+import {
+  DEFAULT_GITHUB_HOST,
+  GITHUB_HOST_MISMATCH_MESSAGE,
+  GITHUB_TOKEN_ERRORS,
+  githubHostOf,
+  type GithubTokenRecord,
+} from "../types";
 
 /**
  * The GitHub section of the Global settings window, and the Add token dialog it
@@ -18,6 +25,9 @@ import { GITHUB_TOKEN_ERRORS, type GithubTokenRecord } from "../types";
 /** Render a typed backend rejection as text that says what to do about it. */
 export function tokenErrorMessage(e: unknown): string {
   const raw = typeof e === "string" ? e : e instanceof Error ? e.message : "";
+  // AAP-FR-LRTC: a refused certificate names its host and its cause.
+  const tls = tlsErrorMessage(raw);
+  if (tls) return tls;
   switch (raw) {
     // GHA-FR-10: the three rejections are deliberately distinguishable — a bad
     // token, a network that never answered, and a keychain that refused are
@@ -32,6 +42,12 @@ export function tokenErrorMessage(e: unknown): string {
       return "Another token already uses that name. Pick a different one.";
     case GITHUB_TOKEN_ERRORS.unknownToken:
       return "That token is no longer stored.";
+    // GHA-FR-OGNL: the domain field is the one input the author can fix.
+    case GITHUB_TOKEN_ERRORS.invalidHost:
+      return "That domain is not a valid host.";
+    // GHA-FR-LBLM: not a selection problem, so it never opens the picker.
+    case GITHUB_TOKEN_ERRORS.hostMismatch:
+      return GITHUB_HOST_MISMATCH_MESSAGE;
     // These two reach the surface that requested the blocked operation
     // (GHA-FR-16), which phrases them in terms of what it was trying to do.
     // Given text here too so neither can ever render as a raw slug.
@@ -58,8 +74,10 @@ const STATE_LABEL: Record<GithubTokenRecord["state"], string> = {
 
 /**
  * GHA-FR-02: a token row's second line — the account, the granted scopes, and
- * the masked hint. Shared with the picker modal (GHA-FR-15) so the two surfaces
- * describe a token identically rather than drifting apart.
+ * the masked hint — and, only for a host other than `github.com`, a line of its
+ * own with the domain. Shared with the picker modal (GHA-FR-15) and the Project
+ * settings Project section (SET-FR-12) so the surfaces describe a token
+ * identically rather than drifting apart.
  */
 export function TokenIdentityLine({ token }: { token: GithubTokenRecord }) {
   const parts = [
@@ -68,18 +86,27 @@ export function TokenIdentityLine({ token }: { token: GithubTokenRecord }) {
     // GHA-FR-03: four characters is the most of a token that is ever rendered.
     `••••${token.maskedHint}`,
   ];
+  const host = githubHostOf(token);
   return (
-    <div className="t-ui-sm t-muted" data-testid="token-identity">
-      {parts.join(" · ")}
-    </div>
+    <>
+      <div className="t-ui-sm t-muted" data-testid="token-identity">
+        {parts.join(" · ")}
+      </div>
+      {host !== DEFAULT_GITHUB_HOST && (
+        <div className="t-ui-sm t-muted" data-testid="token-host">
+          {host}
+        </div>
+      )}
+    </>
   );
 }
 
 interface AddTokenDialogProps {
   onClose: () => void;
   /** Resolves once the token is stored; rejects with a typed backend error. */
-  onAdd: (label: string, secret: string) => Promise<void>;
-  onOpenGithub: () => Promise<void>;
+  onAdd: (label: string, secret: string, host: string) => Promise<void>;
+  /** Receives the domain exactly as typed; empty means `github.com`. */
+  onOpenGithub: (host: string) => Promise<void>;
 }
 
 /**
@@ -93,6 +120,9 @@ interface AddTokenDialogProps {
  */
 export function AddTokenDialog({ onClose, onAdd, onOpenGithub }: AddTokenDialogProps) {
   const [label, setLabel] = useState("");
+  // GHA-FR-PGPY: empty means github.com. It is sent as typed; the backend
+  // normalizes it and refuses a bad one with `invalid_host`.
+  const [host, setHost] = useState("");
   // GHA-FR-09: the secret lives here and nowhere else. It is cleared the moment
   // the submission resolves either way, and unmounting the dialog discards it —
   // nothing in the UI can reproduce it afterwards.
@@ -119,14 +149,25 @@ export function AddTokenDialog({ onClose, onAdd, onOpenGithub }: AddTokenDialogP
     setSubmitting(true);
     setError("");
     try {
-      await onAdd(label.trim(), secret.trim());
+      await onAdd(label.trim(), secret.trim(), host);
       // The parent unmounts this dialog on success (GHA-FR-08).
     } catch (e) {
-      // GHA-FR-10: stay open, keep the label so it need not be retyped, and
-      // clear the secret — a rejected paste is the thing to redo.
+      // GHA-FR-10, GHA-FR-OGNL: stay open, keep the label and the domain so
+      // they need not be retyped, and clear the secret — a rejected paste is the thing to redo.
       setError(tokenErrorMessage(e));
       setSecret("");
       setSubmitting(false);
+    }
+  };
+
+  // GHA-FR-FUSZ: the hand-off sends the domain as typed. A refusal such as
+  // `invalid_host` renders inline in the same place as a submit error.
+  const openGithub = async () => {
+    setError("");
+    try {
+      await onOpenGithub(host);
+    } catch (e) {
+      setError(tokenErrorMessage(e));
     }
   };
 
@@ -152,6 +193,24 @@ export function AddTokenDialog({ onClose, onAdd, onOpenGithub }: AddTokenDialogP
           </button>
         </div>
         <div className="modal__body">
+          {/* GHA-FR-PGPY: the domain comes first, because the hand-off below
+              and the token itself both depend on it. */}
+          <div className="picker-field">
+            <label className="picker-field__label" htmlFor="gh-token-host">
+              Domain
+            </label>
+            <input
+              id="gh-token-host"
+              className="input input--mono"
+              autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              placeholder={DEFAULT_GITHUB_HOST}
+              value={host}
+              onChange={(e) => setHost(e.target.value)}
+            />
+          </div>
+
           {/* GHA-FR-06: always offered, never a mode. The dialog stays open
               across it — the token arrives back by paste, not by any channel
               the application controls. */}
@@ -165,7 +224,7 @@ export function AddTokenDialog({ onClose, onAdd, onOpenGithub }: AddTokenDialogP
               // `.picker-field` is a flex column, so a bare child stretches to
               // the full modal width and reads as another input.
               style={{ alignSelf: "flex-start" }}
-              onClick={() => void onOpenGithub()}
+              onClick={() => void openGithub()}
             >
               Open GitHub token page
             </button>
@@ -338,8 +397,8 @@ export function GithubTokens() {
               key={t.id}
               className="card"
               data-testid="github-token-row"
-              // SWN-FR-03: this section lives in a window fixed at 800 px wide,
-              // so the row can never be given more room than it has here. The
+              // SWN-FR-03: this section lives in a window no narrower than 800 px,
+              // so the row can be given little more room than it has here. The
               // identity column asks for a real basis and the actions cluster
               // wraps to its own line when it cannot sit beside one, rather than
               // squeezing the label into a column one word-fragment wide.
@@ -438,9 +497,9 @@ export function GithubTokens() {
       {adding && (
         <AddTokenDialog
           onClose={() => setAdding(false)}
-          onOpenGithub={() => api.openGithubTokenCreationPage()}
-          onAdd={async (label, secret) => {
-            const created = await api.addGithubToken(label, secret);
+          onOpenGithub={(host) => api.openGithubTokenCreationPage(host)}
+          onAdd={async (label, secret, host) => {
+            const created = await api.addGithubToken(label, secret, host);
             setTokens((prev) => [...(prev ?? []), created]);
             setAdding(false);
           }}

@@ -24,7 +24,8 @@ pub(super) const INDEX_DOCUMENT: &str = "index.md";
 /// GRB-FR-FMCU: what one file of the bundle may cost one read.
 pub(super) const FILE_LIMIT: usize = crate::tools::agent_exec::SEMANTIC_REBASE_FILE_LIMIT as usize;
 /// GRB-FR-FMCU: what a cut file says about itself, on its own last line.
-pub(super) const CUT_NOTICE: &str = "[synthesis] this file was cut at the 1 MiB bound and is incomplete";
+pub(super) const CUT_NOTICE: &str =
+    "[synthesis] this file was cut at the 1 MiB bound and is incomplete";
 
 /// Where one attempt's material lives, and what it holds.
 pub(super) struct MergeArtifact {
@@ -38,11 +39,7 @@ pub(super) struct MergeArtifact {
 impl MergeArtifact {
     pub(super) fn new(store_root: &Path, attempt_id: &str) -> Self {
         let root = store_root.join(ATTEMPTS_DIR).join(attempt_id);
-        Self {
-            attempt_id: attempt_id.to_string(),
-            checkout: root.join("wt"),
-            root,
-        }
+        Self { attempt_id: attempt_id.to_string(), checkout: root.join("wt"), root }
     }
 
     /// The mirrors are mounted rather than the whole attempt directory: the

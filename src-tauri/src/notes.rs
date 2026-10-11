@@ -184,9 +184,7 @@ pub struct NoteChange {
 
 impl NoteChange {
     pub(crate) fn to(note_id: &str) -> NoteChange {
-        NoteChange {
-            note_id: note_id.to_string(),
-        }
+        NoteChange { note_id: note_id.to_string() }
     }
 }
 
@@ -300,14 +298,9 @@ impl StoredNote {
 
     fn from_note(note: &Note) -> Self {
         let (scope, entity_id, entity_path) = match &note.scope {
-            NoteScope::Entity {
-                entity_id,
-                entity_path,
-            } => (
-                SCOPE_ENTITY.to_string(),
-                entity_id.clone(),
-                entity_path.clone(),
-            ),
+            NoteScope::Entity { entity_id, entity_path } => {
+                (SCOPE_ENTITY.to_string(), entity_id.clone(), entity_path.clone())
+            }
             NoteScope::Project => (SCOPE_PROJECT.to_string(), String::new(), String::new()),
         };
         StoredNote {
@@ -383,16 +376,9 @@ fn load_all_reporting(root: &crate::fs::RootFs) -> (Vec<Note>, Vec<NoteSkip>) {
         // like any other malformed note: serving it would put a row in the
         // panel that `update_note` and `delete_note` can never reach, leaving
         // the user an error they cannot clear.
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or_default()
-            .to_string();
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default().to_string();
         let mut skip = |reason: &'static str| {
-            skipped.push(NoteSkip {
-                note_id: stem.clone(),
-                reason,
-            });
+            skipped.push(NoteSkip { note_id: stem.clone(), reason });
         };
         match root.read_toml::<StoredNote>(&path) {
             Ok(stored) => {
@@ -413,8 +399,7 @@ fn load_all_reporting(root: &crate::fs::RootFs) -> (Vec<Note>, Vec<NoteSkip>) {
 
 fn load_one(root: &crate::fs::RootFs, id: &str) -> Result<Note, String> {
     let path = note_path(root, id)?;
-    let stored =
-        root.read_toml::<StoredNote>(&path).map_err(|_| ERR_NOTE_NOT_FOUND.to_string())?;
+    let stored = root.read_toml::<StoredNote>(&path).map_err(|_| ERR_NOTE_NOT_FOUND.to_string())?;
     stored.into_note().ok_or_else(|| ERR_NOTE_NOT_FOUND.to_string())
 }
 
@@ -460,25 +445,10 @@ fn resolve_item(
     match note.scope.entity_id() {
         Some(entity_id) if entity_resolves(root, entity_id) => {
             let entity_name = basename(entity_id);
-            NoteListItem {
-                note,
-                entity_name: Some(entity_name),
-                unresolved: false,
-                discussion_id,
-            }
+            NoteListItem { note, entity_name: Some(entity_name), unresolved: false, discussion_id }
         }
-        Some(_) => NoteListItem {
-            note,
-            entity_name: None,
-            unresolved: true,
-            discussion_id,
-        },
-        None => NoteListItem {
-            note,
-            entity_name: None,
-            unresolved: false,
-            discussion_id,
-        },
+        Some(_) => NoteListItem { note, entity_name: None, unresolved: true, discussion_id },
+        None => NoteListItem { note, entity_name: None, unresolved: false, discussion_id },
     }
 }
 
@@ -503,10 +473,7 @@ where
     // NTC-FR-19: one pass over the comment store's notes root for the whole
     // list, whichever of the three list commands is being served.
     let discussions = crate::comments::note_discussion_index(store);
-    notes
-        .into_iter()
-        .map(|note| resolve_item(root, note, &discussions))
-        .collect()
+    notes.into_iter().map(|note| resolve_item(root, note, &discussions)).collect()
 }
 
 /// Whether the project holds a note under this id.
@@ -572,13 +539,8 @@ pub fn list_all_notes_in(root: &crate::fs::RootFs, store: &crate::fs::RootFs) ->
 pub fn note_documents(root: &crate::fs::RootFs) -> (Vec<NoteDocument>, Vec<NoteSkip>) {
     let (mut notes, skipped) = load_all_reporting(root);
     sort_most_recent_first(&mut notes);
-    let documents = notes
-        .into_iter()
-        .map(|note| NoteDocument {
-            note_id: note.id,
-            body: note.body,
-        })
-        .collect();
+    let documents =
+        notes.into_iter().map(|note| NoteDocument { note_id: note.id, body: note.body }).collect();
     (documents, skipped)
 }
 
@@ -622,10 +584,9 @@ pub fn note_record(root: &crate::fs::RootFs, id: &str) -> Result<Note, String> {
 /// rather than trusted.
 fn normalize_scope(scope: NoteScope) -> NoteScope {
     match scope {
-        NoteScope::Entity { entity_id, .. } => NoteScope::Entity {
-            entity_path: entity_id.clone(),
-            entity_id,
-        },
+        NoteScope::Entity { entity_id, .. } => {
+            NoteScope::Entity { entity_path: entity_id.clone(), entity_id }
+        }
         NoteScope::Project => NoteScope::Project,
     }
 }
@@ -818,10 +779,7 @@ pub fn follow_rename(root: &crate::fs::RootFs, old_rel: &str, new_rel: &str) -> 
         } else {
             continue;
         };
-        note.scope = NoteScope::Entity {
-            entity_path: rewritten.clone(),
-            entity_id: rewritten,
-        };
+        note.scope = NoteScope::Entity { entity_path: rewritten.clone(), entity_id: rewritten };
         if store(root, &note).is_ok() {
             moved += 1;
         }
@@ -834,10 +792,8 @@ pub fn follow_rename(root: &crate::fs::RootFs, old_rel: &str, new_rel: &str) -> 
 /// reads to populate the Dashboard's Reminders widget; this module schedules no
 /// delivery of its own.
 pub fn reminder_notes(root: &crate::fs::RootFs) -> Vec<Note> {
-    let mut notes: Vec<Note> = load_all(root)
-        .into_iter()
-        .filter(|n| n.reminder.is_some())
-        .collect();
+    let mut notes: Vec<Note> =
+        load_all(root).into_iter().filter(|n| n.reminder.is_some()).collect();
     // Soonest first: a due-reminder widget reads from the front of this list.
     notes.sort_by(|a, b| a.reminder.cmp(&b.reminder).then_with(|| a.id.cmp(&b.id)));
     notes
@@ -847,8 +803,8 @@ mod commands;
 mod timestamps;
 
 pub use commands::*;
-pub use timestamps::*;
 pub(crate) use timestamps::is_valid_id;
+pub use timestamps::*;
 
 #[cfg(test)]
 mod tests;

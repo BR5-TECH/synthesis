@@ -115,8 +115,7 @@ fn eac_ts_pwtg_the_container_names_the_paths_its_host_names() {
         .expect("a working directory");
     assert_eq!(workdir, workspace);
     assert!(
-        argv.iter()
-            .any(|a| a == &format!("type=bind,source={workspace},target={workspace}")),
+        argv.iter().any(|a| a == &format!("type=bind,source={workspace},target={workspace}")),
         "the execution directory is mounted at its own path: {argv:?}",
     );
 
@@ -132,9 +131,9 @@ fn eac_ts_pwtg_the_container_names_the_paths_its_host_names() {
         "the store is mounted at its own path: {argv:?}",
     );
     assert!(
-        !argv
-            .iter()
-            .any(|a| a.contains("/gitcommon") || a.contains("repository-pointer") || a.contains("repository-commondir")),
+        !argv.iter().any(|a| a.contains("/gitcommon")
+            || a.contains("repository-pointer")
+            || a.contains("repository-commondir")),
         "and no fixed path or generated file is used: {argv:?}",
     );
 
@@ -146,10 +145,7 @@ fn eac_ts_pwtg_the_container_names_the_paths_its_host_names() {
         None,
         "a drive is not a root",
     );
-    assert_eq!(
-        descriptor::container_path(Path::new(&workspace)),
-        Some(workspace.clone()),
-    );
+    assert_eq!(descriptor::container_path(Path::new(&workspace)), Some(workspace.clone()),);
     let fallback = repository_mounts_in(&harness, &harness.workspace(), false)
         .expect("the fallback shape composes");
     assert!(
@@ -177,8 +173,10 @@ fn eac_ts_pwtg_the_container_names_the_paths_its_host_names() {
     let harness = harness_for("claude_code");
     linked_worktree_at(&harness.sessions_root().join("holds,comma"), &harness.workspace());
     assert!(
-        super::super::repository_access(&crate::changes::canonicalize_lenient(&harness.workspace()))
-            .is_some(),
+        super::super::repository_access(&crate::changes::canonicalize_lenient(
+            &harness.workspace()
+        ))
+        .is_some(),
         "the directory is still a repository, so the withholding below is the shape's doing",
     );
     let runtime = RecordingRuntime::replying(&stdout_for("claude_code", &envelope_json("success")));
@@ -210,11 +208,7 @@ fn eac_ts_tuaa_a_git_directory_outside_its_store_withholds_the_access() {
     // directory as the one it shares.
     let elsewhere = harness.sessions_root().join("another-store");
     copy_tree(&store, &elsewhere);
-    std::fs::write(
-        git_dir.join("commondir"),
-        format!("{}\n", elsewhere.display()),
-    )
-    .unwrap();
+    std::fs::write(git_dir.join("commondir"), format!("{}\n", elsewhere.display())).unwrap();
 
     // The directory is still a repository this module can open, so what is
     // withheld below is withheld for the shape and not for a fixture that
@@ -228,18 +222,12 @@ fn eac_ts_tuaa_a_git_directory_outside_its_store_withholds_the_access() {
     let runtime = RecordingRuntime::replying(&stdout_for("claude_code", &envelope_json("success")));
     run_with_mount(&harness, runtime.clone(), None, None).expect("launches anyway");
     let argv = runtime.only_run().argv;
-    assert!(
-        !argv.iter().any(|a| a.contains("target=/gitcommon")),
-        "no store is mounted: {argv:?}",
-    );
+    assert!(!argv.iter().any(|a| a.contains("target=/gitcommon")), "no store is mounted: {argv:?}",);
     assert!(
         !argv.iter().any(|a| a.contains("target=/workspace/.git")),
         "and nothing is pinned over the worktree's own: {argv:?}",
     );
-    assert!(
-        !argv.iter().any(|a| a.starts_with("GIT_")),
-        "and Git is told nothing: {argv:?}",
-    );
+    assert!(!argv.iter().any(|a| a.starts_with("GIT_")), "and Git is told nothing: {argv:?}",);
 }
 
 /// EAC-FR-FNFV (EAC-FR-FNFV): the generated record climbs as far as the Git
@@ -260,30 +248,18 @@ fn eac_ts_tuaa_the_generated_record_climbs_the_depth_it_is_at() {
     assert_eq!(at("worktrees/a").commondir_text().unwrap(), "../..\n");
     assert_eq!(at("worktrees/a/b").commondir_text().unwrap(), "../../..\n");
     assert_eq!(
-        RepositoryAccess::Plain {
-            git_dir: PathBuf::from("/w/.git"),
-        }
-        .commondir_text(),
+        RepositoryAccess::Plain { git_dir: PathBuf::from("/w/.git") }.commondir_text(),
         None,
         "an ordinary checkout generates nothing: Git finds its store where it always was",
     );
 
     let deep = at("worktrees/a/b");
     let targets: Vec<String> = deep
-        .mounts(
-            "/workspace",
-            "/gitcommon",
-            Path::new("/p"),
-            Some(Path::new("/c")),
-            Path::new("/e"),
-        )
+        .mounts("/workspace", "/gitcommon", Path::new("/p"), Some(Path::new("/c")), Path::new("/e"))
         .into_iter()
         .map(|(_, target)| target)
         .collect();
-    assert!(
-        targets.contains(&"/gitcommon/worktrees/a/b/commondir".to_string()),
-        "{targets:?}",
-    );
+    assert!(targets.contains(&"/gitcommon/worktrees/a/b/commondir".to_string()), "{targets:?}",);
 }
 
 /// EAC-FR-FNFV (EAC-FR-FNFV): what one execution resolves through is its own.
@@ -348,10 +324,7 @@ fn eac_ts_tuaa_an_ordinary_checkout_is_pinned_in_place() {
         .find(|a| a.contains(&format!("target={workspace}/.git,")))
         .unwrap_or_else(|| panic!("no pin in {argv:?}"));
     assert!(pin.contains(",readonly"), "{pin}");
-    let pinned_source = pin
-        .split(',')
-        .find_map(|p| p.strip_prefix("source="))
-        .expect("a source");
+    let pinned_source = pin.split(',').find_map(|p| p.strip_prefix("source=")).expect("a source");
     assert_eq!(
         std::fs::canonicalize(pinned_source).expect("the pinned .git"),
         std::fs::canonicalize(harness.workspace().join(".git")).expect("its own .git"),
@@ -401,8 +374,14 @@ fn eac_ts_xbkr_the_turn_kind_selects_the_model_and_the_effort_and_nothing_else()
         (TurnKind::SemanticRebase, "semantic_rebase", "opus", "xhigh"),
     ];
     for (_, kind, model, effort) in KINDS {
-        agentic::set_model_impl(&harness.store, &harness.ai, "claude_code", Some(kind), Some(model))
-            .expect("a model per kind");
+        agentic::set_model_impl(
+            &harness.store,
+            &harness.ai,
+            "claude_code",
+            Some(kind),
+            Some(model),
+        )
+        .expect("a model per kind");
         agentic::set_effort_impl(
             &harness.store,
             &harness.ai,
@@ -422,10 +401,8 @@ fn eac_ts_xbkr_the_turn_kind_selects_the_model_and_the_effort_and_nothing_else()
         runtime.only_run().argv
     };
     let after = |argv: &[String], flag: &str| -> String {
-        let at = argv
-            .iter()
-            .position(|a| a == flag)
-            .unwrap_or_else(|| panic!("no {flag} in {argv:?}"));
+        let at =
+            argv.iter().position(|a| a == flag).unwrap_or_else(|| panic!("no {flag} in {argv:?}"));
         argv[at + 1].clone()
     };
 
@@ -512,10 +489,7 @@ fn eac_ts54_the_bundle_is_read_only_to_the_executor_and_no_image_carries_it() {
                 if path.is_dir() {
                     stack.push(path);
                 } else {
-                    out.push((
-                        path.to_string_lossy().into_owned(),
-                        std::fs::read(&path).unwrap(),
-                    ));
+                    out.push((path.to_string_lossy().into_owned(), std::fs::read(&path).unwrap()));
                 }
             }
         }
@@ -527,9 +501,7 @@ fn eac_ts54_the_bundle_is_read_only_to_the_executor_and_no_image_carries_it() {
     let execution = run_with_mount(
         &harness,
         runtime.clone(),
-        Some(SupplementaryMount::SemanticRebaseArtifact {
-            host_path: bundle.clone(),
-        }),
+        Some(SupplementaryMount::SemanticRebaseArtifact { host_path: bundle.clone() }),
         None,
     )
     .expect("runs");
@@ -547,10 +519,7 @@ fn eac_ts54_the_bundle_is_read_only_to_the_executor_and_no_image_carries_it() {
                 if path.is_dir() {
                     stack.push(path);
                 } else {
-                    out.push((
-                        path.to_string_lossy().into_owned(),
-                        std::fs::read(&path).unwrap(),
-                    ));
+                    out.push((path.to_string_lossy().into_owned(), std::fs::read(&path).unwrap()));
                 }
             }
         }
@@ -638,6 +607,7 @@ fn eac_ts56_a_semantic_rebase_execution_writes_no_content_into_the_log() {
             task: request_task,
             cancellation: CancellationToken::new(),
             activity: Some(collected.clone() as Arc<dyn AgentActivitySink>),
+            durable_output: None,
             supplementary_mount: Some(SupplementaryMount::SemanticRebaseArtifact {
                 host_path: bundle,
             }),
@@ -647,8 +617,7 @@ fn eac_ts56_a_semantic_rebase_execution_writes_no_content_into_the_log() {
 
     assert!(!ours.is_empty(), "the launch wrote its boundary records");
     assert!(
-        ours.iter()
-            .all(|r| r.level != crate::logging::LogLevel::Debug),
+        ours.iter().all(|r| r.level != crate::logging::LogLevel::Debug),
         "a semantic-rebase execution writes no DEBUG record",
     );
     let all = serde_json::to_string(&ours).expect("records");
@@ -656,10 +625,7 @@ fn eac_ts56_a_semantic_rebase_execution_writes_no_content_into_the_log() {
     assert!(!all.contains(CONTENT), "file content reached the log");
     assert!(!all.contains("stderr_excerpt"), "an excerpt reached the log");
     // The sink still received the run's narration.
-    assert!(
-        !collected.events().is_empty(),
-        "the activity sink is unaffected by the suppression",
-    );
+    assert!(!collected.events().is_empty(), "the activity sink is unaffected by the suppression",);
 
     // And an ordinary execution keeps its DEBUG records — the invocation, the
     // task, and a record per observed line.
@@ -667,20 +633,14 @@ fn eac_ts56_a_semantic_rebase_execution_writes_no_content_into_the_log() {
     run_with_mount(&harness, runtime.clone(), None, None).expect("runs");
     let ordinary = records_for_container(&container_of(&runtime));
     assert!(
-        ordinary
-            .iter()
-            .any(|r| r.level == crate::logging::LogLevel::Debug),
+        ordinary.iter().any(|r| r.level == crate::logging::LogLevel::Debug),
         "an ordinary execution still writes DEBUG records",
     );
 }
 
 /// The container name one recorded launch created.
 fn container_of(runtime: &Arc<RecordingRuntime>) -> String {
-    runtime
-        .only_run()
-        .container
-        .map(|spec| spec.name)
-        .expect("the launch was recorded")
+    runtime.only_run().container.map(|spec| spec.name).expect("the launch was recorded")
 }
 
 /// Every record of one launch, told apart from the rest of the shared session

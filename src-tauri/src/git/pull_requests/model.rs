@@ -11,6 +11,15 @@ use serde_json::Value;
 /// The name GitHub shows for an account that no longer exists.
 const GHOST: &str = "ghost";
 
+/// The pull request GitHub created (GTC-FR-MMFM).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatedPullRequest {
+    pub number: u64,
+    /// The address of its page on `github.com`.
+    pub url: String,
+}
+
 /// One row of the pull request list (GTC-FR-GXUB).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]

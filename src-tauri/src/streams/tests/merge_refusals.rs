@@ -137,9 +137,7 @@ fn a_dirty_stream_is_refused_with_every_dirty_path() {
 fn a_dirty_base_worktree_is_refused_with_every_dirty_path() {
     for publication in [
         StreamMergePublication::Uncommitted,
-        StreamMergePublication::Commit {
-            message: "never lands".into(),
-        },
+        StreamMergePublication::Commit { message: "never lands".into() },
     ] {
         let fx = Fixture::new();
         let stream = stream_ahead(&fx, "dirty base");
@@ -169,14 +167,9 @@ fn a_stream_whose_working_copy_is_gone_is_refused_as_missing() {
     let base_before = tip_text(&fx.repo(), &stream.base_branch);
     let files_before = observe(&fx, &stream).base_files;
 
-    let refusal = merge(
-        &fx,
-        &stream.id,
-        StreamMergePublication::Commit {
-            message: "never lands".into(),
-        },
-    )
-    .expect_err("refused");
+    let refusal =
+        merge(&fx, &stream.id, StreamMergePublication::Commit { message: "never lands".into() })
+            .expect_err("refused");
 
     assert_eq!(refusal, ERR_STREAM_MISSING);
     assert_eq!(tip_text(&fx.repo(), &stream.base_branch), base_before);
@@ -240,9 +233,7 @@ fn a_request_made_while_the_guard_is_held_is_refused_and_changes_nothing() {
         let other = fx.create("another stream", None).expect("created");
         let before = observe(&fx, &stream);
         let state = fx.app.state::<StreamState>();
-        let hold = state
-            .begin_repository_update(&other.id, holder)
-            .expect("the guard is free");
+        let hold = state.begin_repository_update(&other.id, holder).expect("the guard is free");
 
         let refusal =
             merge(&fx, &stream.id, StreamMergePublication::Uncommitted).expect_err("refused");
@@ -307,8 +298,7 @@ fn a_conflict_merge_with_no_worktree_on_the_base_branch_is_refused_at_the_check(
     repo.branch("elsewhere", &head, false).unwrap();
     repo.set_head("refs/heads/elsewhere").unwrap();
 
-    let refusal =
-        merge(&fx, &stream.id, StreamMergePublication::Uncommitted).expect_err("refused");
+    let refusal = merge(&fx, &stream.id, StreamMergePublication::Uncommitted).expect_err("refused");
 
     assert_eq!(refusal, ERR_BASE_NOT_CHECKED_OUT);
     assert_no_run_anywhere(&fx);
@@ -346,9 +336,7 @@ fn a_changed_committed_draft_refuses_the_merge_as_base_dirty() {
     for conflicting in [false, true] {
         for publication in [
             StreamMergePublication::Uncommitted,
-            StreamMergePublication::Commit {
-                message: "never lands".into(),
-            },
+            StreamMergePublication::Commit { message: "never lands".into() },
         ] {
             let fx = Fixture::new();
             commit_a_draft(&fx);
@@ -370,7 +358,11 @@ fn a_changed_committed_draft_refuses_the_merge_as_base_dirty() {
                 "conflicting: {conflicting}",
             );
             assert_eq!(observe(&fx, &stream), before, "the refusal wrote something");
-            assert_eq!(tip_text(&fx.repo(), &stream.base_branch), base_tip, "nothing was committed");
+            assert_eq!(
+                tip_text(&fx.repo(), &stream.base_branch),
+                base_tip,
+                "nothing was committed"
+            );
             assert_eq!(std::fs::read_to_string(&prompt).unwrap(), "accepted, never committed\n");
             assert_no_run_anywhere(&fx);
         }
@@ -386,11 +378,8 @@ fn a_changed_drafts_root_ignore_file_does_not_refuse_the_merge() {
     commit_a_draft(&fx);
     commit_file(&fx.repo(), ".synthesis/drafts/.gitignore", "*/history/\n", "drafts root ignore");
     let stream = stream_ahead(&fx, "root ignore");
-    std::fs::write(
-        fx.root().join(".synthesis/drafts/.gitignore"),
-        "*/history/\n*/proposals/\n",
-    )
-    .unwrap();
+    std::fs::write(fx.root().join(".synthesis/drafts/.gitignore"), "*/history/\n*/proposals/\n")
+        .unwrap();
 
     merge(&fx, &stream.id, StreamMergePublication::Uncommitted).expect("merged");
 }

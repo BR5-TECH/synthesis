@@ -161,10 +161,7 @@ pub use store::*;
 ///
 /// [`create_draft_impl`] filing the draft at the drafts root — what every caller
 /// that has no folder to file it in wants, and what `folder = None` means.
-pub fn create_draft_at_root(
-    root: &fs::RootFs,
-    name: Option<&str>,
-) -> Result<DraftCreated, String> {
+pub fn create_draft_at_root(root: &fs::RootFs, name: Option<&str>) -> Result<DraftCreated, String> {
     create_draft_impl(root, name, None)
 }
 
@@ -228,10 +225,7 @@ pub fn create_draft_impl(
         .map(|text| config.line_endings.normalize(text))
         .unwrap_or_default();
     scaffold_draft(root, &parent, &record, &primary, &starting)?;
-    Ok(DraftCreated {
-        draft: record,
-        file: primary,
-    })
+    Ok(DraftCreated { draft: record, file: primary })
 }
 
 /// DRS-FR-06 / DRS-FR-01: lay out one new draft's folder under `parent` and
@@ -316,7 +310,11 @@ pub(crate) fn scaffold_draft(
 /// record that will not write puts the file back under its old name. A draft
 /// whose primary file has been deleted renames its record alone, there being no
 /// file left bound to the name (DRS-FR-15).
-pub fn rename_draft_impl(root: &crate::fs::RootFs, id: &str, name: &str) -> Result<DraftRecord, String> {
+pub fn rename_draft_impl(
+    root: &crate::fs::RootFs,
+    id: &str,
+    name: &str,
+) -> Result<DraftRecord, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         // DRP-FR-11: committing an empty name leaves the stored name untouched,
@@ -398,10 +396,8 @@ pub fn set_draft_status_impl(
     // `graduated` belongs to `set_draft_graduated` (DRS-FR-20) and `published`
     // to `set_draft_published` (DRS-FR-VKQO).
     // DRS-FR-WFLY: `github_shadow` belongs to `create_github_shadow_draft`.
-    if matches!(
-        status,
-        DraftStatus::Graduated | DraftStatus::Published | DraftStatus::GithubShadow
-    ) {
+    if matches!(status, DraftStatus::Graduated | DraftStatus::Published | DraftStatus::GithubShadow)
+    {
         return Err(ERR_STATUS_NOT_SETTABLE.to_string());
     }
     let dir = draft_dir(root, id)?;
@@ -479,10 +475,13 @@ pub fn delete_draft_impl(root: &fs::RootFs, store: &fs::RootFs, id: &str) -> Res
     crate::comments::delete_draft_comments(store, id)
 }
 
-
 /// DRS-FR-12: read the draft's prompt. `path` names that prompt and any other
 /// path is a typed "not found"; an inconsistent draft is refused outright.
-pub fn load_draft_file_impl(root: &fs::RootFs, id: &str, path: &str) -> Result<DraftContents, String> {
+pub fn load_draft_file_impl(
+    root: &fs::RootFs,
+    id: &str,
+    path: &str,
+) -> Result<DraftContents, String> {
     let dir = draft_dir(root, id)?;
     let prompt = require_prompt_at(root, &dir, id)?;
     if path != prompt {
@@ -531,9 +530,7 @@ pub fn save_draft_file_impl(
     // PST-FR-DQZT: a save is no draft event, so nothing is committed here.
     // The next draft event of this draft, or the author, commits it.
     touch_at(root, &dir, id);
-    Ok(DraftSaveResult {
-        checksum: fs::sha256_bytes(normalised.as_bytes()),
-    })
+    Ok(DraftSaveResult { checksum: fs::sha256_bytes(normalised.as_bytes()) })
 }
 
 /// [`save_draft_file_impl`] for the acceptance transaction, which has already
@@ -553,9 +550,7 @@ pub(crate) fn save_prompt_at(
     // PST-FR-DQZT: a save is no draft event, so nothing is committed here.
     // The next draft event of this draft, or the author, commits it.
     touch_at(root, dir, id);
-    Ok(DraftSaveResult {
-        checksum: fs::sha256_bytes(normalised.as_bytes()),
-    })
+    Ok(DraftSaveResult { checksum: fs::sha256_bytes(normalised.as_bytes()) })
 }
 
 /// The line-ending convention a draft write applies (DRS-FR-12), for a caller
@@ -599,14 +594,14 @@ fn draft_file_path_in(root: &fs::RootFs, dir: &Path, path: &str) -> Result<PathB
     Ok(abs)
 }
 
-/// DRS-FR-13: there is no operation that creates, renames, or deletes a file or
-/// a folder inside a draft.
-///
-/// Nothing stood here by accident. A draft's file set is settled at creation
-/// (DRS-FR-06) and changes only when the draft is renamed, which renames the one
-/// file it holds (DRS-FR-14) — so a draft can never be reduced to no file, never
-/// grown into a tree, and no caller can put one into the state DRS-FR-11
-/// forbids.
+// DRS-FR-13: there is no operation that creates, renames, or deletes a file or
+// a folder inside a draft.
+//
+// Nothing stood here by accident. A draft's file set is settled at creation
+// (DRS-FR-06) and changes only when the draft is renamed, which renames the one
+// file it holds (DRS-FR-14) — so a draft can never be reduced to no file, never
+// grown into a tree, and no caller can put one into the state DRS-FR-11
+// forbids.
 
 /// DRS-FR-20: mark a draft `graduated`, the one path to that status.
 ///
@@ -713,10 +708,7 @@ pub struct DraftChange {
 impl DraftChange {
     /// A change confined to one draft's own files.
     pub(crate) fn to(draft_id: &str, paths: Vec<String>) -> DraftChange {
-        DraftChange {
-            draft_id: draft_id.to_string(),
-            paths,
-        }
+        DraftChange { draft_id: draft_id.to_string(), paths }
     }
 
     /// A change to the draft's record alone — no file of it moved.
@@ -771,10 +763,13 @@ pub fn draft_proposals_dir(root: &crate::fs::RootFs, id: &str) -> Result<PathBuf
 /// to open them; routing it through this keeps the symlink and `..` refusals of
 /// DRS-FR-16 binding on that reader too, rather than leaving it to rebuild the
 /// path itself and inherit none of them.
-pub fn draft_file_abs_path(root: &crate::fs::RootFs, id: &str, path: &str) -> Result<PathBuf, String> {
+pub fn draft_file_abs_path(
+    root: &crate::fs::RootFs,
+    id: &str,
+    path: &str,
+) -> Result<PathBuf, String> {
     draft_file_path(root, id, path)
 }
-
 
 #[cfg(test)]
 mod tests;

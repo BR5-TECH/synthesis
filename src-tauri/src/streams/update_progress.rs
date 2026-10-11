@@ -72,18 +72,16 @@ impl<'a, R: tauri::Runtime> UpdateProgress<'a, R> {
         stream_name: &str,
         strategy: StreamUpdateStrategy,
     ) -> Self {
-        let id = app
-            .try_state::<crate::progress::ProgressRegistry>()
-            .map(|registry| {
-                crate::progress::register_and_publish(
-                    app,
-                    &registry,
-                    "stream-update",
-                    &format!("Updating {stream_name}"),
-                    None,
-                    Some(UPDATE_ATTEMPTS_MAX as u64),
-                )
-            });
+        let id = app.try_state::<crate::progress::ProgressRegistry>().map(|registry| {
+            crate::progress::register_and_publish(
+                app,
+                &registry,
+                "stream-update",
+                &format!("Updating {stream_name}"),
+                None,
+                Some(UPDATE_ATTEMPTS_MAX as u64),
+            )
+        });
         Self {
             app,
             id,
@@ -109,10 +107,9 @@ impl<'a, R: tauri::Runtime> UpdateProgress<'a, R> {
     }
 
     fn advance(&self, turn: u32) {
-        let (Some(id), Some(registry)) = (
-            self.id,
-            self.app.try_state::<crate::progress::ProgressRegistry>(),
-        ) else {
+        let (Some(id), Some(registry)) =
+            (self.id, self.app.try_state::<crate::progress::ProgressRegistry>())
+        else {
             return;
         };
         crate::progress::update_and_publish(
@@ -128,19 +125,10 @@ impl<'a, R: tauri::Runtime> UpdateProgress<'a, R> {
 impl<R: tauri::Runtime> Drop for UpdateProgress<'_, R> {
     fn drop(&mut self) {
         // WKS-FR-FQLS: the update has settled, whichever way it settled.
-        report(
-            self.app,
-            &self.project_key,
-            &self.stream_id,
-            "",
-            self.strategy,
-            0,
-            &[],
-        );
-        let (Some(id), Some(registry)) = (
-            self.id,
-            self.app.try_state::<crate::progress::ProgressRegistry>(),
-        ) else {
+        report(self.app, &self.project_key, &self.stream_id, "", self.strategy, 0, &[]);
+        let (Some(id), Some(registry)) =
+            (self.id, self.app.try_state::<crate::progress::ProgressRegistry>())
+        else {
             return;
         };
         crate::progress::terminate_and_publish(

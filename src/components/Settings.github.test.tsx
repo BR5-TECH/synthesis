@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { Settings } from "./Settings";
+import { Settings } from "../test/settingsHarness";
 import type { GithubBindingResolution, GithubTokenRecord } from "../types";
 
 // SET-FR-12: the Project section names the token this project authenticates
@@ -18,6 +18,7 @@ const WORK: GithubTokenRecord = {
   accountLogin: "raver119",
   scopes: ["repo", "workflow"],
   maskedHint: "a3f9",
+  host: "github.com",
   addedAt: "2026-03-12T10:00:00Z",
   lastVerifiedAt: null,
   state: "valid",
@@ -66,6 +67,26 @@ async function openProjectSection() {
 }
 
 describe("Project settings — GitHub token (SET-FR-12)", () => {
+  it("SET-FR-12, GHA-FR-LBLM: shows the domain of the bound token only when it is not github.com", async () => {
+    backend(
+      [{ tokenId: "t3", resolution: "bound" }],
+      [WORK, { ...WORK, id: "t3", label: "company", host: "company.ghe.com" }],
+    );
+    render(<Settings contentRoot="/p#0" lineEndings="lf" onSelectLineEndings={vi.fn()} />);
+    await openProjectSection();
+    const bound = await screen.findByTestId("github-token-bound");
+    expect(bound).toHaveTextContent("company");
+    expect(screen.getByTestId("token-host")).toHaveTextContent("company.ghe.com");
+  });
+
+  it("SET-FR-12: shows no domain line for a github.com token", async () => {
+    backend([{ tokenId: "t1", resolution: "bound" }], [WORK, PERSONAL]);
+    render(<Settings contentRoot="/p#0" lineEndings="lf" onSelectLineEndings={vi.fn()} />);
+    await openProjectSection();
+    await screen.findByTestId("github-token-bound");
+    expect(screen.queryByTestId("token-host")).not.toBeInTheDocument();
+  });
+
   it("SET-FR-12 names the bound token and describes it without ever showing more than the masked hint", async () => {
     backend([{ tokenId: "t1", resolution: "bound" }], [WORK, PERSONAL]);
     render(<Settings contentRoot="/p#0" lineEndings="lf" onSelectLineEndings={vi.fn()} />);

@@ -16,10 +16,7 @@ fn no_content(_rel: &str) -> ContentFacts {
 }
 
 fn entry(rel: &str, is_dir: bool) -> Entry {
-    Entry {
-        rel: rel.to_string(),
-        is_dir,
-    }
+    Entry { rel: rel.to_string(), is_dir }
 }
 
 /// The eight built-in types, so a variant added later fails to compile here
@@ -63,9 +60,7 @@ fn find<'a>(node: &'a TreeNode, path: &str) -> Option<&'a TreeNode> {
     if node.path == path {
         return Some(node);
     }
-    node.children
-        .as_ref()
-        .and_then(|kids| kids.iter().find_map(|c| find(c, path)))
+    node.children.as_ref().and_then(|kids| kids.iter().find_map(|c| find(c, path)))
 }
 
 fn project_with_synthesis() -> TempDir {
@@ -74,12 +69,12 @@ fn project_with_synthesis() -> TempDir {
     tmp
 }
 
-mod vocabulary;
-mod skill_names;
-mod classification;
 mod assignments;
-mod tree_shape;
-mod scope_rules;
-mod scan_skills;
 mod change_paths;
+mod classification;
+mod scan_skills;
+mod scope_rules;
+mod skill_names;
+mod tree_shape;
+mod vocabulary;
 mod wire_shapes;

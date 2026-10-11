@@ -23,12 +23,21 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const RUST_SOURCE = read("src-tauri/src/github_publication/records.rs");
 const TS_SOURCE = read("src/types/publication.ts");
+const HOST_SOURCE = read("src-tauri/src/github_tokens/host.rs");
 
 /** Every `pub const ERR_NAME: &str = "value";` the Rust module declares. */
 function rustErrorCodes(): Map<string, string> {
   const out = new Map<string, string>();
   const re = /pub const (ERR_[A-Z_]+): &str = "([^"]+)";/g;
   for (const [, name, value] of RUST_SOURCE.matchAll(re)) out.set(name, value);
+  // A code that publication shares with the token module is declared there and
+  // re-exported here as `crate::github_tokens::ERR_NAME`.
+  const shared = /pub const (ERR_[A-Z_]+): &str = crate::github_tokens::(ERR_[A-Z_]+);/g;
+  for (const [, name, source] of RUST_SOURCE.matchAll(shared)) {
+    const declared = new RegExp(`pub const ${source}: &str = "([^"]+)";`).exec(HOST_SOURCE);
+    expect(declared, `${source} is no longer declared in github_tokens/host.rs`).not.toBeNull();
+    out.set(name, declared![1]);
+  }
   return out;
 }
 
@@ -72,7 +81,7 @@ describe("publication vocabulary parity across the IPC boundary", () => {
     expect(typescript).toEqual(rust);
   });
 
-  it("GHP-FR-MZPR: every ineligible value is also a typed error code", () => {
+  it("GHP-FR-MZPR, GHP-FR-ZRFP: every ineligible value is also a typed error code", () => {
     // A remote's eligibility becomes the refusal a publish answers with
     // (GHP-FR-ZRFP), so every value except `eligible` must be spelled the same
     // in both vocabularies.
@@ -84,6 +93,12 @@ describe("publication vocabulary parity across the IPC boundary", () => {
       // (`no_github_remote`).
       if (value === "not_github") {
         expect(codes.has("no_github_remote")).toBe(true);
+        continue;
+      }
+      // GHP-FR-ZRFP: `host_mismatch` describes one remote, and the refusal it
+      // produces is spelled `github_host_mismatch`.
+      if (value === "host_mismatch") {
+        expect(codes.has("github_host_mismatch")).toBe(true);
         continue;
       }
       expect(

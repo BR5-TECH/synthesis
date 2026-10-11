@@ -274,12 +274,7 @@ fn store(front: &mut Frontmatter, key: &'static str, value: &str) {
 /// needs — the distinction between folded and literal is about rendering, and
 /// nothing renders a description here.
 fn fold(lines: Vec<String>) -> String {
-    lines
-        .iter()
-        .map(|l| l.trim())
-        .filter(|l| !l.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
+    lines.iter().map(|l| l.trim()).filter(|l| !l.is_empty()).collect::<Vec<_>>().join(" ")
 }
 
 /// Strip the quotes a YAML author might add around a scalar.
@@ -318,10 +313,7 @@ pub fn enumerate(root: &crate::fs::RootFs) -> (Vec<SkillDescriptor>, Vec<Exclusi
         if meta.kind == crate::fs::EntryKind::Symlink {
             // DSL-FR-05: a symlinked special folder contributes no skills at
             // all, and nothing is resolved through it.
-            excluded.push(Exclusion {
-                path: folder.to_string(),
-                reason: REASON_SYMLINK,
-            });
+            excluded.push(Exclusion { path: folder.to_string(), reason: REASON_SYMLINK });
             continue;
         }
         if meta.kind != crate::fs::EntryKind::Dir {
@@ -372,10 +364,7 @@ pub fn enumerate(root: &crate::fs::RootFs) -> (Vec<SkillDescriptor>, Vec<Exclusi
                     Ok(()) => skills.push(SkillDescriptor {
                         // DSL-FR-10: a skill that declares no usable name goes
                         // by its folder, rather than being excluded for it.
-                        name: front
-                            .name
-                            .clone()
-                            .unwrap_or_else(|| folder_name.clone()),
+                        name: front.name.clone().unwrap_or_else(|| folder_name.clone()),
                         description: front.description.clone().unwrap_or_default(),
                         path: rel,
                         ecosystem,
@@ -471,10 +460,7 @@ pub fn search_skills(indexer: &Bm25Indexer, query: &str, limit: usize) -> Vec<Ra
                 .skills()
                 .iter()
                 .find(|s| s.path == hit.path)
-                .map(|skill| RankedSkill {
-                    skill: skill.clone(),
-                    score: hit.score,
-                })
+                .map(|skill| RankedSkill { skill: skill.clone(), score: hit.score })
         })
         .collect()
 }

@@ -19,7 +19,7 @@ import {
 } from "../state/agentRegistry";
 import {
   AgentsChromeControl,
-  GlobalAgents,
+  PersonalAgents,
   MentionComposer,
   ProjectAgents,
   agentErrorMessage,
@@ -75,8 +75,12 @@ function agent(over: Partial<Agent> & { id: string; nickname: string }): Agent {
   };
 }
 
-function enrolled(a: Agent, availability: ProjectAgent["availability"] = "ready") {
-  return { agent: a, availability };
+function enrolled(
+  a: Agent,
+  availability: ProjectAgent["availability"] = "ready",
+  scope: ProjectAgent["scope"] = "project",
+): ProjectAgent {
+  return { agent: a, scope, availability };
 }
 
 // The keychain-free shape these surfaces actually read: no `keyState`, no
@@ -135,8 +139,8 @@ function wire(b: Backend) {
     switch (cmd) {
       case "list_project_agents":
         return b.projectAgents;
-      case "list_agents":
-        return b.agents;
+      case "list_personal_agents":
+        return b.agents.map((a) => enrolled(a, "ready", "personal"));
       case "get_active_ai_api_catalog": {
         // The provider active for the open project: the first verified record.
         const catalog = b.integrations.find((i) => i.state === "verified") ?? null;
@@ -157,20 +161,13 @@ function wire(b: Backend) {
         return agent({ ...draft, id });
       }
       case "delete_agent": {
-        const { id } = args as { id: string };
-        b.agents = b.agents.filter((a) => a.id !== id);
-        return b.agents;
-      }
-      case "enrol_project_agent": {
-        const { agentId } = args as { agentId: string };
-        const found = b.agents.find((a) => a.id === agentId)!;
-        b.projectAgents = [...b.projectAgents, enrolled(found)];
-        return b.projectAgents;
-      }
-      case "remove_project_agent": {
-        const { agentId } = args as { agentId: string };
-        b.projectAgents = b.projectAgents.filter((p) => p.agent.id !== agentId);
-        return b.projectAgents;
+        const { scope, id } = args as { scope: "project" | "personal"; id: string };
+        if (scope === "personal") {
+          b.agents = b.agents.filter((a) => a.id !== id);
+          return b.agents.map((a) => enrolled(a, "ready", "personal"));
+        }
+        b.projectAgents = b.projectAgents.filter((p) => p.agent.id !== id);
+        return b.projectAgents.filter((p) => p.scope === "project");
       }
       default:
         throw new Error(`unexpected invoke ${cmd}`);
@@ -207,7 +204,7 @@ afterEach(cleanup);
 // AGT-FR-09, AGT-FR-22 … AGT-FR-21, GLS-FR-24: the Global settings section and its editor
 // ---------------------------------------------------------------------------
 
-describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
+describe("AGT-FR-09 … AGT-FR-21: the Personal Agents section", () => {
   it("lists the whole registry, ordered by nickname without regard to case", async () => {
     // AGT-FR-22's first half / AGT-FR-09.
     const b = backend({
@@ -218,9 +215,9 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
       ],
       projectAgents: [enrolled(agent({ id: "a1", nickname: "arch" }))],
     });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await waitFor(() => expect(screen.getAllByTestId("agent-row")).toHaveLength(3));
-    expect(calls(b, "list_agents")).toHaveLength(1);
+    expect(calls(b, "list_personal_agents")).toHaveLength(1);
     expect(
       screen.getAllByTestId("agent-row-nickname").map((r) => r.textContent),
     ).toEqual(["@arch", "@bee", "@Zed"]);
@@ -233,7 +230,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
         agent({ id: "a2", nickname: "gone", modelId: "no-such-model" }),
       ],
     });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await waitFor(() => expect(screen.getAllByTestId("agent-row")).toHaveLength(2));
     // Availability is derived from the active catalog, which arrives in its own
     // read - so the warning lands a render after the rows do.
@@ -260,7 +257,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
         }),
       ],
     });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     const editor = await screen.findByTestId("agent-editor");
     expect(within(editor).getByTestId("agent-nickname")).toHaveValue("");
@@ -297,7 +294,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
     // field untouched, and what is typed is sent as typed — the trim that
     // decides what is stored is the registry's (AGR-FR-23).
     const b = backend({ agents: [] });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     const editor = await screen.findByTestId("agent-editor");
     const confirm = within(editor).getByTestId("agent-editor-confirm");
@@ -336,7 +333,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
     const b = backend({
       agents: [agent({ id: "a1", nickname: "arch", title: "Developer" })],
     });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-edit"));
     const editor = await screen.findByTestId("agent-editor");
     const title = within(editor).getByTestId("agent-title");
@@ -354,7 +351,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
   it("saves an untitled agent with an empty title rather than omitting the field", async () => {
     // AGT-FR-12, AGT-FR-19, AGT-FR-11, AGR-FR-23 / AGT-FR-42: leaving the field alone is an ordinary save.
     const b = backend({ agents: [] });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     const editor = await screen.findByTestId("agent-editor");
     await userEvent.type(within(editor).getByTestId("agent-nickname"), "sec");
@@ -374,7 +371,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
       agents: [agent({ id: "a1", nickname: "arch" })],
       createError: "nickname_taken",
     });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     const editor = await screen.findByTestId("agent-editor");
     const nickname = within(editor).getByTestId("agent-nickname");
@@ -422,7 +419,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
         integration({ provider: "openai", state: "unconfigured" }),
       ],
     });
-    const { unmount } = render(<GlobalAgents />);
+    const { unmount } = render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     await userEvent.click(await screen.findByTestId("agent-model"));
     expect(
@@ -436,7 +433,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
       agents: [],
       integrations: [integration({ provider: "openrouter", state: "unconfigured" })],
     });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     // AGT-FR-14: the empty state must *name the section where one is
     // configured*. Anchored on that clause rather than on "AI API" alone, which
     // the sentence's own opening words would satisfy without it.
@@ -449,7 +446,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
   it("renders the reasoning row only for a model that declares reasoning", async () => {
     // AGT-FR-16 / AGT-FR-12, FR-16.
     backend({ agents: [] });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     const editor = await screen.findByTestId("agent-editor");
 
@@ -473,7 +470,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
     // AGT-FR-17's second clause / AGT-FR-17: the editor never holds a
     // combination the backend would reject.
     backend({ agents: [] });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     const editor = await screen.findByTestId("agent-editor");
 
@@ -505,7 +502,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
     // AGT-FR-11: a modal with a confirm action below a short window's fold and
     // no other way out is a trap. Escape and the backdrop are the two ways out.
     const b = backend({ agents: [agent({ id: "a1", nickname: "arch" })] });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-edit"));
     await screen.findByTestId("agent-editor");
     await userEvent.keyboard("{Escape}");
@@ -526,7 +523,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
   it("creates with empty instructions and carries multi-line ones verbatim", async () => {
     // AGT-FR-19 / AGT-FR-18, FR-19.
     const b = backend({ agents: [] });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     const editor = await screen.findByTestId("agent-editor");
     await userEvent.type(within(editor).getByTestId("agent-nickname"), "arch");
@@ -544,7 +541,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
   it("invokes nothing when the editor is cancelled", async () => {
     // AGT-FR-19.
     const b = backend({ agents: [agent({ id: "a1", nickname: "arch" })] });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-edit"));
     const editor = await screen.findByTestId("agent-editor");
     await userEvent.type(within(editor).getByTestId("agent-nickname"), "-changed");
@@ -556,11 +553,11 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
   it("confirms a deletion, naming what it costs, and invokes nothing if dismissed", async () => {
     // AGT-FR-20.
     const b = backend({ agents: [agent({ id: "a1", nickname: "arch" })] });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-delete"));
     const confirm = await screen.findByTestId("agent-delete-confirm");
     expect(confirm).toHaveTextContent("@arch");
-    expect(confirm).toHaveTextContent(/every project that enrolled it/);
+    expect(confirm).toHaveTextContent(/removed from every project/);
     expect(calls(b, "delete_agent")).toHaveLength(0);
 
     await userEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
@@ -580,7 +577,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
     backend({ agents: [agent({ id: "a1", nickname: "arch" })] });
     const handled = vi.fn();
     const { unmount } = render(
-      <GlobalAgents
+      <PersonalAgents
         editorRequest={{ agentId: "a1", nonce: 1 }}
         onEditorRequestHandled={handled}
       />,
@@ -592,7 +589,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
     unmount();
 
     backend({ agents: [agent({ id: "a1", nickname: "arch" })] });
-    render(<GlobalAgents editorRequest={{ agentId: null, nonce: 1 }} />);
+    render(<PersonalAgents editorRequest={{ agentId: null, nonce: 1 }} />);
     expect(
       within(await screen.findByTestId("agent-editor")).getByTestId(
         "agent-nickname",
@@ -604,7 +601,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
     // The bug this shape exists to prevent: an editor that reopens every time
     // the section is revisited, because a one-shot request was held as a value.
     backend({ agents: [agent({ id: "a1", nickname: "arch" })] });
-    const { unmount } = render(<GlobalAgents editorRequest={null} />);
+    const { unmount } = render(<PersonalAgents editorRequest={null} />);
     await screen.findByTestId("agent-row");
     expect(screen.queryByTestId("agent-editor")).not.toBeInTheDocument();
     unmount();
@@ -617,7 +614,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
         nonce: number;
       } | null>({ agentId: null, nonce: 1 });
       return (
-        <GlobalAgents
+        <PersonalAgents
           editorRequest={request}
           onEditorRequestHandled={() => setRequest(null)}
         />
@@ -640,11 +637,11 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
     // settings → AI API" accuses a provider that is fine
     // of a fault it does not have, because `list_agents` failed.
     invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "list_agents") throw "keychain_unavailable";
+      if (cmd === "list_personal_agents") throw "keychain_unavailable";
       if (cmd === "list_agent_turns") return [];
       return [];
     });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
 
     await screen.findByTestId("agents-error");
     expect(screen.queryByTestId("agents-no-provider")).not.toBeInTheDocument();
@@ -661,7 +658,7 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
       if (cmd === "list_ai_api_catalogs") throw "keychain_unavailable";
       return listAgents(cmd, args);
     });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
 
     expect(await screen.findByTestId("agent-row")).toHaveTextContent("@arch");
     expect(screen.queryByTestId("agents-error")).not.toBeInTheDocument();
@@ -669,67 +666,75 @@ describe("AGT-FR-09 … AGT-FR-21: the Global settings Agents section", () => {
 });
 
 // ---------------------------------------------------------------------------
-// AGT-FR-22, AGT-FR-23 … AGT-FR-22: the Project settings section
+// AGT-FR-22, AGT-FR-23: the Project Agents section
 // ---------------------------------------------------------------------------
 
-describe("AGT-FR-22 / AGT-FR-23: the Project settings Agents section", () => {
-  it("lists only the enrolment, enrols and removes at once, and never offers an edit", async () => {
-    // AGT-FR-09's second half and AGT-FR-23 / AGT-FR-22, FR-23.
+describe("AGT-FR-22 / AGT-FR-23: the Project Agents section", () => {
+  it("AGT-FR-22: lists only the Project agents of the roster, with an edit and a delete action each", async () => {
     const b = backend({
-      agents: [
-        agent({ id: "a1", nickname: "arch" }),
-        agent({ id: "a2", nickname: "sec" }),
-        agent({ id: "a3", nickname: "scribe" }),
+      agents: [agent({ id: "p1", nickname: "mine" })],
+      projectAgents: [
+        enrolled(agent({ id: "a2", nickname: "sec" })),
+        enrolled(agent({ id: "a1", nickname: "arch" })),
+        enrolled(agent({ id: "p1", nickname: "mine" }), "ready", "personal"),
       ],
-      projectAgents: [enrolled(agent({ id: "a1", nickname: "arch" }))],
     });
     render(<ProjectAgents />);
-    await waitFor(() =>
-      expect(screen.getAllByTestId("project-agent-row")).toHaveLength(1),
-    );
+    await waitFor(() => expect(screen.getAllByTestId("agent-row")).toHaveLength(2));
     expect(calls(b, "list_project_agents")).toHaveLength(1);
-    expect(screen.queryByTestId("agent-edit")).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByTestId("project-agent-add"));
-    const picker = await screen.findByTestId("project-agent-picker");
-    const options = within(picker).getAllByTestId("project-agent-option");
-    expect(options.map((o) => o.textContent)).toEqual(["@sec", "@scribe"]);
-
-    await userEvent.click(options[0]);
-    await waitFor(() => expect(calls(b, "enrol_project_agent")).toHaveLength(1));
-    await waitFor(() =>
-      expect(screen.getAllByTestId("project-agent-row")).toHaveLength(2),
-    );
-
-    await userEvent.click(screen.getAllByTestId("project-agent-remove")[0]);
-    await waitFor(() => expect(calls(b, "remove_project_agent")).toHaveLength(1));
-    // Removal leaves the description alone: the registry read is unchanged.
-    expect(b.agents).toHaveLength(3);
+    expect(calls(b, "list_personal_agents")).toHaveLength(0);
+    expect(screen.getAllByTestId("agent-edit")).toHaveLength(2);
+    expect(screen.getAllByTestId("agent-delete")).toHaveLength(2);
+    expect(screen.getByTestId("agents-section")).toHaveAttribute("data-scope", "project");
+    // AGT-FR-23: it says where its agents are saved and how they are shared.
+    expect(screen.getByTestId("agents-section")).toHaveTextContent(/\.synthesis/);
   });
 
-  it("says there is nothing left to add, and where a persona is described", async () => {
-    // AGT-FR-31 / AGT-FR-23, FR-31.
-    backend({
-      agents: [agent({ id: "a1", nickname: "arch" })],
+  it("AGT-FR-23, AGT-FR-19: creates a Project agent through the editor with the project scope", async () => {
+    const b = backend({ projectAgents: [] });
+    render(<ProjectAgents />);
+    await screen.findByTestId("agents-empty");
+    await userEvent.click(await screen.findByTestId("agent-create"));
+    const editor = await screen.findByTestId("agent-editor");
+    expect(editor).toHaveAccessibleName("New Project agent");
+    await userEvent.type(within(editor).getByTestId("agent-nickname"), "arch");
+    await userEvent.click(within(editor).getByTestId("agent-model"));
+    await userEvent.click(await screen.findByRole("option", { name: /Claude Opus 5/ }));
+    await userEvent.click(within(editor).getByTestId("agent-editor-confirm"));
+    await waitFor(() => expect(calls(b, "create_agent")).toHaveLength(1));
+    expect(calls(b, "create_agent")[0].args).toMatchObject({
+      scope: "project",
+      draft: { nickname: "arch" },
+    });
+  });
+
+  it("AGT-FR-20: states what deleting a Project agent costs and deletes with the project scope", async () => {
+    const b = backend({
       projectAgents: [enrolled(agent({ id: "a1", nickname: "arch" }))],
     });
-    const { unmount } = render(<ProjectAgents />);
-    const add = await screen.findByTestId("project-agent-add");
-    await waitFor(() => expect(add).toHaveTextContent(/Nothing left to add/i));
-    expect(add).toBeDisabled();
-    unmount();
-
-    backend({ agents: [], projectAgents: [] });
     render(<ProjectAgents />);
-    expect(
-      await screen.findByTestId("project-agents-none-described"),
-    ).toHaveTextContent(/Global settings/);
+    await userEvent.click(await screen.findByTestId("agent-delete"));
+    const confirm = await screen.findByTestId("agent-delete-confirm");
+    expect(confirm).toHaveTextContent(/removed from this project/);
+    expect(confirm).toHaveTextContent(/every contributor/);
+    await userEvent.click(within(confirm).getByTestId("agent-delete-confirm-ok"));
+    await waitFor(() => expect(calls(b, "delete_agent")).toHaveLength(1));
+    expect(calls(b, "delete_agent")[0].args).toEqual({ scope: "project", id: "a1" });
+    await waitFor(() =>
+      expect(screen.queryByTestId("agent-row")).not.toBeInTheDocument(),
+    );
   });
 
-  it("does not claim nothing is described when the read failed", async () => {
-    // "No agents are described on this machine yet" is a statement of fact, not
-    // advice, and a failed read is no basis for it — the author's registry may
-    // be full. Withheld, so the error is the only thing claimed.
+  it("AGT-FR-23, AGT-FR-31: renders a first-class empty state for a project with no agent of its own", async () => {
+    backend({ projectAgents: [] });
+    render(<ProjectAgents />);
+    expect(await screen.findByTestId("agents-empty")).toHaveTextContent(
+      /no agents of its own/,
+    );
+    expect(screen.queryByTestId("agents-error")).not.toBeInTheDocument();
+  });
+
+  it("does not claim the project has no agent when the read failed", async () => {
     invokeMock.mockImplementation(async (cmd: string) => {
       if (cmd === "list_project_agents") throw "no_project_open";
       if (cmd === "list_agent_turns") return [];
@@ -737,26 +742,43 @@ describe("AGT-FR-22 / AGT-FR-23: the Project settings Agents section", () => {
     });
     render(<ProjectAgents />);
 
-    await screen.findByTestId("project-agents-error");
-    expect(
-      screen.queryByTestId("project-agents-none-described"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByTestId("project-agents-empty")).not.toBeInTheDocument();
+    await screen.findByTestId("agents-error");
+    expect(screen.queryByTestId("agents-empty")).not.toBeInTheDocument();
   });
 
-  it("states a degraded agent's reason and still offers to remove it", async () => {
-    // AGT-FR-22.
+  it("AGT-FR-22: states a degraded agent's reason and still offers to edit and delete it", async () => {
+    // AGT-FR-PRVQ: availability is derived from the active provider's catalog,
+    // and here none is configured.
     backend({
-      agents: [agent({ id: "a1", nickname: "arch" })],
-      projectAgents: [
-        enrolled(agent({ id: "a1", nickname: "arch" }), "provider_unverified"),
-      ],
+      integrations: [],
+      projectAgents: [enrolled(agent({ id: "a1", nickname: "arch" }))],
     });
     render(<ProjectAgents />);
-    expect(await screen.findByTestId("project-agent-warning")).toHaveTextContent(
-      /No AI API provider is active for this project/,
+    expect(await screen.findByTestId("agent-row-warning")).toHaveTextContent(
+      /No AI API provider is configured/,
     );
-    expect(screen.getByTestId("project-agent-remove")).toBeInTheDocument();
-    expect(screen.queryByTestId("agent-edit")).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-edit")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-delete")).toBeInTheDocument();
+  });
+});
+
+describe("AGT-FR-RWHL: a shadowed Personal agent", () => {
+  it("is listed in the Personal Agents section with the reason, and stays editable", async () => {
+    backend({
+      agents: [agent({ id: "a1", nickname: "arch" })],
+    });
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation(async (cmd: string, args: unknown) => {
+      if (cmd === "list_personal_agents") {
+        return [enrolled(agent({ id: "a1", nickname: "arch" }), "shadowed", "personal")];
+      }
+      return base(cmd, args);
+    });
+    render(<PersonalAgents />);
+    expect(await screen.findByTestId("agent-row-warning")).toHaveTextContent(
+      /Project agent with the same nickname wins/,
+    );
+    expect(screen.getByTestId("agent-edit")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-delete")).toBeInTheDocument();
   });
 });

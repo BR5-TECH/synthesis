@@ -20,10 +20,7 @@ fn moving_a_note_between_entities_keeps_its_id_and_filename() {
     let moved = update_note_in(
         root,
         &note.id,
-        NoteFields {
-            scope: Some(entity("b.md")),
-            ..Default::default()
-        },
+        NoteFields { scope: Some(entity("b.md")), ..Default::default() },
         "2026-01-02T00:00:00Z",
     )
     .unwrap();
@@ -32,10 +29,7 @@ fn moving_a_note_between_entities_keeps_its_id_and_filename() {
     assert!(file.exists(), "and so is the filename");
     assert_eq!(
         moved.scope,
-        NoteScope::Entity {
-            entity_id: "b.md".into(),
-            entity_path: "b.md".into()
-        }
+        NoteScope::Entity { entity_id: "b.md".into(), entity_path: "b.md".into() }
     );
     assert_eq!(list_notes_for_entity_in(root, root, "b.md").len(), 1);
     assert!(list_notes_for_entity_in(root, root, "a.md").is_empty());
@@ -52,10 +46,7 @@ fn moving_a_note_to_project_scope_moves_it_between_the_two_lists() {
     update_note_in(
         root,
         &note.id,
-        NoteFields {
-            scope: Some(NoteScope::Project),
-            ..Default::default()
-        },
+        NoteFields { scope: Some(NoteScope::Project), ..Default::default() },
         "2026-01-02T00:00:00Z",
     )
     .unwrap();
@@ -76,16 +67,11 @@ fn every_list_returns_most_recently_edited_first() {
     let y = create(root, NoteScope::Project, "Y", "2026-01-02T00:00:00Z");
     let z = create(root, NoteScope::Project, "Z", "2026-01-03T00:00:00Z");
 
-    let all: Vec<String> = list_all_notes_in(root, root)
-        .into_iter()
-        .map(|i| i.note.id)
-        .collect();
+    let all: Vec<String> = list_all_notes_in(root, root).into_iter().map(|i| i.note.id).collect();
     assert_eq!(all, vec![z.id.clone(), y.id.clone(), x.id.clone()]);
 
-    let project: Vec<String> = list_project_notes_in(root, root)
-        .into_iter()
-        .map(|i| i.note.id)
-        .collect();
+    let project: Vec<String> =
+        list_project_notes_in(root, root).into_iter().map(|i| i.note.id).collect();
     assert_eq!(
         project,
         vec![z.id.clone(), y.id.clone()],
@@ -96,17 +82,12 @@ fn every_list_returns_most_recently_edited_first() {
     update_note_in(
         root,
         &x.id,
-        NoteFields {
-            body: Some("X edited".into()),
-            ..Default::default()
-        },
+        NoteFields { body: Some("X edited".into()), ..Default::default() },
         "2026-01-04T00:00:00Z",
     )
     .unwrap();
-    let reordered: Vec<String> = list_all_notes_in(root, root)
-        .into_iter()
-        .map(|i| i.note.id)
-        .collect();
+    let reordered: Vec<String> =
+        list_all_notes_in(root, root).into_iter().map(|i| i.note.id).collect();
     assert_eq!(reordered, vec![x.id, z.id, y.id]);
 }
 
@@ -140,12 +121,7 @@ fn a_note_whose_entity_is_gone_is_marked_rather_than_dropped() {
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
     touch(root, "specifications/a.md");
-    let note = create(
-        root,
-        entity("specifications/a.md"),
-        "orphan",
-        "2026-01-01T00:00:00Z",
-    );
+    let note = create(root, entity("specifications/a.md"), "orphan", "2026-01-01T00:00:00Z");
     std::fs::remove_file(root.join("specifications/a.md")).unwrap();
 
     let items = list_all_notes_in(root, root);
@@ -161,9 +137,7 @@ fn a_note_whose_entity_is_gone_is_marked_rather_than_dropped() {
         "the last-known path is what the panel renders"
     );
     assert!(
-        root.join(".synthesis/notes")
-            .join(format!("{}.toml", note.id))
-            .exists(),
+        root.join(".synthesis/notes").join(format!("{}.toml", note.id)).exists(),
         "and the note file itself is never deleted"
     );
     // It is still listed for its (now unresolvable) entity id, so the
@@ -185,10 +159,7 @@ fn reattaching_an_unresolved_note_resolves_it_again() {
     update_note_in(
         root,
         &note.id,
-        NoteFields {
-            scope: Some(entity("c.md")),
-            ..Default::default()
-        },
+        NoteFields { scope: Some(entity("c.md")), ..Default::default() },
         "2026-01-02T00:00:00Z",
     )
     .unwrap();

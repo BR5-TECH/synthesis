@@ -3,7 +3,7 @@
 **Spec code:** `GRS`
 
 ## Intent
-The private, durable record of everything a graduation run's agents and loops emitted, kept per run so that an author can read what a phase actually did. It exists because a graduation turn is minutes or hours of work inside a container nobody can see into, and the two accounts that already exist answer different questions: `AGV-agent-activity.md` holds a session-lifetime, memory-bounded stream that is evicted, forgotten, and lost on relaunch, and `GOB-graduation-observability.md` holds the run's own account of its passes without a line of what any of them wrote. This module holds **two append-only streams per run** — the raw executor output, byte for byte after the redaction the executor already applied, and the structured graduation observability records — each written into the run's own directory under the application's private storage. Every record names the run, the phase, and the pass it belongs to, so a surface selects a run, a phase, and a pass without reading the text. Persistence here is **mandatory**: a record that cannot be written stops the agent work rather than being dropped, because output that vanishes silently is worse than a run that stops and says why. Out of scope: how the streams are rendered, searched, and followed on screen, which is `../ui/GLW-graduation-log-window.md`'s; the run's state machine, its queues, and its interruption record, which are `GRD-graduation.md`'s and which this module reports into rather than decides; what the structured records mean, which is `GOB-graduation-observability.md`'s; the masking of a credential, which is `../tools/EAC-execute-agent-cli.md`'s and is done before a byte reaches this module; and the application's own session diagnostic buffer, which is `LGC-logging.md`'s and is neither read nor written here.
+The private, durable record of what the agents of a graduation run did, kept per run so that an author can read it while a phase is working and after the run has moved on. It exists because a graduation turn is minutes or hours of work inside a container nobody can see into, and the two accounts that already exist answer different questions: `AGV-agent-activity.md` holds a session-lifetime, memory-bounded stream that is evicted, forgotten, and lost on relaunch, and `GOB-graduation-observability.md` holds the run's own account of its passes without a line of what any of them did. This module holds **two append-only streams per run**: the **activity stream**, which is the safe normalized agent activity the executor reports, and the **structured stream**, which holds the graduation observability records. Each is written into the run's own directory under the application's private storage. Every record names the run, the phase, and the pass it belongs to, so a surface selects a run, a phase, and a pass without reading the text. The activity stream holds a kind and a bounded one-line summary for each record and never holds task input, internal reasoning, raw CLI output, or a full tool payload. Persistence here is **mandatory**: a record that cannot be written stops the agent work rather than being dropped, because activity that vanishes silently is worse than a run that stops and says why. Out of scope: how the activity stream is rendered, searched, and followed on screen, which is `../ui/GLW-graduation-log-window.md`'s; the run's state machine, its queues, and its interruption record, which are `GRD-graduation.md`'s and which this module reports into rather than decides; what the structured records mean, which is `GOB-graduation-observability.md`'s; the normalization and the masking of the activity, which are `../tools/EAC-execute-agent-cli.md`'s and are done before a record reaches this module; and the application's own session diagnostic buffer, which is `LGC-logging.md`'s and is neither read nor written here.
 
 ## Contract surface
 
@@ -12,7 +12,7 @@ The module owns two files per run, the indexes and the persistence status those 
 ### Storage
 
 ```text
-short_data_dir()/g/<run-id>/logs/source.jsonl       raw executor output, one JSON object per line
+short_data_dir()/g/<run-id>/logs/activity.jsonl     safe normalized agent activity, one JSON object per line
 short_data_dir()/g/<run-id>/logs/structured.jsonl   structured observability records, one per line
 ```
 
@@ -21,34 +21,33 @@ Both files sit beside the run's `run.toml` in the run's own directory (per `GRD-
 ### The streams
 
 ```text
-GraduationLogStream = "source" | "structured"
+GraduationLogStream = "activity" | "structured"
 ```
 
-Exactly two, named on every read, every append, every change event, and every search.
+Exactly two, named on every read, every append, every change event, and every search. The log window reads the activity stream alone.
 
-### The source record
+### The activity record
 
-One JSON object per emitted stdout, stderr, or executor chunk:
+One JSON object per safe activity the executor reported for a graduation turn:
 
 ```
-GraduationSourceChunk {
+GraduationActivityRecord {
   schema_version,   // 1
-  record_id,        // opaque, assigned once by the producer, unique within the run
+  record_id,        // opaque, assigned once by the executor, unique within the run
   sequence,         // integer, assigned here, ascending within this run and stream
-  at,               // RFC 3339 UTC, when the chunk was emitted
+  at,               // RFC 3339 UTC, when the activity arrived
   run_id,
   phase_id,         // one of the four of GRS-FR-MEPZ
   pass,             // the pass number, or null for a run-level record
   origin,           // GraduationLogOrigin
   producer,         // the component that emitted it (GRS-FR-NUXT)
-  agent,            // the integration the turn ran under; null where none applies
-  container,        // the container the chunk was read from; null where none applies
-  source,           // "stdout" | "stderr" | "executor"
-  encoding,         // always "base64"
-  data_base64,      // the complete redacted bytes of this chunk
-  byte_length       // the decoded length in bytes
+  channel,          // "stdout" | "stderr" | "executor"
+  kind,             // one of the safe kinds of GRS-FR-WJIA
+  summary           // one line, masked, bounded by EAC-FR-32
 }
 ```
+
+The record has no payload field, no task field, no reasoning field, and no raw output field.
 
 ### The structured record
 
@@ -93,6 +92,8 @@ semantic_merge_turn             done            null
 stage_transition                the phase being left     null
 ```
 
+The activity stream takes records from the producers `work_turn`, `clarification_judgement`, `review_turn`, and `semantic_merge_turn` alone, because only an agent turn reports activity. Its `origin` is `executor` for the executor's own `finished` activity and for every record whose `pass` is null (GRS-FR-NUXT), and `agent` for every other record.
+
 ### The indexes and the persistence status
 
 Held on the run record, beside the run state, and holding no log payload:
@@ -119,7 +120,7 @@ GraduationLogPersistence {
 
 GraduationLogIndexes {
   log_storage_version: 1,
-  source: GraduationStreamIndex,
+  activity: GraduationStreamIndex,
   structured: GraduationStreamIndex,
   persistence: GraduationLogPersistence,
   last_read_failure  // GraduationLogFailure of kind "read", retained from the most recent
@@ -203,7 +204,7 @@ GraduationLogSearchResult =
 
 Two run-scoped sinks, constructed against one run identifier and the scope its records belong to, and handed to the producer rather than the producer being told a run identifier:
 
-- **the source sink** — handed to `../tools/EAC-execute-agent-cli.md` as `AgentExecutionRequest.durable_output` (per EAC-FR-VSNM). It accepts one chunk at a time and answers each with a durable acknowledgement or a typed failure.
+- **the activity sink** — handed to `../tools/EAC-execute-agent-cli.md` as `AgentExecutionRequest.durable_output` (per EAC-FR-VSNM). It accepts one safe activity at a time and answers each with a durable acknowledgement or a typed failure. It is bound to the run, the turn's producer, and the turn's pass.
 - **the structured sink** — reached by `GOB-graduation-observability.md`'s producers and by `../ai/GRL-graduation-loop.md`'s drives. It accepts one record at a time on the same terms.
 
 ### Tauri commands
@@ -217,13 +218,13 @@ Two run-scoped sinks, constructed against one run identifier and the scope its r
 ### Internal (Rust API, not registered as Tauri commands)
 
 - `initialize_graduation_log_storage(run_id)` — creates the run's `logs/` directory and both files, and writes the run's `GraduationLogIndexes`.
-- `append_graduation_source_chunk(record)` — appends one `GraduationSourceChunk` and returns when it is durable.
+- `append_graduation_activity_record(record)` — appends one `GraduationActivityRecord` and returns when it is durable.
 - `append_graduation_structured_record(record)` — appends one `GraduationStructuredRecord` and returns when it is durable.
 - `recover_graduation_log_storage(run_id)` — repairs a partial tail and replays the pending set idempotently.
 
 ### Typed errors
 
-`read_graduation_logs` returns `no_project_open`, `run_not_found`, `unknown_phase` naming the value it was given, `unknown_stream`, `unknown_scope` naming a pass scope kind it does not hold, and `cursor_not_for_this_scope` where a cursor names another run or another stream. It returns no error for a scope that holds no record and none for a query that matches none: each is a status of the page.
+`read_graduation_logs` returns `no_project_open`, `run_not_found`, `unknown_phase` naming the value it was given, `unknown_stream` naming the value it was given, `unknown_scope` naming a pass scope kind it does not hold, and `cursor_not_for_this_scope` where a cursor names another run or another stream. It returns no error for a scope that holds no record and none for a query that matches none: each is a status of the page.
 
 Both append operations return one `GraduationLogFailure`.
 
@@ -232,32 +233,33 @@ Both append operations return one `GraduationLogFailure`.
 This module owns the storage, and the behaviour around it is settled across the specifications below. The map is here so that the whole of a graduation run's logging is reachable from one place rather than reassembled by a reader who has to guess which module took which part:
 
 - **The two private streams, their files, and the run directory they sit in** — GRS-FR-MABD, GRS-FR-KDOY, GRS-FR-LXGT, GRS-FR-CGSP, and `GRD-graduation.md` GRD-FR-OSCG.
-- **The source record and its schema** — GRS-FR-MEPZ, GRS-FR-JAPO, GRS-FR-QDVH, GRS-FR-YXZX.
+- **The activity record, its schema, and its safe-content boundary** — GRS-FR-SQGZ, GRS-FR-WJIA, GRS-FR-VZUZ, GRS-FR-RDJP; `../tools/EAC-execute-agent-cli.md` EAC-FR-DWGS, EAC-FR-IRKZ.
 - **The structured record and its schema** — GRS-FR-NPIB, GRS-FR-TCKD, and `GOB-graduation-observability.md` GOB-FR-UASF.
-- **Attribution: phase, pass, origin, and producer** — GRS-FR-KJVN, GRS-FR-ZQEM, GRS-FR-XUOA, GRS-FR-HBQT, GRS-FR-WNRC, GRS-FR-URSZ, GRS-FR-NUXT, GRS-FR-GBLC; `GOB-graduation-observability.md`,; `../ai/GLG-graduation-loop-logging.md` GLG-FR-FZHN, GLG-FR-FBKP; `GRD-graduation.md`,.
-- **Phase visibility, and the phase a transition record carries** — GRS-FR-BSJQ, GRS-FR-EPPM, and `GOB-graduation-observability.md`,.
-- **Iteration records and their phase-entry intervals** — `GOB-graduation-observability.md`,.
+- **Attribution: phase, pass, origin, and producer** — GRS-FR-KJVN, GRS-FR-ZQEM, GRS-FR-XUOA, GRS-FR-HBQT, GRS-FR-WNRC, GRS-FR-URSZ, GRS-FR-NUXT, GRS-FR-GBLC; `../ai/GLG-graduation-loop-logging.md` GLG-FR-FZHN, GLG-FR-FBKP.
+- **Phase visibility, and the phase a transition record carries** — GRS-FR-BSJQ, GRS-FR-EPPM.
 - **The run-level scope, and the records whose `pass` is null** — GRS-FR-JXRV, GRS-FR-NKZP, GRS-FR-TQAO, GRS-FR-BWQK, GRS-FR-HVUJ, GRS-FR-EMTV, and `../ui/GLW-graduation-log-window.md` GLW-FR-CQXJ, GLW-FR-DDXJ, GLW-FR-DKWB.
-- **Reads, cursors, paging, statuses, decoding, and search** — GRS-FR-PQVK, GRS-FR-RZXA, GRS-FR-UEIL, GRS-FR-GSUY, GRS-FR-DYPS, GRS-FR-OWDT, GRS-FR-CTQI, GRS-FR-IQUA, GRS-FR-NSGX, GRS-FR-THZA, GRS-FR-QVTA, GRS-FR-OYIC.
+- **Reads, cursors, paging, statuses, and search** — GRS-FR-PQVK, GRS-FR-RZXA, GRS-FR-UEIL, GRS-FR-GSUY, GRS-FR-DYPS, GRS-FR-OWDT, GRS-FR-CTQI, GRS-FR-IQUA, GRS-FR-NSGX, GRS-FR-THZA, GRS-FR-OYIC, GRS-FR-WRAS.
 - **Durability, backpressure, recovery, idempotency, and corruption** — GRS-FR-RGPN, GRS-FR-CYAP, GRS-FR-KQHY, GRS-FR-MXDJ, GRS-FR-MQEQ, GRS-FR-KYWE, GRS-FR-EYNU.
-- **Mandatory persistence, the interruption it causes, and the same-pass Continue** — GRS-FR-EIXS, GRS-FR-DDSB, GRS-FR-OVCO, and `GRD-graduation.md` GRD-FR-IKVE, GRD-FR-IKVE.
-- **Retention, and the exclusion of the bounds that govern other records** — GRS-FR-JQOO, GRS-FR-FORV, GRS-FR-NFLO; `GRD-graduation.md` GRD-FR-OSCG, GRD-FR-OSCG; `AGV-agent-activity.md` AGV-FR-XLZI, AGV-FR-EFNP, AGV-FR-VZBU; `../ui/RUN-runs.md` RUN-FR-DTJO, RUN-FR-GTEU, RUN-FR-MVTX.
-- **Redaction before persistence** — GRS-FR-YXVY, GRS-FR-JWBW; `../tools/EAC-execute-agent-cli.md` EAC-FR-FKCN; `../ai/GLG-graduation-loop-logging.md` GLG-FR-YGCI; `GRD-graduation.md`.
-- **The two run-scoped sinks and the durable acknowledgement they answer with** — `GRD-graduation.md` GXD-FR-IOZU; `../ai/GLG-graduation-loop-logging.md` GLG-FR-QKVI, GLG-FR-AVVZ, GLG-FR-XQTM; `GRD-graduation.md`,; `../tools/EAC-execute-agent-cli.md` EAC-FR-VSNM, EAC-FR-CXUE, EAC-FR-DUTR, EAC-FR-RLIW.
-- **Which progress-bar phase may be opened, and what opening one does** — `../ui/GRU-graduation-runs.md`,; `../ui/RPV-run-progress.md` RPV-FR-JSQW, RPV-FR-LQUP, RPV-FR-MAIP, RPV-FR-NEVJ; `GRD-graduation.md` GRD-FR-LGDV.
-- **The log window: its scoping, its stream toggle, its search, its follow mode, its states, its focus, and the isolation of one run's window from another's** — `../ui/GLW-graduation-log-window.md` GLW-FR-BLWH, GLW-FR-BVYN, GLW-FR-ELJO, GLW-FR-FCVA, GLW-FR-FPUX, GLW-FR-FXAL, GLW-FR-IMKM, GLW-FR-KTWX, GLW-FR-NMOD, GLW-FR-ONEV, GLW-FR-OOYK, GLW-FR-QDWA, GLW-FR-QMRV, GLW-FR-TMRQ, GLW-FR-WBTE, GLW-FR-XZQM, GLW-FR-YVKD, GLW-FR-ZPUH; `../ui/GRU-graduation-runs.md`,.
-- **The separation from the application's own session diagnostics** — GRS-FR-TCKD; `LGC-logging.md` LGC-FR-SFVS, LGC-FR-TCZC; `GOB-graduation-observability.md`; `../ui/GLW-graduation-log-window.md` GLW-FR-TIKK.
+- **Mandatory persistence, the interruption it causes, and the same-pass Continue** — GRS-FR-EIXS, GRS-FR-DDSB, GRS-FR-OVCO, GRS-FR-ITWJ, and `GRD-graduation.md` GRD-FR-IKVE.
+- **Retention, and the exclusion of the bounds that govern other records** — GRS-FR-JQOO, GRS-FR-FORV, GRS-FR-NFLO; `GRD-graduation.md` GRD-FR-OSCG; `AGV-agent-activity.md` AGV-FR-XLZI, AGV-FR-EFNP, AGV-FR-VZBU; `../ui/RUN-runs.md` RUN-FR-DTJO, RUN-FR-GTEU, RUN-FR-MVTX.
+- **Redaction before persistence** — GRS-FR-YXVY, GRS-FR-JWBW; `../tools/EAC-execute-agent-cli.md` EAC-FR-FKCN; `../ai/GLG-graduation-loop-logging.md` GLG-FR-YGCI.
+- **The two run-scoped sinks and the durable acknowledgement they answer with** — `GXD-graduation-execution.md` GXD-FR-IOZU; `../ai/GLG-graduation-loop-logging.md` GLG-FR-QKVI, GLG-FR-AVVZ, GLG-FR-XQTM, GLG-FR-UCRL; `../tools/EAC-execute-agent-cli.md` EAC-FR-VSNM, EAC-FR-CXUE, EAC-FR-DUTR, EAC-FR-RLIW.
+- **Which progress-bar phase may be opened, and what opening one does** — `../ui/GRU-graduation-runs.md` GRU-FR-TQJW; `../ui/RPV-run-progress.md` RPV-FR-JSQW; `GRD-graduation.md` GRD-FR-LGDV.
+- **The log window: its scoping, its row presentation, its search, its follow mode, its states, its focus, and the isolation of one run's window from another's** — `../ui/GLW-graduation-log-window.md` GLW-FR-BLWH, GLW-FR-BVYN, GLW-FR-ELJO, GLW-FR-FCVA, GLW-FR-FPUX, GLW-FR-KHGP, GLW-FR-IMKM, GLW-FR-KTWX, GLW-FR-NMOD, GLW-FR-ONEV, GLW-FR-OOYK, GLW-FR-QDWA, GLW-FR-QMRV, GLW-FR-WBTE, GLW-FR-XZQM, GLW-FR-YVKD, GLW-FR-ZPUH.
+- **The separation from the application's own session diagnostics** — GRS-FR-TCKD; `LGC-logging.md` LGC-FR-SFVS, LGC-FR-TCZC; `../ui/GLW-graduation-log-window.md` GLW-FR-TIKK.
 
 ## Functional requirements
 
-1. **GRS-FR-MABD** Every graduation run owns **two append-only JSONL files** in its own run directory: `logs/source.jsonl` for raw executor output and `logs/structured.jsonl` for structured graduation observability records. One line is one JSON object, and a line is never rewritten, reordered, or removed.
+1. **GRS-FR-MABD** Every graduation run owns **two append-only JSONL files** in its own run directory: `logs/activity.jsonl` for the safe normalized agent activity and `logs/structured.jsonl` for structured graduation observability records. One line is one JSON object, and a line is never rewritten, reordered, or removed.
 2. **GRS-FR-KDOY** Both files are created when the run's private log storage is **initialized**, which happens once, in the durable write that creates the run record, so a run that has emitted nothing still has two readable streams.
 3. **GRS-FR-LXGT** The files live under `FSA-filesystem-access.md::short_data_dir()` in the run's own directory and **never in the repository, in a project's `.synthesis/`, in a graduation or implementation worktree, or in Git history**, and every read and write of them goes through `FSA-filesystem-access.md` rather than through a bare filesystem call.
-4. **GRS-FR-CGSP** `run.toml` keeps the run state, the **log indexes**, and the **latest persistence status**, and it holds **no log payload**: no chunk, no decoded text, no structured field value, and no excerpt of any of them.
+4. **GRS-FR-CGSP** `run.toml` keeps the run state, the **log indexes**, and the **latest persistence status**, and it holds **no log payload**: no activity summary, no structured field value, and no excerpt of either.
 5. **GRS-FR-MEPZ** Every record of either stream carries `schema_version`, `record_id`, `sequence`, `at`, `run_id`, `phase_id`, `pass`, `origin`, and `producer`. `phase_id` is exactly one of the four progress-bar ids of `GOB-graduation-observability.md`: `queued`, `working`, `review`, and `done`.
-6. **GRS-FR-JAPO** A **source** record additionally carries `agent`, `container`, `source`, `encoding`, `data_base64`, and `byte_length`. `source` is `stdout`, `stderr`, or `executor`; `agent` and `container` are null where they do not apply.
-7. **GRS-FR-QDVH** `encoding` is always `base64`, and decoding `data_base64` recovers the **complete redacted bytes of that chunk exactly**, including its boundaries and its position in the order. One emitted chunk is one record: chunks are neither joined, split, re-wrapped, nor normalized on their way to the file.
-8. **GRS-FR-YXZX** The metadata of a source record is **retained with the chunk** rather than derived later, so every text line a surface draws from that chunk can be shown with the run, phase, pass, origin, producer, agent, container, and source it was written under.
+6. **GRS-FR-JAPO** An **activity** record additionally carries `channel`, `kind`, and `summary`. `channel` is `stdout`, `stderr`, or `executor`. `kind` is one of the safe kinds of GRS-FR-WJIA. `summary` is one masked line.
+7. **GRS-FR-SQGZ** An activity record holds **no other field** than the attribution of GRS-FR-MEPZ and the three fields of GRS-FR-JAPO. It holds no payload, no task input, no reasoning text, no invocation text, no raw CLI output, and no full tool argument or result.
+8. **GRS-FR-WJIA** The activity stream accepts a record of these **safe kinds** alone: `started`, `message`, `tool_call`, `tool_result`, `command`, `file_change`, `retry`, `usage`, `finished`, `error`, and `diagnostic`. A record of any other kind is refused before it reaches the file.
+9. **GRS-FR-VZUZ** The kinds `invocation`, `task`, `reasoning`, and `unrecognized` are **excluded kinds**. An excluded kind is never persisted and never rendered, because it carries task input, invocation contents, internal reasoning, or an unread raw protocol line. Excluding it leaves the live Agent Output stream of `AGV-agent-activity.md` unchanged.
+10. **GRS-FR-RDJP** Only an agent turn writes an activity record. A work turn, a review turn, a clarification judgement, and a semantic merge turn produce activity, attributed by the producer table above. A queue wait, a commit, and a stage transition produce none.
 9. **GRS-FR-NPIB** A **structured** record additionally carries `level`, `event`, and `fields`. `fields` is a flat map holding the structured values a surface renders, and the order of the stream is the append order of the stream.
 10. **GRS-FR-TCKD** `structured.jsonl` holds the **graduation observability records of `GOB-graduation-observability.md`** and holds no record of `LGC-logging.md`'s session diagnostic buffer. The two channels stay separate: nothing this module writes reaches that buffer, and nothing that buffer holds reaches either file.
 11. **GRS-FR-BSJQ** `phase_id` is persisted on **every** record and is **authoritative for phase visibility**. No reader infers a phase from the text of a record, from its position, or from the pass it belongs to.
@@ -278,7 +280,7 @@ This module owns the storage, and the behaviour around it is settled across the 
 22. **GRS-FR-ZTCF** Every read that returns a run record, and every `read_graduation_logs`, answers with the **live index** where this process holds one for the run, and with the saved copy otherwise. A read never creates a live index.
 23. **GRS-FR-RGPN** **Every append is durable before the producer receives success.** A producer that has been told a record was written may rely on that record surviving an immediate loss of the process.
 24. **GRS-FR-CYAP** The writer uses **bounded backpressure or a durable pending-write queue**, and it **never drops, truncates, evicts, or silently acknowledges** a record. A producer that outruns the writer waits; it is never told a record was stored that was not.
-25. **GRS-FR-JQOO** No size limit, memory eviction rule, rotation, or truncation applies to either stream. **Source output is complete for the lifetime of the run record**, and the bounds `AGV-agent-activity.md` AGV-FR-05 and AGV-FR-06 place on its own in-memory stream govern nothing here.
+25. **GRS-FR-JQOO** No size limit, memory eviction rule, rotation, or truncation applies to either stream. **Activity is complete for the lifetime of the run record**, and the bounds `AGV-agent-activity.md` AGV-FR-05 and AGV-FR-06 place on its own in-memory stream govern nothing here.
 26. **GRS-FR-KQHY** Records accepted from a producer and not yet durable are the **pending set**, and each carries its `record_id`. Recovery **replays the pending set idempotently**: it reads the stream back from the sequence the index records as durable, collects the `record_id`s the file already holds, discards every pending record whose id is among them, and appends the rest in their original order.
 27. **GRS-FR-MXDJ** A retry therefore **appends no record twice and loses no record whose acknowledgement was interrupted**, which is the one guarantee that makes a mandatory-persistence stop safe to retry.
 28. **GRS-FR-MQEQ** A **partial final line** — the tail of a write the process did not finish — is repaired by truncating the file back to its last complete record before anything further is appended. That record was never acknowledged, so no producer believes it was stored, and the pending set is what restores it.
@@ -286,11 +288,12 @@ This module owns the storage, and the behaviour around it is settled across the 
 30. **GRS-FR-EIXS** **Creating or appending either required stream is mandatory.** Where a file cannot be created or appended, the backend **stops or cancels the current agent action**, persists the typed `GraduationLogFailure` in the run's interruption record, and moves the run to `interrupted` **before it performs another agent action or another state transition** (per `GRD-graduation.md` GRD-FR-IKVE).
 31. **GRS-FR-DDSB** The interruption **identifies the persistence failure** — its code, its stream, and the act that clears it — and **retains the pending records for retry**, naming them by `record_id`, so nothing is lost while the run rests.
 32. **GRS-FR-OVCO** **Continue retries the pending log writes first.** Where every pending write then succeeds, the run resumes the **same** pass: it opens no new pass and replays no already-persisted output. Where persistence still fails, the run stays `interrupted` and Continue stays available.
+33. **GRS-FR-ITWJ** The activity sink acknowledges an activity **only after the record is durable**, and it answers a failed append with the typed `GraduationLogFailure`. The run then moves to `interrupted` through the path of GRS-FR-EIXS, with the reason `log_persistence_failed`. A persistence failure is never shown to a reader as an empty activity stream.
 33. **GRS-FR-FORV** Both streams are **retained for the lifetime of the run record**. Archiving a run, discarding one, interrupting one, and continuing one each leave both files where they are and readable, and the reclamation of a run's branches and working copies reclaims neither file (per `GRD-graduation.md` GRD-FR-GMTX).
 34. **GRS-FR-NFLO** The rule that a discarded run is **forgotten** by `AGV-agent-activity.md` AGV-FR-12 governs that module's own in-memory stream alone and reaches neither file here: a discarded run's logs are read exactly as a completed run's are.
-35. **GRS-FR-YXVY** Executor output passes the **existing credential and session-identity redaction boundary** of `../tools/EAC-execute-agent-cli.md` EAC-FR-29 **before it reaches** `source.jsonl`. This module applies **no second redaction rule of its own** and inspects, masks, and rewrites nothing.
-36. **GRS-FR-JWBW** It nevertheless **never writes an unredacted credential, session identity, login directory, or model transcript**: it accepts source chunks from the executor's masked delivery path and from no other, and it reads no vendor session-state directory (per `../tools/EAC-execute-agent-cli.md` EAC-FR-31). "Complete output" means complete output **after** that redaction.
-37. **GRS-FR-PQVK** The module provides **four typed operations and no other route to either stream**: `read_graduation_logs(run_id, phase_id, pass, stream, cursor, limit, query)`, `append_graduation_source_chunk(record)`, `append_graduation_structured_record(record)`, and the event `"graduation log records appended"` carrying `{ run_id, stream, latest_sequence }` and no record content. **Every read, every append, every change event, and every search request names `run_id` and `stream`**, and a read additionally names the selected `phase_id` and the pass scope. Nothing writes either file by another path, and no operation anywhere reads one without naming both.
+35. **GRS-FR-YXVY** Activity passes the **existing credential and session-identity masking** of `../tools/EAC-execute-agent-cli.md` EAC-FR-29 **before it reaches** `activity.jsonl`. This module applies **no second masking rule of its own** and inspects, masks, and rewrites nothing.
+36. **GRS-FR-JWBW** It nevertheless **never writes an unredacted credential, session identity, login directory, or model transcript**: it accepts activity from the executor's masked durable delivery path and from no other, and it reads no vendor session-state directory (per `../tools/EAC-execute-agent-cli.md` EAC-FR-31). It refuses an excluded kind (GRS-FR-VZUZ) as a second defence.
+37. **GRS-FR-PQVK** The module provides **four typed operations and no other route to either stream**: `read_graduation_logs(run_id, phase_id, pass, stream, cursor, limit, query)`, `append_graduation_activity_record(record)`, `append_graduation_structured_record(record)`, and the event `"graduation log records appended"` carrying `{ run_id, stream, latest_sequence }` and no record content. **Every read, every append, every change event, and every search request names `run_id` and `stream`**, and a read additionally names the selected `phase_id` and the pass scope. Nothing writes either file by another path, and no operation anywhere reads one without naming both.
 38. **GRS-FR-JXRV** **A record's scope is its persisted `pass` and nothing else.** A record whose `pass` is a number belongs to that pass. A record whose `pass` is `null` belongs to the **run-level scope**. This module assigns no run-level record to a pass, reads no phase-entry interval to place one, and returns no pass a record was not written with.
 39. **GRS-FR-NKZP** **A read whose scope names one pass returns that pass's own records alone** — every record whose persisted `pass` is that number. **A read whose scope is `{ kind: "run_level" }` returns the run-level records alone** — every record whose persisted `pass` is `null`. Neither scope returns a record of the other.
 40. **GRS-FR-TQAO** **Authoritative phase visibility narrows every scope alike.** A record is returned only where its persisted `phase_id` equals the phase the read names (GRS-FR-BSJQ). A run-level record of another phase is absent from the run-level scope of the phase being read, and a pass that never entered that phase holds no record there.
@@ -307,15 +310,15 @@ This module owns the storage, and the behaviour around it is settled across the 
 51. **GRS-FR-IQUA** `empty` means the **selected run, phase, pass, and stream hold no record**. It is never returned for a read that failed and never for a stream that could not be accessed.
 52. **GRS-FR-NSGX** A search that matches nothing carries its own `search_no_match` result beside a status the scope's own records settle, so a query with no hit is never reported as the scope being empty and never as the **other** stream holding nothing.
 53. **GRS-FR-THZA** `persistence_failed` carries the **typed persistence failure and the run's interruption state**, so a surface can say that output stopped rather than that a run produced none.
-54. **GRS-FR-OYIC** **Source search matches the decoded output and every displayed source metadata field** — `run_id`, `phase_id`, `pass`, `origin`, `producer`, `agent`, `container`, `source`, the instant `at`, and the `sequence`, which are exactly the fields `../ui/GLW-graduation-log-window.md` GLW-FR-FXAL renders on every line (GRS-FR-YXZX). **Structured search matches the `event` and every structured field the surface renders.** Search is **case-insensitive substring** search, this surface having no other mode defined for it, the selected stream is part of every search request, and the set of searched fields and the set of displayed fields are one set, so nothing a reader can see is unsearchable and nothing invisible is matched.
-55. **GRS-FR-QVTA** Decoding for display is **UTF-8 with replacement characters for invalid byte sequences**, and the **stored base64 stays unchanged**: what is decoded is what is searched and shown, and what is stored is what the executor produced.
+54. **GRS-FR-OYIC** **Activity search matches the `kind` and the `summary` of a record**, which are the texts `../ui/GLW-graduation-log-window.md` GLW-FR-KHGP renders on every row. **Structured search matches the `event` and every structured field of a record.** Search is **case-insensitive substring** search, this surface having no other mode defined for it, and the selected stream is part of every search request. A search never matches a field the window does not display.
+55. **GRS-FR-WRAS** A record is **readable as soon as its append is acknowledged**. A read made while the turn that produced the record is still running returns it, so a surface shows activity before the turn, the phase, or the run changes state.
 56. **GRS-FR-UCZL** `"graduation log records appended"` is emitted **after** records become durable, carrying `{ run_id, stream, latest_sequence }` and **no record content**, so a consumer re-reads under its own cursor rather than rendering an event.
 57. **GRS-FR-KCAK** The event names a **stream**: there is no form of it saying only that a run's logs changed, because a consumer told that much would have to re-read both streams to learn which grew.
 58. **GRS-FR-TYQK** A read of a run this module holds no storage for answers with an `empty` page rather than an error where the run exists, and with `run_not_found` where it does not.
 59. **GRS-FR-MRKO** This module **starts nothing, cancels nothing, and decides nothing about a run**. It reports a persistence failure to `GRD-graduation.md`, which is what stops the work and moves the run.
 60. **GRS-FR-MBED** `log_storage_version` is `1`. A reader that meets a version it does not recognise renders no log for that run rather than guessing at the shape of the files, and that is neither a read failure nor a reason to refuse the run record.
 61. **GRS-FR-JUFY** **A read rewrites nothing it returns.** Naming a record run-level (per `../ui/GLW-graduation-log-window.md` GLW-FR-CQXJ) rewrites no `pass`, `origin`, `producer`, or `phase_id` this module holds, and a re-read returns the record exactly as it was written.
-62. **GRS-FR-HBQT** A turn of a **merge run** is attributed as a turn of any run, by the producer table and by no other rule. A `merge_work` turn is a `work_turn` producer: every record it produces, source and structured alike, carries `phase_id = working` and the number of the pass it belongs to. A `merge_review` turn is a `review_turn` producer: every record it produces carries `phase_id = review` and the number of its pass. The turn kind is not a producer, no producer named for a merge exists, and a clarification judgement taken over the questions of a merge turn is a `clarification_judgement` producer on the same terms. Pass numbers of a merge run ascend across a Continue and are never reused.
+62. **GRS-FR-HBQT** A turn of a **merge run** is attributed as a turn of any run, by the producer table and by no other rule. A `merge_work` turn is a `work_turn` producer: every record it produces, activity and structured alike, carries `phase_id = working` and the number of the pass it belongs to. A `merge_review` turn is a `review_turn` producer: every record it produces carries `phase_id = review` and the number of its pass. The turn kind is not a producer, no producer named for a merge exists, and a clarification judgement taken over the questions of a merge turn is a `clarification_judgement` producer on the same terms. Pass numbers of a merge run ascend across a Continue and are never reused.
 63. **GRS-FR-WNRC** The apply step of a merge run is a `commit` producer. It writes one structured record with the event `merge_applied` when the merge result reaches the base branch, and that record carries `phase_id = done` and `pass = null`, with `origin = application`. A refused or failed apply writes no `merge_applied` record, and the record holds the paths it names as project-relative paths and no file content.
 
 ## Non-functional requirements

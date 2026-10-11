@@ -19,7 +19,7 @@ import {
 } from "../state/agentRegistry";
 import {
   AgentsChromeControl,
-  GlobalAgents,
+  PersonalAgents,
   MentionComposer,
   ProjectAgents,
   agentErrorMessage,
@@ -75,8 +75,12 @@ function agent(over: Partial<Agent> & { id: string; nickname: string }): Agent {
   };
 }
 
-function enrolled(a: Agent, availability: ProjectAgent["availability"] = "ready") {
-  return { agent: a, availability };
+function enrolled(
+  a: Agent,
+  availability: ProjectAgent["availability"] = "ready",
+  scope: ProjectAgent["scope"] = "project",
+): ProjectAgent {
+  return { agent: a, scope, availability };
 }
 
 // The keychain-free shape these surfaces actually read: no `keyState`, no
@@ -135,8 +139,8 @@ function wire(b: Backend) {
     switch (cmd) {
       case "list_project_agents":
         return b.projectAgents;
-      case "list_agents":
-        return b.agents;
+      case "list_personal_agents":
+        return b.agents.map((a) => enrolled(a, "ready", "personal"));
       case "get_active_ai_api_catalog": {
         // The provider active for the open project: the first verified record.
         const catalog = b.integrations.find((i) => i.state === "verified") ?? null;
@@ -157,20 +161,13 @@ function wire(b: Backend) {
         return agent({ ...draft, id });
       }
       case "delete_agent": {
-        const { id } = args as { id: string };
-        b.agents = b.agents.filter((a) => a.id !== id);
-        return b.agents;
-      }
-      case "enrol_project_agent": {
-        const { agentId } = args as { agentId: string };
-        const found = b.agents.find((a) => a.id === agentId)!;
-        b.projectAgents = [...b.projectAgents, enrolled(found)];
-        return b.projectAgents;
-      }
-      case "remove_project_agent": {
-        const { agentId } = args as { agentId: string };
-        b.projectAgents = b.projectAgents.filter((p) => p.agent.id !== agentId);
-        return b.projectAgents;
+        const { scope, id } = args as { scope: "project" | "personal"; id: string };
+        if (scope === "personal") {
+          b.agents = b.agents.filter((a) => a.id !== id);
+          return b.agents.map((a) => enrolled(a, "ready", "personal"));
+        }
+        b.projectAgents = b.projectAgents.filter((p) => p.agent.id !== id);
+        return b.projectAgents.filter((p) => p.scope === "project");
       }
       default:
         throw new Error(`unexpected invoke ${cmd}`);
@@ -347,20 +344,33 @@ describe("AGT-FR-02 … AGT-FR-08: the chrome control and its roster", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("sends a row and the add action to the Global settings editor", async () => {
-    // AGT-FR-07 / AGT-FR-06, FR-07. The roster performs no edit itself.
-    backend({ projectAgents: [enrolled(agent({ id: "a1", nickname: "arch" }))] });
+  it("AGT-FR-06, AGT-FR-07: sends a row to the editor of its scope and the add action to the Project Agents editor", async () => {
+    // The roster performs no edit itself.
+    backend({
+      projectAgents: [
+        enrolled(agent({ id: "a1", nickname: "arch" })),
+        enrolled(agent({ id: "a2", nickname: "scribe" }), "ready", "personal"),
+      ],
+    });
     const onOpenAgentInSettings = vi.fn();
     render(<Roster onOverlayOpening={noop} onOpenAgentInSettings={onOpenAgentInSettings} onOpenProjectSettings={noop} />);
     await userEvent.click(await screen.findByTestId("chrome-agents-control"));
-    await userEvent.click(await screen.findByTestId("agents-roster-row"));
-    expect(onOpenAgentInSettings).toHaveBeenCalledWith("a1");
-    // The roster closed rather than staying open behind the tab.
+    const rows = await screen.findAllByTestId("agents-roster-row");
+    // AGT-FR-04: every row states its scope.
+    expect(rows[0]).toHaveTextContent("Project");
+    expect(rows[1]).toHaveTextContent("Personal");
+    await userEvent.click(rows[0]);
+    expect(onOpenAgentInSettings).toHaveBeenCalledWith("a1", "project");
+    // The roster closed rather than staying open behind the window.
     expect(screen.queryByTestId("agents-roster")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByTestId("chrome-agents-control"));
+    await userEvent.click((await screen.findAllByTestId("agents-roster-row"))[1]);
+    expect(onOpenAgentInSettings).toHaveBeenLastCalledWith("a2", "personal");
+
+    await userEvent.click(screen.getByTestId("chrome-agents-control"));
     await userEvent.click(await screen.findByTestId("agents-roster-add"));
-    expect(onOpenAgentInSettings).toHaveBeenLastCalledWith(null);
+    expect(onOpenAgentInSettings).toHaveBeenLastCalledWith(null, "project");
   });
 
   it("renders a first-class empty state for a project enrolling nobody", async () => {
@@ -458,14 +468,13 @@ describe("AGT-FR-02 … AGT-FR-08: the chrome control and its roster", () => {
     await waitFor(() => expect(control).toHaveTextContent("0"));
   });
 
-  it("re-reads its count when an agent is enrolled from another surface", async () => {
+  it("AGT-FR-02, AGT-FR-NJXP: re-reads its count when an agent is deleted from another surface", async () => {
     // The roster's count is a fact about the open project, and it changes from
     // surfaces this control cannot see. Read only on mount, it goes on
     // reporting a number that is no longer true — which is exactly what an
-    // author sees after enrolling an agent with the roster already on screen.
+    // author sees after deleting an agent with the roster already on screen.
     const b = backend({
-      agents: [agent({ id: "a1", nickname: "arch" })],
-      projectAgents: [],
+      projectAgents: [enrolled(agent({ id: "a1", nickname: "arch" }))],
     });
     render(
       <>
@@ -474,21 +483,52 @@ describe("AGT-FR-02 … AGT-FR-08: the chrome control and its roster", () => {
       </>,
     );
     const control = await screen.findByTestId("chrome-agents-control");
-    await waitFor(() => expect(control).toHaveTextContent("0"));
-
-    // Enrolled from the Project settings section, which the roster cannot see.
-    await userEvent.click(await screen.findByTestId("project-agent-add"));
-    await userEvent.click(
-      (await screen.findAllByTestId("project-agent-option"))[0],
-    );
-    await waitFor(() => expect(calls(b, "enrol_project_agent")).toHaveLength(1));
-
     await waitFor(() => expect(control).toHaveTextContent("1"));
+
+    // Deleted from the Project Agents section, which the roster cannot see.
+    await userEvent.click(await screen.findByTestId("agent-delete"));
+    await userEvent.click(await screen.findByTestId("agent-delete-confirm-ok"));
+    await waitFor(() => expect(calls(b, "delete_agent")).toHaveLength(1));
+
+    await waitFor(() => expect(control).toHaveTextContent("0"));
     await userEvent.click(control);
-    expect(await screen.findByTestId("agents-roster-row")).toHaveTextContent(
-      "@arch",
-    );
-    expect(screen.queryByTestId("agents-roster-empty")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("agents-roster-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("agents-roster-row")).not.toBeInTheDocument();
+  });
+
+  it("AGT-FR-NJXP, AGR-FR-ZRJD: re-reads its count when another window reports a change to the agents", async () => {
+    // The Settings window is a webview of its own, so a write made there reaches
+    // the chrome only as the backend's event.
+    const b = backend({
+      projectAgents: [enrolled(agent({ id: "a1", nickname: "arch" }))],
+    });
+    render(<Roster />);
+    const control = await screen.findByTestId("chrome-agents-control");
+    await waitFor(() => expect(control).toHaveTextContent("1"));
+
+    b.projectAgents = [
+      enrolled(agent({ id: "a1", nickname: "arch" })),
+      enrolled(agent({ id: "a2", nickname: "sec" })),
+    ];
+    await waitFor(() => expect(listeners.get("agents-changed")).toHaveLength(1));
+    act(() => emit("agents-changed", null));
+    await waitFor(() => expect(control).toHaveTextContent("2"));
+  });
+
+  it("AGT-FR-RWHL: marks a Personal agent that a Project agent shadows as unavailable in the roster", async () => {
+    backend({
+      projectAgents: [
+        enrolled(agent({ id: "a1", nickname: "arch" })),
+        enrolled(agent({ id: "a2", nickname: "arch" }), "shadowed", "personal"),
+      ],
+    });
+    render(<Roster />);
+    await userEvent.click(await screen.findByTestId("chrome-agents-control"));
+    const rows = await screen.findAllByTestId("agents-roster-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("Project");
+    expect(rows[1]).toHaveTextContent("Personal");
+    expect(rows[1]).toHaveTextContent("shadowed");
   });
 
   it("carries an icon that names what the control is for", async () => {
@@ -669,11 +709,11 @@ describe("the rules the surfaces share", () => {
     render(
       <>
         <Roster />
-        <GlobalAgents />
+        <PersonalAgents />
         <ProjectAgents />
       </>,
     );
-    await screen.findByTestId("agent-row");
+    await screen.findAllByTestId("agent-row");
     await userEvent.click(await screen.findByTestId("chrome-agents-control"));
     await screen.findByTestId("agents-roster-row");
 

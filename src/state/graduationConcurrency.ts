@@ -18,7 +18,7 @@ import { registerSettingsSection } from "./settingsSweep";
 import type { GraduationConcurrencyLimit } from "../types";
 
 /** The key of the section in its window (SWN-FR-11). */
-export const GRADUATION_SECTION = "graduation";
+export const GRADUATION_SECTION = "project/graduation";
 
 /** SET-FR-QKKQ: the numbers the drop-down lists, before **Unlimited**. */
 export const LISTED_LIMITS = [1, 2, 4, 8] as const;

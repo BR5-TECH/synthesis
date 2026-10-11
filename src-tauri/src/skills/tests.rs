@@ -32,10 +32,7 @@ fn paths(skills: &[SkillDescriptor]) -> Vec<&str> {
 }
 
 fn reasons(excluded: &[Exclusion]) -> Vec<(&str, &str)> {
-    excluded
-        .iter()
-        .map(|e| (e.path.as_str(), e.reason))
-        .collect()
+    excluded.iter().map(|e| (e.path.as_str(), e.reason)).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -66,12 +63,7 @@ fn all_four_special_folders_are_enumerated_with_their_ecosystem() {
     );
     assert_eq!(
         skills.iter().map(|s| s.ecosystem).collect::<Vec<_>>(),
-        vec![
-            Ecosystem::Claude,
-            Ecosystem::Codex,
-            Ecosystem::Github,
-            Ecosystem::Opencode
-        ]
+        vec![Ecosystem::Claude, Ecosystem::Codex, Ecosystem::Github, Ecosystem::Opencode]
     );
     assert_eq!(
         skills.iter().map(|s| s.folder_name.as_str()).collect::<Vec<_>>(),
@@ -89,12 +81,7 @@ fn a_special_folder_deeper_in_the_tree_is_not_one_of_the_four() {
     let dir = TempDir::new().unwrap();
     let root = &crate::fs::RootFs::for_root(dir.path());
     write_skill(root, ".claude/skills", "shallow", "description: at the root");
-    write_skill(
-        root,
-        "packages/web/.claude/skills",
-        "deep",
-        "description: in a package",
-    );
+    write_skill(root, "packages/web/.claude/skills", "deep", "description: in a package");
 
     let (skills, _) = enumerate(root);
     assert_eq!(paths(&skills), vec![".claude/skills/shallow/SKILL.md"]);
@@ -115,22 +102,14 @@ fn only_the_exact_folder_and_basename_shape_is_a_skill() {
     write_skill(root, ".claude/skills", "a/b", "description: too deep");
     // Directly in the special folder, no skill folder at all.
     std::fs::create_dir_all(root.join(".claude/skills")).unwrap();
-    std::fs::write(
-        root.join(".claude/skills/foo.md"),
-        skill_md("description: loose"),
-    )
-    .unwrap();
+    std::fs::write(root.join(".claude/skills/foo.md"), skill_md("description: loose")).unwrap();
     // Wrong case on the basename.
     let lower = root.join(".claude/skills/c");
     std::fs::create_dir_all(&lower).unwrap();
     std::fs::write(lower.join("skill.md"), skill_md("description: lowercase")).unwrap();
 
     let (skills, excluded) = enumerate(root);
-    assert!(
-        skills.is_empty(),
-        "none of the three shapes is a skill: {:?}",
-        paths(&skills)
-    );
+    assert!(skills.is_empty(), "none of the three shapes is a skill: {:?}", paths(&skills));
     assert!(
         excluded.is_empty(),
         "a file that is merely not a skill is ignored, not reported (DSL-FR-24): {excluded:?}"
@@ -152,11 +131,7 @@ fn a_lowercase_skill_md_is_rejected_and_never_duplicates_a_correct_one() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     let only_lower = root.join(".claude/skills/only-lower");
     std::fs::create_dir_all(&only_lower).unwrap();
-    std::fs::write(
-        only_lower.join("skill.md"),
-        skill_md("description: lowercase"),
-    )
-    .unwrap();
+    std::fs::write(only_lower.join("skill.md"), skill_md("description: lowercase")).unwrap();
 
     let (skills, _) = enumerate(root);
     assert!(
@@ -190,11 +165,7 @@ fn a_lowercase_skill_md_is_rejected_and_never_duplicates_a_correct_one() {
             "the second write landed on the same file, which is what folding means"
         );
     } else {
-        assert_eq!(
-            paths(&skills),
-            vec![".claude/skills/both/SKILL.md"],
-            "one entry, not two"
-        );
+        assert_eq!(paths(&skills), vec![".claude/skills/both/SKILL.md"], "one entry, not two");
         assert_eq!(
             skills[0].description, "the real one",
             "the uppercase file is the one that was read"
@@ -211,11 +182,7 @@ fn supporting_files_beside_a_skill_are_not_entries_of_their_own() {
     let refs = root.join(".claude/skills/analyst/references");
     std::fs::create_dir_all(&refs).unwrap();
     std::fs::write(refs.join("rules.md"), "# Rules\n\nsarcophagus\n").unwrap();
-    std::fs::write(
-        root.join(".claude/skills/analyst/run.sh"),
-        "#!/bin/sh\necho hi\n",
-    )
-    .unwrap();
+    std::fs::write(root.join(".claude/skills/analyst/run.sh"), "#!/bin/sh\necho hi\n").unwrap();
 
     let (skills, _) = enumerate(root);
     assert_eq!(paths(&skills), vec![".claude/skills/analyst/SKILL.md"]);
@@ -258,17 +225,10 @@ fn every_symlinked_path_component_disqualifies_a_skill() {
     // (c) the special folder itself is a symlink
     let codex_real = root.join("elsewhere/codexskills/x");
     std::fs::create_dir_all(&codex_real).unwrap();
-    std::fs::write(
-        codex_real.join("SKILL.md"),
-        skill_md("description: under a linked folder"),
-    )
-    .unwrap();
+    std::fs::write(codex_real.join("SKILL.md"), skill_md("description: under a linked folder"))
+        .unwrap();
     std::fs::create_dir_all(root.join(".codex")).unwrap();
-    symlink(
-        root.join("elsewhere/codexskills"),
-        root.join(".codex/skills"),
-    )
-    .unwrap();
+    symlink(root.join("elsewhere/codexskills"), root.join(".codex/skills")).unwrap();
     // A genuine skill, which must survive all of the above.
     write_skill(root, ".claude/skills", "real", "description: an honest skill");
 
@@ -291,10 +251,7 @@ fn every_symlinked_path_component_disqualifies_a_skill() {
         reported.contains(&(".codex/skills", REASON_SYMLINK)),
         "a symlinked special folder is reported: {reported:?}"
     );
-    assert!(
-        !skills.iter().any(|s| s.name == "Borrowed"),
-        "nothing was read through a link"
-    );
+    assert!(!skills.iter().any(|s| s.name == "Borrowed"), "nothing was read through a link");
 }
 
 // ---------------------------------------------------------------------------
@@ -355,11 +312,7 @@ fn a_special_folder_that_cannot_be_read_is_skipped_rather_than_fatal() {
     write_skill(root, ".claude/skills", "a", "description: still found");
     let locked = root.join(".codex/skills");
     std::fs::create_dir_all(locked.join("hidden")).unwrap();
-    std::fs::write(
-        locked.join("hidden/SKILL.md"),
-        skill_md("description: unreachable"),
-    )
-    .unwrap();
+    std::fs::write(locked.join("hidden/SKILL.md"), skill_md("description: unreachable")).unwrap();
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
     let readable_anyway = std::fs::read_dir(&locked).is_ok();
     if !readable_anyway {
@@ -399,11 +352,8 @@ fn a_file_without_a_closed_frontmatter_block_is_excluded() {
     std::fs::write(bare.join("SKILL.md"), "# Just a heading\n\nNo frontmatter.\n").unwrap();
     let open = root.join(".claude/skills/unterminated");
     std::fs::create_dir_all(&open).unwrap();
-    std::fs::write(
-        open.join("SKILL.md"),
-        "---\nname: X\ndescription: never closed\n\n# Body\n",
-    )
-    .unwrap();
+    std::fs::write(open.join("SKILL.md"), "---\nname: X\ndescription: never closed\n\n# Body\n")
+        .unwrap();
 
     let (skills, excluded) = enumerate(root);
     assert!(skills.is_empty(), "neither is eligible: {:?}", paths(&skills));
@@ -461,10 +411,7 @@ fn disable_model_invocation_excludes_only_when_truthy() {
     let (skills, excluded) = enumerate(root);
     assert_eq!(
         paths(&skills),
-        vec![
-            ".claude/skills/garbage/SKILL.md",
-            ".claude/skills/loud/SKILL.md",
-        ],
+        vec![".claude/skills/garbage/SKILL.md", ".claude/skills/loud/SKILL.md",],
         "only a truthy value excludes"
     );
     assert_eq!(
@@ -503,18 +450,11 @@ fn a_missing_name_falls_back_to_the_folder_rather_than_excluding() {
     let dir = TempDir::new().unwrap();
     let root = &crate::fs::RootFs::for_root(dir.path());
     write_skill(root, ".claude/skills", "code-review", "description: reviews code");
-    write_skill(
-        root,
-        ".claude/skills",
-        "blank-name",
-        "name: \"\"\ndescription: also nameless",
-    );
+    write_skill(root, ".claude/skills", "blank-name", "name: \"\"\ndescription: also nameless");
 
     let (skills, _) = enumerate(root);
-    let named: Vec<(&str, &str)> = skills
-        .iter()
-        .map(|s| (s.folder_name.as_str(), s.name.as_str()))
-        .collect();
+    let named: Vec<(&str, &str)> =
+        skills.iter().map(|s| (s.folder_name.as_str(), s.name.as_str())).collect();
     assert_eq!(
         named,
         vec![("blank-name", "blank-name"), ("code-review", "code-review")],
@@ -526,12 +466,7 @@ fn a_missing_name_falls_back_to_the_folder_rather_than_excluding() {
 fn a_declared_name_wins_over_the_folder() {
     let dir = TempDir::new().unwrap();
     let root = &crate::fs::RootFs::for_root(dir.path());
-    write_skill(
-        root,
-        ".claude/skills",
-        "cr",
-        "name: Code review\ndescription: reviews code",
-    );
+    write_skill(root, ".claude/skills", "cr", "name: Code review\ndescription: reviews code");
     let (skills, _) = enumerate(root);
     assert_eq!(skills[0].name, "Code review");
     assert_eq!(skills[0].folder_name, "cr");
@@ -609,21 +544,11 @@ fn eligibility_ignores_the_resolved_artifact_type_in_both_directions() {
         crate::scanning::Scope::File,
     )
     .unwrap();
-    crate::scanning::assign(
-        root,
-        "docs",
-        ArtifactType::Skill,
-        crate::scanning::Scope::Folder,
-    )
-    .unwrap();
+    crate::scanning::assign(root, "docs", ArtifactType::Skill, crate::scanning::Scope::Folder)
+        .unwrap();
 
     let classified = crate::scanning::candidate_files(&crate::scanning::scan(root));
-    let type_of = |p: &str| {
-        classified
-            .iter()
-            .find(|c| c.path == p)
-            .and_then(|c| c.artifact_type)
-    };
+    let type_of = |p: &str| classified.iter().find(|c| c.path == p).and_then(|c| c.artifact_type);
     assert_eq!(
         type_of(".claude/skills/a/SKILL.md"),
         Some(ArtifactType::Prompt),
@@ -810,10 +735,7 @@ fn every_key_is_first_declaration_wins() {
     let parsed = parse_frontmatter(&skill_md(front)).expect("parses");
     assert_eq!(parsed.name.as_deref(), Some("First"));
     assert_eq!(parsed.description.as_deref(), Some("First desc"));
-    assert!(
-        parsed.disable_model_invocation,
-        "the boolean is first-wins too, not last-wins"
-    );
+    assert!(parsed.disable_model_invocation, "the boolean is first-wins too, not last-wins");
 }
 
 #[test]
@@ -876,11 +798,7 @@ fn a_dangling_symlink_is_refused_rather_than_treated_as_missing() {
     let dir = TempDir::new().unwrap();
     let root = &crate::fs::RootFs::for_root(dir.path());
     std::fs::create_dir_all(root.join(".claude/skills")).unwrap();
-    symlink(
-        root.join("nowhere-at-all"),
-        root.join(".claude/skills/dangling"),
-    )
-    .unwrap();
+    symlink(root.join("nowhere-at-all"), root.join(".claude/skills/dangling")).unwrap();
 
     let (skills, excluded) = enumerate(root);
     assert!(skills.is_empty());
@@ -944,14 +862,10 @@ fn no_part_of_this_module_is_reachable_from_the_frontend() {
     // Comment lines are stripped first — this file's own prose mentions the
     // attribute, and matching that would be a false positive.
     let source = include_str!("../skills.rs");
-    let code: String = source
-        .lines()
-        .filter(|l| !l.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let code: String =
+        source.lines().filter(|l| !l.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n");
     assert!(
         !code.contains("#[tauri::command]"),
         "this module registers no Tauri command (DSL-FR-01)"
     );
 }
-

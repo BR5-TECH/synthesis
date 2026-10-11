@@ -265,18 +265,9 @@ pub fn vendor_descriptor(vendor: &str) -> Option<&'static AgenticVendor> {
 }
 
 pub(super) fn catalog_models(descriptor: &AgenticVendor) -> Vec<ModelOption> {
-    descriptor
-        .model_catalog
-        .iter()
-        .map(|(id, label)| ModelOption::new(id, label))
-        .collect()
+    descriptor.model_catalog.iter().map(|(id, label)| ModelOption::new(id, label)).collect()
 }
 
 pub(super) fn declared_efforts(descriptor: &AgenticVendor) -> Vec<EffortOption> {
-    descriptor
-        .reasoning_efforts
-        .iter()
-        .map(|(id, label)| EffortOption::new(id, label))
-        .collect()
+    descriptor.reasoning_efforts.iter().map(|(id, label)| EffortOption::new(id, label)).collect()
 }
-

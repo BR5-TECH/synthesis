@@ -94,14 +94,7 @@ pub fn store_draft_image<R: tauri::Runtime>(
             *slot = Some(name.to_string());
         }
     };
-    let result = store_image_impl(
-        &root,
-        &draft_id,
-        &media_type,
-        filename.as_deref(),
-        &data,
-        &hold,
-    );
+    let result = store_image_impl(&root, &draft_id, &media_type, filename.as_deref(), &data, &hold);
     match &result {
         Ok(asset) => {
             log_info(

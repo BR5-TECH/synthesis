@@ -202,7 +202,7 @@ afterEach(() => {
 
 async function enterIde() {
   await userEvent.click(await screen.findByText("acme"));
-  await screen.findByRole("button", { name: "Global settings" });
+  await screen.findByRole("button", { name: "Settings" });
 }
 
 /**

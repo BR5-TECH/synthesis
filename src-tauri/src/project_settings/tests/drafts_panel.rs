@@ -17,16 +17,9 @@ fn ts23_drafts_panel_state_defaults_round_trips_and_is_never_validated() {
     // Nothing persisted yet: the `active` position, empty filter, nothing
     // expanded (PSS-FR-20).
     assert_eq!(load_drafts_panel_state_from(&root), DraftsPanelState::default());
-    assert_eq!(
-        load_drafts_panel_state_from(&root).status_filter,
-        DraftsStatusFilter::Active
-    );
+    assert_eq!(load_drafts_panel_state_from(&root).status_filter, DraftsStatusFilter::Active);
 
-    let saved = drafts_state(
-        DraftsStatusFilter::Archived,
-        "window",
-        &["UI", "UI/Components"],
-    );
+    let saved = drafts_state(DraftsStatusFilter::Archived, "window", &["UI", "UI/Components"]);
     save_drafts_panel_state_to(&root, saved.clone()).unwrap();
     assert_eq!(load_drafts_panel_state_from(&root), saved);
 
@@ -53,17 +46,13 @@ fn ts23_a_drafts_write_leaves_every_other_section_alone() {
         library_state(&["specifications"], ArtifactTypeFilter::AllFiles, "lib"),
     )
     .unwrap();
-    save_drafts_panel_state_to(&root, drafts_state(DraftsStatusFilter::All, "d", &["UI"]))
-        .unwrap();
+    save_drafts_panel_state_to(&root, drafts_state(DraftsStatusFilter::All, "d", &["UI"])).unwrap();
 
     assert_eq!(
         load_library_panel_state_from(&root).expanded_paths,
         vec!["specifications".to_string()]
     );
-    assert_eq!(
-        load_drafts_panel_state_from(&root).expanded_folders,
-        vec!["UI".to_string()]
-    );
+    assert_eq!(load_drafts_panel_state_from(&root).expanded_folders, vec!["UI".to_string()]);
 }
 
 #[test]
@@ -126,8 +115,7 @@ fn drafts_state_serialises_the_wire_shape_the_frontend_types_against() {
         (DraftsStatusFilter::All, "all"),
     ] {
         assert_eq!(serde_json::to_value(variant).unwrap(), text);
-        let parsed: DraftsStatusFilter =
-            serde_json::from_str(&format!("\"{text}\"")).unwrap();
+        let parsed: DraftsStatusFilter = serde_json::from_str(&format!("\"{text}\"")).unwrap();
         assert_eq!(parsed, variant);
     }
 }

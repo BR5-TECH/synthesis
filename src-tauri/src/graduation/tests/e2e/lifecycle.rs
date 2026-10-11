@@ -55,11 +55,7 @@ fn discarding_a_run_reverts_nothing_and_keeps_its_branch_and_working_copy() {
 #[test]
 fn a_run_discarded_mid_turn_commits_nothing_and_leaves_the_work_uncommitted() {
     Scenario::named("discard during the work turn")
-        .work_turn(
-            Script::reports_success()
-                .writes("src/panel.ts", "1\n")
-                .discarding_the_run(),
-        )
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n").discarding_the_run())
         .run()
         .expect_state(GraduationRunState::Discarded)
         .expect_no_interruption()
@@ -97,9 +93,7 @@ fn a_run_discarded_mid_turn_commits_nothing_and_leaves_the_work_uncommitted() {
 
     Scenario::named("discard races an escalation")
         .work_turn(
-            Script::escalates(&["Which panel is meant?"])
-                .discarding_the_run()
-                .finishing_anyway(),
+            Script::escalates(&["Which panel is meant?"]).discarding_the_run().finishing_anyway(),
         )
         .run()
         .expect_state(GraduationRunState::Discarded)
@@ -133,9 +127,7 @@ fn a_restarted_run_answers_the_discarded_prompt_to_completion() {
         .expect_restarted_from_previous()
         .expect_previous_state(GraduationRunState::Discarded)
         .expect_dispatch(0, |d| {
-            d.purpose("generate")
-                .pass(1)
-                .field("prompt", "Add the empty state to the panel.")
+            d.purpose("generate").pass(1).field("prompt", "Add the empty state to the panel.")
         })
         .expect_commits(1)
         .expect_committed_paths(&["src/panel.ts"])
@@ -150,9 +142,7 @@ fn a_restart_over_a_discarded_turns_work_takes_it_as_standing_work() {
     Scenario::named("restart over discarded work")
         .with_execution_allowed()
         .work_turn(
-            Script::reports_success()
-                .writes("src/left.ts", "left behind\n")
-                .discarding_the_run(),
+            Script::reports_success().writes("src/left.ts", "left behind\n").discarding_the_run(),
         )
         .run()
         .expect_state(GraduationRunState::Discarded)
@@ -276,9 +266,10 @@ fn a_queued_run_refuses_revert() {
 }
 
 // GTE-FR-RZKC / GRD-FR-BLCR: a revert is refused with `run_not_revertable`
-// where the run committed nothing, and while the run holds its stream.
+// where the run committed nothing, also where it rests `blocked` and holds its
+// queue. The state check refuses only a run doing agent work.
 #[test]
-fn revert_is_refused_where_nothing_was_committed_or_the_run_holds_its_stream() {
+fn revert_is_refused_where_nothing_was_committed() {
     Scenario::named("revert with nothing committed")
         .work_turn(Script::escalates(&["Which panel is meant?"]))
         .run()
@@ -290,7 +281,7 @@ fn revert_is_refused_where_nothing_was_committed_or_the_run_holds_its_stream() {
         .review_turn(Script::answers_unreadably())
         .run()
         .expect_state(GraduationRunState::Blocked)
-        .refusing_revert("run_state_not_permitted")
+        .refusing_revert("run_not_revertable")
         .expect_stream_held();
 }
 

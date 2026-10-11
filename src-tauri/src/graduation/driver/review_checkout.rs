@@ -63,29 +63,23 @@ pub(crate) fn create<R: tauri::Runtime>(
     let base_commit = main.find_commit(base_oid).map_err(|e| e.to_string())?;
     let branch = scratch_branch(&run.id);
     let name = registration(&run.id);
-    main.branch(&branch, &base_commit, true)
-        .map_err(|e| e.to_string())?;
+    main.branch(&branch, &base_commit, true).map_err(|e| e.to_string())?;
     let reference = main
         .find_branch(&branch, git2::BranchType::Local)
         .map_err(|e| e.to_string())?
         .into_reference();
     let mut opts = git2::WorktreeAddOptions::new();
     opts.reference(Some(&reference));
-    main.worktree(&name, &target, Some(&opts))
-        .map_err(|e| e.to_string())?;
+    main.worktree(&name, &target, Some(&opts)).map_err(|e| e.to_string())?;
     crate::worktree::normalize_worktree_commondir(&main, &name).map_err(|e| e.to_string())?;
 
     let checkout = git2::Repository::open(&target).map_err(|e| e.to_string())?;
     // Detached: the review reads one revision and owns no branch, so nothing it
     // writes can move the scratch branch either.
-    checkout
-        .set_head_detached(base_oid)
-        .map_err(|e| e.to_string())?;
+    checkout.set_head_detached(base_oid).map_err(|e| e.to_string())?;
     let mut builder = git2::build::CheckoutBuilder::new();
     builder.force();
-    checkout
-        .checkout_head(Some(&mut builder))
-        .map_err(|e| e.to_string())?;
+    checkout.checkout_head(Some(&mut builder)).map_err(|e| e.to_string())?;
 
     // GRL-FR-YKRI: the change set is written over the base as uncommitted work.
     // The index is deliberately left at the base, so what the run changed reads
@@ -94,9 +88,7 @@ pub(crate) fn create<R: tauri::Runtime>(
         let tree = checkout.find_tree(tree).map_err(|e| e.to_string())?;
         let mut builder = git2::build::CheckoutBuilder::new();
         builder.force().remove_untracked(true).update_index(false);
-        checkout
-            .checkout_tree(tree.as_object(), Some(&mut builder))
-            .map_err(|e| e.to_string())?;
+        checkout.checkout_tree(tree.as_object(), Some(&mut builder)).map_err(|e| e.to_string())?;
     }
     Ok(target)
 }

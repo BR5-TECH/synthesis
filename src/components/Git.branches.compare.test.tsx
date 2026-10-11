@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 
 import { Git } from "./Git";
 import { resetAppPreferencesCache } from "../state/appPreferences";
+import { resetLogBufferForTest } from "../logging";
 import type { BranchComparison, DiffPayload, GitBranch } from "../types";
 import { COMMIT_DIFF, COMMIT_FILES, history } from "../test/gitPanelFixtures";
 
@@ -88,9 +89,13 @@ beforeEach(() => {
     }
   });
   resetAppPreferencesCache();
+  resetLogBufferForTest();
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  resetLogBufferForTest();
+});
 
 const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd);
 const rail = () => screen.getByTestId("git-branches");
@@ -293,6 +298,8 @@ describe("the branch against its base (GIT-FR-GDMG)", () => {
     expect(after.has("list_branch_compare_files")).toBe(true);
     after.delete("list_branch_compare_files");
     after.delete("load_app_preferences");
+    // The log buffer flushes in the background; it is not a Git read.
+    after.delete("append_log_records");
     expect([...after]).toEqual([]);
   });
 });

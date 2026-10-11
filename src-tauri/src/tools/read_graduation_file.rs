@@ -20,9 +20,7 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 
-use super::{
-    log_tool_refusal_with, log_tool_success, ToolRefusal, GRADUATION_PATH_BLANK,
-};
+use super::{log_tool_refusal_with, log_tool_success, ToolRefusal, GRADUATION_PATH_BLANK};
 use crate::fs::{EntryKind, FsAccess, FsError};
 use crate::log_fields;
 use crate::logging::{LogBuffer, BUFFER};
@@ -65,9 +63,9 @@ fn lenient_integer<'de, D: serde::Deserializer<'de>>(
 ) -> Result<Option<i64>, D::Error> {
     let value = serde_json::Value::deserialize(deserializer)?;
     Ok(match value {
-        serde_json::Value::Number(number) => number
-            .as_i64()
-            .or_else(|| number.as_f64().map(|f| f.trunc() as i64)),
+        serde_json::Value::Number(number) => {
+            number.as_i64().or_else(|| number.as_f64().map(|f| f.trunc() as i64))
+        }
         serde_json::Value::String(text) => text
             .trim()
             .parse::<i64>()
@@ -105,8 +103,7 @@ pub fn resolve(root: &std::path::Path, path: &str) -> Result<PathBuf, ToolRefusa
     if path.trim().is_empty() {
         return Err(ToolRefusal::InvalidArguments(GRADUATION_PATH_BLANK));
     }
-    crate::fs::resolve_under(root, path.trim())
-        .map_err(|_| ToolRefusal::GraduationPathOutside)
+    crate::fs::resolve_under(root, path.trim()).map_err(|_| ToolRefusal::GraduationPathOutside)
 }
 
 /// The `FsError` vocabulary in this tool's terms (RGF-FR-13).
@@ -152,8 +149,7 @@ pub fn read(
     // for the same reason — each line keeps the terminator the file gave it, so
     // a range is precisely the span of the file those lines occupy and nothing
     // this tool composed is added to it.
-    let (offset, limit) =
-        crate::tools::file_read::normalize_range(args.offset, args.limit);
+    let (offset, limit) = crate::tools::file_read::normalize_range(args.offset, args.limit);
     Ok(crate::tools::file_read::slice_lines(&text, offset, limit).to_string())
 }
 

@@ -127,9 +127,7 @@ pub enum RecordRefusal {
 pub fn is_valid_proposal_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
-        && id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 fn record_path(dir: &Path, id: &str) -> PathBuf {
@@ -162,8 +160,7 @@ pub fn save_candidate_impl(
     content: &str,
     baseline_checksum: &str,
 ) -> Result<(String, CandidateSaved), String> {
-    let (draft_id, mut record) =
-        find_proposal(root, proposal_id).ok_or(ERR_PROPOSAL_NOT_FOUND)?;
+    let (draft_id, mut record) = find_proposal(root, proposal_id).ok_or(ERR_PROPOSAL_NOT_FOUND)?;
     // DCP-FR-26: a candidate is the author's to shape only while the decision it
     // is for is still owed. The text a decided proposal holds is the record of
     // what was decided.
@@ -197,7 +194,7 @@ pub fn save_candidate_impl(
         .map_err(|_| ERR_WRITE_FAILED.to_string())?
         .hunks,
     );
-    root.write_text_atomic(&hunks_path(&dir, proposal_id), &next.to_toml())
+    root.write_text_atomic(hunks_path(&dir, proposal_id), &next.to_toml())
         .map_err(|_| ERR_WRITE_FAILED.to_string())?;
     // DRS-FR-WYIN / DRS-FR-JDRY: a proposal is private draft storage. The
     // ignore file keeps it out of Git, and no commit names it.
@@ -220,7 +217,7 @@ pub fn save_candidate_impl(
             // flag stale. That is the harmless way round — the flag drives a
             // line of prose, while the candidate is the author's work — so the
             // save still succeeds and the miss is recorded by the caller.
-            let _ = root.write_toml_atomic(&record_path(&dir, proposal_id), &record);
+            let _ = root.write_toml_atomic(record_path(&dir, proposal_id), &record);
         }
     }
 
@@ -255,15 +252,12 @@ fn has_pending_in(root: &fs::RootFs, dir: &std::path::Path) -> bool {
         return false;
     };
     entries.into_iter().any(|entry| {
-        entry
-            .name
-            .strip_suffix(&format!(".{RECORD_EXT}"))
-            .is_some_and(|id| {
-                is_valid_proposal_id(id)
-                    && root
-                        .read_toml::<DraftChangeProposal>(&record_path(&dir, id))
-                        .is_ok_and(|p| p.state == ProposalState::Pending)
-            })
+        entry.name.strip_suffix(&format!(".{RECORD_EXT}")).is_some_and(|id| {
+            is_valid_proposal_id(id)
+                && root
+                    .read_toml::<DraftChangeProposal>(&record_path(&dir, id))
+                    .is_ok_and(|p| p.state == ProposalState::Pending)
+        })
     })
 }
 
@@ -309,10 +303,7 @@ pub fn revision_target(root: &fs::RootFs, draft_id: &str, hunk_id: &str) -> Revi
             .unwrap_or_default();
         reads::backfill_legacy_ledger(root, &dir, &mut record, &prompt);
     }
-    let revisable = record
-        .ledger
-        .iter()
-        .any(|row| row.id == hunk_id && row.state.is_undecided());
+    let revisable = record.ledger.iter().any(|row| row.id == hunk_id && row.state.is_undecided());
     if revisable {
         RevisionTarget::Revisable
     } else {
@@ -406,7 +397,11 @@ fn counts_after(
             Some(hunk_id) => row.id == hunk_id,
             None => row.state.is_undecided(),
         };
-        if settles { settled } else { row.state }
+        if settles {
+            settled
+        } else {
+            row.state
+        }
     }))
 }
 
@@ -442,9 +437,7 @@ fn locate_thread(
     draft_id: &str,
     thread_id: &str,
 ) -> Result<(Option<String>, &'static str), String> {
-    let target = comments::DiscussionTarget::Draft {
-        draft_id: draft_id.to_string(),
-    };
+    let target = comments::DiscussionTarget::Draft { draft_id: draft_id.to_string() };
     let found = comments::locate_discussion_of(store, &target, thread_id)
         .ok_or(comments::ERR_DISCUSSION_NOT_FOUND)?;
     Ok(match found.fragment_target {
@@ -494,8 +487,7 @@ pub(crate) fn append_decision_comment(
         event_id,
         comment_id,
         body,
-        by,
-        &now_rfc3339(),
+        comments::Stamp { by, at: &now_rfc3339() },
     )
 }
 
@@ -518,16 +510,13 @@ fn decide<R: tauri::Runtime>(
     root: &fs::RootFs,
     store: &fs::RootFs,
     proposal_id: &str,
-    decision: Decision,
-    // DCP-FR-11 / DCP-FR-14: the one change this decision settles, or `None`
-    // for a decision about the whole proposal.
-    hunk: Option<&str>,
-    feedback: Option<&str>,
+    verdict: Verdict<'_>,
     by: &Participant,
 ) -> Result<Decided, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
+    let Verdict { decision, hunk, feedback } = verdict;
     let (draft_id, _) = find_proposal(root, proposal_id).ok_or(ERR_PROPOSAL_NOT_FOUND)?;
     // DRS-FR-QPSC: the accepted-proposal write of DHS-FR-15 refuses a
     // GitHub-shadow draft and changes nothing. A decline writes no prompt.
@@ -587,11 +576,7 @@ where
 
     // DCP-FR-17: a change is decided once, exactly as a proposal is.
     if let Some(hunk_id) = hunk {
-        let row = record
-            .ledger
-            .iter()
-            .find(|row| row.id == hunk_id)
-            .ok_or(ERR_HUNK_NOT_FOUND)?;
+        let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
         if !row.state.is_undecided() {
             return Err(ERR_HUNK_ALREADY_DECIDED.to_string());
         }
@@ -601,10 +586,9 @@ where
     // agent seven turns to answer where one will do.
     let resolves = match hunk {
         None => true,
-        Some(hunk_id) => !record
-            .ledger
-            .iter()
-            .any(|row| row.id != hunk_id && row.state.is_undecided()),
+        Some(hunk_id) => {
+            !record.ledger.iter().any(|row| row.id != hunk_id && row.state.is_undecided())
+        }
     };
 
     // DCP-FR-18: the draft may have been renamed while the proposal stood, which
@@ -625,12 +609,8 @@ where
     // recorded is not taken and the prompt, the history, and the proposal's state
     // are all exactly what they were. The identity has already been resolved by
     // the command; the lock is this.
-    if comments::thread_at(
-        store,
-        thread_ref(&draft_id, file_rel.as_ref()),
-        &record.thread_id,
-    )?
-    .locked
+    if comments::thread_at(store, thread_ref(&draft_id, file_rel.as_ref()), &record.thread_id)?
+        .locked
     {
         return Err(comments::ERR_DISCUSSION_LOCKED.to_string());
     }
@@ -719,8 +699,7 @@ where
     } else {
         resettle(&mut record);
     }
-    root.write_toml_atomic(record_path(&dir, proposal_id), &record)
-        .map_err(|e| e.to_string())?;
+    root.write_toml_atomic(record_path(&dir, proposal_id), &record).map_err(|e| e.to_string())?;
     // DRS-FR-WYIN / DRS-FR-JDRY: a proposal is private draft storage. The
     // ignore file keeps it out of Git, and no commit names it.
     drafts::git_storage::ensure_private_ignored(root);
@@ -807,7 +786,7 @@ pub fn decline_for_test<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    decide(app, root, store, proposal_id, Decision::Decline, None, None, by)
+    decide(app, root, store, proposal_id, Verdict::whole(Decision::Decline), by)
 }
 
 /// [`accept_draft_change_hunk`] for a test that holds no Tauri `State`.
@@ -827,7 +806,14 @@ pub fn accept_hunk_for_test<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    decide(app, root, store, proposal_id, Decision::Accept, Some(hunk_id), None, by)
+    decide(
+        app,
+        root,
+        store,
+        proposal_id,
+        Verdict { decision: Decision::Accept, hunk: Some(hunk_id), feedback: None },
+        by,
+    )
 }
 
 /// [`decide`] for a test in another module.
@@ -840,7 +826,14 @@ pub fn accept_for_test<R: tauri::Runtime>(
     feedback: Option<&str>,
     by: &Participant,
 ) -> Result<Decided, String> {
-    decide(app, root, store, proposal_id, Decision::Accept, None, feedback, by)
+    decide(
+        app,
+        root,
+        store,
+        proposal_id,
+        Verdict { decision: Decision::Accept, hunk: None, feedback },
+        by,
+    )
 }
 
 /// A decision that landed, and whether the conversation got to hear about it.
@@ -897,10 +890,7 @@ pub(crate) fn announce<R: tauri::Runtime>(
 {
     let _ = app.emit(
         PROPOSALS_CHANGED,
-        ProposalsChanged {
-            draft_id: proposal.draft_id.clone(),
-            proposal: proposal.clone(),
-        },
+        ProposalsChanged { draft_id: proposal.draft_id.clone(), proposal: proposal.clone() },
     );
     // DCP-FR-WTKA: a proposal that reaches a **final decision** contributes
     // exactly one `proposal_decision` line to that draft's statistics log,

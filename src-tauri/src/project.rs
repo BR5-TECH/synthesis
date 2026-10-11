@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 
 use crate::artifacts::ContentTracker;
-use crate::progress;
 use crate::global_settings::GlobalSettingsStore;
+use crate::progress;
 use crate::watcher::{start_watching, ProjectWatcher};
 
 /// What an open/create returns. `path` is the project's **identity anchor**
@@ -114,11 +114,7 @@ impl ProjectState {
         // A test that mounts a root gets it governed, over exactly that
         // directory — so `require_root` answers, and so the module under test
         // reaches the disk through the same gate it will in production.
-        let access = crate::fs::FsAccess::builder()
-            .allow_root(&root)
-            .build()
-            .ok()
-            .map(Arc::new);
+        let access = crate::fs::FsAccess::builder().allow_root(&root).build().ok().map(Arc::new);
         if let Ok(mut guard) = self.root.lock() {
             *guard = Some(root);
         }
@@ -464,11 +460,10 @@ pub fn remount_content_root<R: tauri::Runtime>(
         // Mounted with the guarded root rather than a bare path: an index pass
         // runs on its own thread, and this is what keeps its reads inside the
         // same allowlist the command that scheduled it was bound by.
-        match project.require_root() {
-            Ok(rooted) => indexer.mount(&rooted),
-            // No access installed means no project is usable, and there is
-            // nothing valid for a pass to run against.
-            Err(_) => {}
+        // No access installed means no project is usable, and there is
+        // nothing valid for a pass to run against.
+        if let Ok(rooted) = project.require_root() {
+            indexer.mount(&rooted);
         }
     }
     crate::bm25_index::request_pass(app, crate::bm25_index::PassScope::ALL);
@@ -487,8 +482,7 @@ fn drafts_are_ignored(root: &crate::fs::RootFs) -> bool {
     crate::changes::open_repo(root.path())
         .ok()
         .and_then(|repo| {
-            repo.status_should_ignore(Path::new(crate::storage_floor::DRAFTS_REL))
-                .ok()
+            repo.status_should_ignore(Path::new(crate::storage_floor::DRAFTS_REL)).ok()
         })
         .unwrap_or(false)
 }
@@ -503,10 +497,6 @@ fn activate_project<R: tauri::Runtime>(
     handle: &ProjectHandle,
 ) {
     project.set_anchor(handle.path.clone());
-    // SWN-FR-16 / PPK-FR-15: the Project settings menu entry is offered only
-    // while a project is open. Put back here, before the frontend has drawn
-    // anything, so the entry and the project appear together.
-    crate::menu::set_project_settings_present(app, true);
     remount_content_root(
         app,
         project,
@@ -614,6 +604,8 @@ pub fn deactivate_project(
 /// changes (EDT-FR-33) — a torn-down project has no root, so `save_artifact_contents`
 /// would fail from here on. Writes no file itself, and is idempotent.
 #[tauri::command]
+// Reason: the parameters of a Tauri command are its IPC contract with `invoke()`.
+#[allow(clippy::too_many_arguments)]
 pub fn close_project<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     project: State<'_, ProjectState>,
@@ -685,10 +677,6 @@ pub fn close_project<R: tauri::Runtime>(
     // alone (PST-FR-14); the close itself completes at its ordinary speed
     // whatever the pass is doing.
     crate::draft_assets::sweep_project_draft_assets(&app);
-    // SWN-FR-16 / PPK-FR-15: the Project settings entry is ABSENT rather than
-    // greyed-out while no project is open, so the menu the picker is left with
-    // offers nothing that names a project that does not exist.
-    crate::menu::set_project_settings_present(&app, false);
     deactivate_project(
         project.inner(),
         watcher.inner(),
@@ -796,10 +784,7 @@ fn open_project_from_git_url_impl(
     if trimmed.is_empty() {
         return Err("url is empty".into());
     }
-    let tail = trimmed
-        .rsplit(|c| c == '/' || c == ':')
-        .next()
-        .unwrap_or(trimmed);
+    let tail = trimmed.rsplit(['/', ':']).next().unwrap_or(trimmed);
     let name = tail.strip_suffix(".git").unwrap_or(tail).to_string();
     if name.is_empty() {
         return Err("could not derive project name from url".into());
@@ -835,10 +820,7 @@ fn create_project_impl(
     }
     // A created project keeps the name the user chose; only its identity anchor
     // and content root come from the worktree resolution.
-    Ok(ProjectHandle {
-        name,
-        ..resolve_handle(store, &target_path)
-    })
+    Ok(ProjectHandle { name, ..resolve_handle(store, &target_path) })
 }
 
 #[tauri::command]

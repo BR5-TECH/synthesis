@@ -125,10 +125,7 @@ impl Pending {
     /// DSS-FR-MHJC: an event whose capture instant is its own — an interval's
     /// `started_at` — takes it, and every other event is captured now.
     pub fn now(body: EventBody) -> Pending {
-        let at = body
-            .capture_instant()
-            .map(str::to_string)
-            .unwrap_or_else(now_rfc3339_millis);
+        let at = body.capture_instant().map(str::to_string).unwrap_or_else(now_rfc3339_millis);
         Pending { at, body }
     }
 
@@ -136,10 +133,7 @@ impl Pending {
     /// knows when the fact happened rather than when it got round to recording
     /// it (DSS-FR-MHJC).
     pub fn at(at: impl Into<String>, body: EventBody) -> Pending {
-        let at = body
-            .capture_instant()
-            .map(str::to_string)
-            .unwrap_or_else(|| at.into());
+        let at = body.capture_instant().map(str::to_string).unwrap_or_else(|| at.into());
         Pending { at, body }
     }
 }
@@ -194,12 +188,8 @@ pub fn append_events(
     // there already has one; a race between two first attempts writes two, and
     // the fold converges them on the earlier (DSS-FR-JRSY).
     if root.file_info(&path).is_err() {
-        let boundary_at = pending
-            .iter()
-            .map(|event| event.at.as_str())
-            .min()
-            .unwrap_or_default()
-            .to_string();
+        let boundary_at =
+            pending.iter().map(|event| event.at.as_str()).min().unwrap_or_default().to_string();
         lines.push(line_of(draft_id, &boundary_at, &EventBody::TelemetryActivated)?);
     }
     for event in pending {
@@ -303,10 +293,8 @@ struct WriterQueue {
 static WRITER: OnceLock<Writer> = OnceLock::new();
 
 fn writer() -> &'static Writer {
-    WRITER.get_or_init(|| Writer {
-        queue: Mutex::new(WriterQueue::default()),
-        idle: Condvar::new(),
-    })
+    WRITER
+        .get_or_init(|| Writer { queue: Mutex::new(WriterQueue::default()), idle: Condvar::new() })
 }
 
 /// Start the writer thread once, the first time anything is queued.
@@ -326,10 +314,7 @@ fn ensure_thread() {
                         }
                         queue.running = false;
                         writer.idle.notify_all();
-                        queue = writer
-                            .idle
-                            .wait(queue)
-                            .unwrap_or_else(|e| e.into_inner());
+                        queue = writer.idle.wait(queue).unwrap_or_else(|e| e.into_inner());
                     }
                 };
                 if let Some(task) = task {
@@ -419,11 +404,8 @@ pub fn record_statistics_events<R: tauri::Runtime>(
     let draft_id = draft_id.to_string();
     let queued_for = draft_id.clone();
     let dropped = enqueue(Box::new(move || {
-        let types = pending
-            .iter()
-            .map(|event| event.body.type_name())
-            .collect::<Vec<_>>()
-            .join(",");
+        let types =
+            pending.iter().map(|event| event.body.type_name()).collect::<Vec<_>>().join(",");
         // DRS-FR-ZLBK: a draft that has been deleted takes its log with it, and
         // an event queued before that deletion must not bring the log back.
         // Checked **here**, on the writer, rather than where the event was
@@ -466,9 +448,7 @@ pub fn record_statistics_events<R: tauri::Runtime>(
                 // before, carrying the draft's id and no totals.
                 let _ = sink.emit(
                     DRAFT_STATISTICS_CHANGED,
-                    DraftStatisticsChanged {
-                        draft_id: draft_id.clone(),
-                    },
+                    DraftStatisticsChanged { draft_id: draft_id.clone() },
                 );
             }
             Err(reason) => {
@@ -555,9 +535,7 @@ pub fn usage_events(
 
 /// DSS-FR-QLXV: the open project's root, or the typed refusal.
 fn require_root(project: &State<'_, ProjectState>) -> Result<fsa::RootFs, String> {
-    project
-        .require_root()
-        .map_err(|_| ERR_NO_PROJECT_OPEN.to_string())
+    project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())
 }
 
 /// DSS-FR-QLXV: a draft the active worktree does not hold is `draft_not_found`.
@@ -601,10 +579,9 @@ pub fn record_draft_editing_interval(
 ) -> Result<(), String> {
     let root = require_root(&project)?;
     require_draft(&root, &draft_id)?;
-    let (Some(started), Some(ended)) = (
-        time::parse_instant_ms(&started_at),
-        time::parse_instant_ms(&ended_at),
-    ) else {
+    let (Some(started), Some(ended)) =
+        (time::parse_instant_ms(&started_at), time::parse_instant_ms(&ended_at))
+    else {
         return Err(ERR_INVALID_INTERVAL.to_string());
     };
     if ended < started {
@@ -613,11 +590,7 @@ pub fn record_draft_editing_interval(
     record_statistics_event(
         &app,
         &draft_id,
-        EventBody::EditingInterval {
-            interval_id: new_note_id(),
-            started_at,
-            ended_at,
-        },
+        EventBody::EditingInterval { interval_id: new_note_id(), started_at, ended_at },
     );
     Ok(())
 }

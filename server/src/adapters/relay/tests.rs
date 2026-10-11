@@ -35,9 +35,7 @@ fn accepted_handle(
     registration_id: &str,
     instance_id: &str,
 ) -> ClientConnection {
-    let client = relay
-        .register_client(registration_id, instance_id)
-        .expect("a registration");
+    let client = relay.register_client(registration_id, instance_id).expect("a registration");
     relay
         .resolve_registration(&client.handle, instance_id, true)
         .expect("the IDE accepted the registration")
@@ -84,11 +82,7 @@ fn a_second_connection_replaces_the_first_and_leaves_a_notice() {
         .expect("the second connection");
 
     match registration {
-        WorkerRegistration::Replaced {
-            route,
-            previous_connection_id,
-            ..
-        } => {
+        WorkerRegistration::Replaced { route, previous_connection_id, .. } => {
             assert_eq!(route.connection_id, "connection-2");
             assert_eq!(previous_connection_id, "connection-1");
         }
@@ -115,18 +109,13 @@ fn an_announcement_replaces_the_whole_exposed_set() {
     relay
         .register_worker("instance-a", "connection-1", projects(&["p1", "p2"]))
         .expect("the worker is registered");
-    relay
-        .select_project("instance-a", "p2")
-        .expect("the project is selected");
+    relay.select_project("instance-a", "p2").expect("the project is selected");
 
     let route = relay
         .announce_projects("instance-a", "connection-1", projects(&["p1", "p3"]), None)
         .expect("the announcement");
-    let exposed: Vec<&str> = route
-        .projects
-        .iter()
-        .map(|project| project.project_id.as_str())
-        .collect();
+    let exposed: Vec<&str> =
+        route.projects.iter().map(|project| project.project_id.as_str()).collect();
     assert_eq!(exposed, vec!["p1", "p3"]);
     // The selected project left the exposed set, so it is selected no longer.
     assert_eq!(route.selected_project_id, None);
@@ -140,19 +129,13 @@ fn an_unexposed_target_is_refused_and_changes_nothing() {
     relay
         .register_worker("instance-a", "connection-1", projects(&["p1", "p2"]))
         .expect("the worker is registered");
-    relay
-        .select_project("instance-a", "p1")
-        .expect("the project is selected");
+    relay.select_project("instance-a", "p1").expect("the project is selected");
 
-    let error = relay
-        .select_project("instance-a", "p9")
-        .expect_err("an unexposed target is refused");
+    let error =
+        relay.select_project("instance-a", "p9").expect_err("an unexposed target is refused");
     assert_eq!(error.code(), "not_found");
     assert_eq!(
-        relay
-            .worker("instance-a")
-            .expect("the route stands")
-            .selected_project_id,
+        relay.worker("instance-a").expect("the route stands").selected_project_id,
         Some("p1".to_string())
     );
 }
@@ -168,12 +151,8 @@ fn two_workers_hold_two_selected_projects_and_their_clients_observe_each() {
     relay
         .register_worker("instance-b", "connection-2", projects(&["p3"]))
         .expect("the second worker");
-    relay
-        .select_project("instance-a", "p2")
-        .expect("a selection");
-    relay
-        .select_project("instance-b", "p3")
-        .expect("a selection");
+    relay.select_project("instance-a", "p2").expect("a selection");
+    relay.select_project("instance-b", "p3").expect("a selection");
 
     // Three handles: two on one worker and one on the other.
     let first = accepted_handle(&relay, "reg-1", "instance-a");
@@ -181,69 +160,39 @@ fn two_workers_hold_two_selected_projects_and_their_clients_observe_each() {
     let third = accepted_handle(&relay, "reg-3", "instance-b");
     assert_ne!(first.handle, second.handle);
 
-    relay
-        .attach_client(&first.handle, "instance-a")
-        .expect("an attachment");
-    relay
-        .attach_client(&second.handle, "instance-a")
-        .expect("an attachment");
-    relay
-        .attach_client(&third.handle, "instance-b")
-        .expect("an attachment");
+    relay.attach_client(&first.handle, "instance-a").expect("an attachment");
+    relay.attach_client(&second.handle, "instance-a").expect("an attachment");
+    relay.attach_client(&third.handle, "instance-b").expect("an attachment");
 
     assert_eq!(
-        relay
-            .observe_selected_project(&first.handle)
-            .expect("an observation"),
+        relay.observe_selected_project(&first.handle).expect("an observation"),
         Some("p2".to_string())
     );
     assert_eq!(
-        relay
-            .observe_selected_project(&third.handle)
-            .expect("an observation"),
+        relay.observe_selected_project(&third.handle).expect("an observation"),
         Some("p3".to_string())
     );
 
     // A selection on one worker reaches its own clients alone.
-    relay
-        .select_project("instance-a", "p1")
-        .expect("a selection");
+    relay.select_project("instance-a", "p1").expect("a selection");
     assert_eq!(
-        relay
-            .observe_selected_project(&second.handle)
-            .expect("an observation"),
+        relay.observe_selected_project(&second.handle).expect("an observation"),
         Some("p1".to_string())
     );
     assert_eq!(
-        relay
-            .observe_selected_project(&third.handle)
-            .expect("an observation"),
+        relay.observe_selected_project(&third.handle).expect("an observation"),
         Some("p3".to_string())
     );
 
-    assert_eq!(
-        relay
-            .worker("instance-a")
-            .expect("a route")
-            .attached_clients,
-        2
-    );
-    assert_eq!(
-        relay
-            .worker("instance-b")
-            .expect("a route")
-            .attached_clients,
-        1
-    );
+    assert_eq!(relay.worker("instance-a").expect("a route").attached_clients, 2);
+    assert_eq!(relay.worker("instance-b").expect("a route").attached_clients, 1);
 }
 
 // SRB-FR-MTHQ: an attachment to an instance that holds no route is refused.
 #[test]
 fn an_attachment_to_an_unknown_worker_is_refused() {
     let relay = relay();
-    relay
-        .register_worker("instance-a", "connection-1", projects(&["p1"]))
-        .expect("the worker");
+    relay.register_worker("instance-a", "connection-1", projects(&["p1"])).expect("the worker");
     let client = accepted_handle(&relay, "reg-1", "instance-a");
 
     // RSN-FR-UDCM: the handle is bound to one worker, and it never moves.
@@ -251,20 +200,12 @@ fn an_attachment_to_an_unknown_worker_is_refused() {
         .attach_client(&client.handle, "instance-none")
         .expect_err("the attachment is refused");
     assert_eq!(error, ReasonCode::HandleNotFound);
-    assert_eq!(
-        relay
-            .client(&client.handle)
-            .expect("the connection")
-            .instance_id,
-        None
-    );
+    assert_eq!(relay.client(&client.handle).expect("the connection").instance_id, None);
 
     // RSN-FR-BUXE: a registration whose target holds no route is refused before
     // a handle is assigned.
     assert_eq!(
-        relay
-            .register_client("reg-2", "instance-none")
-            .expect_err("no route holds the target"),
+        relay.register_client("reg-2", "instance-none").expect_err("no route holds the target"),
         ReasonCode::WorkerNotFound
     );
 }
@@ -274,13 +215,9 @@ fn an_attachment_to_an_unknown_worker_is_refused() {
 #[test]
 fn a_handle_is_eligible_only_after_the_ide_accepts_it() {
     let relay = relay();
-    relay
-        .register_worker("instance-a", "connection-1", projects(&["p1"]))
-        .expect("the worker");
+    relay.register_worker("instance-a", "connection-1", projects(&["p1"])).expect("the worker");
 
-    let pending = relay
-        .register_client("reg-1", "instance-a")
-        .expect("a registration");
+    let pending = relay.register_client("reg-1", "instance-a").expect("a registration");
     assert_eq!(pending.state, HandleState::Pending);
     assert_eq!(
         relay
@@ -289,9 +226,7 @@ fn a_handle_is_eligible_only_after_the_ide_accepts_it() {
         ReasonCode::HandleNotFound
     );
 
-    let rejected = relay
-        .register_client("reg-2", "instance-a")
-        .expect("a registration");
+    let rejected = relay.register_client("reg-2", "instance-a").expect("a registration");
     relay
         .resolve_registration(&rejected.handle, "instance-a", false)
         .expect("the IDE rejected the registration");
@@ -321,13 +256,9 @@ fn an_invalidated_handle_is_refused_with_the_reason_it_carries() {
         (InvalidReason::Reset, ReasonCode::HandleReset),
     ] {
         let relay = relay();
-        relay
-            .register_worker("instance-a", "connection-1", projects(&["p1"]))
-            .expect("the worker");
+        relay.register_worker("instance-a", "connection-1", projects(&["p1"])).expect("the worker");
         let client = accepted_handle(&relay, "reg-1", "instance-a");
-        relay
-            .attach_client(&client.handle, "instance-a")
-            .expect("an attachment");
+        relay.attach_client(&client.handle, "instance-a").expect("an attachment");
 
         relay
             .invalidate_handle(&client.handle, Some("instance-a"), reason)
@@ -338,9 +269,7 @@ fn an_invalidated_handle_is_refused_with_the_reason_it_carries() {
         assert_eq!(held.instance_id, None);
         assert!(!held.authenticated);
         assert_eq!(
-            relay
-                .attach_client(&client.handle, "instance-a")
-                .expect_err("the handle is refused"),
+            relay.attach_client(&client.handle, "instance-a").expect_err("the handle is refused"),
             expected
         );
         assert_eq!(
@@ -367,15 +296,9 @@ fn a_broadcast_reaches_the_authenticated_clients_of_one_route() {
     let authenticated = accepted_handle(&relay, "reg-1", "instance-a");
     let pending = accepted_handle(&relay, "reg-2", "instance-a");
     let elsewhere = accepted_handle(&relay, "reg-3", "instance-b");
-    relay
-        .attach_client(&authenticated.handle, "instance-a")
-        .expect("an attachment");
-    relay
-        .attach_client(&pending.handle, "instance-a")
-        .expect("an attachment");
-    relay
-        .attach_client(&elsewhere.handle, "instance-b")
-        .expect("an attachment");
+    relay.attach_client(&authenticated.handle, "instance-a").expect("an attachment");
+    relay.attach_client(&pending.handle, "instance-a").expect("an attachment");
+    relay.attach_client(&elsewhere.handle, "instance-b").expect("an attachment");
     relay
         .authenticate_client(&authenticated.handle, "instance-a")
         .expect("the worker authenticated the client");
@@ -384,15 +307,11 @@ fn a_broadcast_reaches_the_authenticated_clients_of_one_route() {
         .expect("the worker authenticated the client");
 
     assert_eq!(
-        relay
-            .broadcast_targets("instance-a", "connection-1")
-            .expect("the targets"),
+        relay.broadcast_targets("instance-a", "connection-1").expect("the targets"),
         vec![authenticated.handle.clone()]
     );
     assert_eq!(
-        relay
-            .broadcast_targets("instance-b", "connection-2")
-            .expect("the targets"),
+        relay.broadcast_targets("instance-b", "connection-2").expect("the targets"),
         vec![elsewhere.handle]
     );
 }
@@ -401,35 +320,26 @@ fn a_broadcast_reaches_the_authenticated_clients_of_one_route() {
 #[test]
 fn a_reset_invalidates_the_handle_for_good() {
     let relay = relay();
-    relay
-        .register_worker("instance-a", "connection-1", projects(&["p1"]))
-        .expect("the worker");
+    relay.register_worker("instance-a", "connection-1", projects(&["p1"])).expect("the worker");
     let client = accepted_handle(&relay, "reg-1", "instance-a");
-    relay
-        .attach_client(&client.handle, "instance-a")
-        .expect("an attachment");
+    relay.attach_client(&client.handle, "instance-a").expect("an attachment");
 
     relay.reset_client(&client.handle).expect("the reset");
     // RSN-FR-ADXL: the record is kept, so a later frame is refused with the
     // reason of the reset rather than as an unknown handle.
     assert_eq!(
-        relay
-            .attach_client(&client.handle, "instance-a")
-            .expect_err("the handle is refused"),
+        relay.attach_client(&client.handle, "instance-a").expect_err("the handle is refused"),
         ReasonCode::HandleReset
     );
     assert_eq!(
-        relay
-            .observe_selected_project(&client.handle)
-            .expect_err("the handle is refused"),
+        relay.observe_selected_project(&client.handle).expect_err("the handle is refused"),
         ReasonCode::HandleReset
     );
 
     // Every later registration takes another handle.
     for index in 0..32 {
-        let next = relay
-            .register_client(&format!("reg-{index}"), "instance-a")
-            .expect("a registration");
+        let next =
+            relay.register_client(&format!("reg-{index}"), "instance-a").expect("a registration");
         assert_ne!(next.handle, client.handle);
     }
 }
@@ -438,32 +348,19 @@ fn a_reset_invalidates_the_handle_for_good() {
 #[test]
 fn dropping_a_route_detaches_its_clients() {
     let relay = relay();
-    relay
-        .register_worker("instance-a", "connection-1", projects(&["p1"]))
-        .expect("the worker");
+    relay.register_worker("instance-a", "connection-1", projects(&["p1"])).expect("the worker");
     let client = accepted_handle(&relay, "reg-1", "instance-a");
-    relay
-        .attach_client(&client.handle, "instance-a")
-        .expect("an attachment");
-    relay
-        .authenticate_client(&client.handle, "instance-a")
-        .expect("the authentication");
+    relay.attach_client(&client.handle, "instance-a").expect("an attachment");
+    relay.authenticate_client(&client.handle, "instance-a").expect("the authentication");
 
-    let detached = relay
-        .drop_worker("instance-a", "connection-1")
-        .expect("the route is dropped");
+    let detached = relay.drop_worker("instance-a", "connection-1").expect("the route is dropped");
     assert_eq!(detached, vec![client.handle.clone()]);
     assert!(relay.workers().is_empty());
 
     let connection = relay.client(&client.handle).expect("the connection stands");
     assert_eq!(connection.instance_id, None);
     assert!(!connection.authenticated);
-    assert_eq!(
-        relay
-            .observe_selected_project(&client.handle)
-            .expect("an observation"),
-        None
-    );
+    assert_eq!(relay.observe_selected_project(&client.handle).expect("an observation"), None);
 }
 
 // SRB-FR-WHRO, SRB-FR-ZUPL: a new relay holds no route and no handle, which is
@@ -471,9 +368,7 @@ fn dropping_a_route_detaches_its_clients() {
 #[test]
 fn a_new_relay_holds_no_route_and_no_handle() {
     let first = relay();
-    first
-        .register_worker("instance-a", "connection-1", projects(&["p1"]))
-        .expect("the worker");
+    first.register_worker("instance-a", "connection-1", projects(&["p1"])).expect("the worker");
     let client = accepted_handle(&first, "reg-1", "instance-a");
 
     let second = relay();
@@ -497,9 +392,7 @@ fn the_state_is_driven_from_many_threads() {
                 for round in 0..25 {
                     let client =
                         accepted_handle(&relay, &format!("reg-{index}-{round}"), &instance);
-                    relay
-                        .attach_client(&client.handle, &instance)
-                        .expect("an attachment");
+                    relay.attach_client(&client.handle, &instance).expect("an attachment");
                     relay
                         .authenticate_client(&client.handle, &instance)
                         .expect("the authentication");
@@ -530,23 +423,13 @@ fn the_state_is_driven_from_many_threads() {
 fn the_display_name_is_never_a_routing_key() {
     let relay = relay();
     let exposed = vec![
-        ExposedProject {
-            project_id: "p1".to_string(),
-            display_name: "One name".to_string(),
-        },
-        ExposedProject {
-            project_id: "p2".to_string(),
-            display_name: "One name".to_string(),
-        },
+        ExposedProject { project_id: "p1".to_string(), display_name: "One name".to_string() },
+        ExposedProject { project_id: "p2".to_string(), display_name: "One name".to_string() },
     ];
-    relay
-        .register_worker("instance-a", "connection-1", exposed)
-        .expect("the worker");
+    relay.register_worker("instance-a", "connection-1", exposed).expect("the worker");
 
     assert!(relay.select_project("instance-a", "One name").is_err());
-    relay
-        .select_project("instance-a", "p2")
-        .expect("the identifier selects the project");
+    relay.select_project("instance-a", "p2").expect("the identifier selects the project");
 }
 
 // SRB-FR-IZAB: every operation of the port writes one record, and the record
@@ -554,12 +437,8 @@ fn the_display_name_is_never_a_routing_key() {
 #[test]
 fn a_worker_operation_writes_a_record_of_the_connection_and_the_instance() {
     let (relay, logs) = relay_with_logs();
-    relay
-        .register_worker("instance-a", "connection-1", projects(&["p1"]))
-        .expect("the worker");
-    relay
-        .select_project("instance-a", "p1")
-        .expect("the project is selected");
+    relay.register_worker("instance-a", "connection-1", projects(&["p1"])).expect("the worker");
+    relay.select_project("instance-a", "p1").expect("the project is selected");
 
     let records = logs.records_of("relay");
     assert_eq!(records.len(), 2);
@@ -593,23 +472,14 @@ fn a_refused_operation_is_recorded_with_the_code_of_the_refusal() {
 #[test]
 fn a_client_operation_names_the_connection_and_never_the_handle() {
     let (relay, logs) = relay_with_logs();
-    relay
-        .register_worker("instance-a", "connection-1", projects(&["p1"]))
-        .expect("the worker");
+    relay.register_worker("instance-a", "connection-1", projects(&["p1"])).expect("the worker");
     let client = accepted_handle(&relay, "reg-1", "instance-a");
-    relay
-        .attach_client(&client.handle, "instance-a")
-        .expect("the attachment");
-    relay
-        .authenticate_client(&client.handle, "instance-a")
-        .expect("the client is authenticated");
+    relay.attach_client(&client.handle, "instance-a").expect("the attachment");
+    relay.authenticate_client(&client.handle, "instance-a").expect("the client is authenticated");
     relay.reset_client(&client.handle).expect("the reset");
 
     let text = logs.text();
-    assert!(
-        !text.contains(&client.handle),
-        "a record named the handle: {text}"
-    );
+    assert!(!text.contains(&client.handle), "a record named the handle: {text}");
     assert_ne!(client.connection_id, client.handle);
 
     let records = logs.records_of("relay");
@@ -641,12 +511,7 @@ fn a_record_holds_no_payload_and_no_project_content() {
         .register_worker("instance-a", "connection-1", projects(&["secret-project"]))
         .expect("the worker");
     relay
-        .announce_projects(
-            "instance-a",
-            "connection-1",
-            projects(&["secret-project"]),
-            None,
-        )
+        .announce_projects("instance-a", "connection-1", projects(&["secret-project"]), None)
         .expect("the announcement");
 
     let text = logs.text();
@@ -657,16 +522,7 @@ fn a_record_holds_no_payload_and_no_project_content() {
         let object = record.as_object().expect("a record is an object");
         let mut names: Vec<&str> = object.keys().map(String::as_str).collect();
         names.sort();
-        assert_eq!(
-            names,
-            vec![
-                "connection_id",
-                "event",
-                "instance_id",
-                "operation",
-                "outcome"
-            ]
-        );
+        assert_eq!(names, vec!["connection_id", "event", "instance_id", "operation", "outcome"]);
     }
 }
 
@@ -681,12 +537,7 @@ fn an_announcement_applies_its_set_and_its_selection_together() {
         .expect("the worker");
 
     let route = relay
-        .announce_projects(
-            "instance-a",
-            "connection-1",
-            projects(&["p1", "p2"]),
-            Some("p2"),
-        )
+        .announce_projects("instance-a", "connection-1", projects(&["p1", "p2"]), Some("p2"))
         .expect("the announcement");
     assert_eq!(route.selected_project_id, Some("p2".to_string()));
 
@@ -712,9 +563,7 @@ fn a_worker_reaches_no_handle_of_another_worker() {
         .register_worker("instance-b", "connection-2", projects(&["p1"]))
         .expect("the second worker");
     let client = accepted_handle(&relay, "reg-1", "instance-a");
-    relay
-        .attach_client(&client.handle, "instance-a")
-        .expect("an attachment");
+    relay.attach_client(&client.handle, "instance-a").expect("an attachment");
 
     assert_eq!(
         relay
@@ -728,12 +577,7 @@ fn a_worker_reaches_no_handle_of_another_worker() {
             .expect_err("another worker invalidates nothing"),
         ReasonCode::HandleNotFound
     );
-    assert!(
-        !relay
-            .client(&client.handle)
-            .expect("the connection stands")
-            .authenticated
-    );
+    assert!(!relay.client(&client.handle).expect("the connection stands").authenticated);
 
     // Its own worker still reaches it.
     relay
@@ -747,20 +591,12 @@ fn a_worker_reaches_no_handle_of_another_worker() {
 #[test]
 fn a_second_attachment_of_one_handle_keeps_what_the_handle_earned() {
     let relay = relay();
-    relay
-        .register_worker("instance-a", "connection-1", projects(&["p1"]))
-        .expect("the worker");
+    relay.register_worker("instance-a", "connection-1", projects(&["p1"])).expect("the worker");
     let client = accepted_handle(&relay, "reg-1", "instance-a");
-    relay
-        .attach_client(&client.handle, "instance-a")
-        .expect("an attachment");
-    relay
-        .authenticate_client(&client.handle, "instance-a")
-        .expect("the authentication");
+    relay.attach_client(&client.handle, "instance-a").expect("an attachment");
+    relay.authenticate_client(&client.handle, "instance-a").expect("the authentication");
 
-    let again = relay
-        .attach_client(&client.handle, "instance-a")
-        .expect("a second attachment");
+    let again = relay.attach_client(&client.handle, "instance-a").expect("a second attachment");
     assert!(again.authenticated);
 
     // A route the handle is not bound to is refused rather than attached
@@ -781,12 +617,8 @@ fn a_second_attachment_of_one_handle_keeps_what_the_handle_earned() {
 #[test]
 fn an_abandoned_registration_leaves_no_handle() {
     let relay = relay();
-    relay
-        .register_worker("instance-a", "connection-1", projects(&["p1"]))
-        .expect("the worker");
-    let pending = relay
-        .register_client("reg-1", "instance-a")
-        .expect("a registration");
+    relay.register_worker("instance-a", "connection-1", projects(&["p1"])).expect("the worker");
+    let pending = relay.register_client("reg-1", "instance-a").expect("a registration");
 
     relay.drop_pending_registration(&pending.handle);
     assert_eq!(
@@ -811,9 +643,7 @@ fn an_abandoned_registration_leaves_no_handle() {
 #[test]
 fn a_reset_is_never_masked_by_a_later_reason() {
     let relay = relay();
-    relay
-        .register_worker("instance-a", "connection-1", projects(&["p1"]))
-        .expect("the worker");
+    relay.register_worker("instance-a", "connection-1", projects(&["p1"])).expect("the worker");
     let client = accepted_handle(&relay, "reg-1", "instance-a");
 
     relay.reset_client(&client.handle).expect("the reset");
@@ -822,9 +652,7 @@ fn a_reset_is_never_masked_by_a_later_reason() {
         .expect("the invalidation is applied");
 
     assert_eq!(
-        relay
-            .attach_client(&client.handle, "instance-a")
-            .expect_err("the handle is refused"),
+        relay.attach_client(&client.handle, "instance-a").expect_err("the handle is refused"),
         ReasonCode::HandleReset
     );
 }
@@ -834,9 +662,7 @@ fn a_reset_is_never_masked_by_a_later_reason() {
 #[test]
 fn peeking_at_a_handle_writes_no_record() {
     let (relay, logs) = relay_with_logs();
-    relay
-        .register_worker("instance-a", "connection-1", projects(&["p1"]))
-        .expect("the worker");
+    relay.register_worker("instance-a", "connection-1", projects(&["p1"])).expect("the worker");
     let client = accepted_handle(&relay, "reg-1", "instance-a");
     let before = logs.records_of("relay").len();
 
@@ -858,23 +684,14 @@ fn a_replaced_connection_announces_nothing_and_broadcasts_to_nobody() {
         .register_worker("instance-a", "connection-1", projects(&["p1", "p2"]))
         .expect("the first connection");
     let client = accepted_handle(&relay, "reg-1", "instance-a");
-    relay
-        .attach_client(&client.handle, "instance-a")
-        .expect("an attachment");
-    relay
-        .authenticate_client(&client.handle, "instance-a")
-        .expect("the authentication");
+    relay.attach_client(&client.handle, "instance-a").expect("an attachment");
+    relay.authenticate_client(&client.handle, "instance-a").expect("the authentication");
 
     relay
         .register_worker("instance-a", "connection-2", projects(&["p1", "p2"]))
         .expect("the replacement");
     relay
-        .announce_projects(
-            "instance-a",
-            "connection-2",
-            projects(&["p1", "p2"]),
-            Some("p2"),
-        )
+        .announce_projects("instance-a", "connection-2", projects(&["p1", "p2"]), Some("p2"))
         .expect("the replacement announces");
 
     // The replaced connection keeps writing, and changes nothing.
@@ -891,10 +708,7 @@ fn a_replaced_connection_announces_nothing_and_broadcasts_to_nobody() {
     let route = relay.worker("instance-a").expect("the route stands");
     assert_eq!(route.connection_id, "connection-2");
     assert_eq!(route.selected_project_id, Some("p2".to_string()));
-    let exposed: Vec<&str> = route
-        .projects
-        .iter()
-        .map(|project| project.project_id.as_str())
-        .collect();
+    let exposed: Vec<&str> =
+        route.projects.iter().map(|project| project.project_id.as_str()).collect();
     assert_eq!(exposed, vec!["p1", "p2"]);
 }

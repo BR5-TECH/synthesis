@@ -1,0 +1,57 @@
+/* GSD-FR-BZHW: where the run works is one choice of four, so the four read as
+   one segmented toggle with a single frame, the same as the other toggles of
+   the IDE. The four segments share the width of the body equally, and the
+   toggle is as tall as the fields under it. */
+.graduation-start__destination {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+/* The legend lines up with the labels of the fields under it. */
+.graduation-start__destination > legend { padding: 0; }
+.graduation-start__destination-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  box-sizing: border-box;
+  height: var(--ctl-h-lg);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--bg-canvas);
+}
+.graduation-start__destination-option {
+  min-width: 0;
+  /* The narrow side padding lets "Temporary stream" fit in bold. */
+  padding: 0 var(--sp-1);
+  border: 0;
+  background: none;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--fs-ui-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out);
+}
+.graduation-start__destination-option + .graduation-start__destination-option {
+  border-left: 1px solid var(--border-1);
+}
+.graduation-start__destination-option:hover:not(:disabled):not([data-active="true"]) {
+  background: var(--bg-hover);
+  color: var(--fg-1);
+}
+/* The chosen segment shows by fill and by weight, so colour is not the only
+   sign. */
+.graduation-start__destination-option[data-active="true"] {
+  background: var(--bg-active);
+  color: var(--fg-1);
+  font-weight: var(--fw-semi);
+}
+.graduation-start__destination-option:disabled { color: var(--fg-4); cursor: not-allowed; }
+.graduation-start__destination-option:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--ring);
+}

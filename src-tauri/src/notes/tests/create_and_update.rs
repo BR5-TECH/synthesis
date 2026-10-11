@@ -44,10 +44,7 @@ fn a_created_note_carries_its_scope_path_and_optional_fields() {
     .unwrap();
     assert_eq!(
         note.scope,
-        NoteScope::Entity {
-            entity_id: "specs/a.md".into(),
-            entity_path: "specs/a.md".into()
-        },
+        NoteScope::Entity { entity_id: "specs/a.md".into(), entity_path: "specs/a.md".into() },
         "entity_path is recorded from the entity's current path (NTC-FR-04)"
     );
     assert_eq!(note.reminder.as_deref(), Some("2026-03-04T09:00:00Z"));
@@ -84,10 +81,7 @@ fn editing_the_body_stamps_updated_at_and_never_rewrites_created_at() {
     let updated = update_note_in(
         root,
         &note.id,
-        NoteFields {
-            body: Some("changed".into()),
-            ..Default::default()
-        },
+        NoteFields { body: Some("changed".into()), ..Default::default() },
         "2026-02-02T10:00:00Z",
     )
     .unwrap();
@@ -116,10 +110,7 @@ fn a_partial_update_carries_every_absent_field_through_unchanged() {
     let after_body = update_note_in(
         root,
         &note.id,
-        NoteFields {
-            body: Some("changed".into()),
-            ..Default::default()
-        },
+        NoteFields { body: Some("changed".into()), ..Default::default() },
         "2026-01-02T00:00:00Z",
     )
     .unwrap();
@@ -134,10 +125,7 @@ fn a_partial_update_carries_every_absent_field_through_unchanged() {
     let cleared = update_note_in(
         root,
         &note.id,
-        NoteFields {
-            reminder: Some(None),
-            ..Default::default()
-        },
+        NoteFields { reminder: Some(None), ..Default::default() },
         "2026-01-03T00:00:00Z",
     )
     .unwrap();
@@ -153,13 +141,8 @@ fn an_update_that_changes_nothing_leaves_updated_at_alone() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     let note = create(root, NoteScope::Project, "body", "2026-01-01T00:00:00Z");
 
-    let untouched = update_note_in(
-        root,
-        &note.id,
-        NoteFields::default(),
-        "2026-09-09T00:00:00Z",
-    )
-    .unwrap();
+    let untouched =
+        update_note_in(root, &note.id, NoteFields::default(), "2026-09-09T00:00:00Z").unwrap();
     assert_eq!(untouched.updated_at, "2026-01-01T00:00:00Z");
 
     let resubmitted = update_note_in(
@@ -191,10 +174,7 @@ fn a_note_emptied_of_its_body_survives_every_read() {
     let emptied = update_note_in(
         root,
         &note.id,
-        NoteFields {
-            body: Some(String::new()),
-            ..Default::default()
-        },
+        NoteFields { body: Some(String::new()), ..Default::default() },
         "2026-02-02T10:00:00Z",
     )
     .unwrap();
@@ -225,10 +205,7 @@ fn a_note_emptied_of_its_body_survives_every_read() {
     let again = update_note_in(
         root,
         &note.id,
-        NoteFields {
-            body: Some(String::new()),
-            ..Default::default()
-        },
+        NoteFields { body: Some(String::new()), ..Default::default() },
         "2026-03-03T10:00:00Z",
     )
     .unwrap();
@@ -252,18 +229,10 @@ fn the_wire_shape_of_a_partial_update_distinguishes_absent_from_null() {
 fn updating_or_deleting_an_unknown_id_is_a_typed_not_found() {
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
+    assert_eq!(delete_note_in(root, root, "0197ab-0000-00000000").unwrap_err(), ERR_NOTE_NOT_FOUND);
     assert_eq!(
-        delete_note_in(root, root, "0197ab-0000-00000000").unwrap_err(),
-        ERR_NOTE_NOT_FOUND
-    );
-    assert_eq!(
-        update_note_in(
-            root,
-            "0197ab-0000-00000000",
-            NoteFields::default(),
-            "2026-01-01T00:00:00Z"
-        )
-        .unwrap_err(),
+        update_note_in(root, "0197ab-0000-00000000", NoteFields::default(), "2026-01-01T00:00:00Z")
+            .unwrap_err(),
         ERR_NOTE_NOT_FOUND
     );
 }

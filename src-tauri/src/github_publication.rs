@@ -32,7 +32,7 @@
 
 use tauri::{Emitter, Manager, State};
 
-use crate::github_tokens::{self, GithubTokens};
+use crate::github_tokens::{self, GithubTokens, ProjectToken};
 use crate::global_settings::GlobalSettingsStore;
 use crate::log_fields;
 use crate::logging::{self, Domain};
@@ -91,19 +91,43 @@ pub fn configured_remotes(root: &crate::fs::RootFs) -> Vec<ConfiguredRemote> {
         .collect()
 }
 
-/// The project's token, or `None` where it resolves none.
+/// The project's token and its host, or `None` where it resolves none.
 ///
 /// A missing token is not an error here: it is one of the reasons a remote is
 /// ineligible (GHP-FR-MZPR), and reporting it as a classification rather than
 /// as a failure is what lets the picker explain every row at once.
-fn project_secret<R: tauri::Runtime>(app: &tauri::AppHandle<R>, project_key: &str) -> Option<String> {
+fn project_token<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    project_key: &str,
+) -> Option<ProjectToken> {
     #[cfg(test)]
     if let Some(secret) = app.try_state::<TestSecret>() {
-        return Some(secret.0.clone());
+        return Some(ProjectToken {
+            secret: secret.0.clone(),
+            host: github_tokens::DEFAULT_HOST.to_string(),
+        });
     }
     let store = app.state::<GlobalSettingsStore>();
     let tokens = app.state::<GithubTokens>();
-    github_tokens::resolve_github_token_secret(&store, &tokens, project_key).ok()
+    github_tokens::resolve_project_token(&store, &tokens, project_key).ok()
+}
+
+/// The secret and the host of a token, as the pair the classification takes.
+fn token_pair(token: Option<&ProjectToken>) -> Option<(&str, &str)> {
+    token.map(|t| (t.secret.as_str(), t.host.as_str()))
+}
+
+/// The host of the token, or `github.com` where the project resolves none.
+fn token_host(token: Option<&ProjectToken>) -> &str {
+    token.map_or(github_tokens::DEFAULT_HOST, |t| t.host.as_str())
+}
+
+/// The hosts of every stored token, which with `github.com` and `*.ghe.com`
+/// name the GitHub remotes of the project (GHP-FR-BXTU).
+fn known_hosts<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Vec<String> {
+    app.try_state::<GlobalSettingsStore>()
+        .map(|store| github_tokens::known_github_hosts(&store))
+        .unwrap_or_default()
 }
 
 /// Run one command's body off the main thread.
@@ -125,8 +149,13 @@ where
         .map_err(|_| ERR_GITHUB_UNREACHABLE.to_string())?
 }
 
-fn issues_client<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> std::sync::Arc<dyn GithubIssues> {
-    app.state::<GithubIssuesSeam>().0.clone()
+/// The client for the REST API of `host` (GHP-FR-HSTA).
+fn issues_client<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    host: &str,
+) -> std::sync::Arc<dyn GithubIssues> {
+    let client = app.state::<GithubIssuesSeam>().0.clone();
+    client.for_host(host).unwrap_or(client)
 }
 
 /// The project's root, or the typed refusal — reported, because a command that
@@ -225,29 +254,26 @@ fn get_draft_publication_impl<R: tauri::Runtime>(
             "A graduation run is working from this draft.",
         )
     } else {
-        let local = flow::local_eligibility(
-            &root,
-            &draft_id,
-            record.status,
-            publication.attempt.as_ref(),
-        );
+        let local =
+            flow::local_eligibility(&root, &draft_id, record.status, publication.attempt.as_ref());
         // The remote checks cost a network read per GitHub remote, so they run
         // only once everything decidable from disk has passed.
         match local.publishable {
             false => local,
             true => {
-                let secret = project_secret(app, &project_key);
-                let resolution = flow::resolution_for(
+                let token = project_token(app, &project_key);
+                let resolution = flow::resolution_hosted(
                     &root,
                     &configured_remotes(&root),
-                    secret.as_deref(),
-                    issues_client(app).as_ref(),
+                    token_pair(token.as_ref()),
+                    &known_hosts(app),
+                    issues_client(app, token_host(token.as_ref())).as_ref(),
                 );
                 match resolution.selection {
                     Some(_) => PublicationEligibility::publishable(),
                     None => {
                         let code = remotes::refusal_for(&resolution.remotes);
-                        PublicationEligibility::refused(code, remotes::refusal_reason(code))
+                        PublicationEligibility::refused(&code, remotes::refusal_reason(&code))
                     }
                 }
             }
@@ -280,10 +306,15 @@ fn list_publication_remotes_impl<R: tauri::Runtime>(
     let root = require_root(app, &project)?;
     let project_key = project.slot_key();
     require_publishable_draft(app, &root, &draft_id)?;
-    let secret = project_secret(app, &project_key);
+    let token = project_token(app, &project_key);
     let configured = configured_remotes(&root);
-    let resolution =
-        flow::resolution_for(&root, &configured, secret.as_deref(), issues_client(app).as_ref());
+    let resolution = flow::resolution_hosted(
+        &root,
+        &configured,
+        token_pair(token.as_ref()),
+        &known_hosts(app),
+        issues_client(app, token_host(token.as_ref())).as_ref(),
+    );
     logging::log_debug(
         app,
         &logging::BUFFER,
@@ -325,7 +356,13 @@ pub async fn publish_draft_to_github(
     app: tauri::AppHandle,
 ) -> Result<PublicationOutcome, String> {
     off_thread(move || {
-        publish_draft_to_github_impl(&app, draft_id, remote_name, persist_remote, publication_choice)
+        publish_draft_to_github_impl(
+            &app,
+            draft_id,
+            remote_name,
+            persist_remote,
+            publication_choice,
+        )
     })
     .await
 }
@@ -350,12 +387,18 @@ fn publish_draft_to_github_impl<R: tauri::Runtime>(
         return Err(fail(app, &draft_id, local.reason_code.unwrap_or_default()));
     }
 
-    let Some(secret) = project_secret(app, &project_key) else {
+    let Some(token) = project_token(app, &project_key) else {
         return Err(fail(app, &draft_id, ERR_TOKEN_UNAVAILABLE.to_string()));
     };
-    let client = issues_client(app);
-    let classified =
-        remotes::classify(&configured_remotes(&root), Some(&secret), client.as_ref());
+    let secret = &token.secret;
+    let client = issues_client(app, &token.host);
+    let classified = remotes::classify_hosted(
+        &configured_remotes(&root),
+        token_pair(Some(&token)),
+        &known_hosts(app),
+        client.as_ref(),
+        true,
+    );
     let remote = flow::resolve_remote_for(&classified, &remote_name)
         .map_err(|code| fail(app, &draft_id, code))?;
 
@@ -367,15 +410,20 @@ fn publish_draft_to_github_impl<R: tauri::Runtime>(
         &publication_choice,
         &settings,
         client.as_ref(),
-        &secret,
+        secret,
         remote.repository_owner.as_deref().unwrap_or_default(),
         remote.repository_name.as_deref().unwrap_or_default(),
     )
     .map_err(|code| fail(app, &draft_id, code))?;
 
     flow::persist_choice(&root, &remote, persist_remote)?;
-    let attempt =
-        flow::open_attempt_with(&root, &draft_id, &remote, flow::new_marker(), Some(choice.clone()))?;
+    let attempt = flow::open_attempt_with(
+        &root,
+        &draft_id,
+        &remote,
+        flow::new_marker(),
+        Some(choice.clone()),
+    )?;
     logging::log_info(
         app,
         &logging::BUFFER,
@@ -394,7 +442,7 @@ fn publish_draft_to_github_impl<R: tauri::Runtime>(
     );
     announce(app, &draft_id);
 
-    let outcome = flow::publish_with_attempt(&root, &draft_id, &attempt, &secret, client.as_ref());
+    let outcome = flow::publish_with_attempt(&root, &draft_id, &attempt, secret, client.as_ref());
     settle(app, &root, &draft_id, status, outcome)
 }
 
@@ -417,19 +465,25 @@ fn load_publication_metadata_impl<R: tauri::Runtime>(
     let root = require_root(app, &project)?;
     let project_key = project.slot_key();
     require_publishable_draft(app, &root, &draft_id)?;
-    let Some(secret) = project_secret(app, &project_key) else {
+    let Some(token) = project_token(app, &project_key) else {
         return Err(fail(app, &draft_id, ERR_TOKEN_UNAVAILABLE.to_string()));
     };
-    let client = issues_client(app);
-    let classified =
-        remotes::classify(&configured_remotes(&root), Some(&secret), client.as_ref());
+    let secret = &token.secret;
+    let client = issues_client(app, &token.host);
+    let classified = remotes::classify_hosted(
+        &configured_remotes(&root),
+        token_pair(Some(&token)),
+        &known_hosts(app),
+        client.as_ref(),
+        true,
+    );
     let remote = flow::resolve_remote_for(&classified, &remote_name)
         .map_err(|code| fail(app, &draft_id, code))?;
     let settings = crate::project_settings::load_github_publication_settings_from(&root)
         .map_err(|_| fail(app, &draft_id, ERR_INVALID_PUBLICATION_SETTINGS.to_string()))?;
     let metadata = flow::load_metadata(
         client.as_ref(),
-        &secret,
+        secret,
         remote.repository_owner.as_deref().unwrap_or_default(),
         remote.repository_name.as_deref().unwrap_or_default(),
         settings,
@@ -465,7 +519,7 @@ fn get_github_publication_settings_impl<R: tauri::Runtime>(
 ) -> Result<GithubPublicationSettings, String> {
     let project = app.state::<ProjectState>();
     let root = require_root(app, &project)?;
-    crate::project_settings::load_github_publication_settings_from(&root).map_err(|error| {
+    crate::project_settings::load_github_publication_settings_from(&root).inspect_err(|_error| {
         logging::log_warn(
             app,
             &logging::BUFFER,
@@ -473,7 +527,6 @@ fn get_github_publication_settings_impl<R: tauri::Runtime>(
             "github publication settings could not be read",
             log_fields! { "refusal" => ERR_INVALID_PUBLICATION_SETTINGS },
         );
-        error
     })
 }
 
@@ -543,15 +596,15 @@ fn list_github_issue_types_impl<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<MetadataList<PublicationIssueType>, String> {
     let project = app.state::<ProjectState>();
-    let secret = project_secret(app, &project.slot_key());
-    let repository =
-        resolve_publication_repository_with(app, secret.as_deref()).map_err(|code| fail(app, "", code))?;
-    let Some(secret) = secret else {
+    let token = project_token(app, &project.slot_key());
+    let repository = resolve_publication_repository_with(app, token.as_ref())
+        .map_err(|code| fail(app, "", code))?;
+    let Some(token) = token else {
         return Err(fail(app, "", ERR_TOKEN_UNAVAILABLE.to_string()));
     };
     let list = flow::issue_types_list(
-        issues_client(app).as_ref(),
-        &secret,
+        issues_client(app, &token.host).as_ref(),
+        &token.secret,
         &repository.repository_owner,
     );
     logging::log_debug(
@@ -585,11 +638,17 @@ fn retry_draft_publication_impl<R: tauri::Runtime>(
     let Some(attempt) = store::read_store(&root, &draft_id)?.attempt else {
         return Err(fail(app, &draft_id, ERR_NO_ATTEMPT.to_string()));
     };
-    let Some(secret) = project_secret(app, &project_key) else {
+    let Some(token) = project_token(app, &project_key) else {
         return Err(fail(app, &draft_id, ERR_TOKEN_UNAVAILABLE.to_string()));
     };
-    let client = issues_client(app);
-    let outcome = flow::publish_with_attempt(&root, &draft_id, &attempt, &secret, client.as_ref());
+    // GTS-FR-OBAS: the attempt belongs to a repository on one host, and the
+    // token of the project must belong to the same host.
+    if attempt.repository_host != token.host {
+        return Err(fail(app, &draft_id, ERR_HOST_MISMATCH.to_string()));
+    }
+    let secret = &token.secret;
+    let client = issues_client(app, &token.host);
+    let outcome = flow::publish_with_attempt(&root, &draft_id, &attempt, secret, client.as_ref());
     settle(app, &root, &draft_id, status, outcome)
 }
 
@@ -622,14 +681,18 @@ fn resolve_draft_publication_conflict_impl<R: tauri::Runtime>(
     if attempt.state != AttemptState::AwaitingChoice {
         return Err(fail(app, &draft_id, ERR_NO_ATTEMPT.to_string()));
     }
-    let Some(secret) = project_secret(app, &project_key) else {
+    let Some(token) = project_token(app, &project_key) else {
         return Err(fail(app, &draft_id, ERR_TOKEN_UNAVAILABLE.to_string()));
     };
-    let client = issues_client(app);
+    if attempt.repository_host != token.host {
+        return Err(fail(app, &draft_id, ERR_HOST_MISMATCH.to_string()));
+    }
+    let secret = &token.secret;
+    let client = issues_client(app, &token.host);
 
     let outcome = match choice {
         RecoveryChoice::UpdateExisting => {
-            flow::update_existing(&root, &draft_id, &attempt, &secret, client.as_ref())
+            flow::update_existing(&root, &draft_id, &attempt, secret, client.as_ref())
         }
         // GHP-FR-QLDF: a deliberate re-publication is a **new** attempt with a
         // new marker, so the issue it creates is a second issue rather than an
@@ -639,10 +702,12 @@ fn resolve_draft_publication_conflict_impl<R: tauri::Runtime>(
                 name: attempt.remote_name.clone(),
                 url: attempt.remote_url.clone(),
                 kind: RemoteKind::Github,
+                repository_host: Some(attempt.repository_host.clone()),
                 repository_owner: Some(attempt.repository_owner.clone()),
                 repository_name: Some(attempt.repository_name.clone()),
                 eligibility: RemoteEligibility::Eligible,
                 reason: None,
+                tls_failure: None,
             };
             // GHP-FR-YPGL: the saved choice travels to the new attempt, which
             // replaces the old one in a single write.
@@ -653,7 +718,7 @@ fn resolve_draft_publication_conflict_impl<R: tauri::Runtime>(
                 flow::new_marker(),
                 attempt.choice.clone(),
             )?;
-            flow::publish_with_attempt(&root, &draft_id, &fresh, &secret, client.as_ref())
+            flow::publish_with_attempt(&root, &draft_id, &fresh, secret, client.as_ref())
         }
     };
     settle(app, &root, &draft_id, status, outcome)
@@ -719,19 +784,25 @@ pub fn resolve_publication_repository<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<PublicationRepository, String> {
     let project = app.state::<ProjectState>();
-    let secret = project_secret(app, &project.slot_key());
-    resolve_publication_repository_with(app, secret.as_deref())
+    let token = project_token(app, &project.slot_key());
+    resolve_publication_repository_with(app, token.as_ref())
 }
 
-/// [`resolve_publication_repository`] with the secret the caller already
+/// [`resolve_publication_repository`] with the token the caller already
 /// resolved, so a caller resolves the token once.
 pub fn resolve_publication_repository_with<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    secret: Option<&str>,
+    token: Option<&ProjectToken>,
 ) -> Result<PublicationRepository, String> {
     let project = app.state::<ProjectState>();
     let root = project.require_root().map_err(|_| ERR_NO_PROJECT.to_string())?;
-    flow::resolve_repository_from(&root, &configured_remotes(&root), secret, issues_client(app).as_ref())
+    flow::resolve_repository_hosted(
+        &root,
+        &configured_remotes(&root),
+        token_pair(token),
+        &known_hosts(app),
+        issues_client(app, token_host(token)).as_ref(),
+    )
 }
 
 /// GHP-FR-MJTB: open one recorded issue URL outside the application.

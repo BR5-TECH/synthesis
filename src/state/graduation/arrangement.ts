@@ -89,8 +89,8 @@ export function reorderAnnouncement(
 /** What the rail announces when the author pauses or resumes a run. */
 export function pauseAnnouncement(run: GraduationRun, paused: boolean): string {
   return paused
-    ? `Paused “${runTitle(run)}”. Its work stream is free for the run behind it.`
-    : `Resumed “${runTitle(run)}”. It waits at the front of ${targetName(run)}.`;
+    ? `Paused “${runTitle(run)}”. It keeps ${targetName(run)}, and the runs behind it wait.`
+    : `Resumed “${runTitle(run)}”. It continues in ${targetName(run)} at once.`;
 }
 
 /** What the rail announces when auto-start is turned off or on. */

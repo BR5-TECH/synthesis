@@ -15,11 +15,14 @@ fn the_launch_handoff_answers_only_for_executable_clis() {
     verify_integration_impl(&h.store, &h.ai, "claude_code", &claude_config(Some(SAMPLE_TOKEN)))
         .expect("claude verifies");
 
-    match resolve_agent_launch_credential(&h.ai, "claude_code").expect("handoff") {
-        AgentLaunchCredential::ClaudeOauthToken(token) => {
-            assert_eq!(token.expose(), SAMPLE_TOKEN);
+    match resolve_agent_launch_credential(&h.store, &h.ai, "claude_code").expect("handoff") {
+        AgentLaunchCredential::ClaudeEnvironment(variables) => {
+            assert_eq!(variables.len(), 1);
+            assert_eq!(variables[0].name, "CLAUDE_CODE_OAUTH_TOKEN");
+            assert_eq!(variables[0].value.expose(), SAMPLE_TOKEN);
+            assert!(variables[0].masked);
         }
-        other => panic!("expected a token, got {other:?}"),
+        other => panic!("expected an environment, got {other:?}"),
     }
 
     // Codex resolves to its own login directory, with the container target
@@ -32,14 +35,11 @@ fn the_launch_handoff_answers_only_for_executable_clis() {
         Arc::new(FakeProber::default()),
         FakeKeychain::new(),
     );
-    let codex = Harness {
-        ai: codex.ai.with_home(home.path()),
-        ..codex
-    };
+    let codex = Harness { ai: codex.ai.with_home(home.path()), ..codex };
     verify_integration_impl(&codex.store, &codex.ai, "codex", &cli_config("/usr/bin/codex"))
         .expect("codex verifies");
 
-    match resolve_agent_launch_credential(&codex.ai, "codex").expect("handoff") {
+    match resolve_agent_launch_credential(&codex.store, &codex.ai, "codex").expect("handoff") {
         AgentLaunchCredential::CodexConfigMount { source, target } => {
             assert_eq!(source, home.path().join(".codex"));
             assert_eq!(target, PathBuf::from("/home/agent/.codex"));
@@ -51,7 +51,7 @@ fn the_launch_handoff_answers_only_for_executable_clis() {
     // pinned for it. Neither API-kind vendor is executable either.
     for vendor in ["opencode", "claude_agent_api", "custom_agent_api"] {
         assert_eq!(
-            resolve_agent_launch_credential(&h.ai, vendor).unwrap_err(),
+            resolve_agent_launch_credential(&h.store, &h.ai, vendor).unwrap_err(),
             ERR_NOT_AN_EXECUTABLE_CLI,
             "{vendor} must not be executable"
         );
@@ -59,7 +59,7 @@ fn the_launch_handoff_answers_only_for_executable_clis() {
     // And nothing it returns describes an integration — the variants carry
     // launch material alone, with no vendor, model, effort, or binary path.
     assert_eq!(
-        resolve_agent_launch_credential(&h.ai, "no_such_vendor").unwrap_err(),
+        resolve_agent_launch_credential(&h.store, &h.ai, "no_such_vendor").unwrap_err(),
         ERR_NOT_AN_EXECUTABLE_CLI
     );
 }
@@ -76,9 +76,11 @@ fn the_handoff_type_never_renders_and_every_refusal_is_typed() {
     assert!(!rendered.contains("sk-ant-oat01-"));
     assert!(rendered.contains("<redacted>"));
 
-    let credential = AgentLaunchCredential::ClaudeOauthToken(SecretString::new(
-        SAMPLE_TOKEN.to_string(),
-    ));
+    let credential = AgentLaunchCredential::ClaudeEnvironment(vec![LaunchVariable {
+        name: "CLAUDE_CODE_OAUTH_TOKEN".to_string(),
+        value: SecretString::new(SAMPLE_TOKEN.to_string()),
+        masked: true,
+    }]);
     let rendered = format!("{credential:?}");
     assert!(!rendered.contains(SAMPLE_TOKEN));
 
@@ -100,7 +102,7 @@ fn the_handoff_type_never_renders_and_every_refusal_is_typed() {
         .expect("verifies");
     h.keys.wipe("claude_code");
     assert_eq!(
-        resolve_agent_launch_credential(&h.ai, "claude_code").unwrap_err(),
+        resolve_agent_launch_credential(&h.store, &h.ai, "claude_code").unwrap_err(),
         ERR_TOKEN_MISSING
     );
 
@@ -116,7 +118,7 @@ fn the_handoff_type_never_renders_and_every_refusal_is_typed() {
     .expect("verifies");
     locked.keys.lock_it();
     assert_eq!(
-        resolve_agent_launch_credential(&locked.ai, "claude_code").unwrap_err(),
+        resolve_agent_launch_credential(&locked.store, &locked.ai, "claude_code").unwrap_err(),
         ERR_KEYCHAIN_UNAVAILABLE
     );
 
@@ -129,12 +131,12 @@ fn the_handoff_type_never_renders_and_every_refusal_is_typed() {
         FakeKeychain::new(),
     );
     let codex_ai = codex.ai.with_home(empty_home.path());
-    let error = resolve_agent_launch_credential(&codex_ai, "codex").unwrap_err();
+    let error = resolve_agent_launch_credential(&codex.store, &codex_ai, "codex").unwrap_err();
     assert_eq!(error, ERR_CODEX_CONFIG_MISSING);
     // AIC-FR-31: no refusal carries a credential-derived value or a
     // filesystem path — a home directory names the machine's user.
     for vendor in ["claude_code", "codex", "opencode"] {
-        if let Err(message) = resolve_agent_launch_credential(&codex_ai, vendor) {
+        if let Err(message) = resolve_agent_launch_credential(&codex.store, &codex_ai, vendor) {
             assert!(!message.contains('/'), "{message} leaked a path");
             assert!(!message.contains(SAMPLE_TOKEN));
             assert!(!message.contains("sk-ant-oat01-"));
@@ -172,10 +174,7 @@ fn aic_ts38_this_module_names_the_agent_and_holds_no_image_or_backend() {
         "docker_endpoint",
         "DockerBackend",
     ] {
-        assert!(
-            !code.contains(absent),
-            "AIC-FR-33: this module names no {absent}",
-        );
+        assert!(!code.contains(absent), "AIC-FR-33: this module names no {absent}",);
     }
 
     // The record shape carries none of them either, whatever a vendor is
@@ -197,10 +196,7 @@ fn aic_ts38_this_module_names_the_agent_and_holds_no_image_or_backend() {
     // may be configured like any other CLI-kind vendor and resolves no
     // launch, so a project that configures an image for it has configured
     // one nothing can yet run.
-    assert_eq!(
-        crate::project_settings::images::EXECUTABLE_VENDORS,
-        ["claude_code", "codex"]
-    );
+    assert_eq!(crate::project_settings::images::EXECUTABLE_VENDORS, ["claude_code", "codex"]);
     assert!(!crate::project_settings::images::is_executable_vendor("opencode"));
     for api_kind in ["claude_agent_api", "custom_agent_api"] {
         assert!(!crate::project_settings::images::is_executable_vendor(api_kind));

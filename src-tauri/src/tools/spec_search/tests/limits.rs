@@ -20,21 +20,14 @@ fn thirty_matching_specifications_are_bounded_by_the_limit() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     for i in 0..30 {
-        write(
-            root,
-            &format!("specifications/s{i:02}.md"),
-            &spec_body("teardown", 1),
-        );
+        write(root, &format!("specifications/s{i:02}.md"), &spec_body("teardown", 1));
     }
     let fixture = mounted(dir);
 
     assert_eq!(query(&fixture, "teardown", None).specifications.len(), 5);
     assert_eq!(query(&fixture, "teardown", Some(0)).specifications.len(), 1);
     assert_eq!(query(&fixture, "teardown", Some(-5)).specifications.len(), 1);
-    assert_eq!(
-        query(&fixture, "teardown", Some(1000)).specifications.len(),
-        20,
-    );
+    assert_eq!(query(&fixture, "teardown", Some(1000)).specifications.len(), 20,);
 }
 
 // ---------------------------------------------------------------------------
@@ -54,11 +47,8 @@ fn a_specification_appears_once_carrying_its_best_matching_section() {
 
     let output = query(&fixture, "teardown", Some(3));
 
-    let appearances = output
-        .specifications
-        .iter()
-        .filter(|m| m.path == "specifications/many.md")
-        .count();
+    let appearances =
+        output.specifications.iter().filter(|m| m.path == "specifications/many.md").count();
     assert_eq!(appearances, 1, "one entry per file (SPS-FR-07)");
 
     // The passage that stands for the file is its highest-scoring one, not
@@ -74,18 +64,12 @@ fn a_specification_appears_once_carrying_its_best_matching_section() {
         .filter(|h| h.path == "specifications/many.md")
         .map(|h| h.score)
         .fold(f32::MIN, f32::max);
-    let carried = output
-        .specifications
-        .iter()
-        .find(|m| m.path == "specifications/many.md")
-        .expect("present");
+    let carried =
+        output.specifications.iter().find(|m| m.path == "specifications/many.md").expect("present");
     assert_eq!(carried.score, best, "the best section stands for the file");
 
     assert!(
-        hits.iter()
-            .filter(|h| h.path == "specifications/many.md")
-            .count()
-            > 1,
+        hits.iter().filter(|h| h.path == "specifications/many.md").count() > 1,
         "the fixture must actually present several passages of one file, \
          or this test proves nothing",
     );
@@ -123,11 +107,7 @@ fn the_limit_is_filled_with_distinct_specifications() {
     let fixture = mounted(dir);
 
     let output = query(&fixture, "teardown", Some(5));
-    assert_eq!(
-        output.specifications.len(),
-        5,
-        "five files, not five passages (SPS-FR-08)",
-    );
+    assert_eq!(output.specifications.len(), 5, "five files, not five passages (SPS-FR-08)",);
     let distinct: std::collections::HashSet<&String> =
         output.specifications.iter().map(|m| &m.path).collect();
     assert_eq!(distinct.len(), 5, "all five are different files");
@@ -184,4 +164,3 @@ fn matches_are_ordered_by_descending_score() {
         "the most apt is first",
     );
 }
-

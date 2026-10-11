@@ -15,12 +15,15 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { resetLogBufferForTest } from "../logging";
+
 import {
   agenticStatus,
   aiErrorMessage,
   apiStatus,
   type AgenticDraft,
 } from "./AiIntegrations";
+import { emptyDraft } from "./agenticDraft";
 import { AI_ERRORS } from "../types";
 import {
   AGENTIC_ALL,
@@ -53,6 +56,9 @@ const commands = commandsFor(invokeMock);
 
 beforeEach(() => {
   invokeMock.mockReset();
+  // AII-FR-OTQY logs when a read-only tab opens. The flush timer must not
+  // go to the next test.
+  resetLogBufferForTest();
 });
 
 afterEach(cleanup);
@@ -85,7 +91,10 @@ describe("the AI integrations section", () => {
         "Custom",
       ]),
     );
-    expect(agenticLevel().getAllByRole("tab").map((t) => t.textContent)).toEqual([
+    // The vendor strip alone: the Claude Code tab holds a strip of its own
+    // (AII-FR-IUUM), which is not a tab of this level.
+    const vendorStrip = agenticLevel().getByRole("tablist", { name: "Agentic AI" });
+    expect(within(vendorStrip).getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Claude Code",
       "Codex",
       "OpenCode",
@@ -274,7 +283,7 @@ describe("the AI integrations section", () => {
     expect(document.querySelectorAll(".picker-error")).toHaveLength(0);
   });
 
-  it("renders every control from stored state with no verification call (AII-FR-01)", async () => {
+  it("renders every control from stored state with no verification call (AII-FR-01, AII-FR-OTQY)", async () => {
     // AII-FR-01 / the non-functional requirements: nothing contacts a provider
     // or runs a binary until the author activates Verify.
     backend({
@@ -300,13 +309,11 @@ describe("the AI integrations section", () => {
     }
 
     // The complete set, not a couple of negatives: anything that reached a
-    // provider or ran a binary would show up here as a new name.
+    // provider or ran a binary would show up here as a new name. Claude Code has
+    // a stored path, and every other tab is not implemented, so no tab detects
+    // (AII-FR-OTQY).
     expect(new Set(commands())).toEqual(
-      new Set([
-        "list_ai_api_integrations",
-        "list_agentic_integrations",
-        "detect_agentic_cli_binary",
-      ]),
+      new Set(["list_ai_api_integrations", "list_agentic_integrations"]),
     );
   });
 });
@@ -317,10 +324,7 @@ describe("the AI integrations section", () => {
 
 describe("the status lines", () => {
   const draft = (over: Partial<AgenticDraft> = {}): AgenticDraft => ({
-    path: "",
-    baseUrl: "",
-    apiKey: "",
-    oauthToken: "",
+    ...emptyDraft(),
     ...over,
   });
 

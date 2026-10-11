@@ -61,11 +61,7 @@ fn an_absent_path_and_a_folder_refuse_differently() {
 #[test]
 fn a_path_that_leaves_the_root_is_refused_even_when_it_returns() {
     let project = project();
-    let basename = project
-        .root
-        .file_name()
-        .and_then(|n| n.to_str())
-        .expect("a named directory");
+    let basename = project.root.file_name().and_then(|n| n.to_str()).expect("a named directory");
 
     // RFT-FR-04 and FSA-FR-10 both say containment is judged by where a path
     // ends. The gate is stricter than that sentence: it refuses the moment a
@@ -122,10 +118,7 @@ fn a_hostile_path_neither_panics_nor_escapes() {
         "../..",
     ] {
         let outcome = project.at(path);
-        assert!(
-            outcome.is_err(),
-            "{path:?} must not resolve to a readable file",
-        );
+        assert!(outcome.is_err(), "{path:?} must not resolve to a readable file",);
     }
 }
 
@@ -138,11 +131,7 @@ fn a_session_discarded_with_its_project_stops_reading() {
     let project = project();
     let tool = project.tool();
     let read = |t: &FileReadTool<tauri::test::MockRuntime>| {
-        block_on(t.call(ReadFileArgs {
-            path: "src/a.ts".to_string(),
-            offset: None,
-            limit: None,
-        }))
+        block_on(t.call(ReadFileArgs { path: "src/a.ts".to_string(), offset: None, limit: None }))
     };
 
     assert!(read(&tool).is_ok(), "the session is live");
@@ -164,4 +153,3 @@ fn a_session_discarded_with_its_project_stops_reading() {
         "a discarded session reads nothing (FSA-FR-29)",
     );
 }
-

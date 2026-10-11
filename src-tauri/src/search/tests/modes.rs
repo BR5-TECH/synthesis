@@ -48,10 +48,7 @@ fn ts6_literal_modes_assign_no_meaning_to_regex_metacharacters() {
 
 #[test]
 fn ts7_an_uncompilable_regex_is_the_typed_invalid_query_error() {
-    assert_eq!(
-        Matcher::compile("foo(", SearchMode::Regex).unwrap_err(),
-        INVALID_QUERY
-    );
+    assert_eq!(Matcher::compile("foo(", SearchMode::Regex).unwrap_err(), INVALID_QUERY);
     // The same text is a perfectly ordinary literal in the other two modes.
     assert!(Matcher::compile("foo(", SearchMode::LiteralInsensitive).is_ok());
     assert!(Matcher::compile("foo(", SearchMode::SmartCase).is_ok());

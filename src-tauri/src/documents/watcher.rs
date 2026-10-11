@@ -41,10 +41,7 @@ pub fn watch_targets(sources: &[DocumentSource]) -> Vec<WatchTarget> {
     for source in sources.iter().filter(|s| s.status == Availability::Available) {
         let normalised = normalise_path(&source.path);
         let target = match source.kind {
-            SourceKind::Folder => WatchTarget {
-                path: PathBuf::from(normalised),
-                recursive: true,
-            },
+            SourceKind::Folder => WatchTarget { path: PathBuf::from(normalised), recursive: true },
             SourceKind::File => {
                 let Some((parent, _)) = normalised.rsplit_once('/') else {
                     continue;
@@ -87,11 +84,8 @@ pub struct DocumentsWatcher {
 type Register<'a> = dyn Fn(&mut Debouncer<RecommendedWatcher>, &WatchTarget) -> bool + 'a;
 
 fn register_with_os(debouncer: &mut Debouncer<RecommendedWatcher>, target: &WatchTarget) -> bool {
-    let mode = if target.recursive {
-        RecursiveMode::Recursive
-    } else {
-        RecursiveMode::NonRecursive
-    };
+    let mode =
+        if target.recursive { RecursiveMode::Recursive } else { RecursiveMode::NonRecursive };
     debouncer.watcher().watch(&target.path, mode).is_ok()
 }
 

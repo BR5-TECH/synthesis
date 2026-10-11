@@ -31,7 +31,7 @@ fn open_file_refuses_a_link_in_every_write_mode() {
     symlink(&target, &link).unwrap();
 
     for mode in [OpenMode::ReadOnly, OpenMode::Append, OpenMode::Truncate] {
-        let err = access.open_file(&link, mode).err().expect("must refuse");
+        let err = access.open_file(&link, mode).expect_err("must refuse");
         assert!(
             matches!(err, FsError::SymlinkRefused { .. }),
             "{mode:?} through a link must be SymlinkRefused, got {err:?}"
@@ -52,9 +52,7 @@ fn append_lines_and_ensure_gitignored_refuse_a_link_too() {
     let link = root.join("log.jsonl");
     symlink(&target, &link).unwrap();
 
-    let err = access
-        .append_lines(&link, &["injected".to_string()])
-        .unwrap_err();
+    let err = access.append_lines(&link, &["injected".to_string()]).unwrap_err();
     assert!(matches!(err, FsError::SymlinkRefused { .. }), "got {err:?}");
     assert_eq!(fs::read_to_string(&target).unwrap(), "keep\n");
 
@@ -84,11 +82,7 @@ fn following_validates_a_relative_target_the_same_as_an_absolute_one() {
     let root = fs::canonicalize(tmp.path()).unwrap();
     let outside_dir = TempDir::new().unwrap();
     let outside = fs::canonicalize(outside_dir.path()).unwrap();
-    let access = FsAccess::builder()
-        .allow_root(&root)
-        .follow_symlinks(true)
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().allow_root(&root).follow_symlinks(true).build().unwrap();
 
     // A relative target that stays inside, nested deep enough that the
     // `probe.parent()` join actually matters.
@@ -127,11 +121,7 @@ fn following_refuses_an_ancestor_link_that_escapes() {
     let root = fs::canonicalize(tmp.path()).unwrap();
     let outside_dir = TempDir::new().unwrap();
     let outside = fs::canonicalize(outside_dir.path()).unwrap();
-    let access = FsAccess::builder()
-        .allow_root(&root)
-        .follow_symlinks(true)
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().allow_root(&root).follow_symlinks(true).build().unwrap();
 
     write_raw(&outside.join("f.md"), "outside content");
     symlink(&outside, root.join("linkdir")).unwrap();
@@ -142,9 +132,7 @@ fn following_refuses_an_ancestor_link_that_escapes() {
         "an escaping ANCESTOR link must be refused, got {err:?}"
     );
     // And a write through it leaves the target byte-for-byte intact.
-    let err = access
-        .write_text_atomic(root.join("linkdir").join("f.md"), "clobbered")
-        .unwrap_err();
+    let err = access.write_text_atomic(root.join("linkdir").join("f.md"), "clobbered").unwrap_err();
     assert!(matches!(err, FsError::EscapesAllowedRoots { .. }), "got {err:?}");
     assert_eq!(fs::read_to_string(outside.join("f.md")).unwrap(), "outside content");
 }
@@ -158,11 +146,7 @@ fn following_refuses_a_write_through_an_escaping_link_without_touching_the_targe
     let root = fs::canonicalize(tmp.path()).unwrap();
     let outside_dir = TempDir::new().unwrap();
     let outside = fs::canonicalize(outside_dir.path()).unwrap();
-    let access = FsAccess::builder()
-        .allow_root(&root)
-        .follow_symlinks(true)
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().allow_root(&root).follow_symlinks(true).build().unwrap();
 
     let target = outside.join("x.md");
     write_raw(&target, "secret");
@@ -190,11 +174,7 @@ fn following_copies_a_tree_holding_an_inside_link_without_leaving_a_partial_copy
     // it unconditionally AFTER the destination had already been created.
     let tmp = TempDir::new().unwrap();
     let root = fs::canonicalize(tmp.path()).unwrap();
-    let access = FsAccess::builder()
-        .allow_root(&root)
-        .follow_symlinks(true)
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().allow_root(&root).follow_symlinks(true).build().unwrap();
 
     let tree = root.join("tree");
     write_raw(&tree.join("a.md"), "a");
@@ -222,11 +202,7 @@ fn following_refuses_a_tree_copy_before_creating_the_destination() {
     let root = fs::canonicalize(tmp.path()).unwrap();
     let outside_dir = TempDir::new().unwrap();
     let outside = fs::canonicalize(outside_dir.path()).unwrap();
-    let access = FsAccess::builder()
-        .allow_root(&root)
-        .follow_symlinks(true)
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().allow_root(&root).follow_symlinks(true).build().unwrap();
 
     let tree = root.join("tree");
     write_raw(&tree.join("a.md"), "a");
@@ -236,10 +212,7 @@ fn following_refuses_a_tree_copy_before_creating_the_destination() {
     let dst = root.join("copy");
     let err = access.copy_path(&tree, &dst).unwrap_err();
     assert!(matches!(err, FsError::EscapesAllowedRoots { .. }), "got {err:?}");
-    assert!(
-        !dst.exists(),
-        "the destination must not exist at all after a refused copy"
-    );
+    assert!(!dst.exists(), "the destination must not exist at all after a refused copy");
 }
 
 #[cfg(unix)]
@@ -252,12 +225,8 @@ fn following_accepts_a_link_into_a_different_allowlisted_root() {
     let b_dir = TempDir::new().unwrap();
     let a = fs::canonicalize(a_dir.path()).unwrap();
     let b = fs::canonicalize(b_dir.path()).unwrap();
-    let access = FsAccess::builder()
-        .allow_root(&a)
-        .allow_root(&b)
-        .follow_symlinks(true)
-        .build()
-        .unwrap();
+    let access =
+        FsAccess::builder().allow_root(&a).allow_root(&b).follow_symlinks(true).build().unwrap();
 
     write_raw(&b.join("shared.md"), "from b");
     symlink(b.join("shared.md"), a.join("into-b")).unwrap();
@@ -272,11 +241,7 @@ fn following_reports_a_long_acyclic_chain_rather_than_walking_it_forever() {
     // `hops > MAX_SYMLINK_HOPS`.
     let tmp = TempDir::new().unwrap();
     let root = fs::canonicalize(tmp.path()).unwrap();
-    let access = FsAccess::builder()
-        .allow_root(&root)
-        .follow_symlinks(true)
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().allow_root(&root).follow_symlinks(true).build().unwrap();
 
     write_raw(&root.join("link-0"), "end of the chain");
     for i in 1..=45 {
@@ -305,11 +270,7 @@ fn file_info_identifies_a_link_under_both_policies() {
     symlink(root.join("real.md"), root.join("link.md")).unwrap();
 
     for follow in [false, true] {
-        let access = FsAccess::builder()
-            .allow_root(&root)
-            .follow_symlinks(follow)
-            .build()
-            .unwrap();
+        let access = FsAccess::builder().allow_root(&root).follow_symlinks(follow).build().unwrap();
         let info = access.file_info(root.join("link.md")).unwrap();
         assert_eq!(
             info.kind,
@@ -345,11 +306,7 @@ fn following_handles_dangling_links_on_their_own_terms() {
 
     // Follow policy: the one pointing inside is resolved and then simply
     // missing; the one pointing outside is refused for leaving the allowlist.
-    let following = FsAccess::builder()
-        .allow_root(&root)
-        .follow_symlinks(true)
-        .build()
-        .unwrap();
+    let following = FsAccess::builder().allow_root(&root).follow_symlinks(true).build().unwrap();
     let err = following.read_text(root.join("dangling-inside")).unwrap_err();
     assert!(matches!(err, FsError::NotFound { .. }), "got {err:?}");
     let err = following.read_text(root.join("dangling-outside")).unwrap_err();
@@ -469,9 +426,5 @@ fn a_session_temp_dir_outlives_the_swap_only_while_an_arc_still_holds_it() {
 
     // Release it, and the directory goes with the instance.
     drop(first);
-    assert!(
-        !first_temp.exists(),
-        "once the last reference is gone the temp directory is removed"
-    );
+    assert!(!first_temp.exists(), "once the last reference is gone the temp directory is removed");
 }
-

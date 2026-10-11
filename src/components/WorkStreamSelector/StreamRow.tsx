@@ -5,10 +5,12 @@
  * how far ahead and behind its base it stands, what its merge run link and its
  * update record hold, and which of its actions those permit (WSS-FR-JBYF).
  *
- * A row offers **Merge…**, **Update…** and **Delete…** in that order
- * (WSS-FR-TKMB). Merge takes the stream into its base branch; Update brings the
- * base branch into the stream. Each is enabled only where it has something to
- * do and nothing is already reconciling this stream (WSS-FR-XRHT).
+ * A row offers **Merge stream**, **Create a PR**, **Update stream** and
+ * **Delete stream** in that order, centered in the row (WSS-FR-TKMB,
+ * WSS-FR-KHGP). Merge takes the stream into
+ * its base branch; Update brings the base branch into the stream. Each is
+ * enabled only where it has something to do and nothing is already reconciling
+ * this stream (WSS-FR-XRHT).
  */
 
 import type { StreamMergePublication, WorkStreamSummary } from "../../types";
@@ -31,6 +33,8 @@ export interface StreamRowProps {
   surface: RowSurface;
   busy: boolean;
   error: string | null;
+  /** WSS-FR-PSXK: the name of the draft the run holding the stream works on. */
+  busyDraftName: string | null;
   /** WSS-FR-HGWL: the merge call this surface is waiting on, if one is out. */
   merge: RunningMerge | null;
   /** WSS-FR-KMHD / WSS-FR-PLVE: what the last settled merge call answered. */
@@ -63,6 +67,8 @@ export interface StreamRowProps {
   /** WSS-FR-GTQL: open the resolution window against the update record. */
   onResolveUpdate: () => void;
   onOpenChanges: () => void;
+  /** WSS-FR-KHGP: open the Create a PR window for this stream. */
+  onCreatePullRequest: (summary: WorkStreamSummary) => void;
 }
 
 export function StreamRow({
@@ -70,6 +76,7 @@ export function StreamRow({
   surface,
   busy,
   error,
+  busyDraftName,
   merge,
   mergeOutcome,
   update,
@@ -87,6 +94,7 @@ export function StreamRow({
   onOpenRun,
   onResolveUpdate,
   onOpenChanges,
+  onCreatePullRequest,
 }: StreamRowProps) {
   const { stream, aheadOfBase, behindBase, queuedRunCount } = summary;
   const held = Boolean(stream.busyRunId);
@@ -116,6 +124,47 @@ export function StreamRow({
   const updatable = canUpdateStream(summary) && !running;
   // WSS-FR-YPDA: and Merge only where the stream stands ahead of its base.
   const mergeable = aheadOfBase > 0 && !running;
+  // WSS-FR-EPCH: Create a PR needs a commit the base branch lacks, and no run,
+  // merge call or update holding the stream, and a stream that is not missing.
+  // A busy, missing or updating row keeps the button, disabled, beside its status
+  // (WSS-FR-PSXK, WSS-FR-OQYG, WSS-FR-BDMU).
+  const proposable = aheadOfBase > 0 && !running && !blocked;
+  const createPrReason = proposable
+    ? undefined
+    : createPullRequestDisabledReason(summary, {
+        missing,
+        held,
+        merging,
+        updating,
+      });
+  const createPrButton = (
+    <button
+      type="button"
+      className="btn btn--ghost btn--sm stream-select__act"
+      disabled={!proposable}
+      aria-disabled={!proposable}
+      aria-describedby={
+        proposable ? undefined : `stream-create-pr-reason-${stream.id}`
+      }
+      data-testid={`stream-create-pr-${stream.id}`}
+      title={createPrReason}
+      onClick={() => onCreatePullRequest(summary)}
+    >
+      Create a PR
+    </button>
+  );
+  // WSS-FR-EPCH: where the button stands, its reason stands in words beside it.
+  const createPrReasonLine = !proposable && (
+    <p
+      id={`stream-create-pr-reason-${stream.id}`}
+      className="stream-select__meta t-muted"
+      data-testid={`stream-create-pr-reason-${stream.id}`}
+    >
+      {createPrReason}
+    </p>
+  );
+  const idleActions =
+    !updating && !updateNeedsAuthor && !blocked && surface.kind === "none";
   // WSS-FR-NRCQ: the row acts on no merge run. Its one control for a merge is
   // Open in Runs…, which the status renders.
 
@@ -138,16 +187,28 @@ export function StreamRow({
           {aheadOfBase} ahead of {stream.baseBranch} · {behindBase} behind ·{" "}
           {queuedRunCount} queued
         </span>
+        {/* WSS-FR-DNQM: the row says in words that the stream is temporary. */}
+        {stream.temporary && (
+          <span
+            className="stream-select__meta t-muted"
+            data-testid={`stream-temporary-${stream.id}`}
+          >
+            Temporary stream — merged into {stream.baseBranch} and deleted when
+            its work is done
+          </span>
+        )}
       </button>
 
-      {/* WSS-FR-PSXK: the busy line replaces the actions rather than sitting
-          beside them, so a busy stream offers nothing that would be refused. */}
+      {/* WSS-FR-PSXK: the busy line replaces the idle actions. Only Create a PR
+          stays, disabled, so the row says in words why it is refused. */}
       {held && (
         <p className="badge badge--warn" role="status">
           Busy —{" "}
           {summary.mergeRun && summary.mergeRun.runId === stream.busyRunId
             ? summary.mergeRun.name
-            : `run ${stream.busyRunId}`}{" "}
+            : busyDraftName
+              ? `“${busyDraftName}”`
+              : "a run"}{" "}
           is working in it
         </p>
       )}
@@ -155,6 +216,12 @@ export function StreamRow({
         <p className="badge badge--warn" role="status">
           Missing — its working copy is gone. Delete it and make it again.
         </p>
+      )}
+      {blocked && !updating && (
+        <>
+          <div className="stream-select__row-actions">{createPrButton}</div>
+          {createPrReasonLine}
+        </>
       )}
 
       {/* WSS-FR-HGWL / WSS-FR-KMHD / WSS-FR-PLVE / WSS-FR-OFCU: the merge call,
@@ -190,6 +257,7 @@ export function StreamRow({
             </p>
           )}
           <div className="stream-select__row-actions">
+            {createPrButton}
             <button
               type="button"
               className="btn btn--ghost btn--sm"
@@ -199,6 +267,7 @@ export function StreamRow({
               Cancel update
             </button>
           </div>
+          {createPrReasonLine}
         </>
       )}
 
@@ -241,44 +310,48 @@ export function StreamRow({
         </>
       )}
 
-      {/* WSS-FR-TKMB: Merge, then Update, then Delete. A control the stream has
+      {/* WSS-FR-TKMB / WSS-FR-KHGP: Merge, then Create a PR, then Update, then
+          Delete. A control the stream has
           no work for stays in place and disabled, so the actions of two rows
           stand in one column. */}
-      {!updating && !updateNeedsAuthor && !blocked && surface.kind === "none" && (
-        <div className="stream-select__row-actions">
+      {idleActions && (
+        <div className="stream-select__row-actions stream-select__row-actions--idle">
           <button
             type="button"
-            className="btn btn--ghost btn--sm"
+            className="btn btn--ghost btn--sm stream-select__act"
             disabled={!mergeable}
             data-testid={`stream-merge-${stream.id}`}
             title={mergeDisabledReason(summary, merging, mergeable)}
             onClick={() => onOpenSurface({ kind: "merge", streamId: stream.id })}
           >
-            Merge…
+            Merge stream
           </button>
+          {createPrButton}
           <button
             type="button"
-            className="btn btn--ghost btn--sm"
+            className="btn btn--ghost btn--sm stream-select__act"
             disabled={!updatable}
             data-testid={`stream-update-${stream.id}`}
             title={updateDisabledReason(summary, running)}
             onClick={() => onOpenSurface({ kind: "update", streamId: stream.id })}
           >
-            Update…
+            Update stream
           </button>
           <button
             type="button"
-            className="btn btn--ghost btn--sm"
+            className="btn btn--ghost btn--sm stream-select__act"
             // WSS-FR-HGWL / WSS-FR-XRHT: a stream whose merge call is out, or
             // whose merge run holds it, is not one to delete.
             disabled={merging || mergeRunHolds}
             data-testid={`stream-delete-${stream.id}`}
             onClick={() => onOpenSurface({ kind: "delete", streamId: stream.id })}
           >
-            Delete…
+            Delete stream
           </button>
         </div>
       )}
+
+      {idleActions && createPrReasonLine}
 
       {!merge && surface.kind === "merge" && surface.streamId === stream.id && (
         <MergeConfirm
@@ -329,7 +402,7 @@ function strategyWord(strategy: string | undefined): string {
 }
 
 /**
- * WSS-FR-HZVQ: why **Update…** is disabled, in words rather than by a state the
+ * WSS-FR-HZVQ: why **Update stream** is disabled, in words rather than by a state the
  * author has to infer from a greyed control.
  */
 function updateDisabledReason(
@@ -345,7 +418,7 @@ function updateDisabledReason(
 }
 
 /**
- * WSS-FR-XRHT / WSS-FR-YPDA: why **Merge…** is disabled, in words.
+ * WSS-FR-XRHT / WSS-FR-YPDA: why **Merge stream** is disabled, in words.
  *
  * A merge call that is out and a merge run that holds the stream each say so,
  * and a stream that stands ahead of its base by nothing says that.
@@ -362,4 +435,28 @@ function mergeDisabledReason(
   }
   if (summary.stream.busyRunId) return "A run is working in this stream.";
   return "This stream holds nothing its base branch does not.";
+}
+
+/**
+ * WSS-FR-EPCH: why **Create a PR** is disabled, in words: the stream is missing,
+ * a run, a merge call, an update or a merge run holds it, or it holds no commit
+ * its base branch lacks (it was merged or never advanced).
+ */
+function createPullRequestDisabledReason(
+  summary: WorkStreamSummary,
+  state: {
+    missing: boolean;
+    held: boolean;
+    merging: boolean;
+    updating: boolean;
+  },
+): string {
+  if (state.missing) return `${summary.stream.name} is missing.`;
+  if (state.held) return "A run is working in this stream.";
+  if (state.merging) return `Merging ${summary.stream.name}.`;
+  if (state.updating) return `Updating ${summary.stream.name}.`;
+  if (mergeRunBlocksStream(summary.mergeRun)) {
+    return `${summary.mergeRun!.name} holds this stream. Open it in Runs.`;
+  }
+  return `Nothing to propose: this stream holds no commit that ${summary.stream.baseBranch} lacks.`;
 }

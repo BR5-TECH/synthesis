@@ -8,17 +8,10 @@ use super::*;
 use tempfile::TempDir;
 
 fn branch_state(target: &str) -> ChangesPanelState {
-    ChangesPanelState {
-        mode: ChangesMode::Branch,
-        target_branch: Some(target.to_string()),
-    }
+    ChangesPanelState { mode: ChangesMode::Branch, target_branch: Some(target.to_string()) }
 }
 
-fn library_state(
-    expanded: &[&str],
-    filter: ArtifactTypeFilter,
-    text: &str,
-) -> LibraryPanelState {
+fn library_state(expanded: &[&str], filter: ArtifactTypeFilter, text: &str) -> LibraryPanelState {
     LibraryPanelState {
         expanded_paths: expanded.iter().map(|s| s.to_string()).collect(),
         artifact_type_filter: filter,
@@ -27,17 +20,10 @@ fn library_state(
 }
 
 fn notes_state(position: NotesScopePosition, text: &str) -> NotesPanelState {
-    NotesPanelState {
-        scope_position: position,
-        text_filter: text.to_string(),
-    }
+    NotesPanelState { scope_position: position, text_filter: text.to_string() }
 }
 
-fn drafts_state(
-    status: DraftsStatusFilter,
-    text: &str,
-    expanded: &[&str],
-) -> DraftsPanelState {
+fn drafts_state(status: DraftsStatusFilter, text: &str, expanded: &[&str]) -> DraftsPanelState {
     DraftsPanelState {
         status_filter: status,
         text_filter: text.to_string(),
@@ -71,14 +57,14 @@ fn docker_root() -> (tempfile::TempDir, crate::fs::RootFs) {
 }
 
 mod changes_panel;
-mod line_endings;
-mod draft_template;
-mod library_panel;
-mod notes_panel;
-mod drafts_panel;
-mod legacy_keys;
 mod docker_images;
-mod shared_loop_settings;
-mod graduation_concurrency;
+mod draft_template;
+mod drafts_panel;
 mod github_polling;
+mod graduation_concurrency;
+mod legacy_keys;
+mod library_panel;
+mod line_endings;
+mod notes_panel;
 mod publication_settings;
+mod shared_loop_settings;

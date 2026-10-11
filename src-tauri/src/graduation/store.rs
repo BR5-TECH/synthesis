@@ -51,6 +51,32 @@ pub struct QueueIndexEntry {
     /// archived merge run out of a stream's row without opening the record.
     #[serde(default)]
     pub archived: bool,
+    /// GRD-FR-BNTC: the run was dispatched before, so a `queued` run still holds
+    /// its queue and its project slot.
+    #[serde(default)]
+    pub dispatched: bool,
+}
+
+impl QueueIndexEntry {
+    /// GRD-FR-ZVNO: the key of the queue this run belongs to.
+    pub fn queue_key(&self) -> String {
+        if self.stream_id.is_empty() && !self.worktree_path.is_empty() {
+            worktree_queue_key(&self.worktree_path)
+        } else {
+            self.stream_id.clone()
+        }
+    }
+
+    /// GRD-FR-BNTC: whether this run holds its queue (see
+    /// `GraduationRun::holds_queue`).
+    pub fn holds_queue(&self) -> bool {
+        self.state.holds_queue() || (self.state == GraduationRunState::Queued && self.dispatched)
+    }
+
+    /// GRD-FR-KKKN: whether this run holds a project slot.
+    pub fn holds_slot(&self) -> bool {
+        self.state.holds_slot() || (self.state == GraduationRunState::Queued && self.dispatched)
+    }
 }
 
 /// GSU-FR-RJRF: the one root this module writes under.
@@ -67,9 +93,7 @@ impl StoreBase {
 
     /// A project's run order.
     pub fn queue_path(&self, project_key: &str) -> PathBuf {
-        self.root
-            .join(QUEUES_DIR)
-            .join(format!("{}.toml", sanitize_key(project_key)))
+        self.root.join(QUEUES_DIR).join(format!("{}.toml", sanitize_key(project_key)))
     }
 
     /// One run's own directory.
@@ -108,10 +132,8 @@ impl StoreBase {
 
 /// A project key reduced to one path-safe segment.
 fn sanitize_key(key: &str) -> String {
-    let mut out: String = key
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect();
+    let mut out: String =
+        key.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
     while out.contains("--") {
         out = out.replace("--", "-");
     }
@@ -146,17 +168,13 @@ pub fn write_run_record(
     if !home.is_dir() {
         fs.create_dir(&home).map_err(|e| e.to_string())?;
     }
-    fs.write_toml_atomic(base.record(&run.id), run)
-        .map_err(|e| e.to_string())
+    fs.write_toml_atomic(base.record(&run.id), run).map_err(|e| e.to_string())
 }
 
 /// GRD-FR-VLFO: the project's run order.
 pub fn read_queue_index(fs: &fsa::FsAccess, base: &StoreBase, project_key: &str) -> QueueIndex {
     fs.read_toml(base.queue_path(project_key))
-        .unwrap_or_else(|_| QueueIndex {
-            project_key: project_key.to_string(),
-            runs: Vec::new(),
-        })
+        .unwrap_or_else(|_| QueueIndex { project_key: project_key.to_string(), runs: Vec::new() })
 }
 
 /// Write the project's run order durably.
@@ -179,11 +197,7 @@ pub fn write_queue_index(
 ///
 /// A run owns its record and its logs. It owns no branch and no working copy:
 /// the stream outlives it.
-pub fn remove_run_home(
-    fs: &fsa::FsAccess,
-    base: &StoreBase,
-    run_id: &str,
-) -> Result<(), String> {
+pub fn remove_run_home(fs: &fsa::FsAccess, base: &StoreBase, run_id: &str) -> Result<(), String> {
     let dir = base.home(run_id);
     if dir.exists() {
         // FSA-FR-ZUCF: a run's home holds its review checkout, which the
@@ -203,16 +217,9 @@ pub fn store_fs<R: tauri::Runtime>(
 }
 
 /// The store root: `short_data_dir()`, or whatever root the managed state names.
-pub fn store_base<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-) -> Result<StoreBase, String> {
-    if let Some(root) = app
-        .try_state::<GraduationState>()
-        .and_then(|state| state.root())
-    {
+pub fn store_base<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<StoreBase, String> {
+    if let Some(root) = app.try_state::<GraduationState>().and_then(|state| state.root()) {
         return Ok(StoreBase::new(root));
     }
-    fsa::short_data_dir()
-        .map(StoreBase::new)
-        .map_err(|e| e.to_string())
+    fsa::short_data_dir().map(StoreBase::new).map_err(|e| e.to_string())
 }

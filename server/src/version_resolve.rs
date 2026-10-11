@@ -24,10 +24,7 @@ pub fn resolve_version(
     exact_tag: Option<&str>,
     short_hash: Option<&str>,
 ) -> String {
-    for source in [build_argument, exact_tag, short_hash]
-        .into_iter()
-        .flatten()
-    {
+    for source in [build_argument, exact_tag, short_hash].into_iter().flatten() {
         let value = source.trim();
         if !value.is_empty() {
             return value.to_string();
@@ -73,14 +70,8 @@ mod tests {
     #[test]
     fn blank_sources_fall_through_to_the_next_source() {
         assert_eq!(resolve_version(Some(""), Some("v1.3.9"), None), "v1.3.9");
-        assert_eq!(
-            resolve_version(Some("  "), None, Some("a1b2c3d")),
-            "a1b2c3d"
-        );
-        assert_eq!(
-            resolve_version(Some(""), Some(" "), Some("\n")),
-            "undefined"
-        );
+        assert_eq!(resolve_version(Some("  "), None, Some("a1b2c3d")), "a1b2c3d");
+        assert_eq!(resolve_version(Some(""), Some(" "), Some("\n")), "undefined");
     }
 
     // Git command output carries a trailing newline. The resolver trims it, so

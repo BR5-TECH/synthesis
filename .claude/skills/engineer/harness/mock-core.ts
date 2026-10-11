@@ -1441,7 +1441,55 @@ const proposalsByDraft: Record<string, any[]> = {
       decidedAt: "2026-07-28T09:58:00Z",
     },
   ],
+  // DCR-FR-LGHZ / DCR-FR-TSNW: three insertions whose `lead` quotes Markdown
+  // links and an escape, the last one starting inside a link destination and
+  // ending at the end of the prompt.
+  "d-18": [
+    {
+      id: "prop-3",
+      draftId: "d-18",
+      path: "Mirror selection.md",
+      agent,
+      rationale: "Each section now says what happens when a mirror does not answer.",
+      threadId: "disc-1",
+      commentId: "disc-1-c3",
+      state: "pending",
+      candidateEdited: false,
+      legacy: false,
+      hunkCount: 3,
+      counts: { pending: 3, accepted: 0, rejected: 0, discussing: 0 },
+      ledger: [
+        { id: "h-31", kind: "add", state: "pending", edited: false, revision: 0 },
+        { id: "h-32", kind: "add", state: "pending", edited: false, revision: 0 },
+        { id: "h-33", kind: "add", state: "pending", edited: false, revision: 0 },
+      ],
+      createdAt: "2026-08-27T10:00:00Z",
+    },
+  ],
 };
+
+/** The proposal row with this id, whichever draft holds it. */
+function findProposalRow(id: string): any {
+  return Object.values(proposalsByDraft)
+    .flat()
+    .find((p) => p.id === id);
+}
+
+/** DCR-FR-LGHZ: the prompt `d-18`'s proposal is anchored in. */
+const MIRROR_PROMPT =
+  "## Purpose\n\nThe tool should talk to every mirror.\n\n## Steps\n\n- User types a mirror, with a placeholder of [mirror.org](http://mirror.org) \n\n## Rules\n\n- [mirror.org](http://mirror.org) stays the default. Hosts like \\*.mirror.net are an option.\n- Saved mirrors keep working since [mirror.org](http://mirror.org) is a default.";
+
+/** An insertion after `lead`, hinted at the end of `lead` in `MIRROR_PROMPT`. */
+function mirrorInsertion(id: string, lead: string, after: string): any {
+  const end = MIRROR_PROMPT.indexOf(lead) + lead.length;
+  return {
+    id,
+    kind: "add",
+    revision: 0,
+    after,
+    anchor: { lead, trail: "", hint_start: end, hint_end: end },
+  };
+}
 
 /**
  * DCP-FR-08: the proposed text, keyed by proposal.
@@ -1560,6 +1608,23 @@ const proposalHunks: Record<string, any[]> = {
         "Only worktrees this project created. A worktree made by hand is left alone.",
       anchor: { lead: "## Scope\n\n", trail: "\n", hint_start: 210, hint_end: 241 },
     },
+  ],
+  "prop-3": [
+    mirrorInsertion(
+      "h-31",
+      "## Purpose\n\nThe tool should talk to every mirror.",
+      " A mirror that does not answer is skipped.",
+    ),
+    mirrorInsertion(
+      "h-32",
+      "## Steps\n\n- User types a mirror, with a placeholder of [mirror.org](http://mirror.org) ",
+      "\n- The tool checks that the mirror answers.",
+    ),
+    mirrorInsertion(
+      "h-33",
+      MIRROR_PROMPT.slice(MIRROR_PROMPT.indexOf("rror.org) stays the default.")),
+      "\n- A mirror that stops answering is reported.",
+    ),
   ],
 };
 
@@ -2089,6 +2154,15 @@ const drafts = [
     folder: "backend",
     updatedAt: "2026-08-26T11:00:00Z",
   },
+  /** DCR-FR-LGHZ: the draft whose pending proposal quotes Markdown links. */
+  {
+    id: "d-18",
+    name: "Mirror selection",
+    status: "active",
+    folder: "UI",
+    updatedAt: "2026-08-27T10:00:00Z",
+    hasPendingProposal: true,
+  },
   /**
    * GPP-FR-XPUO / DRP-FR-ZRJJ: a draft a claim of a GitHub Task created. It sits
    * at the drafts root and is read-only for its whole life.
@@ -2243,6 +2317,14 @@ const draftRecords: Record<string, Record<string, unknown>> = {
     status: "graduating",
     createdAt: "2026-08-26T09:00:00Z",
     updatedAt: "2026-08-26T11:00:00Z",
+  },
+  "d-18": {
+    id: "d-18",
+    name: "Mirror selection",
+    promptPath: "Mirror selection.md",
+    status: "active",
+    createdAt: "2026-08-27T09:00:00Z",
+    updatedAt: "2026-08-27T10:00:00Z",
   },
   /** GPP-FR-XPUO / DRS-FR-XDWS: the seeded GitHub-shadow draft. */
   "gh-1": {
@@ -2427,6 +2509,7 @@ const draftBodies: Record<string, string> = {
         `Paragraph ${i + 1}. The command grew out of the worktree work and has never been written down properly. This paragraph stands between the two proposed changes so that neither is on screen while the other is.`,
     ).join("\n\n") +
     "\n\n## Scope\n\nWorktrees this project created.\n",
+  "Mirror selection.md": MIRROR_PROMPT,
   "Icon button sizing.md": `# Icon button sizing
 
 The sizing table, drawn inline: ![the sizing table](../assets/8f3a91c2.png) and
@@ -2472,6 +2555,7 @@ const draftFiles: Record<string, string[]> = {
   "d-11": ["Session restore.md"],
   "d-12": ["Attachment thumbnails.md"],
   "d-13": ["Log rotation.md"],
+  "d-18": ["Mirror selection.md"],
   // GPP-FR-XPUO / DRS-FR-XDWS: the seeded GitHub-shadow draft.
   "gh-1": ["Cache invalidation.md"],
 };
@@ -3060,14 +3144,25 @@ const byNickname = (a: MockAgent, b: MockAgent) =>
 
 const sortedAgents = () => [...agentsRegistry].sort(byNickname);
 
-// The demo project's enrolment: two ready agents plus the degraded one, so the
-// roster, the project section and the mention picker all show a warning row.
-let enrolledAgentIds = ["agt-arch", "agt-scribe", "agt-long"];
+// The demo project's Project agents (AGR-FR-12). Every other agent of the
+// registry is a Personal agent, which is on every project's roster (AGR-FR-02).
+// Two ready agents plus the degraded one, so the roster, both sections and the
+// mention picker all show a warning row.
+let projectScopeIds = ["agt-arch"];
 
-const projectAgents = () =>
-  sortedAgents()
-    .filter((agent) => enrolledAgentIds.includes(agent.id))
-    .map((agent) => ({ agent, availability: availabilityOf(agent) }));
+const scopeOf = (agent: MockAgent) =>
+  projectScopeIds.includes(agent.id) ? "project" : "personal";
+
+const describeAgent = (agent: MockAgent) => ({
+  agent,
+  scope: scopeOf(agent),
+  availability: availabilityOf(agent),
+});
+
+const projectAgents = () => sortedAgents().map(describeAgent);
+
+const agentsOfScope = (scope: string) =>
+  projectAgents().filter((entry) => entry.scope === scope);
 
 /**
  * AGT-FR-36 / CMT-FR-78: enrol extra **ready** agents, so a conversation
@@ -3104,7 +3199,6 @@ const projectAgents = () =>
       title: "Extra agent added from the console",
     };
     agentsRegistry = [...agentsRegistry, created];
-    enrolledAgentIds = [...enrolledAgentIds, created.id];
     made.push(nickname);
   }
   return made;
@@ -5729,7 +5823,7 @@ for (const run of graduationRuns) {
 }
 
 /** GRD-FR-KDWA: the log index every run carries. Healthy and empty. */
-function streamIndex(name: "source" | "structured") {
+function streamIndex(name: "activity" | "structured") {
   return {
     stream: name,
     latestSequence: 0,
@@ -5772,7 +5866,7 @@ function makeStreamRun(over: any) {
     },
     logs: {
       logStorageVersion: 1,
-      source: streamIndex("source"),
+      activity: streamIndex("activity"),
       structured: streamIndex("structured"),
       persistence: {
         status: "healthy",
@@ -5962,7 +6056,6 @@ graduationRuns.push(
       reason: "execution_timeout",
       at: "2026-09-06T11:00:00Z",
       detail: "The agent turn ran for 120 minutes and was stopped.",
-      streamReleased: true,
     },
     input: {
       draftId: "d-25",
@@ -5980,7 +6073,6 @@ graduationRuns.push(
       reason: "agent_exited",
       at: "2026-09-06T11:30:00Z",
       detail: "The agent process exited with status 1.",
-      streamReleased: true,
     },
     input: {
       draftId: "d-26",
@@ -6360,6 +6452,207 @@ const findRun = (runId: string) => {
   return run;
 };
 
+/* --- Graduation agent activity (GRS-graduation-run-log-storage.md) ---------
+ *
+ * Run `g-40` is working on its second pass after a review sent it back, so its
+ * Review phase holds an earlier pass the window must still list (GLW-FR-CKLZ).
+ * Records are kept per run, phase, and pass, and `read_graduation_logs` answers
+ * from them the way the backend does: ascending by sequence, bounded to a page.
+ *
+ * Add a record while the window is open, as a running phase would:
+ *   window.__appendGraduationActivity("g-40", "working", 2, "message", "text")
+ */
+const activityKinds = [
+  "started",
+  "message",
+  "tool_call",
+  "tool_result",
+  "progress",
+  "diagnostic",
+];
+const graduationActivity: Record<
+  string,
+  Array<{ sequence: number; at: string; phaseId: string; pass: number | null; kind: string; summary: string }>
+> = { "g-40": [] };
+(function seedGraduationActivity() {
+  const records = graduationActivity["g-40"];
+  const base = Date.parse("2026-09-06T09:02:00Z");
+  const add = (phaseId: string, pass: number | null, count: number) => {
+    for (let i = 0; i < count; i += 1) {
+      const sequence = records.length + 1;
+      records.push({
+        sequence,
+        at: new Date(base + sequence * 4000).toISOString(),
+        phaseId,
+        pass,
+        kind: activityKinds[i % activityKinds.length],
+        summary: `${phaseId} pass ${pass ?? "run-level"} step ${i + 1}`,
+      });
+    }
+  };
+  add("queued", null, 1);
+  add("working", 1, 60);
+  add("review", 1, 6);
+  add("working", 2, 4);
+})();
+
+function graduationActivityIndex(runId: string) {
+  const records = graduationActivity[runId] ?? [];
+  const segments: any[] = [];
+  for (const r of records) {
+    const last = segments[segments.length - 1];
+    if (last && last.phaseId === r.phaseId && last.pass === r.pass) {
+      last.lastSequence = r.sequence;
+      last.recordCount += 1;
+    } else {
+      segments.push({
+        phaseId: r.phaseId,
+        pass: r.pass,
+        firstSequence: r.sequence,
+        lastSequence: r.sequence,
+        recordCount: 1,
+      });
+    }
+  }
+  return {
+    stream: "activity",
+    latestSequence: records.length,
+    recordCount: records.length,
+    durableThroughSequence: records.length,
+    byteLength: records.length * 120,
+    segments,
+  };
+}
+
+graduationRuns.push(
+  makeStreamRun({
+    id: "g-40",
+    draftId: "d-40",
+    state: "working",
+    workTurns: 2,
+    reviewTurns: 1,
+    input: {
+      draftId: "d-40",
+      draftName: "Keep scroll position",
+      prompt: "Keep the editor's scroll position when a tab is reopened.",
+      promptChecksum: "sha-p40",
+      capturedAt: "2026-09-06T09:00:00Z",
+    },
+    checkpoint: {
+      pass: 2,
+      changedPaths: [],
+      hiddenPaths: [],
+      hiddenPathsOmitted: 0,
+      pendingEscalationAnswers: [],
+      verdictRefusals: 0,
+    },
+    observability: {
+      observabilityVersion: 1,
+      currentStage: "working",
+      stageCondition: "active",
+      queue: { waitReason: null, leftQueuedAt: "2026-09-06T09:02:00Z" },
+      stageHistory: [
+        { from: "queued", to: "working", pass: 1, at: "2026-09-06T09:02:00Z", reason: "work_started" },
+        { from: "working", to: "review", pass: 1, at: "2026-09-06T09:05:00Z", reason: "review_started" },
+        { from: "review", to: "working", pass: 2, at: "2026-09-06T09:08:00Z", reason: "review_revision" },
+      ],
+      revisionHistory: [],
+      passes: [
+        { pass: 1, status: "failed", task: "Keep the scroll position.", findings: [], startedAt: "2026-09-06T09:02:00Z" },
+        { pass: 2, status: "working", task: "Keep the scroll position.", findings: [], startedAt: "2026-09-06T09:08:00Z" },
+      ],
+    },
+  }),
+);
+(graduationRuns[graduationRuns.length - 1] as any).logs.activity = graduationActivityIndex("g-40");
+
+function syncGraduationLogIndex(runId: string) {
+  const run: any = graduationRuns.find((r) => r.id === runId);
+  if (run) run.logs.activity = graduationActivityIndex(runId);
+}
+
+(globalThis as Record<string, unknown>).__appendGraduationActivity = (
+  runId: string,
+  phaseId: string,
+  pass: number | null,
+  kind: string,
+  summary: string,
+) => {
+  const records = (graduationActivity[runId] ??= []);
+  const sequence = records.length + 1;
+  records.push({ sequence, at: new Date().toISOString(), phaseId, pass, kind, summary });
+  syncGraduationLogIndex(runId);
+  (globalThis as any).__fireBusEvent?.("graduation-log-records-appended", {
+    runId,
+    stream: "activity",
+    latestSequence: sequence,
+  });
+};
+
+function readGraduationActivity(a: any) {
+  const runId = String(a.runId ?? "");
+  const phaseId = String(a.phaseId ?? "");
+  const scope = a.pass ?? { kind: "phase" };
+  findRun(runId);
+  const limit = Math.min(Math.max(Number(a.limit ?? 50), 1), 200);
+  const query = String(a.query ?? "").trim().toLowerCase();
+  const all = graduationActivity[runId] ?? [];
+  let inScope = all.filter(
+    (r) =>
+      r.phaseId === phaseId &&
+      (scope.kind === "pass"
+        ? r.pass === scope.pass
+        : scope.kind === "run_level"
+          ? r.pass === null
+          : true),
+  );
+  if (query)
+    inScope = inScope.filter((r) =>
+      `${r.kind} ${r.summary}`.toLowerCase().includes(query),
+    );
+  const cursor = a.cursor ?? null;
+  let slice: typeof inScope;
+  let oldestReached: boolean;
+  if (cursor?.direction === "after") {
+    slice = inScope.filter((r) => r.sequence > cursor.sequence).slice(0, limit);
+    oldestReached = true;
+  } else if (cursor?.direction === "before") {
+    const older = inScope.filter((r) => r.sequence < cursor.sequence);
+    slice = older.slice(Math.max(older.length - limit, 0));
+    oldestReached = older.length <= limit;
+  } else {
+    slice = inScope.slice(Math.max(inScope.length - limit, 0));
+    oldestReached = inScope.length <= limit;
+  }
+  const first = slice[0];
+  const last = slice[slice.length - 1];
+  return {
+    runId,
+    stream: "activity",
+    phaseId,
+    scope,
+    entries: slice.map((r) => ({
+      record: { ...r, pass: r.pass },
+      presentation: { runLevel: r.pass === null },
+    })),
+    nextCursor: last
+      ? { runId, stream: "activity", direction: "after", sequence: last.sequence }
+      : cursor?.direction === "after"
+        ? cursor
+        : null,
+    olderCursor:
+      first && !oldestReached
+        ? { runId, stream: "activity", direction: "before", sequence: first.sequence }
+        : null,
+    matchedTotal: inScope.length,
+    oldestReached,
+    latestSequence: all.length,
+    status: inScope.length === 0 && !query ? "empty" : "available",
+    search: !query ? "not_requested" : inScope.length ? "matched" : "search_no_match",
+    failure: null,
+  };
+}
+
 /**
  * GRV-FR-13 /: the review in **in-place** mode, where the header
  * carries the warning, a sentence stands where Reject would be, and the
@@ -6469,6 +6762,28 @@ function graduationChanged(run: any): any {
  * did *not* call — "clicking away made no second rename call" is otherwise
  * invisible from the page, since a refused call changes nothing either.
  */
+/** SET-FR-21: the Docker section's per-vendor images (`load_project_docker_images`). */
+const mockDockerImages: Array<Record<string, any>> = [
+  {
+    vendor: "claude_code", configuration: "configured", imageName: "acme/agent", tag: "latest",
+    imageReference: "acme/agent:latest", dockerfile: null, dockerfileState: "absent",
+    dockerfileProblem: null, buildContext: null, buildContextState: "absent",
+    graduationState: "usable",
+  },
+  {
+    vendor: "codex", configuration: "unset", imageName: "", tag: null, imageReference: null,
+    dockerfile: null, dockerfileState: "absent", dockerfileProblem: null,
+    buildContext: null, buildContextState: "absent",
+    graduationState: "image_name_missing",
+  },
+  {
+    vendor: "opencode", configuration: "unset", imageName: "", tag: null, imageReference: null,
+    dockerfile: null, dockerfileState: "absent", dockerfileProblem: null,
+    buildContext: null, buildContextState: "absent",
+    graduationState: "execution_unsupported",
+  },
+];
+
 const invokeLog: Array<{ cmd: string; args: Record<string, any> }> = [];
 (globalThis as Record<string, unknown>).__invokeLog = invokeLog;
 
@@ -6791,13 +7106,13 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
 
     // ---- settings child windows (SWN-settings-windows.md) ----------------
     //
-    // The two settings surfaces are native child windows of the application
-    // (SWN-FR-01), which a browser harness cannot create: their frame, their
-    // fixed size, their modality, and the one-window rule are all the Rust
+    // The Settings surface is a native child window of the application
+    // (SWN-FR-01), which a browser harness cannot create: its frame, its
+    // size, its modality, and the one-window rule are all the Rust
     // side's. What IS verifiable here is the window's BODY, because all three
-    // windows boot one entry point — navigate to `/?settings=global` or
-    // `/?settings=project` (optionally with `&section=`) and `main.tsx` renders
-    // the settings window's root instead of the shell.
+    // windows boot one entry point — navigate to `/?settings=1` (optionally with
+    // `&section=global%2Fagents`, a scope and a section) and `main.tsx` renders
+    // the Settings window's root instead of the shell.
     //
     // So these three record the request rather than performing it: opening a
     // window from the shell is a no-op the harness reports through
@@ -6809,7 +7124,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           | unknown[]
           | undefined ??
         ((globalThis as Record<string, unknown>).__settingsWindowRequests = [])
-      ).push({ kind: a.kind, section: a.section ?? null });
+      ).push({ section: a.section ?? null });
       return undefined;
     case "finish_settings_close":
       return undefined;
@@ -6821,7 +7136,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return {
         projectName: "acme",
         projectKey: "~/dev/acme",
-        contentRoot: "~/dev/acme",
+        // An absolute path, as the real backend answers, and the one that the
+        // mock dialog's default pick lies in: a path field reads a picked path
+        // against this folder.
+        contentRoot: "/Users/demo/dev/acme",
       };
 
     // ---- preferences -----------------------------------------------------
@@ -7696,6 +8014,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         createdAt: new Date().toISOString(),
         busyRunId: null,
         isMissing: false,
+        temporary: Boolean(a.temporary),
       };
       workStreams.push(created);
       return { ...created };
@@ -7712,6 +8031,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       };
     case "get_graduation_run":
       return { ...findRun(String(a.runId ?? "")) };
+    case "read_graduation_logs":
+      return readGraduationActivity(a);
     // GRD-FR-GRHC: the limit, the slots held, and the queued runs that wait for
     // a slot alone. The limit is the one the Graduation section saved.
     case "get_graduation_capacity": {
@@ -7992,7 +8313,6 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         reason: "author_pause",
         at: new Date().toISOString(),
         detail: "The author paused the run.",
-        streamReleased: true,
       };
       return graduationChanged(run);
     }
@@ -8229,7 +8549,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const id = String(a.proposalId ?? "");
       const hunks = proposalHunks[id];
       if (hunks === undefined) throw "proposal_not_found";
-      const row = (proposalsByDraft["d-1"] ?? []).find((p) => p.id === id);
+      const row = findProposalRow(id);
       const prompt = draftBodies[row?.path ?? ""] ?? ORIGINAL_PROMPT;
       const resolutions = hunks.map((h) => {
         const before = String(h.before ?? "");
@@ -8263,7 +8583,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const id = String(a.proposalId ?? "");
       const hunks = proposalHunks[id];
       if (hunks === undefined) throw "proposal_not_found";
-      const row = (proposalsByDraft["d-1"] ?? []).find((p) => p.id === id);
+      const row = findProposalRow(id);
       if (row && row.state !== "pending") throw "already_decided";
       if (harnessFlag("candidateWriteFails")) throw "write_failed";
       const target = hunks.find((h) => h.id === String(a.hunkId ?? ""));
@@ -8286,7 +8606,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
      */
     case "set_draft_change_hunk_discussing": {
       const id = String(a.proposalId ?? "");
-      const row = (proposalsByDraft["d-1"] ?? []).find((p) => p.id === id);
+      const row = findProposalRow(id);
       if (!row) throw "proposal_not_found";
       const ledgerRow = row.ledger?.find((r: any) => r.id === String(a.hunkId ?? ""));
       if (!ledgerRow) throw "hunk_not_found";
@@ -8313,7 +8633,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "reject_draft_change_hunk": {
       const id = String(a.proposalId ?? "");
       const accepted = cmd === "accept_draft_change_hunk";
-      const row = (proposalsByDraft["d-1"] ?? []).find((p) => p.id === id);
+      const row = findProposalRow(id);
       if (!row) throw "proposal_not_found";
       const hunkId = String(a.hunkId ?? "");
       const ledgerRow = row.ledger?.find((r: any) => r.id === hunkId);
@@ -8368,7 +8688,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
      */
     case "decline_draft_change_proposal": {
       const id = String(a.proposalId ?? "");
-      const row = (proposalsByDraft["d-1"] ?? []).find((p) => p.id === id);
+      const row = findProposalRow(id);
       if (!row) throw "proposal_not_found";
       if (row.state !== "pending") throw "already_decided";
       for (const r of row.ledger ?? []) {
@@ -9160,12 +9480,72 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     }
     case "detect_agentic_cli_binary":
       return { path: "/opt/homebrew/bin/claude" };
+    // SET-FR-21 / PSS-FR-29: the project's Docker images, so the Docker section
+    // of Project settings renders its joined `name:tag` field. Claude Code is
+    // configured with a tag; the other vendors are unset.
+    case "load_project_docker_images":
+      return mockDockerImages;
+    case "load_docker_backend":
+      return {
+        mode: "bollard",
+        endpoint: "automatic",
+        cliPath: null,
+        state: "verified",
+        serverVersion: "27.1.1",
+        verifiedAt: "2026-07-27T10:00:00Z",
+      };
+    case "load_project_image_build_in_flight":
+      return null;
+    case "save_project_vendor_image": {
+      const entry = (a.entry ?? {}) as {
+        imageName?: string; tag?: string | null; dockerfile?: string | null; buildContext?: string | null;
+      };
+      const status = mockDockerImages.find((s) => s.vendor === a.vendor);
+      if (!status) throw "unknown_vendor";
+      // PSS-FR-BCTX: a build context must name an existing folder. The mock
+      // treats any path containing "missing" as one that does not exist.
+      if (entry.buildContext && entry.buildContext.includes("missing")) {
+        throw "build_context_not_a_directory";
+      }
+      status.dockerfile = entry.dockerfile ?? null;
+      status.dockerfileState = status.dockerfile ? "valid" : "absent";
+      status.buildContext = entry.buildContext ?? null;
+      status.buildContextState = status.buildContext ? "valid" : "absent";
+      status.imageName = entry.imageName ?? "";
+      status.tag = entry.tag ?? null;
+      status.configuration = status.imageName ? "configured" : "unset";
+      status.imageReference = status.imageName
+        ? status.tag ? `${status.imageName}:${status.tag}` : status.imageName
+        : null;
+      return status;
+    }
     case "verify_agentic_integration": {
       // AIC-FR-26 / AIC-FR-27: the typed refusals, so the surface can be driven
       // through them. A malformed or missing token is rejected before anything
       // would have been stored, exactly as the backend does.
       const config = (a.config ?? {}) as Record<string, unknown>;
       const record = agentics.find((i) => i.vendor === a.vendor) ?? agentics[0];
+      // AIC-FR-QHLN: Custom Gateway mode. The gateway serves the Amazon
+      // Bedrock runtime API, so a verification runs no binary and asks no
+      // gateway: it checks the token and commits.
+      if (record.kind === "cli" && config.authMode === "custom_gateway") {
+        const baseUrl = typeof config.gatewayBaseUrl === "string" ? config.gatewayBaseUrl : "";
+        const gatewayToken =
+          typeof config.gatewayToken === "string" ? config.gatewayToken.trim() : null;
+        const ext = record as Record<string, unknown>;
+        if (gatewayToken === null && ext.gatewayKeyState !== "set") throw "token_missing";
+        ext.authMode = "custom_gateway";
+        ext.gatewayBaseUrl = baseUrl;
+        ext.gatewayTokenVar = config.gatewayTokenVar ?? "ANTHROPIC_AUTH_TOKEN";
+        if (gatewayToken !== null) {
+          ext.gatewayKeyState = "set";
+          ext.gatewayMaskedHint = gatewayToken.slice(-4);
+        }
+        record.modelsOrigin = "catalog";
+        record.version = null;
+        record.state = "verified";
+        return record;
+      }
       if (record.kind === "cli" && record.keyRequired) {
         const token = typeof config.oauthToken === "string" ? config.oauthToken.trim() : null;
         if (token === null && record.keyState !== "set") throw "token_missing";
@@ -9277,8 +9657,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return { provider: a.provider ?? null, resolution: a.provider ? "overridden" : "inherited", overrideProvider: a.provider ?? null };
 
     // ---- conversational agents (AGR / AGC) ------------------------------
-    case "list_agents":
-      return sortedAgents();
+    case "list_personal_agents":
+      return agentsOfScope("personal");
     case "create_agent": {
       const draft = a.draft ?? {};
       const nickname = String(draft.nickname ?? "");
@@ -9304,6 +9684,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         reasoning: draft.reasoning ?? null,
       };
       agentsRegistry = [...agentsRegistry, created];
+      if (a.scope === "project") projectScopeIds = [...projectScopeIds, created.id];
       return created;
     }
     case "update_agent": {
@@ -9337,21 +9718,12 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return updated;
     }
     case "delete_agent":
-      // AGR-FR-11: the definition and every project's enrolment of it, in one.
+      // AGR-FR-11: one definition of one scope.
       agentsRegistry = agentsRegistry.filter((x) => x.id !== a.id);
-      enrolledAgentIds = enrolledAgentIds.filter((id) => id !== a.id);
+      projectScopeIds = projectScopeIds.filter((id) => id !== a.id);
       agentTurns = agentTurns.filter((t) => t.agentId !== a.id);
-      return sortedAgents();
+      return agentsOfScope(String(a.scope));
     case "list_project_agents":
-      return projectAgents();
-    case "enrol_project_agent":
-      if (!enrolledAgentIds.includes(a.agentId)) {
-        enrolledAgentIds = [...enrolledAgentIds, a.agentId];
-      }
-      return projectAgents();
-    case "remove_project_agent":
-      enrolledAgentIds = enrolledAgentIds.filter((id) => id !== a.agentId);
-      agentTurns = agentTurns.filter((t) => t.agentId !== a.agentId);
       return projectAgents();
     /* AGC-FR-55: the recovery registry — at most one entry per conversation,
        each `failed` and each carrying `retryPermitted`. What a card reads when
@@ -9429,7 +9801,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const agent = agentsRegistry.find(
         (x) => x.nickname.toLowerCase() === String(a.nickname).toLowerCase(),
       );
-      if (!agent || !enrolledAgentIds.includes(agent.id)) {
+      if (!agent) {
         throw "agent_not_found";
       }
       if (availabilityOf(agent) !== "ready") throw "agent_unavailable";

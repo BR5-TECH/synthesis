@@ -100,10 +100,7 @@ pub struct MembershipService {
 impl MembershipService {
     /// The service over the given ports.
     pub fn new(ports: Ports) -> Self {
-        MembershipService {
-            authority: Authority::new(ports.clone()),
-            ports,
-        }
+        MembershipService { authority: Authority::new(ports.clone()), ports }
     }
 
     /// Reads a target that a membership or an invitation addresses, and refuses
@@ -115,11 +112,9 @@ impl MembershipService {
     ) -> Result<(), DomainError> {
         let exists = match target_type {
             TargetType::Team => self.ports.teams.find(TeamId(target_id)).is_some(),
-            TargetType::Organization => self
-                .ports
-                .organizations
-                .find(OrganizationId(target_id))
-                .is_some(),
+            TargetType::Organization => {
+                self.ports.organizations.find(OrganizationId(target_id)).is_some()
+            }
             TargetType::User => false,
         };
         if exists {
@@ -189,8 +184,7 @@ impl MembershipApi for MembershipService {
 
         self.authority.require(
             principal,
-            self.authority
-                .manages(principal.user_id, target_type, target_id),
+            self.authority.manages(principal.user_id, target_type, target_id),
             "membership.create",
         )?;
         self.write_membership(id, member_id, target_type, target_id, role)
@@ -208,8 +202,7 @@ impl MembershipApi for MembershipService {
                 membership.target_type,
                 membership.target_id,
             );
-        self.authority
-            .require(principal, allowed, "membership.read")?;
+        self.authority.require(principal, allowed, "membership.read")?;
         Ok(membership)
     }
 
@@ -219,11 +212,7 @@ impl MembershipApi for MembershipService {
         filter: MembershipFilter,
     ) -> Result<Vec<Membership>, DomainError> {
         let member = filter.member_id.as_deref().map(UserId::parse).transpose()?;
-        let target_type = filter
-            .target_type
-            .as_deref()
-            .map(TargetType::parse)
-            .transpose()?;
+        let target_type = filter.target_type.as_deref().map(TargetType::parse).transpose()?;
         let target_id = filter
             .target_id
             .as_deref()
@@ -263,36 +252,30 @@ impl MembershipApi for MembershipService {
         let membership = self.ports.memberships.get(id)?;
         self.authority.require(
             principal,
-            self.authority.manages(
-                principal.user_id,
-                membership.target_type,
-                membership.target_id,
-            ),
+            self.authority.manages(principal.user_id, membership.target_type, membership.target_id),
             "membership.update",
         )?;
 
         let now = self.ports.clock.now();
-        self.ports
-            .memberships
-            .update(id, &mut |membership: &mut Membership| {
-                if let Some(role) = command.role.as_deref() {
-                    membership.role = MemberRole::parse(role)?;
-                }
-                if let Some(status) = command.status.as_deref() {
-                    membership.status = match status {
-                        "active" => Status::Active,
-                        "suspended" => Status::Suspended,
-                        other => {
-                            return Err(DomainError::invalid_field(
-                                "status",
-                                &format!("the value \"{other}\" is not active or suspended"),
-                            ))
-                        }
-                    };
-                }
-                membership.updated_at = now.clone();
-                Ok(())
-            })
+        self.ports.memberships.update(id, &mut |membership: &mut Membership| {
+            if let Some(role) = command.role.as_deref() {
+                membership.role = MemberRole::parse(role)?;
+            }
+            if let Some(status) = command.status.as_deref() {
+                membership.status = match status {
+                    "active" => Status::Active,
+                    "suspended" => Status::Suspended,
+                    other => {
+                        return Err(DomainError::invalid_field(
+                            "status",
+                            &format!("the value \"{other}\" is not active or suspended"),
+                        ))
+                    }
+                };
+            }
+            membership.updated_at = now.clone();
+            Ok(())
+        })
     }
 
     fn delete_membership(
@@ -307,8 +290,7 @@ impl MembershipApi for MembershipService {
                 membership.target_type,
                 membership.target_id,
             );
-        self.authority
-            .require(principal, allowed, "membership.delete")?;
+        self.authority.require(principal, allowed, "membership.delete")?;
         self.ports.memberships.remove(id).map(|_| ())
     }
 
@@ -324,11 +306,7 @@ impl MembershipApi for MembershipService {
         let role = MemberRole::parse(&command.role)?;
         let expires_at = Timestamp(validation::name("expires_at", &command.expires_at)?);
 
-        let invitee_user_id = command
-            .invitee_user_id
-            .as_deref()
-            .map(UserId::parse)
-            .transpose()?;
+        let invitee_user_id = command.invitee_user_id.as_deref().map(UserId::parse).transpose()?;
         let invitee_email = command
             .invitee_email
             .as_deref()
@@ -347,8 +325,7 @@ impl MembershipApi for MembershipService {
         self.check_target(target_type, target_id)?;
         self.authority.require(
             principal,
-            self.authority
-                .manages(principal.user_id, target_type, target_id),
+            self.authority.manages(principal.user_id, target_type, target_id),
             "invitation.create",
         )?;
 
@@ -384,8 +361,7 @@ impl MembershipApi for MembershipService {
                 invitation.target_type,
                 invitation.target_id,
             );
-        self.authority
-            .require(principal, allowed, "invitation.read")?;
+        self.authority.require(principal, allowed, "invitation.read")?;
         Ok(invitation)
     }
 
@@ -425,25 +401,19 @@ impl MembershipApi for MembershipService {
             (None, Some(user_id)) => user_id,
             (None, None) => principal.user_id,
         };
-        self.authority.require(
-            principal,
-            member_id == principal.user_id,
-            "invitation.accept",
-        )?;
+        self.authority.require(principal, member_id == principal.user_id, "invitation.accept")?;
 
         // SAS-FR-ATLB: the state moves first. An invitation that is expired,
         // revoked, or accepted is refused here and writes no membership.
         let now = self.ports.clock.now();
-        self.ports
-            .invitations
-            .update(id, &mut |invitation: &mut Invitation| {
-                if !invitation.is_acceptable(&now) {
-                    return Err(DomainError::InvitationNotPending);
-                }
-                invitation.state = InvitationState::Accepted;
-                invitation.updated_at = now.clone();
-                Ok(())
-            })?;
+        self.ports.invitations.update(id, &mut |invitation: &mut Invitation| {
+            if !invitation.is_acceptable(&now) {
+                return Err(DomainError::InvitationNotPending);
+            }
+            invitation.state = InvitationState::Accepted;
+            invitation.updated_at = now.clone();
+            Ok(())
+        })?;
 
         let membership_id: MembershipId = self.ports.resolve_id("id", None)?;
         let written = self.write_membership(
@@ -457,13 +427,10 @@ impl MembershipApi for MembershipService {
         // SAS-FR-XUFA: a membership that is refused leaves the invitation as it
         // was, so a refused acceptance may be repeated.
         if written.is_err() {
-            let _ = self
-                .ports
-                .invitations
-                .update(id, &mut |invitation: &mut Invitation| {
-                    invitation.state = InvitationState::Pending;
-                    Ok(())
-                });
+            let _ = self.ports.invitations.update(id, &mut |invitation: &mut Invitation| {
+                invitation.state = InvitationState::Pending;
+                Ok(())
+            });
         }
         written
     }
@@ -486,16 +453,14 @@ impl MembershipApi for MembershipService {
         )?;
 
         let now = self.ports.clock.now();
-        self.ports
-            .invitations
-            .update(id, &mut |invitation: &mut Invitation| {
-                if !matches!(invitation.state, InvitationState::Pending) {
-                    return Err(DomainError::InvitationNotPending);
-                }
-                invitation.state = InvitationState::Revoked;
-                invitation.updated_at = now.clone();
-                Ok(())
-            })
+        self.ports.invitations.update(id, &mut |invitation: &mut Invitation| {
+            if !matches!(invitation.state, InvitationState::Pending) {
+                return Err(DomainError::InvitationNotPending);
+            }
+            invitation.state = InvitationState::Revoked;
+            invitation.updated_at = now.clone();
+            Ok(())
+        })
     }
 
     fn create_device(
@@ -511,8 +476,7 @@ impl MembershipApi for MembershipService {
             Some(text) => UserId::parse(text)?,
         };
         self.ports.users.get(owner_id)?;
-        self.authority
-            .require(principal, owner_id == principal.user_id, "device.create")?;
+        self.authority.require(principal, owner_id == principal.user_id, "device.create")?;
 
         let now = self.ports.clock.now();
         self.ports.devices.insert(
@@ -531,11 +495,7 @@ impl MembershipApi for MembershipService {
 
     fn read_device(&self, principal: &Principal, id: DeviceId) -> Result<Device, DomainError> {
         let device = self.ports.devices.get(id)?;
-        self.authority.require(
-            principal,
-            device.owner_id == principal.user_id,
-            "device.read",
-        )?;
+        self.authority.require(principal, device.owner_id == principal.user_id, "device.read")?;
         Ok(device)
     }
 
@@ -557,11 +517,7 @@ impl MembershipApi for MembershipService {
         command: UpdateDevice,
     ) -> Result<Device, DomainError> {
         let device = self.ports.devices.get(id)?;
-        self.authority.require(
-            principal,
-            device.owner_id == principal.user_id,
-            "device.update",
-        )?;
+        self.authority.require(principal, device.owner_id == principal.user_id, "device.update")?;
 
         let now = self.ports.clock.now();
         self.ports.devices.update(id, &mut |device: &mut Device| {
@@ -577,11 +533,7 @@ impl MembershipApi for MembershipService {
 
     fn revoke_device(&self, principal: &Principal, id: DeviceId) -> Result<Device, DomainError> {
         let device = self.ports.devices.get(id)?;
-        self.authority.require(
-            principal,
-            device.owner_id == principal.user_id,
-            "device.revoke",
-        )?;
+        self.authority.require(principal, device.owner_id == principal.user_id, "device.revoke")?;
 
         let now = self.ports.clock.now();
         self.ports.devices.update(id, &mut |device: &mut Device| {
@@ -592,11 +544,7 @@ impl MembershipApi for MembershipService {
 
     fn delete_device(&self, principal: &Principal, id: DeviceId) -> Result<(), DomainError> {
         let device = self.ports.devices.get(id)?;
-        self.authority.require(
-            principal,
-            device.owner_id == principal.user_id,
-            "device.delete",
-        )?;
+        self.authority.require(principal, device.owner_id == principal.user_id, "device.delete")?;
         self.ports.devices.remove(id).map(|_| ())
     }
 }

@@ -184,12 +184,19 @@ afterEach(async () => {
   // show it to the next test.
   // Imported here and not at the top, because a static import would load the
   // module graph before a test file's `vi.mock` calls take effect.
-  const [{ clearAllDiscussionSessions }, { resetDiscussionFocus }] = await Promise.all([
+  const [
+    { clearAllDiscussionSessions },
+    { resetDiscussionFocus },
+    { resetImplementedAgenticVendorsForTest },
+  ] = await Promise.all([
     import("../state/discussionSession"),
     import("../state/discussionFocus"),
+    import("../components/agenticImplemented"),
   ]);
   clearAllDiscussionSessions();
   resetDiscussionFocus();
+  // AII-FR-OTQY: a test that opens the vendor gate must not leave it open.
+  resetImplementedAgenticVendorsForTest();
   if (pendingShortTimers.size === 0 || vi.isFakeTimers()) {
     pendingShortTimers.clear();
     return;

@@ -5,9 +5,7 @@
 use super::*;
 
 use super::log_reads::driven;
-use crate::graduation::logs::read::{
-    GraduationLogPassScope, STATUS_AVAILABLE, STATUS_UNAVAILABLE,
-};
+use crate::graduation::logs::read::{GraduationLogPassScope, STATUS_AVAILABLE, STATUS_UNAVAILABLE};
 use crate::graduation::logs::{self, GraduationLogPage, GraduationLogStream};
 
 // ---------------------------------------------------------------------------
@@ -124,13 +122,9 @@ fn a_corrupt_read_is_recorded_on_the_run_and_cleared_by_a_later_one() {
     let page = command(&fx, &run.id, "working", pass.clone(), "structured").expect("a page");
     assert_eq!(page.status, STATUS_UNAVAILABLE);
 
-    let recorded = crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone())
-        .expect("the run");
-    let failure = recorded
-        .logs
-        .last_read_failure
-        .clone()
-        .expect("the damage is on the run record");
+    let recorded =
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
+    let failure = recorded.logs.last_read_failure.clone().expect("the damage is on the run record");
     assert_eq!(failure.code, logs::index::CODE_STREAM_CORRUPT);
     // GRS-FR-MRKO: it interrupts no run and moves no run state.
     assert!(recorded.logs.persistence.is_healthy());
@@ -138,16 +132,16 @@ fn a_corrupt_read_is_recorded_on_the_run_and_cleared_by_a_later_one() {
 
     // Met again, the record is left exactly as it stands.
     let _ = command(&fx, &run.id, "working", pass.clone(), "structured").expect("a page");
-    let again = crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone())
-        .expect("the run");
+    let again =
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
     assert_eq!(again.logs.last_read_failure, Some(failure));
 
     // GRS-FR-EYNU: it stays readable until a later read of that stream succeeds.
     std::fs::write(&path, whole).expect("the repaired stream");
     let repaired = command(&fx, &run.id, "working", pass, "structured").expect("a page");
     assert_eq!(repaired.status, STATUS_AVAILABLE);
-    let cleared = crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone())
-        .expect("the run");
+    let cleared =
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
     assert!(cleared.logs.last_read_failure.is_none());
 }
 
@@ -159,36 +153,30 @@ fn every_stream_announces_that_it_grew_and_carries_no_record() {
     use tauri::Listener;
 
     let fx = Fixture::new();
-    let source = Arc::new(AtomicUsize::new(0));
+    let activity = Arc::new(AtomicUsize::new(0));
     let structured = Arc::new(AtomicUsize::new(0));
     let payloads = Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
     {
-        let (source, structured, payloads) =
-            (source.clone(), structured.clone(), payloads.clone());
-        fx.app.listen(
-            crate::graduation::GRADUATION_LOG_RECORDS_APPENDED,
-            move |event| {
-                let payload: serde_json::Value =
-                    serde_json::from_str(event.payload()).expect("a payload");
-                match payload["stream"].as_str() {
-                    Some("source") => source.fetch_add(1, Ordering::SeqCst),
-                    Some("structured") => structured.fetch_add(1, Ordering::SeqCst),
-                    _ => panic!("every event names one of the two streams"),
-                };
-                payloads.lock().expect("the payloads").push(payload);
-            },
-        );
+        let (activity, structured, payloads) =
+            (activity.clone(), structured.clone(), payloads.clone());
+        fx.app.listen(crate::graduation::GRADUATION_LOG_RECORDS_APPENDED, move |event| {
+            let payload: serde_json::Value =
+                serde_json::from_str(event.payload()).expect("a payload");
+            match payload["stream"].as_str() {
+                Some("activity") => activity.fetch_add(1, Ordering::SeqCst),
+                Some("structured") => structured.fetch_add(1, Ordering::SeqCst),
+                _ => panic!("every event names one of the two streams"),
+            };
+            payloads.lock().expect("the payloads").push(payload);
+        });
     }
 
     let run = driven(&fx);
 
+    assert!(structured.load(Ordering::SeqCst) > 0, "the structured stream announced that it grew");
     assert!(
-        structured.load(Ordering::SeqCst) > 0,
-        "the structured stream announced that it grew"
-    );
-    assert!(
-        source.load(Ordering::SeqCst) > 0,
-        "and so did the source stream, which is what a following surface reads"
+        activity.load(Ordering::SeqCst) > 0,
+        "and so did the activity stream, which is what a following surface reads"
     );
     let held = payloads.lock().expect("the payloads");
     for payload in held.iter() {
@@ -197,7 +185,7 @@ fn every_stream_announces_that_it_grew_and_carries_no_record() {
         // No record content: the three fields and no other.
         let object = payload.as_object().expect("an object");
         assert_eq!(object.len(), 3, "{payload}");
-        for key in ["record", "records", "data_base64", "event", "fields"] {
+        for key in ["record", "records", "summary", "kind", "event", "fields"] {
             assert!(object.get(key).is_none(), "the event carries no {key}");
         }
     }

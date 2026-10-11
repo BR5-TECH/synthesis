@@ -18,11 +18,8 @@ pub fn reorder_graduation_run<R: tauri::Runtime>(
     let _write = state.as_ref().map(|state| state.write_guard());
 
     let queue = queue::project_queue(&app).ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
-    let run = queue
-        .runs
-        .iter()
-        .find(|r| r.id == run_id)
-        .ok_or_else(|| ERR_UNKNOWN_RUN.to_string())?;
+    let run =
+        queue.runs.iter().find(|r| r.id == run_id).ok_or_else(|| ERR_UNKNOWN_RUN.to_string())?;
 
     // Accepted for a queued member alone: every other state is a run the author
     // is not arranging.
@@ -36,14 +33,10 @@ pub fn reorder_graduation_run<R: tauri::Runtime>(
     }
     let queue_key = run.queue_key();
     let announced = run.clone();
-    let members: Vec<String> = queue::queue_of(&queue, &queue_key)
-        .iter()
-        .map(|r| r.id.clone())
-        .collect();
-    let actual = members
-        .iter()
-        .position(|id| id == &run_id)
-        .ok_or_else(|| ERR_UNKNOWN_RUN.to_string())?;
+    let members: Vec<String> =
+        queue::queue_of(&queue, &queue_key).iter().map(|r| r.id.clone()).collect();
+    let actual =
+        members.iter().position(|id| id == &run_id).ok_or_else(|| ERR_UNKNOWN_RUN.to_string())?;
 
     // A caller acting on a listing it read before another change landed is told
     // rather than obeyed.
@@ -51,10 +44,7 @@ pub fn reorder_graduation_run<R: tauri::Runtime>(
         return Err(format!("{ERR_QUEUE_POSITION_STALE}: {actual}"));
     }
     if new_position >= members.len() {
-        return Err(format!(
-            "{ERR_QUEUE_POSITION_OUT_OF_RANGE}: {}",
-            members.len()
-        ));
+        return Err(format!("{ERR_QUEUE_POSITION_OUT_OF_RANGE}: {}", members.len()));
     }
     if actual == new_position {
         return Ok(queue);
@@ -77,7 +67,7 @@ pub fn reorder_graduation_run<R: tauri::Runtime>(
         ours.iter().map(|i| index.runs[*i].clone()).collect();
     let moved = ordered.remove(actual);
     ordered.insert(new_position, moved);
-    for (slot, entry) in ours.iter().zip(ordered.into_iter()) {
+    for (slot, entry) in ours.iter().zip(ordered) {
         index.runs[*slot] = entry;
     }
     store::write_queue_index(&fs, &base, &index)?;

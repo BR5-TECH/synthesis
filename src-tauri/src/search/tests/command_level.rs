@@ -19,26 +19,18 @@ fn mock_search_app(root: Option<&Path>) -> tauri::App<tauri::test::MockRuntime> 
     app.manage(SearchRegistry::default());
     app.manage(ProgressRegistry::default());
     if let Some(root) = root {
-        app.state::<crate::project::ProjectState>()
-            .set_root(root.to_path_buf());
+        app.state::<crate::project::ProjectState>().set_root(root.to_path_buf());
     }
     app
 }
 
 /// Subscribe to `"search ended"` and return a receiver of its reasons.
-fn watch_endings(
-    app: &tauri::App<tauri::test::MockRuntime>,
-) -> std::sync::mpsc::Receiver<String> {
+fn watch_endings(app: &tauri::App<tauri::test::MockRuntime>) -> std::sync::mpsc::Receiver<String> {
     use tauri::Listener;
     let (tx, rx) = std::sync::mpsc::channel();
     app.listen(SEARCH_ENDED, move |event| {
-        let payload: serde_json::Value =
-            serde_json::from_str(event.payload()).unwrap_or_default();
-        let reason = payload
-            .get("reason")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string();
+        let payload: serde_json::Value = serde_json::from_str(event.payload()).unwrap_or_default();
+        let reason = payload.get("reason").and_then(|v| v.as_str()).unwrap_or_default().to_string();
         let _ = tx.send(reason);
     });
     rx

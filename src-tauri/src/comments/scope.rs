@@ -8,25 +8,37 @@ use super::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LogScope<'a> {
     Artifact,
-    Draft { draft_id: &'a str },
+    Draft {
+        draft_id: &'a str,
+    },
     /// CMS-FR-55: the draft's reserved discussion log. Its *attachments* sit in
     /// the same folder [`LogScope::Draft`]'s do — only the log's filename differs,
     /// because a discussion is draft-scoped like any other draft thread.
-    DraftDiscussion { draft_id: &'a str },
+    DraftDiscussion {
+        draft_id: &'a str,
+    },
     /// CMS-FR-55: an artifact's reserved discussion log, beside its anchored one
     /// in the store's `comments/` folder. Its attachments share the same folder — only the
     /// log's filename differs, because a discussion about a file of the project
     /// is artifact-scoped like any other thread on it.
-    ArtifactDiscussion { artifact_id: &'a str },
+    ArtifactDiscussion {
+        artifact_id: &'a str,
+    },
     /// CMS-FR-37 / CMS-FR-55: a note's reserved discussion log, inside that
     /// note's own folder under the store's comments root. Its attachments sit
     /// in that same folder, which is what lets CMS-FR-64 remove the whole
     /// conversation in one recursive delete.
-    NoteDiscussion { note_id: &'a str },
+    NoteDiscussion {
+        note_id: &'a str,
+    },
 }
 
 impl LogScope<'_> {
-    pub(super) fn log_path(&self, root: &crate::fs::RootFs, file_rel: &str) -> Result<PathBuf, String> {
+    pub(super) fn log_path(
+        &self,
+        root: &crate::fs::RootFs,
+        file_rel: &str,
+    ) -> Result<PathBuf, String> {
         match self {
             LogScope::Artifact => log_path(root, file_rel),
             LogScope::NoteDiscussion { note_id } => note_discussion_log_path(root, note_id),
@@ -59,18 +71,19 @@ impl LogScope<'_> {
     /// hand. A line crafted with
     /// `"digest": "../<log-id>.jsonl"` would otherwise serve that file's bytes
     /// to anyone who opens the artifact.
-    pub(super) fn attachment_path(&self, root: &crate::fs::RootFs, digest: &str) -> Result<PathBuf, String> {
+    pub(super) fn attachment_path(
+        &self,
+        root: &crate::fs::RootFs,
+        digest: &str,
+    ) -> Result<PathBuf, String> {
         if !is_storage_digest(digest) {
             return Err(ERR_ATTACHMENT_NOT_FOUND.to_string());
         }
         // A draft or a note that is gone holds no attachment, its folder having
         // been removed with it (CMS-FR-39, CMS-FR-64), which is what
         // `attachment_not_found` says (CMS-FR-48).
-        let dir = self
-            .comments_folder(root)
-            .map_err(|_| ERR_ATTACHMENT_NOT_FOUND.to_string())?;
-        fsa::resolve_under(dir, format!("{ATTACHMENTS_SUBDIR}/{digest}"))
-            .map_err(|e| e.to_string())
+        let dir = self.comments_folder(root).map_err(|_| ERR_ATTACHMENT_NOT_FOUND.to_string())?;
+        fsa::resolve_under(dir, format!("{ATTACHMENTS_SUBDIR}/{digest}")).map_err(|e| e.to_string())
     }
 
     /// The scope's own comments folder — the directory its log, its attachments,
@@ -153,24 +166,15 @@ pub struct ThreadRef<'a> {
 
 impl<'a> ThreadRef<'a> {
     pub fn artifact(artifact_id: &'a str) -> Self {
-        Self {
-            scope: LogScope::Artifact,
-            file_rel: artifact_id,
-        }
+        Self { scope: LogScope::Artifact, file_rel: artifact_id }
     }
 
     pub fn draft_file(draft_id: &'a str, file_rel: &'a str) -> Self {
-        Self {
-            scope: LogScope::Draft { draft_id },
-            file_rel,
-        }
+        Self { scope: LogScope::Draft { draft_id }, file_rel }
     }
 
     pub fn discussion(draft_id: &'a str) -> Self {
-        Self {
-            scope: LogScope::DraftDiscussion { draft_id },
-            file_rel: "",
-        }
+        Self { scope: LogScope::DraftDiscussion { draft_id }, file_rel: "" }
     }
 
     /// CMS-FR-56: a discussion about one file of the project, taken entire.
@@ -178,10 +182,7 @@ impl<'a> ThreadRef<'a> {
     /// `file_rel` carries the artifact so the thread folds with its path — unlike
     /// a draft's discussion, which belongs to no one file and so carries none.
     pub fn artifact_discussion(artifact_id: &'a str) -> Self {
-        Self {
-            scope: LogScope::ArtifactDiscussion { artifact_id },
-            file_rel: artifact_id,
-        }
+        Self { scope: LogScope::ArtifactDiscussion { artifact_id }, file_rel: artifact_id }
     }
 
     /// CMS-FR-62: the one discussion a note carries.
@@ -190,17 +191,16 @@ impl<'a> ThreadRef<'a> {
     /// about the note and belongs to no file of the project, so nothing about
     /// the entity it is filed against reaches the thread.
     pub fn note_discussion(note_id: &'a str) -> Self {
-        Self {
-            scope: LogScope::NoteDiscussion { note_id },
-            file_rel: "",
-        }
+        Self { scope: LogScope::NoteDiscussion { note_id }, file_rel: "" }
     }
 
     /// Every thread the log this names currently holds.
     pub(super) fn list(&self, root: &fsa::RootFs) -> Vec<Discussion> {
         match self.scope {
             LogScope::Artifact => list_fragment_discussions_in(root, self.file_rel),
-            LogScope::Draft { draft_id } => list_draft_fragment_discussions_in(root, draft_id, self.file_rel),
+            LogScope::Draft { draft_id } => {
+                list_draft_fragment_discussions_in(root, draft_id, self.file_rel)
+            }
             LogScope::DraftDiscussion { draft_id } => fold_discussion(root, draft_id),
             LogScope::ArtifactDiscussion { artifact_id } => {
                 fold_artifact_discussion(root, artifact_id)
@@ -240,7 +240,5 @@ pub fn thread_at(
 pub(super) fn is_path_safe_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
-        && id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }

@@ -13,6 +13,7 @@
 import type { MutableRefObject } from "react";
 
 import { logInfo } from "../../logging";
+import { formatSectionAddress } from "../../settingsWindow";
 
 import {
   aheadOf,
@@ -23,6 +24,8 @@ import {
   conditionOf,
   conditionSentence,
   failureStatement,
+  FAILED_HOLD_STATEMENT,
+  runsRemovedByDiscard,
   hasReadableProgress,
   iterationLabel,
   retryStatement,
@@ -68,7 +71,7 @@ export interface RunRegionProps {
   act: RunAct;
   onOpenDraft?: (draftId: string) => void;
   /** GRU-FR-QLRQ: opens a project settings section. */
-  onOpenSettings?: (section: string) => void;
+  onOpenSettings?: (address: string) => void;
   /** GLW-FR-ALZI: the author activated a stage that holds a log. */
   onActivateStage: (stageId: string) => void;
   /** GEA-FR-VIPR: the backend accepted an answer set. */
@@ -240,7 +243,7 @@ export function RunRegion({
                   logInfo(["frontend"], "graduation run routed to the time limit setting", {
                     runId: run.id,
                   });
-                  onOpenSettings("graduation");
+                  onOpenSettings(formatSectionAddress("project", "graduation"));
                 }}
               >
                 Change the time limit
@@ -286,6 +289,13 @@ export function RunRegion({
           {failureStatement(run)}
         </p>
       )}
+      {/* GRU-FR-QYEE: a failed run holds its queue until the author discards
+          it, so the runs behind it say they wait and what the discard does. */}
+      {run.state === "failed" && runsRemovedByDiscard(queue, run).length > 0 && (
+        <p className="t-meta" data-testid="graduation-failed-hold">
+          {FAILED_HOLD_STATEMENT}
+        </p>
+      )}
 
       {run.state === "completed" && commitSummary(run) && (
         <p className="graduation__outcome" data-testid="graduation-commits">
@@ -313,6 +323,7 @@ export function RunRegion({
       <div className="graduation__foot">
         <RunActionRow
           run={run}
+          queue={queue}
           busy={busy}
           act={act}
           onOpenDraft={onOpenDraft}

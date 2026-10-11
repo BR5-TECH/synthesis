@@ -551,14 +551,11 @@ impl Harness {
         self.turns().join_turn_threads();
     }
 
+    /// Block until every dispatched turn has fully ended, then check that no
+    /// turn is left in flight. The wait is on the turn threads, not on time.
     fn settle(&self) {
-        for _ in 0..600 {
-            if self.turns().in_flight(None).is_empty() {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        panic!("turns did not settle");
+        self.join_turns();
+        assert!(self.turns().in_flight(None).is_empty(), "a turn is still in flight");
     }
 
     fn threads(&self, artifact_id: &str) -> Vec<Discussion> {

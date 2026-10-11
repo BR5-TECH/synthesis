@@ -64,8 +64,7 @@ fn every_kind_of_discussion(h: &Harness) -> Vec<(&'static str, Discussion)> {
             None,
             "@arch is this ready?".into(),
             Vec::new(),
-            &human,
-            "2026-01-01T00:00:00Z",
+            comments::Stamp { by: &human, at: "2026-01-01T00:00:00Z" },
         )
         .expect("whole-target artifact discussion"),
     ));
@@ -91,8 +90,7 @@ fn every_kind_of_discussion(h: &Harness) -> Vec<(&'static str, Discussion)> {
             Some(FragmentTarget::in_draft(&created.draft.id, &created.file, 0, 5, "Hello")),
             "@arch this opening?".into(),
             Vec::new(),
-            &human,
-            "2026-01-01T00:00:00Z",
+            comments::Stamp { by: &human, at: "2026-01-01T00:00:00Z" },
         )
         .expect("draft fragment discussion"),
     ));

@@ -607,7 +607,7 @@ impl TurnRegistry {
         // Ids are `turn-<n>` from a monotonic counter, so the numeric suffix is
         // the registration order. `started_at` has one-second resolution and
         // would tie for turns dispatched together by one post.
-        turns.sort_by(|a, b| ordinal(&b.id).cmp(&ordinal(&a.id)));
+        turns.sort_by_key(|turn| std::cmp::Reverse(ordinal(&turn.id)));
         turns
     }
 
@@ -660,7 +660,7 @@ impl TurnRegistry {
             .collect();
         // Registration order, as `in_flight` sorts: `ended_at` has one-second
         // resolution and would tie for two turns that failed together.
-        turns.sort_by(|a, b| ordinal(&b.id).cmp(&ordinal(&a.id)));
+        turns.sort_by_key(|turn| std::cmp::Reverse(ordinal(&turn.id)));
         turns
     }
 
@@ -719,7 +719,7 @@ impl TurnRegistry {
             .filter(|turn| origin.is_none_or(|o| &turn.origin == o))
             .cloned()
             .collect();
-        turns.sort_by(|a, b| ordinal(&b.id).cmp(&ordinal(&a.id)));
+        turns.sort_by_key(|turn| std::cmp::Reverse(ordinal(&turn.id)));
         turns
     }
 

@@ -52,8 +52,7 @@ fn the_note_builder_gathers_the_note_the_history_and_the_current_comment() {
             body.into(),
             Vec::new(),
             Vec::new(),
-            &human("ada"),
-            at,
+            crate::comments::Stamp { by: &human("ada"), at },
         )
         .unwrap();
     }
@@ -64,8 +63,7 @@ fn the_note_builder_gathers_the_note_the_history_and_the_current_comment() {
         "@arch so what should I do?".into(),
         Vec::new(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:04:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:04:00Z" },
     )
     .unwrap()
     .comments

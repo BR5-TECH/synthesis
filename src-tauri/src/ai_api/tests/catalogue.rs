@@ -164,7 +164,12 @@ fn a_catalogue_agrees_with_what_an_agents_availability_is_computed_from() {
     // shapes below are where the two readings were actually found to differ.
     use crate::agents::{availability_of, Agent, AgentAvailability};
 
-    let cases: &[(&str, Option<&str>, Option<&str>, Option<&str>, AgentAvailability)] = &[
+    /// A label, a base URL, a masked hint, a verification time, and the
+    /// expected verdict.
+    type AvailabilityCase<'a> =
+        (&'a str, Option<&'a str>, Option<&'a str>, Option<&'a str>, AgentAvailability);
+
+    let cases: &[AvailabilityCase<'_>] = &[
         // label, base_url, masked_hint, verified_at, expected verdict
         ("never configured", None, None, None, AgentAvailability::ProviderUnconfigured),
         (

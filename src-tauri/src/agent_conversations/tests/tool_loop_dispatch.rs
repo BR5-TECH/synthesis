@@ -102,8 +102,7 @@ fn every_artifact_turn_is_offered_the_nine_and_the_prompt_proposal_tool(
             None,
             format!("@{nickname} thoughts?"),
             Vec::new(),
-            &human("ada"),
-            "2026-01-01T00:00:00Z",
+            crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
         )
         .expect("discussion");
         let turn = h

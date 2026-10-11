@@ -10,9 +10,12 @@ use super::*;
 // CVL-FR-16, CVL-FR-17, CVL-FR-18, AGC-FR-18 / CVL-FR-17: the provider-call deadline, told apart from the turn's
 // ---------------------------------------------------------------------------
 
+/// A never-answering seam, its call counter, and the deadlines it was given.
+pub(super) type CountingSeam =
+    (Box<dyn CompletionSeam>, Arc<AtomicUsize>, Arc<Mutex<Vec<Duration>>>);
+
 /// A never-answering seam with its call counter and the deadlines it was given.
-pub(super) fn counting_never_answers(
-) -> (Box<dyn CompletionSeam>, Arc<AtomicUsize>, Arc<Mutex<Vec<Duration>>>) {
+pub(super) fn counting_never_answers() -> CountingSeam {
     let calls = Arc::new(AtomicUsize::new(0));
     let deadlines = Arc::new(Mutex::new(Vec::new()));
     (

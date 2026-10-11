@@ -74,8 +74,7 @@ fn a_discussion_log_written_before_targets_existed_still_folds() {
         "and the archive part?".into(),
         Vec::new(),
         Vec::new(),
-        &human("raver119"),
-        "2026-02-02T00:00:00Z",
+        Stamp { by: &human("raver119"), at: "2026-02-02T00:00:00Z" },
     )
     .unwrap();
     let after = fold_discussion(root, &draft);
@@ -229,8 +228,7 @@ fn every_command_but_the_reanchor_serves_an_artifact_discussion() {
         "and the archive part?".into(),
         Vec::new(),
         Vec::new(),
-        &human("raver119"),
-        "2026-02-03T00:00:00Z",
+        Stamp { by: &human("raver119"), at: "2026-02-03T00:00:00Z" },
     )
     .unwrap();
     assert_eq!(replied.comments.len(), 2);
@@ -356,8 +354,7 @@ fn a_target_that_escapes_or_names_a_directory_is_refused() {
                 None,
                 "hello".into(),
                 Vec::new(),
-                &human("raver119"),
-                "2026-02-01T00:00:00Z",
+                Stamp { by: &human("raver119"), at: "2026-02-01T00:00:00Z" }
             )
             .unwrap_err(),
             ERR_ARTIFACT_NOT_FOUND,
@@ -381,8 +378,7 @@ fn a_target_naming_nothing_is_refused_without_a_write() {
             None,
             "hello".into(),
             vec![inline_png("shot.png", b"bytes")],
-            &human("raver119"),
-            "2026-02-01T00:00:00Z",
+            Stamp { by: &human("raver119"), at: "2026-02-01T00:00:00Z" }
         )
         .unwrap_err(),
         ERR_ARTIFACT_NOT_FOUND
@@ -406,8 +402,7 @@ fn an_artifact_discussions_attachments_are_committed_beside_the_logs() {
         None,
         "look".into(),
         vec![inline_png("shot.png", png)],
-        &human("raver119"),
-        "2026-02-01T00:00:00Z",
+        Stamp { by: &human("raver119"), at: "2026-02-01T00:00:00Z" },
     )
     .unwrap();
     let Attachment::Blob { digest, .. } = &thread.comments[0].attachments[0] else {

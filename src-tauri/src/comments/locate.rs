@@ -39,7 +39,15 @@ pub fn append_agent_comment_to(
     // every `blob` a thread holds was put there by the participant who attached
     // it. The one exception is a proposal reference, which goes through the
     // sibling below rather than through here.
-    append_agent_comment_with(root, target, thread_id, new_note_id(), body, Vec::new(), by, at)
+    append_agent_comment_with(
+        root,
+        target,
+        thread_id,
+        new_note_id(),
+        body,
+        Vec::new(),
+        Stamp { by, at },
+    )
 }
 
 /// [`append_agent_comment_to`] carrying attachments, under a comment id the
@@ -68,9 +76,9 @@ pub fn append_agent_comment_with(
     comment_id: String,
     body: String,
     attachments: Vec<Attachment>,
-    by: &Participant,
-    at: &str,
+    stamp: Stamp<'_>,
 ) -> Result<Discussion, String> {
+    let Stamp { by, at } = stamp;
     let thread = target.find(root, thread_id)?;
     // CMS-FR-17: a lock stops an agent exactly as it stops a person.
     if thread.locked {

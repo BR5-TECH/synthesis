@@ -110,6 +110,20 @@ fn das_ts28_a_pass_removes_what_it_can_and_counts_what_it_could_not() {
 // DAS-FR-25 — the lock refuses a write and answers a read (DAS-FR-25)
 // ---------------------------------------------------------------------------
 
+/// The signature of `store_image_impl`, a write that the command surface guards.
+type StoreImageFn = fn(
+    &crate::fs::RootFs,
+    &str,
+    &str,
+    Option<&str>,
+    &str,
+    &dyn Fn(&str),
+) -> Result<DraftAsset, String>;
+
+/// The signature of `discard_image_impl`, a write that the command surface guards.
+type DiscardImageFn =
+    fn(&crate::fs::RootFs, &str, &str, &DraftAssetSweeper) -> Result<DraftAssetDiscarded, String>;
+
 /// DAS-FR-25: `store_draft_image` and `discard_draft_image` are refused against
 /// a draft a graduation holds, and `read_draft_image` and `read_prompt_images`
 /// answer for it exactly as for any other draft.
@@ -136,22 +150,7 @@ fn das_ts18_both_reads_are_indifferent_to_the_lock() {
     // And the two that DO refuse are the two the command surface guards. Named
     // here so a rename fails to compile rather than silently leaving the guard
     // covering nothing.
-    let _guarded: (
-        fn(
-            &crate::fs::RootFs,
-            &str,
-            &str,
-            Option<&str>,
-            &str,
-            &dyn Fn(&str),
-        ) -> Result<DraftAsset, String>,
-        fn(
-            &crate::fs::RootFs,
-            &str,
-            &str,
-            &DraftAssetSweeper,
-        ) -> Result<DraftAssetDiscarded, String>,
-    ) = (store_image_impl, discard_image_impl);
+    let _guarded: (StoreImageFn, DiscardImageFn) = (store_image_impl, discard_image_impl);
     const LIB: &str = include_str!("../../draft_assets.rs");
     for command in ["store_draft_image", "discard_draft_image"] {
         let at = LIB.find(&format!("pub fn {command}")).expect("the command");

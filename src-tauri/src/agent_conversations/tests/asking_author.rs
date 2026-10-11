@@ -140,8 +140,7 @@ fn seed_prompt_discussion(h: &Harness, nickname: &str) -> Discussion {
         None,
         format!("@{nickname} what would you change?"),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion")
 }
@@ -732,8 +731,7 @@ fn the_answering_turn_reads_the_question_and_the_answer_as_ordinary_history() {
         "two, definitely".into(),
         Vec::new(),
         Vec::new(),
-        &human("ada"),
-        "2099-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2099-01-01T00:00:00Z" },
     )
     .expect("reply");
     let reply_id = answered

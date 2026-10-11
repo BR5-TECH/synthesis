@@ -442,10 +442,9 @@ fn conversation_tools<R: tauri::Runtime>(
     roots: Roots<'_>,
     origin: &ConversationOrigin,
     author: &Participant,
-    asked: &Arc<AtomicBool>,
-    asked_questions: &Arc<AtomicBool>,
-    proposed: &Arc<AtomicBool>,
+    flags: ContributionFlags<'_>,
 ) -> Vec<rig::tool::DynamicTool> {
+    let ContributionFlags { asked, asked_questions, proposed } = flags;
     let mut tools = vec![
         erase_tool(crate::tools::spec_search::SpecSearchTool::new(app.clone())),
         erase_tool(crate::tools::file_read::FileReadTool::new(app.clone(), session)),
@@ -516,6 +515,16 @@ fn conversation_tools<R: tauri::Runtime>(
         ));
     }
     tools
+}
+
+/// The three signals that the turn-ending tools set when a contribution goes
+/// out (CVL-FR-15): a question, a set of discussion questions, or a proposal.
+/// [`conversation_tools`] gives each one to the tool that sets it.
+#[derive(Clone, Copy)]
+struct ContributionFlags<'a> {
+    asked: &'a Arc<AtomicBool>,
+    asked_questions: &'a Arc<AtomicBool>,
+    proposed: &'a Arc<AtomicBool>,
 }
 
 // ---------------------------------------------------------------------------
@@ -680,11 +689,9 @@ pub fn retry_impl<R: tauri::Runtime>(
         },
     );
 
-    // Dropped before dispatching: `dispatch_impl` reads the registry off the app
-    // handle itself and would otherwise contend with a `State` still borrowed
-    // here for the whole of this call.
-    drop(turns);
-
+    // `dispatch_impl` reads the registry off the app handle itself. The `State`
+    // here is only a shared reference and holds no lock, so the two do not
+    // contend.
     dispatch_impl(
         app,
         roots,

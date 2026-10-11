@@ -20,8 +20,7 @@ fn a_quote_must_name_a_comment_in_the_same_thread() {
         "agreed".into(),
         vec![CommentQuote { comment_id: c1.clone(), excerpt: "first".into() }],
         Vec::new(),
-        &human("octocat"),
-        "2026-01-02T00:00:00Z",
+        Stamp { by: &human("octocat"), at: "2026-01-02T00:00:00Z" },
     )
     .unwrap();
     assert_eq!(updated.comments.len(), 2);
@@ -35,8 +34,7 @@ fn a_quote_must_name_a_comment_in_the_same_thread() {
         "nope".into(),
         vec![CommentQuote { comment_id: t2.comments[0].id.clone(), excerpt: "other".into() }],
         Vec::new(),
-        &human("octocat"),
-        "2026-01-03T00:00:00Z",
+        Stamp { by: &human("octocat"), at: "2026-01-03T00:00:00Z" },
     )
     .unwrap_err();
     assert_eq!(err, ERR_QUOTED_COMMENT_NOT_IN_DISCUSSION);
@@ -64,8 +62,7 @@ fn a_locked_thread_takes_no_comment_until_it_is_unlocked() {
             "blocked".into(),
             vec![],
             Vec::new(),
-            &human("octocat"),
-            "2026-01-03T00:00:00Z"
+            Stamp { by: &human("octocat"), at: "2026-01-03T00:00:00Z" }
         )
         .unwrap_err(),
         ERR_DISCUSSION_LOCKED
@@ -81,8 +78,7 @@ fn a_locked_thread_takes_no_comment_until_it_is_unlocked() {
         "now fine".into(),
         vec![],
         Vec::new(),
-        &human("octocat"),
-        "2026-01-05T00:00:00Z",
+        Stamp { by: &human("octocat"), at: "2026-01-05T00:00:00Z" },
     )
     .unwrap();
     assert_eq!(after.comments.len(), 2);
@@ -108,8 +104,7 @@ fn lock_and_resolution_move_independently_in_every_combination() {
         "still talking".into(),
         vec![],
         Vec::new(),
-        &by,
-        "2026-01-03T00:00:00Z",
+        Stamp { by: &by, at: "2026-01-03T00:00:00Z" },
     )
     .unwrap();
 

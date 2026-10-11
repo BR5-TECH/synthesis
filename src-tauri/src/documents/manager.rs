@@ -35,6 +35,10 @@ pub(super) struct PdfCacheEntry {
 /// that panics or fails (DCL-FR-VRTS).
 pub type Extractor = fn(&[u8]) -> Result<String, String>;
 
+/// The write of a changed source list to the store, under the project key that
+/// the change began for (DCL-FR-VWSG).
+pub type Persist<'a> = dyn Fn(&str, &[StoredSource]) -> Result<(), String> + 'a;
+
 fn default_extractor(bytes: &[u8]) -> Result<String, String> {
     pdf_extract::extract_text_from_mem(bytes).map_err(|e| e.to_string())
 }
@@ -294,7 +298,7 @@ impl DocumentsCollection {
     pub fn add_sources(
         &self,
         requested: &[StoredSource],
-        persist: &dyn Fn(&str, &[StoredSource]) -> Result<(), String>,
+        persist: &Persist<'_>,
     ) -> Result<Vec<StoredSource>, DocumentsError> {
         let _mutation = lock(&self.mutation);
         let (generation, key, mut list) = self.begin_change()?;
@@ -353,7 +357,7 @@ impl DocumentsCollection {
     pub fn remove_source(
         &self,
         path: &str,
-        persist: &dyn Fn(&str, &[StoredSource]) -> Result<(), String>,
+        persist: &Persist<'_>,
     ) -> Result<Option<StoredSource>, DocumentsError> {
         let _mutation = lock(&self.mutation);
         let (generation, project_key, mut list) = self.begin_change()?;

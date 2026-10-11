@@ -201,6 +201,20 @@ pub(super) fn record_refinement_lifecycle<R: tauri::Runtime>(
     );
 }
 
+/// How a turn ended: the terminal state that [`finish`] stamps, and what the
+/// path that ended the turn knows about it.
+#[derive(Clone, Copy)]
+pub(super) struct TurnEnding {
+    pub(super) state: AgentTurnState,
+    pub(super) failure: Option<&'static str>,
+    /// AGC-FR-31: whether this failure is one the author may ask again. Passed
+    /// rather than derived from `failure`, because `timed_out` names both the
+    /// retryable per-call deadline and the whole-turn one that is not
+    /// (CVL-FR-17, CVL-FR-18) — only the path that terminated the turn knows
+    /// which it was.
+    pub(super) recoverable: bool,
+}
+
 /// The one exit every path takes: stamp the terminal state, publish it exactly
 /// once, and release the progress operation (AGC-FR-21, AGC-FR-24).
 pub(super) fn finish<R: tauri::Runtime>(
@@ -208,16 +222,10 @@ pub(super) fn finish<R: tauri::Runtime>(
     turns: &TurnRegistry,
     progress_registry: &ProgressRegistry,
     turn_id: &str,
-    state: AgentTurnState,
-    failure: Option<&'static str>,
+    ending: TurnEnding,
     counts: TurnCounts,
-    // AGC-FR-31: whether this failure is one the author may ask again. Passed
-    // rather than derived from `failure`, because `timed_out` names both the
-    // retryable per-call deadline and the whole-turn one that is not
-    // (CVL-FR-17, CVL-FR-18) — only the path that terminated the turn knows
-    // which it was.
-    recoverable: bool,
 ) {
+    let TurnEnding { state, failure, recoverable } = ending;
     let Some((mut turn, operation, project_key, reached_model)) =
         turns.terminate(turn_id, state, failure)
     else {

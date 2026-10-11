@@ -42,8 +42,11 @@ fn vault_harness_with(
     (store, ai)
 }
 
+/// One typed vault failure and the switch on the fake keyring that provokes it.
+type Provocation = (&'static str, Box<dyn Fn(&FakeKeyring)>);
+
 /// The five typed vault failures, each with the switch that provokes it.
-fn vault_provocations() -> Vec<(&'static str, Box<dyn Fn(&FakeKeyring)>)> {
+fn vault_provocations() -> Vec<Provocation> {
     vec![
         ("vault_unavailable", Box::new(|k: &FakeKeyring| k.state().refuse_read = true)),
         ("vault_write_failed", Box::new(|k: &FakeKeyring| k.state().refuse_write = true)),
@@ -161,7 +164,7 @@ fn aic_fr32_no_candidate_is_supplied_for_a_keyless_vendor() {
 /// leaves the record `key_unavailable` and never fails the listing.
 #[test]
 fn aic_ts26_every_vault_failure_downgrades_but_never_fails_the_listing() {
-    let provocations: Vec<(&str, Box<dyn Fn(&FakeKeyring)>)> = vec![
+    let provocations: Vec<Provocation> = vec![
         ("vault_unavailable", Box::new(|k: &FakeKeyring| k.state().refuse_read = true)),
         ("vault_malformed", Box::new(|k: &FakeKeyring| k.set_entry("not an AppSecrets object"))),
         ("vault_unsupported_version", Box::new(|k: &FakeKeyring| k.set_entry(r#"{"version":99}"#))),

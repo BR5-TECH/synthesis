@@ -594,14 +594,14 @@ fn draft_file_path_in(root: &fs::RootFs, dir: &Path, path: &str) -> Result<PathB
     Ok(abs)
 }
 
-/// DRS-FR-13: there is no operation that creates, renames, or deletes a file or
-/// a folder inside a draft.
-///
-/// Nothing stood here by accident. A draft's file set is settled at creation
-/// (DRS-FR-06) and changes only when the draft is renamed, which renames the one
-/// file it holds (DRS-FR-14) — so a draft can never be reduced to no file, never
-/// grown into a tree, and no caller can put one into the state DRS-FR-11
-/// forbids.
+// DRS-FR-13: there is no operation that creates, renames, or deletes a file or
+// a folder inside a draft.
+//
+// Nothing stood here by accident. A draft's file set is settled at creation
+// (DRS-FR-06) and changes only when the draft is renamed, which renames the one
+// file it holds (DRS-FR-14) — so a draft can never be reduced to no file, never
+// grown into a tree, and no caller can put one into the state DRS-FR-11
+// forbids.
 
 /// DRS-FR-20: mark a draft `graduated`, the one path to that status.
 ///

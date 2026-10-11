@@ -36,8 +36,7 @@ fn seeded_draft(h: &Harness) -> (String, crate::comments::Discussion) {
         None,
         "@arch where should graduation live?".into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
     (created.draft.id, discussion)

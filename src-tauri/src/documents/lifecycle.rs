@@ -19,7 +19,7 @@ use crate::global_settings::GlobalSettingsStore;
 use crate::logging::LogLevel;
 
 use super::log::DocLog;
-use super::manager::{DocumentsCollection, RefreshOutcome};
+use super::manager::{DocumentsCollection, Persist, RefreshOutcome};
 use super::model::{
     format_of, DocumentsError, DocumentsSnapshot, PickDocumentSourcesResult, PickMode, SourceKind,
     StoredSource,
@@ -309,9 +309,7 @@ fn mode_name(mode: PickMode) -> &'static str {
 /// DCL-FR-VWSG: the key is the one the change began for, which the collection
 /// passes in, so a project switch during the write cannot move the list into
 /// another project's slot.
-fn persister<'a, R: tauri::Runtime>(
-    app: &'a tauri::AppHandle<R>,
-) -> Box<dyn Fn(&str, &[StoredSource]) -> Result<(), String> + 'a> {
+fn persister<'a, R: tauri::Runtime>(app: &'a tauri::AppHandle<R>) -> Box<Persist<'a>> {
     Box::new(move |key: &str, list: &[StoredSource]| {
         let store =
             app.try_state::<GlobalSettingsStore>().ok_or("the settings store is not available")?;

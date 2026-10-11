@@ -93,8 +93,7 @@ fn comments_and_events_stamp_the_local_participant_and_keep_saved_authors() {
         "second".into(),
         Vec::new(),
         Vec::new(),
-        &github,
-        "2026-01-01T00:00:01Z",
+        Stamp { by: &github, at: "2026-01-01T00:00:01Z" },
     )
     .unwrap();
     let locked =

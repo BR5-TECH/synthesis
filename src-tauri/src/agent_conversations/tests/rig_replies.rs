@@ -12,6 +12,8 @@ use rig::test_utils::MockTurn;
 
 /// One round through the production extraction, against a scripted turn of
 /// the framework's own mock.
+// Reason: the test returns what the production seam returns, and that error is `CallFailure`.
+#[allow(clippy::result_large_err)]
 fn reply_to(turn: MockTurn) -> Result<ModelReply, CallFailure> {
     let request = wire_request();
     let built =

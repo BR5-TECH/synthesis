@@ -58,8 +58,7 @@ fn an_attachment_is_stored_by_kind_and_deduplicated_by_content() {
         "same picture".into(),
         vec![],
         vec![inline_png("renamed.png", png)],
-        &human("octocat"),
-        "2026-01-02T00:00:00Z",
+        Stamp { by: &human("octocat"), at: "2026-01-02T00:00:00Z" },
     )
     .unwrap();
     assert_eq!(stored_files(root), vec![digest.clone()], "byte-identical content is one file",);
@@ -84,8 +83,7 @@ fn an_attachment_is_stored_by_kind_and_deduplicated_by_content() {
         "third time".into(),
         vec![],
         vec![inline_png("again.png", png)],
-        &human("octocat"),
-        "2026-01-03T00:00:00Z",
+        Stamp { by: &human("octocat"), at: "2026-01-03T00:00:00Z" },
     )
     .unwrap();
     assert_eq!(
@@ -164,8 +162,7 @@ fn a_failed_append_leaves_the_bytes_rather_than_a_dangling_reference() {
         "with a picture".into(),
         vec![],
         vec![inline_png("a.png", png)],
-        &human("raver119"),
-        "2026-01-02T00:00:00Z",
+        Stamp { by: &human("raver119"), at: "2026-01-02T00:00:00Z" },
     );
     assert!(err.is_err(), "the append could not be written");
 
@@ -225,8 +222,7 @@ fn the_refusal_matrix_covers_urls_filenames_and_the_size_boundary() {
             "try".into(),
             vec![],
             attachments,
-            &by,
-            "2026-01-02T00:00:00Z",
+            Stamp { by: &by, at: "2026-01-02T00:00:00Z" },
         )
     };
 
@@ -290,8 +286,7 @@ fn a_refusal_for_any_reason_leaves_the_attachments_folder_clean() {
             "quoting elsewhere".into(),
             vec![CommentQuote { comment_id: other.comments[0].id.clone(), excerpt: "y".into() }],
             vec![inline_png("never-stored.png", b"never")],
-            &by,
-            "2026-01-02T00:00:00Z",
+            Stamp { by: &by, at: "2026-01-02T00:00:00Z" }
         )
         .unwrap_err(),
         ERR_QUOTED_COMMENT_NOT_IN_DISCUSSION,
@@ -308,8 +303,7 @@ fn a_refusal_for_any_reason_leaves_the_attachments_folder_clean() {
             "into a locked thread".into(),
             vec![],
             vec![inline_png("never-stored.png", b"never")],
-            &by,
-            "2026-01-04T00:00:00Z",
+            Stamp { by: &by, at: "2026-01-04T00:00:00Z" }
         )
         .unwrap_err(),
         ERR_DISCUSSION_LOCKED,
@@ -369,8 +363,7 @@ fn an_unacceptable_attachment_refuses_the_whole_append() {
             vec![],
             // The acceptable one is first, so nothing about ordering saves it.
             vec![inline_png("ok.png", b"fine"), bad],
-            &human("raver119"),
-            "2026-01-02T00:00:00Z",
+            Stamp { by: &human("raver119"), at: "2026-01-02T00:00:00Z" },
         )
         .unwrap_err();
         assert_eq!(err, expected);

@@ -487,8 +487,7 @@ where
         comment_id,
         new.rationale.to_string(),
         vec![attachment],
-        new.agent,
-        &now,
+        comments::Stamp { by: new.agent, at: &now },
     ) {
         Ok(thread) => thread,
         Err(error) => {
@@ -785,8 +784,7 @@ where
         journal.event_id.clone(),
         journal.comment_id.clone(),
         journal.comment_body.clone(),
-        &journal.comment_by,
-        &now_rfc3339(),
+        comments::Stamp { by: &journal.comment_by, at: &now_rfc3339() },
     )?;
     // AGC-FR-31 / CTA-FR-RUVS: the author's decision is a human-authored comment,
     // so it retires this conversation's offer to retry a failed turn exactly as

@@ -147,7 +147,7 @@ fn provider_reported_blocks_become_one_call_per_tool_the_provider_ran() {
         serde_json::from_value(value).expect("a reasoning block")
     }
 
-    let details = vec![
+    let details = [
         // The model's own reasoning: no tool, so nothing to carry.
         detail(None, None, None, None),
         // One tool reported as a call and then as its result, under one id.

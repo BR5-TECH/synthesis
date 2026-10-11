@@ -336,8 +336,10 @@ fn a_long_discussion_history_is_bounded_like_any_other_section() {
             "x".repeat(2_000),
             vec![],
             Vec::new(),
-            &human("ada"),
-            &format!("2026-01-01T00:00:{:02}Z", i + 1),
+            crate::comments::Stamp {
+                by: &human("ada"),
+                at: &format!("2026-01-01T00:00:{:02}Z", i + 1),
+            },
         )
         .expect("comment");
     }
@@ -379,8 +381,7 @@ fn an_artifact_discussion_carries_the_files_whole_source() {
         None,
         "@arch can the review step split?".into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
 
@@ -481,8 +482,7 @@ fn an_unreadable_file_leaves_the_rest_of_an_artifact_discussion_intact() {
         None,
         "@arch thoughts?".into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
     // Gone after the thread was opened, which is exactly the case AGC-FR-12 is
@@ -513,8 +513,7 @@ fn a_locked_artifact_discussion_refuses_its_turn() {
         None,
         "@arch thoughts?".into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
     crate::comments::set_lock_to(
@@ -549,8 +548,7 @@ fn an_answer_lands_in_the_discussion_log_beside_the_anchored_one() {
         None,
         "@arch thoughts?".into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
 

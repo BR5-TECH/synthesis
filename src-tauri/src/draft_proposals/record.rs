@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::comments::Participant;
 
-use super::{anchors, hunks};
+use super::{anchors, hunks, Decision};
 
 /// DCP-FR-04: where a proposal stands. `pending` is the only state that occupies
 /// the draft's one slot.
@@ -184,4 +184,23 @@ pub struct ProposalHunks {
 #[serde(rename_all = "camelCase")]
 pub struct CandidateSaved {
     pub checksum: String,
+}
+
+/// What the author decided: which way the decision went, the change it
+/// settles, and the feedback that goes with it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Verdict<'a> {
+    pub(crate) decision: Decision,
+    /// DCP-FR-11 / DCP-FR-14: the one change this decision settles, or `None`
+    /// for a decision about the whole proposal.
+    pub(crate) hunk: Option<&'a str>,
+    pub(crate) feedback: Option<&'a str>,
+}
+
+impl Verdict<'_> {
+    /// A decision about the whole proposal, without feedback.
+    #[cfg(test)]
+    pub(crate) const fn whole(decision: Decision) -> Self {
+        Self { decision, hunk: None, feedback: None }
+    }
 }

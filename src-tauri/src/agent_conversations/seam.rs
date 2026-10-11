@@ -229,6 +229,8 @@ pub struct InputTokens {
 /// it stands at that moment. The tools reach no network of their own, so a
 /// turn's whole outbound footprint is the calls made here.
 pub trait CompletionSeam: Send + Sync {
+    // Reason: `CallFailure` is the error of the whole completion seam; a box would change about 26 signatures.
+    #[allow(clippy::result_large_err)]
     fn complete(
         &self,
         request: &AgentRequest,

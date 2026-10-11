@@ -487,8 +487,7 @@ pub(crate) fn append_decision_comment(
         event_id,
         comment_id,
         body,
-        by,
-        &now_rfc3339(),
+        comments::Stamp { by, at: &now_rfc3339() },
     )
 }
 
@@ -511,16 +510,13 @@ fn decide<R: tauri::Runtime>(
     root: &fs::RootFs,
     store: &fs::RootFs,
     proposal_id: &str,
-    decision: Decision,
-    // DCP-FR-11 / DCP-FR-14: the one change this decision settles, or `None`
-    // for a decision about the whole proposal.
-    hunk: Option<&str>,
-    feedback: Option<&str>,
+    verdict: Verdict<'_>,
     by: &Participant,
 ) -> Result<Decided, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
+    let Verdict { decision, hunk, feedback } = verdict;
     let (draft_id, _) = find_proposal(root, proposal_id).ok_or(ERR_PROPOSAL_NOT_FOUND)?;
     // DRS-FR-QPSC: the accepted-proposal write of DHS-FR-15 refuses a
     // GitHub-shadow draft and changes nothing. A decline writes no prompt.
@@ -790,7 +786,7 @@ pub fn decline_for_test<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    decide(app, root, store, proposal_id, Decision::Decline, None, None, by)
+    decide(app, root, store, proposal_id, Verdict::whole(Decision::Decline), by)
 }
 
 /// [`accept_draft_change_hunk`] for a test that holds no Tauri `State`.
@@ -810,7 +806,14 @@ pub fn accept_hunk_for_test<R: tauri::Runtime>(
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    decide(app, root, store, proposal_id, Decision::Accept, Some(hunk_id), None, by)
+    decide(
+        app,
+        root,
+        store,
+        proposal_id,
+        Verdict { decision: Decision::Accept, hunk: Some(hunk_id), feedback: None },
+        by,
+    )
 }
 
 /// [`decide`] for a test in another module.
@@ -823,7 +826,14 @@ pub fn accept_for_test<R: tauri::Runtime>(
     feedback: Option<&str>,
     by: &Participant,
 ) -> Result<Decided, String> {
-    decide(app, root, store, proposal_id, Decision::Accept, None, feedback, by)
+    decide(
+        app,
+        root,
+        store,
+        proposal_id,
+        Verdict { decision: Decision::Accept, hunk: None, feedback },
+        by,
+    )
 }
 
 /// A decision that landed, and whether the conversation got to hear about it.

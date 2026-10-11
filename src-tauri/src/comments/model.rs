@@ -396,3 +396,11 @@ pub struct Event {
     #[serde(flatten)]
     pub body: EventBody,
 }
+
+/// Who appends to a conversation, and when: the `by` and the `at` that each
+/// [`Event`] of the append records.
+#[derive(Clone, Copy, Debug)]
+pub struct Stamp<'a> {
+    pub by: &'a Participant,
+    pub at: &'a str,
+}

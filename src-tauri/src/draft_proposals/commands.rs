@@ -110,9 +110,7 @@ where
         &root,
         &repo_store,
         &proposal_id,
-        decision,
-        hunk_id.as_deref(),
-        feedback.as_deref(),
+        Verdict { decision, hunk: hunk_id.as_deref(), feedback: feedback.as_deref() },
         &by,
     )
     .inspect_err(|e| log_refusal(&app, operation, e))?;
@@ -272,9 +270,7 @@ where
         &root,
         &repo_store,
         &proposal_id,
-        Decision::Decline,
-        None,
-        feedback.as_deref(),
+        Verdict { decision: Decision::Decline, hunk: None, feedback: feedback.as_deref() },
         &by,
     )
     .inspect_err(|e| log_refusal(&app, "decline", e))?;

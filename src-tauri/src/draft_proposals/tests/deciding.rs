@@ -366,10 +366,10 @@ fn two_windows_deciding_one_proposal_land_exactly_one_decision() {
     let root = &f.root;
     let id = proposal.id.as_str();
     let (accepted, declined) = std::thread::scope(|scope| {
-        let accept =
-            scope.spawn(|| decide(&app, root, root, id, Decision::Accept, None, None, &human()));
-        let decline =
-            scope.spawn(|| decide(&app, root, root, id, Decision::Decline, None, None, &human()));
+        let accept = scope
+            .spawn(|| decide(&app, root, root, id, Verdict::whole(Decision::Accept), &human()));
+        let decline = scope
+            .spawn(|| decide(&app, root, root, id, Verdict::whole(Decision::Decline), &human()));
         (accept.join().expect("accept thread"), decline.join().expect("decline thread"))
     });
 

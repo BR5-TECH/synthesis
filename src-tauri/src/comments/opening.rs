@@ -174,9 +174,9 @@ pub fn open_discussion_in(
     fragment_target: Option<FragmentTarget>,
     body: String,
     attachments: Vec<AttachmentInput>,
-    by: &Participant,
-    at: &str,
+    stamp: Stamp<'_>,
 ) -> Result<Discussion, String> {
+    let Stamp { by, at } = stamp;
     if matches!(target, DiscussionTarget::Note { .. }) {
         return Err(ERR_NOT_SUPPORTED.to_string());
     }

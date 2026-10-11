@@ -272,8 +272,7 @@ fn a_prompt_proposal_rationale_carries_no_marker() {
         None,
         "@arch what would you change?".into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
     let turn = h

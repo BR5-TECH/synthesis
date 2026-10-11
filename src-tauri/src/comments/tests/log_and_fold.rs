@@ -117,8 +117,7 @@ fn a_log_whose_every_line_was_duplicated_folds_to_the_same_state() {
         "second".into(),
         vec![],
         Vec::new(),
-        &human("octocat"),
-        "2026-01-02T00:00:00Z",
+        Stamp { by: &human("octocat"), at: "2026-01-02T00:00:00Z" },
     )
     .unwrap();
 
@@ -148,8 +147,7 @@ fn damaged_and_future_lines_are_skipped_and_left_on_disk() {
         "second".into(),
         vec![],
         Vec::new(),
-        &human("raver119"),
-        "2026-01-02T00:00:00Z",
+        Stamp { by: &human("raver119"), at: "2026-01-02T00:00:00Z" },
     )
     .unwrap();
 
@@ -493,8 +491,7 @@ fn concurrent_appends_all_land_and_a_duplicated_line_folds_once() {
                     format!("reply {n}"),
                     Vec::new(),
                     Vec::new(),
-                    &human("raver119"),
-                    "2026-01-01T00:00:01Z",
+                    Stamp { by: &human("raver119"), at: "2026-01-01T00:00:01Z" },
                 )
                 .expect("append");
             });

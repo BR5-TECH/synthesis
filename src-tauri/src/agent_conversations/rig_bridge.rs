@@ -321,6 +321,8 @@ pub use rig_seam::run_model;
 /// `crate::ai_openrouter` documents: a Tauri command may already be executing
 /// inside a Tokio worker, and driving a nested runtime from there panics at
 /// runtime — a failure no test without the full Tauri runtime would catch.
+// Reason: `CallFailure` is the error of the whole completion seam; a box would change about 26 signatures.
+#[allow(clippy::result_large_err)]
 pub(super) fn block_on_with_timeout<F, T>(future: F, timeout: Duration) -> Result<T, CallFailure>
 where
     F: std::future::Future<Output = Result<T, CallFailure>> + Send + 'static,
@@ -596,6 +598,8 @@ async fn carry_openai(
 /// serves neither will not serve it, and a provider that serves one serves
 /// search: search alone leaves an agent able to reach the web, while fetch alone
 /// leaves it able to read only pages whose address it already has.
+// Reason: `CallFailure` is the error of the whole completion seam; a box would change about 26 signatures.
+#[allow(clippy::result_large_err)]
 fn carry_openrouter_narrowing(
     request: &AgentRequest,
     exchange: &[rig::completion::Message],

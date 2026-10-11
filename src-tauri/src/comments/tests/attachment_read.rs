@@ -20,8 +20,7 @@ fn cms_ts68_read_attachment_bytes_matches_the_surface_read_and_fetches_nothing()
         None,
         "look at this".into(),
         vec![inline_png("diff.png", png), url_png("https://example.test/a.png", Some("spec v2"))],
-        &human("raver119"),
-        "2026-01-01T00:00:00Z",
+        Stamp { by: &human("raver119"), at: "2026-01-01T00:00:00Z" },
     )
     .unwrap();
     let digest = match only_attachments(&thread)[0] {
@@ -181,8 +180,7 @@ fn a_discussion_takes_every_operation_an_anchored_thread_takes() {
         "agreed".into(),
         vec![CommentQuote { comment_id: first_comment.clone(), excerpt: "first".into() }],
         vec![inline_png("shot.png", b"bytes")],
-        &human("raver119"),
-        "2026-02-01T00:01:00Z",
+        Stamp { by: &human("raver119"), at: "2026-02-01T00:01:00Z" },
     )
     .unwrap();
     assert_eq!(replied.comments.len(), 2);
@@ -353,8 +351,7 @@ fn a_discussion_needs_a_draft_and_the_reserved_name_collides_with_nothing() {
             None,
             "hello".into(),
             vec![inline_png("shot.png", b"bytes")],
-            &human("raver119"),
-            "2026-02-01T00:00:00Z",
+            Stamp { by: &human("raver119"), at: "2026-02-01T00:00:00Z" }
         )
         .unwrap_err(),
         ERR_DRAFT_NOT_FOUND,
@@ -435,8 +432,7 @@ fn an_attachment_read_is_confined_to_the_scope_its_caller_names() {
         None,
         "look".into(),
         vec![inline_png("shot.png", png)],
-        &human("raver119"),
-        "2026-02-01T00:00:00Z",
+        Stamp { by: &human("raver119"), at: "2026-02-01T00:00:00Z" },
     )
     .unwrap();
 

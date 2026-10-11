@@ -94,8 +94,7 @@ fn a_write_leaves_the_worktree_byte_for_byte_as_it_was() {
         "a reply".into(),
         Vec::new(),
         vec![inline_png("shot.png", b"bytes")],
-        &human("raver119"),
-        "2026-01-01T00:00:01Z",
+        Stamp { by: &human("raver119"), at: "2026-01-01T00:00:01Z" },
     )
     .unwrap();
     // The project-wide read takes both roots, and still writes into neither.
@@ -138,7 +137,15 @@ fn an_unknown_thread_is_the_typed_not_found() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     let by = human("raver119");
     for result in [
-        add_comment_in(root, "specs/a.md", "nope", "x".into(), vec![], Vec::new(), &by, "t"),
+        add_comment_in(
+            root,
+            "specs/a.md",
+            "nope",
+            "x".into(),
+            vec![],
+            Vec::new(),
+            Stamp { by: &by, at: "t" },
+        ),
         set_lock_in(root, "specs/a.md", "nope", true, &by, "t"),
         set_resolution_in(root, "specs/a.md", "nope", true, &by, "t"),
         reanchor_in(root, "specs/a.md", "nope", anchor(0, 1, "a"), &by, "t"),
@@ -234,8 +241,7 @@ fn every_step_adds_exactly_one_line_and_rewrites_none() {
                 "reply one".into(),
                 vec![],
                 Vec::new(),
-                &by,
-                "2026-01-02T00:00:00Z",
+                Stamp { by: &by, at: "2026-01-02T00:00:00Z" },
             )
         }),
         Box::new(|| {
@@ -246,8 +252,7 @@ fn every_step_adds_exactly_one_line_and_rewrites_none() {
                 "reply two".into(),
                 vec![],
                 Vec::new(),
-                &by,
-                "2026-01-03T00:00:00Z",
+                Stamp { by: &by, at: "2026-01-03T00:00:00Z" },
             )
         }),
         Box::new(|| set_lock_in(root, "specs/a.md", &id, true, &by, "2026-01-04T00:00:00Z")),

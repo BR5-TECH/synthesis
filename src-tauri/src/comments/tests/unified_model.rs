@@ -157,8 +157,7 @@ fn reading_a_legacy_log_again_changes_nothing_and_duplicate_lines_fold_once() {
         "too early".into(),
         Vec::new(),
         Vec::new(),
-        &human("raver119"),
-        "2026-01-02T00:00:00Z",
+        Stamp { by: &human("raver119"), at: "2026-01-02T00:00:00Z" },
     );
     assert_eq!(refused.unwrap_err(), ERR_DISCUSSION_LOCKED);
     let (unlocked, _) =
@@ -171,8 +170,7 @@ fn reading_a_legacy_log_again_changes_nothing_and_duplicate_lines_fold_once() {
         "third".into(),
         Vec::new(),
         Vec::new(),
-        &human("raver119"),
-        "2026-01-02T00:00:01Z",
+        Stamp { by: &human("raver119"), at: "2026-01-02T00:00:01Z" },
     )
     .unwrap();
     assert_eq!(appended.comments.len(), 3);
@@ -260,8 +258,7 @@ fn a_fragment_is_accepted_for_artifact_and_draft_owners_and_its_absence_means_th
             fragment,
             "hello".into(),
             Vec::new(),
-            &by,
-            "2026-02-01T00:00:00Z",
+            Stamp { by: &by, at: "2026-02-01T00:00:00Z" },
         )
     };
 
@@ -326,8 +323,7 @@ fn a_fragment_is_refused_with_a_typed_error_for_notes_and_malformed_fragments() 
             Some(fragment),
             "hello".into(),
             Vec::new(),
-            &by,
-            "2026-02-01T00:00:00Z",
+            Stamp { by: &by, at: "2026-02-01T00:00:00Z" },
         )
         .unwrap_err()
     };
@@ -426,8 +422,16 @@ fn one_of_each(root: &crate::fs::RootFs) -> Vec<(&'static str, Discussion)> {
     let artifact = artifact_target("specs/a.md");
     let draft_target = DiscussionTarget::Draft { draft_id: draft.clone() };
     let open_with = |target: &DiscussionTarget, fragment: Option<FragmentTarget>, at: &str| {
-        open_discussion_in(root, root, target, fragment, "hello".into(), Vec::new(), &by, at)
-            .unwrap()
+        open_discussion_in(
+            root,
+            root,
+            target,
+            fragment,
+            "hello".into(),
+            Vec::new(),
+            Stamp { by: &by, at },
+        )
+        .unwrap()
     };
     let (note_discussion, _) = get_or_create_note_discussion_in(
         root,
@@ -505,8 +509,7 @@ fn one_discussion_id_reads_as_the_same_record_from_every_route() {
             "reply".into(),
             Vec::new(),
             Vec::new(),
-            &human("ada"),
-            "2026-03-01T00:00:00Z",
+            Stamp { by: &human("ada"), at: "2026-03-01T00:00:00Z" },
         )
         .unwrap();
         assert_eq!(replied.id, discussion.id, "{label}");
@@ -568,8 +571,7 @@ fn a_discussion_of_a_missing_owner_stays_readable_and_a_deleted_draft_takes_its_
             None,
             "again".into(),
             Vec::new(),
-            &human("raver119"),
-            "2026-03-01T00:00:00Z",
+            Stamp { by: &human("raver119"), at: "2026-03-01T00:00:00Z" }
         )
         .unwrap_err(),
         ERR_ARTIFACT_NOT_FOUND,
@@ -593,8 +595,7 @@ fn a_discussion_of_a_missing_owner_stays_readable_and_a_deleted_draft_takes_its_
             None,
             "again".into(),
             Vec::new(),
-            &human("raver119"),
-            "2026-03-01T00:00:00Z",
+            Stamp { by: &human("raver119"), at: "2026-03-01T00:00:00Z" }
         )
         .unwrap_err(),
         ERR_DRAFT_NOT_FOUND,
@@ -640,8 +641,7 @@ fn a_worktree_switch_keeps_the_same_logs() {
         Some(FragmentTarget::in_artifact("specs/a.md", 0, 3, "abc")),
         "pinned".into(),
         Vec::new(),
-        &by,
-        "2026-02-01T00:00:00Z",
+        Stamp { by: &by, at: "2026-02-01T00:00:00Z" },
     )
     .unwrap();
     let whole = open_discussion_in(
@@ -651,8 +651,7 @@ fn a_worktree_switch_keeps_the_same_logs() {
         None,
         "whole".into(),
         Vec::new(),
-        &by,
-        "2026-02-01T00:00:01Z",
+        Stamp { by: &by, at: "2026-02-01T00:00:01Z" },
     )
     .unwrap();
     let logs_before = walk_files(store_dir.path());
@@ -678,8 +677,7 @@ fn a_worktree_switch_keeps_the_same_logs() {
         "from the second checkout".into(),
         Vec::new(),
         Vec::new(),
-        &by,
-        "2026-02-02T00:00:00Z",
+        Stamp { by: &by, at: "2026-02-02T00:00:00Z" },
     )
     .unwrap();
     assert_eq!(replied.comments.len(), 2);

@@ -11,8 +11,7 @@ pub fn add_comment_in(
     body: String,
     quotes: Vec<CommentQuote>,
     attachments: Vec<AttachmentInput>,
-    by: &Participant,
-    at: &str,
+    stamp: Stamp<'_>,
 ) -> Result<Discussion, String> {
     add_comment_to(
         root,
@@ -21,8 +20,7 @@ pub fn add_comment_in(
         body,
         quotes,
         attachments,
-        by,
-        at,
+        stamp,
     )
 }
 
@@ -96,8 +94,7 @@ pub fn append_decision_comment_event(
     event_id: String,
     comment_id: String,
     body: String,
-    by: &Participant,
-    at: &str,
+    stamp: Stamp<'_>,
 ) -> Result<Discussion, String> {
     // The thread still has to exist: an append into a log for a thread that was
     // never opened would fold to nothing and quietly lose the decision.
@@ -106,8 +103,8 @@ pub fn append_decision_comment_event(
         v: SCHEMA_VERSION,
         event_id,
         thread_id: thread_id.to_string(),
-        at: at.to_string(),
-        by: by.clone(),
+        at: stamp.at.to_string(),
+        by: stamp.by.clone(),
         body: EventBody::CommentAdded {
             comment_id,
             body,
@@ -131,9 +128,9 @@ pub fn add_comment_to(
     body: String,
     quotes: Vec<CommentQuote>,
     attachments: Vec<AttachmentInput>,
-    by: &Participant,
-    at: &str,
+    stamp: Stamp<'_>,
 ) -> Result<Discussion, String> {
+    let Stamp { by, at } = stamp;
     let thread = target.find(root, thread_id)?;
     // CMS-FR-17: the one thing a lock prevents.
     if thread.locked {

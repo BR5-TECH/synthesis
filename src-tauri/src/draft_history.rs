@@ -665,25 +665,29 @@ fn stage_for_test(
         write_entry(
             root,
             &hist,
-            id,
-            draft_id,
-            base_seq + 1,
-            &proposal.path,
-            DraftHistorySource::Original,
+            NewEntry {
+                entry_id: id,
+                draft_id,
+                seq: base_seq + 1,
+                path: &proposal.path,
+                source: DraftHistorySource::Original,
+            },
             prior.as_bytes(),
         )?;
     }
     write_entry(
         root,
         &hist,
-        &entry_id,
-        draft_id,
-        seq,
-        &proposal.path,
-        DraftHistorySource::ProposalAccepted {
-            proposal_id: proposal.id.clone(),
-            hunk_id: None,
-            agent: proposal.agent.clone(),
+        NewEntry {
+            entry_id: &entry_id,
+            draft_id,
+            seq,
+            path: &proposal.path,
+            source: DraftHistorySource::ProposalAccepted {
+                proposal_id: proposal.id.clone(),
+                hunk_id: None,
+                agent: proposal.agent.clone(),
+            },
         },
         normalised.as_bytes(),
     )?;

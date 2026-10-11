@@ -13,6 +13,8 @@ use super::*;
 /// separated from its own carrier: what a request *asks for* is then readable
 /// without a network call, and a test pins the tool array directly rather than
 /// inferring it from a response.
+// Reason: `CallFailure` is the error of the whole completion seam; a box would change about 26 signatures.
+#[allow(clippy::result_large_err)]
 pub(super) fn openrouter_request(
     request: &AgentRequest,
     exchange: &[rig::completion::Message],

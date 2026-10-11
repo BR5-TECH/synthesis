@@ -113,8 +113,10 @@ fn a_local_participants_comment_reaches_the_agent_as_me() {
         "written as me".to_string(),
         Vec::new(),
         Vec::new(),
-        &crate::comments::Participant::local_human(),
-        "2026-01-01T00:05:00Z",
+        crate::comments::Stamp {
+            by: &crate::comments::Participant::local_human(),
+            at: "2026-01-01T00:05:00Z",
+        },
     )
     .expect("local reply");
     let local_id = thread.comments.last().unwrap().id.clone();
@@ -128,8 +130,7 @@ fn a_local_participants_comment_reaches_the_agent_as_me() {
             excerpt: "written as me".to_string(),
         }],
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:06:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:06:00Z" },
     )
     .expect("trigger");
     let trigger = thread.comments.last().unwrap().id.clone();
@@ -190,8 +191,7 @@ fn an_artifact_section_names_the_type_the_library_shows_for_the_same_path() {
             None,
             "@arch what is this?".into(),
             Vec::new(),
-            &human("ada"),
-            "2026-01-01T00:00:00Z",
+            crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
         )
         .expect("discussion");
         let trigger = thread.comments[0].id.clone();
@@ -257,8 +257,7 @@ fn a_drafts_sections_name_the_type_its_own_prompt_declares() {
         None,
         "@arch what now?".into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
     let whole_draft = build_input(
@@ -297,8 +296,7 @@ fn a_drafts_sections_name_the_type_its_own_prompt_declares() {
         None,
         "@arch and this?".into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:02:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:02:00Z" },
     )
     .expect("discussion");
     assert_eq!(
@@ -426,8 +424,7 @@ fn a_discussions_attachments_are_named_and_never_carried() {
                 base64::engine::general_purpose::STANDARD.encode(b"bytes")
             },
         }],
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
 

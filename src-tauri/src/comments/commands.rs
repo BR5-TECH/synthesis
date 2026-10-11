@@ -192,8 +192,7 @@ pub fn open_discussion<R: tauri::Runtime>(
         fragment_target,
         body,
         attachments,
-        &by,
-        &now_rfc3339(),
+        Stamp { by: &by, at: &now_rfc3339() },
     )
     .inspect_err(|err| {
         crate::logging::log_warn(
@@ -239,8 +238,7 @@ pub fn add_comment<R: tauri::Runtime>(
         body,
         quotes,
         attachments,
-        &by,
-        &now_rfc3339(),
+        Stamp { by: &by, at: &now_rfc3339() },
     )?;
     // AGC-FR-31 / CTA-FR-RUVS: a later **human** comment retires this
     // conversation's offer to retry a failed turn. Here rather than in the agent

@@ -255,9 +255,10 @@ fn a_note_body_rewrite_replaces_its_document_whole_and_a_deletion_removes_it() {
     let removed = seed_note(&root, crate::notes::NoteScope::Project, "charlie doomed");
 
     let app = indexed(&root_path);
-    let indexer = app.state::<Bm25Indexer>();
-    assert_eq!(search(&indexer, &[IndexId::Notes], "alpha", 10).len(), 1);
-    drop(indexer);
+    {
+        let indexer = app.state::<Bm25Indexer>();
+        assert_eq!(search(&indexer, &[IndexId::Notes], "alpha", 10).len(), 1);
+    }
 
     crate::notes::update_note_in(
         &root,

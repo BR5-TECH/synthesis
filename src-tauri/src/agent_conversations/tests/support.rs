@@ -141,8 +141,7 @@ pub(super) fn seed_discussion(h: &Harness, earlier: &[&str]) -> (String, Discuss
         None,
         earlier.first().copied().unwrap_or("@arch what now?").to_string(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
     for (i, body) in earlier.iter().skip(1).enumerate() {
@@ -153,8 +152,10 @@ pub(super) fn seed_discussion(h: &Harness, earlier: &[&str]) -> (String, Discuss
             (*body).to_string(),
             Vec::new(),
             Vec::new(),
-            &human("ada"),
-            &format!("2026-01-01T00:0{}:00Z", i + 1),
+            crate::comments::Stamp {
+                by: &human("ada"),
+                at: &format!("2026-01-01T00:0{}:00Z", i + 1),
+            },
         )
         .expect("reply");
     }
@@ -228,11 +229,11 @@ pub(super) fn asks(question: &str) -> ScriptedReply {
 /// moves every origin has, and only offering a rewrite is bound to one.
 pub(super) const DRAFT_ONLY_TOOL: &str = "propose_draft_changes";
 
-/// The nine every turn gets, in the order `conversation_tools` names them.
-///
-/// `search_notes` is among them on every origin kind, which is
-/// `../../specifications/tools/NST-note-search-tool.md` NST-FR-01, CVL-FR-08's claim as
-/// well as CVL-FR-30, CVL-FR-08's: every test below that sweeps the five kinds sweeps it.
+// The nine every turn gets, in the order `conversation_tools` names them.
+//
+// `search_notes` is among them on every origin kind, which is
+// `../../specifications/tools/NST-note-search-tool.md` NST-FR-01, CVL-FR-08's claim as
+// well as CVL-FR-30, CVL-FR-08's: every test below that sweeps the five kinds sweeps it.
 
 /// One field as text, or empty where the record does not carry it.
 ///
@@ -270,6 +271,10 @@ pub(super) fn mentions_a_provider_entry(exchange: &[rig::completion::Message]) -
     })
 }
 
+/// The calls and the results that [`native_traffic`] finds: `(name, arguments)`
+/// for each call and `(id, result)` for each result.
+pub(super) type NativeTraffic = (Vec<(String, String)>, Vec<(String, String)>);
+
 /// Every provider-run call and result an exchange holds, in order — as
 /// `(name, arguments)` for a call and `(id, result)` for a result.
 ///
@@ -279,9 +284,7 @@ pub(super) fn mentions_a_provider_entry(exchange: &[rig::completion::Message]) -
 /// exists to assert exactly that, and it looks for the shape the loop used to
 /// build — a function call named for a provider entry type — because that is the
 /// shape a provider refuses.
-pub(super) fn native_traffic(
-    exchange: &[rig::completion::Message],
-) -> (Vec<(String, String)>, Vec<(String, String)>) {
+pub(super) fn native_traffic(exchange: &[rig::completion::Message]) -> NativeTraffic {
     use rig::completion::message::{AssistantContent, ToolResultContent, UserContent};
     let mut calls = Vec::new();
     let mut results = Vec::new();

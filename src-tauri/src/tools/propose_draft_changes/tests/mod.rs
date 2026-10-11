@@ -70,8 +70,7 @@ impl Fixture {
             None,
             "@arch what would you change?".into(),
             Vec::new(),
-            &human(),
-            "2026-01-01T00:00:00Z",
+            crate::comments::Stamp { by: &human(), at: "2026-01-01T00:00:00Z" },
         )
         .expect("discussion");
         Fixture {

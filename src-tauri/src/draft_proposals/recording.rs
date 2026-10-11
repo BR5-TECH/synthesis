@@ -165,8 +165,7 @@ where
         comment_id,
         new.rationale.to_string(),
         vec![attachment],
-        new.agent,
-        &now,
+        comments::Stamp { by: new.agent, at: &now },
     ) {
         Ok(thread) => thread,
         Err(error) => {

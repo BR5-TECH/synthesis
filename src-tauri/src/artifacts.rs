@@ -75,6 +75,11 @@ impl ContentTracker {
     pub fn len(&self) -> usize {
         self.inner.lock().map(|g| g.len()).unwrap_or(0)
     }
+
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 /// Wire shape of `load_artifact_contents_by_id` (PST-FR-15): body + baseline.

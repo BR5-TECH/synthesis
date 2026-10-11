@@ -83,8 +83,7 @@ impl Fixture {
             None,
             "@arch what would you change?".into(),
             Vec::new(),
-            &human(),
-            "2026-01-01T00:00:00Z",
+            comments::Stamp { by: &human(), at: "2026-01-01T00:00:00Z" },
         )
         .expect("discussion");
         Fixture {
@@ -201,7 +200,14 @@ impl Fixture {
     }
 
     fn accept(&self, id: &str) -> Result<Decided, String> {
-        decide(&self.handle(), &self.root, &self.root, id, Decision::Accept, None, None, &human())
+        decide(
+            &self.handle(),
+            &self.root,
+            &self.root,
+            id,
+            Verdict::whole(Decision::Accept),
+            &human(),
+        )
     }
 
     fn accept_hunk(&self, id: &str, hunk: &str) -> Result<Decided, String> {
@@ -210,9 +216,7 @@ impl Fixture {
             &self.root,
             &self.root,
             id,
-            Decision::Accept,
-            Some(hunk),
-            None,
+            Verdict { decision: Decision::Accept, hunk: Some(hunk), feedback: None },
             &human(),
         )
     }
@@ -223,9 +227,7 @@ impl Fixture {
             &self.root,
             &self.root,
             id,
-            Decision::Decline,
-            Some(hunk),
-            None,
+            Verdict { decision: Decision::Decline, hunk: Some(hunk), feedback: None },
             &human(),
         )
     }
@@ -245,7 +247,14 @@ impl Fixture {
     }
 
     fn decline(&self, id: &str) -> Result<Decided, String> {
-        decide(&self.handle(), &self.root, &self.root, id, Decision::Decline, None, None, &human())
+        decide(
+            &self.handle(),
+            &self.root,
+            &self.root,
+            id,
+            Verdict::whole(Decision::Decline),
+            &human(),
+        )
     }
 
     fn proposals_folder_files(&self) -> Vec<String> {
@@ -275,9 +284,7 @@ impl Fixture {
             &self.root,
             &self.root,
             id,
-            Decision::Decline,
-            None,
-            feedback,
+            Verdict { decision: Decision::Decline, hunk: None, feedback },
             &human(),
         )
     }

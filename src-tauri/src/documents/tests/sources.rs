@@ -27,7 +27,7 @@ fn adding_a_known_path_adds_nothing_and_order_is_first_addition() {
     assert!(added.is_empty(), "the same normalised path adds nothing");
     assert_eq!(*persisted.lock().unwrap(), [2], "nothing is stored for a repeat");
     let c = source(SourceKind::Folder, "/refs/c");
-    docs.collection.add_sources(&[c.clone()], &persist).unwrap();
+    docs.collection.add_sources(std::slice::from_ref(&c), &persist).unwrap();
     assert_eq!(docs.collection.stored_sources(), [a, b, c]);
 }
 

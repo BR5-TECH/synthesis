@@ -198,8 +198,7 @@ fn open_artifact_discussion(
         None,
         body.into(),
         Vec::new(),
-        &human("raver119"),
-        at,
+        Stamp { by: &human("raver119"), at },
     )
     .unwrap()
 }
@@ -226,8 +225,7 @@ fn open_discussion(root: &crate::fs::RootFs, draft_id: &str, body: &str, at: &st
         None,
         body.into(),
         Vec::new(),
-        &human("raver119"),
-        at,
+        Stamp { by: &human("raver119"), at },
     )
     .unwrap()
 }

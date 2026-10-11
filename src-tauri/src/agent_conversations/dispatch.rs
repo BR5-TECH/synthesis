@@ -280,9 +280,7 @@ pub fn dispatch_impl<R: tauri::Runtime>(
         roots,
         &origin,
         &author,
-        &asked,
-        &asked_questions,
-        &proposed,
+        ContributionFlags { asked: &asked, asked_questions: &asked_questions, proposed: &proposed },
     );
     let plan = TurnPlan {
         turn_id: turn.id.clone(),
@@ -475,8 +473,7 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
         &turns,
         &progress_registry,
         &plan.turn_id,
-        state,
-        failure,
+        TurnEnding { state, failure, recoverable },
         TurnCounts {
             logical: Some(plan.model_calls.load(Ordering::SeqCst)),
             physical: Some(plan.physical_calls.load(Ordering::SeqCst)),
@@ -486,6 +483,5 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
                 uncached: plan.uncached_input_tokens.load(Ordering::SeqCst),
             }),
         },
-        recoverable,
     );
 }

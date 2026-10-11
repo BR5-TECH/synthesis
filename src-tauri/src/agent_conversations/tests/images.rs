@@ -67,8 +67,7 @@ fn open_draft_discussion(h: &Harness, draft_id: &str, body: &str) -> Discussion 
         None,
         body.into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion")
 }
@@ -163,8 +162,7 @@ fn agc_ts54_a_comments_image_attachments_reach_the_section_holding_them() {
             filename: "diff.png".into(),
             data: encoded(&png_bytes("attached")),
         }],
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
     crate::comments::add_comment_to(
@@ -178,8 +176,7 @@ fn agc_ts54_a_comments_image_attachments_reach_the_section_holding_them() {
             filename: "notes.pdf".into(),
             data: encoded(b"%PDF-1.7"),
         }],
-        &human("ada"),
-        "2026-01-01T00:00:01Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:01Z" },
     )
     .expect("pdf");
     crate::comments::add_comment_to(
@@ -193,8 +190,7 @@ fn agc_ts54_a_comments_image_attachments_reach_the_section_holding_them() {
             media_type: "text/plain".into(),
             label: Some("spec v2".into()),
         }],
-        &human("ada"),
-        "2026-01-01T00:00:02Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:02Z" },
     )
     .expect("link");
     let asking = crate::comments::add_comment_to(
@@ -208,8 +204,7 @@ fn agc_ts54_a_comments_image_attachments_reach_the_section_holding_them() {
             filename: "current.png".into(),
             data: encoded(&png_bytes("current")),
         }],
-        &human("ada"),
-        "2026-01-01T00:00:03Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:03Z" },
     )
     .expect("current");
     let trigger = asking.comments.last().expect("the trigger").id.clone();

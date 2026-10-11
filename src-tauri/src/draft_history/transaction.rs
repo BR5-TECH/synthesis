@@ -17,6 +17,16 @@ use super::*;
 // Writing entries
 // ---------------------------------------------------------------------------
 
+/// The manifest fields of one entry that the caller chooses. [`write_entry`]
+/// adds the fields that come from the payload and the clock.
+pub(crate) struct NewEntry<'a> {
+    pub(crate) entry_id: &'a str,
+    pub(crate) draft_id: &'a str,
+    pub(crate) seq: u32,
+    pub(crate) path: &'a str,
+    pub(crate) source: DraftHistorySource,
+}
+
 /// Write one entry: payload first, then manifest.
 ///
 /// The order is what DHS-FR-12 rests on outside a transaction too — a payload
@@ -25,13 +35,10 @@ use super::*;
 pub(crate) fn write_entry(
     root: &fs::RootFs,
     hist: &Path,
-    entry_id: &str,
-    draft_id: &str,
-    seq: u32,
-    path: &str,
-    source: DraftHistorySource,
+    new_entry: NewEntry<'_>,
     bytes: &[u8],
 ) -> Result<DraftHistoryEntry, String> {
+    let NewEntry { entry_id, draft_id, seq, path, source } = new_entry;
     root.write_bytes_atomic(snapshot_path(hist, entry_id), bytes).map_err(|e| e.to_string())?;
     // Digested from the file that just landed rather than from the slice in
     // memory, so the manifest describes what a later read will actually verify.
@@ -202,11 +209,13 @@ where
             Some(id) => Some(write_entry(
                 root,
                 &hist,
-                id,
-                draft_id,
-                original_seq,
-                &prompt,
-                DraftHistorySource::Original,
+                NewEntry {
+                    entry_id: id,
+                    draft_id,
+                    seq: original_seq,
+                    path: &prompt,
+                    source: DraftHistorySource::Original,
+                },
                 &prior,
             )?),
             None => None,
@@ -215,14 +224,16 @@ where
             Some(id) => Some(write_entry(
                 root,
                 &hist,
-                id,
-                draft_id,
-                next_seq,
-                &prompt,
-                DraftHistorySource::ProposalAccepted {
-                    proposal_id: input.proposal.id.clone(),
-                    hunk_id: input.hunk_id.clone(),
-                    agent: input.proposal.agent.clone(),
+                NewEntry {
+                    entry_id: id,
+                    draft_id,
+                    seq: next_seq,
+                    path: &prompt,
+                    source: DraftHistorySource::ProposalAccepted {
+                        proposal_id: input.proposal.id.clone(),
+                        hunk_id: input.hunk_id.clone(),
+                        agent: input.proposal.agent.clone(),
+                    },
                 },
                 normalised.as_bytes(),
             )?),

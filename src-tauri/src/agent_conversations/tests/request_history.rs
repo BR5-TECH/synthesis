@@ -31,8 +31,7 @@ fn the_artifact_builder_gathers_the_artifact_the_history_and_the_current_comment
             body.into(),
             vec![],
             vec![],
-            &human("ada"),
-            at,
+            crate::comments::Stamp { by: &human("ada"), at },
         )
         .expect("comment");
     }
@@ -137,8 +136,7 @@ fn the_history_names_every_author_by_handle() {
         "@arch so which is it?".into(),
         vec![],
         vec![],
-        &human("ada"),
-        "2026-01-01T00:00:02Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:02Z" },
     )
     .expect("third comment");
 
@@ -197,8 +195,7 @@ fn a_quote_reaches_the_agent_attributed_to_whoever_wrote_the_passage() {
             excerpt: "the rail's floor is wrong".into(),
         }],
         vec![],
-        &human("sam"),
-        "2026-01-01T00:00:02Z",
+        crate::comments::Stamp { by: &human("sam"), at: "2026-01-01T00:00:02Z" },
     )
     .expect("the quoting comment");
     crate::comments::add_comment_in(
@@ -208,8 +205,7 @@ fn a_quote_reaches_the_agent_attributed_to_whoever_wrote_the_passage() {
         "@arch so which is it?".into(),
         vec![],
         vec![],
-        &human("ada"),
-        "2026-01-01T00:00:03Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:03Z" },
     )
     .expect("the trigger");
 
@@ -349,8 +345,7 @@ fn several_quotes_render_in_the_order_the_comment_holds_them() {
             crate::comments::CommentQuote { comment_id: second, excerpt: "SECOND-EXCERPT".into() },
         ],
         vec![],
-        &human("ada"),
-        "2026-01-01T00:00:02Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:02Z" },
     )
     .expect("a comment quoting two passages");
 
@@ -391,8 +386,7 @@ fn the_comment_that_addressed_the_agent_carries_its_quotes_too() {
             excerpt: "the passage in question".into(),
         }],
         vec![],
-        &human("ada"),
-        "2026-01-01T00:00:02Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:02Z" },
     )
     .expect("the trigger, carrying a quote");
 
@@ -483,8 +477,7 @@ fn attachments_are_named_without_being_carried() {
                 label: Some("spec v2".into()),
             },
         ],
-        &human("ada"),
-        "2026-01-01T00:00:02Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:02Z" },
     )
     .expect("comment with attachments");
 
@@ -555,8 +548,7 @@ fn attachments_are_named_without_being_carried() {
             media_type: "image/png".into(),
             label: None,
         }],
-        &human("ada"),
-        "2026-01-01T00:00:03Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:03Z" },
     )
     .expect("unlabelled link");
 
@@ -644,8 +636,7 @@ fn a_delivered_agent_comment_carries_no_attachment() {
             filename: "shot.png".into(),
             data: base64::engine::general_purpose::STANDARD.encode(b"bytes"),
         }],
-        &human("ada"),
-        "2026-01-01T00:00:02Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:02Z" },
     )
     .expect("author's attachment");
 
@@ -690,8 +681,7 @@ fn the_history_ends_at_the_comment_that_addressed_the_agent() {
         "A later comment nobody asked about.".into(),
         vec![],
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:02Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:02Z" },
     )
     .expect("later comment");
 

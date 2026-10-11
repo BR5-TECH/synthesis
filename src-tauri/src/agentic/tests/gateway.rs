@@ -101,11 +101,15 @@ fn a_payload_that_mixes_the_two_shapes_is_refused() {
     assert!(h.runner.calls.lock().unwrap().is_empty(), "no binary ran");
 }
 
+/// One bad gateway field: a label, the change that makes the field bad, and the
+/// error code that the refusal names.
+type GatewayFieldCase = (&'static str, Box<dyn Fn(&mut VerifyConfig)>, &'static str);
+
 // AIC-FR-UFNB, AIC-FR-CVPW, AIC-FR-IOWS: every shape error comes before the
 // binary runs and before the vault is touched.
 #[test]
 fn a_bad_gateway_field_is_refused_before_anything_runs_or_is_stored() {
-    let cases: Vec<(&str, Box<dyn Fn(&mut VerifyConfig)>, &str)> = vec![
+    let cases: Vec<GatewayFieldCase> = vec![
         ("empty URL", Box::new(|c| c.gateway_base_url = Some("  ".into())), "base_url_empty"),
         (
             "relative URL",

@@ -70,8 +70,7 @@ fn a_proposal_reference_folds_holds_no_content_and_is_served_by_nothing() {
             draft_id: "d1".into(),
             path: "ui/spec.md".into(),
         }],
-        &agent("a1", "arch"),
-        "2026-01-01T00:01:00Z",
+        Stamp { by: &agent("a1", "arch"), at: "2026-01-01T00:01:00Z" },
     )
     .expect("appended");
 
@@ -145,8 +144,7 @@ fn a_prompt_proposal_reference_folds_holds_no_content_and_is_never_validated() {
             artifact_id: "prompts/review.md".into(),
             path: "prompts/review.md".into(),
         }],
-        &agent("a1", "arch"),
-        "2026-01-01T00:01:00Z",
+        Stamp { by: &agent("a1", "arch"), at: "2026-01-01T00:01:00Z" },
     )
     .expect("appended");
 
@@ -266,8 +264,7 @@ fn a_drafts_review_is_addressed_by_its_stable_id_and_a_move_leaves_it_there() {
         None,
         "rework the graduation part".into(),
         vec![inline_png("shot.png", b"discussion-bytes")],
-        &human("raver119"),
-        "2026-02-01T00:00:01Z",
+        Stamp { by: &human("raver119"), at: "2026-02-01T00:00:01Z" },
     )
     .unwrap();
 

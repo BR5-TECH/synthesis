@@ -196,8 +196,7 @@ fn a_discussion_carries_the_other_prompt() {
         None,
         "@arch where should graduation live?".into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
 
@@ -438,8 +437,7 @@ fn a_dispatched_discussion_turn_carries_its_agents_title_too() {
         None,
         "@arch where should graduation live?".into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
 
@@ -579,8 +577,7 @@ fn the_prompt_and_the_builders_name_the_same_tags() {
         None,
         "@arch what now?".into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
 
@@ -591,8 +588,7 @@ fn the_prompt_and_the_builders_name_the_same_tags() {
         None,
         "@arch what is this for?".into(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("artifact discussion");
     let (_, note_origin) = seed_note_discussion(

@@ -199,8 +199,7 @@ fn a_note_discussion_refuses_an_unknown_note_an_empty_body_and_open_discussion()
             None,
             "by the wrong door".into(),
             Vec::new(),
-            &by,
-            "2025-03-04T11:00:00Z",
+            Stamp { by: &by, at: "2025-03-04T11:00:00Z" },
         )
         .unwrap_err();
         assert_eq!(err, ERR_NOT_SUPPORTED);
@@ -248,8 +247,7 @@ fn a_note_discussion_behaves_like_any_other_discussion() {
         "a reply".into(),
         Vec::new(),
         Vec::new(),
-        &by,
-        "2025-03-04T12:00:00Z",
+        Stamp { by: &by, at: "2025-03-04T12:00:00Z" },
     )
     .unwrap();
     append_agent_comment_to(
@@ -290,8 +288,7 @@ fn a_note_discussion_behaves_like_any_other_discussion() {
             media_type: "image/png".into(),
             data: b64(b"PNGBYTES"),
         }],
-        &by,
-        "2025-03-04T14:30:00Z",
+        Stamp { by: &by, at: "2025-03-04T14:30:00Z" },
     );
     // The thread was locked above, so unlock it for this append.
     let _ = with_blob;
@@ -307,8 +304,7 @@ fn a_note_discussion_behaves_like_any_other_discussion() {
             media_type: "image/png".into(),
             data: b64(b"PNGBYTES"),
         }],
-        &by,
-        "2025-03-04T14:30:00Z",
+        Stamp { by: &by, at: "2025-03-04T14:30:00Z" },
     )
     .unwrap();
     let digest = match folded.comments.last().unwrap().attachments.first().unwrap() {
@@ -473,8 +469,7 @@ fn the_note_index_and_the_removal_are_scoped_to_one_note() {
                 media_type: "image/png".into(),
                 data: b64(b"PNGBYTES"),
             }],
-            &by,
-            "2025-03-04T12:00:00Z",
+            Stamp { by: &by, at: "2025-03-04T12:00:00Z" },
         )
         .unwrap();
     }

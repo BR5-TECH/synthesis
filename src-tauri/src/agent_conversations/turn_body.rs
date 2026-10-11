@@ -242,10 +242,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             plan,
             &endpoint,
             &exchange,
-            bounds.retry,
-            deadline,
-            model_calls,
-            at_bound,
+            ModelCall { policy: bounds.retry, deadline, model_calls, at_bound },
         )?;
 
         // CVL-FR-31: what the provider ran for itself is reported and recorded

@@ -258,6 +258,8 @@ fn a_failed_record_write_leaves_no_comment_behind() {
     // Restore before asserting, so a failure here does not leave the temp dir
     // undeletable.
     let mut perms = std::fs::metadata(&dir).expect("meta").permissions();
+    // Reason: the test restores write permission on its own temp directory
+    // so that the directory can be deleted; no production code does this.
     #[allow(clippy::permissions_set_readonly_false)]
     perms.set_readonly(false);
     std::fs::set_permissions(&dir, perms).expect("chmod");
@@ -379,6 +381,8 @@ fn a_failed_draft_write_leaves_the_proposal_pending_and_the_file_untouched() {
     let outcome = f.accept(&proposal.id);
 
     let mut perms = std::fs::metadata(&files_dir).expect("meta").permissions();
+    // Reason: the test restores write permission on its own temp directory
+    // so that the directory can be deleted; no production code does this.
     #[allow(clippy::permissions_set_readonly_false)]
     perms.set_readonly(false);
     std::fs::set_permissions(&files_dir, perms).expect("chmod");

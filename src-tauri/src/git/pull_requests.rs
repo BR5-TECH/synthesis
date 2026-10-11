@@ -129,8 +129,9 @@ fn is_refusal(error: &str) -> bool {
 }
 
 /// Run one read and report it. The target is resolved from `access`, and `work`
-/// gets it; `outcome` turns its result into the counts the record carries. Records hold names, numbers,
-/// and counts only: never the token, never text of a pull request.
+/// gets it; `outcome` turns its result into the counts the record carries.
+/// Records hold names, numbers, and counts only: never the token, never text of
+/// a pull request.
 fn run_reported<S, T>(
     sink: &S,
     buffer: &'static LogBuffer,

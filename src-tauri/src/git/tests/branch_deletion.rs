@@ -89,10 +89,12 @@ impl DeletionFixture {
         delete_branch_at(
             &self.app,
             self.buffer,
-            &self.active_root(),
-            "key",
-            &self.settings,
-            &self.tokens,
+            GithubAccess {
+                root: &self.active_root(),
+                store: &self.settings,
+                tokens: &self.tokens,
+                project_key: "key",
+            },
             name,
             delete_remote,
             discard,

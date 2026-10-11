@@ -6,6 +6,16 @@
 
 use super::*;
 
+/// One logical model call: the retry budget, the whole-turn deadline, the
+/// call's ordinal in the turn, and whether the loop's bound falls on it
+/// (CVL-FR-13, CVL-FR-19).
+pub(super) struct ModelCall {
+    pub(super) policy: RetryPolicy,
+    pub(super) deadline: std::time::Instant,
+    pub(super) model_calls: usize,
+    pub(super) at_bound: bool,
+}
+
 /// CVL-FR-17 / CVL-FR-19: one **logical** `complete` invocation, made as up to
 /// three physical attempts under its own deadline and its own retry budget.
 ///
@@ -16,18 +26,15 @@ use super::*;
 /// here reaches a surface either — the turn stays `running` throughout and emits
 /// no event — so a turn that answered on its third attempt and one that answered
 /// on its first are indistinguishable to whoever dispatched them.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn complete_with_retries<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     turns: &TurnRegistry,
     plan: &TurnPlan,
     endpoint: &AiApiCall,
     exchange: &[rig::completion::Message],
-    policy: RetryPolicy,
-    deadline: std::time::Instant,
-    model_calls: usize,
-    at_bound: bool,
+    call: ModelCall,
 ) -> Result<ModelReply, TurnEnd> {
+    let ModelCall { policy, deadline, model_calls, at_bound } = call;
     let model_label = endpoint.model_id.as_deref().unwrap_or("<provider default>");
     for attempt in 1..=policy.max_attempts {
         check_cancelled(plan)?;

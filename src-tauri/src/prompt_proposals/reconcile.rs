@@ -288,10 +288,7 @@ where
             root,
             store,
             &record,
-            &thread_artifact,
-            discussion,
-            feedback,
-            by,
+            Acceptance { thread_artifact: &thread_artifact, discussion, feedback, by },
             tracker,
         );
     }

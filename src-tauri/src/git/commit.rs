@@ -44,12 +44,12 @@ pub(crate) fn tree_mode(raw: u32) -> git2::FileMode {
     }
 }
 
-/// GTC-FR-19: which named paths differ from `HEAD`, and where a renamed one
-/// came from.
-///
 /// The changed paths and the `(new, previous)` pair of each renamed entry.
 type ChangedNamedPaths = (Vec<String>, Vec<(String, String)>);
 
+/// GTC-FR-19: which named paths differ from `HEAD`, and where a renamed one
+/// came from.
+///
 /// Returns `(changed, previous_of)`: the repository-relative paths among
 /// `specs` that the working tree reports as differing from `HEAD`, and the
 /// pre-rename location of each renamed entry. Computed from a diff rather than

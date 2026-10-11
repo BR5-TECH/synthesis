@@ -236,7 +236,6 @@ impl Harness {
         Self::build_full(seam, recorder, concurrency, secrets, timeout, fast_retries(), 0.5)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn build_full(
         seam: Box<dyn CompletionSeam>,
         recorder: Arc<ScriptedCompletion>,

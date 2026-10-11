@@ -8,7 +8,7 @@ The repository's single list of the commands a person or an agent runs by hand. 
 ## User stories
 - As a developer, I want to run `task build` so that the desktop application is bundled for the machine I am on without me choosing the command for my operating system.
 - As a developer, I want to run `task docker` so that every image the repository defines is built locally under one version tag, with nothing pushed anywhere.
-- As a developer, I want to run `task lint` so that I see every format and lint fault of the three Rust crates in one command, before the pipeline reports them.
+- As a developer, I want to run `task lint` so that I check the format and the lints of the three Rust crates with one command, before the pipeline reports a fault.
 - As a developer, I want to run `task tests` so that I run what the pipeline runs before I open a pull request.
 - As an AI agent, I want each command to have one name, one working directory, and one failure behaviour so that I run the same command a developer runs and read the same result.
 

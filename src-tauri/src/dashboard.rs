@@ -317,6 +317,10 @@ fn recently_edited_impl<R: tauri::Runtime>(
     recently_edited_from(readings)
 }
 
+/// One artifact that answered a stat: its id, its path, its kind, and its
+/// modification time.
+type ArtifactReading = (String, String, ArtifactKind, SystemTime);
+
 /// PST-FR-31 (pure): stat every enumerated artifact, keeping the ones the
 /// filesystem can describe and naming the ones it cannot.
 ///
@@ -325,11 +329,10 @@ fn recently_edited_impl<R: tauri::Runtime>(
 /// cannot describe never fails the widget. The omissions are returned rather
 /// than logged here so that the rule and its reporting are testable without a
 /// filesystem that can be made to refuse a stat on demand.
-#[allow(clippy::type_complexity)]
 fn stat_artifacts(
     nodes: Vec<(String, String, scanning::ArtifactType)>,
     stat: impl Fn(&str) -> Option<SystemTime>,
-) -> (Vec<(String, String, ArtifactKind, SystemTime)>, Vec<String>) {
+) -> (Vec<ArtifactReading>, Vec<String>) {
     let mut readings = Vec::with_capacity(nodes.len());
     let mut omitted = Vec::new();
     for (id, name, artifact_type) in nodes {
@@ -828,29 +831,25 @@ fn read_for<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     widget: DashboardWidget,
 ) -> Result<(), String> {
-    #[allow(clippy::let_and_return)]
-    {
-        let outcome: Result<(), String> = match widget {
-            DashboardWidget::AgentActivity => match app.try_state::<ProjectState>() {
-                Some(project) => agent_runs_impl(app, &project).map(|_| ()),
+    match widget {
+        DashboardWidget::AgentActivity => match app.try_state::<ProjectState>() {
+            Some(project) => agent_runs_impl(app, &project).map(|_| ()),
+            None => Ok(()),
+        },
+        DashboardWidget::PendingGit => {
+            match app.try_state::<ProjectState>().and_then(|p| p.require_root().ok()) {
+                Some(root) => pending_git_impl(&root).map(|_| ()),
+                // The project closed while the refresh was queued. Not a
+                // failure: the result is discarded below on identity.
                 None => Ok(()),
-            },
-            DashboardWidget::PendingGit => {
-                match app.try_state::<ProjectState>().and_then(|p| p.require_root().ok()) {
-                    Some(root) => pending_git_impl(&root).map(|_| ()),
-                    // The project closed while the refresh was queued. Not a
-                    // failure: the result is discarded below on identity.
-                    None => Ok(()),
-                }
             }
-            // Unreachable: `dispatch_refresh` refuses a widget the timer does
-            // not drive, so nothing reaches here without a read to perform.
-            DashboardWidget::RecentlyEdited | DashboardWidget::ActiveDrafts => {
-                debug_assert!(false, "a filesystem-driven widget was dispatched");
-                Err("this widget is refreshed by the filesystem, not by the timer".to_string())
-            }
-        };
-        outcome
+        }
+        // Unreachable: `dispatch_refresh` refuses a widget the timer does
+        // not drive, so nothing reaches here without a read to perform.
+        DashboardWidget::RecentlyEdited | DashboardWidget::ActiveDrafts => {
+            debug_assert!(false, "a filesystem-driven widget was dispatched");
+            Err("this widget is refreshed by the filesystem, not by the timer".to_string())
+        }
     }
 }
 

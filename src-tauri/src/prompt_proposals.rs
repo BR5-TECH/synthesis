@@ -558,23 +558,29 @@ fn decision_body(decision: Decision, path: &str, edited: bool, feedback: Option<
     }
 }
 
+/// The thread that receives the decision comment, and the author's own part of
+/// the decision (PCP-FR-12, PCP-FR-16).
+struct Acceptance<'a> {
+    thread_artifact: &'a str,
+    discussion: bool,
+    feedback: Option<&'a str>,
+    by: &'a Participant,
+}
+
 /// PCP-FR-12 / PCP-FR-14: accept a pending proposal, as one transaction with one
 /// commit point.
-#[allow(clippy::too_many_arguments)]
 fn accept_locked<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     root: &fs::RootFs,
     store: &fs::RootFs,
     record: &PromptChangeProposal,
-    thread_artifact: &str,
-    discussion: bool,
-    feedback: Option<&str>,
-    by: &Participant,
+    acceptance: Acceptance<'_>,
     tracker: &ContentTracker,
 ) -> Result<PromptDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
+    let Acceptance { thread_artifact, discussion, feedback, by } = acceptance;
     // PCP-FR-14: one acceptance of a proposal at a time. A second is refused
     // rather than interleaved.
     let Some(_slot) = try_acceptance_slot(&record.id) else {

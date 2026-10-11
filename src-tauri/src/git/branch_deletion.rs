@@ -280,18 +280,15 @@ pub fn inspect_branch_deletion_reported<R: tauri::Runtime>(
 ///
 /// GTC-FR-NPCT: emits `"branches changed"` once when the branch was removed,
 /// including when the remote leg failed, and nothing on a refusal.
-#[allow(clippy::too_many_arguments)]
 pub fn delete_branch_at<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     buffer: &'static LogBuffer,
-    root: &Path,
-    project_key: &str,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
+    access: GithubAccess<'_>,
     name: &str,
     delete_remote: bool,
     discard_uncommitted: bool,
 ) -> Result<BranchDeletionOutcome, String> {
+    let GithubAccess { root, store, tokens, project_key } = access;
     let started = Instant::now();
     logging::log_info(
         app,
@@ -462,10 +459,7 @@ pub async fn delete_branch(
         delete_branch_at(
             &app,
             &logging::BUFFER,
-            &root,
-            &project_key,
-            &store,
-            &tokens,
+            GithubAccess { root: &root, store: &store, tokens: &tokens, project_key: &project_key },
             &name,
             delete_remote,
             discard_uncommitted,

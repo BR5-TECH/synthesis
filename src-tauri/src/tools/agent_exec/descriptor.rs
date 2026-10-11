@@ -616,16 +616,16 @@ impl ContainerSpec {
     /// The Docker CLI backend's rendering of this specification: the complete
     /// `docker run` argument vector (EAC-FR-13).
     ///
-    /// `env_names` names variables whose *values* the runtime takes from the docker
-    /// client's own environment. That indirection is the whole reason Claude's
-    /// token never reaches an argument vector (EAC-FR-15): `--env NAME` is a name,
-    /// and a name is not a secret.
+    /// The `env_names` field names variables whose *values* the runtime takes
+    /// from the docker client's own environment. That indirection is the whole
+    /// reason Claude's token never reaches an argument vector (EAC-FR-15):
+    /// `--env NAME` is a name, and a name is not a secret.
     ///
-    /// `env_literals` carry their values in the argv instead, which is correct only
-    /// because every one of them is a container path this application chose — a
-    /// mount target, never a secret. The two mechanisms are separate so that
+    /// The `env_literals` field carries its values in the argv instead, which is
+    /// correct only because every one of them is a container path this
+    /// application chose — a mount target, never a secret. The two mechanisms are separate so that
     /// "forwarded by name" and "written in the vector" are decisions a reader makes
-    /// per variable rather than one the function makes for all of them.
+    /// per variable rather than one this method makes for all of them.
     pub fn docker_run_args(&self) -> Vec<String> {
         let mut args: Vec<String> = vec![
             "run".into(),

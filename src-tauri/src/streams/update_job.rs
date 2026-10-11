@@ -127,26 +127,30 @@ pub(super) fn start_with<R: tauri::Runtime>(
             &stream_id,
             &project_key,
             started,
-            strategy,
-            base_revision,
-            decisions,
+            UpdatePlan { strategy, base_revision, decisions },
             dispatch,
         );
     });
     Ok((record, handle))
 }
 
-#[allow(clippy::too_many_arguments)]
+/// What one update does: the strategy, the base revision it moves the stream
+/// onto, and the merge decisions the author already gave.
+struct UpdatePlan {
+    strategy: StreamUpdateStrategy,
+    base_revision: String,
+    decisions: Vec<StreamMergeDecision>,
+}
+
 fn update_blocking<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     stream_id: &str,
     project_key: &str,
     mut record: StreamUpdateRecord,
-    strategy: StreamUpdateStrategy,
-    base_revision: String,
-    decisions: Vec<StreamMergeDecision>,
+    plan: UpdatePlan,
     dispatch: Arc<dyn GraduationDispatch<R>>,
 ) {
+    let UpdatePlan { strategy, base_revision, decisions } = plan;
     let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else {
         // The update never ran, so the record must not be left claiming it is.
         record.state = update_record::StreamUpdateState::Failed;

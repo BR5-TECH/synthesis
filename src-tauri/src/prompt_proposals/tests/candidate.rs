@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 // ---------------------------------------------------------------------------
 // The candidate (PCP-FR-22 … PCP-FR-24)
 // ---------------------------------------------------------------------------
@@ -60,10 +59,7 @@ fn a_candidate_save_is_refused_once_the_proposal_is_decided() {
         save_candidate_impl(&f.root, &accepted.id, "nope\n", &loaded.checksum).unwrap_err(),
         ERR_ALREADY_DECIDED,
     );
-    assert_eq!(
-        load_content_impl(&f.root, &accepted.id).unwrap().content,
-        PROPOSED,
-    );
+    assert_eq!(load_content_impl(&f.root, &accepted.id).unwrap().content, PROPOSED,);
     assert!(events.lock().unwrap().is_empty());
 }
 
@@ -75,21 +71,16 @@ fn a_stale_candidate_save_writes_nothing() {
     let first = load_content_impl(&f.root, &proposal.id).expect("loaded");
     let second = first.clone();
 
-    save_candidate_impl(&f.root, &proposal.id, "first\n", &first.checksum).expect("the first lands");
+    save_candidate_impl(&f.root, &proposal.id, "first\n", &first.checksum)
+        .expect("the first lands");
     assert_eq!(
         save_candidate_impl(&f.root, &proposal.id, "second\n", &second.checksum).unwrap_err(),
         ERR_CANDIDATE_STALE,
     );
-    assert_eq!(
-        load_content_impl(&f.root, &proposal.id).unwrap().content,
-        "first\n",
-    );
+    assert_eq!(load_content_impl(&f.root, &proposal.id).unwrap().content, "first\n",);
 
     // …and re-reading and saving with the fresh checksum lands.
     let fresh = load_content_impl(&f.root, &proposal.id).expect("loaded");
     save_candidate_impl(&f.root, &proposal.id, "second\n", &fresh.checksum).expect("lands");
-    assert_eq!(
-        load_content_impl(&f.root, &proposal.id).unwrap().content,
-        "second\n",
-    );
+    assert_eq!(load_content_impl(&f.root, &proposal.id).unwrap().content, "second\n",);
 }

@@ -31,10 +31,7 @@ pub(super) fn validate_fragment(
         }
         DiscussionTarget::Note { .. } => return Err(ERR_INVALID_FRAGMENT.to_string()),
     };
-    Ok(FragmentTarget {
-        path,
-        ..fragment.clone()
-    })
+    Ok(FragmentTarget { path, ..fragment.clone() })
 }
 
 /// CMS-FR-26 / CMS-FR-27: the single write path.
@@ -129,14 +126,8 @@ pub fn append_events_with_identities(
     let lines: Result<Vec<String>, String> = events
         .into_iter()
         .map(|(thread_id, event_id, by, body)| {
-            let event = Event {
-                v: SCHEMA_VERSION,
-                event_id,
-                thread_id,
-                at: at.to_string(),
-                by,
-                body,
-            };
+            let event =
+                Event { v: SCHEMA_VERSION, event_id, thread_id, at: at.to_string(), by, body };
             serde_json::to_string(&event).map_err(|e| format!("could not encode event: {e}"))
         })
         .collect();
@@ -158,9 +149,7 @@ pub fn open_artifact_fragment_in(
     by: &Participant,
     at: &str,
 ) -> Result<Discussion, String> {
-    let target = DiscussionTarget::Artifact {
-        artifact_id: artifact_id.to_string(),
-    };
+    let target = DiscussionTarget::Artifact { artifact_id: artifact_id.to_string() };
     let fragment = validate_fragment(
         &target,
         &FragmentTarget::in_artifact(artifact_id, position.start, position.end, &position.quote),
@@ -191,10 +180,7 @@ pub fn open_discussion_in(
     if matches!(target, DiscussionTarget::Note { .. }) {
         return Err(ERR_NOT_SUPPORTED.to_string());
     }
-    let fragment = fragment_target
-        .as_ref()
-        .map(|f| validate_fragment(target, f))
-        .transpose()?;
+    let fragment = fragment_target.as_ref().map(|f| validate_fragment(target, f)).transpose()?;
     // CMS-FR-57: checked before anything is stored, so a target naming nothing in
     // the open project leaves neither a log nor an orphaned attachment behind.
     match target {
@@ -349,9 +335,7 @@ pub fn get_or_create_note_discussion_in(
             (
                 thread_id.clone(),
                 EventBody::DiscussionOpened {
-                    target: Some(DiscussionTarget::Note {
-                        note_id: note_id.to_string(),
-                    }),
+                    target: Some(DiscussionTarget::Note { note_id: note_id.to_string() }),
                     draft_id: None,
                     fragment_target: None,
                 },
@@ -457,9 +441,7 @@ pub fn lock_note_discussions() -> std::sync::MutexGuard<'static, ()> {
     // guards no in-memory invariant — the log on disk is the only state — so
     // recovering is right where propagating would wedge the feature for the
     // rest of the session.
-    NOTE_DISCUSSION_LOCK
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+    NOTE_DISCUSSION_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// [`delete_note_discussion_in`] for a caller already holding the lock

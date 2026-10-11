@@ -9,7 +9,11 @@ use super::*;
 #[test]
 fn gts_ts01_adding_stores_the_secret_in_the_keychain_and_the_description_in_the_registry() {
     // GTS-FR-01 / GTS-FR-02 / GTS-FR-03 / GTS-FR-04.
-    let Harness { store, tokens, secrets, .. } = harness(FakeVerifier::accepting("ghp_secret_value_a3f9", "raver119", &["repo", "workflow"]));
+    let Harness { store, tokens, secrets, .. } = harness(FakeVerifier::accepting(
+        "ghp_secret_value_a3f9",
+        "raver119",
+        &["repo", "workflow"],
+    ));
 
     let record = add_token_impl(&store, &tokens, "work", "ghp_secret_value_a3f9", "").unwrap();
 
@@ -85,11 +89,8 @@ fn an_omitted_label_is_derived_from_the_account_the_token_authenticates_as() {
     // GTS-FR-05: the account is the name the author would have typed, and
     // it is already known by the time the record is written — so a label is
     // a way to tell two tokens of the same account apart, not a toll gate.
-    let Harness { store, tokens, .. } = harness(FakeVerifier::accepting(
-        "ghp_secret_1234",
-        "raver119",
-        &["repo"],
-    ));
+    let Harness { store, tokens, .. } =
+        harness(FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]));
 
     let first = add_token_impl(&store, &tokens, "", "ghp_secret_1234", "").unwrap();
     assert_eq!(first.label, "raver119");
@@ -119,16 +120,8 @@ fn deriving_a_label_never_collides_with_one_the_author_chose() {
 fn an_explicit_duplicate_label_is_still_refused_before_the_network_call() {
     // The fast-fail path: a label the author chose is checked up front, so a
     // collision costs a round trip rather than a wait on GitHub.
-    let Harness {
-        store,
-        tokens,
-        verifier,
-        ..
-    } = harness(FakeVerifier::accepting(
-        "ghp_secret_1234",
-        "raver119",
-        &["repo"],
-    ));
+    let Harness { store, tokens, verifier, .. } =
+        harness(FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]));
     add_token_impl(&store, &tokens, "work", "ghp_secret_1234", "").unwrap();
 
     // Make every verification fail: if the duplicate check ran first, the
@@ -155,9 +148,7 @@ fn gts_ts14_a_locked_keychain_stores_nothing_but_listing_still_works() {
     assert!(store.load_github_token_registry().unwrap().is_empty());
 
     // Seed a record directly, as a previously-successful add would have.
-    store
-        .save_github_token_registry(vec![record("a", "work")])
-        .unwrap();
+    store.save_github_token_registry(vec![record("a", "work")]).unwrap();
     let listed = list_tokens_impl(&store, &tokens).unwrap();
     assert_eq!(listed.len(), 1, "listing must survive a locked keychain");
     assert_eq!(listed[0].state, TokenState::Unavailable);

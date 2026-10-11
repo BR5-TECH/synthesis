@@ -63,34 +63,22 @@ fn gss_ts23_the_agentic_registry_survives_a_round_trip_through_disk() {
     let reloaded = GlobalSettingsStore::with_path(path.clone());
     let (records, active) = reloaded.load_agentic_registry().unwrap();
     assert_eq!(records.len(), 2);
-    assert_eq!(
-        records[0].binary_path.as_deref(),
-        Some("/opt/homebrew/bin/claude")
-    );
+    assert_eq!(records[0].binary_path.as_deref(), Some("/opt/homebrew/bin/claude"));
     assert_eq!(records[0].version.as_deref(), Some("2.1.4"));
     assert_eq!(records[0].selected_model.as_deref(), Some("opus"));
     assert_eq!(records[0].selected_effort.as_deref(), Some("high"));
     // Both maps read back with those entries alone, so every other turn
     // kind still resolves the record's defaults (GSS-FR-14).
-    assert_eq!(
-        records[0].model_overrides.get("review").map(String::as_str),
-        Some("opus"),
-    );
+    assert_eq!(records[0].model_overrides.get("review").map(String::as_str), Some("opus"),);
     assert_eq!(records[0].model_overrides.len(), 1);
-    assert_eq!(
-        records[0].effort_overrides.get("implementation").map(String::as_str),
-        Some("low"),
-    );
+    assert_eq!(records[0].effort_overrides.get("implementation").map(String::as_str), Some("low"),);
     assert_eq!(records[0].effort_overrides.len(), 1);
     assert!(
         records[1].model_overrides.is_empty() && records[1].effort_overrides.is_empty(),
         "a record configured before any kind was distinguished reads back empty",
     );
     assert_eq!(records[0].path_origin, PathOrigin::Detected);
-    assert_eq!(
-        records[1].base_url.as_deref(),
-        Some("https://api.anthropic.com/v1")
-    );
+    assert_eq!(records[1].base_url.as_deref(), Some("https://api.anthropic.com/v1"));
     assert_eq!(records[1].masked_hint.as_deref(), Some("a71c"));
     assert_eq!(
         active.as_deref(),
@@ -132,10 +120,7 @@ fn gss_ts26_the_ai_api_registry_survives_a_round_trip_through_disk() {
                         base_url: Some("https://openrouter.ai/api/v1".into()),
                         masked_hint: Some("3f9a".into()),
                         verified_at: Some("2026-07-01T09:00:00Z".into()),
-                        models: vec![ModelOption::new(
-                            "anthropic/claude-opus-5",
-                            "Claude Opus 5",
-                        )],
+                        models: vec![ModelOption::new("anthropic/claude-opus-5", "Claude Opus 5")],
                         models_origin: ModelsOrigin::Probed,
                         selected_model: Some("anthropic/claude-opus-5".into()),
                         selected_reasoning: None,
@@ -157,16 +142,10 @@ fn gss_ts26_the_ai_api_registry_survives_a_round_trip_through_disk() {
     let reloaded = GlobalSettingsStore::with_path(path.clone());
     let (records, active) = reloaded.load_ai_api_registry().unwrap();
     assert_eq!(records.len(), 2);
-    assert_eq!(
-        records[0].base_url.as_deref(),
-        Some("https://openrouter.ai/api/v1")
-    );
+    assert_eq!(records[0].base_url.as_deref(), Some("https://openrouter.ai/api/v1"));
     assert_eq!(records[0].masked_hint.as_deref(), Some("3f9a"));
     assert_eq!(records[0].models_origin, ModelsOrigin::Probed);
-    assert_eq!(
-        records[0].selected_model.as_deref(),
-        Some("anthropic/claude-opus-5")
-    );
+    assert_eq!(records[0].selected_model.as_deref(), Some("anthropic/claude-opus-5"));
     assert_eq!(records[1].masked_hint, None);
     assert_eq!(active.as_deref(), Some("openrouter"));
 
@@ -191,22 +170,12 @@ fn gss_ts23_both_active_scalars_serialise_alongside_each_other() {
     let path = dir.path().join("synthesis.toml");
     {
         let store = GlobalSettingsStore::with_path(path.clone());
-        store
-            .save_agentic_registry(vec![], Some("codex".into()))
-            .unwrap();
-        store
-            .save_ai_api_registry(vec![], Some("anthropic".into()))
-            .unwrap();
+        store.save_agentic_registry(vec![], Some("codex".into())).unwrap();
+        store.save_ai_api_registry(vec![], Some("anthropic".into())).unwrap();
     }
     let reloaded = GlobalSettingsStore::with_path(path);
-    assert_eq!(
-        reloaded.load_agentic_registry().unwrap().1.as_deref(),
-        Some("codex")
-    );
-    assert_eq!(
-        reloaded.load_ai_api_registry().unwrap().1.as_deref(),
-        Some("anthropic")
-    );
+    assert_eq!(reloaded.load_agentic_registry().unwrap().1.as_deref(), Some("codex"));
+    assert_eq!(reloaded.load_ai_api_registry().unwrap().1.as_deref(), Some("anthropic"));
 }
 
 #[test]
@@ -220,27 +189,19 @@ fn gss_ts24_an_agentic_override_is_keyed_by_project_and_never_validated() {
     {
         let store = GlobalSettingsStore::with_path(path.clone());
         store.save_agentic_override("/dev/acme", "codex").unwrap();
-        store
-            .save_agentic_override("/dev/other", "claude_code")
-            .unwrap();
+        store.save_agentic_override("/dev/other", "claude_code").unwrap();
         // The registry is empty: nothing here checks that `codex` exists.
         assert!(store.load_agentic_registry().unwrap().0.is_empty());
     }
 
     let reloaded = GlobalSettingsStore::with_path(path.clone());
     assert_eq!(
-        reloaded
-            .load_agentic_override("/dev/acme")
-            .unwrap()
-            .as_deref(),
+        reloaded.load_agentic_override("/dev/acme").unwrap().as_deref(),
         Some("codex"),
         "the key is the project, so a change of active worktree keeps it"
     );
     assert_eq!(
-        reloaded
-            .load_agentic_override("/dev/other")
-            .unwrap()
-            .as_deref(),
+        reloaded.load_agentic_override("/dev/other").unwrap().as_deref(),
         Some("claude_code"),
         "and one project's override never leaks into another"
     );
@@ -248,10 +209,7 @@ fn gss_ts24_an_agentic_override_is_keyed_by_project_and_never_validated() {
     reloaded.clear_agentic_override("/dev/acme").unwrap();
     assert_eq!(reloaded.load_agentic_override("/dev/acme").unwrap(), None);
     assert_eq!(
-        reloaded
-            .load_agentic_override("/dev/other")
-            .unwrap()
-            .as_deref(),
+        reloaded.load_agentic_override("/dev/other").unwrap().as_deref(),
         Some("claude_code"),
     );
 }
@@ -281,9 +239,7 @@ fn gss_ts29_the_agent_registry_survives_a_round_trip_and_carries_no_key() {
                     instructions: "Argue about structure.".into(),
                     created_at: "2026-07-01T09:00:00Z".into(),
                     updated_at: "2026-07-01T09:00:00Z".into(),
-                    reasoning: Some(ReasoningChoice::Effort {
-                        effort: "high".into(),
-                    }),
+                    reasoning: Some(ReasoningChoice::Effort { effort: "high".into() }),
                 },
                 Agent {
                     id: "a2".into(),
@@ -327,12 +283,7 @@ fn gss_ts29_the_agent_registry_survives_a_round_trip_and_carries_no_key() {
     // than as anything else — the same value AGR-FR-24 gives a record that
     // predates the field.
     assert_eq!(agents[1].title, "");
-    assert_eq!(
-        agents[0].reasoning,
-        Some(ReasoningChoice::Effort {
-            effort: "high".into()
-        }),
-    );
+    assert_eq!(agents[0].reasoning, Some(ReasoningChoice::Effort { effort: "high".into() }),);
     assert_eq!(agents[1].reasoning, None);
 }
 
@@ -438,17 +389,8 @@ fn gss_ts27_the_two_project_overrides_are_independent_of_each_other() {
     }
 
     let reloaded = GlobalSettingsStore::with_path(path);
-    assert_eq!(
-        reloaded
-            .load_agentic_override("/dev/acme")
-            .unwrap()
-            .as_deref(),
-        Some("codex")
-    );
-    assert_eq!(
-        reloaded.load_ai_api_override("/dev/acme").unwrap().as_deref(),
-        Some("openai")
-    );
+    assert_eq!(reloaded.load_agentic_override("/dev/acme").unwrap().as_deref(), Some("codex"));
+    assert_eq!(reloaded.load_ai_api_override("/dev/acme").unwrap().as_deref(), Some("openai"));
 
     reloaded.clear_agentic_override("/dev/acme").unwrap();
     assert_eq!(reloaded.load_agentic_override("/dev/acme").unwrap(), None);
@@ -463,10 +405,7 @@ fn gss_ts27_the_two_project_overrides_are_independent_of_each_other() {
         None,
         "a project that overrides only the API level reads back unset here"
     );
-    assert_eq!(
-        reloaded.load_ai_api_override("/dev/solo").unwrap().as_deref(),
-        Some("anthropic")
-    );
+    assert_eq!(reloaded.load_ai_api_override("/dev/solo").unwrap().as_deref(), Some("anthropic"));
 }
 
 #[test]

@@ -71,9 +71,7 @@ fn setting_one_provider_leaves_the_others_and_its_own_selections_untouched() {
         &h.store,
         &h.ai,
         "openrouter",
-        Some(ReasoningChoice::Effort {
-            effort: "low".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "low".into() }),
     )
     .unwrap();
     set_turn_timeout_impl(&h.store, &h.ai, "anthropic", Some(90_000)).unwrap();
@@ -84,10 +82,7 @@ fn setting_one_provider_leaves_the_others_and_its_own_selections_untouched() {
     let list = list_integrations_impl(&h.store, &h.ai).unwrap();
     let after = find(&list, "openrouter");
     assert_eq!(
-        AiApiIntegration {
-            turn_timeout_ms: before.turn_timeout_ms,
-            ..after.clone()
-        },
+        AiApiIntegration { turn_timeout_ms: before.turn_timeout_ms, ..after.clone() },
         before,
         "nothing but the timeout changed",
     );
@@ -160,9 +155,7 @@ fn the_turn_timeout_round_trips_through_the_toml_store() {
         verified_at: Some("2026-07-31T00:00:00Z".into()),
         selected_model: Some("a/model".into()),
         models_origin: ModelsOrigin::Probed,
-        selected_reasoning: Some(ReasoningChoice::Effort {
-            effort: "high".into(),
-        }),
+        selected_reasoning: Some(ReasoningChoice::Effort { effort: "high".into() }),
         models: vec![with_ladder("a/model", &["high"], Some("high"), false)],
     };
     let text = toml::to_string(&record).unwrap();
@@ -175,11 +168,7 @@ fn the_turn_timeout_round_trips_through_the_toml_store() {
     assert_eq!(loaded.turn_timeout_ms, None);
     assert_eq!(loaded.selected_model.as_deref(), Some("a/model"));
 
-    let cleared = toml::to_string(&AiApiRecord {
-        turn_timeout_ms: None,
-        ..record
-    })
-    .unwrap();
+    let cleared = toml::to_string(&AiApiRecord { turn_timeout_ms: None, ..record }).unwrap();
     assert!(!cleared.contains("turnTimeoutMs"), "{cleared}");
 }
 

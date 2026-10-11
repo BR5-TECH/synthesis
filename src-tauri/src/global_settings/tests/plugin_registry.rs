@@ -11,9 +11,7 @@ use super::*;
 fn install_then_list_then_uninstall_plugin() {
     let store = GlobalSettingsStore::in_memory();
     assert!(store.list_installed_plugins().unwrap().is_empty());
-    let installed = store
-        .install_plugin("git@github.com:org/markdown-toolbar.git")
-        .unwrap();
+    let installed = store.install_plugin("git@github.com:org/markdown-toolbar.git").unwrap();
     assert_eq!(installed.id, "markdown-toolbar");
     assert_eq!(store.list_installed_plugins().unwrap().len(), 1);
     store.uninstall_plugin("markdown-toolbar").unwrap();
@@ -56,12 +54,8 @@ fn uninstall_plugin_cascades_disable_scoped_to_that_id_only() {
 
     store.uninstall_plugin("git-pr").unwrap();
 
-    let remaining: Vec<String> = store
-        .list_installed_plugins()
-        .unwrap()
-        .into_iter()
-        .map(|p| p.id)
-        .collect();
+    let remaining: Vec<String> =
+        store.list_installed_plugins().unwrap().into_iter().map(|p| p.id).collect();
     assert_eq!(remaining, vec!["other".to_string()]);
     assert!(!store.is_open_project_plugin_enabled("git-pr").unwrap());
     assert!(

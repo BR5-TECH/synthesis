@@ -73,14 +73,18 @@ fn published(outcome: Result<PublicationOutcome, String>) -> PublicationRecord {
 #[test]
 fn a_plain_root_publication_sends_no_metadata() {
     let f = fixture();
-    let choice = f.resolve(&PublicationChoiceInput::default(), &settings(MilestonePolicy::default())).unwrap();
+    let choice = f
+        .resolve(&PublicationChoiceInput::default(), &settings(MilestonePolicy::default()))
+        .unwrap();
     assert_eq!(choice, PublicationChoice::root());
     let attempt = f.attempt_with("pub-1", choice);
 
     let record = published(f.publish(&attempt));
     assert_eq!(f.github.fields.lock().unwrap().as_slice(), &[client::IssueFields::default()]);
-    assert_eq!(client::issue_payload("t", "b", &client::IssueFields::default()),
-        serde_json::json!({ "title": "t", "body": "b" }));
+    assert_eq!(
+        client::issue_payload("t", "b", &client::IssueFields::default()),
+        serde_json::json!({ "title": "t", "body": "b" })
+    );
     assert_eq!(record.choice.unwrap().kind, PublicationKind::Root);
     assert!(!f.github.calls().iter().any(|c| matches!(c, Call::Link(..) | Call::Read(_))));
 }
@@ -119,13 +123,22 @@ fn a_root_publication_carries_the_selected_type_and_milestone() {
 fn a_root_choice_naming_unavailable_metadata_is_refused() {
     let f = fixture();
     let by_type = PublicationChoiceInput { issue_type: Some("Epic".into()), ..Default::default() };
-    assert_eq!(f.resolve(&by_type, &settings(MilestonePolicy::default())), Err(ERR_ISSUE_TYPE_UNAVAILABLE.into()));
+    assert_eq!(
+        f.resolve(&by_type, &settings(MilestonePolicy::default())),
+        Err(ERR_ISSUE_TYPE_UNAVAILABLE.into())
+    );
     let by_milestone = PublicationChoiceInput { milestone_number: Some(99), ..Default::default() };
-    assert_eq!(f.resolve(&by_milestone, &settings(MilestonePolicy::default())), Err(ERR_MILESTONE_UNAVAILABLE.into()));
+    assert_eq!(
+        f.resolve(&by_milestone, &settings(MilestonePolicy::default())),
+        Err(ERR_MILESTONE_UNAVAILABLE.into())
+    );
 
     *f.github.types.lock().unwrap() = None;
     let named = PublicationChoiceInput { issue_type: Some("Bug".into()), ..Default::default() };
-    assert_eq!(f.resolve(&named, &settings(MilestonePolicy::default())), Err(ERR_ISSUE_TYPE_UNAVAILABLE.into()));
+    assert_eq!(
+        f.resolve(&named, &settings(MilestonePolicy::default())),
+        Err(ERR_ISSUE_TYPE_UNAVAILABLE.into())
+    );
     assert!(f.github.calls().iter().all(|c| !matches!(c, Call::Create(_))));
     let path = crate::drafts::draft_publication_path(&f.root, &f.id).unwrap();
     assert!(!path.exists(), "a refused choice writes no attempt record");
@@ -139,7 +152,9 @@ fn a_root_choice_resolves_while_every_metadata_read_fails() {
     *f.github.types.lock().unwrap() = None;
     *f.github.milestones.lock().unwrap() = None;
     *f.github.parents_fail.lock().unwrap() = true;
-    let choice = f.resolve(&PublicationChoiceInput::default(), &settings(MilestonePolicy::default())).unwrap();
+    let choice = f
+        .resolve(&PublicationChoiceInput::default(), &settings(MilestonePolicy::default()))
+        .unwrap();
     assert_eq!(choice, PublicationChoice::root());
     assert!(f.github.calls().is_empty(), "an unadorned root choice reads nothing");
 }
@@ -167,7 +182,11 @@ fn a_sub_issue_takes_the_configured_type_and_the_parent_milestone_and_links() {
     assert_eq!(choice.milestone_title.as_deref(), Some("v1.2"));
 
     let attempt = f.attempt_with("pub-1", choice.clone());
-    assert_eq!(f.store().attempt.unwrap().choice, Some(choice.clone()), "saved before the first mutation");
+    assert_eq!(
+        f.store().attempt.unwrap().choice,
+        Some(choice.clone()),
+        "saved before the first mutation"
+    );
     assert!(f.github.calls().iter().all(|c| !matches!(c, Call::Create(_))));
 
     let record = published(f.publish(&attempt));
@@ -211,13 +230,21 @@ fn the_author_selected_policy_uses_the_named_open_milestone() {
     let parent = f.github.seed("Feature", Some((7, "v1.2")));
     let policy = settings(MilestonePolicy::AuthorSelected);
 
-    let named = PublicationChoiceInput { parent_issue_number: Some(parent), milestone_number: Some(8), ..Default::default() };
+    let named = PublicationChoiceInput {
+        parent_issue_number: Some(parent),
+        milestone_number: Some(8),
+        ..Default::default()
+    };
     let choice = f.resolve(&named, &policy).unwrap();
     assert_eq!(choice.milestone_number, Some(8));
     assert_eq!(choice.milestone_title.as_deref(), Some("v1.3"));
 
     assert_eq!(f.resolve(&sub_of(parent), &policy).unwrap().milestone_number, None);
-    let unknown = PublicationChoiceInput { parent_issue_number: Some(parent), milestone_number: Some(99), ..Default::default() };
+    let unknown = PublicationChoiceInput {
+        parent_issue_number: Some(parent),
+        milestone_number: Some(99),
+        ..Default::default()
+    };
     assert_eq!(f.resolve(&unknown, &policy), Err(ERR_MILESTONE_UNAVAILABLE.into()));
 
     for other in [MilestonePolicy::InheritParent, MilestonePolicy::NoMilestone] {
@@ -235,7 +262,10 @@ fn an_unavailable_sub_issue_type_is_omitted() {
     let mut configured = settings(MilestonePolicy::NoMilestone);
 
     configured.sub_issue_type = "task".into();
-    assert_eq!(f.resolve(&sub_of(parent), &configured).unwrap().issue_type.as_deref(), Some("Task"));
+    assert_eq!(
+        f.resolve(&sub_of(parent), &configured).unwrap().issue_type.as_deref(),
+        Some("Task")
+    );
 
     configured.sub_issue_type = "Chore".into();
     assert_eq!(f.resolve(&sub_of(parent), &configured).unwrap().issue_type, None);
@@ -250,8 +280,15 @@ fn an_unavailable_sub_issue_type_is_omitted() {
 fn a_sub_issue_choice_cannot_override_the_type() {
     let f = fixture();
     let parent = f.github.seed("Feature", None);
-    let input = PublicationChoiceInput { parent_issue_number: Some(parent), issue_type: Some("Bug".into()), ..Default::default() };
-    assert_eq!(f.resolve(&input, &settings(MilestonePolicy::default())), Err(ERR_INVALID_PUBLICATION_CHOICE.into()));
+    let input = PublicationChoiceInput {
+        parent_issue_number: Some(parent),
+        issue_type: Some("Bug".into()),
+        ..Default::default()
+    };
+    assert_eq!(
+        f.resolve(&input, &settings(MilestonePolicy::default())),
+        Err(ERR_INVALID_PUBLICATION_CHOICE.into())
+    );
 }
 
 /// GHP-FR-RMVQ: a parent that is missing, closed, a pull request, or of a Type
@@ -284,7 +321,10 @@ fn the_parent_filter_honours_several_configured_types() {
     let mut multi = settings(MilestonePolicy::default());
     multi.parent_issue_types = vec!["Feature".into(), "bug".into()];
     assert!(f.resolve(&sub_of(bug), &multi).is_ok());
-    assert_eq!(f.resolve(&sub_of(bug), &settings(MilestonePolicy::default())), Err(ERR_PARENT_ISSUE_UNAVAILABLE.into()));
+    assert_eq!(
+        f.resolve(&sub_of(bug), &settings(MilestonePolicy::default())),
+        Err(ERR_PARENT_ISSUE_UNAVAILABLE.into())
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +344,13 @@ fn the_metadata_lists_hold_only_parent_candidates() {
     f.github.edit(pull, |i| i.is_pull_request = true);
     f.github.seed("Bug", None);
 
-    let metadata = flow::load_metadata(&f.github, "secret", "acme", "widgets", GithubPublicationSettings::default());
+    let metadata = flow::load_metadata(
+        &f.github,
+        "secret",
+        "acme",
+        "widgets",
+        GithubPublicationSettings::default(),
+    );
     assert_eq!(metadata.parents.state, MetadataState::Loaded);
     assert_eq!(metadata.parents.items.len(), 1);
     let row = &metadata.parents.items[0];
@@ -314,8 +360,15 @@ fn the_metadata_lists_hold_only_parent_candidates() {
     assert_eq!(row.milestone, Some(PublicationMilestone { number: 7, title: "v1.2".into() }));
     assert_eq!(metadata.issue_types.items.len(), 3);
     assert_eq!(metadata.milestones.items.len(), 2);
-    assert_eq!(metadata.sub_issue_type, SubIssueTypeResolution { name: "Task".into(), resolved: Some("Task".into()) });
-    assert!(f.github.calls().iter().all(|c| matches!(c, Call::ListParents | Call::ListTypes | Call::ListMilestones)));
+    assert_eq!(
+        metadata.sub_issue_type,
+        SubIssueTypeResolution { name: "Task".into(), resolved: Some("Task".into()) }
+    );
+    assert!(f
+        .github
+        .calls()
+        .iter()
+        .all(|c| matches!(c, Call::ListParents | Call::ListTypes | Call::ListMilestones)));
 }
 
 /// GHP-FR-DZLB / GHP-FR-YSPJ / GHP-FR-GHEA / GHP-FR-ETJD: one failed list
@@ -325,7 +378,13 @@ fn the_metadata_lists_hold_only_parent_candidates() {
 fn a_failed_list_does_not_fail_the_others() {
     let f = fixture();
     *f.github.parents_fail.lock().unwrap() = true;
-    let metadata = flow::load_metadata(&f.github, "secret", "acme", "widgets", GithubPublicationSettings::default());
+    let metadata = flow::load_metadata(
+        &f.github,
+        "secret",
+        "acme",
+        "widgets",
+        GithubPublicationSettings::default(),
+    );
     assert_eq!(metadata.parents.state, MetadataState::Failed);
     assert_eq!(metadata.parents.error_code.as_deref(), Some(ERR_PARENT_ISSUES_UNREADABLE));
     assert!(metadata.parents.error.is_some());
@@ -335,15 +394,30 @@ fn a_failed_list_does_not_fail_the_others() {
     *f.github.parents_fail.lock().unwrap() = false;
     *f.github.types.lock().unwrap() = None;
     *f.github.milestones.lock().unwrap() = None;
-    let metadata = flow::load_metadata(&f.github, "secret", "acme", "widgets", GithubPublicationSettings::default());
+    let metadata = flow::load_metadata(
+        &f.github,
+        "secret",
+        "acme",
+        "widgets",
+        GithubPublicationSettings::default(),
+    );
     assert_eq!(metadata.parents.state, MetadataState::Loaded);
     assert!(metadata.parents.items.is_empty());
     assert_eq!(metadata.issue_types.error_code.as_deref(), Some(ERR_ISSUE_TYPES_UNREADABLE));
     assert_eq!(metadata.milestones.error_code.as_deref(), Some(ERR_MILESTONES_UNREADABLE));
-    assert_eq!(metadata.sub_issue_type.resolved, None, "an unreadable Type list leaves the Type unavailable");
+    assert_eq!(
+        metadata.sub_issue_type.resolved, None,
+        "an unreadable Type list leaves the Type unavailable"
+    );
 
     *f.github.types.lock().unwrap() = Some(Vec::new());
-    let metadata = flow::load_metadata(&f.github, "secret", "acme", "widgets", GithubPublicationSettings::default());
+    let metadata = flow::load_metadata(
+        &f.github,
+        "secret",
+        "acme",
+        "widgets",
+        GithubPublicationSettings::default(),
+    );
     assert_eq!(metadata.issue_types.state, MetadataState::Loaded);
     assert!(metadata.issue_types.items.is_empty());
     assert_eq!(metadata.sub_issue_type.resolved, None);
@@ -390,7 +464,9 @@ fn a_restarted_attempt_replaces_the_standing_one_and_keeps_the_choice() {
 
     f.attempt_with("pub-1", choice.clone());
     flow::set_attempt_state(&f.root, &f.id, AttemptState::AwaitingChoice).unwrap();
-    let fresh = flow::restart_attempt(&f.root, &f.id, &origin(), "pub-2".into(), Some(choice.clone())).unwrap();
+    let fresh =
+        flow::restart_attempt(&f.root, &f.id, &origin(), "pub-2".into(), Some(choice.clone()))
+            .unwrap();
 
     let standing = f.store().attempt.unwrap();
     assert_eq!(standing, fresh);
@@ -421,13 +497,25 @@ fn a_failed_link_is_recovered_by_updating_the_existing_issue() {
     *f.github.link_error.lock().unwrap() = None;
     f.github.calls.lock().unwrap().clear();
     let outcome = f.publish(&standing).unwrap();
-    let PublicationOutcome::RecoveryRequired { mismatches, .. } = outcome else { panic!("recovery") };
+    let PublicationOutcome::RecoveryRequired { mismatches, .. } = outcome else {
+        panic!("recovery")
+    };
     assert_eq!(mismatches, vec!["parent".to_string()]);
-    assert_eq!(f.github.calls(), vec![Call::Search("acme/widgets:pub-1".into())], "no list, no setting, no create");
+    assert_eq!(
+        f.github.calls(),
+        vec![Call::Search("acme/widgets:pub-1".into())],
+        "no list, no setting, no create"
+    );
     assert_eq!(f.store().attempt.unwrap().state, AttemptState::AwaitingChoice);
 
     f.github.calls.lock().unwrap().clear();
-    let record = published(flow::update_existing(&f.root, &f.id, &f.store().attempt.unwrap(), "secret", &f.github));
+    let record = published(flow::update_existing(
+        &f.root,
+        &f.id,
+        &f.store().attempt.unwrap(),
+        "secret",
+        &f.github,
+    ));
     let issue = f.github.issue(record.issue_number);
     assert_eq!(issue.parent.unwrap().number, parent);
     assert!(f.github.calls().contains(&Call::Link(parent, issue.id, false)));
@@ -449,10 +537,22 @@ fn a_changed_parent_keeps_the_attempt_recoverable_and_publishes_no_root() {
     let mut elsewhere = choice.clone();
     elsewhere.parent_repository_owner = Some("other".into());
     let cases = [
-        ("closed", choice.clone(), Box::new(|f: &Fixture| f.github.edit(1, |i| i.open = false)) as Box<dyn Fn(&Fixture)>),
-        ("pull request", choice.clone(), Box::new(|f: &Fixture| f.github.edit(1, |i| i.is_pull_request = true))),
+        (
+            "closed",
+            choice.clone(),
+            Box::new(|f: &Fixture| f.github.edit(1, |i| i.open = false)) as Box<dyn Fn(&Fixture)>,
+        ),
+        (
+            "pull request",
+            choice.clone(),
+            Box::new(|f: &Fixture| f.github.edit(1, |i| i.is_pull_request = true)),
+        ),
         ("another repository", elsewhere, Box::new(|_: &Fixture| {})),
-        ("missing", choice.clone(), Box::new(|f: &Fixture| f.github.issues.lock().unwrap().clear())),
+        (
+            "missing",
+            choice.clone(),
+            Box::new(|f: &Fixture| f.github.issues.lock().unwrap().clear()),
+        ),
     ];
     for (name, saved, change) in cases {
         let f = fixture();
@@ -460,7 +560,10 @@ fn a_changed_parent_keeps_the_attempt_recoverable_and_publishes_no_root() {
         let attempt = f.attempt_with("pub-1", saved);
         change(&f);
         assert_eq!(f.publish(&attempt), Err(ERR_PARENT_ISSUE_UNAVAILABLE.to_string()), "{name}");
-        assert!(!f.github.calls().iter().any(|c| matches!(c, Call::Create(_))), "{name}: no create");
+        assert!(
+            !f.github.calls().iter().any(|c| matches!(c, Call::Create(_))),
+            "{name}: no create"
+        );
         let standing = f.store().attempt.unwrap();
         assert_eq!(standing.state, AttemptState::Open, "{name}");
         assert_eq!(standing.choice.unwrap().kind, PublicationKind::SubIssue, "{name}");
@@ -481,7 +584,14 @@ fn a_lost_response_is_reused_when_the_metadata_matches() {
     let content = flow::issue_content(&f.root, &f.id, "pub-1").unwrap();
     let created = f
         .github
-        .create_issue("s", "acme", "widgets", &content.title, &content.body, &flow::fields_of(&choice))
+        .create_issue(
+            "s",
+            "acme",
+            "widgets",
+            &content.title,
+            &content.body,
+            &flow::fields_of(&choice),
+        )
         .unwrap();
     f.github.link_sub_issue("s", "acme", "widgets", parent, created.id, false).unwrap();
     f.github.calls.lock().unwrap().clear();
@@ -504,11 +614,19 @@ fn a_metadata_mismatch_returns_the_recovery_choice() {
     let content = flow::issue_content(&f.root, &f.id, "pub-1").unwrap();
     // Created with a different Type and no milestone, and never linked.
     f.github
-        .create_issue("s", "acme", "widgets", &content.title, &content.body, &client::IssueFields { issue_type: Some("Bug".into()), milestone: None })
+        .create_issue(
+            "s",
+            "acme",
+            "widgets",
+            &content.title,
+            &content.body,
+            &client::IssueFields { issue_type: Some("Bug".into()), milestone: None },
+        )
         .unwrap();
     f.github.calls.lock().unwrap().clear();
 
-    let PublicationOutcome::RecoveryRequired { mismatches, .. } = f.publish(&attempt).unwrap() else {
+    let PublicationOutcome::RecoveryRequired { mismatches, .. } = f.publish(&attempt).unwrap()
+    else {
         panic!("recovery")
     };
     assert_eq!(mismatches, vec!["parent".to_string(), "type".to_string(), "milestone".to_string()]);
@@ -530,7 +648,14 @@ fn update_existing_reconciles_type_milestone_and_parent() {
     let content = flow::issue_content(&f.root, &f.id, "pub-1").unwrap();
     let wrong = f
         .github
-        .create_issue("s", "acme", "widgets", &content.title, &content.body, &client::IssueFields { issue_type: Some("Bug".into()), milestone: None })
+        .create_issue(
+            "s",
+            "acme",
+            "widgets",
+            &content.title,
+            &content.body,
+            &client::IssueFields { issue_type: Some("Bug".into()), milestone: None },
+        )
         .unwrap();
     f.github.link_sub_issue("s", "acme", "widgets", first, wrong.id, false).unwrap();
     f.github.calls.lock().unwrap().clear();
@@ -542,7 +667,10 @@ fn update_existing_reconciles_type_milestone_and_parent() {
         f.github.fields.lock().unwrap().as_slice(),
         &[client::IssueFields { issue_type: Some("Task".into()), milestone: Some(8) }]
     );
-    assert!(f.github.calls().contains(&Call::Link(second, wrong.id, true)), "a different parent is replaced");
+    assert!(
+        f.github.calls().contains(&Call::Link(second, wrong.id, true)),
+        "a different parent is replaced"
+    );
     let issue = f.github.issue(wrong.number);
     assert_eq!(issue.issue_type.as_deref(), Some("Task"));
     assert_eq!(issue.milestone.unwrap().number, 8);
@@ -576,11 +704,18 @@ fn a_root_choice_removes_a_stray_parent() {
         .unwrap();
     f.github.link_sub_issue("s", "acme", "widgets", parent, found.id, false).unwrap();
 
-    let PublicationOutcome::RecoveryRequired { mismatches, .. } = f.publish(&attempt).unwrap() else {
+    let PublicationOutcome::RecoveryRequired { mismatches, .. } = f.publish(&attempt).unwrap()
+    else {
         panic!("recovery")
     };
     assert_eq!(mismatches, vec!["parent".to_string()]);
-    published(flow::update_existing(&f.root, &f.id, &f.store().attempt.unwrap(), "secret", &f.github));
+    published(flow::update_existing(
+        &f.root,
+        &f.id,
+        &f.store().attempt.unwrap(),
+        "secret",
+        &f.github,
+    ));
     assert!(f.github.calls().contains(&Call::Unlink(parent, found.id)));
     assert!(f.github.issue(found.number).parent.is_none());
 }
@@ -594,7 +729,9 @@ fn a_failed_reconcile_link_keeps_the_choice_open() {
     let choice = f.resolve(&sub_of(parent), &settings(MilestonePolicy::NoMilestone)).unwrap();
     let attempt = f.attempt_with("pub-1", choice);
     let content = flow::issue_content(&f.root, &f.id, "pub-1").unwrap();
-    f.github.create_issue("s", "acme", "widgets", &content.title, &content.body, &Default::default()).unwrap();
+    f.github
+        .create_issue("s", "acme", "widgets", &content.title, &content.body, &Default::default())
+        .unwrap();
     f.publish(&attempt).unwrap();
     *f.github.link_error.lock().unwrap() = Some(ERR_SUB_ISSUE_LINK_FAILED.into());
 
@@ -680,7 +817,9 @@ fn a_choice_round_trips_through_the_store_file() {
     assert_eq!(f.store().publication[0].choice, Some(choice));
 
     let root_attempt = f.attempt_with("pub-2", PublicationChoice::root());
-    let text = std::fs::read_to_string(crate::drafts::draft_publication_path(&f.root, &f.id).unwrap()).unwrap();
+    let text =
+        std::fs::read_to_string(crate::drafts::draft_publication_path(&f.root, &f.id).unwrap())
+            .unwrap();
     assert_eq!(text.matches("parentIssueNumber").count(), 1, "a root choice holds no parent");
     let _ = root_attempt;
 }
@@ -702,7 +841,9 @@ fn the_settings_validation_refuses_what_cannot_be_used() {
     assert_eq!(ok.parent_issue_types, vec!["Feature".to_string(), "Epic".to_string()]);
     assert_eq!(ok.sub_issue_type, "Task");
 
-    for (types, sub) in [(vec![], "Task"), (vec!["  ".to_string()], "Task"), (vec!["Feature".to_string()], "  ")] {
+    for (types, sub) in
+        [(vec![], "Task"), (vec!["  ".to_string()], "Task"), (vec!["Feature".to_string()], "  ")]
+    {
         assert_eq!(
             flow::validated_settings(types, sub.to_string(), MilestonePolicy::default()),
             Err(ERR_INVALID_PUBLICATION_SETTINGS.to_string())
@@ -715,7 +856,12 @@ fn the_settings_validation_refuses_what_cannot_be_used() {
 #[test]
 fn saved_settings_are_kept_as_written() {
     let f = fixture();
-    let saved = flow::validated_settings(vec!["Retired".into()], "Gone".into(), MilestonePolicy::NoMilestone).unwrap();
+    let saved = flow::validated_settings(
+        vec!["Retired".into()],
+        "Gone".into(),
+        MilestonePolicy::NoMilestone,
+    )
+    .unwrap();
     save_github_publication_settings_to(&f.root, &saved).unwrap();
     assert_eq!(load_github_publication_settings_from(&f.root).unwrap(), saved);
     assert!(f.github.calls().is_empty());

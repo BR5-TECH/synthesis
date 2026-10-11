@@ -159,20 +159,11 @@ pub fn account_from_user_payload(body: &str) -> Option<GithubIdentity> {
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string())
     };
-    Some(GithubIdentity {
-        login,
-        display_name: field("name"),
-        email: field("email"),
-    })
+    Some(GithubIdentity { login, display_name: field("name"), email: field("email") })
 }
 
 /// Split the `x-oauth-scopes` header into its scope list, dropping the empty
 /// entries a trailing comma or an empty header would otherwise produce.
 pub fn parse_scopes(header: &str) -> Vec<String> {
-    header
-        .split(',')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .collect()
+    header.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).map(|s| s.to_string()).collect()
 }

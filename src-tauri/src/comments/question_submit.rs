@@ -127,9 +127,8 @@ pub fn validate_answers(
         return Err(ERR_QUESTION_ANSWERS_INCOMPLETE.to_string());
     }
     for question in &set.questions {
-        let mut matching = answers
-            .iter()
-            .filter(|answer| answer.question_position == question.position);
+        let mut matching =
+            answers.iter().filter(|answer| answer.question_position == question.position);
         let Some(answer) = matching.next() else {
             return Err(ERR_QUESTION_ANSWERS_INCOMPLETE.to_string());
         };
@@ -157,14 +156,12 @@ pub fn validate_answers(
         }
         // Both halves of a chosen option travel, so an entry naming one of them
         // is as incomplete as one naming neither.
-        let (Some(position), Some(value)) = (answer.option_position, answer.option_value.as_deref())
+        let (Some(position), Some(value)) =
+            (answer.option_position, answer.option_value.as_deref())
         else {
             return Err(ERR_QUESTION_ANSWERS_INCOMPLETE.to_string());
         };
-        let Some(option) = question
-            .options
-            .iter()
-            .find(|option| option.position == position)
+        let Some(option) = question.options.iter().find(|option| option.position == position)
         else {
             return Err(ERR_QUESTION_ANSWERS_INCOMPLETE.to_string());
         };
@@ -234,7 +231,8 @@ pub fn submit_discussion_question_answers<R: tauri::Runtime>(
     let root = project.require_store()?;
     let worktree = project.require_root()?;
     let acting = acting_participant(&store, &project)?;
-    let outcome = commit_question_answers(&root, &worktree, &thread_id, &set_id, &answers, &acting)?;
+    let outcome =
+        commit_question_answers(&root, &worktree, &thread_id, &set_id, &answers, &acting)?;
     crate::logging::log_info(
         &app,
         &crate::logging::BUFFER,
@@ -342,11 +340,7 @@ fn finish_committed_submission(
     thread: &Discussion,
 ) -> Result<SubmissionOutcome, String> {
     let first_question = question_identity(set_id, 1);
-    if !thread
-        .comments
-        .iter()
-        .any(|comment| comment.id == first_question)
-    {
+    if !thread.comments.iter().any(|comment| comment.id == first_question) {
         return Err(ERR_QUESTION_SET_NOT_FOUND.to_string());
     }
     // The last answer identity the log carries is the final one. Read from the
@@ -360,10 +354,7 @@ fn finish_committed_submission(
         .map(|comment| comment.id.clone())
         .ok_or_else(|| ERR_QUESTION_SET_NOT_FOUND.to_string())?;
     Ok(SubmissionOutcome {
-        submitted: QuestionAnswersSubmitted {
-            discussion: thread.clone(),
-            final_answer_comment_id,
-        },
+        submitted: QuestionAnswersSubmitted { discussion: thread.clone(), final_answer_comment_id },
         appended_questions: 0,
         already_committed: true,
     })

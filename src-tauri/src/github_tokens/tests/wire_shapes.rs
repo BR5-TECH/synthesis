@@ -70,8 +70,7 @@ fn a_registry_written_before_a_field_existed_still_loads() {
     // GSS-FR-13: `#[serde(default)]` is what keeps a forward/backward
     // `synthesis.toml` from failing the whole-store parse and taking
     // recents and both registries down with it.
-    let decoded: GithubTokenRecord =
-        serde_json::from_str(r#"{"id":"a","label":"work"}"#).unwrap();
+    let decoded: GithubTokenRecord = serde_json::from_str(r#"{"id":"a","label":"work"}"#).unwrap();
     assert_eq!(decoded.id, "a");
     assert_eq!(decoded.state, TokenState::Unverified);
     assert!(decoded.scopes.is_empty());
@@ -92,10 +91,7 @@ fn the_token_creation_url_carries_the_scopes_the_operations_need() {
         .collect();
     // An equality check, not a `contains`: a silently appended scope (say
     // `admin:org`) would ask the author to mint a far broader credential.
-    assert_eq!(
-        scopes,
-        std::collections::HashSet::from(["repo", "workflow"])
-    );
+    assert_eq!(scopes, std::collections::HashSet::from(["repo", "workflow"]));
 }
 
 #[test]

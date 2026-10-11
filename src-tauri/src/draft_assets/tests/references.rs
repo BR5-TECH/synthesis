@@ -21,10 +21,7 @@ fn das_ts04_a_direct_read_is_refused_and_a_resolution_refuses_nothing() {
         assert_eq!(content.media_type, "image/png");
         assert_eq!(content.data, b64(&png("valid")));
     }
-    assert_eq!(
-        read_image_impl(&root, &id, "assets/missing.png").unwrap_err(),
-        ERR_ASSET_NOT_FOUND
-    );
+    assert_eq!(read_image_impl(&root, &id, "assets/missing.png").unwrap_err(), ERR_ASSET_NOT_FOUND);
     // DAS-FR-07: a destination that leaves the draft, an absolute path, and a
     // data destination are each refused, and nothing outside the draft was
     // opened, followed, or requested.
@@ -48,10 +45,7 @@ fn das_ts04_a_direct_read_is_refused_and_a_resolution_refuses_nothing() {
     #[cfg(unix)]
     {
         std::os::unix::fs::symlink(&secret, assets_of(&root, &id).join("link.png")).unwrap();
-        assert_eq!(
-            read_image_impl(&root, &id, "assets/link.png").unwrap_err(),
-            ERR_PATH_ESCAPE
-        );
+        assert_eq!(read_image_impl(&root, &id, "assets/link.png").unwrap_err(), ERR_PATH_ESCAPE);
     }
 
     // DAS-FR-22 / DAS-FR-12: resolution refuses nothing. One unreferenced asset
@@ -280,8 +274,9 @@ fn das_ts10_a_prompt_that_cannot_be_read_deletes_nothing_at_all() {
     place(&root, &id, "b.png", &png("b"));
 
     // A prompt whose bytes do not decode as UTF-8.
-    let prompt = drafts::draft_file_abs_path(&root, &id, &drafts::require_prompt(&root, &id).unwrap())
-        .unwrap();
+    let prompt =
+        drafts::draft_file_abs_path(&root, &id, &drafts::require_prompt(&root, &id).unwrap())
+            .unwrap();
     std::fs::write(&prompt, [0xF0, 0x9F, 0x92]).unwrap();
 
     let pass = sweep(&root, &id);
@@ -307,4 +302,3 @@ fn das_ts10_an_inconsistent_draft_deletes_nothing_at_all() {
     assert!(!pass.complete);
     assert!(assets_of(&root, &id).join("a.png").is_file());
 }
-

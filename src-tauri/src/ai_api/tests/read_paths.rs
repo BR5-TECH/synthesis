@@ -10,12 +10,7 @@ fn aap_ts33_a_callers_selection_is_validated_from_the_registry_alone() {
     // were reached, which is the whole claim: an agent can be validated
     // while the machine is offline and the credential store shut.
     let prober = FakeProber::returning(&[]);
-    prober.set_rich_models(vec![with_ladder(
-        "a/model",
-        &["high", "medium", "low"],
-        None,
-        false,
-    )]);
+    prober.set_rich_models(vec![with_ladder("a/model", &["high", "medium", "low"], None, false)]);
     let h = harness(prober, FakeKeychain::new());
     verify_openrouter(&h);
     let calls_before = h.prober.calls.lock().unwrap().len();
@@ -25,9 +20,7 @@ fn aap_ts33_a_callers_selection_is_validated_from_the_registry_alone() {
         &h.store,
         "openrouter",
         "a/model",
-        Some(&ReasoningChoice::Effort {
-            effort: "medium".into()
-        }),
+        Some(&ReasoningChoice::Effort { effort: "medium".into() }),
     )
     .is_ok());
     assert_eq!(
@@ -45,9 +38,7 @@ fn aap_ts33_a_callers_selection_is_validated_from_the_registry_alone() {
             &h.store,
             "openrouter",
             "a/model",
-            Some(&ReasoningChoice::Effort {
-                effort: "absurd".into()
-            }),
+            Some(&ReasoningChoice::Effort { effort: "absurd".into() }),
         )
         .unwrap_err(),
         ERR_UNKNOWN_EFFORT,
@@ -87,8 +78,7 @@ fn aap_ts33_a_configured_but_unverified_provider_is_not_verified_rather_than_unc
 }
 
 #[test]
-fn aap_ts34_the_endpoint_carries_the_callers_model_not_the_records_and_no_override_redirects_it()
-{
+fn aap_ts34_the_endpoint_carries_the_callers_model_not_the_records_and_no_override_redirects_it() {
     // AAP-FR-34. The record selects `a/model` at `low`; the caller asks for
     // `b/model` at `high`, and the project is overridden to Anthropic.
     let prober = FakeProber::returning(&[]);
@@ -103,35 +93,24 @@ fn aap_ts34_the_endpoint_carries_the_callers_model_not_the_records_and_no_overri
         &h.store,
         &h.ai,
         "openrouter",
-        Some(ReasoningChoice::Effort {
-            effort: "low".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "low".into() }),
     )
     .unwrap();
-    h.store
-        .save_ai_api_override("/dev/acme", "anthropic")
-        .unwrap();
+    h.store.save_ai_api_override("/dev/acme", "anthropic").unwrap();
 
     let call = resolve_ai_api_endpoint(
         &h.store,
         &h.ai,
         "openrouter",
         "b/model",
-        Some(ReasoningChoice::Effort {
-            effort: "high".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "high".into() }),
     )
     .unwrap();
     assert_eq!(call.provider, "openrouter");
     assert_eq!(call.base_url, "https://openrouter.ai/api/v1");
     assert_eq!(call.api_key.as_deref(), Some("sk-or-1234"));
     assert_eq!(call.model_id.as_deref(), Some("b/model"));
-    assert_eq!(
-        call.reasoning,
-        Some(ReasoningChoice::Effort {
-            effort: "high".into()
-        }),
-    );
+    assert_eq!(call.reasoning, Some(ReasoningChoice::Effort { effort: "high".into() }),);
 
     // A model the record does not offer is refused, and no key was read for
     // it — validation runs before the keychain is touched.
@@ -174,9 +153,7 @@ fn aap_ts35_a_stored_selection_serves_the_graduation_run_and_never_an_agents_tur
         &h.store,
         &h.ai,
         "openrouter",
-        Some(ReasoningChoice::Effort {
-            effort: "low".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "low".into() }),
     )
     .unwrap();
 
@@ -187,12 +164,7 @@ fn aap_ts35_a_stored_selection_serves_the_graduation_run_and_never_an_agents_tur
     assert_eq!(run.base_url, "https://openrouter.ai/api/v1");
     assert_eq!(run.api_key.as_deref(), Some("sk-or-1234"));
     assert_eq!(run.model_id.as_deref(), Some("a/model"));
-    assert_eq!(
-        run.reasoning,
-        Some(ReasoningChoice::Effort {
-            effort: "low".into()
-        }),
-    );
+    assert_eq!(run.reasoning, Some(ReasoningChoice::Effort { effort: "low".into() }),);
 
     // The agent's path: the same endpoint and key, and nothing else in
     // common. The stored `a/model` and `low` had no effect on it.
@@ -201,20 +173,13 @@ fn aap_ts35_a_stored_selection_serves_the_graduation_run_and_never_an_agents_tur
         &h.ai,
         "openrouter",
         "b/model",
-        Some(ReasoningChoice::Effort {
-            effort: "high".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "high".into() }),
     )
     .unwrap();
     assert_eq!(agent.base_url, run.base_url);
     assert_eq!(agent.api_key, run.api_key);
     assert_eq!(agent.model_id.as_deref(), Some("b/model"));
-    assert_eq!(
-        agent.reasoning,
-        Some(ReasoningChoice::Effort {
-            effort: "high".into()
-        }),
-    );
+    assert_eq!(agent.reasoning, Some(ReasoningChoice::Effort { effort: "high".into() }),);
 
     // AAP-FR-34: an agent that asked for **no** reasoning gets none — the
     // record's stored `low` must not fill the caller's `None`. This is the
@@ -222,10 +187,7 @@ fn aap_ts35_a_stored_selection_serves_the_graduation_run_and_never_an_agents_tur
     // suite that would turn red if the resolver ever fell back to the store.
     let none = resolve_ai_api_endpoint(&h.store, &h.ai, "openrouter", "b/model", None).unwrap();
     assert_eq!(none.model_id.as_deref(), Some("b/model"));
-    assert_eq!(
-        none.reasoning, None,
-        "the record's stored choice must not fill a caller's None",
-    );
+    assert_eq!(none.reasoning, None, "the record's stored choice must not fill a caller's None",);
 
     // And the two paths move independently. The record is moved somewhere
     // the agent is *not* — provider default, no reasoning — so a resolver
@@ -239,17 +201,13 @@ fn aap_ts35_a_stored_selection_serves_the_graduation_run_and_never_an_agents_tur
         &h.ai,
         "openrouter",
         "b/model",
-        Some(ReasoningChoice::Effort {
-            effort: "high".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "high".into() }),
     )
     .unwrap();
     assert_eq!(again.model_id.as_deref(), Some("b/model"));
     assert_eq!(
         again.reasoning,
-        Some(ReasoningChoice::Effort {
-            effort: "high".into()
-        }),
+        Some(ReasoningChoice::Effort { effort: "high".into() }),
         "an agent's turn resolves to its own selections exactly as before",
     );
 
@@ -288,11 +246,7 @@ fn aap_ts31_only_openrouter_routes_through_its_own_client() {
         .unwrap_err(),
         ERR_UNREACHABLE
     );
-    assert_eq!(
-        openrouter.calls.lock().unwrap().len(),
-        1,
-        "openrouter went to its own client"
-    );
+    assert_eq!(openrouter.calls.lock().unwrap().len(), 1, "openrouter went to its own client");
 
     for provider in ["anthropic", "openai", "custom"] {
         // AAP-FR-KRVT: the Custom gateway root carries no `/v1`.
@@ -331,13 +285,10 @@ fn a_reasoning_choice_round_trips_through_the_toml_store() {
         verified_at: Some("2026-07-31T00:00:00Z".into()),
         selected_model: Some("a/model".into()),
         models_origin: ModelsOrigin::Probed,
-        selected_reasoning: Some(ReasoningChoice::Effort {
-            effort: "high".into(),
-        }),
+        selected_reasoning: Some(ReasoningChoice::Effort { effort: "high".into() }),
         models: vec![with_ladder("a/model", &["high"], Some("high"), false)],
     };
     let text = toml::to_string(&record).unwrap();
     let back: AiApiRecord = toml::from_str(&text).unwrap();
     assert_eq!(back, record, "the record survives the store intact:\n{text}");
 }
-

@@ -18,28 +18,25 @@ pub(super) struct MergeProgress<'a, R: tauri::Runtime> {
 
 impl<'a, R: tauri::Runtime> MergeProgress<'a, R> {
     pub(super) fn begin(app: &'a tauri::AppHandle<R>, stream_name: &str) -> Self {
-        let id = app
-            .try_state::<crate::progress::ProgressRegistry>()
-            .map(|registry| {
-                crate::progress::register_and_publish(
-                    app,
-                    &registry,
-                    "merge",
-                    &format!("Merging {stream_name}"),
-                    None,
-                    None,
-                )
-            });
+        let id = app.try_state::<crate::progress::ProgressRegistry>().map(|registry| {
+            crate::progress::register_and_publish(
+                app,
+                &registry,
+                "merge",
+                &format!("Merging {stream_name}"),
+                None,
+                None,
+            )
+        });
         Self { app, id }
     }
 }
 
 impl<R: tauri::Runtime> Drop for MergeProgress<'_, R> {
     fn drop(&mut self) {
-        let (Some(id), Some(registry)) = (
-            self.id,
-            self.app.try_state::<crate::progress::ProgressRegistry>(),
-        ) else {
+        let (Some(id), Some(registry)) =
+            (self.id, self.app.try_state::<crate::progress::ProgressRegistry>())
+        else {
             return;
         };
         crate::progress::terminate_and_publish(

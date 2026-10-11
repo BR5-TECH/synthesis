@@ -93,9 +93,7 @@ fn record_recent_project_persists_across_reload() {
     let path = dir.path().join("synthesis.toml");
     {
         let store = GlobalSettingsStore::with_path(path.clone());
-        store
-            .record_recent_project("my-real-project", "/Users/me/code/my-real-project")
-            .unwrap();
+        store.record_recent_project("my-real-project", "/Users/me/code/my-real-project").unwrap();
     }
     let reloaded = GlobalSettingsStore::with_path(path);
     let recents = reloaded.list_recent_projects().unwrap();

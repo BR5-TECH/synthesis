@@ -16,9 +16,7 @@ pub fn cancel_impl<R: tauri::Runtime>(
         // without changing it. A cancellation racing a delivery therefore reads
         // back `delivered` rather than as an error, and a second cancel of the
         // same turn is a no-op rather than a failure.
-        return turns
-            .terminated(turn_id)
-            .ok_or_else(|| ERR_TURN_NOT_FOUND.to_string());
+        return turns.terminated(turn_id).ok_or_else(|| ERR_TURN_NOT_FOUND.to_string());
     };
     flag.store(true, Ordering::SeqCst);
     let Some((turn, operation, _project_key, reached_model)) =

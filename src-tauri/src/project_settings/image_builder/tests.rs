@@ -60,10 +60,7 @@ fn a_failure_diagnostic_is_the_builds_own_tail() {
     assert!(!text.contains("line 0"));
 
     // A build that said nothing still says something.
-    assert_eq!(
-        diagnostic_from(&[], Some(125)),
-        "the build failed with exit status 125"
-    );
+    assert_eq!(diagnostic_from(&[], Some(125)), "the build failed with exit status 125");
 }
 
 /// PSS-FR-26 (PSS-FR-26): a CLI build runs the verified executable and
@@ -91,10 +88,7 @@ fn a_cli_build_reports_what_the_executable_did() {
         placement: DockerfilePlacement::InContext("Dockerfile".into()),
     };
     let sink = RecordingSink::default();
-    assert_eq!(
-        build_with_cli(fake.to_str().unwrap(), &request, &sink),
-        BuildTerminal::Succeeded
-    );
+    assert_eq!(build_with_cli(fake.to_str().unwrap(), &request, &sink), BuildTerminal::Succeeded);
     let updates = sink.updates.lock().unwrap().clone();
     assert!(updates.iter().any(|u| u.3.contains("Step 1/2")));
     assert_eq!(updates.last().unwrap().2, Some(2));
@@ -208,10 +202,7 @@ fn dockerignore_entries_are_excluded() {
     assert!(names.contains(&"src/app.ts"), "{names:?}");
     // The ignore file itself is sent, exactly as Docker sends it.
     assert!(names.contains(&".dockerignore"), "{names:?}");
-    assert!(
-        !names.iter().any(|p| p.starts_with("node_modules")),
-        "{names:?}"
-    );
+    assert!(!names.iter().any(|p| p.starts_with("node_modules")), "{names:?}");
     assert!(!names.iter().any(|p| p.starts_with("target")), "{names:?}");
     assert!(!names.contains(&"build.log"), "{names:?}");
     // A `!` rule re-includes what the rule above it excluded.
@@ -307,10 +298,7 @@ fn the_repository_dockerignore_keeps_build_output_out_of_the_context() {
         "dist/index.html",
         "tsconfig.test.tsbuildinfo",
     ] {
-        assert!(
-            ignore.excludes(Path::new(excluded)),
-            "{excluded} belongs to no build context"
-        );
+        assert!(ignore.excludes(Path::new(excluded)), "{excluded} belongs to no build context");
     }
 
     // A Dockerfile named inside the context is what the Engine backend
@@ -390,10 +378,7 @@ fn the_repository_dockerignore_packs_only_authored_work() {
         assert!(packed.iter().any(|p| p == kept), "{kept} is missing: {packed:?}");
     }
     for gone in ["target", "node_modules", "dist/", "tsbuildinfo"] {
-        assert!(
-            !packed.iter().any(|p| p.contains(gone)),
-            "{gone} was packed: {packed:?}"
-        );
+        assert!(!packed.iter().any(|p| p.contains(gone)), "{gone} was packed: {packed:?}");
     }
 }
 
@@ -651,17 +636,13 @@ fn only_the_dockerignore_at_the_context_root_applies() {
     write(dir.path(), ".dockerignore", "secret.txt\n");
     write(dir.path(), "ctx/secret.txt", "kept\n");
     write(dir.path(), "ctx/other.txt", "kept\n");
-    let names: Vec<String> = packed_with(&dir.path().join("ctx"), None)
-        .into_iter()
-        .map(|(name, _)| name)
-        .collect();
+    let names: Vec<String> =
+        packed_with(&dir.path().join("ctx"), None).into_iter().map(|(name, _)| name).collect();
     assert!(names.contains(&"secret.txt".to_string()), "{names:?}");
 
     write(dir.path(), "ctx/.dockerignore", "secret.txt\n");
-    let names: Vec<String> = packed_with(&dir.path().join("ctx"), None)
-        .into_iter()
-        .map(|(name, _)| name)
-        .collect();
+    let names: Vec<String> =
+        packed_with(&dir.path().join("ctx"), None).into_iter().map(|(name, _)| name).collect();
     assert!(!names.contains(&"secret.txt".to_string()), "{names:?}");
 }
 
@@ -703,10 +684,7 @@ fn a_cli_build_runs_from_the_project_root_with_the_context_argument() {
         placement: DockerfilePlacement::Outside,
     };
     let sink = RecordingSink::default();
-    assert_eq!(
-        build_with_cli(fake.to_str().unwrap(), &request, &sink),
-        BuildTerminal::Succeeded
-    );
+    assert_eq!(build_with_cli(fake.to_str().unwrap(), &request, &sink), BuildTerminal::Succeeded);
     let lines: Vec<String> = sink.updates.lock().unwrap().iter().map(|u| u.3.clone()).collect();
     let cwd = lines.iter().find(|l| l.starts_with("cwd=")).unwrap();
     assert_eq!(cwd, &format!("cwd={}", project.canonicalize().unwrap().display()));

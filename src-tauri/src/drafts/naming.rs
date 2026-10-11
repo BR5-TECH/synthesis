@@ -15,9 +15,7 @@ use super::*;
 pub fn is_valid_draft_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
-        && id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 /// A single path segment the author supplies for a new draft file or folder
@@ -192,7 +190,12 @@ pub(super) fn is_case_only_rename(current: &str, new_name: &str) -> bool {
 /// refuses a path occupied by *another* file, not by the one being renamed. If
 /// the second leg fails the entry is put back under its original name, so a
 /// refusal still leaves the draft exactly as it was.
-pub(super) fn rename_entry(root: &fs::RootFs, files_dir: &Path, path: &str, new_name: &str) -> Result<(), String> {
+pub(super) fn rename_entry(
+    root: &fs::RootFs,
+    files_dir: &Path,
+    path: &str,
+    new_name: &str,
+) -> Result<(), String> {
     rename_entry_named(root, files_dir, path, new_name, &|name| {
         format!("already exists in this draft: {}", with_basename(path, name))
     })
@@ -242,4 +245,3 @@ pub(super) fn with_basename(path: &str, base: &str) -> String {
         (None, _) => base.to_string(),
     }
 }
-

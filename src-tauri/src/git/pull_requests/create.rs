@@ -32,7 +32,6 @@ pub const ERR_PULL_REQUEST_REJECTED: &str = "pull_request_rejected";
 /// The words GitHub uses when a pull request for the same branches is open.
 const ALREADY_EXISTS: &str = "pull request already exists";
 
-
 /// GTC-FR-YQAE: the typed error of a failed write.
 fn write_error(failure: GithubWriteFailure) -> String {
     match failure {
@@ -110,9 +109,7 @@ where
                 "base": base,
                 "draft": draft,
             });
-            let answer = client
-                .post_json(&target.secret, &path, &request)
-                .map_err(write_error)?;
+            let answer = client.post_json(&target.secret, &path, &request).map_err(write_error)?;
             created_from_json(&answer, &target.host)
                 .ok_or_else(|| github_tokens::ERR_GITHUB_UNREACHABLE.to_string())
         },
@@ -163,9 +160,7 @@ fn base_tip(repo: &Repository, base: &str, remote: Option<&str>) -> Result<Oid, 
 }
 
 fn count(repo: &Repository, from: Oid, not_in: Oid) -> u32 {
-    repo.graph_ahead_behind(from, not_in)
-        .map(|(ahead, _)| ahead as u32)
-        .unwrap_or(0)
+    repo.graph_ahead_behind(from, not_in).map(|(ahead, _)| ahead as u32).unwrap_or(0)
 }
 
 /// The pure half of `get_pull_request_head_state`: everything but the paths of
@@ -177,23 +172,18 @@ pub(crate) fn head_state_in(
     uncommitted_paths: Vec<String>,
 ) -> Result<PullRequestHeadState, String> {
     let head = head.trim();
-    let branch = repo
-        .find_branch(head, BranchType::Local)
-        .map_err(|_| ERR_UNKNOWN_BRANCH.to_string())?;
-    let head_tip = branch
-        .get()
-        .peel_to_commit()
-        .map_err(|_| ERR_UNKNOWN_BRANCH.to_string())?
-        .id();
+    let branch =
+        repo.find_branch(head, BranchType::Local).map_err(|_| ERR_UNKNOWN_BRANCH.to_string())?;
+    let head_tip = branch.get().peel_to_commit().map_err(|_| ERR_UNKNOWN_BRANCH.to_string())?.id();
     let remote = changes::primary_remote_name(repo);
     let base = match base.map(str::trim).filter(|b| !b.is_empty()) {
         Some(named) => named.to_string(),
         None => changes::default_branch(repo)?,
     };
     let base_oid = base_tip(repo, &base, remote.as_deref())?;
-    let remote_tip = remote.as_deref().and_then(|name| {
-        repo.refname_to_id(&format!("refs/remotes/{name}/{head}")).ok()
-    });
+    let remote_tip = remote
+        .as_deref()
+        .and_then(|name| repo.refname_to_id(&format!("refs/remotes/{name}/{head}")).ok());
     Ok(PullRequestHeadState {
         head: head.to_string(),
         base,
@@ -228,11 +218,9 @@ fn uncommitted_paths_for<R: tauri::Runtime>(
     let held = crate::worktree::context_for(root)
         .ok()
         .and_then(|context| checkout_holding(&context.worktrees, head));
-    let tree = held.or_else(|| {
-        crate::streams::stream_on_branch(app, head).map(|stream| stream.worktree())
-    });
-    tree.map(|path| crate::streams::uncommitted_paths_of(&path))
-        .unwrap_or_default()
+    let tree = held
+        .or_else(|| crate::streams::stream_on_branch(app, head).map(|stream| stream.worktree()));
+    tree.map(|path| crate::streams::uncommitted_paths_of(&path)).unwrap_or_default()
 }
 
 /// GTC-FR-NEIW: read the head state and report it.

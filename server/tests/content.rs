@@ -82,11 +82,7 @@ fn a_stale_draft_update_is_refused_and_changes_nothing() {
         .update_draft(
             &admin,
             draft.id,
-            UpdateDraft {
-                revision: 1,
-                content: Some("Second".to_string()),
-                ..Default::default()
-            },
+            UpdateDraft { revision: 1, content: Some("Second".to_string()), ..Default::default() },
         )
         .expect("the update is accepted");
     assert_eq!(updated.revision, 2);
@@ -97,20 +93,12 @@ fn a_stale_draft_update_is_refused_and_changes_nothing() {
         .update_draft(
             &admin,
             draft.id,
-            UpdateDraft {
-                revision: 1,
-                content: Some("Third".to_string()),
-                ..Default::default()
-            },
+            UpdateDraft { revision: 1, content: Some("Third".to_string()), ..Default::default() },
         )
         .expect_err("the second writer holds a stale revision");
     assert_eq!(refused.code(), "stale_revision");
     assert_eq!(
-        application
-            .content
-            .read_draft(&admin, draft.id)
-            .expect("the draft is read")
-            .content,
+        application.content.read_draft(&admin, draft.id).expect("the draft is read").content,
         "Second"
     );
 }
@@ -129,39 +117,21 @@ fn a_draft_moves_through_its_states() {
         .create_draft(
             &admin,
             project.id,
-            CreateDraft {
-                title: "A draft".to_string(),
-                ..Default::default()
-            },
+            CreateDraft { title: "A draft".to_string(), ..Default::default() },
         )
         .expect("the draft is written");
 
     assert_eq!(
-        application
-            .content
-            .archive_draft(&admin, draft.id)
-            .expect("the draft is archived")
-            .state,
+        application.content.archive_draft(&admin, draft.id).expect("the draft is archived").state,
         DraftState::Archived
     );
     assert_eq!(
-        application
-            .content
-            .graduate_draft(&admin, draft.id)
-            .expect("the draft is graduated")
-            .state,
+        application.content.graduate_draft(&admin, draft.id).expect("the draft is graduated").state,
         DraftState::Graduated
     );
-    application
-        .content
-        .delete_draft(&admin, draft.id)
-        .expect("the draft is deleted");
+    application.content.delete_draft(&admin, draft.id).expect("the draft is deleted");
     assert_eq!(
-        application
-            .content
-            .read_draft(&admin, draft.id)
-            .expect_err("the draft is gone")
-            .code(),
+        application.content.read_draft(&admin, draft.id).expect_err("the draft is gone").code(),
         "not_found"
     );
 }
@@ -180,10 +150,7 @@ fn a_draft_a_conversation_names_is_not_deleted() {
         .create_draft(
             &admin,
             project.id,
-            CreateDraft {
-                title: "A draft".to_string(),
-                ..Default::default()
-            },
+            CreateDraft { title: "A draft".to_string(), ..Default::default() },
         )
         .expect("the draft is written");
     application
@@ -224,10 +191,7 @@ fn the_message_sequence_keeps_its_order() {
         .create_conversation(
             &admin,
             project.id,
-            CreateConversation {
-                title: "A conversation".to_string(),
-                ..Default::default()
-            },
+            CreateConversation { title: "A conversation".to_string(), ..Default::default() },
         )
         .expect("the conversation is written");
 
@@ -237,19 +201,14 @@ fn the_message_sequence_keeps_its_order() {
             .append_message(
                 &admin,
                 conversation.id,
-                AppendMessage {
-                    body: format!("message {index}"),
-                    ..Default::default()
-                },
+                AppendMessage { body: format!("message {index}"), ..Default::default() },
             )
             .expect("the message is appended");
         assert_eq!(message.sequence, index);
     }
 
-    let messages = application
-        .content
-        .read_messages(&admin, conversation.id)
-        .expect("the messages are read");
+    let messages =
+        application.content.read_messages(&admin, conversation.id).expect("the messages are read");
     assert_eq!(messages.len(), 5);
     for (index, message) in messages.iter().enumerate() {
         assert_eq!(message.sequence, index as u64 + 1);
@@ -271,10 +230,7 @@ fn concurrent_appends_never_repeat_a_sequence_number() {
         .create_conversation(
             &admin,
             project.id,
-            CreateConversation {
-                title: "A conversation".to_string(),
-                ..Default::default()
-            },
+            CreateConversation { title: "A conversation".to_string(), ..Default::default() },
         )
         .expect("the conversation is written");
 
@@ -303,10 +259,8 @@ fn concurrent_appends_never_repeat_a_sequence_number() {
         thread.join().expect("the thread completes");
     }
 
-    let messages = application
-        .content
-        .read_messages(&admin, conversation.id)
-        .expect("the messages are read");
+    let messages =
+        application.content.read_messages(&admin, conversation.id).expect("the messages are read");
     assert_eq!(messages.len(), 160);
     let mut sequences: Vec<u64> = messages.iter().map(|message| message.sequence).collect();
     sequences.sort_unstable();
@@ -331,10 +285,7 @@ fn a_locked_conversation_refuses_a_message() {
         .create_conversation(
             &admin,
             project.id,
-            CreateConversation {
-                title: "A conversation".to_string(),
-                ..Default::default()
-            },
+            CreateConversation { title: "A conversation".to_string(), ..Default::default() },
         )
         .expect("the conversation is written");
 
@@ -347,10 +298,7 @@ fn a_locked_conversation_refuses_a_message() {
         .append_message(
             &admin,
             conversation.id,
-            AppendMessage {
-                body: "One more".to_string(),
-                ..Default::default()
-            },
+            AppendMessage { body: "One more".to_string(), ..Default::default() },
         )
         .expect("a resolved conversation accepts a message");
     assert_eq!(
@@ -371,10 +319,7 @@ fn a_locked_conversation_refuses_a_message() {
         .append_message(
             &admin,
             conversation.id,
-            AppendMessage {
-                body: "Refused".to_string(),
-                ..Default::default()
-            },
+            AppendMessage { body: "Refused".to_string(), ..Default::default() },
         )
         .expect_err("a locked conversation refuses a message");
     assert_eq!(refused.code(), "conversation_locked");
@@ -402,10 +347,7 @@ fn a_stale_conversation_update_is_refused() {
         .create_conversation(
             &admin,
             project.id,
-            CreateConversation {
-                title: "A conversation".to_string(),
-                ..Default::default()
-            },
+            CreateConversation { title: "A conversation".to_string(), ..Default::default() },
         )
         .expect("the conversation is written");
 
@@ -414,10 +356,7 @@ fn a_stale_conversation_update_is_refused() {
         .update_conversation(
             &admin,
             conversation.id,
-            UpdateConversation {
-                revision: 1,
-                title: Some("A better title".to_string()),
-            },
+            UpdateConversation { revision: 1, title: Some("A better title".to_string()) },
         )
         .expect("the update is accepted");
     assert_eq!(
@@ -426,10 +365,7 @@ fn a_stale_conversation_update_is_refused() {
             .update_conversation(
                 &admin,
                 conversation.id,
-                UpdateConversation {
-                    revision: 1,
-                    title: Some("A third title".to_string()),
-                },
+                UpdateConversation { revision: 1, title: Some("A third title".to_string()) },
             )
             .expect_err("the revision is stale")
             .code(),
@@ -452,10 +388,7 @@ fn a_conversation_names_a_draft_of_its_own_project() {
         .create_draft(
             &admin,
             first.id,
-            CreateDraft {
-                title: "A draft".to_string(),
-                ..Default::default()
-            },
+            CreateDraft { title: "A draft".to_string(), ..Default::default() },
         )
         .expect("the draft is written");
 
@@ -488,10 +421,7 @@ fn a_project_that_holds_content_needs_a_cascade() {
         .create_draft(
             &admin,
             project.id,
-            CreateDraft {
-                title: "A draft".to_string(),
-                ..Default::default()
-            },
+            CreateDraft { title: "A draft".to_string(), ..Default::default() },
         )
         .expect("the draft is written");
 
@@ -515,8 +445,5 @@ fn a_project_that_holds_content_needs_a_cascade() {
             .code(),
         "not_found"
     );
-    assert!(
-        api.ports.grants.list().is_empty(),
-        "the grants left as well"
-    );
+    assert!(api.ports.grants.list().is_empty(), "the grants left as well");
 }

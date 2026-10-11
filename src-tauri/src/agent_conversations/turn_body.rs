@@ -224,10 +224,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
 
     let answer = loop {
         check_cancelled(plan)?;
-        if deadline
-            .saturating_duration_since(std::time::Instant::now())
-            .is_zero()
-        {
+        if deadline.saturating_duration_since(std::time::Instant::now()).is_zero() {
             log_turn_out_of_time(app, turns, plan, model_calls);
             return Err(TurnEnd::TimedOut);
         }
@@ -345,10 +342,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 // state: this turn left a durable set and no comment, so a
                 // reader looking for the agent's contribution in the log would
                 // otherwise find none and call the turn broken.
-                Some((
-                    TurnEnd::AskedQuestions,
-                    "agent recorded a question set",
-                ))
+                Some((TurnEnd::AskedQuestions, "agent recorded a question set"))
             } else if plan.proposed.load(Ordering::SeqCst) {
                 // One flag for both proposal tools: which of them a turn holds is
                 // decided by its origin kind (CVL-FR-08), so the flag alone says

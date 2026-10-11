@@ -22,8 +22,7 @@ fn is_fence(line: &str) -> bool {
 fn is_heading(line: &str) -> bool {
     let t = line.trim_start();
     let hashes = t.chars().take_while(|c| *c == '#').count();
-    (1..=6).contains(&hashes)
-        && matches!(t.chars().nth(hashes), Some(c) if c == ' ' || c == '\t')
+    (1..=6).contains(&hashes) && matches!(t.chars().nth(hashes), Some(c) if c == ' ' || c == '\t')
 }
 
 /// Whether `text` carries heading structure at all — the choice BMI-FR-05 makes
@@ -141,11 +140,8 @@ pub fn chunk_text(text: &str) -> Vec<String> {
     } else {
         text
     };
-    let sections = if has_headings(text) {
-        split_at_headings(text)
-    } else {
-        vec![text.to_string()]
-    };
+    let sections =
+        if has_headings(text) { split_at_headings(text) } else { vec![text.to_string()] };
     let mut out = Vec::new();
     for section in sections {
         for block in bound_to_blocks(&section) {

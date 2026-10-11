@@ -12,10 +12,7 @@ fn only_a_401_or_403_is_evidence_about_the_token() {
     // redirect classified as `Rejected` would tell an author their perfectly
     // good token is bad.
     for code in [401u16, 403] {
-        assert!(matches!(
-            verify_failure_for_status(code),
-            VerifyError::Rejected
-        ));
+        assert!(matches!(verify_failure_for_status(code), VerifyError::Rejected));
     }
     for code in [404u16, 429, 500, 502, 302] {
         assert!(

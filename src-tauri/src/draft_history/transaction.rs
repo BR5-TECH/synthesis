@@ -32,13 +32,10 @@ pub(crate) fn write_entry(
     source: DraftHistorySource,
     bytes: &[u8],
 ) -> Result<DraftHistoryEntry, String> {
-    root.write_bytes_atomic(snapshot_path(hist, entry_id), bytes)
-        .map_err(|e| e.to_string())?;
+    root.write_bytes_atomic(snapshot_path(hist, entry_id), bytes).map_err(|e| e.to_string())?;
     // Digested from the file that just landed rather than from the slice in
     // memory, so the manifest describes what a later read will actually verify.
-    let sha256 = root
-        .sha256_file(snapshot_path(hist, entry_id))
-        .map_err(|e| e.to_string())?;
+    let sha256 = root.sha256_file(snapshot_path(hist, entry_id)).map_err(|e| e.to_string())?;
     let entry = DraftHistoryEntry {
         id: entry_id.to_string(),
         draft_id: draft_id.to_string(),
@@ -49,8 +46,7 @@ pub(crate) fn write_entry(
         sha256,
         source,
     };
-    root.write_toml_atomic(manifest_path(hist, entry_id), &entry)
-        .map_err(|e| e.to_string())?;
+    root.write_toml_atomic(manifest_path(hist, entry_id), &entry).map_err(|e| e.to_string())?;
     // DRS-FR-WYIN / DRS-FR-JDRY: a settled version is private draft storage.
     // The ignore file keeps it out of Git, and no commit names it.
     crate::drafts::git_storage::ensure_private_ignored(root);
@@ -151,9 +147,7 @@ where
     // will persist it, and read the prompt's current bytes.
     let normalised = drafts::normalise_for_write(root, input.candidate);
     let prompt_abs = drafts::draft_file_abs_path(root, draft_id, &prompt)?;
-    let prior = root
-        .read_bytes(&prompt_abs)
-        .map_err(|_| ERR_WRITE_FAILED.to_string())?;
+    let prior = root.read_bytes(&prompt_abs).map_err(|_| ERR_WRITE_FAILED.to_string())?;
 
     // DHS-FR-16: an acceptance whose normalised candidate is byte-identical to
     // what the prompt holds creates no entry. The transaction still runs — the
@@ -171,11 +165,7 @@ where
     let original_id = (changes && held.is_empty()).then(new_note_id);
     let base_seq = held.iter().map(|e| e.seq).max().unwrap_or(0);
     let original_seq = base_seq + 1;
-    let next_seq = if original_id.is_some() {
-        base_seq + 2
-    } else {
-        base_seq + 1
-    };
+    let next_seq = if original_id.is_some() { base_seq + 2 } else { base_seq + 1 };
 
     let journal = Journal {
         operation_id: new_note_id(),
@@ -202,10 +192,8 @@ where
     // Anything from here to the commit point that fails is undone whole.
     type Prepared = (Option<DraftHistoryEntry>, Option<DraftHistoryEntry>);
     let prepared = || -> Result<Prepared, String> {
-        root.write_bytes_atomic(hist.join(JOURNAL_PRIOR), &prior)
-            .map_err(|e| e.to_string())?;
-        root.write_toml_atomic(hist.join(JOURNAL_FILE), &journal)
-            .map_err(|e| e.to_string())?;
+        root.write_bytes_atomic(hist.join(JOURNAL_PRIOR), &prior).map_err(|e| e.to_string())?;
+        root.write_toml_atomic(hist.join(JOURNAL_FILE), &journal).map_err(|e| e.to_string())?;
         // DHS-FR-07: the superseded prompt is settled before the version that
         // supersedes it, so the two never land out of order and a rollback that
         // catches the operation between them has one entry to remove rather than
@@ -285,14 +273,8 @@ where
     };
 
     // ---- THE COMMIT POINT: one atomic rewrite of the journal ----------------
-    let committed = Journal {
-        phase: Phase::Committed,
-        ..journal.clone()
-    };
-    if root
-        .write_toml_atomic(hist.join(JOURNAL_FILE), &committed)
-        .is_err()
-    {
+    let committed = Journal { phase: Phase::Committed, ..journal.clone() };
+    if root.write_toml_atomic(hist.join(JOURNAL_FILE), &committed).is_err() {
         let rolled = roll_back(root, &dir, &hist, &journal);
         log_recovery(app, "rollback", draft_id, &journal, "journal commit failed");
         if rolled.is_err() {
@@ -306,10 +288,7 @@ where
     // the ordinary announcement of an ordinary write, and the version it
     // produced second — so a surface redrawing on the proposal (which its own
     // command announces after this returns) already holds both.
-    drafts::announce(
-        app,
-        drafts::DraftChange::to(draft_id, vec![prompt.clone()]),
-    );
+    drafts::announce(app, drafts::DraftChange::to(draft_id, vec![prompt.clone()]));
     // DHS-FR-22: one event per entry that became exposed, oldest first — the
     // `Original` this acceptance settled, where it settled one, and then the
     // version it produced.
@@ -343,12 +322,7 @@ where
     // decision alone.
     if !committed.resolves {
         finish(root, &hist, &committed);
-        return Ok(AcceptedOutcome {
-            entry,
-            original,
-            proposal,
-            comment_id: None,
-        });
+        return Ok(AcceptedOutcome { entry, original, proposal, comment_id: None });
     }
 
     // DHS-FR-17: the append is retried once inside the call; where the retry also
@@ -392,10 +366,7 @@ where
 /// would be harmless (CMS-FR-06 folds it once) but would also be a lie about
 /// what still had to happen.
 fn finish(root: &fs::RootFs, hist: &Path, journal: &Journal) {
-    let done = Journal {
-        phase: Phase::Complete,
-        ..journal.clone()
-    };
+    let done = Journal { phase: Phase::Complete, ..journal.clone() };
     let _ = root.write_toml_atomic(hist.join(JOURNAL_FILE), &done);
     let _ = root.delete_under(hist, JOURNAL_FILE, false);
     let _ = root.delete_under(hist, JOURNAL_PRIOR, false);
@@ -424,14 +395,9 @@ fn withdraw<R: tauri::Runtime>(app: &tauri::AppHandle<R>, draft_id: &str, journa
 /// reconciliation that may itself be interrupted: the prompt is restored only
 /// where it currently holds the candidate's digest, and each removal tolerates
 /// a file that is already gone.
-fn roll_back(
-    root: &fs::RootFs,
-    dir: &Path,
-    hist: &Path,
-    journal: &Journal,
-) -> Result<(), String> {
-    let prompt_abs = fs::resolve_under(dir.join(drafts::FILES_DIR), &journal.path)
-        .map_err(|e| e.to_string())?;
+fn roll_back(root: &fs::RootFs, dir: &Path, hist: &Path, journal: &Journal) -> Result<(), String> {
+    let prompt_abs =
+        fs::resolve_under(dir.join(drafts::FILES_DIR), &journal.path).map_err(|e| e.to_string())?;
     let current = root.sha256_file(&prompt_abs).map_err(|e| e.to_string())?;
     if current == journal.candidate_sha256 && current != journal.prior_sha256 {
         let prior = root
@@ -443,17 +409,10 @@ fn roll_back(
     // DRS-FR-WYIN / DRS-FR-JDRY: a settled version is private draft storage.
     // The ignore file keeps it out of Git, and no commit names it.
     crate::drafts::git_storage::ensure_private_ignored(root);
-    for id in [
-        journal.entry_id.as_deref(),
-        journal.original_entry_id.as_deref(),
-    ]
-    .into_iter()
-    .flatten()
+    for id in
+        [journal.entry_id.as_deref(), journal.original_entry_id.as_deref()].into_iter().flatten()
     {
-        for name in [
-            format!("{id}.{SNAPSHOT_EXT}"),
-            format!("{id}.{MANIFEST_EXT}"),
-        ] {
+        for name in [format!("{id}.{SNAPSHOT_EXT}"), format!("{id}.{MANIFEST_EXT}")] {
             let _ = root.delete_under(hist, &name, false);
             if root.file_info(hist.join(&name)).is_ok() {
                 return Err(ERR_HISTORY_RECOVERY_FAILED.to_string());
@@ -526,10 +485,7 @@ pub enum Reconciliation {
     /// An operation that never committed was undone (DHS-FR-19).
     RolledBack,
     /// A committed operation's decision comment was appended (DHS-FR-20).
-    RolledForward {
-        proposal_id: String,
-        comment_id: String,
-    },
+    RolledForward { proposal_id: String, comment_id: String },
 }
 
 /// DHS-FR-18: read the journal and do exactly what the phase it finds requires.
@@ -599,4 +555,3 @@ where
         }
     }
 }
-

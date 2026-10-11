@@ -16,9 +16,11 @@ use crate::comments::{self, DiscussionTarget, FragmentTarget};
 /// wrote it, and the discussion the fold reads out of it.
 fn seed_legacy_artifact_thread(h: &Harness, artifact_id: &str, source: &str) -> Discussion {
     std::fs::write(h.root().path().join(artifact_id), source).expect("artifact");
-    let log = h
-        .root()
-        .join(format!("{}/{}.jsonl", crate::repository_store::COMMENTS_DIRNAME, comments::log_id(artifact_id)));
+    let log = h.root().join(format!(
+        "{}/{}.jsonl",
+        crate::repository_store::COMMENTS_DIRNAME,
+        comments::log_id(artifact_id)
+    ));
     std::fs::create_dir_all(log.parent().expect("a parent")).expect("comments dir");
     let thread_id = "legacy-artifact-thread";
     let opened = serde_json::json!({
@@ -58,9 +60,7 @@ fn every_kind_of_discussion(h: &Harness) -> Vec<(&'static str, Discussion)> {
         comments::open_discussion_in(
             &root,
             &root,
-            &DiscussionTarget::Artifact {
-                artifact_id: "whole.md".into(),
-            },
+            &DiscussionTarget::Artifact { artifact_id: "whole.md".into() },
             None,
             "@arch is this ready?".into(),
             Vec::new(),
@@ -78,7 +78,8 @@ fn every_kind_of_discussion(h: &Harness) -> Vec<(&'static str, Discussion)> {
     let (draft_id, whole_draft) = seed_discussion(h, &["@arch what now?"]);
     out.push(("draft, whole target", whole_draft));
 
-    let created = crate::drafts::create_draft_at_root(&root, Some("fragment-draft")).expect("draft");
+    let created =
+        crate::drafts::create_draft_at_root(&root, Some("fragment-draft")).expect("draft");
     crate::drafts::save_draft_file_impl(&root, &created.draft.id, &created.file, "Hello prompt.")
         .expect("write");
     out.push((
@@ -86,9 +87,7 @@ fn every_kind_of_discussion(h: &Harness) -> Vec<(&'static str, Discussion)> {
         comments::open_discussion_in(
             &root,
             &root,
-            &DiscussionTarget::Draft {
-                draft_id: created.draft.id.clone(),
-            },
+            &DiscussionTarget::Draft { draft_id: created.draft.id.clone() },
             Some(FragmentTarget::in_draft(&created.draft.id, &created.file, 0, 5, "Hello")),
             "@arch this opening?".into(),
             Vec::new(),
@@ -186,9 +185,7 @@ fn a_turn_attaches_to_the_one_discussion_id_for_every_kind_of_discussion() {
 fn a_draft_turns_statistics_event_carries_the_one_discussion_id() {
     let h = Harness::new(vec![Ok("one".into()), Ok("two".into()), Ok("three".into())]);
     h.create_agent("arch", "Argue about structure.");
-    h.app
-        .state::<ProjectState>()
-        .set_root(h.root.path().to_path_buf());
+    h.app.state::<ProjectState>().set_root(h.root.path().to_path_buf());
     let discussions = every_kind_of_discussion(&h);
 
     let mut expected: Vec<(String, String, bool)> = Vec::new();
@@ -197,25 +194,31 @@ fn a_draft_turns_statistics_event_carries_the_one_discussion_id() {
             continue;
         };
         let turn = h
-            .dispatch(
-                "arch",
-                ConversationOrigin::of(discussion),
-                &discussion.comments[0].id,
-            )
+            .dispatch("arch", ConversationOrigin::of(discussion), &discussion.comments[0].id)
             .unwrap_or_else(|e| panic!("{label}: dispatch refused: {e}"));
         wait_for_terminal(&h, &turn.id);
-        expected.push((draft_id.to_string(), discussion.id.clone(), discussion.is_fragment_targeted()));
+        expected.push((
+            draft_id.to_string(),
+            discussion.id.clone(),
+            discussion.is_fragment_targeted(),
+        ));
     }
     h.settle();
     crate::statistics::wait_for_writer();
-    assert_eq!(expected.len(), 3, "a whole-target, a fragment and a legacy-origin draft discussion");
+    assert_eq!(
+        expected.len(),
+        3,
+        "a whole-target, a fragment and a legacy-origin draft discussion"
+    );
 
     for (draft_id, discussion_id, fragment_targeted) in expected {
         let path = crate::statistics::log_path(&h.root(), &draft_id).expect("path");
         let text = h.root().read_text(&path).expect("log");
         let recorded: Vec<(String, bool)> = text
             .lines()
-            .filter_map(|line| serde_json::from_str::<crate::statistics::StatisticsEvent>(line).ok())
+            .filter_map(|line| {
+                serde_json::from_str::<crate::statistics::StatisticsEvent>(line).ok()
+            })
             .filter_map(|event| match event.body {
                 crate::statistics::EventBody::ConversationTurn {
                     discussion_id,

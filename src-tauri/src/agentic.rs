@@ -174,9 +174,7 @@ pub fn is_valid_oauth_token(token: &str) -> bool {
         // `[A-Za-z0-9_-]+` — one or more, so a bare prefix does not pass.
         Some(rest) => {
             !rest.is_empty()
-                && rest
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         }
         None => false,
     }
@@ -248,14 +246,7 @@ impl AgenticIntegrations {
         prober: Box<dyn EndpointProber>,
         secrets: Box<dyn SecretStore>,
     ) -> Self {
-        Self {
-            probe,
-            runner,
-            prober,
-            secrets,
-            home: dirs::home_dir(),
-            write_lock: Mutex::new(()),
-        }
+        Self { probe, runner, prober, secrets, home: dirs::home_dir(), write_lock: Mutex::new(()) }
     }
 
     /// The same collaborators with the user home pointed somewhere else, so a
@@ -266,7 +257,6 @@ impl AgenticIntegrations {
         self
     }
 }
-
 
 #[cfg(test)]
 mod tests;

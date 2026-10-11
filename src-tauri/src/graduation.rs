@@ -64,7 +64,6 @@ mod state;
 mod store;
 mod transitions;
 
-
 pub use arrangement::*;
 pub use commands::*;
 pub use commit::*;
@@ -73,34 +72,33 @@ pub use errors::*;
 pub use events::{
     GRADUATION_LOG_RECORDS_APPENDED, GRADUATION_QUEUE_CHANGED, GRADUATION_RUN_CHANGED,
 };
+pub use logs::{GraduationLogIndexes, GraduationLogStream};
+pub use merge_run::{
+    enqueue_merge_run, merge_title, reclaim_ended_merge_run, GraduationMergeData,
+    GraduationMergeResult, MergePublished, MergeRunRequest, MERGE_PASS_BUDGET,
+};
+pub(crate) use merge_run::{log_merge_boundary, MergeBoundary};
 pub use observability::{
     GraduationObservability, GraduationStageCondition, GraduationVisualStage, PassRecord,
     PassStatus, StageReason, StageTransition,
 };
 pub use queue::{
-    draft_graduation, draft_graduation_stands, latest_run_for, load_queue, merge_runs_by_stream,
-    holder_of_queue, next_eligible, slot_holders,
-    position_in_queue, project_queue, queue_of, queued_counts_by_stream, require_no_running_graduation,
-    require_unlocked_draft,
+    draft_graduation, draft_graduation_stands, holder_of_queue, latest_run_for, load_queue,
+    merge_runs_by_stream, next_eligible, position_in_queue, project_queue, queue_of,
+    queued_counts_by_stream, require_no_running_graduation, require_unlocked_draft, slot_holders,
     streams_with_runs,
 };
 pub use record::*;
-pub use scheduler::*;
+pub use run_progress::{end_with_loop as end_run_progress, PROGRESS_KIND_GRADUATION};
 pub use runs::{
     load_run, record_checkpoint, record_escalation, save_run, validate_escalation_request,
 };
-pub use logs::{GraduationLogIndexes, GraduationLogStream};
-pub use merge_run::{
-    enqueue_merge_run, merge_title, reclaim_ended_merge_run, GraduationMergeData, GraduationMergeResult, MergePublished,
-    MergeRunRequest, MERGE_PASS_BUDGET,
-};
-pub(crate) use merge_run::{log_merge_boundary, MergeBoundary};
+pub use scheduler::*;
 pub use state::GraduationState;
 pub use store::{
     new_run_id, read_queue_index, store_base, store_fs, write_queue_index, QueueIndex,
     QueueIndexEntry, StoreBase,
 };
-pub use run_progress::{end_with_loop as end_run_progress, PROGRESS_KIND_GRADUATION};
 /// The sync of a run's progress operation, for a test that holds a stale copy.
 #[cfg(test)]
 pub(crate) fn run_progress_sync_for_test<R: tauri::Runtime>(
@@ -134,10 +132,7 @@ pub fn interrupt_running<R: tauri::Runtime>(
     for run in queue.runs {
         // GRD-FR-TWMA: a stop reaches a running turn. A `blocked` run holds its
         // stream but runs no turn, so it rests as it stands (GRD-FR-XVUD).
-        if !matches!(
-            run.state,
-            GraduationRunState::Working | GraduationRunState::Reviewing
-        ) {
+        if !matches!(run.state, GraduationRunState::Working | GraduationRunState::Reviewing) {
             continue;
         }
         let Ok(mut run) = load_run(app, &run.id) else {
@@ -193,10 +188,8 @@ pub fn sweep_abandoned_runs<R: tauri::Runtime>(app: &tauri::AppHandle<R>, queue:
         // GRD-FR-XVUD: `working` and `reviewing` alone. A `blocked` run also
         // holds its stream, but it is resting on a condition the author clears
         // rather than on a loop that has gone, so a relaunch leaves it blocked.
-        if !matches!(
-            summary.state,
-            GraduationRunState::Working | GraduationRunState::Reviewing
-        ) || state.is_driving(&summary.id)
+        if !matches!(summary.state, GraduationRunState::Working | GraduationRunState::Reviewing)
+            || state.is_driving(&summary.id)
         {
             continue;
         }

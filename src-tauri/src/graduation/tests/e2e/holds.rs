@@ -69,11 +69,7 @@ fn a_run_at_rest_keeps_its_queue_and_its_slot_in_every_resting_state() {
         .expect_cannot_start("behind");
 
     with_a_run_behind("hold: author pause")
-        .work_turn(
-            Script::reports_success()
-                .writes("src/panel.ts", "1\n")
-                .pausing_the_run(),
-        )
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n").pausing_the_run())
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("author_pause")
@@ -100,11 +96,7 @@ fn a_run_at_rest_keeps_its_queue_and_its_slot_in_every_resting_state() {
 #[test]
 fn a_hold_survives_a_relaunch() {
     with_a_run_behind("hold: relaunch")
-        .work_turn(
-            Script::reports_success()
-                .writes("src/panel.ts", "1\n")
-                .pausing_the_run(),
-        )
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n").pausing_the_run())
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .relaunching()
@@ -124,11 +116,7 @@ fn continue_takes_no_new_claim_on_a_full_limit() {
     Scenario::named("continue under a full limit")
         .with_setting(Setting::GraduationConcurrencyLimit, 1)
         .with_run_on_stream("other", "header", "Write the footer.")
-        .work_turn(
-            Script::reports_success()
-                .writes("src/panel.ts", "1\n")
-                .pausing_the_run(),
-        )
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n").pausing_the_run())
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .expect_slots_in_use(1)
@@ -178,11 +166,7 @@ fn a_discard_removes_the_queued_runs_behind_it_and_keeps_the_run_ahead() {
 #[test]
 fn a_revert_of_an_interrupted_run_removes_the_queued_runs_behind_it() {
     with_a_run_behind("cascade by revert")
-        .work_turn(
-            Script::reports_success()
-                .writes("src/panel.ts", "1\n")
-                .pausing_the_run(),
-        )
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n").pausing_the_run())
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .expect_commits(1)

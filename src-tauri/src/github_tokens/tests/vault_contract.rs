@@ -50,8 +50,7 @@ fn gts_ts18_legacy_secrets_are_adopted_on_the_first_read() {
 /// vault already holds its secret — the vault decides what is adopted.
 #[test]
 fn gts_fr17_a_candidate_is_supplied_for_every_record() {
-    let candidates =
-        migration_candidates(&[record("a", "work"), record("b", "personal")]);
+    let candidates = migration_candidates(&[record("a", "work"), record("b", "personal")]);
     assert_eq!(candidates.len(), 2);
     for (candidate, id) in candidates.iter().zip(["a", "b"]) {
         assert_eq!(candidate.legacy_service, "com.synthesis.github-token");
@@ -66,26 +65,11 @@ fn gts_fr17_a_candidate_is_supplied_for_every_record() {
 /// The five typed vault failures, each with the switch that provokes it.
 fn vault_provocations() -> Vec<(&'static str, Box<dyn Fn(&FakeKeyring)>)> {
     vec![
-        (
-            "vault_unavailable",
-            Box::new(|k: &FakeKeyring| k.state().refuse_read = true),
-        ),
-        (
-            "vault_write_failed",
-            Box::new(|k: &FakeKeyring| k.state().refuse_write = true),
-        ),
-        (
-            "vault_verify_failed",
-            Box::new(|k: &FakeKeyring| k.state().mangle_next_writes = 1),
-        ),
-        (
-            "vault_malformed",
-            Box::new(|k: &FakeKeyring| k.set_entry("not an AppSecrets object")),
-        ),
-        (
-            "vault_unsupported_version",
-            Box::new(|k: &FakeKeyring| k.set_entry(r#"{"version":99}"#)),
-        ),
+        ("vault_unavailable", Box::new(|k: &FakeKeyring| k.state().refuse_read = true)),
+        ("vault_write_failed", Box::new(|k: &FakeKeyring| k.state().refuse_write = true)),
+        ("vault_verify_failed", Box::new(|k: &FakeKeyring| k.state().mangle_next_writes = 1)),
+        ("vault_malformed", Box::new(|k: &FakeKeyring| k.set_entry("not an AppSecrets object"))),
+        ("vault_unsupported_version", Box::new(|k: &FakeKeyring| k.set_entry(r#"{"version":99}"#))),
     ]
 }
 
@@ -139,11 +123,9 @@ fn gts_fr03_a_listing_costs_no_keyring_access_however_many_records() {
     let mut reads_for = Vec::new();
     for count in [1usize, 20] {
         let keyring = FakeKeyring::default();
-        let registry: Vec<GithubTokenRecord> = (0..count)
-            .map(|i| record(&format!("t{i}"), &format!("label {i}")))
-            .collect();
-        let (store, tokens) =
-            vault_harness(&keyring, registry, FakeVerifier::rejecting());
+        let registry: Vec<GithubTokenRecord> =
+            (0..count).map(|i| record(&format!("t{i}"), &format!("label {i}"))).collect();
+        let (store, tokens) = vault_harness(&keyring, registry, FakeVerifier::rejecting());
         // The first listing initializes the vault cache.
         let _ = list_tokens_impl(&store, &tokens).unwrap();
         let before = keyring.count(&Call::Read);
@@ -221,11 +203,8 @@ fn gts_ts15_every_vault_failure_refuses_a_read_the_same_way() {
     for (name, provoke) in vault_provocations() {
         let keyring = FakeKeyring::default();
         provoke(&keyring);
-        let (store, tokens) = vault_harness(
-            &keyring,
-            vec![record("a", "work")],
-            FakeVerifier::rejecting(),
-        );
+        let (store, tokens) =
+            vault_harness(&keyring, vec![record("a", "work")], FakeVerifier::rejecting());
         store.save_github_token_binding("proj", "a").unwrap();
 
         assert_eq!(
@@ -301,10 +280,7 @@ fn a_malformed_vault_value_does_not_refuse_an_add() {
 
     assert_eq!(added.label, "work");
     let object = keyring.object();
-    assert_eq!(
-        object.get("quarantine").and_then(|v| v.as_str()),
-        Some("not an AppSecrets object")
-    );
+    assert_eq!(object.get("quarantine").and_then(|v| v.as_str()), Some("not an AppSecrets object"));
     assert_eq!(
         resolve_github_token_secret(&store, &tokens, "proj", "github.com").unwrap(),
         "ghp_new_secret"

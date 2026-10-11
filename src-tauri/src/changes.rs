@@ -225,10 +225,7 @@ pub fn to_project_rel(prefix: &str, repo_rel: &str) -> Option<String> {
     if prefix.is_empty() {
         return Some(repo_rel.to_string());
     }
-    repo_rel
-        .strip_prefix(prefix)
-        .and_then(|rest| rest.strip_prefix('/'))
-        .map(|s| s.to_string())
+    repo_rel.strip_prefix(prefix).and_then(|rest| rest.strip_prefix('/')).map(|s| s.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -274,8 +271,7 @@ pub fn scope_to_project(opts: &mut DiffOptions, prefix: &str) {
 pub fn find_renames(diff: &mut Diff<'_>) -> Result<(), String> {
     let mut find = DiffFindOptions::new();
     find.renames(true).copies(false).for_untracked(true);
-    diff.find_similar(Some(&mut find))
-        .map_err(|e| format!("failed to detect renames: {e}"))
+    diff.find_similar(Some(&mut find)).map_err(|e| format!("failed to detect renames: {e}"))
 }
 
 /// Map a libgit2 delta status onto the contract's `change_status`. Entries that
@@ -326,11 +322,7 @@ fn collect_changes(diff: &mut Diff<'_>) -> Result<Vec<RawChange>, String> {
     let binary: RefCell<BTreeSet<String>> = RefCell::new(BTreeSet::new());
 
     let key_of = |delta: &git2::DiffDelta<'_>| -> Option<String> {
-        delta
-            .new_file()
-            .path()
-            .or_else(|| delta.old_file().path())
-            .map(to_forward)
+        delta.new_file().path().or_else(|| delta.old_file().path()).map(to_forward)
     };
 
     {
@@ -354,13 +346,8 @@ fn collect_changes(diff: &mut Diff<'_>) -> Result<Vec<RawChange>, String> {
             }
             true
         };
-        diff.foreach(
-            &mut file_cb,
-            Some(&mut binary_cb),
-            None,
-            Some(&mut line_cb),
-        )
-        .map_err(|e| format!("failed to read diff: {e}"))?;
+        diff.foreach(&mut file_cb, Some(&mut binary_cb), None, Some(&mut line_cb))
+            .map_err(|e| format!("failed to read diff: {e}"))?;
     }
 
     let stats = stats.into_inner();
@@ -384,14 +371,7 @@ fn collect_changes(diff: &mut Diff<'_>) -> Result<Vec<RawChange>, String> {
             || delta.new_file().is_binary()
             || delta.old_file().is_binary();
         let (added, removed) = stats.get(&path).copied().unwrap_or((0, 0));
-        out.push(RawChange {
-            path,
-            previous_path,
-            status,
-            added,
-            removed,
-            is_binary,
-        });
+        out.push(RawChange { path, previous_path, status, added, removed, is_binary });
     }
     Ok(out)
 }
@@ -441,10 +421,7 @@ fn to_entries(root: &crate::fs::RootFs, prefix: &str, raw: Vec<RawChange>) -> Ve
         .into_iter()
         .filter_map(|r| {
             let path = to_project_rel(prefix, &r.path)?;
-            let previous_path = r
-                .previous_path
-                .as_deref()
-                .and_then(|p| to_project_rel(prefix, p));
+            let previous_path = r.previous_path.as_deref().and_then(|p| to_project_rel(prefix, p));
             let (artifact_type, type_source) =
                 scanning::classify_file(&path, &assignments, &content);
             let name = path.rsplit('/').next().unwrap_or(&path).to_string();
@@ -507,15 +484,9 @@ fn head_commit(repo: &Repository) -> Option<Oid> {
 /// is read from another's.
 pub fn primary_remote_name(repo: &Repository) -> Option<String> {
     let remotes = repo.remotes().ok()?;
-    let names: Vec<String> = remotes
-        .iter()
-        .filter_map(|r| r.ok().flatten().map(|s| s.to_string()))
-        .collect();
-    names
-        .iter()
-        .find(|n| n.as_str() == "origin")
-        .or_else(|| names.first())
-        .cloned()
+    let names: Vec<String> =
+        remotes.iter().filter_map(|r| r.ok().flatten().map(|s| s.to_string())).collect();
+    names.iter().find(|n| n.as_str() == "origin").or_else(|| names.first()).cloned()
 }
 
 /// The repository's default branch (CHC-FR-13): the primary remote's published
@@ -544,9 +515,7 @@ pub fn default_branch(repo: &Repository) -> Result<String, String> {
     // (4) The current branch. An unborn or detached HEAD has no branch name to
     // offer, so the conventional default stands in rather than erroring — the
     // picker stays populated and the user can choose.
-    Ok(current_branch_name(repo)
-        .filter(|s| s != "HEAD")
-        .unwrap_or_else(|| "main".to_string()))
+    Ok(current_branch_name(repo).filter(|s| s != "HEAD").unwrap_or_else(|| "main".to_string()))
 }
 
 /// The shorthand name of the branch `HEAD` points at, or `None` when `HEAD` is
@@ -576,35 +545,30 @@ pub fn uncommitted_change_set(root: &crate::fs::RootFs) -> Result<ChangeSet, Str
     scope_to_project(&mut opts, &prefix);
     // An unborn HEAD (a repository with no commits) has no tree; diffing
     // against `None` reports the whole working tree as new, which is correct.
-    let tree = head_commit(&repo)
-        .and_then(|oid| repo.find_commit(oid).ok())
-        .and_then(|c| c.tree().ok());
+    let tree =
+        head_commit(&repo).and_then(|oid| repo.find_commit(oid).ok()).and_then(|c| c.tree().ok());
     let mut diff = repo
         .diff_tree_to_workdir_with_index(tree.as_ref(), Some(&mut opts))
         .map_err(|e| format!("failed to diff working tree: {e}"))?;
     let raw = collect_changes(&mut diff)?;
-    Ok(ChangeSet {
-        comparison: Comparison::Uncommitted,
-        entries: to_entries(root, &prefix, raw),
-    })
+    Ok(ChangeSet { comparison: Comparison::Uncommitted, entries: to_entries(root, &prefix, raw) })
 }
 
 /// CHC-FR-04: the working tree against the merge-base of the current branch and
 /// `target_branch`. The result therefore holds every change the current branch
 /// introduces — committed and uncommitted alike — and nothing from commits that
 /// landed on `target_branch` after that merge-base.
-pub fn branch_change_set(root: &crate::fs::RootFs, target_branch: &str) -> Result<ChangeSet, String> {
+pub fn branch_change_set(
+    root: &crate::fs::RootFs,
+    target_branch: &str,
+) -> Result<ChangeSet, String> {
     let repo = open_repo(root)?;
     let prefix = project_prefix(&repo, root);
     let target = resolve_branch_commit(&repo, target_branch)?;
     let head = head_commit(&repo).ok_or_else(|| ERR_NO_MERGE_BASE.to_string())?;
-    let base = repo
-        .merge_base(head, target)
-        .map_err(|_| ERR_NO_MERGE_BASE.to_string())?;
-    let base_tree = repo
-        .find_commit(base)
-        .and_then(|c| c.tree())
-        .map_err(|_| ERR_NO_MERGE_BASE.to_string())?;
+    let base = repo.merge_base(head, target).map_err(|_| ERR_NO_MERGE_BASE.to_string())?;
+    let base_tree =
+        repo.find_commit(base).and_then(|c| c.tree()).map_err(|_| ERR_NO_MERGE_BASE.to_string())?;
     let mut opts = diff_options();
     scope_to_project(&mut opts, &prefix);
     let mut diff = repo
@@ -632,9 +596,7 @@ pub fn comparison_branches(root: &Path) -> Result<Vec<BranchOption>, String> {
         .filter(|h| h.is_branch())
         .and_then(|h| h.shorthand().ok().map(|s| s.to_string()));
 
-    let branches = repo
-        .branches(None)
-        .map_err(|e| format!("failed to list branches: {e}"))?;
+    let branches = repo.branches(None).map_err(|e| format!("failed to list branches: {e}"))?;
     let mut rows: Vec<((u8, String), BranchOption)> = Vec::new();
     for item in branches {
         let Ok((branch, kind)) = item else { continue };
@@ -664,17 +626,11 @@ pub fn comparison_branches(root: &Path) -> Result<Vec<BranchOption>, String> {
 /// which is exactly what CHC-FR-21 asserts. `saturating_add` keeps a
 /// pathological repository from panicking a read-only query.
 pub fn totals_of(set: &ChangeSet) -> DiffTotals {
-    let mut totals = DiffTotals {
-        file_count: set.entries.len(),
-        ..DiffTotals::default()
-    };
+    let mut totals = DiffTotals { file_count: set.entries.len(), ..DiffTotals::default() };
     for entry in &set.entries {
-        totals.added_lines = totals
-            .added_lines
-            .saturating_add(entry.added_lines.unwrap_or(0));
-        totals.removed_lines = totals
-            .removed_lines
-            .saturating_add(entry.removed_lines.unwrap_or(0));
+        totals.added_lines = totals.added_lines.saturating_add(entry.added_lines.unwrap_or(0));
+        totals.removed_lines =
+            totals.removed_lines.saturating_add(entry.removed_lines.unwrap_or(0));
     }
     totals
 }

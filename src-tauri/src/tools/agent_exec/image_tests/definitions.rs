@@ -62,9 +62,7 @@ fn each_vendor_cli_is_pinned_to_the_version_the_manifest_records() {
 /// the bracket in place, so every comparison below would miss a Git install
 /// written that way — in a test whose whole purpose is to see one.
 fn normalize(word: &str) -> String {
-    word.trim_end_matches('\\')
-        .trim_matches(['"', '\'', '[', ']', ',', '(', ')'])
-        .to_string()
+    word.trim_end_matches('\\').trim_matches(['"', '\'', '[', ']', ',', '(', ')']).to_string()
 }
 
 /// The package set an `apt-get install` block names, normalized.
@@ -147,7 +145,7 @@ fn each_image_installs_exactly_the_packages_avi_names() {
                 "ca-certificates",
                 "curl",
                 "fonts-liberation",
-        "git",
+                "git",
                 "libasound2",
                 "libatk-bridge2.0-0",
                 "libatk1.0-0",
@@ -240,9 +238,7 @@ fn each_image_carries_one_pinned_browser_a_foreign_uid_can_reach() {
         let version = directives(dockerfile)
             .into_iter()
             .find_map(|directive| {
-                directive
-                    .strip_prefix("ARG PLAYWRIGHT_VERSION=")
-                    .map(str::to_string)
+                directive.strip_prefix("ARG PLAYWRIGHT_VERSION=").map(str::to_string)
             })
             .unwrap_or_else(|| panic!("{vendor} pins no browser runtime version"));
         assert!(
@@ -328,36 +324,30 @@ fn each_image_pins_the_same_toolchains() {
     let mut pinned: Vec<Vec<String>> = Vec::new();
     let mut rustup_blocks: Vec<String> = Vec::new();
     for (vendor, dockerfile) in dockerfiles() {
-        let versions: Vec<String> = ["RUST_VERSION", "RUSTUP_VERSION", "PNPM_VERSION", "TYPESCRIPT_VERSION"]
-            .into_iter()
-            .map(|name| {
-                let value = directives(dockerfile)
-                    .into_iter()
-                    .find_map(|directive| {
-                        directive
-                            .strip_prefix(&format!("ARG {name}="))
-                            .map(str::to_string)
-                    })
-                    .unwrap_or_else(|| panic!("{vendor} pins no {name}"));
-                assert!(
-                    value.chars().next().is_some_and(|c| c.is_ascii_digit()),
-                    "{vendor} pins {name} to something other than a version: {value}"
-                );
-                value
-            })
-            .collect();
+        let versions: Vec<String> =
+            ["RUST_VERSION", "RUSTUP_VERSION", "PNPM_VERSION", "TYPESCRIPT_VERSION"]
+                .into_iter()
+                .map(|name| {
+                    let value = directives(dockerfile)
+                        .into_iter()
+                        .find_map(|directive| {
+                            directive.strip_prefix(&format!("ARG {name}=")).map(str::to_string)
+                        })
+                        .unwrap_or_else(|| panic!("{vendor} pins no {name}"));
+                    assert!(
+                        value.chars().next().is_some_and(|c| c.is_ascii_digit()),
+                        "{vendor} pins {name} to something other than a version: {value}"
+                    );
+                    value
+                })
+                .collect();
         pinned.push(versions);
 
         // Each is declared once. Docker takes the last `ARG` of a name and
         // the reader above takes the first, so a second declaration lower in
         // the file would let this whole test read a pin the build does not
         // use.
-        for name in [
-            "RUST_VERSION",
-            "RUSTUP_VERSION",
-            "PNPM_VERSION",
-            "TYPESCRIPT_VERSION",
-        ] {
+        for name in ["RUST_VERSION", "RUSTUP_VERSION", "PNPM_VERSION", "TYPESCRIPT_VERSION"] {
             let declarations = directives(dockerfile)
                 .into_iter()
                 .filter(|directive| directive.starts_with(&format!("ARG {name}=")))
@@ -388,10 +378,7 @@ fn each_image_pins_the_same_toolchains() {
             "{vendor} installs more of the Rust toolchain than the work uses"
         );
         for component in ["--component rustfmt", "--component clippy"] {
-            assert!(
-                dockerfile.contains(component),
-                "{vendor} does not install {component}"
-            );
+            assert!(dockerfile.contains(component), "{vendor} does not install {component}");
         }
 
         // The installer is the one part of an image that arrives over the
@@ -415,9 +402,9 @@ fn each_image_pins_the_same_toolchains() {
 
         // And checked *before* it runs. Every other assertion here is a
         // substring, which a reordering would satisfy while verifying nothing.
-        let checked = rustup
-            .find("sha256sum --check --strict")
-            .unwrap_or_else(|| panic!("{vendor} runs the Rust installer without checking it against a digest"));
+        let checked = rustup.find("sha256sum --check --strict").unwrap_or_else(|| {
+            panic!("{vendor} runs the Rust installer without checking it against a digest")
+        });
         let executed = rustup
             .find("/tmp/rustup-init -y")
             .unwrap_or_else(|| panic!("{vendor} does not run the Rust installer it downloaded"));
@@ -428,11 +415,8 @@ fn each_image_pins_the_same_toolchains() {
 
         // One checksum per architecture, each a real digest, and no two
         // architectures sharing one.
-        let checksums: Vec<&str> = rustup
-            .split("sha256='")
-            .skip(1)
-            .filter_map(|rest| rest.split('\'').next())
-            .collect();
+        let checksums: Vec<&str> =
+            rustup.split("sha256='").skip(1).filter_map(|rest| rest.split('\'').next()).collect();
         assert_eq!(
             checksums.len(),
             2,
@@ -442,9 +426,7 @@ fn each_image_pins_the_same_toolchains() {
         for checksum in &checksums {
             assert!(
                 checksum.len() == 64
-                    && checksum
-                        .chars()
-                        .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
+                    && checksum.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
                 "{vendor} records something other than a SHA-256: {checksum}"
             );
         }
@@ -510,10 +492,7 @@ fn each_image_pins_the_same_toolchains() {
 fn each_image_names_a_writable_home_for_the_uid_a_launch_supplies() {
     for (vendor, dockerfile) in dockerfiles() {
         let envs = env_assignments(dockerfile);
-        for named in [
-            "HOME=/home/agent",
-            "PNPM_HOME=/home/agent/.local/share/pnpm",
-        ] {
+        for named in ["HOME=/home/agent", "PNPM_HOME=/home/agent/.local/share/pnpm"] {
             assert!(
                 envs.iter().any(|assignment| assignment == named),
                 "{vendor} does not name {named}, so a foreign UID gets `/` as its home"
@@ -527,14 +506,8 @@ fn each_image_names_a_writable_home_for_the_uid_a_launch_supplies() {
             .iter()
             .find(|assignment| assignment.starts_with("PATH="))
             .unwrap_or_else(|| panic!("{vendor} sets no PATH"));
-        for directory in [
-            "/usr/local/cargo/bin",
-            "/home/agent/.local/share/pnpm/bin",
-        ] {
-            assert!(
-                path.contains(directory),
-                "{vendor} leaves {directory} off PATH: {path}"
-            );
+        for directory in ["/usr/local/cargo/bin", "/home/agent/.local/share/pnpm/bin"] {
+            assert!(path.contains(directory), "{vendor} leaves {directory} off PATH: {path}");
         }
 
         // And the home is writable by whatever UID the launch supplies. A

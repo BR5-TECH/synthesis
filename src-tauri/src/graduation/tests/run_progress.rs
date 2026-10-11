@@ -62,9 +62,7 @@ fn an_executing_run_is_one_operation_with_the_run_as_its_destination() {
         assert_eq!(during.len(), 1, "one operation while executing: {during:?}");
         assert_eq!(
             during[0].activation,
-            Some(Activation::GraduationRun {
-                run_id: run.id.clone()
-            })
+            Some(Activation::GraduationRun { run_id: run.id.clone() })
         );
         assert_eq!(during[0].label, "Graduating editor draft…");
         assert_eq!(during[0].scope, None);
@@ -75,10 +73,8 @@ fn an_executing_run_is_one_operation_with_the_run_as_its_destination() {
     // Exactly one registration and one terminal event, and a completed run ends
     // as finished.
     let events = events.lock().unwrap();
-    let mine: Vec<&String> = events
-        .iter()
-        .filter(|payload| payload.contains(&seen[0][0].id))
-        .collect();
+    let mine: Vec<&String> =
+        events.iter().filter(|payload| payload.contains(&seen[0][0].id)).collect();
     assert_eq!(mine.len(), 2, "registration and terminal: {mine:?}");
     assert!(mine[0].contains("\"running\""));
     assert!(mine[1].contains("\"finished\""));
@@ -135,10 +131,7 @@ fn concurrent_runs_are_separate_operations_newest_first() {
         Some(Activation::GraduationRun { run_id: second.id.clone() }),
         "the later run is first"
     );
-    assert_eq!(
-        both[1].activation,
-        Some(Activation::GraduationRun { run_id: first.id.clone() })
-    );
+    assert_eq!(both[1].activation, Some(Activation::GraduationRun { run_id: first.id.clone() }));
 
     // Moving on to reviewing registers no second operation.
     transition(&fx.app, &mut first, GraduationRunState::Reviewing).unwrap();
@@ -148,10 +141,7 @@ fn concurrent_runs_are_separate_operations_newest_first() {
     transition(&fx.app, &mut second, GraduationRunState::Blocked).unwrap();
     let rest = graduation_operations(&fx);
     assert_eq!(rest.len(), 1);
-    assert_eq!(
-        rest[0].activation,
-        Some(Activation::GraduationRun { run_id: first.id.clone() })
-    );
+    assert_eq!(rest[0].activation, Some(Activation::GraduationRun { run_id: first.id.clone() }));
 }
 
 /// GRD-FR-ZHNV: an interruption and a discard end the operation.
@@ -242,10 +232,7 @@ fn an_operation_left_behind_is_ended_when_the_loop_returns() {
     end_run_progress(&fx.app, &run.id);
 
     assert!(graduation_operations(&fx).is_empty());
-    assert_eq!(
-        end_states(&events, &id),
-        vec!["running".to_string(), "cancelled".to_string()]
-    );
+    assert_eq!(end_states(&events, &id), vec!["running".to_string(), "cancelled".to_string()]);
     // A second end is a no-op: exactly one terminal event.
     end_run_progress(&fx.app, &run.id);
     assert_eq!(end_states(&events, &id).len(), 2);

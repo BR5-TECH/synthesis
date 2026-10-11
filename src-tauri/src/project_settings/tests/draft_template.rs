@@ -26,7 +26,7 @@ fn an_unconfigured_draft_template_reads_as_unset_and_a_configured_one_round_trip
         ProjectConfig {
             line_endings: LineEndings::Lf,
             draft_template: Some("# Context\n\n## Decision\n".to_string()),
-                        ..Default::default()
+            ..Default::default()
         },
     )
     .unwrap();
@@ -64,7 +64,7 @@ fn an_empty_draft_template_clears_the_key_and_leaves_every_other_section_standin
         ProjectConfig {
             line_endings: LineEndings::Crlf,
             draft_template: Some("# Context".to_string()),
-                        ..Default::default()
+            ..Default::default()
         },
     )
     .unwrap();
@@ -73,7 +73,7 @@ fn an_empty_draft_template_clears_the_key_and_leaves_every_other_section_standin
         ProjectConfig {
             line_endings: LineEndings::Crlf,
             draft_template: Some(String::new()),
-                        ..Default::default()
+            ..Default::default()
         },
     )
     .unwrap();
@@ -83,25 +83,15 @@ fn an_empty_draft_template_clears_the_key_and_leaves_every_other_section_standin
         !table.contains_key(DRAFT_TEMPLATE_KEY),
         "an empty template removes the key rather than recording an empty value"
     );
-    assert_eq!(
-        load_project_config_from(&root).unwrap().draft_template,
-        None
-    );
+    assert_eq!(load_project_config_from(&root).unwrap().draft_template, None);
     assert_eq!(table.get("mcp").and_then(|v| v.as_str()), Some("one-connection"));
-    assert_eq!(
-        load_project_config_from(&root).unwrap().line_endings,
-        LineEndings::Crlf
-    );
+    assert_eq!(load_project_config_from(&root).unwrap().line_endings, LineEndings::Crlf);
 
     // And changing the convention afterwards rewrites nothing about the
     // template: it is still unset.
     save_project_config_to(
         &root,
-        ProjectConfig {
-            line_endings: LineEndings::Lf,
-            draft_template: None,
-                        ..Default::default()
-        },
+        ProjectConfig { line_endings: LineEndings::Lf, draft_template: None, ..Default::default() },
     )
     .unwrap();
     let after = load_project_config_from(&root).unwrap();
@@ -121,7 +111,7 @@ fn a_write_carrying_no_template_leaves_a_configured_one_untouched() {
         ProjectConfig {
             line_endings: LineEndings::Lf,
             draft_template: Some("# Context".to_string()),
-                        ..Default::default()
+            ..Default::default()
         },
     )
     .unwrap();
@@ -130,7 +120,7 @@ fn a_write_carrying_no_template_leaves_a_configured_one_untouched() {
         ProjectConfig {
             line_endings: LineEndings::Crlf,
             draft_template: None,
-                        ..Default::default()
+            ..Default::default()
         },
     )
     .unwrap();
@@ -151,16 +141,14 @@ fn the_template_resolves_per_worktree_and_a_malformed_store_is_a_typed_error() {
         ProjectConfig {
             line_endings: LineEndings::Lf,
             draft_template: Some("# A".to_string()),
-                        ..Default::default()
+            ..Default::default()
         },
     )
     .unwrap();
 
     // Worktree B configures none, and nothing was copied from A.
     assert_eq!(
-        load_project_config_from(&crate::fs::RootFs::for_root(b.path()))
-            .unwrap()
-            .draft_template,
+        load_project_config_from(&crate::fs::RootFs::for_root(b.path())).unwrap().draft_template,
         None
     );
     assert!(!b.path().join(".synthesis/project.toml").exists());

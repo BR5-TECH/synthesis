@@ -63,8 +63,7 @@ fn das_ts12_discard_retains_a_referenced_asset_and_is_idempotent() {
     assert!(read_image_impl(&root, &id, &asset.path).is_ok(), "still readable");
 
     for _ in 0..2 {
-        let outcome =
-            discard_image_impl(&root, &id, "assets/nothing-here.png", &sweeper).unwrap();
+        let outcome = discard_image_impl(&root, &id, "assets/nothing-here.png", &sweeper).unwrap();
         assert!(outcome.discarded, "a path naming nothing is reported discarded");
         assert!(!outcome.retained);
     }
@@ -172,8 +171,8 @@ fn das_ts16_a_refused_delete_costs_the_pass_nothing_but_that_file() {
     let mut readonly = std::fs::metadata(&assets).unwrap().permissions();
     readonly.set_mode(0o500);
     std::fs::set_permissions(&assets, readonly).unwrap();
-    let error =
-        discard_image_impl(&root, &id, "assets/two.png", &DraftAssetSweeper::default()).unwrap_err();
+    let error = discard_image_impl(&root, &id, "assets/two.png", &DraftAssetSweeper::default())
+        .unwrap_err();
     let mut writable = std::fs::metadata(&assets).unwrap().permissions();
     writable.set_mode(0o700);
     std::fs::set_permissions(&assets, writable).unwrap();

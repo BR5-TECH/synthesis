@@ -10,7 +10,6 @@ use super::*;
 // The tool loop (CVL-FR-08 … CVL-FR-28)
 // ---------------------------------------------------------------------------
 
-
 #[test]
 fn each_origin_kind_is_offered_the_nine_and_at_most_one_proposal_tool() {
     // CVL-FR-30 / CVL-FR-08. Two agents across the four origin kinds: the set is
@@ -25,21 +24,13 @@ fn each_origin_kind_is_offered_the_nine_and_at_most_one_proposal_tool() {
         // A draft comment and a draft discussion, so both draft origin kinds.
         let (draft_id, discussion) = seed_discussion(&h, &[&format!("@{nickname} thoughts?")]);
         let turn = h
-            .dispatch(
-                nickname,
-                ConversationOrigin::of(&discussion),
-                &discussion.comments[0].id,
-            )
+            .dispatch(nickname, ConversationOrigin::of(&discussion), &discussion.comments[0].id)
             .expect("dispatch");
         wait_for_terminal(&h, &turn.id);
 
         let anchored = seed_draft_thread(&h, &draft_id, "artifact-window.md");
         let turn = h
-            .dispatch(
-                nickname,
-                ConversationOrigin::of(&anchored),
-                &anchored.comments[0].id,
-            )
+            .dispatch(nickname, ConversationOrigin::of(&anchored), &anchored.comments[0].id)
             .expect("dispatch");
         wait_for_terminal(&h, &turn.id);
 
@@ -100,20 +91,14 @@ fn every_artifact_turn_is_offered_the_nine_and_the_prompt_proposal_tool(
         // and both compiled prompts are covered.
         let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
         let turn = h
-            .dispatch(
-                nickname,
-                ConversationOrigin::of(&thread),
-                &thread.comments[0].id,
-            )
+            .dispatch(nickname, ConversationOrigin::of(&thread), &thread.comments[0].id)
             .expect("dispatch");
         wait_for_terminal(&h, &turn.id);
 
         let discussion = crate::comments::open_discussion_in(
             &h.root(),
             &h.root(),
-            &crate::comments::DiscussionTarget::Artifact {
-                artifact_id: "spec.md".into(),
-            },
+            &crate::comments::DiscussionTarget::Artifact { artifact_id: "spec.md".into() },
             None,
             format!("@{nickname} thoughts?"),
             Vec::new(),
@@ -122,11 +107,7 @@ fn every_artifact_turn_is_offered_the_nine_and_the_prompt_proposal_tool(
         )
         .expect("discussion");
         let turn = h
-            .dispatch(
-                nickname,
-                ConversationOrigin::of(&discussion),
-                &discussion.comments[0].id,
-            )
+            .dispatch(nickname, ConversationOrigin::of(&discussion), &discussion.comments[0].id)
             .expect("dispatch");
         wait_for_terminal(&h, &turn.id);
 
@@ -179,10 +160,7 @@ fn every_artifact_turn_is_offered_the_nine_and_the_prompt_proposal_tool(
         .split_once('}')
         .expect("its body")
         .0;
-    assert!(
-        !draft.contains("tool"),
-        "an agent's definition names no tool: {draft}",
-    );
+    assert!(!draft.contains("tool"), "an agent's definition names no tool: {draft}",);
 }
 
 #[test]
@@ -193,10 +171,7 @@ fn a_turn_loops_until_the_model_answers_and_each_call_carries_the_whole_exchange
             "search_specifications",
             serde_json::json!({ "query": "teardown" }),
         )),
-        Ok(ScriptedReply::calls(
-            "read_file",
-            serde_json::json!({ "path": "spec.md" }),
-        )),
+        Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))),
         Ok(ScriptedReply::answer("The editor spec settles this.")),
     ]);
     h.mount();
@@ -221,14 +196,16 @@ fn a_turn_loops_until_the_model_answers_and_each_call_carries_the_whole_exchange
     // The tools genuinely ran: a result came back for each call.
     let results = exchanges[2]
         .iter()
-        .filter(|message| matches!(
-            message,
-            rig::completion::Message::User { content }
-                if content.iter().any(|part| matches!(
-                    part,
-                    rig::completion::message::UserContent::ToolResult(_)
-                ))
-        ))
+        .filter(|message| {
+            matches!(
+                message,
+                rig::completion::Message::User { content }
+                    if content.iter().any(|part| matches!(
+                        part,
+                        rig::completion::message::UserContent::ToolResult(_)
+                    ))
+            )
+        })
         .count();
     assert_eq!(results, 2, "one result per tool the model asked for");
 
@@ -242,11 +219,9 @@ fn a_turn_loops_until_the_model_answers_and_each_call_carries_the_whole_exchange
 fn several_tools_asked_for_at_once_are_all_dispatched_before_the_next_call() {
     // CVL-FR-12.
     let h = Harness::scripted(vec![
-        Ok(
-            ScriptedReply::calls("search_specifications", serde_json::json!({ "query": "a" }))
-                .and_calls("list_skills", serde_json::json!({}))
-                .and_calls("search_skills", serde_json::json!({ "query": "b" })),
-        ),
+        Ok(ScriptedReply::calls("search_specifications", serde_json::json!({ "query": "a" }))
+            .and_calls("list_skills", serde_json::json!({}))
+            .and_calls("search_skills", serde_json::json!({ "query": "b" }))),
         Ok(ScriptedReply::answer("Three at once.")),
     ]);
     h.mount();
@@ -267,7 +242,9 @@ fn several_tools_asked_for_at_once_are_all_dispatched_before_the_next_call() {
         })
         .flat_map(|content| content.iter())
         .filter_map(|part| match part {
-            rig::completion::message::UserContent::ToolResult(result) => Some(result.call.to_string()),
+            rig::completion::message::UserContent::ToolResult(result) => {
+                Some(result.call.to_string())
+            }
             _ => None,
         })
         .collect();
@@ -284,8 +261,7 @@ fn at_the_bound_the_turn_delivers_the_prose_the_last_reply_carried() {
     // AGC-FR-18, CVL-FR-19 / CVL-FR-13. A model that never stops asking for tools.
     let script: Vec<Result<ScriptedReply, &'static str>> = (0..MAX_MODEL_CALLS)
         .map(|i| {
-            let reply =
-                ScriptedReply::calls("list_skills", serde_json::json!({}));
+            let reply = ScriptedReply::calls("list_skills", serde_json::json!({}));
             Ok(if i == MAX_MODEL_CALLS - 1 {
                 reply.with_text("The editor spec settles this.")
             } else {
@@ -363,11 +339,7 @@ fn a_final_reply_with_no_prose_at_all_leaves_nothing_to_deliver() {
         MAX_MODEL_CALLS - 1,
         "no round beyond the bound dispatched a tool",
     );
-    assert_eq!(
-        h.threads("spec.md")[0].comments.len(),
-        1,
-        "the thread gained no line",
-    );
+    assert_eq!(h.threads("spec.md")[0].comments.len(), 1, "the thread gained no line",);
     assert_eq!(h.agent_sessions(), 0, "a failed turn's session ended with it");
 }
 
@@ -383,14 +355,8 @@ fn the_model_call_bound_is_the_value_the_spec_argues_for() {
 fn a_tool_refusal_is_fed_back_and_the_turn_still_delivers() {
     // CVL-FR-14. The first path does not exist; the second does.
     let h = Harness::scripted(vec![
-        Ok(ScriptedReply::calls(
-            "read_file",
-            serde_json::json!({ "path": "does/not/exist.md" }),
-        )),
-        Ok(ScriptedReply::calls(
-            "read_file",
-            serde_json::json!({ "path": "spec.md" }),
-        )),
+        Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "does/not/exist.md" }))),
+        Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))),
         Ok(ScriptedReply::answer("Found it on the second try.")),
     ]);
     h.mount();
@@ -420,11 +386,7 @@ fn a_tool_refusal_is_fed_back_and_the_turn_still_delivers() {
         Some(rig::completion::message::ToolResultContent::Text(text)) => text.text.clone(),
         _ => panic!("a tool result is text"),
     };
-    assert_eq!(
-        text,
-        crate::tools::FILE_NOT_FOUND,
-        "the model reads the tool's own sentence",
-    );
+    assert_eq!(text, crate::tools::FILE_NOT_FOUND, "the model reads the tool's own sentence",);
 
     assert_eq!(h.threads("spec.md")[0].comments[1].body, "Found it on the second try.");
 }
@@ -448,10 +410,14 @@ fn a_tool_the_model_invented_is_reported_to_it_rather_than_ending_the_turn() {
             _ => Vec::new(),
         })
         .find_map(|part| match part {
-            rig::completion::message::UserContent::ToolResult(result) => match result.content.first() {
-                Some(rig::completion::message::ToolResultContent::Text(text)) => Some(text.text.clone()),
-                _ => None,
-            },
+            rig::completion::message::UserContent::ToolResult(result) => {
+                match result.content.first() {
+                    Some(rig::completion::message::ToolResultContent::Text(text)) => {
+                        Some(text.text.clone())
+                    }
+                    _ => None,
+                }
+            }
             _ => None,
         })
         .expect("a result came back");
@@ -465,17 +431,15 @@ fn a_tool_the_model_invented_is_reported_to_it_rather_than_ending_the_turn() {
 fn a_turn_that_called_every_tool_changes_nothing_in_the_project() {
     // CVL-FR-09.
     let h = Harness::scripted(vec![
-        Ok(
-            ScriptedReply::calls("search_specifications", serde_json::json!({ "query": "teardown" }))
-                .and_calls("read_file", serde_json::json!({ "path": "spec.md" }))
-                .and_calls(
-                    "search_skills",
-                    serde_json::json!({ "query": "author specifications" }),
-                )
-                .and_calls("list_skills", serde_json::json!({}))
-                .and_calls("load_skill", serde_json::json!({ "name": "analyst" }))
-                .and_calls("search_notes", serde_json::json!({ "query": "teardown" })),
-        ),
+        Ok(ScriptedReply::calls(
+            "search_specifications",
+            serde_json::json!({ "query": "teardown" }),
+        )
+        .and_calls("read_file", serde_json::json!({ "path": "spec.md" }))
+        .and_calls("search_skills", serde_json::json!({ "query": "author specifications" }))
+        .and_calls("list_skills", serde_json::json!({}))
+        .and_calls("load_skill", serde_json::json!({ "name": "analyst" }))
+        .and_calls("search_notes", serde_json::json!({ "query": "teardown" }))),
         Ok(ScriptedReply::answer("Read everything.")),
     ]);
     // Seeded so all six tools have something real to answer from: without a
@@ -518,11 +482,7 @@ fn a_turn_that_called_every_tool_changes_nothing_in_the_project() {
     let before = tree_snapshot(h.root().path());
 
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     let terminal = wait_for_terminal(&h, &turn.id);
     assert_eq!(terminal.state, AgentTurnState::Delivered);
@@ -537,20 +497,9 @@ fn a_turn_that_called_every_tool_changes_nothing_in_the_project() {
         "search_specifications found the seeded specification: {}",
         results[0],
     );
-    assert_eq!(
-        results[1], "Some artifact source here.",
-        "read_file returned the artifact",
-    );
-    assert!(
-        results[2].contains("analyst"),
-        "search_skills found the seeded skill: {}",
-        results[2],
-    );
-    assert!(
-        results[3].contains("analyst"),
-        "list_skills listed it: {}",
-        results[3],
-    );
+    assert_eq!(results[1], "Some artifact source here.", "read_file returned the artifact",);
+    assert!(results[2].contains("analyst"), "search_skills found the seeded skill: {}", results[2],);
+    assert!(results[3].contains("analyst"), "list_skills listed it: {}", results[3],);
     assert!(
         results[4].contains("Follow the analyst procedure."),
         "load_skill returned the skill's body: {}",
@@ -596,12 +545,8 @@ fn a_turn_that_called_every_tool_changes_nothing_in_the_project() {
     // NST-FR-19: and the note the turn found was not resolved, marked, or
     // reported as read — `updated_at` is what a write of any kind would have
     // moved, and the tree comparison above already covers its body and scope.
-    let after_note = crate::notes::note_record(
-        &crate::fs::RootFs::for_root(h.root().path()),
-        &note.id,
-    )
-    .expect("the note still resolves");
+    let after_note =
+        crate::notes::note_record(&crate::fs::RootFs::for_root(h.root().path()), &note.id)
+            .expect("the note still resolves");
     assert_eq!(after_note, note, "searching a note is not activity on it");
 }
-
-

@@ -314,10 +314,7 @@ impl GraduationInterruptionReason {
     /// GRU-FR-BLSS / GLG-FR-RLQZ: whether the stop is a failure, as opposed to
     /// a stop the author or the application made on purpose.
     pub fn is_failure(self) -> bool {
-        !matches!(
-            self,
-            Self::AuthorPause | Self::ApplicationShutdown | Self::ProjectChanged
-        )
+        !matches!(self, Self::AuthorPause | Self::ApplicationShutdown | Self::ProjectChanged)
     }
 }
 
@@ -796,11 +793,7 @@ impl GraduationRun {
     /// the limit the caller computed from the settings, so the author's first
     /// Continue resets its budget rather than spending a pass repeating work.
     pub fn pass_budget_spent(&self, limit: u32) -> bool {
-        let limit = if self.checkpoint.pass_limit > 0 {
-            self.checkpoint.pass_limit
-        } else {
-            limit
-        };
+        let limit = if self.checkpoint.pass_limit > 0 { self.checkpoint.pass_limit } else { limit };
         limit > 0 && self.pass() >= limit
     }
 

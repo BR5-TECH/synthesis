@@ -130,14 +130,8 @@ fn a_status_says_what_the_entry_is_worth() {
     };
     let status = status_for(&root, "codex", Some(&broken));
     assert_eq!(status.dockerfile_state, DockerfileState::Invalid);
-    assert_eq!(
-        status.dockerfile_problem,
-        Some(DockerfileProblem::NotARegularFile)
-    );
-    assert_eq!(
-        status.graduation_state,
-        VendorGraduationState::DockerfileInvalid
-    );
+    assert_eq!(status.dockerfile_problem, Some(DockerfileProblem::NotARegularFile));
+    assert_eq!(status.graduation_state, VendorGraduationState::DockerfileInvalid);
     // And the entry still holds the path: reading validates nothing away.
     assert_eq!(status.dockerfile.as_deref(), Some("docker/gone.Dockerfile"));
 }
@@ -155,10 +149,7 @@ fn opencode_reports_execution_unsupported_rather_than_a_bad_entry() {
     };
     let status = status_for(&root, "opencode", Some(&entry));
     assert_eq!(status.dockerfile_state, DockerfileState::Valid);
-    assert_eq!(
-        status.graduation_state,
-        VendorGraduationState::ExecutionUnsupported
-    );
+    assert_eq!(status.graduation_state, VendorGraduationState::ExecutionUnsupported);
     // Even with nothing configured at all, the answer is the same one.
     assert_eq!(
         status_for(&root, "opencode", None).graduation_state,
@@ -270,11 +261,8 @@ fn writing_one_vendor_carries_every_other_section_through() {
 /// <root>` and carries no `--push`.
 #[test]
 fn the_cli_build_vector_is_local_only() {
-    let args = docker_build_args(
-        "docker/agent.Dockerfile",
-        "acme/agent:2.1",
-        Path::new("/projects/acme"),
-    );
+    let args =
+        docker_build_args("docker/agent.Dockerfile", "acme/agent:2.1", Path::new("/projects/acme"));
     assert_eq!(
         args,
         vec![
@@ -296,10 +284,7 @@ fn the_cli_build_vector_is_local_only() {
 fn a_project_builds_one_image_at_a_time() {
     let registry = ImageBuildRegistry::default();
     let cancel = registry.claim("claude_code", "op-1").unwrap();
-    assert_eq!(
-        registry.claim("codex", "op-2").unwrap_err(),
-        ERR_BUILD_ALREADY_RUNNING
-    );
+    assert_eq!(registry.claim("codex", "op-2").unwrap_err(), ERR_BUILD_ALREADY_RUNNING);
     assert_eq!(
         registry.in_flight(),
         Some(InFlightImageBuild {
@@ -362,11 +347,7 @@ struct ScriptedBuilder {
 
 impl ScriptedBuilder {
     fn new(outcome: BuildTerminal) -> Self {
-        Self {
-            outcome,
-            seen: Mutex::new(Vec::new()),
-            emit: Vec::new(),
-        }
+        Self { outcome, seen: Mutex::new(Vec::new()), emit: Vec::new() }
     }
 }
 
@@ -377,10 +358,7 @@ impl ImageBuilder for ScriptedBuilder {
         backend: &ResolvedDockerBackend,
         sink: &dyn ImageBuildSink,
     ) -> BuildTerminal {
-        self.seen
-            .lock()
-            .unwrap()
-            .push((request.clone(), backend.clone()));
+        self.seen.lock().unwrap().push((request.clone(), backend.clone()));
         for (completed, total, message) in &self.emit {
             sink.progress(PHASE_BUILDING, *completed, *total, message);
         }
@@ -389,9 +367,7 @@ impl ImageBuilder for ScriptedBuilder {
 }
 
 fn verified_cli_backend() -> ResolvedDockerBackend {
-    ResolvedDockerBackend::Cli {
-        path: "/bin/docker".to_string(),
-    }
+    ResolvedDockerBackend::Cli { path: "/bin/docker".to_string() }
 }
 
 fn buildable_entry() -> ProjectVendorImage {
@@ -833,11 +809,19 @@ fn a_parent_segment_in_the_dockerfile_path_is_folded() {
     let project = outer.path().join("project");
     std::fs::create_dir_all(project.join("docker/ctx")).unwrap();
     assert_eq!(
-        dockerfile_placement(&project, &project.join("docker/ctx"), "docker/ctx/../agent.Dockerfile"),
+        dockerfile_placement(
+            &project,
+            &project.join("docker/ctx"),
+            "docker/ctx/../agent.Dockerfile"
+        ),
         DockerfilePlacement::Outside
     );
     assert_eq!(
-        dockerfile_placement(&project, &project.join("docker/ctx"), "docker/../docker/ctx/Dockerfile"),
+        dockerfile_placement(
+            &project,
+            &project.join("docker/ctx"),
+            "docker/../docker/ctx/Dockerfile"
+        ),
         DockerfilePlacement::InContext("Dockerfile".into())
     );
 }

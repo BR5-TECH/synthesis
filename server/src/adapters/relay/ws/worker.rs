@@ -45,10 +45,7 @@ pub async fn run(mut incoming: SplitStream<WebSocket>, sink: Sink, state: HttpSt
     // WSK-FR-TDKM: the first frame is `worker_hello`, and any other first frame
     // is refused before a route is recorded.
     if frame.frame_type != "worker_hello" {
-        let _ = outgoing.fail(
-            ReasonCode::MissingWorkerAuthentication,
-            frame.request_id.as_deref(),
-        );
+        let _ = outgoing.fail(ReasonCode::MissingWorkerAuthentication, frame.request_id.as_deref());
         return;
     }
 
@@ -91,10 +88,7 @@ fn announcement(frame: &Envelope) -> Result<Announcement, ReasonCode> {
     // RSN-FR-VTKA: a selection that is not in the same announcement's exposed
     // set is refused.
     if let Some(selected) = &selected {
-        if !projects
-            .iter()
-            .any(|project| &project.project_id == selected)
-        {
+        if !projects.iter().any(|project| &project.project_id == selected) {
             return Err(ReasonCode::InvalidFrameShape);
         }
     }
@@ -130,10 +124,7 @@ fn hello(
     };
 
     let registration =
-        match state
-            .relay
-            .register_worker(&instance_id, connection_id, projects.clone())
-        {
+        match state.relay.register_worker(&instance_id, connection_id, projects.clone()) {
             Ok(registration) => registration,
             Err(_) => {
                 let _ = outgoing.fail(ReasonCode::InvalidWorkerAuthentication, request_id);
@@ -156,10 +147,7 @@ fn hello(
 
     // RSN-FR-EHUT, RSN-FR-SVMD: the replacement closes the older worker
     // connection and notifies every client the older route held.
-    if let WorkerRegistration::Replaced {
-        detached_handles, ..
-    } = &registration
-    {
+    if let WorkerRegistration::Replaced { detached_handles, .. } = &registration {
         for handle in detached_handles {
             for client in state.hub.clients_of(handle) {
                 // A client that is not reading learns of the replacement when
@@ -177,9 +165,7 @@ fn hello(
         }
     }
 
-    if let Some(replaced) = state
-        .hub
-        .put_worker(&instance_id, connection_id, outgoing.sink.clone())
+    if let Some(replaced) = state.hub.put_worker(&instance_id, connection_id, outgoing.sink.clone())
     {
         let _ = replaced.try_send(Outbound::Close(ReasonCode::WorkerReplaced.as_str()));
     }
@@ -233,10 +219,7 @@ fn dispatch(
             // RSN-FR-UDCM: a handle bound to another worker is not this
             // worker's to invalidate, and refusing it costs this connection
             // nothing.
-            match state
-                .relay
-                .invalidate_handle(&handle, Some(instance_id), invalid)
-            {
+            match state.relay.invalidate_handle(&handle, Some(instance_id), invalid) {
                 // RSN-FR-KVBO: every connection that holds the handle closes
                 // with the reason the IDE named.
                 Ok(_) => {
@@ -300,11 +283,7 @@ fn dispatch(
             let Some(handle) = state.hub.registration_handle(&registration_id) else {
                 return outgoing.fail(ReasonCode::DeliveryFailed, request_id);
             };
-            if state
-                .relay
-                .resolve_registration(&handle, instance_id, accepted)
-                .is_err()
-            {
+            if state.relay.resolve_registration(&handle, instance_id, accepted).is_err() {
                 return outgoing.fail(ReasonCode::DeliveryFailed, request_id);
             }
             let Some(client) = state.hub.registration_of(&registration_id) else {
@@ -345,12 +324,7 @@ fn dispatch(
             if !owns_handle(state, &handle, instance_id) {
                 return outgoing.fail(ReasonCode::DeliveryFailed, request_id);
             }
-            if accepted
-                && state
-                    .relay
-                    .authenticate_client(&handle, instance_id)
-                    .is_err()
-            {
+            if accepted && state.relay.authenticate_client(&handle, instance_id).is_err() {
                 return outgoing.fail(ReasonCode::DeliveryFailed, request_id);
             }
 
@@ -464,8 +438,5 @@ fn dispatch(
 /// Read without a record: the transport asks it on every frame that names a
 /// handle, and a record for each would evict the records a reader needs.
 fn owns_handle(state: &HttpState, handle: &str, instance_id: &str) -> bool {
-    state
-        .relay
-        .peek_client(handle)
-        .is_ok_and(|client| client.bound_instance_id == instance_id)
+    state.relay.peek_client(handle).is_ok_and(|client| client.bound_instance_id == instance_id)
 }

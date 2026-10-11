@@ -105,10 +105,7 @@ impl GraduationLogProducer {
     /// GRS-FR-URSZ / GRS-FR-ZQEM: whether a record of this producer belongs to
     /// one pass, or to the run as a whole.
     pub fn carries_pass(self) -> bool {
-        matches!(
-            self,
-            Self::WorkTurn | Self::ClarificationJudgement | Self::ReviewTurn
-        )
+        matches!(self, Self::WorkTurn | Self::ClarificationJudgement | Self::ReviewTurn)
     }
 
     /// GRS-FR-NUXT: a run-level record names a non-agent source.

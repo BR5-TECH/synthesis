@@ -17,10 +17,7 @@ fn is_read_only() {
     let before = crate::tools::tests::tree_snapshot(fixture.root().path());
     for query in ["teardown", "ordering", "nothing here"] {
         for limit in [None, Some(1), Some(1000)] {
-            let _ = block_on(fixture.tool().call(DraftSearchArgs {
-                query: query.into(),
-                limit,
-            }));
+            let _ = block_on(fixture.tool().call(DraftSearchArgs { query: query.into(), limit }));
         }
     }
     assert_eq!(
@@ -42,16 +39,9 @@ fn logs_the_named_arguments_and_no_returned_material() {
     DST_BUFFER.clear();
 
     let tool = fixture.logged(&DST_BUFFER);
-    block_on(tool.call(DraftSearchArgs {
-        query: "teardown".into(),
-        limit: Some(2),
-    }))
-    .expect("succeeds");
-    block_on(tool.call(DraftSearchArgs {
-        query: "".into(),
-        limit: None,
-    }))
-    .expect_err("refuses");
+    block_on(tool.call(DraftSearchArgs { query: "teardown".into(), limit: Some(2) }))
+        .expect("succeeds");
+    block_on(tool.call(DraftSearchArgs { query: "".into(), limit: None })).expect_err("refuses");
 
     // Querying either domain returns the same two records — a tool call is
     // work the backend performs because a model asked for it, and a reader
@@ -72,11 +62,7 @@ fn logs_the_named_arguments_and_no_returned_material() {
     };
     let records = of_domain(Domain::Ai);
     assert_eq!(records.len(), 2, "one success and one refusal");
-    assert_eq!(
-        records,
-        of_domain(Domain::Backend),
-        "both domains return the same two records",
-    );
+    assert_eq!(records, of_domain(Domain::Backend), "both domains return the same two records",);
     let success = records
         .iter()
         .find(|r| r.level == LogLevel::Info && r.fields.get("tool").is_some())
@@ -93,30 +79,20 @@ fn logs_the_named_arguments_and_no_returned_material() {
         vec!["drafts", "limit", "limitApplied", "query", "tool"],
     );
 
-    let refusal = records
-        .iter()
-        .find(|r| r.level == LogLevel::Warn)
-        .expect("a WARN record");
+    let refusal = records.iter().find(|r| r.level == LogLevel::Warn).expect("a WARN record");
     assert_eq!(refusal.fields["reason"], serde_json::json!("invalid_arguments"));
     assert_eq!(refusal.fields["query"], serde_json::json!(""));
     assert!(
         refusal.fields.get("limit").is_none(),
         "the model sent none, which is itself the fact worth reading"
     );
-    assert!(
-        refusal.fields.get("limitApplied").is_none(),
-        "no applied limit on a refusal"
-    );
+    assert!(refusal.fields.get("limitApplied").is_none(), "no applied limit on a refusal");
 
     // DST-FR-21: nothing the call returned reaches a record.
     for record in &records {
-        let blob = serde_json::to_string(&record.fields).expect("serialises")
-            + &record.message;
+        let blob = serde_json::to_string(&record.fields).expect("serialises") + &record.message;
         for leaked in ["logged", "sequence", "# Plan", "teardown sequence", ".md"] {
-            assert!(
-                !blob.contains(leaked),
-                "{leaked:?} leaked into a log record: {blob}"
-            );
+            assert!(!blob.contains(leaked), "{leaked:?} leaked into a log record: {blob}");
         }
     }
 }
@@ -131,13 +107,15 @@ fn logs_a_bounded_query() {
     DST_BOUND_BUFFER.clear();
     let query = "sarcophagus ".repeat(2000);
 
-    block_on(fixture.logged(&DST_BOUND_BUFFER).call(DraftSearchArgs {
-        query: query.clone(),
-        limit: Some(1000),
-    }))
+    block_on(
+        fixture
+            .logged(&DST_BOUND_BUFFER)
+            .call(DraftSearchArgs { query: query.clone(), limit: Some(1000) }),
+    )
     .expect("succeeds");
 
-    let records = DST_BOUND_BUFFER.query(&LogFilter { min_level: LogLevel::Debug, ..LogFilter::default() }, None, 1000)
+    let records = DST_BOUND_BUFFER
+        .query(&LogFilter { min_level: LogLevel::Debug, ..LogFilter::default() }, None, 1000)
         .expect("the buffer answers")
         .records;
     let record = records.first().expect("a record");
@@ -162,11 +140,9 @@ fn a_limit_that_is_not_a_number_is_forgiven() {
     assert_eq!(normalize_limit(args.limit), 10);
 
     // And every spelling of a number a model plausibly emits does decode.
-    for (sent, expected) in [
-        (serde_json::json!("3"), 3),
-        (serde_json::json!(3.7), 3),
-        (serde_json::json!(4), 4),
-    ] {
+    for (sent, expected) in
+        [(serde_json::json!("3"), 3), (serde_json::json!(3.7), 3), (serde_json::json!(4), 4)]
+    {
         let args: DraftSearchArgs =
             serde_json::from_value(serde_json::json!({ "query": "q", "limit": sent }))
                 .expect("decodes");

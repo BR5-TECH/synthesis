@@ -32,11 +32,7 @@ const PROPOSED: &str = "# Spec\n\nA better opening.\n";
 const RATIONALE: &str = "The opening buries the point.";
 
 fn human() -> Participant {
-    Participant::Human {
-        login: "raver119".into(),
-        display_name: None,
-        email: None,
-    }
+    Participant::Human { login: "raver119".into(), display_name: None, email: None }
 }
 
 fn agent() -> Participant {
@@ -70,9 +66,7 @@ impl Fixture {
         let thread = crate::comments::open_discussion_in(
             &root,
             &root,
-            &DiscussionTarget::Draft {
-                draft_id: created.draft.id.clone(),
-            },
+            &DiscussionTarget::Draft { draft_id: created.draft.id.clone() },
             None,
             "@arch what would you change?".into(),
             Vec::new(),
@@ -100,10 +94,7 @@ impl Fixture {
     /// The pair a conversation-bound tool holds: one temporary directory
     /// serving as both the worktree and the repository machine store.
     fn roots(&self) -> crate::agent_conversations::OwnedRoots {
-        crate::agent_conversations::OwnedRoots {
-            worktree: self.root(),
-            store: self.root(),
-        }
+        crate::agent_conversations::OwnedRoots { worktree: self.root(), store: self.root() }
     }
 
     fn origin(&self) -> ConversationOrigin {
@@ -155,9 +146,7 @@ impl Fixture {
     }
 
     fn file_body(&self) -> String {
-        crate::drafts::load_draft_file_impl(&self.root(), &self.draft_id, FILE)
-            .expect("file")
-            .body
+        crate::drafts::load_draft_file_impl(&self.root(), &self.draft_id, FILE).expect("file").body
     }
 
     fn lock(&self) {
@@ -196,12 +185,8 @@ fn good() -> ProposeDraftChangesArgs {
 
 /// The property names of a JSON Schema object, sorted.
 fn schema_keys(properties: &serde_json::Value) -> Vec<String> {
-    let mut keys: Vec<String> = properties
-        .as_object()
-        .expect("an object")
-        .keys()
-        .cloned()
-        .collect();
+    let mut keys: Vec<String> =
+        properties.as_object().expect("an object").keys().cloned().collect();
     keys.sort();
     keys
 }
@@ -239,10 +224,7 @@ fn the_definition_is_fixed_text_and_names_the_three_required_arguments() {
 
     let schema = tool.parameters();
     assert_eq!(schema["type"], "object");
-    assert_eq!(
-        schema_keys(&schema["properties"]),
-        vec!["hunks", "path", "rationale", "revises"],
-    );
+    assert_eq!(schema_keys(&schema["properties"]), vec!["hunks", "path", "rationale", "revises"],);
     let required: Vec<&str> = schema["required"]
         .as_array()
         .expect("required")
@@ -254,9 +236,7 @@ fn the_definition_is_fixed_text_and_names_the_three_required_arguments() {
     assert_eq!(required.len(), 3, "only `revises` has a default");
     for key in ["path", "hunks", "rationale"] {
         assert!(
-            schema["properties"][key]["description"]
-                .as_str()
-                .is_some_and(|d| !d.is_empty()),
+            schema["properties"][key]["description"].as_str().is_some_and(|d| !d.is_empty()),
             "{key} carries its own description (TLC-FR-06)",
         );
     }
@@ -268,10 +248,7 @@ fn the_definition_is_fixed_text_and_names_the_three_required_arguments() {
     // `hunks`' own description, not one or the other.
     for text in [
         tool.description(),
-        schema["properties"]["hunks"]["description"]
-            .as_str()
-            .expect("description")
-            .to_string(),
+        schema["properties"]["hunks"]["description"].as_str().expect("description").to_string(),
     ] {
         let lowered = text.to_lowercase();
         assert!(
@@ -330,20 +307,14 @@ fn no_argument_reaches_a_draft_the_turn_was_not_asked_about() {
 #[test]
 fn a_successful_call_records_a_proposal_and_writes_no_file_of_the_draft() {
     let f = Fixture::new();
-    assert_eq!(
-        f.call(good()).expect("proposed"),
-        ProposeDraftChangesOutput { proposed: true },
-    );
+    assert_eq!(f.call(good()).expect("proposed"), ProposeDraftChangesOutput { proposed: true },);
 
     assert_eq!(f.file_body(), ORIGINAL, "the draft file is untouched");
     let proposals = f.proposals();
     assert_eq!(proposals.len(), 1);
     assert_eq!(proposals[0].path, FILE);
     assert_eq!(proposals[0].rationale, RATIONALE);
-    assert!(
-        f.proposed.load(Ordering::SeqCst),
-        "the loop is told a proposal went out (CVL-FR-15)",
-    );
+    assert!(f.proposed.load(Ordering::SeqCst), "the loop is told a proposal went out (CVL-FR-15)",);
 }
 
 #[test]
@@ -369,10 +340,7 @@ fn a_path_naming_nothing_in_the_draft_is_a_retryable_not_found() {
     let refusal = f.call(args("missing.md", PROPOSED, RATIONALE)).unwrap_err();
     assert_eq!(refusal, ToolRefusal::ProposalPathMissing);
     assert_eq!(refusal.kind(), ToolErrorKind::NotFound);
-    assert!(
-        refusal.retryable(),
-        "a different path reaches a file the draft has (PDC-FR-05)",
-    );
+    assert!(refusal.retryable(), "a different path reaches a file the draft has (PDC-FR-05)",);
     assert!(f.proposals().is_empty());
     assert_eq!(f.discussion().comments.len(), 1, "and nothing was appended");
 }
@@ -419,10 +387,8 @@ fn blank_content_blank_rationale_and_a_no_op_change_refuse_distinctly() {
         assert_eq!(refusal.kind(), ToolErrorKind::InvalidArgs);
         assert!(refusal.retryable(), "each is the model's to correct");
     }
-    let messages: Vec<String> = [&blank_content, &blank_rationale, &no_change]
-        .iter()
-        .map(|r| r.to_string())
-        .collect();
+    let messages: Vec<String> =
+        [&blank_content, &blank_rationale, &no_change].iter().map(|r| r.to_string()).collect();
     let unique: std::collections::BTreeSet<&String> = messages.iter().collect();
     assert_eq!(
         unique.len(),
@@ -484,8 +450,14 @@ fn a_second_proposal_is_refused_while_one_is_pending_and_is_retryable() {
         .into_iter()
         .find(|p| p.state == crate::draft_proposals::ProposalState::Pending)
         .expect("the standing proposal");
-    crate::draft_proposals::decline_for_test(&f.handle(), &f.root(), &f.root(), &pending.id, &human())
-        .expect("decline");
+    crate::draft_proposals::decline_for_test(
+        &f.handle(),
+        &f.root(),
+        &f.root(),
+        &pending.id,
+        &human(),
+    )
+    .expect("decline");
 
     f.call(args(FILE, "different again", RATIONALE))
         .expect("the slot is free once the author has decided");
@@ -546,12 +518,7 @@ fn the_comment_is_the_rationale_and_one_reference_by_the_agent() {
     let posted = thread.comments.last().expect("the proposal's comment");
     assert_eq!(posted.body, RATIONALE, "the rationale and nothing else");
     match &posted.author {
-        Participant::Agent {
-            agent_id,
-            handle,
-            model,
-            title,
-        } => {
+        Participant::Agent { agent_id, handle, model, title } => {
             assert_eq!(agent_id, "agent-1");
             assert_eq!(handle, "arch");
             assert_eq!(model.as_deref(), Some("m"));
@@ -571,13 +538,9 @@ fn the_comment_is_the_rationale_and_one_reference_by_the_agent() {
     }
 
     // PDC-FR-12: nothing machine-shaped in the body a person reads.
-    for marker in [
-        &f.proposals()[0].id[..],
-        &f.draft_id[..],
-        FILE,
-        "proposal",
-        "propose_draft_changes",
-    ] {
+    for marker in
+        [&f.proposals()[0].id[..], &f.draft_id[..], FILE, "proposal", "propose_draft_changes"]
+    {
         assert!(
             !posted.body.contains(marker),
             "the body carries no identifier or marker: {marker:?} in {:?}",
@@ -614,7 +577,10 @@ fn with_no_project_open_it_gives_the_shared_refusal() {
     let elsewhere = TempDir::new().expect("tempdir");
     let tool = ProposeDraftChangesTool::new(
         closed.handle().clone(),
-        crate::agent_conversations::OwnedRoots { worktree: crate::fs::RootFs::for_root(elsewhere.path()), store: crate::fs::RootFs::for_root(elsewhere.path()) },
+        crate::agent_conversations::OwnedRoots {
+            worktree: crate::fs::RootFs::for_root(elsewhere.path()),
+            store: crate::fs::RootFs::for_root(elsewhere.path()),
+        },
         ConversationOrigin::stub_draft("t", "d", false),
         agent(),
         Arc::new(AtomicBool::new(false)),
@@ -641,25 +607,15 @@ fn a_call_records_the_draft_the_conversation_and_the_path_and_nothing_composed()
     // The refusal first: once a proposal stands, every later call refuses for the
     // draft's one pending slot (PDC-FR-08) rather than for the path, and this
     // test is about what a *path* refusal records.
-    block_on(
-        f.tool()
-            .with_buffer(&PDC_LOG)
-            .call(args("missing.md", PROPOSED, RATIONALE)),
-    )
-    .unwrap_err();
+    block_on(f.tool().with_buffer(&PDC_LOG).call(args("missing.md", PROPOSED, RATIONALE)))
+        .unwrap_err();
     block_on(f.tool().with_buffer(&PDC_LOG).call(good())).expect("proposed");
 
     for domain in [Domain::Ai, Domain::Backend] {
         let records = records(&PDC_LOG, domain);
         assert_eq!(records.len(), 2, "one per call, under {domain:?}");
-        let info = records
-            .iter()
-            .find(|r| r.level == LogLevel::Info)
-            .expect("the success");
-        let warn = records
-            .iter()
-            .find(|r| r.level == LogLevel::Warn)
-            .expect("the refusal");
+        let info = records.iter().find(|r| r.level == LogLevel::Info).expect("the success");
+        let warn = records.iter().find(|r| r.level == LogLevel::Warn).expect("the refusal");
 
         for record in [info, warn] {
             let fields = serde_json::to_string(&record.fields).expect("fields");
@@ -668,14 +624,8 @@ fn a_call_records_the_draft_the_conversation_and_the_path_and_nothing_composed()
             assert!(fields.contains(&f.thread_id), "names the conversation");
             // PDC-FR-18: `path` is this tool's one loggable argument.
             let whole = format!("{} {}", record.message, fields);
-            assert!(
-                !whole.contains("better opening"),
-                "no part of the proposed text: {whole}",
-            );
-            assert!(
-                !whole.contains(RATIONALE),
-                "no part of the rationale: {whole}",
-            );
+            assert!(!whole.contains("better opening"), "no part of the proposed text: {whole}",);
+            assert!(!whole.contains(RATIONALE), "no part of the rationale: {whole}",);
             assert!(
                 !whole.contains("The original"),
                 "and no part of the file being replaced: {whole}",
@@ -686,9 +636,7 @@ fn a_call_records_the_draft_the_conversation_and_the_path_and_nothing_composed()
             "the success names which file was rewritten",
         );
         assert!(
-            serde_json::to_string(&warn.fields)
-                .expect("fields")
-                .contains("proposal_path_missing"),
+            serde_json::to_string(&warn.fields).expect("fields").contains("proposal_path_missing"),
             "and the refusal names the reason",
         );
     }
@@ -698,12 +646,8 @@ fn a_call_records_the_draft_the_conversation_and_the_path_and_nothing_composed()
 fn a_very_long_path_is_bounded_before_it_reaches_a_record() {
     let f = Fixture::new();
     let long = "x".repeat(5_000);
-    block_on(
-        f.tool()
-            .with_buffer(&PDC_BOUND_LOG)
-            .call(args(&long, PROPOSED, RATIONALE)),
-    )
-    .unwrap_err();
+    block_on(f.tool().with_buffer(&PDC_BOUND_LOG).call(args(&long, PROPOSED, RATIONALE)))
+        .unwrap_err();
 
     let emitted = records(&PDC_BOUND_LOG, Domain::Backend);
     let fields = serde_json::to_string(&emitted[0].fields).expect("fields");
@@ -731,9 +675,7 @@ fn a_successful_call_changes_only_the_proposals_folder_and_the_conversation_log(
     let after = tree_of(&f.path);
     let added: Vec<&String> = after.iter().filter(|p| !before.contains(*p)).collect();
     assert!(
-        added
-            .iter()
-            .all(|p| p.contains("/proposals/") || p.ends_with("discussion.jsonl")),
+        added.iter().all(|p| p.contains("/proposals/") || p.ends_with("discussion.jsonl")),
         "only the candidate and the conversation's own log: {added:?}",
     );
     let removed: Vec<&String> = before.iter().filter(|p| !after.contains(*p)).collect();
@@ -753,10 +695,7 @@ fn tree_of(root: &std::path::Path) -> Vec<String> {
                 walk(&path, base, out);
             } else {
                 out.push(
-                    path.strip_prefix(base)
-                        .unwrap_or(&path)
-                        .to_string_lossy()
-                        .replace('\\', "/"),
+                    path.strip_prefix(base).unwrap_or(&path).to_string_lossy().replace('\\', "/"),
                 );
             }
         }

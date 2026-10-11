@@ -47,11 +47,8 @@ fn request() -> AgentRequest {
 
 /// Serve exactly one HTTP request on loopback with a refusal, and hand back what
 /// was received (the request line, the headers, and the body).
-fn refuse_once() -> (
-    String,
-    std::thread::JoinHandle<String>,
-    std::sync::Arc<std::sync::atomic::AtomicBool>,
-) {
+fn refuse_once(
+) -> (String, std::thread::JoinHandle<String>, std::sync::Arc<std::sync::atomic::AtomicBool>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let accepted = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -59,9 +56,7 @@ fn refuse_once() -> (
     let handle = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         flag.store(true, std::sync::atomic::Ordering::SeqCst);
-        stream
-            .set_read_timeout(Some(Duration::from_secs(10)))
-            .unwrap();
+        stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
         let mut received = Vec::new();
         let mut buffer = [0u8; 4096];
         loop {
@@ -129,11 +124,14 @@ fn call_once_with(
 // added, the route its model's mode allows, and nothing else.
 #[test]
 fn the_adapter_configuration_follows_the_endpoint_and_the_model_mode() {
-    let chat = openai_adapter_config(&custom_endpoint("https://gw.example.com", Some(ModelMode::Chat)));
+    let chat =
+        openai_adapter_config(&custom_endpoint("https://gw.example.com", Some(ModelMode::Chat)));
     assert_eq!(chat.base_url, "https://gw.example.com/v1");
     assert_eq!(chat.route, OpenAiRoute::ChatCompletions);
-    let responses =
-        openai_adapter_config(&custom_endpoint("https://gw.example.com", Some(ModelMode::Responses)));
+    let responses = openai_adapter_config(&custom_endpoint(
+        "https://gw.example.com",
+        Some(ModelMode::Responses),
+    ));
     assert_eq!(responses.route, OpenAiRoute::Responses);
     let both = openai_adapter_config(&custom_endpoint("https://gw.example.com", None));
     assert_eq!(both.route, OpenAiRoute::Unrestricted, "no preference is added");
@@ -163,8 +161,7 @@ fn a_chat_model_is_called_on_chat_completions_with_the_bearer_secret() {
     assert!(first.starts_with("POST /v1/chat/completions"), "{first}");
     assert_eq!(body_json(&seen)["max_tokens"], 128_000, "{seen}");
     assert!(
-        seen.to_lowercase()
-            .contains(&format!("authorization: bearer {}", SECRET.to_lowercase())),
+        seen.to_lowercase().contains(&format!("authorization: bearer {}", SECRET.to_lowercase())),
         "the secret travels as a bearer token"
     );
     let failure = outcome.expect_err("the loopback server refuses");
@@ -211,9 +208,7 @@ fn an_openai_call_states_no_output_token_limit() {
         let mut endpoint = custom_endpoint(&format!("{url}/v1"), None);
         endpoint.provider = "openai".into();
         endpoint.model_id = Some("gpt-6-sol".into());
-        endpoint.reasoning = Some(crate::ai_api::ReasoningChoice::Effort {
-            effort: "high".into(),
-        });
+        endpoint.reasoning = Some(crate::ai_api::ReasoningChoice::Effort { effort: "high".into() });
         endpoint
     });
     let first = seen.lines().next().unwrap_or_default().to_string();
@@ -265,9 +260,8 @@ fn a_dispatch_after_a_provider_switch_to_one_without_the_model_is_refused() {
         vec![ModelOption::new("other-model", "other-model")];
     h.store().save_ai_api_registry(records, Some("custom".into())).unwrap();
 
-    let refused = h
-        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
-        .unwrap_err();
+    let refused =
+        h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id).unwrap_err();
     assert_eq!(refused, FAIL_AGENT_UNAVAILABLE);
     assert!(h.turns().in_flight(None).is_empty());
     assert!(h.seam.requests().is_empty(), "no call was made");

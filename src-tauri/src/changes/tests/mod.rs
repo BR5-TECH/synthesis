@@ -74,9 +74,7 @@ impl Fixture {
     fn stage_all(&self) {
         let repo = self.repo();
         let mut index = repo.index().unwrap();
-        index
-            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-            .unwrap();
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
         index.update_all(["*"].iter(), None).unwrap();
         index.write().unwrap();
     }
@@ -89,13 +87,13 @@ impl Fixture {
         let tree_id = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_id).unwrap();
         let sig = repo.signature().unwrap();
-        let parents: Vec<git2::Commit> = match repo.head().ok().and_then(|h| h.peel_to_commit().ok()) {
-            Some(c) => vec![c],
-            None => vec![],
-        };
+        let parents: Vec<git2::Commit> =
+            match repo.head().ok().and_then(|h| h.peel_to_commit().ok()) {
+                Some(c) => vec![c],
+                None => vec![],
+            };
         let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
-        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parent_refs)
-            .unwrap()
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parent_refs).unwrap()
     }
 
     fn branch(&self, name: &str) {
@@ -106,14 +104,10 @@ impl Fixture {
 
     fn checkout(&self, name: &str) {
         let repo = self.repo();
-        let reference = repo
-            .find_branch(name, BranchType::Local)
-            .unwrap()
-            .into_reference();
+        let reference = repo.find_branch(name, BranchType::Local).unwrap().into_reference();
         let target = reference.name().unwrap().to_string();
         repo.set_head(&target).unwrap();
-        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
-            .unwrap();
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force())).unwrap();
     }
 
     fn detach(&self) {
@@ -144,13 +138,13 @@ fn paths(set: &ChangeSet) -> Vec<String> {
     set.entries.iter().map(|e| e.path.clone()).collect()
 }
 
-mod change_set;
-mod renames_and_ignores;
-mod head_states;
-mod classification;
 mod branches;
-mod read_only;
-mod diff_totals;
+mod change_set;
+mod classification;
 mod co_located;
+mod diff_totals;
+mod head_states;
+mod read_only;
+mod renames_and_ignores;
 mod watch_surface;
 mod wire_shapes;

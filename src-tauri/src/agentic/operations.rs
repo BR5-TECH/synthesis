@@ -19,12 +19,7 @@ pub fn list_integrations_impl(
     ai: &AgenticIntegrations,
 ) -> Result<Vec<AgenticIntegration>, String> {
     let (records, active) = store.load_agentic_registry()?;
-    Ok(integrations_from(
-        &records,
-        active.as_deref(),
-        &*ai.probe,
-        &vendor_presence(&*ai.secrets),
-    ))
+    Ok(integrations_from(&records, active.as_deref(), &*ai.probe, &vendor_presence(&*ai.secrets)))
 }
 
 /// AIC-FR-03: locate a candidate binary. Persists nothing, executes nothing, and
@@ -40,9 +35,7 @@ pub fn detect_binary_impl(
     let path_var = std::env::var("PATH").ok();
     let home = dirs::home_dir();
     let dirs = detection_directories(path_var.as_deref(), home.as_deref());
-    Ok(DetectedBinary {
-        path: detect_in(&dirs, descriptor.executable_names, &*ai.probe),
-    })
+    Ok(DetectedBinary { path: detect_in(&dirs, descriptor.executable_names, &*ai.probe) })
 }
 
 /// What a successful verification of either kind produced, before it is written.
@@ -80,10 +73,8 @@ pub(super) fn verify_cli(
         return Err(ERR_NOT_EXECUTABLE.into());
     }
 
-    let output = ai
-        .runner
-        .run(&binary, descriptor.version_args, VERIFY_TIMEOUT)
-        .map_err(|e| match e {
+    let output =
+        ai.runner.run(&binary, descriptor.version_args, VERIFY_TIMEOUT).map_err(|e| match e {
             RunError::NotFound => ERR_NOT_FOUND.to_string(),
             RunError::NotExecutable => ERR_NOT_EXECUTABLE.to_string(),
             RunError::TimedOut => ERR_TIMED_OUT.to_string(),
@@ -319,10 +310,7 @@ pub fn verify_integration_impl(
                 // nor a keychain round trip (AIC-FR-27).
                 let supplied =
                     resolve_supplied_token(ai, descriptor, config.oauth_token.as_deref())?;
-                (
-                    verify_cli(ai, descriptor, config.path.as_deref().unwrap_or(""))?,
-                    supplied,
-                )
+                (verify_cli(ai, descriptor, config.path.as_deref().unwrap_or(""))?, supplied)
             }
         }
         VendorKind::Api => {
@@ -344,10 +332,7 @@ pub fn verify_integration_impl(
         }
     };
 
-    let _guard = ai
-        .write_lock
-        .lock()
-        .map_err(|e| format!("agentic registry poisoned: {e}"))?;
+    let _guard = ai.write_lock.lock().map_err(|e| format!("agentic registry poisoned: {e}"))?;
 
     // AIC-FR-06 / AIC-FR-20: the credential reaches the keychain before the
     // registry is touched, so a keychain that refuses cannot leave behind a
@@ -369,19 +354,15 @@ pub fn verify_integration_impl(
     // still there until the new one lands and there is no observable moment
     // holding both or neither.
     match (descriptor.kind, verified.api_key.as_deref()) {
-        (VendorKind::Api, Some(key)) => ai
-            .secrets
-            .set(vendor, key)
-            .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?,
-        (VendorKind::Api, None) => ai
-            .secrets
-            .delete(vendor)
-            .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?,
+        (VendorKind::Api, Some(key)) => {
+            ai.secrets.set(vendor, key).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
+        }
+        (VendorKind::Api, None) => {
+            ai.secrets.delete(vendor).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
+        }
         (VendorKind::Cli, _) => {
             if let Some(token) = supplied_token.as_deref() {
-                ai.secrets
-                    .set(vendor, token)
-                    .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
+                ai.secrets.set(vendor, token).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
             }
             // AIC-FR-YXAB: the gateway token has a vault entry of its own, and
             // a subscription verification never reaches it.
@@ -455,12 +436,7 @@ pub fn verify_integration_impl(
     }
 
     store.save_agentic_registry(records.clone(), active.clone())?;
-    integrations_from(
-        &records,
-        active.as_deref(),
-        &*ai.probe,
-        &vendor_presence(&*ai.secrets),
-    )
+    integrations_from(&records, active.as_deref(), &*ai.probe, &vendor_presence(&*ai.secrets))
         .into_iter()
         .find(|i| i.vendor == vendor)
         .ok_or_else(|| ERR_UNKNOWN_VENDOR.to_string())
@@ -477,10 +453,7 @@ where
     F: FnOnce(&mut AgenticRecord) -> Result<(), String>,
 {
     vendor_descriptor(vendor).ok_or(ERR_UNKNOWN_VENDOR)?;
-    let _guard = ai
-        .write_lock
-        .lock()
-        .map_err(|e| format!("agentic registry poisoned: {e}"))?;
+    let _guard = ai.write_lock.lock().map_err(|e| format!("agentic registry poisoned: {e}"))?;
     let (mut records, active) = store.load_agentic_registry()?;
     let index = match records.iter().position(|r| r.vendor == vendor) {
         Some(i) => i,
@@ -491,12 +464,7 @@ where
     };
     apply(&mut records[index])?;
     store.save_agentic_registry(records.clone(), active.clone())?;
-    integrations_from(
-        &records,
-        active.as_deref(),
-        &*ai.probe,
-        &vendor_presence(&*ai.secrets),
-    )
+    integrations_from(&records, active.as_deref(), &*ai.probe, &vendor_presence(&*ai.secrets))
         .into_iter()
         .find(|i| i.vendor == vendor)
         .ok_or_else(|| ERR_UNKNOWN_VENDOR.to_string())
@@ -622,10 +590,7 @@ pub fn set_active_impl(
     vendor: &str,
 ) -> Result<Vec<AgenticIntegration>, String> {
     let descriptor = vendor_descriptor(vendor).ok_or(ERR_UNKNOWN_VENDOR)?;
-    let _guard = ai
-        .write_lock
-        .lock()
-        .map_err(|e| format!("agentic registry poisoned: {e}"))?;
+    let _guard = ai.write_lock.lock().map_err(|e| format!("agentic registry poisoned: {e}"))?;
     let (records, _) = store.load_agentic_registry()?;
     let present = vendor_presence(&*ai.secrets);
     let verified = records.iter().any(|r| {
@@ -651,25 +616,18 @@ pub fn clear_integration_impl(
     vendor: &str,
 ) -> Result<Vec<AgenticIntegration>, String> {
     let descriptor = vendor_descriptor(vendor).ok_or(ERR_UNKNOWN_VENDOR)?;
-    let _guard = ai
-        .write_lock
-        .lock()
-        .map_err(|e| format!("agentic registry poisoned: {e}"))?;
+    let _guard = ai.write_lock.lock().map_err(|e| format!("agentic registry poisoned: {e}"))?;
     // The delete comes first, for the same reason the write does in
     // verification: a keychain that refuses must leave the registry untouched
     // rather than dropping the record and stranding the credential (AIC-FR-24).
     // `delete` succeeds on an entry that is not there, which is what makes
     // clearing idempotent.
     if descriptor.holds_credential() {
-        ai.secrets
-            .delete(vendor)
-            .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
+        ai.secrets.delete(vendor).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
     }
     // AIC-FR-14: Claude Code's gateway token goes with its OAuth token.
     if descriptor.requires_oauth_token() {
-        ai.secrets
-            .delete(GATEWAY_SECRET_ID)
-            .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
+        ai.secrets.delete(GATEWAY_SECRET_ID).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
     }
     let (mut records, active) = store.load_agentic_registry()?;
     records.retain(|r| r.vendor != vendor);
@@ -678,12 +636,7 @@ pub fn clear_integration_impl(
         other => other,
     };
     store.save_agentic_registry(records.clone(), active.clone())?;
-    Ok(integrations_from(
-        &records,
-        active.as_deref(),
-        &*ai.probe,
-        &vendor_presence(&*ai.secrets),
-    ))
+    Ok(integrations_from(&records, active.as_deref(), &*ai.probe, &vendor_presence(&*ai.secrets)))
 }
 
 /// AIC-FR-32: one migration candidate per vendor that holds a credential.
@@ -718,11 +671,8 @@ pub fn get_project_impl(
     // An empty key is "no project open" (`ProjectState::slot_key`), whose slot is
     // the shared default one — an override read from there would belong to no
     // project in particular.
-    let override_vendor = if project_key.is_empty() {
-        None
-    } else {
-        store.load_agentic_override(project_key)?
-    };
+    let override_vendor =
+        if project_key.is_empty() { None } else { store.load_agentic_override(project_key)? };
     Ok(resolve_project(
         &records,
         active.as_deref(),
@@ -792,10 +742,7 @@ pub fn resolve_agentic_invocation(
     };
     let descriptor = vendor_descriptor(&vendor).ok_or(ERR_NONE_SELECTED)?;
     let (records, _) = store.load_agentic_registry()?;
-    let record = records
-        .iter()
-        .find(|r| r.vendor == vendor)
-        .ok_or(ERR_NONE_SELECTED)?;
+    let record = records.iter().find(|r| r.vendor == vendor).ok_or(ERR_NONE_SELECTED)?;
 
     match descriptor.kind {
         VendorKind::Cli => {
@@ -806,11 +753,7 @@ pub fn resolve_agentic_invocation(
             let binary_path = if gateway_mode {
                 String::new()
             } else {
-                record
-                    .binary_path
-                    .clone()
-                    .filter(|p| !p.is_empty())
-                    .ok_or(ERR_NONE_SELECTED)?
+                record.binary_path.clone().filter(|p| !p.is_empty()).ok_or(ERR_NONE_SELECTED)?
             };
             // AIC-FR-29: a CLI invocation is a path, a model, and an effort. No
             // token is read here and none is carried out — Claude Code's stored
@@ -825,17 +768,12 @@ pub fn resolve_agentic_invocation(
             })
         }
         VendorKind::Api => {
-            let base_url = record
-                .base_url
-                .clone()
-                .filter(|u| !u.is_empty())
-                .ok_or(ERR_NONE_SELECTED)?;
+            let base_url =
+                record.base_url.clone().filter(|u| !u.is_empty()).ok_or(ERR_NONE_SELECTED)?;
             // The one place a key is read back out, and only for a caller that
             // is about to present it to the endpoint it belongs to.
             let api_key = if record.masked_hint.is_some() {
-                ai.secrets
-                    .get(&vendor)
-                    .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
+                ai.secrets.get(&vendor).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
             } else {
                 None
             };
@@ -849,4 +787,3 @@ pub fn resolve_agentic_invocation(
         }
     }
 }
-

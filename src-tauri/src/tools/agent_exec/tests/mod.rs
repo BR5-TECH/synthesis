@@ -24,8 +24,8 @@ use super::protocol::*;
 use super::runtime::*;
 use super::*;
 use crate::agentic::{
-    self, verify_integration_impl, AgenticIntegrations, CliOutput, CliRunner,
-    FileProbe, RunError, VerifyConfig,
+    self, verify_integration_impl, AgenticIntegrations, CliOutput, CliRunner, FileProbe, RunError,
+    VerifyConfig,
 };
 use crate::ai_shared::{
     EndpointProber, ModelOption, ProbeError, ProbeRequest, SecretStore, SecretUnavailable,
@@ -43,22 +43,22 @@ use support::*;
 #[path = "../mock_tests/mod.rs"]
 mod mock_tests;
 
-mod merge_turns;
-mod rebase_mounts;
-mod rebase_isolation;
-mod surface;
-mod task_document;
-mod envelope;
 mod capture;
 mod concurrency;
-mod decoding;
-mod controls;
-mod watching;
-mod durable;
-mod observers;
 mod contracts;
-mod gateway_env;
+mod controls;
+mod decoding;
+mod durable;
 mod env_values;
+mod envelope;
+mod gateway_env;
+mod merge_turns;
+mod observers;
+mod rebase_isolation;
+mod rebase_mounts;
+mod surface;
+mod task_document;
+mod watching;
 
 /// The sample well-formed token AIC's own suite uses (AIC-FR-27). It is a fake value.
 const SAMPLE_TOKEN: &str = "sk-ant-oat01-FAKE-TEST-TOKEN-NOT-A-REAL-CREDENTIAL-000000000000000000000000000000000000000-ygAA";
@@ -98,11 +98,9 @@ struct FakeRunner {
 impl CliRunner for FakeRunner {
     fn run(&self, path: &Path, _args: &[&str], _timeout: Duration) -> Result<CliOutput, RunError> {
         match self.banners.get(&path.to_string_lossy().to_string()) {
-            Some(banner) => Ok(CliOutput {
-                stdout: banner.clone(),
-                stderr: String::new(),
-                success: true,
-            }),
+            Some(banner) => {
+                Ok(CliOutput { stdout: banner.clone(), stderr: String::new(), success: true })
+            }
             None => Err(RunError::NotFound),
         }
     }
@@ -130,10 +128,7 @@ struct FakeKeys(StdMutex<HashMap<String, String>>);
 
 impl SecretStore for Arc<FakeKeys> {
     fn set(&self, id: &str, secret: &str) -> Result<(), SecretUnavailable> {
-        self.0
-            .lock()
-            .unwrap()
-            .insert(id.to_string(), secret.to_string());
+        self.0.lock().unwrap().insert(id.to_string(), secret.to_string());
         Ok(())
     }
     fn get(&self, id: &str) -> Result<Option<String>, SecretUnavailable> {
@@ -165,11 +160,7 @@ struct Recorded {
 #[derive(Clone)]
 enum Script {
     /// Replay a response and exit status.
-    Reply {
-        stdout: String,
-        stderr: String,
-        exit_code: i32,
-    },
+    Reply { stdout: String, stderr: String, exit_code: i32 },
     /// Replay bytes that are not valid UTF-8.
     ReplyRaw { stdout: Vec<u8>, exit_code: i32 },
     /// Replay more bytes on a stream than its bound allows.
@@ -253,11 +244,7 @@ impl RecordingRuntime {
 
     fn broken(available: bool, image_available: bool, launch: Option<RuntimeError>) -> Arc<Self> {
         Arc::new(RecordingRuntime {
-            script: Script::Reply {
-                stdout: String::new(),
-                stderr: String::new(),
-                exit_code: 0,
-            },
+            script: Script::Reply { stdout: String::new(), stderr: String::new(), exit_code: 0 },
             available,
             image_available,
             launch_error: launch,
@@ -309,11 +296,7 @@ impl DockerRuntime for RecordingRuntime {
             self.runs.lock().unwrap().push(Recorded {
                 argv: request.argv.to_vec(),
                 container: request.container.cloned(),
-                env: request
-                    .env
-                    .iter()
-                    .map(|(k, v)| (k.clone(), v.expose().to_string()))
-                    .collect(),
+                env: request.env.iter().map(|(k, v)| (k.clone(), v.expose().to_string())).collect(),
                 // Docker's own rule, modelled rather than assumed: a container
                 // launched without `--interactive` is given `/dev/null` for
                 // stdin, and whatever the client wrote to the pipe reaches
@@ -338,36 +321,23 @@ impl DockerRuntime for RecordingRuntime {
             }
 
             let outcome = match &self.script {
-                Script::Reply {
-                    stdout,
-                    stderr,
-                    exit_code,
-                } => RuntimeOutcome {
+                Script::Reply { stdout, stderr, exit_code } => RuntimeOutcome {
                     end: RunEnd::Exited,
                     exit_code: Some(*exit_code),
                     stdout: CapturedStream {
                         bytes: substitute_session(stdout, request.argv).into_bytes(),
                         truncated: false,
                     },
-                    stderr: CapturedStream {
-                        bytes: stderr.as_bytes().to_vec(),
-                        truncated: false,
-                    },
+                    stderr: CapturedStream { bytes: stderr.as_bytes().to_vec(), truncated: false },
                 },
                 Script::ReplyRaw { stdout, exit_code } => RuntimeOutcome {
                     end: RunEnd::Exited,
                     exit_code: Some(*exit_code),
-                    stdout: CapturedStream {
-                        bytes: stdout.clone(),
-                        truncated: false,
-                    },
+                    stdout: CapturedStream { bytes: stdout.clone(), truncated: false },
                     stderr: CapturedStream::default(),
                 },
                 Script::Flood { stream } => {
-                    let full = CapturedStream {
-                        bytes: vec![b'x'; 64],
-                        truncated: true,
-                    };
+                    let full = CapturedStream { bytes: vec![b'x'; 64], truncated: true };
                     RuntimeOutcome {
                         end: RunEnd::Exited,
                         exit_code: Some(0),
@@ -376,11 +346,7 @@ impl DockerRuntime for RecordingRuntime {
                         } else {
                             CapturedStream::default()
                         },
-                        stderr: if *stream == "stderr" {
-                            full
-                        } else {
-                            CapturedStream::default()
-                        },
+                        stderr: if *stream == "stderr" { full } else { CapturedStream::default() },
                     }
                 }
                 Script::TimeOut => RuntimeOutcome {
@@ -502,11 +468,8 @@ impl Harness {
     /// **canonical** spelling EAC-FR-02 gives the execution directory, which on
     /// this platform is not the one a temporary directory reports.
     fn workspace_target(&self) -> String {
-        crate::changes::canonicalize_lenient(&self.workspace())
-            .to_string_lossy()
-            .into_owned()
+        crate::changes::canonicalize_lenient(&self.workspace()).to_string_lossy().into_owned()
     }
-
 
     /// Where this harness's session state for `vendor` lands, as the string the
     /// mount argument carries.
@@ -552,9 +515,7 @@ fn harness_verified_with(vendor: &str, config: Option<VerifyConfig>) -> Harness 
         executables: vec![binary.to_string()],
         directories: vec![home.path().join(".codex")],
     };
-    let runner = FakeRunner {
-        banners: HashMap::from([(binary.to_string(), banner.to_string())]),
-    };
+    let runner = FakeRunner { banners: HashMap::from([(binary.to_string(), banner.to_string())]) };
 
     let ai = AgenticIntegrations::new(
         Box::new(probe),
@@ -583,14 +544,7 @@ fn harness_verified_with(vendor: &str, config: Option<VerifyConfig>) -> Harness 
         .build()
         .expect("fs");
 
-    Harness {
-        store,
-        ai,
-        fs,
-        workspace,
-        home,
-        sessions,
-    }
+    Harness { store, ai, fs, workspace, home, sessions }
 }
 
 /// A harness with nothing configured at all.
@@ -599,9 +553,7 @@ fn empty_harness() -> Harness {
     let workspace = tempfile::tempdir().expect("workspace");
     let ai = AgenticIntegrations::new(
         Box::new(FakeProbe::default()),
-        Box::new(FakeRunner {
-            banners: HashMap::new(),
-        }),
+        Box::new(FakeRunner { banners: HashMap::new() }),
         Box::new(NoProber),
         Box::new(Arc::new(FakeKeys::default())),
     )
@@ -612,14 +564,7 @@ fn empty_harness() -> Harness {
         .allow_root(sessions.path())
         .build()
         .expect("fs");
-    Harness {
-        store: GlobalSettingsStore::in_memory(),
-        ai,
-        fs,
-        workspace,
-        home,
-        sessions,
-    }
+    Harness { store: GlobalSettingsStore::in_memory(), ai, fs, workspace, home, sessions }
 }
 
 /// EAC-FR-38: the project's committed image, as this suite's fixture project

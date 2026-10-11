@@ -38,10 +38,7 @@ fn driven(fx: &Fixture, turns: Vec<Turn>) -> (GraduationRun, Arc<ScriptedDispatc
 fn diagnostics(run_id: &str) -> Vec<crate::logging::LogRecord> {
     let filter: crate::logging::LogFilter =
         serde_json::from_value(serde_json::json!({ "query": run_id })).unwrap();
-    crate::logging::BUFFER
-        .query(&filter, None, 5000)
-        .expect("a page")
-        .records
+    crate::logging::BUFFER.query(&filter, None, 5000).expect("a page").records
 }
 
 fn outcome_of(record: &crate::logging::LogRecord) -> Option<&str> {
@@ -101,20 +98,12 @@ fn a_merge_runs_turns_and_apply_step_are_attributed_by_the_producer_table() {
     assert_eq!(run.state, GraduationRunState::Completed, "{run:?}");
 
     let records = lines_of(&fx, &run.id, GraduationLogStream::Structured);
-    let producers: BTreeSet<&str> = records
-        .iter()
-        .filter_map(|r| field(r, "producer").as_str())
-        .collect();
-    assert_eq!(
-        producers,
-        BTreeSet::from(["queue_wait", "work_turn", "review_turn", "commit"])
-    );
+    let producers: BTreeSet<&str> =
+        records.iter().filter_map(|r| field(r, "producer").as_str()).collect();
+    assert_eq!(producers, BTreeSet::from(["queue_wait", "work_turn", "review_turn", "commit"]));
 
     let of = |producer: &str| -> Vec<&serde_json::Value> {
-        records
-            .iter()
-            .filter(|r| field(r, "producer").as_str() == Some(producer))
-            .collect()
+        records.iter().filter(|r| field(r, "producer").as_str() == Some(producer)).collect()
     };
     let work = of("work_turn");
     assert_eq!(work.len(), 4, "two merge_work turns, each started and ended");
@@ -217,7 +206,13 @@ fn a_merge_run_carries_the_ordinary_observability_record() {
     let keys: BTreeSet<&str> = observed.as_object().unwrap().keys().map(String::as_str).collect();
     assert_eq!(
         keys,
-        BTreeSet::from(["observabilityVersion", "currentStage", "stageCondition", "stageHistory", "passes"]),
+        BTreeSet::from([
+            "observabilityVersion",
+            "currentStage",
+            "stageCondition",
+            "stageHistory",
+            "passes"
+        ]),
         "no field marks a merge run or holds its result"
     );
 
@@ -400,7 +395,9 @@ fn a_refused_tip_check_is_a_warning_with_the_typed_outcome() {
         .collect();
     assert_eq!(refused.len(), 1);
     assert_eq!(refused[0].level, LogLevel::Warn);
-    assert!(refused[0].domains.contains(&Domain::Ai) && refused[0].domains.contains(&Domain::Backend));
+    assert!(
+        refused[0].domains.contains(&Domain::Ai) && refused[0].domains.contains(&Domain::Backend)
+    );
     assert_eq!(refused[0].fields["boundary"], "tip_check");
 }
 

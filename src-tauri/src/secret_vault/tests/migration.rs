@@ -19,11 +19,7 @@ fn asv_ts_16_migration_adopts_then_deletes() {
         .migrate_legacy_secrets(&[
             candidate(GITHUB_LEGACY, "t1", &["github", "tokens", "t1"]),
             candidate(AI_API_LEGACY, "openai", &["ai_api", "providers", "openai"]),
-            candidate(
-                AGENTIC_LEGACY,
-                "claude_code",
-                &["agentic", "vendors", "claude_code"],
-            ),
+            candidate(AGENTIC_LEGACY, "claude_code", &["agentic", "vendors", "claude_code"]),
         ])
         .unwrap();
 
@@ -38,10 +34,7 @@ fn asv_ts_16_migration_adopts_then_deletes() {
     // ASV-FR-25: the write and its verification precede every deletion.
     let calls = keyring.calls();
     let write_at = calls.iter().position(|c| *c == Call::Write).unwrap();
-    let first_delete = calls
-        .iter()
-        .position(|c| matches!(c, Call::DeleteLegacy(..)))
-        .unwrap();
+    let first_delete = calls.iter().position(|c| matches!(c, Call::DeleteLegacy(..))).unwrap();
     assert!(write_at < first_delete);
     // The read-back that verified it sits between them.
     assert!(calls[write_at + 1..first_delete].contains(&Call::Read));
@@ -52,15 +45,11 @@ fn asv_ts_16_migration_adopts_then_deletes() {
         Some("ghp_secret".into())
     );
     assert_eq!(
-        vault
-            .read_secret(&p(&["ai_api", "providers", "openai"]))
-            .unwrap(),
+        vault.read_secret(&p(&["ai_api", "providers", "openai"])).unwrap(),
         Some("sk-key".into())
     );
     assert_eq!(
-        vault
-            .read_secret(&p(&["agentic", "vendors", "claude_code"]))
-            .unwrap(),
+        vault.read_secret(&p(&["agentic", "vendors", "claude_code"])).unwrap(),
         Some("sk-ant-oat01-x".into())
     );
 }
@@ -84,18 +73,13 @@ fn asv_ts_17_consolidated_value_wins_and_legacy_is_still_deleted() {
     assert_eq!(outcome.adopted, 0);
     assert_eq!(outcome.deleted, 1);
     assert_eq!(
-        vault
-            .read_secret(&p(&["ai_api", "providers", "openai"]))
-            .unwrap(),
+        vault.read_secret(&p(&["ai_api", "providers", "openai"])).unwrap(),
         Some("kept".into())
     );
 
     let calls = keyring.calls();
     let write_at = calls.iter().position(|c| *c == Call::Write).unwrap();
-    let delete_at = calls
-        .iter()
-        .position(|c| matches!(c, Call::DeleteLegacy(..)))
-        .unwrap();
+    let delete_at = calls.iter().position(|c| matches!(c, Call::DeleteLegacy(..))).unwrap();
     assert!(write_at < delete_at, "the write precedes the deletion");
     assert!(calls[write_at + 1..delete_at].contains(&Call::Read));
     assert!(keyring.legacy(AI_API_LEGACY, "openai").is_none());
@@ -109,10 +93,7 @@ fn asv_ts_18_unreadable_candidate_is_skipped_not_deleted() {
     keyring.set_legacy(GITHUB_LEGACY, "a", "A");
     keyring.set_legacy(GITHUB_LEGACY, "b", "B");
     keyring.set_legacy(GITHUB_LEGACY, "c", "C");
-    keyring
-        .state()
-        .refuse_legacy_read
-        .push((GITHUB_LEGACY.to_string(), "c".to_string()));
+    keyring.state().refuse_legacy_read.push((GITHUB_LEGACY.to_string(), "c".to_string()));
 
     let candidates = vec![
         candidate(GITHUB_LEGACY, "a", &["github", "tokens", "a"]),
@@ -135,10 +116,7 @@ fn asv_ts_18_unreadable_candidate_is_skipped_not_deleted() {
     assert_eq!(outcome.adopted, 1);
     assert_eq!(outcome.deleted, 1);
     assert_eq!(outcome.absent, 2);
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "c"])).unwrap(),
-        Some("C".into())
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "c"])).unwrap(), Some("C".into()));
     assert_eq!(keyring.legacy_count(), 0);
 }
 
@@ -152,11 +130,7 @@ fn asv_ts_19_absent_candidates_write_nothing() {
         .migrate_legacy_secrets(&[
             candidate(GITHUB_LEGACY, "a", &["github", "tokens", "a"]),
             candidate(AI_API_LEGACY, "openai", &["ai_api", "providers", "openai"]),
-            candidate(
-                AGENTIC_LEGACY,
-                "claude_code",
-                &["agentic", "vendors", "claude_code"],
-            ),
+            candidate(AGENTIC_LEGACY, "claude_code", &["agentic", "vendors", "claude_code"]),
         ])
         .unwrap();
 
@@ -176,10 +150,7 @@ fn asv_ts_20_undeleted_entry_is_retried() {
     keyring.set_legacy(GITHUB_LEGACY, "a", "A");
     keyring.set_legacy(GITHUB_LEGACY, "b", "B");
     keyring.set_legacy(GITHUB_LEGACY, "c", "C");
-    keyring
-        .state()
-        .refuse_legacy_delete
-        .push((GITHUB_LEGACY.to_string(), "c".to_string()));
+    keyring.state().refuse_legacy_delete.push((GITHUB_LEGACY.to_string(), "c".to_string()));
 
     let candidates = vec![
         candidate(GITHUB_LEGACY, "a", &["github", "tokens", "a"]),
@@ -204,10 +175,7 @@ fn asv_ts_20_undeleted_entry_is_retried() {
     // The object was written and verified once more before the deletion.
     assert_eq!(keyring.count(&Call::Write) - writes_before, 1);
     assert_eq!(keyring.legacy_count(), 0);
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "c"])).unwrap(),
-        Some("C".into())
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "c"])).unwrap(), Some("C".into()));
 }
 
 /// ASV-FR-26, ASV-FR-12: a migration whose consolidated write is refused leaves every
@@ -233,14 +201,7 @@ fn asv_ts_21_refused_migration_write_deletes_nothing() {
     assert_eq!(keyring.legacy_count(), 3);
     assert_eq!(keyring.legacy(GITHUB_LEGACY, "a").as_deref(), Some("A"));
     assert_eq!(keyring.entry().as_deref(), Some(r#"{"version":1}"#));
-    assert_eq!(
-        keyring
-            .calls()
-            .iter()
-            .filter(|c| matches!(c, Call::DeleteLegacy(..)))
-            .count(),
-        0
-    );
+    assert_eq!(keyring.calls().iter().filter(|c| matches!(c, Call::DeleteLegacy(..))).count(), 0);
 }
 
 /// ASV-FR-20: migration runs once per process, before the first read the
@@ -254,24 +215,14 @@ fn asv_fr_20_migration_precedes_the_first_operation() {
     }));
 
     // The very first operation is a read, and it already sees the adopted value.
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        Some("A".into())
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), Some("A".into()));
     assert_eq!(keyring.legacy_count(), 0);
 
-    let reads_of_legacy = keyring
-        .calls()
-        .iter()
-        .filter(|c| matches!(c, Call::ReadLegacy(..)))
-        .count();
+    let reads_of_legacy =
+        keyring.calls().iter().filter(|c| matches!(c, Call::ReadLegacy(..))).count();
     vault.read_secret(&p(&["github", "tokens", "a"])).unwrap();
     assert_eq!(
-        keyring
-            .calls()
-            .iter()
-            .filter(|c| matches!(c, Call::ReadLegacy(..)))
-            .count(),
+        keyring.calls().iter().filter(|c| matches!(c, Call::ReadLegacy(..))).count(),
         reads_of_legacy,
         "migration did not run a second time"
     );
@@ -295,10 +246,7 @@ fn a_read_of_a_quarantined_entry_never_migrates_over_it() {
         vec![candidate(GITHUB_LEGACY, "a", &["github", "tokens", "a"])]
     }));
 
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])),
-        Err(VaultError::Malformed)
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])), Err(VaultError::Malformed));
 
     assert_eq!(keyring.entry().as_deref(), Some(garbage));
     assert_eq!(keyring.count(&Call::Write), 0);
@@ -324,17 +272,11 @@ fn a_mutation_quarantines_and_the_next_operation_migrates() {
     set(&vault, &["github", "tokens", "b"], "B").unwrap();
 
     // The value is quarantined and the legacy entry is still untouched.
-    assert_eq!(
-        keyring.object().get("quarantine").and_then(Value::as_str),
-        Some(garbage)
-    );
+    assert_eq!(keyring.object().get("quarantine").and_then(Value::as_str), Some(garbage));
     assert_eq!(keyring.legacy(GITHUB_LEGACY, "a").as_deref(), Some("A"));
 
     // The next operation migrates.
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        Some("A".into())
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), Some("A".into()));
     assert!(keyring.legacy(GITHUB_LEGACY, "a").is_none());
     assert_eq!(
         keyring.object().get("quarantine").and_then(Value::as_str),
@@ -368,11 +310,7 @@ fn a_migration_that_failed_after_reading_is_not_retried_this_process() {
         let _ = vault.read_secret(&p(&["github", "tokens", "a"]));
     }
 
-    let legacy_reads = keyring
-        .calls()
-        .iter()
-        .filter(|c| matches!(c, Call::ReadLegacy(..)))
-        .count();
+    let legacy_reads = keyring.calls().iter().filter(|c| matches!(c, Call::ReadLegacy(..))).count();
     assert_eq!(legacy_reads, 3, "each legacy entry was read once, not once per operation");
     // And nothing was deleted, because the write never verified.
     assert_eq!(keyring.legacy_count(), 3);
@@ -391,22 +329,13 @@ fn a_migration_that_failed_before_reading_is_retried() {
     }));
 
     // Two reads against the quarantined entry: both refuse, neither migrates.
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])),
-        Err(VaultError::Malformed)
-    );
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])),
-        Err(VaultError::Malformed)
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])), Err(VaultError::Malformed));
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])), Err(VaultError::Malformed));
     assert!(keyring.legacy_entries_touched().is_empty());
 
     // A mutation clears the state, and migration then runs after all.
     set(&vault, &["github", "tokens", "b"], "B").unwrap();
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        Some("A".into())
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), Some("A".into()));
 }
 
 /// ASV-FR-22 read with ASV-FR-25, at its sharpest: a candidate whose secret
@@ -445,10 +374,7 @@ fn a_candidate_whose_path_is_blocked_keeps_its_legacy_entry() {
     );
     assert!(keyring.legacy(GITHUB_LEGACY, "fine").is_none());
     // And the secret that blocked it is untouched.
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        Some("A".into())
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), Some("A".into()));
     // The refusal is reported, because a candidate counted in none of the five
     // outcome fields is otherwise invisible to the caller.
     assert!(vault
@@ -502,17 +428,11 @@ fn a_keychain_that_unlocks_mid_session_still_migrates() {
     }));
     keyring.state().refuse_read = true;
 
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])),
-        Err(VaultError::Unavailable)
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])), Err(VaultError::Unavailable));
     assert!(keyring.legacy_entries_touched().is_empty());
 
     keyring.state().refuse_read = false;
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        Some("A".into())
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), Some("A".into()));
     assert!(keyring.legacy(GITHUB_LEGACY, "a").is_none());
 }
 
@@ -548,10 +468,7 @@ fn an_absent_candidate_source_does_not_consume_the_migration() {
     vault.set_candidate_source(Box::new(|| {
         vec![candidate(GITHUB_LEGACY, "a", &["github", "tokens", "a"])]
     }));
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        Some("A".into())
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), Some("A".into()));
 }
 
 /// ASV-FR-09 / ASV-FR-20: migration runs exactly once however many threads
@@ -580,20 +497,14 @@ fn migration_runs_once_however_many_threads_race_for_it() {
     for i in 0..8 {
         let vault = Arc::clone(&vault);
         handles.push(std::thread::spawn(move || {
-            vault
-                .read_secret(&path(&["github", "tokens", &format!("t{}", i % 3)]))
-                .unwrap()
+            vault.read_secret(&path(&["github", "tokens", &format!("t{}", i % 3)])).unwrap()
         }));
     }
     for handle in handles {
         assert_eq!(handle.join().unwrap(), Some("secret".to_string()));
     }
 
-    let legacy_reads = keyring
-        .calls()
-        .iter()
-        .filter(|c| matches!(c, Call::ReadLegacy(..)))
-        .count();
+    let legacy_reads = keyring.calls().iter().filter(|c| matches!(c, Call::ReadLegacy(..))).count();
     assert_eq!(legacy_reads, 3, "three candidates, read once each");
 }
 
@@ -624,14 +535,7 @@ fn a_migration_whose_write_does_not_verify_deletes_nothing() {
     for id in ["a", "b", "c"] {
         assert_eq!(keyring.legacy(GITHUB_LEGACY, id).as_deref(), Some("secret"));
     }
-    assert_eq!(
-        keyring
-            .calls()
-            .iter()
-            .filter(|c| matches!(c, Call::DeleteLegacy(..)))
-            .count(),
-        0
-    );
+    assert_eq!(keyring.calls().iter().filter(|c| matches!(c, Call::DeleteLegacy(..))).count(), 0);
 }
 
 /// ASV-FR-12 read with ASV-FR-17: a quarantine recovery whose write does not
@@ -726,10 +630,7 @@ fn migration_collects_every_candidate_before_it_writes() {
 
     let calls = keyring.calls();
     let write_at = calls.iter().position(|c| *c == Call::Write).unwrap();
-    let last_legacy_read = calls
-        .iter()
-        .rposition(|c| matches!(c, Call::ReadLegacy(..)))
-        .unwrap();
+    let last_legacy_read = calls.iter().rposition(|c| matches!(c, Call::ReadLegacy(..))).unwrap();
     assert!(last_legacy_read < write_at);
     assert_eq!(keyring.count(&Call::Write), 1);
 }
@@ -767,9 +668,7 @@ fn concurrent_mutations_are_serialised_even_with_a_slow_read() {
 
     for i in 0..4 {
         assert_eq!(
-            vault
-                .read_secret(&path(&["github", "tokens", &format!("t{i}")]))
-                .unwrap(),
+            vault.read_secret(&path(&["github", "tokens", &format!("t{i}")])).unwrap(),
             Some(format!("secret-{i}")),
             "the write of thread {i} survived every other"
         );
@@ -808,12 +707,8 @@ fn presence_never_observes_half_a_request() {
                     .unwrap();
                 vault
                     .apply_secret_mutations(&[
-                        Mutation::Remove {
-                            path: path(&["github", "tokens", "a"]),
-                        },
-                        Mutation::Remove {
-                            path: path(&["github", "tokens", "b"]),
-                        },
+                        Mutation::Remove { path: path(&["github", "tokens", "a"]) },
+                        Mutation::Remove { path: path(&["github", "tokens", "b"]) },
                     ])
                     .unwrap();
             }
@@ -849,10 +744,7 @@ fn a_poisoned_lock_does_not_wedge_the_vault() {
 
     // The vault still serves.
     set(&vault, &["github", "tokens", "b"], "B").unwrap();
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "b"])).unwrap(),
-        Some("B".into())
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "b"])).unwrap(), Some("B".into()));
 }
 
 /// A backend that panics on its first read, to poison the vault's lock.
@@ -863,10 +755,7 @@ struct PanickingOnce {
 
 impl VaultBackend for PanickingOnce {
     fn read(&self) -> Result<Option<String>, String> {
-        if self
-            .panics
-            .swap(false, std::sync::atomic::Ordering::SeqCst)
-        {
+        if self.panics.swap(false, std::sync::atomic::Ordering::SeqCst) {
             panic!("the keyring blew up");
         }
         self.inner.read()
@@ -890,4 +779,3 @@ impl VaultBackend for PanickingOnce {
 fn the_global_vault_is_one_instance() {
     assert!(Arc::ptr_eq(&global(), &global()));
 }
-

@@ -11,7 +11,10 @@ use crate::project_settings::GraduationConcurrency;
 fn one_run_of_a_stream_works_at_a_time() {
     let state = StreamState::default();
     assert!(state.claim("w1", "run-a", GraduationConcurrency::limited(4)));
-    assert!(!state.claim("w1", "run-b", GraduationConcurrency::limited(4)), "a second run is refused");
+    assert!(
+        !state.claim("w1", "run-b", GraduationConcurrency::limited(4)),
+        "a second run is refused"
+    );
     assert_eq!(state.holder_of("w1").as_deref(), Some("run-a"));
 
     state.release("w1");
@@ -46,7 +49,14 @@ fn a_limit_of_one_lets_only_one_stream_work() {
 fn an_unlimited_project_refuses_no_free_stream() {
     let state = StreamState::default();
     for n in 0..20 {
-        assert!(state.claim(&format!("w{n}"), &format!("run-{n}"), GraduationConcurrency::Unlimited));
+        assert!(state.claim(
+            &format!("w{n}"),
+            &format!("run-{n}"),
+            GraduationConcurrency::Unlimited
+        ));
     }
-    assert!(!state.claim("w0", "run-x", GraduationConcurrency::Unlimited), "one run per stream still holds");
+    assert!(
+        !state.claim("w0", "run-x", GraduationConcurrency::Unlimited),
+        "one run per stream still holds"
+    );
 }

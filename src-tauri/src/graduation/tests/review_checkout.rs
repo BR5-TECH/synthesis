@@ -46,19 +46,12 @@ fn the_review_stands_in_the_change_set_the_work_turn_wrote() {
         Some("seed\nand more\n"),
         "a changed path holds the change"
     );
-    assert!(
-        !seen.tree.contains_key(".gitignore"),
-        "a deleted path is gone"
-    );
+    assert!(!seen.tree.contains_key(".gitignore"), "a deleted path is gone");
 
     // And `git diff HEAD` names exactly the run's change set.
     assert_eq!(
         seen.diff_paths,
-        vec![
-            ".gitignore".to_string(),
-            "README.md".to_string(),
-            "src/panel.ts".to_string()
-        ]
+        vec![".gitignore".to_string(), "README.md".to_string(), "src/panel.ts".to_string()]
     );
     assert_eq!(seen.path_list("changed_paths"), seen.diff_paths);
 }
@@ -72,9 +65,7 @@ fn the_review_sees_the_tree_the_commit_will_hold() {
     let run = fx.enqueue(&stream, "Rework the panel.");
 
     let dispatch = ScriptedDispatch::new(vec![
-        Turn::work()
-            .writing("src/panel.ts", "export const panel = 1;\n")
-            .deleting(".gitignore"),
+        Turn::work().writing("src/panel.ts", "export const panel = 1;\n").deleting(".gitignore"),
         Turn::ready(),
     ]);
     let run = fx.drive(&run, dispatch.clone());
@@ -293,10 +284,7 @@ fn the_stream_is_clean_after_a_run_commits() {
         .filter(|entry| !entry.status().is_empty())
         .map(|entry| entry.path().unwrap_or_default().to_string())
         .collect();
-    assert!(
-        dirty.is_empty(),
-        "the stream reads back clean after the run: {dirty:?}"
-    );
+    assert!(dirty.is_empty(), "the stream reads back clean after the run: {dirty:?}");
 }
 
 /// GRL-FR-YKRI: a review checkout the application never finished is reclaimed
@@ -320,12 +308,9 @@ fn a_stranded_review_checkout_is_reclaimed_at_the_next_queue_read() {
             .to_string(),
     );
     crate::graduation::save_run(&fx.app, &mut run).expect("saved");
-    let checkout = crate::graduation::driver::review_checkout::create(
-        &fx.app,
-        &run,
-        &stream.worktree(),
-    )
-    .expect("a checkout");
+    let checkout =
+        crate::graduation::driver::review_checkout::create(&fx.app, &run, &stream.worktree())
+            .expect("a checkout");
     assert!(checkout.is_dir());
 
     let queue = crate::graduation::project_queue(&fx.app).expect("the queue");
@@ -338,8 +323,7 @@ fn a_stranded_review_checkout_is_reclaimed_at_the_next_queue_read() {
         "and so is its registration"
     );
     assert!(
-        repo.find_branch(&format!("synthesis/review/{}", run.id), git2::BranchType::Local)
-            .is_err(),
+        repo.find_branch(&format!("synthesis/review/{}", run.id), git2::BranchType::Local).is_err(),
         "and its branch"
     );
     // The stream itself is untouched.
@@ -368,21 +352,15 @@ fn a_checkout_of_a_reviewing_run_is_left_alone() {
     );
     run.state = GraduationRunState::Reviewing;
     crate::graduation::save_run(&fx.app, &mut run).expect("saved");
-    let checkout = crate::graduation::driver::review_checkout::create(
-        &fx.app,
-        &run,
-        &stream.worktree(),
-    )
-    .expect("a checkout");
+    let checkout =
+        crate::graduation::driver::review_checkout::create(&fx.app, &run, &stream.worktree())
+            .expect("a checkout");
 
     let queue = crate::graduation::project_queue(&fx.app).expect("the queue");
     crate::graduation::driver::review_checkout::sweep_stranded(&fx.app, &queue);
 
     assert!(checkout.is_dir(), "the live checkout stands");
-    assert!(crate::streams::registers_worktree(
-        &fx.repo(),
-        &format!("{}-rv", run.id)
-    ));
+    assert!(crate::streams::registers_worktree(&fx.repo(), &format!("{}-rv", run.id)));
 }
 
 /// GRL-FR-XNQU: the tree the review stands in is the tree the commit holds, for
@@ -396,20 +374,18 @@ fn a_change_set_of_modes_links_and_binary_reaches_the_review_whole() {
     let worktree = stream.worktree();
 
     let dispatch = ScriptedDispatch::new(vec![
-        Turn::work()
-            .writing("build.sh", "#!/bin/sh\necho hello\n")
-            .doing({
-                let worktree = worktree.clone();
-                move || {
-                    use std::os::unix::fs::PermissionsExt;
-                    let script = worktree.join("build.sh");
-                    let mut mode = std::fs::metadata(&script).unwrap().permissions();
-                    mode.set_mode(0o755);
-                    std::fs::set_permissions(&script, mode).unwrap();
-                    std::fs::write(worktree.join("logo.bin"), [0u8, 159, 146, 150, 0, 255]).unwrap();
-                    std::os::unix::fs::symlink("build.sh", worktree.join("build-link")).unwrap();
-                }
-            }),
+        Turn::work().writing("build.sh", "#!/bin/sh\necho hello\n").doing({
+            let worktree = worktree.clone();
+            move || {
+                use std::os::unix::fs::PermissionsExt;
+                let script = worktree.join("build.sh");
+                let mut mode = std::fs::metadata(&script).unwrap().permissions();
+                mode.set_mode(0o755);
+                std::fs::set_permissions(&script, mode).unwrap();
+                std::fs::write(worktree.join("logo.bin"), [0u8, 159, 146, 150, 0, 255]).unwrap();
+                std::os::unix::fs::symlink("build.sh", worktree.join("build-link")).unwrap();
+            }
+        }),
         Turn::ready(),
     ]);
     let run = fx.drive(&run, dispatch.clone());
@@ -438,9 +414,7 @@ fn a_change_set_of_modes_links_and_binary_reaches_the_review_whole() {
     assert_eq!(mode_of("build.sh"), i32::from(git2::FileMode::BlobExecutable));
     assert_eq!(mode_of("build-link"), i32::from(git2::FileMode::Link));
     assert_eq!(mode_of("logo.bin"), i32::from(git2::FileMode::Blob));
-    let blob = repo
-        .find_blob(tree.get_path(Path::new("logo.bin")).unwrap().id())
-        .unwrap();
+    let blob = repo.find_blob(tree.get_path(Path::new("logo.bin")).unwrap().id()).unwrap();
     assert_eq!(blob.content(), [0u8, 159, 146, 150, 0, 255]);
 }
 
@@ -472,11 +446,7 @@ fn a_removed_directory_and_a_rename_reach_the_review_and_the_commit() {
     let review = &dispatch.of_part("review")[0];
     assert_eq!(
         review.diff_paths,
-        vec![
-            "legacy/old.ts".to_string(),
-            "panel.ts".to_string(),
-            "src/panel.ts".to_string()
-        ]
+        vec!["legacy/old.ts".to_string(), "panel.ts".to_string(), "src/panel.ts".to_string()]
     );
     assert!(!review.tree.contains_key("legacy/old.ts"));
     assert!(!review.tree.contains_key("panel.ts"));
@@ -521,14 +491,9 @@ fn a_review_that_installed_symlinks_is_still_reclaimed() {
     let run = fx.drive(&run, dispatch.clone());
 
     assert_eq!(run.state, GraduationRunState::Completed);
-    let checkout = crate::graduation::store_base(&fx.app)
-        .expect("the store")
-        .review_checkout(&run.id);
-    assert!(
-        !checkout.exists(),
-        "the checkout was left standing at {}",
-        checkout.display()
-    );
+    let checkout =
+        crate::graduation::store_base(&fx.app).expect("the store").review_checkout(&run.id);
+    assert!(!checkout.exists(), "the checkout was left standing at {}", checkout.display());
 }
 
 /// GRL-FR-YKRI: the reclaim at the head of `create` takes what an earlier turn

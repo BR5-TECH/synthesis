@@ -73,19 +73,16 @@ impl<'a> FoldTarget<'a> {
     /// The owner every discussion of this log has, read off the log's location.
     pub fn owner(&self) -> DiscussionTarget {
         match *self {
-            FoldTarget::Artifact { artifact_id } | FoldTarget::ArtifactDiscussion { artifact_id } => {
-                DiscussionTarget::Artifact {
-                    artifact_id: artifact_id.to_string(),
-                }
+            FoldTarget::Artifact { artifact_id }
+            | FoldTarget::ArtifactDiscussion { artifact_id } => {
+                DiscussionTarget::Artifact { artifact_id: artifact_id.to_string() }
             }
             FoldTarget::DraftFile { draft_id, .. } | FoldTarget::DraftDiscussion { draft_id } => {
-                DiscussionTarget::Draft {
-                    draft_id: draft_id.to_string(),
-                }
+                DiscussionTarget::Draft { draft_id: draft_id.to_string() }
             }
-            FoldTarget::NoteDiscussion { note_id } => DiscussionTarget::Note {
-                note_id: note_id.to_string(),
-            },
+            FoldTarget::NoteDiscussion { note_id } => {
+                DiscussionTarget::Note { note_id: note_id.to_string() }
+            }
         }
     }
 
@@ -169,27 +166,13 @@ pub fn fold_events_for(target: FoldTarget<'_>, events: Vec<Event>) -> Vec<Discus
         // cannot hold. Skipping keeps CMS-FR-56 true of a hand-edited or
         // mismerged log as well as of one this module wrote.
         let fragment: Option<Option<FragmentTarget>> = match (&event.body, fragment_path) {
-            (EventBody::ThreadOpened { anchor, .. }, Some(path)) => Some(Some(fragment_in(
-                target,
-                path,
-                anchor.start,
-                anchor.end,
-                &anchor.quote,
-            ))),
-            (
-                EventBody::DiscussionOpened {
-                    fragment_target: Some(f),
-                    ..
-                },
-                Some(path),
-            ) => Some(Some(fragment_in(target, path, f.start, f.end, &f.quote))),
-            (
-                EventBody::DiscussionOpened {
-                    fragment_target: None,
-                    ..
-                },
-                None,
-            ) => Some(None),
+            (EventBody::ThreadOpened { anchor, .. }, Some(path)) => {
+                Some(Some(fragment_in(target, path, anchor.start, anchor.end, &anchor.quote)))
+            }
+            (EventBody::DiscussionOpened { fragment_target: Some(f), .. }, Some(path)) => {
+                Some(Some(fragment_in(target, path, f.start, f.end, &f.quote)))
+            }
+            (EventBody::DiscussionOpened { fragment_target: None, .. }, None) => Some(None),
             _ => None,
         };
         let Some(fragment_target) = fragment else {
@@ -229,12 +212,7 @@ pub fn fold_events_for(target: FoldTarget<'_>, events: Vec<Event>) -> Vec<Discus
                     continue;
                 };
                 match body {
-                    EventBody::CommentAdded {
-                        comment_id,
-                        body,
-                        quotes,
-                        attachments,
-                    } => {
+                    EventBody::CommentAdded { comment_id, body, quotes, attachments } => {
                         if discussion.comments.iter().any(|c| c.id == comment_id) {
                             continue;
                         }

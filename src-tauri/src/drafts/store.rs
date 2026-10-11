@@ -19,7 +19,11 @@ pub(super) fn read_record(root: &fs::RootFs, id: &str) -> Result<DraftRecord, St
 /// [`read_record`] for a caller that already knows where the draft's directory
 /// sits — the drafts-root walk, which would otherwise pay for a second walk per
 /// draft it just found.
-pub(super) fn read_record_at(root: &fs::RootFs, dir: &Path, id: &str) -> Result<DraftRecord, String> {
+pub(super) fn read_record_at(
+    root: &fs::RootFs,
+    dir: &Path,
+    id: &str,
+) -> Result<DraftRecord, String> {
     let path = dir.join(RECORD_FILE);
     let mut record =
         root.read_toml::<DraftRecord>(&path).map_err(|_| format!("draft not found: {id}"))?;
@@ -29,11 +33,7 @@ pub(super) fn read_record_at(root: &fs::RootFs, dir: &Path, id: &str) -> Result<
     // this module will act on, so the pointer is simply absent — which reads as
     // an inconsistent draft (DRS-FR-15), reached without ever stat-ing whatever
     // it pointed at.
-    if record
-        .prompt_path
-        .as_deref()
-        .is_some_and(|p| !is_valid_draft_path(p))
-    {
+    if record.prompt_path.as_deref().is_some_and(|p| !is_valid_draft_path(p)) {
         record.prompt_path = None;
     }
     Ok(record)
@@ -45,9 +45,12 @@ pub(super) fn read_record_at(root: &fs::RootFs, dir: &Path, id: &str) -> Result<
 /// walking the drafts root (DRS-FR-29), and every caller here has already done
 /// that walk to read the record it is about to write back. One that took an id
 /// would quietly double the cost of every mutation.
-pub(super) fn write_record_at(root: &fs::RootFs, dir: &Path, record: &DraftRecord) -> Result<(), String> {
-    root.write_toml_atomic(dir.join(RECORD_FILE), record)
-        .map_err(|e| e.to_string())?;
+pub(super) fn write_record_at(
+    root: &fs::RootFs,
+    dir: &Path,
+    record: &DraftRecord,
+) -> Result<(), String> {
+    root.write_toml_atomic(dir.join(RECORD_FILE), record).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -212,8 +215,7 @@ pub(super) fn hierarchy_from(
         // DRS-FR-08 / DRS-FR-41: one stat of the prompt the enumeration above
         // already found. No file's contents are read, so the walk still costs a
         // directory read per draft.
-        let prompt_activity_at =
-            prompt.and_then(|name| prompt_activity_at(root, &at.dir, &name));
+        let prompt_activity_at = prompt.and_then(|name| prompt_activity_at(root, &at.dir, &name));
         drafts.push(DraftSummary {
             id: record.id,
             name: record.name,
@@ -253,10 +255,7 @@ pub fn search_drafts_impl(root: &crate::fs::RootFs, text: &str) -> Vec<DraftMatc
         // which is what leaves the unfiltered list exactly as `list_drafts` gave
         // it and annotates no row (DRP-FR-17).
         if needle.is_empty() || summary.name.to_lowercase().contains(&needle) {
-            out.push(DraftMatch {
-                draft_id: summary.id,
-                matched_in: DraftMatchedIn::Name,
-            });
+            out.push(DraftMatch { draft_id: summary.id, matched_in: DraftMatchedIn::Name });
             continue;
         }
         if summary.inconsistent {
@@ -266,10 +265,7 @@ pub fn search_drafts_impl(root: &crate::fs::RootFs, text: &str) -> Vec<DraftMatc
             continue;
         };
         if contains_text(root, &dir.join(FILES_DIR), &needle) {
-            out.push(DraftMatch {
-                draft_id: summary.id,
-                matched_in: DraftMatchedIn::Contents,
-            });
+            out.push(DraftMatch { draft_id: summary.id, matched_in: DraftMatchedIn::Contents });
         }
     }
     out
@@ -302,11 +298,7 @@ pub(super) fn contains_text(root: &fs::RootFs, dir: &Path, needle: &str) -> bool
                 return true;
             }
         } else if entry.kind == fs::EntryKind::File
-            && root
-                .file_info(&entry_path)
-                .map(|i| i.size)
-                .unwrap_or(u64::MAX)
-                <= SEARCH_MAX_BYTES
+            && root.file_info(&entry_path).map(|i| i.size).unwrap_or(u64::MAX) <= SEARCH_MAX_BYTES
             && root
                 .read_bytes(&entry_path)
                 .ok()
@@ -340,4 +332,3 @@ pub(super) fn default_draft_name(root: &crate::fs::RootFs) -> String {
     }
     DEFAULT_NAME.to_string()
 }
-

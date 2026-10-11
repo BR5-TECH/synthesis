@@ -361,8 +361,7 @@ pub fn plan(
                 // insertion keeps no `before` and a deletion no `after`, so
                 // nothing is stored that acceptance cannot use — and the review
                 // cannot draw a side the decision would not take.
-                before: (item.kind != HunkKind::Add && !before.is_empty())
-                    .then(|| before.clone()),
+                before: (item.kind != HunkKind::Add && !before.is_empty()).then(|| before.clone()),
                 after: (item.kind != HunkKind::Del)
                     .then(|| {
                         item.after
@@ -452,7 +451,16 @@ pub fn apply_all(prompt: &str, doc: &HunkDocument) -> Option<String> {
 mod tests {
     use super::*;
 
-    fn hunk(id: &str, kind: HunkKind, before: &str, after: &str, lead: &str, trail: &str, hs: usize, he: usize) -> ProposalHunk {
+    fn hunk(
+        id: &str,
+        kind: HunkKind,
+        before: &str,
+        after: &str,
+        lead: &str,
+        trail: &str,
+        hs: usize,
+        he: usize,
+    ) -> ProposalHunk {
         ProposalHunk {
             id: id.to_string(),
             kind,
@@ -534,7 +542,16 @@ mod tests {
     #[test]
     fn applying_one_hunk_leaves_every_other_byte_alone() {
         let prompt = "alpha BETA gamma";
-        let doc = HunkDocument::new(vec![hunk("h1", HunkKind::Replace, "BETA", "DELTA", "alpha ", " gamma", 6, 10)]);
+        let doc = HunkDocument::new(vec![hunk(
+            "h1",
+            HunkKind::Replace,
+            "BETA",
+            "DELTA",
+            "alpha ",
+            " gamma",
+            6,
+            10,
+        )]);
         let at = doc.resolve_all(prompt)[0];
         assert_eq!(apply_hunk(prompt, &doc.hunks[0], at).unwrap(), "alpha DELTA gamma");
     }
@@ -626,7 +643,16 @@ mod tests {
     // DCP-FR-BMLX: a lost hunk cannot be applied.
     #[test]
     fn a_lost_hunk_applies_to_nothing() {
-        let doc = HunkDocument::new(vec![hunk("h1", HunkKind::Replace, "GONE", "X", "no ", " ctx", 0, 4)]);
+        let doc = HunkDocument::new(vec![hunk(
+            "h1",
+            HunkKind::Replace,
+            "GONE",
+            "X",
+            "no ",
+            " ctx",
+            0,
+            4,
+        )]);
         let at = doc.resolve_all("nothing like it here")[0];
         assert!(at.is_lost());
         assert!(apply_hunk("nothing like it here", &doc.hunks[0], at).is_none());

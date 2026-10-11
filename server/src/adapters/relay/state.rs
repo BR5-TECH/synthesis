@@ -57,12 +57,7 @@ pub struct RelayRegistry {
 impl RelayRegistry {
     /// A relay that holds no route.
     pub fn new(clock: Arc<dyn Clock>, ids: Arc<dyn IdSource>, logs: Arc<dyn LogSink>) -> Self {
-        RelayRegistry {
-            state: Mutex::new(RelayState::default()),
-            clock,
-            ids,
-            logs,
-        }
+        RelayRegistry { state: Mutex::new(RelayState::default()), clock, ids, logs }
     }
 
     /// Writes the record of one relay operation (SRB-FR-IZAB).
@@ -219,11 +214,7 @@ impl RelayRegistry {
             detached_handles.sort();
         }
 
-        let worker = state
-            .workers
-            .get(&instance_id)
-            .cloned()
-            .expect("the route was just written");
+        let worker = state.workers.get(&instance_id).cloned().expect("the route was just written");
         let route = Self::route_of(&state, &instance_id, &worker);
 
         match previous {
@@ -254,13 +245,8 @@ impl RelayRegistry {
         // RSN-FR-VTKA: a selection that the same announcement does not expose
         // is refused before anything is written.
         if let Some(selected) = selected_project_id {
-            if !projects
-                .iter()
-                .any(|project| project.project_id == selected)
-            {
-                return Err(DomainError::NotFound {
-                    resource: "exposed project",
-                });
+            if !projects.iter().any(|project| project.project_id == selected) {
+                return Err(DomainError::NotFound { resource: "exposed project" });
             }
         }
 
@@ -268,34 +254,27 @@ impl RelayRegistry {
         let worker = state
             .workers
             .get_mut(instance_id)
-            .ok_or(DomainError::NotFound {
-                resource: "worker route",
-            })?;
+            .ok_or(DomainError::NotFound { resource: "worker route" })?;
 
         // SRB-FR-LGQB, RSN-FR-EHUT: a connection that no longer holds the route
         // changes nothing. Checked under the same lock as the write, so a
         // replacement never loses a race with an older connection.
         if worker.connection_id != connection_id {
-            return Err(DomainError::NotFound {
-                resource: "worker route",
-            });
+            return Err(DomainError::NotFound { resource: "worker route" });
         }
 
         // SRB-FR-NIUT: the announcement replaces the whole exposed set, and a
         // selected project that the newer set omits stops being selected. The
         // set and the selection are written under one lock, so no reader
         // observes one announcement's projects beside another's selection.
-        let exposed: Vec<String> = projects
-            .iter()
-            .map(|project| project.project_id.clone())
-            .collect();
+        let exposed: Vec<String> =
+            projects.iter().map(|project| project.project_id.clone()).collect();
         worker.projects = projects;
         worker.selected_project_id = match selected_project_id {
             Some(selected) => Some(selected.to_string()),
-            None => worker
-                .selected_project_id
-                .clone()
-                .filter(|selected| exposed.contains(selected)),
+            None => {
+                worker.selected_project_id.clone().filter(|selected| exposed.contains(selected))
+            }
         };
 
         let worker = worker.clone();
@@ -311,20 +290,12 @@ impl RelayRegistry {
         let worker = state
             .workers
             .get_mut(instance_id)
-            .ok_or(DomainError::NotFound {
-                resource: "worker route",
-            })?;
+            .ok_or(DomainError::NotFound { resource: "worker route" })?;
 
         // SRB-FR-FVJD: a target that the worker does not expose is refused, and
         // the selected project does not change.
-        if !worker
-            .projects
-            .iter()
-            .any(|project| project.project_id == project_id)
-        {
-            return Err(DomainError::NotFound {
-                resource: "exposed project",
-            });
+        if !worker.projects.iter().any(|project| project.project_id == project_id) {
+            return Err(DomainError::NotFound { resource: "exposed project" });
         }
         worker.selected_project_id = Some(project_id.to_string());
 
@@ -341,16 +312,12 @@ impl RelayRegistry {
         let worker = state
             .workers
             .get(instance_id)
-            .ok_or(DomainError::NotFound {
-                resource: "worker route",
-            })?;
+            .ok_or(DomainError::NotFound { resource: "worker route" })?;
 
         // A connection that no longer holds the route drops nothing: it was
         // replaced, and the newer connection owns the route (SRB-FR-LGQB).
         if worker.connection_id != connection_id {
-            return Err(DomainError::NotFound {
-                resource: "worker route",
-            });
+            return Err(DomainError::NotFound { resource: "worker route" });
         }
         state.workers.remove(instance_id);
 
@@ -382,9 +349,7 @@ impl RelayRegistry {
         let worker = state
             .workers
             .get(instance_id)
-            .ok_or(DomainError::NotFound {
-                resource: "worker route",
-            })?;
+            .ok_or(DomainError::NotFound { resource: "worker route" })?;
         Ok(Self::route_of(&state, instance_id, worker))
     }
 
@@ -437,10 +402,7 @@ impl RelayRegistry {
         accepted: bool,
     ) -> Result<ClientConnection, ReasonCode> {
         let mut state = self.state.lock().expect("the relay state is not poisoned");
-        let client = state
-            .clients
-            .get_mut(handle)
-            .ok_or(ReasonCode::HandleNotFound)?;
+        let client = state.clients.get_mut(handle).ok_or(ReasonCode::HandleNotFound)?;
 
         // RSN-FR-UDCM: the result belongs to the worker the handle is bound to,
         // so one worker never resolves another worker's registration.
@@ -467,10 +429,7 @@ impl RelayRegistry {
     ) -> Result<ClientConnection, ReasonCode> {
         let mut state = self.state.lock().expect("the relay state is not poisoned");
         let holds_route = state.workers.contains_key(instance_id);
-        let client = state
-            .clients
-            .get_mut(handle)
-            .ok_or(ReasonCode::HandleNotFound)?;
+        let client = state.clients.get_mut(handle).ok_or(ReasonCode::HandleNotFound)?;
 
         // RSN-FR-FKRE: a handle that is not active is refused with the reason
         // of its own state.
@@ -504,10 +463,7 @@ impl RelayRegistry {
         instance_id: &str,
     ) -> Result<ClientConnection, ReasonCode> {
         let mut state = self.state.lock().expect("the relay state is not poisoned");
-        let client = state
-            .clients
-            .get_mut(handle)
-            .ok_or(ReasonCode::HandleNotFound)?;
+        let client = state.clients.get_mut(handle).ok_or(ReasonCode::HandleNotFound)?;
         if let Some(refusal) = client.state.refusal() {
             return Err(refusal);
         }
@@ -526,10 +482,7 @@ impl RelayRegistry {
 
     fn observe_selected_project_inner(&self, handle: &str) -> Result<Option<String>, ReasonCode> {
         let state = self.state.lock().expect("the relay state is not poisoned");
-        let client = state
-            .clients
-            .get(handle)
-            .ok_or(ReasonCode::HandleNotFound)?;
+        let client = state.clients.get(handle).ok_or(ReasonCode::HandleNotFound)?;
         if let Some(refusal) = client.state.refusal() {
             return Err(refusal);
         }
@@ -581,10 +534,7 @@ impl RelayRegistry {
         reason: InvalidReason,
     ) -> Result<ClientConnection, ReasonCode> {
         let mut state = self.state.lock().expect("the relay state is not poisoned");
-        let client = state
-            .clients
-            .get_mut(handle)
-            .ok_or(ReasonCode::HandleNotFound)?;
+        let client = state.clients.get_mut(handle).ok_or(ReasonCode::HandleNotFound)?;
         // RSN-FR-UDCM: a worker invalidates the handles bound to it alone.
         if let Some(instance_id) = instance_id {
             if client.bound_instance_id != instance_id {
@@ -604,10 +554,8 @@ impl RelayRegistry {
     /// resolved it leaves no handle and no record behind.
     fn drop_pending_registration_inner(&self, handle: &str) -> bool {
         let mut state = self.state.lock().expect("the relay state is not poisoned");
-        let pending = state
-            .clients
-            .get(handle)
-            .is_some_and(|client| client.state == HandleState::Pending);
+        let pending =
+            state.clients.get(handle).is_some_and(|client| client.state == HandleState::Pending);
         if pending {
             // The handle itself stays in `assigned_handles`, so it is never
             // assigned again (SRB-FR-XSAG).
@@ -628,19 +576,11 @@ impl RelayRegistry {
 
     fn client_inner(&self, handle: &str) -> Result<ClientConnection, ReasonCode> {
         let state = self.state.lock().expect("the relay state is not poisoned");
-        state
-            .clients
-            .get(handle)
-            .cloned()
-            .ok_or(ReasonCode::HandleNotFound)
+        state.clients.get(handle).cloned().ok_or(ReasonCode::HandleNotFound)
     }
 
     fn take_replacement_notice_inner(&self, connection_id: &str) -> Option<ReplacementNotice> {
-        self.state
-            .lock()
-            .expect("the relay state is not poisoned")
-            .notices
-            .remove(connection_id)
+        self.state.lock().expect("the relay state is not poisoned").notices.remove(connection_id)
     }
 }
 
@@ -660,12 +600,7 @@ impl RelayApi for RelayRegistry {
         projects: Vec<ExposedProject>,
     ) -> Result<WorkerRegistration, DomainError> {
         let result = self.register_worker_inner(instance_id, connection_id, projects);
-        self.recorded(
-            "register_worker",
-            Some(connection_id),
-            Some(instance_id),
-            result,
-        )
+        self.recorded("register_worker", Some(connection_id), Some(instance_id), result)
     }
 
     fn announce_projects(
@@ -677,12 +612,7 @@ impl RelayApi for RelayRegistry {
     ) -> Result<WorkerRoute, DomainError> {
         let result =
             self.announce_projects_inner(instance_id, connection_id, projects, selected_project_id);
-        self.recorded(
-            "announce_projects",
-            Some(connection_id),
-            Some(instance_id),
-            result,
-        )
+        self.recorded("announce_projects", Some(connection_id), Some(instance_id), result)
     }
 
     fn select_project(
@@ -691,16 +621,8 @@ impl RelayApi for RelayRegistry {
         project_id: &str,
     ) -> Result<WorkerRoute, DomainError> {
         let result = self.select_project_inner(instance_id, project_id);
-        let connection_id = result
-            .as_ref()
-            .ok()
-            .map(|route| route.connection_id.clone());
-        self.recorded(
-            "select_project",
-            connection_id.as_deref(),
-            Some(instance_id),
-            result,
-        )
+        let connection_id = result.as_ref().ok().map(|route| route.connection_id.clone());
+        self.recorded("select_project", connection_id.as_deref(), Some(instance_id), result)
     }
 
     fn drop_worker(
@@ -709,12 +631,7 @@ impl RelayApi for RelayRegistry {
         connection_id: &str,
     ) -> Result<Vec<String>, DomainError> {
         let result = self.drop_worker_inner(instance_id, connection_id);
-        self.recorded(
-            "drop_worker",
-            Some(connection_id),
-            Some(instance_id),
-            result,
-        )
+        self.recorded("drop_worker", Some(connection_id), Some(instance_id), result)
     }
 
     fn workers(&self) -> Vec<WorkerRoute> {
@@ -725,16 +642,8 @@ impl RelayApi for RelayRegistry {
 
     fn worker(&self, instance_id: &str) -> Result<WorkerRoute, DomainError> {
         let result = self.worker_inner(instance_id);
-        let connection_id = result
-            .as_ref()
-            .ok()
-            .map(|route| route.connection_id.clone());
-        self.recorded(
-            "worker",
-            connection_id.as_deref(),
-            Some(instance_id),
-            result,
-        )
+        let connection_id = result.as_ref().ok().map(|route| route.connection_id.clone());
+        self.recorded("worker", connection_id.as_deref(), Some(instance_id), result)
     }
 
     fn register_client(
@@ -743,16 +652,8 @@ impl RelayApi for RelayRegistry {
         instance_id: &str,
     ) -> Result<ClientConnection, ReasonCode> {
         let result = self.register_client_inner(registration_id, instance_id);
-        let connection_id = result
-            .as_ref()
-            .ok()
-            .map(|client| client.connection_id.clone());
-        self.recorded_reason(
-            "register_client",
-            connection_id.as_deref(),
-            Some(instance_id),
-            result,
-        )
+        let connection_id = result.as_ref().ok().map(|client| client.connection_id.clone());
+        self.recorded_reason("register_client", connection_id.as_deref(), Some(instance_id), result)
     }
 
     fn route_connection(&self, instance_id: &str) -> Option<String> {
@@ -779,14 +680,8 @@ impl RelayApi for RelayRegistry {
         accepted: bool,
     ) -> Result<ClientConnection, ReasonCode> {
         let result = self.resolve_registration_inner(handle, instance_id, accepted);
-        let connection_id = result
-            .as_ref()
-            .ok()
-            .map(|client| client.connection_id.clone());
-        let instance_id = result
-            .as_ref()
-            .ok()
-            .map(|client| client.bound_instance_id.clone());
+        let connection_id = result.as_ref().ok().map(|client| client.connection_id.clone());
+        let instance_id = result.as_ref().ok().map(|client| client.bound_instance_id.clone());
         self.recorded_reason(
             "resolve_registration",
             connection_id.as_deref(),
@@ -804,16 +699,8 @@ impl RelayApi for RelayRegistry {
         // The connection reaches the record from the result, not from a second
         // read of the state: a reset between the two would leave the record
         // with no connection identifier at all.
-        let connection_id = result
-            .as_ref()
-            .ok()
-            .map(|client| client.connection_id.clone());
-        self.recorded_reason(
-            "attach_client",
-            connection_id.as_deref(),
-            Some(instance_id),
-            result,
-        )
+        let connection_id = result.as_ref().ok().map(|client| client.connection_id.clone());
+        self.recorded_reason("attach_client", connection_id.as_deref(), Some(instance_id), result)
     }
 
     fn authenticate_client(
@@ -822,14 +709,8 @@ impl RelayApi for RelayRegistry {
         instance_id: &str,
     ) -> Result<ClientConnection, ReasonCode> {
         let result = self.authenticate_client_inner(handle, instance_id);
-        let connection_id = result
-            .as_ref()
-            .ok()
-            .map(|client| client.connection_id.clone());
-        let instance_id = result
-            .as_ref()
-            .ok()
-            .and_then(|client| client.instance_id.clone());
+        let connection_id = result.as_ref().ok().map(|client| client.connection_id.clone());
+        let instance_id = result.as_ref().ok().and_then(|client| client.instance_id.clone());
         self.recorded_reason(
             "authenticate_client",
             connection_id.as_deref(),
@@ -841,12 +722,7 @@ impl RelayApi for RelayRegistry {
     fn observe_selected_project(&self, handle: &str) -> Result<Option<String>, ReasonCode> {
         let result = self.observe_selected_project_inner(handle);
         let connection_id = self.connection_id_of(handle);
-        self.recorded_reason(
-            "observe_selected_project",
-            connection_id.as_deref(),
-            None,
-            result,
-        )
+        self.recorded_reason("observe_selected_project", connection_id.as_deref(), None, result)
     }
 
     fn broadcast_targets(
@@ -855,12 +731,7 @@ impl RelayApi for RelayRegistry {
         connection_id: &str,
     ) -> Result<Vec<String>, ReasonCode> {
         let result = self.broadcast_targets_inner(instance_id, connection_id);
-        self.recorded_reason(
-            "broadcast_targets",
-            Some(connection_id),
-            Some(instance_id),
-            result,
-        )
+        self.recorded_reason("broadcast_targets", Some(connection_id), Some(instance_id), result)
     }
 
     fn invalidate_handle(
@@ -870,10 +741,7 @@ impl RelayApi for RelayRegistry {
         reason: InvalidReason,
     ) -> Result<ClientConnection, ReasonCode> {
         let result = self.invalidate_handle_inner(handle, instance_id, reason);
-        let connection_id = result
-            .as_ref()
-            .ok()
-            .map(|client| client.connection_id.clone());
+        let connection_id = result.as_ref().ok().map(|client| client.connection_id.clone());
         self.recorded_reason(
             "invalidate_handle",
             connection_id.as_deref(),
@@ -885,10 +753,7 @@ impl RelayApi for RelayRegistry {
     fn reset_client(&self, handle: &str) -> Result<ClientConnection, ReasonCode> {
         let instance_id = self.client_inner(handle).ok().and_then(|c| c.instance_id);
         let result = self.invalidate_handle_inner(handle, None, InvalidReason::Reset);
-        let connection_id = result
-            .as_ref()
-            .ok()
-            .map(|client| client.connection_id.clone());
+        let connection_id = result.as_ref().ok().map(|client| client.connection_id.clone());
         self.recorded_reason(
             "reset_client",
             connection_id.as_deref(),
@@ -903,20 +768,9 @@ impl RelayApi for RelayRegistry {
 
     fn client(&self, handle: &str) -> Result<ClientConnection, ReasonCode> {
         let result = self.client_inner(handle);
-        let connection_id = result
-            .as_ref()
-            .ok()
-            .map(|client| client.connection_id.clone());
-        let instance_id = result
-            .as_ref()
-            .ok()
-            .and_then(|client| client.instance_id.clone());
-        self.recorded_reason(
-            "client",
-            connection_id.as_deref(),
-            instance_id.as_deref(),
-            result,
-        )
+        let connection_id = result.as_ref().ok().map(|client| client.connection_id.clone());
+        let instance_id = result.as_ref().ok().and_then(|client| client.instance_id.clone());
+        self.recorded_reason("client", connection_id.as_deref(), instance_id.as_deref(), result)
     }
 
     fn take_replacement_notice(&self, connection_id: &str) -> Option<ReplacementNotice> {

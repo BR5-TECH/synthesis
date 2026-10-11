@@ -35,10 +35,7 @@ pub(super) fn tool_written_as_prose<'a>(
         }
     }
 
-    tools
-        .iter()
-        .find(|tool| fits_schema(object, &tool.parameters))
-        .map(|tool| tool.name.as_str())
+    tools.iter().find(|tool| fits_schema(object, &tool.parameters)).map(|tool| tool.name.as_str())
 }
 
 /// CVL-FR-JPHT: `text` without one code fence that encloses all of it — an

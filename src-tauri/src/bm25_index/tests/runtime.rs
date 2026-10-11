@@ -28,10 +28,7 @@ fn mounting_a_root_discards_what_the_previous_root_left() {
 
     let b = scratch_root("b");
     indexer.mount(&b);
-    assert!(
-        search(&indexer, &[], "teardown", 10).is_empty(),
-        "the new root starts from nothing"
-    );
+    assert!(search(&indexer, &[], "teardown", 10).is_empty(), "the new root starts from nothing");
     assert_eq!(indexer.root().unwrap(), b.path());
 }
 
@@ -97,10 +94,7 @@ fn no_draft_change_ever_dirties_the_artifact_half() {
         vec!["spec.md".to_string()],
         vec!["ui/a.md".to_string(), "ui/b.md".to_string()],
     ] {
-        let change = crate::drafts::DraftChange {
-            draft_id: "d1".to_string(),
-            paths,
-        };
+        let change = crate::drafts::DraftChange { draft_id: "d1".to_string(), paths };
         assert_eq!(scope_for_draft_change(&change), PassScope::DRAFTS);
     }
 }
@@ -154,14 +148,8 @@ fn a_pass_over_a_real_tree_indexes_the_typed_files_and_nothing_else() {
     assert_eq!(stats.files_indexed, 2, "the spec and the skill, not main.rs");
 
     let snapshot = indexer.snapshot();
-    assert_eq!(
-        snapshot.paths(IndexId::Spec),
-        vec!["specifications/wtc.md".to_string()]
-    );
-    assert_eq!(
-        snapshot.paths(IndexId::Skill),
-        vec![".claude/skills/review.md".to_string()]
-    );
+    assert_eq!(snapshot.paths(IndexId::Spec), vec!["specifications/wtc.md".to_string()]);
+    assert_eq!(snapshot.paths(IndexId::Skill), vec![".claude/skills/review.md".to_string()]);
 
     let hits = search(&indexer, &[], "teardown", 10);
     assert_eq!(
@@ -172,7 +160,6 @@ fn a_pass_over_a_real_tree_indexes_the_typed_files_and_nothing_else() {
         ],
         "an untyped source file is findable in neither index"
     );
-
 }
 
 #[test]
@@ -240,7 +227,12 @@ fn a_pass_whose_root_moved_under_it_publishes_nothing() {
 
     assert!(
         indexer
-            .run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ALL, stale_generation)
+            .run_pass(
+                &handle,
+                &crate::fs::RootFs::for_root(&root),
+                PassScope::ALL,
+                stale_generation
+            )
             .is_none(),
         "the pass abandons its result"
     );
@@ -254,20 +246,21 @@ fn an_oversized_file_is_skipped_and_a_readable_one_beside_it_is_not() {
     let dir = tempfile::TempDir::new().unwrap();
     let root = &crate::fs::RootFs::for_root(dir.path());
     std::fs::create_dir_all(root.join("specifications")).unwrap();
-    std::fs::write(
-        root.join("specifications/big.md"),
-        "x".repeat(MAX_FILE_BYTES as usize + 1),
-    )
-    .unwrap();
+    std::fs::write(root.join("specifications/big.md"), "x".repeat(MAX_FILE_BYTES as usize + 1))
+        .unwrap();
     std::fs::write(root.join("specifications/small.md"), "teardown\n").unwrap();
 
-    assert!(read_bounded(&crate::fs::RootFs::for_root(&root), &root.join("specifications/big.md")).is_err());
+    assert!(read_bounded(&crate::fs::RootFs::for_root(&root), &root.join("specifications/big.md"))
+        .is_err());
     assert_eq!(
-        read_bounded(&crate::fs::RootFs::for_root(&root), &root.join("specifications/small.md")).unwrap(),
+        read_bounded(&crate::fs::RootFs::for_root(&root), &root.join("specifications/small.md"))
+            .unwrap(),
         "teardown\n"
     );
     // The reason names the shape of what was refused, never the contents.
-    let reason = read_bounded(&crate::fs::RootFs::for_root(&root), &root.join("specifications/big.md")).unwrap_err();
+    let reason =
+        read_bounded(&crate::fs::RootFs::for_root(&root), &root.join("specifications/big.md"))
+            .unwrap_err();
     assert!(reason.contains("ceiling"), "{reason}");
     assert!(
         !reason.contains("xxxx"),
@@ -297,7 +290,12 @@ fn a_pass_picks_up_a_file_created_after_the_previous_one() {
     let indexer = app.state::<Bm25Indexer>();
     indexer.mount(&crate::fs::RootFs::for_root(&root));
     let generation = indexer.generation();
-    indexer.run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ARTIFACTS, generation);
+    indexer.run_pass(
+        &handle,
+        &crate::fs::RootFs::for_root(&root),
+        PassScope::ARTIFACTS,
+        generation,
+    );
     assert!(search(&indexer, &[], "reconciliation", 10).is_empty());
 
     std::fs::write(
@@ -309,7 +307,12 @@ fn a_pass_picks_up_a_file_created_after_the_previous_one() {
     // keeps it current; here the invalidation is explicit because no watcher is
     // mounted in this test.
     app.state::<CandidateStore>().invalidate();
-    indexer.run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ARTIFACTS, generation);
+    indexer.run_pass(
+        &handle,
+        &crate::fs::RootFs::for_root(&root),
+        PassScope::ARTIFACTS,
+        generation,
+    );
 
     assert_eq!(
         hit_paths(&search(&indexer, &[], "reconciliation", 10)),
@@ -319,7 +322,12 @@ fn a_pass_picks_up_a_file_created_after_the_previous_one() {
     // And a deletion takes it back out.
     std::fs::remove_file(root.join("specifications/new.md")).unwrap();
     app.state::<CandidateStore>().invalidate();
-    indexer.run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ARTIFACTS, generation);
+    indexer.run_pass(
+        &handle,
+        &crate::fs::RootFs::for_root(&root),
+        PassScope::ARTIFACTS,
+        generation,
+    );
     assert!(search(&indexer, &[], "reconciliation", 10).is_empty());
 }
 
@@ -345,7 +353,12 @@ fn a_type_assignment_invalidates_the_candidate_list_so_the_next_pass_moves_the_f
     let generation = indexer.generation();
 
     // Untyped: the file belongs to no index (BMI-FR-03).
-    indexer.run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ARTIFACTS, generation);
+    indexer.run_pass(
+        &handle,
+        &crate::fs::RootFs::for_root(&root),
+        PassScope::ARTIFACTS,
+        generation,
+    );
     assert!(candidates.is_mounted(), "the pass mounted the candidate list");
     assert!(search(&indexer, &[], "teardown", 10).is_empty());
 
@@ -359,7 +372,12 @@ fn a_type_assignment_invalidates_the_candidate_list_so_the_next_pass_moves_the_f
 
     // The assignment alone changes nothing a pass can see: the mounted list
     // still carries the old classification.
-    indexer.run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ARTIFACTS, generation);
+    indexer.run_pass(
+        &handle,
+        &crate::fs::RootFs::for_root(&root),
+        PassScope::ARTIFACTS,
+        generation,
+    );
     assert!(
         search(&indexer, &[], "teardown", 10).is_empty(),
         "a stale candidate list must not be what makes this pass"
@@ -375,7 +393,12 @@ fn a_type_assignment_invalidates_the_candidate_list_so_the_next_pass_moves_the_f
         "the stale classification is dropped so the next enumeration rebuilds"
     );
 
-    indexer.run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ARTIFACTS, generation);
+    indexer.run_pass(
+        &handle,
+        &crate::fs::RootFs::for_root(&root),
+        PassScope::ARTIFACTS,
+        generation,
+    );
     assert_eq!(
         hit_paths(&search(&indexer, &[], "teardown", 10)),
         vec![(IndexId::Scenario, "notes/x.md".to_string())],
@@ -399,8 +422,8 @@ fn an_inconsistent_draft_contributes_nothing_to_the_drafts_index() {
 
     // Both prompts carry the term, so only the invariant can separate them.
     for created in [&good, &broken] {
-        let abs = crate::drafts::draft_file_abs_path(&rooted, &created.draft.id, &created.file)
-            .unwrap();
+        let abs =
+            crate::drafts::draft_file_abs_path(&rooted, &created.draft.id, &created.file).unwrap();
         std::fs::write(&abs, "# P\n\nteardown material\n").unwrap();
     }
     // A second file under `files/` is exactly what DRS-FR-13 forbids anyone to
@@ -451,16 +474,10 @@ fn nothing_of_a_draft_but_its_live_prompt_is_indexed_anywhere() {
     std::fs::write(draft_dir.join("history/e1.toml"), "id = \"e1\"\n").unwrap();
     std::fs::write(draft_dir.join("proposals/p1.md"), "sarcophagus in a candidate\n").unwrap();
     std::fs::create_dir_all(draft_dir.join("proposals/blobs")).unwrap();
-    std::fs::write(
-        draft_dir.join("proposals/blobs/abc123.md"),
-        "sarcophagus in an attachment\n",
-    )
-    .unwrap();
-    std::fs::write(
-        draft_dir.join("conversation.jsonl"),
-        "sarcophagus in a conversation\n",
-    )
-    .unwrap();
+    std::fs::write(draft_dir.join("proposals/blobs/abc123.md"), "sarcophagus in an attachment\n")
+        .unwrap();
+    std::fs::write(draft_dir.join("conversation.jsonl"), "sarcophagus in a conversation\n")
+        .unwrap();
 
     let app = mounted_app();
     let handle = app.handle().clone();
@@ -514,7 +531,12 @@ fn a_folder_scope_assignment_moves_the_files_that_inherit_it() {
     let generation = indexer.generation();
 
     // Neither file carries or infers a type, so neither belongs to any index.
-    indexer.run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ARTIFACTS, generation);
+    indexer.run_pass(
+        &handle,
+        &crate::fs::RootFs::for_root(&root),
+        PassScope::ARTIFACTS,
+        generation,
+    );
     assert!(
         search(&indexer, &[], "teardown", 10).is_empty(),
         "precondition: unclassified files are indexed nowhere (BMI-FR-03)"
@@ -531,7 +553,12 @@ fn a_folder_scope_assignment_moves_the_files_that_inherit_it() {
     .unwrap();
     candidates.invalidate();
 
-    indexer.run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ARTIFACTS, generation);
+    indexer.run_pass(
+        &handle,
+        &crate::fs::RootFs::for_root(&root),
+        PassScope::ARTIFACTS,
+        generation,
+    );
     assert_eq!(
         hit_paths(&search(&indexer, &[], "teardown", 10)),
         vec![
@@ -541,4 +568,3 @@ fn a_folder_scope_assignment_moves_the_files_that_inherit_it() {
         "every file inheriting the folder's new type enters that type's index"
     );
 }
-

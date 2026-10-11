@@ -14,9 +14,7 @@ use super::*;
 fn staged_paths(f: &Fixture) -> Vec<String> {
     let repo = f.repo();
     let tree = head_tree(&repo);
-    let diff = repo
-        .diff_tree_to_index(tree.as_ref(), None, None)
-        .unwrap();
+    let diff = repo.diff_tree_to_index(tree.as_ref(), None, None).unwrap();
     let mut paths: Vec<String> = diff
         .deltas()
         .filter_map(|d| {
@@ -35,9 +33,7 @@ fn commit_touched(f: &Fixture) -> Vec<String> {
     let repo = f.repo();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     let parent = head.parent(0).ok().map(|c| c.tree().unwrap());
-    let diff = repo
-        .diff_tree_to_tree(parent.as_ref(), Some(&head.tree().unwrap()), None)
-        .unwrap();
+    let diff = repo.diff_tree_to_tree(parent.as_ref(), Some(&head.tree().unwrap()), None).unwrap();
     let mut paths: Vec<String> = diff
         .deltas()
         .flat_map(|d| {
@@ -74,7 +70,13 @@ fn commit_paths_commits_only_the_named_paths_and_adds_untracked_ones() {
     f.write("b.md", "two\n");
     f.write("new.md", "fresh\n");
 
-    commit_named_paths(&crate::fs::RootFs::for_root(f.root()), "msg", &["new.md".into(), "a.md".into()], None).unwrap();
+    commit_named_paths(
+        &crate::fs::RootFs::for_root(f.root()),
+        "msg",
+        &["new.md".into(), "a.md".into()],
+        None,
+    )
+    .unwrap();
 
     assert_eq!(commit_touched(&f), vec!["a.md".to_string(), "new.md".into()]);
     assert_eq!(head_text(&f, "a.md").as_deref(), Some("two\n"));
@@ -98,7 +100,8 @@ fn commit_paths_leaves_an_unnamed_staged_path_staged() {
     f.write("staged.md", "two\n");
     f.stage_all();
 
-    commit_named_paths(&crate::fs::RootFs::for_root(f.root()), "msg", &["a.md".into()], None).unwrap();
+    commit_named_paths(&crate::fs::RootFs::for_root(f.root()), "msg", &["a.md".into()], None)
+        .unwrap();
 
     assert_eq!(commit_touched(&f), vec!["a.md".to_string()]);
     assert_eq!(
@@ -134,10 +137,7 @@ fn commit_paths_records_a_deletion_and_a_rename_at_both_locations() {
     assert!(!outcome.commit_id.is_empty());
     let mut recorded = outcome.committed_paths.clone();
     recorded.sort();
-    assert_eq!(
-        recorded,
-        vec!["gone.md".to_string(), "new.md".to_string(), "old.md".to_string()]
-    );
+    assert_eq!(recorded, vec!["gone.md".to_string(), "new.md".to_string(), "old.md".to_string()]);
 
     assert_eq!(head_text(&f, "gone.md"), None, "recorded as a deletion");
     assert_eq!(head_text(&f, "old.md"), None, "the rename's old location");
@@ -180,13 +180,13 @@ fn commit_paths_refuses_before_it_writes_anything() {
     ];
     let mut errors = Vec::new();
     for (message, paths) in refusals {
-        errors.push(commit_named_paths(&crate::fs::RootFs::for_root(f.root()), message, &paths, None).unwrap_err());
+        errors.push(
+            commit_named_paths(&crate::fs::RootFs::for_root(f.root()), message, &paths, None)
+                .unwrap_err(),
+        );
         assert_eq!(f.repo().head().unwrap().target().unwrap(), head_before);
         assert_eq!(staged_paths(&f), index_before, "the index was disturbed");
-        assert_eq!(
-            std::fs::read_to_string(f.root().join("a.md")).unwrap(),
-            "two\n"
-        );
+        assert_eq!(std::fs::read_to_string(f.root().join("a.md")).unwrap(), "two\n");
     }
     assert_eq!(errors[0], ERR_EMPTY_COMMIT_MESSAGE);
     assert_eq!(errors[1], ERR_NO_PATHS_SELECTED);
@@ -195,10 +195,7 @@ fn commit_paths_refuses_before_it_writes_anything() {
     // echoes the caller's own argument and nothing it learned by looking,
     // so it discloses nothing about what is outside the root.
     assert!(errors[3].contains("escapes"), "{}", errors[3]);
-    assert!(
-        !errors[3].contains("secret"),
-        "no content of the refused path is read or reported"
-    );
+    assert!(!errors[3].contains("secret"), "no content of the refused path is read or reported");
 }
 
 #[test]
@@ -215,11 +212,7 @@ fn commit_paths_survives_a_rename_rotation_without_losing_a_file() {
     f.commit("base");
     std::fs::remove_file(f.root().join("old.md")).unwrap();
     std::fs::rename(f.root().join("third.md"), f.root().join("old.md")).unwrap();
-    std::fs::write(
-        f.root().join("new.md"),
-        format!("first {long}"),
-    )
-    .unwrap();
+    std::fs::write(f.root().join("new.md"), format!("first {long}")).unwrap();
 
     commit_named_paths(
         &crate::fs::RootFs::for_root(f.root()),
@@ -263,8 +256,13 @@ fn commit_paths_commits_a_project_rooted_below_the_repository_root() {
     f.write("project/new.md", "fresh\n");
     f.write("outside.md", "host edited\n");
 
-    let outcome =
-        commit_named_paths(&crate::fs::RootFs::for_root(&root), "msg", &["a.md".into(), "new.md".into()], None).unwrap();
+    let outcome = commit_named_paths(
+        &crate::fs::RootFs::for_root(&root),
+        "msg",
+        &["a.md".into(), "new.md".into()],
+        None,
+    )
+    .unwrap();
 
     // GTC-FR-19: reported project-relative, the way every path crossing this
     // boundary is — the frontend names files that way and could match a
@@ -279,7 +277,13 @@ fn commit_paths_commits_a_project_rooted_below_the_repository_root() {
     // The host file was never named, so it is still modified and uncommitted.
     assert_eq!(head_text(&f, "outside.md").as_deref(), Some("host\n"));
     // And a path escaping the project root is still refused from here.
-    assert!(commit_named_paths(&crate::fs::RootFs::for_root(&root), "msg", &["../outside.md".into()], None).is_err());
+    assert!(commit_named_paths(
+        &crate::fs::RootFs::for_root(&root),
+        "msg",
+        &["../outside.md".into()],
+        None
+    )
+    .is_err());
 }
 
 #[test]
@@ -292,12 +296,24 @@ fn commit_paths_is_nothing_to_commit_for_a_path_that_does_not_change_anything() 
     f.commit("base");
 
     assert_eq!(
-        commit_named_paths(&crate::fs::RootFs::for_root(f.root()), "msg", &["ghost.md".into()], None).unwrap_err(),
+        commit_named_paths(
+            &crate::fs::RootFs::for_root(f.root()),
+            "msg",
+            &["ghost.md".into()],
+            None
+        )
+        .unwrap_err(),
         ERR_NOTHING_TO_COMMIT
     );
 
     f.write("a.md", "two\n");
-    commit_named_paths(&crate::fs::RootFs::for_root(f.root()), "msg", &["a.md".into(), "a.md".into()], None).unwrap();
+    commit_named_paths(
+        &crate::fs::RootFs::for_root(f.root()),
+        "msg",
+        &["a.md".into(), "a.md".into()],
+        None,
+    )
+    .unwrap();
     assert_eq!(commit_touched(&f), vec!["a.md".to_string()]);
     assert_eq!(head_text(&f, "a.md").as_deref(), Some("two\n"));
 }
@@ -317,7 +333,13 @@ fn commit_paths_records_an_executable_bit_change() {
         perms.set_mode(0o755);
         std::fs::set_permissions(&path, perms).unwrap();
 
-        commit_named_paths(&crate::fs::RootFs::for_root(f.root()), "chmod", &["run.sh".into()], None).unwrap();
+        commit_named_paths(
+            &crate::fs::RootFs::for_root(f.root()),
+            "chmod",
+            &["run.sh".into()],
+            None,
+        )
+        .unwrap();
 
         let repo = f.repo();
         let tree = repo.head().unwrap().peel_to_commit().unwrap().tree().unwrap();
@@ -331,7 +353,8 @@ fn commit_paths_takes_its_identity_from_the_git_configuration() {
     // GTC-FR-03.
     let f = Fixture::new();
     f.write("a.md", "one\n");
-    commit_named_paths(&crate::fs::RootFs::for_root(f.root()), "first", &["a.md".into()], None).unwrap();
+    commit_named_paths(&crate::fs::RootFs::for_root(f.root()), "first", &["a.md".into()], None)
+        .unwrap();
     let repo = f.repo();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     assert_eq!(head.author().name().unwrap(), "Test");
@@ -344,7 +367,8 @@ fn commit_paths_outside_a_repository_is_the_typed_error() {
     let dir = TempDir::new().unwrap();
     std::fs::write(dir.path().join("a.md"), "one\n").unwrap();
     assert_eq!(
-        commit_named_paths(&crate::fs::RootFs::for_root(dir.path()), "msg", &["a.md".into()], None).unwrap_err(),
+        commit_named_paths(&crate::fs::RootFs::for_root(dir.path()), "msg", &["a.md".into()], None)
+            .unwrap_err(),
         ERR_NOT_A_REPO
     );
 }

@@ -78,10 +78,7 @@ fn the_active_worktree_is_refused_whatever_an_earlier_listing_said() {
     let refused = remove_linked_worktree(app.handle(), &path, &path).unwrap_err();
 
     assert_eq!(refused, ERR_WORKTREE_IS_ACTIVE);
-    assert_eq!(
-        snapshot,
-        crate::changes::tests_support::snapshot(f.container.path().to_path_buf())
-    );
+    assert_eq!(snapshot, crate::changes::tests_support::snapshot(f.container.path().to_path_buf()));
 }
 
 // WTC-FR-RDVK
@@ -116,9 +113,6 @@ fn a_worktree_holding_a_symbolic_link_is_removed_and_the_link_target_survives() 
 
     assert!(!path.exists(), "the worktree directory is gone");
     assert_eq!(linked_count(&f), 0, "and its registration is pruned");
-    assert!(
-        outside.path().join("store.js").exists(),
-        "a link was unlinked and never followed"
-    );
+    assert!(outside.path().join("store.js").exists(), "a link was unlinked and never followed");
     assert!(f.root().join("a.md").exists(), "the primary worktree is untouched");
 }

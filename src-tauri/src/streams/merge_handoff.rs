@@ -13,7 +13,9 @@
 
 use tauri::Manager;
 
-use super::commands::{announce, project_key, project_root, refuse, store, store_fs, stream_has_live_run};
+use super::commands::{
+    announce, project_key, project_root, refuse, store, store_fs, stream_has_live_run,
+};
 use super::merge_progress::MergeProgress;
 use super::*;
 use crate::graduation::MergeRunRequest;
@@ -35,7 +37,9 @@ fn stream_of<R: tauri::Runtime>(
     let key = project_key(app);
     store::read_stream(&fs, &store, stream_id)
         .filter(|stream| stream.project_key == key)
-        .ok_or_else(|| refuse(app, "work stream not found", stream_id, ERR_UNKNOWN_STREAM.to_string()))
+        .ok_or_else(|| {
+            refuse(app, "work stream not found", stream_id, ERR_UNKNOWN_STREAM.to_string())
+        })
 }
 
 /// WKS-FR-GKPX: merge a stream into the branch it came from.
@@ -83,9 +87,7 @@ pub(crate) fn merge_work_stream_blocking<R: tauri::Runtime>(
     let hold = match state.as_ref() {
         Some(state) => match state.begin_repository_update(stream_id, Reconciliation::Merge) {
             Ok(hold) => Some(hold),
-            Err(reason) => {
-                return Err(refuse(app, "work stream merge refused", stream_id, reason))
-            }
+            Err(reason) => return Err(refuse(app, "work stream merge refused", stream_id, reason)),
         },
         None => None,
     };
@@ -144,9 +146,8 @@ fn check<R: tauri::Runtime>(
     // be the primary worktree: a stream's base is whatever the author stood on
     // when they made it.
     let base_repo = git::worktree_holding(&main, &stream.base_branch);
-    let base_worktree = base_repo
-        .as_ref()
-        .and_then(|repo| repo.workdir().map(std::path::PathBuf::from));
+    let base_worktree =
+        base_repo.as_ref().and_then(|repo| repo.workdir().map(std::path::PathBuf::from));
     merge::refuse_dirty(&stream.worktree(), base_worktree.as_deref())?;
 
     let mut prepared = merge::prepare(&main, stream)?;

@@ -155,8 +155,7 @@ fn an_anthropic_reply_goes_back_with_its_signed_thinking() {
     );
     let wire = anthropic_wire("claude-sonnet-5-5");
     let json = body_of(
-        wire.encode(built, rig::wire::Mode::Unary)
-            .expect("the Messages route builds the request"),
+        wire.encode(built, rig::wire::Mode::Unary).expect("the Messages route builds the request"),
     );
     let messages = json["messages"].as_array().expect("messages");
     let assistant = messages
@@ -246,8 +245,7 @@ fn a_model_the_catalog_does_not_mark_is_sent_no_thinking() {
     ));
     let wire = anthropic_wire("claude-not-in-any-catalog");
     let json = body_of(
-        wire.encode(built, rig::wire::Mode::Unary)
-            .expect("the Messages route builds the request"),
+        wire.encode(built, rig::wire::Mode::Unary).expect("the Messages route builds the request"),
     );
     assert!(json.get("thinking").is_none(), "{json}");
     assert_eq!(json["max_tokens"], 32_000);

@@ -196,8 +196,7 @@ fn every_vendor_is_told_the_response_contract_in_the_same_words() {
     );
     let summary_clause = clause("`summary` —");
     assert!(
-        states(&summary_clause, MAX_SUMMARY_WORDS)
-            && states(&summary_clause, LIMIT_OPTION_SUMMARY),
+        states(&summary_clause, MAX_SUMMARY_WORDS) && states(&summary_clause, LIMIT_OPTION_SUMMARY),
         "a summary's word and byte bounds are stated together: {summary_clause}",
     );
     let description_clause = clause("`description` —");
@@ -207,14 +206,8 @@ fn every_vendor_is_told_the_response_contract_in_the_same_words() {
             && states(&description_clause, LIMIT_OPTION_DESCRIPTION),
         "a description's sentence, word, and byte bounds likewise: {description_clause}",
     );
-    assert!(
-        states(&clause("`reason` —"), LIMIT_ESCALATION_REASON),
-        "and the reason's byte bound",
-    );
-    assert!(
-        states(&clause("`question` —"), LIMIT_ESCALATION_QUESTION),
-        "and each question's",
-    );
+    assert!(states(&clause("`reason` —"), LIMIT_ESCALATION_REASON), "and the reason's byte bound",);
+    assert!(states(&clause("`question` —"), LIMIT_ESCALATION_QUESTION), "and each question's",);
     assert!(
         states(&clause("`answer` —"), LIMIT_OPTION_ANSWER),
         "and a proposed response's answer's",
@@ -224,10 +217,9 @@ fn every_vendor_is_told_the_response_contract_in_the_same_words() {
     // agent reading both is told one contract rather than two. Each literal is
     // bound to the Rust constant the decoder enforces, rather than to a number
     // written here twice.
-    let schema: serde_json::Value = serde_json::from_str(
-        crate::tools::agent_exec::descriptor::claude_code::ENVELOPE_SCHEMA,
-    )
-    .expect("the vendor schema parses");
+    let schema: serde_json::Value =
+        serde_json::from_str(crate::tools::agent_exec::descriptor::claude_code::ENVELOPE_SCHEMA)
+            .expect("the vendor schema parses");
     let escalation_schema = &schema["properties"]["escalation"];
     let questions_schema = &escalation_schema["properties"]["questions"];
     assert_eq!(questions_schema["minItems"], json!(MIN_ESCALATION_QUESTIONS));
@@ -244,14 +236,8 @@ fn every_vendor_is_told_the_response_contract_in_the_same_words() {
     for field in ["answer", "summary", "description"] {
         assert_eq!(option_schema["properties"][field]["pattern"], json!(r"\S"));
     }
-    assert_eq!(
-        escalation_schema["properties"]["reason"]["pattern"],
-        json!(r"\S"),
-    );
-    assert_eq!(
-        question_schema["properties"]["question"]["pattern"],
-        json!(r"\S"),
-    );
+    assert_eq!(escalation_schema["properties"]["reason"]["pattern"], json!(r"\S"),);
+    assert_eq!(question_schema["properties"]["question"]["pattern"], json!(r"\S"),);
     // CCP-FR-07: and the two classes it cannot express faithfully stay with the
     // decoder rather than being transcribed more freely than they are enforced.
     // A byte bound written as a character bound, or a word count written as a
@@ -365,27 +351,19 @@ fn every_vendor_is_told_the_response_contract_in_the_same_words() {
     let mut input = serde_json::Map::new();
     input.insert("context".into(), json!(IN_INPUT));
     loaded.input = Some(input);
-    loaded.resume = Some(SessionRef {
-        session_id: Some(IN_RESUME.to_string()),
-        continuation_token: None,
-    });
+    loaded.resume =
+        Some(SessionRef { session_id: Some(IN_RESUME.to_string()), continuation_token: None });
     run(&harness, runtime.clone(), loaded).expect("runs");
     let (_, second) = split_task_document(&runtime.only_run().stdin);
     assert_eq!(second, contracts[0], "the contract does not vary with the task");
     for marker in [MARKER, IN_INPUT, IN_RESUME] {
-        assert!(
-            !second.contains(marker),
-            "the contract carries no part of a task: {marker}",
-        );
+        assert!(!second.contains(marker), "the contract carries no part of a task: {marker}",);
     }
 }
 
 /// The three outcomes, so a test iterates the enum rather than a list of words.
-const ALL_OUTCOMES: [AgentOutcome; 3] = [
-    AgentOutcome::Success,
-    AgentOutcome::Failure,
-    AgentOutcome::EscalationRequired,
-];
+const ALL_OUTCOMES: [AgentOutcome; 3] =
+    [AgentOutcome::Success, AgentOutcome::Failure, AgentOutcome::EscalationRequired];
 
 /// An outcome as it appears on the wire, read off its own serialization.
 fn outcome_name(outcome: AgentOutcome) -> String {
@@ -406,22 +384,12 @@ fn envelope_field_names() -> Vec<String> {
         outcome: AgentOutcome::Success,
         summary: "s".into(),
         result: Some(serde_json::Map::new()),
-        failure: Some(AgentFailure {
-            code: "c".into(),
-            message: "m".into(),
-            retryable: true,
-        }),
+        failure: Some(AgentFailure { code: "c".into(), message: "m".into(), retryable: true }),
         escalation: Some(AgentEscalation {
             reason: "r".into(),
-            questions: vec![AgentEscalationQuestion {
-                question: "q".into(),
-                options: Vec::new(),
-            }],
+            questions: vec![AgentEscalationQuestion { question: "q".into(), options: Vec::new() }],
         }),
-        session: Some(SessionRef {
-            session_id: None,
-            continuation_token: None,
-        }),
+        session: Some(SessionRef { session_id: None, continuation_token: None }),
         metadata: Some(serde_json::Map::new()),
     };
     serde_json::to_value(populated)
@@ -587,10 +555,7 @@ fn the_response_contract_is_the_executors_and_no_callers() {
         callers_half <= LIMIT_TASK,
         "the caller's half alone is inside the bound — the contract is what tips it",
     );
-    assert!(
-        callers_half + RESPONSE_CONTRACT.len() > LIMIT_TASK,
-        "the pair is over it",
-    );
+    assert!(callers_half + RESPONSE_CONTRACT.len() > LIMIT_TASK, "the pair is over it",);
     assert_eq!(
         run(&harness, runtime.clone(), straddling).unwrap_err(),
         AgentExecutionError::RequestTooLarge(LimitName::Task)
@@ -612,10 +577,8 @@ fn task_data_appears_only_on_stdin() {
     let mut input = serde_json::Map::new();
     input.insert("secret_context".into(), json!(INPUT_VALUE));
     request.input = Some(input);
-    request.resume = Some(SessionRef {
-        session_id: Some(RESUME_TOKEN.to_string()),
-        continuation_token: None,
-    });
+    request.resume =
+        Some(SessionRef { session_id: Some(RESUME_TOKEN.to_string()), continuation_token: None });
 
     let outcome = run(&harness, runtime.clone(), request).expect("runs");
     let recorded = runtime.only_run();
@@ -654,10 +617,7 @@ fn the_oauth_token_reaches_one_container_environment_only() {
     let outcome = run(&harness, runtime.clone(), task("go")).expect("runs");
     let recorded = runtime.only_run();
 
-    assert_eq!(
-        recorded.env.get("CLAUDE_CODE_OAUTH_TOKEN").map(String::as_str),
-        Some(SAMPLE_TOKEN)
-    );
+    assert_eq!(recorded.env.get("CLAUDE_CODE_OAUTH_TOKEN").map(String::as_str), Some(SAMPLE_TOKEN));
     assert_eq!(recorded.env.len(), 1, "no other variable carries it");
 
     // Not in the argv: the vector names the *variable*, which is not a secret.
@@ -704,20 +664,11 @@ fn the_codex_configuration_mount_is_writable_and_nothing_else_is_mounted() {
     );
     // And it is named to the CLI, which is what makes it the login directory
     // rather than an unused mount.
-    assert!(recorded
-        .argv
-        .iter()
-        .any(|a| a == "CODEX_HOME=/home/agent/.codex"));
+    assert!(recorded.argv.iter().any(|a| a == "CODEX_HOME=/home/agent/.codex"));
 
     // Nothing dangerous is mounted or enabled.
     let argv = recorded.argv.join(" ");
-    for forbidden in [
-        "/var/run/docker.sock",
-        "--privileged",
-        "--publish",
-        "-p 0",
-        "source=/,",
-    ] {
+    for forbidden in ["/var/run/docker.sock", "--privileged", "--publish", "-p 0", "source=/,"] {
         assert!(!argv.contains(forbidden), "{forbidden} must not appear");
     }
     assert!(argv.contains("--cap-drop ALL"));

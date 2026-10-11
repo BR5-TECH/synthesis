@@ -42,28 +42,20 @@ fn the_next_write_drops_the_legacy_key_and_keeps_everything_else() {
     let dir = TempDir::new().unwrap();
     let root = local_with_legacy_key(&dir);
     assert!(
-        std::fs::read_to_string(local_toml_path(&root))
-            .unwrap()
-            .contains("recently_edited"),
+        std::fs::read_to_string(local_toml_path(&root)).unwrap().contains("recently_edited"),
         "precondition: the key is on disk before the write"
     );
 
     save_changes_panel_state_to(&root, branch_state("develop")).unwrap();
 
     let after = std::fs::read_to_string(local_toml_path(&root)).unwrap();
-    assert!(
-        !after.contains("recently_edited"),
-        "the key does not survive the next write: {after}"
-    );
+    assert!(!after.contains("recently_edited"), "the key does not survive the next write: {after}");
     assert_eq!(
         load_notes_panel_state_from(&root).text_filter,
         "handoff",
         "and every other persisted value came through the write unchanged"
     );
-    assert_eq!(
-        load_changes_panel_state_from(&root).target_branch.as_deref(),
-        Some("develop"),
-    );
+    assert_eq!(load_changes_panel_state_from(&root).target_branch.as_deref(), Some("develop"),);
 }
 
 /// PSS-FR-14, second clause: a project whose local store is never written
@@ -77,9 +69,7 @@ fn a_project_never_written_again_keeps_a_key_that_changes_nothing() {
     let reread = crate::fs::RootFs::for_root(dir.path());
     assert_eq!(load_notes_panel_state_from(&reread).text_filter, "handoff");
     assert!(
-        std::fs::read_to_string(local_toml_path(&root))
-            .unwrap()
-            .contains("recently_edited"),
+        std::fs::read_to_string(local_toml_path(&root)).unwrap().contains("recently_edited"),
         "no migration ran, because reading is not writing"
     );
 }

@@ -88,8 +88,8 @@ fn a_directory_outside_the_allowlist_is_refused_by_the_guard() {
     assert!(outside.path().is_dir(), "a bare predicate would accept this");
 
     let runtime = RecordingRuntime::replying("");
-    let executor = AgentCliExecutor::new(runtime.clone())
-        .with_session_state_root(harness.sessions_root());
+    let executor =
+        AgentCliExecutor::new(runtime.clone()).with_session_state_root(harness.sessions_root());
     let error = block_on(executor.execute_agent_cli(
         &Silent,
         &harness.context(),
@@ -123,10 +123,7 @@ fn an_unmountable_directory_is_refused_through_the_executor() {
 
     let home = tempfile::tempdir().expect("home");
     let ai = AgenticIntegrations::new(
-        Box::new(FakeProbe {
-            executables: vec!["/usr/bin/claude".into()],
-            directories: vec![],
-        }),
+        Box::new(FakeProbe { executables: vec!["/usr/bin/claude".into()], directories: vec![] }),
         Box::new(FakeRunner {
             banners: HashMap::from([("/usr/bin/claude".to_string(), "claude 2.1.232".to_string())]),
         }),
@@ -147,10 +144,7 @@ fn an_unmountable_directory_is_refused_through_the_executor() {
     )
     .expect("verifies");
     agentic::set_active_impl(&store, &ai, "claude_code").expect("activates");
-    let fs = FsAccess::builder()
-        .allow_root(workspace.path())
-        .build()
-        .expect("fs");
+    let fs = FsAccess::builder().allow_root(workspace.path()).build().expect("fs");
 
     let runtime = RecordingRuntime::replying("");
     let executor = AgentCliExecutor::new(runtime.clone());
@@ -198,9 +192,7 @@ fn an_api_kind_integration_is_refused_by_its_own_branch() {
         let keys: Arc<FakeKeys> = Arc::new(FakeKeys::default());
         let ai = AgenticIntegrations::new(
             Box::new(FakeProbe::default()),
-            Box::new(FakeRunner {
-                banners: HashMap::new(),
-            }),
+            Box::new(FakeRunner { banners: HashMap::new() }),
             Box::new(OkProber),
             Box::new(keys),
         )
@@ -220,10 +212,7 @@ fn an_api_kind_integration_is_refused_by_its_own_branch() {
         .expect("api vendor verifies");
         agentic::set_active_impl(&store, &ai, vendor).expect("activates");
 
-        let fs = FsAccess::builder()
-            .allow_root(workspace.path())
-            .build()
-            .expect("fs");
+        let fs = FsAccess::builder().allow_root(workspace.path()).build().expect("fs");
         let runtime = RecordingRuntime::replying("");
         let executor = AgentCliExecutor::new(runtime.clone());
         let error = block_on(executor.execute_agent_cli(
@@ -236,7 +225,7 @@ fn an_api_kind_integration_is_refused_by_its_own_branch() {
                 images: &TEST_IMAGES,
             },
             AgentExecutionRequest {
-            turn_kind: super::super::TurnKind::Work,
+                turn_kind: super::super::TurnKind::Work,
                 execution_directory: workspace.path().to_path_buf(),
                 task: task("go"),
                 cancellation: CancellationToken::new(),
@@ -281,10 +270,7 @@ fn an_oversized_envelope_is_refused_even_inside_a_bounded_stream() {
     let harness = harness_for("claude_code");
     let runtime = RecordingRuntime::replying(&claude_stdout(&huge));
     let outcome = run(&harness, runtime, task("go")).expect("ran");
-    assert_eq!(
-        outcome.process_outcome,
-        ProcessOutcome::InvalidStructuredOutput
-    );
+    assert_eq!(outcome.process_outcome, ProcessOutcome::InvalidStructuredOutput);
     assert!(outcome.response.is_none());
     assert!(!outcome.stdout.truncated, "the stream itself was within bounds");
 }
@@ -317,12 +303,7 @@ fn a_vendor_session_reference_is_bounded_and_never_empty() {
 
     // Over its bound: dropped rather than returned unbounded.
     let oversized = stream(Some(&"z".repeat(LIMIT_SESSION_FIELD + 1)));
-    let outcome = run(
-        &harness,
-        RecordingRuntime::replying(&oversized),
-        task("go"),
-    )
-    .expect("ran");
+    let outcome = run(&harness, RecordingRuntime::replying(&oversized), task("go")).expect("ran");
     assert_eq!(outcome.process_outcome, ProcessOutcome::Completed);
     assert!(outcome.session.is_none(), "an unbounded id must not be carried");
 
@@ -344,10 +325,7 @@ fn a_vendor_session_reference_is_bounded_and_never_empty() {
     // And one within bounds is carried.
     let ok = stream(Some("s-42"));
     let outcome = run(&harness, RecordingRuntime::replying(&ok), task("go")).expect("ran");
-    assert_eq!(
-        outcome.session.and_then(|s| s.session_id).as_deref(),
-        Some("s-42")
-    );
+    assert_eq!(outcome.session.and_then(|s| s.session_id).as_deref(), Some("s-42"));
 }
 
 /// CCP-FR-09 end to end — the schema-validated position is used when the CLI
@@ -364,11 +342,7 @@ fn either_claude_code_extraction_position_completes_a_turn() {
     ] {
         let outcome = run(&harness, RecordingRuntime::replying(&stdout), task("go"))
             .unwrap_or_else(|e| panic!("{name} failed to run: {e:?}"));
-        assert_eq!(
-            outcome.process_outcome,
-            ProcessOutcome::Completed,
-            "{name} did not complete"
-        );
+        assert_eq!(outcome.process_outcome, ProcessOutcome::Completed, "{name} did not complete");
         assert_eq!(outcome.response.expect("an envelope").summary, "did the thing");
     }
 }
@@ -403,10 +377,7 @@ fn an_assigned_session_must_be_reported_back_unchanged() {
     })
     .to_string();
     let outcome = run(&harness, RecordingRuntime::replying(&crossed), task("go")).expect("ran");
-    assert_eq!(
-        outcome.process_outcome,
-        ProcessOutcome::InvalidStructuredOutput
-    );
+    assert_eq!(outcome.process_outcome, ProcessOutcome::InvalidStructuredOutput);
     assert!(outcome.response.is_none());
 
     // A resumed turn asserts nothing of the kind: the session is the vendor's
@@ -431,10 +402,7 @@ fn a_read_error_marks_the_capture_truncated_rather_than_complete() {
     let sh = HostDockerCli::with_program("sh");
     let outcome = block_on(async {
         sh.run(RunRequest {
-            argv: &[
-                "-c".to_string(),
-                "printf 'y%.0s' $(seq 1 5000)".to_string(),
-            ],
+            argv: &["-c".to_string(), "printf 'y%.0s' $(seq 1 5000)".to_string()],
             container: None,
             env: &BTreeMap::new(),
             stdin: b"",
@@ -499,10 +467,7 @@ fn a_read_error_marks_the_capture_truncated_rather_than_complete() {
 fn a_timeout_kills_the_grandchildren_too() {
     let marker = tempfile::tempdir().expect("dir");
     let flag = marker.path().join("still-alive");
-    let script = format!(
-        "sh -c 'sleep 30; touch {}' & wait",
-        flag.to_string_lossy()
-    );
+    let script = format!("sh -c 'sleep 30; touch {}' & wait", flag.to_string_lossy());
 
     let sh = HostDockerCli::with_program("sh");
     let outcome = block_on(async {
@@ -526,10 +491,7 @@ fn a_timeout_kills_the_grandchildren_too() {
     // wait is enough to prove the kill reached it without waiting that out:
     // if the process group was signalled, nothing is left to do it.
     std::thread::sleep(Duration::from_millis(400));
-    assert!(
-        !flag.exists(),
-        "a grandchild outlived the timeout that killed its parent"
-    );
+    assert!(!flag.exists(), "a grandchild outlived the timeout that killed its parent");
 }
 
 /// EAC-FR-25 — a token already cancelled before the run starts ends the run
@@ -552,10 +514,7 @@ fn a_pre_cancelled_token_ends_the_run_immediately() {
     let sh = HostDockerCli::with_program("sh");
     let outcome = block_on(async {
         sh.run(RunRequest {
-            argv: &[
-                "-c".to_string(),
-                format!("sleep 30; touch {}", survived.to_string_lossy()),
-            ],
+            argv: &["-c".to_string(), format!("sleep 30; touch {}", survived.to_string_lossy())],
             container: None,
             env: &BTreeMap::new(),
             stdin: b"",
@@ -617,9 +576,7 @@ fn the_mock_docker_scenario_matches_what_production_generates() {
         &descriptor::CLAUDE_CODE.vendor_args(None, None, SCENARIO_SESSION_ID, None, None),
     );
 
-    let required = scenario["expected"]["required_args"]
-        .as_array()
-        .expect("required_args");
+    let required = scenario["expected"]["required_args"].as_array().expect("required_args");
     assert!(!required.is_empty());
     for requirement in required {
         let value = requirement["value"].as_str().expect("a value");
@@ -647,9 +604,7 @@ fn the_mock_docker_scenario_matches_what_production_generates() {
         SCENARIO_SESSION_ID,
     ];
     for arg in &argv {
-        let covered = required
-            .iter()
-            .any(|r| r["value"].as_str() == Some(arg.as_str()))
+        let covered = required.iter().any(|r| r["value"].as_str() == Some(arg.as_str()))
             || variable.contains(&arg.as_str());
         assert!(
             covered,

@@ -24,10 +24,10 @@
 //! the streaming checksum) once the gate has produced a validated absolute path.
 //! Those free functions are the implementation; this type is the contract.
 
-use std::marker::PhantomData;
 use std::collections::HashSet;
 use std::fs;
 use std::io;
+use std::marker::PhantomData;
 use std::path::{Component, Path, PathBuf};
 
 use serde::de::DeserializeOwned;
@@ -48,7 +48,9 @@ const MAX_SYMLINK_HOPS: usize = 40;
 pub use super::access_build::FsAccessBuilder;
 pub use super::access_handles::{FileHandle, RootFs};
 pub use super::access_state::FsAccessState;
-pub use super::access_types::{CreateMode, DirEntry, EntryKind, FileInfo, OpenMode, UserChosenPath};
+pub use super::access_types::{
+    CreateMode, DirEntry, EntryKind, FileInfo, OpenMode, UserChosenPath,
+};
 
 pub(super) use super::access_build::canonicalize_root;
 use super::access_build::SessionTemp;
@@ -90,7 +92,6 @@ impl FsAccess {
         &self.roots
     }
 
-
     /// Whether this instance resolves symbolic links (FSA-FR-17 / FSA-FR-27).
     pub fn follows_symlinks(&self) -> bool {
         self.follow_symlinks
@@ -120,9 +121,7 @@ impl FsAccess {
                 Component::ParentDir => {
                     // Never pop the root itself; `/..` is `/` on every platform
                     // this targets.
-                    let poppable = out
-                        .last()
-                        .is_some_and(|c| matches!(c, Component::Normal(_)));
+                    let poppable = out.last().is_some_and(|c| matches!(c, Component::Normal(_)));
                     if poppable {
                         out.pop();
                     }
@@ -145,9 +144,7 @@ impl FsAccess {
             .find(|r| path.starts_with(r))
             .or_else(|| self.file_grants.iter().find(|g| path == g.as_path()))
             .map(|r| r.as_path())
-            .ok_or_else(|| FsError::EscapesAllowedRoots {
-                path: path.to_path_buf(),
-            })
+            .ok_or_else(|| FsError::EscapesAllowedRoots { path: path.to_path_buf() })
     }
 
     /// Absolute-path requirement (FSA-FR-19) plus normalisation plus
@@ -155,9 +152,7 @@ impl FsAccess {
     /// here has touched nothing.
     pub(super) fn contain(&self, path: &Path) -> FsResult<PathBuf> {
         if !path.is_absolute() {
-            return Err(FsError::RelativePath {
-                path: path.to_path_buf(),
-            });
+            return Err(FsError::RelativePath { path: path.to_path_buf() });
         }
         let normalized = Self::normalize(path);
         self.root_for(&normalized)?;
@@ -230,9 +225,9 @@ impl FsAccess {
         }
         let grant = self.root_for(path)?;
         match fs::symlink_metadata(grant) {
-            Ok(meta) if meta.file_type().is_symlink() => Err(FsError::SymlinkRefused {
-                path: grant.to_path_buf(),
-            }),
+            Ok(meta) if meta.file_type().is_symlink() => {
+                Err(FsError::SymlinkRefused { path: grant.to_path_buf() })
+            }
             // A grant that is gone reports its own missing error on its own terms.
             Ok(_) | Err(_) => Ok(()),
         }
@@ -250,10 +245,8 @@ impl FsAccess {
     /// from turning a previously-accepted path into an escape.
     pub(super) fn refuse_links(&self, path: &Path, allow_leaf_link: bool) -> FsResult<()> {
         let root = self.root_for(path)?;
-        let tail: Vec<Component> = path
-            .strip_prefix(root)
-            .map(|t| t.components().collect())
-            .unwrap_or_default();
+        let tail: Vec<Component> =
+            path.strip_prefix(root).map(|t| t.components().collect()).unwrap_or_default();
         let last = tail.len().saturating_sub(1);
         let mut probe = root.to_path_buf();
         for (i, component) in tail.iter().enumerate() {
@@ -288,10 +281,8 @@ impl FsAccess {
 
         'restart: loop {
             let root = self.root_for(&current)?.to_path_buf();
-            let tail: Vec<Component> = current
-                .strip_prefix(&root)
-                .map(|t| t.components().collect())
-                .unwrap_or_default();
+            let tail: Vec<Component> =
+                current.strip_prefix(&root).map(|t| t.components().collect()).unwrap_or_default();
             let mut probe = root;
             for (i, component) in tail.iter().enumerate() {
                 probe.push(component);
@@ -311,10 +302,7 @@ impl FsAccess {
                 let joined = if target.is_absolute() {
                     target
                 } else {
-                    probe
-                        .parent()
-                        .map(|p| p.join(&target))
-                        .unwrap_or(target)
+                    probe.parent().map(|p| p.join(&target)).unwrap_or(target)
                 };
                 let resolved = Self::normalize(&joined);
                 // Every hop is validated, not just the last one.
@@ -515,11 +503,7 @@ impl FsAccess {
             }
             Err(e) => return Err(FsError::Io(e)),
         };
-        Ok(FileHandle {
-            file,
-            mode,
-            _instance: PhantomData,
-        })
+        Ok(FileHandle { file, mode, _instance: PhantomData })
     }
 
     // -----------------------------------------------------------------------
@@ -663,9 +647,7 @@ impl FsAccess {
     pub fn rename_path(&self, path: impl AsRef<Path>, new_name: &str) -> FsResult<()> {
         self.deny_write("rename_path")?;
         if !super::is_valid_basename(new_name) {
-            return Err(FsError::InvalidName {
-                name: new_name.to_string(),
-            });
+            return Err(FsError::InvalidName { name: new_name.to_string() });
         }
         let src = self.validate(path.as_ref())?;
         if fs::symlink_metadata(&src).is_err() {
@@ -721,10 +703,7 @@ impl FsAccess {
         // help. `dst == src` satisfies this too, which is the honest reading —
         // moving something onto itself is not a move.
         if dst == src || dst.starts_with(&src) {
-            return Err(FsError::InvalidDestination {
-                source: src,
-                dest: dst,
-            });
+            return Err(FsError::InvalidDestination { source: src, dest: dst });
         }
         if fs::symlink_metadata(&dst).is_ok() {
             return Err(FsError::AlreadyExists { path: dst });
@@ -779,10 +758,7 @@ impl FsAccess {
         if meta.is_dir() && dst.starts_with(&src) {
             return Err(FsError::Io(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!(
-                    "cannot copy directory {} into itself or a descendant",
-                    src.display()
-                ),
+                format!("cannot copy directory {} into itself or a descendant", src.display()),
             )));
         }
         if meta.is_dir() {
@@ -874,9 +850,7 @@ impl FsAccess {
             // what is checked — and the leaf is what a write would land on.
             if let Ok(meta) = fs::symlink_metadata(target) {
                 if meta.file_type().is_symlink() {
-                    return Err(FsError::SymlinkRefused {
-                        path: target.to_path_buf(),
-                    });
+                    return Err(FsError::SymlinkRefused { path: target.to_path_buf() });
                 }
             }
         }
@@ -884,11 +858,7 @@ impl FsAccess {
     }
 
     /// FSA-FR-28: the UTF-8 text form of [`Self::write_bytes_at_user_choice`].
-    pub fn write_text_at_user_choice(
-        &self,
-        chosen: &UserChosenPath,
-        text: &str,
-    ) -> FsResult<()> {
+    pub fn write_text_at_user_choice(&self, chosen: &UserChosenPath, text: &str) -> FsResult<()> {
         self.write_bytes_at_user_choice(chosen, text.as_bytes())
     }
 }

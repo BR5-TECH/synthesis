@@ -30,17 +30,12 @@ fn records_name_the_arguments_and_nothing_returned() {
     fixture.select(SourceKind::Folder, "refs");
     let id = fixture.id_of("refs/secret-name.md");
     let tool = SearchDocumentsTool::with_buffer(fixture.fixture.handle(), &SDT_BUFFER);
-    let output = block_on(tool.call(SearchDocumentsArgs {
-        query: "platypus venom".into(),
-        limit: Some(3),
-    }))
-    .unwrap();
+    let output =
+        block_on(tool.call(SearchDocumentsArgs { query: "platypus venom".into(), limit: Some(3) }))
+            .unwrap();
     assert_eq!(output.documents.len(), 1);
-    let _ = block_on(tool.call(SearchDocumentsArgs {
-        query: " ".into(),
-        limit: None,
-    }))
-    .unwrap_err();
+    let _ =
+        block_on(tool.call(SearchDocumentsArgs { query: " ".into(), limit: None })).unwrap_err();
 
     let ai = records_of(&SDT_BUFFER, Domain::Ai);
     assert_eq!(ai.len(), 2);
@@ -73,17 +68,10 @@ fn a_long_query_is_bounded_in_the_record() {
     fixture.select(SourceKind::Folder, "refs");
     let query = "w\u{f6}mbat ".repeat(3000);
     let tool = SearchDocumentsTool::with_buffer(fixture.fixture.handle(), &SDT_BOUND_BUFFER);
-    block_on(tool.call(SearchDocumentsArgs {
-        query: query.clone(),
-        limit: None,
-    }))
-    .unwrap();
+    block_on(tool.call(SearchDocumentsArgs { query: query.clone(), limit: None })).unwrap();
     let records = records_of(&SDT_BOUND_BUFFER, Domain::Ai);
     let logged = records[0].fields["query"].as_str().unwrap();
     assert_eq!(logged.chars().count(), 512 + 1);
     assert!(logged.ends_with('…'));
-    assert_eq!(
-        logged.trim_end_matches('…'),
-        query.chars().take(512).collect::<String>()
-    );
+    assert_eq!(logged.trim_end_matches('…'), query.chars().take(512).collect::<String>());
 }

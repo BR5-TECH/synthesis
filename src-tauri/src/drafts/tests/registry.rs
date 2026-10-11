@@ -3,7 +3,6 @@
 
 use super::*;
 
-
 #[test]
 fn draft_command_functions_are_in_scope() {
     // Compile-time references: renaming or removing a command without
@@ -38,9 +37,6 @@ fn no_registered_command_reaches_inside_a_draft() {
         "rename_draft_path",
         "delete_draft_path",
     ] {
-        assert!(
-            !crate::COMMAND_NAMES.contains(&gone),
-            "{gone} is still registered",
-        );
+        assert!(!crate::COMMAND_NAMES.contains(&gone), "{gone} is still registered",);
     }
 }

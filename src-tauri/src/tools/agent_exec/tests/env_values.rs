@@ -94,8 +94,5 @@ fn the_engine_backend_sends_only_named_variables_that_have_a_value() {
         vendor_args: vec![],
     };
     let env = secret_env(&[("NAMED", "yes"), ("NOT_NAMED", "no")]);
-    assert_eq!(
-        super::super::runtime::engine_env(&spec, &env),
-        vec!["NAMED=yes".to_string()]
-    );
+    assert_eq!(super::super::runtime::engine_env(&spec, &env), vec!["NAMED=yes".to_string()]);
 }

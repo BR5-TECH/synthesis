@@ -94,11 +94,9 @@ impl std::fmt::Debug for AgentLaunchCredential {
         // Which vendor's material this is, and nothing about what it holds.
         // That is the whole of what a diagnostic has any use for.
         match self {
-            Self::ClaudeEnvironment(variables) => write!(
-                f,
-                "AgentLaunchCredential::ClaudeEnvironment({} variables)",
-                variables.len()
-            ),
+            Self::ClaudeEnvironment(variables) => {
+                write!(f, "AgentLaunchCredential::ClaudeEnvironment({} variables)", variables.len())
+            }
             Self::CodexConfigMount { .. } => {
                 f.write_str("AgentLaunchCredential::CodexConfigMount(<redacted>)")
             }
@@ -138,9 +136,8 @@ pub fn resolve_agent_launch_credential(
         // AIC-FR-WNQR: the stored mode decides which credential this launch
         // reads. A registry that cannot be read is a refusal, never a quiet
         // fall back to the other mode's credential.
-        let (records, _) = store
-            .load_agentic_registry()
-            .map_err(|_| ERR_REGISTRY_UNAVAILABLE.to_string())?;
+        let (records, _) =
+            store.load_agentic_registry().map_err(|_| ERR_REGISTRY_UNAVAILABLE.to_string())?;
         let record = records
             .into_iter()
             .find(|r| r.vendor == vendor)
@@ -155,14 +152,13 @@ pub fn resolve_agent_launch_credential(
             .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
             .ok_or(ERR_TOKEN_MISSING)?;
         let credential = SecretString::new(token);
-        return Ok(AgentLaunchCredential::ClaudeEnvironment(
-            compose_launch_environment(&record, &credential)?,
-        ));
+        return Ok(AgentLaunchCredential::ClaudeEnvironment(compose_launch_environment(
+            &record,
+            &credential,
+        )?));
     }
 
-    let mount = descriptor
-        .config_mount
-        .ok_or(ERR_NOT_AN_EXECUTABLE_CLI)?;
+    let mount = descriptor.config_mount.ok_or(ERR_NOT_AN_EXECUTABLE_CLI)?;
     // The location is this module's to own (AIC-FR-30): no caller supplies it,
     // and no caller can substitute one.
     let home = ai.home.as_deref().ok_or(ERR_CODEX_CONFIG_MISSING)?;
@@ -177,4 +173,3 @@ pub fn resolve_agent_launch_credential(
         target: PathBuf::from(mount.container_target),
     })
 }
-

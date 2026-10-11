@@ -89,13 +89,13 @@ where
     // **without a position** — naming a change would name the first one
     // whatever failed, which is the very thing a caller cannot act on and the
     // reason the places are carried at all.
-    let composed =
-        hunks::apply_all(&current.body, &document).ok_or(RecordRefusal::NotRecorded)?;
+    let composed = hunks::apply_all(&current.body, &document).ok_or(RecordRefusal::NotRecorded)?;
     if current.body == drafts::normalise_for_write(root, &composed) {
         return Err(RecordRefusal::NoChange);
     }
 
-    let dir = drafts::draft_proposals_dir(root, new.draft_id).map_err(|_| RecordRefusal::NotRecorded)?;
+    let dir =
+        drafts::draft_proposals_dir(root, new.draft_id).map_err(|_| RecordRefusal::NotRecorded)?;
     let id = new_note_id();
     let now = now_rfc3339();
 
@@ -236,9 +236,7 @@ pub(crate) fn draft_lock(draft_id: &str) -> std::sync::MutexGuard<'static, ()> {
     let locks = LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
     let mutex = {
         let mut guard = locks.lock().unwrap_or_else(|e| e.into_inner());
-        *guard
-            .entry(draft_id.to_string())
-            .or_insert_with(|| Box::leak(Box::new(Mutex::new(()))))
+        *guard.entry(draft_id.to_string()).or_insert_with(|| Box::leak(Box::new(Mutex::new(()))))
     };
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -246,5 +244,3 @@ pub(crate) fn draft_lock(draft_id: &str) -> std::sync::MutexGuard<'static, ()> {
 // ---------------------------------------------------------------------------
 // Deciding (DCP-FR-11 through DCP-FR-15)
 // ---------------------------------------------------------------------------
-
-

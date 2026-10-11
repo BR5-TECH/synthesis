@@ -13,7 +13,8 @@ const GATEWAY_URL: &str = "https://llm-gateway.example.com/bedrock";
 fn no_binary_harness() -> (Harness, Arc<FakeRunner>, Arc<FakeProber>) {
     let runner = FakeRunner::saying("/usr/bin/claude", "claude 2.1.4");
     let prober = FakeProber::failing(ProbeError::Unreachable("must not be asked".into()));
-    let h = harness(FakeFs::with_executable(&[]), runner.clone(), prober.clone(), FakeKeychain::new());
+    let h =
+        harness(FakeFs::with_executable(&[]), runner.clone(), prober.clone(), FakeKeychain::new());
     (h, runner, prober)
 }
 
@@ -44,10 +45,7 @@ fn environment_of(h: &Harness) -> Vec<LaunchVariable> {
 
 /// The name, value, and masked flag of each variable, in order.
 fn described(variables: &[LaunchVariable]) -> Vec<(String, String, bool)> {
-    variables
-        .iter()
-        .map(|v| (v.name.clone(), v.value.expose().to_string(), v.masked))
-        .collect()
+    variables.iter().map(|v| (v.name.clone(), v.value.expose().to_string(), v.masked)).collect()
 }
 
 // AIC-FR-QHLN, AIC-FR-UFNB, AIC-FR-YXAB: a gateway verifies on a machine with no
@@ -134,7 +132,12 @@ fn an_older_payload_verifies_as_a_bedrock_gateway() {
     let names: Vec<String> = environment_of(&h).into_iter().map(|v| v.name.clone()).collect();
     assert_eq!(
         names,
-        vec!["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_SKIP_BEDROCK_AUTH", "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_AUTH_TOKEN"]
+        vec![
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
+            "ANTHROPIC_BEDROCK_BASE_URL",
+            "ANTHROPIC_AUTH_TOKEN"
+        ]
     );
 }
 
@@ -153,7 +156,12 @@ fn an_older_registry_record_launches_the_bedrock_variables() {
     let names: Vec<String> = environment_of(&h).into_iter().map(|v| v.name.clone()).collect();
     assert_eq!(
         names,
-        vec!["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_SKIP_BEDROCK_AUTH", "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_AUTH_TOKEN"]
+        vec![
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
+            "ANTHROPIC_BEDROCK_BASE_URL",
+            "ANTHROPIC_AUTH_TOKEN"
+        ]
     );
 }
 
@@ -235,7 +243,8 @@ fn an_author_entry_follows_and_replaces_a_bedrock_variable() {
     let (h, _, _) = no_binary_harness();
     let mut config = gateway_config(Some(GATEWAY_TOKEN));
     config.gateway_token_var = Some("GATEWAY_KEY".into());
-    config.env_vars = Some(vec!["CLAUDE_CODE_SKIP_BEDROCK_AUTH=0".into(), "AWS_REGION=eu-west-1".into()]);
+    config.env_vars =
+        Some(vec!["CLAUDE_CODE_SKIP_BEDROCK_AUTH=0".into(), "AWS_REGION=eu-west-1".into()]);
     verify(&h, &config).unwrap();
 
     assert_eq!(

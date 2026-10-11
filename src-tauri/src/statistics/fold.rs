@@ -225,11 +225,7 @@ pub fn fold_log(draft_id: &str, text: &str) -> DraftStatistics {
         };
         match &event.body {
             EventBody::TelemetryActivated => {}
-            EventBody::EditingInterval {
-                interval_id,
-                started_at,
-                ended_at,
-            } => {
+            EventBody::EditingInterval { interval_id, started_at, ended_at } => {
                 let Some(span) = clipped(started_at, ended_at, boundary_ms) else {
                     // A required field the fold could not read is damage of the
                     // same kind an unreadable line is, and reaches the same one
@@ -245,11 +241,7 @@ pub fn fold_log(draft_id: &str, text: &str) -> DraftStatistics {
                 acc.editing_ms += span;
             }
             EventBody::ConversationTurn {
-                turn_id,
-                reached_model,
-                started_at,
-                ended_at,
-                ..
+                turn_id, reached_model, started_at, ended_at, ..
             } => {
                 let Some(span) = clipped(started_at, ended_at, boundary_ms) else {
                     damage.turn = true;
@@ -268,13 +260,7 @@ pub fn fold_log(draft_id: &str, text: &str) -> DraftStatistics {
                     acc.refinement_ms += span;
                 }
             }
-            EventBody::AgentOperation {
-                operation_id,
-                bucket,
-                started_at,
-                ended_at,
-                ..
-            } => {
+            EventBody::AgentOperation { operation_id, bucket, started_at, ended_at, .. } => {
                 let Some(span) = clipped(started_at, ended_at, boundary_ms) else {
                     damage.operations.insert(*bucket);
                     continue;
@@ -328,10 +314,7 @@ pub fn fold_log(draft_id: &str, text: &str) -> DraftStatistics {
                 acc.saw_history = true;
                 acc.history_entries += 1;
             }
-            EventBody::ProposalDecision {
-                proposal_id,
-                decision,
-            } => {
+            EventBody::ProposalDecision { proposal_id, decision } => {
                 if !in_scope(&event.at, boundary_ms) {
                     continue;
                 }
@@ -396,11 +379,9 @@ fn totals_of(acc: &Accumulator, damage: &Damage) -> DraftStatisticsTotals {
         rejected_proposals: Measure::of(acc.rejected, state(acc.saw_proposal, damage.proposal())),
         // DSS-FR-UBLC: the conversation-scoped records read a second way, which
         // the `debug_assert!` above keeps identical to the Refinement bucket.
-        conversation_tokens: token_pair(
-            acc,
-            damage.usage(Bucket::Refinement),
-            |line| line.scope == UsageScope::Conversation,
-        ),
+        conversation_tokens: token_pair(acc, damage.usage(Bucket::Refinement), |line| {
+            line.scope == UsageScope::Conversation
+        }),
         agent_time_ms: bucket_times(acc, damage),
         agent_tokens: bucket_tokens(acc, damage),
     }
@@ -440,17 +421,11 @@ fn bucket_times(acc: &Accumulator, damage: &Damage) -> BucketTimes {
 /// is a partial sum, and the author reads the bucket's own stated absence beside
 /// it.
 fn sum_of_buckets(each: &[Measure; 6]) -> Measure {
-    if each
-        .iter()
-        .all(|m| m.availability == Availability::Unavailable)
-    {
+    if each.iter().all(|m| m.availability == Availability::Unavailable) {
         return Measure::unavailable();
     }
     let sum = each.iter().filter_map(|m| m.value).sum();
-    if each
-        .iter()
-        .all(|m| m.availability == Availability::Available)
-    {
+    if each.iter().all(|m| m.availability == Availability::Available) {
         Measure::of(sum, Availability::Available)
     } else {
         Measure::of(sum, Availability::Incomplete)
@@ -458,8 +433,8 @@ fn sum_of_buckets(each: &[Measure; 6]) -> Measure {
 }
 
 fn bucket_tokens(acc: &Accumulator, damage: &Damage) -> BucketTokens {
-    let each =
-        Bucket::ORDER.map(|bucket| token_pair(acc, damage.usage(bucket), move |line| line.bucket == bucket));
+    let each = Bucket::ORDER
+        .map(|bucket| token_pair(acc, damage.usage(bucket), move |line| line.bucket == bucket));
     BucketTokens {
         refinement: each[0],
         authoring: each[1],

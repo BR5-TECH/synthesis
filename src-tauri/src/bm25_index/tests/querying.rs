@@ -117,30 +117,18 @@ fn equal_scores_order_identically_across_repeated_queries() {
 #[test]
 fn a_created_file_enters_its_index_and_a_deleted_one_leaves_it() {
     // BMI-FR-15.
-    let start = pass(
-        &IndexSet::default(),
-        vec![artifact(IndexId::Spec, "a.md", "alpha")],
-        PassScope::ALL,
-    );
+    let start =
+        pass(&IndexSet::default(), vec![artifact(IndexId::Spec, "a.md", "alpha")], PassScope::ALL);
     let created = pass(
         &start,
-        vec![
-            artifact(IndexId::Spec, "a.md", "alpha"),
-            artifact(IndexId::Spec, "new.md", "bravo"),
-        ],
+        vec![artifact(IndexId::Spec, "a.md", "alpha"), artifact(IndexId::Spec, "new.md", "bravo")],
         PassScope::ARTIFACTS,
     );
-    assert_eq!(
-        created.paths(IndexId::Spec),
-        vec!["a.md".to_string(), "new.md".to_string()]
-    );
+    assert_eq!(created.paths(IndexId::Spec), vec!["a.md".to_string(), "new.md".to_string()]);
     assert!(!search_snapshot(&created, &[], "bravo", 10).is_empty());
 
-    let deleted = pass(
-        &created,
-        vec![artifact(IndexId::Spec, "a.md", "alpha")],
-        PassScope::ARTIFACTS,
-    );
+    let deleted =
+        pass(&created, vec![artifact(IndexId::Spec, "a.md", "alpha")], PassScope::ARTIFACTS);
     assert_eq!(deleted.paths(IndexId::Spec), vec!["a.md".to_string()]);
     assert!(
         search_snapshot(&deleted, &[], "bravo", 10).is_empty(),
@@ -154,22 +142,14 @@ fn a_content_edit_replaces_a_files_chunks_whole() {
     // surviving as a stale document beside the new ones.
     let before = pass(
         &IndexSet::default(),
-        vec![artifact(
-            IndexId::Spec,
-            "a.md",
-            "# One\n\nteardown\n\n# Two\n\nremovable\n",
-        )],
+        vec![artifact(IndexId::Spec, "a.md", "# One\n\nteardown\n\n# Two\n\nremovable\n")],
         PassScope::ALL,
     );
     assert!(!search_snapshot(&before, &[], "removable", 10).is_empty());
 
     let after = pass(
         &before,
-        vec![artifact(
-            IndexId::Spec,
-            "a.md",
-            "# One\n\nteardown\n\n# Two\n\nreplacement\n",
-        )],
+        vec![artifact(IndexId::Spec, "a.md", "# One\n\nteardown\n\n# Two\n\nreplacement\n")],
         PassScope::ARTIFACTS,
     );
     assert!(
@@ -244,10 +224,7 @@ fn graduation_removes_the_draft_and_indexes_the_published_files_in_one_pass() {
     // none in which it is in neither.
     let before = pass(
         &IndexSet::default(),
-        vec![
-            draft("d1", "ui/a.md", "teardown alpha"),
-            draft("d1", "ui/b.md", "teardown bravo"),
-        ],
+        vec![draft("d1", "ui/a.md", "teardown alpha"), draft("d1", "ui/b.md", "teardown bravo")],
         PassScope::ALL,
     );
     assert_eq!(before.file_count(IndexId::Drafts), 2);
@@ -261,11 +238,7 @@ fn graduation_removes_the_draft_and_indexes_the_published_files_in_one_pass() {
         ],
         PassScope::ALL,
     );
-    assert_eq!(
-        after.file_count(IndexId::Drafts),
-        0,
-        "the graduated draft leaves the drafts index"
-    );
+    assert_eq!(after.file_count(IndexId::Drafts), 0, "the graduated draft leaves the drafts index");
     assert_eq!(after.file_count(IndexId::Spec), 2);
     assert_eq!(
         hit_paths(&search_snapshot(&after, &[], "teardown", 10)),
@@ -283,10 +256,7 @@ fn a_pass_scoped_to_one_half_leaves_the_other_untouched() {
     // a tree change from disturbing the drafts index.
     let both = pass(
         &IndexSet::default(),
-        vec![
-            artifact(IndexId::Spec, "a.md", "alpha"),
-            draft("d1", "n.md", "bravo"),
-        ],
+        vec![artifact(IndexId::Spec, "a.md", "alpha"), draft("d1", "n.md", "bravo")],
         PassScope::ALL,
     );
 
@@ -297,11 +267,8 @@ fn a_pass_scoped_to_one_half_leaves_the_other_untouched() {
     assert_eq!(drafts_only.file_count(IndexId::Drafts), 1);
 
     // And the reverse.
-    let artifacts_only = pass(
-        &drafts_only,
-        vec![artifact(IndexId::Spec, "a.md", "alpha")],
-        PassScope::ARTIFACTS,
-    );
+    let artifacts_only =
+        pass(&drafts_only, vec![artifact(IndexId::Spec, "a.md", "alpha")], PassScope::ARTIFACTS);
     assert_eq!(artifacts_only.file_count(IndexId::Spec), 1);
     assert_eq!(artifacts_only.file_count(IndexId::Drafts), 1);
 }
@@ -348,11 +315,7 @@ fn an_incrementally_maintained_index_equals_one_built_from_scratch() {
     incremental = pass(&incremental, final_sources(), PassScope::ALL);
 
     for index in IndexId::ALL {
-        assert_eq!(
-            fresh.paths(index),
-            incremental.paths(index),
-            "{index:?} membership must match"
-        );
+        assert_eq!(fresh.paths(index), incremental.paths(index), "{index:?} membership must match");
         assert_eq!(fresh.chunk_count(index), incremental.chunk_count(index));
     }
     let a = search_snapshot(&fresh, &[], "teardown", 10);
@@ -399,9 +362,8 @@ fn a_pass_reports_progress_that_becomes_determinate_and_never_exceeds_its_total(
     // knows how many files it will index.
     let mut seen: Vec<u64> = Vec::new();
     let total = 4u64;
-    let sources: Vec<SourceFile> = (0..total)
-        .map(|i| artifact(IndexId::Spec, &format!("s{i}.md"), "teardown"))
-        .collect();
+    let sources: Vec<SourceFile> =
+        (0..total).map(|i| artifact(IndexId::Spec, &format!("s{i}.md"), "teardown")).collect();
     reconcile(
         &IndexSet::default(),
         sources,
@@ -412,4 +374,3 @@ fn a_pass_reports_progress_that_becomes_determinate_and_never_exceeds_its_total(
     assert_eq!(seen, vec![0, 1, 2, 3]);
     assert!(seen.iter().all(|c| *c < total));
 }
-

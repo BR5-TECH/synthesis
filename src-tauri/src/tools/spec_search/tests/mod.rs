@@ -5,8 +5,8 @@
 
 use rig::tool::{PortableTool, ToolErrorKind};
 
-use tempfile::TempDir;
 use tauri::Manager;
+use tempfile::TempDir;
 
 use super::*;
 use crate::bm25_index::Bm25Indexer;
@@ -21,7 +21,6 @@ mod limits;
 mod log_records;
 mod match_shape;
 mod refusals;
-
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -76,10 +75,7 @@ fn spec_body(topic: &str, sections: usize) -> String {
 /// A section that mentions `teardown` `weight` times, padded so the files
 /// differ in density rather than only in length.
 fn section(index: usize, weight: usize) -> String {
-    let mentions = std::iter::repeat("teardown")
-        .take(weight)
-        .collect::<Vec<_>>()
-        .join(" ");
+    let mentions = std::iter::repeat("teardown").take(weight).collect::<Vec<_>>().join(" ");
     format!("\n## Section {index}\n\nThis section covers {mentions} and related matters.\n")
 }
 
@@ -111,12 +107,6 @@ fn spec_project() -> Fixture {
 
 fn query(fixture: &Fixture, text: &str, limit: Option<i64>) -> SpecificationSearchOutput {
     let indexer = fixture.app.state::<Bm25Indexer>();
-    search(
-        &indexer,
-        &SpecificationSearchArgs {
-            query: text.to_string(),
-            limit,
-        },
-    )
-    .expect("the query succeeds")
+    search(&indexer, &SpecificationSearchArgs { query: text.to_string(), limit })
+        .expect("the query succeeds")
 }

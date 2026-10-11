@@ -15,7 +15,6 @@
 //! durable state that survives a relaunch and keeps blocking the project's
 //! queue.
 
-
 use serde::{Deserialize, Serialize};
 
 use super::ToolRefusal;
@@ -32,13 +31,6 @@ pub const NAME: &str = "escalate_to_user";
 /// ESU-FR-19: the fixed text the model reads, compiled into the binary.
 pub const DESCRIPTION: &str = "Stop and ask the person who started this graduation what you cannot answer yourself. Use this when deciding whether the work is finished turns on something only they know — which of two readings of their prompt they meant, whether a change they did not ask for is wanted, whether a gap you found should be filled here or left. The run pauses where it stands and waits, however long that takes, so ask everything you are stuck on in this one call rather than stopping the run again later. Ask between one and eight questions, each a single clear thing rather than three things in one sentence, and say enough about what you found that they can answer without opening anything. Give each question up to three concrete responses where you can see them, and none where no fixed choice fits; each response carries the answer itself, a label of at most five words, and a line of at most two sentences and twelve words saying what choosing it means. They may always answer in their own words instead. Do not use it to report progress, to explain what you did, or to ask something you could settle by reading a file. Calling it ends your turn: nothing else you asked for in the same reply is done, and no verdict you give alongside it is read.";
 
-
-
-
-
-
-
-
 /// ESU-FR-11: the named limits. Each exists because the recorded escalation is
 /// persisted in the run's checkpoint, rendered in the run surface, and travels
 /// back to the execution agent inside a structured input already bounded by
@@ -49,7 +41,8 @@ pub const DESCRIPTION: &str = "Stop and ask the person who started this graduati
 /// refused at here is the bound it would be refused at there.
 pub use crate::tools::agent_exec::protocol::{
     LIMIT_ESCALATION_QUESTION as QUESTION_LIMIT, LIMIT_ESCALATION_REASON as REASON_LIMIT,
-    LIMIT_OPTION_ANSWER as OPTION_ANSWER_LIMIT, LIMIT_OPTION_DESCRIPTION as OPTION_DESCRIPTION_LIMIT,
+    LIMIT_OPTION_ANSWER as OPTION_ANSWER_LIMIT,
+    LIMIT_OPTION_DESCRIPTION as OPTION_DESCRIPTION_LIMIT,
     LIMIT_OPTION_SUMMARY as OPTION_SUMMARY_LIMIT, MAX_ESCALATION_QUESTIONS as MAX_QUESTIONS,
     MAX_QUESTION_OPTIONS as MAX_OPTIONS, MIN_ESCALATION_QUESTIONS as MIN_QUESTIONS,
 };
@@ -110,7 +103,6 @@ pub struct EscalateToUserArgs {
 pub struct Escalated {
     pub escalated: bool,
 }
-
 
 // ---------------------------------------------------------------------------
 // Validation (ESU-FR-10, ESU-FR-11, ESU-FR-16)

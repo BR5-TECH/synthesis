@@ -49,10 +49,7 @@ fn no_part_of_this_module_is_reachable_from_the_frontend() {
         !code.contains("#[tauri::command]"),
         "BMI-FR-01: this module registers no Tauri command",
     );
-    assert!(
-        !code.contains(".emit("),
-        "BMI-FR-01: this module emits no Tauri event of its own",
-    );
+    assert!(!code.contains(".emit("), "BMI-FR-01: this module emits no Tauri event of its own",);
 }
 
 // ---------------------------------------------------------------------------
@@ -147,18 +144,9 @@ fn drafts_of_either_status_are_indexed_and_only_in_the_drafts_index() {
     assert_eq!(hits.len(), 2);
     let mut ids: Vec<Option<String>> = hits.iter().map(|h| h.draft_id.clone()).collect();
     ids.sort();
-    assert_eq!(
-        ids,
-        vec![
-            Some("d-active".to_string()),
-            Some("d-archived".to_string())
-        ],
-    );
+    assert_eq!(ids, vec![Some("d-active".to_string()), Some("d-archived".to_string())],);
     for hit in &hits {
-        assert!(
-            hit.node_id.is_none(),
-            "a draft chunk has no scan node, so it carries no node id"
-        );
+        assert!(hit.node_id.is_none(), "a draft chunk has no scan node, so it carries no node id");
     }
     for index in IndexId::ALL {
         if index != IndexId::Drafts {
@@ -234,10 +222,7 @@ fn a_heading_less_file_splits_into_bounded_blocks_at_blank_lines() {
     // BMI-FR-06: no file is ever one unbounded document, and a boundary falls
     // at a blank line.
     let paragraph = "lorem ipsum dolor sit amet ".repeat(40); // ~1080 chars
-    let text = std::iter::repeat(paragraph.trim())
-        .take(12)
-        .collect::<Vec<_>>()
-        .join("\n\n");
+    let text = std::iter::repeat(paragraph.trim()).take(12).collect::<Vec<_>>().join("\n\n");
     assert!(text.chars().count() > MAX_CHUNK_CHARS * 2);
 
     let chunks = chunk_text(&text);
@@ -262,10 +247,7 @@ fn one_heading_section_over_the_ceiling_is_split_further() {
     // through the hard-split fallback — those are two different code paths and
     // BMI-FR-06 names this one.
     let paragraph = "lorem ipsum dolor sit amet consectetur ".repeat(20);
-    let body = std::iter::repeat(paragraph.trim())
-        .take(15)
-        .collect::<Vec<_>>()
-        .join("\n\n");
+    let body = std::iter::repeat(paragraph.trim()).take(15).collect::<Vec<_>>().join("\n\n");
     let text = format!("# Title\n\n{body}");
     assert!(text.chars().count() > MAX_CHUNK_CHARS);
     let chunks = chunk_text(&text);
@@ -304,11 +286,7 @@ fn a_whitespace_only_chunk_is_dropped_and_ordinals_stay_contiguous() {
     // whitespace-only section *under* a heading is not whitespace-only — it
     // still carries the heading line — so it would prove nothing here.)
     let chunks = chunk_text("\n   \n\n# One\n\nalpha\n\n# Two\n\nbravo\n");
-    assert_eq!(
-        chunks.len(),
-        2,
-        "the empty preamble contributes no chunk: {chunks:#?}"
-    );
+    assert_eq!(chunks.len(), 2, "the empty preamble contributes no chunk: {chunks:#?}");
     assert!(chunks[0].starts_with("# One"));
     assert!(chunks[1].starts_with("# Two"));
 
@@ -351,11 +329,8 @@ fn a_files_language_is_detected_once_and_governs_every_chunk_of_it() {
     // as the document it came from rather than guessed at on its own.
     assert_eq!(detect_file_language(GERMAN), Language::German);
 
-    let set = pass(
-        &IndexSet::default(),
-        vec![artifact(IndexId::Spec, "de.md", GERMAN)],
-        PassScope::ALL,
-    );
+    let set =
+        pass(&IndexSet::default(), vec![artifact(IndexId::Spec, "de.md", GERMAN)], PassScope::ALL);
     assert_eq!(
         set.language_of(IndexId::Spec, "de.md"),
         Some(Language::German),
@@ -448,10 +423,7 @@ fn an_unreadable_file_is_skipped_with_a_reason_and_the_pass_completes() {
         |_, file, reason| skipped.push((file.path.clone(), reason.to_string())),
         |_| {},
     );
-    assert_eq!(
-        skipped,
-        vec![("binary.md".to_string(), "not valid UTF-8 text".to_string())]
-    );
+    assert_eq!(skipped, vec![("binary.md".to_string(), "not valid UTF-8 text".to_string())]);
     assert_eq!(stats.files_skipped, 1);
     assert_eq!(stats.files_indexed, 1);
     assert_eq!(set.paths(IndexId::Spec), vec!["good.md".to_string()]);
@@ -476,4 +448,3 @@ fn a_file_that_becomes_unreadable_leaves_the_index() {
     assert_eq!(second.file_count(IndexId::Spec), 0);
     assert!(search_snapshot(&second, &[], "teardown", 10).is_empty());
 }
-

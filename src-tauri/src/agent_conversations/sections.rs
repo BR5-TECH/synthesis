@@ -23,13 +23,7 @@ pub(super) fn bounded(body: String) -> (String, bool) {
 
 pub(super) fn section(tag: &str, attributes: Vec<(String, String)>, body: String) -> InputSection {
     let (body, truncated) = bounded(body);
-    InputSection {
-        tag: tag.to_string(),
-        attributes,
-        body,
-        truncated,
-        parts: Vec::new(),
-    }
+    InputSection { tag: tag.to_string(), attributes, body, truncated, parts: Vec::new() }
 }
 
 /// AGC-FR-35: a section built from **ordered parts**, one of which may be an
@@ -101,9 +95,7 @@ pub(super) fn section_of_parts(
 /// display name the log stamped, `Me` where it carries none.
 pub(super) fn handle_of(participant: &Participant) -> &str {
     match participant {
-        Participant::Human {
-            login, display_name, ..
-        } if login.is_empty() => display_name
+        Participant::Human { login, display_name, .. } if login.is_empty() => display_name
             .as_deref()
             .filter(|name| !name.is_empty())
             .unwrap_or(comments::LOCAL_PARTICIPANT_NAME),
@@ -120,16 +112,10 @@ pub(super) fn handle_of(participant: &Participant) -> &str {
 /// much the conversation is carrying.
 fn attachment_line(attachment: &comments::Attachment, digests: &ProposalDigests) -> String {
     match attachment {
-        comments::Attachment::Blob {
-            filename,
-            media_type,
-            ..
-        } => format!("[attachment: {filename} ({media_type}), not shown]"),
-        comments::Attachment::Url {
-            url,
-            media_type,
-            label,
-        } => {
+        comments::Attachment::Blob { filename, media_type, .. } => {
+            format!("[attachment: {filename} ({media_type}), not shown]")
+        }
+        comments::Attachment::Url { url, media_type, label } => {
             let name = label.as_deref().filter(|l| !l.is_empty()).unwrap_or(url);
             format!("[attachment: {name} ({media_type}), not shown]")
         }
@@ -141,12 +127,12 @@ fn attachment_line(attachment: &comments::Attachment, digests: &ProposalDigests)
         // `current_comment` attachment, a draft that no longer resolves — keeps
         // the bare line, the file as it now stands being in the `artifact`
         // section (AGC-FR-07).
-        comments::Attachment::Proposal {
-            path, proposal_id, ..
-        } => match digests.get(proposal_id.as_str()) {
-            Some(digest) => proposal_digest_line(path, digest),
-            None => format!("[proposed a new version of {path}]"),
-        },
+        comments::Attachment::Proposal { path, proposal_id, .. } => {
+            match digests.get(proposal_id.as_str()) {
+                Some(digest) => proposal_digest_line(path, digest),
+                None => format!("[proposed a new version of {path}]"),
+            }
+        }
         // CMS-FR-66: the same line for a rewrite offered against a prompt the
         // project holds. The two references name different stores and read
         // identically here, for the reason above: what an agent needs is that a
@@ -206,12 +192,7 @@ fn proposal_digests(roots: Roots<'_>, thread: &comments::Discussion) -> Proposal
     let mut referenced: Vec<(&str, &str)> = Vec::new();
     for comment in &thread.comments {
         for attachment in &comment.attachments {
-            if let comments::Attachment::Proposal {
-                draft_id,
-                proposal_id,
-                ..
-            } = attachment
-            {
+            if let comments::Attachment::Proposal { draft_id, proposal_id, .. } = attachment {
                 if !referenced.iter().any(|(_, id)| *id == proposal_id.as_str()) {
                     referenced.push((draft_id, proposal_id));
                 }
@@ -280,9 +261,8 @@ pub(super) fn proposal_digest_line(path: &str, digest: &ProposalDigest) -> Strin
         let state = match change.state {
             crate::draft_proposals::hunks::HunkState::Accepted => "accepted",
             crate::draft_proposals::hunks::HunkState::Rejected => "rejected",
-            crate::draft_proposals::hunks::HunkState::Pending | crate::draft_proposals::hunks::HunkState::Discussing => {
-                "undecided"
-            }
+            crate::draft_proposals::hunks::HunkState::Pending
+            | crate::draft_proposals::hunks::HunkState::Discussing => "undecided",
         };
         line.push_str(&format!("\n  {}. {kind} — {state}", position + 1));
         if !change.before.is_empty() {
@@ -348,7 +328,6 @@ pub(super) fn quote_line(quote: &comments::CommentQuote, handle: Option<&str>) -
     }
 }
 
-
 /// The text a comment contributes when nothing about it is an image — the
 /// rendering [`comment_parts`] produces for a section holding no picture.
 ///
@@ -358,10 +337,7 @@ pub(super) fn quote_line(quote: &comments::CommentQuote, handle: Option<&str>) -
 pub(super) fn comment_text(comment: &comments::Comment, handles: &HashMap<&str, &str>) -> String {
     let mut out = format!("@{}:\n", handle_of(&comment.author));
     for quote in &comment.quotes {
-        out.push_str(&quote_line(
-            quote,
-            handles.get(quote.comment_id.as_str()).copied(),
-        ));
+        out.push_str(&quote_line(quote, handles.get(quote.comment_id.as_str()).copied()));
         out.push('\n');
     }
     out.push_str(&strip_citation_markers(&comment.body));
@@ -391,10 +367,7 @@ fn comment_parts(
 ) -> Vec<InputPart> {
     let mut prose = format!("@{}:\n", handle_of(&comment.author));
     for quote in &comment.quotes {
-        prose.push_str(&quote_line(
-            quote,
-            handles.get(quote.comment_id.as_str()).copied(),
-        ));
+        prose.push_str(&quote_line(quote, handles.get(quote.comment_id.as_str()).copied()));
         prose.push('\n');
     }
     // AGC-FR-INFL: a body goes back to the model without the citation markers
@@ -427,13 +400,7 @@ fn attachment_image(
     attachment: &comments::Attachment,
     metadata: &str,
 ) -> Option<InputImage> {
-    let comments::Attachment::Blob {
-        digest,
-        media_type,
-        filename,
-        ..
-    } = attachment
-    else {
+    let comments::Attachment::Blob { digest, media_type, filename, .. } = attachment else {
         return None;
     };
     if !media_type.split(';').next()?.trim().to_ascii_lowercase().starts_with("image/") {
@@ -692,7 +659,5 @@ pub(super) fn draft_file_type(
 /// cannot reach a model with a question and nothing else by simply omitting a
 /// section.
 pub(super) fn has_material(input: &[InputSection]) -> bool {
-    input
-        .iter()
-        .any(|s| s.tag == TAG_ARTIFACT || s.tag == TAG_DISCUSSION_HISTORY)
+    input.iter().any(|s| s.tag == TAG_ARTIFACT || s.tag == TAG_DISCUSSION_HISTORY)
 }

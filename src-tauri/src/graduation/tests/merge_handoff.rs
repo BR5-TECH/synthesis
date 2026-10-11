@@ -13,16 +13,13 @@ pub(super) fn commit_file(repo: &git2::Repository, path: &str, content: &str, me
     let workdir = repo.workdir().expect("a working copy").to_path_buf();
     std::fs::write(workdir.join(path), content).unwrap();
     let mut index = repo.index().expect("index");
-    index
-        .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-        .expect("add");
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).expect("add");
     index.update_all(["*"].iter(), None).expect("update");
     index.write().expect("write");
     let tree = repo.find_tree(index.write_tree().expect("tree")).expect("tree");
     let signature = repo.signature().expect("signature");
     let head = repo.head().unwrap().peel_to_commit().unwrap();
-    repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[&head])
-        .expect("commit");
+    repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[&head]).expect("commit");
 }
 
 /// A stream and a base branch in conflict over three paths, with one clean
@@ -80,10 +77,8 @@ pub(super) fn live(fx: &Fixture, stream: &crate::streams::WorkStream) -> Live {
         if name.starts_with("refs/synthesis/") || name.contains("merge-run") {
             continue;
         }
-        let target = reference
-            .peel_to_commit()
-            .map(|commit| commit.id().to_string())
-            .unwrap_or_default();
+        let target =
+            reference.peel_to_commit().map(|commit| commit.id().to_string()).unwrap_or_default();
         refs.insert(name, target);
     }
     let stream_repo = git2::Repository::open(stream.worktree()).expect("stream repo");
@@ -124,10 +119,7 @@ pub(super) fn handed_off(
     publication: StreamMergePublication,
 ) -> (String, Vec<String>) {
     match request(fx, stream, publication).expect("the check settled") {
-        StreamMergeResult::Conflicted {
-            run_id,
-            conflicted_paths,
-        } => (run_id, conflicted_paths),
+        StreamMergeResult::Conflicted { run_id, conflicted_paths } => (run_id, conflicted_paths),
         other => panic!("expected a handoff, got {other:?}"),
     }
 }
@@ -139,9 +131,7 @@ pub(super) fn index_entries(fx: &Fixture) -> Vec<QueueIndexEntry> {
 }
 
 pub(super) fn snapshot_ref_stands(fx: &Fixture, run_id: &str) -> bool {
-    fx.repo()
-        .find_reference(&format!("refs/synthesis/merge/{run_id}"))
-        .is_ok()
+    fx.repo().find_reference(&format!("refs/synthesis/merge/{run_id}")).is_ok()
 }
 
 pub(super) fn registered(fx: &Fixture, name: &str) -> bool {
@@ -170,10 +160,7 @@ fn a_conflict_hands_off_and_leaves_both_branches_and_working_copies_as_they_were
     assert!(snapshot_ref_stands(&fx, &run_id));
     assert!(!registered(&fx, &format!("{run_id}-mw")), "no merge worktree yet");
     assert!(!crate::graduation::store_base(&fx.app).unwrap().merge_worktree(&run_id).exists());
-    assert!(
-        !fx.state_of_stream_is_busy(&stream),
-        "the handoff claims nothing: a dispatch does"
-    );
+    assert!(!fx.state_of_stream_is_busy(&stream), "the handoff claims nothing: a dispatch does");
 }
 
 impl Fixture {
@@ -197,13 +184,8 @@ fn the_handoff_creates_one_queued_merge_run_with_the_whole_merge_data() {
     let base_tip = tip(&repo, &stream.base_branch);
     let stream_tip = tip(&repo, &stream.branch);
 
-    let (run_id, _) = handed_off(
-        &fx,
-        &stream,
-        StreamMergePublication::Commit {
-            message: "Land feature".into(),
-        },
-    );
+    let (run_id, _) =
+        handed_off(&fx, &stream, StreamMergePublication::Commit { message: "Land feature".into() });
     let run = fx.reload(&run_id);
 
     assert_eq!(run.state, GraduationRunState::Queued);
@@ -217,12 +199,7 @@ fn the_handoff_creates_one_queued_merge_run_with_the_whole_merge_data() {
     assert_eq!(data.base_tip, base_tip.to_string());
     assert_eq!(data.stream_tip, stream_tip.to_string());
     assert_eq!(data.merge_base, repo.merge_base(base_tip, stream_tip).unwrap().to_string());
-    assert_eq!(
-        data.publication,
-        StreamMergePublication::Commit {
-            message: "Land feature".into()
-        }
-    );
+    assert_eq!(data.publication, StreamMergePublication::Commit { message: "Land feature".into() });
     // The Git-clean path is a changed path and an unresolved one is both.
     assert_eq!(
         data.changed_paths,
@@ -285,11 +262,16 @@ fn the_snapshot_the_run_names_has_two_parents_and_markers_where_git_stopped() {
         Some(String::from_utf8_lossy(blob.content()).into_owned())
     };
     let readme = blob("README.md").expect("README.md");
-    assert!(readme.contains("<<<<<<< ") && readme.contains("||||||| ") && readme.contains(">>>>>>> "));
+    assert!(
+        readme.contains("<<<<<<< ") && readme.contains("||||||| ") && readme.contains(">>>>>>> ")
+    );
     assert!(readme.contains("base side") && readme.contains("stream side"));
     // A delete-against-modify path is a marked file naming the deleted side.
     let gone = blob("gone.txt").expect("gone.txt");
-    assert!(gone.contains("<<<<<<< ") && gone.contains("(this path was deleted on this side)"), "{gone}");
+    assert!(
+        gone.contains("<<<<<<< ") && gone.contains("(this path was deleted on this side)"),
+        "{gone}"
+    );
     assert!(gone.contains("changed by the base"), "{gone}");
     // An add/add path is marked with both contents.
     let both = blob("both-new.txt").expect("both-new.txt");
@@ -298,9 +280,7 @@ fn the_snapshot_the_run_names_has_two_parents_and_markers_where_git_stopped() {
     assert_eq!(blob("stream-only.txt").as_deref(), Some("kept\n"));
     assert_eq!(blob("base-only.txt").as_deref(), Some("from the base\n"));
     assert_eq!(
-        repo.find_reference(&format!("refs/synthesis/merge/{run_id}"))
-            .unwrap()
-            .target(),
+        repo.find_reference(&format!("refs/synthesis/merge/{run_id}")).unwrap().target(),
         Some(snapshot)
     );
 }
@@ -331,20 +311,28 @@ fn a_refused_preflight_creates_no_run_and_leaves_no_snapshot_ref() {
     let store = fx.app.state::<crate::global_settings::GlobalSettingsStore>();
 
     let refused = |fx: &Fixture, before: &Live| -> String {
-        let refusal = request(fx, &stream, StreamMergePublication::Uncommitted).expect_err("refused");
+        let refusal =
+            request(fx, &stream, StreamMergePublication::Uncommitted).expect_err("refused");
         assert!(index_entries(fx).is_empty(), "a run was created");
         assert_eq!(&live(fx, &stream), before);
-        let snapshot_refs = fx
-            .repo()
-            .references_glob("refs/synthesis/merge/*")
-            .unwrap()
-            .count();
+        let snapshot_refs = fx.repo().references_glob("refs/synthesis/merge/*").unwrap().count();
         assert_eq!(snapshot_refs, 0, "a snapshot ref stands");
-        assert!(fx.repo().worktrees().unwrap().iter().flatten().flatten().all(|n| !n.ends_with("-mw")));
+        assert!(fx
+            .repo()
+            .worktrees()
+            .unwrap()
+            .iter()
+            .flatten()
+            .flatten()
+            .all(|n| !n.ends_with("-mw")));
         refusal
     };
 
-    assert_eq!(refused(&fx, &live(&fx, &stream)), ERR_VENDOR_EXECUTION_UNSUPPORTED, "no vendor configured");
+    assert_eq!(
+        refused(&fx, &live(&fx, &stream)),
+        ERR_VENDOR_EXECUTION_UNSUPPORTED,
+        "no vendor configured"
+    );
 
     store
         .save_agentic_registry(
@@ -357,7 +345,11 @@ fn a_refused_preflight_creates_no_run_and_leaves_no_snapshot_ref() {
             Some("claude_code".into()),
         )
         .expect("a registry");
-    assert_eq!(refused(&fx, &live(&fx, &stream)), ERR_VENDOR_IMAGE_UNCONFIGURED, "no image committed");
+    assert_eq!(
+        refused(&fx, &live(&fx, &stream)),
+        ERR_VENDOR_IMAGE_UNCONFIGURED,
+        "no image committed"
+    );
 
     let access = fx.app.state::<crate::fs::FsAccessState>().get().expect("instance");
     crate::project_settings::save_project_vendor_image_to(
@@ -374,7 +366,11 @@ fn a_refused_preflight_creates_no_run_and_leaves_no_snapshot_ref() {
     // The setting is a file of the base worktree, so it is committed like the
     // author's own work: an untracked file would make the base dirty.
     commit_file(&fx.repo(), "image-setting.txt", "committed\n", "commit the image setting");
-    assert_eq!(refused(&fx, &live(&fx, &stream)), ERR_DOCKER_BACKEND_UNVERIFIED, "no verified backend");
+    assert_eq!(
+        refused(&fx, &live(&fx, &stream)),
+        ERR_DOCKER_BACKEND_UNVERIFIED,
+        "no verified backend"
+    );
 }
 
 // WKS-FR-GKPX, WKS-FR-VQDE: a second request while the merge run has not ended
@@ -407,16 +403,12 @@ fn the_guard_is_released_and_the_run_stands_in_the_streams_queue() {
 
     let state = fx.app.state::<crate::streams::StreamState>();
     assert!(
-        state
-            .begin_repository_update(&stream.id, crate::streams::Reconciliation::Update)
-            .is_ok(),
+        state.begin_repository_update(&stream.id, crate::streams::Reconciliation::Update).is_ok(),
         "the guard is free after the handoff"
     );
     let queue = crate::graduation::project_queue(&fx.app).expect("a queue");
-    let queued: Vec<&str> = crate::graduation::queue_of(&queue, &stream.id)
-        .iter()
-        .map(|run| run.id.as_str())
-        .collect();
+    let queued: Vec<&str> =
+        crate::graduation::queue_of(&queue, &stream.id).iter().map(|run| run.id.as_str()).collect();
     assert_eq!(queued, vec![run_id.as_str()]);
 }
 
@@ -440,7 +432,10 @@ fn the_merge_worktree_is_seeded_from_the_snapshot_and_touches_nothing_live() {
     let worktree = merge_worktree_of(&fx, &run_id);
 
     assert_eq!(worktree, crate::graduation::store_base(&fx.app).unwrap().merge_worktree(&run_id));
-    assert!(worktree.ends_with(format!("g/{run_id}/mw")) || worktree.to_string_lossy().ends_with(&format!("{run_id}/mw")));
+    assert!(
+        worktree.ends_with(format!("g/{run_id}/mw"))
+            || worktree.to_string_lossy().ends_with(&format!("{run_id}/mw"))
+    );
     assert!(registered(&fx, &format!("{run_id}-mw")));
     assert!(fx
         .repo()
@@ -470,8 +465,8 @@ fn discarding_a_merge_run_reclaims_everything_the_run_owned() {
     let worktree = merge_worktree_of(&fx, &run_id);
     let before = live(&fx, &stream);
 
-    let discarded =
-        crate::graduation::discard_graduation_run(fx.app.clone(), run_id.clone()).expect("discarded");
+    let discarded = crate::graduation::discard_graduation_run(fx.app.clone(), run_id.clone())
+        .expect("discarded");
 
     assert_eq!(discarded.state, GraduationRunState::Discarded);
     assert!(!worktree.exists(), "the worktree directory is gone");
@@ -555,7 +550,11 @@ fn a_merge_run_found_working_with_no_loop_is_interrupted_and_keeps_its_worktree(
     assert!(worktree.exists());
     assert!(snapshot_ref_stands(&fx, &run_id));
     let data = reloaded.merge.expect("merge data");
-    assert_eq!(data.base_tip, tip(&fx.repo(), &stream.base_branch).to_string(), "neither branch moved");
+    assert_eq!(
+        data.base_tip,
+        tip(&fx.repo(), &stream.base_branch).to_string(),
+        "neither branch moved"
+    );
 }
 
 // WKS-FR-YSUB, WKS-FR-GKPX: a direct run that targets a stream's working copy

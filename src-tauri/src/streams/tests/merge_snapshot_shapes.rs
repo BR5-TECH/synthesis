@@ -11,7 +11,8 @@ const RUN: &str = "gshapes1";
 
 /// Enough lines that Git reads a moved file as a rename and not as a deletion
 /// beside an addition.
-const BODY: &str = "line one\nline two\nline three\nline four\nline five\nline six\nline seven\nline eight\n";
+const BODY: &str =
+    "line one\nline two\nline three\nline four\nline five\nline six\nline seven\nline eight\n";
 
 fn markers_in(text: &str) -> bool {
     ["<<<<<<<", "|||||||", ">>>>>>>"].iter().any(|m| text.contains(m))
@@ -33,11 +34,7 @@ fn tree_paths(repo: &git2::Repository, commit: git2::Oid) -> Vec<String> {
 
 /// A snapshot that holds a file at the old path of a renamed file has put a
 /// marker where nobody can settle it, and has lost the rename.
-fn assert_old_path_is_gone(
-    fx: &Fixture,
-    snapshot: &merge_snapshot::Snapshot,
-    old_path: &str,
-) {
+fn assert_old_path_is_gone(fx: &Fixture, snapshot: &merge_snapshot::Snapshot, old_path: &str) {
     let repo = fx.repo();
     assert!(
         !snapshot.unresolved_paths.iter().any(|p| p == old_path),
@@ -226,10 +223,7 @@ fn a_binary_against_text_keeps_the_base_sides_bytes() {
     commit_file(&stream_repo(&stream), "mixed.dat", "stream text\n", "stream text");
     commit_bytes(&fx.repo(), "mixed.dat", binary, "base binary");
     let snapshot = capture_snapshot(&fx, &stream, RUN);
-    assert_eq!(
-        blob_bytes(&fx.repo(), snapshot.commit, "mixed.dat").as_deref(),
-        Some(binary)
-    );
+    assert_eq!(blob_bytes(&fx.repo(), snapshot.commit, "mixed.dat").as_deref(), Some(binary));
 
     // The base side is text and the stream side is binary.
     let fx = Fixture::new();

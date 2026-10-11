@@ -28,8 +28,8 @@ fn claude_code_runs_end_to_end_against_the_mock() {
     );
 
     let runtime = MockDockerRuntime::new(&scenario);
-    let outcome = drive_with(&harness, runtime.clone(), request, CancellationToken::new())
-        .expect("ran");
+    let outcome =
+        drive_with(&harness, runtime.clone(), request, CancellationToken::new()).expect("ran");
 
     assert_eq!(outcome.process_outcome, ProcessOutcome::Completed);
     assert_eq!(outcome.exit_code, Some(0));
@@ -45,10 +45,7 @@ fn claude_code_runs_end_to_end_against_the_mock() {
     let image = test_image_reference("claude_code");
     let tail = runtime.only_vendor_tail(&image);
     let assigned = assigned_session_id(&tail).expect("--session-id");
-    assert_eq!(
-        outcome.session.and_then(|s| s.session_id).as_deref(),
-        Some(assigned.as_str())
-    );
+    assert_eq!(outcome.session.and_then(|s| s.session_id).as_deref(), Some(assigned.as_str()));
 
     // And the exact vendor vector, which the scenario's presence-only check
     // cannot pin.
@@ -127,8 +124,8 @@ fn the_task_envelope_crosses_the_pipe_byte_for_byte() {
         &[],
     );
 
-    let outcome = drive(&harness, &scenario, request.clone(), CancellationToken::new())
-        .expect("ran");
+    let outcome =
+        drive(&harness, &scenario, request.clone(), CancellationToken::new()).expect("ran");
     assert_eq!(outcome.exit_code, Some(65));
     let record: serde_json::Value =
         serde_json::from_slice(&outcome.stderr.bytes).expect("one record");
@@ -149,9 +146,7 @@ fn the_task_envelope_crosses_the_pipe_byte_for_byte() {
         &[],
     );
     assert_eq!(
-        drive(&harness, &scenario, request, CancellationToken::new())
-            .expect("ran")
-            .process_outcome,
+        drive(&harness, &scenario, request, CancellationToken::new()).expect("ran").process_outcome,
         ProcessOutcome::Completed
     );
 }
@@ -162,10 +157,7 @@ fn the_task_envelope_crosses_the_pipe_byte_for_byte() {
 fn agent_reported_outcomes_survive_the_process_boundary() {
     let harness = harness_for("claude_code");
 
-    for (outcome_name, check) in [
-        ("failure", "failure"),
-        ("escalation_required", "escalation"),
-    ] {
+    for (outcome_name, check) in [("failure", "failure"), ("escalation_required", "escalation")] {
         let request = task("go");
         let scenario = scenario_for(
             "claude_code",

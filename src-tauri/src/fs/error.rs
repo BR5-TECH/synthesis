@@ -118,12 +118,9 @@ impl fmt::Display for FsError {
             FsError::Toml { path, message } => {
                 write!(f, "malformed toml at {}: {message}", path.display())
             }
-            FsError::PathEscape { root, rel } => write!(
-                f,
-                "path {} escapes root {}",
-                rel.display(),
-                root.display()
-            ),
+            FsError::PathEscape { root, rel } => {
+                write!(f, "path {} escapes root {}", rel.display(), root.display())
+            }
             FsError::AlreadyExists { path } => {
                 write!(f, "destination already exists: {}", path.display())
             }
@@ -263,14 +260,9 @@ mod tests {
 
     #[test]
     fn variants_are_distinguishable_by_matches() {
-        let nf = FsError::NotFound {
-            path: PathBuf::from("/x"),
-        };
+        let nf = FsError::NotFound { path: PathBuf::from("/x") };
         let io_e = FsError::Io(io::Error::new(io::ErrorKind::PermissionDenied, "denied"));
-        let pe = FsError::PathEscape {
-            root: PathBuf::from("/r"),
-            rel: PathBuf::from("../x"),
-        };
+        let pe = FsError::PathEscape { root: PathBuf::from("/r"), rel: PathBuf::from("../x") };
         let nap = FsError::NotAProject;
 
         assert!(matches!(nf, FsError::NotFound { .. }));
@@ -279,21 +271,15 @@ mod tests {
         assert!(matches!(nap, FsError::NotAProject));
 
         // FSA-FR-12 / FSA-FR-13 structural-mutation variants.
-        let ae = FsError::AlreadyExists {
-            path: PathBuf::from("/r/b"),
-        };
-        let inv = FsError::InvalidName {
-            name: "a/b".into(),
-        };
+        let ae = FsError::AlreadyExists { path: PathBuf::from("/r/b") };
+        let inv = FsError::InvalidName { name: "a/b".into() };
         assert!(matches!(ae, FsError::AlreadyExists { .. }));
         assert!(matches!(inv, FsError::InvalidName { .. }));
     }
 
     #[test]
     fn display_renders_path_information() {
-        let nf = FsError::NotFound {
-            path: PathBuf::from("/some/where"),
-        };
+        let nf = FsError::NotFound { path: PathBuf::from("/some/where") };
         assert!(format!("{nf}").contains("/some/where"));
     }
 }

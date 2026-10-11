@@ -357,7 +357,10 @@ pub(super) fn classify_provider_error(message: &str) -> CallFailure {
 /// it is read ahead of the text classification, which can mistake a host name or
 /// a port for a status. A provider that answered with a status had a good
 /// handshake, so a failure that carries a status is left as it is.
-pub(super) fn with_recorded_tls(failure: CallFailure, record: &crate::tls::TlsRecord) -> CallFailure {
+pub(super) fn with_recorded_tls(
+    failure: CallFailure,
+    record: &crate::tls::TlsRecord,
+) -> CallFailure {
     if failure.status.is_some() {
         return failure;
     }

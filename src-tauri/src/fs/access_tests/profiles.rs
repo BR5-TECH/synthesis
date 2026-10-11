@@ -45,10 +45,7 @@ fn tsxmpr_the_short_root_is_the_home_directory_and_one_segment() {
     // the platform's own data root does: a path with one is a path an agent
     // quotes and repeats rather than stands in.
     assert!(
-        !dir.file_name()
-            .expect("a last segment")
-            .to_string_lossy()
-            .contains(' '),
+        !dir.file_name().expect("a last segment").to_string_lossy().contains(' '),
         "{dir:?} adds a segment holding a space",
     );
 }
@@ -80,10 +77,7 @@ fn ts30_the_application_instance_is_rebuilt_rather_than_widened() {
         ("short_data_dir()", crate::fs::short_data_dir().unwrap()),
     ] {
         assert!(
-            access
-                .roots()
-                .iter()
-                .any(|r| expected.starts_with(r) || *r == expected),
+            access.roots().iter().any(|r| expected.starts_with(r) || *r == expected),
             "{label} must be reachable: roots were {:?}",
             access.roots()
         );
@@ -127,10 +121,7 @@ fn ts33_an_agent_session_reaches_the_project_and_its_own_scratch_and_nothing_els
             .session_temp_dir()
             .unwrap_or_else(|| panic!("{label} has its own scratch (FSA-FR-29)"))
             .to_path_buf();
-        assert!(
-            access.roots().iter().any(|r| *r == root),
-            "{label} reaches the worktree",
-        );
+        assert!(access.roots().iter().any(|r| *r == root), "{label} reaches the worktree",);
         assert!(!access.follows_symlinks(), "{label} refuses links");
 
         // FSA-FR-29's whole point: no root either application-owned path could
@@ -142,10 +133,7 @@ fn ts33_an_agent_session_reaches_the_project_and_its_own_scratch_and_nothing_els
             ("short_data_dir()", crate::fs::short_data_dir().unwrap(), "g"),
         ] {
             assert!(
-                !access
-                    .roots()
-                    .iter()
-                    .any(|r| owned.starts_with(r) || *r == owned),
+                !access.roots().iter().any(|r| owned.starts_with(r) || *r == owned),
                 "{label} must not reach {root_name}: roots were {:?}",
                 access.roots(),
             );
@@ -157,9 +145,7 @@ fn ts33_an_agent_session_reaches_the_project_and_its_own_scratch_and_nothing_els
         }
 
         // Both roots are read-write (FSA-FR-29).
-        access
-            .write_text_atomic(root.join(format!("{label}.md")), label)
-            .unwrap();
+        access.write_text_atomic(root.join(format!("{label}.md")), label).unwrap();
         access.write_text_atomic(temp.join("scratch"), label).unwrap();
     }
 
@@ -191,10 +177,7 @@ fn ts33_an_agent_session_reaches_the_project_and_its_own_scratch_and_nothing_els
 fn ts33_no_agent_instance_exists_without_an_open_project() {
     let state = FsAccessState::default();
     // Before anything is installed.
-    assert!(matches!(
-        state.open_agent_session("s").unwrap_err(),
-        FsAccessBuildError::NoRoots,
-    ));
+    assert!(matches!(state.open_agent_session("s").unwrap_err(), FsAccessBuildError::NoRoots,));
 
     // And after a project is closed again: the pre-project instance reaches
     // app_data_dir(), which is precisely what an agent may not have, so there
@@ -208,10 +191,7 @@ fn ts33_no_agent_instance_exists_without_an_open_project() {
 
     state.install_pre_project().unwrap();
     assert_eq!(state.agent_session_count(), 0);
-    assert!(matches!(
-        state.open_agent_session("s").unwrap_err(),
-        FsAccessBuildError::NoRoots,
-    ));
+    assert!(matches!(state.open_agent_session("s").unwrap_err(), FsAccessBuildError::NoRoots,));
     drop(live);
     assert!(!temp.exists(), "closing takes the scratch with it");
 }
@@ -251,11 +231,7 @@ fn ts33_a_session_built_while_the_worktree_changes_is_never_installed() {
     // Flip the roots under them, checking the invariant after every flip: an
     // instance the state hands out must be rooted at the worktree in force.
     for round in 0..200 {
-        let (want, other) = if round % 2 == 0 {
-            (&root_b, &root_a)
-        } else {
-            (&root_a, &root_b)
-        };
+        let (want, other) = if round % 2 == 0 { (&root_b, &root_a) } else { (&root_a, &root_b) };
         state.install_for_worktree(want).unwrap();
         for n in 0..4 {
             if let Some(access) = state.agent_session(&format!("s{n}")) {
@@ -284,14 +260,8 @@ fn ts33_closing_one_session_leaves_the_others_alone() {
     let go = state.open_agent_session("go").unwrap();
     assert_eq!(state.agent_session_count(), 2);
 
-    let keep_temp = keep
-        .session_temp_dir()
-        .expect("a session has a temp directory")
-        .to_path_buf();
-    let go_temp = go
-        .session_temp_dir()
-        .expect("a session has a temp directory")
-        .to_path_buf();
+    let keep_temp = keep.session_temp_dir().expect("a session has a temp directory").to_path_buf();
+    let go_temp = go.session_temp_dir().expect("a session has a temp directory").to_path_buf();
     assert_ne!(keep_temp, go_temp, "two sessions, two temp directories");
 
     state.close_agent_session("go");
@@ -348,9 +318,7 @@ fn ts30_the_pre_project_instance_serves_app_data_before_any_project_opens() {
 
     // No project root is reachable, because there is no project.
     let elsewhere = TempDir::new().unwrap();
-    let err = access
-        .write_text_atomic(elsewhere.path().join("x.md"), "x")
-        .unwrap_err();
+    let err = access.write_text_atomic(elsewhere.path().join("x.md"), "x").unwrap_err();
     assert!(matches!(err, FsError::EscapesAllowedRoots { .. }), "got {err:?}");
 }
 
@@ -380,9 +348,7 @@ fn instance_reads_and_writes_carry_the_typed_errors_of_fsa_fr_06() {
         name: String,
     }
     let t = root.join("c.toml");
-    access
-        .write_toml_atomic(&t, &C { name: "x".into() })
-        .unwrap();
+    access.write_toml_atomic(&t, &C { name: "x".into() }).unwrap();
     assert_eq!(access.read_toml::<C>(&t).unwrap(), C { name: "x".into() });
     fs::write(&t, b"name = = =\n").unwrap();
     let err = access.read_toml::<C>(&t).unwrap_err();
@@ -394,9 +360,7 @@ fn instance_append_lines_and_checksum_behave_as_the_free_functions_do() {
     let (_tmp, access, root) = rooted();
     let log = root.join("log.jsonl");
 
-    access
-        .append_lines(&log, &["a".to_string(), "b".to_string()])
-        .unwrap();
+    access.append_lines(&log, &["a".to_string(), "b".to_string()]).unwrap();
     assert_eq!(fs::read_to_string(&log).unwrap(), "a\nb\n");
     access.append_lines(&log, &["c".to_string()]).unwrap();
     assert_eq!(fs::read_to_string(&log).unwrap(), "a\nb\nc\n");
@@ -418,9 +382,7 @@ fn instance_append_lines_and_checksum_behave_as_the_free_functions_do() {
 
     // Outside the roots, both refuse.
     let outside = TempDir::new().unwrap();
-    let err = access
-        .append_lines(outside.path().join("l.jsonl"), &["x".to_string()])
-        .unwrap_err();
+    let err = access.append_lines(outside.path().join("l.jsonl"), &["x".to_string()]).unwrap_err();
     assert!(matches!(err, FsError::EscapesAllowedRoots { .. }), "got {err:?}");
     let err = access.sha256_file(outside.path().join("f")).unwrap_err();
     assert!(matches!(err, FsError::EscapesAllowedRoots { .. }), "got {err:?}");
@@ -458,5 +420,3 @@ fn instance_ensure_gitignored_creates_and_preserves() {
     let err = access.ensure_gitignored(outside.path()).unwrap_err();
     assert!(matches!(err, FsError::EscapesAllowedRoots { .. }), "got {err:?}");
 }
-
-

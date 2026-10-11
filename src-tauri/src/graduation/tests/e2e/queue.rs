@@ -94,17 +94,13 @@ fn a_wider_stream_limit_lets_a_second_stream_work_alongside() {
     Scenario::named("stream limit of two")
         .with_setting(Setting::GraduationConcurrencyLimit, 2)
         .with_run_on_stream("header run", "header", "Write the header.")
-        .work_turn(
-            Script::reports_success()
-                .writes("src/panel.ts", "1\n")
-                .starting_another_run(
-                    "header run",
-                    vec![
-                        Script::reports_success().writes("src/header.ts", "1\n"),
-                        Script::answers_ready("The header is there."),
-                    ],
-                ),
-        )
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n").starting_another_run(
+            "header run",
+            vec![
+                Script::reports_success().writes("src/header.ts", "1\n"),
+                Script::answers_ready("The header is there."),
+            ],
+        ))
         .review_turn(Script::answers_ready("The work answers the prompt."))
         .run()
         .expect_state(GraduationRunState::Completed)
@@ -124,9 +120,7 @@ fn a_run_behind_a_run_discarded_mid_turn_is_removed_and_the_turns_work_stays() {
     Scenario::named("run behind a mid-turn discard")
         .with_run_on_stream("behind", "editor", "Write the header.")
         .work_turn(
-            Script::reports_success()
-                .writes("src/left.ts", "left behind\n")
-                .discarding_the_run(),
+            Script::reports_success().writes("src/left.ts", "left behind\n").discarding_the_run(),
         )
         .run()
         .expect_state(GraduationRunState::Discarded)

@@ -330,11 +330,8 @@ fn find_node<'a>(node: &'a scanning::TreeNode, rel: &str) -> Option<&'a scanning
     if node.path == rel {
         return Some(node);
     }
-    node.children
-        .as_ref()
-        .and_then(|cs| cs.iter().find_map(|c| find_node(c, rel)))
+    node.children.as_ref().and_then(|cs| cs.iter().find_map(|c| find_node(c, rel)))
 }
-
 
 /// The node a just-created plain file has in the project tree.
 ///
@@ -376,7 +373,11 @@ fn created_file_node(rel: &str) -> scanning::TreeNode {
 /// Records no assignment at any scope: the file's type is whatever ASC-FR-06
 /// resolves for its path — an inference, an inherited folder-scope assignment, or
 /// none — and there is no body to normalise, since the file is created empty.
-fn create_file_impl(root: &fs::RootFs, location: Option<&str>, name: &str) -> Result<scanning::TreeNode, String> {
+fn create_file_impl(
+    root: &fs::RootFs,
+    location: Option<&str>,
+    name: &str,
+) -> Result<scanning::TreeNode, String> {
     if !is_valid_artifact_name(name) {
         return Err(format!("invalid name: {name:?}"));
     }
@@ -397,16 +398,13 @@ fn create_file_impl(root: &fs::RootFs, location: Option<&str>, name: &str) -> Re
     // convention to (PST-FR-23), so no normalisation step is involved.
     root.write_text_atomic(&target, "").map_err(|e| e.to_string())?;
     let tree = scanning::scan(root);
-    Ok(find_node(&tree, &rel)
-        .cloned()
-        .unwrap_or_else(|| created_file_node(&rel)))
+    Ok(find_node(&tree, &rel).cloned().unwrap_or_else(|| created_file_node(&rel)))
 }
 
 /// PST-FR-29: the typed validation error a `create_typed_file` carrying no
 /// artifact type is refused with. Named rather than formatted so the UI can
 /// recognise it and the requirement is testable.
-pub const ERR_TYPED_FILE_NEEDS_A_TYPE: &str =
-    "an artifact type is required to create a typed file";
+pub const ERR_TYPED_FILE_NEEDS_A_TYPE: &str = "an artifact type is required to create a typed file";
 
 /// PST-FR-29 core: create the empty file **and** record its file-scope type
 /// assignment as **one transaction**, for the New Artifact window
@@ -502,10 +500,7 @@ fn rollback_created_folder(root: &fs::RootFs, rel: &str) {
     let Ok(abs) = fs::resolve_under(root, rel) else {
         return;
     };
-    let empty = root
-        .list_dir(&abs)
-        .map(|entries| entries.is_empty())
-        .unwrap_or(false);
+    let empty = root.list_dir(&abs).map(|entries| entries.is_empty()).unwrap_or(false);
     if empty {
         // PST-FR-10: through the FSA primitive, not a raw `fs::remove`.
         let _ = root.delete_under(root.path(), rel, true);
@@ -587,9 +582,7 @@ fn create_folder_impl(
         }
     }
     let tree = scanning::scan(root);
-    Ok(find_node(&tree, &rel)
-        .cloned()
-        .unwrap_or_else(|| created_folder_node(&rel, effective_type)))
+    Ok(find_node(&tree, &rel).cloned().unwrap_or_else(|| created_folder_node(&rel, effective_type)))
 }
 
 /// PST-FR-18: delete a project file or folder
@@ -644,7 +637,6 @@ pub fn copy_path_into_folder(
     ensure_inside_root(&app, &root, "copy_path_into_folder", &dest_folder)?;
     copy_path_into_folder_impl(&root, &source_path, &dest_folder)
 }
-
 
 /// PST-FR-26: create a plain file in the open project (`"create file (location,
 /// name)"`) and return the created node so the UI can open and reveal it. The

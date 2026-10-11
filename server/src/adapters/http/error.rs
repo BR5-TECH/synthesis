@@ -83,34 +83,15 @@ mod tests {
         let cases = [
             (DomainError::Unauthenticated, StatusCode::UNAUTHORIZED),
             (
-                DomainError::Forbidden {
-                    permission: "draft.read".to_string(),
-                },
+                DomainError::Forbidden { permission: "draft.read".to_string() },
                 StatusCode::FORBIDDEN,
             ),
-            (
-                DomainError::NotFound { resource: "draft" },
-                StatusCode::NOT_FOUND,
-            ),
-            (
-                DomainError::invalid_field("title", "empty"),
-                StatusCode::BAD_REQUEST,
-            ),
+            (DomainError::NotFound { resource: "draft" }, StatusCode::NOT_FOUND),
+            (DomainError::invalid_field("title", "empty"), StatusCode::BAD_REQUEST),
             (DomainError::DuplicateGrant, StatusCode::CONFLICT),
             (DomainError::OwnerProtected, StatusCode::CONFLICT),
-            (
-                DomainError::StaleRevision {
-                    expected: 1,
-                    actual: 2,
-                },
-                StatusCode::CONFLICT,
-            ),
-            (
-                DomainError::Internal {
-                    reason: "x".to_string(),
-                },
-                StatusCode::INTERNAL_SERVER_ERROR,
-            ),
+            (DomainError::StaleRevision { expected: 1, actual: 2 }, StatusCode::CONFLICT),
+            (DomainError::Internal { reason: "x".to_string() }, StatusCode::INTERNAL_SERVER_ERROR),
         ];
         for (error, expected) in cases {
             assert_eq!(status_of(&error), expected, "{error}");

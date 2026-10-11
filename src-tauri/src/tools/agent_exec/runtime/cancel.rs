@@ -24,10 +24,7 @@ impl CancellationToken {
     /// EAC-FR-CPEP: a token that is cancelled when this one is, and that can be
     /// cancelled on its own without touching this one.
     pub fn linked(&self) -> Self {
-        Self {
-            own: Arc::new(AtomicBool::new(false)),
-            parent: Some(Arc::new(self.clone())),
-        }
+        Self { own: Arc::new(AtomicBool::new(false)), parent: Some(Arc::new(self.clone())) }
     }
 
     pub fn cancel(&self) {
@@ -36,9 +33,6 @@ impl CancellationToken {
 
     pub fn is_cancelled(&self) -> bool {
         self.own.load(Ordering::SeqCst)
-            || self
-                .parent
-                .as_ref()
-                .is_some_and(|parent| parent.is_cancelled())
+            || self.parent.as_ref().is_some_and(|parent| parent.is_cancelled())
     }
 }

@@ -150,10 +150,7 @@ pub struct AgenticRecord {
 
 impl AgenticRecord {
     pub(super) fn empty(vendor: &str) -> Self {
-        Self {
-            vendor: vendor.to_string(),
-            ..Default::default()
-        }
+        Self { vendor: vendor.to_string(), ..Default::default() }
     }
 }
 
@@ -250,25 +247,14 @@ pub enum AgenticInvocation {
 impl std::fmt::Debug for AgenticInvocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Cli {
-                vendor,
-                binary_path,
-                model_id,
-                effort_id,
-            } => f
+            Self::Cli { vendor, binary_path, model_id, effort_id } => f
                 .debug_struct("AgenticInvocation::Cli")
                 .field("vendor", vendor)
                 .field("binary_path", binary_path)
                 .field("model_id", model_id)
                 .field("effort_id", effort_id)
                 .finish(),
-            Self::Api {
-                vendor,
-                base_url,
-                api_key,
-                model_id,
-                effort_id,
-            } => f
+            Self::Api { vendor, base_url, api_key, model_id, effort_id } => f
                 .debug_struct("AgenticInvocation::Api")
                 .field("vendor", vendor)
                 .field("base_url", base_url)
@@ -343,4 +329,3 @@ impl std::fmt::Debug for VerifyConfig {
             .finish()
     }
 }
-

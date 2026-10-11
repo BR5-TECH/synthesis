@@ -24,11 +24,7 @@ const ORIGINAL: &str = "# Spec\n\nThe original three paragraphs.\n";
 const PROPOSED: &str = "# Spec\n\nA better opening.\n\nAnd a second paragraph.\n";
 
 fn human() -> Participant {
-    Participant::Human {
-        login: "raver119".into(),
-        display_name: None,
-        email: None,
-    }
+    Participant::Human { login: "raver119".into(), display_name: None, email: None }
 }
 
 fn agent() -> Participant {
@@ -70,14 +66,10 @@ impl Fixture {
         let mut parent = String::new();
         for segment in folder.split('/').filter(|s| !s.is_empty()) {
             drafts::create_drafts_folder_impl(&root, &parent, segment).expect("drafts folder");
-            parent = if parent.is_empty() {
-                segment.to_string()
-            } else {
-                format!("{parent}/{segment}")
-            };
+            parent =
+                if parent.is_empty() { segment.to_string() } else { format!("{parent}/{segment}") };
         }
-        let created =
-            drafts::create_draft_impl(&root, Some("spec"), Some(folder)).expect("draft");
+        let created = drafts::create_draft_impl(&root, Some("spec"), Some(folder)).expect("draft");
         let draft_id = created.draft.id.clone();
         drafts::save_draft_file_impl(&root, &draft_id, &created.file, ORIGINAL).expect("seed");
         // The draft is created holding `spec.md` already (DRS-FR-06); the
@@ -87,9 +79,7 @@ impl Fixture {
         let thread = comments::open_discussion_in(
             &root,
             &root,
-            &DiscussionTarget::Draft {
-                draft_id: draft_id.clone(),
-            },
+            &DiscussionTarget::Draft { draft_id: draft_id.clone() },
             None,
             "@arch what would you change?".into(),
             Vec::new(),
@@ -126,12 +116,11 @@ impl Fixture {
     fn watch_threads(&self) -> Arc<Mutex<Vec<serde_json::Value>>> {
         let seen: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&seen);
-        self.app
-            .listen(comments::DISCUSSION_CHANGED, move |event| {
-                if let Ok(value) = serde_json::from_str::<serde_json::Value>(event.payload()) {
-                    sink.lock().unwrap_or_else(|e| e.into_inner()).push(value);
-                }
-            });
+        self.app.listen(comments::DISCUSSION_CHANGED, move |event| {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(event.payload()) {
+                sink.lock().unwrap_or_else(|e| e.into_inner()).push(value);
+            }
+        });
         seen
     }
 
@@ -189,9 +178,7 @@ impl Fixture {
     }
 
     fn file_body(&self) -> String {
-        drafts::load_draft_file_impl(&self.root, &self.draft_id, FILE)
-            .expect("file")
-            .body
+        drafts::load_draft_file_impl(&self.root, &self.draft_id, FILE).expect("file").body
     }
 
     fn discussion(&self) -> comments::Discussion {
@@ -218,11 +205,29 @@ impl Fixture {
     }
 
     fn accept_hunk(&self, id: &str, hunk: &str) -> Result<Decided, String> {
-        decide(&self.handle(), &self.root, &self.root, id, Decision::Accept, Some(hunk), None, &human())
+        decide(
+            &self.handle(),
+            &self.root,
+            &self.root,
+            id,
+            Decision::Accept,
+            Some(hunk),
+            None,
+            &human(),
+        )
     }
 
     fn reject_hunk(&self, id: &str, hunk: &str) -> Result<Decided, String> {
-        decide(&self.handle(), &self.root, &self.root, id, Decision::Decline, Some(hunk), None, &human())
+        decide(
+            &self.handle(),
+            &self.root,
+            &self.root,
+            id,
+            Decision::Decline,
+            Some(hunk),
+            None,
+            &human(),
+        )
     }
 
     fn edit_hunk(
@@ -265,7 +270,16 @@ impl Fixture {
     }
 
     fn decline_with(&self, id: &str, feedback: Option<&str>) -> Result<Decided, String> {
-        decide(&self.handle(), &self.root, &self.root, id, Decision::Decline, None, feedback, &human())
+        decide(
+            &self.handle(),
+            &self.root,
+            &self.root,
+            id,
+            Decision::Decline,
+            None,
+            feedback,
+            &human(),
+        )
     }
 }
 

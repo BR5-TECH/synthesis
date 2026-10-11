@@ -186,10 +186,9 @@ fn scope_bounds(
     }) {
         bounds = Some(match bounds {
             None => (segment.first_sequence, segment.last_sequence),
-            Some((first, last)) => (
-                first.min(segment.first_sequence),
-                last.max(segment.last_sequence),
-            ),
+            Some((first, last)) => {
+                (first.min(segment.first_sequence), last.max(segment.last_sequence))
+            }
         });
     }
     bounds
@@ -210,27 +209,16 @@ fn decode(text: &str, bounds: Option<(u64, u64)>) -> (Vec<Line>, Option<Corrupti
         match serde_json::from_str::<serde_json::Value>(trimmed) {
             Ok(value) => {
                 let sequence = value.get("sequence").and_then(|v| v.as_u64()).unwrap_or(0);
-                let phase_id = value
-                    .get("phase_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_string();
-                let pass = value
-                    .get("pass")
-                    .and_then(|v| v.as_u64())
-                    .map(|pass| pass as u32);
+                let phase_id =
+                    value.get("phase_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                let pass = value.get("pass").and_then(|v| v.as_u64()).map(|pass| pass as u32);
                 stopped = sequence;
                 match bounds {
                     // The scope's last record is already held, so the rest of
                     // the file is nothing this read answers for.
                     Some((_, last)) if sequence > last => return (lines, None),
                     Some((first, _)) if sequence < first => {}
-                    _ => lines.push(Line {
-                        sequence,
-                        phase_id,
-                        pass,
-                        value,
-                    }),
+                    _ => lines.push(Line { sequence, phase_id, pass, value }),
                 }
                 offset += byte_length;
             }
@@ -239,13 +227,7 @@ fn decode(text: &str, bounds: Option<(u64, u64)>) -> (Vec<Line>, Option<Corrupti
             // append repairs it, and it is not a damaged file.
             Err(_) if !ends_the_line => return (lines, None),
             Err(_) => {
-                return (
-                    lines,
-                    Some(Corruption {
-                        stopped_sequence: stopped,
-                        byte_offset: offset,
-                    }),
-                )
+                return (lines, Some(Corruption { stopped_sequence: stopped, byte_offset: offset }))
             }
         }
     }
@@ -359,11 +341,8 @@ pub fn read_page(
     // GRS-FR-THZA: a failed write of this stream is reported as such, so a
     // surface says that output stopped rather than that a run produced none.
     if indexes.persistence.status == STATUS_FAILED {
-        if let Some(failure) = indexes
-            .persistence
-            .failure
-            .as_ref()
-            .filter(|failure| failure.stream == stream)
+        if let Some(failure) =
+            indexes.persistence.failure.as_ref().filter(|failure| failure.stream == stream)
         {
             let mut page = GraduationLogPage::bare(
                 run_id,
@@ -439,22 +418,13 @@ pub fn read_page(
         return Ok(page);
     }
 
-    let scoped: Vec<&Line> = lines
-        .iter()
-        .filter(|line| in_scope(line, phase_id, scope))
-        .collect();
+    let scoped: Vec<&Line> = lines.iter().filter(|line| in_scope(line, phase_id, scope)).collect();
 
     // GRS-FR-NSGX: the scope's own records settle the status, and the query
     // carries its own result beside it.
-    let status = if scoped.is_empty() {
-        STATUS_EMPTY
-    } else {
-        STATUS_AVAILABLE
-    };
+    let status = if scoped.is_empty() { STATUS_EMPTY } else { STATUS_AVAILABLE };
 
-    let needle = query
-        .map(|query| query.trim().to_lowercase())
-        .filter(|query| !query.is_empty());
+    let needle = query.map(|query| query.trim().to_lowercase()).filter(|query| !query.is_empty());
     let matched: Vec<&Line> = match needle.as_ref() {
         None => scoped,
         Some(needle) => scoped
@@ -520,29 +490,23 @@ pub fn read_page(
         // before it begins one past the cursor the caller gave.
         None => cursor.as_ref().map(|cursor| cursor.sequence + 1),
     };
-    let older_cursor = older_sequence
-        .filter(|_| !oldest_reached)
-        .map(|sequence| GraduationLogCursor {
+    let older_cursor =
+        older_sequence.filter(|_| !oldest_reached).map(|sequence| GraduationLogCursor {
             run_id: run_id.to_string(),
             stream,
             direction: DIRECTION_BEFORE.to_string(),
             sequence,
         });
-    let asked_before = cursor
-        .as_ref()
-        .is_some_and(|cursor| cursor.direction == DIRECTION_BEFORE);
+    let asked_before = cursor.as_ref().is_some_and(|cursor| cursor.direction == DIRECTION_BEFORE);
     let next_cursor = if asked_before {
         older_cursor.clone()
     } else {
-        window
-            .last()
-            .filter(|_| !newest_reached)
-            .map(|last| GraduationLogCursor {
-                run_id: run_id.to_string(),
-                stream,
-                direction: DIRECTION_AFTER.to_string(),
-                sequence: last.sequence,
-            })
+        window.last().filter(|_| !newest_reached).map(|last| GraduationLogCursor {
+            run_id: run_id.to_string(),
+            stream,
+            direction: DIRECTION_AFTER.to_string(),
+            sequence: last.sequence,
+        })
     };
 
     Ok(GraduationLogPage {
@@ -554,9 +518,7 @@ pub fn read_page(
             .iter()
             .map(|line| GraduationLogPageEntry {
                 record: line.value.clone(),
-                presentation: GraduationLogPresentation {
-                    run_level: line.pass.is_none(),
-                },
+                presentation: GraduationLogPresentation { run_level: line.pass.is_none() },
             })
             .collect(),
         next_cursor,

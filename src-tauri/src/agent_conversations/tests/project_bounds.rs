@@ -16,14 +16,8 @@ use super::*;
 /// payload itself would refuse (PSS-FR-ZLCF).
 fn open_project_with(h: &Harness, settings: &[(&str, i64)]) {
     let root = h.root().path().to_path_buf();
-    let body: String = settings
-        .iter()
-        .map(|(key, value)| format!("{key} = {value}\n"))
-        .collect();
-    let fs = crate::fs::FsAccess::builder()
-        .allow_root(&root)
-        .build()
-        .expect("a real directory");
+    let body: String = settings.iter().map(|(key, value)| format!("{key} = {value}\n")).collect();
+    let fs = crate::fs::FsAccess::builder().allow_root(&root).build().expect("a real directory");
     fs.write_text_atomic(root.join(".synthesis").join("project.toml"), &body)
         .expect("the settings file is writable");
 
@@ -31,14 +25,8 @@ fn open_project_with(h: &Harness, settings: &[(&str, i64)]) {
         .state::<crate::fs::FsAccessState>()
         .install_for_worktree(&root)
         .expect("a test root is a real directory");
-    let access = h
-        .app
-        .state::<crate::fs::FsAccessState>()
-        .get()
-        .expect("an instance");
-    h.app
-        .state::<ProjectState>()
-        .set_root_with_access(root, Some(access));
+    let access = h.app.state::<crate::fs::FsAccessState>().get().expect("an instance");
+    h.app.state::<ProjectState>().set_root_with_access(root, Some(access));
 }
 
 // CVL-FR-PDXK, CVL-FR-19 / PSS-FR-WPKS: a turn spends the project's retry
@@ -178,10 +166,8 @@ fn store_provider_turn_timeout(h: &Harness, ms: u64) {
 /// use a bound of a second, which the command would refuse.
 fn store_turn_timeout_on(h: &Harness, provider: &str, ms: u64) {
     let (mut records, active) = h.store().load_ai_api_registry().expect("registry");
-    let record = records
-        .iter_mut()
-        .find(|r| r.provider == provider)
-        .expect("the provider is seeded");
+    let record =
+        records.iter_mut().find(|r| r.provider == provider).expect("the provider is seeded");
     record.turn_timeout_ms = Some(ms);
     h.store().save_ai_api_registry(records, active).expect("registry");
 }

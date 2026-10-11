@@ -192,10 +192,7 @@ fn post_at(api: &str, secret: &str, path: &str, body: &Value) -> Result<Value, G
             None => GithubWriteFailure::Unreachable,
         })?;
     let status = response.status().as_u16();
-    let text = response
-        .body_mut()
-        .read_to_string()
-        .map_err(|_| GithubWriteFailure::Unreachable)?;
+    let text = response.body_mut().read_to_string().map_err(|_| GithubWriteFailure::Unreachable)?;
     match status {
         200..=299 => serde_json::from_str(&text).map_err(|_| GithubWriteFailure::Unreachable),
         401 | 403 => Err(GithubWriteFailure::Rejected),
@@ -222,10 +219,7 @@ fn get_at(api: &str, secret: &str, path: &str) -> Result<Value, GithubFailure> {
         .header("User-Agent", "synthesis")
         .call()
         .map_err(|error| classify_at(&error, api))?;
-    let body = response
-        .body_mut()
-        .read_to_string()
-        .map_err(|_| GithubFailure::Unreachable)?;
+    let body = response.body_mut().read_to_string().map_err(|_| GithubFailure::Unreachable)?;
     serde_json::from_str(&body).map_err(|_| GithubFailure::Unreachable)
 }
 

@@ -22,10 +22,7 @@ fn a_spent_pass_budget_rests_the_run_and_continue_resets_only_that_budget() {
     Scenario::named("budget exhausted")
         .with_setting(Setting::PassBudget, 1)
         .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
-        .review_turn(Script::answers_revise(
-            ReviewSeverity::Major,
-            "The empty state is not there.",
-        ))
+        .review_turn(Script::answers_revise(ReviewSeverity::Major, "The empty state is not there."))
         .run()
         // One pass is the whole budget, so the first `revise` verdict is
         // already the last one this window allows.
@@ -159,9 +156,7 @@ fn a_stored_bound_outside_its_range_leaves_the_loop_at_its_own_default() {
         .expect_state(GraduationRunState::AwaitingAuthor)
         .expect_pass_window(1, 2)
         .expect_dispatch(0, |d| {
-            d.execution_timeout_ms(
-                crate::graduation::driver::phases::DEFAULT_EXECUTION_TIMEOUT_MS,
-            )
+            d.execution_timeout_ms(crate::graduation::driver::phases::DEFAULT_EXECUTION_TIMEOUT_MS)
         });
 }
 

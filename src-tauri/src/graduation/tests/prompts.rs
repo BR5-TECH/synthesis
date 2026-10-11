@@ -11,26 +11,11 @@ use super::*;
 /// The six instructions this loop compiles in (GRL-FR-GADT), as source.
 fn prompt_sources() -> Vec<(&'static str, &'static str)> {
     vec![
-        (
-            "work.md",
-            include_str!("../../../../resources/prompts/graduation/work.md"),
-        ),
-        (
-            "review.md",
-            include_str!("../../../../resources/prompts/graduation/review.md"),
-        ),
-        (
-            "rebase.md",
-            include_str!("../../../../resources/prompts/graduation/rebase.md"),
-        ),
-        (
-            "refusals.md",
-            include_str!("../../../../resources/prompts/graduation/refusals.md"),
-        ),
-        (
-            "merge-work.md",
-            include_str!("../../../../resources/prompts/graduation/merge-work.md"),
-        ),
+        ("work.md", include_str!("../../../../resources/prompts/graduation/work.md")),
+        ("review.md", include_str!("../../../../resources/prompts/graduation/review.md")),
+        ("rebase.md", include_str!("../../../../resources/prompts/graduation/rebase.md")),
+        ("refusals.md", include_str!("../../../../resources/prompts/graduation/refusals.md")),
+        ("merge-work.md", include_str!("../../../../resources/prompts/graduation/merge-work.md")),
         (
             "merge-review.md",
             include_str!("../../../../resources/prompts/graduation/merge-review.md"),
@@ -43,10 +28,8 @@ fn fields_named(text: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for (index, _) in text.match_indices("input.") {
         let rest = &text[index + "input.".len()..];
-        let name: String = rest
-            .chars()
-            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-            .collect();
+        let name: String =
+            rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect();
         if !name.is_empty() {
             out.push(name);
         }
@@ -184,9 +167,7 @@ fn the_rebase_prompt_reads_the_authors_decisions() {
         .expect("the rebase instruction");
 
     assert!(
-        crate::streams::merge_input_field_names()
-            .iter()
-            .any(|field| field == "author_decisions"),
+        crate::streams::merge_input_field_names().iter().any(|field| field == "author_decisions"),
         "the merge carries the author's decisions",
     );
     assert!(
@@ -232,10 +213,7 @@ fn the_review_prompt_reads_the_work_turns_account() {
     // GRL-FR-NVBZ: a claim rather than evidence, and the line says what settles
     // it instead. Asserted on the **claim** it must carry rather than on an
     // exact phrase, so rewording the sentence does not fail a passing reviewer.
-    assert!(
-        lower.contains("claim"),
-        "GRL-FR-NVBZ: the line calls the account a claim: {given}",
-    );
+    assert!(lower.contains("claim"), "GRL-FR-NVBZ: the line calls the account a claim: {given}",);
     assert!(
         lower.contains("working copy"),
         "GRL-FR-NVBZ: and names the working copy as what says whether it is true: {given}",
@@ -263,17 +241,13 @@ fn the_review_prompt_reads_the_work_turns_account() {
 // written for.
 #[test]
 fn every_specification_a_prompt_cites_exists() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("the repository root")
-        .to_path_buf();
+    let root =
+        Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("the repository root").to_path_buf();
     for (name, source) in prompt_sources() {
         for (index, _) in source.match_indices("specifications/") {
             let rest = &source[index..];
-            let cited: String = rest
-                .chars()
-                .take_while(|c| !c.is_whitespace() && *c != '`' && *c != ')')
-                .collect();
+            let cited: String =
+                rest.chars().take_while(|c| !c.is_whitespace() && *c != '`' && *c != ')').collect();
             if !cited.ends_with(".md") {
                 continue;
             }
@@ -310,9 +284,6 @@ fn the_review_refusal_names_the_shape_a_verdict_must_take() {
     let correction = driver::prompt_section(&driver::REFUSALS, driver::REFUSAL_REVIEW_RESULT)
         .expect("refusals.md holds the review_result correction");
     for required in ["verdict", "rationale", "findings", "severity", "correction"] {
-        assert!(
-            correction.contains(required),
-            "the correction does not name `{required}`",
-        );
+        assert!(correction.contains(required), "the correction does not name `{required}`",);
     }
 }

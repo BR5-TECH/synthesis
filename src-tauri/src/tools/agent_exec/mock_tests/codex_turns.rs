@@ -30,10 +30,7 @@ fn codex_runs_end_to_end_against_the_mock() {
     // EAC-FR-21: the thread the CLI itself reported on `thread.started` is what
     // the caller carries forward, not the `sess-1` the agent wrote into its
     // envelope — resuming on the latter would continue nothing.
-    assert_eq!(
-        outcome.session.and_then(|s| s.session_id).as_deref(),
-        Some(CODEX_THREAD_ID)
-    );
+    assert_eq!(outcome.session.and_then(|s| s.session_id).as_deref(), Some(CODEX_THREAD_ID));
 }
 
 /// EAC-FR-12, EAC-FR-30 / CDX-FR-09, CDX-FR-10 — a resumed Codex turn is its own grammar over a real
@@ -42,10 +39,8 @@ fn codex_runs_end_to_end_against_the_mock() {
 fn a_resumed_codex_turn_uses_its_own_grammar() {
     let harness = harness_for("codex");
     let mut request = task("continue");
-    request.resume = Some(SessionRef {
-        session_id: Some("sess-earlier".into()),
-        continuation_token: None,
-    });
+    request.resume =
+        Some(SessionRef { session_id: Some("sess-earlier".into()), continuation_token: None });
 
     // The resumed vector drops `--sandbox` — which `exec resume` does not accept
     // — and carries the policy as a config override instead, so the scenario
@@ -105,10 +100,7 @@ fn a_codex_stream_that_is_not_events_is_rejected() {
                        "text":"I finished the task."}}),
             ),
         ),
-        (
-            "no agent message",
-            format!("{}\n", json!({"type":"thread.started","thread_id":"t"})),
-        ),
+        ("no agent message", format!("{}\n", json!({"type":"thread.started","thread_id":"t"}))),
         // A turn the CLI itself reports as failed yields no envelope even though
         // one is present earlier in the stream (CDX-FR-16).
         (

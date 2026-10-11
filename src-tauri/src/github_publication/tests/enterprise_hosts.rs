@@ -36,12 +36,8 @@ fn every_url_form_of_an_enterprise_repository_canonicalizes_to_one_value() {
 #[test]
 fn a_remote_on_the_host_of_the_token_is_classified_and_probed() {
     let fake = FakeGithub::with_probe(ProbeOutcome::Publishable);
-    let classified = classify_for(
-        &[configured("origin", GHE)],
-        Some(("secret", "company.ghe.com")),
-        &[],
-        &fake,
-    );
+    let classified =
+        classify_for(&[configured("origin", GHE)], Some(("secret", "company.ghe.com")), &[], &fake);
     assert_eq!(classified[0].kind, RemoteKind::Github);
     assert_eq!(classified[0].eligibility, RemoteEligibility::Eligible);
     assert_eq!(classified[0].repository_host.as_deref(), Some("company.ghe.com"));
@@ -54,10 +50,7 @@ fn a_remote_on_the_host_of_the_token_is_classified_and_probed() {
 fn a_remote_on_another_host_than_the_token_is_a_host_mismatch_with_no_request() {
     let fake = FakeGithub::with_probe(ProbeOutcome::Publishable);
     let classified = classify_for(
-        &[
-            configured("origin", GHE),
-            configured("upstream", "https://github.com/acme/widgets.git"),
-        ],
+        &[configured("origin", GHE), configured("upstream", "https://github.com/acme/widgets.git")],
         Some(("secret", "company.ghe.com")),
         &[],
         &fake,
@@ -74,12 +67,8 @@ fn a_remote_on_another_host_than_the_token_is_a_host_mismatch_with_no_request() 
 #[test]
 fn the_refusal_names_a_host_mismatch_before_a_missing_token() {
     let fake = FakeGithub::with_probe(ProbeOutcome::Publishable);
-    let only_mismatch = classify_for(
-        &[configured("origin", GHE)],
-        Some(("secret", "github.com")),
-        &[],
-        &fake,
-    );
+    let only_mismatch =
+        classify_for(&[configured("origin", GHE)], Some(("secret", "github.com")), &[], &fake);
     assert_eq!(remotes::refusal_for(&only_mismatch), "github_host_mismatch");
     assert!(fake.calls().is_empty());
     assert!(remotes::refusal_reason("github_host_mismatch").contains("another GitHub host"));
@@ -100,10 +89,16 @@ fn a_host_is_github_when_a_stored_token_names_it_and_other_hosts_stay_other() {
     let corp = "https://git.corp.example/acme/widgets.git";
     let known = vec!["git.corp.example".to_string()];
 
-    let github = classify_for(&[configured("origin", corp)], Some(("s", "git.corp.example")), &[], &fake);
-    assert_eq!(github[0].eligibility, RemoteEligibility::Eligible, "the token host is a GitHub host");
+    let github =
+        classify_for(&[configured("origin", corp)], Some(("s", "git.corp.example")), &[], &fake);
+    assert_eq!(
+        github[0].eligibility,
+        RemoteEligibility::Eligible,
+        "the token host is a GitHub host"
+    );
 
-    let by_registry = classify_for(&[configured("origin", corp)], Some(("s", "github.com")), &known, &fake);
+    let by_registry =
+        classify_for(&[configured("origin", corp)], Some(("s", "github.com")), &known, &fake);
     assert_eq!(by_registry[0].eligibility, RemoteEligibility::HostMismatch);
 
     let other = classify_for(&[configured("origin", corp)], Some(("s", "github.com")), &[], &fake);
@@ -116,21 +111,35 @@ fn a_host_is_github_when_a_stored_token_names_it_and_other_hosts_stay_other() {
 #[test]
 fn the_remote_wire_shape_carries_the_repository_host() {
     let fake = FakeGithub::with_probe(ProbeOutcome::Publishable);
-    let classified = classify_for(&[configured("origin", GHE)], Some(("s", "company.ghe.com")), &[], &fake);
+    let classified =
+        classify_for(&[configured("origin", GHE)], Some(("s", "company.ghe.com")), &[], &fake);
     let wire = serde_json::to_value(&classified[0]).unwrap();
     assert_eq!(wire["repositoryHost"], "company.ghe.com");
     assert_eq!(wire["eligibility"], "eligible");
-    let mismatch = classify_for(&[configured("origin", GHE)], Some(("s", "github.com")), &[], &fake);
+    let mismatch =
+        classify_for(&[configured("origin", GHE)], Some(("s", "github.com")), &[], &fake);
     assert_eq!(serde_json::to_value(&mismatch[0]).unwrap()["eligibility"], "host_mismatch");
 }
 
 // GHP-FR-MJTB
 #[test]
 fn an_issue_page_opens_only_on_the_repository_host_of_its_record() {
-    assert!(flow::is_openable_issue_url("https://company.ghe.com/acme/widgets/issues/4", "company.ghe.com"));
-    assert!(!flow::is_openable_issue_url("https://github.com/acme/widgets/issues/4", "company.ghe.com"));
-    assert!(!flow::is_openable_issue_url("https://company.ghe.com.evil.example/acme/w/issues/4", "company.ghe.com"));
-    assert!(!flow::is_openable_issue_url("https://user@company.ghe.com/acme/w/issues/4", "company.ghe.com"));
+    assert!(flow::is_openable_issue_url(
+        "https://company.ghe.com/acme/widgets/issues/4",
+        "company.ghe.com"
+    ));
+    assert!(!flow::is_openable_issue_url(
+        "https://github.com/acme/widgets/issues/4",
+        "company.ghe.com"
+    ));
+    assert!(!flow::is_openable_issue_url(
+        "https://company.ghe.com.evil.example/acme/w/issues/4",
+        "company.ghe.com"
+    ));
+    assert!(!flow::is_openable_issue_url(
+        "https://user@company.ghe.com/acme/w/issues/4",
+        "company.ghe.com"
+    ));
     assert!(!flow::is_openable_issue_url("file:///etc/passwd", "company.ghe.com"));
 }
 

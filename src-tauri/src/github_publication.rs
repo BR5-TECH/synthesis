@@ -254,12 +254,8 @@ fn get_draft_publication_impl<R: tauri::Runtime>(
             "A graduation run is working from this draft.",
         )
     } else {
-        let local = flow::local_eligibility(
-            &root,
-            &draft_id,
-            record.status,
-            publication.attempt.as_ref(),
-        );
+        let local =
+            flow::local_eligibility(&root, &draft_id, record.status, publication.attempt.as_ref());
         // The remote checks cost a network read per GitHub remote, so they run
         // only once everything decidable from disk has passed.
         match local.publishable {
@@ -360,7 +356,13 @@ pub async fn publish_draft_to_github(
     app: tauri::AppHandle,
 ) -> Result<PublicationOutcome, String> {
     off_thread(move || {
-        publish_draft_to_github_impl(&app, draft_id, remote_name, persist_remote, publication_choice)
+        publish_draft_to_github_impl(
+            &app,
+            draft_id,
+            remote_name,
+            persist_remote,
+            publication_choice,
+        )
     })
     .await
 }
@@ -415,8 +417,13 @@ fn publish_draft_to_github_impl<R: tauri::Runtime>(
     .map_err(|code| fail(app, &draft_id, code))?;
 
     flow::persist_choice(&root, &remote, persist_remote)?;
-    let attempt =
-        flow::open_attempt_with(&root, &draft_id, &remote, flow::new_marker(), Some(choice.clone()))?;
+    let attempt = flow::open_attempt_with(
+        &root,
+        &draft_id,
+        &remote,
+        flow::new_marker(),
+        Some(choice.clone()),
+    )?;
     logging::log_info(
         app,
         &logging::BUFFER,

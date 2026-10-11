@@ -115,18 +115,9 @@ fn a_malformed_model_list_is_rejected_whole() {
         ),
         ("numeric id", r#"{"object":"list","data":[{"id":1,"object":"model"}]}"#),
         ("entry without object", r#"{"object":"list","data":[{"id":"a"}]}"#),
-        (
-            "entry with another object",
-            r#"{"object":"list","data":[{"id":"a","object":"thing"}]}"#,
-        ),
-        (
-            "unknown mode",
-            r#"{"object":"list","data":[{"id":"a","object":"model","mode":"both"}]}"#,
-        ),
-        (
-            "numeric mode",
-            r#"{"object":"list","data":[{"id":"a","object":"model","mode":1}]}"#,
-        ),
+        ("entry with another object", r#"{"object":"list","data":[{"id":"a","object":"thing"}]}"#),
+        ("unknown mode", r#"{"object":"list","data":[{"id":"a","object":"model","mode":"both"}]}"#),
+        ("numeric mode", r#"{"object":"list","data":[{"id":"a","object":"model","mode":1}]}"#),
     ] {
         assert!(parse_gateway_models_payload(body).is_none(), "{label}");
     }
@@ -177,8 +168,7 @@ fn mode_is_stored_listed_and_returned_by_both_read_paths() {
         ("resp-only", Some(ModelMode::Responses)),
         ("both", None),
     ] {
-        let endpoint =
-            resolve_ai_api_endpoint(&h.store, &h.ai, "custom", model, None).unwrap();
+        let endpoint = resolve_ai_api_endpoint(&h.store, &h.ai, "custom", model, None).unwrap();
         assert_eq!(endpoint.model_mode, expected, "{model}");
         assert_eq!(endpoint.base_url, "https://gw.example.com");
         assert_eq!(endpoint.api_key.as_deref(), Some(SECRET));
@@ -205,14 +195,8 @@ fn a_custom_model_offers_no_reasoning() {
         .iter()
         .all(|m| m.reasoning.is_none()));
     assert_eq!(
-        resolve_ai_api_endpoint(
-            &h.store,
-            &h.ai,
-            "custom",
-            "both",
-            Some(ReasoningChoice::On)
-        )
-        .unwrap_err(),
+        resolve_ai_api_endpoint(&h.store, &h.ai, "custom", "both", Some(ReasoningChoice::On))
+            .unwrap_err(),
         ERR_REASONING_UNSUPPORTED,
     );
 }
@@ -265,8 +249,14 @@ fn the_agent_provider_follows_the_project_resolution_without_touching_the_keycha
     assert_eq!(h.keys.reads(), reads, "no key was read");
 
     // A second verified provider with no choice leaves nothing resolved.
-    verify_integration_impl(&h.store, &h.ai, "openai", "https://api.openai.com/v1", Some("sk-1234"))
-        .unwrap();
+    verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "openai",
+        "https://api.openai.com/v1",
+        Some("sk-1234"),
+    )
+    .unwrap();
     assert_eq!(resolve_agent_provider(&h.store, "").unwrap_err(), ERR_NOT_VERIFIED);
     assert_eq!(
         active_catalog_impl(&h.store, "").unwrap().resolution,
@@ -298,9 +288,9 @@ fn the_agent_provider_follows_the_project_resolution_without_touching_the_keycha
 // strictly.
 #[test]
 fn the_production_prober_sends_the_bearer_secret_to_v1_models_and_reads_strictly() {
+    use crate::ai_shared::HttpEndpointProber;
     use std::io::{Read, Write};
     use std::net::TcpListener;
-    use crate::ai_shared::HttpEndpointProber;
 
     fn serve(body: &'static str) -> (String, std::thread::JoinHandle<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -328,7 +318,9 @@ fn the_production_prober_sends_the_bearer_secret_to_v1_models_and_reads_strictly
         })
     };
 
-    let (url, server) = serve(r#"{"object":"list","data":[{"id":"a","object":"model","mode":"chat"},{"id":"b","object":"model"}]}"#);
+    let (url, server) = serve(
+        r#"{"object":"list","data":[{"id":"a","object":"model","mode":"chat"},{"id":"b","object":"model"}]}"#,
+    );
     let models = probe(&url).unwrap();
     let seen = server.join().unwrap();
     assert!(seen.starts_with("GET /v1/models "), "{seen}");
@@ -336,7 +328,10 @@ fn the_production_prober_sends_the_bearer_secret_to_v1_models_and_reads_strictly
         seen.to_lowercase().contains(&format!("authorization: bearer {}", SECRET.to_lowercase())),
         "{seen}"
     );
-    assert_eq!(models.iter().map(|m| m.mode).collect::<Vec<_>>(), vec![Some(ModelMode::Chat), None]);
+    assert_eq!(
+        models.iter().map(|m| m.mode).collect::<Vec<_>>(),
+        vec![Some(ModelMode::Chat), None]
+    );
 
     let (url, server) = serve(r#"{"object":"list","data":[{"id":"a"}]}"#);
     assert_eq!(probe(&url).unwrap_err(), ProbeError::NotExpectedKind);

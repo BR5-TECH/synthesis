@@ -60,10 +60,7 @@ fn ts8_the_checksum_streams_and_agrees_with_the_in_memory_one() {
     let big: String = std::iter::repeat_n("abcdefghij", 200_000).collect();
     let p = root.join("big.bin");
     access.write_text_atomic(&p, &big).unwrap();
-    assert_eq!(
-        access.sha256_file(&p).unwrap(),
-        crate::fs::sha256_bytes(big.as_bytes())
-    );
+    assert_eq!(access.sha256_file(&p).unwrap(), crate::fs::sha256_bytes(big.as_bytes()));
 
     // And the empty-file vector.
     let e = root.join("empty.bin");
@@ -249,12 +246,8 @@ fn fr5_every_write_primitive_creates_its_missing_parents() {
 
     access.write_bytes_atomic(root.join("a/b/c/bytes.bin"), b"B").unwrap();
     access.write_text_atomic(root.join("d/e/f/text.md"), "T").unwrap();
-    access
-        .write_toml_atomic(root.join("g/h/i/conf.toml"), &C { name: "n".into() })
-        .unwrap();
-    access
-        .append_lines(root.join("j/k/l/log.jsonl"), &["L".to_string()])
-        .unwrap();
+    access.write_toml_atomic(root.join("g/h/i/conf.toml"), &C { name: "n".into() }).unwrap();
+    access.append_lines(root.join("j/k/l/log.jsonl"), &["L".to_string()]).unwrap();
     access.create_file(root.join("m/n/o/new.txt"), CreateMode::Exclusive).unwrap();
 
     assert_eq!(fs::read(root.join("a/b/c/bytes.bin")).unwrap(), b"B");
@@ -388,7 +381,6 @@ fn ts19_the_remaining_operations_refuse_a_link_and_leave_no_trace() {
     write_raw(&target, "target");
     let link = root.join("link.md");
     symlink(&target, &link).unwrap();
-
 
     let err = access.copy_path(&link, root.join("copy.md")).unwrap_err();
     assert!(matches!(err, FsError::SymlinkRefused { .. }), "copy: got {err:?}");

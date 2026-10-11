@@ -105,16 +105,10 @@ fn a_committed_acceptance_is_rolled_forward_and_its_comment_folds_once() {
 
     // DHS-FR-21: an interruption *after* the append and before the journal was
     // removed re-appends under the same `event_id`, and the fold applies it once.
-    f.root
-        .write_toml_atomic(f.hist().join(JOURNAL_FILE), &journal)
-        .expect("journal back");
+    f.root.write_toml_atomic(f.hist().join(JOURNAL_FILE), &journal).expect("journal back");
     std::fs::write(f.hist().join(JOURNAL_PRIOR), ORIGINAL_TEXT).expect("prior");
     f.reconcile().expect("reconciled again");
-    assert_eq!(
-        f.discussion().comments.len(),
-        before + 1,
-        "no second line was contributed",
-    );
+    assert_eq!(f.discussion().comments.len(), before + 1, "no second line was contributed",);
 }
 
 #[test]
@@ -190,24 +184,17 @@ fn a_rollback_that_cannot_remove_an_entry_leaves_the_journal_and_exposes_nothing
     // The prompt is restored from `journal.prior` first, so `files/` stays
     // writable and only the removal is made to fail.
     let mode = std::fs::metadata(&hist).expect("metadata").permissions();
-    std::fs::set_permissions(&hist, std::fs::Permissions::from_mode(0o555))
-        .expect("read-only");
+    std::fs::set_permissions(&hist, std::fs::Permissions::from_mode(0o555)).expect("read-only");
 
     let refused = f.reconcile().unwrap_err();
 
     assert_eq!(refused, ERR_HISTORY_RECOVERY_FAILED);
-    assert!(
-        hist.join(JOURNAL_FILE).is_file(),
-        "the journal stands so the next run tries again",
-    );
+    assert!(hist.join(JOURNAL_FILE).is_file(), "the journal stands so the next run tries again",);
     // Both entries are still on disk — and still hidden by that journal, so
     // nothing was ever offered as a version.
     assert!(manifest_path(&hist, &entry_id).is_file());
     assert!(manifest_path(&hist, &original_id).is_file());
-    assert_eq!(
-        list_impl_after_reconcile(&f).unwrap_err(),
-        ERR_HISTORY_RECOVERY_FAILED,
-    );
+    assert_eq!(list_impl_after_reconcile(&f).unwrap_err(), ERR_HISTORY_RECOVERY_FAILED,);
     assert_eq!(load_impl(&f.root, &entry_id).unwrap_err(), ERR_ENTRY_NOT_FOUND);
 
     // And with the folder writable again the reconciliation completes.
@@ -231,10 +218,7 @@ fn a_rollback_caught_between_the_two_entries_removes_the_one_that_landed() {
     let original_id = journal.original_entry_id.clone().expect("an Original");
     // Rewind to the instant after the `Original` landed and before the version's
     // own payload was written.
-    for name in [
-        format!("{entry_id}.{SNAPSHOT_EXT}"),
-        format!("{entry_id}.{MANIFEST_EXT}"),
-    ] {
+    for name in [format!("{entry_id}.{SNAPSHOT_EXT}"), format!("{entry_id}.{MANIFEST_EXT}")] {
         std::fs::remove_file(f.hist().join(name)).expect("rewind");
     }
     assert!(manifest_path(&f.hist(), &original_id).is_file());
@@ -271,10 +255,7 @@ fn a_later_acceptance_in_progress_hides_only_its_own_entry() {
 
     // And the rollback leaves those two exactly as they were.
     f.reconcile().expect("rolled back");
-    assert_eq!(
-        f.list().entries.iter().map(|e| e.id.clone()).collect::<Vec<_>>(),
-        standing,
-    );
+    assert_eq!(f.list().entries.iter().map(|e| e.id.clone()).collect::<Vec<_>>(), standing,);
 }
 
 #[test]
@@ -296,14 +277,8 @@ fn a_rolled_back_acceptance_that_created_no_entry_announces_nothing() {
             std::fs::remove_file(f.hist().join(format!("{id}.{ext}"))).expect("rewind");
         }
     }
-    let bare = Journal {
-        entry_id: None,
-        original_entry_id: None,
-        ..journal
-    };
-    f.root
-        .write_toml_atomic(f.hist().join(JOURNAL_FILE), &bare)
-        .expect("journal");
+    let bare = Journal { entry_id: None, original_entry_id: None, ..journal };
+    f.root.write_toml_atomic(f.hist().join(JOURNAL_FILE), &bare).expect("journal");
     let seen = f.watch();
 
     f.reconcile().expect("rolled back");
@@ -340,8 +315,7 @@ fn a_standing_journal_that_cannot_be_cleared_refuses_a_second_acceptance() {
     let hist = f.hist();
     let before = f.history_files();
     let mode = std::fs::metadata(&hist).expect("metadata").permissions();
-    std::fs::set_permissions(&hist, std::fs::Permissions::from_mode(0o555))
-        .expect("read-only");
+    std::fs::set_permissions(&hist, std::fs::Permissions::from_mode(0o555)).expect("read-only");
 
     let refused = apply_acceptance(
         &f.handle(),
@@ -441,10 +415,7 @@ fn a_reconciled_acceptance_raises_no_draft_event() {
     let proposal = f.propose(PROPOSED);
     interrupt(&f, &proposal, Phase::Committed);
     let before = draft_events(&f);
-    assert!(matches!(
-        f.reconcile().expect("rolled forward"),
-        Reconciliation::RolledForward { .. }
-    ));
+    assert!(matches!(f.reconcile().expect("rolled forward"), Reconciliation::RolledForward { .. }));
     assert_eq!(draft_events(&f), before);
 
     let g = Fixture::new();
@@ -455,4 +426,3 @@ fn a_reconciled_acceptance_raises_no_draft_event() {
     assert_eq!(g.reconcile().expect("rolled back"), Reconciliation::RolledBack);
     assert_eq!(draft_events(&g), before);
 }
-

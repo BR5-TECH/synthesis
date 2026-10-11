@@ -66,8 +66,7 @@ pub fn import_legacy_storage(store: &fsa::RootFs, worktree: &fsa::RootFs) -> Imp
     // The drafts the worktree still holds, which is what a statistics log has to
     // belong to before it is imported.
     let drafts = crate::drafts::draft_locations(worktree);
-    let live: std::collections::HashSet<&str> =
-        drafts.iter().map(|(id, _)| id.as_str()).collect();
+    let live: std::collections::HashSet<&str> = drafts.iter().map(|(id, _)| id.as_str()).collect();
     // `DRS-draft-storage.md` DRS-FR-ZLBK: deleting a draft takes its statistics
     // log, and success means it is gone. The committed copy stays in the
     // worktree because the pass removes nothing (RMS-FR-XRPT), so importing it
@@ -78,21 +77,14 @@ pub fn import_legacy_storage(store: &fsa::RootFs, worktree: &fsa::RootFs) -> Imp
         &worktree.path().join(LEGACY_STATISTICS_REL),
         &store.path().join(STATISTICS_DIRNAME),
         &mut out,
-        &|name| {
-            name.strip_suffix(".jsonl")
-                .is_some_and(|draft_id| live.contains(draft_id))
-        },
+        &|name| name.strip_suffix(".jsonl").is_some_and(|draft_id| live.contains(draft_id)),
     );
     for (draft_id, dir) in drafts {
         import_tree(
             store,
             worktree,
             &dir.join(LEGACY_DRAFT_COMMENTS_DIR),
-            &store
-                .path()
-                .join(DRAFTS_DIRNAME)
-                .join(&draft_id)
-                .join(COMMENTS_DIRNAME),
+            &store.path().join(DRAFTS_DIRNAME).join(&draft_id).join(COMMENTS_DIRNAME),
             &mut out,
         );
     }
@@ -166,12 +158,7 @@ fn import_tree_where(
 /// nothing the second time. A line carrying no readable identity is deduplicated
 /// on its own text instead, which is the same guarantee for a line this build
 /// cannot parse.
-fn merge_log(
-    store: &fsa::RootFs,
-    worktree: &fsa::RootFs,
-    src: &Path,
-    dest: &Path,
-) -> usize {
+fn merge_log(store: &fsa::RootFs, worktree: &fsa::RootFs, src: &Path, dest: &Path) -> usize {
     let Ok(source) = worktree.read_text(src) else {
         return 0;
     };
@@ -204,12 +191,7 @@ fn merge_log(
 fn line_identity(line: &str) -> String {
     serde_json::from_str::<serde_json::Value>(line)
         .ok()
-        .and_then(|value| {
-            value
-                .get("event_id")
-                .and_then(|id| id.as_str())
-                .map(str::to_string)
-        })
+        .and_then(|value| value.get("event_id").and_then(|id| id.as_str()).map(str::to_string))
         .unwrap_or_else(|| line.to_string())
 }
 
@@ -218,12 +200,7 @@ fn line_identity(line: &str) -> String {
 /// An attachment is named by the digest of its own bytes (`CMS-comments-storage.md`
 /// CMS-FR-44), so a file already present under that name is the same file and is
 /// left exactly as it is.
-fn copy_absent(
-    store: &fsa::RootFs,
-    worktree: &fsa::RootFs,
-    src: &Path,
-    dest: &Path,
-) -> bool {
+fn copy_absent(store: &fsa::RootFs, worktree: &fsa::RootFs, src: &Path, dest: &Path) -> bool {
     if store.file_info(dest).is_ok() {
         return false;
     }

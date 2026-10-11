@@ -65,10 +65,10 @@ impl FsAccessState {
     /// Build the pre-project instance: `app_data_dir()`, `short_data_dir()`,
     /// and a session temp directory, links refused. Called once at startup.
     pub fn install_pre_project(&self) -> Result<(), FsAccessBuildError> {
-        let app_data = super::app_data_dir()
-            .map_err(|e| FsAccessBuildError::AppDataDir(e.to_string()))?;
-        let short_data = super::short_data_dir()
-            .map_err(|e| FsAccessBuildError::AppDataDir(e.to_string()))?;
+        let app_data =
+            super::app_data_dir().map_err(|e| FsAccessBuildError::AppDataDir(e.to_string()))?;
+        let short_data =
+            super::short_data_dir().map_err(|e| FsAccessBuildError::AppDataDir(e.to_string()))?;
         let built = FsAccess::builder()
             .owned_root(app_data)
             .owned_root(short_data)
@@ -90,10 +90,10 @@ impl FsAccessState {
     /// root it was built against, so no session keeps reading a checkout the
     /// application has stopped showing.
     pub fn install_for_worktree(&self, worktree: &Path) -> Result<(), FsAccessBuildError> {
-        let app_data = super::app_data_dir()
-            .map_err(|e| FsAccessBuildError::AppDataDir(e.to_string()))?;
-        let short_data = super::short_data_dir()
-            .map_err(|e| FsAccessBuildError::AppDataDir(e.to_string()))?;
+        let app_data =
+            super::app_data_dir().map_err(|e| FsAccessBuildError::AppDataDir(e.to_string()))?;
+        let short_data =
+            super::short_data_dir().map_err(|e| FsAccessBuildError::AppDataDir(e.to_string()))?;
         // FSA-FR-ZUCF: the two application roots are owned; the worktree is
         // the user's project and is never reclaimable by this application.
         let built = FsAccess::builder()
@@ -134,10 +134,7 @@ impl FsAccessState {
             .and_then(|guard| guard.clone())
             .ok_or(FsAccessBuildError::NoRoots)?;
         let built = std::sync::Arc::new(
-            FsAccess::builder()
-                .allow_root(worktree)
-                .session_temp(true)
-                .build()?,
+            FsAccess::builder().allow_root(worktree).session_temp(true).build()?,
         );
         let mut guard = self.agents.write().map_err(|_| FsAccessBuildError::NoRoots)?;
         // The roots moved while this was building, so `built` is rooted at a
@@ -154,10 +151,7 @@ impl FsAccessState {
 
     /// The instance for `session_id`, or `None` when that session holds none.
     pub fn agent_session(&self, session_id: &str) -> Option<std::sync::Arc<FsAccess>> {
-        self.agents
-            .read()
-            .ok()
-            .and_then(|guard| guard.get(session_id).cloned())
+        self.agents.read().ok().and_then(|guard| guard.get(session_id).cloned())
     }
 
     /// End one agent session, dropping its instance and its temp directory
@@ -182,8 +176,7 @@ impl FsAccessState {
     /// until it lets go, which is why a caller resolves its instance from here
     /// per call rather than holding one for its lifetime.
     fn discard_agent_sessions(&self) {
-        self.generation
-            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        self.generation.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
         if let Ok(mut guard) = self.agents.write() {
             guard.clear();
         }
@@ -208,11 +201,8 @@ impl FsAccessState {
         worktree: &Path,
         also: &Path,
     ) -> Result<(), FsAccessBuildError> {
-        let built = FsAccess::builder()
-            .allow_root(worktree)
-            .owned_root(also)
-            .session_temp(true)
-            .build()?;
+        let built =
+            FsAccess::builder().allow_root(worktree).owned_root(also).session_temp(true).build()?;
         self.set_worktree(Some(worktree.to_path_buf()));
         self.discard_agent_sessions();
         self.replace(built);
@@ -251,10 +241,8 @@ impl FsAccessState {
             }
         }
         granted.sort();
-        let mut current = self
-            .documents_grants
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut current =
+            self.documents_grants.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let standing = self.documents().is_some();
         if *current == granted && standing == !granted.is_empty() {
             return refused;
@@ -267,11 +255,7 @@ impl FsAccessState {
                 builder.read_only_file(path)
             };
         }
-        let built = if granted.is_empty() {
-            None
-        } else {
-            builder.build().ok()
-        };
+        let built = if granted.is_empty() { None } else { builder.build().ok() };
         if let Ok(mut guard) = self.documents.write() {
             *guard = built.map(std::sync::Arc::new);
         }
@@ -290,10 +274,7 @@ impl FsAccessState {
         if let Ok(mut guard) = self.documents.write() {
             *guard = None;
         }
-        self.documents_grants
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clear();
+        self.documents_grants.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clear();
     }
 
     /// The instance in force, or `None` before one has been installed.

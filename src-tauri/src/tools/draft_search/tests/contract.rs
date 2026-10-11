@@ -13,10 +13,7 @@ fn is_a_portable_tool_named_search_drafts() {
     let fixture = DraftFixture::new();
     let tool = fixture.tool();
     assert_eq!(NAME, "search_drafts");
-    assert_eq!(
-        <DraftSearchTool<tauri::test::MockRuntime> as PortableTool>::NAME,
-        NAME
-    );
+    assert_eq!(<DraftSearchTool<tauri::test::MockRuntime> as PortableTool>::NAME, NAME);
     assert_eq!(rig::tool::tool_definition(&tool).name, NAME);
 
     // DST-FR-01: `crate::drafts`' Tauri command of the same name is the panel's

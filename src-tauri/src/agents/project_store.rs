@@ -91,11 +91,7 @@ pub fn list(root: &RootFs) -> Result<ProjectAgentFiles, String> {
     };
     let mut out = ProjectAgentFiles::default();
     for entry in entries {
-        let Some(id) = entry
-            .name
-            .strip_suffix(&format!(".{EXTENSION}"))
-            .map(str::to_string)
-        else {
+        let Some(id) = entry.name.strip_suffix(&format!(".{EXTENSION}")).map(str::to_string) else {
             continue;
         };
         if entry.kind != EntryKind::File {

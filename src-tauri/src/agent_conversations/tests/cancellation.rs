@@ -13,19 +13,11 @@ use super::*;
 #[test]
 fn cancelling_terminates_the_turn_appends_nothing_and_is_idempotent() {
     // AGC-FR-20.
-    let h = Harness::with(
-        vec![Ok("never delivered".into())],
-        Duration::from_millis(400),
-        4,
-    );
+    let h = Harness::with(vec![Ok("never delivered".into())], Duration::from_millis(400), 4);
     h.create_agent("arch", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
 
     // Cancel while the model call is actually in flight rather than while the
@@ -42,12 +34,10 @@ fn cancelling_terminates_the_turn_appends_nothing_and_is_idempotent() {
     assert_eq!(h.seam.requests().len(), 1, "the model call never started");
 
     let handle = h.app.handle().clone();
-    let cancelled =
-        cancel_impl(&handle, &h.turns(), &h.progress(), &turn.id).expect("cancel");
+    let cancelled = cancel_impl(&handle, &h.turns(), &h.progress(), &turn.id).expect("cancel");
     assert_eq!(cancelled.state, AgentTurnState::Cancelled);
     // AGC-FR-20: a second cancel of the same turn succeeds and changes nothing.
-    let again =
-        cancel_impl(&handle, &h.turns(), &h.progress(), &turn.id).expect("idempotent");
+    let again = cancel_impl(&handle, &h.turns(), &h.progress(), &turn.id).expect("idempotent");
     assert_eq!(again, cancelled);
 
     // The model call is still running on its own thread, and the count below is
@@ -58,11 +48,7 @@ fn cancelling_terminates_the_turn_appends_nothing_and_is_idempotent() {
     // discarding the answer it can no longer deliver (AGC-FR-20). A clock could
     // only ever say "not yet, probably".
     wait_for_record(&turn.id, "agent answer discarded: the turn was cancelled");
-    assert_eq!(
-        h.threads("spec.md")[0].comments.len(),
-        1,
-        "a cancelled turn contributes nothing",
-    );
+    assert_eq!(h.threads("spec.md")[0].comments.len(), 1, "a cancelled turn contributes nothing",);
 }
 
 #[test]
@@ -73,28 +59,16 @@ fn cancelling_a_delivered_turn_leaves_the_comment_and_the_state_alone() {
     h.create_agent("arch", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     let delivered = wait_for_terminal(&h, &turn.id);
     assert_eq!(delivered.state, AgentTurnState::Delivered);
 
-    let late = cancel_impl(
-        &h.app.handle().clone(),
-        &h.turns(),
-        &h.progress(),
-        &turn.id,
-    )
-    .expect("a late cancel still succeeds");
+    let late = cancel_impl(&h.app.handle().clone(), &h.turns(), &h.progress(), &turn.id)
+        .expect("a late cancel still succeeds");
     assert_eq!(late.state, AgentTurnState::Delivered);
     assert_eq!(h.threads("spec.md")[0].comments.len(), 2);
-    assert_eq!(
-        h.threads("spec.md")[0].comments[1].body,
-        "Delivered before the cancel.",
-    );
+    assert_eq!(h.threads("spec.md")[0].comments[1].body, "Delivered before the cancel.",);
 }
 
 #[test]
@@ -124,9 +98,7 @@ fn a_cancel_that_arrives_after_the_delivery_claim_cannot_take_the_turn() {
     // After it, `terminate` refuses to cancel — which is the whole guarantee.
     cancelled.store(true, Ordering::SeqCst);
     assert!(
-        h.turns()
-            .terminate(&turn.id, AgentTurnState::Cancelled, None)
-            .is_none(),
+        h.turns().terminate(&turn.id, AgentTurnState::Cancelled, None).is_none(),
         "a committed delivery cannot be cancelled out from under its append",
     );
     // And the delivering thread's own terminate still lands.
@@ -137,13 +109,8 @@ fn a_cancel_that_arrives_after_the_delivery_claim_cannot_take_the_turn() {
     assert_eq!(delivered.state, AgentTurnState::Delivered);
 
     // A cancellation arriving after all that reports what actually happened.
-    let late = cancel_impl(
-        &h.app.handle().clone(),
-        &h.turns(),
-        &h.progress(),
-        &turn.id,
-    )
-    .expect("a late cancel still succeeds");
+    let late = cancel_impl(&h.app.handle().clone(), &h.turns(), &h.progress(), &turn.id)
+        .expect("a late cancel still succeeds");
     assert_eq!(late.state, AgentTurnState::Delivered);
 }
 
@@ -172,11 +139,7 @@ fn a_provider_that_never_answers_is_abandoned_at_the_bound() {
     h.create_agent("arch", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
 
     // "Abandoned rather than waited on" needs no stopwatch: the seam never
@@ -187,14 +150,8 @@ fn a_provider_that_never_answers_is_abandoned_at_the_bound() {
     let terminal = wait_for_terminal(&h, &turn.id);
     assert_eq!(terminal.state, AgentTurnState::Failed);
     assert_eq!(terminal.failure.as_deref(), Some(FAIL_TIMED_OUT));
-    assert_eq!(
-        h.threads("spec.md")[0].comments.len(),
-        1,
-        "an abandoned turn appends nothing",
-    );
+    assert_eq!(h.threads("spec.md")[0].comments.len(), 1, "an abandoned turn appends nothing",);
 }
-
-
 
 struct NeverAnswers;
 
@@ -255,11 +212,7 @@ impl CompletionSeam for GatedCompletion {
 #[test]
 fn deleting_an_agent_cancels_its_turns_and_a_withdrawal_cancels_only_that_projects() {
     // AGC-FR-20, per AGR-FR-11 and AGR-FR-15.
-    let h = Harness::with(
-        vec![Ok("a".into()), Ok("b".into())],
-        Duration::from_millis(500),
-        4,
-    );
+    let h = Harness::with(vec![Ok("a".into()), Ok("b".into())], Duration::from_millis(500), 4);
     let arch = h.create_agent("arch", "");
     let sec = h.create_agent("sec", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
@@ -291,13 +244,7 @@ fn deleting_an_agent_cancels_its_turns_and_a_withdrawal_cancels_only_that_projec
     assert_eq!(live[0].agent_id, sec.id);
 
     // A withdrawal from *another* project leaves this project's turn alone.
-    cancel_turns_for_agent(
-        &handle,
-        &h.turns(),
-        &h.progress(),
-        &sec.id,
-        Some("some-other-project"),
-    );
+    cancel_turns_for_agent(&handle, &h.turns(), &h.progress(), &sec.id, Some("some-other-project"));
     assert_eq!(h.turns().in_flight(None).len(), 1);
 
     cancel_turns_for_agent(&handle, &h.turns(), &h.progress(), &sec.id, Some(PROJECT_KEY));
@@ -326,13 +273,8 @@ fn an_awaiting_turn_is_unchanged_by_cancel_and_discarded_with_its_agent() {
     assert_eq!(turn.state, AgentTurnState::AwaitingReply);
 
     // AGC-FR-20: it has terminated, so a cancel succeeds and changes nothing.
-    let cancelled = cancel_impl(
-        &h.app.handle().clone(),
-        &h.turns(),
-        &h.progress(),
-        &turn.id,
-    )
-    .expect("cancel succeeds against a terminated turn");
+    let cancelled = cancel_impl(&h.app.handle().clone(), &h.turns(), &h.progress(), &turn.id)
+        .expect("cancel succeeds against a terminated turn");
     assert_eq!(cancelled.state, AgentTurnState::AwaitingReply);
     assert_eq!(
         folded(&h, "spec.md", &thread.id).comments.len(),
@@ -391,11 +333,7 @@ fn a_second_question_in_one_reply_is_never_posted_even_when_the_first_refused() 
     h.create_agent("arch", "");
     let (turn, thread) = run_one(&h, "arch");
 
-    assert_eq!(
-        turn.state,
-        AgentTurnState::Delivered,
-        "the first ask refused, so the turn ran on",
-    );
+    assert_eq!(turn.state, AgentTurnState::Delivered, "the first ask refused, so the turn ran on",);
 
     let thread = folded(&h, "spec.md", &thread.id);
     assert!(
@@ -439,13 +377,10 @@ fn a_second_question_in_one_reply_is_never_posted_even_when_the_first_refused() 
         .flatten()
         .collect();
     assert!(
-        results
-            .iter()
-            .any(|r| r.contains("one question can be asked at a time")),
+        results.iter().any(|r| r.contains("one question can be asked at a time")),
         "the second call was answered rather than left dangling: {results:?}",
     );
 }
-
 
 #[test]
 fn a_withdrawal_from_one_project_leaves_another_projects_question_owed() {
@@ -453,10 +388,8 @@ fn a_withdrawal_from_one_project_leaves_another_projects_question_owed() {
     // the machine. Without the `project_key` predicate on the discard, removing
     // `arch` from one project would forget what it is owed everywhere.
     const OTHER_PROJECT: &str = "other-proj";
-    let h = Harness::scripted(vec![
-        Ok(asks("One spec or two?")),
-        Ok(asks("And the archive part?")),
-    ]);
+    let h =
+        Harness::scripted(vec![Ok(asks("One spec or two?")), Ok(asks("And the archive part?"))]);
     h.mount();
     let agent = h.create_agent("arch", "");
     // The same Personal agent is available in a second project without any
@@ -466,21 +399,11 @@ fn a_withdrawal_from_one_project_leaves_another_projects_question_owed() {
     let there = h.seed_artifact_thread("other.md", "More source.");
 
     let owed_here = h
-        .dispatch_in(
-            PROJECT_KEY,
-            "arch",
-            ConversationOrigin::of(&here),
-            &here.comments[0].id,
-        )
+        .dispatch_in(PROJECT_KEY, "arch", ConversationOrigin::of(&here), &here.comments[0].id)
         .expect("dispatch");
     wait_for_terminal(&h, &owed_here.id);
     let owed_there = h
-        .dispatch_in(
-            OTHER_PROJECT,
-            "arch",
-            ConversationOrigin::of(&there),
-            &there.comments[0].id,
-        )
+        .dispatch_in(OTHER_PROJECT, "arch", ConversationOrigin::of(&there), &there.comments[0].id)
         .expect("dispatch");
     wait_for_terminal(&h, &owed_there.id);
     assert_eq!(h.turns().in_flight(None).len(), 2);
@@ -494,12 +417,7 @@ fn a_withdrawal_from_one_project_leaves_another_projects_question_owed() {
         Some(PROJECT_KEY),
     );
 
-    let outstanding: Vec<String> = h
-        .turns()
-        .in_flight(None)
-        .into_iter()
-        .map(|t| t.id)
-        .collect();
+    let outstanding: Vec<String> = h.turns().in_flight(None).into_iter().map(|t| t.id).collect();
     assert_eq!(
         outstanding,
         vec![owed_there.id.clone()],
@@ -507,13 +425,7 @@ fn a_withdrawal_from_one_project_leaves_another_projects_question_owed() {
     );
 
     // Deleted from the machine: everything it was owed goes, whichever project.
-    cancel_turns_for_agent(
-        &h.app.handle().clone(),
-        &h.turns(),
-        &h.progress(),
-        &agent.id,
-        None,
-    );
+    cancel_turns_for_agent(&h.app.handle().clone(), &h.turns(), &h.progress(), &agent.id, None);
     assert!(h.turns().in_flight(None).is_empty());
 }
 
@@ -529,9 +441,7 @@ fn a_withdrawal_leaves_another_agents_question_owed() {
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let origin = ConversationOrigin::of(&thread);
     for nickname in ["arch", "sec"] {
-        let turn = h
-            .dispatch(nickname, origin.clone(), &thread.comments[0].id)
-            .expect("dispatch");
+        let turn = h.dispatch(nickname, origin.clone(), &thread.comments[0].id).expect("dispatch");
         wait_for_terminal(&h, &turn.id);
     }
     assert_eq!(h.turns().in_flight(None).len(), 2);
@@ -544,12 +454,7 @@ fn a_withdrawal_leaves_another_agents_question_owed() {
         Some(PROJECT_KEY),
     );
 
-    let left: Vec<String> = h
-        .turns()
-        .in_flight(None)
-        .into_iter()
-        .map(|t| t.nickname)
-        .collect();
+    let left: Vec<String> = h.turns().in_flight(None).into_iter().map(|t| t.nickname).collect();
     assert_eq!(left, vec!["sec".to_string()]);
 }
 
@@ -582,10 +487,7 @@ fn nothing_about_a_question_awaiting_an_answer_reaches_disk() {
         !rendered.contains("awaiting_reply"),
         "AGC-FR-23: no file records that a reply is owed",
     );
-    assert!(
-        !rendered.contains(&turn.id),
-        "AGC-FR-23: no file names the turn",
-    );
+    assert!(!rendered.contains(&turn.id), "AGC-FR-23: no file names the turn",);
     // The question itself is in the conversation, because that is a comment.
     assert_eq!(folded(&h, "spec.md", &thread.id).comments.len(), 2);
 }

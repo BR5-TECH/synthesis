@@ -182,10 +182,7 @@ impl GraduationObservability {
             // it stands there.
             S::AwaitingAuthor => (self.current_stage, C::Waiting),
             S::Blocked => (self.current_stage, C::Blocked),
-            S::Interrupted => (
-                self.current_stage,
-                if paused { C::Paused } else { C::Stopped },
-            ),
+            S::Interrupted => (self.current_stage, if paused { C::Paused } else { C::Stopped }),
             S::Completed => (V::Done, C::Complete),
             S::Discarded | S::Failed => (V::Done, C::Stopped),
         };
@@ -205,13 +202,7 @@ impl GraduationObservability {
         if self.current_stage == to {
             return;
         }
-        self.stage_history.push(StageTransition {
-            from: self.current_stage,
-            to,
-            pass,
-            at,
-            reason,
-        });
+        self.stage_history.push(StageTransition { from: self.current_stage, to, pass, at, reason });
         self.current_stage = to;
     }
 
@@ -223,11 +214,7 @@ impl GraduationObservability {
     /// record for it would report two passes where one was made, and would
     /// spend a bound the author never used (GRL-FR-ARPX, GRL-FR-ISIL).
     pub fn open_pass(&mut self, pass: u32, task: String, at: String) {
-        if self
-            .passes
-            .iter()
-            .any(|record| record.pass == pass && record.ended_at.is_none())
-        {
+        if self.passes.iter().any(|record| record.pass == pass && record.ended_at.is_none()) {
             return;
         }
         self.begin_pass(pass, task, at);

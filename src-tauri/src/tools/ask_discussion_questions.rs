@@ -188,16 +188,9 @@ pub fn normalize(questions: &[AskedQuestion]) -> Result<Vec<PendingQuestion>, To
             if value.len() > OPTION_LIMIT {
                 return Err(ToolRefusal::InvalidQuestion(SET_OPTION_TOO_LONG, position));
             }
-            options.push(QuestionOption {
-                position: option_index + 1,
-                value: value.to_string(),
-            });
+            options.push(QuestionOption { position: option_index + 1, value: value.to_string() });
         }
-        out.push(PendingQuestion {
-            position,
-            text: text.to_string(),
-            options,
-        });
+        out.push(PendingQuestion { position, text: text.to_string(), options });
     }
     Ok(out)
 }
@@ -246,14 +239,7 @@ impl<R: tauri::Runtime> AskDiscussionQuestionsTool<R> {
         author: Participant,
         recorded: Arc<AtomicBool>,
     ) -> Self {
-        AskDiscussionQuestionsTool {
-            app,
-            roots,
-            origin,
-            author,
-            recorded,
-            buffer: &BUFFER,
-        }
+        AskDiscussionQuestionsTool { app, roots, origin, author, recorded, buffer: &BUFFER }
     }
 
     /// The same tool, reporting into `buffer`.

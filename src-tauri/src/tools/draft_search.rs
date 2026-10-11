@@ -113,9 +113,9 @@ fn lenient_limit<'de, D: serde::Deserializer<'de>>(
 ) -> Result<Option<i64>, D::Error> {
     let value = serde_json::Value::deserialize(deserializer)?;
     Ok(match value {
-        serde_json::Value::Number(number) => number
-            .as_i64()
-            .or_else(|| number.as_f64().map(|f| f.trunc() as i64)),
+        serde_json::Value::Number(number) => {
+            number.as_i64().or_else(|| number.as_f64().map(|f| f.trunc() as i64))
+        }
         serde_json::Value::String(text) => text
             .trim()
             .parse::<i64>()
@@ -335,11 +335,7 @@ pub struct DraftSearchTool<R: tauri::Runtime> {
 impl<R: tauri::Runtime> DraftSearchTool<R> {
     /// TLC-FR-19: this tool's own constructor. A caller attaches it by name.
     pub fn new(app: tauri::AppHandle<R>, session: impl Into<String>) -> Self {
-        DraftSearchTool {
-            app,
-            session: session.into(),
-            buffer: &BUFFER,
-        }
+        DraftSearchTool { app, session: session.into(), buffer: &BUFFER }
     }
 
     /// The same tool, reporting into `buffer`.
@@ -349,11 +345,7 @@ impl<R: tauri::Runtime> DraftSearchTool<R> {
         session: impl Into<String>,
         buffer: &'static LogBuffer,
     ) -> Self {
-        DraftSearchTool {
-            app,
-            session: session.into(),
-            buffer,
-        }
+        DraftSearchTool { app, session: session.into(), buffer }
     }
 
     /// The whole call, with its logging (TLC-FR-14, DST-FR-21).

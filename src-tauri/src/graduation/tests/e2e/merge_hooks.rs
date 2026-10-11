@@ -12,8 +12,8 @@ use std::sync::Arc;
 use tauri::{Listener, Manager};
 
 use super::hooks::{log_path, TurnContext};
-use super::settings::guard;
 use super::script::TurnScript;
+use super::settings::guard;
 use crate::graduation::{GraduationLogStream, GraduationState};
 
 /// What the run owns in the repository: the merge worktree directory, its
@@ -27,12 +27,8 @@ pub(crate) struct Workspace {
 }
 
 impl Workspace {
-    pub(crate) const STANDING: Workspace = Workspace {
-        directory: true,
-        registration: true,
-        scratch_branch: true,
-        snapshot_ref: true,
-    };
+    pub(crate) const STANDING: Workspace =
+        Workspace { directory: true, registration: true, scratch_branch: true, snapshot_ref: true };
 }
 
 impl TurnContext {
@@ -40,20 +36,14 @@ impl TurnContext {
     pub(crate) fn workspace(&self) -> Workspace {
         let run = &self.run_id;
         let repo = git2::Repository::open(&self.project_root).expect("the base repository");
-        let directory = crate::graduation::store_base(&self.app)
-            .expect("the run store")
-            .merge_worktree(run);
+        let directory =
+            crate::graduation::store_base(&self.app).expect("the run store").merge_worktree(run);
         let scratch_branch = repo
             .find_branch(&format!("synthesis/merge-run/{run}"), git2::BranchType::Local)
             .is_ok();
         let snapshot_ref = repo.find_reference(&format!("refs/synthesis/merge/{run}")).is_ok();
         let registration = crate::streams::registers_worktree(&repo, &format!("{run}-mw"));
-        Workspace {
-            directory: directory.exists(),
-            registration,
-            scratch_branch,
-            snapshot_ref,
-        }
+        Workspace { directory: directory.exists(), registration, scratch_branch, snapshot_ref }
     }
 
     /// Whether a loop of this process is still inside the run, and whether the
@@ -68,29 +58,28 @@ impl TurnContext {
     fn once_the_verdict_is_recorded(&self, act: Arc<dyn Fn(&TurnContext) + Send + Sync>) {
         let fired = Arc::new(AtomicBool::new(false));
         let ctx = self.clone();
-        self.app
-            .listen(crate::graduation::GRADUATION_LOG_RECORDS_APPENDED, move |event| {
-                let payload: serde_json::Value =
-                    serde_json::from_str(event.payload()).unwrap_or_default();
-                let is_ours = payload["runId"] == ctx.run_id.as_str()
-                    && payload["stream"] == "structured";
-                if !is_ours || fired.load(Ordering::SeqCst) {
-                    return;
-                }
-                let path = log_path(&ctx.app, &ctx.run_id, GraduationLogStream::Structured);
-                let root = path.parent().expect("the stream's directory").to_path_buf();
-                let last = guard(&root)
-                    .read_text(&path)
-                    .unwrap_or_default()
-                    .lines()
-                    .last()
-                    .and_then(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-                    .unwrap_or_default();
-                if last["event"] == "review verdict" {
-                    fired.store(true, Ordering::SeqCst);
-                    act(&ctx);
-                }
-            });
+        self.app.listen(crate::graduation::GRADUATION_LOG_RECORDS_APPENDED, move |event| {
+            let payload: serde_json::Value =
+                serde_json::from_str(event.payload()).unwrap_or_default();
+            let is_ours =
+                payload["runId"] == ctx.run_id.as_str() && payload["stream"] == "structured";
+            if !is_ours || fired.load(Ordering::SeqCst) {
+                return;
+            }
+            let path = log_path(&ctx.app, &ctx.run_id, GraduationLogStream::Structured);
+            let root = path.parent().expect("the stream's directory").to_path_buf();
+            let last = guard(&root)
+                .read_text(&path)
+                .unwrap_or_default()
+                .lines()
+                .last()
+                .and_then(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+                .unwrap_or_default();
+            if last["event"] == "review verdict" {
+                fired.store(true, Ordering::SeqCst);
+                act(&ctx);
+            }
+        });
     }
 }
 

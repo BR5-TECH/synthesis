@@ -35,10 +35,7 @@ fn the_launch_handoff_answers_only_for_executable_clis() {
         Arc::new(FakeProber::default()),
         FakeKeychain::new(),
     );
-    let codex = Harness {
-        ai: codex.ai.with_home(home.path()),
-        ..codex
-    };
+    let codex = Harness { ai: codex.ai.with_home(home.path()), ..codex };
     verify_integration_impl(&codex.store, &codex.ai, "codex", &cli_config("/usr/bin/codex"))
         .expect("codex verifies");
 
@@ -177,10 +174,7 @@ fn aic_ts38_this_module_names_the_agent_and_holds_no_image_or_backend() {
         "docker_endpoint",
         "DockerBackend",
     ] {
-        assert!(
-            !code.contains(absent),
-            "AIC-FR-33: this module names no {absent}",
-        );
+        assert!(!code.contains(absent), "AIC-FR-33: this module names no {absent}",);
     }
 
     // The record shape carries none of them either, whatever a vendor is
@@ -202,10 +196,7 @@ fn aic_ts38_this_module_names_the_agent_and_holds_no_image_or_backend() {
     // may be configured like any other CLI-kind vendor and resolves no
     // launch, so a project that configures an image for it has configured
     // one nothing can yet run.
-    assert_eq!(
-        crate::project_settings::images::EXECUTABLE_VENDORS,
-        ["claude_code", "codex"]
-    );
+    assert_eq!(crate::project_settings::images::EXECUTABLE_VENDORS, ["claude_code", "codex"]);
     assert!(!crate::project_settings::images::is_executable_vendor("opencode"));
     for api_kind in ["claude_agent_api", "custom_agent_api"] {
         assert!(!crate::project_settings::images::is_executable_vendor(api_kind));

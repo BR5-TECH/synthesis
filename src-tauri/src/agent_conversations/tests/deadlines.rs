@@ -11,18 +11,12 @@ use super::*;
 // ---------------------------------------------------------------------------
 
 /// A never-answering seam with its call counter and the deadlines it was given.
-pub(super) fn counting_never_answers() -> (
-    Box<dyn CompletionSeam>,
-    Arc<AtomicUsize>,
-    Arc<Mutex<Vec<Duration>>>,
-) {
+pub(super) fn counting_never_answers(
+) -> (Box<dyn CompletionSeam>, Arc<AtomicUsize>, Arc<Mutex<Vec<Duration>>>) {
     let calls = Arc::new(AtomicUsize::new(0));
     let deadlines = Arc::new(Mutex::new(Vec::new()));
     (
-        Box::new(CountingNeverAnswers {
-            calls: calls.clone(),
-            deadlines: deadlines.clone(),
-        }),
+        Box::new(CountingNeverAnswers { calls: calls.clone(), deadlines: deadlines.clone() }),
         calls,
         deadlines,
     )
@@ -88,11 +82,8 @@ fn the_whole_turn_deadline_caps_the_call_and_is_not_retried() {
     // deadline rather than the call's. No retry follows: a budget spent by
     // definition is not one repeating the call would help.
     let (seam, calls, deadlines) = counting_never_answers();
-    let h = Harness::with_seam_and_retries(
-        seam,
-        RetryPolicy::default(),
-        Duration::from_millis(150),
-    );
+    let h =
+        Harness::with_seam_and_retries(seam, RetryPolicy::default(), Duration::from_millis(150));
     h.create_agent("arch", "");
     let (terminal, _) = run_one(&h, "arch");
 
@@ -112,10 +103,7 @@ fn the_whole_turn_deadline_caps_the_call_and_is_not_retried() {
     assert_eq!(terminal.failure.as_deref(), Some(FAIL_TIMED_OUT));
     assert!(!terminal.retry_permitted, "the whole-turn deadline offers nothing");
     assert!(h.turns().recoverable_failures(None).is_empty());
-    let record = find(
-        &records_where("turnId", &terminal.id),
-        "agent turn ran out of time",
-    );
+    let record = find(&records_where("turnId", &terminal.id), "agent turn ran out of time");
     assert_eq!(field(&record, "deadline"), "whole_turn");
 }
 
@@ -124,21 +112,14 @@ fn a_thread_locked_during_a_backoff_wait_stops_the_retry() {
     // CVL-FR-25 (second half) / CVL-FR-19, AGC-FR-19, AGC-FR-31.
     let h = Harness::with_retries(
         vec![Err(FAIL_UNREACHABLE); MAX_ATTEMPTS],
-        RetryPolicy {
-            first_base: Duration::from_millis(400),
-            ..RetryPolicy::default()
-        },
+        RetryPolicy { first_base: Duration::from_millis(400), ..RetryPolicy::default() },
         0.5,
         Duration::from_secs(30),
     );
     h.create_agent("arch", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
 
     // Lock it while the turn is sitting in its first backoff.
@@ -207,11 +188,8 @@ fn deleting_a_note_takes_its_conversations_offer_with_it() {
         "about to go",
         "@arch thoughts?",
     );
-    let trigger = crate::comments::note_discussion_of(&h.root(), &note_id)
-        .unwrap()
-        .comments[0]
-        .id
-        .clone();
+    let trigger =
+        crate::comments::note_discussion_of(&h.root(), &note_id).unwrap().comments[0].id.clone();
 
     let turn = h.dispatch("arch", origin, &trigger).expect("dispatch");
     let terminal = wait_for_terminal(&h, &turn.id);
@@ -219,12 +197,7 @@ fn deleting_a_note_takes_its_conversations_offer_with_it() {
     assert_eq!(h.turns().recoverable_failures(None).len(), 1);
 
     crate::notes::delete_note_in(&h.root(), &h.root(), &note_id).unwrap();
-    cancel_turns_for_note(
-        &h.app.handle().clone(),
-        &h.turns(),
-        &h.progress(),
-        &note_id,
-    );
+    cancel_turns_for_note(&h.app.handle().clone(), &h.turns(), &h.progress(), &note_id);
 
     assert!(
         h.turns().recoverable_failures(None).is_empty(),
@@ -262,10 +235,7 @@ fn no_authoring_comment_reaches_a_turn() {
             !compiled.contains("<!--") && !compiled.contains("-->"),
             "{kind:?} sends a comment delimiter to a model",
         );
-        assert_eq!(
-            compiled, compiled.trim_start(),
-            "{kind:?} begins with blank space",
-        );
+        assert_eq!(compiled, compiled.trim_start(), "{kind:?} begins with blank space",);
         // A template carrying no comment contributes itself unchanged.
         let raw = prompt_template(kind);
         if !raw.contains("<!--") {
@@ -289,10 +259,7 @@ fn no_authoring_comment_reaches_a_turn() {
         "the placeholder inside the comment survived the removal",
     );
     assert!(!compiled.contains("<!--") && !compiled.contains("-->"));
-    assert!(
-        !compiled.contains("a note holding"),
-        "the comment's own words reached the model",
-    );
+    assert!(!compiled.contains("a note holding"), "the comment's own words reached the model",);
 }
 
 // ---------------------------------------------------------------------------
@@ -334,8 +301,7 @@ fn an_openrouter_conversation_carries_the_search_entry_and_withholds_the_fetch()
                 assert_eq!(endpoint.provider, "openrouter");
                 // The portable set is still exactly what the origin kind
                 // decides: the entries neither add nor remove one of these.
-                let portable: Vec<&str> =
-                    request.tools.iter().map(|t| t.name.as_str()).collect();
+                let portable: Vec<&str> = request.tools.iter().map(|t| t.name.as_str()).collect();
                 assert_eq!(portable.len(), 12, "the eleven and one proposal tool");
                 assert!(
                     !portable
@@ -405,9 +371,7 @@ fn a_conversation_on_another_provider_carries_neither_entry() {
         let portable: Vec<&str> = request.tools.iter().map(|t| t.name.as_str()).collect();
         assert_eq!(portable.len(), 12, "the same portable set as anywhere else");
         assert!(
-            !portable
-                .iter()
-                .any(|name| name.contains("web_search") || name.contains("web_fetch")),
+            !portable.iter().any(|name| name.contains("web_search") || name.contains("web_fetch")),
             "and nothing local stands in for the absent capability",
         );
     }
@@ -468,7 +432,7 @@ fn openrouter_request_over(
         model_id: Some(model.into()),
         reasoning: None,
         accepts_image_input: false,
-                    model_mode: None,
+        model_mode: None,
     };
     let exchange = opening_exchange(&request, with_images);
     let built = openrouter_request(&request, &exchange, &endpoint).expect("assembled");
@@ -507,9 +471,7 @@ fn the_openrouter_call_asks_the_client_to_advance_its_own_boundary() {
         "the call asks for an advancing boundary at the short lifetime: {wire}",
     );
     // CVL-FR-39: and the two fixed marks stand where the material stops.
-    let parts = wire["messages"][1]["content"]
-        .as_array()
-        .expect("the input travels as parts");
+    let parts = wire["messages"][1]["content"].as_array().expect("the input travels as parts");
     assert_eq!(parts.len(), 2, "the head and the tail: {parts:?}");
     assert_eq!(parts[0]["cache_control"]["type"], "ephemeral");
     assert!(
@@ -517,8 +479,7 @@ fn the_openrouter_call_asks_the_client_to_advance_its_own_boundary() {
         "what the conversation grows carries no mark of its own",
     );
     assert_eq!(
-        wire["messages"][0]["content"][0]["cache_control"]["type"],
-        "ephemeral",
+        wire["messages"][0]["content"][0]["cache_control"]["type"], "ephemeral",
         "the compiled prompt is marked",
     );
 }
@@ -539,11 +500,7 @@ fn an_input_carrying_a_picture_splits_at_the_same_boundary() {
     let wire = openrouter_request_over("cache-multimodal-test-model", material, true);
     let parts = wire_input_parts(&wire);
     assert_eq!(parts.len(), 2, "the head and the tail: {parts:?}");
-    assert_eq!(
-        parts[0].1.as_deref(),
-        Some("ephemeral"),
-        "the head carries the mark",
-    );
+    assert_eq!(parts[0].1.as_deref(), Some("ephemeral"), "the head carries the mark",);
     assert_eq!(parts[1].1, None, "what the conversation grows carries none");
     assert!(
         parts[0].0.contains("Before.") && parts[0].0.contains("After."),
@@ -554,11 +511,7 @@ fn an_input_carrying_a_picture_splits_at_the_same_boundary() {
         !parts[0].0.contains("What was said."),
         "the head stops before what the conversation grows",
     );
-    assert!(
-        parts[1].0.contains("What was said."),
-        "and the tail carries it: {:?}",
-        parts[1].0,
-    );
+    assert!(parts[1].0.contains("What was said."), "and the tail carries it: {:?}", parts[1].0,);
 }
 
 #[test]
@@ -569,10 +522,7 @@ fn a_head_of_prose_splits_the_same_when_a_later_section_carries_a_picture() {
     // image part renders its prose the same way either way — this is what keeps
     // that true rather than leaving it to coincidence.
     let mut material = plain_material();
-    material[1].parts = vec![
-        InputPart::Text("What was said.\n".into()),
-        image_part("b"),
-    ];
+    material[1].parts = vec![InputPart::Text("What was said.\n".into()), image_part("b")];
     let wire = openrouter_request_over("cache-late-picture-test-model", material, true);
     let parts = wire_input_parts(&wire);
     assert_eq!(parts.len(), 2, "the head is still split off: {parts:?}");
@@ -601,7 +551,7 @@ fn the_boundary_and_the_marks_stand_on_every_round() {
         model_id: Some("cache-rounds-test-model".into()),
         reasoning: None,
         accepts_image_input: false,
-                    model_mode: None,
+        model_mode: None,
     };
     let mut exchange = opening_exchange(&request, false);
     for round in 0..4 {
@@ -773,9 +723,7 @@ fn a_call_asks_for_the_upstream_that_served_the_last_one() {
     // — a single process-wide slot would answer every assertion above and this
     // is what tells the two apart.
     assert!(
-        openrouter_request_for("cache-affinity-other-model")
-            .get("provider")
-            .is_none(),
+        openrouter_request_for("cache-affinity-other-model").get("provider").is_none(),
         "a model nothing is known of asks for no upstream, whatever another model pinned",
     );
     remember_upstream("cache-affinity-other-model", "Google AI Studio");
@@ -821,15 +769,12 @@ fn the_openrouter_call_presents_the_search_entry_in_its_tool_array() {
         model_id: Some("m".into()),
         reasoning: None,
         accepts_image_input: false,
-                    model_mode: None,
+        model_mode: None,
     };
     let exchange = opening_exchange(&request, false);
     let built = openrouter_request(&request, &exchange, &endpoint).expect("assembled");
     let wire = serde_json::to_value(&built).expect("serialisable");
-    let tools = wire
-        .get("tools")
-        .and_then(|t| t.as_array())
-        .expect("a tools array");
+    let tools = wire.get("tools").and_then(|t| t.as_array()).expect("a tools array");
     assert_eq!(tools.len(), 2, "one portable definition and one entry");
     assert!(
         tools.contains(&serde_json::json!({ "type": "openrouter:web_search" })),
@@ -841,10 +786,8 @@ fn the_openrouter_call_presents_the_search_entry_in_its_tool_array() {
         "the fetch entry reaches no request while it is withheld: {tools:?}",
     );
     assert!(
-        tools
-            .iter()
-            .any(|tool| tool.get("function").and_then(|f| f.get("name"))
-                == Some(&serde_json::json!("read_file"))),
+        tools.iter().any(|tool| tool.get("function").and_then(|f| f.get("name"))
+            == Some(&serde_json::json!("read_file"))),
         "beside the portable definitions rather than instead of them",
     );
     // WST-FR-06: no member offers both capabilities. Still asserted while the
@@ -868,10 +811,7 @@ fn the_openrouter_call_presents_the_search_entry_in_its_tool_array() {
     };
     let built = openrouter_request(&bare, &exchange, &endpoint).expect("assembled");
     let wire = serde_json::to_value(&built).expect("serialisable");
-    let tools = wire
-        .get("tools")
-        .and_then(|t| t.as_array())
-        .expect("a tools array");
+    let tools = wire.get("tools").and_then(|t| t.as_array()).expect("a tools array");
     assert_eq!(tools.len(), 1, "the portable definition alone");
     assert!(
         !tools

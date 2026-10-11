@@ -12,10 +12,10 @@ use tauri::Manager;
 use tempfile::TempDir;
 
 use super::client::*;
-use super::{client, view};
 use super::eligibility::*;
 use super::records::*;
 use super::session::*;
+use super::{client, view};
 
 mod app_claims;
 mod app_polling;
@@ -48,7 +48,10 @@ pub(super) fn key(dir: &TempDir) -> SessionKey {
 }
 
 pub(super) fn settings(project: Option<&str>) -> GithubPollingSettings {
-    GithubPollingSettings { project_node_id: project.map(str::to_string), interval_minutes: Some(5) }
+    GithubPollingSettings {
+        project_node_id: project.map(str::to_string),
+        interval_minutes: Some(5),
+    }
 }
 
 pub(super) fn valid_shape() -> ProjectShape {
@@ -356,7 +359,15 @@ impl crate::github_publication::GithubIssues for OpenRepositories {
     ) -> Result<Vec<crate::github_publication::PublicationMilestone>, String> {
         unreachable!("polling never lists milestones")
     }
-    fn link_sub_issue(&self, _: &str, _: &str, _: &str, _: u64, _: u64, _: bool) -> Result<(), String> {
+    fn link_sub_issue(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: u64,
+        _: u64,
+        _: bool,
+    ) -> Result<(), String> {
         unreachable!("polling never links a sub-issue")
     }
     fn unlink_sub_issue(&self, _: &str, _: &str, _: &str, _: u64, _: u64) -> Result<(), String> {
@@ -439,4 +450,3 @@ impl Harness {
         self.fake.calls().iter().filter(|c| f(c)).count()
     }
 }
-

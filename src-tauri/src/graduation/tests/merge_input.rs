@@ -52,9 +52,7 @@ pub(super) fn bare_merge_run() -> GraduationRun {
             stream_tip: "b".repeat(40),
             merge_base: "c".repeat(40),
             snapshot_commit: "d".repeat(40),
-            publication: StreamMergePublication::Commit {
-                message: "Land feature".into(),
-            },
+            publication: StreamMergePublication::Commit { message: "Land feature".into() },
             changed_paths: vec!["README.md".into(), "src/call.rs".into(), "src/queue.rs".into()],
             unresolved_paths: vec!["src/queue.rs".into()],
             conflicts: vec![StreamMergeConflict {
@@ -114,7 +112,8 @@ fn a_merge_work_input_carries_the_merge_context() {
 #[test]
 fn a_merge_review_input_names_the_paths_reconciled_beyond_the_unresolved_ones() {
     let mut run = bare_merge_run();
-    run.checkpoint.changed_paths = vec!["src/call.rs".into(), "src/queue.rs".into(), "tests/q.rs".into()];
+    run.checkpoint.changed_paths =
+        vec!["src/call.rs".into(), "src/queue.rs".into(), "tests/q.rs".into()];
 
     let input = driver::compose_input(&run, driver::PART_REVIEW, driver::PURPOSE_GENERATE);
 
@@ -136,7 +135,8 @@ fn a_merge_review_input_names_the_paths_reconciled_beyond_the_unresolved_ones() 
 fn the_merge_context_is_snake_case_and_absent_from_an_ordinary_input() {
     let run = bare_merge_run();
     let work = driver::compose_input(&run, driver::PART_WORK, driver::PURPOSE_GENERATE).to_map();
-    let review = driver::compose_input(&run, driver::PART_REVIEW, driver::PURPOSE_GENERATE).to_map();
+    let review =
+        driver::compose_input(&run, driver::PART_REVIEW, driver::PURPOSE_GENERATE).to_map();
 
     let context = work["merge"].as_object().expect("an object");
     for key in [
@@ -222,8 +222,14 @@ fn a_merge_run_carries_its_own_two_instructions() {
         assert_ne!(text, driver::REBASE_PROMPT.as_str(), "{part}");
     }
 
-    assert_eq!(driver::instruction_for_run(&draft, driver::PART_WORK), driver::WORK_PROMPT.as_str());
-    assert_eq!(driver::instruction_for_run(&draft, driver::PART_REVIEW), driver::REVIEW_PROMPT.as_str());
+    assert_eq!(
+        driver::instruction_for_run(&draft, driver::PART_WORK),
+        driver::WORK_PROMPT.as_str()
+    );
+    assert_eq!(
+        driver::instruction_for_run(&draft, driver::PART_REVIEW),
+        driver::REVIEW_PROMPT.as_str()
+    );
     assert_eq!(
         driver::instruction_for_run(&draft, driver::PART_SEMANTIC_MERGE),
         driver::REBASE_PROMPT.as_str()
@@ -259,10 +265,8 @@ fn a_merge_runs_window_is_two_passes_whatever_the_projects_budget() {
     assert_eq!(crate::graduation::MERGE_PASS_BUDGET, 2);
 
     for budget in [1u32, 2, 5, 40] {
-        let settings = driver::LoopSettings {
-            pass_budget: budget,
-            ..driver::LoopSettings::default()
-        };
+        let settings =
+            driver::LoopSettings { pass_budget: budget, ..driver::LoopSettings::default() };
         assert_eq!(settings.pass_limit_for(&run), 2, "budget {budget}, first window");
         assert_eq!(settings.pass_limit_from(&run, 3), 4, "budget {budget}, after a floor move");
         assert_eq!(settings.pass_limit_from(&run, 5), 6, "budget {budget}, after two moves");
@@ -274,10 +278,7 @@ fn a_merge_runs_window_is_two_passes_whatever_the_projects_budget() {
 
     // The budget the project sets still governs a run that is not a merge run.
     let draft = bare_draft_run();
-    let wide = driver::LoopSettings {
-        pass_budget: 5,
-        ..driver::LoopSettings::default()
-    };
+    let wide = driver::LoopSettings { pass_budget: 5, ..driver::LoopSettings::default() };
     assert_eq!(wide.pass_limit_for(&draft), 5);
     assert_eq!(wide.pass_limit_from(&draft, 3), 7);
 }
@@ -287,10 +288,7 @@ fn a_merge_runs_window_is_two_passes_whatever_the_projects_budget() {
 // while the timeout stays the project's own.
 #[test]
 fn a_merge_run_still_reads_the_execution_timeout() {
-    let settings = driver::LoopSettings {
-        execution_timeout_ms: 123_000,
-        pass_budget: 9,
-    };
+    let settings = driver::LoopSettings { execution_timeout_ms: 123_000, pass_budget: 9 };
     let merge = bare_merge_run();
     assert_eq!(settings.execution_timeout_ms, 123_000);
     assert_eq!(settings.pass_limit_for(&merge), 2);

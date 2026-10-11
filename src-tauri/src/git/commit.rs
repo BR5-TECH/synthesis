@@ -30,8 +30,7 @@ pub(crate) fn base_tree_or_empty(repo: &Repository) -> Result<git2::Tree<'_>, St
         .treebuilder(None)
         .and_then(|builder| builder.write())
         .map_err(|e| format!("failed to create the empty tree: {e}"))?;
-    repo.find_tree(oid)
-        .map_err(|e| format!("failed to read the empty tree: {e}"))
+    repo.find_tree(oid).map_err(|e| format!("failed to read the empty tree: {e}"))
 }
 
 /// The tree entry mode for an index entry's raw mode. Anything that is not a
@@ -82,14 +81,8 @@ pub(crate) fn changed_named_paths(
     let mut changed = Vec::new();
     let mut previous_of = Vec::new();
     for delta in diff.deltas() {
-        let new_path = delta
-            .new_file()
-            .path()
-            .map(|p| p.to_string_lossy().into_owned());
-        let old_path = delta
-            .old_file()
-            .path()
-            .map(|p| p.to_string_lossy().into_owned());
+        let new_path = delta.new_file().path().map(|p| p.to_string_lossy().into_owned());
+        let old_path = delta.old_file().path().map(|p| p.to_string_lossy().into_owned());
         // A deletion has no new-side path; the entry is still named by its old
         // one, which is the path the caller ticked.
         let named = new_path.clone().or_else(|| old_path.clone());
@@ -200,9 +193,7 @@ fn commit_paths_with(
     // `add_path` reads the working-directory content through the repository's
     // filters, so a checkout under `core.autocrlf` commits the blob Git would
     // have committed rather than the raw bytes on disk.
-    let mut index = repo
-        .index()
-        .map_err(|e| format!("failed to open the index: {e}"))?;
+    let mut index = repo.index().map_err(|e| format!("failed to open the index: {e}"))?;
     // Every `spec` is repository-relative, so presence on disk is decided
     // against the repository's working directory rather than against the
     // project's content root, which may sit below it.
@@ -219,9 +210,7 @@ fn commit_paths_with(
         // so a file that could not be read is never committed as deleted.
         match root.file_info(workdir.join(spec)) {
             Ok(_) => {
-                index
-                    .add_path(relative)
-                    .map_err(|e| format!("failed to stage {spec}: {e}"))?;
+                index.add_path(relative).map_err(|e| format!("failed to stage {spec}: {e}"))?;
             }
             Err(crate::fs::FsError::NotFound { .. }) => {
                 index
@@ -248,9 +237,7 @@ fn commit_paths_with(
             let _ = index.remove_path(Path::new(old));
         }
     }
-    index
-        .write()
-        .map_err(|e| format!("failed to write the index: {e}"))?;
+    index.write().map_err(|e| format!("failed to write the index: {e}"))?;
 
     // The tree is HEAD's, updated at the named paths only.
     let base = base_tree_or_empty(&repo)?;
@@ -260,8 +247,7 @@ fn commit_paths_with(
         previous_of
             .iter()
             .filter(|(new, old)| {
-                changed.iter().any(|spec| spec == new)
-                    && !changed.iter().any(|spec| spec == old)
+                changed.iter().any(|spec| spec == new) && !changed.iter().any(|spec| spec == old)
             })
             .map(|(_, old)| old.clone()),
     );
@@ -285,29 +271,20 @@ fn commit_paths_with(
     let tree_oid = update
         .create_updated(&repo, &base)
         .map_err(|e| format!("failed to build the commit tree: {e}"))?;
-    let tree = repo
-        .find_tree(tree_oid)
-        .map_err(|e| format!("failed to read the commit tree: {e}"))?;
+    let tree =
+        repo.find_tree(tree_oid).map_err(|e| format!("failed to read the commit tree: {e}"))?;
 
     // GTC-FR-03: the authoring identity is the user's Git configuration; this
     // module does not own it and does not invent one.
-    let signature = repo
-        .signature()
-        .map_err(|e| format!("no Git authoring identity is configured: {e}"))?;
+    let signature =
+        repo.signature().map_err(|e| format!("no Git authoring identity is configured: {e}"))?;
     let parents: Vec<git2::Commit> = match repo.head().ok().and_then(|h| h.peel_to_commit().ok()) {
         Some(parent) => vec![parent],
         None => Vec::new(),
     };
     let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
     let oid = repo
-        .commit(
-            Some("HEAD"),
-            &signature,
-            &signature,
-            message,
-            &tree,
-            &parent_refs,
-        )
+        .commit(Some("HEAD"), &signature, &signature, message, &tree, &parent_refs)
         .map_err(|e| format!("failed to create the commit: {e}"))?;
     // GTC-FR-19: report every path the commit **recorded** — the named set that
     // actually changed, plus the previous location of each rename — rather than
@@ -320,14 +297,9 @@ fn commit_paths_with(
     // `touched` is repository-relative, and a project nested below the
     // repository root would otherwise hand the frontend paths it cannot match
     // against anything it holds.
-    let committed_paths = touched
-        .iter()
-        .filter_map(|spec| project_relative(&prefix, spec))
-        .collect();
-    Ok(CommitOutcome {
-        commit_id: oid.to_string(),
-        committed_paths,
-    })
+    let committed_paths =
+        touched.iter().filter_map(|spec| project_relative(&prefix, spec)).collect();
+    Ok(CommitOutcome { commit_id: oid.to_string(), committed_paths })
 }
 
 /// The inverse of [`repo_pathspec`]: a repository-relative spec back to the
@@ -340,7 +312,5 @@ pub(crate) fn project_relative(prefix: &str, spec: &str) -> Option<String> {
     if prefix.is_empty() {
         return Some(spec.to_string());
     }
-    spec.strip_prefix(prefix)
-        .and_then(|rest| rest.strip_prefix('/'))
-        .map(str::to_string)
+    spec.strip_prefix(prefix).and_then(|rest| rest.strip_prefix('/')).map(str::to_string)
 }

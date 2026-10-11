@@ -65,21 +65,21 @@ impl<'a, S: LogSink + Clone + Send + Sync + 'static> LaunchObserver<'a, S> {
         // such record at all (EAC-FR-42).
         if self.logs_activity {
             logging::log_debug(
-            &self.log,
-            &BUFFER,
-            &[Domain::Ai, Domain::Backend],
-            "agent activity",
-            log_fields! {
-                "vendor" => self.vendor.as_str(),
-                "container" => self.container.as_str(),
-                "channel" => event.channel,
-                "kind" => event.kind,
-                "summary" => event.summary.as_str(),
-                // The whole event, so a reader who exports or copies a record
-                // has what the panel showed rather than a shortened form of it.
-                "event" => event.payload.as_str(),
-                "event_truncated" => event.payload_truncated,
-            },
+                &self.log,
+                &BUFFER,
+                &[Domain::Ai, Domain::Backend],
+                "agent activity",
+                log_fields! {
+                    "vendor" => self.vendor.as_str(),
+                    "container" => self.container.as_str(),
+                    "channel" => event.channel,
+                    "kind" => event.kind,
+                    "summary" => event.summary.as_str(),
+                    // The whole event, so a reader who exports or copies a record
+                    // has what the panel showed rather than a shortened form of it.
+                    "event" => event.payload.as_str(),
+                    "event_truncated" => event.payload_truncated,
+                },
             );
         }
         if let Some(sink) = self.sink {
@@ -182,7 +182,9 @@ impl<'a, S: LogSink + Clone + Send + Sync + 'static> LaunchObserver<'a, S> {
     }
 }
 
-impl<'a, S: LogSink + Clone + Send + Sync + 'static> runtime::StreamObserver for LaunchObserver<'a, S> {
+impl<'a, S: LogSink + Clone + Send + Sync + 'static> runtime::StreamObserver
+    for LaunchObserver<'a, S>
+{
     fn line(&self, channel: runtime::StreamChannel, bytes: &[u8], whole: bool) {
         let mut held = match self.carry.lock() {
             Ok(held) => held,
@@ -204,11 +206,8 @@ impl<'a, S: LogSink + Clone + Send + Sync + 'static> runtime::StreamObserver for
         // ending may have been cut through a credential. Holding back the last
         // `carry_len` bytes means the two halves are rejoined before anything
         // is masked, so no fragment of a secret is ever emitted (EAC-FR-29).
-        let emit_upto = if whole {
-            piece.len()
-        } else {
-            piece.len().saturating_sub(self.carry_len)
-        };
+        let emit_upto =
+            if whole { piece.len() } else { piece.len().saturating_sub(self.carry_len) };
         if !whole {
             carry.extend_from_slice(&piece[emit_upto..]);
         }
@@ -231,10 +230,8 @@ pub(super) fn bounded_payload(text: &str) -> (String, bool) {
     if text.len() <= protocol::LIMIT_ACTIVITY_EVENT {
         return (text.to_string(), false);
     }
-    let end = (0..=protocol::LIMIT_ACTIVITY_EVENT)
-        .rev()
-        .find(|i| text.is_char_boundary(*i))
-        .unwrap_or(0);
+    let end =
+        (0..=protocol::LIMIT_ACTIVITY_EVENT).rev().find(|i| text.is_char_boundary(*i)).unwrap_or(0);
     (text[..end].to_string(), true)
 }
 

@@ -35,12 +35,7 @@ fn a_fetch_adds_advances_and_prunes_remote_tracking_refs() {
     f.upstream.write("a.md", "one\ntwo\n");
     f.upstream.commit();
     let advanced = f.upstream.repo().head().unwrap().peel_to_commit().unwrap().id();
-    f.upstream
-        .repo()
-        .find_branch("spike", BranchType::Local)
-        .unwrap()
-        .delete()
-        .unwrap();
+    f.upstream.repo().find_branch("spike", BranchType::Local).unwrap().delete().unwrap();
 
     let head_before = f.downstream.repo().head().unwrap().peel_to_commit().unwrap().id();
     let branch_before = f.downstream.current();
@@ -134,23 +129,14 @@ fn a_prune_leaves_the_local_branch_whose_upstream_vanished_intact() {
         .filter_map(|(b, _)| b.name().ok().flatten().map(|s| s.to_string()))
         .collect();
 
-    f.upstream
-        .repo()
-        .find_branch("spike", BranchType::Local)
-        .unwrap()
-        .delete()
-        .unwrap();
+    f.upstream.repo().find_branch("spike", BranchType::Local).unwrap().delete().unwrap();
     f.fetch().unwrap();
 
     let downstream = f.downstream.repo();
     let local = downstream
         .find_branch("spike", BranchType::Local)
         .expect("the local branch survives the prune");
-    assert_eq!(
-        local.get().peel_to_commit().unwrap().id(),
-        local_head,
-        "with its commits intact"
-    );
+    assert_eq!(local.get().peel_to_commit().unwrap().id(), local_head, "with its commits intact");
     assert!(
         !f.tracking().contains(&"origin/spike".to_string()),
         "only its remote-tracking ref was dropped"
@@ -196,9 +182,7 @@ fn a_github_remote_with_no_resolvable_token_refuses_before_any_network_request()
     // anything — the URL below is unroutable, so a test that reached the
     // network would hang or time out rather than pass.
     let f = WorktreeFixture::new();
-    f.repo()
-        .remote("origin", "https://github.com/acme/does-not-exist.git")
-        .unwrap();
+    f.repo().remote("origin", "https://github.com/acme/does-not-exist.git").unwrap();
     let before = f.snapshot_all();
 
     let fetch = |store: &GlobalSettingsStore| {
@@ -215,10 +199,7 @@ fn a_github_remote_with_no_resolvable_token_refuses_before_any_network_request()
 
     // Nothing stored at all: there is nothing to choose between.
     let empty = GlobalSettingsStore::in_memory();
-    assert_eq!(
-        fetch(&empty).unwrap_err(),
-        crate::github_tokens::ERR_TOKEN_MISSING
-    );
+    assert_eq!(fetch(&empty).unwrap_err(), crate::github_tokens::ERR_TOKEN_MISSING);
 
     // Two stored and no binding: the project has not been pointed at one.
     let two = GlobalSettingsStore::in_memory();
@@ -235,10 +216,7 @@ fn a_github_remote_with_no_resolvable_token_refuses_before_any_network_request()
         },
     ])
     .unwrap();
-    assert_eq!(
-        fetch(&two).unwrap_err(),
-        crate::github_tokens::ERR_SELECTION_REQUIRED
-    );
+    assert_eq!(fetch(&two).unwrap_err(), crate::github_tokens::ERR_SELECTION_REQUIRED);
 
     assert_eq!(
         before,
@@ -284,10 +262,7 @@ fn a_fetch_reports_itself_as_a_git_operation_and_streams_no_output() {
         published.last().map(|op| op.state) == Some(OperationState::Finished),
         "and reaches a terminal state when it ends: {published:?}"
     );
-    assert!(
-        registry.in_flight().is_empty(),
-        "leaving nothing stranded in the in-flight set"
-    );
+    assert!(registry.in_flight().is_empty(), "leaving nothing stranded in the in-flight set");
     // GTC-FR-15, PRG-FR-TBZN: a fetch has no destination in the Git panel.
     assert!(
         published.iter().all(|op| op.activation.is_none()),
@@ -309,9 +284,7 @@ fn a_failed_fetch_still_terminates_its_operation() {
     let f = WorktreeFixture::new();
     // A remote that exists but cannot be reached: the path is not a
     // repository, so libgit2 fails locally without touching a network.
-    f.repo()
-        .remote("origin", &format!("file://{}", f.sibling("nowhere").display()))
-        .unwrap();
+    f.repo().remote("origin", &format!("file://{}", f.sibling("nowhere").display())).unwrap();
     let sink = CollectingSink::default();
     let registry = ProgressRegistry::default();
 
@@ -342,12 +315,7 @@ fn a_failed_fetch_still_terminates_its_operation() {
     // reason to correct the classifier, not to loosen this.
     assert_eq!(err, crate::github_tokens::ERR_GITHUB_UNREACHABLE);
     assert!(
-        sink.published
-            .lock()
-            .unwrap()
-            .last()
-            .map(|op| op.state)
-            == Some(OperationState::Failed),
+        sink.published.lock().unwrap().last().map(|op| op.state) == Some(OperationState::Failed),
         "and its operation reached a terminal state"
     );
     assert!(registry.in_flight().is_empty());
@@ -456,15 +424,9 @@ fn a_transfer_failure_separates_a_refused_credential_from_an_unreachable_remote(
     // so the classification is pinned rather than left to a message match.
     use git2::{ErrorClass, ErrorCode};
     let refused = git2::Error::new(ErrorCode::Auth, ErrorClass::Http, "401");
-    assert_eq!(
-        classify_transfer_error(&refused),
-        crate::github_tokens::ERR_INVALID_TOKEN
-    );
+    assert_eq!(classify_transfer_error(&refused), crate::github_tokens::ERR_INVALID_TOKEN);
     let unreachable = git2::Error::new(ErrorCode::GenericError, ErrorClass::Net, "no route");
-    assert_eq!(
-        classify_transfer_error(&unreachable),
-        crate::github_tokens::ERR_GITHUB_UNREACHABLE
-    );
+    assert_eq!(classify_transfer_error(&unreachable), crate::github_tokens::ERR_GITHUB_UNREACHABLE);
     // GTC-FR-11: neither carries libgit2's message, so a remote URL with an
     // embedded credential cannot leak through an error.
     let leaky = git2::Error::new(

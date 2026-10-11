@@ -130,17 +130,9 @@ async fn created_identifier(response: Response) -> (Response, Option<String>) {
 
     let identifier = serde_json::from_slice::<Value>(&bytes)
         .ok()
-        .and_then(|document| {
-            document
-                .get("id")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        });
+        .and_then(|document| document.get("id").and_then(Value::as_str).map(str::to_string));
 
-    (
-        Response::from_parts(parts, Body::from(bytes)),
-        identifier.filter(|value| !value.is_empty()),
-    )
+    (Response::from_parts(parts, Body::from(bytes)), identifier.filter(|value| !value.is_empty()))
 }
 
 #[cfg(test)]
@@ -153,19 +145,15 @@ mod tests {
     // answer the caller receives is unchanged.
     #[tokio::test]
     async fn the_created_identifier_is_read_and_the_answer_is_unchanged() {
-        let response = (
-            StatusCode::CREATED,
-            Json(json!({"id": "abc", "display_name": "a name"})),
-        )
+        let response = (StatusCode::CREATED, Json(json!({"id": "abc", "display_name": "a name"})))
             .into_response();
 
         let (response, identifier) = created_identifier(response).await;
         assert_eq!(identifier.as_deref(), Some("abc"));
         assert_eq!(response.status(), StatusCode::CREATED);
 
-        let bytes = to_bytes(response.into_body(), MAX_READ_BYTES)
-            .await
-            .expect("the body is readable");
+        let bytes =
+            to_bytes(response.into_body(), MAX_READ_BYTES).await.expect("the body is readable");
         let document: Value = serde_json::from_slice(&bytes).expect("the body is JSON");
         assert_eq!(document["display_name"], "a name");
     }
@@ -182,11 +170,9 @@ mod tests {
     // members of the answer never reach the record.
     #[tokio::test]
     async fn an_answer_without_an_id_names_no_identifier() {
-        let response = (
-            StatusCode::CREATED,
-            Json(json!({"items": [], "email": "person@example.com"})),
-        )
-            .into_response();
+        let response =
+            (StatusCode::CREATED, Json(json!({"items": [], "email": "person@example.com"})))
+                .into_response();
         let (_, identifier) = created_identifier(response).await;
         assert_eq!(identifier, None);
     }
@@ -201,9 +187,8 @@ mod tests {
         assert_eq!(identifier, None);
         assert_eq!(listed.status(), StatusCode::OK);
 
-        let bytes = to_bytes(listed.into_body(), MAX_READ_BYTES)
-            .await
-            .expect("the body is readable");
+        let bytes =
+            to_bytes(listed.into_body(), MAX_READ_BYTES).await.expect("the body is readable");
         let document: Value = serde_json::from_slice(&bytes).expect("the body is JSON");
         assert_eq!(document["items"][0]["id"], "abc");
     }

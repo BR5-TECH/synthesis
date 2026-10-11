@@ -40,10 +40,8 @@ pub fn is_app_bundle(bundle_path: &str, identifier: Option<&str>) -> bool {
 /// notification for its own.
 pub fn run_token() -> &'static str {
     static TOKEN: LazyLock<String> = LazyLock::new(|| {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or_default();
+        let nanos =
+            SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or_default();
         format!("{:x}{:x}", std::process::id(), nanos)
     });
     TOKEN.as_str()
@@ -234,9 +232,7 @@ impl ClickRoutes {
     /// A poisoned map must not stop notifications: a notification is
     /// peripheral to everything it reports on.
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, Box<dyn FnOnce() + Send>>> {
-        self.routes
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.routes.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 

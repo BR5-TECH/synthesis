@@ -24,7 +24,9 @@ pub fn finished_line(
             human_duration(limit_ms)
         ),
         ProcessOutcome::NonZeroExit => match exit_code {
-            Some(code) => format!("Turn stopped: the agent process exited with code {code} after {after}."),
+            Some(code) => {
+                format!("Turn stopped: the agent process exited with code {code} after {after}.")
+            }
             None => format!("Turn stopped: the agent process exited after {after}."),
         },
         ProcessOutcome::Terminated => {

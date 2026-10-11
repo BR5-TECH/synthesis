@@ -80,12 +80,8 @@ pub(super) fn resolve_token_var(raw: Option<&str>) -> Result<String, String> {
     // The launch sets the Bedrock names itself and never passes the Anthropic
     // base URL (AIC-FR-XZCS), so a token under one of them would replace a
     // launch variable or pass the one name no launch passes.
-    let launch_sets = [
-        ANTHROPIC_BASE_URL_VAR,
-        BEDROCK_BASE_URL_VAR,
-        BEDROCK_FLAG_VAR,
-        BEDROCK_SKIP_AUTH_VAR,
-    ];
+    let launch_sets =
+        [ANTHROPIC_BASE_URL_VAR, BEDROCK_BASE_URL_VAR, BEDROCK_FLAG_VAR, BEDROCK_SKIP_AUTH_VAR];
     if !is_valid_variable_name(name)
         || launch_sets.iter().any(|set| name.eq_ignore_ascii_case(set))
         || is_reserved_variable(name)
@@ -169,11 +165,7 @@ pub(super) fn plan_gateway(
             None
         }
     };
-    Ok(GatewayPlan {
-        base_url,
-        token_var,
-        supplied_token,
-    })
+    Ok(GatewayPlan { base_url, token_var, supplied_token })
 }
 
 /// AIC-FR-ISOC: a value of this many characters or more is masked in records.

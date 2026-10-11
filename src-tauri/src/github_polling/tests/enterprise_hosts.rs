@@ -42,24 +42,22 @@ fn a_listed_enterprise_issue_resolves_to_its_url_and_a_foreign_url_is_refused() 
         "https://company.ghe.com/acme/widgets/issues/7"
     );
     rows[0].url = "https://github.com/acme/widgets/issues/7".into();
-    assert_eq!(
-        listed_issue_url(7, &repository, &rows, &[]).unwrap_err(),
-        ERR_ISSUE_NOT_LISTED
-    );
+    assert_eq!(listed_issue_url(7, &repository, &rows, &[]).unwrap_err(), ERR_ISSUE_NOT_LISTED);
 }
 
 // GPP-FR-HSTE, PSS-FR-TXJV
 #[test]
 fn a_claim_and_a_link_stored_without_a_host_read_as_github_com() {
-    let claim: crate::project_settings::GithubPendingClaim = serde_json::from_value(serde_json::json!({
-        "repositoryOwner": "acme",
-        "repositoryName": "widgets",
-        "issueNumber": 7,
-        "issueUrl": "https://github.com/acme/widgets/issues/7",
-        "projectNodeId": "PVT_1",
-        "claimedAt": "2026-10-02T09:00:00Z",
-    }))
-    .unwrap();
+    let claim: crate::project_settings::GithubPendingClaim =
+        serde_json::from_value(serde_json::json!({
+            "repositoryOwner": "acme",
+            "repositoryName": "widgets",
+            "issueNumber": 7,
+            "issueUrl": "https://github.com/acme/widgets/issues/7",
+            "projectNodeId": "PVT_1",
+            "claimedAt": "2026-10-02T09:00:00Z",
+        }))
+        .unwrap();
     assert_eq!(claim.repository_host, "github.com");
 
     let link: crate::drafts::GithubIssueLink = serde_json::from_value(serde_json::json!({
@@ -99,7 +97,10 @@ fn ghe_task(number: u64) -> GithubReadyTask {
     eligible_tasks(&[ready(number)], &ghe_repo()).remove(0)
 }
 
-fn on_ghe<T>(mut link: crate::drafts::GithubIssueLink, then: impl FnOnce(&mut crate::drafts::GithubIssueLink) -> T) -> T {
+fn on_ghe<T>(
+    mut link: crate::drafts::GithubIssueLink,
+    then: impl FnOnce(&mut crate::drafts::GithubIssueLink) -> T,
+) -> T {
     link.repository_host = "company.ghe.com".into();
     then(&mut link)
 }
@@ -140,8 +141,14 @@ fn a_shadow_or_a_claim_on_one_host_does_not_hide_the_same_issue_of_another_host(
 // GPP-FR-YROY, GPP-FR-HSTE
 #[test]
 fn the_same_issue_of_two_hosts_has_two_identities_and_two_claim_locks() {
-    assert_ne!(IssueKey::of_task(&ghe_task(7)), IssueKey::of_task(&eligible_tasks(&[ready(7)], &repo())[0]));
-    assert_eq!(IssueKey::new("Company.GHE.com", "ACME", "Widgets", 7), IssueKey::of_task(&ghe_task(7)));
+    assert_ne!(
+        IssueKey::of_task(&ghe_task(7)),
+        IssueKey::of_task(&eligible_tasks(&[ready(7)], &repo())[0])
+    );
+    assert_eq!(
+        IssueKey::new("Company.GHE.com", "ACME", "Widgets", 7),
+        IssueKey::of_task(&ghe_task(7))
+    );
 
     let guards = ClaimGuards::default();
     let held = guards.acquire(IssueKey::new("github.com", "acme", "widgets", 7)).unwrap();
@@ -163,7 +170,11 @@ fn a_claim_does_not_reuse_a_shadow_or_meet_a_pending_claim_of_another_host() {
     let root = crate::fs::RootFs::for_root(dir.path());
     let github_shadow = crate::drafts::create_github_shadow_draft(&root, "t", "b", link(7))
         .expect("the github.com shadow draft is created");
-    crate::project_settings::save_github_pending_claims_to(&root, &[pending(7, Some(github_shadow.draft.id.as_str()))]).unwrap();
+    crate::project_settings::save_github_pending_claims_to(
+        &root,
+        &[pending(7, Some(github_shadow.draft.id.as_str()))],
+    )
+    .unwrap();
 
     let repository = ghe_repo();
     let fake = FakeProjects::new();
@@ -185,7 +196,9 @@ fn a_claim_does_not_reuse_a_shadow_or_meet_a_pending_claim_of_another_host() {
         github_shadow.draft.id
     );
     assert_eq!(
-        crate::drafts::find_github_shadow(&root, "company.ghe.com", "acme", "widgets", 7).unwrap().id,
+        crate::drafts::find_github_shadow(&root, "company.ghe.com", "acme", "widgets", 7)
+            .unwrap()
+            .id,
         outcome.result.draft_id
     );
 

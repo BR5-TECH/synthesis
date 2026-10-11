@@ -32,10 +32,12 @@ use objc2_user_notifications::{
 use tauri::Manager;
 
 use super::platform::{
-    self, permission_from_answer, plan_response, platform_identifier, post_outcome,
-    request_flow, run_token, ClickRoutes, ResponseAction, ResponsePlan,
+    self, permission_from_answer, plan_response, platform_identifier, post_outcome, request_flow,
+    run_token, ClickRoutes, ResponseAction, ResponsePlan,
 };
-use super::{NotificationRegistry, NotificationRequest, NotificationSink, PermissionState, PostError};
+use super::{
+    NotificationRegistry, NotificationRequest, NotificationSink, PermissionState, PostError,
+};
 use crate::log_fields;
 use crate::logging::{log_debug, log_info, log_warn, Domain, Fields, BUFFER};
 
@@ -180,12 +182,8 @@ impl Delegate {
 fn response_action(response: &UNNotificationResponse) -> ResponseAction {
     let action = response.actionIdentifier();
     // SAFETY: the centre defines these constants for the life of the process.
-    let (open, dismiss) = unsafe {
-        (
-            UNNotificationDefaultActionIdentifier,
-            UNNotificationDismissActionIdentifier,
-        )
-    };
+    let (open, dismiss) =
+        unsafe { (UNNotificationDefaultActionIdentifier, UNNotificationDismissActionIdentifier) };
     if action.isEqualToString(open) {
         ResponseAction::Open
     } else if action.isEqualToString(dismiss) {
@@ -215,10 +213,7 @@ fn route_response(center: &UNUserNotificationCenter, response: &UNNotificationRe
             if let Some(app) = APP.get() {
                 app.state::<NotificationRegistry>().withdraw(id);
             }
-            debug(
-                "notification dismissed",
-                log_fields! { "notificationId" => id },
-            );
+            debug("notification dismissed", log_fields! { "notificationId" => id });
         }
         ResponsePlan::Open(id) => {
             // NTD-FR-10: the route is given out once, and the notification
@@ -235,9 +230,8 @@ fn route_response(center: &UNUserNotificationCenter, response: &UNNotificationRe
             // The route raises a window and emits an event. It runs off the
             // centre's callback, so the centre is never held while a window
             // comes forward.
-            let spawned = std::thread::Builder::new()
-                .name("notification-activation".into())
-                .spawn(route);
+            let spawned =
+                std::thread::Builder::new().name("notification-activation".into()).spawn(route);
             if let Err(e) = spawned {
                 warn(
                     "could not start the notification activation",
@@ -331,10 +325,7 @@ impl NotificationSink for OsSink {
                 "notification centre refused a post",
                 log_fields! { "notificationId" => id, "domain" => domain.as_str(), "code" => *code },
             ),
-            None => warn(
-                "notification post timed out",
-                log_fields! { "notificationId" => id },
-            ),
+            None => warn("notification post timed out", log_fields! { "notificationId" => id }),
         }
         let Err(failure) = post_outcome(answer) else {
             return Ok(());
@@ -372,10 +363,7 @@ impl NotificationSink for OsSink {
         };
         // NTD-FR-03: the answer is the state the centre reports after the
         // prompt.
-        request_flow(
-            || read_permission(&center),
-            || ask_permission(&center),
-        )
+        request_flow(|| read_permission(&center), || ask_permission(&center))
     }
 }
 
@@ -419,11 +407,8 @@ mod tests {
         let sink = OsSink;
         assert_eq!(sink.permission(), PermissionState::Unsupported);
         assert_eq!(sink.request_permission(), PermissionState::Unsupported);
-        let delivered = sink.deliver(
-            "notif-unbundled",
-            &NotificationRequest::default(),
-            Box::new(|| {}),
-        );
+        let delivered =
+            sink.deliver("notif-unbundled", &NotificationRequest::default(), Box::new(|| {}));
         assert_eq!(delivered, Err(PostError::Unsupported));
         assert!(ROUTES.take(&platform_identifier(run_token(), "notif-unbundled")).is_none());
         sink.retract("notif-unbundled");

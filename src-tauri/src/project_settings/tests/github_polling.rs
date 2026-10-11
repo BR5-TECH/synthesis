@@ -37,10 +37,8 @@ fn the_polling_settings_are_project_public_and_merge_into_the_store() {
     .unwrap();
     assert_eq!(load_github_polling_settings_from(&root).unwrap(), GithubPollingSettings::default());
 
-    let saved = GithubPollingSettings {
-        project_node_id: Some("PVT_1".into()),
-        interval_minutes: Some(15),
-    };
+    let saved =
+        GithubPollingSettings { project_node_id: Some("PVT_1".into()), interval_minutes: Some(15) };
     save_github_polling_settings_to(&root, &saved).unwrap();
     assert_eq!(load_github_polling_settings_from(&root).unwrap(), saved);
     let text = std::fs::read_to_string(dir.path().join(".synthesis/project.toml")).unwrap();
@@ -73,9 +71,18 @@ fn invalid_stored_values_read_as_unset() {
     let (dir, root) = fresh();
     let path = dir.path().join(".synthesis/project.toml");
     for (body, expected) in [
-        ("[githubPolling]\nprojectNodeId = \"\"\nintervalMinutes = 7\n", GithubPollingSettings::default()),
-        ("[githubPolling]\nprojectNodeId = 12\nintervalMinutes = \"5\"\n", GithubPollingSettings::default()),
-        ("[githubPolling]\nprojectNodeId = \"  \"\nintervalMinutes = -5\n", GithubPollingSettings::default()),
+        (
+            "[githubPolling]\nprojectNodeId = \"\"\nintervalMinutes = 7\n",
+            GithubPollingSettings::default(),
+        ),
+        (
+            "[githubPolling]\nprojectNodeId = 12\nintervalMinutes = \"5\"\n",
+            GithubPollingSettings::default(),
+        ),
+        (
+            "[githubPolling]\nprojectNodeId = \"  \"\nintervalMinutes = -5\n",
+            GithubPollingSettings::default(),
+        ),
         (
             "[githubPolling]\nprojectNodeId = \"PVT_1\"\nintervalMinutes = 0\n",
             GithubPollingSettings { project_node_id: Some("PVT_1".into()), interval_minutes: None },
@@ -102,7 +109,8 @@ fn invalid_stored_values_read_as_unset() {
 fn the_pending_claims_are_project_local_and_merge_into_the_store() {
     let (dir, root) = fresh();
     assert!(load_github_pending_claims_from(&root).is_empty(), "a missing list reads as empty");
-    save_drafts_panel_state_to(&root, drafts_state(DraftsStatusFilter::Archived, "x", &["UI"])).unwrap();
+    save_drafts_panel_state_to(&root, drafts_state(DraftsStatusFilter::Archived, "x", &["UI"]))
+        .unwrap();
 
     let claims = vec![claim(4, None), claim(5, Some("d-5"))];
     save_github_pending_claims_to(&root, &claims).unwrap();
@@ -168,7 +176,8 @@ claimedAt = "2026-10-02T09:00:00Z"
     .unwrap();
     assert_eq!(load_github_pending_claims_from(&root), vec![claim(4, None)]);
 
-    std::fs::write(dir.path().join(".synthesis/local.toml"), "github_pending_claims = 3\n").unwrap();
+    std::fs::write(dir.path().join(".synthesis/local.toml"), "github_pending_claims = 3\n")
+        .unwrap();
     assert!(load_github_pending_claims_from(&root).is_empty());
 }
 

@@ -10,22 +10,14 @@ fn commit_on(worktree: &Path, file: &str, message: &str) -> String {
         .allow_root(&worktree.to_path_buf())
         .build()
         .expect("the working copy");
-    fs.write_text_atomic(worktree.join(file), message)
-        .expect("the file is writable");
+    fs.write_text_atomic(worktree.join(file), message).expect("the file is writable");
     let repo = git2::Repository::open(worktree).expect("the stream's repository");
     let mut index = repo.index().expect("the index");
-    index
-        .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-        .expect("staged");
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).expect("staged");
     index.write().expect("written");
-    let tree = repo
-        .find_tree(index.write_tree().expect("a tree"))
-        .expect("a tree");
+    let tree = repo.find_tree(index.write_tree().expect("a tree")).expect("a tree");
     let signature = repo.signature().expect("a signature");
-    let head = repo
-        .head()
-        .and_then(|head| head.peel_to_commit())
-        .expect("the head");
+    let head = repo.head().and_then(|head| head.peel_to_commit()).expect("the head");
     let revision = repo
         .commit(Some("HEAD"), &signature, &signature, message, &tree, &[&head])
         .expect("committed")

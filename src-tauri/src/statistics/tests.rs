@@ -45,17 +45,13 @@ impl Fixture {
     }
 
     fn log_text(&self, draft_id: &str) -> String {
-        self.root
-            .read_text(log_path(&self.root, draft_id).expect("path"))
-            .expect("log")
+        self.root.read_text(log_path(&self.root, draft_id).expect("path")).expect("log")
     }
 
     /// Put a raw line into a draft's log, for the damaged-line cases.
     fn append_raw(&self, draft_id: &str, line: &str) {
         let path = log_path(&self.root, draft_id).expect("path");
-        self.root
-            .append_lines(&path, &[line.to_string()])
-            .expect("raw append");
+        self.root.append_lines(&path, &[line.to_string()]).expect("raw append");
     }
 }
 
@@ -128,10 +124,7 @@ fn history(entry_id: &str, seq: u32, kind: HistorySourceKind) -> Pending {
 }
 
 fn decision(proposal_id: &str, decision: Decision) -> Pending {
-    Pending::now(EventBody::ProposalDecision {
-        proposal_id: proposal_id.to_string(),
-        decision,
-    })
+    Pending::now(EventBody::ProposalDecision { proposal_id: proposal_id.to_string(), decision })
 }
 
 // ---------------------------------------------------------------------------
@@ -236,10 +229,7 @@ fn ts_hmdr_racing_boundaries_converge_on_the_earlier() {
     let stats = f.read(DRAFT);
     assert_eq!(stats.boundary_at.as_deref(), Some(at(0).as_str()));
     // A decision between the two boundaries counts, the earlier being the one.
-    assert_eq!(
-        stats.totals.accepted_proposals,
-        Measure::of(1, Availability::Available)
-    );
+    assert_eq!(stats.totals.accepted_proposals, Measure::of(1, Availability::Available));
 }
 
 // ---------------------------------------------------------------------------
@@ -307,10 +297,7 @@ fn ts_ujcf_an_interval_straddling_the_boundary_contributes_its_captured_part() {
     );
     // DSS-FR-KYTB: clipping is not incompleteness — the part cut away is
     // pre-boundary activity, which is out of scope rather than missing.
-    assert_eq!(
-        stats.totals.editing_time_ms.availability,
-        Availability::Available
-    );
+    assert_eq!(stats.totals.editing_time_ms.availability, Availability::Available);
     assert_eq!(stats.unreadable_lines, 0);
 }
 
@@ -344,10 +331,7 @@ fn ts_qeip_a_damaged_line_is_skipped_counted_and_left_in_place() {
     assert_eq!(stats.totals.draft_edits.value, Some(1));
     // DSS-FR-NCLP: a family the fold saw a valid event of, beside a line it
     // could not read, is `incomplete` rather than `unavailable` or zero.
-    assert_eq!(
-        stats.totals.draft_edits.availability,
-        Availability::Incomplete
-    );
+    assert_eq!(stats.totals.draft_edits.availability, Availability::Incomplete);
     // A family with no valid event at all stays unavailable.
     assert_eq!(stats.totals.editing_time_ms, Measure::unavailable());
     // DSS-FR-WRPD: no line is ever rewritten or removed.
@@ -396,10 +380,7 @@ fn ts_qeip_damage_reaches_the_family_the_unreadable_line_belongs_to_and_no_other
             "an unrelated family is not made incomplete by another's damage",
         );
     }
-    assert_eq!(
-        stats.totals.agent_time_ms.reviews.availability,
-        Availability::Available,
-    );
+    assert_eq!(stats.totals.agent_time_ms.reviews.availability, Availability::Available,);
 }
 
 #[test]
@@ -433,20 +414,14 @@ fn ts_qeip_a_line_naming_no_family_reaches_every_one_of_them() {
     let f = Fixture::new();
     f.append(
         DRAFT,
-        vec![
-            history("h1", 1, HistorySourceKind::Original),
-            decision("p1", Decision::Accepted),
-        ],
+        vec![history("h1", 1, HistorySourceKind::Original), decision("p1", Decision::Accepted)],
     );
     f.append_raw(DRAFT, "not json at all");
 
     let stats = f.read(DRAFT);
     assert_eq!(stats.unreadable_lines, 1);
     assert_eq!(stats.totals.draft_edits.availability, Availability::Incomplete);
-    assert_eq!(
-        stats.totals.accepted_proposals.availability,
-        Availability::Incomplete,
-    );
+    assert_eq!(stats.totals.accepted_proposals.availability, Availability::Incomplete,);
     // And a family with no valid event of its own is still unavailable rather
     // than incomplete: there is nothing for the damage to be partial about.
     assert_eq!(stats.totals.editing_time_ms, Measure::unavailable());
@@ -529,17 +504,11 @@ fn ts_gxnu_a_turn_that_reached_no_model_contributes_nothing_but_is_available() {
     let f = Fixture::new();
     f.append(DRAFT, vec![turn("t1", false, 0, minutes(4))]);
     let stats = f.read(DRAFT);
-    assert_eq!(
-        stats.totals.ai_interactions,
-        Measure::of(0, Availability::Available)
-    );
+    assert_eq!(stats.totals.ai_interactions, Measure::of(0, Availability::Available));
     // DSS-FR-IYRG: none of those four minutes reaches Refinement time, and the
     // figure is `available` at zero rather than `unavailable` — a turn was
     // recorded.
-    assert_eq!(
-        stats.totals.agent_time_ms.refinement,
-        Measure::of(0, Availability::Available)
-    );
+    assert_eq!(stats.totals.agent_time_ms.refinement, Measure::of(0, Availability::Available));
 }
 
 #[test]
@@ -549,26 +518,44 @@ fn ts_dwma_one_turn_is_one_interaction_however_many_records_it_reported() {
         DRAFT,
         vec![
             turn("t1", true, 0, minutes(6)),
-            usage("u1", UsageScope::Conversation, Bucket::Refinement, "t1", Representation::PerCall, Some(10), Some(1)),
-            usage("u2", UsageScope::Conversation, Bucket::Refinement, "t1", Representation::PerCall, Some(20), Some(2)),
+            usage(
+                "u1",
+                UsageScope::Conversation,
+                Bucket::Refinement,
+                "t1",
+                Representation::PerCall,
+                Some(10),
+                Some(1),
+            ),
+            usage(
+                "u2",
+                UsageScope::Conversation,
+                Bucket::Refinement,
+                "t1",
+                Representation::PerCall,
+                Some(20),
+                Some(2),
+            ),
             // The successful retry's own record, distinct and summed like any
             // other, adding no interaction.
-            usage("u3", UsageScope::Conversation, Bucket::Refinement, "t1", Representation::PerCall, Some(30), Some(3)),
+            usage(
+                "u3",
+                UsageScope::Conversation,
+                Bucket::Refinement,
+                "t1",
+                Representation::PerCall,
+                Some(30),
+                Some(3),
+            ),
         ],
     );
     let stats = f.read(DRAFT);
     assert_eq!(stats.totals.ai_interactions.value, Some(1));
-    assert_eq!(
-        stats.totals.agent_time_ms.refinement.value,
-        Some(minutes(6) as u64)
-    );
+    assert_eq!(stats.totals.agent_time_ms.refinement.value, Some(minutes(6) as u64));
     assert_eq!(stats.totals.conversation_tokens.input.value, Some(60));
     assert_eq!(stats.totals.conversation_tokens.output.value, Some(6));
     // DSS-FR-UBLC: the same records read as the Refinement bucket.
-    assert_eq!(
-        stats.totals.agent_tokens.refinement,
-        stats.totals.conversation_tokens
-    );
+    assert_eq!(stats.totals.agent_tokens.refinement, stats.totals.conversation_tokens);
 }
 
 // ---------------------------------------------------------------------------
@@ -645,10 +632,7 @@ fn ts_ruap_a_pre_boundary_decision_contributes_nothing_and_marks_nothing_incompl
     );
 
     let stats = f.read(DRAFT);
-    assert_eq!(
-        stats.totals.accepted_proposals,
-        Measure::of(1, Availability::Available)
-    );
+    assert_eq!(stats.totals.accepted_proposals, Measure::of(1, Availability::Available));
     assert_eq!(stats.unreadable_lines, 0);
 }
 
@@ -682,9 +666,33 @@ fn ts_bthx_per_call_records_win_over_a_turn_aggregate_and_are_never_combined() {
         DRAFT,
         vec![
             turn("t1", true, 0, minutes(1)),
-            usage("u1", UsageScope::Conversation, Bucket::Refinement, "t1", Representation::PerCall, Some(10), Some(1)),
-            usage("u2", UsageScope::Conversation, Bucket::Refinement, "t1", Representation::PerCall, Some(20), Some(2)),
-            usage("agg", UsageScope::Conversation, Bucket::Refinement, "t1", Representation::TurnAggregate, Some(999), Some(99)),
+            usage(
+                "u1",
+                UsageScope::Conversation,
+                Bucket::Refinement,
+                "t1",
+                Representation::PerCall,
+                Some(10),
+                Some(1),
+            ),
+            usage(
+                "u2",
+                UsageScope::Conversation,
+                Bucket::Refinement,
+                "t1",
+                Representation::PerCall,
+                Some(20),
+                Some(2),
+            ),
+            usage(
+                "agg",
+                UsageScope::Conversation,
+                Bucket::Refinement,
+                "t1",
+                Representation::TurnAggregate,
+                Some(999),
+                Some(99),
+            ),
         ],
     );
     let stats = f.read(DRAFT);
@@ -699,14 +707,19 @@ fn ts_bthx_an_aggregate_alone_is_used_once_and_a_missing_direction_is_incomplete
         DRAFT,
         vec![
             turn("t1", true, 0, minutes(1)),
-            usage("agg", UsageScope::Conversation, Bucket::Refinement, "t1", Representation::TurnAggregate, Some(500), None),
+            usage(
+                "agg",
+                UsageScope::Conversation,
+                Bucket::Refinement,
+                "t1",
+                Representation::TurnAggregate,
+                Some(500),
+                None,
+            ),
         ],
     );
     let stats = f.read(DRAFT);
-    assert_eq!(
-        stats.totals.conversation_tokens.input,
-        Measure::of(500, Availability::Available)
-    );
+    assert_eq!(stats.totals.conversation_tokens.input, Measure::of(500, Availability::Available));
     // DSS-FR-DZQF: an unreported direction is never filled with a zero.
     assert_eq!(stats.totals.conversation_tokens.output, Measure::unavailable());
 }
@@ -718,19 +731,29 @@ fn ts_mjew_a_direction_some_records_report_and_some_do_not_is_incomplete() {
         DRAFT,
         vec![
             turn("t1", true, 0, minutes(1)),
-            usage("u1", UsageScope::Conversation, Bucket::Refinement, "t1", Representation::PerCall, Some(10), Some(4)),
-            usage("u2", UsageScope::Conversation, Bucket::Refinement, "t1", Representation::PerCall, Some(20), None),
+            usage(
+                "u1",
+                UsageScope::Conversation,
+                Bucket::Refinement,
+                "t1",
+                Representation::PerCall,
+                Some(10),
+                Some(4),
+            ),
+            usage(
+                "u2",
+                UsageScope::Conversation,
+                Bucket::Refinement,
+                "t1",
+                Representation::PerCall,
+                Some(20),
+                None,
+            ),
         ],
     );
     let stats = f.read(DRAFT);
-    assert_eq!(
-        stats.totals.conversation_tokens.input,
-        Measure::of(30, Availability::Available)
-    );
-    assert_eq!(
-        stats.totals.conversation_tokens.output,
-        Measure::of(4, Availability::Incomplete)
-    );
+    assert_eq!(stats.totals.conversation_tokens.input, Measure::of(30, Availability::Available));
+    assert_eq!(stats.totals.conversation_tokens.output, Measure::of(4, Availability::Incomplete));
 }
 
 #[test]
@@ -801,17 +824,11 @@ fn ts_xafr_the_total_is_the_sum_of_the_six_and_an_absent_bucket_is_not_a_zero() 
     let g = Fixture::new();
     g.append(
         OTHER,
-        vec![
-            turn("t1", true, 0, minutes(1)),
-            operation("o1", Bucket::Authoring, 0, minutes(2)),
-        ],
+        vec![turn("t1", true, 0, minutes(1)), operation("o1", Bucket::Authoring, 0, minutes(2))],
     );
     let partial = g.read(OTHER).totals.agent_time_ms;
     assert_eq!(partial.reviews, Measure::unavailable());
-    assert_eq!(
-        partial.total,
-        Measure::of(minutes(3) as u64, Availability::Incomplete)
-    );
+    assert_eq!(partial.total, Measure::of(minutes(3) as u64, Availability::Incomplete));
 
     // With nothing recorded at all every bucket and the total are unavailable.
     let h = Fixture::new();
@@ -829,11 +846,7 @@ fn ts_xafr_the_total_is_the_sum_of_the_six_and_an_absent_bucket_is_not_a_zero() 
 fn ts_holv_the_log_is_named_for_the_stable_draft_id_under_the_committed_folder() {
     let f = Fixture::new();
     f.append(DRAFT, vec![decision("p1", Decision::Accepted)]);
-    let expected = f
-        .root
-        .path()
-        .join(STATISTICS_REL)
-        .join(format!("{DRAFT}.jsonl"));
+    let expected = f.root.path().join(STATISTICS_REL).join(format!("{DRAFT}.jsonl"));
     assert!(expected.exists());
     assert!(!f.root.path().join(".synthesis/drafts").exists());
 }
@@ -846,12 +859,7 @@ fn ts_ungk_deletion_is_scoped_idempotent_and_leaves_every_other_log_alone() {
     let other_before = f.log_text(OTHER);
 
     delete_draft_statistics(&f.root, DRAFT).expect("delete");
-    assert!(!f
-        .root
-        .path()
-        .join(STATISTICS_REL)
-        .join(format!("{DRAFT}.jsonl"))
-        .exists());
+    assert!(!f.root.path().join(STATISTICS_REL).join(format!("{DRAFT}.jsonl")).exists());
     assert_eq!(f.log_text(OTHER), other_before);
 
     // A second call is an already completed deletion rather than an error.
@@ -871,7 +879,15 @@ fn ts_fyta_no_line_carries_content_and_a_replay_folds_to_the_same_totals() {
             interval("i1", 0, minutes(5)),
             turn("t1", true, 0, minutes(2)),
             operation("o1", Bucket::Implementation, 0, minutes(3)),
-            usage("u1", UsageScope::Graduation, Bucket::Implementation, "o1", Representation::PerCall, Some(7), Some(8)),
+            usage(
+                "u1",
+                UsageScope::Graduation,
+                Bucket::Implementation,
+                "o1",
+                Representation::PerCall,
+                Some(7),
+                Some(8),
+            ),
             history("h1", 1, HistorySourceKind::Original),
             decision("p1", Decision::Accepted),
         ],
@@ -881,13 +897,20 @@ fn ts_fyta_no_line_carries_content_and_a_replay_folds_to_the_same_totals() {
     // decision, and reported token numbers, and nothing else. The vocabulary is
     // closed, so the check is that no key outside it ever appears.
     for forbidden in [
-        "prompt", "candidate", "rationale", "feedback", "body", "content", "exchange", "tool",
-        "answer", "credential", "token\"", "secret",
+        "prompt",
+        "candidate",
+        "rationale",
+        "feedback",
+        "body",
+        "content",
+        "exchange",
+        "tool",
+        "answer",
+        "credential",
+        "token\"",
+        "secret",
     ] {
-        assert!(
-            !text.contains(forbidden),
-            "a statistics line must not carry {forbidden:?}"
-        );
+        assert!(!text.contains(forbidden), "a statistics line must not carry {forbidden:?}");
     }
 
     // A relaunch replays the same file and folds to the same totals.
@@ -925,10 +948,7 @@ fn instants_round_trip_through_the_shape_this_module_writes() {
     assert_eq!(time::parse_instant_ms("not an instant"), None);
     assert_eq!(time::parse_instant_ms("2026-03-14T12:00:00"), None);
     // A second-granularity stamp is read as the start of that second.
-    assert_eq!(
-        time::parse_instant_ms("1970-01-01T00:00:01Z"),
-        Some(1_000)
-    );
+    assert_eq!(time::parse_instant_ms("1970-01-01T00:00:01Z"), Some(1_000));
 }
 
 /// DSS-FR-MVTK, PST-FR-DQZT: no write of this module arms the debounced commit.

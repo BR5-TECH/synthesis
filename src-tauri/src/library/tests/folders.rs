@@ -45,10 +45,7 @@ fn create_folder_impl_rejects_a_collision_without_touching_the_existing_folder()
 
     let err = create_folder_impl(root, None, "drafts", None).unwrap_err();
     assert!(err.contains("already exists"), "got: {err}");
-    assert_eq!(
-        std::fs::read_to_string(root.join("drafts/keep.md")).unwrap(),
-        "mine"
-    );
+    assert_eq!(std::fs::read_to_string(root.join("drafts/keep.md")).unwrap(), "mine");
 }
 
 #[test]
@@ -73,8 +70,8 @@ fn create_folder_impl_records_a_folder_scope_assignment_its_contents_inherit() {
     let dir = tempfile::TempDir::new().unwrap();
     let root = &crate::fs::RootFs::for_root(dir.path());
 
-    let node = create_folder_impl(root, None, "drafts", Some(scanning::ArtifactType::Scenario))
-        .unwrap();
+    let node =
+        create_folder_impl(root, None, "drafts", Some(scanning::ArtifactType::Scenario)).unwrap();
     assert!(root.join("drafts").is_dir());
     // ASC-FR-18: the folder reports its own assignment on the returned node.
     assert_eq!(node.artifact_type, Some(scanning::ArtifactType::Scenario));
@@ -100,10 +97,7 @@ fn create_folder_impl_rejects_a_name_an_existing_file_occupies() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     std::fs::write(root.join("README.md"), b"readme").unwrap();
     assert!(create_folder_impl(root, None, "README.md", None).is_err());
-    assert_eq!(
-        std::fs::read_to_string(root.join("README.md")).unwrap(),
-        "readme"
-    );
+    assert_eq!(std::fs::read_to_string(root.join("README.md")).unwrap(), "readme");
 }
 
 #[test]
@@ -111,7 +105,11 @@ fn create_folder_impl_rejects_a_location_escaping_the_root() {
     // PST-FR-25 / FSA-FR-10: a location that climbs out of the project root is
     // rejected by the escape gate and nothing is created.
     let dir = tempfile::TempDir::new().unwrap();
-    let root = &{ let p = dir.path().join("root"); std::fs::create_dir_all(&p).unwrap(); crate::fs::RootFs::for_root(&p) };
+    let root = &{
+        let p = dir.path().join("root");
+        std::fs::create_dir_all(&p).unwrap();
+        crate::fs::RootFs::for_root(&p)
+    };
     std::fs::create_dir_all(&root).unwrap();
     assert!(create_folder_impl(&root, Some("../evil"), "x", None).is_err());
     assert!(!dir.path().join("evil").exists());
@@ -170,11 +168,7 @@ fn inheritance_reaches_through_an_untyped_ancestor_and_the_user_can_override_it(
             .unwrap();
     assert_eq!(override_node.artifact_type, Some(scanning::ArtifactType::Spec));
     assert_eq!(
-        scanning::load_assignments(root)
-            .assignments
-            .get("prompts/specs")
-            .unwrap()
-            .artifact_type,
+        scanning::load_assignments(root).assignments.get("prompts/specs").unwrap().artifact_type,
         scanning::ArtifactType::Spec
     );
 }
@@ -204,13 +198,7 @@ fn a_file_scope_assignment_on_an_ancestor_is_not_inherited() {
     let dir = tempfile::TempDir::new().unwrap();
     let root = &crate::fs::RootFs::for_root(dir.path());
     std::fs::create_dir_all(root.join("odd")).unwrap();
-    scanning::assign(
-        root,
-        "odd",
-        scanning::ArtifactType::Prompt,
-        scanning::Scope::File,
-    )
-    .unwrap();
+    scanning::assign(root, "odd", scanning::ArtifactType::Prompt, scanning::Scope::File).unwrap();
 
     let node = create_folder_impl(root, Some("odd"), "child", None).unwrap();
     assert_eq!(node.artifact_type, None);
@@ -227,8 +215,7 @@ fn a_folder_whose_name_the_scan_excludes_is_still_reported_as_created() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     std::fs::write(root.join(".gitignore"), b"dist/\n").unwrap();
 
-    let node = create_folder_impl(root, None, "dist", Some(scanning::ArtifactType::Spec))
-        .unwrap();
+    let node = create_folder_impl(root, None, "dist", Some(scanning::ArtifactType::Spec)).unwrap();
 
     assert!(root.join("dist").is_dir());
     assert_eq!(node.path, "dist");
@@ -253,8 +240,8 @@ fn a_failed_type_assignment_rolls_the_creation_back() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     std::fs::write(root.join(".synthesis"), b"not a directory").unwrap();
 
-    let err = create_folder_impl(root, None, "drafts", Some(scanning::ArtifactType::Spec))
-        .unwrap_err();
+    let err =
+        create_folder_impl(root, None, "drafts", Some(scanning::ArtifactType::Spec)).unwrap_err();
 
     assert!(!err.is_empty());
     assert!(
@@ -275,10 +262,7 @@ fn no_structural_mutation_in_this_module_bypasses_the_fsa_primitives() {
     // Only the non-test half is scanned: the tests below legitimately build
     // and inspect fixtures with `std::fs`.
     let source = include_str!("../../library.rs");
-    let impl_half = source
-        .split_once("\n#[cfg(test)]")
-        .expect("the test module")
-        .0;
+    let impl_half = source.split_once("\n#[cfg(test)]").expect("the test module").0;
     for forbidden in [
         "std::fs::create_dir",
         "std::fs::remove_",
@@ -305,10 +289,7 @@ fn a_rollback_never_destroys_content_that_appeared_under_the_new_folder() {
 
     rollback_created_folder(root, "keep");
 
-    assert_eq!(
-        std::fs::read_to_string(root.join("keep/precious.md")).unwrap(),
-        "do not delete"
-    );
+    assert_eq!(std::fs::read_to_string(root.join("keep/precious.md")).unwrap(), "do not delete");
     // While an empty one is removed, which is the case it exists for.
     std::fs::create_dir_all(root.join("hollow")).unwrap();
     rollback_created_folder(root, "hollow");

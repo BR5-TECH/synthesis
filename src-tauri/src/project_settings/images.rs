@@ -111,11 +111,7 @@ impl ProjectVendorImage {
     fn normalised(&self) -> ProjectVendorImage {
         ProjectVendorImage {
             image_name: self.image_name.trim().to_string(),
-            tag: self
-                .tag
-                .as_ref()
-                .map(|t| t.trim().to_string())
-                .filter(|t| !t.is_empty()),
+            tag: self.tag.as_ref().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()),
             dockerfile: self
                 .dockerfile
                 .as_ref()
@@ -498,16 +494,9 @@ fn existing_directory(path: &Path) -> Option<PathBuf> {
 /// A relative value resolves against the project root and may leave it. An
 /// absolute value is taken as given. The folder must exist; anything else is
 /// refused with `build_context_not_a_directory`. Returns the canonical path.
-pub fn validate_build_context(
-    root: &crate::fs::RootFs,
-    context: &str,
-) -> Result<PathBuf, String> {
+pub fn validate_build_context(root: &crate::fs::RootFs, context: &str) -> Result<PathBuf, String> {
     let path = Path::new(context);
-    let resolved = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        root.path().join(path)
-    };
+    let resolved = if path.is_absolute() { path.to_path_buf() } else { root.path().join(path) };
     existing_directory(&resolved).ok_or_else(|| ERR_BUILD_CONTEXT_NOT_A_DIRECTORY.to_string())
 }
 
@@ -583,7 +572,11 @@ pub const BUILD_TAG_FLAG: &str = "--tag";
 /// and nothing else. There is no `--push`, no `login`, and no publish
 /// subcommand anywhere in this module, so a build cannot reach a registry by
 /// any argument this function could be asked to produce.
-pub fn docker_build_args(dockerfile: &str, image_reference: &str, context_root: &Path) -> Vec<String> {
+pub fn docker_build_args(
+    dockerfile: &str,
+    image_reference: &str,
+    context_root: &Path,
+) -> Vec<String> {
     vec![
         BUILD_SUBCOMMAND.to_string(),
         BUILD_FILE_FLAG.to_string(),
@@ -879,13 +872,9 @@ pub fn prepare_build(
         return Err(ERR_UNKNOWN_VENDOR.to_string());
     }
     let entry = entry.ok_or_else(|| ERR_IMAGE_NAME_EMPTY.to_string())?;
-    let image_reference = entry
-        .image_reference()
-        .ok_or_else(|| ERR_IMAGE_NAME_EMPTY.to_string())?;
-    let dockerfile = entry
-        .dockerfile
-        .clone()
-        .ok_or_else(|| ERR_DOCKERFILE_UNSET.to_string())?;
+    let image_reference =
+        entry.image_reference().ok_or_else(|| ERR_IMAGE_NAME_EMPTY.to_string())?;
+    let dockerfile = entry.dockerfile.clone().ok_or_else(|| ERR_DOCKERFILE_UNSET.to_string())?;
     // GSS-FR-40: an unverified backend refuses and starts nothing. Read rather
     // than probed, so a daemon that is merely stopped is the build's own
     // failure and not this refusal.

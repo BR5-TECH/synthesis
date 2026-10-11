@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 // ---------------------------------------------------------------------------
 // Accepting (PCP-FR-12 … PCP-FR-14)
 // ---------------------------------------------------------------------------
@@ -45,11 +44,7 @@ fn an_acceptance_replaces_the_file_as_it_stands_without_comparing_a_baseline() {
     write_file(&f.root, PROMPT, author_edit);
 
     f.accept(&proposal.id).expect("accepted");
-    assert_eq!(
-        f.artifact_body(),
-        PROPOSED,
-        "the candidate replaces whatever the file held",
-    );
+    assert_eq!(f.artifact_body(), PROPOSED, "the candidate replaces whatever the file held",);
 }
 
 #[test]
@@ -96,17 +91,10 @@ fn an_acceptance_that_cannot_write_leaves_the_file_and_the_proposal_alone() {
     assert_eq!(f.discussion().comments.len(), before, "no comment appended");
     assert_eq!(
         f.folder_files(),
-        vec![
-            format!("{}.content", proposal.id),
-            format!("{}.toml", proposal.id),
-        ],
+        vec![format!("{}.content", proposal.id), format!("{}.toml", proposal.id),],
         "neither the journal nor the prior remains",
     );
-    assert_eq!(
-        events.lock().unwrap().len(),
-        1,
-        "only the recording announced anything",
-    );
+    assert_eq!(events.lock().unwrap().len(), 1, "only the recording announced anything",);
 }
 
 #[test]
@@ -143,10 +131,7 @@ fn a_journal_left_by_an_interrupted_acceptance_is_rolled_forward_or_back() {
     let listed = g.list();
     assert_eq!(listed[0].state, PromptProposalState::Pending);
     assert_eq!(g.artifact_body(), ORIGINAL);
-    assert!(
-        !g.dir().join(format!("{}.journal", other.id)).exists(),
-        "the journal is cleared",
-    );
+    assert!(!g.dir().join(format!("{}.journal", other.id)).exists(), "the journal is cleared",);
 }
 
 #[test]
@@ -210,9 +195,7 @@ fn discussion_log(f: &Fixture) -> std::path::PathBuf {
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .find(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.ends_with(".discussion.jsonl"))
+            p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.ends_with(".discussion.jsonl"))
         })
         .expect("the discussion's log")
 }
@@ -257,11 +240,7 @@ fn an_acceptance_whose_comment_cannot_be_appended_is_landed_and_incomplete() {
     assert!(record.decided_at.is_some());
     assert!(record.comment_owed, "the comment is owed");
     assert_eq!(f.artifact_body(), PROPOSED, "the artifact holds the candidate");
-    assert_eq!(
-        events.lock().unwrap().len(),
-        2,
-        "the event was emitted at the commit point",
-    );
+    assert_eq!(events.lock().unwrap().len(), 2, "the event was emitted at the commit point",);
     // …and the journal and the prior are still on disk, the journal carrying the
     // minted identity the recovery needs.
     let files = f.folder_files();
@@ -276,9 +255,7 @@ fn an_acceptance_whose_comment_cannot_be_appended_is_landed_and_incomplete() {
         "nothing was appended, so no turn has anything to answer",
     );
     assert!(read_proposal(&f.root, &proposal.id).unwrap().comment_owed);
-    assert!(f
-        .folder_files()
-        .contains(&format!("{}.journal", proposal.id)));
+    assert!(f.folder_files().contains(&format!("{}.journal", proposal.id)));
 
     // Allowed to succeed, the reconciliation appends exactly once, clears the
     // flag, and removes the journal and the prior.
@@ -292,10 +269,7 @@ fn an_acceptance_whose_comment_cannot_be_appended_is_landed_and_incomplete() {
     assert_eq!(f.discussion().comments.len(), before + 1);
     assert_eq!(
         f.folder_files(),
-        vec![
-            format!("{}.content", proposal.id),
-            format!("{}.toml", proposal.id),
-        ],
+        vec![format!("{}.content", proposal.id), format!("{}.toml", proposal.id),],
     );
     assert_eq!(f.artifact_body(), PROPOSED, "and nothing was written twice");
 

@@ -21,10 +21,7 @@ fn aap_ts21_no_descriptor_or_record_carries_a_modality() {
     let list = list_integrations_impl(&h.store, &h.ai).unwrap();
     let as_text = serde_json::to_string(&list).unwrap().to_lowercase();
     for absent in ["modality", "voice", "embedding"] {
-        assert!(
-            !as_text.contains(absent),
-            "no record may carry a {absent} field"
-        );
+        assert!(!as_text.contains(absent), "no record may carry a {absent} field");
     }
     // AAP-FR-21 is about the **kind of endpoint** this module can describe,
     // and AAP-FR-35 puts one image-related field on a model: whether the
@@ -34,10 +31,7 @@ fn aap_ts21_no_descriptor_or_record_carries_a_modality() {
     // substring, which would now forbid the capability the later
     // requirement adds.
     for absent in ["image_endpoint", "imagegeneration", "\"image\":"] {
-        assert!(
-            !as_text.contains(absent),
-            "no record may describe an image endpoint ({absent})"
-        );
+        assert!(!as_text.contains(absent), "no record may describe an image endpoint ({absent})");
     }
     assert!(
         as_text.contains("acceptsimageinput"),
@@ -50,9 +44,8 @@ fn aap_ts21_no_descriptor_or_record_carries_a_modality() {
 /// A model whose probe declares its own input modalities.
 fn with_modalities(id: &str, modalities: Option<&[&str]>) -> ModelOption {
     let declared = modalities.map(|m| m.iter().map(|s| s.to_string()).collect::<Vec<_>>());
-    ModelOption::new(id, id).with_declared_image_input(
-        crate::ai_shared::image_input_declared(declared.as_deref()),
-    )
+    ModelOption::new(id, id)
+        .with_declared_image_input(crate::ai_shared::image_input_declared(declared.as_deref()))
 }
 
 #[test]
@@ -147,8 +140,7 @@ fn aap_ts36_resolve_returns_the_flag_of_the_model_it_resolved() {
     verify_openrouter(&h);
 
     for (model, expected) in [("sees/pictures", true), ("text/only", false)] {
-        let call =
-            resolve_ai_api_endpoint(&h.store, &h.ai, "openrouter", model, None).unwrap();
+        let call = resolve_ai_api_endpoint(&h.store, &h.ai, "openrouter", model, None).unwrap();
         assert_eq!(call.accepts_image_input, expected, "{model}");
         assert_eq!(call.model_id.as_deref(), Some(model));
         assert_eq!(call.base_url, "https://openrouter.ai/api/v1");
@@ -226,4 +218,3 @@ fn aap_ts24_a_bundled_catalog_carries_no_reasoning_at_all() {
         );
     }
 }
-

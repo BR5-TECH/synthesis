@@ -90,14 +90,10 @@ impl AccessService {
 
         let held = self.effective_permissions(principal.user_id, &project);
         if !held.contains(&Permission::ProjectRead) {
-            return Err(DomainError::NotFound {
-                resource: "project",
-            });
+            return Err(DomainError::NotFound { resource: "project" });
         }
         if !held.contains(&permission) {
-            return Err(DomainError::Forbidden {
-                permission: permission.as_str().to_string(),
-            });
+            return Err(DomainError::Forbidden { permission: permission.as_str().to_string() });
         }
         Ok(project)
     }
@@ -119,11 +115,9 @@ impl AccessService {
     ) -> Result<(), DomainError> {
         let exists = match target_type {
             TargetType::User => self.ports.users.find(UserId(target_id)).is_some(),
-            TargetType::Team => self
-                .ports
-                .teams
-                .find(crate::domain::ids::TeamId(target_id))
-                .is_some(),
+            TargetType::Team => {
+                self.ports.teams.find(crate::domain::ids::TeamId(target_id)).is_some()
+            }
             TargetType::Organization => self
                 .ports
                 .organizations

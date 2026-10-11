@@ -187,8 +187,10 @@ pub trait DockerRuntime: Send + Sync {
     /// Is the pinned image present, and if not can it be pulled?
     fn ensure_image<'a>(&'a self, image: &'a str) -> BoxFuture<'a, Result<(), RuntimeError>>;
 
-    fn run<'a>(&'a self, request: RunRequest<'a>)
-        -> BoxFuture<'a, Result<RuntimeOutcome, RuntimeError>>;
+    fn run<'a>(
+        &'a self,
+        request: RunRequest<'a>,
+    ) -> BoxFuture<'a, Result<RuntimeOutcome, RuntimeError>>;
 
     /// EAC-FR-26: confirm the container is gone, whatever path the run took
     /// out. `--rm` covers a clean exit; a killed client does not necessarily
@@ -255,10 +257,7 @@ impl HostDockerCli {
     /// What production does, with the locations stated rather than compiled in,
     /// so a test can prove the search finds a runtime `PATH` does not hold
     /// without one being installed where the test is running.
-    pub fn with_program_searching(
-        program: impl Into<String>,
-        search: Vec<String>,
-    ) -> Self {
+    pub fn with_program_searching(program: impl Into<String>, search: Vec<String>) -> Self {
         HostDockerCli {
             program: program.into(),
             search,
@@ -356,12 +355,7 @@ impl DockerRuntime for HostDockerCli {
 
     fn ensure_image<'a>(&'a self, image: &'a str) -> BoxFuture<'a, Result<(), RuntimeError>> {
         Box::pin(async move {
-            if self
-                .control(&["image", "inspect", image])
-                .await?
-                .status
-                .success()
-            {
+            if self.control(&["image", "inspect", image]).await?.status.success() {
                 return Ok(());
             }
             // Absent locally. One pull, and if that fails the image is not
@@ -404,9 +398,8 @@ impl DockerRuntime for HostDockerCli {
                 command.env(name, value.expose());
             }
 
-            let mut child = command
-                .spawn()
-                .map_err(|e| RuntimeError::LaunchFailed(e.kind().to_string()))?;
+            let mut child =
+                command.spawn().map_err(|e| RuntimeError::LaunchFailed(e.kind().to_string()))?;
 
             let mut stdin = child.stdin.take();
             let mut stdout = child.stdout.take();
@@ -477,12 +470,7 @@ impl DockerRuntime for HostDockerCli {
 
             let ((stdout, stderr), (end, exit_code)) = tokio::join!(pump, waiter);
 
-            Ok(RuntimeOutcome {
-                end,
-                exit_code,
-                stdout,
-                stderr,
-            })
+            Ok(RuntimeOutcome { end, exit_code, stdout, stderr })
         })
     }
 
@@ -885,4 +873,3 @@ impl DockerRuntime for BollardDocker {
 /// token again.
 #[allow(dead_code)]
 const POLL_SLICE: Duration = Duration::from_millis(100);
-

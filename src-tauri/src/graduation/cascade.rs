@@ -54,9 +54,7 @@ pub(super) fn remove_runs<R: tauri::Runtime>(
     // The order is written first. A crash after it leaves a directory nothing
     // lists, where the other order would leave a listed run with no record.
     let mut index = store::read_queue_index(&fs, &base, &holder.project_key);
-    index
-        .runs
-        .retain(|entry| !removed.iter().any(|gone| gone.run_id == entry.run_id));
+    index.runs.retain(|entry| !removed.iter().any(|gone| gone.run_id == entry.run_id));
     store::write_queue_index(&fs, &base, &index)?;
     for entry in removed {
         let record = records.iter().find(|run| run.id == entry.run_id);

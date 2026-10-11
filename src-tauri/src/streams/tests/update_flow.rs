@@ -3,7 +3,6 @@
 
 use std::path::Path;
 
-
 use super::*;
 
 // WKS-FR-RJPD / WKS-FR-UBGX: a listing says how far behind its base each stream
@@ -15,10 +14,7 @@ fn a_listing_reports_how_far_behind_a_stream_stands_and_what_it_is_missing() {
     let up_to_date = summary_of(&fx, &stream.id);
     assert_eq!(up_to_date.behind_base, 0, "a fresh stream is up to date");
     assert!(up_to_date.missing_commits.is_empty());
-    assert_eq!(
-        up_to_date.base_tip_revision,
-        tip_of(&fx.repo(), &stream.base_branch).to_string(),
-    );
+    assert_eq!(up_to_date.base_tip_revision, tip_of(&fx.repo(), &stream.base_branch).to_string(),);
 
     std::fs::write(fx.root().join("base-only.txt"), "one\n").unwrap();
     commit_all(&fx.repo(), "base moved on");
@@ -30,10 +26,7 @@ fn a_listing_reports_how_far_behind_a_stream_stands_and_what_it_is_missing() {
         summary.missing_commits[0].revision,
         tip_of(&fx.repo(), &stream.base_branch).to_string(),
     );
-    assert_eq!(
-        summary.base_tip_revision,
-        tip_of(&fx.repo(), &stream.base_branch).to_string(),
-    );
+    assert_eq!(summary.base_tip_revision, tip_of(&fx.repo(), &stream.base_branch).to_string(),);
 }
 
 // GRB-FR-NFEB: a stream that already holds the pinned revision rests at
@@ -81,11 +74,7 @@ fn merge_source_creates_a_merge_commit_on_the_stream_and_leaves_the_base_alone()
     assert!(record.updated_paths.contains(&"base-only.txt".to_string()));
 
     let repo = fx.repo();
-    assert_eq!(
-        tip_of(&repo, &stream.base_branch),
-        base_before,
-        "the base branch does not move",
-    );
+    assert_eq!(tip_of(&repo, &stream.base_branch), base_before, "the base branch does not move",);
     let tip = repo.find_commit(tip_of(&repo, &stream.branch)).unwrap();
     assert_eq!(tip.parent_count(), 2, "one merge commit");
     assert!(tip.parent_ids().any(|oid| oid == pinned));
@@ -100,11 +89,8 @@ fn rebase_source_replays_the_stream_commits_onto_the_pinned_revision() {
     let fx = Fixture::new();
     let stream = fx.create("replayed", None).expect("created");
     let worktree = git2::Repository::open(&stream.worktree_path).expect("stream repo");
-    std::fs::write(
-        Path::new(&stream.worktree_path).join("stream-only.txt"),
-        "from the stream\n",
-    )
-    .unwrap();
+    std::fs::write(Path::new(&stream.worktree_path).join("stream-only.txt"), "from the stream\n")
+        .unwrap();
     commit_all(&worktree, "stream work");
     std::fs::write(fx.root().join("base-only.txt"), "from the base\n").unwrap();
     commit_all(&fx.repo(), "base moved on");
@@ -142,11 +128,7 @@ fn a_conflicting_rebase_spends_one_semantic_turn_for_the_whole_replay() {
     let worktree = git2::Repository::open(&stream.worktree_path).expect("stream repo");
     let worktree_path = Path::new(&stream.worktree_path);
     for step in 1..=3 {
-        std::fs::write(
-            worktree_path.join("README.md"),
-            format!("{STREAM_SIDE}-{step}\n"),
-        )
-        .unwrap();
+        std::fs::write(worktree_path.join("README.md"), format!("{STREAM_SIDE}-{step}\n")).unwrap();
         commit_all(&worktree, &format!("stream edit {step}"));
     }
     std::fs::write(fx.root().join("README.md"), format!("{BASE_SIDE}\n")).unwrap();
@@ -168,11 +150,7 @@ fn a_conflicting_rebase_spends_one_semantic_turn_for_the_whole_replay() {
     .expect("started");
 
     assert_eq!(record.state, StreamUpdateState::Updated, "{record:?}");
-    assert_eq!(
-        dispatch.turns(),
-        1,
-        "three conflicting replay steps cost one turn, not three",
-    );
+    assert_eq!(dispatch.turns(), 1, "three conflicting replay steps cost one turn, not three",);
     assert_eq!(record.semantic_turns, 1);
     let repo = fx.repo();
     assert_eq!(tip_of(&repo, &stream.base_branch), pinned, "the base is untouched");
@@ -281,10 +259,7 @@ fn an_escalated_update_is_answered_and_the_answers_reach_the_next_turn() {
     assert_eq!(record.state, StreamUpdateState::Escalated, "{record:?}");
     let escalation = record.escalation.as_ref().expect("an escalation");
     assert_eq!(escalation.questions.len(), 1);
-    assert_eq!(
-        escalation.origin,
-        crate::graduation::GraduationEscalationOrigin::SemanticMerge,
-    );
+    assert_eq!(escalation.origin, crate::graduation::GraduationEscalationOrigin::SemanticMerge,);
     assert_eq!(record.base_revision, pinned.to_string(), "the pin is retained");
 
     // WKS-FR-DPNM: an escalated update is answered, never retried.
@@ -331,10 +306,7 @@ fn the_update_record_stands_apart_from_the_merge_record() {
 
     // WKS-FR-SGCM: and the listing carries it.
     let summary = summary_of(&fx, &stream.id);
-    assert_eq!(
-        summary.update.as_ref().map(|r| r.state),
-        Some(StreamUpdateState::Updated),
-    );
+    assert_eq!(summary.update.as_ref().map(|r| r.state), Some(StreamUpdateState::Updated),);
     assert!(summary.merge_run.is_none());
 }
 
@@ -441,11 +413,9 @@ fn a_running_update_reports_which_turn_it_is_on() {
         .expect("a turn was reported");
     assert_eq!(turn["strategy"], "rebase_source");
     assert_eq!(turn["turnsMax"], UPDATE_ATTEMPTS_MAX as u64);
-    assert!(
-        turn["reconcilingPaths"]
-            .as_array()
-            .is_some_and(|paths| paths.iter().any(|p| p == "README.md")),
-    );
+    assert!(turn["reconcilingPaths"]
+        .as_array()
+        .is_some_and(|paths| paths.iter().any(|p| p == "README.md")),);
     assert!(
         reports.iter().any(|value| value["turn"].as_u64() == Some(0)),
         "the update reports itself settled",
@@ -482,10 +452,7 @@ fn an_update_takes_its_source_from_the_recorded_base_branch_alone() {
     let stream = stream_behind_its_base(&fx);
     let pinned = tip_of(&fx.repo(), &stream.base_branch);
     let tracked = |root: &Path| -> Vec<String> {
-        files_under(root)
-            .into_iter()
-            .filter(|name| !name.starts_with(".git/"))
-            .collect()
+        files_under(root).into_iter().filter(|name| !name.starts_with(".git/")).collect()
     };
     let base_files = tracked(&fx.root());
 
@@ -507,11 +474,7 @@ fn an_update_takes_its_source_from_the_recorded_base_branch_alone() {
 
     assert_eq!(record.state, StreamUpdateState::Updated, "{record:?}");
     assert_eq!(record.base_branch, stream.base_branch);
-    assert_eq!(
-        tracked(&fx.root()),
-        base_files,
-        "the base branch's own worktree is not written",
-    );
+    assert_eq!(tracked(&fx.root()), base_files, "the base branch's own worktree is not written",);
 }
 
 // GRB-FR-RMKD: a replay that needed a turn still lands every stream commit as
@@ -523,11 +486,7 @@ fn a_reconciled_rebase_lands_every_stream_commit_in_order() {
     let worktree = git2::Repository::open(&stream.worktree_path).expect("stream repo");
     let worktree_path = Path::new(&stream.worktree_path);
     for step in 1..=3 {
-        std::fs::write(
-            worktree_path.join("README.md"),
-            format!("{STREAM_SIDE}-{step}\n"),
-        )
-        .unwrap();
+        std::fs::write(worktree_path.join("README.md"), format!("{STREAM_SIDE}-{step}\n")).unwrap();
         commit_all(&worktree, &format!("stream edit {step}"));
     }
     std::fs::write(fx.root().join("README.md"), format!("{BASE_SIDE}\n")).unwrap();
@@ -555,12 +514,7 @@ fn a_reconciled_rebase_lands_every_stream_commit_in_order() {
     let mut at = tip_of(&repo, &stream.branch);
     while at != pinned {
         let commit = repo.find_commit(at).unwrap();
-        let blob = commit
-            .tree()
-            .unwrap()
-            .get_path(Path::new("README.md"))
-            .unwrap()
-            .id();
+        let blob = commit.tree().unwrap().get_path(Path::new("README.md")).unwrap().id();
         walk.push((
             commit.summary().ok().flatten().unwrap_or("").to_string(),
             commit.parent_count(),
@@ -653,7 +607,6 @@ fn a_retry_runs_under_the_recorded_strategy_and_pinned_revision() {
     assert_eq!(started.state, StreamUpdateState::Running);
     assert_eq!(started.strategy, StreamUpdateStrategy::RebaseSource);
     assert_eq!(started.base_revision, pinned);
-
 }
 
 // WKS-FR-VQRD / WKS-FR-DPNM: a settled update permits no retry at all.

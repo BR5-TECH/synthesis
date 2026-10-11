@@ -134,13 +134,7 @@ impl DocumentsCollection {
         let bytes = self.read_document_bytes(&access, &entry)?;
         let revision = crate::fs::sha256_bytes(&bytes);
         let text = String::from_utf8(bytes).map_err(|_| DocumentsError::Unavailable)?;
-        Ok(DocumentText {
-            id: entry.id,
-            name: entry.name,
-            format: entry.format,
-            text,
-            revision,
-        })
+        Ok(DocumentText { id: entry.id, name: entry.name, format: entry.format, text, revision })
     }
 
     /// DCL-FR-TEUK: the whole content of a PDF document, base64 encoded.
@@ -212,10 +206,10 @@ impl DocumentsCollection {
                 .get(&entry.id)
                 .and_then(|r| Some((r.fingerprint.clone()?, r.entry.revision.clone()?)))
         };
-        let current = access.file_info(&path).ok().map(|info| Fingerprint {
-            size: info.size,
-            modified: info.modified,
-        });
+        let current = access
+            .file_info(&path)
+            .ok()
+            .map(|info| Fingerprint { size: info.size, modified: info.modified });
         let mut bytes: Option<Vec<u8>> = None;
         let revision = match (known, current) {
             (Some((fingerprint, revision)), Some(now)) if fingerprint == now => revision,
@@ -237,13 +231,8 @@ impl DocumentsCollection {
         // so text is never cached against bytes it did not come from.
         let revision = crate::fs::sha256_bytes(&bytes);
         let text = self.extract(&entry.id, bytes, log);
-        lock(&self.pdf_cache).insert(
-            entry.id.clone(),
-            PdfCacheEntry {
-                revision,
-                text: text.clone(),
-            },
-        );
+        lock(&self.pdf_cache)
+            .insert(entry.id.clone(), PdfCacheEntry { revision, text: text.clone() });
         text.ok_or(DocumentsError::NoText)
     }
 
@@ -283,14 +272,14 @@ impl DocumentsCollection {
         self.extractions.fetch_add(1, Ordering::Relaxed);
         let extractor = self.extractor;
         let (send, receive) = std::sync::mpsc::channel();
-        let spawned = std::thread::Builder::new()
-            .name("documents-pdf-extract".to_string())
-            .spawn(move || {
+        let spawned = std::thread::Builder::new().name("documents-pdf-extract".to_string()).spawn(
+            move || {
                 let outcome =
                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| extractor(&bytes)));
                 // The receiver is gone when the deadline has passed.
                 let _ = send.send(outcome);
-            });
+            },
+        );
         if spawned.is_err() {
             warn("extractor could not start");
             return None;

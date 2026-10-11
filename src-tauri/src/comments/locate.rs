@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 /// CMS-FR-41: the agent write path — the *only* way a comment is attributed to
 /// an agent, and reachable from no Tauri command.
 ///
@@ -22,14 +21,7 @@ pub fn append_agent_comment(
     by: &Participant,
     at: &str,
 ) -> Result<Discussion, String> {
-    append_agent_comment_to(
-        root,
-        ThreadRef { scope, file_rel },
-        thread_id,
-        body,
-        by,
-        at,
-    )
+    append_agent_comment_to(root, ThreadRef { scope, file_rel }, thread_id, body, by, at)
 }
 
 /// [`append_agent_comment`] naming the conversation as a [`ThreadRef`], which is
@@ -47,16 +39,7 @@ pub fn append_agent_comment_to(
     // every `blob` a thread holds was put there by the participant who attached
     // it. The one exception is a proposal reference, which goes through the
     // sibling below rather than through here.
-    append_agent_comment_with(
-        root,
-        target,
-        thread_id,
-        new_note_id(),
-        body,
-        Vec::new(),
-        by,
-        at,
-    )
+    append_agent_comment_with(root, target, thread_id, new_note_id(), body, Vec::new(), by, at)
 }
 
 /// [`append_agent_comment_to`] carrying attachments, under a comment id the
@@ -101,12 +84,7 @@ pub fn append_agent_comment_with(
         at,
         vec![(
             thread_id.to_string(),
-            EventBody::CommentAdded {
-                comment_id,
-                body,
-                quotes: Vec::new(),
-                attachments,
-            },
+            EventBody::CommentAdded { comment_id, body, quotes: Vec::new(), attachments },
         )],
     )?;
     target.find(root, thread_id)
@@ -121,9 +99,7 @@ pub fn locate_discussion_of(
     target: &DiscussionTarget,
     discussion_id: &str,
 ) -> Option<Discussion> {
-    list_discussions_in(root, target)
-        .into_iter()
-        .find(|d| d.id == discussion_id)
+    list_discussions_in(root, target).into_iter().find(|d| d.id == discussion_id)
 }
 
 /// One note discussion by id alone, for a caller that holds a conversation's
@@ -132,10 +108,7 @@ pub fn locate_discussion_of(
 ///
 /// A walk of the notes comments root rather than a derivation, because the id
 /// this is given is the *discussion's* and the folders are keyed by the note's.
-pub fn locate_note_discussion(
-    root: &crate::fs::RootFs,
-    discussion_id: &str,
-) -> Option<Discussion> {
+pub fn locate_note_discussion(root: &crate::fs::RootFs, discussion_id: &str) -> Option<Discussion> {
     let dir = fsa::resolve_under(root, format!("{COMMENTS_REL}/{NOTES_SUBDIR}")).ok()?;
     let entries = root.list_dir(&dir).ok()?;
     entries

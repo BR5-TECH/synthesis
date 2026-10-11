@@ -25,9 +25,7 @@ fn within_five_seconds<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'sta
     std::thread::spawn(move || {
         let _ = send.send(work());
     });
-    receive
-        .recv_timeout(Duration::from_secs(5))
-        .expect("the operation ended")
+    receive.recv_timeout(Duration::from_secs(5)).expect("the operation ended")
 }
 
 // FSA-FR-NRQE: a regular file is read whole, up to the limit.
@@ -65,18 +63,11 @@ fn a_fifo_is_listed_as_other_and_never_blocks_a_read() {
     let (_tmp, access, root) = rooted();
     make_fifo(&root.join("pipe.txt"));
     write_raw(&root.join("real.txt"), "real");
-    let kinds: Vec<(String, EntryKind)> = access
-        .list_dir(&root)
-        .unwrap()
-        .into_iter()
-        .map(|e| (e.name, e.kind))
-        .collect();
+    let kinds: Vec<(String, EntryKind)> =
+        access.list_dir(&root).unwrap().into_iter().map(|e| (e.name, e.kind)).collect();
     assert_eq!(
         kinds,
-        vec![
-            ("pipe.txt".to_string(), EntryKind::Other),
-            ("real.txt".to_string(), EntryKind::File),
-        ]
+        vec![("pipe.txt".to_string(), EntryKind::Other), ("real.txt".to_string(), EntryKind::File),]
     );
     assert_eq!(access.file_info(root.join("pipe.txt")).unwrap().kind, EntryKind::Other);
     let path = root.join("pipe.txt");
@@ -141,10 +132,7 @@ impl Granted {
 #[test]
 fn a_granted_file_swapped_for_a_link_is_refused_at_read_time() {
     let g = Granted::new();
-    let access = FsAccess::builder()
-        .read_only_file(g.root.join("granted.md"))
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().read_only_file(g.root.join("granted.md")).build().unwrap();
     assert_eq!(access.read_text(g.root.join("granted.md")).unwrap(), "granted");
 
     fs::remove_file(g.root.join("granted.md")).unwrap();
@@ -154,10 +142,7 @@ fn a_granted_file_swapped_for_a_link_is_refused_at_read_time() {
     assert!(matches!(access.read_bytes(&path), Err(FsError::SymlinkRefused { .. })));
     assert!(matches!(access.read_text(&path), Err(FsError::SymlinkRefused { .. })));
     assert!(matches!(access.sha256_file(&path), Err(FsError::SymlinkRefused { .. })));
-    assert!(matches!(
-        access.read_regular_bytes(&path, 100),
-        Err(FsError::SymlinkRefused { .. })
-    ));
+    assert!(matches!(access.read_regular_bytes(&path, 100), Err(FsError::SymlinkRefused { .. })));
     assert!(matches!(
         access.open_file(&path, OpenMode::ReadOnly),
         Err(FsError::SymlinkRefused { .. })
@@ -172,10 +157,7 @@ fn a_granted_file_swapped_for_a_link_is_refused_at_read_time() {
 #[test]
 fn a_granted_folder_swapped_for_a_link_is_refused_at_read_time() {
     let g = Granted::new();
-    let access = FsAccess::builder()
-        .read_only_folder(g.root.join("folder"))
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().read_only_folder(g.root.join("folder")).build().unwrap();
     assert_eq!(access.read_text(g.root.join("folder/inside.md")).unwrap(), "inside");
 
     fs::remove_dir_all(g.root.join("folder")).unwrap();
@@ -185,10 +167,7 @@ fn a_granted_folder_swapped_for_a_link_is_refused_at_read_time() {
         access.read_bytes(g.root.join("folder/secret.txt")),
         Err(FsError::SymlinkRefused { .. })
     ));
-    assert!(matches!(
-        access.list_dir(g.root.join("folder")),
-        Err(FsError::SymlinkRefused { .. })
-    ));
+    assert!(matches!(access.list_dir(g.root.join("folder")), Err(FsError::SymlinkRefused { .. })));
 }
 
 // FSA-FR-WBKZ: a refresh that finds the same grantable sources keeps the same

@@ -173,17 +173,14 @@ pub(crate) fn next_credential(
 }
 
 /// Install the credential chain on `callbacks`.
-pub(crate) fn install_credentials<'cb>(callbacks: &mut git2::RemoteCallbacks<'cb>, token: Option<&'cb str>) {
+pub(crate) fn install_credentials<'cb>(
+    callbacks: &mut git2::RemoteCallbacks<'cb>,
+    token: Option<&'cb str>,
+) {
     let chain = credential_chain(token);
     let cursor = Cell::new(0usize);
     callbacks.credentials(move |_url, username_from_url, allowed| {
-        next_credential(
-            &chain,
-            &cursor,
-            token,
-            username_from_url.unwrap_or("git"),
-            allowed,
-        )
+        next_credential(&chain, &cursor, token, username_from_url.unwrap_or("git"), allowed)
     });
 }
 
@@ -195,9 +192,8 @@ pub(crate) fn fetch_with_prune(
     remote_name: &str,
     token: Option<&str>,
 ) -> Result<(), String> {
-    let mut remote = repo
-        .find_remote(remote_name)
-        .map_err(|_| ERR_NO_REMOTE_CONFIGURED.to_string())?;
+    let mut remote =
+        repo.find_remote(remote_name).map_err(|_| ERR_NO_REMOTE_CONFIGURED.to_string())?;
 
     let mut callbacks = git2::RemoteCallbacks::new();
     install_credentials(&mut callbacks, token);
@@ -214,9 +210,7 @@ pub(crate) fn fetch_with_prune(
     // what maps its `refs/heads/*` onto this repository's remote-tracking refs.
     // Naming a refspec here instead would quietly ignore a repository that
     // fetches a narrower set than the default.
-    remote
-        .fetch::<&str>(&[], Some(&mut opts), None)
-        .map_err(|e| classify_transfer_error(&e))
+    remote.fetch::<&str>(&[], Some(&mut opts), None).map_err(|e| classify_transfer_error(&e))
 }
 
 /// **The** fetch primitive (GTC-FR-12): update the repository's remote-tracking
@@ -276,8 +270,8 @@ where
     // The refusal is logged here rather than left to the caller: it is the one
     // failure that happens *before* a transfer, and the record is what explains
     // a refresh that reached no remote at all.
-    let token = github_tokens::resolve_remote_token(store, tokens, project_key, &url)
-        .inspect_err(|e| {
+    let token =
+        github_tokens::resolve_remote_token(store, tokens, project_key, &url).inspect_err(|e| {
             log_failure(
                 sink,
                 buffer,
@@ -315,14 +309,7 @@ where
 
     let fields = log_fields! { "remote" => &remote_name, "durationMs" => duration_ms(started) };
     match &result {
-        Ok(()) => log_ok(
-            sink,
-            buffer,
-            LogLevel::Info,
-            TRANSFER,
-            "remote branches fetched",
-            fields,
-        ),
+        Ok(()) => log_ok(sink, buffer, LogLevel::Info, TRANSFER, "remote branches fetched", fields),
         Err(error) => log_failure(sink, buffer, TRANSFER, MSG_FETCH_FAILED, error, fields),
     }
     result

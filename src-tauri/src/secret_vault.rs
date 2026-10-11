@@ -349,10 +349,7 @@ impl Vault {
 
     fn emit(&self, level: LogLevel, message: &str, fields: Fields) {
         #[cfg(test)]
-        self.emitted
-            .lock()
-            .unwrap()
-            .push((message.to_string(), fields.clone()));
+        self.emitted.lock().unwrap().push((message.to_string(), fields.clone()));
         let handle = match self.sink.lock() {
             Ok(slot) => slot.clone(),
             Err(_) => None,
@@ -477,8 +474,7 @@ impl Vault {
         candidates: &[Candidate],
     ) -> Result<MigrationOutcome, VaultError> {
         let _guard = self.acquire();
-        let outcome =
-            self.migrate_locked("migrate_legacy_secrets", candidates, &mut false)?;
+        let outcome = self.migrate_locked("migrate_legacy_secrets", candidates, &mut false)?;
         self.migrated.store(true, Ordering::SeqCst);
         Ok(outcome)
     }
@@ -525,9 +521,7 @@ impl Vault {
 
     /// A copy of the cached object and the serialized value it agrees with.
     fn cache_base(&self) -> Option<(Map<String, Value>, Option<String>)> {
-        self.cache_slot()
-            .as_ref()
-            .map(|cached| (cached.object.clone(), cached.serialized.clone()))
+        self.cache_slot().as_ref().map(|cached| (cached.object.clone(), cached.serialized.clone()))
     }
 
     /// Put `object` in the cache. Called only with an object that the entry
@@ -657,10 +651,9 @@ impl Vault {
         // Once the cache holds the object, migration works on it rather than
         // reading the entry again (ASV-FR-DQHY).
         let snapshot = match self.cache_base() {
-            Some((object, serialized)) => Snapshot {
-                raw: serialized,
-                state: Loaded::Object(object),
-            },
+            Some((object, serialized)) => {
+                Snapshot { raw: serialized, state: Loaded::Object(object) }
+            }
             None => self.load_locked("migrate_legacy_secrets")?,
         };
         let mut object = match snapshot.state {
@@ -687,10 +680,7 @@ impl Vault {
         // before that, whatever the write had to change.
         let mut deletable: Vec<&Candidate> = Vec::new();
         for candidate in candidates {
-            match self
-                .backend
-                .read_legacy(&candidate.legacy_service, &candidate.legacy_account)
-            {
+            match self.backend.read_legacy(&candidate.legacy_service, &candidate.legacy_account) {
                 // ASV-FR-22: skipped rather than fatal, and **not deleted** —
                 // deleting a secret this module could not read would destroy
                 // the only copy of it.
@@ -742,18 +732,12 @@ impl Vault {
             return Ok(outcome);
         }
 
-        let serialized = self.write_verified_locked(
-            "migrate_legacy_secrets",
-            &object,
-            snapshot.raw.as_deref(),
-        )?;
+        let serialized =
+            self.write_verified_locked("migrate_legacy_secrets", &object, snapshot.raw.as_deref())?;
         self.store_cache_locked(operation, object, Some(serialized));
 
         for candidate in deletable {
-            match self
-                .backend
-                .delete_legacy(&candidate.legacy_service, &candidate.legacy_account)
-            {
+            match self.backend.delete_legacy(&candidate.legacy_service, &candidate.legacy_account) {
                 Ok(()) => outcome.deleted += 1,
                 // ASV-FR-26: partial migration is safe and repeatable. The
                 // entry stays where it is and the next migration deletes it.
@@ -784,10 +768,7 @@ impl Vault {
             Err(_) => return Err(self.failed(operation, VaultError::Unavailable)),
         };
         let Some(raw) = raw else {
-            return Ok(Snapshot {
-                raw: None,
-                state: Loaded::Absent,
-            });
+            return Ok(Snapshot { raw: None, state: Loaded::Absent });
         };
         let state = match decode(&raw) {
             Decoded::Object(object) => Loaded::Object(object),
@@ -798,10 +779,7 @@ impl Vault {
             }
             Decoded::Malformed => Loaded::Malformed(raw.clone()),
         };
-        Ok(Snapshot {
-            raw: Some(raw),
-            state,
-        })
+        Ok(Snapshot { raw: Some(raw), state })
     }
 
     /// ASV-FR-10 / ASV-FR-11 / ASV-FR-12: write the complete object as one
@@ -874,9 +852,7 @@ static GLOBAL: OnceLock<Arc<Vault>> = OnceLock::new();
 /// app handle exists — and because "process-wide" is the requirement, not "one
 /// per managed state".
 pub fn global() -> Arc<Vault> {
-    GLOBAL
-        .get_or_init(|| Arc::new(Vault::new(Box::new(KeyringVaultBackend))))
-        .clone()
+    GLOBAL.get_or_init(|| Arc::new(Vault::new(Box::new(KeyringVaultBackend)))).clone()
 }
 
 mod adapter;

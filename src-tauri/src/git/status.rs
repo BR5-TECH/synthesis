@@ -91,10 +91,7 @@ pub fn is_worktree_identity_changed(error: &str) -> bool {
 /// everywhere but the graduation preflight, and resolving the worktree for it
 /// would put a repository discovery — and, outside a repository, a "not a git
 /// repository" refusal — ahead of the message and path checks GTC-FR-20 orders.
-pub fn require_worktree_identity(
-    active_root: &Path,
-    expected: Option<&str>,
-) -> Result<(), String> {
+pub fn require_worktree_identity(active_root: &Path, expected: Option<&str>) -> Result<(), String> {
     if expected.is_none() {
         return Ok(());
     }
@@ -212,10 +209,7 @@ pub fn working_tree_status(root: &crate::fs::RootFs) -> Result<Vec<WorkingTreeEn
             .and_then(|d| d.new_file().path())
             .map(changes::to_forward)
             .or_else(|| {
-                head_to_index
-                    .as_ref()
-                    .and_then(|d| d.new_file().path())
-                    .map(changes::to_forward)
+                head_to_index.as_ref().and_then(|d| d.new_file().path()).map(changes::to_forward)
             })
             .or_else(|| entry.path().ok().map(str::to_string));
         // A path libgit2 cannot report as UTF-8 on either side names a file no
@@ -227,9 +221,7 @@ pub fn working_tree_status(root: &crate::fs::RootFs) -> Result<Vec<WorkingTreeEn
         let previous = [&head_to_index, &index_to_workdir]
             .into_iter()
             .flatten()
-            .filter(|delta| {
-                matches!(delta.status(), git2::Delta::Renamed | git2::Delta::Copied)
-            })
+            .filter(|delta| matches!(delta.status(), git2::Delta::Renamed | git2::Delta::Copied))
             .find_map(|delta| delta.old_file().path().map(changes::to_forward))
             .filter(|old| *old != path);
 
@@ -239,15 +231,9 @@ pub fn working_tree_status(root: &crate::fs::RootFs) -> Result<Vec<WorkingTreeEn
         let Some(path) = changes::to_project_rel(&prefix, &path) else {
             continue;
         };
-        let previous_path = previous
-            .as_deref()
-            .and_then(|old| changes::to_project_rel(&prefix, old));
-        entries.push(WorkingTreeEntry {
-            path,
-            staged_status,
-            unstaged_status,
-            previous_path,
-        });
+        let previous_path =
+            previous.as_deref().and_then(|old| changes::to_project_rel(&prefix, old));
+        entries.push(WorkingTreeEntry { path, staged_status, unstaged_status, previous_path });
     }
     // Deterministic, so a surface rendering the set twice renders it the same
     // way twice. Git's own status order is not one the author can predict.
@@ -268,10 +254,7 @@ pub fn working_tree_status_reported<S: LogSink + Clone + Send + 'static>(
         // GTC-FR-31: ahead of the read, so a refusal has read no status.
         let worktree_path = resolve_worktree_identity(root.path(), expected_worktree)?;
         let entries = working_tree_status(root)?;
-        Ok(WorkingTreeStatus {
-            worktree_path,
-            entries,
-        })
+        Ok(WorkingTreeStatus { worktree_path, entries })
     })();
     // How many paths, never which: a working tree routinely holds hundreds and
     // the session buffer is a bounded ring. No path and no file content appears.
@@ -281,14 +264,7 @@ pub fn working_tree_status_reported<S: LogSink + Clone + Send + 'static>(
                 "entryCount" => status.entries.len(),
                 "durationMs" => duration_ms(started),
             };
-            log_ok(
-                sink,
-                buffer,
-                LogLevel::Debug,
-                LOCAL,
-                "working tree status read",
-                fields,
-            );
+            log_ok(sink, buffer, LogLevel::Debug, LOCAL, "working tree status read", fields);
             Ok(status)
         }
         Err(error) => {
@@ -331,10 +307,7 @@ pub struct UpstreamSyncState {
 pub fn upstream_sync_state(root: &Path) -> Result<UpstreamSyncState, String> {
     let repo = changes::open_repo(root)?;
     let has_remote = changes::primary_remote_name(&repo).is_some();
-    let mut state = UpstreamSyncState {
-        has_remote,
-        ..UpstreamSyncState::default()
-    };
+    let mut state = UpstreamSyncState { has_remote, ..UpstreamSyncState::default() };
 
     // A detached HEAD tracks nothing, and neither does an unborn branch.
     let Ok(head) = repo.head() else {
@@ -354,10 +327,8 @@ pub fn upstream_sync_state(root: &Path) -> Result<UpstreamSyncState, String> {
         // push would publish it.
         return Ok(state);
     };
-    let (Some(local_oid), Some(upstream_oid)) = (
-        branch.get().target(),
-        upstream.get().target(),
-    ) else {
+    let (Some(local_oid), Some(upstream_oid)) = (branch.get().target(), upstream.get().target())
+    else {
         return Ok(state);
     };
     let (ahead, behind) = repo

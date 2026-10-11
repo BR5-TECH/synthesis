@@ -53,10 +53,8 @@ pub(super) fn sweep_stranded_attempts<R: tauri::Runtime>(app: &tauri::AppHandle<
     let Ok(main) = git::primary_repo(&root) else {
         return;
     };
-    let live: Vec<String> = app
-        .try_state::<StreamState>()
-        .map(|state| state.attempts_running())
-        .unwrap_or_default();
+    let live: Vec<String> =
+        app.try_state::<StreamState>().map(|state| state.attempts_running()).unwrap_or_default();
 
     let attempts_root = store.root().join(artifact::ATTEMPTS_DIR);
     let stranded: Vec<String> = fs

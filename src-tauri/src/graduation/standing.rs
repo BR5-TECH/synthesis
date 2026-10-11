@@ -149,9 +149,7 @@ fn await_push(
             Ok(outcome) => return outcome,
             // The thread ended without reporting, which only a panic inside it
             // does. The run goes on, as it does for every other push failure.
-            Err(RecvTimeoutError::Disconnected) => {
-                return Err(ERR_PUSH_UNAVAILABLE.to_string())
-            }
+            Err(RecvTimeoutError::Disconnected) => return Err(ERR_PUSH_UNAVAILABLE.to_string()),
             Err(RecvTimeoutError::Timeout) => {
                 if cancellation.is_cancelled() {
                     return Err(ERR_PUSH_ABANDONED.to_string());

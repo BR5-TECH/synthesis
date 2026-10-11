@@ -104,10 +104,7 @@ pub struct SettingsWindows {
 
 impl SettingsWindows {
     fn peek(&self) -> Option<PendingSweep> {
-        self.pending
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone()
+        self.pending.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
     fn set(&self, sweep: Option<PendingSweep>) {
@@ -300,9 +297,7 @@ fn logical_outer_size<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Op
 fn stored_size<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<(u32, u32)> {
     let store = app.try_state::<crate::global_settings::GlobalSettingsStore>()?;
     match store.load_settings_window_size() {
-        Ok(size) => size
-            .filter(|s| s.width > 0 && s.height > 0)
-            .map(|s| (s.width, s.height)),
+        Ok(size) => size.filter(|s| s.width > 0 && s.height > 0).map(|s| (s.width, s.height)),
         Err(e) => {
             logging::log_warn(
                 app,
@@ -362,12 +357,7 @@ fn opening_display<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<Openi
     let (pos, size) = (parent.outer_position().ok()?, parent.outer_size().ok()?);
     let (work, scale) = crate::window::work_area_for_rect(
         app,
-        crate::window::DisplayRect {
-            x: pos.x,
-            y: pos.y,
-            width: size.width,
-            height: size.height,
-        },
+        crate::window::DisplayRect { x: pos.x, y: pos.y, width: size.width, height: size.height },
     )?;
     Some(OpeningDisplay { work, scale })
 }
@@ -383,11 +373,8 @@ fn opening_display<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<Openi
 /// centred again.
 fn place<R: tauri::Runtime>(app: &tauri::AppHandle<R>, window: &tauri::WebviewWindow<R>) {
     let display = opening_display(app);
-    let scale = display
-        .as_ref()
-        .map(|d| d.scale)
-        .or_else(|| window.scale_factor().ok())
-        .unwrap_or(1.0);
+    let scale =
+        display.as_ref().map(|d| d.scale).or_else(|| window.scale_factor().ok()).unwrap_or(1.0);
     let work_logical = display.as_ref().map(|d| {
         (
             (d.work.width as f64 / scale).floor() as u32,
@@ -396,15 +383,10 @@ fn place<R: tauri::Runtime>(app: &tauri::AppHandle<R>, window: &tauri::WebviewWi
     });
     let target = opening_size(stored_size(app), work_logical);
     if let (Ok(outer), Ok(inner)) = (window.outer_size(), window.inner_size()) {
-        let decoration = (
-            outer.width.saturating_sub(inner.width),
-            outer.height.saturating_sub(inner.height),
-        );
+        let decoration =
+            (outer.width.saturating_sub(inner.width), outer.height.saturating_sub(inner.height));
         let physical = |logical: (u32, u32)| {
-            (
-                (logical.0 as f64 * scale).round() as u32,
-                (logical.1 as f64 * scale).round() as u32,
-            )
+            ((logical.0 as f64 * scale).round() as u32, (logical.1 as f64 * scale).round() as u32)
         };
         let (w, h) = inner_size_for_outer(physical(target), decoration);
         let (min_w, min_h) = inner_size_for_outer(physical(MIN_WINDOW_SIZE), decoration);
@@ -464,10 +446,7 @@ fn create<R: tauri::Runtime>(app: &tauri::AppHandle<R>, section: Option<String>)
             tauri::WebviewUrl::App(url.clone().into()),
         )
         .title(SETTINGS_WINDOW_TITLE)
-        .inner_size(
-            DEFAULT_WINDOW_SIZE.0 as f64,
-            DEFAULT_WINDOW_SIZE.1 as f64,
-        )
+        .inner_size(DEFAULT_WINDOW_SIZE.0 as f64, DEFAULT_WINDOW_SIZE.1 as f64)
         // SWN-FR-03: the author can drag-resize the window, but it offers no
         // maximize. Disabling the maximize control also disables the macOS zoom
         // button, which is what keeps the window out of OS full-screen. The
@@ -643,10 +622,8 @@ fn dispatch<R: tauri::Runtime>(app: &tauri::AppHandle<R>, request: Request) {
     // Project section. The Project group is absent from the window, but an
     // address a notification carries or a stale frontend call could still name
     // one, so the rule is enforced where every route meets.
-    let project_open = app
-        .try_state::<crate::project::ProjectState>()
-        .and_then(|p| p.root())
-        .is_some();
+    let project_open =
+        app.try_state::<crate::project::ProjectState>().and_then(|p| p.root()).is_some();
     if !route_allowed(&request, project_open) {
         logging::log_warn(
             app,
@@ -686,10 +663,7 @@ pub fn request_open<R: tauri::Runtime>(app: &tauri::AppHandle<R>, section: Optio
 /// offers, the section a notification's address carries. `None` opens the
 /// window on Appearance (SWN-FR-MRNB).
 #[tauri::command]
-pub fn open_settings_window<R: tauri::Runtime>(
-    section: Option<String>,
-    app: tauri::AppHandle<R>,
-) {
+pub fn open_settings_window<R: tauri::Runtime>(section: Option<String>, app: tauri::AppHandle<R>) {
     dispatch(&app, Request::Open { section });
 }
 
@@ -732,10 +706,7 @@ pub fn get_settings_window_context<R: tauri::Runtime>(
         } else {
             crate::project::basename(&project_key)
         },
-        content_root: project
-            .root()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_default(),
+        content_root: project.root().map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
         project_key,
     }
 }
@@ -756,10 +727,7 @@ pub fn finish_settings_close<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) {
     let label = window.label().to_string();
-    let Some(sweep) = app
-        .try_state::<SettingsWindows>()
-        .and_then(|s| s.take_for(&label))
-    else {
+    let Some(sweep) = app.try_state::<SettingsWindows>().and_then(|s| s.take_for(&label)) else {
         // An answer nobody is waiting for — a duplicate, or one from a window
         // whose sweep was already settled. Ignoring it is what keeps a second
         // close request from performing the transition twice (SWN-FR-12).
@@ -781,10 +749,7 @@ pub fn finish_settings_close<R: tauri::Runtime>(
     // nothing else about the request happens.
     release_exit_hold(&app, &sweep.next);
     if let Some(w) = app.get_webview_window(&label) {
-        let _ = w.emit(
-            EVENT_PRESENT_FAILURE,
-            serde_json::json!({ "section": section }),
-        );
+        let _ = w.emit(EVENT_PRESENT_FAILURE, serde_json::json!({ "section": section }));
         let _ = w.set_focus();
     }
     logging::log_warn(

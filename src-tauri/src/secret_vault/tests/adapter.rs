@@ -18,16 +18,11 @@ fn vault_secrets_maps_ids_onto_paths_and_collapses_errors() {
     vault.mark_migrated();
     let secrets = VaultSecrets::new(Arc::clone(&vault), &["ai_api", "providers"]);
 
-    assert_eq!(
-        secrets.path_of("openai"),
-        p(&["ai_api", "providers", "openai"])
-    );
+    assert_eq!(secrets.path_of("openai"), p(&["ai_api", "providers", "openai"]));
 
     AiSecretStore::set(&secrets, "openai", "sk-key").unwrap();
     assert_eq!(
-        vault
-            .read_secret(&p(&["ai_api", "providers", "openai"]))
-            .unwrap(),
+        vault.read_secret(&p(&["ai_api", "providers", "openai"])).unwrap(),
         Some("sk-key".into())
     );
     assert!(AiSecretStore::has(&secrets, "openai").unwrap());
@@ -65,21 +60,12 @@ fn vault_namespaces_do_not_collide() {
     AiSecretStore::set(&api, "shared_id", "api key").unwrap();
     AiSecretStore::set(&agentic, "shared_id", "agent credential").unwrap();
 
-    assert_eq!(
-        AiSecretStore::get(&api, "shared_id").unwrap(),
-        Some("api key".into())
-    );
-    assert_eq!(
-        AiSecretStore::get(&agentic, "shared_id").unwrap(),
-        Some("agent credential".into())
-    );
+    assert_eq!(AiSecretStore::get(&api, "shared_id").unwrap(), Some("api key".into()));
+    assert_eq!(AiSecretStore::get(&agentic, "shared_id").unwrap(), Some("agent credential".into()));
 
     AiSecretStore::delete(&api, "shared_id").unwrap();
     assert_eq!(AiSecretStore::get(&api, "shared_id").unwrap(), None);
-    assert_eq!(
-        AiSecretStore::get(&agentic, "shared_id").unwrap(),
-        Some("agent credential".into())
-    );
+    assert_eq!(AiSecretStore::get(&agentic, "shared_id").unwrap(), Some("agent credential".into()));
 }
 
 /// ASV-FR-33: the walking-skeleton contract holds for the GitHub adapter too,
@@ -94,10 +80,7 @@ fn vault_secrets_serves_the_github_trait() {
     let secrets = VaultSecrets::new(vault, &["github", "tokens"]);
 
     GithubSecretStore::set(&secrets, "t1", "ghp_secret").unwrap();
-    assert_eq!(
-        GithubSecretStore::get(&secrets, "t1").unwrap(),
-        Some("ghp_secret".into())
-    );
+    assert_eq!(GithubSecretStore::get(&secrets, "t1").unwrap(), Some("ghp_secret".into()));
     let presence = GithubSecretStore::presence(&secrets, &["t1", "t2"]).unwrap();
     assert_eq!(presence.get("t1"), Some(&true));
     assert_eq!(presence.get("t2"), Some(&false));
@@ -180,16 +163,8 @@ fn the_owning_modules_are_wired_to_the_global_vault() {
             include_str!("../../github_tokens.rs"),
             "github_tokens::VAULT_NAMESPACE",
         ),
-        (
-            "ai_api.rs",
-            include_str!("../../ai_api.rs"),
-            "ai_api::VAULT_NAMESPACE",
-        ),
-        (
-            "agentic.rs",
-            include_str!("../../agentic.rs"),
-            "agentic::VAULT_NAMESPACE",
-        ),
+        ("ai_api.rs", include_str!("../../ai_api.rs"), "ai_api::VAULT_NAMESPACE"),
+        ("agentic.rs", include_str!("../../agentic.rs"), "agentic::VAULT_NAMESPACE"),
     ] {
         let default = source
             .split_once("fn default() -> Self {")
@@ -246,10 +221,8 @@ fn keyring_entry_names_are_the_only_ones_used() {
         .split_once("impl VaultBackend for KeyringVaultBackend")
         .expect("the production backend")
         .1;
-    let write = backend
-        .split_once("fn write(&self, value: &str)")
-        .expect("the consolidated write")
-        .1;
+    let write =
+        backend.split_once("fn write(&self, value: &str)").expect("the consolidated write").1;
     let write = write.split_once("\n    fn ").expect("the end of write").0;
     assert!(
         write.contains("set_password"),
@@ -288,21 +261,12 @@ fn the_last_set_of_a_path_in_a_request_wins() {
 
     vault
         .apply_secret_mutations(&[
-            Mutation::Set {
-                path: p(&["github", "tokens", "a"]),
-                secret: "first".into(),
-            },
-            Mutation::Set {
-                path: p(&["github", "tokens", "a"]),
-                secret: "second".into(),
-            },
+            Mutation::Set { path: p(&["github", "tokens", "a"]), secret: "first".into() },
+            Mutation::Set { path: p(&["github", "tokens", "a"]), secret: "second".into() },
         ])
         .unwrap();
 
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        Some("second".into())
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), Some("second".into()));
 }
 
 /// A `Set` at a path that names an existing namespace rather than a leaf is
@@ -313,14 +277,8 @@ fn a_set_that_would_replace_a_namespace_is_refused() {
     set(&vault, &["github", "tokens", "a"], "A").unwrap();
 
     // `["github","tokens"]` is an object holding a secret.
-    assert_eq!(
-        set(&vault, &["github", "tokens"], "clobber").unwrap_err(),
-        VaultError::WriteFailed
-    );
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        Some("A".into())
-    );
+    assert_eq!(set(&vault, &["github", "tokens"], "clobber").unwrap_err(), VaultError::WriteFailed);
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), Some("A".into()));
 
     // And the mirror: a path *through* an existing leaf cannot create an object
     // where a secret sits.
@@ -347,13 +305,8 @@ fn an_empty_secret_is_stored_and_reads_as_present() {
 
     set(&vault, &["github", "tokens", "a"], "").unwrap();
 
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        Some(String::new())
-    );
-    let presence = vault
-        .secret_presence(&[p(&["github", "tokens", "a"])])
-        .unwrap();
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), Some(String::new()));
+    let presence = vault.secret_presence(&[p(&["github", "tokens", "a"])]).unwrap();
     assert_eq!(presence.get(&p(&["github", "tokens", "a"])), Some(&true));
 }
 
@@ -373,10 +326,7 @@ fn a_duplicated_candidate_is_adopted_once() {
     // The second sees the path already held (ASV-FR-21) and adopts nothing.
     assert_eq!(outcome.adopted, 1);
     assert_eq!(keyring.count(&Call::Write), 1);
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        Some("A".into())
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), Some("A".into()));
     assert!(keyring.legacy(GITHUB_LEGACY, "a").is_none());
 }
 
@@ -388,19 +338,11 @@ fn unknown_namespaces_survive_a_removal_too() {
     keyring.set_entry(r#"{"version":1,"future":{"a":"kept"},"github":{"tokens":{"t":"T"}}}"#);
 
     vault
-        .apply_secret_mutations(&[Mutation::Remove {
-            path: p(&["github", "tokens", "t"]),
-        }])
+        .apply_secret_mutations(&[Mutation::Remove { path: p(&["github", "tokens", "t"]) }])
         .unwrap();
 
     let object = keyring.object();
-    assert_eq!(
-        object
-            .get("future")
-            .and_then(|v| v.get("a"))
-            .and_then(Value::as_str),
-        Some("kept")
-    );
+    assert_eq!(object.get("future").and_then(|v| v.get("a")).and_then(Value::as_str), Some("kept"));
 }
 
 /// A `Remove` of a path that is not there succeeds, which is what makes the
@@ -415,9 +357,7 @@ fn removing_an_absent_path_succeeds() {
         }])
         .unwrap();
     vault
-        .apply_secret_mutations(&[Mutation::Remove {
-            path: p(&["no", "such", "namespace"]),
-        }])
+        .apply_secret_mutations(&[Mutation::Remove { path: p(&["no", "such", "namespace"]) }])
         .unwrap();
 }
 
@@ -429,8 +369,5 @@ fn the_version_field_is_not_addressable() {
     set(&vault, &["github", "tokens", "a"], "A").unwrap();
 
     assert!(set(&vault, &["version"], "99").is_err());
-    assert_eq!(
-        keyring.object().get("version").and_then(Value::as_u64),
-        Some(1)
-    );
+    assert_eq!(keyring.object().get("version").and_then(Value::as_u64), Some(1));
 }

@@ -98,9 +98,7 @@ const QUEUE_CAPACITY: usize = 64;
 /// bounded so a search never starves the rest of the application (SCC NFR). It
 /// does not grow with the size of the tree.
 fn consumer_pool_size() -> usize {
-    std::thread::available_parallelism()
-        .map(|n| n.get().saturating_sub(1).clamp(2, 8))
-        .unwrap_or(4)
+    std::thread::available_parallelism().map(|n| n.get().saturating_sub(1).clamp(2, 8)).unwrap_or(4)
 }
 
 // ---------------------------------------------------------------------------
@@ -343,9 +341,9 @@ impl Matcher {
                     Ok(Matcher::Insensitive(query.to_lowercase()))
                 }
             }
-            SearchMode::Regex => regex::Regex::new(query)
-                .map(Matcher::Regex)
-                .map_err(|_| INVALID_QUERY.to_string()),
+            SearchMode::Regex => {
+                regex::Regex::new(query).map(Matcher::Regex).map_err(|_| INVALID_QUERY.to_string())
+            }
         }
     }
 
@@ -370,12 +368,12 @@ impl Matcher {
                 let at = lowered.find(needle.as_str())?;
                 Some((map_lowered_offset(haystack, at), needle.chars().count()))
             }
-            Matcher::Sensitive(needle) => haystack
-                .find(needle.as_str())
-                .map(|at| (at, needle.chars().count())),
-            Matcher::Regex(re) => re
-                .find(haystack)
-                .map(|m| (m.start(), haystack[m.start()..m.end()].chars().count())),
+            Matcher::Sensitive(needle) => {
+                haystack.find(needle.as_str()).map(|at| (at, needle.chars().count()))
+            }
+            Matcher::Regex(re) => {
+                re.find(haystack).map(|m| (m.start(), haystack[m.start()..m.end()].chars().count()))
+            }
         }
     }
 }
@@ -716,15 +714,9 @@ pub fn run_search<S: SearchSink + ?Sized>(
 
     // The cap names its own outcome; otherwise a stop that arrived from outside
     // names it, and an untouched stop means the enumeration was exhausted.
-    let reason = if capped {
-        EndReason::Capped
-    } else {
-        external_stop.unwrap_or(EndReason::Completed)
-    };
-    sink.ended(&SearchEndedPayload {
-        search_id: search_id.to_string(),
-        reason,
-    });
+    let reason =
+        if capped { EndReason::Capped } else { external_stop.unwrap_or(EndReason::Completed) };
+    sink.ended(&SearchEndedPayload { search_id: search_id.to_string(), reason });
     reason
 }
 
@@ -897,9 +889,7 @@ fn search_thread_body<R: tauri::Runtime>(
 
     // SCC-FR-03 / SCC-FR-04: the candidates are the scan's file nodes, served
     // from the mounted list. This module walks no tree of its own.
-    let candidates = app
-        .state::<CandidateStore>()
-        .candidates(&root);
+    let candidates = app.state::<CandidateStore>().candidates(&root);
     // PRG-FR-05: the operation becomes determinate once the candidate count is
     // known (SCC-FR-18).
     progress::update_and_publish(
@@ -910,18 +900,9 @@ fn search_thread_body<R: tauri::Runtime>(
         Some(candidates.len() as u64),
     );
 
-    run_search(
-        app,
-        &root,
-        candidates,
-        matcher,
-        scope,
-        stop,
-        search_id,
-        &|consumed| {
-            progress::update_and_publish(app, &progress_registry, operation, Some(consumed), None);
-        },
-    )
+    run_search(app, &root, candidates, matcher, scope, stop, search_id, &|consumed| {
+        progress::update_and_publish(app, &progress_registry, operation, Some(consumed), None);
+    })
 }
 
 /// SCC-FR-14: stop a running search. A `search_id` that is already ended is a

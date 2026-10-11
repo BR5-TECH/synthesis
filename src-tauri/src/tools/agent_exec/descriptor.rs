@@ -85,10 +85,8 @@ impl ImageManifestEntry {
         if !self.is_published() {
             return self.image_ref.clone();
         }
-        let repository = self
-            .image_ref
-            .rsplit_once(':')
-            .map_or(self.image_ref.as_str(), |(repo, _)| repo);
+        let repository =
+            self.image_ref.rsplit_once(':').map_or(self.image_ref.as_str(), |(repo, _)| repo);
         format!("{repository}@{}", self.image_digest)
     }
 
@@ -207,11 +205,7 @@ pub enum ResponseSource {
     JsonStringField { key: &'static str },
     /// JSONL events; the envelope is the text of the last completed item of
     /// this type, parsed as JSON text.
-    JsonlLastItem {
-        event_type: &'static str,
-        item_type: &'static str,
-        text_key: &'static str,
-    },
+    JsonlLastItem { event_type: &'static str, item_type: &'static str, text_key: &'static str },
 }
 
 /// What one line of a vendor's output means, in terms every vendor shares
@@ -294,10 +288,7 @@ pub const LIMIT_SUMMARY_LINE: usize = 300;
 /// reached into another's would break the one-file-per-protocol rule EAC-FR-11
 /// and EAC-FR-12 rest on.
 pub fn summary_line(text: &str) -> String {
-    let flat: String = text
-        .chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
-        .collect();
+    let flat: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
     let flat = flat.split_whitespace().collect::<Vec<_>>().join(" ");
     if flat.chars().count() <= LIMIT_SUMMARY_LINE {
         return flat;
@@ -323,10 +314,7 @@ pub enum SessionSource {
     AssignedThenAsserted { key: &'static str },
     /// The vendor reports an identifier of its own at `event_type`.`key`, and
     /// the executor cannot preassign one.
-    ReportedByEvent {
-        event_type: &'static str,
-        key: &'static str,
-    },
+    ReportedByEvent { event_type: &'static str, key: &'static str },
 }
 
 /// How a vendor's session state survives the container (EAC-FR-31).
@@ -335,10 +323,7 @@ pub enum SessionStateMount {
     /// A Synthesis-owned directory mounted at `target` and addressed by `env`.
     /// The credential arrives separately, so this mount carries transcripts and
     /// nothing else.
-    Dedicated {
-        env: &'static str,
-        target: &'static str,
-    },
+    Dedicated { env: &'static str, target: &'static str },
     /// The vendor's credential mount *is* its session directory, so the two
     /// coincide and that mount is read/write. Its target is whatever AIC
     /// supplied, so there is none to name here.
@@ -445,9 +430,7 @@ pub static CLAUDE_CODE: VendorExecutionDescriptor = VendorExecutionDescriptor {
     activity: claude_code::activity,
     // CCP-FR-09: the schema-validated object first, the text form second.
     response_sources: &[
-        ResponseSource::JsonObjectField {
-            key: "structured_output",
-        },
+        ResponseSource::JsonObjectField { key: "structured_output" },
         ResponseSource::JsonStringField { key: "result" },
     ],
     // CCP-FR-16: assigned before the run, asserted back afterwards.
@@ -470,7 +453,9 @@ pub static CODEX: VendorExecutionDescriptor = VendorExecutionDescriptor {
     // contract changes nothing about its vector; the document reaches its agent
     // in the task alone.
     fresh_argv: |model, effort, _assigned, _contract| codex::fresh_argv(model, effort),
-    resume_argv: Some(|model, effort, session, _contract| codex::resume_argv(model, effort, session)),
+    resume_argv: Some(|model, effort, session, _contract| {
+        codex::resume_argv(model, effort, session)
+    }),
     // The CLI validates the identifier itself; what this checks is only that the
     // value can be carried inside a quoted config override without changing what
     // the override means.
@@ -489,9 +474,7 @@ pub static CODEX: VendorExecutionDescriptor = VendorExecutionDescriptor {
         key: "thread_id",
     },
     // CDX-FR-23: login directory and session directory are the same directory.
-    session_state: SessionStateMount::SharedWithCredentialMount {
-        env: codex::SESSION_STATE_ENV,
-    },
+    session_state: SessionStateMount::SharedWithCredentialMount { env: codex::SESSION_STATE_ENV },
     credential_form: CredentialForm::Mount,
 };
 
@@ -563,10 +546,7 @@ impl VendorExecutionDescriptor {
         stdout: &str,
         assigned_session_id: Option<&str>,
     ) -> Result<(AgentResponseEnvelope, Option<String>), EnvelopeInvalid> {
-        let extracted = (self.extractor)(&ExtractContext {
-            stdout,
-            assigned_session_id,
-        })?;
+        let extracted = (self.extractor)(&ExtractContext { stdout, assigned_session_id })?;
         Ok((extracted.envelope, extracted.session_id))
     }
 
@@ -749,9 +729,7 @@ pub fn unique_container_name() -> String {
 
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let sequence = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos());
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos());
     format!("synthesis-agent-{}-{}-{}", std::process::id(), nanos, sequence)
 }
 
@@ -773,9 +751,7 @@ pub fn new_session_id() -> String {
 
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let sequence = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos());
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos());
 
     let mut hasher = Sha256::new();
     hasher.update(std::process::id().to_le_bytes());
@@ -791,14 +767,7 @@ pub fn new_session_id() -> String {
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
     let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-    format!(
-        "{}-{}-{}-{}-{}",
-        &hex[0..8],
-        &hex[8..12],
-        &hex[12..16],
-        &hex[16..20],
-        &hex[20..32]
-    )
+    format!("{}-{}-{}-{}-{}", &hex[0..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..32])
 }
 
 /// The host directory a vendor's session state lives in (EAC-FR-31).
@@ -833,10 +802,7 @@ pub fn path_slug(path: &Path) -> String {
 
     let mut hasher = Sha256::new();
     hasher.update(path.to_string_lossy().as_bytes());
-    hasher.finalize()[..8]
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    hasher.finalize()[..8].iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// The host user the container runs as (EAC-FR-14).

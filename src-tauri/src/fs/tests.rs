@@ -44,10 +44,7 @@ fn ts2_discover_project_root_returns_not_a_project_when_none_exists() {
     let deeper = tmp.path().join("a").join("b").join("c");
     fs::create_dir_all(&deeper).unwrap();
     let err = discover_project_root(&deeper).unwrap_err();
-    assert!(
-        matches!(err, FsError::NotAProject),
-        "expected NotAProject, got {err:?}"
-    );
+    assert!(matches!(err, FsError::NotAProject), "expected NotAProject, got {err:?}");
 }
 
 #[test]
@@ -174,10 +171,7 @@ fn ts12_resolve_under_rejects_escape_with_dotdot() {
     let tmp = TempDir::new().unwrap();
     let root = tmp.path().to_path_buf();
     let err = resolve_under(&root, "../escape.txt").unwrap_err();
-    assert!(
-        matches!(err, FsError::PathEscape { .. }),
-        "expected PathEscape, got {err:?}"
-    );
+    assert!(matches!(err, FsError::PathEscape { .. }), "expected PathEscape, got {err:?}");
 }
 
 #[test]
@@ -260,16 +254,11 @@ fn fr1_browse_result_serializes_cancelled_as_externally_tagged() {
 
 #[test]
 fn fr1_browse_result_serializes_selected_with_path_field() {
-    let r = BrowseResult::Selected {
-        path: "/Users/x/dev/proj".into(),
-    };
+    let r = BrowseResult::Selected { path: "/Users/x/dev/proj".into() };
     let v: serde_json::Value = serde_json::to_value(&r).unwrap();
     // Externally tagged: { "selected": { "path": "..." } }
     let inner = v.get("selected").expect("expected `selected` tag");
-    assert_eq!(
-        inner.get("path").and_then(|p| p.as_str()),
-        Some("/Users/x/dev/proj")
-    );
+    assert_eq!(inner.get("path").and_then(|p| p.as_str()), Some("/Users/x/dev/proj"));
 }
 
 // PST-FR-26's decision half, testable without a Tauri runtime: which paths
@@ -324,4 +313,3 @@ fn is_valid_basename_accepts_plain_and_rejects_paths() {
 // -----------------------------------------------------------------
 // FSA-FR-15: append_lines.
 // -----------------------------------------------------------------
-

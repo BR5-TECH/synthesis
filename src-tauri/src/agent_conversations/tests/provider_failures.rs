@@ -39,11 +39,7 @@ fn a_provider_tool_that_failed_is_a_result_rather_than_a_turn_failure() {
     assert_eq!(mine.len(), 4, "one activity event per begin and per finish");
     assert_eq!(
         mine.iter()
-            .map(|e| e
-                .active_tool_calls
-                .iter()
-                .map(|c| c.tool.as_str())
-                .collect::<Vec<_>>())
+            .map(|e| e.active_tool_calls.iter().map(|c| c.tool.as_str()).collect::<Vec<_>>())
             .collect::<Vec<_>>(),
         vec![
             Vec::<&str>::new(),
@@ -65,11 +61,9 @@ fn provider_tool_traffic_reaches_no_surface_and_no_record() {
     const QUERY: &str = "how-does-teardown-work";
     const ADDRESS: &str = "https://example.invalid/teardown-page";
     const PAGE: &str = "The page text nobody but the model should ever read.";
-    let h = Harness::scripted(vec![
-        Ok(ScriptedReply::answer("Teardown runs last.")
-            .and_native("openrouter:web_search", QUERY, "1. Teardown")
-            .and_native("openrouter:web_fetch", ADDRESS, PAGE)),
-    ]);
+    let h = Harness::scripted(vec![Ok(ScriptedReply::answer("Teardown runs last.")
+        .and_native("openrouter:web_search", QUERY, "1. Teardown")
+        .and_native("openrouter:web_fetch", ADDRESS, PAGE))]);
     h.mount();
     h.create_agent("arch", "");
     let (terminal, _) = run_one(&h, "arch");
@@ -105,10 +99,7 @@ fn provider_tool_traffic_reaches_no_surface_and_no_record() {
     for domain in [logging::Domain::Ai, logging::Domain::Backend] {
         let records = TEST_BUFFER
             .query(
-                &LogFilter {
-                    domains: vec![domain],
-                    ..Default::default()
-                },
+                &LogFilter { domains: vec![domain], ..Default::default() },
                 None,
                 logging::BUFFER_CAPACITY,
             )
@@ -160,37 +151,17 @@ fn provider_reported_blocks_become_one_call_per_tool_the_provider_ran() {
         // The model's own reasoning: no tool, so nothing to carry.
         detail(None, None, None, None),
         // One tool reported as a call and then as its result, under one id.
-        detail(
-            Some("openrouter:web_search"),
-            Some(r#"{"query":"a"}"#),
-            None,
-            Some("call_1"),
-        ),
+        detail(Some("openrouter:web_search"), Some(r#"{"query":"a"}"#), None, Some("call_1")),
         detail(Some("openrouter:web_search"), None, Some("A"), Some("call_1")),
         // Another reported whole, and a third naming no id at all.
-        detail(
-            Some("openrouter:web_fetch"),
-            Some(r#"{"url":"u"}"#),
-            Some("PAGE"),
-            Some("call_2"),
-        ),
+        detail(Some("openrouter:web_fetch"), Some(r#"{"url":"u"}"#), Some("PAGE"), Some("call_2")),
         detail(Some("openrouter:web_search"), Some("{}"), Some("B"), None),
         // A second tool reported under an id another tool already used: two
         // calls, not one, and the later one keeps an id of its own rather than
         // disappearing into the first.
-        detail(
-            Some("openrouter:web_fetch"),
-            Some(r#"{"url":"v"}"#),
-            Some("OTHER"),
-            Some("call_1"),
-        ),
+        detail(Some("openrouter:web_fetch"), Some(r#"{"url":"v"}"#), Some("OTHER"), Some("call_1")),
         // A call the provider never reported a result for.
-        detail(
-            Some("openrouter:web_search"),
-            Some(r#"{"query":"c"}"#),
-            None,
-            Some("call_3"),
-        ),
+        detail(Some("openrouter:web_search"), Some(r#"{"query":"c"}"#), None, Some("call_3")),
     ];
     let calls = openrouter_bridge::native_calls_in(details.iter(), 7);
     assert_eq!(calls.len(), 5, "one entry per tool the provider actually ran");
@@ -225,8 +196,11 @@ fn a_provider_call_with_no_result_is_recorded_as_one_that_produced_nothing() {
     // failure (CVL-FR-32) — the model read it and carried on — but it is
     // recorded at `WARN`, so it is found in a log rather than by reproducing
     // the turn.
-    let h = Harness::scripted(vec![Ok(ScriptedReply::answer("Nothing came back.")
-        .and_native("openrouter:web_fetch", "{}", ""))]);
+    let h = Harness::scripted(vec![Ok(ScriptedReply::answer("Nothing came back.").and_native(
+        "openrouter:web_fetch",
+        "{}",
+        "",
+    ))]);
     h.mount();
     h.create_agent("arch", "");
     let (terminal, _) = run_one(&h, "arch");
@@ -275,11 +249,7 @@ fn provider_call_arguments_of_every_shape_are_measured_and_never_parsed() {
         );
         let records = provider_tool_records(&terminal.id);
         assert_eq!(records.len(), 1, "for arguments {arguments:?}");
-        assert_eq!(
-            require(&records[0], "argumentChars"),
-            expected,
-            "for arguments {arguments:?}",
-        );
+        assert_eq!(require(&records[0], "argumentChars"), expected, "for arguments {arguments:?}",);
     }
 }
 
@@ -375,10 +345,8 @@ fn a_provider_supplied_call_id_is_what_the_record_names() {
     let (terminal, _) = run_one(&h, "arch");
     assert_eq!(terminal.state, AgentTurnState::Delivered);
 
-    let ids: Vec<String> = provider_tool_records(&terminal.id)
-        .iter()
-        .map(|record| field(record, "callId"))
-        .collect();
+    let ids: Vec<String> =
+        provider_tool_records(&terminal.id).iter().map(|record| field(record, "callId")).collect();
     assert_eq!(ids.len(), 2, "one record per call the provider ran");
     assert_eq!(ids[0], "call_abc", "the provider's own id travels");
     assert!(!ids[1].is_empty(), "and one is derived where it named none");
@@ -394,8 +362,11 @@ fn a_retried_call_repeats_an_exchange_that_carries_no_provider_traffic() {
     // carry twice.
     let h = Harness::scripted(vec![
         Err(FAIL_UNREACHABLE),
-        Ok(ScriptedReply::answer("Answered on the second attempt.")
-            .and_native("openrouter:web_search", "{}", "A")),
+        Ok(ScriptedReply::answer("Answered on the second attempt.").and_native(
+            "openrouter:web_search",
+            "{}",
+            "A",
+        )),
     ]);
     h.mount();
     h.create_agent("arch", "");
@@ -436,11 +407,7 @@ fn cancelling_after_a_reply_that_reported_provider_traffic_appends_nothing() {
     h.create_agent("arch", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
 
     // Wait until the second round — the one after the provider's traffic — is in
@@ -495,7 +462,11 @@ impl CompletionSeam for NativeThenGated {
         if exchange.len() == 1 {
             return Ok(ModelReply {
                 text: String::new(),
-                tool_calls: vec![super::support::rig_tool_call("call-0", crate::tools::skill_list::NAME, serde_json::json!({}))],
+                tool_calls: vec![super::support::rig_tool_call(
+                    "call-0",
+                    crate::tools::skill_list::NAME,
+                    serde_json::json!({}),
+                )],
                 native_calls: vec![NativeToolCall {
                     id: "call_1".into(),
                     name: "openrouter:web_search".into(),
@@ -503,11 +474,11 @@ impl CompletionSeam for NativeThenGated {
                     result: "A".into(),
                 }],
                 native_usage: None,
-            native_entries_dropped: 0,
-            reply_repairs: Default::default(),
-            served_by: None,
-            prompt_tokens: None,
-            output_tokens: None,
+                native_entries_dropped: 0,
+                reply_repairs: Default::default(),
+                served_by: None,
+                prompt_tokens: None,
+                output_tokens: None,
                 input_tokens: None,
                 ..Default::default()
             });

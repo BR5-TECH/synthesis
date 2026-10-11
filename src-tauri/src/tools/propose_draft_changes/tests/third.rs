@@ -2,8 +2,8 @@
 //!
 //! One part of `mod.rs`, which holds the fixtures these all run against.
 
-use super::*;
 use super::second::{PDC_SEVERAL_LEAK_LOG, PDC_SEVERAL_REFUSAL_LOG};
+use super::*;
 
 // ---------------------------------------------------------------------------
 // What `revises` can mean on the draft as it stands (PDC-FR-GMWR)
@@ -228,21 +228,12 @@ fn the_one_change_rule_is_stated_where_the_model_reads_it() {
     let tool = f.tool();
     let schema = tool.parameters();
     let description = tool.description();
-    assert!(
-        description.contains("`revises`"),
-        "the description names the field: {description}",
-    );
+    assert!(description.contains("`revises`"), "the description names the field: {description}",);
     for text in [
         description.clone(),
-        schema["properties"]["revises"]["description"]
-            .as_str()
-            .expect("description")
-            .to_string(),
+        schema["properties"]["revises"]["description"].as_str().expect("description").to_string(),
     ] {
-        assert!(
-            text.contains("one change"),
-            "the text states the one-change rule: {text}",
-        );
+        assert!(text.contains("one change"), "the text states the one-change rule: {text}",);
     }
 }
 
@@ -403,11 +394,7 @@ fn a_real_name_on_a_proposal_since_fully_decided_is_ignored() {
     })
     .expect("a proposal stands");
     let settled = f.hunks_of_the_one_proposal()[0].id.clone();
-    set_state(
-        &f,
-        &settled,
-        crate::draft_proposals::hunks::HunkState::Rejected,
-    );
+    set_state(&f, &settled, crate::draft_proposals::hunks::HunkState::Rejected);
 
     let out = f
         .call(ProposeDraftChangesArgs {
@@ -555,23 +542,17 @@ fn a_refusal_about_one_of_several_changes_names_which_one() {
     };
 
     PDC_SEVERAL_REFUSAL_LOG.clear();
-    let refused = block_on(
-        f.tool()
-            .with_buffer(&PDC_SEVERAL_REFUSAL_LOG)
-            .call(ProposeDraftChangesArgs {
-                path: FILE.into(),
-                rationale: RATIONALE.into(),
-                revises: None,
-                hunks,
-            }),
-    )
-    .unwrap_err();
+    let refused =
+        block_on(f.tool().with_buffer(&PDC_SEVERAL_REFUSAL_LOG).call(ProposeDraftChangesArgs {
+            path: FILE.into(),
+            rationale: RATIONALE.into(),
+            revises: None,
+            hunks,
+        }))
+        .unwrap_err();
 
     let message = refused.to_string();
-    assert!(
-        message.starts_with("Change 2 of 5: "),
-        "the refusal names the change: {message}",
-    );
+    assert!(message.starts_with("Change 2 of 5: "), "the refusal names the change: {message}",);
     assert!(message.contains(PROPOSAL_TEXT_NOT_FOUND), "{message}");
 
     // And the record says which, so a reader can tell a model that is one
@@ -593,25 +574,21 @@ fn a_refusal_that_names_a_change_still_records_no_text() {
     let f = Fixture::new();
     let secret = "TEXT NOBODY SHOULD SEE IN A LOG";
     PDC_SEVERAL_LEAK_LOG.clear();
-    let _ = block_on(
-        f.tool()
-            .with_buffer(&PDC_SEVERAL_LEAK_LOG)
-            .call(ProposeDraftChangesArgs {
-                path: FILE.into(),
-                rationale: RATIONALE.into(),
-                revises: None,
-                hunks: vec![
-                    one_change().remove(0),
-                    HunkArg {
-                        kind: Some("replace".into()),
-                        before: Some(secret.into()),
-                        after: Some("x".into()),
-                        after_text: None,
-                        note: None,
-                    },
-                ],
-            }),
-    );
+    let _ = block_on(f.tool().with_buffer(&PDC_SEVERAL_LEAK_LOG).call(ProposeDraftChangesArgs {
+        path: FILE.into(),
+        rationale: RATIONALE.into(),
+        revises: None,
+        hunks: vec![
+            one_change().remove(0),
+            HunkArg {
+                kind: Some("replace".into()),
+                before: Some(secret.into()),
+                after: Some("x".into()),
+                after_text: None,
+                note: None,
+            },
+        ],
+    }));
     let rendered = serde_json::to_string(
         &records(&PDC_SEVERAL_LEAK_LOG, Domain::Ai)
             .into_iter()
@@ -647,10 +624,7 @@ fn every_placement_refusal_names_the_change_it_is_about() {
             hunks,
         })
         .unwrap_err();
-    assert_eq!(
-        refused.to_string(),
-        format!("Change 3 of 5: {PROPOSAL_TEXT_NOT_UNIQUE}"),
-    );
+    assert_eq!(refused.to_string(), format!("Change 3 of 5: {PROPOSAL_TEXT_NOT_UNIQUE}"),);
 
     // And two changes covering the same text, which names the later of them.
     let f = Fixture::new();
@@ -677,10 +651,7 @@ fn every_placement_refusal_names_the_change_it_is_about() {
             ],
         })
         .unwrap_err();
-    assert_eq!(
-        refused.to_string(),
-        format!("Change 2 of 2: {PROPOSAL_HUNKS_OVERLAP}"),
-    );
+    assert_eq!(refused.to_string(), format!("Change 2 of 2: {PROPOSAL_HUNKS_OVERLAP}"),);
 }
 
 // TLC-FR-10 / TLC-FR-11: a refusal that names a change is still an argument
@@ -688,11 +659,8 @@ fn every_placement_refusal_names_the_change_it_is_about() {
 // Listing the variant is not classifying it.
 #[test]
 fn a_refusal_that_names_a_change_is_a_retryable_argument_refusal() {
-    let refusal = ToolRefusal::InvalidArgumentsAt {
-        message: PROPOSAL_TEXT_NOT_FOUND,
-        at: 2,
-        of: 5,
-    };
+    let refusal =
+        ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_TEXT_NOT_FOUND, at: 2, of: 5 };
     assert_eq!(refusal.reason(), "invalid_arguments");
     assert!(refusal.retryable());
     assert_eq!(refusal_code(&refusal), Some("text_not_found"));

@@ -81,10 +81,8 @@ async fn a_rejected_registration_never_becomes_a_session() {
         json!({"registration_id": "reg-1", "instance_id": "instance-a", "payload": "cXI"}),
     )
     .await;
-    let handle = expect(&mut registration).await["body"]["handle"]
-        .as_str()
-        .expect("a handle")
-        .to_string();
+    let handle =
+        expect(&mut registration).await["body"]["handle"].as_str().expect("a handle").to_string();
     let _routed = expect(&mut worker_socket).await;
     send(
         &mut worker_socket,
@@ -94,10 +92,7 @@ async fn a_rejected_registration_never_becomes_a_session() {
         json!({"registration_id": "reg-1", "status": "rejected"}),
     )
     .await;
-    assert_eq!(
-        expect(&mut registration).await["body"]["status"],
-        "rejected"
-    );
+    assert_eq!(expect(&mut registration).await["body"]["status"], "rejected");
 
     let mut client = relay.open("/v1/client").await;
     send(
@@ -125,14 +120,8 @@ async fn a_rejected_registration_never_becomes_a_session() {
     )
     .await;
     let _ = expect(&mut attached).await;
-    send(
-        &mut attached,
-        "client",
-        "application_message",
-        None,
-        json!({"payload": "dG9vLWVhcmx5"}),
-    )
-    .await;
+    send(&mut attached, "client", "application_message", None, json!({"payload": "dG9vLWVhcmx5"}))
+        .await;
     let failure = expect(&mut attached).await;
     assert_eq!(failure["body"]["reason"], "invalid_frame_shape");
 }
@@ -251,14 +240,8 @@ async fn an_undeliverable_frame_is_answered_with_a_failure() {
     let mut worker_socket = worker(&relay).await;
 
     // No client is attached, so a broadcast reaches nobody.
-    send(
-        &mut worker_socket,
-        "worker",
-        "application_message",
-        None,
-        json!({"payload": "bm9ib2R5"}),
-    )
-    .await;
+    send(&mut worker_socket, "worker", "application_message", None, json!({"payload": "bm9ib2R5"}))
+        .await;
     let failure = expect(&mut worker_socket).await;
     assert_eq!(failure["type"], "relay_failure");
     assert_eq!(failure["body"]["reason"], "delivery_failed");
@@ -335,10 +318,7 @@ async fn a_closed_worker_socket_drops_its_route() {
         json!({"handle": handle, "instance_id": "instance-a"}),
     )
     .await;
-    assert_eq!(
-        expect(&mut client).await["body"]["reason"],
-        "worker_not_found"
-    );
+    assert_eq!(expect(&mut client).await["body"]["reason"], "worker_not_found");
 }
 
 // RSN-FR-JAVE: several client connections may hold one handle, and a broadcast
@@ -367,14 +347,8 @@ async fn a_broadcast_reaches_every_socket_of_one_handle() {
     let announced = expect(&mut worker_socket).await;
     assert_eq!(announced["type"], "client_attach");
 
-    send(
-        &mut worker_socket,
-        "worker",
-        "application_message",
-        None,
-        json!({"payload": "Ym90aA"}),
-    )
-    .await;
+    send(&mut worker_socket, "worker", "application_message", None, json!({"payload": "Ym90aA"}))
+        .await;
     assert_eq!(expect(&mut first).await["body"]["payload"], "Ym90aA");
     assert_eq!(expect(&mut second).await["body"]["payload"], "Ym90aA");
 }
@@ -494,10 +468,8 @@ async fn a_registration_payload_is_forwarded_unchanged_in_both_directions() {
         json!({"registration_id": "reg-1", "instance_id": "instance-a", "payload": "cXItcGF5bG9hZA"}),
     )
     .await;
-    let handle = expect(&mut registration).await["body"]["handle"]
-        .as_str()
-        .expect("a handle")
-        .to_string();
+    let handle =
+        expect(&mut registration).await["body"]["handle"].as_str().expect("a handle").to_string();
     let routed = expect(&mut worker_socket).await;
     assert_eq!(routed["body"]["payload"], "cXItcGF5bG9hZA");
 

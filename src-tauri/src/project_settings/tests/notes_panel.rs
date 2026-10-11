@@ -46,14 +46,15 @@ fn two_worktrees_keep_independent_notes_panel_state() {
     // PSS-FR-19 first half / PSS-FR-16.
     let a = TempDir::new().unwrap();
     let b = TempDir::new().unwrap();
-    save_notes_panel_state_to(&crate::fs::RootFs::for_root(a.path()), notes_state(NotesScopePosition::All, "spec")).unwrap();
+    save_notes_panel_state_to(
+        &crate::fs::RootFs::for_root(a.path()),
+        notes_state(NotesScopePosition::All, "spec"),
+    )
+    .unwrap();
 
     let from_b = load_notes_panel_state_from(&crate::fs::RootFs::for_root(b.path()));
     assert_eq!(from_b, NotesPanelState::default(), "B's own default");
-    assert!(
-        !b.path().join(".synthesis/local.toml").exists(),
-        "nothing was copied from A into B"
-    );
+    assert!(!b.path().join(".synthesis/local.toml").exists(), "nothing was copied from A into B");
     assert_eq!(
         load_notes_panel_state_from(&crate::fs::RootFs::for_root(a.path())).scope_position,
         NotesScopePosition::All,
@@ -68,7 +69,11 @@ fn the_entity_position_is_returned_unchanged_and_never_rewritten() {
     // decision, and it must be able to make it without the store having
     // silently downgraded the value first.
     let dir = TempDir::new().unwrap();
-    save_notes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), notes_state(NotesScopePosition::Entity, "")).unwrap();
+    save_notes_panel_state_to(
+        &crate::fs::RootFs::for_root(dir.path()),
+        notes_state(NotesScopePosition::Entity, ""),
+    )
+    .unwrap();
     assert_eq!(
         load_notes_panel_state_from(&crate::fs::RootFs::for_root(dir.path())).scope_position,
         NotesScopePosition::Entity
@@ -85,10 +90,16 @@ fn a_notes_whole_record_write_replaces_every_field() {
     // PSS-FR-19: the record is written whole, so a caller changing one
     // field supplies the other unchanged.
     let dir = TempDir::new().unwrap();
-    save_notes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), notes_state(NotesScopePosition::All, "spec"))
-        .unwrap();
-    save_notes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), notes_state(NotesScopePosition::Project, ""))
-        .unwrap();
+    save_notes_panel_state_to(
+        &crate::fs::RootFs::for_root(dir.path()),
+        notes_state(NotesScopePosition::All, "spec"),
+    )
+    .unwrap();
+    save_notes_panel_state_to(
+        &crate::fs::RootFs::for_root(dir.path()),
+        notes_state(NotesScopePosition::Project, ""),
+    )
+    .unwrap();
     assert_eq!(
         load_notes_panel_state_from(&crate::fs::RootFs::for_root(dir.path())),
         notes_state(NotesScopePosition::Project, "")
@@ -98,15 +109,23 @@ fn a_notes_whole_record_write_replaces_every_field() {
 #[test]
 fn saving_notes_state_preserves_every_other_project_local_section() {
     let dir = TempDir::new().unwrap();
-    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop")).unwrap();
+    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop"))
+        .unwrap();
     save_library_panel_state_to(
         &crate::fs::RootFs::for_root(dir.path()),
         library_state(&["specifications"], ArtifactTypeFilter::AllFiles, ""),
     )
     .unwrap();
-    save_notes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), notes_state(NotesScopePosition::All, "x")).unwrap();
+    save_notes_panel_state_to(
+        &crate::fs::RootFs::for_root(dir.path()),
+        notes_state(NotesScopePosition::All, "x"),
+    )
+    .unwrap();
 
-    assert_eq!(load_changes_panel_state_from(&crate::fs::RootFs::for_root(dir.path())), branch_state("develop"));
+    assert_eq!(
+        load_changes_panel_state_from(&crate::fs::RootFs::for_root(dir.path())),
+        branch_state("develop")
+    );
     assert_eq!(
         load_library_panel_state_from(&crate::fs::RootFs::for_root(dir.path())).expanded_paths,
         vec!["specifications".to_string()]
@@ -166,8 +185,7 @@ fn notes_state_serialises_the_wire_shape_the_frontend_types_against() {
         (NotesScopePosition::All, "all"),
     ] {
         assert_eq!(serde_json::to_value(variant).unwrap(), text);
-        let parsed: NotesScopePosition =
-            serde_json::from_str(&format!("\"{text}\"")).unwrap();
+        let parsed: NotesScopePosition = serde_json::from_str(&format!("\"{text}\"")).unwrap();
         assert_eq!(parsed, variant);
     }
 }

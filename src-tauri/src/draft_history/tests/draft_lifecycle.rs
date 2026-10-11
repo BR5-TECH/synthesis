@@ -31,10 +31,7 @@ fn deleting_a_draft_takes_its_history_with_it_and_writes_nothing_outside() {
     drafts::delete_draft_impl(&f.root, &f.root, &f.draft_id).expect("deleted");
 
     assert!(!hist.exists());
-    assert_eq!(
-        std::fs::read_to_string(f.root.join("README.md")).expect("read"),
-        "untouched",
-    );
+    assert_eq!(std::fs::read_to_string(f.root.join("README.md")).expect("read"), "untouched",);
 }
 
 #[test]
@@ -73,11 +70,7 @@ fn an_entry_id_crafted_to_escape_the_history_folder_is_refused_having_written_no
     let f = Fixture::new();
     for escape in ["../../etc/passwd", "/etc/passwd", "..", "a/b", ""] {
         assert!(!is_valid_entry_id(escape), "{escape:?} must be refused");
-        assert_eq!(
-            load_impl(&f.root, escape).unwrap_err(),
-            ERR_ENTRY_NOT_FOUND,
-            "{escape:?}",
-        );
+        assert_eq!(load_impl(&f.root, escape).unwrap_err(), ERR_ENTRY_NOT_FOUND, "{escape:?}",);
     }
     assert_eq!(f.history_files(), Vec::<String>::new(), "nothing was written");
 }
@@ -86,35 +79,20 @@ fn an_entry_id_crafted_to_escape_the_history_folder_is_refused_having_written_no
 fn an_inconsistent_draft_and_an_unknown_id_are_typed_refusals() {
     let f = Fixture::new();
     f.accept_new("rewritten\n");
-    assert_eq!(
-        list_impl(&f.root, "no-such-draft").unwrap_err(),
-        ERR_DRAFT_NOT_FOUND,
-    );
-    assert_eq!(
-        f.reconcile_of("no-such-draft").unwrap_err(),
-        ERR_DRAFT_NOT_FOUND,
-    );
+    assert_eq!(list_impl(&f.root, "no-such-draft").unwrap_err(), ERR_DRAFT_NOT_FOUND,);
+    assert_eq!(f.reconcile_of("no-such-draft").unwrap_err(), ERR_DRAFT_NOT_FOUND,);
     assert_eq!(load_impl(&f.root, "no-such-entry").unwrap_err(), ERR_ENTRY_NOT_FOUND);
 
     // DRS-FR-11: a second file by hand, which is the only way one gets there.
     let entry_id = f.list().entries[0].id.clone();
     std::fs::write(
-        drafts::draft_dir(&f.root, &f.draft_id)
-            .expect("dir")
-            .join("files")
-            .join("smuggled.md"),
+        drafts::draft_dir(&f.root, &f.draft_id).expect("dir").join("files").join("smuggled.md"),
         "by hand",
     )
     .expect("second file");
 
-    assert_eq!(
-        list_impl(&f.root, &f.draft_id).unwrap_err(),
-        drafts::ERR_NOT_SINGLE_FILE,
-    );
-    assert_eq!(
-        load_impl(&f.root, &entry_id).unwrap_err(),
-        drafts::ERR_NOT_SINGLE_FILE,
-    );
+    assert_eq!(list_impl(&f.root, &f.draft_id).unwrap_err(), drafts::ERR_NOT_SINGLE_FILE,);
+    assert_eq!(load_impl(&f.root, &entry_id).unwrap_err(), drafts::ERR_NOT_SINGLE_FILE,);
 }
 
 // ---------------------------------------------------------------------------
@@ -135,29 +113,20 @@ fn the_log_names_the_draft_and_the_entry_and_carries_no_composed_text() {
     f.accept(&proposal).expect("accepted");
 
     let records = crate::logging::BUFFER
-        .query(
-            &crate::logging::LogFilter::default(),
-            None,
-            crate::logging::BUFFER_CAPACITY,
-        )
+        .query(&crate::logging::LogFilter::default(), None, crate::logging::BUFFER_CAPACITY)
         .expect("the buffer answers a default filter")
         .records;
 
     let mine: Vec<_> = records
         .iter()
-        .filter(|r| {
-            r.fields.get("draftId")
-                == Some(&serde_json::Value::String(f.draft_id.clone()))
-        })
+        .filter(|r| r.fields.get("draftId") == Some(&serde_json::Value::String(f.draft_id.clone())))
         .collect();
     // DHS-FR-26: one record per entry the acceptance created — two for a first
     // acceptance, which settles the `Original` as well (DHS-FR-07). A record for
     // "the entry" would leave the other version unaccounted for in the one
     // channel this is debuggable from.
-    let created: Vec<_> = mine
-        .iter()
-        .filter(|r| r.message == "draft history entry created")
-        .collect();
+    let created: Vec<_> =
+        mine.iter().filter(|r| r.message == "draft history entry created").collect();
     assert_eq!(
         created.len(),
         2,
@@ -171,17 +140,11 @@ fn the_log_names_the_draft_and_the_entry_and_carries_no_composed_text() {
         "no record names the Original the acceptance settled",
     );
     // …and the commit names both, so a reader of that one line can find them.
-    let commit = mine
-        .iter()
-        .find(|r| r.message == "draft acceptance committed")
-        .expect("a commit record");
+    let commit =
+        mine.iter().find(|r| r.message == "draft acceptance committed").expect("a commit record");
     for field in ["entryId", "originalEntryId"] {
         assert!(
-            commit
-                .fields
-                .get(field)
-                .and_then(|v| v.as_str())
-                .is_some_and(|id| !id.is_empty()),
+            commit.fields.get(field).and_then(|v| v.as_str()).is_some_and(|id| !id.is_empty()),
             "the commit record does not name {field}",
         );
     }
@@ -205,10 +168,7 @@ fn the_log_names_the_draft_and_the_entry_and_carries_no_composed_text() {
     // on a record naming no draft would pass a narrower check.
     let haystack = serde_json::to_string(&records).expect("records serialise");
     for secret in [PROMPT_TEXT, CANDIDATE_TEXT, "The opening buries the point."] {
-        assert!(
-            !haystack.contains(secret),
-            "{secret:?} reached the session log",
-        );
+        assert!(!haystack.contains(secret), "{secret:?} reached the session log",);
     }
 }
 
@@ -315,9 +275,7 @@ fn history_statistics(f: &Fixture) -> crate::statistics::DraftStatistics {
 fn with_project(f: &Fixture) {
     use tauri::Manager;
     f.app.manage(crate::project::ProjectState::default());
-    f.app
-        .state::<crate::project::ProjectState>()
-        .set_root(f.root.path().to_path_buf());
+    f.app.state::<crate::project::ProjectState>().set_root(f.root.path().to_path_buf());
 }
 
 #[test]

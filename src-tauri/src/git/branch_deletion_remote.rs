@@ -17,9 +17,7 @@ use crate::github_tokens;
 use crate::log_fields;
 use crate::logging::{self, LogBuffer, LogLevel};
 
-use super::branch_deletion::{
-    RemoteDeletionOutcome, REMOTE_DELETED, REMOTE_FAILED,
-};
+use super::branch_deletion::{RemoteDeletionOutcome, REMOTE_DELETED, REMOTE_FAILED};
 use super::*;
 
 /// The remote branch a deletion would delete.
@@ -63,12 +61,7 @@ pub(crate) fn remote_target(repo: &Repository, local_name: &str) -> Option<Remot
         .ok()
         .and_then(|r| r.url().ok().map(str::to_string))
         .unwrap_or_default();
-    Some(RemoteTarget {
-        remote,
-        branch,
-        tracking,
-        url,
-    })
+    Some(RemoteTarget { remote, branch, tracking, url })
 }
 
 /// Delete the branch on the remote, then its remote-tracking ref.
@@ -77,9 +70,8 @@ fn push_deletion(
     target: &RemoteTarget,
     token: Option<&str>,
 ) -> Result<(), String> {
-    let mut remote = repo
-        .find_remote(&target.remote)
-        .map_err(|_| ERR_NO_REMOTE_CONFIGURED.to_string())?;
+    let mut remote =
+        repo.find_remote(&target.remote).map_err(|_| ERR_NO_REMOTE_CONFIGURED.to_string())?;
     // The remote's verdict for the ref. A push can succeed at the transport and
     // still be refused for the ref, which libgit2 reports only here.
     let rejection = RefCell::new(None::<String>);
@@ -94,18 +86,14 @@ fn push_deletion(
     let mut opts = git2::PushOptions::new();
     opts.remote_callbacks(callbacks);
     let refspec = format!(":refs/heads/{}", target.branch);
-    remote
-        .push(&[refspec.as_str()], Some(&mut opts))
-        .map_err(|e| classify_transfer_error(&e))?;
+    remote.push(&[refspec.as_str()], Some(&mut opts)).map_err(|e| classify_transfer_error(&e))?;
     if let Some(reason) = rejection.borrow().clone() {
         return Err(reason);
     }
 
     // GTC-FR-FSRQ: the remote-tracking ref goes with the branch it tracked.
     if let Ok(mut tracking) = repo.find_reference(&format!("refs/remotes/{}", target.tracking)) {
-        tracking
-            .delete()
-            .map_err(|_| github_tokens::ERR_GITHUB_UNREACHABLE.to_string())?;
+        tracking.delete().map_err(|_| github_tokens::ERR_GITHUB_UNREACHABLE.to_string())?;
     }
     Ok(())
 }

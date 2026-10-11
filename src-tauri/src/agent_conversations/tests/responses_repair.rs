@@ -77,11 +77,7 @@ fn every_other_body_is_left_as_it_is() {
         Vec::new(),
     ];
     for body in untouched {
-        assert!(
-            repair_reply(&body).is_none(),
-            "{}",
-            String::from_utf8_lossy(&body)
-        );
+        assert!(repair_reply(&body).is_none(), "{}", String::from_utf8_lossy(&body));
     }
 }
 
@@ -172,12 +168,8 @@ fn both_tolerances_apply_to_one_body() {
 // CVL-FR-TQRD: the route check names the Responses path alone.
 #[test]
 fn the_route_check_names_the_responses_path_alone() {
-    let request = |uri: &str| {
-        rig::http_client::Request::builder()
-            .uri(uri)
-            .body(Vec::<u8>::new())
-            .unwrap()
-    };
+    let request =
+        |uri: &str| rig::http_client::Request::builder().uri(uri).body(Vec::<u8>::new()).unwrap();
     assert!(is_responses_route(&request("https://gw.example/v1/responses")));
     assert!(is_responses_route(&request("https://gw.example/v1/responses/")));
     assert!(!is_responses_route(&request("https://gw.example/v1/chat/completions")));
@@ -284,9 +276,7 @@ pub(super) fn answer_once(status: &'static str, body: String) -> OneShot {
     let handle = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         flag.store(true, Ordering::SeqCst);
-        stream
-            .set_read_timeout(Some(Duration::from_secs(10)))
-            .unwrap();
+        stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
         let mut received = Vec::new();
         let mut buffer = [0u8; 4096];
         loop {
@@ -313,11 +303,7 @@ pub(super) fn answer_once(status: &'static str, body: String) -> OneShot {
             "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
             body.len()
         );
-        String::from_utf8_lossy(&received)
-            .lines()
-            .next()
-            .unwrap_or_default()
-            .to_string()
+        String::from_utf8_lossy(&received).lines().next().unwrap_or_default().to_string()
     });
     OneShot { addr, accepted, handle }
 }
@@ -372,12 +358,8 @@ const RESPONSES: Option<ModelMode> = Some(ModelMode::Responses);
 // the answer of the model, and the loop is told that it was repaired.
 #[test]
 fn a_custom_gateway_reply_with_an_empty_text_object_delivers_its_answer() {
-    let (seen, outcome) = call(
-        "custom",
-        RESPONSES,
-        "http://{addr}",
-        responses_reply(serde_json::json!({})),
-    );
+    let (seen, outcome) =
+        call("custom", RESPONSES, "http://{addr}", responses_reply(serde_json::json!({})));
     assert!(seen.starts_with("POST /v1/responses "), "{seen}");
     let reply = outcome.expect("the repaired reply is read");
     assert_eq!(reply.text, "The answer.");
@@ -404,12 +386,8 @@ fn a_custom_gateway_reply_with_a_format_is_not_repaired() {
 // reads it on its own terms.
 #[test]
 fn the_same_reply_on_openai_gets_no_repair() {
-    let (seen, outcome) = call(
-        "openai",
-        RESPONSES,
-        "http://{addr}/v1",
-        responses_reply(serde_json::json!({})),
-    );
+    let (seen, outcome) =
+        call("openai", RESPONSES, "http://{addr}/v1", responses_reply(serde_json::json!({})));
     assert!(seen.starts_with("POST /v1/responses "), "{seen}");
     let reply = outcome.expect("the framework reads the reply");
     assert_eq!(reply.text, "The answer.");
@@ -435,7 +413,8 @@ fn a_custom_gateway_reply_that_cannot_be_read_is_an_invalid_response() {
 // reply is repaired there as well.
 #[test]
 fn an_unrestricted_custom_model_is_repaired_on_the_responses_route() {
-    let (seen, outcome) = call("custom", None, "http://{addr}", responses_reply(serde_json::json!({})));
+    let (seen, outcome) =
+        call("custom", None, "http://{addr}", responses_reply(serde_json::json!({})));
     assert!(seen.starts_with("POST /v1/responses "), "{seen}");
     let reply = outcome.expect("the repaired reply is read");
     assert_eq!(reply.text, "The answer.");

@@ -9,7 +9,12 @@ fn the_wire_shape_is_the_one_the_contract_surface_declares() {
     let thread = Discussion {
         id: "t1".into(),
         target: artifact_target("specs/a.md"),
-        fragment_target: Some(FragmentTarget::in_artifact("specs/a.md", 40, 61, "the first session")),
+        fragment_target: Some(FragmentTarget::in_artifact(
+            "specs/a.md",
+            40,
+            61,
+            "the first session",
+        )),
         comments: vec![Comment {
             id: "c1".into(),
             author: Participant::Human {
@@ -18,10 +23,7 @@ fn the_wire_shape_is_the_one_the_contract_surface_declares() {
                 email: None,
             },
             body: "hi".into(),
-            quotes: vec![CommentQuote {
-                comment_id: "c0".into(),
-                excerpt: "e".into(),
-            }],
+            quotes: vec![CommentQuote { comment_id: "c0".into(), excerpt: "e".into() }],
             attachments: vec![
                 Attachment::Blob {
                     digest: "a3f9".into(),
@@ -63,10 +65,7 @@ fn the_wire_shape_is_the_one_the_contract_surface_declares() {
     assert_eq!(json["resolved"], true);
 
     // A whole-target discussion carries an explicit null, never an absent field.
-    let whole = Discussion {
-        fragment_target: None,
-        ..thread
-    };
+    let whole = Discussion { fragment_target: None, ..thread };
     let whole_json = serde_json::to_value(&whole).unwrap();
     assert!(whole_json["fragmentTarget"].is_null());
     assert!(whole_json.as_object().unwrap().contains_key("fragmentTarget"));

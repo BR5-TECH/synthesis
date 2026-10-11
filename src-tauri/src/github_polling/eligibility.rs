@@ -35,7 +35,10 @@ impl PollFailure {
 
 /// GPP-FR-DEZO / GPP-FR-EHRC: check the Project's `Status` field.
 pub fn validate_shape(shape: &ProjectShape) -> Result<ValidConfiguration, PollFailure> {
-    let fail = |code: &str| PollFailure { code: code.to_string(), project_title: Some(shape.title.clone()) };
+    let fail = |code: &str| PollFailure {
+        code: code.to_string(),
+        project_title: Some(shape.title.clone()),
+    };
     let Some(field) = shape.status_field.as_ref() else {
         return Err(fail(ERR_STATUS_FIELD_MISSING));
     };
@@ -150,10 +153,9 @@ pub fn poll_once(
     project_id: &str,
 ) -> Result<PollSuccess, PollFailure> {
     let configuration = read_configuration(client, secret, project_id)?;
-    let read = client.project_items(secret, project_id).map_err(|code| PollFailure {
-        code,
-        project_title: Some(configuration.title.clone()),
-    })?;
+    let read = client
+        .project_items(secret, project_id)
+        .map_err(|code| PollFailure { code, project_title: Some(configuration.title.clone()) })?;
     let shadows: Vec<GithubIssueLink> = crate::drafts::github_shadow_drafts(root)
         .into_iter()
         .filter_map(|draft| draft.github_issue)
@@ -208,13 +210,9 @@ pub fn is_repository_issue_url(url: &str, repository: &RepositoryRef) -> bool {
         return false;
     };
     let mut segments = path.1.split('/');
-    let (Some(owner), Some(name), Some("issues"), Some(number), None) = (
-        segments.next(),
-        segments.next(),
-        segments.next(),
-        segments.next(),
-        segments.next(),
-    ) else {
+    let (Some(owner), Some(name), Some("issues"), Some(number), None) =
+        (segments.next(), segments.next(), segments.next(), segments.next(), segments.next())
+    else {
         return false;
     };
     owner.eq_ignore_ascii_case(&repository.owner)

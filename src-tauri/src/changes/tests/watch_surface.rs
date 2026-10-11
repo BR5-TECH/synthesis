@@ -36,25 +36,18 @@ fn changes_change_count_counts_worktree_and_git_directory_changes() {
         path: base.join(rel),
         kind: notify_debouncer_mini::DebouncedEventKind::Any,
     };
-    let count = |events: Vec<DebouncedEvent>| {
-        changes_change_count(&Ok(events), &root, Some(&git_dir))
-    };
+    let count =
+        |events: Vec<DebouncedEvent>| changes_change_count(&Ok(events), &root, Some(&git_dir));
 
     // A working-tree edit alone is enough — a content change alters the
     // diff even though the tree shape is untouched.
     assert_eq!(count(vec![ev(&root, "src/App.tsx")]), 1);
 
     // A commit moves HEAD and refs with no working-tree change at all.
-    assert_eq!(
-        count(vec![ev(&git_dir, "HEAD"), ev(&git_dir, "refs/heads/main")]),
-        2
-    );
+    assert_eq!(count(vec![ev(&git_dir, "HEAD"), ev(&git_dir, "refs/heads/main")]), 2);
 
     // Lock churn and object writes on their own are not a change.
-    assert_eq!(
-        count(vec![ev(&git_dir, "index.lock"), ev(&git_dir, "objects/ab/cd")]),
-        0
-    );
+    assert_eq!(count(vec![ev(&git_dir, "index.lock"), ev(&git_dir, "objects/ab/cd")]), 0);
 
     // Nothing at all -> no event is due.
     assert_eq!(count(vec![]), 0);
@@ -63,10 +56,7 @@ fn changes_change_count_counts_worktree_and_git_directory_changes() {
     assert_eq!(changes_change_count(&errored, &root, Some(&git_dir)), 0);
 
     // With no repository there is nothing to watch beyond the working tree.
-    assert_eq!(
-        changes_change_count(&Ok(vec![ev(&git_dir, "HEAD")]), &root, None),
-        0
-    );
+    assert_eq!(changes_change_count(&Ok(vec![ev(&git_dir, "HEAD")]), &root, None), 0);
 }
 
 #[test]

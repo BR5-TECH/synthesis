@@ -41,30 +41,16 @@ pub fn routes() -> Router<HttpState> {
         .route("/v1/projects", post(create_project).get(list_projects))
         .route(
             "/v1/projects/{project_id}",
-            get(read_project)
-                .patch(update_project)
-                .delete(delete_project),
+            get(read_project).patch(update_project).delete(delete_project),
         )
-        .route(
-            "/v1/projects/{project_id}/transfer-ownership",
-            post(transfer_ownership),
-        )
-        .route(
-            "/v1/projects/{project_id}/permissions",
-            get(effective_permissions),
-        )
-        .route(
-            "/v1/projects/{project_id}/grants",
-            post(create_grant).get(list_grants),
-        )
+        .route("/v1/projects/{project_id}/transfer-ownership", post(transfer_ownership))
+        .route("/v1/projects/{project_id}/permissions", get(effective_permissions))
+        .route("/v1/projects/{project_id}/grants", post(create_grant).get(list_grants))
         .route(
             "/v1/projects/{project_id}/grants/{grant_id}",
             get(read_grant).patch(update_grant).delete(delete_grant),
         )
-        .route(
-            "/v1/projects/{project_id}/grants/{grant_id}/revoke",
-            post(revoke_grant),
-        )
+        .route("/v1/projects/{project_id}/grants/{grant_id}/revoke", post(revoke_grant))
 }
 
 async fn read_roles(_principal: Principal) -> Json<RolesBody> {
@@ -76,10 +62,7 @@ async fn create_project(
     principal: Principal,
     Payload(command): Payload<CreateProject>,
 ) -> Result<(StatusCode, Json<Project>), ApiError> {
-    let project = state
-        .application
-        .projects
-        .create_project(&principal, command)?;
+    let project = state.application.projects.create_project(&principal, command)?;
     Ok((StatusCode::CREATED, Json(project)))
 }
 
@@ -88,9 +71,7 @@ async fn list_projects(
     principal: Principal,
     Params(page): Params<Page>,
 ) -> Result<Json<ListBody<Project>>, ApiError> {
-    Ok(Json(ListBody::new(
-        state.application.projects.list_projects(&principal, page)?,
-    )))
+    Ok(Json(ListBody::new(state.application.projects.list_projects(&principal, page)?)))
 }
 
 async fn read_project(
@@ -98,12 +79,7 @@ async fn read_project(
     principal: Principal,
     Path(project_id): Path<String>,
 ) -> Result<Json<Project>, ApiError> {
-    Ok(Json(
-        state
-            .application
-            .projects
-            .read_project(&principal, path_id(&project_id)?)?,
-    ))
+    Ok(Json(state.application.projects.read_project(&principal, path_id(&project_id)?)?))
 }
 
 async fn update_project(
@@ -125,10 +101,7 @@ async fn delete_project(
     Path(project_id): Path<String>,
     Params(query): Params<DeleteQuery>,
 ) -> Result<StatusCode, ApiError> {
-    state
-        .application
-        .projects
-        .delete_project(&principal, path_id(&project_id)?, query.cascade)?;
+    state.application.projects.delete_project(&principal, path_id(&project_id)?, query.cascade)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -170,10 +143,7 @@ async fn create_grant(
     Payload(command): Payload<CreateGrant>,
 ) -> Result<(StatusCode, Json<Grant>), ApiError> {
     let grant =
-        state
-            .application
-            .projects
-            .create_grant(&principal, path_id(&project_id)?, command)?;
+        state.application.projects.create_grant(&principal, path_id(&project_id)?, command)?;
     Ok((StatusCode::CREATED, Json(grant)))
 }
 
@@ -183,12 +153,11 @@ async fn list_grants(
     Path(project_id): Path<String>,
     Params(page): Params<Page>,
 ) -> Result<Json<ListBody<Grant>>, ApiError> {
-    Ok(Json(ListBody::new(
-        state
-            .application
-            .projects
-            .list_grants(&principal, path_id(&project_id)?, page)?,
-    )))
+    Ok(Json(ListBody::new(state.application.projects.list_grants(
+        &principal,
+        path_id(&project_id)?,
+        page,
+    )?)))
 }
 
 async fn read_grant(

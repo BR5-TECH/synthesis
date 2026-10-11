@@ -190,10 +190,7 @@ impl CallFailure {
 
     /// AGC-FR-RWPT: a certificate the TLS check refused.
     pub fn tls_untrusted(failure: crate::tls::TlsFailure) -> Self {
-        Self {
-            tls: Some(failure),
-            ..Self::new(FAIL_TLS_UNTRUSTED, class::TLS)
-        }
+        Self { tls: Some(failure), ..Self::new(FAIL_TLS_UNTRUSTED, class::TLS) }
     }
 
     /// A host that could not be reached, of the given class.
@@ -337,7 +334,11 @@ impl Default for RetryPolicy {
 ///
 /// `attempt` is the 1-based number of the attempt **about to be made**, so the
 /// first retry is attempt 2 and reads `bases[0]`.
-pub(super) fn backoff_delay(policy: &RetryPolicy, attempt: usize, jitter: &dyn JitterSource) -> Duration {
+pub(super) fn backoff_delay(
+    policy: &RetryPolicy,
+    attempt: usize,
+    jitter: &dyn JitterSource,
+) -> Duration {
     // CVL-FR-19: the first retry takes the base delay and each retry after it
     // doubles the one before. The ceiling below is what bounds the schedule,
     // whatever budget the project holds.

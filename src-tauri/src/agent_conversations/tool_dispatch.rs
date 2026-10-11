@@ -16,12 +16,7 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
     remaining: Duration,
 ) -> String {
     let name = call.function.name.to_string();
-    let Some(tool) = plan
-        .tools
-        .iter()
-        .find(|tool| tool.name().as_str() == name)
-        .cloned()
-    else {
+    let Some(tool) = plan.tools.iter().find(|tool| tool.name().as_str() == name).cloned() else {
         // Not a defect in the project — the model named something that is not on
         // offer, which the definitions it was given already contradict.
         logging::log_warn(
@@ -186,10 +181,13 @@ pub(super) fn dispatch_tool<R: tauri::Runtime>(
 /// model sent beside it when that text was not one. The shape of a refused call
 /// is read from what the model sent, so text that is JSON reads as its own
 /// kind and text that is not JSON reads as `string`.
-pub(super) fn arguments_as_sent(function: &rig::completion::message::ToolFunction) -> serde_json::Value {
+pub(super) fn arguments_as_sent(
+    function: &rig::completion::message::ToolFunction,
+) -> serde_json::Value {
     match &function.invalid_arguments {
-        Some(text) => serde_json::from_str(text)
-            .unwrap_or_else(|_| serde_json::Value::String(String::new())),
+        Some(text) => {
+            serde_json::from_str(text).unwrap_or_else(|_| serde_json::Value::String(String::new()))
+        }
         None => function.arguments_value(),
     }
 }

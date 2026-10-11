@@ -21,10 +21,7 @@ fn ts5_assign_file_persists_and_classifies() {
     let stored = load_assignments(root);
     assert_eq!(
         stored.assignments.get("notes/x.md"),
-        Some(&Assignment {
-            artifact_type: ArtifactType::Scenario,
-            scope: Scope::File,
-        })
+        Some(&Assignment { artifact_type: ArtifactType::Scenario, scope: Scope::File })
     );
 
     let tree = scan(root);
@@ -42,18 +39,11 @@ fn ts6_folder_assignment_inherited_by_children() {
     // Use a neutral folder name (`plans`) that does NOT match a path
     // recognizer, so folder inheritance is unambiguously what classifies
     // the children.
-    let entries = [
-        entry("plans", true),
-        entry("plans/a.md", false),
-        entry("plans/b.md", false),
-    ];
+    let entries = [entry("plans", true), entry("plans/a.md", false), entry("plans/b.md", false)];
     let assignments = LibraryAssignments {
         assignments: BTreeMap::from([(
             "plans".to_string(),
-            Assignment {
-                artifact_type: ArtifactType::Spec,
-                scope: Scope::Folder,
-            },
+            Assignment { artifact_type: ArtifactType::Spec, scope: Scope::Folder },
         )]),
     };
     let tree = build_tree("p", &entries, &assignments, &no_content);
@@ -74,17 +64,11 @@ fn ts7_per_file_assignment_wins_over_folder() {
         assignments: BTreeMap::from([
             (
                 "plans".to_string(),
-                Assignment {
-                    artifact_type: ArtifactType::Spec,
-                    scope: Scope::Folder,
-                },
+                Assignment { artifact_type: ArtifactType::Spec, scope: Scope::Folder },
             ),
             (
                 "plans/a.md".to_string(),
-                Assignment {
-                    artifact_type: ArtifactType::Instructions,
-                    scope: Scope::File,
-                },
+                Assignment { artifact_type: ArtifactType::Instructions, scope: Scope::File },
             ),
         ]),
     };
@@ -101,10 +85,7 @@ fn path_inference_beats_folder_inheritance() {
     let assignments = LibraryAssignments {
         assignments: BTreeMap::from([(
             ".claude/skills".to_string(),
-            Assignment {
-                artifact_type: ArtifactType::Scratchpad,
-                scope: Scope::Folder,
-            },
+            Assignment { artifact_type: ArtifactType::Scratchpad, scope: Scope::Folder },
         )]),
     };
     let entries = [
@@ -131,10 +112,7 @@ fn ts8_clear_reverts_assignment() {
     fs::write(root.join("notes/x.md"), "body").unwrap();
 
     assign(root, "notes/x.md", ArtifactType::Scenario, Scope::File).unwrap();
-    assert_eq!(
-        scan(root).children.as_ref().unwrap().is_empty(),
-        false
-    );
+    assert_eq!(scan(root).children.as_ref().unwrap().is_empty(), false);
     clear(root, "notes/x.md").unwrap();
 
     let tree = scan(root);
@@ -167,10 +145,7 @@ fn clear_folder_assignment_reverts_children_and_has_artifacts() {
 
     assign(root, "misc", ArtifactType::Prompt, Scope::Folder).unwrap();
     let before = scan(root);
-    assert_eq!(
-        find(&before, "misc/readme.txt").unwrap().type_source,
-        Some(TypeSource::Inherited)
-    );
+    assert_eq!(find(&before, "misc/readme.txt").unwrap().type_source, Some(TypeSource::Inherited));
     assert_eq!(find(&before, "misc").unwrap().has_artifacts, Some(true));
 
     clear(root, "misc").unwrap();
@@ -201,22 +176,14 @@ fn an_assignment_for_a_path_that_went_missing_is_inert_rather_than_an_error() {
     let root = &crate::fs::RootFs::for_root(tmp.path());
     fs::create_dir_all(root.join("specifications")).unwrap();
     fs::write(root.join("specifications/overview.md"), b"").unwrap();
-    assign(
-        root,
-        "specifications/overview.md",
-        ArtifactType::Spec,
-        Scope::File,
-    )
-    .unwrap();
+    assign(root, "specifications/overview.md", ArtifactType::Spec, Scope::File).unwrap();
 
     fs::remove_file(root.join("specifications/overview.md")).unwrap();
 
     let tree = scan(root);
     assert!(find(&tree, "specifications/overview.md").is_none());
     assert!(
-        load_assignments(root)
-            .assignments
-            .contains_key("specifications/overview.md"),
+        load_assignments(root).assignments.contains_key("specifications/overview.md"),
         "the assignment is retained rather than pruned"
     );
 

@@ -12,14 +12,9 @@ fn a_blank_query_refuses_rather_than_answering_nothing_matched() {
     let indexer = fixture.app.state::<Bm25Indexer>();
 
     for text in ["", "   ", "\t\n "] {
-        let refusal = search(
-            &indexer,
-            &SpecificationSearchArgs {
-                query: text.to_string(),
-                limit: None,
-            },
-        )
-        .expect_err("a blank query is a refusal (SPS-FR-13)");
+        let refusal =
+            search(&indexer, &SpecificationSearchArgs { query: text.to_string(), limit: None })
+                .expect_err("a blank query is a refusal (SPS-FR-13)");
 
         assert_eq!(refusal.kind(), ToolErrorKind::InvalidArgs);
         assert!(refusal.retryable());
@@ -36,11 +31,9 @@ fn no_project_open_refuses_rather_than_returning_an_empty_list() {
     let app = closed_project();
     let tool = SpecSearchTool::new(app.handle().clone());
 
-    let refusal = block_on(tool.call(SpecificationSearchArgs {
-        query: "teardown".to_string(),
-        limit: None,
-    }))
-    .expect_err("a closed project refuses (SPS-FR-14)");
+    let refusal =
+        block_on(tool.call(SpecificationSearchArgs { query: "teardown".to_string(), limit: None }))
+            .expect_err("a closed project refuses (SPS-FR-14)");
 
     assert_eq!(refusal, crate::tools::ToolRefusal::NoProjectOpen);
     assert_eq!(refusal.kind(), ToolErrorKind::NotFound);
@@ -56,9 +49,7 @@ fn no_project_open_refuses_rather_than_returning_an_empty_list() {
 fn nothing_matched_and_no_specifications_are_both_successes() {
     let fixture = spec_project();
     assert!(
-        query(&fixture, "zzzzunmatchablezzzz", None)
-            .specifications
-            .is_empty(),
+        query(&fixture, "zzzzunmatchablezzzz", None).specifications.is_empty(),
         "a query matching nothing is an empty list (SPS-FR-15)",
     );
 
@@ -68,4 +59,3 @@ fn nothing_matched_and_no_specifications_are_both_successes() {
         "a project holding no specification is an empty list (SPS-FR-15)",
     );
 }
-

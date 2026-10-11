@@ -14,8 +14,7 @@ fn gss_ts03_every_role_defaults_to_unset() {
     // is the *application's*, not the store's.
     let store = GlobalSettingsStore::in_memory();
     let fonts = store.load_app_preferences().unwrap().fonts;
-    for (role, setting) in [("ui", &fonts.ui), ("rich", &fonts.rich), ("source", &fonts.source)]
-    {
+    for (role, setting) in [("ui", &fonts.ui), ("rich", &fonts.rich), ("source", &fonts.source)] {
         assert_eq!(setting.family, None, "{role} family is unset");
         assert_eq!(setting.size_px, None, "{role} size is unset");
         assert_eq!(setting.line_height, None, "{role} line height is unset");
@@ -67,11 +66,8 @@ fn a_record_written_before_the_font_settings_existed_still_loads() {
     // every existing install boots to a repaired (empty) store.
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("synthesis.toml");
-    std::fs::write(
-        &path,
-        "[appPreferences]\ntheme = \"dark\"\nmainWindowFullscreen = true\n",
-    )
-    .unwrap();
+    std::fs::write(&path, "[appPreferences]\ntheme = \"dark\"\nmainWindowFullscreen = true\n")
+        .unwrap();
     let store = GlobalSettingsStore::with_path(path);
     let prefs = store.load_app_preferences().unwrap();
     assert_eq!(prefs.theme, Theme::Dark);
@@ -154,7 +150,10 @@ fn gss_ts28_all_nine_font_values_survive_a_relaunch_a_diff_write_and_another_pro
     // Relaunched into a different project.
     let reloaded = GlobalSettingsStore::with_path(path);
     reloaded
-        .save_project_layout("/projects/somewhere-else", crate::layout::LayoutPreferences::default())
+        .save_project_layout(
+            "/projects/somewhere-else",
+            crate::layout::LayoutPreferences::default(),
+        )
         .unwrap();
     assert_eq!(
         reloaded.load_app_preferences().unwrap().fonts,
@@ -205,10 +204,7 @@ fn a_font_write_leaves_every_other_field_of_the_record_alone() {
     assert_eq!(after.theme, Theme::Dark);
     assert!(after.main_window_fullscreen);
     assert_eq!(after.search_query_mode, SearchQueryMode::Regex);
-    assert_eq!(
-        after.diff_visualization_mode,
-        DiffVisualizationMode::SideBySide
-    );
+    assert_eq!(after.diff_visualization_mode, DiffVisualizationMode::SideBySide);
     assert_eq!(after.diff_rendering_mode, DiffRenderingMode::Rich);
     assert_eq!(after.changes_commit_action, ChangesCommitAction::Push);
 }
@@ -228,8 +224,5 @@ fn the_store_bounds_no_size_and_validates_no_family() {
     store.save_app_preferences(prefs).unwrap();
     let after = store.load_app_preferences().unwrap();
     assert_eq!(after.fonts.source.size_px, Some(400.0));
-    assert_eq!(
-        after.fonts.source.family.as_deref(),
-        Some("A Font Nobody Has")
-    );
+    assert_eq!(after.fonts.source.family.as_deref(), Some("A Font Nobody Has"));
 }

@@ -61,18 +61,38 @@ fn no_backend_module_reaches_the_filesystem_outside_the_helper() {
     /// like a guarded call while being anything but.
     const REACHING: &[&str] = &[
         // Free-function spellings.
-        "std::fs::read", "std::fs::read_to_string", "std::fs::write",
-        "std::fs::create_dir", "std::fs::create_dir_all", "std::fs::remove_file",
-        "std::fs::remove_dir", "std::fs::remove_dir_all", "std::fs::rename",
-        "std::fs::copy", "std::fs::canonicalize", "std::fs::read_dir",
-        "std::fs::metadata", "std::fs::symlink_metadata", "std::fs::read_link",
-        "std::fs::set_permissions", "std::fs::hard_link", "std::fs::DirBuilder",
-        "std::fs::File::create", "std::fs::File::open", "std::fs::OpenOptions",
-        "std::os::unix::fs::symlink", "std::os::windows::fs::symlink",
+        "std::fs::read",
+        "std::fs::read_to_string",
+        "std::fs::write",
+        "std::fs::create_dir",
+        "std::fs::create_dir_all",
+        "std::fs::remove_file",
+        "std::fs::remove_dir",
+        "std::fs::remove_dir_all",
+        "std::fs::rename",
+        "std::fs::copy",
+        "std::fs::canonicalize",
+        "std::fs::read_dir",
+        "std::fs::metadata",
+        "std::fs::symlink_metadata",
+        "std::fs::read_link",
+        "std::fs::set_permissions",
+        "std::fs::hard_link",
+        "std::fs::DirBuilder",
+        "std::fs::File::create",
+        "std::fs::File::open",
+        "std::fs::OpenOptions",
+        "std::os::unix::fs::symlink",
+        "std::os::windows::fs::symlink",
         // Aliased or imported spellings, which the qualified list above misses.
-        "use std::fs;", "use std::fs as", "use std::fs::",
+        "use std::fs;",
+        "use std::fs as",
+        "use std::fs::",
         // Method spellings on a `Path`/`PathBuf`/`RootFs`.
-        ".read_dir()", ".symlink_metadata()", ".canonicalize()", ".read_link()",
+        ".read_dir()",
+        ".symlink_metadata()",
+        ".canonicalize()",
+        ".read_link()",
         ".metadata()",
     ];
 
@@ -146,11 +166,7 @@ fn no_backend_module_reaches_the_filesystem_outside_the_helper() {
     // The files that could declare `path` as its parent's test module.
     let declaring_candidates = |dir: &Path| -> Vec<PathBuf> {
         let parent = dir.parent().expect("a path under src has a parent");
-        vec![
-            parent.with_extension("rs"),
-            parent.join("mod.rs"),
-            src.join("lib.rs"),
-        ]
+        vec![parent.with_extension("rs"), parent.join("mod.rs"), src.join("lib.rs")]
     };
 
     // Is `path` declared as a test module under the name it carries?
@@ -202,10 +218,8 @@ fn no_backend_module_reaches_the_filesystem_outside_the_helper() {
     let mut proven_test_directories: BTreeSet<PathBuf> = BTreeSet::new();
     for file in &files {
         if let Some(dir) = file.parent() {
-            let named_for_tests = dir
-                .file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.ends_with("_tests"));
+            let named_for_tests =
+                dir.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.ends_with("_tests"));
             if named_for_tests
                 && !proven_test_directories.contains(dir)
                 && declared_under_cfg_test(dir)
@@ -222,9 +236,7 @@ fn no_backend_module_reaches_the_filesystem_outside_the_helper() {
         file.parent().is_some_and(|p| p.ends_with("fs"))
             || name == "tests.rs"
             || file.parent().is_some_and(|p| p.ends_with("tests"))
-            || file
-                .parent()
-                .is_some_and(|p| proven_test_directories.contains(p))
+            || file.parent().is_some_and(|p| proven_test_directories.contains(p))
     };
 
     let mut swept = 0usize;
@@ -284,9 +296,7 @@ fn no_backend_module_reaches_the_filesystem_outside_the_helper() {
             }
             for call in REACHING {
                 if line.contains(call)
-                    && !EXCEPTIONS
-                        .iter()
-                        .any(|(f, func)| file.ends_with(f) && *func == current_fn)
+                    && !EXCEPTIONS.iter().any(|(f, func)| file.ends_with(f) && *func == current_fn)
                 {
                     offenders.insert(format!("{name}::{current_fn} -> {call}"));
                 }
@@ -314,10 +324,7 @@ fn no_backend_module_reaches_the_filesystem_outside_the_helper() {
 
     // A collapse of the sweep itself still fails loudly. The floor is absolute
     // rather than proportional, for the reason above.
-    assert!(
-        swept > 100,
-        "only {swept} sources are swept — the sweep has collapsed",
-    );
+    assert!(swept > 100, "only {swept} sources are swept — the sweep has collapsed",);
 
     assert!(
         offenders.is_empty(),

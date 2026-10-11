@@ -28,12 +28,7 @@ fn ts37_prompt_activity_follows_the_prompt_alone() {
     create_drafts_folder_impl(root, "", "UI").unwrap();
     let created = create_draft_impl(root, Some("spec"), None).unwrap();
     let id = created.draft.id.clone();
-    let prompt_path = dir
-        .path()
-        .join(DRAFTS_REL)
-        .join(&id)
-        .join(FILES_DIR)
-        .join(&created.file);
+    let prompt_path = dir.path().join(DRAFTS_REL).join(&id).join(FILES_DIR).join(&created.file);
     set_mtime(&prompt_path, 1_000);
 
     let activity = |root: &crate::fs::RootFs| -> String {
@@ -79,10 +74,7 @@ fn ts37_prompt_activity_follows_the_prompt_alone() {
 
     // Saving the prompt is the one thing that moves it.
     save_draft_file_impl(root, &id, "renamed.md", "# rewritten\n").unwrap();
-    assert!(
-        activity(root) > at_creation,
-        "the prompt's own write moves the instant"
-    );
+    assert!(activity(root) > at_creation, "the prompt's own write moves the instant");
 }
 
 /// DRS-FR-41: the walk-free reading agrees with the id-only one, which is
@@ -109,10 +101,7 @@ fn prompt_activity_in_a_known_directory_agrees_with_the_id_only_call() {
 
     // A directory holding no record answers `None` rather than erroring:
     // to the watch there is simply no prompt activity to report there.
-    assert_eq!(
-        prompt_activity_in(root, &dir.path().join(DRAFTS_REL).join("UI"), &id),
-        None,
-    );
+    assert_eq!(prompt_activity_in(root, &dir.path().join(DRAFTS_REL).join("UI"), &id), None,);
 }
 
 /// DRS-FR-41 / DRS-FR-15: an inconsistent draft has no single prompt to
@@ -132,10 +121,7 @@ fn an_inconsistent_draft_carries_no_prompt_activity() {
     let row = listed(root).into_iter().find(|d| d.id == id).expect("still listed");
     assert!(row.inconsistent, "precondition: the draft is inconsistent");
     assert_eq!(row.prompt_activity_at, None);
-    assert_eq!(
-        draft_prompt_activity(root, &id).unwrap_err(),
-        ERR_NOT_SINGLE_FILE,
-    );
+    assert_eq!(draft_prompt_activity(root, &id).unwrap_err(), ERR_NOT_SINGLE_FILE,);
 }
 
 #[test]

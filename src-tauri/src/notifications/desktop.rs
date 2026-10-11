@@ -24,14 +24,8 @@ impl NotificationSink for OsSink {
         #[cfg(target_os = "windows")]
         notification.subtitle(&request.subtitle).body(&request.body);
         #[cfg(not(target_os = "windows"))]
-        notification.body(&super::platform::fold_subtitle(
-            &request.subtitle,
-            &request.body,
-        ));
-        notification
-            .show()
-            .map(|_| ())
-            .map_err(|_| PostError::DeliveryFailed)
+        notification.body(&super::platform::fold_subtitle(&request.subtitle, &request.body));
+        notification.show().map(|_| ()).map_err(|_| PostError::DeliveryFailed)
     }
 
     fn retract(&self, _id: &str) {}

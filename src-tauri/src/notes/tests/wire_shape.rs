@@ -26,16 +26,12 @@ fn the_wire_shape_is_the_one_the_contract_surface_declares() {
     assert_eq!(json["scope"]["entityPath"], "specs/a.md");
     assert_eq!(json["createdAt"], "2026-01-01T00:00:00Z");
     assert_eq!(json["updatedAt"], "2026-01-02T00:00:00Z");
-    assert!(
-        json.get("reminder").is_none(),
-        "an absent reminder is absent on the wire, not null"
-    );
+    assert!(json.get("reminder").is_none(), "an absent reminder is absent on the wire, not null");
 
     let project = serde_json::to_value(NoteScope::Project).unwrap();
     assert_eq!(project["kind"], "project");
     // And the scope round-trips from the shape the frontend sends.
-    let parsed: NoteScope =
-        serde_json::from_str(r#"{"kind":"entity","entityId":"a.md"}"#).unwrap();
+    let parsed: NoteScope = serde_json::from_str(r#"{"kind":"entity","entityId":"a.md"}"#).unwrap();
     assert_eq!(parsed.entity_id(), Some("a.md"));
 }
 

@@ -79,11 +79,7 @@ fn a_path_under_a_plain_root_is_refused_and_nothing_is_removed() {
     let (_a, author) = parent();
     let (_b, plain) = parent();
     write_raw(&plain.join("wt/a.txt"), "a");
-    let access = FsAccess::builder()
-        .author_root(&author)
-        .allow_root(&plain)
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().author_root(&author).allow_root(&plain).build().unwrap();
 
     let err = access.delete_author_tree(plain.join("wt")).unwrap_err();
 
@@ -123,9 +119,7 @@ fn a_link_on_the_way_to_the_tree_is_refused() {
     write_raw(&outside.join("wt/a.txt"), "a");
     symlink(&outside, root.join("hop")).unwrap();
 
-    let err = access_for(&root)
-        .delete_author_tree(root.join("hop/wt"))
-        .unwrap_err();
+    let err = access_for(&root).delete_author_tree(root.join("hop/wt")).unwrap_err();
 
     assert!(matches!(err, FsError::SymlinkRefused { .. }), "{err:?}");
     assert!(outside.join("wt/a.txt").exists());

@@ -18,10 +18,7 @@ fn ts20_builder_accepts_a_real_directory_and_refuses_the_rest() {
 
     // Negative: no root at all.
     let err = FsAccess::builder().build().unwrap_err();
-    assert!(
-        matches!(err, FsAccessBuildError::NoRoots),
-        "expected NoRoots, got {err:?}"
-    );
+    assert!(matches!(err, FsAccessBuildError::NoRoots), "expected NoRoots, got {err:?}");
 
     // Negative: a root that does not exist.
     let missing = root.join("nowhere");
@@ -76,12 +73,7 @@ fn ts21_every_allowlisted_root_is_reachable_and_nothing_else_is() {
     let temp = access.session_temp_dir().unwrap().to_path_buf();
 
     // Positive: a file written and read back under each of the four roots.
-    for (label, root) in [
-        ("worktree", &w),
-        ("appdata", &a),
-        ("shortdata", &s),
-        ("temp", &temp),
-    ] {
+    for (label, root) in [("worktree", &w), ("appdata", &a), ("shortdata", &s), ("temp", &temp)] {
         let p = root.join("probe.txt");
         access.write_text_atomic(&p, label).unwrap();
         assert_eq!(
@@ -124,14 +116,9 @@ fn ts12_escapes_are_refused_and_normalisation_is_by_where_the_path_ends() {
     assert!(matches!(err, FsError::EscapesAllowedRoots { .. }), "got {err:?}");
 
     // A path under a root allowlisted for a *different* instance.
-    let err = access
-        .write_text_atomic(other_root.join("x.md"), "x")
-        .unwrap_err();
+    let err = access.write_text_atomic(other_root.join("x.md"), "x").unwrap_err();
     assert!(matches!(err, FsError::EscapesAllowedRoots { .. }), "got {err:?}");
-    assert!(
-        !other_root.join("x.md").exists(),
-        "another instance's root must be untouched"
-    );
+    assert!(!other_root.join("x.md").exists(), "another instance's root must be untouched");
 
     // Positive: a path that climbs out of a subdirectory and back in is judged
     // by where it *ends*, so it proceeds against the normalised location.
@@ -179,11 +166,7 @@ fn ts23_session_temp_is_created_allowlisted_and_removed_with_the_instance() {
     let root = fs::canonicalize(tmp.path()).unwrap();
 
     let temp_path = {
-        let access = FsAccess::builder()
-            .allow_root(&root)
-            .session_temp(true)
-            .build()
-            .unwrap();
+        let access = FsAccess::builder().allow_root(&root).session_temp(true).build().unwrap();
         let temp = access.session_temp_dir().unwrap().to_path_buf();
 
         // Exists, empty, and inside the allowlist.
@@ -197,26 +180,15 @@ fn ts23_session_temp_is_created_allowlisted_and_removed_with_the_instance() {
     }; // instance dropped here
 
     // Dropping the instance removes the directory and everything under it.
-    assert!(
-        !temp_path.exists(),
-        "the session temp directory must not outlive its instance"
-    );
+    assert!(!temp_path.exists(), "the session temp directory must not outlive its instance");
 }
 
 #[test]
 fn ts23_two_instances_hold_distinct_and_mutually_unreachable_temp_dirs() {
     let tmp = TempDir::new().unwrap();
     let root = fs::canonicalize(tmp.path()).unwrap();
-    let a = FsAccess::builder()
-        .allow_root(&root)
-        .session_temp(true)
-        .build()
-        .unwrap();
-    let b = FsAccess::builder()
-        .allow_root(&root)
-        .session_temp(true)
-        .build()
-        .unwrap();
+    let a = FsAccess::builder().allow_root(&root).session_temp(true).build().unwrap();
+    let b = FsAccess::builder().allow_root(&root).session_temp(true).build().unwrap();
 
     let ta = a.session_temp_dir().unwrap().to_path_buf();
     let tb = b.session_temp_dir().unwrap().to_path_buf();
@@ -234,4 +206,3 @@ fn ts23_without_session_temp_none_is_created() {
     let (_tmp, access, _root) = rooted();
     assert!(access.session_temp_dir().is_none());
 }
-

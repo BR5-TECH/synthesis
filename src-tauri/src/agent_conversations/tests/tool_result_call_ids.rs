@@ -129,9 +129,8 @@ pub(super) fn responses_body(built: rig::completion::CompletionRequest) -> serde
         rig::providers::openai::OpenAIConfig::new("not-a-real-key"),
         "model",
     );
-    let encoded = wire
-        .encode(built, rig::wire::Mode::Unary)
-        .expect("the Responses route builds the request");
+    let encoded =
+        wire.encode(built, rig::wire::Mode::Unary).expect("the Responses route builds the request");
     match encoded.request.body() {
         rig::wire::Body::Bytes(bytes) => {
             serde_json::from_slice(bytes).expect("the request body is JSON")

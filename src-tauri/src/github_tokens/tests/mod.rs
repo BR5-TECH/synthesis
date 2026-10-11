@@ -25,10 +25,7 @@ struct FakeSecrets {
 
 impl FakeSecrets {
     fn broken() -> Self {
-        Self {
-            broken: true,
-            ..Default::default()
-        }
+        Self { broken: true, ..Default::default() }
     }
     fn count(&self) -> usize {
         self.entries.lock().unwrap().len()
@@ -47,10 +44,7 @@ impl SecretStore for FakeSecrets {
         if self.broken {
             return Err(SecretUnavailable("locked".into()));
         }
-        self.entries
-            .lock()
-            .unwrap()
-            .insert(id.to_string(), secret.to_string());
+        self.entries.lock().unwrap().insert(id.to_string(), secret.to_string());
         Ok(())
     }
     fn get(&self, id: &str) -> Result<Option<String>, SecretUnavailable> {
@@ -99,22 +93,13 @@ impl FakeVerifier {
                 scopes: scopes.iter().map(|s| s.to_string()).collect(),
             },
         );
-        Self {
-            good: StdMutex::new(good),
-            unreachable: false,
-        }
+        Self { good: StdMutex::new(good), unreachable: false }
     }
     fn rejecting() -> Self {
-        Self {
-            good: StdMutex::new(HashMap::new()),
-            unreachable: false,
-        }
+        Self { good: StdMutex::new(HashMap::new()), unreachable: false }
     }
     fn offline() -> Self {
-        Self {
-            good: StdMutex::new(HashMap::new()),
-            unreachable: true,
-        }
+        Self { good: StdMutex::new(HashMap::new()), unreachable: true }
     }
     fn accept(&self, secret: &str, login: &str, scopes: &[&str]) {
         self.good.lock().unwrap().insert(
@@ -138,12 +123,7 @@ impl GithubVerifier for FakeVerifier {
         if self.unreachable {
             return Err(VerifyError::Unreachable("no route to host".into()));
         }
-        self.good
-            .lock()
-            .unwrap()
-            .get(secret)
-            .cloned()
-            .ok_or(VerifyError::Rejected)
+        self.good.lock().unwrap().get(secret).cloned().ok_or(VerifyError::Rejected)
     }
 }
 
@@ -163,12 +143,7 @@ fn harness(verifier: FakeVerifier) -> Harness {
         Box::new(ArcSecrets(secrets.clone())),
         Box::new(ArcVerifier(verifier.clone())),
     );
-    Harness {
-        store: GlobalSettingsStore::in_memory(),
-        tokens,
-        secrets,
-        verifier,
-    }
+    Harness { store: GlobalSettingsStore::in_memory(), tokens, secrets, verifier }
 }
 
 /// Let a test hold the same fake the store is using. The store takes a
@@ -194,11 +169,7 @@ impl GithubVerifier for ArcVerifier {
 }
 
 fn record(id: &str, label: &str) -> GithubTokenRecord {
-    GithubTokenRecord {
-        id: id.into(),
-        label: label.into(),
-        ..Default::default()
-    }
+    GithubTokenRecord { id: id.into(), label: label.into(), ..Default::default() }
 }
 
 use crate::secret_vault::test_support::FakeKeyring;
@@ -216,21 +187,19 @@ fn vault_harness(
     store.save_github_token_registry(registry.clone()).unwrap();
     let vault = Arc::new(Vault::new(Box::new(keyring.clone())));
     vault.set_candidate_source(Box::new(move || migration_candidates(&registry)));
-    let tokens = GithubTokens::new(
-        Box::new(VaultSecrets::new(vault, VAULT_NAMESPACE)),
-        Box::new(verifier),
-    );
+    let tokens =
+        GithubTokens::new(Box::new(VaultSecrets::new(vault, VAULT_NAMESPACE)), Box::new(verifier));
     (store, tokens)
 }
 
-mod vault_contract;
-mod masking;
-mod binding_resolution;
 mod adding;
-mod listing;
-mod host_rules;
+mod binding_resolution;
 mod bindings;
+mod host_rules;
 mod identity;
-mod wire_shapes;
-mod verifier_rules;
+mod listing;
+mod masking;
 mod state_and_concurrency;
+mod vault_contract;
+mod verifier_rules;
+mod wire_shapes;

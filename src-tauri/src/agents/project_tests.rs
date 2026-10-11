@@ -88,14 +88,11 @@ fn a_project_agent_is_one_file_named_by_its_id() {
     let arch = create(&store, Some(&root), AgentScope::Project, "arch").unwrap();
     let sec = create(&store, Some(&root), AgentScope::Project, "sec").unwrap();
 
-    assert_eq!(
-        agent_files(&root),
-        {
-            let mut expected = vec![format!("{}.toml", arch.id), format!("{}.toml", sec.id)];
-            expected.sort();
-            expected
-        },
-    );
+    assert_eq!(agent_files(&root), {
+        let mut expected = vec![format!("{}.toml", arch.id), format!("{}.toml", sec.id)];
+        expected.sort();
+        expected
+    },);
     // The agent is addressable at once, with no enrolment step, and nothing
     // was written into the user-global registry.
     assert!(store.load_agent_registry().unwrap().is_empty());
@@ -111,10 +108,7 @@ fn an_update_and_a_delete_touch_one_file_only() {
     let (dir, root) = worktree();
     let arch = create(&store, Some(&root), AgentScope::Project, "arch").unwrap();
     let sec = create(&store, Some(&root), AgentScope::Project, "sec").unwrap();
-    let sec_file = dir
-        .path()
-        .join(".synthesis/agents")
-        .join(format!("{}.toml", sec.id));
+    let sec_file = dir.path().join(".synthesis/agents").join(format!("{}.toml", sec.id));
     let before = read(&root, &sec_file);
 
     let mut changed = draft("arch");
@@ -123,8 +117,8 @@ fn an_update_and_a_delete_touch_one_file_only() {
         .unwrap();
     assert_eq!(read(&root, &sec_file), before);
 
-    let left = delete_agent_impl(&store, "proj", Some(&root), AgentScope::Project, &arch.id)
-        .unwrap();
+    let left =
+        delete_agent_impl(&store, "proj", Some(&root), AgentScope::Project, &arch.id).unwrap();
     assert_eq!(left.len(), 1);
     assert_eq!(left[0].agent.id, sec.id);
     assert_eq!(read(&root, &sec_file), before);
@@ -142,16 +136,10 @@ fn a_project_agent_file_holds_persona_fields_only() {
     let mut d = draft("arch");
     d.title = "Architect".into();
     d.instructions = "Argue about structure.".into();
-    d.reasoning = Some(ReasoningChoice::Effort {
-        effort: "high".into(),
-    });
-    let arch =
-        create_agent_impl(&store, "proj", Some(&root), AgentScope::Project, &d).unwrap();
+    d.reasoning = Some(ReasoningChoice::Effort { effort: "high".into() });
+    let arch = create_agent_impl(&store, "proj", Some(&root), AgentScope::Project, &d).unwrap();
 
-    let path = dir
-        .path()
-        .join(".synthesis/agents")
-        .join(format!("{}.toml", arch.id));
+    let path = dir.path().join(".synthesis/agents").join(format!("{}.toml", arch.id));
     let text = read(&root, &path);
     for wanted in ["nickname", "title", "modelId", "instructions", "reasoning"] {
         assert!(text.contains(wanted), "the file lacks {wanted}: {text}");
@@ -164,11 +152,7 @@ fn a_project_agent_file_holds_persona_fields_only() {
     }
     assert!(!text.contains(&format!("\"{}\"", arch.id)), "the id is the file name");
 
-    put(
-        &root,
-        &path,
-        &format!("{text}\nprovider = \"openrouter\"\napiKey = \"sk-123\"\n"),
-    );
+    put(&root, &path, &format!("{text}\nprovider = \"openrouter\"\napiKey = \"sk-123\"\n"));
     update_agent_impl(&store, "proj", Some(&root), AgentScope::Project, &arch.id, &d).unwrap();
     let rewritten = read(&root, &path);
     assert!(!rewritten.contains("provider") && !rewritten.contains("sk-123"));
@@ -181,10 +165,7 @@ fn a_project_agent_file_holds_persona_fields_only() {
 fn an_unreadable_file_is_skipped_and_the_others_load() {
     let store = store();
     let (dir, root) = worktree();
-    assert_eq!(
-        list_project_agents_impl(&store, "proj", &root).unwrap(),
-        vec![]
-    );
+    assert_eq!(list_project_agents_impl(&store, "proj", &root).unwrap(), vec![]);
 
     let arch = create(&store, Some(&root), AgentScope::Project, "arch").unwrap();
     let folder = dir.path().join(".synthesis/agents");
@@ -212,10 +193,8 @@ fn the_roster_holds_both_scopes_in_nickname_order() {
     create(&store, Some(&root), AgentScope::Project, "Cy").unwrap();
 
     let roster = list_project_agents_impl(&store, "proj", &root).unwrap();
-    let seen: Vec<(String, AgentScope)> = roster
-        .into_iter()
-        .map(|p| (p.agent.nickname, p.scope))
-        .collect();
+    let seen: Vec<(String, AgentScope)> =
+        roster.into_iter().map(|p| (p.agent.nickname, p.scope)).collect();
     assert_eq!(
         seen,
         vec![
@@ -244,10 +223,7 @@ fn a_nickname_is_unique_inside_a_scope_and_free_across_scopes() {
         ERR_NICKNAME_TAKEN,
     );
     for scope in [AgentScope::Project, AgentScope::Personal] {
-        assert_eq!(
-            create(&store, Some(&root), scope, "All").unwrap_err(),
-            ERR_NICKNAME_RESERVED,
-        );
+        assert_eq!(create(&store, Some(&root), scope, "All").unwrap_err(), ERR_NICKNAME_RESERVED,);
     }
 }
 
@@ -292,14 +268,8 @@ fn resolution_prefers_the_project_agent_and_never_reaches_a_shadowed_one() {
     let personal_sec = create(&store, Some(&root), AgentScope::Personal, "sec").unwrap();
     let project = create(&store, Some(&root), AgentScope::Project, "arch").unwrap();
 
-    assert_eq!(
-        resolve_project_agent(&store, "proj", &root, "ARCH").unwrap().id,
-        project.id,
-    );
-    assert_eq!(
-        resolve_project_agent(&store, "proj", &root, "sec").unwrap().id,
-        personal_sec.id,
-    );
+    assert_eq!(resolve_project_agent(&store, "proj", &root, "ARCH").unwrap().id, project.id,);
+    assert_eq!(resolve_project_agent(&store, "proj", &root, "sec").unwrap().id, personal_sec.id,);
     assert_eq!(
         resolve_project_agent(&store, "proj", &root, "nobody").unwrap_err(),
         ERR_AGENT_NOT_FOUND,
@@ -331,12 +301,8 @@ fn a_project_agent_with_an_unoffered_model_stays_defined_and_unchanged() {
     let (dir, root) = worktree();
     let mut d = draft("arch");
     d.model_id = "n".into();
-    let arch =
-        create_agent_impl(&store, "proj", Some(&root), AgentScope::Project, &d).unwrap();
-    let path = dir
-        .path()
-        .join(".synthesis/agents")
-        .join(format!("{}.toml", arch.id));
+    let arch = create_agent_impl(&store, "proj", Some(&root), AgentScope::Project, &d).unwrap();
+    let path = dir.path().join(".synthesis/agents").join(format!("{}.toml", arch.id));
     let before = read(&root, &path);
 
     store
@@ -356,13 +322,9 @@ fn a_project_agent_with_an_unoffered_model_stays_defined_and_unchanged() {
 #[test]
 fn the_project_scope_refuses_without_a_project() {
     let store = store();
+    assert_eq!(create(&store, None, AgentScope::Project, "arch").unwrap_err(), ERR_NO_PROJECT_OPEN,);
     assert_eq!(
-        create(&store, None, AgentScope::Project, "arch").unwrap_err(),
-        ERR_NO_PROJECT_OPEN,
-    );
-    assert_eq!(
-        update_agent_impl(&store, "", None, AgentScope::Project, "x", &draft("arch"))
-            .unwrap_err(),
+        update_agent_impl(&store, "", None, AgentScope::Project, "x", &draft("arch")).unwrap_err(),
         ERR_NO_PROJECT_OPEN,
     );
     assert_eq!(
@@ -409,10 +371,7 @@ fn two_merged_files_with_one_nickname_stay_editable() {
         &std::path::Path::new(".synthesis/agents").join("zzz-merged.toml"),
         "nickname = \"arch\"\nmodelId = \"m\"\n",
     );
-    assert_eq!(
-        list_project_agents_impl(&store, "proj", &root).unwrap().len(),
-        2
-    );
+    assert_eq!(list_project_agents_impl(&store, "proj", &root).unwrap().len(), 2);
 
     let mut changed = draft("arch");
     changed.instructions = "Argue about structure.".into();

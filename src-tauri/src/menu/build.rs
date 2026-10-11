@@ -102,13 +102,7 @@ pub(super) fn build_app_menu<R: tauri::Runtime, M: tauri::Manager<R>>(
         .item(&window_menu)
         .build()?;
 
-    Ok(BuiltMenu {
-        menu,
-        save,
-        save_all,
-        find,
-        find_replace,
-    })
+    Ok(BuiltMenu { menu, save, save_all, find, find_replace })
 }
 
 /// Install the native Edit menu on the app (SNV-FR-14). Best-effort: a menu
@@ -117,10 +111,8 @@ pub fn install_app_menu<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result
     let built = build_app_menu(app)?;
     // Keep the live-enablement handles before the menu is handed over, so
     // `set_save_menu_state` has something to act on (SNV-FR-28 / SNV-FR-30).
-    app.state::<SaveMenuItems<R>>()
-        .store(built.save, built.save_all);
-    app.state::<FindMenuItems<R>>()
-        .store(built.find, built.find_replace);
+    app.state::<SaveMenuItems<R>>().store(built.save, built.save_all);
+    app.state::<FindMenuItems<R>>().store(built.find, built.find_replace);
     app.set_menu(built.menu)?;
     Ok(())
 }

@@ -51,14 +51,9 @@ fn only_the_three_terminal_states_are_terminal() {
     for state in [S::Completed, S::Discarded, S::Failed] {
         assert!(state.is_terminal(), "{} is terminal", state.as_str());
     }
-    for state in [
-        S::Queued,
-        S::Working,
-        S::Reviewing,
-        S::AwaitingAuthor,
-        S::Blocked,
-        S::Interrupted,
-    ] {
+    for state in
+        [S::Queued, S::Working, S::Reviewing, S::AwaitingAuthor, S::Blocked, S::Interrupted]
+    {
         assert!(!state.is_terminal(), "{} is not terminal", state.as_str());
     }
 }
@@ -68,13 +63,7 @@ fn only_the_three_terminal_states_are_terminal() {
 #[test]
 fn a_run_holds_its_queue_from_its_first_dispatch_until_it_is_completed_or_discarded() {
     use GraduationRunState as S;
-    for state in [
-        S::Working,
-        S::Reviewing,
-        S::Blocked,
-        S::AwaitingAuthor,
-        S::Interrupted,
-    ] {
+    for state in [S::Working, S::Reviewing, S::Blocked, S::AwaitingAuthor, S::Interrupted] {
         assert!(state.holds_queue(), "{} holds the queue", state.as_str());
         assert!(state.holds_slot(), "{} holds a slot", state.as_str());
     }
@@ -135,20 +124,14 @@ fn a_busy_stream_starts_nothing_and_a_free_one_starts_its_earliest_member() {
     other.id = "g3".into();
     other.stream_id = "w2".into();
 
-    let queue = GraduationQueue {
-        project_key: "p".into(),
-        runs: vec![first, second, other],
-    };
+    let queue = GraduationQueue { project_key: "p".into(), runs: vec![first, second, other] };
     assert_eq!(queue::next_eligible(&queue, "w1").map(|r| r.id.as_str()), Some("g1"));
     assert_eq!(queue::next_eligible(&queue, "w2").map(|r| r.id.as_str()), Some("g3"));
 
     // With the first run working, its stream starts nothing more.
     let mut busy = queue.runs.clone();
     busy[0].state = GraduationRunState::Working;
-    let queue = GraduationQueue {
-        project_key: "p".into(),
-        runs: busy,
-    };
+    let queue = GraduationQueue { project_key: "p".into(), runs: busy };
     assert!(queue::next_eligible(&queue, "w1").is_none());
     // The other stream is unaffected: streams work independently.
     assert_eq!(queue::next_eligible(&queue, "w2").map(|r| r.id.as_str()), Some("g3"));
@@ -165,14 +148,8 @@ fn a_streams_queue_is_the_subsequence_of_the_projects_run_order() {
     b.stream_id = "w2".into();
     let mut c = run_at(GraduationRunState::Queued);
     c.id = "g3".into();
-    let queue = GraduationQueue {
-        project_key: "p".into(),
-        runs: vec![a, b, c],
-    };
-    let ours: Vec<&str> = queue::queue_of(&queue, "w1")
-        .iter()
-        .map(|r| r.id.as_str())
-        .collect();
+    let queue = GraduationQueue { project_key: "p".into(), runs: vec![a, b, c] };
+    let ours: Vec<&str> = queue::queue_of(&queue, "w1").iter().map(|r| r.id.as_str()).collect();
     assert_eq!(ours, vec!["g1", "g3"]);
     assert_eq!(queue::position_in_queue(&queue, "g3"), Some(1));
 }
@@ -210,20 +187,10 @@ fn each_state_resolves_its_stage_and_its_condition() {
 #[test]
 fn a_change_of_condition_alone_appends_no_transition() {
     let mut o = GraduationObservability::default();
-    o.note_stage(
-        GraduationVisualStage::Working,
-        1,
-        "t".into(),
-        StageReason::WorkStarted,
-    );
+    o.note_stage(GraduationVisualStage::Working, 1, "t".into(), StageReason::WorkStarted);
     assert_eq!(o.stage_history.len(), 1);
     // The same stage again appends nothing.
-    o.note_stage(
-        GraduationVisualStage::Working,
-        1,
-        "t".into(),
-        StageReason::WorkStarted,
-    );
+    o.note_stage(GraduationVisualStage::Working, 1, "t".into(), StageReason::WorkStarted);
     assert_eq!(o.stage_history.len(), 1);
     // Coming to rest changes the condition and appends no entry.
     o.apply_state(GraduationRunState::Blocked, false);
@@ -236,16 +203,13 @@ fn the_only_backward_move_is_a_review_asking_for_revision() {
     let mut o = GraduationObservability::default();
     o.note_stage(GraduationVisualStage::Working, 1, "t".into(), StageReason::WorkStarted);
     o.note_stage(GraduationVisualStage::Review, 1, "t".into(), StageReason::ReviewStarted);
-    o.note_stage(
-        GraduationVisualStage::Working,
-        2,
-        "t".into(),
-        StageReason::ReviewRevision,
-    );
+    o.note_stage(GraduationVisualStage::Working, 2, "t".into(), StageReason::ReviewRevision);
     let backward: Vec<&StageTransition> = o
         .stage_history
         .iter()
-        .filter(|t| t.from == GraduationVisualStage::Review && t.to == GraduationVisualStage::Working)
+        .filter(|t| {
+            t.from == GraduationVisualStage::Review && t.to == GraduationVisualStage::Working
+        })
         .collect();
     assert_eq!(backward.len(), 1);
     assert_eq!(backward[0].reason, StageReason::ReviewRevision);
@@ -286,19 +250,13 @@ fn a_pass_records_its_task_its_verdict_and_its_findings_whole() {
 fn a_draft_is_graduated_while_a_committing_run_of_it_stands() {
     let mut run = run_at(GraduationRunState::Completed);
     run.commits = vec!["abc".into()];
-    let queue = GraduationQueue {
-        project_key: "p".into(),
-        runs: vec![run.clone()],
-    };
+    let queue = GraduationQueue { project_key: "p".into(), runs: vec![run.clone()] };
     assert!(queue::draft_graduation_stands(&queue, "d1"));
 
     // Discarded releases it.
     let mut discarded = run.clone();
     discarded.state = GraduationRunState::Discarded;
-    let queue = GraduationQueue {
-        project_key: "p".into(),
-        runs: vec![discarded],
-    };
+    let queue = GraduationQueue { project_key: "p".into(), runs: vec![discarded] };
     assert!(!queue::draft_graduation_stands(&queue, "d1"));
 
     // A run that committed nothing never granted it.
@@ -331,7 +289,10 @@ fn a_task_input_is_refused_before_a_container_is_created() {
 
     let mut unknown_part = good.clone();
     unknown_part.part = "authoring".into();
-    assert!(unknown_part.validate(driver::DEFAULT_PASS_BUDGET).is_err(), "a retired part is refused");
+    assert!(
+        unknown_part.validate(driver::DEFAULT_PASS_BUDGET).is_err(),
+        "a retired part is refused"
+    );
 
     let mut unknown_purpose = good.clone();
     unknown_purpose.purpose = "publish".into();
@@ -352,10 +313,7 @@ fn only_the_semantic_merge_part_reaches_the_masked_turn_kind() {
     use crate::tools::agent_exec::TurnKind;
     assert_eq!(driver::turn_kind_for(driver::PART_WORK), TurnKind::Work);
     assert_eq!(driver::turn_kind_for(driver::PART_REVIEW), TurnKind::Review);
-    assert_eq!(
-        driver::turn_kind_for(driver::PART_SEMANTIC_MERGE),
-        TurnKind::SemanticRebase
-    );
+    assert_eq!(driver::turn_kind_for(driver::PART_SEMANTIC_MERGE), TurnKind::SemanticRebase);
     for part in ["", "unknown", "authoring", "implementation"] {
         assert_ne!(
             driver::turn_kind_for(part),
@@ -377,8 +335,7 @@ fn an_escalation_request_is_validated_on_the_tool_form() {
     assert!(validate_escalation_request("  ", &[question("what?")]).is_err());
     assert!(validate_escalation_request("why", &[]).is_err());
 
-    let too_many: Vec<GraduationEscalationQuestion> =
-        (0..9).map(|_| question("what?")).collect();
+    let too_many: Vec<GraduationEscalationQuestion> = (0..9).map(|_| question("what?")).collect();
     assert!(validate_escalation_request("why", &too_many).is_err());
 
     let mut too_many_options = question("what?");
@@ -415,11 +372,8 @@ fn the_work_instruction_imposes_no_shape_on_the_work() {
         work.contains("CLAUDE.md") && work.contains("AGENTS.md"),
         "the work turn is directed at the project's own instructions",
     );
-    for imposed in [
-        "write the specification",
-        "specifications/",
-        "the specification it describes",
-    ] {
+    for imposed in ["write the specification", "specifications/", "the specification it describes"]
+    {
         assert!(
             !work.to_lowercase().contains(&imposed.to_lowercase()),
             "the work instruction must not require {imposed:?}",
@@ -436,28 +390,82 @@ fn a_stream_takes_one_run_and_a_project_takes_its_limit_of_streams() {
     let token = CancellationToken::new;
 
     // One run of a stream at a time.
-    assert!(state.claim("w1", "g1", false, crate::project_settings::GraduationConcurrency::limited(2), token()));
-    assert!(!state.claim("w1", "g2", false, crate::project_settings::GraduationConcurrency::limited(2), token()), "the stream is held");
+    assert!(state.claim(
+        "w1",
+        "g1",
+        false,
+        crate::project_settings::GraduationConcurrency::limited(2),
+        token()
+    ));
+    assert!(
+        !state.claim(
+            "w1",
+            "g2",
+            false,
+            crate::project_settings::GraduationConcurrency::limited(2),
+            token()
+        ),
+        "the stream is held"
+    );
     assert_eq!(state.holder_of("w1").as_deref(), Some("g1"));
 
     // A second stream works beside it, up to the limit.
-    assert!(state.claim("w2", "g2", false, crate::project_settings::GraduationConcurrency::limited(2), token()));
+    assert!(state.claim(
+        "w2",
+        "g2",
+        false,
+        crate::project_settings::GraduationConcurrency::limited(2),
+        token()
+    ));
     assert_eq!(state.working_count(), 2);
-    assert!(!state.claim("w3", "g3", false, crate::project_settings::GraduationConcurrency::limited(2), token()), "the limit is reached");
+    assert!(
+        !state.claim(
+            "w3",
+            "g3",
+            false,
+            crate::project_settings::GraduationConcurrency::limited(2),
+            token()
+        ),
+        "the limit is reached"
+    );
 
     // One run holds one stream, whatever else is free.
-    assert!(!state.claim("w3", "g1", false, crate::project_settings::GraduationConcurrency::limited(4), token()));
+    assert!(!state.claim(
+        "w3",
+        "g1",
+        false,
+        crate::project_settings::GraduationConcurrency::limited(4),
+        token()
+    ));
 
     // Releasing one frees a slot.
     state.release("w1");
     assert_eq!(state.working_count(), 1);
-    assert!(state.claim("w3", "g3", false, crate::project_settings::GraduationConcurrency::limited(2), token()));
+    assert!(state.claim(
+        "w3",
+        "g3",
+        false,
+        crate::project_settings::GraduationConcurrency::limited(2),
+        token()
+    ));
 
     // A limit of zero is read as one: a project that may dispatch nothing at
     // all is a queue that never moves.
     let single = GraduationState::default();
-    assert!(single.claim("w1", "g1", false, crate::project_settings::GraduationConcurrency::limited(0), token()));
-    assert!(!single.claim("w2", "g2", false, crate::project_settings::GraduationConcurrency::limited(0), token()));
+    assert!(single.claim(
+        "w1",
+        "g1",
+        false,
+        crate::project_settings::GraduationConcurrency::limited(0),
+        token()
+    ));
+    assert!(!single.claim(
+        "w2",
+        "g2",
+        false,
+        crate::project_settings::GraduationConcurrency::limited(0),
+        token()
+    ));
 }
 
 /// GXD-FR-GMDI: a record written before the checkpoint carried a resume phase
@@ -490,10 +498,7 @@ fn a_record_written_before_these_fields_still_reads() {
     // GRL-FR-DNKA: the old key is dropped and the account reads as absent, which
     // is the safe reading — a run resumed across the rename is reviewed on its
     // change set alone, exactly as it would have been.
-    assert!(
-        checkpoint.agent_account.is_none(),
-        "the old key was read as an account",
-    );
+    assert!(checkpoint.agent_account.is_none(), "the old key was read as an account",);
     assert!(
         checkpoint.resume_part.is_none(),
         "no pointer means the work turn, which is what it was written under"
@@ -527,11 +532,7 @@ fn a_blocker_written_before_it_carried_an_attempt_still_reads() {
 /// pinned here rather than left to the derive.
 #[test]
 fn the_new_fields_cross_the_seam_under_the_names_the_frontend_reads() {
-    let mut checkpoint = GraduationCheckpoint {
-        pass: 2,
-        block_attempts: 3,
-        ..Default::default()
-    };
+    let mut checkpoint = GraduationCheckpoint { pass: 2, block_attempts: 3, ..Default::default() };
     let value = serde_json::to_value(&checkpoint).expect("serialized");
 
     assert_eq!(value.get("blockAttempts").and_then(|v| v.as_u64()), Some(3));
@@ -545,10 +546,7 @@ fn the_new_fields_cross_the_seam_under_the_names_the_frontend_reads() {
     checkpoint.blocked_code = Some("review_checkout_failed".to_string());
     let value = serde_json::to_value(&checkpoint).expect("serialized");
     assert_eq!(value.get("resumePart").and_then(|v| v.as_str()), Some("review"));
-    assert_eq!(
-        value.get("blockedCode").and_then(|v| v.as_str()),
-        Some("review_checkout_failed")
-    );
+    assert_eq!(value.get("blockedCode").and_then(|v| v.as_str()), Some("review_checkout_failed"));
 
     let blocker = GraduationBlocker {
         code: "review_checkout_failed".to_string(),

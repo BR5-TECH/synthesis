@@ -86,9 +86,9 @@ fn lenient_limit<'de, D: serde::Deserializer<'de>>(
 ) -> Result<Option<i64>, D::Error> {
     let value = serde_json::Value::deserialize(deserializer)?;
     Ok(match value {
-        serde_json::Value::Number(number) => number
-            .as_i64()
-            .or_else(|| number.as_f64().map(|f| f.trunc() as i64)),
+        serde_json::Value::Number(number) => {
+            number.as_i64().or_else(|| number.as_f64().map(|f| f.trunc() as i64))
+        }
         serde_json::Value::String(text) => text
             .trim()
             .parse::<i64>()
@@ -184,9 +184,7 @@ pub fn search(
         &args.query,
         limit.saturating_mul(OVERFETCH_FACTOR),
     );
-    Ok(SearchDocumentsOutput {
-        documents: resolve_matches(hits, collection, limit),
-    })
+    Ok(SearchDocumentsOutput { documents: resolve_matches(hits, collection, limit) })
 }
 
 /// SDT-FR-EMCC, SDT-FR-ONOF: one match per document, resolved against the
@@ -269,10 +267,7 @@ pub struct SearchDocumentsTool<R: tauri::Runtime> {
 impl<R: tauri::Runtime> SearchDocumentsTool<R> {
     /// TLC-FR-19: this tool's own constructor. A caller attaches it by name.
     pub fn new(app: tauri::AppHandle<R>) -> Self {
-        SearchDocumentsTool {
-            app,
-            buffer: &BUFFER,
-        }
+        SearchDocumentsTool { app, buffer: &BUFFER }
     }
 
     /// The same tool, reporting into `buffer`.

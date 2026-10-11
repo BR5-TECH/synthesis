@@ -14,10 +14,7 @@ struct Kept {
 
 impl Kept {
     fn failing() -> Arc<Self> {
-        Arc::new(Self {
-            fail_first: true,
-            ..Self::default()
-        })
+        Arc::new(Self { fail_first: true, ..Self::default() })
     }
 
     fn kept(&self) -> Vec<DurableActivity> {
@@ -92,11 +89,8 @@ fn a_durable_sink_receives_the_safe_kinds_and_never_the_invocation_or_the_task()
     let last = kept.last().expect("a closing activity");
     assert_eq!(last.channel, "executor", "the executor's own line arrives last");
 
-    let rendered = kept
-        .iter()
-        .map(|a| format!("{} {}", a.channel, a.summary))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let rendered =
+        kept.iter().map(|a| format!("{} {}", a.channel, a.summary)).collect::<Vec<_>>().join("\n");
     assert!(!rendered.contains(INSTRUCTION), "the task never reaches the sink");
     assert!(!rendered.contains("--interactive"), "the invocation never reaches the sink");
     let mut ids: Vec<&str> = kept.iter().map(|a| a.record_id.as_str()).collect();
@@ -193,14 +187,8 @@ fn a_durable_failure_ends_delivery_and_is_returned_after_the_container_is_remove
     let durable = Kept::failing();
     let caller = CancellationToken::new();
 
-    let error = run_keeping(
-        &harness,
-        runtime.clone(),
-        task("go"),
-        durable.clone(),
-        caller.clone(),
-    )
-    .expect_err("the sink failed");
+    let error = run_keeping(&harness, runtime.clone(), task("go"), durable.clone(), caller.clone())
+        .expect_err("the sink failed");
 
     match error {
         AgentExecutionError::DurableOutputFailed(failure) => {

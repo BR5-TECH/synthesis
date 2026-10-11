@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 
 use crate::artifacts::ContentTracker;
-use crate::progress;
 use crate::global_settings::GlobalSettingsStore;
+use crate::progress;
 use crate::watcher::{start_watching, ProjectWatcher};
 
 /// What an open/create returns. `path` is the project's **identity anchor**
@@ -114,11 +114,7 @@ impl ProjectState {
         // A test that mounts a root gets it governed, over exactly that
         // directory — so `require_root` answers, and so the module under test
         // reaches the disk through the same gate it will in production.
-        let access = crate::fs::FsAccess::builder()
-            .allow_root(&root)
-            .build()
-            .ok()
-            .map(Arc::new);
+        let access = crate::fs::FsAccess::builder().allow_root(&root).build().ok().map(Arc::new);
         if let Ok(mut guard) = self.root.lock() {
             *guard = Some(root);
         }
@@ -487,8 +483,7 @@ fn drafts_are_ignored(root: &crate::fs::RootFs) -> bool {
     crate::changes::open_repo(root.path())
         .ok()
         .and_then(|repo| {
-            repo.status_should_ignore(Path::new(crate::storage_floor::DRAFTS_REL))
-                .ok()
+            repo.status_should_ignore(Path::new(crate::storage_floor::DRAFTS_REL)).ok()
         })
         .unwrap_or(false)
 }
@@ -788,10 +783,7 @@ fn open_project_from_git_url_impl(
     if trimmed.is_empty() {
         return Err("url is empty".into());
     }
-    let tail = trimmed
-        .rsplit(|c| c == '/' || c == ':')
-        .next()
-        .unwrap_or(trimmed);
+    let tail = trimmed.rsplit(|c| c == '/' || c == ':').next().unwrap_or(trimmed);
     let name = tail.strip_suffix(".git").unwrap_or(tail).to_string();
     if name.is_empty() {
         return Err("could not derive project name from url".into());
@@ -827,10 +819,7 @@ fn create_project_impl(
     }
     // A created project keeps the name the user chose; only its identity anchor
     // and content root come from the worktree resolution.
-    Ok(ProjectHandle {
-        name,
-        ..resolve_handle(store, &target_path)
-    })
+    Ok(ProjectHandle { name, ..resolve_handle(store, &target_path) })
 }
 
 #[tauri::command]

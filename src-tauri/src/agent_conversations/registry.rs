@@ -219,10 +219,7 @@ impl TurnRegistry {
         app: &tauri::AppHandle<R>,
         provider_timeout_ms: Option<u64>,
     ) -> TurnBounds {
-        let mut bounds = TurnBounds {
-            timeout: self.timeout,
-            retry: self.retry,
-        };
+        let mut bounds = TurnBounds { timeout: self.timeout, retry: self.retry };
         use tauri::Manager;
         let root = app
             .try_state::<crate::project::ProjectState>()
@@ -444,10 +441,7 @@ impl TurnRegistry {
             // nothing is owed on.
             inner.awaiting.insert(
                 turn.id.clone(),
-                Awaiting {
-                    turn: turn.clone(),
-                    project_key: live.project_key,
-                },
+                Awaiting { turn: turn.clone(), project_key: live.project_key },
             );
         } else {
             inner.remember_terminated(turn.clone());
@@ -563,7 +557,11 @@ impl TurnRegistry {
     /// An agent that is gone is owed nothing. Silent for the same reason
     /// [`retire_awaiting`](Self::retire_awaiting) is: the turn's terminal event
     /// has already been emitted.
-    pub(super) fn discard_awaiting_for_agent(&self, agent_id: &str, project_key: Option<&str>) -> usize {
+    pub(super) fn discard_awaiting_for_agent(
+        &self,
+        agent_id: &str,
+        project_key: Option<&str>,
+    ) -> usize {
         let mut inner = self.lock();
         let before = inner.awaiting.len();
         inner.awaiting.retain(|_, a| {
@@ -630,18 +628,16 @@ impl TurnRegistry {
     /// `retry_permitted` — so the terminal event of AGC-FR-21 publishes the same
     /// thing `list_recoverable_agent_turn_failures` would return, and a consumer
     /// watching events and one reading the query can never disagree.
-    pub(super) fn remember_recoverable(&self, mut turn: AgentTurn, project_key: String) -> AgentTurn {
+    pub(super) fn remember_recoverable(
+        &self,
+        mut turn: AgentTurn,
+        project_key: String,
+    ) -> AgentTurn {
         turn.retry_permitted = true;
         let mut inner = self.lock();
         let key = turn.origin.discussion_id().to_string();
         // The displaced entry keeps its terminal state; only the offer moves.
-        inner.recoverable.insert(
-            key,
-            Recoverable {
-                turn: turn.clone(),
-                project_key,
-            },
-        );
+        inner.recoverable.insert(key, Recoverable { turn: turn.clone(), project_key });
         turn
     }
 
@@ -650,7 +646,10 @@ impl TurnRegistry {
     /// An `origin` narrows to that conversation; `None` returns every entry
     /// anywhere. A turn returned here is not outstanding, so `list_agent_turns`
     /// returns it under neither form.
-    pub(super) fn recoverable_failures(&self, origin: Option<&ConversationOrigin>) -> Vec<AgentTurn> {
+    pub(super) fn recoverable_failures(
+        &self,
+        origin: Option<&ConversationOrigin>,
+    ) -> Vec<AgentTurn> {
         let inner = self.lock();
         let mut turns: Vec<AgentTurn> = inner
             .recoverable
@@ -699,10 +698,7 @@ impl TurnRegistry {
         if turn.images_omitted {
             inner.image_notices.insert(
                 key,
-                Recoverable {
-                    turn: turn.clone(),
-                    project_key: project_key.to_string(),
-                },
+                Recoverable { turn: turn.clone(), project_key: project_key.to_string() },
             );
         } else {
             inner.image_notices.remove(&key);
@@ -740,10 +736,7 @@ impl TurnRegistry {
             .iter()
             .find(|(_, entry)| entry.turn.id == turn_id)
             .map(|(key, _)| key.clone())?;
-        inner
-            .recoverable
-            .remove(&key)
-            .map(|entry| (entry.turn, entry.project_key))
+        inner.recoverable.remove(&key).map(|entry| (entry.turn, entry.project_key))
     }
 
     /// AGC-FR-31: retire the entry a conversation holds, because a later
@@ -760,7 +753,11 @@ impl TurnRegistry {
 
     /// AGC-FR-31: discard the entries belonging to an agent that is gone, on the
     /// terms its awaiting registrations are discarded (AGR-FR-11, AGR-FR-15).
-    pub(super) fn discard_recoverable_for_agent(&self, agent_id: &str, project_key: Option<&str>) -> usize {
+    pub(super) fn discard_recoverable_for_agent(
+        &self,
+        agent_id: &str,
+        project_key: Option<&str>,
+    ) -> usize {
         let mut inner = self.lock();
         let before = inner.recoverable.len();
         inner.recoverable.retain(|_, entry| {
@@ -775,9 +772,7 @@ impl TurnRegistry {
     pub(super) fn discard_recoverable_for_note(&self, note_id: &str) -> usize {
         let mut inner = self.lock();
         let before = inner.recoverable.len();
-        inner
-            .recoverable
-            .retain(|_, entry| origin_note_id(&entry.turn.origin) != Some(note_id));
+        inner.recoverable.retain(|_, entry| origin_note_id(&entry.turn.origin) != Some(note_id));
         before - inner.recoverable.len()
     }
 
@@ -799,9 +794,7 @@ impl TurnRegistry {
     pub(super) fn discard_awaiting_for_note(&self, note_id: &str) -> usize {
         let mut inner = self.lock();
         let before = inner.awaiting.len();
-        inner
-            .awaiting
-            .retain(|_, a| origin_note_id(&a.turn.origin) != Some(note_id));
+        inner.awaiting.retain(|_, a| origin_note_id(&a.turn.origin) != Some(note_id));
         before - inner.awaiting.len()
     }
 
@@ -853,9 +846,7 @@ impl TurnRegistry {
             available = cvar.wait(available).unwrap_or_else(|e| e.into_inner());
         }
         *available -= 1;
-        PermitGuard {
-            permits: self.permits.clone(),
-        }
+        PermitGuard { permits: self.permits.clone() }
     }
 }
 
@@ -877,11 +868,7 @@ impl Inner {
 }
 
 fn ordinal(turn_id: &str) -> u64 {
-    turn_id
-        .rsplit('-')
-        .next()
-        .and_then(|n| n.parse().ok())
-        .unwrap_or(0)
+    turn_id.rsplit('-').next().and_then(|n| n.parse().ok()).unwrap_or(0)
 }
 
 pub(super) struct PermitGuard {

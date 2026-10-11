@@ -73,10 +73,7 @@ fn ts14_capped_stops_at_the_total_cap_without_reading_the_rest_of_the_tree() {
     let total = 100_000;
     let candidates = Arc::new(
         (0..total)
-            .map(|n| Candidate {
-                ordinal: n as u64,
-                ..files[n % on_disk].clone()
-            })
+            .map(|n| Candidate { ordinal: n as u64, ..files[n % on_disk].clone() })
             .collect::<Vec<_>>(),
     );
 

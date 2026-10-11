@@ -127,17 +127,18 @@ pub fn dispatch_impl<R: tauri::Runtime>(
     let origin = normalise_origin(roots, origin);
 
     // AGC-FR-04: a turn names exactly one agent.
-    let agent = agents::resolve_project_agent(&store, project_key, roots.worktree, nickname).map_err(|e| {
-        let failure = match e.as_str() {
-            agents::ERR_AGENT_UNAVAILABLE => FAIL_AGENT_UNAVAILABLE,
-            _ => FAIL_AGENT_NOT_FOUND,
-        };
-        // A refusal before registration produces no turn, so it emits no state
-        // change either (AGC-FR-02) — this record is the only account of an
-        // author whose `@mention` went nowhere.
-        log_refusal(app, turns.buffer(), nickname, &origin, failure);
-        failure.to_string()
-    })?;
+    let agent = agents::resolve_project_agent(&store, project_key, roots.worktree, nickname)
+        .map_err(|e| {
+            let failure = match e.as_str() {
+                agents::ERR_AGENT_UNAVAILABLE => FAIL_AGENT_UNAVAILABLE,
+                _ => FAIL_AGENT_NOT_FOUND,
+            };
+            // A refusal before registration produces no turn, so it emits no state
+            // change either (AGC-FR-02) — this record is the only account of an
+            // author whose `@mention` went nowhere.
+            log_refusal(app, turns.buffer(), nickname, &origin, failure);
+            failure.to_string()
+        })?;
 
     // AGC-FR-14: the provider is the one the open project resolves to, read from
     // the registry alone. Availability has just found one that serves the
@@ -459,7 +460,9 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
         Err(TurnEnd::Asked) | Err(TurnEnd::AskedQuestions) | Err(TurnEnd::Proposed) => {
             (AgentTurnState::AwaitingReply, None, false)
         }
-        Err(TurnEnd::Failed(reason)) => (AgentTurnState::Failed, Some(reason), is_recoverable(reason)),
+        Err(TurnEnd::Failed(reason)) => {
+            (AgentTurnState::Failed, Some(reason), is_recoverable(reason))
+        }
         // AGC-FR-RWPT: the host and the cause are written to the live turn
         // first, so the terminal event and the recovery registry both carry them.
         Err(TurnEnd::TlsUntrusted(tls)) => {
@@ -478,11 +481,9 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
             logical: Some(plan.model_calls.load(Ordering::SeqCst)),
             physical: Some(plan.physical_calls.load(Ordering::SeqCst)),
             elapsed_ms: Some(started.elapsed().as_millis() as u64),
-            input_tokens: plan.tokens_reported.load(Ordering::SeqCst).then(|| {
-                InputTokens {
-                    cached: plan.cached_input_tokens.load(Ordering::SeqCst),
-                    uncached: plan.uncached_input_tokens.load(Ordering::SeqCst),
-                }
+            input_tokens: plan.tokens_reported.load(Ordering::SeqCst).then(|| InputTokens {
+                cached: plan.cached_input_tokens.load(Ordering::SeqCst),
+                uncached: plan.uncached_input_tokens.load(Ordering::SeqCst),
             }),
         },
         recoverable,

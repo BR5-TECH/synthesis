@@ -73,12 +73,7 @@ impl Drop for Attempt<'_> {
 impl InitGate {
     pub(super) fn new() -> Self {
         Self {
-            state: Mutex::new(GateState {
-                running: false,
-                epoch: 0,
-                last: Ok(()),
-                waiting: 0,
-            }),
+            state: Mutex::new(GateState { running: false, epoch: 0, last: Ok(()), waiting: 0 }),
             finished: Condvar::new(),
         }
     }
@@ -123,10 +118,7 @@ impl InitGate {
         state.running = true;
         drop(state);
 
-        let mut guard = Attempt {
-            gate: self,
-            result: None,
-        };
+        let mut guard = Attempt { gate: self, result: None };
         let result = attempt();
         guard.result = Some(result);
         drop(guard);

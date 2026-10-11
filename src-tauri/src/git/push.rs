@@ -188,8 +188,8 @@ where
     // GTC-FR-09 / GTC-FR-10: the credential is resolved BEFORE any transport is
     // opened, so a project that resolves no token makes no network request and
     // the typed refusal reaches the caller unchanged.
-    let token = github_tokens::resolve_remote_token(store, tokens, project_key, &url).inspect_err(
-        |e| {
+    let token =
+        github_tokens::resolve_remote_token(store, tokens, project_key, &url).inspect_err(|e| {
             log_failure(
                 sink,
                 buffer,
@@ -198,8 +198,7 @@ where
                 e,
                 log_fields! { "remote" => &remote_name, "branch" => &branch },
             )
-        },
-    )?;
+        })?;
 
     let line = |text: String| {
         emit(
@@ -234,13 +233,10 @@ where
         PUSH_LABEL,
         Some(root.to_path_buf()),
         // PRG-FR-KXQW / GTC-FR-22: the Git panel selects this branch.
-        Some(progress::Activation::GitPush {
-            branch: branch.clone(),
-        }),
+        Some(progress::Activation::GitPush { branch: branch.clone() }),
         || {
-            let mut remote = repo
-                .find_remote(&remote_name)
-                .map_err(|_| ERR_NO_REMOTE_CONFIGURED.to_string())?;
+            let mut remote =
+                repo.find_remote(&remote_name).map_err(|_| ERR_NO_REMOTE_CONFIGURED.to_string())?;
             // The remote's per-ref verdict, declared ahead of the callbacks that
             // borrow it so it outlives them.
             //
@@ -289,9 +285,8 @@ where
             // never pushed.
             if let Ok(mut local) = repo.find_branch(&branch, BranchType::Local) {
                 if local.upstream().is_err() {
-                    upstream_set = local
-                        .set_upstream(Some(&format!("{remote_name}/{branch}")))
-                        .is_ok();
+                    upstream_set =
+                        local.set_upstream(Some(&format!("{remote_name}/{branch}"))).is_ok();
                 }
             }
             line("Done".to_string());
@@ -310,10 +305,7 @@ where
             // Whether the push published a branch that had never been published
             // before — the state change behind a Changes panel that stops
             // offering "publish" and starts offering "push" (CHG-FR-37).
-            fields.insert(
-                "upstreamSet".to_string(),
-                serde_json::json!(upstream_set),
-            );
+            fields.insert("upstreamSet".to_string(), serde_json::json!(upstream_set));
             log_ok(sink, buffer, LogLevel::Info, TRANSFER, "branch pushed", fields);
         }
         // Either one of `classify_transfer_error`'s two constants or the

@@ -118,7 +118,9 @@ fn continue_again_after_a_second_exhaustion_grants_two_more_passes() {
             Script::answers_ready("Both intents stand."),
         ])
         .expect_state(GraduationRunState::Completed)
-        .expect_dispatch(0, |d| d.part("merge_work").pass(5).field_contains("loop_instruction", "Fourth."))
+        .expect_dispatch(0, |d| {
+            d.part("merge_work").pass(5).field_contains("loop_instruction", "Fourth.")
+        })
         .expect_pass(5)
         .expect_pass_window(5, 6)
         .expect_base_holds("README.md", "five\n");

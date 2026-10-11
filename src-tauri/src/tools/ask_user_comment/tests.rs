@@ -29,11 +29,7 @@ const ARTIFACT: &str = "spec.md";
 /// The author of the seed comment: a person, so the thread reads as a
 /// conversation an agent was addressed in.
 fn human() -> Participant {
-    Participant::Human {
-        login: "raver119".into(),
-        display_name: None,
-        email: None,
-    }
+    Participant::Human { login: "raver119".into(), display_name: None, email: None }
 }
 
 /// The agent the tool posts as (AUC-FR-04).
@@ -93,10 +89,7 @@ impl Fixture {
     /// The pair a conversation-bound tool holds: one temporary directory
     /// serving as both the worktree and the repository machine store.
     fn roots(&self) -> crate::agent_conversations::OwnedRoots {
-        crate::agent_conversations::OwnedRoots {
-            worktree: self.root(),
-            store: self.root(),
-        }
+        crate::agent_conversations::OwnedRoots { worktree: self.root(), store: self.root() }
     }
 
     fn origin(&self) -> ConversationOrigin {
@@ -113,7 +106,10 @@ impl Fixture {
         )
     }
 
-    fn reporting_into(&self, buffer: &'static LogBuffer) -> AskUserCommentTool<tauri::test::MockRuntime> {
+    fn reporting_into(
+        &self,
+        buffer: &'static LogBuffer,
+    ) -> AskUserCommentTool<tauri::test::MockRuntime> {
         self.tool().with_buffer(buffer)
     }
 
@@ -167,14 +163,7 @@ fn records_of(buffer: &LogBuffer, domain: Domain) -> Vec<crate::logging::LogReco
 fn rendered_records(buffer: &LogBuffer) -> String {
     serde_json::to_string(
         &buffer
-            .query(
-                &LogFilter {
-                    min_level: LogLevel::Debug,
-                    ..LogFilter::default()
-                },
-                None,
-                1000,
-            )
+            .query(&LogFilter { min_level: LogLevel::Debug, ..LogFilter::default() }, None, 1000)
             .unwrap()
             .records,
     )
@@ -230,13 +219,8 @@ fn definition_is_identical_across_turns_agents_and_conversations() {
     let schema = parameters();
     assert_eq!(schema["required"], serde_json::json!(["question"]));
     for key in ["question", "options"] {
-        let description = schema["properties"][key]["description"]
-            .as_str()
-            .unwrap_or_default();
-        assert!(
-            !description.is_empty(),
-            "AUC-FR-02: `{key}` carries its own description",
-        );
+        let description = schema["properties"][key]["description"].as_str().unwrap_or_default();
+        assert!(!description.is_empty(), "AUC-FR-02: `{key}` carries its own description",);
     }
 }
 
@@ -295,12 +279,7 @@ fn appends_one_comment_as_the_agent_participant() {
     assert_eq!(thread.comments.len(), 2);
     let question = thread.comments.last().unwrap();
     match &question.author {
-        Participant::Agent {
-            agent_id,
-            handle,
-            model,
-            title,
-        } => {
+        Participant::Agent { agent_id, handle, model, title } => {
             assert_eq!(agent_id, "agent-1");
             assert_eq!(handle, "arch", "AUC-FR-04: the nickname is the handle");
             assert_eq!(model.as_deref(), Some("m"));
@@ -328,9 +307,7 @@ fn appends_one_comment_as_the_agent_participant() {
 #[test]
 fn the_comment_carries_no_marker_or_identifier() {
     let fixture = Fixture::new();
-    fixture
-        .call(args("one or two?", Some(vec!["one", "two"])))
-        .expect("posted");
+    fixture.call(args("one or two?", Some(vec!["one", "two"]))).expect("posted");
     let body = fixture.thread().comments.last().unwrap().body.clone();
 
     // Nothing machine-shaped, nothing to quote back, and no instruction about
@@ -347,10 +324,7 @@ fn the_comment_carries_no_marker_or_identifier() {
         "[1]",
         "AUC-",
     ] {
-        assert!(
-            !body.contains(marker),
-            "AUC-FR-05: the body carries no `{marker}` — {body:?}",
-        );
+        assert!(!body.contains(marker), "AUC-FR-05: the body carries no `{marker}` — {body:?}",);
     }
     // The closing line is the only sentence the tool contributed.
     assert_eq!(
@@ -372,11 +346,7 @@ fn a_blank_question_is_refused_and_appends_nothing() {
         assert_eq!(refusal, ToolRefusal::InvalidArguments(QUESTION_BLANK));
         assert_eq!(refusal.kind(), ToolErrorKind::InvalidArgs);
         assert!(refusal.retryable(), "AUC-FR-06: retryable");
-        assert_eq!(
-            fixture.thread().comments.len(),
-            1,
-            "AUC-FR-06: nothing was appended",
-        );
+        assert_eq!(fixture.thread().comments.len(), 1, "AUC-FR-06: nothing was appended",);
         assert!(!fixture.asked.load(Ordering::SeqCst));
     }
 }
@@ -401,9 +371,7 @@ fn absent_or_blank_options_leave_the_question_alone() {
 #[test]
 fn blank_entries_are_dropped_and_the_rest_kept_in_order() {
     let fixture = Fixture::new();
-    fixture
-        .call(args("which?", Some(vec!["a", "", "b"])))
-        .expect("posted");
+    fixture.call(args("which?", Some(vec!["a", "", "b"]))).expect("posted");
     assert_eq!(
         fixture.thread().comments.last().unwrap().body,
         format!("which?\n\n- a\n- b\n\n{CLOSING_LINE}"),
@@ -414,15 +382,10 @@ fn blank_entries_are_dropped_and_the_rest_kept_in_order() {
 fn a_long_option_list_is_neither_refused_nor_truncated() {
     let fixture = Fixture::new();
     let options: Vec<&str> = vec!["a", "b", "c", "d", "e", "f"];
-    fixture
-        .call(args("which?", Some(options.clone())))
-        .expect("posted");
+    fixture.call(args("which?", Some(options.clone()))).expect("posted");
     let body = fixture.thread().comments.last().unwrap().body.clone();
     for option in options {
-        assert!(
-            body.contains(&format!("- {option}\n")),
-            "AUC-FR-07: `{option}` survived",
-        );
+        assert!(body.contains(&format!("- {option}\n")), "AUC-FR-07: `{option}` survived",);
     }
 }
 
@@ -500,20 +463,14 @@ fn a_locked_conversation_refuses_unretryably_and_appends_nothing() {
 
     assert_eq!(refusal, ToolRefusal::ConversationLocked);
     assert_eq!(refusal.kind(), ToolErrorKind::PermissionDenied);
-    assert!(
-        !refusal.retryable(),
-        "AUC-FR-10: no argument unlocks a conversation",
-    );
+    assert!(!refusal.retryable(), "AUC-FR-10: no argument unlocks a conversation",);
     let message = refusal.to_string();
     assert!(
         message.contains("will not succeed"),
         "AUC-FR-10: the message says so as well as the flag — {message:?}",
     );
     assert_eq!(fixture.thread().comments.len(), 1);
-    assert!(
-        !fixture.asked.load(Ordering::SeqCst),
-        "AUC-FR-12: a refusal does not end the turn",
-    );
+    assert!(!fixture.asked.load(Ordering::SeqCst), "AUC-FR-12: a refusal does not end the turn",);
 }
 
 // ---------------------------------------------------------------------------
@@ -568,16 +525,9 @@ fn with_no_project_open_the_shared_refusal_is_produced() {
     let refusal = block_on(tool.call(args("which way?", None))).expect_err("refused");
     assert_eq!(refusal, ToolRefusal::NoProjectOpen);
     assert_eq!(refusal.kind(), ToolErrorKind::NotFound);
-    assert!(
-        !refusal.retryable(),
-        "AUC-FR-13: no argument opens a project",
-    );
+    assert!(!refusal.retryable(), "AUC-FR-13: no argument opens a project",);
     assert_eq!(refusal.to_string(), crate::tools::NO_PROJECT_OPEN);
-    assert_eq!(
-        fixture.thread().comments.len(),
-        1,
-        "AUC-FR-13: nothing was appended",
-    );
+    assert_eq!(fixture.thread().comments.len(), 1, "AUC-FR-13: nothing was appended",);
     assert!(!fixture.asked.load(Ordering::SeqCst));
 
     // The gate runs before the argument check, so a blank question with no
@@ -595,13 +545,7 @@ fn the_question_carries_no_attachment() {
     let fixture = Fixture::new();
     fixture.call(args("which way?", None)).expect("posted");
     assert!(
-        fixture
-            .thread()
-            .comments
-            .last()
-            .unwrap()
-            .attachments
-            .is_empty(),
+        fixture.thread().comments.last().unwrap().attachments.is_empty(),
         "AUC-FR-14: an agent contributes prose and never a file",
     );
 }
@@ -675,21 +619,12 @@ fn a_call_reports_the_tool_and_the_conversation_and_nothing_it_composed() {
 
     fixture
         .reporting_into(&AUC_LOG)
-        .run(args(
-            "Should graduation write one spec or two?",
-            Some(vec!["one spec", "two specs"]),
-        ))
+        .run(args("Should graduation write one spec or two?", Some(vec!["one spec", "two specs"])))
         .expect("posted");
     // The refusal path where `args.question` is in hand at the emit site.
-    fixture
-        .reporting_into(&AUC_LOG)
-        .run(args("   ", None))
-        .expect_err("refused");
+    fixture.reporting_into(&AUC_LOG).run(args("   ", None)).expect_err("refused");
     fixture.lock();
-    fixture
-        .reporting_into(&AUC_LOG)
-        .run(args("and the archive part?", None))
-        .expect_err("refused");
+    fixture.reporting_into(&AUC_LOG).run(args("and the archive part?", None)).expect_err("refused");
 
     // The same two records under either domain (TLC-FR-14).
     for domain in [Domain::Ai, Domain::Backend] {
@@ -721,19 +656,10 @@ fn a_call_reports_the_tool_and_the_conversation_and_nothing_it_composed() {
                 serde_json::json!(fixture.thread_id),
                 "AUC-FR-17: a record that cannot be tied to a conversation cannot be followed",
             );
-            assert_eq!(
-                record.fields["originKind"],
-                serde_json::json!("artifact_comment"),
-            );
+            assert_eq!(record.fields["originKind"], serde_json::json!("artifact_comment"),);
         }
-        assert_eq!(
-            records[1].fields["reason"],
-            serde_json::json!("invalid_arguments"),
-        );
-        assert_eq!(
-            records[2].fields["reason"],
-            serde_json::json!("conversation_locked"),
-        );
+        assert_eq!(records[1].fields["reason"], serde_json::json!("invalid_arguments"),);
+        assert_eq!(records[2].fields["reason"], serde_json::json!("conversation_locked"),);
     }
 
     // AUC-FR-17: none of it names what the model composed.
@@ -776,16 +702,10 @@ fn nothing_changes_but_the_conversations_own_log() {
     };
     let changed = differs(&after, &before);
     assert!(
-        differs(&before, &after)
-            .iter()
-            .all(|path| changed.contains(path)),
+        differs(&before, &after).iter().all(|path| changed.contains(path)),
         "AUC-FR-01: nothing was deleted",
     );
-    assert_eq!(
-        changed.len(),
-        1,
-        "AUC-FR-01: exactly one file changed — {changed:?}",
-    );
+    assert_eq!(changed.len(), 1, "AUC-FR-01: exactly one file changed — {changed:?}",);
     assert!(
         changed[0].starts_with("comments/") && changed[0].ends_with(".jsonl"),
         "AUC-FR-01: and it is the conversation's own log — {changed:?}",

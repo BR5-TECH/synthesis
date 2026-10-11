@@ -9,13 +9,13 @@ use super::*;
 /// [`crate::drafts::draft_assets_dir`] with this module's typed refusal in place
 /// of its prose (DAS-FR-27).
 pub(super) fn assets_dir(root: &fs::RootFs, draft_id: &str) -> Result<PathBuf, String> {
-    crate::drafts::draft_assets_dir(root, draft_id)
-        .map_err(|_| ERR_DRAFT_NOT_FOUND.to_string())
+    crate::drafts::draft_assets_dir(root, draft_id).map_err(|_| ERR_DRAFT_NOT_FOUND.to_string())
 }
 
 /// Monotonic within the process, so two stores in the same millisecond still get
 /// distinct identifiers.
-pub(super) static ASSET_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+pub(super) static ASSET_COUNTER: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(0);
 
 /// DAS-FR-02: the opaque identifier a stored asset is named by, generated at the
 /// store.
@@ -122,10 +122,7 @@ pub fn store_image_impl(
     // DAS-FR-02: the supplied filename is recorded as metadata alone, after the
     // bytes are in place — so a record that will not write leaves a stored
     // asset with no recorded name rather than a failed store.
-    let filename = filename
-        .map(str::trim)
-        .filter(|f| !f.is_empty())
-        .map(str::to_string);
+    let filename = filename.map(str::trim).filter(|f| !f.is_empty()).map(str::to_string);
     if let Some(supplied) = filename.as_deref() {
         record_filename(root, &dir, &name, supplied);
     }
@@ -177,11 +174,7 @@ pub(super) struct RecordedFilenames {
 /// filename is metadata beside the bytes, and losing it costs a caller a label
 /// while losing the read would cost them the picture.
 pub(super) fn recorded_filename(root: &fs::RootFs, dir: &Path, name: &str) -> Option<String> {
-    root.read_toml::<RecordedFilenames>(dir.join(FILENAMES_FILE))
-        .ok()?
-        .names
-        .get(name)
-        .cloned()
+    root.read_toml::<RecordedFilenames>(dir.join(FILENAMES_FILE)).ok()?.names.get(name).cloned()
 }
 
 /// DAS-FR-02: record the name an asset was supplied under, beside the folder
@@ -195,9 +188,7 @@ pub(super) fn recorded_filename(root: &fs::RootFs, dir: &Path, name: &str) -> Op
 /// DAS-FR-04 says that value never means.
 pub(super) fn record_filename(root: &fs::RootFs, dir: &Path, name: &str, filename: &str) {
     let path = dir.join(FILENAMES_FILE);
-    let mut recorded = root
-        .read_toml::<RecordedFilenames>(&path)
-        .unwrap_or_default();
+    let mut recorded = root.read_toml::<RecordedFilenames>(&path).unwrap_or_default();
     recorded.names.insert(name.to_string(), filename.to_string());
     let _ = root.write_toml_atomic(&path, &recorded);
 }
@@ -229,16 +220,12 @@ pub fn read_image_impl(
     // never followed and the content of a file the draft does not own can never
     // be handed to a surface.
     match root.file_info(&abs) {
-        Ok(info) if info.kind == fs::EntryKind::Symlink => {
-            return Err(ERR_PATH_ESCAPE.to_string())
-        }
+        Ok(info) if info.kind == fs::EntryKind::Symlink => return Err(ERR_PATH_ESCAPE.to_string()),
         Ok(info) if info.kind == fs::EntryKind::File => {}
         _ => return Err(ERR_ASSET_NOT_FOUND.to_string()),
     }
     let media_type = media_type_of(&name).ok_or(ERR_ASSET_NOT_FOUND)?;
-    let bytes = root
-        .read_bytes(&abs)
-        .map_err(|_| ERR_ASSET_NOT_FOUND.to_string())?;
+    let bytes = root.read_bytes(&abs).map_err(|_| ERR_ASSET_NOT_FOUND.to_string())?;
     use base64::Engine as _;
     Ok(DraftImageContent {
         media_type: media_type.to_string(),

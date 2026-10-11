@@ -20,12 +20,7 @@ fn vault_harness(
     fs: Arc<FakeFs>,
     registry: Vec<AgenticRecord>,
 ) -> (GlobalSettingsStore, AgenticIntegrations) {
-    vault_harness_with(
-        keyring,
-        fs,
-        registry,
-        Arc::new(FakeProber::default()),
-    )
+    vault_harness_with(keyring, fs, registry, Arc::new(FakeProber::default()))
 }
 
 fn vault_harness_with(
@@ -50,26 +45,11 @@ fn vault_harness_with(
 /// The five typed vault failures, each with the switch that provokes it.
 fn vault_provocations() -> Vec<(&'static str, Box<dyn Fn(&FakeKeyring)>)> {
     vec![
-        (
-            "vault_unavailable",
-            Box::new(|k: &FakeKeyring| k.state().refuse_read = true),
-        ),
-        (
-            "vault_write_failed",
-            Box::new(|k: &FakeKeyring| k.state().refuse_write = true),
-        ),
-        (
-            "vault_verify_failed",
-            Box::new(|k: &FakeKeyring| k.state().mangle_next_writes = 1),
-        ),
-        (
-            "vault_malformed",
-            Box::new(|k: &FakeKeyring| k.set_entry("not an AppSecrets object")),
-        ),
-        (
-            "vault_unsupported_version",
-            Box::new(|k: &FakeKeyring| k.set_entry(r#"{"version":99}"#)),
-        ),
+        ("vault_unavailable", Box::new(|k: &FakeKeyring| k.state().refuse_read = true)),
+        ("vault_write_failed", Box::new(|k: &FakeKeyring| k.state().refuse_write = true)),
+        ("vault_verify_failed", Box::new(|k: &FakeKeyring| k.state().mangle_next_writes = 1)),
+        ("vault_malformed", Box::new(|k: &FakeKeyring| k.set_entry("not an AppSecrets object"))),
+        ("vault_unsupported_version", Box::new(|k: &FakeKeyring| k.set_entry(r#"{"version":99}"#))),
     ]
 }
 
@@ -135,9 +115,7 @@ fn aic_ts37_legacy_credentials_are_adopted_and_codex_is_left_alone() {
     assert_eq!(cli.state, IntegrationState::Verified);
     assert_eq!(cli.key_state, KeyState::Set);
 
-    assert!(keyring
-        .legacy(LEGACY_KEYCHAIN_SERVICE, "claude_agent_api")
-        .is_none());
+    assert!(keyring.legacy(LEGACY_KEYCHAIN_SERVICE, "claude_agent_api").is_none());
     assert!(keyring.legacy(LEGACY_KEYCHAIN_SERVICE, "claude_code").is_none());
     // AIC-FR-32 / ASV-FR-32: Codex holds no credential here, so migration
     // never named it — its legacy entry was not read and not deleted.
@@ -156,14 +134,8 @@ fn aic_ts37_legacy_credentials_are_adopted_and_codex_is_left_alone() {
         .and_then(|v| v.get("vendors"))
         .and_then(|v| v.as_object())
         .expect("the agentic.vendors namespace exists");
-    assert_eq!(
-        vendors.get("claude_agent_api").and_then(|v| v.as_str()),
-        Some("k-api-key")
-    );
-    assert_eq!(
-        vendors.get("claude_code").and_then(|v| v.as_str()),
-        Some("sk-ant-oat01-token")
-    );
+    assert_eq!(vendors.get("claude_agent_api").and_then(|v| v.as_str()), Some("k-api-key"));
+    assert_eq!(vendors.get("claude_code").and_then(|v| v.as_str()), Some("sk-ant-oat01-token"));
     assert!(!vendors.contains_key("codex"));
 }
 
@@ -171,26 +143,15 @@ fn aic_ts37_legacy_credentials_are_adopted_and_codex_is_left_alone() {
 /// no other — whatever the registry carries.
 #[test]
 fn aic_fr32_no_candidate_is_supplied_for_a_keyless_vendor() {
-    let registry: Vec<AgenticRecord> = VENDORS
-        .iter()
-        .map(|d| AgenticRecord::empty(d.vendor))
-        .collect();
+    let registry: Vec<AgenticRecord> =
+        VENDORS.iter().map(|d| AgenticRecord::empty(d.vendor)).collect();
 
     let candidates = migration_candidates(&registry);
 
-    let accounts: Vec<&str> = candidates
-        .iter()
-        .map(|c| c.legacy_account.as_str())
-        .collect();
-    assert_eq!(
-        accounts,
-        vec!["claude_code", "claude_agent_api", "custom_agent_api"]
-    );
+    let accounts: Vec<&str> = candidates.iter().map(|c| c.legacy_account.as_str()).collect();
+    assert_eq!(accounts, vec!["claude_code", "claude_agent_api", "custom_agent_api"]);
     for candidate in &candidates {
-        assert_eq!(
-            candidate.legacy_service,
-            "com.synthesis.agentic-integration"
-        );
+        assert_eq!(candidate.legacy_service, "com.synthesis.agentic-integration");
         assert_eq!(candidate.path[0], "agentic");
         assert_eq!(candidate.path[1], "vendors");
     }
@@ -201,18 +162,9 @@ fn aic_fr32_no_candidate_is_supplied_for_a_keyless_vendor() {
 #[test]
 fn aic_ts26_every_vault_failure_downgrades_but_never_fails_the_listing() {
     let provocations: Vec<(&str, Box<dyn Fn(&FakeKeyring)>)> = vec![
-        (
-            "vault_unavailable",
-            Box::new(|k: &FakeKeyring| k.state().refuse_read = true),
-        ),
-        (
-            "vault_malformed",
-            Box::new(|k: &FakeKeyring| k.set_entry("not an AppSecrets object")),
-        ),
-        (
-            "vault_unsupported_version",
-            Box::new(|k: &FakeKeyring| k.set_entry(r#"{"version":99}"#)),
-        ),
+        ("vault_unavailable", Box::new(|k: &FakeKeyring| k.state().refuse_read = true)),
+        ("vault_malformed", Box::new(|k: &FakeKeyring| k.set_entry("not an AppSecrets object"))),
+        ("vault_unsupported_version", Box::new(|k: &FakeKeyring| k.set_entry(r#"{"version":99}"#))),
     ];
 
     for (name, provoke) in provocations {
@@ -234,11 +186,7 @@ fn aic_ts26_every_vault_failure_downgrades_but_never_fails_the_listing() {
         // a credential, not the one that happened to be asked first.
         for vendor in ["claude_agent_api", "custom_agent_api"] {
             let record = list.iter().find(|i| i.vendor == vendor).unwrap();
-            assert_eq!(
-                record.key_state,
-                KeyState::Unavailable,
-                "provoked {name} for {vendor}"
-            );
+            assert_eq!(record.key_state, KeyState::Unavailable, "provoked {name} for {vendor}");
             assert_eq!(
                 record.state,
                 IntegrationState::KeyUnavailable,
@@ -415,10 +363,7 @@ fn aic_fr02_a_listing_makes_no_keyring_access_after_the_cache_is_initialized() {
     let (store, ai) = vault_harness(
         &keyring,
         FakeFs::with_executable(&[]),
-        VENDORS
-            .iter()
-            .map(|d| AgenticRecord::empty(d.vendor))
-            .collect(),
+        VENDORS.iter().map(|d| AgenticRecord::empty(d.vendor)).collect(),
     );
     // The first listing initializes the vault cache.
     let _ = list_integrations_impl(&store, &ai).unwrap();

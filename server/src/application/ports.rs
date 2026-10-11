@@ -106,17 +106,11 @@ pub struct Principal {
 impl Principal {
     /// A principal that holds no bypass.
     pub fn member(user_id: UserId) -> Self {
-        Principal {
-            user_id,
-            is_administrator: false,
-        }
+        Principal { user_id, is_administrator: false }
     }
 
     /// The administrator principal.
     pub fn administrator(user_id: UserId) -> Self {
-        Principal {
-            user_id,
-            is_administrator: true,
-        }
+        Principal { user_id, is_administrator: true }
     }
 }

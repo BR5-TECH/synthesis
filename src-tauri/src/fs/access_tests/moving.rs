@@ -17,58 +17,36 @@ fn ts34_move_relocates_a_subtree_whole_and_carries_its_typed_refusals() {
     // Positive: the whole subtree arrives under a different parent, and the
     // source is gone rather than copied.
     access.move_path(&tree, root.join("b").join("tree")).unwrap();
-    assert_eq!(
-        fs::read_to_string(root.join("b/tree/one.md")).unwrap(),
-        "one"
-    );
-    assert_eq!(
-        fs::read_to_string(root.join("b/tree/nested/two.md")).unwrap(),
-        "two"
-    );
+    assert_eq!(fs::read_to_string(root.join("b/tree/one.md")).unwrap(), "one");
+    assert_eq!(fs::read_to_string(root.join("b/tree/nested/two.md")).unwrap(), "two");
     assert!(!tree.exists(), "the source is relocated, not duplicated");
 
     // Negative: an occupied destination is the typed "exists" and is untouched.
     write_raw(&root.join("a").join("x"), "x");
-    let err = access
-        .move_path(root.join("a").join("x"), root.join("b").join("tree"))
-        .unwrap_err();
+    let err = access.move_path(root.join("a").join("x"), root.join("b").join("tree")).unwrap_err();
     assert!(matches!(err, FsError::AlreadyExists { .. }), "got {err:?}");
     assert!(root.join("b/tree/one.md").is_file(), "and it is untouched");
     assert!(root.join("a/x").is_file(), "and the source stayed put");
 
     // Negative: a destination inside the source's own subtree.
-    let err = access
-        .move_path(root.join("b").join("tree"), root.join("b/tree/inner"))
-        .unwrap_err();
-    assert!(
-        matches!(err, FsError::InvalidDestination { .. }),
-        "got {err:?}"
-    );
+    let err = access.move_path(root.join("b").join("tree"), root.join("b/tree/inner")).unwrap_err();
+    assert!(matches!(err, FsError::InvalidDestination { .. }), "got {err:?}");
     assert!(!root.join("b/tree/inner").exists(), "and nothing moved");
 
     // Negative: the source itself is likewise inside its own subtree.
-    let err = access
-        .move_path(root.join("b").join("tree"), root.join("b").join("tree"))
-        .unwrap_err();
-    assert!(
-        matches!(err, FsError::InvalidDestination { .. }),
-        "got {err:?}"
-    );
+    let err =
+        access.move_path(root.join("b").join("tree"), root.join("b").join("tree")).unwrap_err();
+    assert!(matches!(err, FsError::InvalidDestination { .. }), "got {err:?}");
 
     // Negative: a missing source is the typed "missing".
-    let err = access
-        .move_path(root.join("a/missing"), root.join("b/missing"))
-        .unwrap_err();
+    let err = access.move_path(root.join("a/missing"), root.join("b/missing")).unwrap_err();
     assert!(matches!(err, FsError::NotFound { .. }), "got {err:?}");
 
     // Negative: a destination outside every allowlisted root.
     let outside = TempDir::new().unwrap();
     let denied = outside.path().join("leak");
     let err = access.move_path(root.join("a/x"), &denied).unwrap_err();
-    assert!(
-        matches!(err, FsError::EscapesAllowedRoots { .. }),
-        "got {err:?}"
-    );
+    assert!(matches!(err, FsError::EscapesAllowedRoots { .. }), "got {err:?}");
     assert!(!denied.exists());
     assert!(root.join("a/x").is_file(), "and the source stayed put");
 }
@@ -81,18 +59,13 @@ fn ts34_move_refuses_a_tree_holding_a_link_before_anything_moves() {
     write_raw(&tree.join("deep").join("keep.md"), "keep");
     symlink(root.join("a"), tree.join("deep").join("link")).unwrap();
 
-    let err = access
-        .move_path(&tree, root.join("b").join("tree2"))
-        .unwrap_err();
+    let err = access.move_path(&tree, root.join("b").join("tree2")).unwrap_err();
     assert!(matches!(err, FsError::SymlinkRefused { .. }), "got {err:?}");
     assert!(
         tree.join("deep").join("keep.md").is_file(),
         "the source still holds every entry it held"
     );
-    assert!(
-        !root.join("b").join("tree2").exists(),
-        "and nothing was created at the destination"
-    );
+    assert!(!root.join("b").join("tree2").exists(), "and nothing was created at the destination");
 }
 
 #[test]
@@ -180,11 +153,7 @@ fn ts29_following_resolves_inside_the_allowlist_and_refuses_every_escape() {
     let outside_dir = TempDir::new().unwrap();
     let outside = fs::canonicalize(outside_dir.path()).unwrap();
 
-    let access = FsAccess::builder()
-        .allow_root(&root)
-        .follow_symlinks(true)
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().allow_root(&root).follow_symlinks(true).build().unwrap();
 
     // A link pointing inside the root resolves and reads through.
     write_raw(&root.join("real.md"), "inside content");
@@ -227,11 +196,7 @@ fn ts29_a_tree_whose_link_escapes_is_refused_before_removal() {
     let root = fs::canonicalize(tmp.path()).unwrap();
     let outside_dir = TempDir::new().unwrap();
     let outside = fs::canonicalize(outside_dir.path()).unwrap();
-    let access = FsAccess::builder()
-        .allow_root(&root)
-        .follow_symlinks(true)
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().allow_root(&root).follow_symlinks(true).build().unwrap();
 
     let tree = root.join("tree");
     write_raw(&tree.join("a").join("keep.md"), "keep");
@@ -253,20 +218,13 @@ fn ts29_a_tree_whose_link_escapes_is_refused_before_removal() {
 fn ts29_following_traverses_a_linked_ancestor_that_stays_inside() {
     let tmp = TempDir::new().unwrap();
     let root = fs::canonicalize(tmp.path()).unwrap();
-    let access = FsAccess::builder()
-        .allow_root(&root)
-        .follow_symlinks(true)
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().allow_root(&root).follow_symlinks(true).build().unwrap();
 
     // The ancestor case, which the default policy refuses outright.
     let real = root.join("realdir");
     write_raw(&real.join("f.md"), "reached");
     symlink(&real, root.join("linkdir")).unwrap();
-    assert_eq!(
-        access.read_text(root.join("linkdir").join("f.md")).unwrap(),
-        "reached"
-    );
+    assert_eq!(access.read_text(root.join("linkdir").join("f.md")).unwrap(), "reached");
 }
 
 // ---------------------------------------------------------------------------
@@ -293,10 +251,7 @@ fn ts31_a_root_reached_through_a_link_still_contains_the_paths_beneath_it() {
     access.write_text_atomic(&p, "through the link").unwrap();
     assert_eq!(access.read_text(&p).unwrap(), "through the link");
     // And the bytes really landed in the real directory.
-    assert_eq!(
-        fs::read_to_string(real.join("a.md")).unwrap(),
-        "through the link"
-    );
+    assert_eq!(fs::read_to_string(real.join("a.md")).unwrap(), "through the link");
 
     // The canonical spelling works too — they are one directory.
     assert_eq!(access.read_text(real.join("a.md")).unwrap(), "through the link");
@@ -356,9 +311,7 @@ fn ts32_a_user_chosen_path_is_still_subject_to_the_symlink_policy() {
     symlink(&target, &link).unwrap();
 
     let chosen = UserChosenPath::from_frontend_response(&link).unwrap();
-    let err = access
-        .write_text_at_user_choice(&chosen, "through the link")
-        .unwrap_err();
+    let err = access.write_text_at_user_choice(&chosen, "through the link").unwrap_err();
     assert!(matches!(err, FsError::SymlinkRefused { .. }), "got {err:?}");
     assert_eq!(
         fs::read_to_string(&target).unwrap(),
@@ -367,4 +320,3 @@ fn ts32_a_user_chosen_path_is_still_subject_to_the_symlink_policy() {
     );
     let _ = root;
 }
-

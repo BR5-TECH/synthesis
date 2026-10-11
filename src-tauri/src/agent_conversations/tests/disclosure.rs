@@ -24,18 +24,9 @@ fn no_part_of_a_key_appears_in_a_turn_record_an_event_or_a_progress_label() {
     });
 
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
-    let labels: Vec<String> = h
-        .progress()
-        .in_flight()
-        .into_iter()
-        .map(|op| op.label)
-        .collect();
+    let labels: Vec<String> = h.progress().in_flight().into_iter().map(|op| op.label).collect();
     // Every assertion below is **negative** — nothing carries the key — so a
     // drain that starts before the turn has finished stops checking rather than
     // failing, and the test passes without having looked at the events it is
@@ -98,26 +89,19 @@ fn the_delivered_comment_carries_the_answer_alone_and_nothing_records_the_reques
     h.app.listen(AGENT_TURN_STATE_CHANGED, move |event| {
         let _ = turn_tx.send(event.payload().to_string());
     });
-    h.app
-        .listen(crate::comments::DISCUSSION_CHANGED, move |event| {
-            let _ = tx.send(event.payload().to_string());
-        });
+    h.app.listen(crate::comments::DISCUSSION_CHANGED, move |event| {
+        let _ = tx.send(event.payload().to_string());
+    });
 
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     wait_for_terminal(&h, &turn.id);
 
     // A line of the prompt long enough that nothing else in the process could
     // hold it by coincidence.
-    let prompt_sentence = COMMENT_PROMPT_TEMPLATE
-        .lines()
-        .max_by_key(|l| l.len())
-        .expect("the prompt's longest line");
+    let prompt_sentence =
+        COMMENT_PROMPT_TEMPLATE.lines().max_by_key(|l| l.len()).expect("the prompt's longest line");
 
     let threads = h.threads("spec.md");
     let comments = &threads[0].comments;
@@ -137,11 +121,7 @@ fn the_delivered_comment_carries_the_answer_alone_and_nothing_records_the_reques
                 "{} records the assembled request",
                 path.display(),
             );
-            assert!(
-                !text.contains(&turn.id),
-                "{} records the turn",
-                path.display(),
-            );
+            assert!(!text.contains(&turn.id), "{} records the turn", path.display(),);
         }
     }
 
@@ -246,11 +226,7 @@ fn a_turn_in_flight_when_the_project_closes_terminates_cancelled() {
     h.create_agent("arch", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     assert_eq!(h.turns().in_flight(None).len(), 1);
 
@@ -266,19 +242,17 @@ fn a_turn_in_flight_when_the_project_closes_terminates_cancelled() {
 fn an_undecodable_anchored_draft_file_costs_its_section_and_the_turn_proceeds() {
     // AGC-FR-12's draft clause / AGC-FR-12.
     let h = Harness::new(vec![]);
-    let created = crate::drafts::create_draft_at_root(&h.root(), Some("Review me"))
-        .expect("draft");
+    let created = crate::drafts::create_draft_at_root(&h.root(), Some("Review me")).expect("draft");
     let draft_id = created.draft.id.clone();
     let thread = seed_draft_thread(&h, &draft_id, &created.file);
 
     // The anchored file itself does not decode as UTF-8, written past the draft
     // API — which is the only way the builder's read can fail.
-    let files = h
-        .root()
-        .join(format!(".synthesis/drafts/{draft_id}/files"));
+    let files = h.root().join(format!(".synthesis/drafts/{draft_id}/files"));
     std::fs::write(files.join(&created.file), [0xff, 0xfe, 0x00, 0x9f]).expect("binary");
 
-    let sections = build_input(Roots::same(&h.root()),
+    let sections = build_input(
+        Roots::same(&h.root()),
         &ConversationOrigin::of(&thread),
         &thread.comments[0].id,
     );
@@ -288,9 +262,7 @@ fn an_undecodable_anchored_draft_file_costs_its_section_and_the_turn_proceeds() 
         "the artifact section is absent and the rest is still assembled",
     );
     // And the turn has material to proceed on, so AGC-FR-12 does not fail it.
-    assert!(section_of(&sections, TAG_CURRENT_COMMENT)
-        .body
-        .contains("@arch is this two specs?"));
+    assert!(section_of(&sections, TAG_CURRENT_COMMENT).body.contains("@arch is this two specs?"));
 }
 
 #[test]
@@ -312,7 +284,7 @@ fn the_reasoning_a_call_carries_is_the_shape_each_provider_takes_it_in() {
                 model_id: Some("m".into()),
                 reasoning: choice,
                 accepts_image_input: false,
-                    model_mode: None,
+                model_mode: None,
             },
         )
         .additional_params
@@ -328,9 +300,7 @@ fn the_reasoning_a_call_carries_is_the_shape_each_provider_takes_it_in() {
         Some(serde_json::json!({ "reasoning": { "enabled": true } })),
     );
     assert_eq!(
-        built(Some(ReasoningChoice::Effort {
-            effort: "high".into()
-        })),
+        built(Some(ReasoningChoice::Effort { effort: "high".into() })),
         Some(serde_json::json!({ "reasoning": { "effort": "high" } })),
     );
 
@@ -367,15 +337,13 @@ fn a_long_discussion_history_is_bounded_like_any_other_section() {
             vec![],
             Vec::new(),
             &human("ada"),
-            &format!("2026-01-01T00:00:{:02}Z", i + 1))
+            &format!("2026-01-01T00:00:{:02}Z", i + 1),
+        )
         .expect("comment");
     }
     let refreshed = h.threads("spec.md");
     let last = refreshed[0].comments.last().unwrap().id.clone();
-    let sections = build_input(Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        &last,
-    );
+    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &last);
     let conversation = section_of(&sections, TAG_DISCUSSION_HISTORY);
     assert!(conversation.truncated);
     assert!(conversation.body.contains("partial"));
@@ -407,9 +375,7 @@ fn an_artifact_discussion_carries_the_files_whole_source() {
     let discussion = crate::comments::open_discussion_in(
         &h.root(),
         &h.root(),
-        &crate::comments::DiscussionTarget::Artifact {
-            artifact_id: "review.flow".into(),
-        },
+        &crate::comments::DiscussionTarget::Artifact { artifact_id: "review.flow".into() },
         None,
         "@arch can the review step split?".into(),
         Vec::new(),
@@ -418,12 +384,8 @@ fn an_artifact_discussion_carries_the_files_whole_source() {
     )
     .expect("discussion");
 
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&discussion),
-        &discussion.comments[0].id,
-    )
-    .expect("dispatch");
+    h.dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
+        .expect("dispatch");
     h.settle();
 
     let seen = h.seam.requests();
@@ -432,29 +394,18 @@ fn an_artifact_discussion_carries_the_files_whole_source() {
 
     // AGC-FR-06: the same three sections in the same order, and no fourth.
     let tags: Vec<&str> = request.input.iter().map(|s| s.tag.as_str()).collect();
-    assert_eq!(
-        tags,
-        vec![TAG_ARTIFACT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT]
-    );
+    assert_eq!(tags, vec![TAG_ARTIFACT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT]);
 
     let artifact = &request.input[0];
     assert_eq!(artifact.body, flow_source, "the file's own bytes");
     assert!(!artifact.body.contains("NOT THIS ONE"));
     assert!(
-        artifact
-            .attributes
-            .iter()
-            .any(|(k, v)| k == "path" && v == "review.flow"),
+        artifact.attributes.iter().any(|(k, v)| k == "path" && v == "review.flow"),
         "named by its project-relative path"
     );
     // A discussion is pinned to nothing, so no anchor appears anywhere.
     assert!(!request.input[1].body.contains("40..61"));
-    assert!(
-        request.input[1]
-            .attributes
-            .iter()
-            .all(|(k, _)| k != "anchor")
-    );
+    assert!(request.input[1].attributes.iter().all(|(k, _)| k != "anchor"));
 }
 
 /// CVL-FR-03, CVL-FR-04, CVL-FR-08: each discussion kind has an instruction of its own, and neither is
@@ -496,9 +447,7 @@ fn each_discussion_kind_is_answered_under_its_own_prompt() {
     // name is what CVL-FR-05 forbids it to carry, and a bare substring would be
     // satisfied by the word turning up in an unrelated sentence.
     assert!(
-        DISCUSS_DRAFT_PROMPT_TEMPLATE
-            .to_lowercase()
-            .contains("## making proposals"),
+        DISCUSS_DRAFT_PROMPT_TEMPLATE.to_lowercase().contains("## making proposals"),
         "the draft prompt does not tell the agent it may offer a rewrite",
     );
     for (name, template) in [
@@ -528,9 +477,7 @@ fn an_unreadable_file_leaves_the_rest_of_an_artifact_discussion_intact() {
     let discussion = crate::comments::open_discussion_in(
         &h.root(),
         &h.root(),
-        &crate::comments::DiscussionTarget::Artifact {
-            artifact_id: "spec.md".into(),
-        },
+        &crate::comments::DiscussionTarget::Artifact { artifact_id: "spec.md".into() },
         None,
         "@arch thoughts?".into(),
         Vec::new(),
@@ -542,12 +489,8 @@ fn an_unreadable_file_leaves_the_rest_of_an_artifact_discussion_intact() {
     // about: the log still reads, the material does not.
     std::fs::remove_file(h.root().join("spec.md")).expect("remove");
 
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&discussion),
-        &discussion.comments[0].id,
-    )
-    .expect("dispatch");
+    h.dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
+        .expect("dispatch");
     h.settle();
 
     let seen = h.seam.requests();
@@ -566,9 +509,7 @@ fn a_locked_artifact_discussion_refuses_its_turn() {
     let discussion = crate::comments::open_discussion_in(
         &h.root(),
         &h.root(),
-        &crate::comments::DiscussionTarget::Artifact {
-            artifact_id: "spec.md".into(),
-        },
+        &crate::comments::DiscussionTarget::Artifact { artifact_id: "spec.md".into() },
         None,
         "@arch thoughts?".into(),
         Vec::new(),
@@ -587,11 +528,7 @@ fn a_locked_artifact_discussion_refuses_its_turn() {
     .expect("lock");
 
     let err = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&discussion),
-            &discussion.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
         .expect_err("a locked conversation takes no contribution");
     assert!(err.contains("discussion_locked"), "got {err}");
     h.settle();
@@ -608,9 +545,7 @@ fn an_answer_lands_in_the_discussion_log_beside_the_anchored_one() {
     let discussion = crate::comments::open_discussion_in(
         &h.root(),
         &h.root(),
-        &crate::comments::DiscussionTarget::Artifact {
-            artifact_id: "spec.md".into(),
-        },
+        &crate::comments::DiscussionTarget::Artifact { artifact_id: "spec.md".into() },
         None,
         "@arch thoughts?".into(),
         Vec::new(),
@@ -619,12 +554,8 @@ fn an_answer_lands_in_the_discussion_log_beside_the_anchored_one() {
     )
     .expect("discussion");
 
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&discussion),
-        &discussion.comments[0].id,
-    )
-    .expect("dispatch");
+    h.dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
+        .expect("dispatch");
     h.settle();
 
     let folded = crate::comments::fold_artifact_discussion(&h.root(), "spec.md");
@@ -638,7 +569,6 @@ fn an_answer_lands_in_the_discussion_log_beside_the_anchored_one() {
     assert_eq!(still[0].id, anchored.id);
     assert_eq!(still[0].comments.len(), 1);
 }
-
 
 /// CTA-FR-HEYB: the fixed wording the *surface* holds for each of these tools.
 ///
@@ -659,9 +589,6 @@ const SURFACE_ACTIVITY_WORDING: [&str; 13] = [
     "Searching the web",
     "Fetching from the web",
 ];
-
-
-
 
 #[test]
 fn no_conversation_tool_declares_carries_or_returns_an_activity_status() {
@@ -684,10 +611,7 @@ fn no_conversation_tool_declares_carries_or_returns_an_activity_status() {
                     tool.name,
                 );
                 assert!(
-                    tool.parameters
-                        .get("properties")
-                        .and_then(|p| p.get(name))
-                        .is_none(),
+                    tool.parameters.get("properties").and_then(|p| p.get(name)).is_none(),
                     "`{}` declares a `{name}` parameter",
                     tool.name,
                 );
@@ -732,10 +656,7 @@ fn no_conversation_tool_declares_carries_or_returns_an_activity_status() {
         request.tools.iter().any(|t| t.name == ARTIFACT_ONLY_TOOL),
         "the artifact origin's ninth is among them",
     );
-    inspect(
-        &request.tools,
-        &format!("{:?}", artifact.seam.exchanges()[1]),
-    );
+    inspect(&request.tools, &format!("{:?}", artifact.seam.exchanges()[1]));
 
     let draft = Harness::scripted(vec![
         Ok(ScriptedReply::calls("list_skills", serde_json::json!({}))),
@@ -745,11 +666,7 @@ fn no_conversation_tool_declares_carries_or_returns_an_activity_status() {
     draft.create_agent("arch", "");
     let (_draft_id, discussion) = seed_discussion(&draft, &["@arch thoughts?"]);
     let turn = draft
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&discussion),
-            &discussion.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
         .expect("dispatch");
     wait_for_terminal(&draft, &turn.id);
     let (request, _) = draft.seam.requests().remove(0);

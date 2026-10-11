@@ -39,4 +39,3 @@ pub const BLOCK_ATTEMPT_BOUND: u32 = 2;
 /// no execution timeout of its own (`PSS-project-settings-storage.md`
 /// PSS-FR-TQMV).
 pub const DEFAULT_EXECUTION_TIMEOUT_MS: u64 = 2 * 60 * 60 * 1000;
-

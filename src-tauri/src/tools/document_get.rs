@@ -84,9 +84,9 @@ fn lenient_integer<'de, D: serde::Deserializer<'de>>(
 ) -> Result<Option<i64>, D::Error> {
     let value = serde_json::Value::deserialize(deserializer)?;
     Ok(match value {
-        serde_json::Value::Number(number) => number
-            .as_i64()
-            .or_else(|| number.as_f64().map(|f| f.trunc() as i64)),
+        serde_json::Value::Number(number) => {
+            number.as_i64().or_else(|| number.as_f64().map(|f| f.trunc() as i64))
+        }
         serde_json::Value::String(text) => text
             .trim()
             .parse::<i64>()
@@ -267,10 +267,7 @@ pub struct GetDocumentTool<R: tauri::Runtime> {
 impl<R: tauri::Runtime> GetDocumentTool<R> {
     /// TLC-FR-19: this tool's own constructor. A caller attaches it by name.
     pub fn new(app: tauri::AppHandle<R>) -> Self {
-        GetDocumentTool {
-            app,
-            buffer: &BUFFER,
-        }
+        GetDocumentTool { app, buffer: &BUFFER }
     }
 
     /// The same tool, reporting into `buffer`.
@@ -287,10 +284,7 @@ impl<R: tauri::Runtime> GetDocumentTool<R> {
                 .try_state::<DocumentsCollection>()
                 .filter(|collection| collection.is_open())
                 .ok_or(ToolRefusal::NoProjectOpen)?;
-            let fs = self
-                .app
-                .try_state::<FsAccessState>()
-                .ok_or(ToolRefusal::NoProjectOpen)?;
+            let fs = self.app.try_state::<FsAccessState>().ok_or(ToolRefusal::NoProjectOpen)?;
             read(&collection, &fs, &self.app, &args)
         });
         match &outcome {

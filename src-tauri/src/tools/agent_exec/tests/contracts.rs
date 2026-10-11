@@ -31,10 +31,7 @@ async fn eac_ts49_the_seam_finds_a_runtime_path_does_not_hold() {
     // the one that starts.
     let seam = HostDockerCli::with_program_searching(
         "synthesis-no-such-runtime-xyz",
-        vec![
-            absent.to_string_lossy().into_owned(),
-            found.to_string_lossy().into_owned(),
-        ],
+        vec![absent.to_string_lossy().into_owned(), found.to_string_lossy().into_owned()],
     );
     assert_eq!(seam.resolved_program(), None, "nothing is resolved before an operation");
 
@@ -49,10 +46,7 @@ async fn eac_ts49_the_seam_finds_a_runtime_path_does_not_hold() {
     // Resolved once: a later operation runs the same program rather than
     // searching again.
     seam.ensure_image("some/image:1").await.expect("the same program");
-    assert_eq!(
-        seam.resolved_program().as_deref(),
-        Some(found.to_string_lossy().as_ref()),
-    );
+    assert_eq!(seam.resolved_program().as_deref(), Some(found.to_string_lossy().as_ref()),);
 }
 
 /// EAC-FR-37 (EAC-FR-37, EAC-FR-17): a machine with no runtime anywhere fails
@@ -67,10 +61,7 @@ async fn eac_ts49_a_search_that_finds_nothing_falls_back_to_the_plain_name() {
             dir.path().join("b/docker").to_string_lossy().into_owned(),
         ],
     );
-    assert!(matches!(
-        seam.ensure_available().await,
-        Err(RuntimeError::Unavailable),
-    ));
+    assert!(matches!(seam.ensure_available().await, Err(RuntimeError::Unavailable),));
     assert_eq!(
         seam.resolved_program().as_deref(),
         Some("synthesis-no-such-runtime-xyz"),
@@ -89,14 +80,8 @@ async fn eac_ts49_a_named_program_is_never_traded_for_a_found_one() {
     assert!(real.exists());
 
     let seam = HostDockerCli::with_program("synthesis-no-such-runtime-xyz");
-    assert!(matches!(
-        seam.ensure_available().await,
-        Err(RuntimeError::Unavailable),
-    ));
-    assert_eq!(
-        seam.resolved_program().as_deref(),
-        Some("synthesis-no-such-runtime-xyz"),
-    );
+    assert!(matches!(seam.ensure_available().await, Err(RuntimeError::Unavailable),));
+    assert_eq!(seam.resolved_program().as_deref(), Some("synthesis-no-such-runtime-xyz"),);
 }
 
 /// EAC-FR-37: `$HOME` in a search entry is the home the process was given, and
@@ -104,10 +89,7 @@ async fn eac_ts49_a_named_program_is_never_traded_for_a_found_one() {
 #[test]
 fn eac_ts49_the_search_locations_resolve_the_home_directory() {
     let resolved = descriptor::docker_search_paths();
-    assert!(
-        !resolved.is_empty(),
-        "a machine with no HOME still has absolute locations to look in",
-    );
+    assert!(!resolved.is_empty(), "a machine with no HOME still has absolute locations to look in",);
     for path in &resolved {
         assert!(!path.contains("$HOME"), "an unresolved home reached the list: {path}");
         assert!(path.starts_with('/'), "a relative location: {path}");
@@ -123,13 +105,9 @@ fn eac_ts49_the_search_locations_resolve_the_home_directory() {
 
 /// The `--json-schema` argument of a generated vector.
 fn schema_argument_of(argv: &[String]) -> String {
-    let at = argv
-        .iter()
-        .position(|a| a == "--json-schema")
-        .expect("--json-schema");
+    let at = argv.iter().position(|a| a == "--json-schema").expect("--json-schema");
     argv[at + 1].clone()
 }
-
 
 /// EAC-FR-43, EAC-FR-07 / CDX-FR-14 — the named document reaches every vendor in the task
 /// document, and only one vendor's vector carries it.
@@ -160,7 +138,13 @@ fn a_named_result_contract_reaches_every_vendors_task_document() {
         if vendor == "codex" {
             for resume in [None, Some("thread")] {
                 assert_eq!(
-                    descriptor::CODEX.vendor_args(Some("gpt-5"), Some("low"), "IGNORED", resume, None),
+                    descriptor::CODEX.vendor_args(
+                        Some("gpt-5"),
+                        Some("low"),
+                        "IGNORED",
+                        resume,
+                        None
+                    ),
                     descriptor::CODEX.vendor_args(
                         Some("gpt-5"),
                         Some("low"),
@@ -195,10 +179,7 @@ fn a_named_result_contract_reaches_every_vendors_task_document() {
     // EAC-FR-43: the document is fixed text, so no part of the task is in it.
     let written = String::from_utf8(documents[0].clone()).expect("utf-8");
     let at = written.find("\"result_schema\"").expect("the schema is in the document");
-    assert!(
-        !written[at..].contains("judge the work"),
-        "no part of the task may reach the schema",
-    );
+    assert!(!written[at..].contains("judge the work"), "no part of the task may reach the schema",);
 
     // A task naming no contract states no shape for its answer, anywhere.
     let harness = harness_for("claude_code");
@@ -230,10 +211,7 @@ fn a_named_result_contract_reaches_every_vendors_task_document() {
             "execution":{"timeout_ms":1000,"cancellation":"caller_controlled"}}"#;
     let error = serde_json::from_str::<AgentTaskRequest>(supplied)
         .expect_err("a caller-supplied schema is an undefined field");
-    assert!(
-        error.to_string().contains("result_schema"),
-        "the refusal names the field: {error}",
-    );
+    assert!(error.to_string().contains("result_schema"), "the refusal names the field: {error}",);
 }
 
 /// A draft-07 evaluator for exactly the keywords the result documents of
@@ -322,8 +300,7 @@ fn schema_admits(schema: &serde_json::Value, value: &serde_json::Value) -> bool 
             serde_json::Value::Array(_) => "array",
             serde_json::Value::Object(_) => "object",
         };
-        let matched = names.contains(&actual)
-            || (actual == "integer" && names.contains(&"number"));
+        let matched = names.contains(&actual) || (actual == "integer" && names.contains(&"number"));
         if !matched {
             return false;
         }
@@ -406,7 +383,6 @@ fn schema_admits(schema: &serde_json::Value, value: &serde_json::Value) -> bool 
     true
 }
 
-
 /// EAC-FR-FNFV, EAC-FR-40 (EAC-FR-41): a masking that **cannot be established** refuses the
 /// launch rather than establishing part of it.
 ///
@@ -424,10 +400,7 @@ fn eac_ts55_a_masking_walk_that_cannot_finish_refuses_the_launch() {
     // truncated walk would never reach.
     let deep = root.join("one").join("two").join("three");
     std::fs::create_dir_all(deep.join(".git")).expect("a nested checkout");
-    let fs = FsAccess::builder()
-        .allow_root(root)
-        .build()
-        .expect("fs");
+    let fs = FsAccess::builder().allow_root(root).build().expect("fs");
 
     // Walked whole, the nested `.git` is found and can be masked.
     let found = super::super::repository_metadata_paths_within(&fs, root, 1_000)
@@ -441,16 +414,10 @@ fn eac_ts55_a_masking_walk_that_cannot_finish_refuses_the_launch() {
     // the part it managed to see.
     let refused = super::super::repository_metadata_paths_within(&fs, root, 1);
     assert!(
-        matches!(
-            refused,
-            Err(AgentExecutionError::RepositoryMaskingUnavailable(_))
-        ),
+        matches!(refused, Err(AgentExecutionError::RepositoryMaskingUnavailable(_))),
         "a walk that could not finish established no masking: {refused:?}",
     );
-    assert_eq!(
-        refused.unwrap_err().kind(),
-        "repository_masking_unavailable",
-    );
+    assert_eq!(refused.unwrap_err().kind(), "repository_masking_unavailable",);
 }
 
 /// FSA-FR-KVWD, GSU-FR-RJRF, EAC-FR-08 (EAC-FR-40): the containment check is against **every** user-scoped
@@ -466,16 +433,11 @@ fn eac_ts55_a_masking_walk_that_cannot_finish_refuses_the_launch() {
 #[test]
 fn eac_ts53_the_containment_check_knows_every_application_root() {
     let executor = AgentCliExecutor::new(RecordingRuntime::replying(""));
-    let roots = executor
-        .data_roots()
-        .expect("the application resolves its own roots");
+    let roots = executor.data_roots().expect("the application resolves its own roots");
 
     let short = crate::fs::short_data_dir().expect("the short root");
     let app = crate::fs::app_data_dir().expect("the application data root");
-    assert!(
-        roots.contains(&short),
-        "the short root is one the bundle may stand under: {roots:?}",
-    );
+    assert!(roots.contains(&short), "the short root is one the bundle may stand under: {roots:?}",);
     assert!(
         roots.contains(&app),
         "the application data root is one the bundle may stand under: {roots:?}",
@@ -486,10 +448,7 @@ fn eac_ts53_the_containment_check_knows_every_application_root() {
     let harness = tempfile::tempdir().expect("harness");
     let overridden = AgentCliExecutor::new(RecordingRuntime::replying(""))
         .with_session_state_root(harness.path());
-    assert_eq!(
-        overridden.data_roots().expect("roots"),
-        vec![harness.path().to_path_buf()],
-    );
+    assert_eq!(overridden.data_roots().expect("roots"), vec![harness.path().to_path_buf()],);
 }
 
 /// FSA-FR-KVWD, GSU-FR-RJRF, EAC-FR-08 (EAC-FR-40): a bundle inside **either** root is accepted, one
@@ -507,9 +466,7 @@ fn eac_ts53_a_bundle_under_either_root_is_accepted_and_one_outside_both_is_not()
     for root in &roots {
         builder = builder.allow_root(root.clone());
     }
-    let fs = builder
-        .build()
-        .expect("an accessor over every root under test");
+    let fs = builder.build().expect("an accessor over every root under test");
 
     let check = |host: &std::path::Path| {
         validate_supplementary_mount(
@@ -530,16 +487,11 @@ fn eac_ts53_a_bundle_under_either_root_is_accepted_and_one_outside_both_is_not()
     let app_root = crate::fs::app_data_dir().expect("the application data root");
     let under_app = app_root.join("eac-ts53");
     std::fs::create_dir_all(&under_app).expect("the application store");
-    for (root, which) in [
-        (under_short.clone(), "the short root"),
-        (under_app.clone(), "the application data root"),
-    ] {
+    for (root, which) in
+        [(under_short.clone(), "the short root"), (under_app.clone(), "the application data root")]
+    {
         let bundle = rebase_bundle(&root, "report");
-        assert!(
-            check(&bundle).is_ok(),
-            "a bundle under {which} is mounted: {:?}",
-            check(&bundle),
-        );
+        assert!(check(&bundle).is_ok(), "a bundle under {which} is mounted: {:?}", check(&bundle),);
         std::fs::remove_dir_all(&bundle).ok();
     }
     std::fs::remove_dir_all(&under_short).ok();
@@ -547,10 +499,7 @@ fn eac_ts53_a_bundle_under_either_root_is_accepted_and_one_outside_both_is_not()
 
     let elsewhere = rebase_bundle(outside.path(), "elsewhere");
     assert!(
-        matches!(
-            check(&elsewhere),
-            Err(AgentExecutionError::SupplementaryMountInvalid(_)),
-        ),
+        matches!(check(&elsewhere), Err(AgentExecutionError::SupplementaryMountInvalid(_)),),
         "a bundle outside every root is refused",
     );
 
@@ -563,10 +512,7 @@ fn eac_ts53_a_bundle_under_either_root_is_accepted_and_one_outside_both_is_not()
         let linked = inside.join("linked-out");
         std::os::unix::fs::symlink(&elsewhere, &linked).expect("link");
         assert!(
-            matches!(
-                check(&linked),
-                Err(AgentExecutionError::SupplementaryMountInvalid(_)),
-            ),
+            matches!(check(&linked), Err(AgentExecutionError::SupplementaryMountInvalid(_)),),
             "a link out of every root is refused",
         );
         std::fs::remove_dir_all(&inside).ok();

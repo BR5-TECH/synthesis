@@ -12,9 +12,16 @@ fn every_persisted_note_is_searchable_whatever_it_is_filed_against() {
     let fixture = NoteFixture::new();
     fixture.write("specifications/live.md", "# Live\n\nnothing here\n");
     let project = fixture.note("the teardown is never reported");
-    let attached = fixture.scoped_note(entity("specifications/live.md"), "teardown of the panel", None, None);
-    let orphaned = fixture.scoped_note(entity("specifications/gone.md"), "teardown never runs", None, None);
-    let revised = fixture.scoped_note(NoteScope::Project, "teardown against an old revision", None, Some("abc1234"));
+    let attached =
+        fixture.scoped_note(entity("specifications/live.md"), "teardown of the panel", None, None);
+    let orphaned =
+        fixture.scoped_note(entity("specifications/gone.md"), "teardown never runs", None, None);
+    let revised = fixture.scoped_note(
+        NoteScope::Project,
+        "teardown against an old revision",
+        None,
+        Some("abc1234"),
+    );
     fixture.reindex();
 
     let mut expected = vec![project, attached, orphaned, revised];
@@ -53,10 +60,7 @@ fn no_other_index_is_reachable_through_this_tool() {
         "specifications/core/thing.md",
         "# Thing\n\nThe sarcophagus is discussed at length here.\n",
     );
-    fixture.write(
-        "flows/thing.flow",
-        "# Flow\n\nThe sarcophagus step runs first.\n",
-    );
+    fixture.write("flows/thing.flow", "# Flow\n\nThe sarcophagus step runs first.\n");
     crate::tools::tests::write_skill(
         &fixture.root().to_path_buf(),
         ".claude/skills",
@@ -66,11 +70,7 @@ fn no_other_index_is_reachable_through_this_tool() {
     );
     let draft = crate::drafts::create_draft_at_root(&fixture.root(), Some("sarcophagus"))
         .expect("the scaffold completes");
-    let prompt = draft
-        .draft
-        .prompt_path
-        .clone()
-        .expect("a created draft holds its prompt");
+    let prompt = draft.draft.prompt_path.clone().expect("a created draft holds its prompt");
     crate::drafts::save_draft_file_impl(
         &fixture.root(),
         &draft.draft.id,
@@ -110,10 +110,7 @@ fn the_result_is_exactly_what_the_notes_index_produced() {
     // hit's, so this pins the value and not only the ordering — an ordering
     // assertion alone is satisfied by every score being the same number.
     assert_eq!(
-        matches
-            .iter()
-            .map(|m| (Some(m.id.clone()), m.score))
-            .collect::<Vec<_>>(),
+        matches.iter().map(|m| (Some(m.id.clone()), m.score)).collect::<Vec<_>>(),
         from_index,
         "same notes, same order, same scores, and nothing this tool added",
     );
@@ -122,8 +119,7 @@ fn the_result_is_exactly_what_the_notes_index_produced() {
         "precondition: the scores are real numbers rather than a constant",
     );
     assert!(
-        matches[0].score > matches[matches.len() - 1].score
-            || matches.len() == 1,
+        matches[0].score > matches[matches.len() - 1].score || matches.len() == 1,
         "precondition: the scores actually differ, so equality above means something",
     );
     assert_eq!(ids(&matches), {
@@ -138,13 +134,12 @@ fn the_result_is_exactly_what_the_notes_index_produced() {
     const SOURCE: &str = include_str!("../../note_search.rs");
     let code: String = SOURCE
         .lines()
-        .filter(|line| !line.trim_start().starts_with("//") && !line.trim_start().starts_with("///"))
+        .filter(|line| {
+            !line.trim_start().starts_with("//") && !line.trim_start().starts_with("///")
+        })
         .collect::<Vec<_>>()
         .join("\n");
     for forbidden in ["list_dir", "read_dir", "read_text", "read_toml", "list_all_notes"] {
-        assert!(
-            !code.contains(forbidden),
-            "NST-FR-03: this tool must not reach for {forbidden:?}",
-        );
+        assert!(!code.contains(forbidden), "NST-FR-03: this tool must not reach for {forbidden:?}",);
     }
 }

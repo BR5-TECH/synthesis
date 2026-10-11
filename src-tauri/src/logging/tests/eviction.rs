@@ -18,9 +18,8 @@ fn a_full_buffer_evicts_the_oldest_and_counts_the_evictions() {
     assert_eq!(buffer.state().buffer_total, BUFFER_CAPACITY);
     assert_eq!(buffer.state().dropped_total, 0);
 
-    let more: Vec<LogInput> = (0..5)
-        .map(|n| input(LogLevel::Info, &[Domain::Backend], &format!("extra{n}")))
-        .collect();
+    let more: Vec<LogInput> =
+        (0..5).map(|n| input(LogLevel::Info, &[Domain::Backend], &format!("extra{n}"))).collect();
     append(&buffer, more);
 
     let state = buffer.state();
@@ -55,11 +54,7 @@ fn an_oversized_records_fields_collapse_but_the_rest_survives() {
     assert_eq!(r.domains, vec![Domain::Backend]);
     assert_eq!(r.ts, "2026-08-04T12:00:00.000Z");
     assert_eq!(r.fields.len(), 1);
-    assert!(
-        r.fields.contains_key(OMITTED_FIELD),
-        "fields collapse to the marker: {:?}",
-        r.fields
-    );
+    assert!(r.fields.contains_key(OMITTED_FIELD), "fields collapse to the marker: {:?}", r.fields);
     assert!(r.fields.get("blob").is_none());
 
     // A record inside the ceiling keeps its fields untouched.
@@ -71,8 +66,5 @@ fn an_oversized_records_fields_collapse_but_the_rest_survives() {
         )],
     );
     let records = all(&buffer).records;
-    assert_eq!(
-        records[1].fields.get("errno"),
-        Some(&serde_json::json!(13))
-    );
+    assert_eq!(records[1].fields.get("errno"), Some(&serde_json::json!(13)));
 }

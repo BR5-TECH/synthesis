@@ -81,11 +81,8 @@ fn build_with_cli(
 ) -> BuildTerminal {
     use std::process::{Command, Stdio};
 
-    let args = docker_build_args(
-        &request.dockerfile,
-        &request.image_reference,
-        &request.context_root,
-    );
+    let args =
+        docker_build_args(&request.dockerfile, &request.image_reference, &request.context_root);
     let mut child = match Command::new(program)
         .args(&args)
         // `docker build` resolves `--file` against the directory it is run in,
@@ -106,12 +103,9 @@ fn build_with_cli(
     // this thread waited on the other would deadlock.
     let (lines_tx, lines_rx) = std::sync::mpsc::channel::<String>();
     let mut readers = Vec::new();
-    for stream in [
-        child.stdout.take().map(Pipe::Out),
-        child.stderr.take().map(Pipe::Err),
-    ]
-    .into_iter()
-    .flatten()
+    for stream in [child.stdout.take().map(Pipe::Out), child.stderr.take().map(Pipe::Err)]
+        .into_iter()
+        .flatten()
     {
         let tx = lines_tx.clone();
         readers.push(std::thread::spawn(move || stream.pump(tx)));
@@ -134,7 +128,9 @@ fn build_with_cli(
             Ok(None) => std::thread::sleep(POLL_INTERVAL),
             Err(e) => {
                 let _ = child.kill();
-                return BuildTerminal::Failed(format!("the Docker CLI could not be waited on: {e}"));
+                return BuildTerminal::Failed(format!(
+                    "the Docker CLI could not be waited on: {e}"
+                ));
             }
         }
     };
@@ -179,10 +175,7 @@ impl Pipe {
                     buffer.extend_from_slice(&chunk[..n]);
                     while let Some(at) = buffer.iter().position(|b| *b == b'\n') {
                         let line: Vec<u8> = buffer.drain(..=at).collect();
-                        if tx
-                            .send(String::from_utf8_lossy(&line).to_string())
-                            .is_err()
-                        {
+                        if tx.send(String::from_utf8_lossy(&line).to_string()).is_err() {
                             return;
                         }
                     }
@@ -278,12 +271,7 @@ fn build_with_engine(
     // a project of any size costs the same fixed amount of memory. A failure to
     // read the project is reported by the thread rather than raised here,
     // because the connection has already been handed the receiving end.
-    sink.progress(
-        super::images::PHASE_CONTEXT,
-        None,
-        None,
-        "packing the build context",
-    );
+    sink.progress(super::images::PHASE_CONTEXT, None, None, "packing the build context");
     if sink.cancelled() {
         return BuildTerminal::Cancelled;
     }
@@ -291,8 +279,8 @@ fn build_with_engine(
     let (packed_tx, packed_rx) = std::sync::mpsc::channel::<Result<(), String>>();
     let context_root = request.context_root.clone();
     let project_root = request.project_root.clone();
-    let outside_dockerfile = (request.placement == DockerfilePlacement::Outside)
-        .then(|| request.dockerfile.clone());
+    let outside_dockerfile =
+        (request.placement == DockerfilePlacement::Outside).then(|| request.dockerfile.clone());
     // A scope rather than a bare spawn, so the packing thread can read the
     // build's own cancellation. The scope ends only after that thread has, so
     // the packer never outlives the build it packs for.
@@ -326,10 +314,7 @@ fn build_over_connection(
 ) -> BuildTerminal {
     use futures_util::StreamExt;
 
-    let runtime = match tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    {
+    let runtime = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
         Ok(runtime) => runtime,
         Err(e) => return BuildTerminal::Failed(format!("the build could not be started: {e}")),
     };
@@ -340,7 +325,9 @@ fn build_over_connection(
             Err(e) => {
                 // GSS-FR-40: the backend verified once and is unavailable now.
                 // The build reports it rather than a second verification.
-                return BuildTerminal::Failed(format!("the Docker Engine could not be reached: {e}"));
+                return BuildTerminal::Failed(format!(
+                    "the Docker Engine could not be reached: {e}"
+                ));
             }
         };
         // PSS-FR-BDFX: the option names the Dockerfile relative to the context,
@@ -397,9 +384,8 @@ fn build_over_connection(
                     }
                     // `stream` carries the same lines the CLI prints; `status`
                     // carries the pull-style progress of a base image.
-                    for text in [info.stream.as_deref(), info.status.as_deref()]
-                        .into_iter()
-                        .flatten()
+                    for text in
+                        [info.stream.as_deref(), info.status.as_deref()].into_iter().flatten()
                     {
                         for line in text.split_inclusive('\n') {
                             report(sink, line, &mut last_position, &mut tail);
@@ -546,9 +532,7 @@ impl DockerIgnore {
         let path: Vec<String> = relative
             .components()
             .filter_map(|c| match c {
-                std::path::Component::Normal(name) => {
-                    Some(name.to_string_lossy().into_owned())
-                }
+                std::path::Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
                 _ => None,
             })
             .collect();
@@ -570,13 +554,11 @@ impl DockerIgnore {
     /// naming something inside it is the one case where it must be, or the
     /// re-include could never take effect.
     pub fn may_reinclude_below(&self, relative: &Path) -> bool {
-        let depth = relative
-            .components()
-            .filter(|c| matches!(c, std::path::Component::Normal(_)))
-            .count();
-        self.rules
-            .iter()
-            .any(|rule| rule.negated && (rule.segments.len() > depth || rule.segments.iter().any(|s| s == "**")))
+        let depth =
+            relative.components().filter(|c| matches!(c, std::path::Component::Normal(_))).count();
+        self.rules.iter().any(|rule| {
+            rule.negated && (rule.segments.len() > depth || rule.segments.iter().any(|s| s == "**"))
+        })
     }
 }
 
@@ -593,9 +575,7 @@ fn matches_pattern(pattern: &[String], path: &[String]) -> bool {
         }
         Some((head, rest)) => match path.split_first() {
             None => false,
-            Some((segment, tail)) => {
-                matches_segment(head, segment) && matches_pattern(rest, tail)
-            }
+            Some((segment, tail)) => matches_segment(head, segment) && matches_pattern(rest, tail),
         },
     }
 }
@@ -637,9 +617,7 @@ pub fn read_project_file(project_root: &Path, relative: &str) -> Result<Vec<u8>,
         .allow_root(project_root)
         .build()
         .map_err(|e| e.to_string())?;
-    access
-        .read_bytes(project_root.join(relative))
-        .map_err(|e| e.to_string())
+    access.read_bytes(project_root.join(relative)).map_err(|e| e.to_string())
 }
 
 /// Pack the build context into `writer` as a tar archive.
@@ -664,10 +642,7 @@ pub fn pack_context_with<W: std::io::Write>(
     let access = crate::fs::RootFs::new(
         root.to_path_buf(),
         std::sync::Arc::new(
-            crate::fs::FsAccess::builder()
-                .allow_root(root)
-                .build()
-                .map_err(|e| e.to_string())?,
+            crate::fs::FsAccess::builder().allow_root(root).build().map_err(|e| e.to_string())?,
         ),
     );
     // The project's own `.dockerignore`, where it has one. Read through the
@@ -686,9 +661,7 @@ pub fn pack_context_with<W: std::io::Write>(
         header.set_size(bytes.len() as u64);
         header.set_mode(0o644);
         header.set_cksum();
-        archive
-            .append_data(&mut header, PSS_DOCKERFILE_NAME, bytes)
-            .map_err(|e| e.to_string())?;
+        archive.append_data(&mut header, PSS_DOCKERFILE_NAME, bytes).map_err(|e| e.to_string())?;
     }
     archive.finish().map_err(|e| e.to_string())
 }
@@ -702,10 +675,8 @@ pub fn append_dir<W: std::io::Write>(
     relative: &Path,
     reserve_dockerfile_name: bool,
 ) -> Result<(), String> {
-    let entries = access
-        .access()
-        .list_dir(access.path().join(relative))
-        .map_err(|e| e.to_string())?;
+    let entries =
+        access.access().list_dir(access.path().join(relative)).map_err(|e| e.to_string())?;
     for entry in entries {
         let child = relative.join(&entry.name);
         if ALWAYS_EXCLUDED.contains(&entry.name.as_str()) {
@@ -778,11 +749,7 @@ struct ChannelWriter<'a> {
 
 impl<'a> ChannelWriter<'a> {
     fn new(tx: std::sync::mpsc::SyncSender<Vec<u8>>) -> Self {
-        ChannelWriter {
-            tx,
-            pending: Vec::with_capacity(CONTEXT_CHUNK),
-            cancelled: None,
-        }
+        ChannelWriter { tx, pending: Vec::with_capacity(CONTEXT_CHUNK), cancelled: None }
     }
 
     /// PSS-FR-28: give the writer the cancellation to read.
@@ -811,7 +778,10 @@ impl<'a> ChannelWriter<'a> {
         self.tx.send(chunk).map_err(|_| {
             // The reader is gone — the build was cancelled or the connection
             // failed. Ending the packer is the right answer, not a panic.
-            std::io::Error::new(std::io::ErrorKind::BrokenPipe, "the build context is no longer read")
+            std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "the build context is no longer read",
+            )
         })
     }
 }

@@ -126,9 +126,9 @@ fn cause_of_rustls(error: &rustls::Error) -> TlsCause {
         rustls::Error::InvalidCertificate(C::Expired | C::ExpiredContext { .. }) => {
             TlsCause::Expired
         }
-        rustls::Error::InvalidCertificate(C::NotValidForName | C::NotValidForNameContext { .. }) => {
-            TlsCause::HostnameMismatch
-        }
+        rustls::Error::InvalidCertificate(
+            C::NotValidForName | C::NotValidForNameContext { .. },
+        ) => TlsCause::HostnameMismatch,
         _ => TlsCause::Other,
     }
 }
@@ -264,11 +264,8 @@ impl TrustRoots {
 
     /// The `ureq` TLS configuration for these roots.
     pub fn ureq_tls_config(&self) -> ureq::tls::TlsConfig {
-        let certs: Vec<ureq::tls::Certificate<'static>> = self
-            .ders
-            .iter()
-            .map(|der| ureq::tls::Certificate::from_der(der).to_owned())
-            .collect();
+        let certs: Vec<ureq::tls::Certificate<'static>> =
+            self.ders.iter().map(|der| ureq::tls::Certificate::from_der(der).to_owned()).collect();
         ureq::tls::TlsConfig::builder()
             .provider(ureq::tls::TlsProvider::Rustls)
             .root_certs(ureq::tls::RootCerts::new_with_certs(&certs))
@@ -299,7 +296,10 @@ impl TrustRoots {
         let mut config = rustls::ClientConfig::builder_with_provider(provider)
             .with_safe_default_protocol_versions()?
             .dangerous()
-            .with_custom_certificate_verifier(Arc::new(RecordingVerifier { inner, record: record.clone() }))
+            .with_custom_certificate_verifier(Arc::new(RecordingVerifier {
+                inner,
+                record: record.clone(),
+            }))
             .with_no_client_auth();
         config.alpn_protocols = alpn.iter().map(|p| p.to_vec()).collect();
         Ok(config)
@@ -343,9 +343,13 @@ impl rustls::client::danger::ServerCertVerifier for RecordingVerifier {
         ocsp_response: &[u8],
         now: rustls::pki_types::UnixTime,
     ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-        let result =
-            self.inner
-                .verify_server_cert(end_entity, intermediates, server_name, ocsp_response, now);
+        let result = self.inner.verify_server_cert(
+            end_entity,
+            intermediates,
+            server_name,
+            ocsp_response,
+            now,
+        );
         if let Err(error) = &result {
             self.record.set(TlsFailure::new(
                 server_name.to_str().to_ascii_lowercase(),

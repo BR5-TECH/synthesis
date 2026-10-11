@@ -122,7 +122,12 @@ pub struct GithubPollingConfiguration {
 
 impl GithubPollingConfiguration {
     pub fn unset() -> Self {
-        Self { state: ConfigurationState::Unset, error_code: None, error: None, project_title: None }
+        Self {
+            state: ConfigurationState::Unset,
+            error_code: None,
+            error: None,
+            project_title: None,
+        }
     }
 
     pub fn unchecked() -> Self {

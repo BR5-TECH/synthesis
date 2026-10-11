@@ -196,14 +196,7 @@ pub fn set_lock_reporting(
     by: &Participant,
     at: &str,
 ) -> Result<(Discussion, bool), String> {
-    set_lock_to(
-        root,
-        ThreadRef::artifact(artifact_id),
-        thread_id,
-        locked,
-        by,
-        at,
-    )
+    set_lock_to(root, ThreadRef::artifact(artifact_id), thread_id, locked, by, at)
 }
 
 /// [`set_lock_reporting`] naming the conversation as a [`ThreadRef`] (CMS-FR-54).
@@ -219,11 +212,7 @@ pub fn set_lock_to(
     if thread.locked == locked {
         return Ok((thread, false));
     }
-    let body = if locked {
-        EventBody::ThreadLocked
-    } else {
-        EventBody::ThreadUnlocked
-    };
+    let body = if locked { EventBody::ThreadLocked } else { EventBody::ThreadUnlocked };
     append_as_scoped(
         root,
         target.scope,
@@ -259,14 +248,7 @@ pub fn set_resolution_reporting(
     by: &Participant,
     at: &str,
 ) -> Result<(Discussion, bool), String> {
-    set_resolution_to(
-        root,
-        ThreadRef::artifact(artifact_id),
-        thread_id,
-        resolved,
-        by,
-        at,
-    )
+    set_resolution_to(root, ThreadRef::artifact(artifact_id), thread_id, resolved, by, at)
 }
 
 /// [`set_resolution_reporting`] naming the conversation as a [`ThreadRef`]
@@ -283,11 +265,7 @@ pub fn set_resolution_to(
     if thread.resolved == resolved {
         return Ok((thread, false));
     }
-    let body = if resolved {
-        EventBody::ThreadResolved
-    } else {
-        EventBody::ThreadReopened
-    };
+    let body = if resolved { EventBody::ThreadResolved } else { EventBody::ThreadReopened };
     append_as_scoped(
         root,
         target.scope,
@@ -346,12 +324,7 @@ pub fn move_fragment_to(
         target.file_rel,
         by,
         at,
-        vec![(
-            discussion_id.to_string(),
-            EventBody::FragmentMoved {
-                fragment_target: moved,
-            },
-        )],
+        vec![(discussion_id.to_string(), EventBody::FragmentMoved { fragment_target: moved })],
     )?;
     target.find(root, discussion_id).map(|d| (d, true))
 }

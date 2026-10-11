@@ -72,10 +72,7 @@ fn a_read_after_a_cursor_takes_what_followed_it() {
 
     let page = store.read("run", Some(7), None);
 
-    assert_eq!(
-        page.records.iter().map(|r| r.seq).collect::<Vec<_>>(),
-        vec![8, 9, 10]
-    );
+    assert_eq!(page.records.iter().map(|r| r.seq).collect::<Vec<_>>(), vec![8, 9, 10]);
     // A cursor at the newest record returns nothing rather than repeating it.
     assert!(store.read("run", Some(10), None).records.is_empty());
     // A cursor past the newest is positional rather than an error.
@@ -388,10 +385,7 @@ fn concurrent_runs_never_mix_or_reuse_a_sequence() {
         assert_eq!(seqs.len(), sorted.len(), "a sequence was handed out twice");
         assert!(seqs.windows(2).all(|w| w[0] < w[1]), "records are out of order");
         // Every record belongs to the run it was read from.
-        assert!(page
-            .records
-            .iter()
-            .all(|record| record.summary.starts_with(&format!("r{run} "))));
+        assert!(page.records.iter().all(|record| record.summary.starts_with(&format!("r{run} "))));
     }
 }
 
@@ -423,10 +417,7 @@ impl SinkFixture {
         let root = dir.path().canonicalize().expect("a real path");
         let app = tauri::test::mock_app();
         let fs = Arc::new(
-            crate::fs::FsAccess::builder()
-                .allow_root(&root)
-                .build()
-                .expect("an instance"),
+            crate::fs::FsAccess::builder().allow_root(&root).build().expect("an instance"),
         );
         let store = Arc::new(store);
         let sink = RunActivitySink::rooted_at(
@@ -436,13 +427,7 @@ impl SinkFixture {
             Some(fs),
             Some(root.join("agent-activity")),
         );
-        SinkFixture {
-            _dir: dir,
-            _app: app,
-            root,
-            store,
-            sink,
-        }
+        SinkFixture { _dir: dir, _app: app, root, store, sink }
     }
 
     fn file(&self, run_id: &str) -> PathBuf {
@@ -526,12 +511,8 @@ fn a_run_whose_file_cannot_be_written_is_recorded_anyway() {
     let dir = TempDir::new().expect("a temp directory");
     let root = dir.path().canonicalize().expect("a real path");
     std::fs::write(root.join("agent-activity"), b"not a directory").expect("a file");
-    let fs = Arc::new(
-        crate::fs::FsAccess::builder()
-            .allow_root(&root)
-            .build()
-            .expect("an instance"),
-    );
+    let fs =
+        Arc::new(crate::fs::FsAccess::builder().allow_root(&root).build().expect("an instance"));
     let store = Arc::new(ActivityStore::new());
     let sink = RunActivitySink::rooted_at(
         &app.handle().clone(),
@@ -560,15 +541,9 @@ fn the_file_bound_is_announced_once_and_stops_nothing() {
     }
 
     let written = f.written("run-bound");
-    let notices: Vec<_> = written
-        .iter()
-        .filter(|record| record["kind"] == "error")
-        .collect();
+    let notices: Vec<_> = written.iter().filter(|record| record["kind"] == "error").collect();
     assert_eq!(notices.len(), 1, "the bound was announced {} times", notices.len());
-    assert!(notices[0]["summary"]
-        .as_str()
-        .unwrap_or_default()
-        .contains("byte bound"));
+    assert!(notices[0]["summary"].as_str().unwrap_or_default().contains("byte bound"));
     assert!(written.len() < 20, "the bound did not hold");
 
     // Everything is still in memory and still readable: the file stopping short

@@ -19,10 +19,7 @@ fn aap_ts01_a_fresh_machine_lists_four_unconfigured_providers() {
         assert_eq!(i.masked_hint, None);
         assert!(!i.active);
     }
-    assert!(
-        h.prober.calls.lock().unwrap().is_empty(),
-        "listing makes no network request"
-    );
+    assert!(h.prober.calls.lock().unwrap().is_empty(), "listing makes no network request");
 }
 
 #[test]
@@ -48,10 +45,7 @@ fn aap_ts02_only_custom_ships_without_a_default_url_and_a_gateway_url_is_stored(
         Some("sk-1234"),
     )
     .unwrap();
-    assert_eq!(
-        rec.base_url.as_deref(),
-        Some("https://gateway.internal/openai/v1")
-    );
+    assert_eq!(rec.base_url.as_deref(), Some("https://gateway.internal/openai/v1"));
 }
 
 // -- AAP-FR-04: the required key ---------------------------------------
@@ -59,10 +53,7 @@ fn aap_ts02_only_custom_ships_without_a_default_url_and_a_gateway_url_is_stored(
 #[test]
 fn aap_ts03_custom_requires_a_key_like_every_named_provider_and_sends_no_request_without_one() {
     // AAP-FR-04: Custom with an empty secret is refused before any request.
-    let h = harness(
-        FakeProber::returning(&[("llama-3", "Llama 3")]),
-        FakeKeychain::new(),
-    );
+    let h = harness(FakeProber::returning(&[("llama-3", "Llama 3")]), FakeKeychain::new());
     for secret in [None, Some("   ")] {
         assert_eq!(
             verify_integration_impl(&h.store, &h.ai, "custom", "https://gw.example", secret)
@@ -92,21 +83,11 @@ fn aap_ts03_custom_requires_a_key_like_every_named_provider_and_sends_no_request
     // A named provider with an empty key is refused before any request.
     let before = h.prober.calls.lock().unwrap().len();
     assert_eq!(
-        verify_integration_impl(
-            &h.store,
-            &h.ai,
-            "anthropic",
-            "https://api.anthropic.com/v1",
-            None
-        )
-        .unwrap_err(),
+        verify_integration_impl(&h.store, &h.ai, "anthropic", "https://api.anthropic.com/v1", None)
+            .unwrap_err(),
         ERR_KEY_MISSING
     );
-    assert_eq!(
-        h.prober.calls.lock().unwrap().len(),
-        before,
-        "a missing key costs no round trip"
-    );
+    assert_eq!(h.prober.calls.lock().unwrap().len(), before, "a missing key costs no round trip");
     // An all-whitespace key is an empty one.
     assert_eq!(
         verify_integration_impl(
@@ -144,10 +125,7 @@ fn aap_ts04_every_verification_failure_is_distinguishable() {
             expected
         );
         assert!(h.store.load_ai_api_registry().unwrap().0.is_empty());
-        assert!(
-            h.keys.get_raw("openai").is_none(),
-            "a failed verification writes no key"
-        );
+        assert!(h.keys.get_raw("openai").is_none(), "a failed verification writes no key");
     }
 
     let h = ok_harness();
@@ -161,8 +139,7 @@ fn aap_ts04_every_verification_failure_is_distinguishable() {
         ERR_BASE_URL_INVALID
     );
     assert_eq!(
-        verify_integration_impl(&h.store, &h.ai, "nope", "https://x.com", Some("k"))
-            .unwrap_err(),
+        verify_integration_impl(&h.store, &h.ai, "nope", "https://x.com", Some("k")).unwrap_err(),
         ERR_UNKNOWN_PROVIDER
     );
 }
@@ -177,10 +154,8 @@ fn a_refused_certificate_is_tls_untrusted_with_host_and_cause_and_commits_nothin
         (crate::tls::TlsCause::Other, "tls_untrusted:other:api.openai.com"),
     ] {
         let failure = crate::tls::TlsFailure::new("api.openai.com", cause);
-        let h = harness(
-            FakeProber::failing(ProbeError::TlsUntrusted(failure)),
-            FakeKeychain::new(),
-        );
+        let h =
+            harness(FakeProber::failing(ProbeError::TlsUntrusted(failure)), FakeKeychain::new());
         let error = verify_integration_impl(
             &h.store,
             &h.ai,
@@ -293,10 +268,7 @@ fn aap_ts07_an_unreadable_key_degrades_the_record_without_losing_it() {
         "retained rather than pruned — the author can re-verify it"
     );
     assert_eq!(rec.selected_model.as_deref(), Some("gpt-5"));
-    assert_eq!(
-        set_active_impl(&h.store, &h.ai, "openai").unwrap_err(),
-        ERR_NOT_VERIFIED
-    );
+    assert_eq!(set_active_impl(&h.store, &h.ai, "openai").unwrap_err(), ERR_NOT_VERIFIED);
 }
 
 // -- AAP-FR-10: probed vs catalog ---------------------------------------
@@ -395,10 +367,7 @@ fn aap_ts10_a_model_the_endpoint_stops_offering_falls_back_to_the_default() {
 #[test]
 fn aap_ts11_activation_requires_verification_and_only_one_is_ever_active() {
     let h = ok_harness();
-    assert_eq!(
-        set_active_impl(&h.store, &h.ai, "openai").unwrap_err(),
-        ERR_NOT_VERIFIED
-    );
+    assert_eq!(set_active_impl(&h.store, &h.ai, "openai").unwrap_err(), ERR_NOT_VERIFIED);
 
     verify_integration_impl(
         &h.store,
@@ -582,9 +551,7 @@ fn aap_ts16_an_override_may_only_name_a_verified_provider_and_null_clears_it() {
 fn aap_ts17_nothing_configured_and_nothing_selected_are_different_answers() {
     let h = ok_harness();
     assert_eq!(
-        get_project_impl(&h.store, &h.ai, "/dev/acme")
-            .unwrap()
-            .resolution,
+        get_project_impl(&h.store, &h.ai, "/dev/acme").unwrap().resolution,
         ProjectResolution::NoneConfigured
     );
 
@@ -605,9 +572,7 @@ fn aap_ts17_nothing_configured_and_nothing_selected_are_different_answers() {
     )
     .unwrap();
     assert_eq!(
-        get_project_impl(&h.store, &h.ai, "/dev/acme")
-            .unwrap()
-            .resolution,
+        get_project_impl(&h.store, &h.ai, "/dev/acme").unwrap().resolution,
         ProjectResolution::NoneSelected,
         "two verified providers and no choice is a different problem"
     );
@@ -618,10 +583,7 @@ fn aap_ts17_nothing_configured_and_nothing_selected_are_different_answers() {
 #[test]
 fn aap_ts18_the_call_path_refuses_rather_than_returning_a_key() {
     let h = ok_harness();
-    assert_eq!(
-        resolve_ai_api_call(&h.store, &h.ai, "/dev/acme").unwrap_err(),
-        ERR_NONE_CONFIGURED
-    );
+    assert_eq!(resolve_ai_api_call(&h.store, &h.ai, "/dev/acme").unwrap_err(), ERR_NONE_CONFIGURED);
 
     verify_integration_impl(
         &h.store,
@@ -672,4 +634,3 @@ fn aap_ts19_a_locked_keychain_fails_the_write_but_never_the_listing() {
     let list = list_integrations_impl(&h.store, &h.ai).unwrap();
     assert_eq!(list.len(), 4, "listing still answers");
 }
-

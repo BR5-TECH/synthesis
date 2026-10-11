@@ -306,11 +306,7 @@ impl GithubIssues for FakeGithub {
         _repo: &str,
     ) -> Result<Vec<PublicationMilestone>, String> {
         self.record(Call::ListMilestones);
-        self.milestones
-            .lock()
-            .unwrap()
-            .clone()
-            .ok_or_else(|| ERR_MILESTONES_UNREADABLE.to_string())
+        self.milestones.lock().unwrap().clone().ok_or_else(|| ERR_MILESTONES_UNREADABLE.to_string())
     }
 
     fn link_sub_issue(

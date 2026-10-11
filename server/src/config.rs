@@ -170,27 +170,19 @@ where
 
     let host = match &host_setting {
         Some(setting) => {
-            setting
-                .value
-                .parse::<IpAddr>()
-                .map_err(|_| ConfigError::InvalidValue {
-                    setting: "host",
-                    origin: setting.origin,
-                    value: setting.value.clone(),
-                    accepted: HOST_FORM,
-                })?
+            setting.value.parse::<IpAddr>().map_err(|_| ConfigError::InvalidValue {
+                setting: "host",
+                origin: setting.origin,
+                value: setting.value.clone(),
+                accepted: HOST_FORM,
+            })?
         }
-        None => DEFAULT_HOST
-            .parse::<IpAddr>()
-            .expect("the default host is a valid IP address"),
+        None => DEFAULT_HOST.parse::<IpAddr>().expect("the default host is a valid IP address"),
     };
 
     let port = match &port_setting {
         Some(setting) => {
-            let parsed = setting
-                .value
-                .parse::<u16>()
-                .map_err(|_| invalid_port(setting))?;
+            let parsed = setting.value.parse::<u16>().map_err(|_| invalid_port(setting))?;
             if parsed == 0 {
                 return Err(invalid_port(setting));
             }
@@ -219,13 +211,10 @@ fn to_text(arguments: &[OsString]) -> Result<Vec<String>, ConfigError> {
     arguments
         .iter()
         .map(|argument| {
-            argument
-                .clone()
-                .into_string()
-                .map_err(|refused| ConfigError::NotUnicode {
-                    source: "the command line".to_string(),
-                    value: refused.to_string_lossy().into_owned(),
-                })
+            argument.clone().into_string().map_err(|refused| ConfigError::NotUnicode {
+                source: "the command line".to_string(),
+                value: refused.to_string_lossy().into_owned(),
+            })
         })
         .collect()
 }
@@ -244,22 +233,17 @@ where
         return Ok(None);
     };
 
-    let value = value
-        .into_string()
-        .map_err(|refused| ConfigError::NotUnicode {
-            source: format!("the {name} environment variable"),
-            value: refused.to_string_lossy().into_owned(),
-        })?;
+    let value = value.into_string().map_err(|refused| ConfigError::NotUnicode {
+        source: format!("the {name} environment variable"),
+        value: refused.to_string_lossy().into_owned(),
+    })?;
 
     let value = value.trim();
     if value.is_empty() {
         return Ok(None);
     }
 
-    Ok(Some(RawSetting {
-        origin: Origin::Variable(name),
-        value: value.to_string(),
-    }))
+    Ok(Some(RawSetting { origin: Origin::Variable(name), value: value.to_string() }))
 }
 
 /// Reads `--host` and `--port` from the arguments.
@@ -283,9 +267,7 @@ fn parse_arguments(arguments: &[String]) -> Result<ParsedOptions, ConfigError> {
             } else if argument == PORT_OPTION || argument.starts_with(&format!("{PORT_OPTION}=")) {
                 (PORT_OPTION, PORT_FORM, &mut port)
             } else {
-                return Err(ConfigError::UnknownArgument {
-                    argument: argument.to_string(),
-                });
+                return Err(ConfigError::UnknownArgument { argument: argument.to_string() });
             };
 
         let value = match argument.split_once('=') {
@@ -310,10 +292,7 @@ fn parse_arguments(arguments: &[String]) -> Result<ParsedOptions, ConfigError> {
             return Err(ConfigError::MissingValue { option, accepted });
         }
 
-        *slot = Some(RawSetting {
-            origin: Origin::Option(option),
-            value,
-        });
+        *slot = Some(RawSetting { origin: Origin::Option(option), value });
     }
 
     Ok((host, port))
@@ -329,10 +308,8 @@ mod tests {
     }
 
     fn variables(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<OsString> {
-        let map: HashMap<String, OsString> = pairs
-            .iter()
-            .map(|(key, value)| ((*key).to_string(), OsString::from(*value)))
-            .collect();
+        let map: HashMap<String, OsString> =
+            pairs.iter().map(|(key, value)| ((*key).to_string(), OsString::from(*value))).collect();
         move |name: &str| map.get(name).cloned()
     }
 
@@ -358,11 +335,9 @@ mod tests {
     // BMS-FR-05: the variables apply when no option is given.
     #[test]
     fn variables_apply_when_no_option_is_given() {
-        let config = resolve(
-            &[],
-            variables(&[(HOST_VARIABLE, "127.0.0.1"), (PORT_VARIABLE, "9099")]),
-        )
-        .expect("both values are valid");
+        let config =
+            resolve(&[], variables(&[(HOST_VARIABLE, "127.0.0.1"), (PORT_VARIABLE, "9099")]))
+                .expect("both values are valid");
         assert_eq!(config.host.to_string(), "127.0.0.1");
         assert_eq!(config.port, 9099);
     }
@@ -399,11 +374,8 @@ mod tests {
 
     #[test]
     fn a_repeated_option_keeps_the_last_value() {
-        let config = resolve(
-            &arguments(&["--port", "9100", "--port", "9200"]),
-            no_variables,
-        )
-        .expect("both values are valid");
+        let config = resolve(&arguments(&["--port", "9100", "--port", "9200"]), no_variables)
+            .expect("both values are valid");
         assert_eq!(config.port, 9200);
     }
 
@@ -539,10 +511,7 @@ mod tests {
         for argument in ["--port=", "--port= ", "--host=", "--host=  "] {
             let error = resolve(&arguments(&[argument]), no_variables)
                 .expect_err("the option carries no value");
-            assert!(
-                matches!(error, ConfigError::MissingValue { .. }),
-                "{argument}: {error:?}"
-            );
+            assert!(matches!(error, ConfigError::MissingValue { .. }), "{argument}: {error:?}");
         }
     }
 
@@ -553,10 +522,7 @@ mod tests {
         for argument in ["--hostile", "--ports", "--host-name", "--portable=3"] {
             let error = resolve(&arguments(&[argument]), no_variables)
                 .expect_err("the argument is unknown");
-            assert!(
-                matches!(error, ConfigError::UnknownArgument { .. }),
-                "{argument}: {error:?}"
-            );
+            assert!(matches!(error, ConfigError::UnknownArgument { .. }), "{argument}: {error:?}");
         }
     }
 
@@ -574,22 +540,18 @@ mod tests {
     // correct earlier value cannot mask a mistake in a later one.
     #[test]
     fn the_last_option_wins_even_when_it_is_refused() {
-        let error = resolve(
-            &arguments(&["--host", "0.0.0.0", "--host", "not-an-address"]),
-            no_variables,
-        )
-        .expect_err("the last value is refused");
+        let error =
+            resolve(&arguments(&["--host", "0.0.0.0", "--host", "not-an-address"]), no_variables)
+                .expect_err("the last value is refused");
         assert!(error.to_string().contains("not-an-address"), "{error}");
     }
 
     // BMS-FR-05: a losing value is never used, so it is never checked either.
     #[test]
     fn an_invalid_variable_is_ignored_when_the_option_wins() {
-        let config = resolve(
-            &arguments(&["--port", "9100"]),
-            variables(&[(PORT_VARIABLE, "not-a-port")]),
-        )
-        .expect("the option supplies the value that is used");
+        let config =
+            resolve(&arguments(&["--port", "9100"]), variables(&[(PORT_VARIABLE, "not-a-port")]))
+                .expect("the option supplies the value that is used");
         assert_eq!(config.port, 9100);
     }
 }

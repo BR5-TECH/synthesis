@@ -31,7 +31,6 @@
 //! Everything here but `checkout_branch_at` and `fetch_remote_branches` is
 //! read-only.
 
-
 pub mod index_lock;
 
 pub mod branch_compare;
@@ -161,17 +160,9 @@ pub fn rollback_paths_reported<S: LogSink + Clone + Send + 'static>(
                     log_fields! { "error" => error.clone() },
                 );
             }
-            let restored: usize = outcome
-                .entries
-                .iter()
-                .map(|e| e.restored_paths.len())
-                .sum();
+            let restored: usize = outcome.entries.iter().map(|e| e.restored_paths.len()).sum();
             let removed: usize = outcome.entries.iter().map(|e| e.removed_paths.len()).sum();
-            let failed = outcome
-                .entries
-                .iter()
-                .filter(|e| e.outcome == ROLLBACK_FAILED)
-                .count();
+            let failed = outcome.entries.iter().filter(|e| e.outcome == ROLLBACK_FAILED).count();
             let mut fields = fields;
             fields.insert("restoredCount".to_string(), serde_json::json!(restored));
             fields.insert("removedCount".to_string(), serde_json::json!(removed));
@@ -179,17 +170,9 @@ pub fn rollback_paths_reported<S: LogSink + Clone + Send + 'static>(
             log_ok(
                 sink,
                 buffer,
-                if failed > 0 {
-                    LogLevel::Warn
-                } else {
-                    LogLevel::Info
-                },
+                if failed > 0 { LogLevel::Warn } else { LogLevel::Info },
                 LOCAL,
-                if failed > 0 {
-                    "rollback completed with failures"
-                } else {
-                    "rollback completed"
-                },
+                if failed > 0 { "rollback completed with failures" } else { "rollback completed" },
                 fields,
             );
             Ok(outcome)
@@ -256,20 +239,10 @@ pub fn diff_reported<S: LogSink + Clone + Send + 'static>(
             // while the diff text itself is the author's content.
             fields.insert("hunks".to_string(), serde_json::json!(payload.hunks.len()));
             fields.insert("isBinary".to_string(), serde_json::json!(payload.is_binary));
-            fields.insert(
-                "durationMs".to_string(),
-                serde_json::json!(duration_ms(started)),
-            );
+            fields.insert("durationMs".to_string(), serde_json::json!(duration_ms(started)));
             log_ok(sink, buffer, LogLevel::Debug, LOCAL, "diff computed", fields);
         }
-        Err(error) => log_failure(
-            sink,
-            buffer,
-            LOCAL,
-            MSG_DIFF_FAILED,
-            error,
-            scope_fields(scope),
-        ),
+        Err(error) => log_failure(sink, buffer, LOCAL, MSG_DIFF_FAILED, error, scope_fields(scope)),
     }
     result
 }
@@ -291,14 +264,8 @@ pub fn file_revisions_reported<S: LogSink + Clone + Send + 'static>(
             // distinction between an addition, a deletion, and a file that
             // exists and is empty (GTC-FR-16) is exactly what a reader chasing a
             // wrongly-rendered comparison needs. The text is never logged.
-            fields.insert(
-                "hasOld".to_string(),
-                serde_json::json!(revisions.old.is_some()),
-            );
-            fields.insert(
-                "hasNew".to_string(),
-                serde_json::json!(revisions.new.is_some()),
-            );
+            fields.insert("hasOld".to_string(), serde_json::json!(revisions.old.is_some()));
+            fields.insert("hasNew".to_string(), serde_json::json!(revisions.new.is_some()));
             fields.insert(
                 "oldChars".to_string(),
                 serde_json::json!(revisions.old.as_ref().map(String::len)),
@@ -307,31 +274,13 @@ pub fn file_revisions_reported<S: LogSink + Clone + Send + 'static>(
                 "newChars".to_string(),
                 serde_json::json!(revisions.new.as_ref().map(String::len)),
             );
-            fields.insert(
-                "isBinary".to_string(),
-                serde_json::json!(revisions.is_binary),
-            );
-            fields.insert(
-                "durationMs".to_string(),
-                serde_json::json!(duration_ms(started)),
-            );
-            log_ok(
-                sink,
-                buffer,
-                LogLevel::Debug,
-                LOCAL,
-                "file revisions read",
-                fields,
-            );
+            fields.insert("isBinary".to_string(), serde_json::json!(revisions.is_binary));
+            fields.insert("durationMs".to_string(), serde_json::json!(duration_ms(started)));
+            log_ok(sink, buffer, LogLevel::Debug, LOCAL, "file revisions read", fields);
         }
-        Err(error) => log_failure(
-            sink,
-            buffer,
-            LOCAL,
-            MSG_REVISIONS_FAILED,
-            error,
-            scope_fields(scope),
-        ),
+        Err(error) => {
+            log_failure(sink, buffer, LOCAL, MSG_REVISIONS_FAILED, error, scope_fields(scope))
+        }
     }
     result
 }
@@ -358,14 +307,7 @@ pub fn branches_reported<S: LogSink + Clone + Send + 'static>(
                 "current" => branches.iter().find(|b| b.is_current).map(|b| b.name.as_str()).unwrap_or("none"),
             },
         ),
-        Err(error) => log_failure(
-            sink,
-            buffer,
-            LOCAL,
-            MSG_LISTING_FAILED,
-            error,
-            Fields::new(),
-        ),
+        Err(error) => log_failure(sink, buffer, LOCAL, MSG_LISTING_FAILED, error, Fields::new()),
     }
     result
 }
@@ -398,9 +340,7 @@ pub fn commit_paths(
     // here rather than left to the watcher, which does not watch `.git`.
     if let Err(e) = app.emit(
         changes::CHANGES_UPDATED,
-        changes::ChangesUpdatedPayload {
-            change_count: paths.len(),
-        },
+        changes::ChangesUpdatedPayload { change_count: paths.len() },
     ) {
         // The commit is made; an undelivered announcement must not undo it. It
         // is still worth a record: every surface following the event is now
@@ -430,12 +370,7 @@ pub fn get_working_tree_status(
     project: State<'_, ProjectState>,
 ) -> Result<WorkingTreeStatus, String> {
     let root = project.require_root()?;
-    working_tree_status_reported(
-        &app,
-        &logging::BUFFER,
-        &root,
-        expected_worktree.as_deref(),
-    )
+    working_tree_status_reported(&app, &logging::BUFFER, &root, expected_worktree.as_deref())
 }
 
 /// GTC-FR-23: return the named paths to `HEAD`, per path rather than atomically.

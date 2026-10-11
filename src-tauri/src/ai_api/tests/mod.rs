@@ -23,10 +23,8 @@ struct FakeProber {
 impl FakeProber {
     fn returning(models: &[(&str, &str)]) -> Arc<Self> {
         let p = Arc::new(Self::default());
-        *p.models.lock().unwrap() = models
-            .iter()
-            .map(|(id, label)| ModelOption::new(id, label))
-            .collect();
+        *p.models.lock().unwrap() =
+            models.iter().map(|(id, label)| ModelOption::new(id, label)).collect();
         p
     }
     fn failing(e: ProbeError) -> Arc<Self> {
@@ -35,10 +33,8 @@ impl FakeProber {
         p
     }
     fn set_models(&self, models: &[(&str, &str)]) {
-        *self.models.lock().unwrap() = models
-            .iter()
-            .map(|(id, label)| ModelOption::new(id, label))
-            .collect();
+        *self.models.lock().unwrap() =
+            models.iter().map(|(id, label)| ModelOption::new(id, label)).collect();
     }
     /// Models carrying reasoning descriptors, which is what an OpenRouter
     /// probe returns (AAP-FR-24).
@@ -127,10 +123,7 @@ impl SecretStore for Arc<FakeKeychain> {
         if *self.locked.lock().unwrap() {
             return Err(SecretUnavailable("locked".into()));
         }
-        self.entries
-            .lock()
-            .unwrap()
-            .insert(id.to_string(), secret.to_string());
+        self.entries.lock().unwrap().insert(id.to_string(), secret.to_string());
         Ok(())
     }
     fn get(&self, id: &str) -> Result<Option<String>, SecretUnavailable> {
@@ -166,16 +159,12 @@ fn harness(prober: Arc<FakeProber>, keys: Arc<FakeKeychain>) -> Harness {
 }
 
 fn ok_harness() -> Harness {
-    harness(
-        FakeProber::returning(&[("gpt-5", "GPT-5"), ("gpt-4o", "GPT-4o")]),
-        FakeKeychain::new(),
-    )
+    harness(FakeProber::returning(&[("gpt-5", "GPT-5"), ("gpt-4o", "GPT-4o")]), FakeKeychain::new())
 }
 
 fn find<'a>(list: &'a [AiApiIntegration], provider: &str) -> &'a AiApiIntegration {
     list.iter().find(|i| i.provider == provider).unwrap()
 }
-
 
 mod capabilities;
 mod catalogue;

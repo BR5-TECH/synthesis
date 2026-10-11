@@ -115,9 +115,8 @@ fn a_revise_verdict_starts_one_further_pass_carrying_its_findings() {
     assert_eq!(work.len(), 2);
     assert_eq!(work[1].purpose, "revise");
     assert_eq!(work[1].pass, 2);
-    let instruction = work[1]
-        .instruction_field("loop_instruction")
-        .expect("a revise turn carries the findings");
+    let instruction =
+        work[1].instruction_field("loop_instruction").expect("a revise turn carries the findings");
     assert!(
         instruction.contains("The empty state is not there."),
         "the finding travels whole: {instruction}"
@@ -213,11 +212,7 @@ fn the_commit_holds_what_the_work_turn_wrote_and_nothing_else() {
     paths.dedup();
     assert_eq!(
         paths,
-        vec![
-            ".gitignore".to_string(),
-            "README.md".to_string(),
-            "src/panel.ts".to_string()
-        ]
+        vec![".gitignore".to_string(), "README.md".to_string(), "src/panel.ts".to_string()]
     );
 }
 
@@ -248,7 +243,9 @@ fn a_turn_that_could_not_be_launched_rests_the_run() {
     let stream = fx.stream("editor");
     let run = fx.enqueue(&stream, "Add the empty state to the panel.");
 
-    let dispatch = ScriptedDispatch::new(vec![Turn::answering(Answer::Unlaunchable(AgentExecutionError::RuntimeUnavailable))]);
+    let dispatch = ScriptedDispatch::new(vec![Turn::answering(Answer::Unlaunchable(
+        AgentExecutionError::RuntimeUnavailable,
+    ))]);
     let run = fx.drive(&run, dispatch);
 
     assert_eq!(run.state, GraduationRunState::Interrupted);
@@ -337,22 +334,18 @@ fn work_standing_in_the_stream_becomes_the_runs_base_commit() {
     std::fs::write(stream.worktree().join("authored.md"), "mine\n").unwrap();
     let run = fx.enqueue(&stream, "Add the empty state to the panel.");
 
-    let dispatch = ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]);
+    let dispatch =
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]);
     let run = fx.drive(&run, dispatch);
 
     let base = run.base_commit.clone().expect("a base commit");
     let repo = git2::Repository::open(stream.worktree()).expect("stream repo");
-    let base_commit = repo
-        .find_commit(git2::Oid::from_str(&base).unwrap())
-        .unwrap();
+    let base_commit = repo.find_commit(git2::Oid::from_str(&base).unwrap()).unwrap();
     assert!(
         base_commit.tree().unwrap().get_path(Path::new("authored.md")).is_ok(),
         "the author's own work is inside the base commit"
     );
-    assert!(
-        !run.commits.contains(&base),
-        "the base commit is not one the run made"
-    );
+    assert!(!run.commits.contains(&base), "the base commit is not one the run made");
 }
 
 /// GRL-FR-VIAT: a verdict the application cannot read is refused whole.
@@ -378,10 +371,7 @@ fn a_verdict_with_no_finding_beside_revise_is_refused() {
     let run = fx.drive(&run, dispatch);
 
     assert_eq!(run.state, GraduationRunState::Blocked);
-    assert_eq!(
-        run.blocker.as_ref().map(|b| b.code.as_str()),
-        Some("review_verdict_invalid")
-    );
+    assert_eq!(run.blocker.as_ref().map(|b| b.code.as_str()), Some("review_verdict_invalid"));
 }
 
 /// GRL-FR-TVXI: a verdict the application cannot read is asked again as a
@@ -421,10 +411,7 @@ fn an_unreadable_verdict_asks_the_review_again() {
         correction.contains("verdict") && correction.contains("findings"),
         "the correction names the shape: {correction}"
     );
-    assert_eq!(
-        run.checkpoint.verdict_refusals, 0,
-        "a readable verdict resets the count"
-    );
+    assert_eq!(run.checkpoint.verdict_refusals, 0, "a readable verdict resets the count");
 }
 
 /// GRL-FR-TVXI: a second consecutive unreadable verdict blocks the run, and the
@@ -449,16 +436,13 @@ fn two_unreadable_verdicts_block_the_run_and_continue_resets_the_count() {
     let run = fx.drive(&run, dispatch.clone());
 
     assert_eq!(run.state, GraduationRunState::Blocked);
-    assert_eq!(
-        run.blocker.as_ref().map(|b| b.code.as_str()),
-        Some("review_verdict_invalid")
-    );
+    assert_eq!(run.blocker.as_ref().map(|b| b.code.as_str()), Some("review_verdict_invalid"));
     assert_eq!(run.review_turns, 2);
     assert_eq!(run.work_turns, 1);
 
     fx.app.state::<GraduationState>().set_loop_enabled(false);
-    let continued =
-        crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone()).expect("continued");
+    let continued = crate::graduation::continue_graduation_run(fx.app.clone(), run.id.clone())
+        .expect("continued");
     fx.app.state::<GraduationState>().set_loop_enabled(true);
     assert_eq!(continued.checkpoint.verdict_refusals, 0);
 }
@@ -471,10 +455,9 @@ fn a_turn_that_ran_out_of_time_keeps_what_it_wrote() {
     let stream = fx.stream("editor");
     let run = fx.enqueue(&stream, "Write the panel.");
 
-    let dispatch = ScriptedDispatch::new(vec![Turn::answering(Answer::Process(
-        ProcessOutcome::Timeout,
-    ))
-    .writing("src/panel.ts", "half\n")]);
+    let dispatch =
+        ScriptedDispatch::new(vec![Turn::answering(Answer::Process(ProcessOutcome::Timeout))
+            .writing("src/panel.ts", "half\n")]);
     let run = fx.drive(&run, dispatch);
 
     assert_eq!(run.state, GraduationRunState::Interrupted);
@@ -499,10 +482,7 @@ fn an_escalation_records_the_session_its_answers_continue() {
     let run = fx.drive(&run, dispatch);
 
     let escalation = run.escalation.expect("the questions");
-    assert_eq!(
-        escalation.resume.and_then(|r| r.session_id).as_deref(),
-        Some("s1")
-    );
+    assert_eq!(escalation.resume.and_then(|r| r.session_id).as_deref(), Some("s1"));
 }
 
 /// GXD-FR-IOZU: every turn carries an activity sink bound to its run, so what
@@ -513,10 +493,8 @@ fn every_turn_reports_its_activity_against_its_own_run() {
     let stream = fx.stream("editor");
     let run = fx.enqueue(&stream, "Write the panel.");
 
-    let dispatch = ScriptedDispatch::new(vec![
-        Turn::work().writing("src/panel.ts", "1\n"),
-        Turn::ready(),
-    ]);
+    let dispatch =
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]);
     let run = fx.drive(&run, dispatch.clone());
 
     assert!(
@@ -527,11 +505,8 @@ fn every_turn_reports_its_activity_against_its_own_run() {
         dispatch.seen().iter().all(|seen| seen.had_durable_output),
         "a turn with no durable sink is a run whose record nobody keeps"
     );
-    let store = fx
-        .app
-        .state::<std::sync::Arc<crate::agent_activity::ActivityStore>>()
-        .inner()
-        .clone();
+    let store =
+        fx.app.state::<std::sync::Arc<crate::agent_activity::ActivityStore>>().inner().clone();
     let page = store.read(&run.id, None, None);
     assert_eq!(
         page.records.len(),
@@ -606,10 +581,7 @@ fn discarding_a_run_mid_turn_leaves_it_discarded() {
     assert_eq!(run.state, GraduationRunState::Discarded);
     // GRD-FR-GMTX: the stream outlives the run, and nothing of it is reclaimed.
     assert!(stream.worktree().is_dir());
-    assert!(fx
-        .repo()
-        .find_branch(&stream.branch, git2::BranchType::Local)
-        .is_ok());
+    assert!(fx.repo().find_branch(&stream.branch, git2::BranchType::Local).is_ok());
     assert!(fx.app.state::<GraduationState>().holder_of(&stream.id).is_none());
 }
 
@@ -623,9 +595,7 @@ fn a_review_that_cannot_decide_escalates_to_the_author() {
 
     let dispatch = ScriptedDispatch::new(vec![
         Turn::work().writing("src/panel.ts", "1\n"),
-        Turn::answering(Answer::Escalate(vec![
-            "What should the empty panel say?".to_string(),
-        ])),
+        Turn::answering(Answer::Escalate(vec!["What should the empty panel say?".to_string()])),
     ]);
     let run = fx.drive(&run, dispatch.clone());
 
@@ -655,10 +625,7 @@ fn reverting_a_run_makes_new_commits_and_rewrites_no_history() {
 
     let run = fx.drive(
         &run,
-        ScriptedDispatch::new(vec![
-            Turn::work().writing("src/panel.ts", "1\n"),
-            Turn::ready(),
-        ]),
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]),
     );
     let repo = git2::Repository::open(stream.worktree()).unwrap();
     let before: Vec<String> = {
@@ -712,10 +679,7 @@ fn a_review_turn_stopped_mid_way_keeps_the_work_and_reclaims_its_checkout() {
     assert_eq!(run.commits.len(), 1, "what the work turn wrote is kept");
     let checkout = dispatch.of_part("review")[0].directory.clone();
     assert!(!checkout.exists(), "the checkout goes even on a stop");
-    assert!(!crate::streams::registers_worktree(
-        &fx.repo(),
-        &format!("{}-rv", run.id)
-    ));
+    assert!(!crate::streams::registers_worktree(&fx.repo(), &format!("{}-rv", run.id)));
 }
 
 /// GRD-FR-EGWS, GRL-FR-BRJO: a run writes into its stream's working copy and
@@ -729,17 +693,11 @@ fn a_run_writes_nothing_into_the_authors_own_checkout() {
     let before = tree_under(&fx.root());
     fx.drive(
         &run,
-        ScriptedDispatch::new(vec![
-            Turn::work().writing("src/panel.ts", "1\n"),
-            Turn::ready(),
-        ]),
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]),
     );
     let after = tree_under(&fx.root());
 
-    assert_eq!(
-        before, after,
-        "the author's own checkout is byte-identical after the run"
-    );
+    assert_eq!(before, after, "the author's own checkout is byte-identical after the run");
 }
 
 /// GXD-FR-XEUX: the seam ends no run. Every process outcome and every pre-launch
@@ -756,15 +714,9 @@ fn no_outcome_of_the_seam_ends_a_run() {
         let fx = Fixture::new();
         let stream = fx.stream("editor");
         let run = fx.enqueue(&stream, "Write the panel.");
-        let run = fx.drive(
-            &run,
-            ScriptedDispatch::new(vec![Turn::answering(Answer::Process(outcome))]),
-        );
-        assert!(
-            !run.state.is_terminal(),
-            "{outcome:?} ended the run at {:?}",
-            run.state
-        );
+        let run =
+            fx.drive(&run, ScriptedDispatch::new(vec![Turn::answering(Answer::Process(outcome))]));
+        assert!(!run.state.is_terminal(), "{outcome:?} ended the run at {:?}", run.state);
         assert_eq!(run.state, GraduationRunState::Interrupted);
     }
 
@@ -779,11 +731,7 @@ fn no_outcome_of_the_seam_ends_a_run() {
             &run,
             ScriptedDispatch::new(vec![Turn::answering(Answer::Unlaunchable(error.clone()))]),
         );
-        assert!(
-            !run.state.is_terminal(),
-            "{error:?} ended the run at {:?}",
-            run.state
-        );
+        assert!(!run.state.is_terminal(), "{error:?} ended the run at {:?}", run.state);
     }
 }
 
@@ -819,10 +767,7 @@ fn a_run_whose_stream_working_copy_is_gone_rests_for_the_author() {
     let run = fx.drive(&run, dispatch.clone());
 
     assert_eq!(run.state, GraduationRunState::Blocked);
-    assert_eq!(
-        run.blocker.as_ref().map(|b| b.code.as_str()),
-        Some("stream_missing")
-    );
+    assert_eq!(run.blocker.as_ref().map(|b| b.code.as_str()), Some("stream_missing"));
     assert_eq!(dispatch.turns_taken(), 0, "no turn is dispatched into nothing");
     assert!(
         !run.checkpoint.changed_paths.is_empty(),

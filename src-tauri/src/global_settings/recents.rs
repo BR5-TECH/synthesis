@@ -30,11 +30,8 @@ pub fn ordered_visible_recents_with_cap(
     entries: &[RecentProjectEntry],
     cap: usize,
 ) -> Vec<RecentProjectEntry> {
-    let mut kept: Vec<RecentProjectEntry> = entries
-        .iter()
-        .filter(|e| e.pinned || !e.missing)
-        .cloned()
-        .collect();
+    let mut kept: Vec<RecentProjectEntry> =
+        entries.iter().filter(|e| e.pinned || !e.missing).cloned().collect();
 
     // Pinned-first, then recency-desc. `last_opened_at` is ISO-8601 UTC, so a
     // reverse string comparison is a reverse-chronological comparison.
@@ -45,9 +42,7 @@ pub fn ordered_visible_recents_with_cap(
     // sort keeps the more-recently-recorded one ahead. An unstable sort would
     // break that tiebreak.
     kept.sort_by(|a, b| {
-        b.pinned
-            .cmp(&a.pinned)
-            .then_with(|| b.last_opened_at.cmp(&a.last_opened_at))
+        b.pinned.cmp(&a.pinned).then_with(|| b.last_opened_at.cmp(&a.last_opened_at))
     });
 
     let mut out = Vec::with_capacity(kept.len());
@@ -86,10 +81,7 @@ pub fn derive_id_from_source(source: &str) -> String {
 /// Current wall-clock time as an ISO-8601 UTC string (`YYYY-MM-DDTHH:MM:SSZ`).
 /// Used to stamp the MRU `last_opened_at` on project open/create.
 pub fn now_iso8601() -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let secs = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     unix_secs_to_iso8601(secs)
 }
 

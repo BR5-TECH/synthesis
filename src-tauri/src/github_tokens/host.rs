@@ -41,10 +41,7 @@ pub fn normalize_host(input: &str) -> Result<String, String> {
         Some(_) => return Err(ERR_INVALID_HOST.to_string()),
         None => lowered.as_str(),
     };
-    let authority = without_scheme
-        .split(['/', '?', '#'])
-        .next()
-        .unwrap_or_default();
+    let authority = without_scheme.split(['/', '?', '#']).next().unwrap_or_default();
     if authority.is_empty() {
         return Ok(DEFAULT_HOST.to_string());
     }
@@ -70,9 +67,7 @@ fn is_valid_host(host: &str) -> bool {
             && label.len() <= MAX_LABEL_LEN
             && !label.starts_with('-')
             && !label.ends_with('-')
-            && label
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            && label.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
     })
 }
 

@@ -70,26 +70,15 @@ fn author_events() -> NSEventMask {
 /// # Safety
 /// `ns_window` must be a live `NSWindow` pointer, and the caller must be on
 /// the main thread.
-pub unsafe fn set_window_blocked(
-    ns_window: *mut std::ffi::c_void,
-    blocked: bool,
-) -> BlockReport {
+pub unsafe fn set_window_blocked(ns_window: *mut std::ffi::c_void, blocked: bool) -> BlockReport {
     let Some(mtm) = MainThreadMarker::new() else {
-        return BlockReport {
-            monitor: false,
-            overlay: false,
-            dropped: 0,
-        };
+        return BlockReport { monitor: false, overlay: false, dropped: 0 };
     };
     // Whatever is installed goes first, so a second block request replaces
     // it rather than stacking on it.
     let dropped = release();
     if !blocked {
-        return BlockReport {
-            monitor: false,
-            overlay: false,
-            dropped,
-        };
+        return BlockReport { monitor: false, overlay: false, dropped };
     }
     let window: &NSWindow = unsafe { &*ns_window.cast() };
     BlockReport {
@@ -106,9 +95,7 @@ fn install_monitor(window: &NSWindow, mtm: MainThreadMarker) -> bool {
     DROPPED.with(|count| count.set(0));
     let handler = RcBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
         let event = unsafe { event.as_ref() };
-        let for_parent = event
-            .window(mtm)
-            .is_some_and(|window| window.windowNumber() == parent);
+        let for_parent = event.window(mtm).is_some_and(|window| window.windowNumber() == parent);
         if for_parent {
             // Dropped: nothing else sees it, so it reaches neither the
             // parent's webview nor a menu key equivalent behind it.
@@ -120,9 +107,8 @@ fn install_monitor(window: &NSWindow, mtm: MainThreadMarker) -> bool {
             (event as *const NSEvent).cast_mut()
         }
     });
-    let monitor = unsafe {
-        NSEvent::addLocalMonitorForEventsMatchingMask_handler(author_events(), &handler)
-    };
+    let monitor =
+        unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(author_events(), &handler) };
     let installed = monitor.is_some();
     MONITOR.with(|slot| *slot.borrow_mut() = monitor);
     installed
@@ -147,11 +133,7 @@ fn install_overlay(window: &NSWindow, mtm: MainThreadMarker) -> bool {
     let responder = window.firstResponder();
     window.makeFirstResponder(None);
     OVERLAY.with(|slot| {
-        *slot.borrow_mut() = Some(Overlay {
-            view,
-            responder,
-            window: window.retain(),
-        })
+        *slot.borrow_mut() = Some(Overlay { view, responder, window: window.retain() })
     });
     true
 }
@@ -166,9 +148,7 @@ fn release() -> u64 {
     OVERLAY.with(|slot| {
         if let Some(overlay) = slot.borrow_mut().take() {
             overlay.view.removeFromSuperview();
-            overlay
-                .window
-                .makeFirstResponder(overlay.responder.as_deref());
+            overlay.window.makeFirstResponder(overlay.responder.as_deref());
         }
     });
     DROPPED.with(|count| count.replace(0))

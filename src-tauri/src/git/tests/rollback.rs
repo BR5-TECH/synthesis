@@ -10,10 +10,7 @@ use super::*;
 // -----------------------------------------------------------------------
 
 /// The entry for `path`, so a test reads one outcome rather than an index.
-fn rollback_entry<'a>(
-    outcome: &'a RollbackOutcome,
-    path: &str,
-) -> &'a RollbackEntryOutcome {
+fn rollback_entry<'a>(outcome: &'a RollbackOutcome, path: &str) -> &'a RollbackEntryOutcome {
     outcome
         .entries
         .iter()
@@ -23,9 +20,7 @@ fn rollback_entry<'a>(
 
 fn rollback(f: &Fixture, paths: &[&str]) -> RollbackOutcome {
     let owned: Vec<String> = paths.iter().map(|p| p.to_string()).collect();
-    rollback_named_paths(&crate::fs::RootFs::for_root(f.root()), &owned)
-        .unwrap()
-        .0
+    rollback_named_paths(&crate::fs::RootFs::for_root(f.root()), &owned).unwrap().0
 }
 
 #[test]
@@ -46,10 +41,7 @@ fn rollback_restores_tracked_paths_and_removes_ones_head_does_not_hold() {
     f.stage_all();
     f.write("c.md", "three\n"); // …and edited again, unstaged
 
-    let outcome = rollback(
-        &f,
-        &["a.md", "b.md", "c.md", "gone.md", "new.md"],
-    );
+    let outcome = rollback(&f, &["a.md", "b.md", "c.md", "gone.md", "new.md"]);
 
     // Every tracked path is back at HEAD, staged and unstaged edits alike.
     for name in ["a.md", "b.md", "c.md", "gone.md"] {
@@ -151,14 +143,11 @@ fn rollback_undoes_a_rename_at_both_of_its_locations() {
     let f = Fixture::new();
     // Long enough for libgit2 to pair the two halves as a rename, and edited
     // only slightly so the similarity score still clears its threshold.
-    let original = "fn main() {\n    // the entry point, long enough to pair as a rename\n    run();\n}\n";
+    let original =
+        "fn main() {\n    // the entry point, long enough to pair as a rename\n    run();\n}\n";
     f.write("src-tauri/main.rs", original);
     f.commit("base");
-    std::fs::rename(
-        f.root().join("src-tauri/main.rs"),
-        f.root().join("src-tauri/lib.rs"),
-    )
-    .unwrap();
+    std::fs::rename(f.root().join("src-tauri/main.rs"), f.root().join("src-tauri/lib.rs")).unwrap();
     f.write(
         "src-tauri/lib.rs",
         "fn main() {\n    // the entry point, long enough to pair as a rename\n    run_edited();\n}\n",
@@ -208,11 +197,8 @@ fn rollback_validates_before_writing_anything() {
     let outside = TempDir::new().unwrap();
     std::fs::write(outside.path().join("a.md"), "one\n").unwrap();
     assert_eq!(
-        rollback_named_paths(
-            &crate::fs::RootFs::for_root(outside.path()),
-            &["a.md".into()]
-        )
-        .unwrap_err(),
+        rollback_named_paths(&crate::fs::RootFs::for_root(outside.path()), &["a.md".into()])
+            .unwrap_err(),
         ERR_NOT_A_REPO
     );
 }
@@ -254,10 +240,7 @@ fn rollback_touches_nothing_it_was_not_given() {
     rollback(&f, &["a.md"]);
 
     // The unnamed path keeps its modification AND its index state.
-    assert_eq!(
-        std::fs::read_to_string(f.root().join("staged.md")).unwrap(),
-        "two\n"
-    );
+    assert_eq!(std::fs::read_to_string(f.root().join("staged.md")).unwrap(), "two\n");
     let repo = f.repo();
     let statuses = repo.statuses(None).unwrap();
     let staged = statuses

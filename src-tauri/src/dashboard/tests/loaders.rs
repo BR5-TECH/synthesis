@@ -12,10 +12,7 @@ use super::*;
 /// rest on how fast the test ran.
 fn set_mtime(path: &std::path::Path, unix_secs: u64) {
     let file = std::fs::File::options().write(true).open(path).unwrap();
-    file.set_times(
-        std::fs::FileTimes::new().set_modified(at(unix_secs)),
-    )
-    .unwrap();
+    file.set_times(std::fs::FileTimes::new().set_modified(at(unix_secs))).unwrap();
 }
 
 fn write(root: &crate::fs::RootFs, rel: &str, body: &str, unix_secs: u64) {
@@ -37,7 +34,7 @@ fn recently_edited_reads_the_project_and_its_filesystem_and_nothing_else() {
     let root = crate::fs::RootFs::for_root(dir.path());
     std::fs::create_dir_all(dir.path().join(".synthesis")).unwrap();
     for i in 0..8u64 {
-        write(&root, &format!("specs/a{i}.spec.md", ), "body\n", 1_000 + i);
+        write(&root, &format!("specs/a{i}.spec.md",), "body\n", 1_000 + i);
     }
     // Carries no artifact type, and is the most recently written file in the
     // project — so its absence below is the assertion (PST-FR-23).
@@ -79,12 +76,7 @@ fn recently_edited_reads_the_project_and_its_filesystem_and_nothing_else() {
     // Project panel reads it as `analyst` is two surfaces disagreeing about
     // one artifact. Written last, so it leads and the assertion names the
     // row it is about.
-    write(
-        &root,
-        ".claude/skills/analyst/SKILL.md",
-        "---\nname: analyst\n---\n\nbody\n",
-        40_000,
-    );
+    write(&root, ".claude/skills/analyst/SKILL.md", "---\nname: analyst\n---\n\nbody\n", 40_000);
     let named = recently_edited_impl(&app.handle().clone(), &root);
     assert_eq!(
         named[0].name, "analyst",
@@ -178,12 +170,8 @@ fn active_drafts_reads_the_prompt_times_and_the_stored_records() {
         if graduate {
             crate::drafts::set_draft_graduated(&root, &created.draft.id, "run-1").unwrap();
         } else {
-            crate::drafts::set_draft_status_impl(
-                &root,
-                &created.draft.id,
-                DraftStatus::Archived,
-            )
-            .unwrap();
+            crate::drafts::set_draft_status_impl(&root, &created.draft.id, DraftStatus::Archived)
+                .unwrap();
         }
     }
 
@@ -278,13 +266,10 @@ fn pending_git_reports_commits_to_push_and_commits_to_fetch_the_right_way_round(
         let mut index = repo.index().unwrap();
         let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
         let sig = repo.signature().unwrap();
-        let parents: Vec<git2::Commit> = parent
-            .map(|oid| repo.find_commit(oid).unwrap())
-            .into_iter()
-            .collect();
+        let parents: Vec<git2::Commit> =
+            parent.map(|oid| repo.find_commit(oid).unwrap()).into_iter().collect();
         let refs: Vec<&git2::Commit> = parents.iter().collect();
-        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &refs)
-            .unwrap()
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &refs).unwrap()
     };
 
     // A shared base, then one commit only the "remote" holds and two only
@@ -293,8 +278,7 @@ fn pending_git_reports_commits_to_push_and_commits_to_fetch_the_right_way_round(
     let behind_one = commit(&repo, "on the remote", Some(base));
     // The upstream ref, planted directly: this is what `upstream_sync_state`
     // reads, and planting it reaches no network.
-    repo.reference("refs/remotes/origin/main", behind_one, true, "upstream")
-        .unwrap();
+    repo.reference("refs/remotes/origin/main", behind_one, true, "upstream").unwrap();
     repo.reference("refs/heads/main", base, true, "rewind").unwrap();
     repo.set_head("refs/heads/main").unwrap();
     let ahead_one = commit(&repo, "mine 1", Some(base));
@@ -305,14 +289,6 @@ fn pending_git_reports_commits_to_push_and_commits_to_fetch_the_right_way_round(
     }
 
     let counts = pending_git_impl(&root).unwrap();
-    assert_eq!(
-        counts.unpushed_commits,
-        Some(2),
-        "commits the branch holds above its upstream"
-    );
-    assert_eq!(
-        counts.fetchable_commits,
-        Some(1),
-        "commits the upstream holds above the branch"
-    );
+    assert_eq!(counts.unpushed_commits, Some(2), "commits the branch holds above its upstream");
+    assert_eq!(counts.fetchable_commits, Some(1), "commits the upstream holds above the branch");
 }

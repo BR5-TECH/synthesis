@@ -261,9 +261,7 @@ pub fn classify_hosted(
                                 RemoteEligibility::TlsUntrusted
                             }
                             ProbeOutcome::Publishable => RemoteEligibility::Eligible,
-                            ProbeOutcome::IssuesUnreadable => {
-                                RemoteEligibility::IssuesInaccessible
-                            }
+                            ProbeOutcome::IssuesUnreadable => RemoteEligibility::IssuesInaccessible,
                             ProbeOutcome::IssuesDisabled => RemoteEligibility::IssuesDisabled,
                             ProbeOutcome::CreateForbidden => {
                                 RemoteEligibility::IssuesCreateForbidden

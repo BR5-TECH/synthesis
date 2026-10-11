@@ -65,16 +65,25 @@ fn published_is_set_only_over_active_and_never_by_a_caller() {
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "widget");
-    assert_eq!(crate::drafts::set_draft_published(&root, &id).unwrap().status, DraftStatus::Published);
+    assert_eq!(
+        crate::drafts::set_draft_published(&root, &id).unwrap().status,
+        DraftStatus::Published
+    );
     // A second publication leaves the record where it is.
-    assert_eq!(crate::drafts::set_draft_published(&root, &id).unwrap().status, DraftStatus::Published);
+    assert_eq!(
+        crate::drafts::set_draft_published(&root, &id).unwrap().status,
+        DraftStatus::Published
+    );
     // A published draft still takes a prompt write and a rename.
     save_prompt(&root, &id, "still editable\n");
     assert!(crate::drafts::rename_draft_impl(&root, &id, "widget 2").is_ok());
     // A graduated draft keeps `graduated`.
     let other = draft(&root, "other");
     crate::drafts::set_draft_graduated(&root, &other, "run-1").unwrap();
-    assert_eq!(crate::drafts::set_draft_published(&root, &other).unwrap().status, DraftStatus::Graduated);
+    assert_eq!(
+        crate::drafts::set_draft_published(&root, &other).unwrap().status,
+        DraftStatus::Graduated
+    );
     // No caller may set either position.
     assert_eq!(
         crate::drafts::set_draft_status_impl(&root, &id, DraftStatus::Published),
@@ -191,4 +200,3 @@ fn deleting_a_draft_removes_its_publication_store() {
     crate::drafts::delete_draft_impl(&root, &root, &id).expect("deletes");
     assert!(!path.exists());
 }
-

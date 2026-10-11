@@ -61,29 +61,24 @@ struct HealthResponse {
 /// The health route is the one route that needs no credential: it carries the
 /// version alone as its state, so the health answer cannot reach a record.
 pub fn build_router(state: ServiceState) -> Router {
-    let health = Router::new()
-        .route(HEALTH_PATH, get(health))
-        .with_state(state.version);
+    let health = Router::new().route(HEALTH_PATH, get(health)).with_state(state.version);
 
     // The record of the route, the status, and the identifiers a request
     // touched is written for the application routes alone. The health answer
     // holds one compiled-in version and names no record, so it writes none.
-    let application = crate::adapters::http::routes()
-        .with_state(state.http.clone())
-        .layer(axum::middleware::from_fn_with_state(
+    let application = crate::adapters::http::routes().with_state(state.http.clone()).layer(
+        axum::middleware::from_fn_with_state(
             state.http,
             crate::adapters::http::logging::log_requests,
-        ));
+        ),
+    );
 
     health.merge(application)
 }
 
 /// Answers `GET /v1/health` (BMS-FR-11, BMS-FR-12).
 async fn health(State(version): State<&'static str>) -> Json<HealthResponse> {
-    Json(HealthResponse {
-        version,
-        capabilities: CAPABILITIES,
-    })
+    Json(HealthResponse { version, capabilities: CAPABILITIES })
 }
 
 #[cfg(test)]
@@ -108,23 +103,15 @@ mod tests {
             .body(Body::empty())
             .expect("the request is well formed");
 
-        let response = router()
-            .oneshot(request)
-            .await
-            .expect("the router answers every request");
+        let response = router().oneshot(request).await.expect("the router answers every request");
 
         let status = response.status();
         let content_type = response
             .headers()
             .get(CONTENT_TYPE)
             .map(|value| value.to_str().unwrap_or_default().to_string());
-        let body = response
-            .into_body()
-            .collect()
-            .await
-            .expect("the body is readable")
-            .to_bytes()
-            .to_vec();
+        let body =
+            response.into_body().collect().await.expect("the body is readable").to_bytes().to_vec();
 
         (status, content_type, body)
     }
@@ -237,10 +224,7 @@ mod tests {
         ] {
             let (status, _, body) = call(method.clone(), HEALTH_PATH).await;
             assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED, "method {method}");
-            assert!(
-                body.is_empty(),
-                "method {method} carried application content"
-            );
+            assert!(body.is_empty(), "method {method} carried application content");
         }
     }
 
@@ -273,10 +257,7 @@ mod tests {
             .body(Body::empty())
             .expect("the request is well formed");
 
-        let response = router()
-            .oneshot(request)
-            .await
-            .expect("the router answers every request");
+        let response = router().oneshot(request).await.expect("the router answers every request");
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         assert!(response.headers().get("upgrade").is_none());

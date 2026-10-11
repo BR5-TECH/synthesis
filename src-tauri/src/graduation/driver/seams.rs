@@ -66,14 +66,11 @@ impl<R: tauri::Runtime> GraduationDispatch<R> for AgentCliDispatch {
             // that could route around the seam. Each absence maps onto the
             // pre-launch error GXD-FR-XEUX already classifies it as, rather than
             // onto a second vocabulary meaning the same thing.
-            let store = app
-                .try_state::<crate::global_settings::GlobalSettingsStore>()
-                .ok_or_else(|| {
-                    AgentExecutionError::IntegrationUnresolved("no_settings_store".to_string())
-                })?;
-            let integrations = app
-                .try_state::<crate::agentic::AgenticIntegrations>()
-                .ok_or_else(|| {
+            let store = app.try_state::<crate::global_settings::GlobalSettingsStore>().ok_or_else(
+                || AgentExecutionError::IntegrationUnresolved("no_settings_store".to_string()),
+            )?;
+            let integrations =
+                app.try_state::<crate::agentic::AgenticIntegrations>().ok_or_else(|| {
                     AgentExecutionError::IntegrationUnresolved("no_integrations".to_string())
                 })?;
             let fs = crate::graduation::store_fs(app).map_err(|_| {
@@ -102,9 +99,7 @@ impl<R: tauri::Runtime> GraduationDispatch<R> for AgentCliDispatch {
                 fs: &fs,
                 images: &images,
             };
-            AgentCliExecutor::default()
-                .execute_agent_cli(app, &context, request)
-                .await
+            AgentCliExecutor::default().execute_agent_cli(app, &context, request).await
         })
     }
 }

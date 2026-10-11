@@ -137,11 +137,7 @@ fn each_invocation_of_the_loop_gets_its_own_attempt_budget() {
     h.create_agent("arch", "");
     let (terminal, _) = run_one(&h, "arch");
 
-    assert_eq!(
-        terminal.state,
-        AgentTurnState::Delivered,
-        "a spent invocation is not a spent turn",
-    );
+    assert_eq!(terminal.state, AgentTurnState::Delivered, "a spent invocation is not a spent turn",);
     assert_eq!(h.seam.call_count(), 6, "the seam was reached once per physical attempt");
     let threads = h.threads("spec.md");
     assert_eq!(threads[0].comments.len(), 2, "exactly one comment was appended");
@@ -149,10 +145,7 @@ fn each_invocation_of_the_loop_gets_its_own_attempt_budget() {
 
     let records = records_where("turnId", &terminal.id);
     assert_eq!(
-        records
-            .iter()
-            .filter(|r| r.message == "agent tool call completed")
-            .count(),
+        records.iter().filter(|r| r.message == "agent tool call completed").count(),
         1,
         "the tool between the two invocations was dispatched exactly once",
     );
@@ -198,10 +191,7 @@ fn a_credential_or_configuration_failure_is_never_repeated() {
         assert_eq!(terminal.failure.as_deref(), Some(failure));
         assert!(!terminal.retry_permitted, "{failure} offers no retry");
         assert_eq!(h.seam.call_count(), 1, "{failure} was attempted once");
-        assert!(
-            h.turns().recoverable_failures(None).is_empty(),
-            "{failure} left no offer",
-        );
+        assert!(h.turns().recoverable_failures(None).is_empty(), "{failure} left no offer",);
     }
 
     // `context_unavailable` never reaches the seam at all: it is refused before
@@ -212,11 +202,7 @@ fn a_credential_or_configuration_failure_is_never_repeated() {
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     std::fs::remove_file(h.root().path().join("spec.md")).expect("remove the artifact");
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     let terminal = wait_for_terminal(&h, &turn.id);
     assert!(!terminal.retry_permitted);
@@ -242,10 +228,7 @@ fn the_default_retry_schedule_is_the_one_the_spec_states() {
 
     // CVL-FR-19: never above two seconds, whatever the schedule says. A source
     // outside `[0, 1]` is clamped rather than trusted.
-    let long = RetryPolicy {
-        first_base: Duration::from_secs(30),
-        ..policy
-    };
+    let long = RetryPolicy { first_base: Duration::from_secs(30), ..policy };
     assert_eq!(backoff_delay(&long, 2, &FixedJitter(1.0)), BACKOFF_CEILING);
     assert_eq!(backoff_delay(&long, 3, &FixedJitter(9.0)), BACKOFF_CEILING);
     // Beyond the schedule there is no wait, because there is no further attempt.
@@ -258,10 +241,7 @@ fn the_schedule_is_defined_for_whatever_budget_the_project_holds() {
     // project's, so the schedule has to be defined past the two waits a default
     // budget takes. Each retry doubles the one before, and the ceiling is what
     // keeps that bounded however large the budget is.
-    let wide = RetryPolicy {
-        max_attempts: 10,
-        ..RetryPolicy::default()
-    };
+    let wide = RetryPolicy { max_attempts: 10, ..RetryPolicy::default() };
     assert_eq!(backoff_delay(&wide, 2, &FixedJitter(0.5)), Duration::from_millis(500));
     assert_eq!(backoff_delay(&wide, 3, &FixedJitter(0.5)), Duration::from_millis(1000));
     assert_eq!(backoff_delay(&wide, 4, &FixedJitter(0.5)), Duration::from_millis(2000));
@@ -277,10 +257,7 @@ fn the_schedule_is_defined_for_whatever_budget_the_project_holds() {
     assert_eq!(backoff_delay(&wide, 11, &FixedJitter(0.5)), Duration::ZERO);
 
     // A budget of one is the original call and no retry at all.
-    let single = RetryPolicy {
-        max_attempts: 1,
-        ..RetryPolicy::default()
-    };
+    let single = RetryPolicy { max_attempts: 1, ..RetryPolicy::default() };
     assert_eq!(backoff_delay(&single, 2, &FixedJitter(0.5)), Duration::ZERO);
 }
 
@@ -311,21 +288,14 @@ fn a_cancellation_during_a_backoff_wait_abandons_the_retry() {
     // it, and far below the whole-turn deadline.
     let h = Harness::with_retries(
         vec![Err(FAIL_UNREACHABLE); MAX_ATTEMPTS],
-        RetryPolicy {
-            first_base: Duration::from_millis(400),
-            ..RetryPolicy::default()
-        },
+        RetryPolicy { first_base: Duration::from_millis(400), ..RetryPolicy::default() },
         0.5,
         Duration::from_secs(30),
     );
     h.create_agent("arch", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
 
     // Wait until the first attempt has failed and the turn is in its backoff.
@@ -339,16 +309,12 @@ fn a_cancellation_during_a_backoff_wait_abandons_the_retry() {
     // not attempted anything yet, and cancelling *that* is a different test than
     // this one — one that would still pass.
     assert!(h.seam.call_count() >= 1, "the first attempt never began");
-    let cancelled = cancel_impl(&h.app.handle().clone(), &h.turns(), &h.progress(), &turn.id)
-        .expect("cancel");
+    let cancelled =
+        cancel_impl(&h.app.handle().clone(), &h.turns(), &h.progress(), &turn.id).expect("cancel");
     assert_eq!(cancelled.state, AgentTurnState::Cancelled);
     h.settle();
 
-    assert_eq!(
-        h.seam.call_count(),
-        1,
-        "the retry the wait was for was never made",
-    );
+    assert_eq!(h.seam.call_count(), 1, "the retry the wait was for was never made",);
     // AGC-FR-31: a cancelled turn is not a recoverable failure, so nothing is
     // offered — the author already said they were done with it.
     assert!(!cancelled.retry_permitted);
@@ -495,12 +461,8 @@ fn the_recovery_registry_answers_for_a_conversation_and_carries_nothing_else() {
     // exchange, no tool result, no key, and no answer — the shape is the turn
     // and nothing beside it.
     let json = serde_json::to_value(entry).expect("serialise");
-    let mut keys: Vec<&str> = json
-        .as_object()
-        .expect("an object")
-        .keys()
-        .map(String::as_str)
-        .collect();
+    let mut keys: Vec<&str> =
+        json.as_object().expect("an object").keys().map(String::as_str).collect();
     keys.sort_unstable();
     let mut expected = vec![
         "id",
@@ -650,13 +612,9 @@ fn a_later_recoverable_failure_replaces_the_one_before_it() {
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let origin = ConversationOrigin::of(&thread);
 
-    let first = h
-        .dispatch("arch", origin.clone(), &thread.comments[0].id)
-        .expect("arch");
+    let first = h.dispatch("arch", origin.clone(), &thread.comments[0].id).expect("arch");
     let first = wait_for_terminal(&h, &first.id);
-    let second = h
-        .dispatch("sec", origin.clone(), &thread.comments[0].id)
-        .expect("sec");
+    let second = h.dispatch("sec", origin.clone(), &thread.comments[0].id).expect("sec");
     let second = wait_for_terminal(&h, &second.id);
 
     let entries = h.turns().recoverable_failures(Some(&origin));
@@ -684,9 +642,7 @@ fn entries_in_two_conversations_are_independent() {
     let origin_two = ConversationOrigin::of(&two);
 
     for (origin, thread) in [(&origin_one, &one), (&origin_two, &two)] {
-        let turn = h
-            .dispatch("arch", origin.clone(), &thread.comments[0].id)
-            .expect("dispatch");
+        let turn = h.dispatch("arch", origin.clone(), &thread.comments[0].id).expect("dispatch");
         wait_for_terminal(&h, &turn.id);
     }
 
@@ -710,9 +666,7 @@ fn a_human_comment_retires_the_offer_and_an_agents_answer_does_not() {
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let origin = ConversationOrigin::of(&thread);
 
-    let failed = h
-        .dispatch("arch", origin.clone(), &thread.comments[0].id)
-        .expect("arch");
+    let failed = h.dispatch("arch", origin.clone(), &thread.comments[0].id).expect("arch");
     wait_for_terminal(&h, &failed.id);
     assert_eq!(h.turns().recoverable_failures(None).len(), 1);
 
@@ -720,9 +674,7 @@ fn a_human_comment_retires_the_offer_and_an_agents_answer_does_not() {
     // the thread does not mean the author has stopped wanting the answer that
     // failed. Driven through the real agent write path rather than asserted of
     // it, so the two paths are told apart by what they actually do.
-    let answered = h
-        .dispatch("sec", origin.clone(), &thread.comments[0].id)
-        .expect("sec");
+    let answered = h.dispatch("sec", origin.clone(), &thread.comments[0].id).expect("sec");
     let answered = wait_for_terminal(&h, &answered.id);
     assert_eq!(answered.state, AgentTurnState::Delivered);
     assert_eq!(h.threads("spec.md")[0].comments.len(), 2);
@@ -746,13 +698,7 @@ fn closing_a_project_and_losing_an_agent_discard_the_offers_they_own() {
     assert_eq!(h.turns().recoverable_failures(None).len(), 1);
 
     // AGR-FR-11: an agent that is gone is offered nothing.
-    cancel_turns_for_agent(
-        &h.app.handle().clone(),
-        &h.turns(),
-        &h.progress(),
-        &agent.id,
-        None,
-    );
+    cancel_turns_for_agent(&h.app.handle().clone(), &h.turns(), &h.progress(), &agent.id, None);
     assert!(h.turns().recoverable_failures(None).is_empty());
 
     // And a closing project holds no conversation for an offer to be made in.
@@ -772,10 +718,8 @@ fn every_failed_attempt_is_reported_with_its_correlation_and_no_payload() {
     let (terminal, _) = run_one(&h, "arch");
 
     let records = records_where("turnId", &terminal.id);
-    let attempts: Vec<&LogRecord> = records
-        .iter()
-        .filter(|r| r.message == "model call failed")
-        .collect();
+    let attempts: Vec<&LogRecord> =
+        records.iter().filter(|r| r.message == "model call failed").collect();
     assert_eq!(attempts.len(), 2, "one record per failed physical attempt");
     for (index, record) in attempts.iter().enumerate() {
         // CVL-FR-28: `ai` and `backend` together on every record a turn emits,
@@ -811,11 +755,9 @@ fn every_failed_attempt_is_reported_with_its_correlation_and_no_payload() {
     // AGC-FR-26 / CVL-FR-26: nothing any of them carries is a payload.
     for record in &records {
         let text = serde_json::to_string(&record.fields).expect("fields");
-        for forbidden in ["Some artifact source", "answered", "sk-", "Authorization", "@arch what"] {
-            assert!(
-                !text.contains(forbidden),
-                "{forbidden:?} reached a record: {text}",
-            );
+        for forbidden in ["Some artifact source", "answered", "sk-", "Authorization", "@arch what"]
+        {
+            assert!(!text.contains(forbidden), "{forbidden:?} reached a record: {text}",);
         }
     }
 }
@@ -856,17 +798,11 @@ fn a_transport_error_is_normalized_before_it_is_reported() {
         );
     }
     // The status a provider returned is carried; nothing else of the message is.
-    assert_eq!(
-        classify_provider_error("server returned 503 for the request").status,
-        Some(503),
-    );
+    assert_eq!(classify_provider_error("server returned 503 for the request").status, Some(503),);
     assert_eq!(classify_provider_error("connection reset by peer").status, None);
     // An empty reply is the completion outcome rather than a transport one, and
     // is classified without a message at all.
-    assert_eq!(
-        CallFailure::from(FAIL_EMPTY_REPLY).class,
-        class::EMPTY_REPLY,
-    );
+    assert_eq!(CallFailure::from(FAIL_EMPTY_REPLY).class, class::EMPTY_REPLY,);
 }
 
 #[test]
@@ -919,7 +855,8 @@ fn nothing_an_author_can_reach_varies_the_retry_policy() {
     let (failed, _) = run_one(&h, "arch");
     let app = h.app.handle().clone();
     // The whole of its input.
-    let _: Result<AgentTurn, String> = retry_impl(&app, Roots::same(&h.root()), PROJECT_KEY, &failed.id);
+    let _: Result<AgentTurn, String> =
+        retry_impl(&app, Roots::same(&h.root()), PROJECT_KEY, &failed.id);
 
     // An agent's stored definition carries no retry field either.
     let agents = agents::list_personal_agents_impl(&h.store(), "", None).expect("agents");
@@ -986,9 +923,7 @@ fn a_transport_failure_of_a_client_that_refused_a_certificate_is_a_tls_failure()
 
     // A provider that answered with a status had a good handshake.
     record.set_for_test(crate::tls::TlsFailure::new("gw.test", crate::tls::TlsCause::Other));
-    let answered = CallFailure {
-        status: Some(401),
-        ..CallFailure::new(FAIL_REJECTED, class::AUTH)
-    };
+    let answered =
+        CallFailure { status: Some(401), ..CallFailure::new(FAIL_REJECTED, class::AUTH) };
     assert_eq!(with_recorded_tls(answered.clone(), &record), answered);
 }

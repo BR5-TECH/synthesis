@@ -102,10 +102,7 @@ pub struct ContentService {
 impl ContentService {
     /// The service over the given ports.
     pub fn new(ports: Ports) -> Self {
-        ContentService {
-            access: AccessService::new(ports.clone()),
-            ports,
-        }
+        ContentService { access: AccessService::new(ports.clone()), ports }
     }
 
     /// The draft, when the principal holds the permission on its project
@@ -119,8 +116,7 @@ impl ContentService {
         let draft = self.ports.drafts.get(id)?;
         // The project check runs first, and a project the principal may not read
         // answers `not_found`, so a draft identifier discloses nothing.
-        self.access
-            .authorize(principal, draft.project_id, permission)?;
+        self.access.authorize(principal, draft.project_id, permission)?;
         Ok(draft)
     }
 
@@ -133,8 +129,7 @@ impl ContentService {
         permission: Permission,
     ) -> Result<Conversation, DomainError> {
         let conversation = self.ports.conversations.get(id)?;
-        self.access
-            .authorize(principal, conversation.project_id, permission)?;
+        self.access.authorize(principal, conversation.project_id, permission)?;
         Ok(conversation)
     }
 
@@ -162,8 +157,7 @@ impl ContentApi for ContentService {
         project_id: ProjectId,
         command: CreateDraft,
     ) -> Result<Draft, DomainError> {
-        self.access
-            .authorize(principal, project_id, Permission::DraftCreate)?;
+        self.access.authorize(principal, project_id, Permission::DraftCreate)?;
         let id: DraftId = self.ports.resolve_id("id", command.id.as_deref())?;
         let title = validation::name("title", &command.title)?;
         let content = validation::content("content", command.content.as_deref().unwrap_or(""))?;
@@ -196,8 +190,7 @@ impl ContentApi for ContentService {
         project_id: ProjectId,
         page: Page,
     ) -> Result<Vec<Draft>, DomainError> {
-        self.access
-            .authorize(principal, project_id, Permission::DraftRead)?;
+        self.access.authorize(principal, project_id, Permission::DraftRead)?;
         let drafts = self
             .ports
             .drafts
@@ -279,8 +272,7 @@ impl ContentApi for ContentService {
         project_id: ProjectId,
         command: CreateConversation,
     ) -> Result<Conversation, DomainError> {
-        self.access
-            .authorize(principal, project_id, Permission::ConversationCreate)?;
+        self.access.authorize(principal, project_id, Permission::ConversationCreate)?;
         let id: ConversationId = self.ports.resolve_id("id", command.id.as_deref())?;
         let title = validation::name("title", &command.title)?;
         let owner_id = self.owner_of(principal, command.owner_id.as_ref())?;
@@ -333,8 +325,7 @@ impl ContentApi for ContentService {
         project_id: ProjectId,
         page: Page,
     ) -> Result<Vec<Conversation>, DomainError> {
-        self.access
-            .authorize(principal, project_id, Permission::ConversationRead)?;
+        self.access.authorize(principal, project_id, Permission::ConversationRead)?;
         let conversations = self
             .ports
             .conversations
@@ -353,17 +344,15 @@ impl ContentApi for ContentService {
     ) -> Result<Conversation, DomainError> {
         self.conversation_for(principal, id, Permission::ConversationUpdate)?;
         let now = self.ports.clock.now();
-        self.ports
-            .conversations
-            .update(id, &mut |conversation: &mut Conversation| {
-                check_revision(command.revision, conversation.revision)?;
-                if let Some(title) = command.title.as_deref() {
-                    conversation.title = validation::name("title", title)?;
-                }
-                conversation.revision += 1;
-                conversation.updated_at = now.clone();
-                Ok(())
-            })
+        self.ports.conversations.update(id, &mut |conversation: &mut Conversation| {
+            check_revision(command.revision, conversation.revision)?;
+            if let Some(title) = command.title.as_deref() {
+                conversation.title = validation::name("title", title)?;
+            }
+            conversation.revision += 1;
+            conversation.updated_at = now.clone();
+            Ok(())
+        })
     }
 
     fn read_messages(
@@ -371,9 +360,7 @@ impl ContentApi for ContentService {
         principal: &Principal,
         id: ConversationId,
     ) -> Result<Vec<ConversationMessage>, DomainError> {
-        Ok(self
-            .conversation_for(principal, id, Permission::ConversationRead)?
-            .messages)
+        Ok(self.conversation_for(principal, id, Permission::ConversationRead)?.messages)
     }
 
     fn append_message(
@@ -391,16 +378,11 @@ impl ContentApi for ContentService {
         // The sequence number is taken under the store's lock, so two writers
         // never take one number (SAS-FR-HEIV).
         let mut appended: Option<ConversationMessage> = None;
-        self.ports
-            .conversations
-            .update(id, &mut |conversation: &mut Conversation| {
-                appended =
-                    Some(conversation.append(message_id, author, body.clone(), now.clone())?);
-                Ok(())
-            })?;
-        appended.ok_or(DomainError::Internal {
-            reason: "the message was not appended".to_string(),
-        })
+        self.ports.conversations.update(id, &mut |conversation: &mut Conversation| {
+            appended = Some(conversation.append(message_id, author, body.clone(), now.clone())?);
+            Ok(())
+        })?;
+        appended.ok_or(DomainError::Internal { reason: "the message was not appended".to_string() })
     }
 
     fn resolve_conversation(
@@ -410,14 +392,12 @@ impl ContentApi for ContentService {
     ) -> Result<Conversation, DomainError> {
         self.conversation_for(principal, id, Permission::ConversationResolve)?;
         let now = self.ports.clock.now();
-        self.ports
-            .conversations
-            .update(id, &mut |conversation: &mut Conversation| {
-                conversation.state = ConversationState::Resolved;
-                conversation.revision += 1;
-                conversation.updated_at = now.clone();
-                Ok(())
-            })
+        self.ports.conversations.update(id, &mut |conversation: &mut Conversation| {
+            conversation.state = ConversationState::Resolved;
+            conversation.revision += 1;
+            conversation.updated_at = now.clone();
+            Ok(())
+        })
     }
 
     fn lock_conversation(
@@ -427,13 +407,11 @@ impl ContentApi for ContentService {
     ) -> Result<Conversation, DomainError> {
         self.conversation_for(principal, id, Permission::ConversationLock)?;
         let now = self.ports.clock.now();
-        self.ports
-            .conversations
-            .update(id, &mut |conversation: &mut Conversation| {
-                conversation.state = ConversationState::Locked;
-                conversation.revision += 1;
-                conversation.updated_at = now.clone();
-                Ok(())
-            })
+        self.ports.conversations.update(id, &mut |conversation: &mut Conversation| {
+            conversation.state = ConversationState::Locked;
+            conversation.revision += 1;
+            conversation.updated_at = now.clone();
+            Ok(())
+        })
     }
 }

@@ -23,9 +23,7 @@ fn requests(api: &Api) -> Vec<serde_json::Value> {
 #[tokio::test]
 async fn a_create_request_is_recorded_with_its_route_status_and_identifier() {
     let api = Api::new();
-    let answer = api
-        .post("/v1/users", json!({"display_name": "A user"}))
-        .await;
+    let answer = api.post("/v1/users", json!({"display_name": "A user"})).await;
     assert_eq!(answer.status, StatusCode::CREATED);
 
     let records = requests(&api);
@@ -41,9 +39,7 @@ async fn a_create_request_is_recorded_with_its_route_status_and_identifier() {
 #[tokio::test]
 async fn a_path_identifier_is_recorded_under_the_name_of_its_parameter() {
     let api = Api::new();
-    let project = api
-        .post("/v1/projects", json!({"display_name": "A project"}))
-        .await;
+    let project = api.post("/v1/projects", json!({"display_name": "A project"})).await;
     let project_id = project.id();
     api.logs.clear();
 
@@ -76,20 +72,8 @@ async fn a_refused_request_is_recorded_with_its_status() {
 async fn no_record_holds_the_token() {
     let api = Api::new();
     api.get("/v1/projects").await;
-    api.call_with(
-        Method::GET,
-        "/v1/projects",
-        None,
-        Some(&format!("Bearer {TEST_TOKEN}")),
-    )
-    .await;
-    api.call_with(
-        Method::GET,
-        "/v1/projects",
-        None,
-        Some("Bearer another-token"),
-    )
-    .await;
+    api.call_with(Method::GET, "/v1/projects", None, Some(&format!("Bearer {TEST_TOKEN}"))).await;
+    api.call_with(Method::GET, "/v1/projects", None, Some("Bearer another-token")).await;
 
     let text = api.logs.text();
     assert!(!text.contains(TEST_TOKEN), "{text}");
@@ -102,18 +86,12 @@ async fn no_record_holds_the_token() {
 async fn no_record_holds_an_email_a_draft_content_or_a_message_body() {
     let api = Api::new();
     let user = api
-        .post(
-            "/v1/users",
-            json!({"display_name": "A user", "email": "person@example.com"}),
-        )
+        .post("/v1/users", json!({"display_name": "A user", "email": "person@example.com"}))
         .await;
     assert_eq!(user.status, StatusCode::CREATED);
 
     let project = api
-        .post(
-            "/v1/projects",
-            json!({"display_name": "A project", "owner_id": TEST_ADMIN_ID}),
-        )
+        .post("/v1/projects", json!({"display_name": "A project", "owner_id": TEST_ADMIN_ID}))
         .await;
     let project_id = project.id();
 
@@ -199,16 +177,12 @@ async fn reading_the_identifier_leaves_the_answer_unchanged() {
 #[tokio::test]
 async fn a_list_answer_names_no_identifier_of_its_own() {
     let api = Api::new();
-    api.post("/v1/users", json!({"display_name": "A user"}))
-        .await;
+    api.post("/v1/users", json!({"display_name": "A user"})).await;
     api.logs.clear();
 
     let listed = api.get("/v1/users").await;
     assert_eq!(listed.status, StatusCode::OK);
-    assert_eq!(
-        listed.member("items").as_array().expect("the items").len(),
-        2
-    );
+    assert_eq!(listed.member("items").as_array().expect("the items").len(), 2);
 
     let records = requests(&api);
     assert_eq!(records.len(), 1);
@@ -227,10 +201,8 @@ async fn an_unmatched_path_and_a_refused_method_are_recorded() {
     assert_eq!(refused.status, StatusCode::METHOD_NOT_ALLOWED);
 
     let records = requests(&api);
-    let statuses: Vec<u64> = records
-        .iter()
-        .map(|record| record["status"].as_u64().expect("a status"))
-        .collect();
+    let statuses: Vec<u64> =
+        records.iter().map(|record| record["status"].as_u64().expect("a status")).collect();
     assert_eq!(statuses, vec![404, 405]);
     assert_eq!(records[0]["route"], "(unmatched)");
     assert_eq!(records[1]["route"], "/v1/users");

@@ -75,10 +75,7 @@ where
         observer.line(channel, &pending, true);
     }
 
-    CapturedStream {
-        bytes: kept,
-        truncated,
-    }
+    CapturedStream { bytes: kept, truncated }
 }
 
 /// Feed `chunk` through the line reassembler, delivering each complete line.
@@ -130,13 +127,7 @@ pub(super) struct StreamCapture {
 #[cfg_attr(test, allow(dead_code))]
 impl StreamCapture {
     pub(super) fn new(limit: usize, channel: StreamChannel) -> Self {
-        StreamCapture {
-            limit,
-            kept: Vec::new(),
-            truncated: false,
-            pending: Vec::new(),
-            channel,
-        }
+        StreamCapture { limit, kept: Vec::new(), truncated: false, pending: Vec::new(), channel }
     }
 
     pub(super) fn push(&mut self, bytes: &[u8], observer: Option<&dyn StreamObserver>) {
@@ -163,9 +154,6 @@ impl StreamCapture {
             observer.line(self.channel, &self.pending, true);
         }
         self.pending.clear();
-        CapturedStream {
-            bytes: self.kept,
-            truncated: self.truncated,
-        }
+        CapturedStream { bytes: self.kept, truncated: self.truncated }
     }
 }

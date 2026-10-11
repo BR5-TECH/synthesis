@@ -29,15 +29,16 @@ fn gateway_harness(token_var: Option<&str>, entries: &[&str]) -> Harness {
 /// none by value.
 #[test]
 fn a_gateway_launch_passes_every_variable_by_name() {
-    let harness = gateway_harness(
-        Some("ANTHROPIC_API_KEY"),
-        &[&format!("HTTPS_PROXY={LONG_VALUE}")],
-    );
+    let harness =
+        gateway_harness(Some("ANTHROPIC_API_KEY"), &[&format!("HTTPS_PROXY={LONG_VALUE}")]);
     let runtime = RecordingRuntime::replying(&valid_claude_stdout());
     let outcome = run(&harness, runtime.clone(), task("go")).expect("runs");
     let recorded = runtime.only_run();
 
-    assert_eq!(recorded.env.get("ANTHROPIC_BEDROCK_BASE_URL").map(String::as_str), Some(GATEWAY_URL));
+    assert_eq!(
+        recorded.env.get("ANTHROPIC_BEDROCK_BASE_URL").map(String::as_str),
+        Some(GATEWAY_URL)
+    );
     assert!(!recorded.env.contains_key("ANTHROPIC_BASE_URL"));
     assert_eq!(recorded.env.get("ANTHROPIC_API_KEY").map(String::as_str), Some(GATEWAY_TOKEN));
     assert_eq!(recorded.env.get("HTTPS_PROXY").map(String::as_str), Some(LONG_VALUE));
@@ -151,11 +152,10 @@ fn a_hand_edited_entry_for_the_session_directory_never_reaches_the_container() {
 
     let harness = harness_for("claude_code");
     let (mut records, active) = harness.store.load_agentic_registry().expect("registry");
-    let record: &mut AgenticRecord = records.iter_mut().find(|r| r.vendor == "claude_code").unwrap();
-    record.env_vars = vec![
-        "CLAUDE_CONFIG_DIR=/elsewhere".to_string(),
-        "KEPT=value-one".to_string(),
-    ];
+    let record: &mut AgenticRecord =
+        records.iter_mut().find(|r| r.vendor == "claude_code").unwrap();
+    record.env_vars =
+        vec!["CLAUDE_CONFIG_DIR=/elsewhere".to_string(), "KEPT=value-one".to_string()];
     harness.store.save_agentic_registry(records, active).expect("saved");
 
     let runtime = RecordingRuntime::replying(&valid_claude_stdout());
@@ -189,10 +189,7 @@ fn a_gateway_launch_without_its_token_creates_no_container() {
 
     let runtime = RecordingRuntime::replying(&valid_claude_stdout());
     let error = run(&harness, runtime.clone(), task("go")).expect_err("refused");
-    assert!(
-        matches!(error, AgentExecutionError::IntegrationUnresolved(_)),
-        "{error:?}"
-    );
+    assert!(matches!(error, AgentExecutionError::IntegrationUnresolved(_)), "{error:?}");
     assert_eq!(runtime.launched(), 0, "no container was created");
 }
 
@@ -241,7 +238,8 @@ fn a_gateway_only_configuration_launches_and_logs_the_variable_names() {
         .into_iter()
         .find(|record| {
             record.message == "agent execution starting"
-                && record.fields.get("container").and_then(|v| v.as_str()) == Some(container.as_str())
+                && record.fields.get("container").and_then(|v| v.as_str())
+                    == Some(container.as_str())
         })
         .expect("the launch record of this container");
     assert_eq!(

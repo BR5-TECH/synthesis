@@ -23,20 +23,18 @@ fn the_executor_is_not_reachable_from_the_frontend() {
     // Every file in the module, not just the entry point: a command added to
     // `runtime.rs` or `descriptor.rs` would be just as reachable.
     for source in module_sources() {
-    for declaration in [
-        "#[tauri::command]",
-        "impl rig::tool::PortableTool",
-        "fn parameters(",
-        "const NAME",
-        "fn description(",
-    ] {
-        assert!(
-            !source
-                .lines()
-                .any(|line| line.trim_start().starts_with(declaration)),
-            "agent_exec declares {declaration}"
-        );
-    }
+        for declaration in [
+            "#[tauri::command]",
+            "impl rig::tool::PortableTool",
+            "fn parameters(",
+            "const NAME",
+            "fn description(",
+        ] {
+            assert!(
+                !source.lines().any(|line| line.trim_start().starts_with(declaration)),
+                "agent_exec declares {declaration}"
+            );
+        }
     }
 }
 
@@ -140,8 +138,10 @@ fn codexs_generated_invocation_carries_its_own_contract() {
     let harness = harness_for("codex");
     // Codex declares reasoning efforts, so a resolved one becomes a config
     // override; a model becomes `--model`.
-    agentic::set_model_impl(&harness.store, &harness.ai, "codex", None, Some("gpt-5.1")).expect("model");
-    agentic::set_effort_impl(&harness.store, &harness.ai, "codex", None, Some("high")).expect("effort");
+    agentic::set_model_impl(&harness.store, &harness.ai, "codex", None, Some("gpt-5.1"))
+        .expect("model");
+    agentic::set_effort_impl(&harness.store, &harness.ai, "codex", None, Some("high"))
+        .expect("effort");
 
     let runtime = RecordingRuntime::replying(&codex_stdout(&envelope_json("success")));
     let outcome = run(&harness, runtime.clone(), task("run the suite")).expect("runs");
@@ -171,10 +171,7 @@ fn codexs_generated_invocation_carries_its_own_contract() {
     // absent entirely, and the only variable set names the mount itself.
     assert!(recorded.env.is_empty());
     assert!(!recorded.argv.contains(&"CLAUDE_CODE_OAUTH_TOKEN".to_string()));
-    assert!(recorded
-        .argv
-        .iter()
-        .any(|a| a.starts_with("CODEX_HOME=")));
+    assert!(recorded.argv.iter().any(|a| a.starts_with("CODEX_HOME=")));
     // CDX-FR-23 / EAC-FR-16: the login directory is also the session directory,
     // so its mount is read/write rather than read-only.
     let mount = recorded
@@ -196,10 +193,7 @@ fn codexs_generated_invocation_carries_its_own_contract() {
 
     // The caller sees the same shape it saw for Claude Code.
     assert_eq!(outcome.process_outcome, ProcessOutcome::Completed);
-    assert_eq!(
-        outcome.response.expect("envelope").outcome,
-        AgentOutcome::Success
-    );
+    assert_eq!(outcome.response.expect("envelope").outcome, AgentOutcome::Success);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,9 +213,7 @@ fn the_request_cannot_select_an_integration_and_the_executor_resolves_one() {
         .nth(1)
         .and_then(|rest| rest.split('}').next())
         .expect("the request struct");
-    for forbidden in [
-        "vendor", "model", "effort", "image", "token", "credential", "digest",
-    ] {
+    for forbidden in ["vendor", "model", "effort", "image", "token", "credential", "digest"] {
         assert!(
             !request_struct.contains(forbidden),
             "AgentExecutionRequest must not carry a {forbidden} field"
@@ -233,10 +225,7 @@ fn the_request_cannot_select_an_integration_and_the_executor_resolves_one() {
     let harness = harness_for("codex");
     let runtime = RecordingRuntime::replying(&codex_stdout(&envelope_json("success")));
     run(&harness, runtime.clone(), task("go")).expect("runs");
-    assert_eq!(
-        runtime.images_asked.lock().unwrap().as_slice(),
-        [test_image_reference("codex")]
-    );
+    assert_eq!(runtime.images_asked.lock().unwrap().as_slice(), [test_image_reference("codex")]);
 }
 
 /// EAC-FR-03, EAC-FR-04 — an unresolved project, OpenCode, and each API-kind vendor all
@@ -284,10 +273,7 @@ fn an_unavailable_credential_prevents_the_launch_without_disclosing_anything() {
     let empty_home = tempfile::tempdir().expect("home");
     let workspace = tempfile::tempdir().expect("workspace");
     let ai = AgenticIntegrations::new(
-        Box::new(FakeProbe {
-            executables: vec!["/usr/bin/codex".into()],
-            directories: vec![],
-        }),
+        Box::new(FakeProbe { executables: vec!["/usr/bin/codex".into()], directories: vec![] }),
         Box::new(FakeRunner {
             banners: HashMap::from([("/usr/bin/codex".to_string(), "codex 0.147.0".to_string())]),
         }),
@@ -301,18 +287,12 @@ fn an_unavailable_credential_prevents_the_launch_without_disclosing_anything() {
         &store,
         &ai,
         "codex",
-        &VerifyConfig {
-            path: Some("/usr/bin/codex".into()),
-            ..Default::default()
-        },
+        &VerifyConfig { path: Some("/usr/bin/codex".into()), ..Default::default() },
     )
     .expect("codex verifies");
     agentic::set_active_impl(&store, &ai, "codex").expect("activates");
 
-    let fs = FsAccess::builder()
-        .allow_root(workspace.path())
-        .build()
-        .expect("fs");
+    let fs = FsAccess::builder().allow_root(workspace.path()).build().expect("fs");
     let context = LaunchContext {
         store: &store,
         integrations: &ai,
@@ -340,9 +320,7 @@ fn an_unavailable_credential_prevents_the_launch_without_disclosing_anything() {
 
     assert_eq!(
         error,
-        AgentExecutionError::CredentialUnavailable(
-            agentic::ERR_CODEX_CONFIG_MISSING.to_string()
-        )
+        AgentExecutionError::CredentialUnavailable(agentic::ERR_CODEX_CONFIG_MISSING.to_string())
     );
     assert_eq!(runtime.launched(), 0, "the runtime was never touched");
     assert!(runtime.images_asked.lock().unwrap().is_empty());
@@ -356,10 +334,7 @@ fn an_unavailable_credential_prevents_the_launch_without_disclosing_anything() {
     // Claude Code with no readable token never gets this far: the integration
     // degrades and stops resolving, one step earlier.
     let claude_ai = AgenticIntegrations::new(
-        Box::new(FakeProbe {
-            executables: vec!["/usr/bin/claude".into()],
-            directories: vec![],
-        }),
+        Box::new(FakeProbe { executables: vec!["/usr/bin/claude".into()], directories: vec![] }),
         Box::new(FakeRunner {
             banners: HashMap::from([("/usr/bin/claude".to_string(), "claude 2.1.232".to_string())]),
         }),
@@ -375,8 +350,8 @@ fn an_unavailable_credential_prevents_the_launch_without_disclosing_anything() {
         images: &TEST_IMAGES,
     };
     let runtime = RecordingRuntime::replying("");
-    let executor = AgentCliExecutor::new(runtime.clone())
-        .with_session_state_root(harness.sessions_root());
+    let executor =
+        AgentCliExecutor::new(runtime.clone()).with_session_state_root(harness.sessions_root());
     let error = block_on(executor.execute_agent_cli(
         &Silent,
         &context,
@@ -391,10 +366,7 @@ fn an_unavailable_credential_prevents_the_launch_without_disclosing_anything() {
         },
     ))
     .unwrap_err();
-    assert!(matches!(
-        error,
-        AgentExecutionError::IntegrationUnresolved(_)
-    ));
+    assert!(matches!(error, AgentExecutionError::IntegrationUnresolved(_)));
     assert_eq!(runtime.launched(), 0);
 }
 
@@ -403,22 +375,21 @@ fn an_unavailable_credential_prevents_the_launch_without_disclosing_anything() {
 fn an_unusable_execution_directory_is_refused_before_launch() {
     let harness = harness_for("claude_code");
     let runtime = RecordingRuntime::replying("");
-    let executor = AgentCliExecutor::new(runtime.clone())
-        .with_session_state_root(harness.sessions_root());
+    let executor =
+        AgentCliExecutor::new(runtime.clone()).with_session_state_root(harness.sessions_root());
 
     let missing = harness.workspace().join("not-here");
     let file = harness.workspace().join("a-file");
     std::fs::write(&file, b"x").expect("write");
 
-    for (path, expected) in [
-        (missing, DirectoryProblem::Missing),
-        (file, DirectoryProblem::NotADirectory),
-    ] {
+    for (path, expected) in
+        [(missing, DirectoryProblem::Missing), (file, DirectoryProblem::NotADirectory)]
+    {
         let error = block_on(executor.execute_agent_cli(
             &Silent,
             &harness.context(),
             AgentExecutionRequest {
-            turn_kind: super::super::TurnKind::Work,
+                turn_kind: super::super::TurnKind::Work,
                 execution_directory: path,
                 task: task("go"),
                 cancellation: CancellationToken::new(),

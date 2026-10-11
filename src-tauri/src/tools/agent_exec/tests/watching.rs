@@ -6,7 +6,6 @@ use super::*;
 // EAC-FR-33 … EAC-FR-32 — watching a run happen (EAC-FR-32 … EAC-FR-34)
 // ---------------------------------------------------------------------------
 
-
 /// EAC-FR-32, EAC-FR-33, EAC-FR-34, EAC-FR-THUT — a watched run reports its invocation, its
 /// task, every line the CLI wrote, and the executor's closing line, in that order.
 ///
@@ -21,13 +20,8 @@ fn a_watched_run_reports_its_invocation_its_task_and_every_line() {
     let sink = Arc::new(CollectedActivity::default());
 
     const WATCHED_INSTRUCTION: &str = "MARKER-WATCHED-b71d";
-    let outcome = run_watching(
-        &harness,
-        runtime.clone(),
-        task(WATCHED_INSTRUCTION),
-        sink.clone(),
-    )
-    .expect("runs");
+    let outcome = run_watching(&harness, runtime.clone(), task(WATCHED_INSTRUCTION), sink.clone())
+        .expect("runs");
     assert_eq!(outcome.process_outcome, ProcessOutcome::Completed);
 
     let events = sink.events();
@@ -58,11 +52,7 @@ fn a_watched_run_reports_its_invocation_its_task_and_every_line() {
     );
     let closing = events.last().expect("a closing event");
     assert_eq!(closing.channel, "executor");
-    assert!(
-        closing.summary.starts_with("Turn finished after "),
-        "{}",
-        closing.summary
-    );
+    assert!(closing.summary.starts_with("Turn finished after "), "{}", closing.summary);
     let started = &events[2];
     assert_eq!(started.channel, "stdout");
     assert!(started.summary.contains("claude-sonnet-5"));
@@ -144,10 +134,7 @@ fn a_watcher_is_handed_nothing_a_record_may_not_carry() {
     run_watching(&harness, runtime.clone(), task("go"), sink.clone()).expect("runs");
 
     let rendered = sink.rendered();
-    assert!(
-        !rendered.contains(SAMPLE_TOKEN),
-        "the credential reached a watcher whole"
-    );
+    assert!(!rendered.contains(SAMPLE_TOKEN), "the credential reached a watcher whole");
     assert!(
         !rendered.contains(&SAMPLE_TOKEN[..20]),
         "a recognisable piece of the credential reached a watcher"
@@ -224,12 +211,7 @@ fn watching_a_run_does_not_change_what_the_capture_holds() {
 fn a_watcher_of_a_codex_run_is_handed_neither_spelling_of_its_login_directory() {
     let harness = harness_for("codex");
     let container_path = "/home/agent/.codex";
-    let host_path = harness
-        .home
-        .path()
-        .join(".codex")
-        .to_string_lossy()
-        .into_owned();
+    let host_path = harness.home.path().join(".codex").to_string_lossy().into_owned();
 
     // The CLI naming its own login directory is not hypothetical: it is what
     // this vendor prints whenever the login there is missing or stale, which is
@@ -286,12 +268,7 @@ fn the_executors_own_events_are_masked_in_their_summary_as_well_as_their_payload
     // Codex, because its credential is a path in the invocation itself rather
     // than an environment name — the argv is where this vendor can leak.
     let harness = harness_for("codex");
-    let host_path = harness
-        .home
-        .path()
-        .join(".codex")
-        .to_string_lossy()
-        .into_owned();
+    let host_path = harness.home.path().join(".codex").to_string_lossy().into_owned();
     let sink = Arc::new(CollectedActivity::default());
     run_watching(
         &harness,
@@ -315,10 +292,7 @@ fn the_executors_own_events_are_masked_in_their_summary_as_well_as_their_payload
     );
     assert_eq!(
         invocation.summary,
-        descriptor::summary_line(&format!(
-            "{} {}",
-            descriptor::DOCKER_PROGRAM, invocation.payload
-        )),
+        descriptor::summary_line(&format!("{} {}", descriptor::DOCKER_PROGRAM, invocation.payload)),
         "the invocation summary is not the masked invocation, shortened"
     );
     assert!(
@@ -341,10 +315,7 @@ fn the_executors_own_events_are_masked_in_their_summary_as_well_as_their_payload
     let events = sink.events();
     let task_event = &events[1];
     assert_eq!(task_event.kind, "task");
-    assert!(
-        !task_event.summary.contains(SAMPLE_TOKEN),
-        "a credential reached the task summary"
-    );
+    assert!(!task_event.summary.contains(SAMPLE_TOKEN), "a credential reached the task summary");
     assert!(
         task_event.summary.contains(&masked_form(SAMPLE_TOKEN)),
         "the task summary dropped the instruction instead of masking it: {}",
@@ -398,22 +369,15 @@ fn a_summary_is_cut_from_masked_text_wherever_the_credential_sits() {
 #[test]
 fn stderr_reaches_a_watcher_as_diagnostics_on_its_own_channel() {
     let harness = harness_for("claude_code");
-    let runtime = RecordingRuntime::refused(
-        "",
-        "Error: input must be provided on stdin\nsecond line\n",
-        1,
-    );
+    let runtime =
+        RecordingRuntime::refused("", "Error: input must be provided on stdin\nsecond line\n", 1);
     let sink = Arc::new(CollectedActivity::default());
 
     let outcome =
         run_watching(&harness, runtime, task("go"), sink.clone()).expect("the launch happened");
     assert_eq!(outcome.process_outcome, ProcessOutcome::NonZeroExit);
 
-    let diagnostics: Vec<_> = sink
-        .events()
-        .into_iter()
-        .filter(|e| e.channel == "stderr")
-        .collect();
+    let diagnostics: Vec<_> = sink.events().into_iter().filter(|e| e.channel == "stderr").collect();
     assert_eq!(diagnostics.len(), 2, "both lines, separately");
     assert!(diagnostics.iter().all(|e| e.kind == "diagnostic"));
     assert!(diagnostics[0].summary.contains("must be provided on stdin"));
@@ -459,11 +423,7 @@ fn an_oversized_event_is_cut_and_says_so() {
 
     run_watching(&harness, runtime, task(&long), sink.clone()).expect("runs");
 
-    let task_event = sink
-        .events()
-        .into_iter()
-        .find(|e| e.kind == "task")
-        .expect("a task event");
+    let task_event = sink.events().into_iter().find(|e| e.kind == "task").expect("a task event");
     assert!(task_event.payload_truncated, "an oversized event was not marked");
     // Cut *at* the bound rather than discarded: an upper bound alone is
     // satisfied by an empty string, which is the failure that would leave a
@@ -535,17 +495,10 @@ fn a_credential_split_across_a_delivery_boundary_is_still_masked() {
         "the first half of a credential was emitted before its second arrived"
     );
 
-    observer.line(
-        StreamChannel::Stdout,
-        format!("{}\n", &SAMPLE_TOKEN[split..]).as_bytes(),
-        true,
-    );
+    observer.line(StreamChannel::Stdout, format!("{}\n", &SAMPLE_TOKEN[split..]).as_bytes(), true);
 
     let rendered = sink.rendered();
-    assert!(
-        !rendered.contains(SAMPLE_TOKEN),
-        "the rejoined credential was emitted whole"
-    );
+    assert!(!rendered.contains(SAMPLE_TOKEN), "the rejoined credential was emitted whole");
     assert!(
         rendered.contains(&masked_form(SAMPLE_TOKEN)),
         "the two halves were never rejoined and masked: {rendered}"
@@ -582,11 +535,7 @@ fn a_piece_shorter_than_the_carry_is_held_until_the_rest_arrives() {
     );
     assert!(sink.events().is_empty(), "a piece too short to be safe was emitted");
 
-    observer.line(
-        StreamChannel::Stdout,
-        format!("{}\n", &SAMPLE_TOKEN[split..]).as_bytes(),
-        true,
-    );
+    observer.line(StreamChannel::Stdout, format!("{}\n", &SAMPLE_TOKEN[split..]).as_bytes(), true);
 
     let rendered = sink.rendered();
     assert!(!rendered.contains(SAMPLE_TOKEN));

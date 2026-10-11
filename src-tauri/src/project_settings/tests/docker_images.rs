@@ -19,9 +19,7 @@ fn every_vendor_has_a_status_and_a_saved_entry_is_committed() {
         statuses.iter().map(|s| s.vendor.as_str()).collect::<Vec<_>>(),
         vec!["claude_code", "codex", "opencode"]
     );
-    assert!(statuses
-        .iter()
-        .all(|s| s.configuration == images::VendorImageConfiguration::Unset));
+    assert!(statuses.iter().all(|s| s.configuration == images::VendorImageConfiguration::Unset));
 
     save_project_vendor_image_to(
         &root,
@@ -67,10 +65,7 @@ fn a_refused_docker_entry_leaves_the_store_untouched() {
 
     for (dockerfile, expected) in [
         ("/etc/Dockerfile", images::ERR_DOCKERFILE_ABSOLUTE),
-        (
-            "../outside/Dockerfile",
-            images::ERR_DOCKERFILE_ESCAPES_PROJECT_ROOT,
-        ),
+        ("../outside/Dockerfile", images::ERR_DOCKERFILE_ESCAPES_PROJECT_ROOT),
         ("docker", images::ERR_DOCKERFILE_NOT_A_REGULAR_FILE),
     ] {
         assert_eq!(
@@ -134,15 +129,9 @@ fn a_deleted_dockerfile_is_reported_rather_than_rewritten() {
     std::fs::remove_file(dir.path().join("docker/agent.Dockerfile")).unwrap();
     let status = &load_project_docker_images_from(&root).unwrap()[1];
     assert_eq!(status.dockerfile_state, images::DockerfileState::Invalid);
-    assert_eq!(
-        status.dockerfile_problem,
-        Some(images::DockerfileProblem::NotARegularFile)
-    );
+    assert_eq!(status.dockerfile_problem, Some(images::DockerfileProblem::NotARegularFile));
     assert_eq!(status.dockerfile.as_deref(), Some("docker/agent.Dockerfile"));
-    assert_eq!(
-        status.graduation_state,
-        images::VendorGraduationState::DockerfileInvalid
-    );
+    assert_eq!(status.graduation_state, images::VendorGraduationState::DockerfileInvalid);
 }
 
 /// PSS-FR-23 (PSS-FR-22, PSS-FR-17): an image entry and every other
@@ -155,7 +144,7 @@ fn an_image_entry_and_the_rest_of_the_store_carry_each_other_through() {
         ProjectConfig {
             line_endings: LineEndings::Crlf,
             draft_template: Some("# Context\n".to_string()),
-                        ..Default::default()
+            ..Default::default()
         },
     )
     .unwrap();
@@ -179,17 +168,11 @@ fn an_image_entry_and_the_rest_of_the_store_carry_each_other_through() {
     // entry through unchanged.
     save_project_config_to(
         &root,
-        ProjectConfig {
-            line_endings: LineEndings::Lf,
-            draft_template: None,
-                        ..Default::default()
-        },
+        ProjectConfig { line_endings: LineEndings::Lf, draft_template: None, ..Default::default() },
     )
     .unwrap();
     assert_eq!(
-        load_project_docker_images_from(&root).unwrap()[0]
-            .image_reference
-            .as_deref(),
+        load_project_docker_images_from(&root).unwrap()[0].image_reference.as_deref(),
         Some("acme/agent")
     );
 }
@@ -214,10 +197,7 @@ fn an_execution_resolves_only_what_the_project_commits() {
         },
     )
     .unwrap();
-    assert_eq!(
-        resolve_project_vendor_image(&root, "claude_code").unwrap(),
-        "acme/agent:2.1"
-    );
+    assert_eq!(resolve_project_vendor_image(&root, "claude_code").unwrap(), "acme/agent:2.1");
     // No fallback to any shipped image: another vendor still resolves
     // nothing.
     assert_eq!(
@@ -252,10 +232,7 @@ fn image_entries_resolve_per_worktree_and_a_damaged_store_is_typed() {
 
     std::fs::create_dir_all(b_dir.path().join(".synthesis")).unwrap();
     std::fs::write(b_dir.path().join(".synthesis/project.toml"), "not = = toml").unwrap();
-    assert_eq!(
-        load_project_docker_images_from(&b).unwrap_err(),
-        ERR_MALFORMED_PROJECT_CONFIG
-    );
+    assert_eq!(load_project_docker_images_from(&b).unwrap_err(), ERR_MALFORMED_PROJECT_CONFIG);
     assert_eq!(
         resolve_project_vendor_image(&b, "codex").unwrap_err(),
         ERR_MALFORMED_PROJECT_CONFIG

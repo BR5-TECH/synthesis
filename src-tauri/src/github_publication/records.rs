@@ -322,9 +322,7 @@ impl RemoteEligibility {
         match self {
             RemoteEligibility::Eligible => None,
             RemoteEligibility::NotGithub => Some("Not a GitHub repository."),
-            RemoteEligibility::IssuesInaccessible => {
-                Some("The token cannot read this repository.")
-            }
+            RemoteEligibility::IssuesInaccessible => Some("The token cannot read this repository."),
             // GHP-FR-TKBW: the repository refuses the issue, not the token, so the
             // text must send the author to the repository rather than to their token.
             RemoteEligibility::IssuesDisabled => Some(
@@ -337,12 +335,10 @@ impl RemoteEligibility {
             RemoteEligibility::TokenUnavailable => {
                 Some("No GitHub token is available for this project.")
             }
-            RemoteEligibility::HostMismatch => Some(
-                "The token of this project belongs to another GitHub host than this remote.",
-            ),
-            RemoteEligibility::TlsUntrusted => {
-                Some("The certificate of GitHub is not trusted.")
+            RemoteEligibility::HostMismatch => {
+                Some("The token of this project belongs to another GitHub host than this remote.")
             }
+            RemoteEligibility::TlsUntrusted => Some("The certificate of GitHub is not trusted."),
         }
     }
 }

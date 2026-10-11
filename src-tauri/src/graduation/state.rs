@@ -70,10 +70,7 @@ impl Default for GraduationState {
 impl GraduationState {
     /// A state whose store stands under a root the caller names.
     pub fn rooted_at(root: PathBuf) -> Self {
-        Self {
-            root: Mutex::new(Some(root)),
-            ..Default::default()
-        }
+        Self { root: Mutex::new(Some(root)), ..Default::default() }
     }
 
     /// Whether a run may be dispatched at all.
@@ -85,8 +82,7 @@ impl GraduationState {
     /// hand uses this so no loop starts underneath it.
     #[cfg(test)]
     pub(crate) fn set_loop_enabled(&self, enabled: bool) {
-        self.loop_enabled
-            .store(enabled, std::sync::atomic::Ordering::SeqCst);
+        self.loop_enabled.store(enabled, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// The store root this state reads and writes under.
@@ -168,12 +164,7 @@ impl GraduationState {
         }
         running.insert(
             stream_id.to_string(),
-            RunningRun {
-                run_id: run_id.to_string(),
-                cancellation,
-                stopped_because: None,
-                direct,
-            },
+            RunningRun { run_id: run_id.to_string(), cancellation, stopped_because: None, direct },
         );
         true
     }
@@ -184,10 +175,7 @@ impl GraduationState {
     /// dispatched, which the run order index does not yet show.
     pub fn direct_claim(&self) -> Option<String> {
         self.running.lock().ok().and_then(|running| {
-            running
-                .values()
-                .find(|held| held.direct)
-                .map(|held| held.run_id.clone())
+            running.values().find(|held| held.direct).map(|held| held.run_id.clone())
         })
     }
 
@@ -210,10 +198,7 @@ impl GraduationState {
 
     /// The run holding a stream right now.
     pub fn holder_of(&self, stream_id: &str) -> Option<String> {
-        self.running
-            .lock()
-            .ok()
-            .and_then(|r| r.get(stream_id).map(|held| held.run_id.clone()))
+        self.running.lock().ok().and_then(|r| r.get(stream_id).map(|held| held.run_id.clone()))
     }
 
     /// GRD-FR-XVUD: whether a loop of this process is behind the named run.
@@ -221,10 +206,7 @@ impl GraduationState {
     /// A run the store holds as working that this answers `false` for was held
     /// when the application stopped.
     pub fn is_driving(&self, run_id: &str) -> bool {
-        self.running
-            .lock()
-            .map(|r| r.values().any(|held| held.run_id == run_id))
-            .unwrap_or(false)
+        self.running.lock().map(|r| r.values().any(|held| held.run_id == run_id)).unwrap_or(false)
     }
 
     /// A loop of this process begins driving a run.
@@ -242,10 +224,8 @@ impl GraduationState {
         run_id: &str,
         register: impl FnOnce() -> Option<crate::progress::OperationId>,
     ) -> bool {
-        let mut operations = self
-            .operations
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut operations =
+            self.operations.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         if operations.contains_key(run_id) {
             return false;
         }
@@ -260,10 +240,7 @@ impl GraduationState {
 
     /// GRD-FR-ZHNV: take the run's operation, so it is ended exactly once.
     pub(super) fn take_operation(&self, run_id: &str) -> Option<crate::progress::OperationId> {
-        self.operations
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .remove(run_id)
+        self.operations.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).remove(run_id)
     }
 
     /// The loop of this process has returned from a run.
@@ -276,10 +253,7 @@ impl GraduationState {
     /// Whether a loop of this process is still inside the named run, whether or
     /// not it still holds the run's claim.
     pub fn is_looping(&self, run_id: &str) -> bool {
-        self.loops
-            .lock()
-            .map(|loops| loops.contains(run_id))
-            .unwrap_or(false)
+        self.loops.lock().map(|loops| loops.contains(run_id)).unwrap_or(false)
     }
 
     /// How many runs of this process hold a claim right now.
@@ -302,10 +276,8 @@ impl GraduationState {
         running: &BTreeMap<String, RunningRun>,
         holders: &std::collections::BTreeSet<String>,
     ) -> usize {
-        let unclaimed = holders
-            .iter()
-            .filter(|id| !running.values().any(|held| &held.run_id == *id))
-            .count();
+        let unclaimed =
+            holders.iter().filter(|id| !running.values().any(|held| &held.run_id == *id)).count();
         running.len() + unclaimed
     }
 

@@ -149,11 +149,7 @@ pub fn graduation_capacity_of<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> G
             }
         }
     }
-    GraduationCapacity {
-        limit,
-        in_use: in_use as u32,
-        waiting_for_slot,
-    }
+    GraduationCapacity { limit, in_use: in_use as u32, waiting_for_slot }
 }
 
 /// GRD-FR-GRHC: what the project's slots hold now, and which queued runs wait

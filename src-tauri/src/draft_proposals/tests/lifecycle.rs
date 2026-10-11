@@ -42,10 +42,7 @@ fn deleting_the_draft_takes_its_proposals_with_it() {
 
     drafts::delete_draft_impl(&f.root, &f.root, &f.draft_id).expect("delete");
     assert!(!dir.exists(), "the whole folder went with the draft");
-    assert!(
-        find_proposal(&f.root, &proposal.id).is_none(),
-        "and nothing finds it afterwards",
-    );
+    assert!(find_proposal(&f.root, &proposal.id).is_none(), "and nothing finds it afterwards",);
 }
 
 #[test]
@@ -72,19 +69,13 @@ fn graduating_the_draft_leaves_its_proposals_in_place() {
 #[test]
 fn an_unknown_proposal_is_refused_by_every_operation_that_names_one() {
     let f = Fixture::new();
-    assert_eq!(
-        load_content_impl(&f.root, "nope").unwrap_err(),
-        ERR_PROPOSAL_NOT_FOUND,
-    );
+    assert_eq!(load_content_impl(&f.root, "nope").unwrap_err(), ERR_PROPOSAL_NOT_FOUND,);
     assert_eq!(f.accept("nope").unwrap_err(), ERR_PROPOSAL_NOT_FOUND);
     assert_eq!(f.decline_with("nope", None).unwrap_err(), ERR_PROPOSAL_NOT_FOUND);
     // A traversal dressed as an id is refused before it is joined into a path.
     assert!(!is_valid_proposal_id("../../etc/passwd"));
     assert!(!is_valid_proposal_id(""));
-    assert_eq!(
-        load_content_impl(&f.root, "../../etc/passwd").unwrap_err(),
-        ERR_PROPOSAL_NOT_FOUND,
-    );
+    assert_eq!(load_content_impl(&f.root, "../../etc/passwd").unwrap_err(), ERR_PROPOSAL_NOT_FOUND,);
 }
 
 // ---------------------------------------------------------------------------
@@ -99,9 +90,7 @@ fn a_proposal_reaches_an_anchored_draft_thread_too() {
     let thread_id = crate::notes::new_note_id();
     comments::append_as_scoped(
         &f.root,
-        comments::LogScope::Draft {
-            draft_id: &f.draft_id,
-        },
+        comments::LogScope::Draft { draft_id: &f.draft_id },
         FILE,
         &human(),
         "2026-01-01T00:02:00Z",
@@ -110,11 +99,7 @@ fn a_proposal_reaches_an_anchored_draft_thread_too() {
                 thread_id.clone(),
                 comments::EventBody::ThreadOpened {
                     artifact_path: FILE.to_string(),
-                    anchor: comments::LegacyAnchor {
-                        start: 0,
-                        end: 6,
-                        quote: "# Spec".into(),
-                    },
+                    anchor: comments::LegacyAnchor { start: 0, end: 6, quote: "# Spec".into() },
                 },
             ),
             (
@@ -188,27 +173,17 @@ fn a_locked_conversation_refuses_the_decision_before_anything_is_written() {
     let before = f.file_body();
     f.lock();
 
-    assert_eq!(
-        f.accept(&proposal.id).unwrap_err(),
-        crate::comments::ERR_DISCUSSION_LOCKED,
-    );
+    assert_eq!(f.accept(&proposal.id).unwrap_err(), crate::comments::ERR_DISCUSSION_LOCKED,);
     assert_eq!(f.file_body(), before, "the prompt is byte-for-byte what it was");
     assert!(
-        crate::draft_history::list_impl(&f.root, &f.draft_id)
-            .expect("history")
-            .entries
-            .is_empty(),
+        crate::draft_history::list_impl(&f.root, &f.draft_id).expect("history").entries.is_empty(),
         "no version was recorded",
     );
     assert_eq!(
         find_proposal(&f.root, &proposal.id).expect("still there").1.state,
         ProposalState::Pending,
     );
-    assert_eq!(
-        f.discussion().comments.len(),
-        2,
-        "the locked log gained no line",
-    );
+    assert_eq!(f.discussion().comments.len(), 2, "the locked log gained no line",);
 }
 
 // ---------------------------------------------------------------------------
@@ -288,11 +263,7 @@ fn a_failed_record_write_leaves_no_comment_behind() {
     std::fs::set_permissions(&dir, perms).expect("chmod");
 
     assert_eq!(outcome.unwrap_err(), RecordRefusal::NotRecorded);
-    assert_eq!(
-        f.discussion().comments.len(),
-        1,
-        "the conversation gained no line (DCP-FR-06)",
-    );
+    assert_eq!(f.discussion().comments.len(), 1, "the conversation gained no line (DCP-FR-06)",);
     assert!(
         f.proposals_folder_files().is_empty(),
         "and no candidate was left behind either: {:?}",
@@ -379,11 +350,7 @@ fn two_agents_proposing_at_once_record_exactly_one() {
     );
     let all = list_proposals_impl(&f.root, &f.draft_id).expect("list");
     assert_eq!(all.len(), 1, "one candidate on disk: {all:?}");
-    assert_eq!(
-        f.discussion().comments.len(),
-        2,
-        "and one comment announcing it",
-    );
+    assert_eq!(f.discussion().comments.len(), 2, "and one comment announcing it",);
 }
 
 // ---------------------------------------------------------------------------
@@ -404,10 +371,7 @@ fn a_failed_draft_write_leaves_the_proposal_pending_and_the_file_untouched() {
 
     // The draft's `files/` made read-only is what fails the save without
     // touching the record or the conversation.
-    let files_dir = f.root.path().join(format!(
-        ".synthesis/drafts/{}/files",
-        f.draft_id
-    ));
+    let files_dir = f.root.path().join(format!(".synthesis/drafts/{}/files", f.draft_id));
     let mut perms = std::fs::metadata(&files_dir).expect("meta").permissions();
     perms.set_readonly(true);
     std::fs::set_permissions(&files_dir, perms).expect("chmod");
@@ -459,9 +423,5 @@ fn a_decision_reports_the_comment_and_the_origin_kind_it_landed_in() {
     let f2 = Fixture::new();
     let p2 = f2.pending();
     f2.lock();
-    assert_eq!(
-        f2.accept(&p2.id).unwrap_err(),
-        crate::comments::ERR_DISCUSSION_LOCKED,
-    );
+    assert_eq!(f2.accept(&p2.id).unwrap_err(), crate::comments::ERR_DISCUSSION_LOCKED,);
 }
-

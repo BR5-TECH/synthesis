@@ -33,8 +33,8 @@ use crate::project::ProjectState;
 use super::{duration_ms, ERR_NO_REMOTE_CONFIGURED, TRANSFER};
 use client::{read_pages, GithubFailure, GithubPullRequests, HttpGithubPullRequests};
 pub use create::{
-    PullRequestHeadState,
-    ERR_PULL_REQUEST_EXISTS, ERR_PULL_REQUEST_REJECTED, ERR_PULL_REQUEST_TITLE_REQUIRED,
+    PullRequestHeadState, ERR_PULL_REQUEST_EXISTS, ERR_PULL_REQUEST_REJECTED,
+    ERR_PULL_REQUEST_TITLE_REQUIRED,
 };
 pub use model::{
     CreatedPullRequest, PullRequestDetail, PullRequestSummary, PullRequestTimeline,
@@ -65,9 +65,7 @@ struct Target {
 /// `-`, `_` and `.`. Anything else is not an owner or a repository of GitHub.
 fn is_path_safe(part: &str) -> bool {
     !part.is_empty()
-        && part
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        && part.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
 /// Find the repository of the primary remote and resolve the token.
@@ -123,7 +121,8 @@ fn is_refusal(error: &str) -> bool {
                 | ERR_PULL_REQUEST_NOT_FOUND
                 | ERR_PULL_REQUEST_EXISTS
                 | ERR_PULL_REQUEST_TITLE_REQUIRED
-        ) || error.starts_with(ERR_PULL_REQUEST_REJECTED)
+        )
+        || error.starts_with(ERR_PULL_REQUEST_REJECTED)
 }
 
 /// Run one read and report it. `work` gets the resolved target; `outcome` turns

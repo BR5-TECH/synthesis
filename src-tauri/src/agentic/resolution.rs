@@ -113,11 +113,8 @@ pub(super) fn key_presence(
 /// `ASV-application-secret-vault.md` ASV-FR-32). Asking about the rest together
 /// costs the same single vault access as asking about one (ASV-FR-30).
 pub fn vendor_presence(secrets: &dyn SecretStore) -> KeyPresence {
-    let mut ids: Vec<&str> = VENDORS
-        .iter()
-        .filter(|d| d.holds_credential())
-        .map(|d| d.vendor)
-        .collect();
+    let mut ids: Vec<&str> =
+        VENDORS.iter().filter(|d| d.holds_credential()).map(|d| d.vendor).collect();
     // AIC-FR-20: Claude Code holds a second credential, asked after in the same
     // single vault access.
     ids.push(GATEWAY_SECRET_ID);
@@ -147,17 +144,13 @@ pub fn active_vendor(
         .iter()
         .filter(|r| {
             vendor_descriptor(&r.vendor).is_some_and(|d| {
-                state_of(r, d, probe, key_presence(present, r, d))
-                    == IntegrationState::Verified
+                state_of(r, d, probe, key_presence(present, r, d)) == IntegrationState::Verified
             })
         })
         .collect();
 
     if let Some(vendor) = explicit {
-        return verified
-            .iter()
-            .find(|r| r.vendor == vendor)
-            .map(|r| r.vendor.clone());
+        return verified.iter().find(|r| r.vendor == vendor).map(|r| r.vendor.clone());
     }
     match verified.as_slice() {
         [only] => Some(only.vendor.clone()),
@@ -311,11 +304,7 @@ pub fn integrations_from(
 ///    naming coreutils — from passing as anything.
 pub fn identifies_vendor(descriptor: &AgenticVendor, path: &Path, output: &CliOutput) -> bool {
     let text = output.combined().to_lowercase();
-    if descriptor
-        .identity_markers
-        .iter()
-        .any(|marker| text.contains(marker))
-    {
+    if descriptor.identity_markers.iter().any(|marker| text.contains(marker)) {
         return true;
     }
     let named_as_vendor = path
@@ -412,11 +401,7 @@ pub fn detection_directories(path_var: Option<&str>, home: Option<&Path>) -> Vec
     let mut dirs: Vec<PathBuf> = Vec::new();
     if let Some(raw) = path_var {
         let separator = if cfg!(windows) { ';' } else { ':' };
-        dirs.extend(
-            raw.split(separator)
-                .filter(|s| !s.is_empty())
-                .map(PathBuf::from),
-        );
+        dirs.extend(raw.split(separator).filter(|s| !s.is_empty()).map(PathBuf::from));
     }
     // Conventional locations a GUI application will not have inherited on its
     // `PATH`: a macOS app launched from Finder gets a minimal environment, so a
@@ -460,8 +445,7 @@ pub fn resolve_project(
         records.iter().any(|r| {
             r.vendor == vendor
                 && vendor_descriptor(vendor).is_some_and(|d| {
-                    state_of(r, d, probe, key_presence(present, r, d))
-                        == IntegrationState::Verified
+                    state_of(r, d, probe, key_presence(present, r, d)) == IntegrationState::Verified
                 })
         })
     };
@@ -522,4 +506,3 @@ pub(super) fn agentic_probe_error(e: ProbeError) -> String {
         ProbeError::TlsUntrusted(failure) => failure.wire(),
     }
 }
-

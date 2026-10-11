@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::changes::{self, ERR_NO_MERGE_BASE};
 
-
 // ---------------------------------------------------------------------------
 // Wire shapes
 // ---------------------------------------------------------------------------
@@ -99,10 +98,7 @@ pub struct FileRevisions {
 
 impl DiffPayload {
     fn binary() -> DiffPayload {
-        DiffPayload {
-            is_binary: true,
-            hunks: Vec::new(),
-        }
+        DiffPayload { is_binary: true, hunks: Vec::new() }
     }
 
     /// The payload for a path with nothing to show. Production reaches this
@@ -110,10 +106,7 @@ impl DiffPayload {
     /// for the test that pins that equivalence.
     #[cfg(test)]
     pub(crate) fn empty() -> DiffPayload {
-        DiffPayload {
-            is_binary: false,
-            hunks: Vec::new(),
-        }
+        DiffPayload { is_binary: false, hunks: Vec::new() }
     }
 }
 
@@ -150,13 +143,9 @@ pub(crate) fn format_diff(diff: &git2::Diff<'_>) -> Result<DiffPayload, String> 
         match line.origin() {
             // A hunk header opens a new hunk; its content is the `@@ … @@` line.
             'H' => {
-                let header = String::from_utf8_lossy(line.content())
-                    .trim_end_matches('\n')
-                    .to_string();
-                hunks.push(DiffHunk {
-                    header,
-                    lines: Vec::new(),
-                });
+                let header =
+                    String::from_utf8_lossy(line.content()).trim_end_matches('\n').to_string();
+                hunks.push(DiffHunk { header, lines: Vec::new() });
             }
             'F' => {} // the file header is the caller's business, not ours
             origin => {
@@ -166,14 +155,10 @@ pub(crate) fn format_diff(diff: &git2::Diff<'_>) -> Result<DiffPayload, String> 
                 // libgit2 emits hunk headers before their lines, but guard
                 // anyway so a body line can never be dropped.
                 if hunks.is_empty() {
-                    hunks.push(DiffHunk {
-                        header: String::new(),
-                        lines: Vec::new(),
-                    });
+                    hunks.push(DiffHunk { header: String::new(), lines: Vec::new() });
                 }
-                let content = String::from_utf8_lossy(line.content())
-                    .trim_end_matches('\n')
-                    .to_string();
+                let content =
+                    String::from_utf8_lossy(line.content()).trim_end_matches('\n').to_string();
                 let entry = hunks.last_mut().expect("a hunk was just ensured");
                 entry.lines.push(DiffLine {
                     kind: kind.to_string(),
@@ -190,10 +175,7 @@ pub(crate) fn format_diff(diff: &git2::Diff<'_>) -> Result<DiffPayload, String> 
     if is_binary.into_inner() {
         return Ok(DiffPayload::binary());
     }
-    Ok(DiffPayload {
-        is_binary: false,
-        hunks: hunks.into_inner(),
-    })
+    Ok(DiffPayload { is_binary: false, hunks: hunks.into_inner() })
 }
 
 /// Repository-relative pathspec for a project-relative path.
@@ -218,10 +200,7 @@ pub fn diff_for_scope(root: &Path, scope: &DiffScope) -> Result<DiffPayload, Str
     let prefix = changes::project_prefix(&repo, root);
 
     match scope {
-        DiffScope::Path {
-            path,
-            previous_path,
-        } => {
+        DiffScope::Path { path, previous_path } => {
             let mut opts = file_options(&prefix, path, previous_path.as_deref());
             let tree = head_tree(&repo);
             let mut diff = repo
@@ -243,11 +222,7 @@ pub fn diff_for_scope(root: &Path, scope: &DiffScope) -> Result<DiffPayload, Str
             changes::find_renames(&mut diff)?;
             format_diff(&diff)
         }
-        DiffScope::Branch {
-            path,
-            target_branch,
-            previous_path,
-        } => {
+        DiffScope::Branch { path, target_branch, previous_path } => {
             let base_tree = merge_base_tree(&repo, target_branch)?;
             let mut opts = file_options(&prefix, path, previous_path.as_deref());
             let mut diff = repo
@@ -265,7 +240,11 @@ pub fn diff_for_scope(root: &Path, scope: &DiffScope) -> Result<DiffPayload, Str
 /// appends, and libgit2 matches a path against any entry, so a `prefix` entry
 /// alongside a file entry would widen the diff back to the whole project and a
 /// Diff tab would render every changed file at once.
-pub(crate) fn file_options(prefix: &str, path: &str, previous_path: Option<&str>) -> git2::DiffOptions {
+pub(crate) fn file_options(
+    prefix: &str,
+    path: &str,
+    previous_path: Option<&str>,
+) -> git2::DiffOptions {
     let mut opts = changes::diff_options();
     opts.pathspec(repo_pathspec(prefix, path));
     if let Some(previous) = previous_path {
@@ -292,12 +271,8 @@ pub(crate) fn merge_base_tree<'r>(
         .and_then(|h| h.peel_to_commit().ok())
         .map(|c| c.id())
         .ok_or_else(|| ERR_NO_MERGE_BASE.to_string())?;
-    let base = repo
-        .merge_base(head, target)
-        .map_err(|_| ERR_NO_MERGE_BASE.to_string())?;
-    repo.find_commit(base)
-        .and_then(|c| c.tree())
-        .map_err(|_| ERR_NO_MERGE_BASE.to_string())
+    let base = repo.merge_base(head, target).map_err(|_| ERR_NO_MERGE_BASE.to_string())?;
+    repo.find_commit(base).and_then(|c| c.tree()).map_err(|_| ERR_NO_MERGE_BASE.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -378,19 +353,12 @@ pub fn file_revisions_for_scope(
     let prefix = changes::project_prefix(&repo, root);
 
     let (path, previous_path, base_tree) = match scope {
-        DiffScope::Path {
-            path,
-            previous_path,
-        } => (path, previous_path.as_deref(), head_tree(&repo)),
-        DiffScope::Branch {
-            path,
-            target_branch,
-            previous_path,
-        } => (
-            path,
-            previous_path.as_deref(),
-            Some(merge_base_tree(&repo, target_branch)?),
-        ),
+        DiffScope::Path { path, previous_path } => {
+            (path, previous_path.as_deref(), head_tree(&repo))
+        }
+        DiffScope::Branch { path, target_branch, previous_path } => {
+            (path, previous_path.as_deref(), Some(merge_base_tree(&repo, target_branch)?))
+        }
         DiffScope::Staged => return Err(ERR_SCOPE_NOT_A_FILE.to_string()),
     };
 
@@ -399,9 +367,7 @@ pub fn file_revisions_for_scope(
     // contradicting the `+n −n` the row that opened the tab showed (CHC-FR-09).
     let old_spec = repo_pathspec(&prefix, previous_path.unwrap_or(path));
     let new_spec = repo_pathspec(&prefix, path);
-    let old_bytes = base_tree
-        .as_ref()
-        .and_then(|tree| blob_at(&repo, tree, &old_spec));
+    let old_bytes = base_tree.as_ref().and_then(|tree| blob_at(&repo, tree, &old_spec));
 
     // The path arrives from the frontend, so it is resolved under the content
     // root rather than joined blindly: a `..` segment must not reach a file
@@ -425,17 +391,9 @@ pub fn file_revisions_for_scope(
         || marked_binary_by_attributes(&repo, &new_spec)
         || marked_binary_by_attributes(&repo, &old_spec);
     if is_binary {
-        return Ok(FileRevisions {
-            old: None,
-            new: None,
-            is_binary: true,
-        });
+        return Ok(FileRevisions { old: None, new: None, is_binary: true });
     }
 
     let decode = |bytes: Vec<u8>| normalize_eol(String::from_utf8_lossy(&bytes).into_owned());
-    Ok(FileRevisions {
-        old: old_bytes.map(decode),
-        new: new_bytes.map(decode),
-        is_binary: false,
-    })
+    Ok(FileRevisions { old: old_bytes.map(decode), new: new_bytes.map(decode), is_binary: false })
 }

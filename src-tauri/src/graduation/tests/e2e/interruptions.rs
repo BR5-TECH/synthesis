@@ -20,11 +20,7 @@ use crate::graduation::{
 #[test]
 fn an_author_pause_mid_work_rests_the_run_and_continue_resumes_it() {
     Scenario::named("author pause in the work turn")
-        .work_turn(
-            Script::reports_success()
-                .writes("src/panel.ts", "1\n")
-                .pausing_the_run(),
-        )
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n").pausing_the_run())
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("author_pause")
@@ -98,11 +94,7 @@ fn an_author_pause_during_the_review_resumes_at_the_review() {
 #[test]
 fn only_the_abandoned_commit_at_the_head_takes_the_graduation_message() {
     Scenario::named("two abandoned commits")
-        .work_turn(
-            Script::reports_success()
-                .writes("src/panel.ts", "1\n")
-                .pausing_the_run(),
-        )
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n").pausing_the_run())
         .run()
         .expect_commits(1)
         .continued(vec![
@@ -162,9 +154,7 @@ fn the_review_resume_point_is_spent_once_the_review_has_run() {
         .expect_interruption("author_pause")
         .continued(vec![
             Script::answers_revise(ReviewSeverity::Major, "The empty state is not there."),
-            Script::reports_success()
-                .writes("src/panel.ts", "2\n")
-                .pausing_the_run(),
+            Script::reports_success().writes("src/panel.ts", "2\n").pausing_the_run(),
         ])
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("author_pause")
@@ -211,11 +201,7 @@ fn a_turn_that_finishes_as_the_author_pauses_still_rests_paused() {
 #[test]
 fn a_timeout_after_an_earlier_pause_is_not_called_a_pause() {
     Scenario::named("timeout after a pause")
-        .work_turn(
-            Script::reports_success()
-                .writes("src/panel.ts", "1\n")
-                .pausing_the_run(),
-        )
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n").pausing_the_run())
         .run()
         .expect_interruption("author_pause")
         .continued(vec![Script::times_out().writes("src/panel.ts", "2\n")])
@@ -235,10 +221,7 @@ fn a_pause_that_races_the_time_limit_reads_as_the_pause() {
     Scenario::named("pause racing the time limit")
         .with_setting(Setting::ExecutionTimeoutMs, 1_000)
         .work_turn(
-            Script::times_out()
-                .writes("src/panel.ts", "1\n")
-                .pausing_the_run()
-                .finishing_anyway(),
+            Script::times_out().writes("src/panel.ts", "1\n").pausing_the_run().finishing_anyway(),
         )
         .run()
         .expect_state(GraduationRunState::Interrupted)
@@ -448,9 +431,7 @@ fn a_shutdown_leaves_a_blocked_run_on_another_stream_blocked() {
 fn a_run_abandoned_by_a_relaunch_rests_as_execution_abandoned() {
     Scenario::named("relaunch sweep")
         .work_turn(
-            Script::reports_success()
-                .writes("src/panel.ts", "1\n")
-                .abandoned_by_a_relaunch(),
+            Script::reports_success().writes("src/panel.ts", "1\n").abandoned_by_a_relaunch(),
         )
         .run()
         .expect_state(GraduationRunState::Interrupted)
@@ -538,7 +519,11 @@ fn a_review_turn_that_times_out_commits_the_unreviewed_work_and_resumes_with_a_w
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("execution_timeout")
-        .expect_interrupted_record("execution_timeout", "error", &[("process_outcome", serde_json::json!("timeout"))])
+        .expect_interrupted_record(
+            "execution_timeout",
+            "error",
+            &[("process_outcome", serde_json::json!("timeout"))],
+        )
         .expect_commits(1)
         .expect_committed_paths(&["src/panel.ts"])
         .expect_review_checkout_reclaimed()

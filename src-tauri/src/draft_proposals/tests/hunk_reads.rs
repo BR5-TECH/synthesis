@@ -65,7 +65,14 @@ fn strip_to_old_record(fx: &Fixture, proposal_id: &str) {
         .expect("old record written");
 }
 
-fn replace_hunk(id: &str, before: &str, after: &str, lead: &str, trail: &str, at: usize) -> ProposalHunk {
+fn replace_hunk(
+    id: &str,
+    before: &str,
+    after: &str,
+    lead: &str,
+    trail: &str,
+    at: usize,
+) -> ProposalHunk {
     ProposalHunk {
         id: id.to_string(),
         kind: HunkKind::Replace,
@@ -345,7 +352,10 @@ fn replacing(before: &str, after: &str) -> hunks::ProposedHunk {
 fn read_proposal_changes_carries_each_change_and_how_it_was_decided() {
     let f = Fixture::new();
     let proposal = f
-        .propose_hunks(FILE, &[replacing("original", "revised"), replacing("paragraphs", "sections")])
+        .propose_hunks(
+            FILE,
+            &[replacing("original", "revised"), replacing("paragraphs", "sections")],
+        )
         .expect("recorded");
     let first = proposal.ledger[0].id.clone();
     let second = proposal.ledger[1].id.clone();
@@ -466,11 +476,7 @@ fn read_proposal_changes_settles_a_legacy_proposal_from_its_record() {
 
     let read = read_proposal_changes(&f.root, &f.draft_id).expect("read");
     assert_eq!(read.len(), 1);
-    assert_eq!(
-        read[0].changes.len(),
-        1,
-        "a legacy proposal is one whole-document change",
-    );
+    assert_eq!(read[0].changes.len(), 1, "a legacy proposal is one whole-document change",);
     // Without settling the synthesised row from the record, an already-decided
     // proposal reads as undecided — and an agent told a settled passage is still
     // open proposes into it again, which is what AGC-FR-RVQP exists to stop.

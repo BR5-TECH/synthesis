@@ -65,13 +65,9 @@ fn on_macos_the_settings_entry_is_in_the_app_name_menu_and_not_the_file_menu() {
         ]
     );
     let app: Vec<&str> = app_menu_order(true).iter().map(|(id, ..)| *id).collect();
-    assert_eq!(
-        app,
-        [MENU_SETTINGS, MENU_ABOUT, MENU_QUIT]
-    );
+    assert_eq!(app, [MENU_SETTINGS, MENU_ABOUT, MENU_QUIT]);
     // And on every other platform the app-name menu carries Quit alone.
-    let app_elsewhere: Vec<&str> =
-        app_menu_order(false).iter().map(|(id, ..)| *id).collect();
+    let app_elsewhere: Vec<&str> = app_menu_order(false).iter().map(|(id, ..)| *id).collect();
     assert_eq!(app_elsewhere, [MENU_QUIT]);
 }
 
@@ -94,8 +90,7 @@ fn about_sits_immediately_before_the_quit_item_of_the_platform_menu() {
     let app: Vec<&str> = app_menu_order(true).iter().map(|(id, ..)| *id).collect();
     assert_eq!(&app[app.len() - 2..], [MENU_ABOUT, MENU_QUIT]);
 
-    let app_elsewhere: Vec<&str> =
-        app_menu_order(false).iter().map(|(id, ..)| *id).collect();
+    let app_elsewhere: Vec<&str> = app_menu_order(false).iter().map(|(id, ..)| *id).collect();
     assert!(!app_elsewhere.contains(&MENU_ABOUT));
 }
 
@@ -235,10 +230,7 @@ fn each_find_accelerator_is_bound_exactly_once() {
     // SNV-FR-43: ⌘F and ⌘R are each bound, and to one item. An unbound chord
     // is a shortcut that does nothing; a doubly-bound one is undefined
     // behaviour in the native menu.
-    for (chord, expected) in [
-        ("CmdOrCtrl+F", MENU_FIND),
-        ("CmdOrCtrl+R", MENU_FIND_REPLACE),
-    ] {
+    for (chord, expected) in [("CmdOrCtrl+F", MENU_FIND), ("CmdOrCtrl+R", MENU_FIND_REPLACE)] {
         let bound: Vec<&str> = all_menu_item_specs()
             .iter()
             .filter(|(.., accel)| *accel == Some(chord))
@@ -257,10 +249,7 @@ fn the_find_items_the_enablement_handles_need_are_declared_in_the_menu() {
     // forever with no error anywhere.
     let ids: Vec<&str> = EDIT_MENU_ITEMS.iter().map(|(id, ..)| *id).collect();
     assert!(ids.contains(&MENU_FIND), "Find must be an Edit-menu item");
-    assert!(
-        ids.contains(&MENU_FIND_REPLACE),
-        "Find & Replace must be an Edit-menu item"
-    );
+    assert!(ids.contains(&MENU_FIND_REPLACE), "Find & Replace must be an Edit-menu item");
 }
 
 #[test]
@@ -304,10 +293,7 @@ fn activating_find_and_find_replace_emits_their_own_channel() {
         handle_menu_event(&app.handle().clone(), activated);
 
         assert!(hit.load(Ordering::SeqCst), "{activated} must emit {expected}");
-        assert!(
-            !wrong.load(Ordering::SeqCst),
-            "{activated} must not emit {other}"
-        );
+        assert!(!wrong.load(Ordering::SeqCst), "{activated} must not emit {other}");
     }
 }
 
@@ -356,15 +342,10 @@ fn the_save_items_the_enablement_handles_need_are_declared_in_the_menu() {
     // of that list the capture would silently yield `None`, the menu would
     // still build, and `set_save_menu_state` would go inert — Save would be
     // stuck greyed out forever with no error anywhere.
-    let ids: Vec<&str> = file_menu_order(cfg!(target_os = "macos"))
-        .iter()
-        .map(|(id, ..)| *id)
-        .collect();
+    let ids: Vec<&str> =
+        file_menu_order(cfg!(target_os = "macos")).iter().map(|(id, ..)| *id).collect();
     assert!(ids.contains(&MENU_SAVE), "Save must be a File-menu item");
-    assert!(
-        ids.contains(&MENU_SAVE_ALL),
-        "Save All must be a File-menu item"
-    );
+    assert!(ids.contains(&MENU_SAVE_ALL), "Save All must be a File-menu item");
 }
 
 #[test]
@@ -439,16 +420,10 @@ fn exactly_one_menu_item_carries_the_quit_accelerator() {
 fn menu_event_action_maps_each_file_item() {
     // NFI-FR-06, NFW-FR-06, NTA-FR-07, SNV-FR-24 / OVW-FR-02, PST-FR-14, ASC-FR-14, SNV-FR-25: each owned id resolves to its action.
     assert_eq!(menu_event_action(MENU_NEW_FOLDER), Some(MenuAction::NewFolder));
-    assert_eq!(
-        menu_event_action(MENU_NEW_ARTIFACT),
-        Some(MenuAction::NewArtifact)
-    );
+    assert_eq!(menu_event_action(MENU_NEW_ARTIFACT), Some(MenuAction::NewArtifact));
     assert_eq!(menu_event_action(MENU_SAVE), Some(MenuAction::Save));
     assert_eq!(menu_event_action(MENU_SAVE_ALL), Some(MenuAction::SaveAll));
-    assert_eq!(
-        menu_event_action(MENU_CLOSE_PROJECT),
-        Some(MenuAction::CloseProject)
-    );
+    assert_eq!(menu_event_action(MENU_CLOSE_PROJECT), Some(MenuAction::CloseProject));
 }
 
 #[test]
@@ -484,10 +459,9 @@ fn activating_save_and_save_all_emits_their_own_channel() {
     let dir = tempfile::TempDir::new().unwrap();
     let app = mock_app_with_window(dir.path());
 
-    for (activated, expected, other) in [
-        (MENU_SAVE, MENU_SAVE, MENU_SAVE_ALL),
-        (MENU_SAVE_ALL, MENU_SAVE_ALL, MENU_SAVE),
-    ] {
+    for (activated, expected, other) in
+        [(MENU_SAVE, MENU_SAVE, MENU_SAVE_ALL), (MENU_SAVE_ALL, MENU_SAVE_ALL, MENU_SAVE)]
+    {
         let hit = Arc::new(AtomicBool::new(false));
         let wrong = Arc::new(AtomicBool::new(false));
         let (h, w) = (hit.clone(), wrong.clone());
@@ -497,10 +471,7 @@ fn activating_save_and_save_all_emits_their_own_channel() {
         handle_menu_event(&app.handle().clone(), activated);
 
         assert!(hit.load(Ordering::SeqCst), "{activated} must emit {expected}");
-        assert!(
-            !wrong.load(Ordering::SeqCst),
-            "{activated} must not emit {other}"
-        );
+        assert!(!wrong.load(Ordering::SeqCst), "{activated} must not emit {other}");
     }
 }
 
@@ -524,4 +495,3 @@ fn menu_event_action_ignores_unowned_ids() {
         assert_eq!(menu_event_action(id), None, "id {id:?} must be unowned");
     }
 }
-

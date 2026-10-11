@@ -50,7 +50,11 @@ pub fn read_prompt_images_of(
 }
 
 /// One image use, resolved and read.
-pub(super) fn resolve_prompt_image(root: &fs::RootFs, dir: &Path, used: ImageUse) -> DraftPromptImage {
+pub(super) fn resolve_prompt_image(
+    root: &fs::RootFs,
+    dir: &Path,
+    used: ImageUse,
+) -> DraftPromptImage {
     let context = image_context(&used.alt, &used.reference);
     // DAS-FR-22: an entry whose destination resolved to no draft-owned asset is
     // still returned in its own position with its context intact, so the caller

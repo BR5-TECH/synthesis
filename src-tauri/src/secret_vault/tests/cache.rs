@@ -163,9 +163,7 @@ fn a_later_mutation_writes_from_the_cache_and_updates_it() {
     let reads = keyring.count(&Call::Read);
 
     set(&vault, &["github", "tokens", "n"], "N").unwrap();
-    vault
-        .apply_secret_mutations(&[Mutation::Remove { path: p(A) }])
-        .unwrap();
+    vault.apply_secret_mutations(&[Mutation::Remove { path: p(A) }]).unwrap();
 
     // Only the read-back of each mutation.
     assert_eq!(keyring.count(&Call::Read) - reads, 2);

@@ -81,7 +81,10 @@ fn the_graphql_url_follows_the_three_rules() {
 fn the_token_creation_page_is_on_the_host_with_the_scopes_pre_selected() {
     for host in ["github.com", "company.ghe.com", "git.corp.example"] {
         let url = token_creation_url(host);
-        assert!(url.starts_with(&format!("{}/settings/tokens/new?", github_web_base(host))), "{url}");
+        assert!(
+            url.starts_with(&format!("{}/settings/tokens/new?", github_web_base(host))),
+            "{url}"
+        );
         assert!(url.contains("scopes=repo,workflow"), "{url}");
     }
     assert!(token_creation_url("github.com").starts_with("https://github.com/"));
@@ -144,7 +147,10 @@ fn a_remote_host_is_read_from_the_https_ssh_and_scp_forms() {
         assert_eq!(remote_host(url), None, "{url}");
     }
     assert_eq!(https_remote_host("git@github.com:acme/x.git"), None);
-    assert_eq!(https_remote_host("https://github.com@evil.example/x").as_deref(), Some("evil.example"));
+    assert_eq!(
+        https_remote_host("https://github.com@evil.example/x").as_deref(),
+        Some("evil.example")
+    );
 }
 
 fn token_on(host: &str, verifier: FakeVerifier) -> (Harness, GithubTokenRecord) {
@@ -172,9 +178,12 @@ fn adding_a_token_stores_the_normalized_host_and_verifies_against_it() {
         }
     }
     let store = GlobalSettingsStore::in_memory();
-    let tokens = GithubTokens::new(Box::new(FakeSecrets::default()), Box::new(Shared(seen.clone())));
+    let tokens =
+        GithubTokens::new(Box::new(FakeSecrets::default()), Box::new(Shared(seen.clone())));
 
-    let record = add_token_impl(&store, &tokens, "work", "ghp_secret_1234", " HTTPS://Company.GHE.com/ ").unwrap();
+    let record =
+        add_token_impl(&store, &tokens, "work", "ghp_secret_1234", " HTTPS://Company.GHE.com/ ")
+            .unwrap();
     assert_eq!(record.host, "company.ghe.com");
     let default = add_token_impl(&store, &tokens, "personal", "ghp_secret_5678", "").unwrap();
     assert_eq!(default.host, "github.com");
@@ -208,7 +217,8 @@ fn validating_a_token_verifies_against_the_host_of_its_record() {
     }
     let seen = Arc::new(StdMutex::new(Vec::new()));
     let store = GlobalSettingsStore::in_memory();
-    let tokens = GithubTokens::new(Box::new(FakeSecrets::default()), Box::new(Recording(seen.clone())));
+    let tokens =
+        GithubTokens::new(Box::new(FakeSecrets::default()), Box::new(Recording(seen.clone())));
     let ghe = add_token_impl(&store, &tokens, "ghe", "ghp_secret_1234", "company.ghe.com").unwrap();
     // A record stored before hosts existed has none.
     let mut records = store.load_github_token_registry().unwrap();
@@ -230,7 +240,10 @@ fn validating_a_token_verifies_against_the_host_of_its_record() {
 // GTS-FR-OBAS, GTS-FR-13
 #[test]
 fn a_token_is_resolved_only_for_a_remote_on_its_own_host() {
-    let (h, _) = token_on("company.ghe.com", FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]));
+    let (h, _) = token_on(
+        "company.ghe.com",
+        FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]),
+    );
     assert_eq!(
         resolve_github_token_secret(&h.store, &h.tokens, "/dev/acme", "company.ghe.com").unwrap(),
         "ghp_secret_1234"
@@ -254,7 +267,8 @@ fn a_host_mismatch_is_reported_before_the_vault_is_asked_for_the_secret() {
     let mut stored = record("a", "work");
     stored.host = "company.ghe.com".into();
     store.save_github_token_registry(vec![stored]).unwrap();
-    let tokens = GithubTokens::new(Box::new(FakeSecrets::broken()), Box::new(FakeVerifier::rejecting()));
+    let tokens =
+        GithubTokens::new(Box::new(FakeSecrets::broken()), Box::new(FakeVerifier::rejecting()));
     assert_eq!(
         resolve_github_token_secret(&store, &tokens, "/dev/acme", "github.com").unwrap_err(),
         ERR_HOST_MISMATCH
@@ -268,7 +282,10 @@ fn a_host_mismatch_is_reported_before_the_vault_is_asked_for_the_secret() {
 // GTS-FR-OBAS
 #[test]
 fn the_project_token_reports_its_host_with_its_secret() {
-    let (h, _) = token_on("company.ghe.com", FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]));
+    let (h, _) = token_on(
+        "company.ghe.com",
+        FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]),
+    );
     let token = resolve_project_token(&h.store, &h.tokens, "/dev/acme").unwrap();
     assert_eq!(token.host, "company.ghe.com");
     assert_eq!(token.secret, "ghp_secret_1234");
@@ -277,10 +294,16 @@ fn the_project_token_reports_its_host_with_its_secret() {
 // GTC-FR-09, GTC-FR-FSLC
 #[test]
 fn a_remote_token_applies_to_github_hosts_only_and_must_match_the_host() {
-    let (h, _) = token_on("company.ghe.com", FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]));
+    let (h, _) = token_on(
+        "company.ghe.com",
+        FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]),
+    );
     let resolve = |url: &str| resolve_remote_token(&h.store, &h.tokens, "/dev/acme", url);
 
-    assert_eq!(resolve("https://company.ghe.com/acme/x.git").unwrap().as_deref(), Some("ghp_secret_1234"));
+    assert_eq!(
+        resolve("https://company.ghe.com/acme/x.git").unwrap().as_deref(),
+        Some("ghp_secret_1234")
+    );
     // The token is for another host than this remote.
     assert_eq!(resolve("https://github.com/acme/x.git").unwrap_err(), ERR_HOST_MISMATCH);
     assert_eq!(resolve("https://other.ghe.com/acme/x.git").unwrap_err(), ERR_HOST_MISMATCH);
@@ -293,15 +316,29 @@ fn a_remote_token_applies_to_github_hosts_only_and_must_match_the_host() {
 // GTC-FR-09
 #[test]
 fn a_host_that_only_a_stored_token_names_is_a_github_host() {
-    let (h, _) = token_on("git.corp.example", FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]));
+    let (h, _) = token_on(
+        "git.corp.example",
+        FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]),
+    );
     assert_eq!(
-        resolve_remote_token(&h.store, &h.tokens, "/dev/acme", "https://git.corp.example/acme/x.git")
-            .unwrap()
-            .as_deref(),
+        resolve_remote_token(
+            &h.store,
+            &h.tokens,
+            "/dev/acme",
+            "https://git.corp.example/acme/x.git"
+        )
+        .unwrap()
+        .as_deref(),
         Some("ghp_secret_1234")
     );
     assert_eq!(
-        resolve_remote_token(&h.store, &h.tokens, "/dev/acme", "https://git.other.example/acme/x.git").unwrap(),
+        resolve_remote_token(
+            &h.store,
+            &h.tokens,
+            "/dev/acme",
+            "https://git.other.example/acme/x.git"
+        )
+        .unwrap(),
         None
     );
 }

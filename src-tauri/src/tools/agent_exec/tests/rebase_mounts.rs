@@ -25,9 +25,7 @@ fn eac_ts52_the_semantic_rebase_mount_is_fixed_read_only_and_identical_per_vendo
         run_with_mount(
             &harness,
             runtime.clone(),
-            Some(SupplementaryMount::SemanticRebaseArtifact {
-                host_path: bundle.clone(),
-            }),
+            Some(SupplementaryMount::SemanticRebaseArtifact { host_path: bundle.clone() }),
             None,
         )
         .expect("runs");
@@ -51,11 +49,8 @@ fn eac_ts52_the_semantic_rebase_mount_is_fixed_read_only_and_identical_per_vendo
         // GRB-FR-VZHV: the mount set is the execution directory, the artifact,
         // and the vendor's own — no source worktree and no repository directory
         // anywhere in it.
-        let mounts: Vec<&String> = recorded
-            .argv
-            .iter()
-            .filter(|a| a.starts_with("type=bind"))
-            .collect();
+        let mounts: Vec<&String> =
+            recorded.argv.iter().filter(|a| a.starts_with("type=bind")).collect();
         for mount in &mounts {
             assert!(
                 mount.contains(&format!("target={}", harness.workspace_target()))
@@ -156,10 +151,8 @@ fn eac_ts53_an_invalid_bundle_is_refused_before_any_container() {
         (outside_bundle, "outside the application's store"),
         (linked, "reaching through a link out of the store"),
     ] {
-        let runtime = RecordingRuntime::replying(&stdout_for(
-            "claude_code",
-            &envelope_json("success"),
-        ));
+        let runtime =
+            RecordingRuntime::replying(&stdout_for("claude_code", &envelope_json("success")));
         let failure = run_with_mount(
             &harness,
             runtime.clone(),
@@ -195,19 +188,13 @@ fn eac_ts53_an_invalid_bundle_is_refused_before_any_container() {
     }
     // One file sits **exactly on** the bound, which is the size a cut file is
     // written at.
-    std::fs::write(
-        bulk.join("merged/src/area0/nested/deep/file0000.ts"),
-        &at_the_bound,
-    )
-    .unwrap();
+    std::fs::write(bulk.join("merged/src/area0/nested/deep/file0000.ts"), &at_the_bound).unwrap();
 
     let runtime = RecordingRuntime::replying(&stdout_for("claude_code", &envelope_json("success")));
     run_with_mount(
         &harness,
         runtime.clone(),
-        Some(SupplementaryMount::SemanticRebaseArtifact {
-            host_path: bulk.clone(),
-        }),
+        Some(SupplementaryMount::SemanticRebaseArtifact { host_path: bulk.clone() }),
         None,
     )
     .expect("a bundle past any total is mounted");
@@ -245,9 +232,7 @@ fn eac_ts55_repository_metadata_is_masked_for_a_semantic_rebase_execution() {
     run_with_mount(
         &harness,
         runtime.clone(),
-        Some(SupplementaryMount::SemanticRebaseArtifact {
-            host_path: bundle.clone(),
-        }),
+        Some(SupplementaryMount::SemanticRebaseArtifact { host_path: bundle.clone() }),
         None,
     )
     .expect("runs");
@@ -274,10 +259,7 @@ fn eac_ts55_repository_metadata_is_masked_for_a_semantic_rebase_execution() {
     // repository: it would fail the launch.
     let workspace = harness.workspace_target();
     let root_mask = mask_source(&format!("target={workspace}/.git"));
-    assert!(
-        root_mask.is_file(),
-        "a `.git` file must be masked by a file, not {root_mask:?}",
-    );
+    assert!(root_mask.is_file(), "a `.git` file must be masked by a file, not {root_mask:?}",);
     assert_eq!(
         std::fs::read(&root_mask).expect("readable"),
         Vec::<u8>::new(),
@@ -293,10 +275,7 @@ fn eac_ts55_repository_metadata_is_masked_for_a_semantic_rebase_execution() {
             "a `.git` directory must be masked by a directory, not {mask:?} ({nested})",
         );
         assert!(
-            std::fs::read_dir(&mask)
-                .expect("readable")
-                .next()
-                .is_none(),
+            std::fs::read_dir(&mask).expect("readable").next().is_none(),
             "and the directory it is masked by is empty",
         );
     }
@@ -305,7 +284,8 @@ fn eac_ts55_repository_metadata_is_masked_for_a_semantic_rebase_execution() {
     // `semantic_rebase` and supplied no mount is masked all the same, so a turn
     // that reached the executor under the wrong name still reads no repository.
     let runtime = RecordingRuntime::replying(&stdout_for("claude_code", &envelope_json("success")));
-    run_as(&harness, runtime.clone(), None, None, super::super::TurnKind::SemanticRebase).expect("runs");
+    run_as(&harness, runtime.clone(), None, None, super::super::TurnKind::SemanticRebase)
+        .expect("runs");
     assert!(
         runtime
             .only_run()
@@ -328,16 +308,18 @@ fn eac_ts55_masking_and_repository_access_are_exclusive() {
     let harness = harness_for("claude_code");
     linked_worktree_at(&harness.sessions_root(), &harness.workspace());
 
-    let argv_for = |kind: super::super::TurnKind, mount: Option<SupplementaryMount>| -> Vec<String> {
-        let runtime =
-            RecordingRuntime::replying(&stdout_for("claude_code", &envelope_json("success")));
-        run_as(&harness, runtime.clone(), mount, None, kind).expect("runs");
-        runtime.only_run().argv
-    };
+    let argv_for =
+        |kind: super::super::TurnKind, mount: Option<SupplementaryMount>| -> Vec<String> {
+            let runtime =
+                RecordingRuntime::replying(&stdout_for("claude_code", &envelope_json("success")));
+            run_as(&harness, runtime.clone(), mount, None, kind).expect("runs");
+            runtime.only_run().argv
+        };
     let masked = |argv: &[String]| {
-        argv.iter()
-            .any(|a| a.contains(&format!("target={}/.git", harness.workspace_target()))
-                && a.contains("repository-mask"))
+        argv.iter().any(|a| {
+            a.contains(&format!("target={}/.git", harness.workspace_target()))
+                && a.contains("repository-mask")
+        })
     };
     // Read off the Git environment rather than a mount target: the grant carries
     // it in every shape (EAC-FR-ZKMR), where the store's own target is one path
@@ -385,7 +367,9 @@ fn eac_ts_tuaa_a_turn_reaches_its_repository_read_only() {
 
     let mount_for = |target: &str| -> String {
         argv.iter()
-            .find(|a| a.contains(&format!("target={target},")) || a.ends_with(&format!("target={target}")))
+            .find(|a| {
+                a.contains(&format!("target={target},")) || a.ends_with(&format!("target={target}"))
+            })
             .unwrap_or_else(|| panic!("no mount for {target} in {argv:?}"))
             .clone()
     };
@@ -416,10 +400,7 @@ fn eac_ts_tuaa_a_turn_reaches_its_repository_read_only() {
         "one string on both sides, and read-only",
     );
     assert!(
-        !argv
-            .iter()
-            .filter(|a| a.starts_with("type=bind"))
-            .any(|a| a.contains("//")),
+        !argv.iter().filter(|a| a.starts_with("type=bind")).any(|a| a.contains("//")),
         "no mount is composed through a doubled separator: {argv:?}",
     );
 
@@ -443,7 +424,9 @@ fn eac_ts_tuaa_a_turn_reaches_its_repository_read_only() {
         "the pin is the worktree's own file: {pin}",
     );
     assert!(
-        !argv.iter().any(|a| a.contains("repository-pointer") || a.contains("repository-commondir")),
+        !argv
+            .iter()
+            .any(|a| a.contains("repository-pointer") || a.contains("repository-commondir")),
         "nothing is generated in this shape: {argv:?}",
     );
 
@@ -453,11 +436,7 @@ fn eac_ts_tuaa_a_turn_reaches_its_repository_read_only() {
     // correct by construction: a worktree recording its store under another
     // spelling would resolve to nothing inside the container.
     let recorded = std::fs::read_to_string(harness.workspace().join(".git")).expect("the pin");
-    let named = recorded
-        .trim()
-        .strip_prefix("gitdir: ")
-        .expect("a gitdir pointer")
-        .to_string();
+    let named = recorded.trim().strip_prefix("gitdir: ").expect("a gitdir pointer").to_string();
     assert!(
         named.starts_with(&format!("{store_target}/")),
         "the worktree resolves its store inside the mounted one: {named} vs {store_target}",
@@ -484,9 +463,7 @@ fn eac_ts_tuaa_a_turn_reaches_its_repository_read_only() {
     // EAC-FR-FNFV: a store before the mask that covers an entry inside it, or
     // the cover is applied to a path the store then hides.
     let position_of = |mount: &str| {
-        argv.iter()
-            .position(|a| a == mount)
-            .unwrap_or_else(|| panic!("{mount} is not in {argv:?}"))
+        argv.iter().position(|a| a == mount).unwrap_or_else(|| panic!("{mount} is not in {argv:?}"))
     };
     assert!(
         position_of(&mounted) < position_of(&masked_config),
@@ -573,7 +550,9 @@ fn eac_ts_tuaa_a_turn_reaches_its_repository_read_only() {
     let at = |target: &str| {
         rendered
             .iter()
-            .position(|a| a.ends_with(&format!("target={target}")) || a.contains(&format!("target={target},")))
+            .position(|a| {
+                a.ends_with(&format!("target={target}")) || a.contains(&format!("target={target},"))
+            })
             .unwrap_or_else(|| panic!("{target} is not in {rendered:?}"))
     };
     assert!(
@@ -663,19 +642,13 @@ fn eac_ts_tuaa_a_worktree_recording_an_absolute_store_still_resolves() {
     // What the turn would stand on without the generated record: the worktree's
     // own, naming a host path that is not there. Nothing resolves.
     assert!(
-        git2::Repository::open(&mounted_workspace)
-            .and_then(|r| r.head().map(|_| ()))
-            .is_err(),
+        git2::Repository::open(&mounted_workspace).and_then(|r| r.head().map(|_| ())).is_err(),
         "an absolute host record is what fails the turn's first Git command",
     );
 
     // And with the generated record over it.
     let record = mounted_store.join("worktrees/run-1/commondir");
-    std::fs::copy(
-        source_of("/gitcommon/worktrees/run-1/commondir"),
-        &record,
-    )
-    .unwrap();
+    std::fs::copy(source_of("/gitcommon/worktrees/run-1/commondir"), &record).unwrap();
 
     let repo = git2::Repository::open(&mounted_workspace).expect("the worktree resolves");
     let mut walk = repo.revwalk().expect("a revision walk");
@@ -683,16 +656,13 @@ fn eac_ts_tuaa_a_worktree_recording_an_absolute_store_still_resolves() {
     assert!(walk.count() > 0, "there is history to log");
     repo.statuses(None).expect("a status to read");
     let tree = repo.head().unwrap().peel_to_tree().unwrap();
-    repo.diff_tree_to_workdir_with_index(Some(&tree), None)
-        .expect("a diff against HEAD");
+    repo.diff_tree_to_workdir_with_index(Some(&tree), None).expect("a diff against HEAD");
 
     // The control: a record that names somewhere neither mount is fails. Without
     // it this test would pass on a Git that never read the record at all.
     std::fs::write(&record, b"../../nowhere\n").unwrap();
     assert!(
-        git2::Repository::open(&mounted_workspace)
-            .and_then(|r| r.head().map(|_| ()))
-            .is_err(),
+        git2::Repository::open(&mounted_workspace).and_then(|r| r.head().map(|_| ())).is_err(),
         "the record is what the resolution goes through",
     );
     std::fs::write(&record, b"../..\n").unwrap();

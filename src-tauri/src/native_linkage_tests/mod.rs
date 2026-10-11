@@ -155,10 +155,8 @@ mod script {
     // the check exits with status zero.
     #[test]
     fn system_and_bundle_libraries_pass() {
-        let libraries = with(&[
-            "@executable_path/../Frameworks/Helper.dylib",
-            "@loader_path/libLocal.dylib",
-        ]);
+        let libraries =
+            with(&["@executable_path/../Frameworks/Helper.dylib", "@loader_path/libLocal.dylib"]);
         let fixture = Fixture::new(&load_list(&libraries), &load_commands(&[]));
 
         assert_passed(&fixture.run());
@@ -277,10 +275,8 @@ mod script {
     // is not a failure when no `@rpath/` library uses it.
     #[test]
     fn a_run_path_alone_is_not_judged() {
-        let fixture = Fixture::new(
-            &load_list(SYSTEM_LIBRARIES),
-            &load_commands(&["/opt/homebrew/lib"]),
-        );
+        let fixture =
+            Fixture::new(&load_list(SYSTEM_LIBRARIES), &load_commands(&["/opt/homebrew/lib"]));
 
         assert_passed(&fixture.run());
     }
@@ -340,10 +336,7 @@ mod script {
             assert_failed(&output);
             let message = stderr(&output);
             assert!(message.contains(&format!("\"otool {option}\" cannot read")), "{message}");
-            assert!(
-                message.contains(&fixture.executable().display().to_string()),
-                "{message}"
-            );
+            assert!(message.contains(&fixture.executable().display().to_string()), "{message}");
         }
     }
 
@@ -366,11 +359,8 @@ mod script {
 
 /// The crates that the macOS target compiles from source through a feature
 /// (NLL-FR-LTEO), with that feature.
-const COMPILED_BY_FEATURE: &[(&str, &str)] = &[
-    ("libgit2-sys", "vendored"),
-    ("openssl-sys", "vendored"),
-    ("libz-sys", "static"),
-];
+const COMPILED_BY_FEATURE: &[(&str, &str)] =
+    &[("libgit2-sys", "vendored"), ("openssl-sys", "vendored"), ("libz-sys", "static")];
 
 /// Every other `-sys` crate in `Cargo.lock`, and why it needs no feature on
 /// macOS.
@@ -451,11 +441,8 @@ fn every_sys_crate_in_the_lock_file_is_classified() {
         .filter_map(|package| package["name"].as_str())
         .filter(|name| name.ends_with("-sys"))
         .collect();
-    let known: BTreeSet<&str> = COMPILED_BY_FEATURE
-        .iter()
-        .chain(CLASSIFIED)
-        .map(|(name, _)| *name)
-        .collect();
+    let known: BTreeSet<&str> =
+        COMPILED_BY_FEATURE.iter().chain(CLASSIFIED).map(|(name, _)| *name).collect();
 
     let unclassified: Vec<&str> = in_lock.difference(&known).copied().collect();
     assert!(

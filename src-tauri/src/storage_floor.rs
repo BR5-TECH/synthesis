@@ -52,9 +52,7 @@ pub fn is_application_storage_rel(rel: &str) -> bool {
     let normalized = normalize_rel(rel);
     OWNED_FOLDERS.iter().any(|owned| {
         normalized == *owned
-            || normalized
-                .strip_prefix(owned)
-                .is_some_and(|rest| rest.starts_with('/'))
+            || normalized.strip_prefix(owned).is_some_and(|rest| rest.starts_with('/'))
     })
 }
 
@@ -274,10 +272,9 @@ mod tests {
     #[test]
     fn a_repository_path_is_read_past_below_a_project_prefix() {
         use super::is_application_storage_in_repo as read_past;
-        for path in [
-            ".synthesis/drafts/UI/1a0/files/p.md",
-            "apps/web/.synthesis/drafts/1a0/draft.toml",
-        ] {
+        for path in
+            [".synthesis/drafts/UI/1a0/files/p.md", "apps/web/.synthesis/drafts/1a0/draft.toml"]
+        {
             assert!(read_past(path), "{path} is read past");
         }
         for path in [

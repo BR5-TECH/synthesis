@@ -17,10 +17,7 @@ pub struct SaveMenuItems<R: tauri::Runtime> {
 // runtime `R` itself to be `Default`, which no Tauri runtime is.
 impl<R: tauri::Runtime> Default for SaveMenuItems<R> {
     fn default() -> Self {
-        Self {
-            save: Mutex::new(None),
-            save_all: Mutex::new(None),
-        }
+        Self { save: Mutex::new(None), save_all: Mutex::new(None) }
     }
 }
 
@@ -38,19 +35,10 @@ impl<R: tauri::Runtime> SaveMenuItems<R> {
     /// setters hop to the main thread and must not do so holding a mutex.
     pub(super) fn handles(
         &self,
-    ) -> (
-        Option<tauri::menu::MenuItem<R>>,
-        Option<tauri::menu::MenuItem<R>>,
-    ) {
+    ) -> (Option<tauri::menu::MenuItem<R>>, Option<tauri::menu::MenuItem<R>>) {
         (
-            self.save
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .clone(),
-            self.save_all
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .clone(),
+            self.save.lock().unwrap_or_else(|p| p.into_inner()).clone(),
+            self.save_all.lock().unwrap_or_else(|p| p.into_inner()).clone(),
         )
     }
 }
@@ -101,10 +89,7 @@ pub struct FindMenuItems<R: tauri::Runtime> {
 // the runtime `R` to be `Default`, which no Tauri runtime is.
 impl<R: tauri::Runtime> Default for FindMenuItems<R> {
     fn default() -> Self {
-        Self {
-            find: Mutex::new(None),
-            find_replace: Mutex::new(None),
-        }
+        Self { find: Mutex::new(None), find_replace: Mutex::new(None) }
     }
 }
 
@@ -122,16 +107,10 @@ impl<R: tauri::Runtime> FindMenuItems<R> {
     /// setters hop to the main thread and must not do so holding a mutex.
     pub(super) fn handles(
         &self,
-    ) -> (
-        Option<tauri::menu::MenuItem<R>>,
-        Option<tauri::menu::MenuItem<R>>,
-    ) {
+    ) -> (Option<tauri::menu::MenuItem<R>>, Option<tauri::menu::MenuItem<R>>) {
         (
             self.find.lock().unwrap_or_else(|p| p.into_inner()).clone(),
-            self.find_replace
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .clone(),
+            self.find_replace.lock().unwrap_or_else(|p| p.into_inner()).clone(),
         )
     }
 }

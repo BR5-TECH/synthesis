@@ -47,7 +47,10 @@ fn records_name_the_call_and_nothing_of_the_document() {
     assert_eq!(infos[0].fields["range"], serde_json::json!("bytes"));
     assert_eq!(infos[0].fields["bytes"], serde_json::json!(12));
     assert_eq!(infos[1].fields["range"], serde_json::json!("none"));
-    assert_eq!(infos[1].fields["bytes"], serde_json::json!("confidential words in the document".len()));
+    assert_eq!(
+        infos[1].fields["bytes"],
+        serde_json::json!("confidential words in the document".len())
+    );
     let warn = records.iter().find(|r| r.level == LogLevel::Warn).unwrap();
     assert_eq!(warn.fields["tool"], serde_json::json!(NAME));
     assert_eq!(warn.fields["id"], serde_json::json!(id));
@@ -59,7 +62,8 @@ fn records_name_the_call_and_nothing_of_the_document() {
     assert!(!rendered.contains(&*fixture.root.to_string_lossy()), "no path");
     // Read as JSON values rather than as digits anywhere in the text: a
     // timestamp or an id can hold the same digits by chance.
-    let fields = serde_json::to_string(&records.iter().map(|r| &r.fields).collect::<Vec<_>>()).unwrap();
+    let fields =
+        serde_json::to_string(&records.iter().map(|r| &r.fields).collect::<Vec<_>>()).unwrap();
     for value in ["777", "888"] {
         assert!(
             !fields.contains(&format!(":{value}")) && !fields.contains(&format!("\"{value}\"")),

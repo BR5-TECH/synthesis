@@ -64,7 +64,10 @@ pub fn transition<R: tauri::Runtime>(
     // DRS-FR-KQTW: the draft's status follows the runs, so a run that ends
     // releases the lock it held. A merge run holds no draft.
     if next.is_terminal() && !run.input.draft_id.is_empty() {
-        let _ = crate::drafts::announce(app, crate::drafts::DraftChange::to(&run.input.draft_id, Vec::new()));
+        let _ = crate::drafts::announce(
+            app,
+            crate::drafts::DraftChange::to(&run.input.draft_id, Vec::new()),
+        );
     }
     // WKS-FR-WULF: a stream's row names its merge run and that run's state, so a
     // change of the run is a change of the listing.
@@ -99,8 +102,7 @@ pub fn enter_stage<R: tauri::Runtime>(
     reason: observability::StageReason,
 ) -> Result<(), String> {
     let pass = run.pass();
-    run.observability
-        .note_stage(stage, pass, crate::notes::now_rfc3339(), reason);
+    run.observability.note_stage(stage, pass, crate::notes::now_rfc3339(), reason);
     runs::save_run(app, run)
 }
 

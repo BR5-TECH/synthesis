@@ -128,14 +128,8 @@ async fn the_three_protocols_never_read_each_other() {
         let mut socket = relay.open(path).await;
         send(&mut socket, protocol, frame_type, Some("x-1"), json!({})).await;
         let failure = expect(&mut socket).await;
-        assert_eq!(
-            failure["body"]["reason"], "protocol_mismatch",
-            "path {path}"
-        );
-        assert!(
-            next(&mut socket).await.is_none(),
-            "path {path} kept the connection open"
-        );
+        assert_eq!(failure["body"]["reason"], "protocol_mismatch", "path {path}");
+        assert!(next(&mut socket).await.is_none(), "path {path} kept the connection open");
     }
 
     // A type of another protocol, stamped with the right protocol, is refused
@@ -170,10 +164,7 @@ async fn a_bad_envelope_is_refused_over_the_wire() {
     assert_eq!(failure["body"]["reason"], "unsupported_version");
 
     let mut binary = relay.open("/v1/worker").await;
-    binary
-        .send(Message::Binary(vec![1, 2, 3].into()))
-        .await
-        .expect("the frame is written");
+    binary.send(Message::Binary(vec![1, 2, 3].into())).await.expect("the frame is written");
     let failure = expect(&mut binary).await;
     assert_eq!(failure["body"]["reason"], "invalid_frame_shape");
 }
@@ -245,10 +236,7 @@ async fn every_unrecoverable_failure_closes_with_its_own_reason() {
 
     for (path, frame, expected) in cases {
         let mut socket = relay.open(path).await;
-        socket
-            .send(Message::Text(frame.to_string().into()))
-            .await
-            .expect("the frame is written");
+        socket.send(Message::Text(frame.to_string().into())).await.expect("the frame is written");
         let failure = expect(&mut socket).await;
         assert_eq!(failure["body"]["reason"], expected, "path {path}");
 
@@ -275,17 +263,11 @@ async fn a_frame_over_the_bound_is_refused_over_the_wire() {
         "body": {"instance_id": payload, "projects": []},
     });
     assert!(frame.to_string().len() > 1024 * 1024);
-    socket
-        .send(Message::Text(frame.to_string().into()))
-        .await
-        .expect("the frame is written");
+    socket.send(Message::Text(frame.to_string().into())).await.expect("the frame is written");
 
     let failure = expect(&mut socket).await;
     assert_eq!(failure["body"]["reason"], "invalid_frame_shape");
-    assert_eq!(
-        expect_close(&mut socket).await.reason,
-        "invalid_frame_shape"
-    );
+    assert_eq!(expect_close(&mut socket).await.reason, "invalid_frame_shape");
 }
 
 // WSK-FR-NAXC: the relay serves no method other than the upgrade on the three
@@ -304,11 +286,7 @@ async fn no_other_method_is_served_on_the_three_paths() {
             let response = tower::ServiceExt::oneshot(build_router(relay.state.clone()), request)
                 .await
                 .expect("the router answers");
-            assert_eq!(
-                response.status(),
-                StatusCode::METHOD_NOT_ALLOWED,
-                "{method} {path}"
-            );
+            assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED, "{method} {path}");
         }
     }
 }
@@ -342,16 +320,10 @@ async fn a_duplicate_identifier_in_a_later_announcement_changes_nothing() {
     // The refusal is unrecoverable, so the connection closes and its route goes
     // with it. What the route must never hold is the announcement that was
     // refused.
-    assert_eq!(
-        expect_close(&mut worker_socket).await.reason,
-        "invalid_frame_shape"
-    );
+    assert_eq!(expect_close(&mut worker_socket).await.reason, "invalid_frame_shape");
     for route in relay.state.http.relay.workers() {
         assert!(
-            !route
-                .projects
-                .iter()
-                .any(|project| project.project_id == "p9"),
+            !route.projects.iter().any(|project| project.project_id == "p9"),
             "the refused announcement reached the route"
         );
     }
@@ -359,10 +331,7 @@ async fn a_duplicate_identifier_in_a_later_announcement_changes_nothing() {
     // RSN-FR-ADXL: the handle outlives the worker connection, and a later read
     // reports that its worker holds no route.
     let (status, body) = relay
-        .get(
-            "/v1/relay/projects",
-            &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")],
-        )
+        .get("/v1/relay/projects", &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")])
         .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["error"]["code"], "worker_not_found");
@@ -375,10 +344,7 @@ async fn a_ping_is_answered_with_a_pong() {
     let relay = Relay::start().await;
     let mut socket = relay.open("/v1/worker").await;
 
-    socket
-        .send(Message::Ping(vec![7, 7].into()))
-        .await
-        .expect("the ping is written");
+    socket.send(Message::Ping(vec![7, 7].into())).await.expect("the ping is written");
     // The pong arrives before anything else, and the connection is unchanged:
     // a `worker_hello` after it still registers the route.
     let mut answered = false;
@@ -419,14 +385,8 @@ async fn the_frames_of_one_connection_keep_their_order() {
     // reads them in is checkable.
     let payloads: Vec<String> = (0..16).map(|index| format!("bXNn{index}")).collect();
     for payload in &payloads {
-        send(
-            &mut client,
-            "client",
-            "application_message",
-            None,
-            json!({ "payload": payload }),
-        )
-        .await;
+        send(&mut client, "client", "application_message", None, json!({ "payload": payload }))
+            .await;
     }
     for payload in &payloads {
         let forwarded = expect(&mut worker_socket).await;
@@ -446,9 +406,6 @@ async fn the_frames_of_one_connection_keep_their_order() {
         .await;
     }
     for payload in &payloads {
-        assert_eq!(
-            expect(&mut client).await["body"]["payload"],
-            payload.as_str()
-        );
+        assert_eq!(expect(&mut client).await["body"]["payload"], payload.as_str());
     }
 }

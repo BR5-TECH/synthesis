@@ -50,23 +50,12 @@ async fn only_the_configured_token_is_accepted() {
         "Bearer ".to_string(),
     ];
     for credential in refused {
-        let answer = api
-            .call_with(Method::GET, "/v1/projects", None, Some(&credential))
-            .await;
-        assert_eq!(
-            answer.status,
-            StatusCode::UNAUTHORIZED,
-            "credential {credential}"
-        );
+        let answer = api.call_with(Method::GET, "/v1/projects", None, Some(&credential)).await;
+        assert_eq!(answer.status, StatusCode::UNAUTHORIZED, "credential {credential}");
     }
 
     let accepted = api
-        .call_with(
-            Method::GET,
-            "/v1/projects",
-            None,
-            Some(&format!("Bearer {TEST_TOKEN}")),
-        )
+        .call_with(Method::GET, "/v1/projects", None, Some(&format!("Bearer {TEST_TOKEN}")))
         .await;
     assert_eq!(accepted.status, StatusCode::OK);
 }
@@ -79,10 +68,7 @@ async fn the_health_route_needs_no_credential() {
     let answer = api.call_with(Method::GET, "/v1/health", None, None).await;
     assert_eq!(answer.status, StatusCode::OK);
     assert!(answer.member("version").is_string());
-    assert_eq!(
-        answer.member("capabilities"),
-        &json!(["remote_session", "websocket"])
-    );
+    assert_eq!(answer.member("capabilities"), &json!(["remote_session", "websocket"]));
 }
 
 // SAS-FR-ZMPC: every error answer is one object with an `error` member holding
@@ -92,8 +78,7 @@ async fn every_error_answer_carries_the_same_shape() {
     let api = Api::new();
     let answers = [
         api.get("/v1/projects/not-a-uuid").await,
-        api.get(&format!("/v1/projects/{}", uuid::Uuid::from_u128(3)))
-            .await,
+        api.get(&format!("/v1/projects/{}", uuid::Uuid::from_u128(3))).await,
         api.post("/v1/users", json!({"display_name": ""})).await,
     ];
     for answer in answers {
@@ -115,9 +100,7 @@ async fn a_malformed_identifier_and_an_unknown_one_differ() {
     assert_eq!(malformed.status, StatusCode::BAD_REQUEST);
     assert_eq!(malformed.code(), "invalid_field");
 
-    let unknown = api
-        .get(&format!("/v1/users/{}", uuid::Uuid::from_u128(11)))
-        .await;
+    let unknown = api.get(&format!("/v1/users/{}", uuid::Uuid::from_u128(11))).await;
     assert_eq!(unknown.status, StatusCode::NOT_FOUND);
     assert_eq!(unknown.code(), "not_found");
 }
@@ -135,19 +118,10 @@ async fn the_role_mapping_is_published() {
 
     let roles = answer.member("project_roles").as_array().expect("a list");
     assert_eq!(roles.len(), 4);
-    let viewer = roles
-        .iter()
-        .find(|role| role["role"] == "viewer")
-        .expect("the viewer role is published");
+    let viewer =
+        roles.iter().find(|role| role["role"] == "viewer").expect("the viewer role is published");
     assert_eq!(viewer["permissions"].as_array().expect("a list").len(), 3);
-    assert_eq!(
-        answer
-            .member("team_roles")
-            .as_array()
-            .expect("a list")
-            .len(),
-        4
-    );
+    assert_eq!(answer.member("team_roles").as_array().expect("a list").len(), 4);
 }
 
 // SAS-FR-OKUC, SAS-FR-MWOD: a project is created with its owner and its owner
@@ -155,9 +129,7 @@ async fn the_role_mapping_is_published() {
 #[tokio::test]
 async fn a_project_is_created_read_updated_and_deleted() {
     let api = Api::new();
-    let created = api
-        .post("/v1/projects", json!({"display_name": "A project"}))
-        .await;
+    let created = api.post("/v1/projects", json!({"display_name": "A project"})).await;
     assert_eq!(created.status, StatusCode::CREATED);
     assert_eq!(created.member("owner_id").as_str(), Some(TEST_ADMIN_ID));
     let project_id = created.id();
@@ -167,10 +139,7 @@ async fn a_project_is_created_read_updated_and_deleted() {
     assert_eq!(read.member("display_name"), "A project");
 
     let updated = api
-        .patch(
-            &format!("/v1/projects/{project_id}"),
-            json!({"display_name": "A renamed project"}),
-        )
+        .patch(&format!("/v1/projects/{project_id}"), json!({"display_name": "A renamed project"}))
         .await;
     assert_eq!(updated.status, StatusCode::OK);
     assert_eq!(updated.member("display_name"), "A renamed project");
@@ -180,41 +149,25 @@ async fn a_project_is_created_read_updated_and_deleted() {
     let items = grants.member("items").as_array().expect("a list");
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["role"], "owner");
-    assert_eq!(
-        items[0]["permissions"].as_array().expect("a list").len(),
-        15
-    );
+    assert_eq!(items[0]["permissions"].as_array().expect("a list").len(), 15);
 
     let deleted = api.delete(&format!("/v1/projects/{project_id}")).await;
     assert_eq!(deleted.status, StatusCode::NO_CONTENT);
-    assert_eq!(
-        api.get(&format!("/v1/projects/{project_id}")).await.status,
-        StatusCode::NOT_FOUND
-    );
+    assert_eq!(api.get(&format!("/v1/projects/{project_id}")).await.status, StatusCode::NOT_FOUND);
 }
 
 // SAS-FR-VNTC, SAS-FR-MWOD: the conflict rules answer 409 over the surface.
 #[tokio::test]
 async fn the_conflict_rules_answer_over_the_surface() {
     let api = Api::new();
-    let project_id = api
-        .post("/v1/projects", json!({"display_name": "A project"}))
-        .await
-        .id();
-    let user_id = api
-        .post("/v1/users", json!({"display_name": "A member"}))
-        .await
-        .id();
+    let project_id = api.post("/v1/projects", json!({"display_name": "A project"})).await.id();
+    let user_id = api.post("/v1/users", json!({"display_name": "A member"})).await.id();
 
     let grant = json!({"target_type": "user", "target_id": user_id, "role": "viewer"});
-    let created = api
-        .post(&format!("/v1/projects/{project_id}/grants"), grant.clone())
-        .await;
+    let created = api.post(&format!("/v1/projects/{project_id}/grants"), grant.clone()).await;
     assert_eq!(created.status, StatusCode::CREATED);
 
-    let duplicate = api
-        .post(&format!("/v1/projects/{project_id}/grants"), grant)
-        .await;
+    let duplicate = api.post(&format!("/v1/projects/{project_id}/grants"), grant).await;
     assert_eq!(duplicate.status, StatusCode::CONFLICT);
     assert_eq!(duplicate.code(), "duplicate_grant");
 
@@ -238,18 +191,12 @@ async fn the_conflict_rules_answer_over_the_surface() {
 
     // The grant is revoked and then deleted.
     let grant_id = created.id();
-    let revoked = api
-        .post(
-            &format!("/v1/projects/{project_id}/grants/{grant_id}/revoke"),
-            json!({}),
-        )
-        .await;
+    let revoked =
+        api.post(&format!("/v1/projects/{project_id}/grants/{grant_id}/revoke"), json!({})).await;
     assert_eq!(revoked.status, StatusCode::OK);
     assert!(revoked.member("revoked_at").is_string());
     assert_eq!(
-        api.delete(&format!("/v1/projects/{project_id}/grants/{grant_id}"))
-            .await
-            .status,
+        api.delete(&format!("/v1/projects/{project_id}/grants/{grant_id}")).await.status,
         StatusCode::NO_CONTENT
     );
 }
@@ -259,10 +206,7 @@ async fn the_conflict_rules_answer_over_the_surface() {
 #[tokio::test]
 async fn a_draft_is_written_and_updated_by_revision() {
     let api = Api::new();
-    let project_id = api
-        .post("/v1/projects", json!({"display_name": "A project"}))
-        .await
-        .id();
+    let project_id = api.post("/v1/projects", json!({"display_name": "A project"})).await.id();
 
     let created = api
         .post(
@@ -275,19 +219,13 @@ async fn a_draft_is_written_and_updated_by_revision() {
     assert_eq!(created.member("revision"), 1);
 
     let updated = api
-        .patch(
-            &format!("/v1/drafts/{draft_id}"),
-            json!({"revision": 1, "content": "Second"}),
-        )
+        .patch(&format!("/v1/drafts/{draft_id}"), json!({"revision": 1, "content": "Second"}))
         .await;
     assert_eq!(updated.status, StatusCode::OK);
     assert_eq!(updated.member("revision"), 2);
 
     let stale = api
-        .patch(
-            &format!("/v1/drafts/{draft_id}"),
-            json!({"revision": 1, "content": "Third"}),
-        )
+        .patch(&format!("/v1/drafts/{draft_id}"), json!({"revision": 1, "content": "Third"}))
         .await;
     assert_eq!(stale.status, StatusCode::CONFLICT);
     assert_eq!(stale.code(), "stale_revision");
@@ -297,10 +235,7 @@ async fn a_draft_is_written_and_updated_by_revision() {
 #[tokio::test]
 async fn a_conversation_appends_and_locks() {
     let api = Api::new();
-    let project_id = api
-        .post("/v1/projects", json!({"display_name": "A project"}))
-        .await
-        .id();
+    let project_id = api.post("/v1/projects", json!({"display_name": "A project"})).await.id();
     let conversation_id = api
         .post(
             &format!("/v1/projects/{project_id}/conversations"),
@@ -320,28 +255,15 @@ async fn a_conversation_appends_and_locks() {
         assert_eq!(appended.member("sequence"), expected);
     }
 
-    let messages = api
-        .get(&format!("/v1/conversations/{conversation_id}/messages"))
-        .await;
-    assert_eq!(
-        messages.member("items").as_array().expect("a list").len(),
-        3
-    );
+    let messages = api.get(&format!("/v1/conversations/{conversation_id}/messages")).await;
+    assert_eq!(messages.member("items").as_array().expect("a list").len(), 3);
 
     assert_eq!(
-        api.post(
-            &format!("/v1/conversations/{conversation_id}/lock"),
-            json!({})
-        )
-        .await
-        .status,
+        api.post(&format!("/v1/conversations/{conversation_id}/lock"), json!({})).await.status,
         StatusCode::OK
     );
     let refused = api
-        .post(
-            &format!("/v1/conversations/{conversation_id}/messages"),
-            json!({"body": "Refused"}),
-        )
+        .post(&format!("/v1/conversations/{conversation_id}/messages"), json!({"body": "Refused"}))
         .await;
     assert_eq!(refused.status, StatusCode::CONFLICT);
     assert_eq!(refused.code(), "conversation_locked");
@@ -351,25 +273,15 @@ async fn a_conversation_appends_and_locks() {
 #[tokio::test]
 async fn the_effective_permissions_are_read_over_the_surface() {
     let api = Api::new();
-    let project_id = api
-        .post("/v1/projects", json!({"display_name": "A project"}))
-        .await
-        .id();
-    let user_id = api
-        .post("/v1/users", json!({"display_name": "A member"}))
-        .await
-        .id();
+    let project_id = api.post("/v1/projects", json!({"display_name": "A project"})).await.id();
+    let user_id = api.post("/v1/users", json!({"display_name": "A member"})).await.id();
     api.post(
         &format!("/v1/projects/{project_id}/grants"),
         json!({"target_type": "user", "target_id": user_id, "role": "contributor"}),
     )
     .await;
 
-    let answer = api
-        .get(&format!(
-            "/v1/projects/{project_id}/permissions?user_id={user_id}"
-        ))
-        .await;
+    let answer = api.get(&format!("/v1/projects/{project_id}/permissions?user_id={user_id}")).await;
     assert_eq!(answer.status, StatusCode::OK);
     assert_eq!(answer.member("user_id").as_str(), Some(user_id.as_str()));
     let permissions = answer.member("permissions").as_array().expect("a list");
@@ -388,10 +300,7 @@ async fn a_page_size_above_the_maximum_is_refused() {
 
     let accepted = api.get("/v1/users?limit=1").await;
     assert_eq!(accepted.status, StatusCode::OK);
-    assert_eq!(
-        accepted.member("items").as_array().expect("a list").len(),
-        1
-    );
+    assert_eq!(accepted.member("items").as_array().expect("a list").len(), 1);
 }
 
 // SRB-FR-SEKN: the relay introspection routes report the active routes, and
@@ -410,18 +319,12 @@ async fn the_relay_routes_report_the_active_workers() {
             }],
         )
         .expect("the worker is registered");
-    relay
-        .select_project("instance-a", "p1")
-        .expect("the project is selected");
-    let client = relay
-        .register_client("reg-1", "instance-a")
-        .expect("a registration");
+    relay.select_project("instance-a", "p1").expect("the project is selected");
+    let client = relay.register_client("reg-1", "instance-a").expect("a registration");
     let client = relay
         .resolve_registration(&client.handle, "instance-a", true)
         .expect("the IDE accepted the registration");
-    relay
-        .attach_client(&client.handle, "instance-a")
-        .expect("an attachment");
+    relay.attach_client(&client.handle, "instance-a").expect("an attachment");
 
     let listed = api.get("/v1/relay/workers").await;
     assert_eq!(listed.status, StatusCode::OK);
@@ -436,14 +339,8 @@ async fn the_relay_routes_report_the_active_workers() {
     assert_eq!(read.member("connection_id"), "connection-1");
 
     // The answer names no handle.
-    assert!(
-        !read.body.to_string().contains(&client.handle),
-        "the answer holds a client handle"
-    );
-    assert_eq!(
-        api.get("/v1/relay/workers/instance-none").await.status,
-        StatusCode::NOT_FOUND
-    );
+    assert!(!read.body.to_string().contains(&client.handle), "the answer holds a client handle");
+    assert_eq!(api.get("/v1/relay/workers/instance-none").await.status, StatusCode::NOT_FOUND);
 }
 
 // SRB-FR-TOQF, WSK-FR-KTRB: the relay opens the three WebSocket routes of
@@ -452,11 +349,7 @@ async fn the_relay_routes_report_the_active_workers() {
 async fn no_websocket_route_beyond_the_three_of_the_transport_is_served() {
     let api = Api::new();
     for path in ["/v1/relay/ws", "/v1/ws", "/v1/relay/worker", "/v1/relay"] {
-        assert_eq!(
-            api.get(path).await.status,
-            StatusCode::NOT_FOUND,
-            "path {path}"
-        );
+        assert_eq!(api.get(path).await.status, StatusCode::NOT_FOUND, "path {path}");
     }
 }
 
@@ -465,22 +358,9 @@ async fn no_websocket_route_beyond_the_three_of_the_transport_is_served() {
 #[tokio::test]
 async fn a_restart_loses_every_record_and_keeps_the_administrator() {
     let first = Api::new();
-    first
-        .post("/v1/projects", json!({"display_name": "A project"}))
-        .await;
-    first
-        .post("/v1/users", json!({"display_name": "A member"}))
-        .await;
-    assert_eq!(
-        first
-            .get("/v1/users")
-            .await
-            .member("items")
-            .as_array()
-            .expect("a list")
-            .len(),
-        2
-    );
+    first.post("/v1/projects", json!({"display_name": "A project"})).await;
+    first.post("/v1/users", json!({"display_name": "A member"})).await;
+    assert_eq!(first.get("/v1/users").await.member("items").as_array().expect("a list").len(), 2);
 
     let second = Api::new();
     assert!(second
@@ -501,10 +381,7 @@ async fn a_restart_loses_every_record_and_keeps_the_administrator() {
 #[tokio::test]
 async fn no_answer_holds_the_token() {
     let api = Api::new();
-    let project_id = api
-        .post("/v1/projects", json!({"display_name": "A project"}))
-        .await
-        .id();
+    let project_id = api.post("/v1/projects", json!({"display_name": "A project"})).await.id();
 
     for path in [
         "/v1/health".to_string(),
@@ -520,8 +397,6 @@ async fn no_answer_holds_the_token() {
         );
     }
 
-    let refused = api
-        .call_with(Method::GET, "/v1/users", None, Some("Bearer wrong-token"))
-        .await;
+    let refused = api.call_with(Method::GET, "/v1/users", None, Some("Bearer wrong-token")).await;
     assert!(!refused.body.to_string().contains("wrong-token"));
 }

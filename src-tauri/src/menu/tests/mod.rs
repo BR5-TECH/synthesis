@@ -41,12 +41,9 @@ fn mock_app_with_project(root: &std::path::Path) -> tauri::App<tauri::test::Mock
 #[cfg(test)]
 fn mock_app_with_window(root: &std::path::Path) -> tauri::App<tauri::test::MockRuntime> {
     let app = mock_app_with_project(root);
-    tauri::WebviewWindowBuilder::new(&app, "main", tauri::WebviewUrl::default())
-        .build()
-        .unwrap();
+    tauri::WebviewWindowBuilder::new(&app, "main", tauri::WebviewUrl::default()).build().unwrap();
     app
 }
-
 
 mod items;
 mod teardown;

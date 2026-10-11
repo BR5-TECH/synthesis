@@ -43,10 +43,7 @@ fn a_cut_off_object_is_refused_before_the_tool_runs() {
         result.contains("not in the shape it expects"),
         "the model is told its arguments were wrong: {result}",
     );
-    assert_eq!(
-        record.fields["reason"],
-        serde_json::json!(crate::tools::ARGUMENTS_UNDECODABLE),
-    );
+    assert_eq!(record.fields["reason"], serde_json::json!(crate::tools::ARGUMENTS_UNDECODABLE),);
     assert_eq!(record.fields["argShape"], serde_json::json!("string"));
     assert!(!format!("{record:?}").contains("README"), "no value is recorded");
 }
@@ -57,10 +54,7 @@ fn a_cut_off_object_is_refused_before_the_tool_runs() {
 fn an_array_is_refused_before_the_tool_runs() {
     let (result, record) = refused_call(serde_json::json!(["README.md", 3]));
     assert!(result.contains("not in the shape it expects"), "{result}");
-    assert_eq!(
-        record.fields["reason"],
-        serde_json::json!(crate::tools::ARGUMENTS_UNDECODABLE),
-    );
+    assert_eq!(record.fields["reason"], serde_json::json!(crate::tools::ARGUMENTS_UNDECODABLE),);
     assert_eq!(record.fields["argShape"], serde_json::json!("[string](2)"));
 }
 
@@ -86,10 +80,7 @@ fn null_arguments_are_an_empty_object() {
 #[test]
 fn a_string_holding_a_whole_object_is_that_object() {
     let h = Harness::scripted(vec![
-        Ok(ScriptedReply::calls(
-            "read_file",
-            serde_json::json!("{\"path\": \"no-such-file.md\"}"),
-        )),
+        Ok(ScriptedReply::calls("read_file", serde_json::json!("{\"path\": \"no-such-file.md\"}"))),
         Ok(ScriptedReply::answer("Done.")),
     ]);
     h.mount();
@@ -125,10 +116,7 @@ fn a_cut_off_question_asks_nothing() {
     assert!(results[0].contains("not in the shape it expects"), "{}", results[0]);
     let record = wait_for_record(&terminal.id, "tool call refused");
     assert_eq!(require(&record, "tool"), crate::tools::ask_user_comment::NAME);
-    assert_eq!(
-        record.fields["reason"],
-        serde_json::json!(crate::tools::ARGUMENTS_UNDECODABLE),
-    );
+    assert_eq!(record.fields["reason"], serde_json::json!(crate::tools::ARGUMENTS_UNDECODABLE),);
 }
 
 // TLC-FR-SPRR: arguments sent as `null` or as blank text are an empty object,

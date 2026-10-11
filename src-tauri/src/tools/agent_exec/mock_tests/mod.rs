@@ -41,9 +41,9 @@ use serde_json::json;
 // the *same* production path is driven a different way.
 use super::*;
 
+mod boundary;
 mod claude_turns;
 mod codex_turns;
-mod boundary;
 
 // ---------------------------------------------------------------------------
 // Locating the mock
@@ -114,12 +114,7 @@ impl Scenario {
             .write_text_atomic(&path, &text)
             .expect("write scenario");
 
-        Scenario {
-            _directory: directory,
-            path,
-            tool,
-            document: text,
-        }
+        Scenario { _directory: directory, path, tool, document: text }
     }
 }
 
@@ -165,10 +160,7 @@ impl MockDockerRuntime {
     fn only_vendor_tail(&self, image: &str) -> Vec<String> {
         let argvs = self.argvs.lock().unwrap();
         assert_eq!(argvs.len(), 1, "expected exactly one launch");
-        let at = argvs[0]
-            .iter()
-            .position(|a| a == image)
-            .expect("the image is in the vector");
+        let at = argvs[0].iter().position(|a| a == image).expect("the image is in the vector");
         argvs[0][at + 1..].to_vec()
     }
 
@@ -179,14 +171,9 @@ impl MockDockerRuntime {
         // reaching around it in a test is how the habit of reaching around it
         // starts.
         let directory = self.scenario.parent().expect("the scenario has a directory");
-        let fs = FsAccess::builder()
-            .allow_root(directory)
-            .build()
-            .expect("fs");
+        let fs = FsAccess::builder().allow_root(directory).build().expect("fs");
 
-        let raw = fs
-            .read_text(&self.scenario)
-            .expect("the scenario is readable");
+        let raw = fs.read_text(&self.scenario).expect("the scenario is readable");
         if !raw.contains(SESSION_PLACEHOLDER) {
             return self.scenario.clone();
         }
@@ -312,10 +299,7 @@ fn required_args(vendor: &str, extra_vendor_args: &[&str]) -> Vec<serde_json::Va
     }
     values.extend(extra_vendor_args.iter().copied());
 
-    values
-        .into_iter()
-        .map(|value| json!({ "value": value }))
-        .collect()
+    values.into_iter().map(|value| json!({ "value": value })).collect()
 }
 
 /// The composite adapter that replaces the whole stack for `vendor`.
@@ -397,8 +381,7 @@ fn drive_with(
     task: AgentTaskRequest,
     cancel: CancellationToken,
 ) -> Result<AgentExecution, AgentExecutionError> {
-    let executor = AgentCliExecutor::new(runtime)
-        .with_session_state_root(harness.sessions_root());
+    let executor = AgentCliExecutor::new(runtime).with_session_state_root(harness.sessions_root());
     block_on(executor.execute_agent_cli(
         &Silent,
         &harness.context(),

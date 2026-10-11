@@ -121,16 +121,15 @@ pub(super) fn read_execution_timeout(table: &toml::value::Table) -> Option<Optio
 
 /// PSS-FR-HDBN: the stored provider-call deadline, on the same terms.
 pub(super) fn read_provider_call_deadline(table: &toml::value::Table) -> Option<Option<u64>> {
-    Some(bounded_u64(
-        table,
-        PROVIDER_CALL_DEADLINE_KEY,
-        PROVIDER_CALL_DEADLINE_BOUNDS,
-    ))
+    Some(bounded_u64(table, PROVIDER_CALL_DEADLINE_KEY, PROVIDER_CALL_DEADLINE_BOUNDS))
 }
 
 /// PSS-FR-WPKS: the stored retry budget, on the same terms.
 pub(super) fn read_retry_budget(table: &toml::value::Table) -> Option<Option<u32>> {
-    Some(bounded_u64(table, RETRY_BUDGET_KEY, RETRY_BUDGET_BOUNDS).and_then(|n| u32::try_from(n).ok()))
+    Some(
+        bounded_u64(table, RETRY_BUDGET_KEY, RETRY_BUDGET_BOUNDS)
+            .and_then(|n| u32::try_from(n).ok()),
+    )
 }
 
 /// PSS-FR-ZLCF, on the three ways a write can speak about a shared bound.

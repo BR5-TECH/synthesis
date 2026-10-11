@@ -16,7 +16,7 @@ fn a_snippet_is_a_window_around_the_match_not_the_head_of_the_line() {
     // would show the user a result whose reason for matching is off-screen.
     let line = format!(
         "{}needle{}",
-        "lead ".repeat(40),   // 200 chars before the match
+        "lead ".repeat(40), // 200 chars before the match
         " and some trailing context after it",
     );
     let snippet = snippet_for(&line, 200, 6);

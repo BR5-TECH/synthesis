@@ -183,7 +183,8 @@ fn a_stream_with_a_live_merge_run_cannot_be_deleted() {
     }
 
     resave(&fx, &mut run, |run| run.state = State::Discarded);
-    delete_work_stream(fx.app.clone(), stream.id.clone(), false, false).expect("deleted once it ended");
+    delete_work_stream(fx.app.clone(), stream.id.clone(), false, false)
+        .expect("deleted once it ended");
 }
 
 // WKS-FR-WULF, GRD-FR-DLWB: a state change of a merge run is a change of the

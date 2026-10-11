@@ -28,11 +28,7 @@ fn buffer_text(buffer: &LogBuffer) -> String {
             1000,
         )
         .expect("the buffer answers");
-    page.records
-        .iter()
-        .map(|record| format!("{record:?}"))
-        .collect::<Vec<_>>()
-        .join("\n")
+    page.records.iter().map(|record| format!("{record:?}")).collect::<Vec<_>>().join("\n")
 }
 
 /// A probe that answers what a test hands it, and records what it was asked.
@@ -43,19 +39,13 @@ struct StubProbe {
 
 impl StubProbe {
     fn new(answer: Result<RelayHealth, String>) -> Arc<StubProbe> {
-        Arc::new(StubProbe {
-            answer,
-            asked: Mutex::new(Vec::new()),
-        })
+        Arc::new(StubProbe { answer, asked: Mutex::new(Vec::new()) })
     }
 }
 
 impl RelayProbe for StubProbe {
     fn health(&self, health_url: &str) -> Result<RelayHealth, String> {
-        self.asked
-            .lock()
-            .expect("the stub is not poisoned")
-            .push(health_url.to_string());
+        self.asked.lock().expect("the stub is not poisoned").push(health_url.to_string());
         self.answer.clone()
     }
 }
@@ -97,18 +87,12 @@ fn the_health_route_is_derived_from_the_url_or_refused_with_its_own_reason() {
 
     assert_eq!(health_url("").expect_err("empty"), ERR_ENDPOINT_EMPTY);
     assert_eq!(health_url("   ").expect_err("empty"), ERR_ENDPOINT_EMPTY);
-    assert_eq!(
-        health_url("relay.example.com").expect_err("no scheme"),
-        ERR_ENDPOINT_INVALID
-    );
+    assert_eq!(health_url("relay.example.com").expect_err("no scheme"), ERR_ENDPOINT_INVALID);
     assert_eq!(
         health_url("https:// relay.example.com").expect_err("white space"),
         ERR_ENDPOINT_INVALID
     );
-    assert_eq!(
-        health_url("https:///v1").expect_err("no authority"),
-        ERR_ENDPOINT_INVALID
-    );
+    assert_eq!(health_url("https:///v1").expect_err("no authority"), ERR_ENDPOINT_INVALID);
     // GSS-FR-VMRB: a URL that carries credentials is refused rather than sent.
     assert_eq!(
         health_url("https://user:secret@relay.example.com").expect_err("credentials"),
@@ -154,14 +138,8 @@ fn an_answer_that_is_not_the_health_object_is_not_a_relay() {
 #[test]
 fn a_relay_that_lacks_a_capability_is_refused() {
     assert_eq!(missing_capability(&[]), Some("remote_session"));
-    assert_eq!(
-        missing_capability(&["remote_session".to_string()]),
-        Some("websocket")
-    );
-    assert_eq!(
-        missing_capability(&["remote_session".to_string(), "websocket".to_string()]),
-        None
-    );
+    assert_eq!(missing_capability(&["remote_session".to_string()]), Some("websocket"));
+    assert_eq!(missing_capability(&["remote_session".to_string(), "websocket".to_string()]), None);
     // An identifier the application does not know changes nothing.
     assert_eq!(
         missing_capability(&[
@@ -185,13 +163,9 @@ fn the_validation_state_follows_the_url_it_was_earned_against() {
     assert_eq!(initial.state, RelayEndpointState::Unset);
     assert_eq!(initial.url, None);
 
-    let saved = save_relay_endpoint_with(
-        &sink,
-        &BUFFER,
-        &store,
-        "https://relay.example.com".to_string(),
-    )
-    .expect("the URL is saved");
+    let saved =
+        save_relay_endpoint_with(&sink, &BUFFER, &store, "https://relay.example.com".to_string())
+            .expect("the URL is saved");
     assert_eq!(saved.state, RelayEndpointState::Unverified);
     assert_eq!(saved.url.as_deref(), Some("https://relay.example.com"));
 
@@ -206,10 +180,7 @@ fn the_validation_state_follows_the_url_it_was_earned_against() {
     .expect("the relay answered");
     assert_eq!(verified.state, RelayEndpointState::Verified);
     assert_eq!(verified.version.as_deref(), Some("v1.2.3"));
-    assert_eq!(
-        verified.capabilities,
-        vec!["remote_session".to_string(), "websocket".to_string()]
-    );
+    assert_eq!(verified.capabilities, vec!["remote_session".to_string(), "websocket".to_string()]);
     assert_eq!(
         probe.asked.lock().expect("the stub").as_slice(),
         ["https://relay.example.com/v1/health"]
@@ -217,34 +188,21 @@ fn the_validation_state_follows_the_url_it_was_earned_against() {
 
     // Re-reading returns the same success without probing again.
     assert_eq!(
-        store
-            .load_relay_endpoint()
-            .expect("a record")
-            .outbound()
-            .state,
+        store.load_relay_endpoint().expect("a record").outbound().state,
         RelayEndpointState::Verified
     );
 
     // GSS-FR-NLDC: a save that changes the URL returns the record to unverified.
-    let moved = save_relay_endpoint_with(
-        &sink,
-        &BUFFER,
-        &store,
-        "https://other.example.com".to_string(),
-    )
-    .expect("the URL is saved");
+    let moved =
+        save_relay_endpoint_with(&sink, &BUFFER, &store, "https://other.example.com".to_string())
+            .expect("the URL is saved");
     assert_eq!(moved.state, RelayEndpointState::Unverified);
     assert_eq!(moved.version, None);
     assert!(moved.capabilities.is_empty());
 
     // A save that changes nothing keeps the success it had.
-    save_relay_endpoint_with(
-        &sink,
-        &BUFFER,
-        &store,
-        "https://relay.example.com".to_string(),
-    )
-    .expect("the URL is saved");
+    save_relay_endpoint_with(&sink, &BUFFER, &store, "https://relay.example.com".to_string())
+        .expect("the URL is saved");
     verify_relay_endpoint_with(
         &sink,
         &BUFFER,
@@ -273,26 +231,10 @@ fn a_refused_verification_persists_nothing_and_keeps_its_reason() {
     let cases: Vec<(Result<RelayHealth, String>, &str, &str)> = vec![
         (Ok(healthy()), "", ERR_ENDPOINT_EMPTY),
         (Ok(healthy()), "relay.example.com", ERR_ENDPOINT_INVALID),
-        (
-            Ok(healthy()),
-            "ws://relay.example.com",
-            ERR_SCHEME_UNSUPPORTED,
-        ),
-        (
-            Err(ERR_UNREACHABLE.to_string()),
-            "https://relay.example.com",
-            ERR_UNREACHABLE,
-        ),
-        (
-            Err(ERR_TIMED_OUT.to_string()),
-            "https://relay.example.com",
-            ERR_TIMED_OUT,
-        ),
-        (
-            Err(ERR_NOT_A_RELAY.to_string()),
-            "https://relay.example.com",
-            ERR_NOT_A_RELAY,
-        ),
+        (Ok(healthy()), "ws://relay.example.com", ERR_SCHEME_UNSUPPORTED),
+        (Err(ERR_UNREACHABLE.to_string()), "https://relay.example.com", ERR_UNREACHABLE),
+        (Err(ERR_TIMED_OUT.to_string()), "https://relay.example.com", ERR_TIMED_OUT),
+        (Err(ERR_NOT_A_RELAY.to_string()), "https://relay.example.com", ERR_NOT_A_RELAY),
         (
             Ok(RelayHealth {
                 version: "v1".to_string(),
@@ -315,11 +257,7 @@ fn a_refused_verification_persists_nothing_and_keeps_its_reason() {
         .expect_err("the verification is refused");
         assert_eq!(refusal, expected, "url {url}");
         assert_eq!(
-            store
-                .load_relay_endpoint()
-                .expect("a record")
-                .outbound()
-                .state,
+            store.load_relay_endpoint().expect("a record").outbound().state,
             RelayEndpointState::Unset,
             "url {url} wrote a record"
         );
@@ -334,13 +272,8 @@ fn no_record_and_no_log_holds_a_credential_or_the_url() {
     let sink = Silent;
     static BUFFER: LogBuffer = LogBuffer::new();
 
-    save_relay_endpoint_with(
-        &sink,
-        &BUFFER,
-        &store,
-        "https://relay.example.com".to_string(),
-    )
-    .expect("the URL is saved");
+    save_relay_endpoint_with(&sink, &BUFFER, &store, "https://relay.example.com".to_string())
+        .expect("the URL is saved");
     verify_relay_endpoint_with(
         &sink,
         &BUFFER,
@@ -351,19 +284,13 @@ fn no_record_and_no_log_holds_a_credential_or_the_url() {
     .expect("the relay answered");
 
     let text = buffer_text(&BUFFER);
-    assert!(
-        !text.contains("relay.example.com"),
-        "a record named the endpoint: {text}"
-    );
+    assert!(!text.contains("relay.example.com"), "a record named the endpoint: {text}");
     assert!(!text.contains("Bearer"), "a record named a credential");
 
     let record = store.load_relay_endpoint().expect("a record");
     let serialised = toml::to_string(&record).expect("the record serialises");
     assert!(!serialised.to_lowercase().contains("token"), "{serialised}");
-    assert!(
-        !serialised.to_lowercase().contains("bearer"),
-        "{serialised}"
-    );
+    assert!(!serialised.to_lowercase().contains("bearer"), "{serialised}");
 }
 
 // GSS-FR-TXAO: this module reaches the relay in `verify_relay_endpoint` alone.
@@ -410,13 +337,8 @@ fn the_record_round_trips_through_the_file_and_clears_to_unset() {
 
     {
         let store = GlobalSettingsStore::with_path(path.clone());
-        save_relay_endpoint_with(
-            &sink,
-            &BUFFER,
-            &store,
-            "https://relay.example.com".to_string(),
-        )
-        .expect("the URL is saved");
+        save_relay_endpoint_with(&sink, &BUFFER, &store, "https://relay.example.com".to_string())
+            .expect("the URL is saved");
         verify_relay_endpoint_with(
             &sink,
             &BUFFER,
@@ -445,10 +367,7 @@ fn the_record_round_trips_through_the_file_and_clears_to_unset() {
     assert_eq!(record.state, RelayEndpointState::Verified);
     assert_eq!(record.url.as_deref(), Some("https://relay.example.com"));
     assert_eq!(record.version.as_deref(), Some("v1.2.3"));
-    assert_eq!(
-        record.capabilities,
-        vec!["remote_session".to_string(), "websocket".to_string()]
-    );
+    assert_eq!(record.capabilities, vec!["remote_session".to_string(), "websocket".to_string()]);
 
     // Clearing the URL returns the record to `unset` and keeps no success.
     let cleared = save_relay_endpoint_with(&sink, &BUFFER, &reopened, "   ".to_string())
@@ -460,11 +379,7 @@ fn the_record_round_trips_through_the_file_and_clears_to_unset() {
 
     let reopened = GlobalSettingsStore::with_path(path);
     assert_eq!(
-        reopened
-            .load_relay_endpoint()
-            .expect("a record")
-            .outbound()
-            .state,
+        reopened.load_relay_endpoint().expect("a record").outbound().state,
         RelayEndpointState::Unset
     );
 }

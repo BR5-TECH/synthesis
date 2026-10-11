@@ -28,9 +28,7 @@ pub(super) fn openrouter_request(
     // as a prefix of the message it is about to carry, so a head the two
     // renderers disagree about costs a mark rather than splitting in the wrong
     // place.
-    let hints = openrouter_bridge::CacheHints {
-        stable_head: stable_head_text(request, exchange),
-    };
+    let hints = openrouter_bridge::CacheHints { stable_head: stable_head_text(request, exchange) };
     let messages = openrouter_bridge::messages_out(&assembled, &hints);
     let model = endpoint.model_id.clone().unwrap_or_default();
     let mut builder = ChatCompletionRequestBuilderShim::new(model.clone(), messages);
@@ -48,11 +46,7 @@ pub(super) fn openrouter_request(
     builder.upstream = upstream_for(&model);
     // CVL-FR-10: the same definitions every other provider is offered, in this
     // SDK's own shape.
-    builder.tools = assembled
-        .tools
-        .iter()
-        .map(openrouter_bridge::tool_out)
-        .collect();
+    builder.tools = assembled.tools.iter().map(openrouter_bridge::tool_out).collect();
     // CVL-FR-30 / WST-FR-02 / WFT-FR-02: the entries exactly as their own
     // modules fix them, each carrying a `type` and no other field — so the
     // search and the fetch are served by OpenRouter's own default engine
@@ -81,9 +75,7 @@ pub(super) fn openrouter_request(
             }
         });
     }
-    builder
-        .build()
-        .map_err(|_| CallFailure::unreachable(class::CONNECT))
+    builder.build().map_err(|_| CallFailure::unreachable(class::CONNECT))
 }
 
 /// CVL-FR-21 / CVL-FR-35: one OpenRouter failure, classified from what the SDK
@@ -109,16 +101,9 @@ pub(super) fn openrouter_failure(error: &openrouter_rs::error::OpenRouterError) 
             // and a refusal it calls unrepeatable is not made three times. A 400
             // is the request's own shape, and the same request will be refused
             // in the same way for as long as it is sent.
-            let failure = if matches!(status, 401 | 403) {
-                FAIL_REJECTED
-            } else {
-                FAIL_UNREACHABLE
-            };
-            let class = if matches!(status, 401 | 403) {
-                class::AUTH
-            } else {
-                class::HTTP_STATUS
-            };
+            let failure =
+                if matches!(status, 401 | 403) { FAIL_REJECTED } else { FAIL_UNREACHABLE };
+            let class = if matches!(status, 401 | 403) { class::AUTH } else { class::HTTP_STATUS };
             CallFailure {
                 failure,
                 class,
@@ -169,11 +154,7 @@ pub(super) async fn carry_openrouter(
         .send_chat_completion(&built)
         .await
         .map_err(|e| with_recorded_tls(openrouter_failure(&e), &tls_record))?;
-    Ok(reply_from_openrouter(
-        &response,
-        endpoint.model_id.as_deref().unwrap_or_default(),
-        round,
-    ))
+    Ok(reply_from_openrouter(&response, endpoint.model_id.as_deref().unwrap_or_default(), round))
 }
 
 /// CVL-FR-10 / CVL-FR-40: what one OpenRouter answer comes to.
@@ -187,11 +168,7 @@ pub(super) fn reply_from_openrouter(
     model: &str,
     round: usize,
 ) -> ModelReply {
-    let text: String = response
-        .choices
-        .iter()
-        .filter_map(|c| c.content())
-        .collect();
+    let text: String = response.choices.iter().filter_map(|c| c.content()).collect();
     // Emptiness is the loop's business here as it is on every other provider
     // (CVL-FR-13): a reply carrying tool calls and no prose is the ordinary
     // middle of a turn.
@@ -201,11 +178,7 @@ pub(super) fn reply_from_openrouter(
     // result before the reply was composed. The loop dispatches none of it and
     // replays none of it — it reports it and records it (CVL-FR-33, CVL-FR-34).
     let native_calls = openrouter_bridge::native_calls_in(
-        response
-            .choices
-            .iter()
-            .filter_map(|choice| choice.reasoning_details())
-            .flatten(),
+        response.choices.iter().filter_map(|choice| choice.reasoning_details()).flatten(),
         round,
     );
     // CVL-FR-34: the provider's own count of what its tool loop did, which is
@@ -225,25 +198,19 @@ pub(super) fn reply_from_openrouter(
     // citations ride in `annotations` instead — so `native_calls_in` finds
     // nothing and this is what says a search happened at all.
     let native_usage = response.usage.as_ref().and_then(|usage| {
-        usage
-            .server_tool_use_details
-            .as_ref()
-            .and_then(|details| {
-                NativeToolUsage::reported(
-                    details.tool_calls_requested,
-                    details.tool_calls_executed,
-                    details.web_search_requests,
-                )
-            })
+        usage.server_tool_use_details.as_ref().and_then(|details| {
+            NativeToolUsage::reported(
+                details.tool_calls_requested,
+                details.tool_calls_executed,
+                details.web_search_requests,
+            )
+        })
     });
     // CVL-FR-40: what the client says of the call it carried, remembered for the
     // next call of this model. Written from every answered call rather than from
     // the first alone, so a call that fell back re-pins to wherever it landed.
-    let served_by = response
-        .provider
-        .as_deref()
-        .filter(|upstream| !upstream.is_empty())
-        .map(str::to_string);
+    let served_by =
+        response.provider.as_deref().filter(|upstream| !upstream.is_empty()).map(str::to_string);
     if let Some(upstream) = served_by.as_deref() {
         remember_upstream(model, upstream);
     }
@@ -314,7 +281,9 @@ pub(super) fn reply_from_openrouter(
 pub(super) mod openrouter_bridge {
     use openrouter_rs::api::chat::Message as OrMessage;
     use openrouter_rs::types::Role;
-    use rig::completion::message::{AssistantContent, ToolCall, ToolFunction, ToolName, UserContent};
+    use rig::completion::message::{
+        AssistantContent, ToolCall, ToolFunction, ToolName, UserContent,
+    };
     use rig::completion::{Message, ToolDefinition};
 
     /// One tool definition, in the SDK's shape (CVL-FR-10).
@@ -408,10 +377,8 @@ pub(super) mod openrouter_bridge {
                 )]);
             }
             Content::Parts(parts) => {
-                if let Some(ContentPart::Text { cache_control, .. }) = parts
-                    .iter_mut()
-                    .rev()
-                    .find(|part| matches!(part, ContentPart::Text { .. }))
+                if let Some(ContentPart::Text { cache_control, .. }) =
+                    parts.iter_mut().rev().find(|part| matches!(part, ContentPart::Text { .. }))
                 {
                     *cache_control = Some(CacheControl::ephemeral());
                 }
@@ -525,10 +492,7 @@ pub(super) mod openrouter_bridge {
             // where it has none. A head the message does not open with, and a
             // head that is the whole of it, both fall back here rather than
             // splitting — an unsplit input is marked exactly as it always was.
-            let split = hints
-                .stable_head
-                .as_deref()
-                .is_some_and(|head| mark_at_head(input, head));
+            let split = hints.stable_head.as_deref().is_some_and(|head| mark_at_head(input, head));
             if !split {
                 mark_for_caching(input);
             }
@@ -538,7 +502,9 @@ pub(super) mod openrouter_bridge {
 
     /// A tool result's text. Every tool in this group returns text (TLC-FR-08),
     /// so anything else is not something this application put there.
-    pub(in crate::agent_conversations) fn render_tool_result(result: &rig::completion::message::ToolResult) -> String {
+    pub(in crate::agent_conversations) fn render_tool_result(
+        result: &rig::completion::message::ToolResult,
+    ) -> String {
         use rig::completion::message::ToolResultContent;
         result
             .content
@@ -582,9 +548,8 @@ pub(super) mod openrouter_bridge {
             // first. A block naming no id is its own call — there is nothing to
             // fold it into.
             if let Some(id) = detail.tool_call_id.as_ref() {
-                if let Some(existing) = out
-                    .iter_mut()
-                    .find(|call| &call.id == id && call.name == name)
+                if let Some(existing) =
+                    out.iter_mut().find(|call| &call.id == id && call.name == name)
                 {
                     if existing.arguments.is_empty() {
                         existing.arguments = detail.arguments.clone().unwrap_or_default();
@@ -595,9 +560,8 @@ pub(super) mod openrouter_bridge {
                     continue;
                 }
             }
-            let taken = |id: &str, out: &[super::NativeToolCall]| {
-                out.iter().any(|call| call.id == id)
-            };
+            let taken =
+                |id: &str, out: &[super::NativeToolCall]| out.iter().any(|call| call.id == id);
             let id = match detail.tool_call_id.clone() {
                 // A provider that names an id this reply has already used for
                 // another tool does not get to collide with it.
@@ -626,7 +590,9 @@ pub(super) mod openrouter_bridge {
     ///
     /// Arguments travel as the JSON string this SDK's wire format uses, which is
     /// what the provider sent in the first place.
-    pub(in crate::agent_conversations) fn tool_call_out(call: &ToolCall) -> openrouter_rs::types::ToolCall {
+    pub(in crate::agent_conversations) fn tool_call_out(
+        call: &ToolCall,
+    ) -> openrouter_rs::types::ToolCall {
         openrouter_rs::types::ToolCall::new(
             call.id.to_string(),
             call.function.name.to_string(),

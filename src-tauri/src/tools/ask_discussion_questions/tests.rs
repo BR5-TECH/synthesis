@@ -17,22 +17,15 @@ fn asked(question: &str, options: &[&str]) -> AskedQuestion {
 /// the order the model wrote them, ascending from one.
 #[test]
 fn a_valid_set_takes_positions_in_the_order_it_was_written() {
-    let questions = normalize(&[
-        asked("first?", &["a", "b"]),
-        asked("second?", &["c", "d", "e"]),
-    ])
-    .unwrap();
+    let questions =
+        normalize(&[asked("first?", &["a", "b"]), asked("second?", &["c", "d", "e"])]).unwrap();
 
     assert_eq!(questions.len(), 2);
     assert_eq!(questions[0].position, 1);
     assert_eq!(questions[0].text, "first?");
     assert_eq!(questions[1].position, 2);
     assert_eq!(
-        questions[1]
-            .options
-            .iter()
-            .map(|o| (o.position, o.value.as_str()))
-            .collect::<Vec<_>>(),
+        questions[1].options.iter().map(|o| (o.position, o.value.as_str())).collect::<Vec<_>>(),
         vec![(1, "c"), (2, "d"), (3, "e")],
     );
 }
@@ -50,10 +43,7 @@ fn an_empty_set_is_refused() {
 #[test]
 fn more_than_ten_questions_is_refused() {
     let many: Vec<AskedQuestion> = (0..11).map(|_| asked("q?", &["a", "b"])).collect();
-    assert!(matches!(
-        normalize(&many).unwrap_err(),
-        ToolRefusal::InvalidArguments(_),
-    ));
+    assert!(matches!(normalize(&many).unwrap_err(), ToolRefusal::InvalidArguments(_),));
     let ten: Vec<AskedQuestion> = (0..10).map(|_| asked("q?", &["a", "b"])).collect();
     assert_eq!(normalize(&ten).unwrap().len(), 10);
 }
@@ -70,10 +60,7 @@ fn a_blank_question_refuses_the_whole_call_and_names_its_position() {
     .unwrap_err();
 
     assert!(matches!(refusal, ToolRefusal::InvalidQuestion(_, 2)));
-    assert!(
-        refusal.to_string().contains("question 2 of the set"),
-        "{refusal}",
-    );
+    assert!(refusal.to_string().contains("question 2 of the set"), "{refusal}",);
 }
 
 /// ADQ-FR-PVXK, ADQ-FR-CJRM: an option count outside two or three refuses the
@@ -96,10 +83,7 @@ fn an_option_count_outside_two_or_three_is_refused() {
 #[test]
 fn a_blank_option_refuses_the_whole_call() {
     let refusal = normalize(&[asked("q?", &["a", "  "])]).unwrap_err();
-    assert!(matches!(
-        refusal,
-        ToolRefusal::InvalidQuestion(SET_OPTION_BLANK, 1),
-    ));
+    assert!(matches!(refusal, ToolRefusal::InvalidQuestion(SET_OPTION_BLANK, 1),));
 }
 
 /// ADQ-FR-ZBQH: a question above its named limit is refused, and the limit
@@ -174,14 +158,8 @@ fn the_parameter_schema_declares_the_documented_argument_and_no_other() {
     assert_eq!(questions["maxItems"], 10);
 
     let item = &questions["items"];
-    assert_eq!(
-        item["properties"]["question"]["description"],
-        QUESTION_DESCRIPTION,
-    );
-    assert_eq!(
-        item["properties"]["options"]["description"],
-        OPTIONS_DESCRIPTION,
-    );
+    assert_eq!(item["properties"]["question"]["description"], QUESTION_DESCRIPTION,);
+    assert_eq!(item["properties"]["options"]["description"], OPTIONS_DESCRIPTION,);
     assert_eq!(item["properties"]["options"]["minItems"], 2);
     assert_eq!(item["properties"]["options"]["maxItems"], 3);
 
@@ -214,11 +192,7 @@ use crate::tools::tests::{block_on, closed_project, mounted, sorted_keys};
 static ADQ_LOG: LogBuffer = LogBuffer::new();
 
 fn human() -> Participant {
-    Participant::Human {
-        login: "raver119".into(),
-        display_name: None,
-        email: None,
-    }
+    Participant::Human { login: "raver119".into(), display_name: None, email: None }
 }
 
 /// The agent the set is recorded as (ADQ-FR-GMDK).
@@ -245,16 +219,12 @@ impl Fixture {
         let dir = TempDir::new().expect("tempdir");
         let path = dir.path().to_path_buf();
         let root = crate::fs::RootFs::for_root(&path);
-        let draft_id = crate::drafts::create_draft_at_root(&root, Some("ontology"))
-            .expect("draft")
-            .draft
-            .id;
+        let draft_id =
+            crate::drafts::create_draft_at_root(&root, Some("ontology")).expect("draft").draft.id;
         let thread = crate::comments::open_discussion_in(
             &root,
             &root,
-            &crate::comments::DiscussionTarget::Draft {
-                draft_id: draft_id.clone(),
-            },
+            &crate::comments::DiscussionTarget::Draft { draft_id: draft_id.clone() },
             None,
             "@arch which way?".into(),
             Vec::new(),
@@ -276,10 +246,7 @@ impl Fixture {
     }
 
     fn roots(&self) -> crate::agent_conversations::OwnedRoots {
-        crate::agent_conversations::OwnedRoots {
-            worktree: self.root(),
-            store: self.root(),
-        }
+        crate::agent_conversations::OwnedRoots { worktree: self.root(), store: self.root() }
     }
 
     fn tool(&self) -> AskDiscussionQuestionsTool<tauri::test::MockRuntime> {
@@ -340,10 +307,7 @@ fn a_successful_call_records_the_set_against_the_bound_discussion() {
     assert_eq!(set.asked_by, agent(), "CMS-FR-41: the turn's own participant");
     assert!(!set.set_id.is_empty());
     assert_eq!(
-        set.questions
-            .iter()
-            .map(|q| (q.position, q.text.as_str()))
-            .collect::<Vec<_>>(),
+        set.questions.iter().map(|q| (q.position, q.text.as_str())).collect::<Vec<_>>(),
         vec![(1, "first?"), (2, "second?")],
     );
     // CVL-FR-15: and the loop is told the set actually went out.
@@ -417,14 +381,10 @@ fn a_call_reports_the_tool_the_discussion_and_the_count_and_nothing_it_composed(
     ADQ_LOG.clear();
     let fixture = Fixture::new();
 
-    block_on(
-        fixture
-            .reporting_into(&ADQ_LOG)
-            .call(args(vec![
-                asked("Should the ontology live in one spec or two?", &["one spec", "two specs"]),
-                asked("Where does the flow diagram go?", &["the ui spec", "the core spec"]),
-            ])),
-    )
+    block_on(fixture.reporting_into(&ADQ_LOG).call(args(vec![
+        asked("Should the ontology live in one spec or two?", &["one spec", "two specs"]),
+        asked("Where does the flow diagram go?", &["the ui spec", "the core spec"]),
+    ])))
     .expect("recorded");
     // The refusal path where the arguments are in hand at the emit site.
     block_on(
@@ -455,18 +415,9 @@ fn a_call_reports_the_tool_the_discussion_and_the_count_and_nothing_it_composed(
 
     // And no record anywhere carries a question, an option, or a body.
     let rendered = format!("{:?}", records_of(&ADQ_LOG, Domain::Ai));
-    for composed in [
-        "ontology",
-        "one spec",
-        "two specs",
-        "flow diagram",
-        "the ui spec",
-        "archive",
-        "keep",
-    ] {
-        assert!(
-            !rendered.contains(composed),
-            "ADQ-FR-LZHV: a record carried {composed:?}",
-        );
+    for composed in
+        ["ontology", "one spec", "two specs", "flow diagram", "the ui spec", "archive", "keep"]
+    {
+        assert!(!rendered.contains(composed), "ADQ-FR-LZHV: a record carried {composed:?}",);
     }
 }

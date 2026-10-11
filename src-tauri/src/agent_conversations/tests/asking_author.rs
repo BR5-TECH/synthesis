@@ -10,8 +10,6 @@ use super::*;
 // Asking the author (CVL-FR-15 … AGC-FR-29)
 // ---------------------------------------------------------------------------
 
-
-
 // ---------------------------------------------------------------------------
 // AGC-FR-01, AGC-FR-17, AGC-FR-21 … AGC-FR-13, AGC-FR-07 — proposing a change to a draft file (CVL-FR-15, AGC-FR-29)
 // ---------------------------------------------------------------------------
@@ -39,11 +37,7 @@ fn proposes(path: &str, content: &str, rationale: &str) -> ScriptedReply {
 pub(super) fn run_draft_turn(h: &Harness, nickname: &str) -> (AgentTurn, String, Discussion) {
     let (draft_id, thread) = seed_discussion(h, &[&format!("@{nickname} what would you change?")]);
     let turn = h
-        .dispatch(
-            nickname,
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch(nickname, ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     let terminal = wait_for_terminal(h, &turn.id);
     (terminal, draft_id, thread)
@@ -61,10 +55,7 @@ pub(super) fn folded_discussion(h: &Harness, draft_id: &str, thread_id: &str) ->
 fn a_turn_that_proposes_a_change_ends_on_that_call() {
     // CVL-FR-15, AGC-FR-01, AGC-FR-17, AGC-FR-21.
     let h = Harness::scripted(vec![
-        Ok(ScriptedReply::calls(
-            "read_file",
-            serde_json::json!({ "path": "spec.md" }),
-        )),
+        Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))),
         Ok(proposes("artifact-window.md", "A better UI half.", "The half buries its point.")),
         // Never reached: the turn ends on the proposal.
         Ok(ScriptedReply::answer("unreachable")),
@@ -94,10 +85,7 @@ fn a_turn_that_proposes_a_change_ends_on_that_call() {
     // AGC-FR-17: the one comment an agent carries an attachment on, and it is a
     // proposal reference rather than a file.
     assert_eq!(posted.attachments.len(), 1);
-    assert!(matches!(
-        posted.attachments[0],
-        crate::comments::Attachment::Proposal { .. }
-    ));
+    assert!(matches!(posted.attachments[0], crate::comments::Attachment::Proposal { .. }));
 
     // The candidate is beside the draft and the draft's own file is untouched.
     let proposals =
@@ -142,17 +130,13 @@ fn seed_prompt_discussion(h: &Harness, nickname: &str) -> Discussion {
     std::fs::create_dir_all(root.path().join(".synthesis")).expect("dirs");
     std::fs::write(
         root.path().join(".synthesis/library.toml"),
-        format!(
-            "[assignments.\"{PROMPT_PATH}\"]\ntype = \"prompt\"\nscope = \"file\"\n"
-        ),
+        format!("[assignments.\"{PROMPT_PATH}\"]\ntype = \"prompt\"\nscope = \"file\"\n"),
     )
     .expect("assignment");
     crate::comments::open_discussion_in(
         &root,
         &root,
-        &crate::comments::DiscussionTarget::Artifact {
-            artifact_id: PROMPT_PATH.into(),
-        },
+        &crate::comments::DiscussionTarget::Artifact { artifact_id: PROMPT_PATH.into() },
         None,
         format!("@{nickname} what would you change?"),
         Vec::new(),
@@ -165,11 +149,7 @@ fn seed_prompt_discussion(h: &Harness, nickname: &str) -> Discussion {
 fn run_prompt_turn(h: &Harness, nickname: &str) -> (AgentTurn, Discussion) {
     let thread = seed_prompt_discussion(h, nickname);
     let turn = h
-        .dispatch(
-            nickname,
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch(nickname, ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     (wait_for_terminal(h, &turn.id), thread)
 }
@@ -185,10 +165,7 @@ fn folded_prompt_discussion(h: &Harness, thread_id: &str) -> Discussion {
 fn a_turn_that_proposes_a_prompt_change_ends_on_that_call() {
     // CVL-FR-15, AGC-FR-01, AGC-FR-17, AGC-FR-21.
     let h = Harness::scripted(vec![
-        Ok(ScriptedReply::calls(
-            "read_file",
-            serde_json::json!({ "path": PROMPT_PATH }),
-        )),
+        Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": PROMPT_PATH }))),
         Ok(proposes_prompt(
             PROMPT_PATH,
             "# Review\n\nRead the file.\n\nSummarise it, then file a note.\n",
@@ -221,20 +198,13 @@ fn a_turn_that_proposes_a_prompt_change_ends_on_that_call() {
     // AGC-FR-17: one reference attachment and nothing beside it, and it is the
     // `prompt_proposal` kind rather than the draft's.
     assert_eq!(posted.attachments.len(), 1);
-    assert!(matches!(
-        posted.attachments[0],
-        crate::comments::Attachment::PromptProposal { .. }
-    ));
+    assert!(matches!(posted.attachments[0], crate::comments::Attachment::PromptProposal { .. }));
 
     // CVL-FR-09: the candidate is beside the project and the artifact is
     // untouched.
-    let proposals =
-        crate::prompt_proposals::list_proposals_impl(&h.root(), PROMPT_PATH);
+    let proposals = crate::prompt_proposals::list_proposals_impl(&h.root(), PROMPT_PATH);
     assert_eq!(proposals.len(), 1);
-    assert_eq!(
-        proposals[0].state,
-        crate::prompt_proposals::PromptProposalState::Pending,
-    );
+    assert_eq!(proposals[0].state, crate::prompt_proposals::PromptProposalState::Pending,);
     assert_eq!(
         std::fs::read_to_string(h.root().path().join(PROMPT_PATH)).expect("prompt"),
         PROMPT_BODY,
@@ -248,11 +218,7 @@ fn a_refused_prompt_proposal_ends_nothing_and_the_turn_answers_with_what_it_has(
     // A file whose resolved type is not `prompt` is refused, the loop keeps
     // running, and the turn delivers the prose it answers with instead.
     let h = Harness::scripted(vec![
-        Ok(proposes_prompt(
-            "spec.md",
-            "# Spec\n\nA rewrite.\n",
-            "It reads better this way.",
-        )),
+        Ok(proposes_prompt("spec.md", "# Spec\n\nA rewrite.\n", "It reads better this way.")),
         Ok(ScriptedReply::answer("I would split the Steps section.")),
     ]);
     h.mount();
@@ -278,17 +244,14 @@ fn a_refused_prompt_proposal_ends_nothing_and_the_turn_answers_with_what_it_has(
 #[test]
 fn a_reply_asking_for_both_ending_tools_on_an_artifact_makes_one_contribution() {
     // CVL-FR-15, AGC-FR-01.
-    let reply = proposes_prompt(
-        PROMPT_PATH,
-        "# Review\n\nRead the file.\n",
-        "Leads with the point.",
-    )
-    .and_calls(
-        crate::tools::ask_user_comment::NAME,
-        serde_json::json!({ "question": "Or shall I?" }),
-    )
-    .and_calls("read_file", serde_json::json!({ "path": PROMPT_PATH }))
-    .with_text("I would also split the Steps");
+    let reply =
+        proposes_prompt(PROMPT_PATH, "# Review\n\nRead the file.\n", "Leads with the point.")
+            .and_calls(
+                crate::tools::ask_user_comment::NAME,
+                serde_json::json!({ "question": "Or shall I?" }),
+            )
+            .and_calls("read_file", serde_json::json!({ "path": PROMPT_PATH }))
+            .with_text("I would also split the Steps");
 
     let h = Harness::scripted(vec![Ok(reply), Ok(ScriptedReply::answer("unreachable"))]);
     h.mount();
@@ -299,17 +262,10 @@ fn a_reply_asking_for_both_ending_tools_on_an_artifact_makes_one_contribution() 
     assert_eq!(h.seam.requests().len(), 1, "the turn ended on its first reply");
 
     let thread = folded_prompt_discussion(&h, &thread.id);
-    assert_eq!(
-        thread.comments.len(),
-        2,
-        "one contribution and not two (AGC-FR-01)",
-    );
+    assert_eq!(thread.comments.len(), 2, "one contribution and not two (AGC-FR-01)",);
     assert_eq!(thread.comments[1].body, "Leads with the point.");
     assert!(
-        !thread
-            .comments
-            .iter()
-            .any(|c| c.body.contains("I would also split the Steps")),
+        !thread.comments.iter().any(|c| c.body.contains("I would also split the Steps")),
         "CVL-FR-15: prose alongside an ending call is appended nowhere",
     );
 }
@@ -335,20 +291,10 @@ fn a_reply_asking_for_both_ending_tools_makes_one_contribution() {
     assert_eq!(h.seam.requests().len(), 1, "the turn ended on its first reply");
 
     let thread = folded_discussion(&h, &draft_id, &thread.id);
-    assert_eq!(
-        thread.comments.len(),
-        2,
-        "one contribution and not two (AGC-FR-01)",
-    );
-    assert_eq!(
-        thread.comments[1].body, "Leads with the point.",
-        "the proposal, not the question",
-    );
+    assert_eq!(thread.comments.len(), 2, "one contribution and not two (AGC-FR-01)",);
+    assert_eq!(thread.comments[1].body, "Leads with the point.", "the proposal, not the question",);
     assert!(
-        !thread
-            .comments
-            .iter()
-            .any(|c| c.body.contains("I would also split the Intent")),
+        !thread.comments.iter().any(|c| c.body.contains("I would also split the Intent")),
         "CVL-FR-15: prose alongside an ending call is appended nowhere",
     );
 }
@@ -371,11 +317,7 @@ fn a_refused_proposal_ends_nothing_and_the_turn_answers_with_what_it_has() {
 
     // A second turn in the same conversation finds the slot taken.
     let second = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     let second = wait_for_terminal(&h, &second.id);
 
@@ -385,9 +327,7 @@ fn a_refused_proposal_ends_nothing_and_the_turn_answers_with_what_it_has() {
         "CVL-FR-14: a tool refusal is not a turn's failure and ends nothing",
     );
     assert_eq!(
-        crate::draft_proposals::list_proposals_impl(&h.root(), &draft_id)
-            .expect("list")
-            .len(),
+        crate::draft_proposals::list_proposals_impl(&h.root(), &draft_id).expect("list").len(),
         1,
         "and no second candidate was recorded",
     );
@@ -419,9 +359,8 @@ fn a_decision_dispatches_a_fresh_turn_reading_the_changed_file() {
     );
 
     // The author accepts, which writes the file and appends the decision.
-    let proposal = crate::draft_proposals::list_proposals_impl(&h.root(), &draft_id)
-        .expect("list")
-        .remove(0);
+    let proposal =
+        crate::draft_proposals::list_proposals_impl(&h.root(), &draft_id).expect("list").remove(0);
     let decided = crate::draft_proposals::accept_for_test(
         &h.app.handle().clone(),
         &h.root(),
@@ -431,21 +370,13 @@ fn a_decision_dispatches_a_fresh_turn_reading_the_changed_file() {
         &human("ada"),
     )
     .expect("accepted");
-    assert_eq!(
-        decided.proposal.state,
-        crate::draft_proposals::ProposalState::Accepted,
-    );
+    assert_eq!(decided.proposal.state, crate::draft_proposals::ProposalState::Accepted,);
 
     // The decision comment is what dispatches the fresh turn (DCR-FR-15).
     let thread_now = folded_discussion(&h, &draft_id, &thread.id);
     let decision = thread_now.comments.last().expect("decision");
-    let second = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &decision.id,
-        )
-        .expect("dispatch");
+    let second =
+        h.dispatch("arch", ConversationOrigin::of(&thread), &decision.id).expect("dispatch");
     wait_for_terminal(&h, &second.id);
 
     // AGC-FR-29: the awaiting turn retired rather than resuming.
@@ -486,10 +417,7 @@ fn a_decision_dispatches_a_fresh_turn_reading_the_changed_file() {
 #[test]
 fn a_turn_that_asks_the_author_ends_on_that_call() {
     let h = Harness::scripted(vec![
-        Ok(ScriptedReply::calls(
-            "read_file",
-            serde_json::json!({ "path": "spec.md" }),
-        )),
+        Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))),
         Ok(asks("One spec or two?")),
         // Never reached: the turn ends on the ask.
         Ok(ScriptedReply::answer("unreachable")),
@@ -515,10 +443,7 @@ fn a_turn_that_asks_the_author_ends_on_that_call() {
     let thread = folded(&h, "spec.md", &thread.id);
     assert_eq!(thread.comments.len(), 2);
     assert_eq!(thread.comments[1].body, "One spec or two?");
-    assert!(matches!(
-        thread.comments[1].author,
-        Participant::Agent { .. }
-    ));
+    assert!(matches!(thread.comments[1].author, Participant::Agent { .. }));
 
     // AGC-FR-21: one terminal event for this turn and no other.
     let events = h
@@ -554,11 +479,7 @@ fn asking_leaves_the_rest_of_the_reply_undispatched_and_its_prose_unappended() {
     let (turn, thread) = run_one(&h, "arch");
 
     assert_eq!(turn.state, AgentTurnState::AwaitingReply);
-    assert_eq!(
-        h.seam.requests().len(),
-        1,
-        "CVL-FR-15: the loop ended on the ask",
-    );
+    assert_eq!(h.seam.requests().len(), 1, "CVL-FR-15: the loop ended on the ask",);
 
     let thread = folded(&h, "spec.md", &thread.id);
     assert_eq!(
@@ -607,16 +528,10 @@ fn a_turn_ending_on_a_question_reports_every_call_of_that_reply_finished() {
         payloads.len(),
         2 + 4 * 2,
         "every call the reply asked for was reported begun and finished: {:?}",
-        payloads
-            .iter()
-            .map(|t| t.active_tool_calls.len())
-            .collect::<Vec<_>>(),
+        payloads.iter().map(|t| t.active_tool_calls.len()).collect::<Vec<_>>(),
     );
     assert_eq!(
-        payloads
-            .iter()
-            .map(|t| t.active_tool_calls.len())
-            .collect::<Vec<_>>(),
+        payloads.iter().map(|t| t.active_tool_calls.len()).collect::<Vec<_>>(),
         vec![0, 1, 2, 3, 4, 3, 2, 1, 0, 0],
         "all four begun before any finished, then emptied one by one",
     );
@@ -625,9 +540,7 @@ fn a_turn_ending_on_a_question_reports_every_call_of_that_reply_finished() {
     let last = payloads.last().expect("a terminal event");
     assert!(last.ended_at.is_some() && last.active_tool_calls.is_empty());
     assert!(
-        payloads[..payloads.len() - 1]
-            .iter()
-            .all(|t| t.state == AgentTurnState::Running),
+        payloads[..payloads.len() - 1].iter().all(|t| t.state == AgentTurnState::Running),
         "AGC-FR-21: exactly one terminal event, and it is the last",
     );
     // AGC-FR-22: nothing is left active on the outstanding record either.
@@ -644,10 +557,7 @@ fn a_turn_ending_on_a_question_reports_every_call_of_that_reply_finished() {
 fn a_refused_question_leaves_the_loop_running_and_the_turn_delivers() {
     // A blank question is the tool's own retryable refusal (AUC-FR-06), which
     // is the refusal branch of CVL-FR-15 reached deterministically.
-    let h = Harness::scripted(vec![
-        Ok(asks("   ")),
-        Ok(ScriptedReply::answer("Two specs, then.")),
-    ]);
+    let h = Harness::scripted(vec![Ok(asks("   ")), Ok(ScriptedReply::answer("Two specs, then."))]);
     h.mount();
     h.create_agent("arch", "");
     let (turn, thread) = run_one(&h, "arch");
@@ -665,10 +575,7 @@ fn a_refused_question_leaves_the_loop_running_and_the_turn_delivers() {
 
     let thread = folded(&h, "spec.md", &thread.id);
     assert_eq!(thread.comments.len(), 2);
-    assert_eq!(
-        thread.comments[1].body, "Two specs, then.",
-        "the answer, and no question",
-    );
+    assert_eq!(thread.comments[1].body, "Two specs, then.", "the answer, and no question",);
 }
 
 // ---------------------------------------------------------------------------
@@ -738,9 +645,7 @@ fn an_awaiting_turn_is_outstanding_until_a_dispatch_for_that_agent_retires_it() 
 
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let origin = ConversationOrigin::of(&thread);
-    let asked = h
-        .dispatch("arch", origin.clone(), &thread.comments[0].id)
-        .expect("dispatch");
+    let asked = h.dispatch("arch", origin.clone(), &thread.comments[0].id).expect("dispatch");
     wait_for_terminal(&h, &asked.id);
 
     // AGC-FR-22: outstanding, so a surface mounted later knows a reply is owed.
@@ -750,15 +655,10 @@ fn an_awaiting_turn_is_outstanding_until_a_dispatch_for_that_agent_retires_it() 
     assert_eq!(outstanding[0].state, AgentTurnState::AwaitingReply);
 
     // A dispatch for another agent in the same conversation leaves it alone.
-    let other = h
-        .dispatch("sec", origin.clone(), &thread.comments[0].id)
-        .expect("dispatch");
+    let other = h.dispatch("sec", origin.clone(), &thread.comments[0].id).expect("dispatch");
     wait_for_terminal(&h, &other.id);
     assert!(
-        h.turns()
-            .in_flight(Some(&origin))
-            .iter()
-            .any(|t| t.id == asked.id),
+        h.turns().in_flight(Some(&origin)).iter().any(|t| t.id == asked.id),
         "AGC-FR-29: only a dispatch for the same agent retires it",
     );
 
@@ -770,16 +670,11 @@ fn an_awaiting_turn_is_outstanding_until_a_dispatch_for_that_agent_retires_it() 
         .iter()
         .filter(|t| t.id == asked.id)
         .count();
-    let answering = h
-        .dispatch("arch", origin.clone(), &thread.comments[0].id)
-        .expect("dispatch");
+    let answering = h.dispatch("arch", origin.clone(), &thread.comments[0].id).expect("dispatch");
     wait_for_terminal(&h, &answering.id);
 
     assert!(
-        !h.turns()
-            .in_flight(Some(&origin))
-            .iter()
-            .any(|t| t.id == asked.id),
+        !h.turns().in_flight(Some(&origin)).iter().any(|t| t.id == asked.id),
         "AGC-FR-29: the wait is over",
     );
     // Retired rather than forgotten: it delivered, its contribution being the
@@ -797,10 +692,7 @@ fn an_awaiting_turn_is_outstanding_until_a_dispatch_for_that_agent_retires_it() 
         .iter()
         .filter(|t| t.id == asked.id)
         .count();
-    assert_eq!(
-        events_before, events_after,
-        "AGC-FR-21 / AGC-FR-29: retirement emits nothing",
-    );
+    assert_eq!(events_before, events_after, "AGC-FR-21 / AGC-FR-29: retirement emits nothing",);
 }
 
 // ---------------------------------------------------------------------------
@@ -811,10 +703,7 @@ fn an_awaiting_turn_is_outstanding_until_a_dispatch_for_that_agent_retires_it() 
 #[test]
 fn the_answering_turn_reads_the_question_and_the_answer_as_ordinary_history() {
     let h = Harness::scripted(vec![
-        Ok(ScriptedReply::calls(
-            "read_file",
-            serde_json::json!({ "path": "spec.md" }),
-        )),
+        Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))),
         Ok(asks("One spec or two?")),
         Ok(ScriptedReply::answer("Two specs, then.")),
     ]);
@@ -823,9 +712,7 @@ fn the_answering_turn_reads_the_question_and_the_answer_as_ordinary_history() {
 
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let origin = ConversationOrigin::of(&thread);
-    let asked = h
-        .dispatch("arch", origin.clone(), &thread.comments[0].id)
-        .expect("dispatch");
+    let asked = h.dispatch("arch", origin.clone(), &thread.comments[0].id).expect("dispatch");
     let asked_terminal = wait_for_terminal(&h, &asked.id);
     assert_eq!(
         asked_terminal.state,
@@ -857,9 +744,7 @@ fn the_answering_turn_reads_the_question_and_the_answer_as_ordinary_history() {
         .id
         .clone();
 
-    let answering = h
-        .dispatch("arch", origin.clone(), &reply_id)
-        .expect("dispatch");
+    let answering = h.dispatch("arch", origin.clone(), &reply_id).expect("dispatch");
     wait_for_terminal(&h, &answering.id);
 
     // AGC-FR-29 / AGC-FR-13: a fresh assembly of the conversation as it now

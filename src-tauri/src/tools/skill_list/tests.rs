@@ -6,10 +6,10 @@ use tauri::Manager;
 use super::*;
 use crate::logging::{LogBuffer, LogFilter, LogLevel};
 use crate::skills::Ecosystem;
+use crate::tools::tests::block_on;
 use crate::tools::tests::{
     closed_project, collision_project, demo_project, empty_project, mounted, write_skill, Fixture,
 };
-use crate::tools::tests::block_on;
 use crate::tools::ToolRefusal;
 
 fn call(fixture: &Fixture) -> Result<SkillListOutput, ToolRefusal> {
@@ -35,10 +35,7 @@ fn the_tool_is_a_portable_tool_named_list_skills() {
     let definition = rig::tool::tool_definition(&SkillListTool::new(app.handle().clone()));
 
     assert_eq!(definition.name, "list_skills");
-    assert_eq!(
-        <SkillListTool<tauri::test::MockRuntime> as PortableTool>::NAME,
-        "list_skills",
-    );
+    assert_eq!(<SkillListTool<tauri::test::MockRuntime> as PortableTool>::NAME, "list_skills",);
     assert_eq!(NAME, "list_skills");
 }
 
@@ -55,8 +52,7 @@ fn the_definition_is_the_fixed_text_and_a_schema_declaring_no_parameters() {
     // it is checked against the spec that defines it.
     const SPEC: &str = include_str!("../../../../specifications/tools/SLT-skill-list-tool.md");
     assert!(
-        SPEC.lines()
-            .any(|line| line.trim().strip_prefix("> ") == Some(DESCRIPTION)),
+        SPEC.lines().any(|line| line.trim().strip_prefix("> ") == Some(DESCRIPTION)),
         "SLT-FR-02: the description must be the spec's contract-surface text",
     );
 
@@ -174,12 +170,7 @@ fn all_four_ecosystem_folders_are_listed_and_a_nested_one_is_not() {
     let ecosystems: Vec<Ecosystem> = output.skills.iter().map(|s| s.ecosystem).collect();
     assert_eq!(
         ecosystems,
-        vec![
-            Ecosystem::Claude,
-            Ecosystem::Codex,
-            Ecosystem::Github,
-            Ecosystem::Opencode,
-        ],
+        vec![Ecosystem::Claude, Ecosystem::Codex, Ecosystem::Github, Ecosystem::Opencode,],
         "each entry reports the folder family it came from",
     );
 }
@@ -307,12 +298,7 @@ fn an_entry_carries_exactly_the_documented_fields_and_its_path_resolves() {
     let entry = output.skills.first().expect("an entry");
 
     let value = serde_json::to_value(entry).unwrap();
-    let mut keys: Vec<&str> = value
-        .as_object()
-        .unwrap()
-        .keys()
-        .map(|k| k.as_str())
-        .collect();
+    let mut keys: Vec<&str> = value.as_object().unwrap().keys().map(|k| k.as_str()).collect();
     keys.sort_unstable();
     assert_eq!(
         keys,
@@ -341,8 +327,8 @@ fn no_project_open_refuses_rather_than_returning_an_empty_list() {
     let app = closed_project();
     let handle = app.handle().clone();
 
-    let refusal = block_on(SkillListTool::new(handle).call(SkillListArgs::default()))
-        .expect_err("SLT-FR-11");
+    let refusal =
+        block_on(SkillListTool::new(handle).call(SkillListArgs::default())).expect_err("SLT-FR-11");
     assert_eq!(refusal, ToolRefusal::NoProjectOpen);
 
     let error = refusal.to_execution_error();
@@ -496,10 +482,10 @@ fn every_listed_skill_is_rankable_and_every_ranked_skill_is_listed() {
 
     // Every listed skill is one `search_skills` can rank.
     for entry in &listed.skills {
-        let found = block_on(SkillSearchTool::new(handle.clone()).call(SkillSearchArgs {
-            query: entry.description.clone(),
-            limit: Some(25),
-        }))
+        let found = block_on(
+            SkillSearchTool::new(handle.clone())
+                .call(SkillSearchArgs { query: entry.description.clone(), limit: Some(25) }),
+        )
         .unwrap();
         assert!(
             found.skills.iter().any(|m| m.path == entry.path),
@@ -532,13 +518,7 @@ fn every_listed_skill_is_rankable_and_every_ranked_skill_is_listed() {
 fn a_call_resolves_without_waiting_on_an_index_pass() {
     // SLT-FR-15: `block_on` polls once and panics on `Pending`.
     let dir = tempfile::TempDir::new().unwrap();
-    write_skill(
-        dir.path(),
-        ".claude/skills",
-        "a",
-        "name: a\ndescription: does a thing",
-        "# Body",
-    );
+    write_skill(dir.path(), ".claude/skills", "a", "name: a\ndescription: does a thing", "# Body");
     let root = crate::changes::canonicalize_lenient(dir.path());
     let app = crate::tools::tests::mock_app();
     let handle = app.handle().clone();
@@ -577,10 +557,7 @@ fn opting_out_and_back_in_removes_and_restores_the_skill() {
     let fixture = mounted(dir);
     let file = {
         let indexer = fixture.app.state::<crate::bm25_index::Bm25Indexer>();
-        indexer
-            .root()
-            .expect("mounted")
-            .join(".claude/skills/toggler/SKILL.md")
+        indexer.root().expect("mounted").join(".claude/skills/toggler/SKILL.md")
     };
 
     assert_eq!(names(&call(&fixture).unwrap()), vec!["stable", "toggler"]);
@@ -597,11 +574,7 @@ fn opting_out_and_back_in_removes_and_restores_the_skill() {
         "SLT-FR-16: the opt-out lands on the next pass",
     );
 
-    std::fs::write(
-        &file,
-        "---\nname: toggler\ndescription: toggles\n---\n\n# Body\n",
-    )
-    .unwrap();
+    std::fs::write(&file, "---\nname: toggler\ndescription: toggles\n---\n\n# Body\n").unwrap();
     fixture.reindex();
     let restored = call(&fixture).unwrap();
     assert_eq!(
@@ -690,9 +663,6 @@ fn a_call_reports_its_skill_count_and_never_a_name_description_or_path() {
         "Review a specification",
         crate::tools::NO_PROJECT_OPEN,
     ] {
-        assert!(
-            !serialised.contains(leaked),
-            "SLT-FR-18: a record must not carry {leaked:?}",
-        );
+        assert!(!serialised.contains(leaked), "SLT-FR-18: a record must not carry {leaked:?}",);
     }
 }

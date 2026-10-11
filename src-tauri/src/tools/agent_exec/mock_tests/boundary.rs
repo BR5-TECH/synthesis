@@ -84,7 +84,7 @@ fn concurrent_launches_over_real_processes_stay_separate() {
                 &Silent,
                 &context,
                 AgentExecutionRequest {
-            turn_kind: super::super::TurnKind::Work,
+                    turn_kind: super::super::TurnKind::Work,
                     execution_directory: harness.workspace(),
                     task: first,
                     cancellation: CancellationToken::new(),
@@ -97,7 +97,7 @@ fn concurrent_launches_over_real_processes_stay_separate() {
                 &Silent,
                 &context,
                 AgentExecutionRequest {
-            turn_kind: super::super::TurnKind::Work,
+                    turn_kind: super::super::TurnKind::Work,
                     execution_directory: harness.workspace(),
                     task: second,
                     cancellation: CancellationToken::new(),
@@ -125,9 +125,6 @@ fn concurrent_launches_over_real_processes_stay_separate() {
 fn the_mock_is_located_at_the_documented_path() {
     let binary = mock_binary();
     assert!(binary.is_file());
-    assert!(binary.ends_with(format!(
-        "agentic-cli-mock{}",
-        std::env::consts::EXE_SUFFIX
-    )));
+    assert!(binary.ends_with(format!("agentic-cli-mock{}", std::env::consts::EXE_SUFFIX)));
     assert!(binary.to_string_lossy().contains("tools/agentic-cli-mock/target/debug"));
 }

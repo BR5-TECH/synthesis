@@ -27,8 +27,8 @@ fn entries_carry_the_library_artifact_type_and_the_same_stable_id() {
 
     // CHC-FR-11: the id is what `load_project_tree` reports.
     let tree = scanning::scan(&crate::fs::RootFs::for_root(f.root()));
-    let tree_id = find_tree_id(&tree, ".claude/skills/foo.md")
-        .expect("the Library tree holds the same file");
+    let tree_id =
+        find_tree_id(&tree, ".claude/skills/foo.md").expect("the Library tree holds the same file");
     assert_eq!(skill.id, tree_id);
     assert_eq!(skill.id, skill.path, "the id is the project-relative path");
 }
@@ -75,10 +75,7 @@ fn find_tree_id(node: &scanning::TreeNode, path: &str) -> Option<String> {
     if node.path == path {
         return Some(node.id.clone());
     }
-    node.children
-        .as_ref()?
-        .iter()
-        .find_map(|c| find_tree_id(c, path))
+    node.children.as_ref()?.iter().find_map(|c| find_tree_id(c, path))
 }
 
 #[test]
@@ -112,10 +109,7 @@ fn a_deleted_markdown_file_is_not_classified_from_its_vanished_content() {
     // While it exists, the content tiebreak classifies it.
     f.write("notes/thing.md", "---\ntype: scenario\n---\nbody\nmore\n");
     let present = uncommitted_change_set(&crate::fs::RootFs::for_root(f.root())).unwrap();
-    assert_eq!(
-        entry(&present, "notes/thing.md").artifact_type,
-        Some(ArtifactType::Scenario)
-    );
+    assert_eq!(entry(&present, "notes/thing.md").artifact_type, Some(ArtifactType::Scenario));
 
     f.remove("notes/thing.md");
     let absent = uncommitted_change_set(&crate::fs::RootFs::for_root(f.root())).unwrap();

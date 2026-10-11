@@ -304,10 +304,7 @@ pub(super) mod rig_seam {
     pub fn input_tokens_of(usage: &Usage) -> Option<InputTokens> {
         usage.input_tokens?;
         let cost = CacheCost::from_usage(usage);
-        Some(InputTokens {
-            cached: cost.cache_reads,
-            uncached: cost.uncached_input,
-        })
+        Some(InputTokens { cached: cost.cache_reads, uncached: cost.uncached_input })
     }
 }
 
@@ -330,10 +327,7 @@ where
     T: Send + 'static,
 {
     let handle = std::thread::spawn(move || {
-        let runtime = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
+        let runtime = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
             Ok(runtime) => runtime,
             Err(_) => return Err(CallFailure::unreachable(class::TRANSPORT_OTHER)),
         };
@@ -385,10 +379,7 @@ impl CompletionSeam for RigCompletion {
             _ => {
                 let built = build_completion_request(request, exchange, endpoint);
                 let endpoint = endpoint.clone();
-                block_on_with_timeout(
-                    async move { carry_openai(built, endpoint).await },
-                    timeout,
-                )
+                block_on_with_timeout(async move { carry_openai(built, endpoint).await }, timeout)
             }
         }
     }
@@ -400,8 +391,8 @@ async fn carry_anthropic(
 ) -> Result<ModelReply, CallFailure> {
     // AAP-FR-WMCX: the client is given the shared HTTP client, so it keeps no
     // trust setup of its own.
-    let (http_client, tls_record) = crate::tls::rig_http_client()
-        .map_err(|_| CallFailure::unreachable(class::CONNECT))?;
+    let (http_client, tls_record) =
+        crate::tls::rig_http_client().map_err(|_| CallFailure::unreachable(class::CONNECT))?;
     let client = rig::providers::anthropic::AnthropicConfig::new(
         endpoint.api_key.clone().unwrap_or_default(),
     )
@@ -552,8 +543,8 @@ async fn carry_openai(
     let request = openai_request(request, &config);
     // AAP-FR-WMCX: the client is given the shared HTTP client, so it keeps no
     // trust setup of its own.
-    let (http_client, tls_record) = crate::tls::rig_http_client()
-        .map_err(|_| CallFailure::unreachable(class::CONNECT))?;
+    let (http_client, tls_record) =
+        crate::tls::rig_http_client().map_err(|_| CallFailure::unreachable(class::CONNECT))?;
     // CVL-FR-TQRD: the Custom gateway's replies are repaired before `rig` reads
     // them. Every other provider's client passes its replies unchanged.
     let http_client = super::responses_repair::ResponsesRepair::new(
@@ -561,11 +552,10 @@ async fn carry_openai(
         config.repair_replies,
     );
     let repair = http_client.clone();
-    let client = rig::providers::openai::OpenAIConfig::new(
-        endpoint.api_key.clone().unwrap_or_default(),
-    )
-    .with_base_url(&config.base_url)
-    .connect(http_client);
+    let client =
+        rig::providers::openai::OpenAIConfig::new(endpoint.api_key.clone().unwrap_or_default())
+            .with_base_url(&config.base_url)
+            .connect(http_client);
     let model_id = endpoint.model_id.clone().unwrap_or_default();
     let result = match config.route {
         // The client's own route is Responses, which is also the only route a
@@ -619,16 +609,12 @@ fn carry_openrouter_narrowing(
     let mut dropped = native_entries_refused_by(&model).min(narrowed.native_tools.len());
 
     loop {
-        narrowed.native_tools = request.native_tools
-            [..request.native_tools.len() - dropped]
-            .to_vec();
+        narrowed.native_tools =
+            request.native_tools[..request.native_tools.len() - dropped].to_vec();
         let built = openrouter_request(&narrowed, exchange, endpoint)?;
         let carried = {
             let endpoint = endpoint.clone();
-            block_on_with_timeout(
-                async move { carry_openrouter(built, endpoint).await },
-                timeout,
-            )
+            block_on_with_timeout(async move { carry_openrouter(built, endpoint).await }, timeout)
         };
         let refusal = match &carried {
             Err(failure) if refuses_a_server_tool(failure) => failure,

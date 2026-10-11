@@ -55,11 +55,7 @@ fn the_skills_index_holds_the_descriptor_while_the_skill_index_holds_the_body() 
         "a term found only in the body ranks nothing in the skills index"
     );
     let body = search(&indexer, &[IndexId::Skill], "sarcophagus", 10);
-    assert_eq!(
-        body.len(),
-        1,
-        "the same file's body is chunked into the `skill` artifact index"
-    );
+    assert_eq!(body.len(), 1, "the same file's body is chunked into the `skill` artifact index");
     assert_eq!(
         body[0].node_id.as_deref(),
         Some(".claude/skills/reviewer/SKILL.md"),
@@ -111,21 +107,14 @@ fn opting_out_removes_a_skill_from_both_the_registry_and_the_index() {
     // Opt out.
     std::fs::write(
         &skill_md,
-        original.replacen(
-            "description:",
-            "disable-model-invocation: true\ndescription:",
-            1,
-        ),
+        original.replacen("description:", "disable-model-invocation: true\ndescription:", 1),
     )
     .unwrap();
     let generation = indexer.generation();
     indexer
         .run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ARTIFACTS, generation)
         .expect("the pass publishes");
-    assert!(
-        list_skills(&indexer).is_empty(),
-        "the registry drops it (DSL-FR-08)"
-    );
+    assert!(list_skills(&indexer).is_empty(), "the registry drops it (DSL-FR-08)");
     assert!(
         search_skills(&indexer, "teardown", 10).is_empty(),
         "and so does the index — they are never observed disagreeing (DSL-FR-18)"
@@ -141,11 +130,7 @@ fn opting_out_removes_a_skill_from_both_the_registry_and_the_index() {
     indexer
         .run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ARTIFACTS, generation)
         .expect("the pass publishes");
-    assert_eq!(
-        list_skills(&indexer).len(),
-        1,
-        "present again, exactly once (DSL-FR-20)"
-    );
+    assert_eq!(list_skills(&indexer).len(), 1, "present again, exactly once (DSL-FR-20)");
     assert_eq!(search_skills(&indexer, "teardown", 10).len(), 1);
 }
 
@@ -251,11 +236,7 @@ fn indexing_skills_writes_nothing_anywhere_under_the_project() {
     let indexer = app.state::<Bm25Indexer>();
     let _ = crate::skills::search_skills(&indexer, "teardown", 10);
     let _ = crate::skills::list_skills(&indexer);
-    assert_eq!(
-        tree_fingerprint(&root),
-        before,
-        "no file under the project changed"
-    );
+    assert_eq!(tree_fingerprint(&root), before, "no file under the project changed");
 }
 
 #[test]
@@ -343,7 +324,8 @@ fn skills_rank_by_relevance_and_honour_the_limit() {
     let ranked = search_skills(&indexer, "review a specification", 10);
     assert!(!ranked.is_empty(), "the query matches something");
     assert_eq!(
-        ranked[0].skill.path, ".claude/skills/specs/SKILL.md",
+        ranked[0].skill.path,
+        ".claude/skills/specs/SKILL.md",
         "the apt skill ranks first, not merely somewhere in the list: {:?}",
         ranked.iter().map(|r| (&r.skill.path, r.score)).collect::<Vec<_>>()
     );
@@ -357,11 +339,8 @@ fn skills_rank_by_relevance_and_honour_the_limit() {
 
     // Two same-named skills are separate entries told apart by path.
     let both = search_skills(&indexer, "specification bread", 10);
-    let named: Vec<&str> = both
-        .iter()
-        .filter(|r| r.skill.name == "specs")
-        .map(|r| r.skill.path.as_str())
-        .collect();
+    let named: Vec<&str> =
+        both.iter().filter(|r| r.skill.name == "specs").map(|r| r.skill.path.as_str()).collect();
     assert_eq!(
         named,
         vec![".claude/skills/specs/SKILL.md", ".codex/skills/specs/SKILL.md"],
@@ -380,11 +359,7 @@ fn skills_rank_by_relevance_and_honour_the_limit() {
     assert_eq!(capped.len(), 2, "the limit bounds the returned list");
     assert_eq!(
         capped.iter().map(|r| r.skill.path.as_str()).collect::<Vec<_>>(),
-        uncapped
-            .iter()
-            .take(2)
-            .map(|r| r.skill.path.as_str())
-            .collect::<Vec<_>>(),
+        uncapped.iter().take(2).map(|r| r.skill.path.as_str()).collect::<Vec<_>>(),
         "the truncation keeps the best-scoring entries rather than an arbitrary two"
     );
 }
@@ -551,10 +526,7 @@ fn an_excluded_skill_is_logged_once_per_time_the_exclusion_arises() {
         rendered.contains(crate::skills::REASON_NO_FRONTMATTER),
         "the record names why: {rendered}"
     );
-    assert!(
-        !rendered.contains(secret),
-        "and carries no part of the file's contents: {rendered}"
-    );
+    assert!(!rendered.contains(secret), "and carries no part of the file's contents: {rendered}");
 
     // A pass runs on every filesystem change anywhere in the project, and this
     // exclusion is a steady state. Re-reporting it on each one would push real
@@ -562,14 +534,15 @@ fn an_excluded_skill_is_logged_once_per_time_the_exclusion_arises() {
     for _ in 0..3 {
         let generation = indexer.generation();
         indexer
-            .run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ARTIFACTS, generation)
+            .run_pass(
+                &handle,
+                &crate::fs::RootFs::for_root(&root),
+                PassScope::ARTIFACTS,
+                generation,
+            )
             .expect("the pass publishes");
     }
-    assert_eq!(
-        ours().len(),
-        1,
-        "an unchanged exclusion is not re-reported by later passes"
-    );
+    assert_eq!(ours().len(), 1, "an unchanged exclusion is not re-reported by later passes");
 
     // But a *changed* reason is news again.
     std::fs::write(d.join("SKILL.md"), "---\nname: Now named\n---\n\n# Body\n").unwrap();
@@ -585,4 +558,3 @@ fn an_excluded_skill_is_logged_once_per_time_the_exclusion_arises() {
         after[1]
     );
 }
-

@@ -122,7 +122,10 @@ fn project_token<R: Runtime>(app: &AppHandle<R>, project_key: &str) -> Option<Pr
     github_tokens::resolve_project_token(&store, &tokens, project_key).ok()
 }
 
-fn require_token<R: Runtime>(app: &AppHandle<R>, project_key: &str) -> Result<ProjectToken, String> {
+fn require_token<R: Runtime>(
+    app: &AppHandle<R>,
+    project_key: &str,
+) -> Result<ProjectToken, String> {
     project_token(app, project_key)
         .ok_or_else(|| crate::github_publication::ERR_TOKEN_UNAVAILABLE.to_string())
 }
@@ -178,7 +181,12 @@ fn log_to<R: Runtime>(app: &AppHandle<R>, level: logging::LogLevel, message: &st
 /// GPP-FR-WKZF / GPP-FR-PUXT: one log record per failure, naming the
 /// operation, the code, and the issue where one applies. No token, header,
 /// body, or credentialed URL is ever a field.
-fn report<R: Runtime>(app: &AppHandle<R>, operation: &str, code: &str, issue: Option<u64>) -> String {
+fn report<R: Runtime>(
+    app: &AppHandle<R>,
+    operation: &str,
+    code: &str,
+    issue: Option<u64>,
+) -> String {
     let mut fields = log_fields! { "operation" => operation, "code" => code };
     if let Some(number) = issue {
         fields.insert("issue".to_string(), serde_json::json!(number));
@@ -202,14 +210,14 @@ pub fn validate_interval(interval_minutes: Option<u32>) -> Result<(), String> {
 fn all_pending_claims(root: &RootFs, held: Vec<GithubPendingClaim>) -> Vec<GithubPendingClaim> {
     let mut claims = load_github_pending_claims_from(root);
     for claim in held {
-        let on_disk = claims
-            .iter()
-            .any(|c| c.names(
+        let on_disk = claims.iter().any(|c| {
+            c.names(
                 &claim.repository_host,
                 &claim.repository_owner,
                 &claim.repository_name,
                 claim.issue_number,
-            ));
+            )
+        });
         if !on_disk {
             claims.push(claim);
         }
@@ -253,7 +261,9 @@ where
 
 /// GPP-FR-WYRP: the Projects the token can read.
 #[tauri::command]
-pub async fn list_github_projects(app: tauri::AppHandle) -> Result<Vec<GithubProjectOption>, String> {
+pub async fn list_github_projects(
+    app: tauri::AppHandle,
+) -> Result<Vec<GithubProjectOption>, String> {
     off_thread(move || list_projects_impl(&app)).await
 }
 
@@ -317,10 +327,10 @@ pub(crate) fn set_settings_impl<R: Runtime>(
 ) -> Result<GithubPollingView, String> {
     let ctx = context(app)?;
     validate_interval(interval_minutes).map_err(|code| report(app, "set_settings", &code, None))?;
-    let project_node_id = project_node_id
-        .map(|id| id.trim().to_string())
-        .filter(|id| !id.is_empty());
-    let settings = GithubPollingSettings { project_node_id: project_node_id.clone(), interval_minutes };
+    let project_node_id =
+        project_node_id.map(|id| id.trim().to_string()).filter(|id| !id.is_empty());
+    let settings =
+        GithubPollingSettings { project_node_id: project_node_id.clone(), interval_minutes };
     save_github_polling_settings_to(&ctx.root, &settings)
         .map_err(|code| report(app, "set_settings", &code, None))?;
     let generation = {
@@ -361,7 +371,12 @@ pub(crate) fn set_settings_impl<R: Runtime>(
                 if let Some(code) = configuration.error_code.as_deref() {
                     report(app, "validate_configuration", code, None);
                 }
-                state(app).slot().record_configuration(&ctx.key, generation, project_id, configuration);
+                state(app).slot().record_configuration(
+                    &ctx.key,
+                    generation,
+                    project_id,
+                    configuration,
+                );
             }
             Err(code) => {
                 report(app, "validate_configuration", &code, None);
@@ -550,7 +565,8 @@ pub(crate) fn claim_impl<R: Runtime>(
     let ctx = context(app)?;
     let settings = load_github_polling_settings_from(&ctx.root).map_err(|c| fail(&c))?;
     // GPP-FR-ANDE: claims refuse on the terms polls do.
-    let project_id = state(app).slot().require_pollable(&ctx.key, &settings).map_err(|c| fail(&c))?;
+    let project_id =
+        state(app).slot().require_pollable(&ctx.key, &settings).map_err(|c| fail(&c))?;
     let token = require_token(app, &ctx.project_key).map_err(|c| fail(&c))?;
     let repository = session_repository(app, &ctx, Some(&token)).map_err(|c| fail(&c))?;
     let state = state(app);
@@ -567,7 +583,13 @@ pub(crate) fn claim_impl<R: Runtime>(
         project_id: &project_id,
     };
     let now = crate::notes::now_rfc3339();
-    let result = match claims::claim(&claim_ctx, projects_client(app, &token.host).as_ref(), number, &now, &held) {
+    let result = match claims::claim(
+        &claim_ctx,
+        projects_client(app, &token.host).as_ref(),
+        number,
+        &now,
+        &held,
+    ) {
         Ok(outcome) => {
             settle_claim(app, &ctx.root, &outcome);
             if !outcome.saved {
@@ -664,7 +686,10 @@ pub(crate) fn retry_impl<R: Runtime>(
 
 /// GPP-FR-BSLI: remove the pending claim of one issue.
 #[tauri::command]
-pub async fn acknowledge_github_claim(issue_number: u64, app: tauri::AppHandle) -> Result<(), String> {
+pub async fn acknowledge_github_claim(
+    issue_number: u64,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
     off_thread(move || acknowledge_impl(&app, issue_number)).await
 }
 
@@ -686,7 +711,10 @@ pub(crate) fn acknowledge_impl<R: Runtime>(app: &AppHandle<R>, number: u64) -> R
 
 /// GPP-FR-WOLE: open one listed issue in the OS default browser.
 #[tauri::command]
-pub async fn open_github_task_issue(issue_number: u64, app: tauri::AppHandle) -> Result<(), String> {
+pub async fn open_github_task_issue(
+    issue_number: u64,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
     off_thread(move || {
         let url = listed_issue_url_impl(&app, issue_number)?;
         use tauri_plugin_opener::OpenerExt;

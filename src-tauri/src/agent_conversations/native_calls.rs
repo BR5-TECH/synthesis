@@ -54,10 +54,8 @@ pub(super) fn report_native_calls<R: tauri::Runtime>(
     } else {
         reply.native_calls.iter().map(|call| call.name.as_str()).collect()
     };
-    let ids: Vec<Option<String>> = reportable
-        .iter()
-        .map(|name| report_tool_begun(app, turns, &plan.turn_id, name))
-        .collect();
+    let ids: Vec<Option<String>> =
+        reportable.iter().map(|name| report_tool_begun(app, turns, &plan.turn_id, name)).collect();
     log_native_calls(app, turns, plan, endpoint, model_calls, reply);
     for id in ids.into_iter().flatten() {
         report_tool_finished(app, turns, &plan.turn_id, &id);

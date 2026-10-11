@@ -37,12 +37,9 @@ struct Relay {
 impl Relay {
     async fn start() -> Relay {
         let state = test_state().0;
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("the listener binds an ephemeral port");
-        let address = listener
-            .local_addr()
-            .expect("the listener holds an address");
+        let listener =
+            TcpListener::bind("127.0.0.1:0").await.expect("the listener binds an ephemeral port");
+        let address = listener.local_addr().expect("the listener holds an address");
         let router = build_router(state.clone());
         tokio::spawn(async move {
             let _ = axum::serve(listener, router).await;
@@ -52,9 +49,7 @@ impl Relay {
 
     /// Opens one endpoint with the transport credential (WSK-FR-HGVU).
     async fn open(&self, path: &str) -> Socket {
-        self.open_with(path, Some(TEST_TOKEN))
-            .await
-            .expect("the upgrade is accepted")
+        self.open_with(path, Some(TEST_TOKEN)).await.expect("the upgrade is accepted")
     }
 
     async fn open_with(&self, path: &str, token: Option<&str>) -> Result<Socket, StatusCode> {
@@ -62,10 +57,9 @@ impl Relay {
             .into_client_request()
             .expect("the request is well formed");
         if let Some(token) = token {
-            request.headers_mut().insert(
-                AUTHORIZATION,
-                format!("Bearer {token}").parse().expect("a header value"),
-            );
+            request
+                .headers_mut()
+                .insert(AUTHORIZATION, format!("Bearer {token}").parse().expect("a header value"));
         }
         match connect_async(request).await {
             Ok((socket, _)) => Ok(socket),
@@ -78,27 +72,19 @@ impl Relay {
 
     /// Calls an HTTP route of the same service, without opening a socket.
     async fn get(&self, path: &str, headers: &[(&str, &str)]) -> (StatusCode, Value) {
-        let mut request = Request::builder()
-            .uri(path)
-            .header("authorization", format!("Bearer {TEST_TOKEN}"));
+        let mut request =
+            Request::builder().uri(path).header("authorization", format!("Bearer {TEST_TOKEN}"));
         for (name, value) in headers {
             request = request.header(*name, *value);
         }
         let response = tower::ServiceExt::oneshot(
             build_router(self.state.clone()),
-            request
-                .body(Body::empty())
-                .expect("the request is well formed"),
+            request.body(Body::empty()).expect("the request is well formed"),
         )
         .await
         .expect("the router answers");
         let status = response.status();
-        let bytes = response
-            .into_body()
-            .collect()
-            .await
-            .expect("the body is readable")
-            .to_bytes();
+        let bytes = response.into_body().collect().await.expect("the body is readable").to_bytes();
         let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
         (status, body)
     }
@@ -121,10 +107,7 @@ async fn send(
     if let Some(request_id) = request_id {
         envelope["request_id"] = json!(request_id);
     }
-    socket
-        .send(Message::Text(envelope.to_string().into()))
-        .await
-        .expect("the frame is written");
+    socket.send(Message::Text(envelope.to_string().into())).await.expect("the frame is written");
 }
 
 /// How a connection ended: the close code and the reason the relay named
@@ -212,10 +195,7 @@ async fn accepted_handle(relay: &Relay, worker: &mut Socket, registration_id: &s
 
     let bound = expect(&mut registration).await;
     assert_eq!(bound["type"], "registration_bound");
-    let handle = bound["body"]["handle"]
-        .as_str()
-        .expect("the handle is a string")
-        .to_string();
+    let handle = bound["body"]["handle"].as_str().expect("the handle is a string").to_string();
 
     let routed = expect(worker).await;
     assert_eq!(routed["type"], "registration_start");

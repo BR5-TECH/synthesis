@@ -21,9 +21,8 @@ fn head_of(stream: &crate::streams::WorkStream) -> String {
 /// Whether a commit's tree holds a path.
 fn tree_holds(stream: &crate::streams::WorkStream, revision: &str, path: &str) -> bool {
     let repo = git2::Repository::open(stream.worktree()).expect("stream repo");
-    let commit = repo
-        .find_commit(git2::Oid::from_str(revision).expect("a revision"))
-        .expect("the commit");
+    let commit =
+        repo.find_commit(git2::Oid::from_str(revision).expect("a revision")).expect("the commit");
     let tree = commit.tree().expect("its tree");
     tree.get_path(Path::new(path)).is_ok()
 }
@@ -40,10 +39,7 @@ fn a_run_that_keeps_the_standing_work_starts_from_the_branch_as_it_stands() {
 
     let run = fx.drive(
         &run,
-        ScriptedDispatch::new(vec![
-            Turn::work().writing("src/panel.ts", "1\n"),
-            Turn::ready(),
-        ]),
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]),
     );
 
     assert_eq!(
@@ -78,10 +74,7 @@ fn a_run_that_commits_the_standing_work_records_the_revision_it_made() {
 
     let run = fx.drive(
         &run,
-        ScriptedDispatch::new(vec![
-            Turn::work().writing("src/panel.ts", "1\n"),
-            Turn::ready(),
-        ]),
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]),
     );
 
     let outcome = run.standing_work_outcome.as_ref().expect("an outcome");
@@ -103,9 +96,8 @@ fn a_run_that_commits_the_standing_work_records_the_revision_it_made() {
 /// The message of the commit a revision names.
 fn message_of(stream: &crate::streams::WorkStream, revision: &str) -> String {
     let repo = git2::Repository::open(stream.worktree()).expect("stream repo");
-    let commit = repo
-        .find_commit(git2::Oid::from_str(revision).expect("a revision"))
-        .expect("the commit");
+    let commit =
+        repo.find_commit(git2::Oid::from_str(revision).expect("a revision")).expect("the commit");
     commit.message().unwrap_or_default().to_string()
 }
 
@@ -143,9 +135,7 @@ fn the_standing_commit_takes_the_message_the_run_carries() {
     // agent identity here would be a claim about who wrote the standing work.
     let repo = git2::Repository::open(stream.worktree()).expect("stream repo");
     let signature = repo.signature().expect("a signature");
-    let commit = repo
-        .find_commit(git2::Oid::from_str(&committed).unwrap())
-        .expect("the commit");
+    let commit = repo.find_commit(git2::Oid::from_str(&committed).unwrap()).expect("the commit");
     assert_eq!(commit.author().name(), signature.name());
     assert_eq!(commit.committer().name(), signature.name());
 }
@@ -188,10 +178,7 @@ fn a_clean_stream_records_no_standing_commit() {
 
     let run = fx.drive(
         &run,
-        ScriptedDispatch::new(vec![
-            Turn::work().writing("src/panel.ts", "1\n"),
-            Turn::ready(),
-        ]),
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]),
     );
 
     assert_eq!(run.base_commit.as_deref(), Some(before.as_str()));
@@ -211,26 +198,14 @@ fn a_push_that_does_not_land_does_not_stop_the_run() {
     std::fs::write(stream.worktree().join("authored.md"), "mine\n").unwrap();
     // The fixture's project has no remote, and the machine has no credential
     // store, so the push cannot land. Neither is a reason to stop the run.
-    let run = fx.enqueue_with(
-        &stream,
-        "Add the empty state.",
-        "d1",
-        StandingWork::CommitAndPush,
-    );
+    let run = fx.enqueue_with(&stream, "Add the empty state.", "d1", StandingWork::CommitAndPush);
 
     let run = fx.drive(
         &run,
-        ScriptedDispatch::new(vec![
-            Turn::work().writing("src/panel.ts", "1\n"),
-            Turn::ready(),
-        ]),
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]),
     );
 
-    assert_eq!(
-        run.state,
-        GraduationRunState::Completed,
-        "the run finished its work"
-    );
+    assert_eq!(run.state, GraduationRunState::Completed, "the run finished its work");
     assert_eq!(run.blocker, None, "a refused push blocks nothing");
     let outcome = run.standing_work_outcome.as_ref().expect("an outcome");
     assert!(outcome.commit.is_some(), "the commit half still happened");
@@ -252,18 +227,13 @@ fn a_push_lands_the_stream_branch_on_the_projects_remote() {
     // network is involved.
     let remote = TempDir::new().expect("a remote dir");
     git2::Repository::init_bare(remote.path()).expect("a bare repo");
-    fx.repo()
-        .remote("origin", remote.path().to_str().expect("a path"))
-        .expect("a remote");
+    fx.repo().remote("origin", remote.path().to_str().expect("a path")).expect("a remote");
     std::fs::write(stream.worktree().join("authored.md"), "mine\n").unwrap();
     let run = fx.enqueue_with(&stream, "Add it.", "d1", StandingWork::CommitAndPush);
 
     let run = fx.drive(
         &run,
-        ScriptedDispatch::new(vec![
-            Turn::work().writing("src/panel.ts", "1\n"),
-            Turn::ready(),
-        ]),
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]),
     );
 
     let outcome = run.standing_work_outcome.as_ref().expect("an outcome");
@@ -295,17 +265,12 @@ fn a_clean_stream_is_pushed_even_though_it_committed_nothing() {
     let stream = fx.stream("editor");
     let remote = TempDir::new().expect("a remote dir");
     git2::Repository::init_bare(remote.path()).expect("a bare repo");
-    fx.repo()
-        .remote("origin", remote.path().to_str().expect("a path"))
-        .expect("a remote");
+    fx.repo().remote("origin", remote.path().to_str().expect("a path")).expect("a remote");
     let run = fx.enqueue_with(&stream, "Add it.", "d1", StandingWork::CommitAndPush);
 
     let run = fx.drive(
         &run,
-        ScriptedDispatch::new(vec![
-            Turn::work().writing("src/panel.ts", "1\n"),
-            Turn::ready(),
-        ]),
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]),
     );
 
     let outcome = run.standing_work_outcome.as_ref().expect("an outcome");
@@ -319,10 +284,7 @@ fn structured(fx: &Fixture, run_id: &str) -> Vec<serde_json::Value> {
 }
 
 /// The records of one event of a run's structured log.
-fn records_of<'a>(
-    written: &'a [serde_json::Value],
-    event: &str,
-) -> Vec<&'a serde_json::Value> {
+fn records_of<'a>(written: &'a [serde_json::Value], event: &str) -> Vec<&'a serde_json::Value> {
     written
         .iter()
         .filter(|record| record.get("event").and_then(|e| e.as_str()) == Some(event))
@@ -337,9 +299,7 @@ fn the_standing_work_step_reports_what_it_did() {
     let stream = fx.stream("editor");
     let remote = TempDir::new().expect("a remote dir");
     git2::Repository::init_bare(remote.path()).expect("a bare repo");
-    fx.repo()
-        .remote("origin", remote.path().to_str().expect("a path"))
-        .expect("a remote");
+    fx.repo().remote("origin", remote.path().to_str().expect("a path")).expect("a remote");
     std::fs::write(stream.worktree().join("authored.md"), "mine\n").unwrap();
     let run = fx.enqueue_with(&stream, "Add it.", "d1", StandingWork::CommitAndPush);
     let run = fx.drive(
@@ -402,9 +362,7 @@ fn the_step_is_settled_before_the_run_is_dispatched() {
     );
     let first_turn = written
         .iter()
-        .position(|record| {
-            record.get("producer").and_then(|p| p.as_str()) == Some("work_turn")
-        })
+        .position(|record| record.get("producer").and_then(|p| p.as_str()) == Some("work_turn"))
         .expect("a work turn");
     assert!(position("standing work settled") < first_turn, "and before the first turn");
 }
@@ -432,10 +390,7 @@ fn a_standing_commit_that_fails_blocks_the_run() {
     drop(held);
 
     assert_eq!(run.state, GraduationRunState::Blocked);
-    assert_eq!(
-        run.blocker.as_ref().map(|b| b.code.as_str()),
-        Some("base_commit_failed")
-    );
+    assert_eq!(run.blocker.as_ref().map(|b| b.code.as_str()), Some("base_commit_failed"));
     assert_eq!(run.base_commit, None, "no base was established");
     assert_eq!(run.standing_work_outcome, None, "and nothing is reported as done");
 }
@@ -610,11 +565,7 @@ fn a_restart_asks_for_a_commit_under_the_drafts_current_name() {
     .expect("a run");
     let discarded = crate::graduation::discard_graduation_run(fx.app.clone(), first.id.clone())
         .expect("a discarded run");
-    let access = fx
-        .app
-        .state::<crate::fs::FsAccessState>()
-        .get()
-        .expect("an instance");
+    let access = fx.app.state::<crate::fs::FsAccessState>().get().expect("an instance");
     let root = crate::fs::RootFs::new(fx.root(), access);
     crate::drafts::rename_draft_impl(&root, &draft, "editor scrolling").expect("a rename");
 
@@ -652,24 +603,16 @@ fn the_record_carries_the_choice_and_the_outcome_in_the_shape_the_window_reads()
     run.standing_work_outcome = Some(StandingWorkOutcome {
         commit: Some("a91bc04".into()),
         pushed: Some(false),
-        push_failure: Some(StandingWorkPushFailure {
-            code: "github_unreachable".into(),
-        }),
+        push_failure: Some(StandingWorkPushFailure { code: "github_unreachable".into() }),
     });
 
     let wire = serde_json::to_value(&run).expect("a serialized run");
     assert_eq!(wire["standingWork"], serde_json::json!("commit_and_push"));
-    assert_eq!(
-        wire["standingWorkMessage"],
-        serde_json::json!("Notes from the meeting")
-    );
+    assert_eq!(wire["standingWorkMessage"], serde_json::json!("Notes from the meeting"));
     let outcome = &wire["standingWorkOutcome"];
     assert_eq!(outcome["commit"], serde_json::json!("a91bc04"));
     assert_eq!(outcome["pushed"], serde_json::json!(false));
-    assert_eq!(
-        outcome["pushFailure"]["code"],
-        serde_json::json!("github_unreachable")
-    );
+    assert_eq!(outcome["pushFailure"]["code"], serde_json::json!("github_unreachable"));
 
     // And each stored value reads back as the choice it names.
     for (stored, choice) in [
@@ -702,15 +645,8 @@ fn enqueuing_records_the_choice_and_touches_no_working_copy() {
     assert_eq!(run.standing_work, StandingWork::CommitAndPush);
     assert_eq!(run.standing_work_outcome, None, "nothing has run yet");
     assert_eq!(run.state, GraduationRunState::Queued);
-    assert_eq!(
-        head_of(&stream),
-        before,
-        "the enqueue committed nothing in the stream"
-    );
-    assert!(
-        stream.worktree().join("authored.md").is_file(),
-        "the standing work is untouched"
-    );
+    assert_eq!(head_of(&stream), before, "the enqueue committed nothing in the stream");
+    assert!(stream.worktree().join("authored.md").is_file(), "the standing work is untouched");
     // GSU-FR-MLEJ: the choice and the message are durable, and both are read
     // again when the run is dispatched.
     let stored = fx.reload(&run.id);

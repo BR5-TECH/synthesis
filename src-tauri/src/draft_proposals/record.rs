@@ -189,4 +189,3 @@ pub struct ProposalHunks {
 pub struct CandidateSaved {
     pub checksum: String,
 }
-

@@ -151,11 +151,18 @@ fn reading_a_legacy_log_again_changes_nothing_and_duplicate_lines_fold_once() {
     // The legacy log holds a lock, which refuses a comment as it always did.
     let log = ThreadRef::artifact("specs/a.md");
     let refused = add_comment_to(
-        root, log, "t1", "too early".into(), Vec::new(), Vec::new(),
-        &human("raver119"), "2026-01-02T00:00:00Z",
+        root,
+        log,
+        "t1",
+        "too early".into(),
+        Vec::new(),
+        Vec::new(),
+        &human("raver119"),
+        "2026-01-02T00:00:00Z",
     );
     assert_eq!(refused.unwrap_err(), ERR_DISCUSSION_LOCKED);
-    let (unlocked, _) = set_lock_to(root, log, "t1", false, &human("raver119"), "2026-01-02T00:00:00Z").unwrap();
+    let (unlocked, _) =
+        set_lock_to(root, log, "t1", false, &human("raver119"), "2026-01-02T00:00:00Z").unwrap();
     assert!(!unlocked.locked);
     let appended = add_comment_to(
         root,
@@ -201,10 +208,7 @@ fn a_legacy_draft_discussion_and_its_pending_question_set_survive() {
             }),
         ],
     );
-    let set_path = ThreadRef::discussion(&draft)
-        .scope
-        .question_set_path(root, "d1")
-        .unwrap();
+    let set_path = ThreadRef::discussion(&draft).scope.question_set_path(root, "d1").unwrap();
     std::fs::create_dir_all(set_path.parent().unwrap()).unwrap();
     std::fs::write(
         &set_path,
@@ -249,15 +253,33 @@ fn a_fragment_is_accepted_for_artifact_and_draft_owners_and_its_absence_means_th
     let artifact = artifact_target("specs/a.md");
     let draft_target = DiscussionTarget::Draft { draft_id: draft.clone() };
     let open_with = |target: &DiscussionTarget, fragment: Option<FragmentTarget>| {
-        open_discussion_in(root, root, target, fragment, "hello".into(), Vec::new(), &by, "2026-02-01T00:00:00Z")
+        open_discussion_in(
+            root,
+            root,
+            target,
+            fragment,
+            "hello".into(),
+            Vec::new(),
+            &by,
+            "2026-02-01T00:00:00Z",
+        )
     };
 
-    let on_artifact = open_with(&artifact, Some(FragmentTarget::in_artifact("specs/a.md", 0, 3, "abc"))).unwrap();
-    assert_eq!(on_artifact.fragment_target, Some(FragmentTarget::in_artifact("specs/a.md", 0, 3, "abc")));
+    let on_artifact =
+        open_with(&artifact, Some(FragmentTarget::in_artifact("specs/a.md", 0, 3, "abc"))).unwrap();
+    assert_eq!(
+        on_artifact.fragment_target,
+        Some(FragmentTarget::in_artifact("specs/a.md", 0, 3, "abc"))
+    );
     assert_eq!(on_artifact.log_ref(), ThreadRef::artifact("specs/a.md"));
 
-    let on_draft = open_with(&draft_target, Some(FragmentTarget::in_draft(&draft, "ui/spec.md", 2, 5, "xyz"))).unwrap();
-    assert_eq!(on_draft.fragment_target, Some(FragmentTarget::in_draft(&draft, "ui/spec.md", 2, 5, "xyz")));
+    let on_draft =
+        open_with(&draft_target, Some(FragmentTarget::in_draft(&draft, "ui/spec.md", 2, 5, "xyz")))
+            .unwrap();
+    assert_eq!(
+        on_draft.fragment_target,
+        Some(FragmentTarget::in_draft(&draft, "ui/spec.md", 2, 5, "xyz"))
+    );
     assert_eq!(on_draft.log_ref(), ThreadRef::draft_file(&draft, "ui/spec.md"));
 
     // The path of an artifact fragment is the artifact's own, whatever is sent.
@@ -297,8 +319,17 @@ fn a_fragment_is_refused_with_a_typed_error_for_notes_and_malformed_fragments() 
     let draft = make_draft(root, "prompt");
     let before = list_all_discussions_in(root, root).len();
     let attempt = |target: &DiscussionTarget, fragment: FragmentTarget| {
-        open_discussion_in(root, root, target, Some(fragment), "hello".into(), Vec::new(), &by, "2026-02-01T00:00:00Z")
-            .unwrap_err()
+        open_discussion_in(
+            root,
+            root,
+            target,
+            Some(fragment),
+            "hello".into(),
+            Vec::new(),
+            &by,
+            "2026-02-01T00:00:00Z",
+        )
+        .unwrap_err()
     };
     let artifact = artifact_target("specs/a.md");
     let note = DiscussionTarget::Note { note_id: "n1".into() };
@@ -324,11 +355,20 @@ fn a_fragment_is_refused_with_a_typed_error_for_notes_and_malformed_fragments() 
         ERR_INVALID_FRAGMENT,
     );
     // An end that is not past its start.
-    assert_eq!(attempt(&artifact, FragmentTarget::in_artifact("specs/a.md", 3, 3, "")), ERR_INVALID_FRAGMENT);
-    assert_eq!(attempt(&artifact, FragmentTarget::in_artifact("specs/a.md", 5, 2, "x")), ERR_INVALID_FRAGMENT);
+    assert_eq!(
+        attempt(&artifact, FragmentTarget::in_artifact("specs/a.md", 3, 3, "")),
+        ERR_INVALID_FRAGMENT
+    );
+    assert_eq!(
+        attempt(&artifact, FragmentTarget::in_artifact("specs/a.md", 5, 2, "x")),
+        ERR_INVALID_FRAGMENT
+    );
     // A draft fragment naming no file.
     let draft_target = DiscussionTarget::Draft { draft_id: draft.clone() };
-    assert_eq!(attempt(&draft_target, FragmentTarget::in_draft(&draft, "  ", 0, 3, "abc")), ERR_INVALID_FRAGMENT);
+    assert_eq!(
+        attempt(&draft_target, FragmentTarget::in_draft(&draft, "  ", 0, 3, "abc")),
+        ERR_INVALID_FRAGMENT
+    );
 
     assert_eq!(list_all_discussions_in(root, root).len(), before, "nothing was appended");
     assert!(list_discussions_in(root, &artifact).is_empty());
@@ -343,7 +383,8 @@ fn a_flow_diff_or_history_discussion_is_whole_target_and_cannot_be_given_a_fragm
     let root = &crate::fs::RootFs::for_root(dir.path());
     let by = human("raver119");
     touch(root, "flows/review.flow");
-    let whole = open_artifact_discussion(root, "flows/review.flow", "which node?", "2026-02-01T00:00:00Z");
+    let whole =
+        open_artifact_discussion(root, "flows/review.flow", "which node?", "2026-02-01T00:00:00Z");
     assert_eq!(whole.fragment_target, None);
     assert_eq!(whole.log_ref(), ThreadRef::artifact_discussion("flows/review.flow"));
 
@@ -357,10 +398,7 @@ fn a_flow_diff_or_history_discussion_is_whole_target_and_cannot_be_given_a_fragm
         "2026-02-01T00:00:01Z",
     );
     assert_eq!(moved.unwrap_err(), ERR_NOT_FRAGMENT_TARGETED);
-    assert_eq!(
-        read_discussion_by_id(root, root, &whole.id).unwrap().fragment_target,
-        None,
-    );
+    assert_eq!(read_discussion_by_id(root, root, &whole.id).unwrap().fragment_target, None,);
     assert_eq!(log_lines_of(root, whole.log_ref()), 2, "nothing was appended by the refusal");
 }
 
@@ -388,7 +426,8 @@ fn one_of_each(root: &crate::fs::RootFs) -> Vec<(&'static str, Discussion)> {
     let artifact = artifact_target("specs/a.md");
     let draft_target = DiscussionTarget::Draft { draft_id: draft.clone() };
     let open_with = |target: &DiscussionTarget, fragment: Option<FragmentTarget>, at: &str| {
-        open_discussion_in(root, root, target, fragment, "hello".into(), Vec::new(), &by, at).unwrap()
+        open_discussion_in(root, root, target, fragment, "hello".into(), Vec::new(), &by, at)
+            .unwrap()
     };
     let (note_discussion, _) = get_or_create_note_discussion_in(
         root,
@@ -401,9 +440,23 @@ fn one_of_each(root: &crate::fs::RootFs) -> Vec<(&'static str, Discussion)> {
     )
     .unwrap();
     vec![
-        ("artifact fragment", open_with(&artifact, Some(FragmentTarget::in_artifact("specs/a.md", 0, 3, "abc")), "2026-02-01T00:00:00Z")),
+        (
+            "artifact fragment",
+            open_with(
+                &artifact,
+                Some(FragmentTarget::in_artifact("specs/a.md", 0, 3, "abc")),
+                "2026-02-01T00:00:00Z",
+            ),
+        ),
         ("artifact whole", open_with(&artifact, None, "2026-02-01T00:00:01Z")),
-        ("draft fragment", open_with(&draft_target, Some(FragmentTarget::in_draft(&draft, "ui/spec.md", 0, 3, "abc")), "2026-02-01T00:00:02Z")),
+        (
+            "draft fragment",
+            open_with(
+                &draft_target,
+                Some(FragmentTarget::in_draft(&draft, "ui/spec.md", 0, 3, "abc")),
+                "2026-02-01T00:00:02Z",
+            ),
+        ),
         ("draft whole", open_with(&draft_target, None, "2026-02-01T00:00:03Z")),
         ("note", note_discussion),
     ]
@@ -486,7 +539,8 @@ fn a_discussion_of_a_missing_owner_stays_readable_and_a_deleted_draft_takes_its_
     // The artifact file is deleted.
     std::fs::remove_file(root.join("specs/a.md")).unwrap();
     let items = list_all_discussions_in(root, root);
-    let unavailable = |id: &str| items.iter().find(|i| i.discussion.id == id).unwrap().owner_unavailable;
+    let unavailable =
+        |id: &str| items.iter().find(|i| i.discussion.id == id).unwrap().owner_unavailable;
     assert!(unavailable(&artifact_fragment.id), "the artifact is gone");
     assert!(unavailable(&artifact_whole.id), "the artifact is gone");
     assert!(!unavailable(&draft_whole.id), "the draft is still there");
@@ -580,14 +634,25 @@ fn a_worktree_switch_keeps_the_same_logs() {
     let by = human("raver119");
     let artifact = artifact_target("specs/a.md");
     let fragment = open_discussion_in(
-        store, first, &artifact,
+        store,
+        first,
+        &artifact,
         Some(FragmentTarget::in_artifact("specs/a.md", 0, 3, "abc")),
-        "pinned".into(), Vec::new(), &by, "2026-02-01T00:00:00Z",
+        "pinned".into(),
+        Vec::new(),
+        &by,
+        "2026-02-01T00:00:00Z",
     )
     .unwrap();
     let whole = open_discussion_in(
-        store, first, &artifact, None,
-        "whole".into(), Vec::new(), &by, "2026-02-01T00:00:01Z",
+        store,
+        first,
+        &artifact,
+        None,
+        "whole".into(),
+        Vec::new(),
+        &by,
+        "2026-02-01T00:00:01Z",
     )
     .unwrap();
     let logs_before = walk_files(store_dir.path());
@@ -626,9 +691,7 @@ fn a_worktree_switch_keeps_the_same_logs() {
     assert_eq!(walk_files(store_dir.path()), logs_before, "the append created no new log");
     for worktree_dir in [&first_dir, &second_dir] {
         assert!(
-            !walk_files(worktree_dir.path())
-                .iter()
-                .any(|p| p.to_string_lossy().contains("jsonl")),
+            !walk_files(worktree_dir.path()).iter().any(|p| p.to_string_lossy().contains("jsonl")),
             "no log stands inside a worktree",
         );
     }

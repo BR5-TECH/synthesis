@@ -42,9 +42,7 @@ fn a_working_merge_run_found_after_a_relaunch_rests_interrupted_and_continue_res
     conflicted_merge("relaunch while working")
         .with_merge(as_one_commit())
         .merge_work_turn(
-            Script::reports_success()
-                .writes("README.md", "half done\n")
-                .abandoned_by_a_relaunch(),
+            Script::reports_success().writes("README.md", "half done\n").abandoned_by_a_relaunch(),
         )
         .run()
         .expect_state(GraduationRunState::Interrupted)
@@ -60,7 +58,9 @@ fn a_working_merge_run_found_after_a_relaunch_rests_interrupted_and_continue_res
         ])
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_order(&["merge_work", "merge_review"])
-        .expect_dispatch(0, |d| d.part("merge_work").pass(1).directory_held("README.md", "half done\n"))
+        .expect_dispatch(0, |d| {
+            d.part("merge_work").pass(1).directory_held("README.md", "half done\n")
+        })
         .expect_base_holds_the_merge_commit("Merge the feature stream")
         .expect_merge_workspace_reclaimed();
 }
@@ -81,10 +81,7 @@ fn a_reviewing_merge_run_found_after_a_relaunch_rests_interrupted_and_continue_r
         .expect_stream_held()
         .expect_slots_in_use(1)
         .expect_merge_workspace_standing()
-        .continued(vec![
-            Script::reports_success(),
-            Script::answers_ready("Both intents stand."),
-        ])
+        .continued(vec![Script::reports_success(), Script::answers_ready("Both intents stand.")])
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_order(&["merge_work", "merge_review"])
         .expect_dispatch(0, |d| {

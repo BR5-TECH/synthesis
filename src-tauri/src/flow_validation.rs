@@ -29,28 +29,14 @@ const DOC_FIELDS: &[&str] = &["version", "name", "description", "loops", "nodes"
 /// more than one artifact. It is part of this schema's history rather than a
 /// field nobody defined, so a document still using it validates and the editor
 /// migrates it to `artifactIds` on the next write.
-const NODE_FIELDS: &[&str] = &[
-    "id",
-    "name",
-    "artifactIds",
-    "artifactId",
-    "prompt",
-    "parentId",
-    "position",
-];
+const NODE_FIELDS: &[&str] =
+    &["id", "name", "artifactIds", "artifactId", "prompt", "parentId", "position"];
 /// A loop carries no `prompt` and no `artifactId`: what it is run under is the
 /// artifact it references (`../ui/FLO-flow.md` FLO-FR-37), and no loop was ever
 /// written with the singular form a node kept, so accepting it here would be
 /// inventing history rather than keeping it.
-const LOOP_FIELDS: &[&str] = &[
-    "id",
-    "name",
-    "artifactIds",
-    "maxPasses",
-    "parentId",
-    "position",
-    "size",
-];
+const LOOP_FIELDS: &[&str] =
+    &["id", "name", "artifactIds", "maxPasses", "parentId", "position", "size"];
 const EDGE_FIELDS: &[&str] = &["id", "from", "to", "label"];
 const POSITION_FIELDS: &[&str] = &["x", "y"];
 const SIZE_FIELDS: &[&str] = &["width", "height"];
@@ -75,21 +61,11 @@ impl FlowViolation {
     }
 
     fn element(code: &'static str, id: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-            element_id: Some(id.into()),
-            edge_id: None,
-        }
+        Self { code, message: message.into(), element_id: Some(id.into()), edge_id: None }
     }
 
     fn edge(code: &'static str, id: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-            element_id: None,
-            edge_id: Some(id.into()),
-        }
+        Self { code, message: message.into(), element_id: None, edge_id: Some(id.into()) }
     }
 }
 
@@ -185,16 +161,10 @@ fn check_number_pair(
     unknown_fields(obj, keys, &format!("{at} `{field}`"), Some(element_id), out);
     for key in keys {
         match obj.get(*key) {
-            None => out.push(shape(
-                at,
-                &format!("`{field}` has no `{key}`"),
-                Some(element_id),
-            )),
-            Some(v) if !v.is_f64() && !v.is_i64() && !v.is_u64() => out.push(shape(
-                at,
-                &format!("`{field}.{key}` is not a number"),
-                Some(element_id),
-            )),
+            None => out.push(shape(at, &format!("`{field}` has no `{key}`"), Some(element_id))),
+            Some(v) if !v.is_f64() && !v.is_i64() && !v.is_u64() => {
+                out.push(shape(at, &format!("`{field}.{key}` is not a number"), Some(element_id)))
+            }
             Some(_) => {}
         }
     }
@@ -302,10 +272,7 @@ fn read_element(
 ) -> Option<Element> {
     let kind = if is_loop { "loop" } else { "node" };
     let Some(obj) = as_object(value) else {
-        out.push(FlowViolation::doc(
-            "shape",
-            format!("{kind} {index} is not an object"),
-        ));
+        out.push(FlowViolation::doc("shape", format!("{kind} {index} is not an object")));
         return None;
     };
     // The id is read first and used to attribute every other violation on this
@@ -313,28 +280,14 @@ fn read_element(
     let id = required_string(obj, "id", &format!("{kind} {index}"), None, out)?;
     let at = format!("{kind} `{id}`");
 
-    unknown_fields(
-        obj,
-        if is_loop { LOOP_FIELDS } else { NODE_FIELDS },
-        &at,
-        Some(&id),
-        out,
-    );
+    unknown_fields(obj, if is_loop { LOOP_FIELDS } else { NODE_FIELDS }, &at, Some(&id), out);
     match obj.get("name") {
         Some(v) if v.is_string() => {}
         Some(_) => out.push(shape(&at, "`name` is not a string", Some(&id))),
         None => out.push(shape(&at, "has no `name`", Some(&id))),
     }
     check_optional_string(obj, "parentId", &at, Some(&id), out);
-    check_number_pair(
-        obj.get("position"),
-        "position",
-        POSITION_FIELDS,
-        &at,
-        &id,
-        true,
-        out,
-    );
+    check_number_pair(obj.get("position"), "position", POSITION_FIELDS, &at, &id, true, out);
     // FLO-FR-10: artifact references are an element's, node and loop alike.
     check_artifact_ids(obj, &at, &id, out);
     if is_loop {
@@ -443,15 +396,10 @@ pub fn validate(body: &str) -> ValidationReport {
         }
     }
 
-    let loop_ids: std::collections::HashSet<&str> = elements
-        .iter()
-        .filter(|e| e.is_loop)
-        .map(|e| e.id.as_str())
-        .collect();
-    let parent_of: std::collections::HashMap<&str, Option<&str>> = elements
-        .iter()
-        .map(|e| (e.id.as_str(), e.parent.as_deref()))
-        .collect();
+    let loop_ids: std::collections::HashSet<&str> =
+        elements.iter().filter(|e| e.is_loop).map(|e| e.id.as_str()).collect();
+    let parent_of: std::collections::HashMap<&str, Option<&str>> =
+        elements.iter().map(|e| (e.id.as_str(), e.parent.as_deref())).collect();
 
     // FGV-FR-13: a `parentId` names a loop, and containment is acyclic.
     for e in &elements {
@@ -495,10 +443,7 @@ pub fn validate(body: &str) -> ValidationReport {
 
     for (i, value) in edges.iter().enumerate() {
         let Some(eobj) = as_object(value) else {
-            edge_level.push(FlowViolation::doc(
-                "shape",
-                format!("edge {i} is not an object"),
-            ));
+            edge_level.push(FlowViolation::doc("shape", format!("edge {i} is not an object")));
             continue;
         };
         let Some(id) = required_string(eobj, "id", &format!("edge {i}"), None, &mut edge_level)
@@ -571,11 +516,7 @@ pub fn validate(body: &str) -> ValidationReport {
                 edge_level.push(FlowViolation::edge(
                     "cross_container_edge",
                     &id,
-                    format!(
-                        "edge `{id}` joins `{from}` in {} to `{to}` in {}",
-                        name(a),
-                        name(b)
-                    ),
+                    format!("edge `{id}` joins `{from}` in {} to `{to}` in {}", name(a), name(b)),
                 ));
             }
         }

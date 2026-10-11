@@ -21,18 +21,18 @@ fn aic_ts21_an_invocation_is_tagged_by_kind_and_refuses_when_nothing_resolves() 
         ERR_NONE_CONFIGURED
     );
 
-    verify_integration_impl(&h.store, &h.ai, "claude_code", &cli_config_for("claude_code", "/usr/bin/claude"))
-        .unwrap();
+    verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "claude_code",
+        &cli_config_for("claude_code", "/usr/bin/claude"),
+    )
+    .unwrap();
     set_model_impl(&h.store, &h.ai, "claude_code", None, Some("opus")).unwrap();
     set_effort_impl(&h.store, &h.ai, "claude_code", None, Some("high")).unwrap();
 
     match resolve_agentic_invocation(&h.store, &h.ai, "/dev/acme", None).unwrap() {
-        AgenticInvocation::Cli {
-            vendor,
-            binary_path,
-            model_id,
-            effort_id,
-        } => {
+        AgenticInvocation::Cli { vendor, binary_path, model_id, effort_id } => {
             assert_eq!(vendor, "claude_code");
             assert_eq!(binary_path, "/usr/bin/claude");
             assert_eq!(model_id.as_deref(), Some("opus"));
@@ -51,12 +51,7 @@ fn aic_ts21_an_invocation_is_tagged_by_kind_and_refuses_when_nothing_resolves() 
     .unwrap();
     set_project_impl(&h.store, &h.ai, "/dev/acme", Some("claude_agent_api")).unwrap();
     match resolve_agentic_invocation(&h.store, &h.ai, "/dev/acme", None).unwrap() {
-        AgenticInvocation::Api {
-            vendor,
-            base_url,
-            api_key,
-            ..
-        } => {
+        AgenticInvocation::Api { vendor, base_url, api_key, .. } => {
             assert_eq!(vendor, "claude_agent_api");
             assert_eq!(base_url, "https://api.anthropic.com/v1");
             assert_eq!(
@@ -92,10 +87,7 @@ fn aic_ts22_no_key_reaches_the_registry_and_a_cli_record_has_no_key_field() {
 
     let (records, _) = h.store.load_agentic_registry().unwrap();
     let as_text = serde_json::to_string(&records).unwrap();
-    assert!(
-        !as_text.contains("sk-ant-secret"),
-        "no key material may reach the registry"
-    );
+    assert!(!as_text.contains("sk-ant-secret"), "no key material may reach the registry");
     assert!(
         !as_text.contains(SAMPLE_TOKEN) && !as_text.contains("sk-ant-oat01-"),
         "no OAuth token material may reach the registry"

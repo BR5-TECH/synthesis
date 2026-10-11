@@ -18,8 +18,7 @@ fn draft_record_and_read_draft_prompt_resolve_a_filed_draft() {
     let root = crate::fs::RootFs::for_root(dir.path());
     create_drafts_folder_impl(&root, "", "UI").unwrap();
     create_drafts_folder_impl(&root, "UI", "Components").unwrap();
-    let created =
-        create_draft_impl(&root, Some("filed"), Some("UI/Components")).unwrap();
+    let created = create_draft_impl(&root, Some("filed"), Some("UI/Components")).unwrap();
     let id = created.draft.id.clone();
     save_draft_file_impl(&root, &id, "filed.md", "# Plan\n\nthe live prompt\n").unwrap();
 
@@ -104,10 +103,7 @@ fn the_resolution_reports_its_three_typed_failures() {
     let broken_dir = draft_dir(&root, &broken).unwrap();
     std::fs::write(broken_dir.join("files/intruder.md"), "second\n").unwrap();
     assert_eq!(draft_record(&root, &broken).unwrap_err(), ERR_NOT_SINGLE_FILE);
-    assert_eq!(
-        read_draft_prompt(&root, &broken).unwrap_err(),
-        ERR_NOT_SINGLE_FILE
-    );
+    assert_eq!(read_draft_prompt(&root, &broken).unwrap_err(), ERR_NOT_SINGLE_FILE);
 
     // DRS-FR-38: a prompt that will not decode is its own outcome, told
     // apart from both of the above — the draft exists and holds exactly one
@@ -119,8 +115,5 @@ fn the_resolution_reports_its_three_typed_failures() {
         draft_record(&root, &unreadable).is_ok(),
         "the record resolves; only the prompt will not read",
     );
-    assert_eq!(
-        read_draft_prompt(&root, &unreadable).unwrap_err(),
-        ERR_PROMPT_UNREADABLE,
-    );
+    assert_eq!(read_draft_prompt(&root, &unreadable).unwrap_err(), ERR_PROMPT_UNREADABLE,);
 }

@@ -17,17 +17,13 @@ fn recording_writes_a_candidate_and_leaves_the_draft_file_untouched() {
         dir.join(format!("{}.toml", proposal.id)).is_file(),
         "the record is one file (DCP-FR-01)",
     );
-    let document = std::fs::read_to_string(dir.join(format!("{}.hunks", proposal.id)))
-        .expect("hunk document");
+    let document =
+        std::fs::read_to_string(dir.join(format!("{}.hunks", proposal.id))).expect("hunk document");
     assert!(
         document.contains(PROPOSED.trim_end()),
         "the proposed text, verbatim, in the hunk document beside the record (DCP-FR-08)",
     );
-    assert_eq!(
-        f.file_body(),
-        ORIGINAL,
-        "recording changes no file of the draft (DCP-FR-01)",
-    );
+    assert_eq!(f.file_body(), ORIGINAL, "recording changes no file of the draft (DCP-FR-01)",);
     assert_eq!(proposal.state, ProposalState::Pending);
     assert_eq!(proposal.decided_at, None);
     assert_eq!(proposal.path, FILE);
@@ -43,11 +39,7 @@ fn a_filed_drafts_candidate_lands_inside_that_draft_wherever_it_is_filed() {
     let f = Fixture::in_folder("UI/Components");
     let proposal = f.pending();
 
-    let filed = f
-        .root
-        .join(".synthesis/drafts/UI/Components")
-        .join(&f.draft_id)
-        .join("proposals");
+    let filed = f.root.join(".synthesis/drafts/UI/Components").join(&f.draft_id).join("proposals");
     assert_eq!(f.proposals_dir(), filed);
     assert!(filed.join(format!("{}.toml", proposal.id)).is_file());
     assert!(filed.join(format!("{}.hunks", proposal.id)).is_file());
@@ -75,10 +67,7 @@ fn a_second_proposal_is_refused_while_one_is_undecided_and_allowed_once_it_is_de
     // A proposal naming anything but the draft's one prompt is refused for a
     // reason of its own (DCP-FR-07), and the pending slot is checked first
     // because it is about the draft rather than about the arguments (DCP-FR-04).
-    assert_eq!(
-        f.propose("notes.md", "other").unwrap_err(),
-        RecordRefusal::ProposalPending,
-    );
+    assert_eq!(f.propose("notes.md", "other").unwrap_err(), RecordRefusal::ProposalPending,);
     assert_eq!(
         list_proposals_impl(&f.root, &f.draft_id).expect("list").len(),
         1,
@@ -115,11 +104,7 @@ fn recording_appends_one_agent_comment_carrying_the_proposal_reference() {
     }
     assert_eq!(posted.attachments.len(), 1, "exactly one (CMS-FR-60)");
     match &posted.attachments[0] {
-        comments::Attachment::Proposal {
-            proposal_id,
-            draft_id,
-            path,
-        } => {
+        comments::Attachment::Proposal { proposal_id, draft_id, path } => {
             assert_eq!(proposal_id, &proposal.id);
             assert_eq!(draft_id, &f.draft_id);
             assert_eq!(path, FILE);
@@ -142,9 +127,8 @@ fn the_conversation_is_announced_when_the_proposal_is_recorded() {
     assert_eq!(seen.len(), 1, "one announcement for one append");
     let announced = &seen[0];
     assert_eq!(announced["id"], f.thread_id, "the conversation it landed in");
-    let comments = announced["comments"]
-        .as_array()
-        .expect("the folded thread carries its comments");
+    let comments =
+        announced["comments"].as_array().expect("the folded thread carries its comments");
     assert_eq!(comments.len(), 2, "the seed comment and the proposal");
     // The payload is the thread as it now stands, so a surface redraws from it
     // without a read of its own.
@@ -181,10 +165,7 @@ fn a_decision_announces_the_conversation_once_more() {
     assert_eq!(comments.len(), 3, "seed, proposal, decision");
     assert_eq!(comments[2]["id"], accepted.comment_id.expect("appended"));
     assert!(
-        comments[2]["body"]
-            .as_str()
-            .expect("body")
-            .contains("Accepted"),
+        comments[2]["body"].as_str().expect("body").contains("Accepted"),
         "the announced thread carries the decision, not a stale fold",
     );
 
@@ -229,10 +210,7 @@ fn a_recording_refused_after_the_append_was_attempted_announces_nothing() {
     f.lock();
     let threads = f.watch_threads();
 
-    assert_eq!(
-        f.propose(FILE, PROPOSED),
-        Err(RecordRefusal::ThreadLocked),
-    );
+    assert_eq!(f.propose(FILE, PROPOSED), Err(RecordRefusal::ThreadLocked),);
     assert!(threads.lock().unwrap_or_else(|e| e.into_inner()).is_empty());
     assert!(f.proposals_folder_files().is_empty(), "and nothing was kept");
 }
@@ -272,10 +250,7 @@ fn a_locked_conversation_leaves_no_candidate_behind() {
 fn recording_refuses_a_missing_path_and_a_no_op_change_distinctly() {
     let f = Fixture::new();
 
-    assert_eq!(
-        f.propose("missing.md", PROPOSED).unwrap_err(),
-        RecordRefusal::PathMissing,
-    );
+    assert_eq!(f.propose("missing.md", PROPOSED).unwrap_err(), RecordRefusal::PathMissing,);
     assert_eq!(
         f.propose(FILE, ORIGINAL).unwrap_err(),
         RecordRefusal::NoChange,
@@ -287,7 +262,6 @@ fn recording_refuses_a_missing_path_and_a_no_op_change_distinctly() {
     );
     assert_eq!(f.discussion().comments.len(), 1, "and neither appended");
 }
-
 
 // ---------------------------------------------------------------------------
 // DCP-FR-JGCD — every change is placed before anything is written
@@ -343,10 +317,7 @@ fn a_change_naming_text_that_occurs_twice_is_refused_as_ambiguous() {
 fn two_changes_covering_the_same_text_are_refused() {
     let f = Fixture::new();
     assert_eq!(
-        f.propose_hunks(
-            FILE,
-            &[replace("original three", "x"), replace("three paragraphs", "y")],
-        ),
+        f.propose_hunks(FILE, &[replace("original three", "x"), replace("three paragraphs", "y")],),
         Err(RecordRefusal::HunkOverlap { at: 2, of: 2 }),
     );
     assert!(f.proposals_folder_files().is_empty(), "nothing was written");

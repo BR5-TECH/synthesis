@@ -107,19 +107,49 @@ fn a_payload_that_mixes_the_two_shapes_is_refused() {
 fn a_bad_gateway_field_is_refused_before_anything_runs_or_is_stored() {
     let cases: Vec<(&str, Box<dyn Fn(&mut VerifyConfig)>, &str)> = vec![
         ("empty URL", Box::new(|c| c.gateway_base_url = Some("  ".into())), "base_url_empty"),
-        ("relative URL", Box::new(|c| c.gateway_base_url = Some("gateway.example.com".into())), "base_url_invalid"),
         (
-            "URL carrying a credential",
-            Box::new(|c| c.gateway_base_url = Some("https://user:secret@gateway.example.com".into())),
+            "relative URL",
+            Box::new(|c| c.gateway_base_url = Some("gateway.example.com".into())),
             "base_url_invalid",
         ),
-        ("variable with a space", Box::new(|c| c.gateway_token_var = Some("MY TOKEN".into())), "token_var_invalid"),
-        ("variable starting with a digit", Box::new(|c| c.gateway_token_var = Some("1TOKEN".into())), "token_var_invalid"),
-        ("the base URL variable", Box::new(|c| c.gateway_token_var = Some("ANTHROPIC_BASE_URL".into())), "token_var_invalid"),
-        ("a reserved variable", Box::new(|c| c.gateway_token_var = Some("PATH".into())), "token_var_invalid"),
-        ("token with a space", Box::new(|c| c.gateway_token = Some("two words".into())), "token_malformed"),
+        (
+            "URL carrying a credential",
+            Box::new(|c| {
+                c.gateway_base_url = Some("https://user:secret@gateway.example.com".into())
+            }),
+            "base_url_invalid",
+        ),
+        (
+            "variable with a space",
+            Box::new(|c| c.gateway_token_var = Some("MY TOKEN".into())),
+            "token_var_invalid",
+        ),
+        (
+            "variable starting with a digit",
+            Box::new(|c| c.gateway_token_var = Some("1TOKEN".into())),
+            "token_var_invalid",
+        ),
+        (
+            "the base URL variable",
+            Box::new(|c| c.gateway_token_var = Some("ANTHROPIC_BASE_URL".into())),
+            "token_var_invalid",
+        ),
+        (
+            "a reserved variable",
+            Box::new(|c| c.gateway_token_var = Some("PATH".into())),
+            "token_var_invalid",
+        ),
+        (
+            "token with a space",
+            Box::new(|c| c.gateway_token = Some("two words".into())),
+            "token_malformed",
+        ),
         ("empty token", Box::new(|c| c.gateway_token = Some("   ".into())), "token_malformed"),
-        ("token with a line break", Box::new(|c| c.gateway_token = Some("abc\ndef".into())), "token_malformed"),
+        (
+            "token with a line break",
+            Box::new(|c| c.gateway_token = Some("abc\ndef".into())),
+            "token_malformed",
+        ),
     ];
     for (label, change, expected) in cases {
         let h = gateway_harness();
@@ -127,7 +157,10 @@ fn a_bad_gateway_field_is_refused_before_anything_runs_or_is_stored() {
         change(&mut config);
         assert_eq!(verify(&h, &config).unwrap_err(), expected, "{label}");
         assert!(h.runner.calls.lock().unwrap().is_empty(), "{label}: no binary ran");
-        assert!(h.keys.calls.lock().unwrap().iter().all(|(op, _)| *op != "set"), "{label}: nothing stored");
+        assert!(
+            h.keys.calls.lock().unwrap().iter().all(|(op, _)| *op != "set"),
+            "{label}: nothing stored"
+        );
     }
 
     // No token supplied and none stored.
@@ -438,7 +471,10 @@ fn the_base_url_is_normalized_before_it_is_stored_and_launched() {
     let record = verify(&h, &config).unwrap();
     assert_eq!(record.gateway_base_url.as_deref(), Some(GATEWAY_URL));
     let launch = environment_of(&h);
-    assert_eq!(value_of(&launch, "ANTHROPIC_BEDROCK_BASE_URL").unwrap().value.expose(), GATEWAY_URL);
+    assert_eq!(
+        value_of(&launch, "ANTHROPIC_BEDROCK_BASE_URL").unwrap().value.expose(),
+        GATEWAY_URL
+    );
     assert!(prober.calls.lock().unwrap().is_empty(), "the gateway is not asked");
     assert_eq!(h.keys.calls_for("claude_code_gateway"), vec!["set"], "one whole-object write");
 }
@@ -491,7 +527,10 @@ fn a_blank_variable_name_means_the_default_and_a_kept_token_is_the_one_sent() {
 
     let mut again = gateway_config(None);
     again.gateway_token_var = Some("  ".into());
-    assert_eq!(verify(&h, &again).unwrap().gateway_token_var.as_deref(), Some("ANTHROPIC_AUTH_TOKEN"));
+    assert_eq!(
+        verify(&h, &again).unwrap().gateway_token_var.as_deref(),
+        Some("ANTHROPIC_AUTH_TOKEN")
+    );
     let launch = environment_of(&h);
     assert_eq!(value_of(&launch, "ANTHROPIC_AUTH_TOKEN").unwrap().value.expose(), GATEWAY_TOKEN);
     assert!(prober.calls.lock().unwrap().is_empty());
@@ -527,7 +566,8 @@ fn every_field_in_the_wrong_place_is_refused() {
     let others = all_clis_harness();
     for vendor in ["codex", "opencode"] {
         for change in [
-            (|c: &mut VerifyConfig| c.auth_mode = Some("custom_gateway".into())) as fn(&mut VerifyConfig),
+            (|c: &mut VerifyConfig| c.auth_mode = Some("custom_gateway".into()))
+                as fn(&mut VerifyConfig),
             |c| c.gateway_base_url = Some(GATEWAY_URL.into()),
             |c| c.gateway_token = Some("t".into()),
             |c| c.gateway_token_var = Some("X".into()),
@@ -563,8 +603,21 @@ fn every_field_in_the_wrong_place_is_refused() {
 #[test]
 fn reserved_names_are_reserved_in_any_case() {
     for name in [
-        "path", "Path", "HOME", "User", "docker_host", "Docker_Config", "ld_preload", "DYLD_X", "SSH_AUTH_SOCK",
-        "XDG_RUNTIME_DIR", "xdg_config_home", "USERPROFILE", "systemroot", "GLIBC_TUNABLES", "claude_config_dir",
+        "path",
+        "Path",
+        "HOME",
+        "User",
+        "docker_host",
+        "Docker_Config",
+        "ld_preload",
+        "DYLD_X",
+        "SSH_AUTH_SOCK",
+        "XDG_RUNTIME_DIR",
+        "xdg_config_home",
+        "USERPROFILE",
+        "systemroot",
+        "GLIBC_TUNABLES",
+        "claude_config_dir",
     ] {
         assert!(is_reserved_variable(name), "{name}");
         let h = claude_harness();

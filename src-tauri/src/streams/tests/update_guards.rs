@@ -122,9 +122,7 @@ fn a_dirty_base_worktree_and_a_base_with_no_checkout_are_each_refused() {
 
     // A base branch no worktree holds: the primary checkout moves off it.
     let repo = fx.repo();
-    let scratch = repo
-        .find_commit(tip_of(&repo, &stream.base_branch))
-        .unwrap();
+    let scratch = repo.find_commit(tip_of(&repo, &stream.base_branch)).unwrap();
     repo.branch("elsewhere", &scratch, true).unwrap();
     repo.set_head("refs/heads/elsewhere").unwrap();
     let report = block_on(updating::run(
@@ -135,10 +133,7 @@ fn a_dirty_base_worktree_and_a_base_with_no_checkout_are_each_refused() {
         Vec::new(),
         ScriptedDispatch::new(Vec::new()),
     ));
-    assert_eq!(
-        code_of(&report.outcome.expect_err("refused")),
-        ERR_BASE_NOT_CHECKED_OUT,
-    );
+    assert_eq!(code_of(&report.outcome.expect_err("refused")), ERR_BASE_NOT_CHECKED_OUT,);
 }
 
 // WKS-FR-NRQT: an update is refused while a run holds the stream.
@@ -188,9 +183,8 @@ fn a_merge_and_an_update_refuse_while_the_other_holds_the_guard() {
     }
 
     // And with an update holding it, a merge of either stream is refused.
-    let _held = state
-        .begin_repository_update(&stream.id, Reconciliation::Update)
-        .expect("the update hold");
+    let _held =
+        state.begin_repository_update(&stream.id, Reconciliation::Update).expect("the update hold");
     assert_eq!(
         merge(&fx, &stream.id, StreamMergePublication::Uncommitted).expect_err("refused"),
         ERR_UPDATE_IN_PROGRESS,
@@ -209,9 +203,7 @@ fn a_reconciliation_refused_by_the_guard_settles_its_own_record() {
     let first = fx.create("holds the guard", None).expect("created");
     let second = stream_behind_its_base(&fx);
     let state = fx.app.state::<StreamState>();
-    let _held = state
-        .begin_repository_update(&first.id, Reconciliation::Update)
-        .expect("the hold");
+    let _held = state.begin_repository_update(&first.id, Reconciliation::Update).expect("the hold");
     assert_eq!(
         merge(&fx, &second.id, StreamMergePublication::Uncommitted).expect_err("refused"),
         ERR_UPDATE_IN_PROGRESS,
@@ -219,9 +211,7 @@ fn a_reconciliation_refused_by_the_guard_settles_its_own_record() {
 
     // And the same for an update refused by a merge holding the guard.
     drop(_held);
-    let _held = state
-        .begin_repository_update(&first.id, Reconciliation::Merge)
-        .expect("the hold");
+    let _held = state.begin_repository_update(&first.id, Reconciliation::Merge).expect("the hold");
     let pinned = tip_of(&fx.repo(), &second.base_branch).to_string();
     let record = update_job_scripted(
         &fx,
@@ -249,9 +239,7 @@ fn cancelling_an_update_reaches_its_token_and_an_idle_stream_is_no_error() {
         .expect("and so is a stream that does not exist");
 
     let state = fx.app.state::<StreamState>();
-    let hold = state
-        .begin_repository_update(&stream.id, Reconciliation::Update)
-        .expect("the hold");
+    let hold = state.begin_repository_update(&stream.id, Reconciliation::Update).expect("the hold");
     assert!(!hold.cancellation().is_cancelled());
     update_commands::cancel_work_stream_update(fx.app.clone(), stream.id.clone())
         .expect("answered");
@@ -347,8 +335,7 @@ fn an_unknown_stream_is_refused_by_every_update_command() {
         ERR_UNKNOWN_STREAM,
     );
     assert_eq!(
-        update_commands::clear_work_stream_update(fx.app.clone(), unknown)
-            .expect_err("refused"),
+        update_commands::clear_work_stream_update(fx.app.clone(), unknown).expect_err("refused"),
         ERR_UNKNOWN_STREAM,
     );
 }
@@ -370,10 +357,7 @@ fn a_stream_whose_working_copy_is_gone_is_refused() {
         Vec::new(),
         ScriptedDispatch::new(Vec::new()),
     ));
-    assert_eq!(
-        code_of(&report.outcome.expect_err("refused")),
-        ERR_STREAM_MISSING,
-    );
+    assert_eq!(code_of(&report.outcome.expect_err("refused")), ERR_STREAM_MISSING,);
 }
 
 // WKS-FR-GYHF: every one of the six update commands answers `unknown_stream`
@@ -384,8 +368,7 @@ fn every_update_command_refuses_a_stream_the_project_does_not_hold() {
     let unknown = || "no-such-stream".to_string();
 
     assert_eq!(
-        update_commands::get_work_stream_update(fx.app.clone(), unknown())
-            .expect_err("refused"),
+        update_commands::get_work_stream_update(fx.app.clone(), unknown()).expect_err("refused"),
         ERR_UNKNOWN_STREAM,
     );
     assert_eq!(
@@ -399,8 +382,7 @@ fn every_update_command_refuses_a_stream_the_project_does_not_hold() {
         ERR_UNKNOWN_STREAM,
     );
     assert_eq!(
-        update_commands::retry_work_stream_update(fx.app.clone(), unknown())
-            .expect_err("refused"),
+        update_commands::retry_work_stream_update(fx.app.clone(), unknown()).expect_err("refused"),
         ERR_UNKNOWN_STREAM,
     );
     assert_eq!(
@@ -413,8 +395,7 @@ fn every_update_command_refuses_a_stream_the_project_does_not_hold() {
         ERR_UNKNOWN_STREAM,
     );
     assert_eq!(
-        update_commands::clear_work_stream_update(fx.app.clone(), unknown())
-            .expect_err("refused"),
+        update_commands::clear_work_stream_update(fx.app.clone(), unknown()).expect_err("refused"),
         ERR_UNKNOWN_STREAM,
     );
     // WKS-FR-WEJK: cancellation alone is answered without an error, a stream
@@ -456,10 +437,7 @@ fn a_rebase_that_settles_nothing_leaves_the_stream_exactly_as_it_was() {
         stream_before,
         "a replay writes loose commits and moves no ref until it is settled",
     );
-    assert_eq!(
-        std::fs::read_to_string(worktree.join("README.md")).unwrap(),
-        content_before,
-    );
+    assert_eq!(std::fs::read_to_string(worktree.join("README.md")).unwrap(), content_before,);
     assert!(
         git::uncommitted_paths(worktree, true).is_empty(),
         "the index and the working copy are as clean as they were",
@@ -572,9 +550,5 @@ fn a_draft_edited_in_the_stream_refuses_an_update_as_stream_dirty() {
     assert_eq!(reason, format!("{ERR_STREAM_DIRTY}: {home_rel}/files/P.md"));
     assert_eq!(tip_of(&fx.repo(), &stream.branch), stream_before, "nothing was committed");
     assert_eq!(tip_of(&fx.repo(), &stream.base_branch), pinned);
-    assert_eq!(
-        std::fs::read_to_string(&stream_prompt).unwrap(),
-        "edited in the stream\n",
-    );
+    assert_eq!(std::fs::read_to_string(&stream_prompt).unwrap(), "edited in the stream\n",);
 }
-

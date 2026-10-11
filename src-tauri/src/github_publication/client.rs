@@ -302,10 +302,7 @@ pub fn scopes_from_header(header: Option<&str>) -> Option<Vec<String>> {
 /// `permissions` are deliberately not read: they describe **code-write**
 /// access, and GHP-FR-RQDV requires only read access to a repository that
 /// accepts issues.
-pub fn issue_capability(
-    repository: &serde_json::Value,
-    scopes: Option<&[String]>,
-) -> ProbeOutcome {
+pub fn issue_capability(repository: &serde_json::Value, scopes: Option<&[String]>) -> ProbeOutcome {
     // A record with no `has_issues` at all is one this application cannot
     // decide from. That is a statement about neither the repository nor the
     // token, so it answers as an unreadable repository.
@@ -339,10 +336,7 @@ pub fn issue_capability(
 /// candidate's own body before one is accepted, whichever endpoint produced the
 /// candidates — a full-text index answers approximately.
 pub fn exact_match(items: &[serde_json::Value], marker: &str) -> Option<IssueRef> {
-    items
-        .iter()
-        .filter_map(issue_from_json)
-        .find(|issue| issue.body.contains(marker))
+    items.iter().filter_map(issue_from_json).find(|issue| issue.body.contains(marker))
 }
 
 pub fn issue_from_json(value: &serde_json::Value) -> Option<IssueRef> {
@@ -360,10 +354,7 @@ pub fn issue_from_json(value: &serde_json::Value) -> Option<IssueRef> {
             .and_then(|v| v.as_str())
             .map(str::to_string),
         milestone: value.get("milestone").and_then(milestone_from_json),
-        parent: value
-            .get("parent_issue_url")
-            .and_then(|v| v.as_str())
-            .and_then(parent_from_url),
+        parent: value.get("parent_issue_url").and_then(|v| v.as_str()).and_then(parent_from_url),
     })
 }
 
@@ -417,9 +408,7 @@ pub fn is_parent_candidate(issue: &IssueRef, types: &[String]) -> bool {
             .is_some_and(|t| types.iter().any(|wanted| wanted.eq_ignore_ascii_case(t)))
 }
 
-fn read_json(
-    mut response: ureq::http::Response<ureq::Body>,
-) -> Result<serde_json::Value, String> {
+fn read_json(mut response: ureq::http::Response<ureq::Body>) -> Result<serde_json::Value, String> {
     let body = response.body_mut().read_to_string().map_err(|_| ERR_GITHUB_UNREACHABLE)?;
     serde_json::from_str(&body).map_err(|_| ERR_GITHUB_UNREACHABLE.to_string())
 }
@@ -485,8 +474,7 @@ impl GithubIssues for HttpGithubIssues {
                     "{api}/repos/{owner}/{repo}/issues\
                      ?state=all&sort=created&direction=desc&per_page=50"
                 );
-                let response =
-                    get(secret, &recent).map_err(|e| transport_error(&e, api))?;
+                let response = get(secret, &recent).map_err(|e| transport_error(&e, api))?;
                 let value = read_json(response)?;
                 let items = value.as_array().cloned().unwrap_or_default();
                 exact_match(&items, marker)
@@ -516,8 +504,8 @@ impl GithubIssues for HttpGithubIssues {
         let api = self.api.as_str();
         let url = format!("{api}/repos/{owner}/{repo}/issues");
         let payload = issue_payload(title, body, fields);
-        let response =
-            send_json(secret, "POST", &url, payload).map_err(|e| transport_or(&e, api, ERR_ISSUE_CREATE_FAILED))?;
+        let response = send_json(secret, "POST", &url, payload)
+            .map_err(|e| transport_or(&e, api, ERR_ISSUE_CREATE_FAILED))?;
         let value = read_json(response).map_err(|_| ERR_ISSUE_CREATE_FAILED.to_string())?;
         issue_from_json(&value).ok_or_else(|| ERR_ISSUE_CREATE_FAILED.to_string())
     }
@@ -535,8 +523,8 @@ impl GithubIssues for HttpGithubIssues {
         let api = self.api.as_str();
         let url = format!("{api}/repos/{owner}/{repo}/issues/{number}");
         let payload = issue_payload(title, body, fields);
-        let response =
-            send_json(secret, "PATCH", &url, payload).map_err(|e| transport_or(&e, api, ERR_ISSUE_UPDATE_FAILED))?;
+        let response = send_json(secret, "PATCH", &url, payload)
+            .map_err(|e| transport_or(&e, api, ERR_ISSUE_UPDATE_FAILED))?;
         let value = read_json(response).map_err(|_| ERR_ISSUE_UPDATE_FAILED.to_string())?;
         issue_from_json(&value).ok_or_else(|| ERR_ISSUE_UPDATE_FAILED.to_string())
     }
@@ -553,9 +541,7 @@ impl GithubIssues for HttpGithubIssues {
         match get(secret, &url) {
             Ok(response) => {
                 let value = read_json(response)?;
-                issue_from_json(&value)
-                    .map(Some)
-                    .ok_or_else(|| ERR_GITHUB_UNREACHABLE.to_string())
+                issue_from_json(&value).map(Some).ok_or_else(|| ERR_GITHUB_UNREACHABLE.to_string())
             }
             Err(ureq::Error::StatusCode(404 | 410)) => Ok(None),
             Err(e) => Err(transport_error(&e, api)),
@@ -577,9 +563,10 @@ impl GithubIssues for HttpGithubIssues {
                     "{api}/repos/{owner}/{repo}/issues?state=open&type={}&per_page={PAGE_SIZE}&page={page}",
                     urlencode(issue_type)
                 );
-                let response = get(secret, &url).map_err(|e| transport_or(&e, api, ERR_PARENT_ISSUES_UNREADABLE))?;
-                let value = read_json(response)
-                    .map_err(|_| ERR_PARENT_ISSUES_UNREADABLE.to_string())?;
+                let response = get(secret, &url)
+                    .map_err(|e| transport_or(&e, api, ERR_PARENT_ISSUES_UNREADABLE))?;
+                let value =
+                    read_json(response).map_err(|_| ERR_PARENT_ISSUES_UNREADABLE.to_string())?;
                 let items = value.as_array().cloned().unwrap_or_default();
                 let rows = items.len();
                 for issue in items.iter().filter_map(issue_from_json) {
@@ -603,8 +590,8 @@ impl GithubIssues for HttpGithubIssues {
         let url = format!("{api}/orgs/{owner}/issue-types");
         match get(secret, &url) {
             Ok(response) => {
-                let value = read_json(response)
-                    .map_err(|_| ERR_ISSUE_TYPES_UNREADABLE.to_string())?;
+                let value =
+                    read_json(response).map_err(|_| ERR_ISSUE_TYPES_UNREADABLE.to_string())?;
                 Ok(issue_type_names(&value))
             }
             // GHP-FR-YSPJ: a user account has no organization to hold Types,
@@ -629,8 +616,7 @@ impl GithubIssues for HttpGithubIssues {
             );
             let response =
                 get(secret, &url).map_err(|e| transport_or(&e, api, ERR_MILESTONES_UNREADABLE))?;
-            let value =
-                read_json(response).map_err(|_| ERR_MILESTONES_UNREADABLE.to_string())?;
+            let value = read_json(response).map_err(|_| ERR_MILESTONES_UNREADABLE.to_string())?;
             let items = value.as_array().cloned().unwrap_or_default();
             let rows = items.len();
             found.extend(items.iter().filter_map(milestone_from_json));

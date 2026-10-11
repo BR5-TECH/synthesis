@@ -22,10 +22,7 @@ fn redaction_strips_userinfo_from_any_url_in_a_line() {
         "pushing to https://github.com/a/b.git"
     );
     // A `@` after the authority belongs to the path and is left alone.
-    assert_eq!(
-        redact_credentials("https://github.com/a/b@v2"),
-        "https://github.com/a/b@v2"
-    );
+    assert_eq!(redact_credentials("https://github.com/a/b@v2"), "https://github.com/a/b@v2");
     assert_eq!(redact_credentials("no url here"), "no url here");
 }
 
@@ -39,9 +36,7 @@ fn a_push_streams_its_output_and_ends_in_one_terminal_event() {
     f.commit("base");
     let remote_dir = TempDir::new().unwrap();
     Repository::init_bare(remote_dir.path()).unwrap();
-    f.repo()
-        .remote("origin", remote_dir.path().to_str().unwrap())
-        .unwrap();
+    f.repo().remote("origin", remote_dir.path().to_str().unwrap()).unwrap();
 
     let sink = RecordingSink::default();
     let registry = ProgressRegistry::default();
@@ -52,23 +47,12 @@ fn a_push_streams_its_output_and_ends_in_one_terminal_event() {
     let store = GlobalSettingsStore::default();
     let tokens = GithubTokens::default();
 
-    push_branch_at(
-        &sink,
-        &SCRATCH_BUFFER,
-        &emit,
-        &registry,
-        &f.root(),
-        &store,
-        &tokens,
-        "key",
-    )
-    .unwrap();
+    push_branch_at(&sink, &SCRATCH_BUFFER, &emit, &registry, &f.root(), &store, &tokens, "key")
+        .unwrap();
 
     let events = emitted.borrow();
-    let finished: Vec<&(String, serde_json::Value)> = events
-        .iter()
-        .filter(|(name, _)| name == GIT_OPERATION_FINISHED)
-        .collect();
+    let finished: Vec<&(String, serde_json::Value)> =
+        events.iter().filter(|(name, _)| name == GIT_OPERATION_FINISHED).collect();
     assert_eq!(finished.len(), 1, "exactly one terminal event");
     assert_eq!(finished[0].1["ok"], serde_json::json!(true));
     assert_eq!(finished[0].1["operation"], serde_json::json!("push"));
@@ -99,9 +83,7 @@ fn a_push_operation_names_the_branch_it_publishes_as_its_destination() {
     f.commit("base");
     let remote_dir = TempDir::new().unwrap();
     Repository::init_bare(remote_dir.path()).unwrap();
-    f.repo()
-        .remote("origin", remote_dir.path().to_str().unwrap())
-        .unwrap();
+    f.repo().remote("origin", remote_dir.path().to_str().unwrap()).unwrap();
     let sink = CollectingSink::default();
     let registry = ProgressRegistry::default();
     let emit = |_name: &str, _payload: serde_json::Value| {};
@@ -120,9 +102,7 @@ fn a_push_operation_names_the_branch_it_publishes_as_its_destination() {
 
     let published = sink.published.lock().unwrap().clone();
     assert!(published.len() >= 2, "registration and terminal event: {published:?}");
-    let expected = Some(crate::progress::Activation::GitPush {
-        branch: f.current_branch(),
-    });
+    let expected = Some(crate::progress::Activation::GitPush { branch: f.current_branch() });
     assert!(
         published.iter().all(|op| op.activation == expected),
         "every event carries the branch destination: {published:?}"
@@ -156,16 +136,11 @@ fn a_push_with_no_remote_is_the_typed_error_and_still_announces_its_end() {
     assert_eq!(err, ERR_NO_REMOTE_CONFIGURED);
 
     let events = emitted.borrow();
-    let finished: Vec<&(String, serde_json::Value)> = events
-        .iter()
-        .filter(|(name, _)| name == GIT_OPERATION_FINISHED)
-        .collect();
+    let finished: Vec<&(String, serde_json::Value)> =
+        events.iter().filter(|(name, _)| name == GIT_OPERATION_FINISHED).collect();
     assert_eq!(finished.len(), 1);
     assert_eq!(finished[0].1["ok"], serde_json::json!(false));
-    assert_eq!(
-        finished[0].1["error"],
-        serde_json::json!(ERR_NO_REMOTE_CONFIGURED)
-    );
+    assert_eq!(finished[0].1["error"], serde_json::json!(ERR_NO_REMOTE_CONFIGURED));
 }
 
 #[test]

@@ -176,10 +176,7 @@ impl IndexId {
     /// neither does a skill descriptor, a skill being eligible whether or not
     /// the scan surfaced its file (DSL-FR-06).
     fn is_artifact_index(self) -> bool {
-        !matches!(
-            self,
-            IndexId::Drafts | IndexId::Notes | IndexId::Skills | IndexId::Documents
-        )
+        !matches!(self, IndexId::Drafts | IndexId::Notes | IndexId::Skills | IndexId::Documents)
     }
 
     /// BMI-FR-05: whether a document in this index is a chunk of a file.
@@ -216,17 +213,11 @@ pub struct FileRef {
 
 impl FileRef {
     fn artifact(path: impl Into<String>) -> FileRef {
-        FileRef {
-            draft_id: None,
-            path: path.into(),
-        }
+        FileRef { draft_id: None, path: path.into() }
     }
 
     fn draft(draft_id: impl Into<String>, path: impl Into<String>) -> FileRef {
-        FileRef {
-            draft_id: Some(draft_id.into()),
-            path: path.into(),
-        }
+        FileRef { draft_id: Some(draft_id.into()), path: path.into() }
     }
 
     /// BMI-FR-28: a note is identified by its id and by nothing else.
@@ -238,27 +229,17 @@ impl FileRef {
     /// index**, and a note's identity is its id — which is why a hit from this
     /// index reports it as `note_id` rather than as a path (see [`ChunkHit`]).
     fn note(note_id: impl Into<String>) -> FileRef {
-        FileRef {
-            draft_id: None,
-            path: note_id.into(),
-        }
+        FileRef { draft_id: None, path: note_id.into() }
     }
 
     /// BMI-FR-FGGU: a document is identified by its id and by nothing else, for
     /// the reason a note is: no index holds a document's filesystem path.
     fn document(document_id: impl Into<String>) -> FileRef {
-        FileRef {
-            draft_id: None,
-            path: document_id.into(),
-        }
+        FileRef { draft_id: None, path: document_id.into() }
     }
 
     fn chunk(&self, ordinal: u32) -> ChunkKey {
-        ChunkKey {
-            draft_id: self.draft_id.clone(),
-            path: self.path.clone(),
-            ordinal,
-        }
+        ChunkKey { draft_id: self.draft_id.clone(), path: self.path.clone(), ordinal }
     }
 }
 
@@ -411,11 +392,7 @@ impl IndexSet {
     /// The paths an index holds, in order. Test-facing: index membership is
     /// what BMI-FR-03, BMI-FR-04, BMI-FR-17, and BMI-FR-27 are claims about.
     pub fn paths(&self, index: IndexId) -> Vec<String> {
-        self.files
-            .keys()
-            .filter(|(i, _)| *i == index)
-            .map(|(_, f)| f.path.clone())
-            .collect()
+        self.files.keys().filter(|(i, _)| *i == index).map(|(_, f)| f.path.clone()).collect()
     }
 
     /// The language a file was indexed under, if it is indexed at all.
@@ -492,10 +469,7 @@ struct Published {
 
 impl Default for Published {
     fn default() -> Self {
-        Published {
-            generation: 0,
-            set: Arc::new(IndexSet::default()),
-        }
+        Published { generation: 0, set: Arc::new(IndexSet::default()) }
     }
 }
 
@@ -742,13 +716,7 @@ impl Bm25Indexer {
                     log_warn(app, &BUFFER, &[Domain::Backend], "index skipped a file", fields);
                 },
                 |processed| {
-                    progress::update_and_publish(
-                        app,
-                        &registry,
-                        operation,
-                        Some(processed),
-                        None,
-                    );
+                    progress::update_and_publish(app, &registry, operation, Some(processed), None);
                 },
             );
             // DSL-FR-18: the registry rides the same snapshot as the `skills`
@@ -776,12 +744,7 @@ impl Bm25Indexer {
                         "documents" => scope.documents,
                     },
                 );
-                progress::terminate_and_publish(
-                    app,
-                    &registry,
-                    operation,
-                    OperationState::Failed,
-                );
+                progress::terminate_and_publish(app, &registry, operation, OperationState::Failed);
                 return None;
             }
         };
@@ -828,12 +791,12 @@ pub use scheduling::{
     scope_for_note_change, PassScope,
 };
 
-use chunking::bound_to_blocks;
-use sources::{collect_sources, log_skill_exclusions};
 #[cfg(test)]
 use crate::scanning::CandidateStore;
+use chunking::bound_to_blocks;
 #[cfg(test)]
 use sources::read_bounded;
+use sources::{collect_sources, log_skill_exclusions};
 
 #[cfg(test)]
 mod tests;

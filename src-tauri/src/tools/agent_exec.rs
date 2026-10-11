@@ -35,7 +35,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::agentic::{
-    self, AgenticIntegrations, AgenticInvocation, AgentLaunchCredential, SecretString,
+    self, AgentLaunchCredential, AgenticIntegrations, AgenticInvocation, SecretString,
 };
 use crate::fs::{EntryKind, FsAccess};
 use crate::global_settings::GlobalSettingsStore;
@@ -56,9 +56,9 @@ mod repository;
 use observer::{bounded_payload, directory_problem, merge_session, LaunchObserver};
 pub(crate) use repository::{repository_access, RepositoryAccess};
 use repository::{
-    repository_metadata_paths, validate_supplementary_mount, RepositoryMask,
-    GIT_COMMON_DIR_TARGET, REPOSITORY_COMMONDIR_FILENAME, REPOSITORY_MASK_DIRNAME,
-    REPOSITORY_MASK_FILENAME, REPOSITORY_POINTER_FILENAME,
+    repository_metadata_paths, validate_supplementary_mount, RepositoryMask, GIT_COMMON_DIR_TARGET,
+    REPOSITORY_COMMONDIR_FILENAME, REPOSITORY_MASK_DIRNAME, REPOSITORY_MASK_FILENAME,
+    REPOSITORY_POINTER_FILENAME,
 };
 
 #[cfg(test)]
@@ -508,19 +508,13 @@ pub struct AgentCliExecutor {
 
 impl Default for AgentCliExecutor {
     fn default() -> Self {
-        AgentCliExecutor {
-            runtime: RuntimeBinding::FromVerifiedBackend,
-            session_state_root: None,
-        }
+        AgentCliExecutor { runtime: RuntimeBinding::FromVerifiedBackend, session_state_root: None }
     }
 }
 
 impl AgentCliExecutor {
     pub fn new(runtime: Arc<dyn DockerRuntime>) -> Self {
-        AgentCliExecutor {
-            runtime: RuntimeBinding::Fixed(runtime),
-            session_state_root: None,
-        }
+        AgentCliExecutor { runtime: RuntimeBinding::Fixed(runtime), session_state_root: None }
     }
 
     /// EAC-FR-39: the runtime this launch goes through — the Docker backend the
@@ -647,20 +641,18 @@ impl AgentCliExecutor {
                 None,
             ),
             RepositoryAccess::Linked { .. } => {
-                let pointer = mask
-                    .dir
-                    .with_file_name(format!("{REPOSITORY_POINTER_FILENAME}-{slug}"));
+                let pointer =
+                    mask.dir.with_file_name(format!("{REPOSITORY_POINTER_FILENAME}-{slug}"));
                 fs.write_text_atomic(&pointer, &access.pointer_text()?).ok()?;
-                let commondir = mask
-                    .dir
-                    .with_file_name(format!("{REPOSITORY_COMMONDIR_FILENAME}-{slug}"));
-                fs.write_text_atomic(&commondir, &access.commondir_text()?)
-                    .ok()?;
+                let commondir =
+                    mask.dir.with_file_name(format!("{REPOSITORY_COMMONDIR_FILENAME}-{slug}"));
+                fs.write_text_atomic(&commondir, &access.commondir_text()?).ok()?;
                 (GIT_COMMON_DIR_TARGET.to_string(), pointer, Some(commondir))
             }
         };
         let mut out: Vec<BindMount> = Vec::new();
-        for (source, target) in access.mounts(workspace, &store, &pin, record.as_deref(), &mask.file)
+        for (source, target) in
+            access.mounts(workspace, &store, &pin, record.as_deref(), &mask.file)
         {
             out.push(BindMount {
                 source: descriptor::mount_source(&source)?,
@@ -671,11 +663,7 @@ impl AgentCliExecutor {
                 read_only: true,
             });
         }
-        let env = access
-            .env()
-            .into_iter()
-            .map(|(name, value)| (name.to_string(), value))
-            .collect();
+        let env = access.env().into_iter().map(|(name, value)| (name.to_string(), value)).collect();
         Some((out, env, access.linked()))
     }
 
@@ -714,9 +702,7 @@ impl AgentCliExecutor {
         // Truncating, so a file left from an earlier launch is empty again
         // rather than trusted to still be: what this mounts must hold nothing.
         if let Err(err) = fs.create_file(&file, crate::fs::CreateMode::Truncate) {
-            return Err(AgentExecutionError::RepositoryMaskingUnavailable(
-                err.to_string(),
-            ));
+            return Err(AgentExecutionError::RepositoryMaskingUnavailable(err.to_string()));
         }
         Ok(RepositoryMask { dir, file })
     }
@@ -738,7 +724,9 @@ impl AgentCliExecutor {
             Some(root) => root.clone(),
             None => crate::fs::app_data_dir()
                 .map_err(|_| {
-                    AgentExecutionError::SessionStateUnavailable(SessionStateProblem::RootUnresolved)
+                    AgentExecutionError::SessionStateUnavailable(
+                        SessionStateProblem::RootUnresolved,
+                    )
                 })?
                 .join(SESSION_STATE_DIRNAME),
         };

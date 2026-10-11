@@ -130,20 +130,30 @@ impl ConversationOrigin {
 /// Test-only constructors for an origin whose discussion need not exist in a store.
 #[cfg(test)]
 impl ConversationOrigin {
-    pub(crate) fn stub_artifact(discussion_id: impl Into<String>, artifact_id: impl Into<String>, fragment: bool) -> Self {
+    pub(crate) fn stub_artifact(
+        discussion_id: impl Into<String>,
+        artifact_id: impl Into<String>,
+        fragment: bool,
+    ) -> Self {
         let artifact_id = artifact_id.into();
         Self {
             discussion_id: discussion_id.into(),
-            fragment_target: fragment.then(|| comments::FragmentTarget::in_artifact(&artifact_id, 0, 1, "x")),
+            fragment_target: fragment
+                .then(|| comments::FragmentTarget::in_artifact(&artifact_id, 0, 1, "x")),
             target: DiscussionTarget::Artifact { artifact_id },
         }
     }
 
-    pub(crate) fn stub_draft(discussion_id: impl Into<String>, draft_id: impl Into<String>, fragment: bool) -> Self {
+    pub(crate) fn stub_draft(
+        discussion_id: impl Into<String>,
+        draft_id: impl Into<String>,
+        fragment: bool,
+    ) -> Self {
         let draft_id = draft_id.into();
         Self {
             discussion_id: discussion_id.into(),
-            fragment_target: fragment.then(|| comments::FragmentTarget::in_draft(&draft_id, "a.md", 0, 1, "x")),
+            fragment_target: fragment
+                .then(|| comments::FragmentTarget::in_draft(&draft_id, "a.md", 0, 1, "x")),
             target: DiscussionTarget::Draft { draft_id },
         }
     }
@@ -313,11 +323,8 @@ pub const TAG_NOTE_CONTEXT: &str = "note_context";
 pub const INPUT_TAGS: [&str; 3] = [TAG_ARTIFACT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT];
 
 /// The tag vocabulary of a note turn, in presentation order (AGC-FR-06).
-pub const NOTE_INPUT_TAGS: [&str; 3] = [
-    TAG_NOTE_CONTEXT,
-    TAG_DISCUSSION_HISTORY,
-    TAG_CURRENT_COMMENT,
-];
+pub const NOTE_INPUT_TAGS: [&str; 3] =
+    [TAG_NOTE_CONTEXT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT];
 
 /// CVL-FR-06: the tags a turn of this origin kind emits, in order.
 ///

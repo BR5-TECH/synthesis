@@ -14,7 +14,8 @@ fn only_selected_documents_are_searched() {
     let project = fixture.fixture.app.state::<crate::bm25_index::Bm25Indexer>().root().unwrap();
     let spec_dir = project.join("specifications");
     std::fs::create_dir_all(&spec_dir).unwrap();
-    std::fs::write(spec_dir.join("AXO-axolotl.md"), "# Axolotl\n\nThe axolotl regenerates limbs.").unwrap();
+    std::fs::write(spec_dir.join("AXO-axolotl.md"), "# Axolotl\n\nThe axolotl regenerates limbs.")
+        .unwrap();
     fixture.fixture.reindex();
 
     let matches = search(&fixture, "axolotl regenerates", None);
@@ -41,9 +42,8 @@ fn the_limit_counts_documents() {
 #[test]
 fn a_document_appears_once_with_its_best_passage() {
     let fixture = DocFixture::new();
-    let sections: String = (0..6)
-        .map(|i| format!("# Section {i}\n\nokapi stripes appear in part {i}\n\n"))
-        .collect();
+    let sections: String =
+        (0..6).map(|i| format!("# Section {i}\n\nokapi stripes appear in part {i}\n\n")).collect();
     fixture.write("refs/long.md", &format!("{sections}# Best\n\nokapi okapi okapi okapi okapi"));
     fixture.write("refs/other.md", "A single okapi mention.");
     fixture.select(SourceKind::Folder, "refs");
@@ -74,7 +74,8 @@ fn documents_that_left_or_became_unavailable_are_omitted() {
     std::fs::remove_file(&gone).unwrap();
     let fs = fixture.fixture.app.state::<crate::fs::FsAccessState>();
     fixture.collection().refresh(&fs, &fixture.fixture.handle(), &|_| {});
-    let names: Vec<String> = search(&fixture, "pangolin", None).into_iter().map(|m| m.name).collect();
+    let names: Vec<String> =
+        search(&fixture, "pangolin", None).into_iter().map(|m| m.name).collect();
     assert!(!names.contains(&"gone.md".to_string()));
     assert_eq!(names.len(), 2);
 
@@ -83,11 +84,15 @@ fn documents_that_left_or_became_unavailable_are_omitted() {
     std::fs::remove_file(fixture.root.join("elsewhere/leaving.md")).unwrap();
     fixture.collection().refresh(&fs, &fixture.fixture.handle(), &|_| {});
     let snapshot = fixture.collection().snapshot().unwrap();
-    assert!(snapshot
-        .documents
-        .iter()
-        .any(|d| d.name == "leaving.md" && d.status == crate::documents::Availability::Unavailable));
-    let names: Vec<String> = search(&fixture, "pangolin", None).into_iter().map(|m| m.name).collect();
+    assert!(
+        snapshot
+            .documents
+            .iter()
+            .any(|d| d.name == "leaving.md"
+                && d.status == crate::documents::Availability::Unavailable)
+    );
+    let names: Vec<String> =
+        search(&fixture, "pangolin", None).into_iter().map(|m| m.name).collect();
     assert_eq!(names, ["kept.md"]);
 }
 

@@ -63,9 +63,7 @@ fn open_draft_discussion(h: &Harness, draft_id: &str, body: &str) -> Discussion 
     crate::comments::open_discussion_in(
         &h.root(),
         &h.root(),
-        &crate::comments::DiscussionTarget::Draft {
-            draft_id: draft_id.to_string(),
-        },
+        &crate::comments::DiscussionTarget::Draft { draft_id: draft_id.to_string() },
         None,
         body.into(),
         Vec::new(),
@@ -96,7 +94,8 @@ fn agc_ts53_a_drafts_prompt_interleaves_its_text_with_the_images_it_embeds() {
     let (draft_id, first, second) = draft_with_two_embedded_images(&h);
     let discussion = open_draft_discussion(&h, &draft_id, "@arch what does this say?");
 
-    let sections = build_input(Roots::same(&h.root()),
+    let sections = build_input(
+        Roots::same(&h.root()),
         &ConversationOrigin::of(&discussion),
         &discussion.comments[0].id,
     );
@@ -129,10 +128,9 @@ fn agc_ts53_a_drafts_prompt_interleaves_its_text_with_the_images_it_embeds() {
     );
     let images = image_parts(artifact);
     assert_eq!(images.len(), 2);
-    for (image, bytes, alt) in [
-        (images[0], &first, "flow diagram"),
-        (images[1], &second, "the other"),
-    ] {
+    for (image, bytes, alt) in
+        [(images[0], &first, "flow diagram"), (images[1], &second, "the other")]
+    {
         assert_eq!(image.media_type, "image/png");
         assert_eq!(image.data, encoded(bytes), "the asset's own bytes");
         assert!(image.context.contains(alt), "its alt text: {}", image.context);
@@ -153,9 +151,7 @@ fn agc_ts54_a_comments_image_attachments_reach_the_section_holding_them() {
     let created = crate::drafts::create_draft_at_root(&root, Some("attachments")).expect("draft");
     let draft_id = created.draft.id.clone();
 
-    let target = crate::comments::DiscussionTarget::Draft {
-        draft_id: draft_id.clone(),
-    };
+    let target = crate::comments::DiscussionTarget::Draft { draft_id: draft_id.clone() };
     let thread = crate::comments::open_discussion_in(
         &root,
         &root,
@@ -218,11 +214,7 @@ fn agc_ts54_a_comments_image_attachments_reach_the_section_holding_them() {
     .expect("current");
     let trigger = asking.comments.last().expect("the trigger").id.clone();
 
-    let sections = build_input(
-        Roots::same(&root),
-        &ConversationOrigin::of(&thread),
-        &trigger,
-    );
+    let sections = build_input(Roots::same(&root), &ConversationOrigin::of(&thread), &trigger);
 
     let history = section_of(&sections, TAG_DISCUSSION_HISTORY);
     let history_images = image_parts(history);
@@ -234,10 +226,7 @@ fn agc_ts54_a_comments_image_attachments_reach_the_section_holding_them() {
     // AGC-FR-09: a PDF and a link are metadata, and always were.
     assert!(history.body.contains("[attachment: notes.pdf (application/pdf), not shown]"));
     assert!(history.body.contains("[attachment: spec v2 (text/plain), not shown]"));
-    assert!(
-        !history.body.contains("example.invalid/spec\n"),
-        "nothing was fetched from the link",
-    );
+    assert!(!history.body.contains("example.invalid/spec\n"), "nothing was fetched from the link",);
 
     let current = section_of(&sections, TAG_CURRENT_COMMENT);
     let current_images = image_parts(current);
@@ -256,7 +245,8 @@ fn cvl_ts65_the_first_user_message_carries_ordered_content_parts() {
     let h = Harness::new(vec![]);
     let (draft_id, first, second) = draft_with_two_embedded_images(&h);
     let discussion = open_draft_discussion(&h, &draft_id, "@arch what does this say?");
-    let input = build_input(Roots::same(&h.root()),
+    let input = build_input(
+        Roots::same(&h.root()),
         &ConversationOrigin::of(&discussion),
         &discussion.comments[0].id,
     );
@@ -283,17 +273,9 @@ fn cvl_ts65_the_first_user_message_carries_ordered_content_parts() {
             _ => "text",
         })
         .collect();
-    assert_eq!(
-        kinds.iter().filter(|k| **k == "image").count(),
-        2,
-        "two image contents: {kinds:?}",
-    );
-    let image_positions: Vec<usize> = kinds
-        .iter()
-        .enumerate()
-        .filter(|(_, k)| **k == "image")
-        .map(|(i, _)| i)
-        .collect();
+    assert_eq!(kinds.iter().filter(|k| **k == "image").count(), 2, "two image contents: {kinds:?}",);
+    let image_positions: Vec<usize> =
+        kinds.iter().enumerate().filter(|(_, k)| **k == "image").map(|(i, _)| i).collect();
     assert!(image_positions[0] < image_positions[1], "in the prompt's own order");
     assert!(image_positions[0] > 0, "text stands before the first picture");
 
@@ -303,15 +285,8 @@ fn cvl_ts65_the_first_user_message_carries_ordered_content_parts() {
         };
         // CVL-FR-37: `rig` image content carrying that image's bytes and media
         // type — never an encoded string inside prose.
-        assert_eq!(
-            image.data,
-            DocumentSourceKind::Base64(encoded(bytes)),
-            "the bytes themselves",
-        );
-        assert_eq!(
-            image.media_type,
-            Some(rig::completion::message::ImageMediaType::PNG),
-        );
+        assert_eq!(image.data, DocumentSourceKind::Base64(encoded(bytes)), "the bytes themselves",);
+        assert_eq!(image.media_type, Some(rig::completion::message::ImageMediaType::PNG),);
         // Its reference and alt text stand beside it, in the text immediately
         // before it.
         let UserContent::Text(before) = contents[position - 1] else {
@@ -347,7 +322,8 @@ fn cvl_ts66_a_text_only_request_carries_metadata_where_the_pictures_were() {
     let h = Harness::new(vec![]);
     let (draft_id, first, second) = draft_with_two_embedded_images(&h);
     let discussion = open_draft_discussion(&h, &draft_id, "@arch what does this say?");
-    let input = build_input(Roots::same(&h.root()),
+    let input = build_input(
+        Roots::same(&h.root()),
         &ConversationOrigin::of(&discussion),
         &discussion.comments[0].id,
     );
@@ -409,12 +385,8 @@ fn cvl_ts66_a_retry_presents_the_identical_content_parts() {
     h.create_agent("arch", "Argue about structure.");
     let discussion = open_draft_discussion(&h, &draft_id, "@arch what does this say?");
 
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&discussion),
-        &discussion.comments[0].id,
-    )
-    .expect("dispatched");
+    h.dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
+        .expect("dispatched");
     h.settle();
 
     let exchanges = h.seam.exchanges();
@@ -451,12 +423,9 @@ fn agc_ts55_a_text_only_model_answers_and_the_turn_records_that_it_omitted_image
     )
     .unwrap();
 
-    let dispatched = h.dispatch(
-        "arch",
-        ConversationOrigin::of(&discussion),
-        &discussion.comments[0].id,
-    )
-    .expect("dispatched");
+    let dispatched = h
+        .dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
+        .expect("dispatched");
     // Waited out on this turn's own terminal event rather than on `settle()`.
     // `settle()` returns when the in-flight set empties, and `terminate` empties
     // it **before** the terminal event is published, so everything below it read
@@ -503,9 +472,7 @@ fn agc_ts55_a_text_only_model_answers_and_the_turn_records_that_it_omitted_image
     // The delivered comment carries no marker of any kind.
     let thread = crate::comments::locate_discussion_of(
         &h.root(),
-        &crate::comments::DiscussionTarget::Draft {
-            draft_id: draft_id.clone(),
-        },
+        &crate::comments::DiscussionTarget::Draft { draft_id: draft_id.clone() },
         &discussion.id,
     )
     .expect("thread");
@@ -540,11 +507,7 @@ fn agc_ts58_the_notice_registry_replaces_and_retires_its_entry() {
 
     turns.record_image_notice(&entry("turn-1", &origin, true), PROJECT_KEY);
     assert_eq!(
-        turns
-            .image_notices(Some(&origin))
-            .iter()
-            .map(|t| t.id.clone())
-            .collect::<Vec<_>>(),
+        turns.image_notices(Some(&origin)).iter().map(|t| t.id.clone()).collect::<Vec<_>>(),
         vec!["turn-1".to_string()],
     );
     // A later turn in the same conversation that also omitted images replaces it.
@@ -561,10 +524,7 @@ fn agc_ts58_the_notice_registry_replaces_and_retires_its_entry() {
     assert_eq!(turns.image_notices(Some(&other)).len(), 1);
 
     // Entering, replacing, and retiring emit nothing of their own.
-    assert!(
-        h.events.lock().unwrap().is_empty(),
-        "no event was emitted for any of it",
-    );
+    assert!(h.events.lock().unwrap().is_empty(), "no event was emitted for any of it",);
 }
 
 /// AGC-FR-40, AGC-FR-26: no image, no encoded payload, and no filename beyond the metadata
@@ -578,12 +538,8 @@ fn agc_ts59_no_image_reaches_any_record_event_or_comment() {
     h.create_agent("arch", "Argue about structure.");
     let discussion = open_draft_discussion(&h, &draft_id, "@arch what does this say?");
 
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&discussion),
-        &discussion.comments[0].id,
-    )
-    .expect("dispatched");
+    h.dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
+        .expect("dispatched");
     h.settle();
 
     let payloads = serde_json::to_string(&*h.events.lock().unwrap()).expect("events");
@@ -594,9 +550,7 @@ fn agc_ts59_no_image_reaches_any_record_event_or_comment() {
     let log = format!("{:?}", all_records());
     let thread = crate::comments::locate_discussion_of(
         &h.root(),
-        &crate::comments::DiscussionTarget::Draft {
-            draft_id: draft_id.clone(),
-        },
+        &crate::comments::DiscussionTarget::Draft { draft_id: draft_id.clone() },
         &discussion.id,
     )
     .expect("thread");
@@ -622,7 +576,6 @@ fn agc_ts59_no_image_reaches_any_record_event_or_comment() {
     assert!(!serialised.contains("\"parts\""), "{serialised}");
 }
 
-
 /// AGC-FR-06, AGC-FR-35 / AGC-FR-37, AGC-FR-38 / CVL-FR-07, CVL-FR-10, CVL-FR-37: a turn whose resolved model **accepts
 /// image content** carries every image its material holds, as `rig` image
 /// content, and records that it omitted none.
@@ -636,12 +589,9 @@ fn agc_ts53_a_turn_against_an_image_capable_model_carries_its_pictures() {
     h.create_agent("arch", "Argue about structure.");
     let discussion = open_draft_discussion(&h, &draft_id, "@arch what does this say?");
 
-    let dispatched = h.dispatch(
-        "arch",
-        ConversationOrigin::of(&discussion),
-        &discussion.comments[0].id,
-    )
-    .expect("dispatched");
+    let dispatched = h
+        .dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
+        .expect("dispatched");
     // Waited out on this turn's own terminal event rather than on `settle()`.
     // `settle()` returns when the in-flight set empties, and `terminate` empties
     // it **before** the terminal event is published, so everything below it read
@@ -672,10 +622,7 @@ fn agc_ts53_a_turn_against_an_image_capable_model_carries_its_pictures() {
     assert_eq!(images[0].data, DocumentSourceKind::Base64(encoded(&first)));
     assert_eq!(images[1].data, DocumentSourceKind::Base64(encoded(&second)));
     for image in &images {
-        assert_eq!(
-            image.media_type,
-            Some(rig::completion::message::ImageMediaType::PNG),
-        );
+        assert_eq!(image.media_type, Some(rig::completion::message::ImageMediaType::PNG),);
     }
     // AGC-FR-37: nothing was omitted, so the turn says so — and CTA-FR-LVPC's
     // notice has nothing to render.
@@ -697,12 +644,8 @@ fn cvl_ts66_a_retry_of_a_multimodal_turn_repeats_it_byte_for_byte() {
     h.create_agent("arch", "Argue about structure.");
     let discussion = open_draft_discussion(&h, &draft_id, "@arch what does this say?");
 
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&discussion),
-        &discussion.comments[0].id,
-    )
-    .expect("dispatched");
+    h.dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
+        .expect("dispatched");
     h.settle();
 
     let exchanges = h.seam.exchanges();
@@ -712,10 +655,7 @@ fn cvl_ts66_a_retry_of_a_multimodal_turn_repeats_it_byte_for_byte() {
         let rig::completion::Message::User { content } = &exchange[0] else {
             panic!("a user message");
         };
-        content
-            .iter()
-            .filter(|c| matches!(c, UserContent::Image(_)))
-            .count()
+        content.iter().filter(|c| matches!(c, UserContent::Image(_))).count()
     };
     assert_eq!(carried(&exchanges[0]), 2, "the first attempt carried both");
     assert_eq!(
@@ -741,12 +681,9 @@ fn agc_ts56_an_undeclared_capability_gets_the_fallback() {
     h.create_agent("arch", "Argue about structure.");
     let discussion = open_draft_discussion(&h, &draft_id, "@arch what does this say?");
 
-    let dispatched = h.dispatch(
-        "arch",
-        ConversationOrigin::of(&discussion),
-        &discussion.comments[0].id,
-    )
-    .expect("dispatched");
+    let dispatched = h
+        .dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
+        .expect("dispatched");
     // Waited out on this turn's own terminal event rather than on `settle()`.
     // `settle()` returns when the in-flight set empties, and `terminate` empties
     // it **before** the terminal event is published, so everything below it read
@@ -776,8 +713,7 @@ fn agc_ts58_the_registry_follows_a_real_turn_and_its_successor() {
     let discussion = open_draft_discussion(&h, &draft_id, "@arch what does this say?");
     let origin = ConversationOrigin::of(&discussion);
 
-    h.dispatch("arch", origin.clone(), &discussion.comments[0].id)
-        .expect("dispatched");
+    h.dispatch("arch", origin.clone(), &discussion.comments[0].id).expect("dispatched");
     h.settle();
     assert_eq!(
         h.turns().image_notices(Some(&origin)).len(),
@@ -788,8 +724,7 @@ fn agc_ts58_the_registry_follows_a_real_turn_and_its_successor() {
     // The author changes the agent's model to one that takes images and asks
     // again: that turn carries them, and the entry is retired.
     h.seed_image_capable_provider();
-    h.dispatch("arch", origin.clone(), &discussion.comments[0].id)
-        .expect("dispatched");
+    h.dispatch("arch", origin.clone(), &discussion.comments[0].id).expect("dispatched");
     h.settle();
     assert!(
         h.turns().image_notices(Some(&origin)).is_empty(),

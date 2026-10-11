@@ -36,33 +36,22 @@ impl Fixture {
         handle.manage(StreamState::rooted_at(canonical(store.path())));
         // The run order index a stream listing counts its queue from stands
         // under the same root, so a test never reads the machine's own store.
-        handle.manage(crate::graduation::GraduationState::rooted_at(canonical(
-            store.path(),
-        )));
+        handle.manage(crate::graduation::GraduationState::rooted_at(canonical(store.path())));
         // GRB-FR-XPLV: what a running merge attributes through.
         handle.manage(crate::progress::ProgressRegistry::default());
         // GRB-FR-KZUN: where a merge turn's activity is filed.
-        handle.manage(std::sync::Arc::new(
-            crate::agent_activity::ActivityStore::new(),
-        ));
+        handle.manage(std::sync::Arc::new(crate::agent_activity::ActivityStore::new()));
 
         handle
             .state::<crate::fs::FsAccessState>()
             .install_for_worktree_and(&root, &canonical(store.path()))
             .expect("two real directories");
-        let access = handle
-            .state::<crate::fs::FsAccessState>()
-            .get()
-            .expect("an instance");
+        let access = handle.state::<crate::fs::FsAccessState>().get().expect("an instance");
         let state = handle.state::<crate::project::ProjectState>();
         state.set_root_with_access(root.clone(), Some(access));
         state.set_anchor(root.to_string_lossy().into_owned());
 
-        Fixture {
-            app: handle,
-            project,
-            store,
-        }
+        Fixture { app: handle, project, store }
     }
 
     fn root(&self) -> PathBuf {
@@ -100,23 +89,14 @@ fn init_repo(root: &Path) -> git2::Repository {
 
 fn commit_all(repo: &git2::Repository, message: &str) -> git2::Oid {
     let mut index = repo.index().expect("index");
-    index
-        .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-        .expect("add");
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).expect("add");
     index.write().expect("write");
-    let tree = repo
-        .find_tree(index.write_tree().expect("tree"))
-        .expect("tree");
+    let tree = repo.find_tree(index.write_tree().expect("tree")).expect("tree");
     let signature = repo.signature().expect("signature");
-    let parents: Vec<git2::Commit> = repo
-        .head()
-        .ok()
-        .and_then(|h| h.peel_to_commit().ok())
-        .into_iter()
-        .collect();
+    let parents: Vec<git2::Commit> =
+        repo.head().ok().and_then(|h| h.peel_to_commit().ok()).into_iter().collect();
     let refs: Vec<&git2::Commit> = parents.iter().collect();
-    repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &refs)
-        .expect("commit")
+    repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &refs).expect("commit")
 }
 
 fn branch_names(repo: &git2::Repository) -> Vec<String> {
@@ -296,11 +276,7 @@ fn merge(
 
 fn worktree_names(repo: &git2::Repository) -> Vec<String> {
     repo.worktrees()
-        .map(|list| {
-            list.iter()
-                .filter_map(|n| n.ok().flatten().map(str::to_string))
-                .collect()
-        })
+        .map(|list| list.iter().filter_map(|n| n.ok().flatten().map(str::to_string)).collect())
         .unwrap_or_default()
 }
 
@@ -309,11 +285,8 @@ fn worktree_names(repo: &git2::Repository) -> Vec<String> {
 fn conflicting_stream(fx: &Fixture) -> WorkStream {
     let stream = fx.create("conflicting", None).expect("created");
     let worktree = git2::Repository::open(&stream.worktree_path).expect("stream repo");
-    std::fs::write(
-        Path::new(&stream.worktree_path).join("README.md"),
-        format!("{STREAM_SIDE}\n"),
-    )
-    .unwrap();
+    std::fs::write(Path::new(&stream.worktree_path).join("README.md"), format!("{STREAM_SIDE}\n"))
+        .unwrap();
     commit_all(&worktree, "stream edit");
     std::fs::write(fx.root().join("README.md"), format!("{BASE_SIDE}\n")).unwrap();
     commit_all(&fx.repo(), "base edit");
@@ -395,12 +368,12 @@ mod listing;
 mod merge_apply_tests;
 mod merge_clean;
 mod merge_listing;
-mod merge_shapes;
 mod merge_refusals;
 mod merge_second_request;
+mod merge_shapes;
 mod merge_snapshot_shapes;
 mod merge_snapshot_tests;
-mod merge_unsupported;
 mod merge_support;
+mod merge_unsupported;
 mod update_flow;
 mod update_guards;

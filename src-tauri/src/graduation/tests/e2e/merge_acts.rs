@@ -144,7 +144,11 @@ impl TurnScript {
                     .expect("a branch head")
             };
             assert_eq!(tip(&data.base_branch), data.base_tip, "the base branch stands at its pin");
-            assert_eq!(tip(&data.stream_branch), data.stream_tip, "the stream branch stands at its pin");
+            assert_eq!(
+                tip(&data.stream_branch),
+                data.stream_tip,
+                "the stream branch stands at its pin"
+            );
             assert!(
                 crate::streams::uncommitted_paths_of(&ctx.project_root).is_empty(),
                 "the base working copy holds nothing uncommitted"
@@ -159,7 +163,10 @@ impl TurnScript {
     /// GTE-FR-YCQW: while this turn runs, the run is in the state of the turn,
     /// holds its stream in memory and on the stream's record, and holds one
     /// project slot.
-    pub(crate) fn holding_the_stream_and_a_slot(self, state: crate::graduation::GraduationRunState) -> Self {
+    pub(crate) fn holding_the_stream_and_a_slot(
+        self,
+        state: crate::graduation::GraduationRunState,
+    ) -> Self {
         self.then(move |ctx| {
             let run = crate::graduation::load_run(&ctx.app, &ctx.run_id).expect("the run record");
             assert_eq!(run.state, state, "the run's state during the turn");
@@ -170,7 +177,8 @@ impl TurnScript {
                 "the run holds its stream"
             );
             assert_eq!(graduation.working_count(), 1, "the run holds one project slot");
-            let busy = crate::streams::stream_of(&ctx.app, &ctx.stream_id).and_then(|stream| stream.busy_run_id);
+            let busy = crate::streams::stream_of(&ctx.app, &ctx.stream_id)
+                .and_then(|stream| stream.busy_run_id);
             assert_eq!(
                 busy.as_deref(),
                 Some(ctx.run_id.as_str()),
@@ -210,7 +218,11 @@ impl Outcome {
     }
 
     /// GTE-FR-TNZF: the same request, naming a stream the scenario chose.
-    pub(crate) fn merging_stream(self, stream_id: &str, publication: StreamMergePublication) -> Self {
+    pub(crate) fn merging_stream(
+        self,
+        stream_id: &str,
+        publication: StreamMergePublication,
+    ) -> Self {
         self.request_merge(stream_id, publication, false)
     }
 
@@ -242,11 +254,8 @@ impl Outcome {
                 .rename_path(root.join(".git-hidden"), ".git")
                 .expect("the repository is back");
         }
-        self.offered = self
-            .fx
-            .app
-            .state::<crate::graduation::driver::drive::SpawnTripwire>()
-            .take();
+        self.offered =
+            self.fx.app.state::<crate::graduation::driver::drive::SpawnTripwire>().take();
         self.dispatch = super::super::ScriptedDispatch::new(Vec::new());
         if let Ok(StreamMergeResult::Conflicted { run_id, .. }) = &answer {
             self.previous = (self.run.id != "no-run").then(|| self.run.id.clone());
@@ -265,11 +274,7 @@ impl Outcome {
     /// GTE-FR-RDPE: the merge run in focus is driven through the scripted seam,
     /// as the queue would drive it once it had a slot.
     pub(crate) fn driving_the_merge(mut self, scripts: Vec<TurnScript>) -> Self {
-        assert!(
-            self.run.is_merge(),
-            "[{}] the focus is on a merge run",
-            self.name
-        );
+        assert!(self.run.is_merge(), "[{}] the focus is on a merge run", self.name);
         self.dispatch = bind(&self.ctx, scripts);
         self.run = self.fx.drive(&self.run, self.dispatch.clone());
         self
@@ -310,7 +315,11 @@ impl Outcome {
     /// GRD-FR-TKUR: the author turns auto-start of the queued merge run off.
     pub(crate) fn turning_auto_start_off(self) -> Self {
         without_loop(&self.fx.app, || {
-            crate::graduation::set_graduation_auto_start(self.fx.app.clone(), self.run.id.clone(), false)
+            crate::graduation::set_graduation_auto_start(
+                self.fx.app.clone(),
+                self.run.id.clone(),
+                false,
+            )
         })
         .unwrap_or_else(|reason| panic!("[{}] auto-start is settable: {reason}", self.name));
         self
@@ -320,11 +329,8 @@ impl Outcome {
     /// whenever a stream is freed. What it offers is kept for the assertions.
     pub(crate) fn offering_the_queue_a_dispatch(mut self) -> Self {
         crate::graduation::advance_stream_queue(&self.fx.app, &self.stream_id);
-        self.offered = self
-            .fx
-            .app
-            .state::<crate::graduation::driver::drive::SpawnTripwire>()
-            .take();
+        self.offered =
+            self.fx.app.state::<crate::graduation::driver::drive::SpawnTripwire>().take();
         self
     }
 
@@ -338,7 +344,12 @@ impl Outcome {
     /// GRD-FR-RHNP: the author moves the merge run within its stream's queue.
     pub(crate) fn reordering_the_merge_run(self, from: usize, to: usize) -> Self {
         without_loop(&self.fx.app, || {
-            crate::graduation::reorder_graduation_run(self.fx.app.clone(), self.run.id.clone(), from, to)
+            crate::graduation::reorder_graduation_run(
+                self.fx.app.clone(),
+                self.run.id.clone(),
+                from,
+                to,
+            )
         })
         .unwrap_or_else(|reason| panic!("[{}] the reorder was refused: {reason}", self.name));
         self
@@ -368,12 +379,7 @@ impl Outcome {
         if stage == MachineSetup::Vendor {
             return self;
         }
-        let access = self
-            .fx
-            .app
-            .state::<crate::fs::FsAccessState>()
-            .get()
-            .expect("an instance");
+        let access = self.fx.app.state::<crate::fs::FsAccessState>().get().expect("an instance");
         let root = crate::fs::RootFs::new(self.fx.root(), access);
         crate::project_settings::save_project_vendor_image_to(
             &root,
@@ -397,9 +403,10 @@ impl Outcome {
     /// branch, so the base branch is checked out nowhere.
     pub(crate) fn checking_out(self, branch: &str) -> Self {
         let repo = self.fx.repo();
-        let object = repo
-            .revparse_single(&format!("refs/heads/{branch}"))
-            .unwrap_or_else(|reason| panic!("[{}] the branch {branch} exists: {reason}", self.name));
+        let object =
+            repo.revparse_single(&format!("refs/heads/{branch}")).unwrap_or_else(|reason| {
+                panic!("[{}] the branch {branch} exists: {reason}", self.name)
+            });
         repo.checkout_tree(&object, Some(git2::build::CheckoutBuilder::new().force()))
             .expect("the checkout");
         repo.set_head(&format!("refs/heads/{branch}")).expect("the head moves");
@@ -449,9 +456,9 @@ impl Outcome {
     /// GTE-FR-TNZF: the author removes the uncommitted file from the stream's
     /// working copy.
     pub(crate) fn cleaning_the_stream(self, path: &str) -> Self {
-        guard(&self.worktree)
-            .delete_path(self.worktree.join(path), false)
-            .unwrap_or_else(|reason| panic!("[{}] the stream file was removable: {reason}", self.name));
+        guard(&self.worktree).delete_path(self.worktree.join(path), false).unwrap_or_else(
+            |reason| panic!("[{}] the stream file was removable: {reason}", self.name),
+        );
         self
     }
 
@@ -459,9 +466,9 @@ impl Outcome {
     /// branch's working copy.
     pub(crate) fn cleaning_the_base(self, path: &str) -> Self {
         let root = self.fx.root();
-        guard(&root)
-            .delete_path(root.join(path), false)
-            .unwrap_or_else(|reason| panic!("[{}] the base file was removable: {reason}", self.name));
+        guard(&root).delete_path(root.join(path), false).unwrap_or_else(|reason| {
+            panic!("[{}] the base file was removable: {reason}", self.name)
+        });
         self
     }
 
@@ -469,9 +476,9 @@ impl Outcome {
     pub(crate) fn releasing_the_base_index(self) -> Self {
         let root = self.fx.root();
         let (git_dir, lock) = index_lock_of(&root);
-        guard(&git_dir)
-            .delete_path(&lock, false)
-            .unwrap_or_else(|reason| panic!("[{}] the base index lock was held: {reason}", self.name));
+        guard(&git_dir).delete_path(&lock, false).unwrap_or_else(|reason| {
+            panic!("[{}] the base index lock was held: {reason}", self.name)
+        });
         self
     }
 
@@ -485,11 +492,13 @@ impl Outcome {
         let state = self.fx.app.state::<GraduationState>();
         state.release(&self.stream_id);
         without_loop(&self.fx.app, || {
-            crate::graduation::list_graduation_queue(self.fx.app.clone())
-                .unwrap_or_else(|reason| panic!("[{}] the queue was not readable: {reason}", self.name))
+            crate::graduation::list_graduation_queue(self.fx.app.clone()).unwrap_or_else(|reason| {
+                panic!("[{}] the queue was not readable: {reason}", self.name)
+            })
         });
-        crate::streams::list_work_streams(self.fx.app.clone())
-            .unwrap_or_else(|reason| panic!("[{}] the streams were not readable: {reason}", self.name));
+        crate::streams::list_work_streams(self.fx.app.clone()).unwrap_or_else(|reason| {
+            panic!("[{}] the streams were not readable: {reason}", self.name)
+        });
         self.dispatch = super::super::ScriptedDispatch::new(Vec::new());
         if self.run.id != "no-run" {
             self.run = self.fx.reload(&self.run.id);
@@ -502,8 +511,9 @@ impl Outcome {
     pub(crate) fn stranding_what_the_run_owned(self) -> Self {
         let run = self.fx.reload(&self.run.id);
         let data = run.merge.clone().expect("a merge run");
-        crate::graduation::driver::merge_workspace::ensure(&self.fx.app, &run)
-            .unwrap_or_else(|reason| panic!("[{}] the merge worktree was made again: {reason}", self.name));
+        crate::graduation::driver::merge_workspace::ensure(&self.fx.app, &run).unwrap_or_else(
+            |reason| panic!("[{}] the merge worktree was made again: {reason}", self.name),
+        );
         let snapshot = git2::Oid::from_str(&data.snapshot_commit).expect("a snapshot id");
         self.fx
             .repo()
@@ -530,11 +540,7 @@ impl Outcome {
     pub(crate) fn merge_worktree_holds(self, path: &str, content: &str) -> Self {
         let root = self.merge_worktree_path();
         let found = guard(&root).read_text(Path::new(&root).join(path)).unwrap_or_default();
-        assert_eq!(
-            found, content,
-            "[{}] what the merge worktree holds at {path}",
-            self.name
-        );
+        assert_eq!(found, content, "[{}] what the merge worktree holds at {path}", self.name);
         self
     }
 }

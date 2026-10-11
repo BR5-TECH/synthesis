@@ -63,9 +63,11 @@ fn every_worktree_of_one_repository_reads_and_writes_one_set_of_logs() {
 
     // A second store is a second repository, and holds none of it (CMS-FR-XQBM).
     let other_repository = temp_root();
-    assert!(
-        list_fragment_discussions_in(&fsa::RootFs::for_root(other_repository.path()), "specs/a.md").is_empty(),
-    );
+    assert!(list_fragment_discussions_in(
+        &fsa::RootFs::for_root(other_repository.path()),
+        "specs/a.md"
+    )
+    .is_empty(),);
 }
 
 /// CMS-FR-01, CMS-FR-VJRP, RMS-FR-HDNZ: a write reaches the store and leaves the
@@ -84,13 +86,7 @@ fn a_write_leaves_the_worktree_byte_for_byte_as_it_was() {
 
     let before = tree_snapshot(worktree_dir.path());
 
-    let thread = open(
-        store,
-        "specs/a.md",
-        anchor(0, 3, "abc"),
-        "a remark",
-        "2026-01-01T00:00:00Z",
-    );
+    let thread = open(store, "specs/a.md", anchor(0, 3, "abc"), "a remark", "2026-01-01T00:00:00Z");
     add_comment_in(
         store,
         "specs/a.md",
@@ -105,11 +101,7 @@ fn a_write_leaves_the_worktree_byte_for_byte_as_it_was() {
     // The project-wide read takes both roots, and still writes into neither.
     list_all_discussions_in(store, worktree);
 
-    assert_eq!(
-        tree_snapshot(worktree_dir.path()),
-        before,
-        "a conversation modified the worktree",
-    );
+    assert_eq!(tree_snapshot(worktree_dir.path()), before, "a conversation modified the worktree",);
     assert!(comments_dir(store_dir.path()).is_dir(), "and reached the store");
 }
 
@@ -122,11 +114,7 @@ fn tree_snapshot(dir: &Path) -> Vec<(String, Vec<u8>)> {
         };
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
-            let rel = if prefix.is_empty() {
-                name.clone()
-            } else {
-                format!("{prefix}/{name}")
-            };
+            let rel = if prefix.is_empty() { name.clone() } else { format!("{prefix}/{name}") };
             let path = entry.path();
             if path.is_dir() {
                 out.push((format!("{rel}/"), Vec::new()));
@@ -170,18 +158,9 @@ fn nothing_is_written_outside_the_comments_folder() {
     std::fs::write(root.join("victim.md"), b"precious").unwrap();
 
     for evil in ["../victim", "../../etc/passwd", "a/../../b", "/etc/passwd"] {
-        open(
-            root,
-            evil,
-            anchor(0, 3, "abc"),
-            "attempt",
-            "2026-01-01T00:00:00Z",
-        );
+        open(root, evil, anchor(0, 3, "abc"), "attempt", "2026-01-01T00:00:00Z");
     }
-    assert_eq!(
-        std::fs::read_to_string(root.join("victim.md")).unwrap(),
-        "precious"
-    );
+    assert_eq!(std::fs::read_to_string(root.join("victim.md")).unwrap(), "precious");
     // An attachment's *filename* is log data and must never reach a path
     // either: the bytes are named by their digest, whatever the file was
     // called (CMS-FR-44).
@@ -226,10 +205,7 @@ fn nothing_is_written_outside_the_comments_folder() {
         assert!(
             name == ".gitattributes"
                 || (name.ends_with(".jsonl")
-                    && name
-                        .trim_end_matches(".jsonl")
-                        .chars()
-                        .all(|c| c.is_ascii_hexdigit())),
+                    && name.trim_end_matches(".jsonl").chars().all(|c| c.is_ascii_hexdigit())),
             "unexpected file {name}"
         );
     }
@@ -243,13 +219,7 @@ fn every_step_adds_exactly_one_line_and_rewrites_none() {
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
     let by = human("raver119");
-    let t = open(
-        root,
-        "specs/a.md",
-        anchor(0, 3, "abc"),
-        "first",
-        "2026-01-01T00:00:00Z",
-    );
+    let t = open(root, "specs/a.md", anchor(0, 3, "abc"), "first", "2026-01-01T00:00:00Z");
     let id = t.id.clone();
 
     let mut previous = log_lines(root, "specs/a.md");
@@ -265,7 +235,8 @@ fn every_step_adds_exactly_one_line_and_rewrites_none() {
                 vec![],
                 Vec::new(),
                 &by,
-                "2026-01-02T00:00:00Z")
+                "2026-01-02T00:00:00Z",
+            )
         }),
         Box::new(|| {
             add_comment_in(
@@ -276,25 +247,15 @@ fn every_step_adds_exactly_one_line_and_rewrites_none() {
                 vec![],
                 Vec::new(),
                 &by,
-                "2026-01-03T00:00:00Z")
+                "2026-01-03T00:00:00Z",
+            )
         }),
         Box::new(|| set_lock_in(root, "specs/a.md", &id, true, &by, "2026-01-04T00:00:00Z")),
-        Box::new(|| {
-            set_resolution_in(root, "specs/a.md", &id, true, &by, "2026-01-05T00:00:00Z")
-        }),
-        Box::new(|| {
-            set_resolution_in(root, "specs/a.md", &id, false, &by, "2026-01-06T00:00:00Z")
-        }),
+        Box::new(|| set_resolution_in(root, "specs/a.md", &id, true, &by, "2026-01-05T00:00:00Z")),
+        Box::new(|| set_resolution_in(root, "specs/a.md", &id, false, &by, "2026-01-06T00:00:00Z")),
         Box::new(|| set_lock_in(root, "specs/a.md", &id, false, &by, "2026-01-07T00:00:00Z")),
         Box::new(|| {
-            reanchor_in(
-                root,
-                "specs/a.md",
-                &id,
-                anchor(9, 12, "abc"),
-                &by,
-                "2026-01-08T00:00:00Z",
-            )
+            reanchor_in(root, "specs/a.md", &id, anchor(9, 12, "abc"), &by, "2026-01-08T00:00:00Z")
         }),
     ];
 

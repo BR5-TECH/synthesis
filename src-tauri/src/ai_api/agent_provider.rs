@@ -23,11 +23,8 @@ fn resolve_registry_only(
     project_key: &str,
 ) -> Result<(Vec<AiApiRecord>, ProjectAiApiIntegration), String> {
     let (records, active) = store.load_ai_api_registry()?;
-    let override_provider = if project_key.is_empty() {
-        None
-    } else {
-        store.load_ai_api_override(project_key)?
-    };
+    let override_provider =
+        if project_key.is_empty() { None } else { store.load_ai_api_override(project_key)? };
     let present = KeyPresence::from_pairs(
         records
             .iter()
@@ -36,12 +33,8 @@ fn resolve_registry_only(
             .filter(|r| r.masked_hint.is_some() && r.verified_at.is_some())
             .map(|r| (r.provider.clone(), true)),
     );
-    let resolved = resolve_project(
-        &records,
-        active.as_deref(),
-        override_provider.as_deref(),
-        &present,
-    );
+    let resolved =
+        resolve_project(&records, active.as_deref(), override_provider.as_deref(), &present);
     Ok((records, resolved))
 }
 
@@ -67,15 +60,11 @@ pub fn active_catalog_impl(
     project_key: &str,
 ) -> Result<ActiveAiApiCatalog, String> {
     let (records, resolved) = resolve_registry_only(store, project_key)?;
-    let catalog = resolved.provider.as_deref().and_then(|provider| {
-        catalogs_from(&records)
-            .into_iter()
-            .find(|c| c.provider == provider)
-    });
-    Ok(ActiveAiApiCatalog {
-        resolution: resolved.resolution,
-        catalog,
-    })
+    let catalog = resolved
+        .provider
+        .as_deref()
+        .and_then(|provider| catalogs_from(&records).into_iter().find(|c| c.provider == provider));
+    Ok(ActiveAiApiCatalog { resolution: resolved.resolution, catalog })
 }
 
 #[tauri::command]

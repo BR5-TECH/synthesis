@@ -30,11 +30,7 @@ pub(crate) fn prune_worktree_registration(
 ) -> Result<(), String> {
     let names: Vec<String> = main
         .worktrees()
-        .map(|list| {
-            list.iter()
-                .filter_map(|n| n.ok().flatten().map(str::to_string))
-                .collect()
-        })
+        .map(|list| list.iter().filter_map(|n| n.ok().flatten().map(str::to_string)).collect())
         .unwrap_or_default();
     let wanted = canonicalize_lenient(path);
     for candidate in names {
@@ -126,14 +122,10 @@ fn remove_checked<R: tauri::Runtime>(
 }
 
 fn remove_directory(target: &Path) -> Result<(), String> {
-    let parent = target
-        .parent()
-        .ok_or_else(|| ERR_NOT_A_WORKTREE.to_string())?;
+    let parent = target.parent().ok_or_else(|| ERR_NOT_A_WORKTREE.to_string())?;
     let access = crate::fs::FsAccess::builder()
         .author_root(parent)
         .build()
         .map_err(|e| format!("failed to remove the worktree: {e}"))?;
-    access
-        .delete_author_tree(target)
-        .map_err(|e| format!("failed to remove the worktree: {e}"))
+    access.delete_author_tree(target).map_err(|e| format!("failed to remove the worktree: {e}"))
 }

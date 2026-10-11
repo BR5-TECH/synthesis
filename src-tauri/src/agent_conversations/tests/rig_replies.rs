@@ -51,13 +51,7 @@ fn a_reply_carries_the_providers_identifiers_and_every_reported_count() {
     assert_eq!(reply.output_tokens, Some(70));
     assert_eq!(reply.cache_write_tokens, Some(300));
     assert_eq!(reply.reasoning_tokens, Some(20));
-    assert_eq!(
-        reply.input_tokens,
-        Some(InputTokens {
-            cached: 4_000,
-            uncached: 700,
-        }),
-    );
+    assert_eq!(reply.input_tokens, Some(InputTokens { cached: 4_000, uncached: 700 }),);
     assert_eq!(reply.response_id.as_deref(), Some("msg_1"));
     assert_eq!(reply.provider_request_id.as_deref(), Some("req_1"));
     assert_eq!(reply.finish_reason.as_deref(), Some("stop"));

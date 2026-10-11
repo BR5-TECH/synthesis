@@ -84,11 +84,8 @@ fn the_transaction_writes_in_the_one_order_that_makes_it_recoverable() {
     let record = at(proposals.join(format!("{}.toml", proposal.id)));
     // CMS-FR-37: the decision comment lands in the store, under the draft's
     // stable id, rather than inside the draft's own folder.
-    let conversation = at(
-        f.root
-            .path()
-            .join(format!("drafts/{}/comments/discussion.jsonl", f.draft_id)),
-    );
+    let conversation =
+        at(f.root.path().join(format!("drafts/{}/comments/discussion.jsonl", f.draft_id)));
 
     assert!(
         payload > original_payload || conversation > payload,
@@ -106,10 +103,7 @@ fn the_transaction_writes_in_the_one_order_that_makes_it_recoverable() {
     assert!(payload <= manifest, "the payload is written before its manifest");
     assert!(manifest <= prompt, "the entry is written before the prompt");
     assert!(prompt <= record, "the prompt is written before the proposal record");
-    assert!(
-        record <= conversation,
-        "the decision comment is appended after the record moved",
-    );
+    assert!(record <= conversation, "the decision comment is appended after the record moved",);
 
     // And the journal is gone, which is only true of an operation that reached
     // `complete` (DHS-FR-14).
@@ -149,10 +143,8 @@ fn the_journal_and_its_prior_payload_are_written_before_any_entry_file() {
     // DHS-FR-12: both entries the operation staged, the `Original` included —
     // exposing one without the other would put a version in the rail for an
     // acceptance that may yet be rolled back.
-    let original_id = journal
-        .original_entry_id
-        .clone()
-        .expect("a first acceptance settles the Original too");
+    let original_id =
+        journal.original_entry_id.clone().expect("a first acceptance settles the Original too");
     assert!(manifest_path(&hist, &original_id).is_file());
     assert!(f.list().entries.is_empty());
     assert_eq!(load_impl(&f.root, &original_id).unwrap_err(), ERR_ENTRY_NOT_FOUND);
@@ -173,17 +165,14 @@ fn a_failed_prompt_write_rolls_the_whole_acceptance_back() {
     let f = Fixture::new();
     f.write_prompt(ORIGINAL_TEXT);
     let proposal = f.propose(PROPOSED);
-    let files = drafts::draft_dir(&f.root, &f.draft_id)
-        .expect("dir")
-        .join("files");
+    let files = drafts::draft_dir(&f.root, &f.draft_id).expect("dir").join("files");
     // The atomic write stages a temp file beside its target and renames it into
     // place, so a read-only `files/` refuses both halves — the draft still holds
     // exactly its one prompt, which is what makes this a *write* failure rather
     // than the inconsistency refusal of DRS-FR-15.
     use std::os::unix::fs::PermissionsExt;
     let mode = std::fs::metadata(&files).expect("metadata").permissions();
-    std::fs::set_permissions(&files, std::fs::Permissions::from_mode(0o555))
-        .expect("read-only");
+    std::fs::set_permissions(&files, std::fs::Permissions::from_mode(0o555)).expect("read-only");
 
     let refused = f.accept(&proposal).unwrap_err();
     std::fs::set_permissions(&files, mode).expect("writable again");
@@ -196,10 +185,7 @@ fn a_failed_prompt_write_rolls_the_whole_acceptance_back() {
         "no Original was left behind for a version that was never superseded",
     );
     assert_eq!(
-        dcp::find_proposal(&f.root, &proposal.id)
-            .expect("still there")
-            .1
-            .state,
+        dcp::find_proposal(&f.root, &proposal.id).expect("still there").1.state,
         dcp::ProposalState::Pending,
     );
     assert_eq!(

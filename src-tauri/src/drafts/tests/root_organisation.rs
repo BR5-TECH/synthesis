@@ -17,8 +17,7 @@ fn ts23_folders_are_directories_and_the_hierarchy_survives_a_restart() {
 
     create_drafts_folder_impl(root, "", "UI").unwrap();
     create_drafts_folder_impl(root, "UI", "Components").unwrap();
-    let created =
-        create_draft_impl(root, Some("spec"), Some("UI/Components")).unwrap();
+    let created = create_draft_impl(root, Some("spec"), Some("UI/Components")).unwrap();
 
     assert!(root
         .join(".synthesis/drafts/UI/Components")
@@ -91,10 +90,7 @@ fn ts24_folder_names_are_validated_and_siblings_may_not_collide() {
     draft(root, "in-ui");
 
     for bad in ["", "a/b", "a\\b", "..", ".", "trailing.", "colon:name"] {
-        assert!(
-            create_drafts_folder_impl(root, "UI", bad).is_err(),
-            "{bad:?} should be refused"
-        );
+        assert!(create_drafts_folder_impl(root, "UI", bad).is_err(), "{bad:?} should be refused");
     }
     assert_eq!(folder_paths(root), vec!["UI".to_string()]);
 
@@ -117,10 +113,7 @@ fn ts24_folder_names_are_validated_and_siblings_may_not_collide() {
     let a = create_draft_impl(root, Some("same"), Some("UI")).unwrap();
     let b = create_draft_impl(root, Some("same"), Some("UI")).unwrap();
     assert_ne!(a.draft.id, b.draft.id);
-    assert_eq!(
-        listed(root).iter().filter(|d| d.folder == "UI").count(),
-        2
-    );
+    assert_eq!(listed(root).iter().filter(|d| d.folder == "UI").count(), 2);
 }
 
 #[test]
@@ -149,10 +142,7 @@ fn ts25_deleting_a_folder_reparents_its_children_and_deletes_no_draft() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     create_drafts_folder_impl(root, "", "UI").unwrap();
     create_drafts_folder_impl(root, "UI", "Components").unwrap();
-    let nested = create_draft_impl(root, Some("nested"), Some("UI/Components"))
-        .unwrap()
-        .draft
-        .id;
+    let nested = create_draft_impl(root, Some("nested"), Some("UI/Components")).unwrap().draft.id;
     let one = create_draft_impl(root, Some("one"), Some("UI")).unwrap().draft.id;
     let two = create_draft_impl(root, Some("two"), Some("UI")).unwrap().draft.id;
     save_draft_file_impl(root, &nested, "nested.md", "held").unwrap();
@@ -164,10 +154,7 @@ fn ts25_deleting_a_folder_reparents_its_children_and_deletes_no_draft() {
     assert_eq!(folder_of(root, &two), "");
     assert_eq!(folder_of(root, &nested), "Components");
     assert_eq!(listed(root).len(), 3, "no draft was deleted");
-    assert_eq!(
-        load_draft_file_impl(root, &nested, "nested.md").unwrap().body,
-        "held"
-    );
+    assert_eq!(load_draft_file_impl(root, &nested, "nested.md").unwrap().body, "held");
 }
 
 #[test]
@@ -177,10 +164,7 @@ fn ts25_a_nested_folder_reparents_to_its_own_parent_not_the_root() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     create_drafts_folder_impl(root, "", "UI").unwrap();
     create_drafts_folder_impl(root, "UI", "research").unwrap();
-    let id = create_draft_impl(root, Some("r"), Some("UI/research"))
-        .unwrap()
-        .draft
-        .id;
+    let id = create_draft_impl(root, Some("r"), Some("UI/research")).unwrap().draft.id;
 
     delete_drafts_folder_impl(root, "UI/research").unwrap();
 
@@ -207,16 +191,11 @@ fn ts26_a_delete_that_would_collide_refuses_the_whole_call() {
     paths.sort();
     assert_eq!(
         paths,
-        vec![
-            "docs".to_string(),
-            "UI".to_string(),
-            "UI/docs".to_string(),
-            "UI/other".to_string(),
-        ]
-        .into_iter()
-        .collect::<std::collections::BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>(),
+        vec!["docs".to_string(), "UI".to_string(), "UI/docs".to_string(), "UI/other".to_string(),]
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>(),
         "nothing moved — `other` would have succeeded and must not have run"
     );
 }
@@ -244,10 +223,7 @@ fn ts26_renaming_a_folder_keeps_its_parent_and_its_subtree() {
     create_drafts_folder_impl(root, "", "UI").unwrap();
     create_drafts_folder_impl(root, "UI", "Components").unwrap();
     create_drafts_folder_impl(root, "", "backend").unwrap();
-    let id = create_draft_impl(root, Some("b"), Some("UI/Components"))
-        .unwrap()
-        .draft
-        .id;
+    let id = create_draft_impl(root, Some("b"), Some("UI/Components")).unwrap().draft.id;
 
     let renamed = rename_drafts_folder_impl(root, "UI", "Interface").unwrap();
     assert_eq!(renamed.path, "Interface");
@@ -271,11 +247,7 @@ fn ts26_renaming_a_folder_keeps_its_parent_and_its_subtree() {
     paths.sort();
     assert_eq!(
         paths,
-        vec![
-            "Interface".to_string(),
-            "Interface/Components".to_string(),
-            "backend".to_string(),
-        ],
+        vec!["Interface".to_string(), "Interface/Components".to_string(), "backend".to_string(),],
         "nothing was renamed and no third folder appeared"
     );
 
@@ -287,7 +259,6 @@ fn ts26_renaming_a_folder_keeps_its_parent_and_its_subtree() {
     assert_eq!(folder_of(root, &id), "INTERFACE/Components");
 }
 
-
 #[test]
 fn ts27_moving_a_draft_changes_only_the_path_its_directory_sits_at() {
     // DRS-FR-32: everything the draft holds travels with the directory, no
@@ -296,21 +267,14 @@ fn ts27_moving_a_draft_changes_only_the_path_its_directory_sits_at() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     create_drafts_folder_impl(root, "", "UI").unwrap();
     create_drafts_folder_impl(root, "", "backend").unwrap();
-    let id = create_draft_impl(root, Some("spec"), Some("UI"))
-        .unwrap()
-        .draft
-        .id;
+    let id = create_draft_impl(root, Some("spec"), Some("UI")).unwrap().draft.id;
     save_draft_file_impl(root, &id, "spec.md", "kept").unwrap();
     let before = read_record(root, &id).unwrap();
 
     let summary = move_draft_to_folder_impl(root, &id, "backend").unwrap();
 
     assert_eq!(summary.folder, "backend");
-    assert!(root
-        .join(".synthesis/drafts/backend")
-        .join(&id)
-        .join(RECORD_FILE)
-        .is_file());
+    assert!(root.join(".synthesis/drafts/backend").join(&id).join(RECORD_FILE).is_file());
     let after = read_record(root, &id).unwrap();
     assert_eq!(after.id, before.id);
     assert_eq!(after.name, before.name);
@@ -356,10 +320,7 @@ fn ts28_a_folder_is_never_moved_inside_itself() {
     create_drafts_folder_impl(root, "", "UI").unwrap();
     create_drafts_folder_impl(root, "UI", "Components").unwrap();
     create_drafts_folder_impl(root, "", "backend").unwrap();
-    let id = create_draft_impl(root, Some("c"), Some("UI/Components"))
-        .unwrap()
-        .draft
-        .id;
+    let id = create_draft_impl(root, Some("c"), Some("UI/Components")).unwrap().draft.id;
 
     for bad in ["UI/Components", "UI"] {
         let err = move_drafts_folder_impl(root, "UI", bad).unwrap_err();
@@ -405,23 +366,14 @@ fn ts29_a_draft_with_an_unreadable_record_is_reported_rather_than_dropped() {
     let dir = project();
     let root = &crate::fs::RootFs::for_root(dir.path());
     create_drafts_folder_impl(root, "", "UI").unwrap();
-    let damaged = create_draft_impl(root, Some("damaged"), Some("UI"))
-        .unwrap()
-        .draft
-        .id;
-    let healthy = create_draft_impl(root, Some("healthy"), Some("UI"))
-        .unwrap()
-        .draft
-        .id;
+    let damaged = create_draft_impl(root, Some("damaged"), Some("UI")).unwrap().draft.id;
+    let healthy = create_draft_impl(root, Some("healthy"), Some("UI")).unwrap().draft.id;
     let record = root.join(".synthesis/drafts/UI").join(&damaged).join(RECORD_FILE);
     std::fs::write(&record, b"this is not toml = = =").unwrap();
 
     let hierarchy = list_drafts_impl(root);
     assert_eq!(hierarchy.folders, vec![DraftFolder { path: "UI".into(), parent: "".into() }]);
-    assert!(
-        hierarchy.drafts.iter().any(|d| d.id == damaged),
-        "the damaged draft is still listed"
-    );
+    assert!(hierarchy.drafts.iter().any(|d| d.id == damaged), "the damaged draft is still listed");
     assert!(hierarchy.drafts.iter().any(|d| d.id == healthy));
     assert!(record.is_file(), "and its folder was neither moved nor deleted");
 }
@@ -441,7 +393,6 @@ fn a_deleted_draft_leaves_its_folder_standing() {
     assert!(listed(root).is_empty());
 }
 
-
 #[test]
 fn a_draft_keeps_its_identity_and_its_proposals_across_a_move() {
     // DRS-FR-32: the comment logs, the proposals and the conversation log
@@ -450,11 +401,7 @@ fn a_draft_keeps_its_identity_and_its_proposals_across_a_move() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     create_drafts_folder_impl(root, "", "UI").unwrap();
     let id = draft(root, "d");
-    std::fs::write(
-        draft_proposals_dir(root, &id).unwrap().join("p.toml"),
-        b"marker",
-    )
-    .unwrap();
+    std::fs::write(draft_proposals_dir(root, &id).unwrap().join("p.toml"), b"marker").unwrap();
 
     move_draft_to_folder_impl(root, &id, "UI").unwrap();
 
@@ -462,11 +409,7 @@ fn a_draft_keeps_its_identity_and_its_proposals_across_a_move() {
         std::fs::read(draft_proposals_dir(root, &id).unwrap().join("p.toml")).unwrap(),
         b"marker"
     );
-    assert!(root
-        .join(".synthesis/drafts/UI")
-        .join(&id)
-        .join(RECORD_FILE)
-        .is_file());
+    assert!(root.join(".synthesis/drafts/UI").join(&id).join(RECORD_FILE).is_file());
 }
 
 #[test]
@@ -567,10 +510,7 @@ fn a_folder_already_in_the_destination_is_refused_whatever_the_capitalisation() 
     let root = &crate::fs::RootFs::for_root(dir.path());
     create_drafts_folder_impl(root, "", "UI").unwrap();
     create_drafts_folder_impl(root, "UI", "Components").unwrap();
-    let id = create_draft_impl(root, Some("d"), Some("UI/Components"))
-        .unwrap()
-        .draft
-        .id;
+    let id = create_draft_impl(root, Some("d"), Some("UI/Components")).unwrap().draft.id;
 
     // The whole message, not a substring of it: "already there" also ends
     // the collision refusal a few lines below the one under test, so a
@@ -626,10 +566,7 @@ fn a_delete_refuses_a_child_that_would_collide_case_insensitively_in_the_parent(
     let id = create_draft_impl(root, Some("d"), Some("UI/docs")).unwrap().draft.id;
 
     let err = delete_drafts_folder_impl(root, "UI").unwrap_err();
-    assert_eq!(
-        err,
-        "\"docs\" cannot move out of \"UI\": something of that name is already there"
-    );
+    assert_eq!(err, "\"docs\" cannot move out of \"UI\": something of that name is already there");
 
     let mut paths = folder_paths(root);
     paths.sort();
@@ -701,10 +638,7 @@ fn a_case_only_folder_rename_onto_a_real_sibling_is_put_back_under_its_own_name(
     let dir = project();
     let root = &crate::fs::RootFs::for_root(dir.path());
     create_drafts_folder_impl(root, "", "Interface").unwrap();
-    let id = create_draft_impl(root, Some("d"), Some("Interface"))
-        .unwrap()
-        .draft
-        .id;
+    let id = create_draft_impl(root, Some("d"), Some("Interface")).unwrap().draft.id;
 
     let made = std::fs::create_dir(root.join(".synthesis/drafts/INTERFACE"));
     if crate::fs::case_probe::folds_case(dir.path()) {

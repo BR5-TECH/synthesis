@@ -66,7 +66,6 @@ fn draft(nickname: &str) -> AgentDraft {
     }
 }
 
-
 // The Personal-scope forms the tests below were written against. They call the
 // scoped functions with the Personal scope and no worktree.
 
@@ -92,10 +91,7 @@ fn update_agent_impl(
     super::update_agent_impl(store, project_key, None, AgentScope::Personal, id, draft)
 }
 
-fn delete_agent_impl(
-    store: &GlobalSettingsStore,
-    id: &str,
-) -> Result<Vec<ProjectAgent>, String> {
+fn delete_agent_impl(store: &GlobalSettingsStore, id: &str) -> Result<Vec<ProjectAgent>, String> {
     super::delete_agent_impl(store, "", None, AgentScope::Personal, id)
 }
 
@@ -135,10 +131,7 @@ fn the_project_scoped_reads_answer_with_an_empty_key_and_the_registry_answers_to
     let store = store();
     assert_eq!(list_project_agents_impl(&store, "proj").unwrap(), vec![]);
     assert_eq!(list_agents_impl(&store).unwrap(), vec![]);
-    assert_eq!(
-        list_personal_agents_impl(&store, "proj", None).unwrap(),
-        vec![]
-    );
+    assert_eq!(list_personal_agents_impl(&store, "proj", None).unwrap(), vec![]);
 }
 
 // -- AGR-FR-01, AGR-FR-02, AGR-FR-03, AGR-FR-09: create round-trips ------------------------------------
@@ -149,15 +142,14 @@ fn a_created_agent_carries_an_id_two_timestamps_and_every_supplied_field() {
     let store = store();
     with_openrouter(&store);
     let created = create_agent_impl(
-        &store, "",
+        &store,
+        "",
         &AgentDraft {
             nickname: "arch".into(),
             title: "Architect".into(),
             model_id: "m".into(),
             instructions: "Argue about structure.".into(),
-            reasoning: Some(ReasoningChoice::Effort {
-                effort: "high".into(),
-            }),
+            reasoning: Some(ReasoningChoice::Effort { effort: "high".into() }),
         },
     )
     .unwrap();
@@ -167,12 +159,7 @@ fn a_created_agent_carries_an_id_two_timestamps_and_every_supplied_field() {
     assert!(!created.updated_at.is_empty());
     assert_eq!(created.nickname, "arch");
     assert_eq!(created.instructions, "Argue about structure.");
-    assert_eq!(
-        created.reasoning,
-        Some(ReasoningChoice::Effort {
-            effort: "high".into()
-        })
-    );
+    assert_eq!(created.reasoning, Some(ReasoningChoice::Effort { effort: "high".into() }));
     // The "relaunch" half: read back out of the store rather than from the
     // returned value.
     assert_eq!(list_agents_impl(&store).unwrap(), vec![created]);
@@ -227,10 +214,7 @@ fn a_nickname_is_unique_without_regard_to_case_on_create_and_on_update() {
     let store = store();
     with_openrouter(&store);
     create_agent_impl(&store, "", &draft("arch")).unwrap();
-    assert_eq!(
-        create_agent_impl(&store, "", &draft("ARCH")).unwrap_err(),
-        ERR_NICKNAME_TAKEN,
-    );
+    assert_eq!(create_agent_impl(&store, "", &draft("ARCH")).unwrap_err(), ERR_NICKNAME_TAKEN,);
     assert_eq!(list_agents_impl(&store).unwrap().len(), 1);
 
     let sec = create_agent_impl(&store, "", &draft("sec")).unwrap();
@@ -264,19 +248,11 @@ fn the_model_is_validated_against_the_active_provider_and_nothing_is_written_on_
     let store = store();
 
     // Nothing configured at all.
-    assert_eq!(
-        create_agent_impl(&store, "", &draft("a")).unwrap_err(),
-        ERR_PROVIDER_UNCONFIGURED,
-    );
+    assert_eq!(create_agent_impl(&store, "", &draft("a")).unwrap_err(), ERR_PROVIDER_UNCONFIGURED,);
 
     // Providers exist, but only a configured-never-verified one.
-    store
-        .save_ai_api_registry(vec![unverified("openai")], None)
-        .unwrap();
-    assert_eq!(
-        create_agent_impl(&store, "", &draft("a")).unwrap_err(),
-        ERR_PROVIDER_NOT_VERIFIED,
-    );
+    store.save_ai_api_registry(vec![unverified("openai")], None).unwrap();
+    assert_eq!(create_agent_impl(&store, "", &draft("a")).unwrap_err(), ERR_PROVIDER_NOT_VERIFIED,);
 
     // Two verified providers and none chosen: nothing resolves.
     store
@@ -288,10 +264,7 @@ fn the_model_is_validated_against_the_active_provider_and_nothing_is_written_on_
             None,
         )
         .unwrap();
-    assert_eq!(
-        create_agent_impl(&store, "", &draft("a")).unwrap_err(),
-        ERR_PROVIDER_NOT_VERIFIED,
-    );
+    assert_eq!(create_agent_impl(&store, "", &draft("a")).unwrap_err(), ERR_PROVIDER_NOT_VERIFIED,);
 
     // The active provider does not offer the model.
     store
@@ -305,10 +278,7 @@ fn the_model_is_validated_against_the_active_provider_and_nothing_is_written_on_
         .unwrap();
     let mut d = draft("a");
     d.model_id = "gpt".into();
-    assert_eq!(
-        create_agent_impl(&store, "", &d).unwrap_err(),
-        ai_api::ERR_UNKNOWN_MODEL,
-    );
+    assert_eq!(create_agent_impl(&store, "", &d).unwrap_err(), ai_api::ERR_UNKNOWN_MODEL,);
 
     assert_eq!(list_agents_impl(&store).unwrap(), vec![]);
 }
@@ -323,10 +293,7 @@ fn switching_the_active_provider_marks_an_agent_whose_model_is_not_served_and_re
             .save_ai_api_registry(
                 vec![
                     verified("anthropic", vec![ModelOption::new("claude", "Claude")]),
-                    verified(
-                        "custom",
-                        vec![ModelOption::new("gw-model", "gw-model")],
-                    ),
+                    verified("custom", vec![ModelOption::new("gw-model", "gw-model")]),
                 ],
                 Some(active.to_string()),
             )
@@ -346,19 +313,13 @@ fn switching_the_active_provider_marks_an_agent_whose_model_is_not_served_and_re
     assert_eq!(listed.len(), 1, "the agent is retained");
     assert_eq!(listed[0].availability, AgentAvailability::ModelUnavailable);
     assert_eq!(listed[0].agent.model_id, "claude", "the model is not rewritten");
-    assert_eq!(
-        resolve_project_agent(&store, "A", "arch").unwrap_err(),
-        ERR_AGENT_UNAVAILABLE,
-    );
+    assert_eq!(resolve_project_agent(&store, "A", "arch").unwrap_err(), ERR_AGENT_UNAVAILABLE,);
 
     // Selecting a model the new provider serves makes the agent available again.
     let mut fixed = draft("arch");
     fixed.model_id = "gw-model".into();
     update_agent_impl(&store, "", &arch.id, &fixed).unwrap();
-    assert_eq!(
-        resolve_project_agent(&store, "A", "arch").unwrap().model_id,
-        "gw-model",
-    );
+    assert_eq!(resolve_project_agent(&store, "A", "arch").unwrap().model_id, "gw-model",);
 
     // Switching back returns the first agent state to unavailable for that model.
     both("anthropic");
@@ -389,10 +350,7 @@ fn the_project_override_selects_the_provider_an_agent_is_read_against() {
     assert!(create_agent_impl(&store, "proj", &d).is_ok());
     // Without the override the same model is not served.
     d.nickname = "b".into();
-    assert_eq!(
-        create_agent_impl(&store, "", &d).unwrap_err(),
-        ai_api::ERR_UNKNOWN_MODEL,
-    );
+    assert_eq!(create_agent_impl(&store, "", &d).unwrap_err(), ai_api::ERR_UNKNOWN_MODEL,);
 }
 
 // AGR-FR-20, GSS-FR-30: a stored record written with a `provider` field loads.
@@ -421,14 +379,12 @@ fn the_reasoning_choice_is_validated_against_the_chosen_model() {
                 vec![
                     ModelOption::new("plain", "Plain"),
                     ModelOption::new("ladder", "Ladder").with_reasoning(Some(ladder())),
-                    ModelOption::new("always", "Always").with_reasoning(Some(
-                        ModelReasoning {
-                            mandatory: true,
-                            supported_efforts: None,
-                            default_effort: None,
-                            ..Default::default()
-                        },
-                    )),
+                    ModelOption::new("always", "Always").with_reasoning(Some(ModelReasoning {
+                        mandatory: true,
+                        supported_efforts: None,
+                        default_effort: None,
+                        ..Default::default()
+                    })),
                 ],
             )],
             None,
@@ -438,26 +394,15 @@ fn the_reasoning_choice_is_validated_against_the_chosen_model() {
     let mut d = draft("a");
     d.model_id = "plain".into();
     d.reasoning = Some(ReasoningChoice::On);
-    assert_eq!(
-        create_agent_impl(&store, "", &d).unwrap_err(),
-        ai_api::ERR_REASONING_UNSUPPORTED,
-    );
+    assert_eq!(create_agent_impl(&store, "", &d).unwrap_err(), ai_api::ERR_REASONING_UNSUPPORTED,);
 
     d.model_id = "ladder".into();
-    d.reasoning = Some(ReasoningChoice::Effort {
-        effort: "absurd".into(),
-    });
-    assert_eq!(
-        create_agent_impl(&store, "", &d).unwrap_err(),
-        ai_api::ERR_UNKNOWN_EFFORT,
-    );
+    d.reasoning = Some(ReasoningChoice::Effort { effort: "absurd".into() });
+    assert_eq!(create_agent_impl(&store, "", &d).unwrap_err(), ai_api::ERR_UNKNOWN_EFFORT,);
 
     d.model_id = "always".into();
     d.reasoning = Some(ReasoningChoice::Off);
-    assert_eq!(
-        create_agent_impl(&store, "", &d).unwrap_err(),
-        ai_api::ERR_REASONING_MANDATORY,
-    );
+    assert_eq!(create_agent_impl(&store, "", &d).unwrap_err(), ai_api::ERR_REASONING_MANDATORY,);
 
     // A null choice is the model's own default and is always accepted.
     d.reasoning = None;
@@ -527,20 +472,14 @@ fn an_absent_an_empty_and_a_whitespace_only_title_all_store_as_empty() {
     let existing = create_agent_impl(&store, "", &draft("updatable")).unwrap();
     let mut u = draft("updatable");
     u.title = "   ".into();
-    assert_eq!(
-        update_agent_impl(&store, "", &existing.id, &u).unwrap().title,
-        "",
-    );
+    assert_eq!(update_agent_impl(&store, "", &existing.id, &u).unwrap().title, "",);
 
     // Braces are text. A title reading like a prompt tag is stored as
     // typed and expanded by nothing (CVL-FR-04 substitutes it once and
     // never re-scans it).
     let mut d = draft("braces");
     d.title = "{{ agent-title }}".into();
-    assert_eq!(
-        create_agent_impl(&store, "", &d).unwrap().title,
-        "{{ agent-title }}",
-    );
+    assert_eq!(create_agent_impl(&store, "", &d).unwrap().title, "{{ agent-title }}",);
 }
 
 #[test]
@@ -579,11 +518,8 @@ fn instructions_are_stored_verbatim_and_an_empty_value_is_ordinary() {
     d.instructions = "# Heading\n\n- one\n- two\n".into();
     let rich = create_agent_impl(&store, "", &d).unwrap();
     assert_eq!(rich.instructions, "# Heading\n\n- one\n- two\n");
-    let read_back = list_agents_impl(&store)
-        .unwrap()
-        .into_iter()
-        .find(|a| a.id == rich.id)
-        .unwrap();
+    let read_back =
+        list_agents_impl(&store).unwrap().into_iter().find(|a| a.id == rich.id).unwrap();
     assert_eq!(read_back.instructions, "# Heading\n\n- one\n- two\n");
 }
 
@@ -658,11 +594,8 @@ fn the_personal_agents_are_listed_by_nickname_without_regard_to_case() {
     create_agent_impl(&store, "", &draft("Zed")).unwrap();
     create_agent_impl(&store, "", &draft("bee")).unwrap();
 
-    let nicknames: Vec<String> = list_agents_impl(&store)
-        .unwrap()
-        .into_iter()
-        .map(|a| a.nickname)
-        .collect();
+    let nicknames: Vec<String> =
+        list_agents_impl(&store).unwrap().into_iter().map(|a| a.nickname).collect();
     assert_eq!(nicknames, vec!["arch", "bee", "Zed"]);
 }
 
@@ -696,15 +629,10 @@ fn availability_degrades_by_kind_and_the_agent_is_still_returned() {
     store.save_ai_api_registry(vec![], None).unwrap();
     let cleared = list_project_agents_impl(&store, "A").unwrap();
     assert_eq!(cleared.len(), 1, "the agent is retained, not pruned");
-    assert_eq!(
-        cleared[0].availability,
-        AgentAvailability::ProviderUnconfigured,
-    );
+    assert_eq!(cleared[0].availability, AgentAvailability::ProviderUnconfigured,);
 
     // Configured but never verified.
-    store
-        .save_ai_api_registry(vec![unverified("openrouter")], None)
-        .unwrap();
+    store.save_ai_api_registry(vec![unverified("openrouter")], None).unwrap();
     assert_eq!(
         list_project_agents_impl(&store, "A").unwrap()[0].availability,
         AgentAvailability::ProviderUnverified,
@@ -713,10 +641,7 @@ fn availability_degrades_by_kind_and_the_agent_is_still_returned() {
     // Verified, but the model list no longer offers the agent's model.
     store
         .save_ai_api_registry(
-            vec![verified(
-                "openrouter",
-                vec![ModelOption::new("something-else", "Else")],
-            )],
+            vec![verified("openrouter", vec![ModelOption::new("something-else", "Else")])],
             None,
         )
         .unwrap();
@@ -751,27 +676,15 @@ fn a_nickname_resolves_without_regard_to_case_and_the_reserved_handle_resolves_t
     with_openrouter(&store);
     let arch = create_agent_impl(&store, "", &draft("arch")).unwrap();
 
-    assert_eq!(
-        resolve_project_agent(&store, "A", "ARCH").unwrap().id,
-        arch.id,
-    );
-    assert_eq!(
-        resolve_project_agent(&store, "A", "sec").unwrap_err(),
-        ERR_AGENT_NOT_FOUND,
-    );
+    assert_eq!(resolve_project_agent(&store, "A", "ARCH").unwrap().id, arch.id,);
+    assert_eq!(resolve_project_agent(&store, "A", "sec").unwrap_err(), ERR_AGENT_NOT_FOUND,);
     // AGR-FR-04: the reserved handle is a nickname no agent can carry, so it
     // resolves to nothing here — the expansion happens in the surface that
     // read the tag, and every dispatch reaching this module names one agent.
-    assert_eq!(
-        resolve_project_agent(&store, "A", "all").unwrap_err(),
-        ERR_AGENT_NOT_FOUND,
-    );
+    assert_eq!(resolve_project_agent(&store, "A", "all").unwrap_err(), ERR_AGENT_NOT_FOUND,);
 
     store.save_ai_api_registry(vec![], None).unwrap();
-    assert_eq!(
-        resolve_project_agent(&store, "A", "arch").unwrap_err(),
-        ERR_AGENT_UNAVAILABLE,
-    );
+    assert_eq!(resolve_project_agent(&store, "A", "arch").unwrap_err(), ERR_AGENT_UNAVAILABLE,);
 }
 
 // -- AGR-FR-19 / AGR-FR-02, AGR-FR-20: one definition, no secret ------------------
@@ -788,9 +701,7 @@ fn one_personal_definition_is_shared_by_every_project() {
     update_agent_impl(&store, "", &arch.id, &d).unwrap();
 
     assert_eq!(
-        list_project_agents_impl(&store, "B").unwrap()[0]
-            .agent
-            .instructions,
+        list_project_agents_impl(&store, "B").unwrap()[0].agent.instructions,
         "edited while A was open",
     );
 }
@@ -804,15 +715,11 @@ fn the_serialised_registry_carries_descriptions_and_no_key() {
     with_openrouter(&store);
     let mut d = draft("arch");
     d.instructions = "Argue about structure.".into();
-    d.reasoning = Some(ReasoningChoice::Effort {
-        effort: "high".into(),
-    });
+    d.reasoning = Some(ReasoningChoice::Effort { effort: "high".into() });
     create_agent_impl(&store, "", &d).unwrap();
 
-    let text = toml::to_string(&AgentsOnly {
-        agents: store.load_agent_registry().unwrap(),
-    })
-    .unwrap();
+    let text =
+        toml::to_string(&AgentsOnly { agents: store.load_agent_registry().unwrap() }).unwrap();
     assert!(text.contains("arch"));
     // AGR-FR-20: no provider id is stored in an agent.
     assert!(!text.contains("openrouter"));

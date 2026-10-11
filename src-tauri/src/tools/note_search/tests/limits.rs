@@ -35,10 +35,7 @@ fn a_result_names_each_note_once_and_never_widens_its_one_call() {
     // engine hands back is its own business, so an assertion about *which* five
     // came out would be an assertion about the engine.
     for i in 0..10 {
-        fixture.note(&format!(
-            "{} note {i} about the panel",
-            "teardown ".repeat(i + 1),
-        ));
+        fixture.note(&format!("{} note {i} about the panel", "teardown ".repeat(i + 1),));
     }
     fixture.reindex();
 
@@ -72,11 +69,8 @@ fn a_result_names_each_note_once_and_never_widens_its_one_call() {
 
     // NST-FR-08: one call for the applied limit and nothing more, so a repeated
     // id in the hit stream is dropped rather than making the tool ask again.
-    let duplicated = vec![
-        hit(&matches[0].id, 3.0),
-        hit(&matches[0].id, 2.0),
-        hit(&matches[1].id, 1.0),
-    ];
+    let duplicated =
+        vec![hit(&matches[0].id, 3.0), hit(&matches[0].id, 2.0), hit(&matches[1].id, 1.0)];
     let resolved = resolve_matches(duplicated, &fixture.root(), 5);
     assert_eq!(
         resolved.iter().map(|m| m.id.clone()).collect::<Vec<_>>(),

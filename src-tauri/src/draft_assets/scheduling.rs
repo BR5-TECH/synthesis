@@ -104,13 +104,7 @@ pub(super) fn report_sweep<R: tauri::Runtime>(
     if sweep.complete {
         log_info(app, &BUFFER, &[Domain::Backend], "draft asset sweep", fields);
     } else {
-        log_warn(
-            app,
-            &BUFFER,
-            &[Domain::Backend],
-            "draft asset sweep incomplete",
-            fields,
-        );
+        log_warn(app, &BUFFER, &[Domain::Backend], "draft asset sweep incomplete", fields);
     }
 }
 
@@ -179,10 +173,7 @@ pub fn sweep_project_draft_assets<R: tauri::Runtime>(app: &tauri::AppHandle<R>) 
         log_fields! { "drafts" => hierarchy.drafts.len() },
     );
     for summary in &hierarchy.drafts {
-        let locked = summary
-            .graduation
-            .as_ref()
-            .is_some_and(|g| g.locked || g.graduated);
+        let locked = summary.graduation.as_ref().is_some_and(|g| g.locked || g.graduated);
         schedule_draft_sweep(app, &sweeper, root.clone(), &summary.id, locked);
     }
 }

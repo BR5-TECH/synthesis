@@ -8,7 +8,7 @@ use super::pull_requests::{
 };
 use super::*;
 use crate::git::pull_requests::client::{GithubFailure, MAX_PAGES, PAGE_SIZE};
-use crate::git::pull_requests::{ERR_PULL_REQUEST_NOT_FOUND, ERR_GITHUB_TOKEN_REJECTED};
+use crate::git::pull_requests::{ERR_GITHUB_TOKEN_REJECTED, ERR_PULL_REQUEST_NOT_FOUND};
 use serde_json::{json, Value};
 
 const TIMELINE: &str = "/repos/acme/platform/issues/9/timeline";
@@ -21,7 +21,14 @@ fn timeline(
 ) -> Result<PullRequestTimeline, String> {
     let (store, tokens) = token_ready();
     list_pull_request_timeline_reported(
-        &NullSink, buffer, &f.root(), &store, &tokens, "/dev/acme", github, 9,
+        &NullSink,
+        buffer,
+        &f.root(),
+        &store,
+        &tokens,
+        "/dev/acme",
+        github,
+        9,
     )
 }
 
@@ -122,7 +129,15 @@ fn every_kind_of_activity_maps_to_its_item() {
 #[test]
 fn every_review_state_of_the_contract_is_kept_and_others_are_dropped() {
     let f = repo_with_origin(PLATFORM);
-    let states = ["approved", "changes_requested", "commented", "dismissed", "pending", "CHANGES_REQUESTED", "odd"];
+    let states = [
+        "approved",
+        "changes_requested",
+        "commented",
+        "dismissed",
+        "pending",
+        "CHANGES_REQUESTED",
+        "odd",
+    ];
     let events: Vec<Value> = states
         .iter()
         .enumerate()

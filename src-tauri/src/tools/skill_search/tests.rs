@@ -9,18 +9,16 @@ use rig::tool::{PortableTool, ToolErrorKind};
 use tauri::Manager;
 
 use super::*;
+use crate::logging::{LogBuffer, LogFilter, LogLevel};
 use crate::skills::Ecosystem;
+use crate::tools::tests::block_on;
 use crate::tools::tests::{
     closed_project, collision_project, demo_project, empty_project, mounted, ranking_project,
     tied_project, write_skill,
 };
-use crate::tools::tests::block_on;
 use crate::tools::ToolRefusal;
-use crate::logging::{LogBuffer, LogFilter, LogLevel};
 
-fn tool(
-    fixture: &crate::tools::tests::Fixture,
-) -> SkillSearchTool<tauri::test::MockRuntime> {
+fn tool(fixture: &crate::tools::tests::Fixture) -> SkillSearchTool<tauri::test::MockRuntime> {
     SkillSearchTool::new(fixture.handle())
 }
 
@@ -29,10 +27,7 @@ fn call(
     query: &str,
     limit: Option<i64>,
 ) -> Result<SkillSearchOutput, ToolRefusal> {
-    block_on(tool(fixture).call(SkillSearchArgs {
-        query: query.to_string(),
-        limit,
-    }))
+    block_on(tool(fixture).call(SkillSearchArgs { query: query.to_string(), limit }))
 }
 
 fn names(output: &SkillSearchOutput) -> Vec<&str> {
@@ -51,14 +46,10 @@ fn paths(output: &SkillSearchOutput) -> Vec<&str> {
 fn the_tool_is_a_portable_tool_named_search_skills() {
     // SST-FR-01.
     let app = closed_project();
-    let definition =
-        rig::tool::tool_definition(&SkillSearchTool::new(app.handle().clone()));
+    let definition = rig::tool::tool_definition(&SkillSearchTool::new(app.handle().clone()));
 
     assert_eq!(definition.name, "search_skills");
-    assert_eq!(
-        <SkillSearchTool<tauri::test::MockRuntime> as PortableTool>::NAME,
-        "search_skills",
-    );
+    assert_eq!(<SkillSearchTool<tauri::test::MockRuntime> as PortableTool>::NAME, "search_skills",);
     assert_eq!(NAME, "search_skills");
 }
 
@@ -66,8 +57,7 @@ fn the_tool_is_a_portable_tool_named_search_skills() {
 fn the_definition_is_the_fixed_text_and_the_documented_schema() {
     // SST-FR-02.
     let app = closed_project();
-    let definition =
-        rig::tool::tool_definition(&SkillSearchTool::new(app.handle().clone()));
+    let definition = rig::tool::tool_definition(&SkillSearchTool::new(app.handle().clone()));
 
     assert_eq!(definition.description, DESCRIPTION);
 
@@ -87,15 +77,9 @@ fn the_definition_is_the_fixed_text_and_the_documented_schema() {
         &serde_json::json!(["query"]),
         "SST-FR-02: query is required and limit is not",
     );
-    for pointer in [
-        "/properties/query/description",
-        "/properties/limit/description",
-    ] {
+    for pointer in ["/properties/query/description", "/properties/limit/description"] {
         let text = schema.pointer(pointer).and_then(|d| d.as_str()).unwrap();
-        assert!(
-            SPEC.contains(text),
-            "SST-FR-02: {pointer} must be the spec's text, got {text:?}",
-        );
+        assert!(SPEC.contains(text), "SST-FR-02: {pointer} must be the spec's text, got {text:?}",);
     }
 }
 
@@ -105,9 +89,7 @@ fn the_definition_is_the_fixed_text_and_the_documented_schema() {
 /// `- \`name\` — *"…"*` bullets; this is what lets a test compare a compiled-in
 /// constant against the document that defines it.
 fn spec_quotes(spec: &str) -> Vec<String> {
-    spec.lines()
-        .filter_map(|line| line.trim().strip_prefix("> ").map(str::to_string))
-        .collect()
+    spec.lines().filter_map(|line| line.trim().strip_prefix("> ").map(str::to_string)).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -143,14 +125,9 @@ fn the_tool_reads_no_file_and_enumerates_no_folder_of_its_own() {
         .filter(|line| !line.trim_start().starts_with("//"))
         .collect::<Vec<_>>()
         .join("\n");
-    for forbidden in [
-        "std::fs",
-        "read_dir",
-        "read_text",
-        "search_snapshot",
-        "snapshot()",
-        "IndexId",
-    ] {
+    for forbidden in
+        ["std::fs", "read_dir", "read_text", "search_snapshot", "snapshot()", "IndexId"]
+    {
         assert!(
             !code.contains(forbidden),
             "SST-FR-03: this tool delegates and must not reach for {forbidden:?}",
@@ -196,7 +173,9 @@ fn the_limit_defaults_to_ten_and_clamps_into_its_documented_range() {
             dir.path(),
             ".claude/skills",
             &format!("skill{index:02}"),
-            &format!("name: skill{index:02}\ndescription: Handles widget calibration number {index}."),
+            &format!(
+                "name: skill{index:02}\ndescription: Handles widget calibration number {index}."
+            ),
             "# Body",
         );
     }
@@ -212,19 +191,13 @@ fn the_limit_defaults_to_ten_and_clamps_into_its_documented_range() {
         1,
         "SST-FR-05: zero clamps up to one, so an empty result always means nothing matched",
     );
-    assert_eq!(
-        call(&fixture, "widget calibration", Some(-5)).unwrap().skills.len(),
-        1,
-    );
+    assert_eq!(call(&fixture, "widget calibration", Some(-5)).unwrap().skills.len(), 1,);
     assert_eq!(
         call(&fixture, "widget calibration", Some(1000)).unwrap().skills.len(),
         25,
         "SST-FR-05: the documented ceiling",
     );
-    assert_eq!(
-        call(&fixture, "widget calibration", Some(3)).unwrap().skills.len(),
-        3,
-    );
+    assert_eq!(call(&fixture, "widget calibration", Some(3)).unwrap().skills.len(), 3,);
 
     // None of the five refused.
     assert_eq!(normalize_limit(Some(0)), MIN_LIMIT as usize);
@@ -264,10 +237,10 @@ fn no_project_open_refuses_rather_than_returning_an_empty_list() {
     let app = closed_project();
     let handle = app.handle().clone();
 
-    let refusal = block_on(SkillSearchTool::new(handle).call(SkillSearchArgs {
-        query: "review a specification".to_string(),
-        limit: None,
-    }))
+    let refusal = block_on(
+        SkillSearchTool::new(handle)
+            .call(SkillSearchArgs { query: "review a specification".to_string(), limit: None }),
+    )
     .expect_err("SST-FR-07");
     assert_eq!(refusal, ToolRefusal::NoProjectOpen);
 
@@ -384,10 +357,7 @@ fn skills_that_tie_on_score_come_back_in_a_stable_order() {
     // very property under test.
     assert_eq!(
         paths(&first),
-        vec![
-            ".claude/skills/alpha/SKILL.md",
-            ".claude/skills/zulu/SKILL.md",
-        ],
+        vec![".claude/skills/alpha/SKILL.md", ".claude/skills/zulu/SKILL.md",],
     );
     assert_eq!(paths(&call(&fixture, "review a pull request diff", None).unwrap()), paths(&first));
 }
@@ -683,13 +653,7 @@ fn a_call_resolves_without_waiting_on_an_index_pass() {
     // SST-FR-14: `block_on` polls exactly once and panics on `Pending`, so a
     // call that waited on anything would fail here rather than hang.
     let dir = tempfile::TempDir::new().unwrap();
-    write_skill(
-        dir.path(),
-        ".claude/skills",
-        "a",
-        "name: a\ndescription: Does a thing.",
-        "# Body",
-    );
+    write_skill(dir.path(), ".claude/skills", "a", "name: a\ndescription: Does a thing.", "# Body");
     let root = crate::changes::canonicalize_lenient(dir.path());
     let app = crate::tools::tests::mock_app();
     let handle = app.handle().clone();
@@ -700,10 +664,10 @@ fn a_call_resolves_without_waiting_on_an_index_pass() {
         indexer.mount(&crate::fs::RootFs::for_root(&root));
     }
 
-    let output = block_on(SkillSearchTool::new(handle).call(SkillSearchArgs {
-        query: "does a thing".to_string(),
-        limit: None,
-    }))
+    let output = block_on(
+        SkillSearchTool::new(handle)
+            .call(SkillSearchArgs { query: "does a thing".to_string(), limit: None }),
+    )
     .expect("SST-FR-14: answers from the index as it stands");
     assert!(
         output.skills.is_empty(),
@@ -724,11 +688,9 @@ fn searching_leaves_the_project_exactly_as_it_was() {
     let before = std::fs::read_to_string(root.join(".claude/skills/analyst/SKILL.md")).unwrap();
     let before_entries = std::fs::read_dir(root.join(".claude/skills")).unwrap().count();
 
-    for (query, limit) in [
-        ("review a specification", None),
-        ("deploy", Some(3)),
-        ("nothing matches this", Some(25)),
-    ] {
+    for (query, limit) in
+        [("review a specification", None), ("deploy", Some(3)), ("nothing matches this", Some(25))]
+    {
         let _ = call(&fixture, query, limit);
     }
 
@@ -736,14 +698,8 @@ fn searching_leaves_the_project_exactly_as_it_was() {
         before,
         std::fs::read_to_string(root.join(".claude/skills/analyst/SKILL.md")).unwrap(),
     );
-    assert_eq!(
-        before_entries,
-        std::fs::read_dir(root.join(".claude/skills")).unwrap().count(),
-    );
-    assert!(
-        !root.join(".synthesis").exists(),
-        "SST-FR-15: nothing was written under .synthesis/",
-    );
+    assert_eq!(before_entries, std::fs::read_dir(root.join(".claude/skills")).unwrap().count(),);
+    assert!(!root.join(".synthesis").exists(), "SST-FR-15: nothing was written under .synthesis/",);
 }
 
 // ---------------------------------------------------------------------------
@@ -760,17 +716,13 @@ fn a_call_reports_its_match_count_and_never_the_query_or_a_result() {
 
     let query = "review a specification for internal contradictions";
     block_on(
-        SkillSearchTool::with_buffer(handle.clone(), &SST_BUFFER).call(SkillSearchArgs {
-            query: query.to_string(),
-            limit: None,
-        }),
+        SkillSearchTool::with_buffer(handle.clone(), &SST_BUFFER)
+            .call(SkillSearchArgs { query: query.to_string(), limit: None }),
     )
     .unwrap();
     block_on(
-        SkillSearchTool::with_buffer(handle, &SST_BUFFER).call(SkillSearchArgs {
-            query: "  ".to_string(),
-            limit: None,
-        }),
+        SkillSearchTool::with_buffer(handle, &SST_BUFFER)
+            .call(SkillSearchArgs { query: "  ".to_string(), limit: None }),
     )
     .unwrap_err();
 
@@ -808,9 +760,6 @@ fn a_call_reports_its_match_count_and_never_the_query_or_a_result() {
         ".claude/skills/analyst/SKILL.md",
         EMPTY_QUERY,
     ] {
-        assert!(
-            !serialised.contains(leaked),
-            "SST-FR-16: a record must not carry {leaked:?}",
-        );
+        assert!(!serialised.contains(leaked), "SST-FR-16: a record must not carry {leaked:?}",);
     }
 }

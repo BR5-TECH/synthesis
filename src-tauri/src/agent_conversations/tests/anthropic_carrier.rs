@@ -33,9 +33,7 @@ fn every_reasoning_choice() -> Vec<Option<ReasoningChoice>> {
         None,
         Some(ReasoningChoice::Off),
         Some(ReasoningChoice::On),
-        Some(ReasoningChoice::Effort {
-            effort: "high".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "high".into() }),
     ]
 }
 
@@ -69,10 +67,7 @@ fn an_anthropic_request_asks_for_the_short_cache_retention() {
     let exchange = opening_exchange(&request, false);
     let endpoint = anthropic_endpoint("https://example.invalid", "claude-opus-5-5", None);
     let built = anthropic_request(build_completion_request(&request, &exchange, &endpoint));
-    assert_eq!(
-        built.options.cache,
-        Some(rig::completion::CacheRetention::Short)
-    );
+    assert_eq!(built.options.cache, Some(rig::completion::CacheRetention::Short));
 }
 
 // CVL-FR-HBNW: no reasoning choice puts a parameter on an Anthropic request.
@@ -95,11 +90,7 @@ fn an_anthropic_request_carries_no_reasoning_parameter_for_any_choice() {
         let mut openai = endpoint.clone();
         openai.provider = "openai".into();
         let built = build_completion_request(&request, &exchange, &openai);
-        assert_eq!(
-            built.additional_params.is_some(),
-            choice.is_some(),
-            "{choice:?}"
-        );
+        assert_eq!(built.additional_params.is_some(), choice.is_some(), "{choice:?}");
     }
 }
 
@@ -118,9 +109,7 @@ fn refuse_once() -> (
     let handle = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         flag.store(true, std::sync::atomic::Ordering::SeqCst);
-        stream
-            .set_read_timeout(Some(Duration::from_secs(10)))
-            .unwrap();
+        stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
         let mut received = Vec::new();
         let mut buffer = [0u8; 4096];
         loop {
@@ -164,9 +153,7 @@ fn an_anthropic_call_reaches_the_messages_api_with_the_limit_and_no_reasoning() 
     let endpoint = anthropic_endpoint(
         &format!("http://{addr}/v1"),
         "claude-opus-5-5",
-        Some(ReasoningChoice::Effort {
-            effort: "high".into(),
-        }),
+        Some(ReasoningChoice::Effort { effort: "high".into() }),
     );
     let request = wire_request();
     let exchange = opening_exchange(&request, false);
@@ -181,13 +168,9 @@ fn an_anthropic_call_reaches_the_messages_api_with_the_limit_and_no_reasoning() 
     let seen = server.join().unwrap();
 
     let first = seen.lines().next().unwrap_or_default();
+    assert!(first.starts_with("POST /v1/messages "), "no request reached the server: {outcome:?}");
     assert!(
-        first.starts_with("POST /v1/messages "),
-        "no request reached the server: {outcome:?}"
-    );
-    assert!(
-        seen.to_lowercase()
-            .contains(&format!("x-api-key: {}", SECRET.to_lowercase())),
+        seen.to_lowercase().contains(&format!("x-api-key: {}", SECRET.to_lowercase())),
         "the key travels in the Anthropic header",
     );
     let body = seen.split("\r\n\r\n").nth(1).unwrap_or_default();
@@ -196,11 +179,7 @@ fn an_anthropic_call_reaches_the_messages_api_with_the_limit_and_no_reasoning() 
     assert_eq!(json["max_tokens"], 32_000);
     assert!(json.get("reasoning").is_none(), "{body}");
     // CVL-FR-23: the short retention, at the boundary the provider advances.
-    assert_eq!(
-        json["cache_control"],
-        serde_json::json!({ "type": "ephemeral" }),
-        "{body}"
-    );
+    assert_eq!(json["cache_control"], serde_json::json!({ "type": "ephemeral" }), "{body}");
     // CVL-FR-HBNW: the framework's default for a model its catalog marks for
     // it is adaptive thinking.
     assert_eq!(json["thinking"]["type"], "adaptive", "{body}");
@@ -210,8 +189,5 @@ fn an_anthropic_call_reaches_the_messages_api_with_the_limit_and_no_reasoning() 
     assert_eq!(failure.status, Some(400));
     assert_eq!(failure.provider_code.as_deref(), Some("invalid_request_error"));
     assert_eq!(failure.provider_message.as_deref(), Some("refused"));
-    assert!(
-        !format!("{failure:?}").contains(SECRET),
-        "no secret in the failure"
-    );
+    assert!(!format!("{failure:?}").contains(SECRET), "no secret in the failure");
 }

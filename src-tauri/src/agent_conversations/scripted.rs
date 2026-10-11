@@ -205,12 +205,7 @@ pub struct ScriptedCompletion {
 impl ScriptedCompletion {
     /// The common case: a script of plain text answers, each ending its turn.
     pub fn new(replies: Vec<Result<String, &'static str>>) -> Self {
-        Self::scripted(
-            replies
-                .into_iter()
-                .map(|reply| reply.map(ScriptedReply::answer))
-                .collect(),
-        )
+        Self::scripted(replies.into_iter().map(|reply| reply.map(ScriptedReply::answer)).collect())
     }
 
     /// A script that can ask for tools (CVL-FR-12).
@@ -226,10 +221,7 @@ impl ScriptedCompletion {
 
     /// Every exchange the seam was handed, in call order.
     pub fn exchanges(&self) -> Vec<Vec<rig::completion::Message>> {
-        self.exchanges
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.exchanges.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// How many times the seam was called — the loop's rounds (CVL-FR-13).
@@ -381,11 +373,7 @@ impl CompletionSeam for ScriptedCompletion {
         // nine or the nine followed by one proposal tool and never anything
         // else — which is what stops a tool being added to a turn without
         // anybody deciding it should be.
-        let offered: Vec<&str> = request
-            .tools
-            .iter()
-            .map(|tool| tool.name.as_str())
-            .collect();
+        let offered: Vec<&str> = request.tools.iter().map(|tool| tool.name.as_str()).collect();
         // CVL-FR-08: the eleven every origin kind gets, in the order
         // `conversation_tools` names them.
         let common = vec![
@@ -428,11 +416,8 @@ impl CompletionSeam for ScriptedCompletion {
         // one test, so a request that lost the entries on some path, gained them
         // on a provider that does not serve them, or was offered one of the two
         // alone cannot land green.
-        let native: Vec<&str> = request
-            .native_tools
-            .iter()
-            .map(|tool| tool.tool_type.as_str())
-            .collect();
+        let native: Vec<&str> =
+            request.native_tools.iter().map(|tool| tool.tool_type.as_str()).collect();
         // CVL-FR-30: the search alone on OpenRouter, and nothing anywhere else.
         // `web_fetch` is withheld (WFT-FR-16), so a request that carried it
         // would be one nobody decided to send.
@@ -449,10 +434,7 @@ impl CompletionSeam for ScriptedCompletion {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push((request.clone(), endpoint.clone()));
-        self.exchanges
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push(exchange.to_vec());
+        self.exchanges.lock().unwrap_or_else(|e| e.into_inner()).push(exchange.to_vec());
         {
             let mut guard = self.concurrency.lock().unwrap_or_else(|e| e.into_inner());
             guard.0 += 1;

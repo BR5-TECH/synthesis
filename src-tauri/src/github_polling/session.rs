@@ -295,7 +295,12 @@ impl SessionSlot {
     }
 
     /// GPP-FR-BSLI: drop the held claim of one issue; whether one was held.
-    pub fn forget_unsaved(&mut self, key: &SessionKey, repository: &RepositoryRef, number: u64) -> bool {
+    pub fn forget_unsaved(
+        &mut self,
+        key: &SessionKey,
+        repository: &RepositoryRef,
+        number: u64,
+    ) -> bool {
         if self.key.as_ref() != Some(key) {
             return false;
         }

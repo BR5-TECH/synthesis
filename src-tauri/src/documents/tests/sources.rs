@@ -5,10 +5,7 @@ use super::*;
 use crate::documents::model::DocumentsError;
 
 fn source(kind: SourceKind, path: &str) -> StoredSource {
-    StoredSource {
-        kind,
-        path: path.to_string(),
-    }
+    StoredSource { kind, path: path.to_string() }
 }
 
 // DCL-FR-PHYP: a source whose normalised path equals a stored one adds nothing,
@@ -41,10 +38,7 @@ fn a_relative_path_is_refused_and_stores_nothing() {
     let docs = Docs::new();
     let stored = Mutex::new(false);
     let result = docs.collection.add_sources(
-        &[
-            source(SourceKind::File, "/refs/ok.md"),
-            source(SourceKind::File, "relative/path.md"),
-        ],
+        &[source(SourceKind::File, "/refs/ok.md"), source(SourceKind::File, "relative/path.md")],
         &|_, _| {
             *stored.lock().unwrap() = true;
             Ok(())
@@ -79,10 +73,9 @@ fn removing_matches_on_the_normalised_path() {
 #[test]
 fn a_failed_store_write_changes_nothing() {
     let docs = Docs::new();
-    let result = docs.collection.add_sources(
-        &[source(SourceKind::File, "/refs/a.md")],
-        &|_, _| Err("disk full".to_string()),
-    );
+    let result = docs.collection.add_sources(&[source(SourceKind::File, "/refs/a.md")], &|_, _| {
+        Err("disk full".to_string())
+    });
     assert_eq!(result.unwrap_err(), DocumentsError::StoreUnavailable);
     assert!(docs.collection.stored_sources().is_empty());
 }
@@ -113,10 +106,7 @@ fn a_closed_collection_refuses_every_operation() {
         docs.collection.read_document_pdf(&docs.fs, "doc-0").unwrap_err().code(),
         "no_project_open"
     );
-    assert_eq!(
-        docs.collection.resolve_document("doc-0").unwrap_err().code(),
-        "no_project_open"
-    );
+    assert_eq!(docs.collection.resolve_document("doc-0").unwrap_err().code(), "no_project_open");
 }
 
 // DCL-FR-MSHW: a store that could not be read shows no documents rather than an

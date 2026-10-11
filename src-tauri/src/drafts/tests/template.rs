@@ -4,13 +4,6 @@ use super::*;
 
 // -- graduation --------------------------------------------------------
 
-
-
-
-
-
-
-
 // -----------------------------------------------------------------------
 // The draft template (DRS-FR-39)
 // -----------------------------------------------------------------------
@@ -22,7 +15,7 @@ fn set_template(root: &crate::fs::RootFs, text: Option<&str>) {
         project_settings::ProjectConfig {
             line_endings: project_settings::LineEndings::Lf,
             draft_template: Some(text.unwrap_or("").to_string()),
-                        ..Default::default()
+            ..Default::default()
         },
     )
     .unwrap();
@@ -37,10 +30,8 @@ fn a_draft_is_created_holding_the_projects_template_or_nothing_where_none_is_set
     let root = &crate::fs::RootFs::for_root(dir.path());
 
     let before = create_draft_at_root(root, Some("spec")).unwrap();
-    let before_prompt = draft_dir(root, &before.draft.id)
-        .unwrap()
-        .join(FILES_DIR)
-        .join(&before.file);
+    let before_prompt =
+        draft_dir(root, &before.draft.id).unwrap().join(FILES_DIR).join(&before.file);
     assert_eq!(std::fs::read(&before_prompt).unwrap().len(), 0);
 
     set_template(root, Some("# Context\n\n## Decision\n"));
@@ -52,10 +43,7 @@ fn a_draft_is_created_holding_the_projects_template_or_nothing_where_none_is_set
         "# Context\n\n## Decision\n"
     );
     assert!(
-        std::fs::read_dir(after_dir.join(HISTORY_DIR))
-            .unwrap()
-            .next()
-            .is_none(),
+        std::fs::read_dir(after_dir.join(HISTORY_DIR)).unwrap().next().is_none(),
         "creating a draft settles no version (DHS-FR-07)"
     );
 
@@ -76,17 +64,14 @@ fn the_template_is_normalised_to_the_projects_line_ending_convention() {
         project_settings::ProjectConfig {
             line_endings: project_settings::LineEndings::Crlf,
             draft_template: Some("# Context\n\n## Decision\n".to_string()),
-                        ..Default::default()
+            ..Default::default()
         },
     )
     .unwrap();
 
     let created = create_draft_at_root(root, Some("spec")).unwrap();
     let body = std::fs::read_to_string(
-        draft_dir(root, &created.draft.id)
-            .unwrap()
-            .join(FILES_DIR)
-            .join(&created.file),
+        draft_dir(root, &created.draft.id).unwrap().join(FILES_DIR).join(&created.file),
     )
     .unwrap();
     assert_eq!(body, "# Context\r\n\r\n## Decision\r\n");
@@ -101,10 +86,7 @@ fn the_copy_is_a_snapshot_that_a_later_template_change_does_not_reach() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     set_template(root, Some("# Context"));
     let created = create_draft_at_root(root, Some("spec")).unwrap();
-    let prompt = draft_dir(root, &created.draft.id)
-        .unwrap()
-        .join(FILES_DIR)
-        .join(&created.file);
+    let prompt = draft_dir(root, &created.draft.id).unwrap().join(FILES_DIR).join(&created.file);
 
     for step in [Some("# Edited"), Some("# Replaced"), None] {
         set_template(root, step);
@@ -115,10 +97,9 @@ fn the_copy_is_a_snapshot_that_a_later_template_change_does_not_reach() {
         );
     }
 
-    let record = std::fs::read_to_string(
-        draft_dir(root, &created.draft.id).unwrap().join(RECORD_FILE),
-    )
-    .unwrap();
+    let record =
+        std::fs::read_to_string(draft_dir(root, &created.draft.id).unwrap().join(RECORD_FILE))
+            .unwrap();
     assert!(
         !record.contains("template"),
         "no draft carries a reference back to the template: {record}"
@@ -127,14 +108,9 @@ fn the_copy_is_a_snapshot_that_a_later_template_change_does_not_reach() {
     // And with the template cleared, the next draft's prompt is empty.
     let next = create_draft_at_root(root, Some("after")).unwrap();
     assert_eq!(
-        std::fs::read(
-            draft_dir(root, &next.draft.id)
-                .unwrap()
-                .join(FILES_DIR)
-                .join(&next.file)
-        )
-        .unwrap()
-        .len(),
+        std::fs::read(draft_dir(root, &next.draft.id).unwrap().join(FILES_DIR).join(&next.file))
+            .unwrap()
+            .len(),
         0
     );
 }
@@ -179,19 +155,12 @@ fn a_draft_template_key_that_is_not_a_string_reads_as_unset() {
     // created empty rather than the creation failing.
     let dir = project();
     let root = &crate::fs::RootFs::for_root(dir.path());
-    std::fs::write(
-        dir.path().join(".synthesis/project.toml"),
-        "draftTemplate = 42\n",
-    )
-    .unwrap();
+    std::fs::write(dir.path().join(".synthesis/project.toml"), "draftTemplate = 42\n").unwrap();
 
     let created = create_draft_at_root(root, Some("spec")).unwrap();
     assert_eq!(
         std::fs::read(
-            draft_dir(root, &created.draft.id)
-                .unwrap()
-                .join(FILES_DIR)
-                .join(&created.file)
+            draft_dir(root, &created.draft.id).unwrap().join(FILES_DIR).join(&created.file)
         )
         .unwrap()
         .len(),
@@ -216,10 +185,7 @@ fn both_drafts_panel_routes_create_a_draft_holding_the_same_template() {
     for created in [&at_root, &in_folder] {
         assert_eq!(
             std::fs::read_to_string(
-                draft_dir(root, &created.draft.id)
-                    .unwrap()
-                    .join(FILES_DIR)
-                    .join(&created.file)
+                draft_dir(root, &created.draft.id).unwrap().join(FILES_DIR).join(&created.file)
             )
             .unwrap(),
             "# Context"
@@ -232,9 +198,8 @@ fn both_drafts_panel_routes_create_a_draft_holding_the_same_template() {
     assert_eq!(a.folder, "");
     assert_eq!(b.folder, "UI");
     // DRS-FR-07: the record says nothing about where a specification lands.
-    let record = std::fs::read_to_string(
-        draft_dir(root, &at_root.draft.id).unwrap().join(RECORD_FILE),
-    )
-    .unwrap();
+    let record =
+        std::fs::read_to_string(draft_dir(root, &at_root.draft.id).unwrap().join(RECORD_FILE))
+            .unwrap();
     assert!(!record.contains("destination"), "{record}");
 }

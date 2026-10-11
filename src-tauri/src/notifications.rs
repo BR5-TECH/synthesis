@@ -28,8 +28,8 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager, State};
 
-use crate::logging::{log_debug, log_error, log_info, log_warn, Domain, BUFFER};
 use crate::log_fields;
+use crate::logging::{log_debug, log_error, log_info, log_warn, Domain, BUFFER};
 
 /// The event an activation is published on (NTD contract surface).
 ///
@@ -294,26 +294,16 @@ impl NotificationRegistry {
             // that changed while the words did not is still nothing new to
             // read, and it is carried through so a click routes to the latest
             // target either way.
-            let unchanged = inner
-                .showing
-                .get(&existing)
-                .is_some_and(|prev| prev.same_words(&showing));
+            let unchanged =
+                inner.showing.get(&existing).is_some_and(|prev| prev.same_words(&showing));
             inner.showing.insert(existing.clone(), showing);
-            return Posted {
-                id: existing,
-                replaced: true,
-                unchanged,
-            };
+            return Posted { id: existing, replaced: true, unchanged };
         }
         let id = format!("notif-{}", inner.next_id);
         inner.next_id += 1;
         inner.by_key.insert(request.key.clone(), id.clone());
         inner.showing.insert(id.clone(), showing);
-        Posted {
-            id,
-            replaced: false,
-            unchanged: false,
-        }
+        Posted { id, replaced: false, unchanged: false }
     }
 
     /// Forget a notification, returning whether one was actually showing.
@@ -358,11 +348,7 @@ impl NotificationRegistry {
         if inner.by_key.get(&showing.key).map(String::as_str) == Some(id) {
             inner.by_key.remove(&showing.key);
         }
-        Some(Activation {
-            id: id.to_string(),
-            key: showing.key,
-            payload: showing.payload,
-        })
+        Some(Activation { id: id.to_string(), key: showing.key, payload: showing.payload })
     }
 
     /// How many notifications are currently showing. Tests and diagnostics only.
@@ -379,9 +365,7 @@ impl NotificationRegistry {
     /// A poisoned registry must not take the application down with it: a
     /// notification is peripheral to everything it reports on.
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
-        self.inner
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -458,9 +442,8 @@ pub fn deliver_activation<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str
 
     // The main window when a project is open, the picker otherwise — whichever
     // is mounted (NTD-FR-09).
-    let window = app
-        .get_webview_window("main")
-        .or_else(|| app.webview_windows().into_values().next());
+    let window =
+        app.get_webview_window("main").or_else(|| app.webview_windows().into_values().next());
     match window {
         Some(window) => {
             if let Err(e) = window.set_focus() {
@@ -563,11 +546,9 @@ async fn off_main_thread<T: Send + 'static>(
 /// nothing, and never returns an error.
 #[tauri::command]
 pub async fn get_notification_permission(app: tauri::AppHandle) -> PermissionState {
-    off_main_thread(&app, "get permission", |app| {
-        app.state::<Notifier>().0.permission()
-    })
-    .await
-    .unwrap_or(PermissionState::Unsupported)
+    off_main_thread(&app, "get permission", |app| app.state::<Notifier>().0.permission())
+        .await
+        .unwrap_or(PermissionState::Unsupported)
 }
 
 /// NTD-FR-03: the only operation here that can present a permission prompt.

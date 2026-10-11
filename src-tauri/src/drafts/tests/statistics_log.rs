@@ -20,19 +20,14 @@ fn drs_ts_xkqm_deleting_a_draft_takes_its_statistics_log_and_leaves_every_other(
         crate::statistics::append_events(
             root,
             id,
-            &[crate::statistics::Pending::now(
-                crate::statistics::EventBody::ProposalDecision {
-                    proposal_id: format!("p-{id}"),
-                    decision: crate::statistics::Decision::Accepted,
-                },
-            )],
+            &[crate::statistics::Pending::now(crate::statistics::EventBody::ProposalDecision {
+                proposal_id: format!("p-{id}"),
+                decision: crate::statistics::Decision::Accepted,
+            })],
         )
         .unwrap();
     }
-    let kept_log = dir
-        .path()
-        .join(crate::statistics::STATISTICS_REL)
-        .join(format!("{kept}.jsonl"));
+    let kept_log = dir.path().join(crate::statistics::STATISTICS_REL).join(format!("{kept}.jsonl"));
     let kept_before = std::fs::read_to_string(&kept_log).unwrap();
 
     delete_draft_impl(root, root, &doomed).unwrap();
@@ -46,12 +41,7 @@ fn drs_ts_xkqm_deleting_a_draft_takes_its_statistics_log_and_leaves_every_other(
         "the draft's statistics log went with it",
     );
     // No statistics file for that id remains anywhere in the project.
-    assert!(
-        !dir.path()
-            .join(DRAFTS_REL)
-            .join(format!("{doomed}.jsonl"))
-            .exists(),
-    );
+    assert!(!dir.path().join(DRAFTS_REL).join(format!("{doomed}.jsonl")).exists(),);
     assert_eq!(std::fs::read_to_string(&kept_log).unwrap(), kept_before);
 
     // A draft whose log is already missing deletes without an error.
@@ -73,29 +63,21 @@ fn drs_ts_xkqm_a_late_event_never_resurrects_a_deleted_drafts_log() {
     let dir = project();
     let root = &crate::fs::RootFs::for_root(dir.path());
     let doomed = draft(root, "doomed");
-    let event = crate::statistics::Pending::now(
-        crate::statistics::EventBody::ProposalDecision {
-            proposal_id: "p-late".to_string(),
-            decision: crate::statistics::Decision::Accepted,
-        },
-    );
+    let event = crate::statistics::Pending::now(crate::statistics::EventBody::ProposalDecision {
+        proposal_id: "p-late".to_string(),
+        decision: crate::statistics::Decision::Accepted,
+    });
     crate::statistics::append_events(root, &doomed, std::slice::from_ref(&event)).unwrap();
 
     delete_draft_impl(root, root, &doomed).unwrap();
-    let log = dir
-        .path()
-        .join(crate::statistics::STATISTICS_REL)
-        .join(format!("{doomed}.jsonl"));
+    let log = dir.path().join(crate::statistics::STATISTICS_REL).join(format!("{doomed}.jsonl"));
     assert!(!log.exists());
 
     // The event the writer was still holding, delivered through the same
     // path production delivers it on. The draft is gone, so it lands
     // nowhere and the log stays gone.
     crate::statistics::append_for_existing_draft(root, root, &doomed, std::slice::from_ref(&event));
-    assert!(
-        !log.exists(),
-        "an append for a draft that no longer exists must create nothing",
-    );
+    assert!(!log.exists(), "an append for a draft that no longer exists must create nothing",);
 
     // And a draft that does still exist is unaffected by the same guard.
     let kept = draft(root, "kept");
@@ -113,13 +95,9 @@ fn drs_ts_xkqm_a_late_event_never_resurrects_a_deleted_drafts_log() {
 #[test]
 fn drs_ts_pghu_the_deletion_order_is_the_log_and_then_the_folder() {
     let source = include_str!("../../drafts.rs");
-    let body = source
-        .split_once("pub fn delete_draft_impl")
-        .expect("the deletion")
-        .1;
-    let statistics_at = body
-        .find("delete_draft_statistics")
-        .expect("the statistics log is removed");
+    let body = source.split_once("pub fn delete_draft_impl").expect("the deletion").1;
+    let statistics_at =
+        body.find("delete_draft_statistics").expect("the statistics log is removed");
     let folder_at = body.find("delete_under").expect("the folder is removed");
     assert!(
         statistics_at < folder_at,
@@ -127,9 +105,7 @@ fn drs_ts_pghu_the_deletion_order_is_the_log_and_then_the_folder() {
     );
     // DRS-FR-WNTA: the draft's review threads go before the folder too, and
     // both removals are scoped to the one stable id.
-    let comments_at = body
-        .find("delete_draft_comments")
-        .expect("the review threads are removed");
+    let comments_at = body.find("delete_draft_comments").expect("the review threads are removed");
     assert!(comments_at < folder_at, "the threads are removed first");
     assert!(body[..folder_at].contains("delete_draft_statistics(store, id)"));
     assert!(body[..folder_at].contains("delete_draft_comments(store, id)"));
@@ -165,11 +141,7 @@ fn drs_ts36_a_drafts_directory_holds_an_empty_assets_folder_and_nothing_else() {
         .into_iter()
         .collect::<Vec<_>>(),
     );
-    assert_eq!(
-        std::fs::read_dir(home.join(ASSETS_DIR)).unwrap().count(),
-        0,
-        "scaffolded empty",
-    );
+    assert_eq!(std::fs::read_dir(home.join(ASSETS_DIR)).unwrap().count(), 0, "scaffolded empty",);
 
     // DRS-FR-11 / DRS-FR-15: an image the prompt embeds is the draft's
     // material rather than a second prompt file, so `files/` still holds

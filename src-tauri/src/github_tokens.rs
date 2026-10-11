@@ -37,19 +37,16 @@ use crate::project::ProjectState;
 mod discussion_identity;
 pub mod host;
 mod verifier;
+use discussion_identity::emit_tokens_changed;
+pub use discussion_identity::{resolve_github_identity_if_stored, GITHUB_TOKENS_CHANGED};
 pub use host::{
-    default_host, github_api_host,
-    github_api_base, github_graphql_url, github_web_base, normalize_host, token_creation_url,
-    DEFAULT_HOST, ERR_HOST_MISMATCH, ERR_INVALID_HOST,
+    default_host, github_api_base, github_api_host, github_graphql_url, github_web_base,
+    normalize_host, token_creation_url, DEFAULT_HOST, ERR_HOST_MISMATCH, ERR_INVALID_HOST,
 };
 pub use verifier::{
     account_from_user_payload, login_from_user_payload, parse_scopes, verify_failure_for_status,
     GithubIdentity, GithubVerifier, HttpGithubVerifier, VerifiedIdentity, VerifyError,
 };
-pub use discussion_identity::{
-    resolve_github_identity_if_stored, GITHUB_TOKENS_CHANGED,
-};
-use discussion_identity::emit_tokens_changed;
 
 // ---------------------------------------------------------------------------
 // Typed errors (GTS-FR-04 / GTS-FR-10 / GTS-FR-14)
@@ -231,7 +228,6 @@ pub trait SecretStore: Send + Sync {
     }
 }
 
-
 // ---------------------------------------------------------------------------
 // Managed state
 // ---------------------------------------------------------------------------
@@ -266,11 +262,7 @@ impl Default for GithubTokens {
 
 impl GithubTokens {
     pub fn new(secrets: Box<dyn SecretStore>, verifier: Box<dyn GithubVerifier>) -> Self {
-        Self {
-            secrets,
-            verifier,
-            write_lock: Mutex::new(()),
-        }
+        Self { secrets, verifier, write_lock: Mutex::new(()) }
     }
 }
 
@@ -312,10 +304,7 @@ pub fn redact(text: &str, secret: &str) -> String {
 /// between a set of one.
 pub fn resolve_binding(records: &[GithubTokenRecord], bound: Option<&str>) -> ProjectTokenBinding {
     if records.is_empty() {
-        return ProjectTokenBinding {
-            token_id: None,
-            resolution: BindingResolution::NoneStored,
-        };
+        return ProjectTokenBinding { token_id: None, resolution: BindingResolution::NoneStored };
     }
     if let Some(id) = bound {
         if records.iter().any(|r| r.id == id) {
@@ -331,10 +320,7 @@ pub fn resolve_binding(records: &[GithubTokenRecord], bound: Option<&str>) -> Pr
             resolution: BindingResolution::Implicit,
         };
     }
-    ProjectTokenBinding {
-        token_id: None,
-        resolution: BindingResolution::SelectionRequired,
-    }
+    ProjectTokenBinding { token_id: None, resolution: BindingResolution::SelectionRequired }
 }
 
 /// Two labels an author could not tell apart are the same label (GTS-FR-05).
@@ -369,10 +355,8 @@ pub fn derive_label_from_login(records: &[GithubTokenRecord], login: &str) -> St
 /// reuse would hand a new record the previous one's secret.
 fn new_token_id() -> String {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0);
+    let nanos =
+        SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0);
     let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("ght-{nanos:x}-{seq:x}")
 }
@@ -428,10 +412,8 @@ pub fn add_token_impl(
         return Err("token is empty".into());
     }
 
-    let _guard = tokens
-        .write_lock
-        .lock()
-        .map_err(|e| format!("github token store poisoned: {e}"))?;
+    let _guard =
+        tokens.write_lock.lock().map_err(|e| format!("github token store poisoned: {e}"))?;
 
     let mut records = store.load_github_token_registry()?;
     // A label the author *chose* is checked before the network call, so a
@@ -456,10 +438,7 @@ pub fn add_token_impl(
     };
 
     let id = new_token_id();
-    tokens
-        .secrets
-        .set(&id, secret)
-        .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
+    tokens.secrets.set(&id, secret).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
 
     let now = now_iso8601();
     let record = GithubTokenRecord {
@@ -495,16 +474,11 @@ pub fn validate_token_impl(
     tokens: &GithubTokens,
     id: &str,
 ) -> Result<GithubTokenRecord, String> {
-    let _guard = tokens
-        .write_lock
-        .lock()
-        .map_err(|e| format!("github token store poisoned: {e}"))?;
+    let _guard =
+        tokens.write_lock.lock().map_err(|e| format!("github token store poisoned: {e}"))?;
 
     let mut records = store.load_github_token_registry()?;
-    let index = records
-        .iter()
-        .position(|r| r.id == id)
-        .ok_or(ERR_UNKNOWN_TOKEN)?;
+    let index = records.iter().position(|r| r.id == id).ok_or(ERR_UNKNOWN_TOKEN)?;
 
     let secret = match tokens.secrets.get(id) {
         Ok(Some(secret)) => secret,
@@ -562,20 +536,12 @@ pub fn rename_token_impl(
         return Err("label is empty".into());
     }
 
-    let _guard = tokens
-        .write_lock
-        .lock()
-        .map_err(|e| format!("github token store poisoned: {e}"))?;
+    let _guard =
+        tokens.write_lock.lock().map_err(|e| format!("github token store poisoned: {e}"))?;
 
     let mut records = store.load_github_token_registry()?;
-    let index = records
-        .iter()
-        .position(|r| r.id == id)
-        .ok_or(ERR_UNKNOWN_TOKEN)?;
-    if records
-        .iter()
-        .any(|r| r.id != id && label_conflicts(&r.label, label))
-    {
+    let index = records.iter().position(|r| r.id == id).ok_or(ERR_UNKNOWN_TOKEN)?;
+    if records.iter().any(|r| r.id != id && label_conflicts(&r.label, label)) {
         return Err(ERR_DUPLICATE_LABEL.into());
     }
     records[index].label = label.to_string();
@@ -591,17 +557,12 @@ pub fn remove_token_impl(
     tokens: &GithubTokens,
     id: &str,
 ) -> Result<(), String> {
-    let _guard = tokens
-        .write_lock
-        .lock()
-        .map_err(|e| format!("github token store poisoned: {e}"))?;
+    let _guard =
+        tokens.write_lock.lock().map_err(|e| format!("github token store poisoned: {e}"))?;
 
     // Order matters: drop the secret first. A registry write that succeeded
     // while the delete failed would leave a secret nothing names.
-    tokens
-        .secrets
-        .delete(id)
-        .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
+    tokens.secrets.delete(id).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
     let mut records = store.load_github_token_registry()?;
     records.retain(|r| r.id != id);
     store.save_github_token_registry(records)
@@ -634,11 +595,8 @@ pub fn get_binding_impl(
     // An empty key is "no project open" (`ProjectState::slot_key`), whose slot
     // is the shared default one — a binding read from there would belong to no
     // project in particular.
-    let bound = if project_key.is_empty() {
-        None
-    } else {
-        store.load_github_token_binding(project_key)?
-    };
+    let bound =
+        if project_key.is_empty() { None } else { store.load_github_token_binding(project_key)? };
     Ok(resolve_binding(&records, bound.as_deref()))
 }
 
@@ -714,16 +672,13 @@ fn resolve_project_token_id(
     project_key: &str,
 ) -> Result<(String, String), String> {
     let records = store.load_github_token_registry()?;
-    let bound = if project_key.is_empty() {
-        None
-    } else {
-        store.load_github_token_binding(project_key)?
-    };
+    let bound =
+        if project_key.is_empty() { None } else { store.load_github_token_binding(project_key)? };
     let binding = resolve_binding(&records, bound.as_deref());
     let id = match binding.resolution {
-        BindingResolution::Bound | BindingResolution::Implicit => binding
-            .token_id
-            .ok_or_else(|| ERR_SELECTION_REQUIRED.to_string())?,
+        BindingResolution::Bound | BindingResolution::Implicit => {
+            binding.token_id.ok_or_else(|| ERR_SELECTION_REQUIRED.to_string())?
+        }
         BindingResolution::SelectionRequired => return Err(ERR_SELECTION_REQUIRED.into()),
         BindingResolution::NoneStored => return Err(ERR_TOKEN_MISSING.into()),
     };
@@ -795,23 +750,17 @@ pub fn resolve_github_identity(
     project_key: &str,
 ) -> Result<GithubIdentity, String> {
     let records = store.load_github_token_registry()?;
-    let bound = if project_key.is_empty() {
-        None
-    } else {
-        store.load_github_token_binding(project_key)?
-    };
+    let bound =
+        if project_key.is_empty() { None } else { store.load_github_token_binding(project_key)? };
     let binding = resolve_binding(&records, bound.as_deref());
     let id = match binding.resolution {
-        BindingResolution::Bound | BindingResolution::Implicit => binding
-            .token_id
-            .ok_or_else(|| ERR_SELECTION_REQUIRED.to_string())?,
+        BindingResolution::Bound | BindingResolution::Implicit => {
+            binding.token_id.ok_or_else(|| ERR_SELECTION_REQUIRED.to_string())?
+        }
         BindingResolution::SelectionRequired => return Err(ERR_SELECTION_REQUIRED.into()),
         BindingResolution::NoneStored => return Err(ERR_TOKEN_MISSING.into()),
     };
-    let record = records
-        .iter()
-        .find(|r| r.id == id)
-        .ok_or(ERR_UNKNOWN_TOKEN)?;
+    let record = records.iter().find(|r| r.id == id).ok_or(ERR_UNKNOWN_TOKEN)?;
     // `add_token_impl` verifies before it stores (GTS-FR-04), so a stored record
     // always carries a login. One that does not was hand-edited or predates the
     // field, and there is no honest identity to stamp — say so distinctly rather
@@ -911,12 +860,10 @@ pub fn open_github_token_creation_page(
     use tauri_plugin_opener::OpenerExt;
     let host = normalize_host(host.as_deref().unwrap_or(""))
         .inspect_err(|code| log_refusal(&app, "github token page refused", code))?;
-    app.opener()
-        .open_url(token_creation_url(&host), None::<&str>)
-        .map_err(|e| {
-            log_refusal(&app, "github token page not opened", "browser_unavailable");
-            format!("could not open the browser: {e}")
-        })
+    app.opener().open_url(token_creation_url(&host), None::<&str>).map_err(|e| {
+        log_refusal(&app, "github token page not opened", "browser_unavailable");
+        format!("could not open the browser: {e}")
+    })
 }
 
 /// A refusal of a token command. Only the typed code is logged: the secret, the

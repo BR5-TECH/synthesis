@@ -69,10 +69,7 @@ impl DraftEvent {
 /// A control character in the name, a line break above all, would turn the
 /// one-line message into a subject and a body, so each one is read as a space.
 pub fn message(event: DraftEvent, draft_name: &str) -> String {
-    let name: String = draft_name
-        .chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
-        .collect();
+    let name: String = draft_name.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
     format!("draft: {} \"{}\"", event.verb(), name.trim())
 }
 
@@ -181,10 +178,8 @@ fn remember_reason(state: &mut State, root: &std::path::Path, reason: Option<&'s
 }
 
 fn committer() -> &'static Committer {
-    COMMITTER.get_or_init(|| Committer {
-        state: Mutex::new(State::default()),
-        wake: Condvar::new(),
-    })
+    COMMITTER
+        .get_or_init(|| Committer { state: Mutex::new(State::default()), wake: Condvar::new() })
 }
 
 /// Start the committer's thread once, the first time an event is raised.
@@ -197,10 +192,7 @@ fn committer() -> &'static Committer {
 fn ensure_thread() {
     static STARTED: OnceLock<()> = OnceLock::new();
     STARTED.get_or_init(|| {
-        std::thread::Builder::new()
-            .name("draft-event-committer".to_string())
-            .spawn(run)
-            .ok();
+        std::thread::Builder::new().name("draft-event-committer".to_string()).spawn(run).ok();
     });
 }
 
@@ -272,10 +264,7 @@ pub fn wait_for_committer() {
     let committer = committer();
     let mut state = committer.state.lock().unwrap_or_else(|e| e.into_inner());
     while !state.pending.is_empty() || state.running {
-        state = committer
-            .wake
-            .wait(state)
-            .unwrap_or_else(|e| e.into_inner());
+        state = committer.wake.wait(state).unwrap_or_else(|e| e.into_inner());
     }
 }
 
@@ -333,10 +322,7 @@ fn run() {
                 }
                 state.running = false;
                 committer.wake.notify_all();
-                state = committer
-                    .wake
-                    .wait(state)
-                    .unwrap_or_else(|e| e.into_inner());
+                state = committer.wake.wait(state).unwrap_or_else(|e| e.into_inner());
             }
         };
         // The commit runs with **no lock of this module held**, so an event

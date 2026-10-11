@@ -13,10 +13,7 @@ use crate::documents::model::{Availability, DocumentsError};
 use crate::documents::watcher::{DocumentsWatcher, WatchTarget};
 
 fn source(kind: SourceKind, path: &str) -> StoredSource {
-    StoredSource {
-        kind,
-        path: path.to_string(),
-    }
+    StoredSource { kind, path: path.to_string() }
 }
 
 fn small_limits() -> Limits {
@@ -44,11 +41,7 @@ fn make_fifo(path: &Path) {
 }
 
 fn warns(docs: &Docs, needle: &str) -> usize {
-    docs.log
-        .records()
-        .iter()
-        .filter(|r| r.0 == LogLevel::Warn && r.1.contains(needle))
-        .count()
+    docs.log.records().iter().filter(|r| r.0 == LogLevel::Warn && r.1.contains(needle)).count()
 }
 
 // DCL-FR-RXMB, DCL-FR-KMHY: a FIFO that carries a supported name, in a selected
@@ -69,9 +62,7 @@ fn a_fifo_in_a_selected_folder_is_skipped_and_never_blocks_the_refresh() {
             docs.refresh();
             let _ = send.send(());
         });
-        receive
-            .recv_timeout(Duration::from_secs(10))
-            .expect("the refresh ended");
+        receive.recv_timeout(Duration::from_secs(10)).expect("the refresh ended");
     });
     assert_eq!(docs.names(), ["real.md"]);
     assert_eq!(warns(&docs, "not a regular file"), 2);
@@ -103,14 +94,7 @@ fn a_file_over_the_size_limit_is_unavailable() {
     docs.refresh();
 
     let snapshot = docs.snapshot();
-    let status = |name: &str| {
-        snapshot
-            .documents
-            .iter()
-            .find(|d| d.name == name)
-            .unwrap()
-            .status
-    };
+    let status = |name: &str| snapshot.documents.iter().find(|d| d.name == name).unwrap().status;
     assert_eq!(status("at-limit.md"), Availability::Available);
     assert_eq!(status("over.md"), Availability::Unavailable);
     assert_eq!(status("over.pdf"), Availability::Unavailable);
@@ -121,10 +105,7 @@ fn a_file_over_the_size_limit_is_unavailable() {
         DocumentsError::Unavailable
     );
     let at_limit = docs.id_of("refs/at-limit.md");
-    assert_eq!(
-        docs.collection.read_document(&docs.fs, &at_limit).unwrap().text,
-        "0123456789"
-    );
+    assert_eq!(docs.collection.read_document(&docs.fs, &at_limit).unwrap().text, "0123456789");
     let over_pdf = docs.id_of("refs/over.pdf");
     assert_eq!(
         docs.collection.read_document_pdf(&docs.fs, &over_pdf).unwrap_err(),
@@ -225,9 +206,7 @@ fn a_source_addition_overtaken_by_a_project_switch_changes_no_other_project() {
         docs.collection.open("other-project", Ok(vec![source(SourceKind::File, "/other.md")]));
         Ok(())
     };
-    let result = docs
-        .collection
-        .add_sources(&[source(SourceKind::File, "/a.md")], &switch);
+    let result = docs.collection.add_sources(&[source(SourceKind::File, "/a.md")], &switch);
     assert_eq!(result.unwrap_err(), DocumentsError::NoProjectOpen);
     assert_eq!(*stored.lock().unwrap(), [("project-key".to_string(), 1)]);
     assert_eq!(
@@ -242,8 +221,7 @@ fn a_source_addition_overtaken_by_a_project_switch_changes_no_other_project() {
 fn a_source_removal_overtaken_by_a_project_switch_changes_no_other_project() {
     let docs = Docs::new();
     docs.collection.close();
-    docs.collection
-        .open("project-key", Ok(vec![source(SourceKind::File, "/a.md")]));
+    docs.collection.open("project-key", Ok(vec![source(SourceKind::File, "/a.md")]));
     let switch = |_key: &str, _list: &[StoredSource]| {
         docs.collection.open("other-project", Ok(Vec::new()));
         Ok(())
@@ -283,9 +261,8 @@ fn no_event_is_emitted_after_the_close_returned() {
     assert!(emitting.load(Ordering::SeqCst));
 
     let late = AtomicBool::new(false);
-    let outcome = docs
-        .collection
-        .refresh(&docs.fs, &docs.log, &|_| late.store(true, Ordering::SeqCst));
+    let outcome =
+        docs.collection.refresh(&docs.fs, &docs.log, &|_| late.store(true, Ordering::SeqCst));
     assert!(outcome.stale);
     assert!(!late.load(Ordering::SeqCst), "a closed collection emits nothing");
 }
@@ -357,25 +334,17 @@ fn a_store_retry_overtaken_by_a_project_switch_is_dropped() {
 fn stopping_the_watch_does_not_wait_for_a_watch_being_set_up() {
     let docs = Docs::new();
     let watcher = DocumentsWatcher::default();
-    let targets = vec![WatchTarget {
-        path: docs.root.clone(),
-        recursive: false,
-    }];
+    let targets = vec![WatchTarget { path: docs.root.clone(), recursive: false }];
     let (entered_send, entered_receive) = mpsc::channel();
     let (release_send, release_receive) = mpsc::channel::<()>();
     let (watcher_ref, docs_ref) = (&watcher, &docs);
     std::thread::scope(|scope| {
         scope.spawn(move || {
-            watcher_ref.watch_with(
-                targets,
-                &docs_ref.log,
-                || {},
-                &|_, _| {
-                    let _ = entered_send.send(());
-                    let _ = release_receive.recv_timeout(Duration::from_secs(10));
-                    true
-                },
-            );
+            watcher_ref.watch_with(targets, &docs_ref.log, || {}, &|_, _| {
+                let _ = entered_send.send(());
+                let _ = release_receive.recv_timeout(Duration::from_secs(10));
+                true
+            });
         });
         entered_receive.recv_timeout(Duration::from_secs(10)).unwrap();
 
@@ -400,10 +369,7 @@ fn a_watch_set_up_without_a_stop_is_armed() {
     let docs = Docs::new();
     let watcher = DocumentsWatcher::default();
     watcher.watch_with(
-        vec![WatchTarget {
-            path: docs.root.clone(),
-            recursive: false,
-        }],
+        vec![WatchTarget { path: docs.root.clone(), recursive: false }],
         &docs.log,
         || {},
         &|_, _| true,

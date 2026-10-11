@@ -142,10 +142,7 @@ pub fn opening_size(stored: Option<(u32, u32)>, work_area: Option<(u32, u32)>) -
     if work_w < MIN_WINDOW_SIZE.0 || work_h < MIN_WINDOW_SIZE.1 {
         return DEFAULT_WINDOW_SIZE;
     }
-    (
-        width.clamp(MIN_WINDOW_SIZE.0, work_w),
-        height.clamp(MIN_WINDOW_SIZE.1, work_h),
-    )
+    (width.clamp(MIN_WINDOW_SIZE.0, work_w), height.clamp(MIN_WINDOW_SIZE.1, work_h))
 }
 
 /// SWN-FR-11: what a failed sweep leaves behind.
@@ -165,8 +162,5 @@ pub fn releases_exit_gate(next: &Transition) -> bool {
 /// bar. Never returns zero in either axis: a decoration larger than the target
 /// would otherwise produce a window with no content at all.
 pub fn inner_size_for_outer(target: (u32, u32), decoration: (u32, u32)) -> (u32, u32) {
-    (
-        target.0.saturating_sub(decoration.0).max(1),
-        target.1.saturating_sub(decoration.1).max(1),
-    )
+    (target.0.saturating_sub(decoration.0).max(1), target.1.saturating_sub(decoration.1).max(1))
 }

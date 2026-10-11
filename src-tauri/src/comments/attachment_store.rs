@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 /// One validated attachment, with the bytes still to be written when it is a
 /// freshly-supplied `inline` payload.
 ///
@@ -23,11 +22,7 @@ pub(super) fn stage_attachment(
     input: AttachmentInput,
 ) -> Result<StagedAttachment, String> {
     match input {
-        AttachmentInput::Url {
-            url,
-            media_type,
-            label,
-        } => {
+        AttachmentInput::Url { url, media_type, label } => {
             if !media_type_accepted(&media_type) {
                 return Err(ERR_UNSUPPORTED_MEDIA_TYPE.to_string());
             }
@@ -49,11 +44,7 @@ pub(super) fn stage_attachment(
                 bytes: None,
             })
         }
-        AttachmentInput::Inline {
-            media_type,
-            filename,
-            data,
-        } => {
+        AttachmentInput::Inline { media_type, filename, data } => {
             if !media_type_accepted(&media_type) {
                 return Err(ERR_UNSUPPORTED_MEDIA_TYPE.to_string());
             }
@@ -133,17 +124,12 @@ pub(super) fn read_attachment_in(
     // The thread is what names the media type and filename to serve back: the
     // stored file is bytes alone, content-addressed and therefore shared, so the
     // name it was attached under lives in the log rather than beside the bytes.
-    let found = thread.comments.iter().flat_map(|c| &c.attachments).find_map(
-        |a| match a {
-            Attachment::Blob {
-                digest: d,
-                media_type,
-                filename,
-                ..
-            } if d == digest => Some((media_type.clone(), filename.clone())),
-            _ => None,
-        },
-    );
+    let found = thread.comments.iter().flat_map(|c| &c.attachments).find_map(|a| match a {
+        Attachment::Blob { digest: d, media_type, filename, .. } if d == digest => {
+            Some((media_type.clone(), filename.clone()))
+        }
+        _ => None,
+    });
     let (media_type, filename) = found.ok_or(ERR_ATTACHMENT_NOT_FOUND)?;
     let path = scope.attachment_path(root, digest)?;
     let bytes = root.read_bytes(&path).map_err(|_| ERR_ATTACHMENT_NOT_FOUND.to_string())?;

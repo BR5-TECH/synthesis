@@ -24,14 +24,12 @@ pub fn reconcile_administrator(
     let now = ports.clock.now();
 
     if ports.users.find(administrator_id).is_some() {
-        return ports
-            .users
-            .update(administrator_id, &mut |user: &mut User| {
-                user.role = UserRole::Administrator;
-                user.status = Status::Active;
-                user.updated_at = now.clone();
-                Ok(())
-            });
+        return ports.users.update(administrator_id, &mut |user: &mut User| {
+            user.role = UserRole::Administrator;
+            user.status = Status::Active;
+            user.updated_at = now.clone();
+            Ok(())
+        });
     }
 
     ports.users.insert(

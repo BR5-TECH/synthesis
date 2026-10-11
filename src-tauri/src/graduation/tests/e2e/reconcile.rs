@@ -14,11 +14,10 @@ use super::scenario::bind;
 use super::script::TurnScript;
 use super::settings::guard;
 use crate::graduation::driver::GraduationDispatch;
-use crate::graduation::{GraduationEscalation, GraduationEscalationAnswer, GraduationEscalationOrigin};
-use crate::streams::{
-    StreamUpdateRecord,
-    StreamUpdateState, StreamUpdateStrategy,
+use crate::graduation::{
+    GraduationEscalation, GraduationEscalationAnswer, GraduationEscalationOrigin,
 };
+use crate::streams::{StreamUpdateRecord, StreamUpdateState, StreamUpdateStrategy};
 
 impl Outcome {
     // -- arranging the base branch --------------------------------------------
@@ -38,14 +37,9 @@ impl Outcome {
                 .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
                 .expect("the base change is staged");
             index.write().expect("the base index is written");
-            let tree = repo
-                .find_tree(index.write_tree().expect("a tree"))
-                .expect("a tree");
+            let tree = repo.find_tree(index.write_tree().expect("a tree")).expect("a tree");
             let signature = repo.signature().expect("a signature");
-            let head = repo
-                .head()
-                .and_then(|head| head.peel_to_commit())
-                .expect("the base head");
+            let head = repo.head().and_then(|head| head.peel_to_commit()).expect("the base head");
             repo.commit(
                 Some("HEAD"),
                 &signature,
@@ -86,7 +80,11 @@ impl Outcome {
 
     /// WKS-FR-NRQT: the author updates the stream from its base branch, pinned
     /// to the revision the base stands at or to the one a scenario pinned.
-    pub(crate) fn updated(mut self, strategy: StreamUpdateStrategy, scripts: Vec<TurnScript>) -> Self {
+    pub(crate) fn updated(
+        mut self,
+        strategy: StreamUpdateStrategy,
+        scripts: Vec<TurnScript>,
+    ) -> Self {
         let pinned = self.base_pin.take().unwrap_or_else(|| self.base_tip());
         let seam = self.rebind(scripts);
         self.reconcile_refusal = crate::streams::update_work_stream_with(
@@ -112,7 +110,9 @@ impl Outcome {
             payload,
             crate::streams::scripted_update_start(seam),
         )
-        .unwrap_or_else(|reason| panic!("[{}] the update answers were refused: {reason}", self.name));
+        .unwrap_or_else(|reason| {
+            panic!("[{}] the update answers were refused: {reason}", self.name)
+        });
         self
     }
 
@@ -204,7 +204,10 @@ impl Outcome {
         self
     }
 
-    pub(crate) fn expect_update_escalation_origin(self, origin: GraduationEscalationOrigin) -> Self {
+    pub(crate) fn expect_update_escalation_origin(
+        self,
+        origin: GraduationEscalationOrigin,
+    ) -> Self {
         assert_eq!(
             self.update_record().escalation.map(|e| e.origin),
             Some(origin),
@@ -216,20 +219,17 @@ impl Outcome {
 
     /// GRB-FR-YRHM: the paths the update could not settle.
     pub(crate) fn expect_update_unsettled(self, paths: &[&str]) -> Self {
-        let mut held: Vec<String> = self
-            .update_record()
-            .conflicts
-            .iter()
-            .map(|c| c.path.clone())
-            .collect();
+        let mut held: Vec<String> =
+            self.update_record().conflicts.iter().map(|c| c.path.clone()).collect();
         held.sort();
         assert_eq!(held, sorted(paths), "[{}] the paths the update left unsettled", self.name);
         self
     }
 
     pub(crate) fn expect_no_update_record(self) -> Self {
-        let held = crate::streams::get_work_stream_update(self.fx.app.clone(), self.stream_id.clone())
-            .expect("a known stream");
+        let held =
+            crate::streams::get_work_stream_update(self.fx.app.clone(), self.stream_id.clone())
+                .expect("a known stream");
         assert!(held.is_none(), "[{}] no update was recorded", self.name);
         self
     }
@@ -291,12 +291,8 @@ impl Outcome {
         let message = {
             let repo = self.fx.repo();
             let oid = git2::Oid::from_str(&self.base_tip()).expect("a revision");
-            let message = repo
-                .find_commit(oid)
-                .expect("a commit")
-                .message()
-                .unwrap_or_default()
-                .to_string();
+            let message =
+                repo.find_commit(oid).expect("a commit").message().unwrap_or_default().to_string();
             message
         };
         assert!(
@@ -340,7 +336,9 @@ impl Outcome {
             .find_branch(&base_branch, git2::BranchType::Local)
             .and_then(|branch| branch.get().peel_to_commit())
             .map(|commit| commit.id().to_string())
-            .unwrap_or_else(|reason| panic!("[{}] the base branch is readable: {reason}", self.name));
+            .unwrap_or_else(|reason| {
+                panic!("[{}] the base branch is readable: {reason}", self.name)
+            });
         tip
     }
 
@@ -352,8 +350,9 @@ impl Outcome {
     }
 
     fn assert_refused(&self, what: &str, code: &str, refusal: Option<String>) {
-        let refusal = refusal
-            .unwrap_or_else(|| panic!("[{}] the {what} was accepted, but {code} was expected", self.name));
+        let refusal = refusal.unwrap_or_else(|| {
+            panic!("[{}] the {what} was accepted, but {code} was expected", self.name)
+        });
         assert!(
             refusal.starts_with(code),
             "[{}] the {what} was refused with {refusal:?}, not {code:?}",
@@ -363,10 +362,12 @@ impl Outcome {
 }
 
 /// One answer per recorded question, in position order.
-fn answers_to(escalation: Option<&GraduationEscalation>, answers: &[&str]) -> Vec<GraduationEscalationAnswer> {
-    let positions: Vec<u32> = escalation
-        .map(|e| e.questions.iter().map(|q| q.position).collect())
-        .unwrap_or_default();
+fn answers_to(
+    escalation: Option<&GraduationEscalation>,
+    answers: &[&str],
+) -> Vec<GraduationEscalationAnswer> {
+    let positions: Vec<u32> =
+        escalation.map(|e| e.questions.iter().map(|q| q.position).collect()).unwrap_or_default();
     answers
         .iter()
         .enumerate()

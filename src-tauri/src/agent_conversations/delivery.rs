@@ -11,9 +11,7 @@ use super::*;
 /// here: the values mapped are `crate::ai_api`'s typed refusals, never a payload.
 pub(super) fn classify_endpoint_error(err: &str) -> &'static str {
     match err {
-        ai_api::ERR_KEYCHAIN_UNAVAILABLE | ai_api::ERR_KEY_UNAVAILABLE => {
-            FAIL_KEYCHAIN_UNAVAILABLE
-        }
+        ai_api::ERR_KEYCHAIN_UNAVAILABLE | ai_api::ERR_KEY_UNAVAILABLE => FAIL_KEYCHAIN_UNAVAILABLE,
         _ => FAIL_AGENT_UNAVAILABLE,
     }
 }
@@ -86,23 +84,10 @@ pub(super) fn log_turn_ended<R: tauri::Runtime>(
     // than claiming a confident zero. Counts alone — nothing drawn from the
     // exchange and nothing of any key (CVL-FR-26, AGC-FR-26).
     if let Some(tokens) = counts.input_tokens {
-        fields.insert(
-            "cachedInputTokens".to_string(),
-            serde_json::json!(tokens.cached),
-        );
-        fields.insert(
-            "uncachedInputTokens".to_string(),
-            serde_json::json!(tokens.uncached),
-        );
+        fields.insert("cachedInputTokens".to_string(), serde_json::json!(tokens.cached));
+        fields.insert("uncachedInputTokens".to_string(), serde_json::json!(tokens.uncached));
     }
-    logging::log(
-        app,
-        buffer,
-        level,
-        &[Domain::Ai, Domain::Backend],
-        "agent turn ended",
-        fields,
-    );
+    logging::log(app, buffer, level, &[Domain::Ai, Domain::Backend], "agent turn ended", fields);
 }
 
 /// CVL-FR-28: what the terminal record reports about a turn's cost.

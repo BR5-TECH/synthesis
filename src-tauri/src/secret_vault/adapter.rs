@@ -42,9 +42,7 @@ impl VaultSecrets {
     }
 
     fn delete_secret(&self, id: &str) -> Result<(), VaultError> {
-        self.vault.apply_secret_mutations(&[Mutation::Remove {
-            path: self.path_of(id),
-        }])
+        self.vault.apply_secret_mutations(&[Mutation::Remove { path: self.path_of(id) }])
     }
 
     fn presence_of(&self, ids: &[&str]) -> Result<HashMap<String, bool>, VaultError> {
@@ -53,12 +51,7 @@ impl VaultSecrets {
         Ok(ids
             .iter()
             .zip(paths.iter())
-            .map(|(id, path)| {
-                (
-                    (*id).to_string(),
-                    answers.get(path).copied().unwrap_or(false),
-                )
-            })
+            .map(|(id, path)| ((*id).to_string(), answers.get(path).copied().unwrap_or(false)))
             .collect())
     }
 }

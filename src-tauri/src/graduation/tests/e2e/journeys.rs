@@ -156,10 +156,7 @@ fn a_commit_holds_what_the_working_copy_holds_and_not_what_an_envelope_claimed()
 fn a_revise_review_sends_its_findings_into_the_next_work_turn() {
     Scenario::named("revise then ready")
         .work_turn(Script::reports_success().writes("src/panel.ts", "export const panel = 1;\n"))
-        .review_turn(Script::answers_revise(
-            ReviewSeverity::Major,
-            "The empty state is not there.",
-        ))
+        .review_turn(Script::answers_revise(ReviewSeverity::Major, "The empty state is not there."))
         .work_turn(Script::reports_success().writes("src/panel.ts", "export const panel = 2;\n"))
         .review_turn(Script::answers_ready("The empty state is there now."))
         .run()
@@ -190,10 +187,7 @@ fn a_revise_review_sends_its_findings_into_the_next_work_turn() {
 fn two_revise_reviews_rest_the_run_for_the_author_with_no_third_pass() {
     Scenario::named("two revise reviews")
         .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
-        .review_turn(Script::answers_revise(
-            ReviewSeverity::Major,
-            "The empty state is not there.",
-        ))
+        .review_turn(Script::answers_revise(ReviewSeverity::Major, "The empty state is not there."))
         .work_turn(Script::reports_success().writes("src/panel.ts", "2\n"))
         .review_turn(Script::answers_revise(
             ReviewSeverity::Critical,
@@ -399,8 +393,7 @@ fn a_second_unreadable_verdict_blocks_the_run_with_the_named_code() {
         .expect_stream_held()
         .expect_dispatch(1, |d| d.has_no_field("correction"))
         .expect_dispatch(2, |d| {
-            d.part("review")
-                .field_contains("correction", "could not be read");
+            d.part("review").field_contains("correction", "could not be read");
         });
 }
 
@@ -491,9 +484,9 @@ fn a_timed_out_turn_rests_the_run_rather_than_failing_it() {
 #[test]
 fn a_turn_that_could_not_be_launched_rests_the_run_and_ends_nothing() {
     Scenario::named("unlaunchable turn")
-        .work_turn(Script::cannot_launch(
-            AgentExecutionError::ExecutionDirectoryInvalid(DirectoryProblem::Inaccessible),
-        ))
+        .work_turn(Script::cannot_launch(AgentExecutionError::ExecutionDirectoryInvalid(
+            DirectoryProblem::Inaccessible,
+        )))
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("launch_failed")
@@ -516,10 +509,7 @@ fn a_turn_that_could_not_be_launched_rests_the_run_and_ends_nothing() {
 fn a_stopped_run_resumes_from_its_checkpoint_without_repeating_a_pass() {
     Scenario::named("resume from checkpoint")
         .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
-        .review_turn(Script::answers_revise(
-            ReviewSeverity::Major,
-            "The empty state is not there.",
-        ))
+        .review_turn(Script::answers_revise(ReviewSeverity::Major, "The empty state is not there."))
         // The second pass is stopped where it stands.
         .work_turn(Script::is_cancelled().writes("src/panel.ts", "2\n"))
         .run()

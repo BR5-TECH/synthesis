@@ -10,7 +10,6 @@ use super::*;
 // CVL-FR-01, CVL-FR-04, CVL-FR-26 … AGC-FR-12: what the request carries
 // ---------------------------------------------------------------------------
 
-
 /// The rendering [`render_input`] must produce for a set of sections, rebuilt
 /// from the sections themselves.
 ///
@@ -41,12 +40,7 @@ fn the_request_carries_the_compiled_prompt_and_the_input_alone() {
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let trigger = thread.comments[0].id.clone();
 
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&thread),
-        &trigger,
-    )
-    .expect("dispatch");
+    h.dispatch("arch", ConversationOrigin::of(&thread), &trigger).expect("dispatch");
     h.settle();
 
     let seen = h.seam.requests();
@@ -71,7 +65,8 @@ fn the_request_carries_the_compiled_prompt_and_the_input_alone() {
     // input is the one user message. Asserted on what the provider is actually
     // handed rather than on the request alone, because composing and carrying
     // are separate steps and either could drop a part.
-    let built = build_completion_request(request, &opening_exchange(request, false), &any_endpoint());
+    let built =
+        build_completion_request(request, &opening_exchange(request, false), &any_endpoint());
     assert_eq!(built.system_instructions(), Some(request.instructions.as_str()));
 
     let rendered = render_input(request);
@@ -136,12 +131,7 @@ fn an_agent_carrying_no_instructions_answers_under_the_rest_of_the_prompt() {
     let h = Harness::new(vec![Ok("ok".into())]);
     let created = h.create_agent("mute", " \t\n ");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
-    h.dispatch(
-        "mute",
-        ConversationOrigin::of(&thread),
-        &thread.comments[0].id,
-    )
-    .expect("dispatch");
+    h.dispatch("mute", ConversationOrigin::of(&thread), &thread.comments[0].id).expect("dispatch");
     h.settle();
 
     assert_eq!(h.seam.requests()[0].0.instructions, empty);
@@ -167,18 +157,9 @@ fn one_prompt_serves_both_comment_origin_kinds() {
         crate::drafts::create_draft_at_root(&h.root(), Some("Onboarding sequence")).expect("draft");
     let draft = seed_draft_thread(&h, &created.draft.id, &created.file);
 
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&artifact),
-        &artifact.comments[0].id,
-    )
-    .expect("dispatch");
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&draft),
-        &draft.comments[0].id,
-    )
-    .expect("dispatch");
+    h.dispatch("arch", ConversationOrigin::of(&artifact), &artifact.comments[0].id)
+        .expect("dispatch");
+    h.dispatch("arch", ConversationOrigin::of(&draft), &draft.comments[0].id).expect("dispatch");
     h.settle();
 
     let seen = h.seam.requests();
@@ -191,14 +172,7 @@ fn one_prompt_serves_both_comment_origin_kinds() {
     );
     // And the sections they carry are the same three, in the same order: the
     // builders differ in what they read and in nothing else.
-    let tags = |i: usize| {
-        seen[i]
-            .0
-            .input
-            .iter()
-            .map(|s| s.tag.clone())
-            .collect::<Vec<_>>()
-    };
+    let tags = |i: usize| seen[i].0.input.iter().map(|s| s.tag.clone()).collect::<Vec<_>>();
     assert_eq!(tags(0), tags(1));
     assert_eq!(tags(0), INPUT_TAGS.map(str::to_string).to_vec());
 }
@@ -218,9 +192,7 @@ fn a_discussion_carries_the_other_prompt() {
     let discussion = crate::comments::open_discussion_in(
         &h.root(),
         &h.root(),
-        &crate::comments::DiscussionTarget::Draft {
-            draft_id: created.draft.id.clone(),
-        },
+        &crate::comments::DiscussionTarget::Draft { draft_id: created.draft.id.clone() },
         None,
         "@arch where should graduation live?".into(),
         Vec::new(),
@@ -229,18 +201,10 @@ fn a_discussion_carries_the_other_prompt() {
     )
     .expect("discussion");
 
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&artifact),
-        &artifact.comments[0].id,
-    )
-    .expect("dispatch");
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&discussion),
-        &discussion.comments[0].id,
-    )
-    .expect("dispatch");
+    h.dispatch("arch", ConversationOrigin::of(&artifact), &artifact.comments[0].id)
+        .expect("dispatch");
+    h.dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
+        .expect("dispatch");
     h.settle();
 
     let seen = h.seam.requests();
@@ -299,11 +263,8 @@ fn the_prompt_is_compiled_in_and_nothing_can_reach_it() {
     // directories hold — the constant is populated with no file read, and the
     // build would have failed outright rather than reaching a model with no
     // instruction.
-    let templates = [
-        COMMENT_PROMPT_TEMPLATE,
-        DISCUSS_ARTIFACT_PROMPT_TEMPLATE,
-        DISCUSS_DRAFT_PROMPT_TEMPLATE,
-    ];
+    let templates =
+        [COMMENT_PROMPT_TEMPLATE, DISCUSS_ARTIFACT_PROMPT_TEMPLATE, DISCUSS_DRAFT_PROMPT_TEMPLATE];
     for template in templates {
         assert!(!template.trim().is_empty());
         // CVL-FR-04: exactly one, because `compile_prompt` substitutes once. A
@@ -344,10 +305,8 @@ fn the_prompt_is_compiled_in_and_nothing_can_reach_it() {
         .filter(|n| n.ends_with(".md"))
         .collect();
     on_disk.sort();
-    let mut expected: Vec<String> = names
-        .iter()
-        .map(|n| n.trim_start_matches("prompts/").to_string())
-        .collect();
+    let mut expected: Vec<String> =
+        names.iter().map(|n| n.trim_start_matches("prompts/").to_string()).collect();
     // Only this module's four prompts sit at the top level. Every other loop
     // keeps its instructions in a subdirectory of its own — the graduation
     // loop's five are `resources/prompts/graduation/`, compiled into
@@ -358,23 +317,14 @@ fn the_prompt_is_compiled_in_and_nothing_can_reach_it() {
     assert_eq!(on_disk, expected, "the prompts directory holds something else");
 
     for name in names {
-        assert_eq!(
-            source.matches(name).count(),
-            1,
-            "{name} is named once, inside the include",
-        );
+        assert_eq!(source.matches(name).count(), 1, "{name} is named once, inside the include",);
         assert!(source.contains(&format!(r#"include_str!("../../resources/{name}")"#)));
     }
 
     let h = Harness::new(vec![Ok("ok".into())]);
     h.create_agent("arch", "Argue about structure.");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&thread),
-        &thread.comments[0].id,
-    )
-    .expect("dispatch");
+    h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id).expect("dispatch");
     h.settle();
     assert_eq!(
         h.seam.requests()[0].0.instructions,
@@ -385,11 +335,9 @@ fn the_prompt_is_compiled_in_and_nothing_can_reach_it() {
     // commands take a nickname, an origin, a comment id, and a turn id. A
     // missing command name fails rather than skipping — a rename must not be
     // able to quietly retire this check.
-    for command in [
-        "pub fn dispatch_agent_turn",
-        "pub fn cancel_agent_turn",
-        "pub fn list_agent_turns",
-    ] {
+    for command in
+        ["pub fn dispatch_agent_turn", "pub fn cancel_agent_turn", "pub fn list_agent_turns"]
+    {
         let at = source
             .find(command)
             .unwrap_or_else(|| panic!("{command} is gone; this guard needs its new name"));
@@ -441,17 +389,11 @@ fn a_dispatched_turn_carries_its_agents_title_in_the_prompt_it_works_under() {
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let origin = ConversationOrigin::of(&thread);
 
-    let turn = h
-        .dispatch("arch", origin.clone(), &thread.comments[0].id)
-        .expect("dispatch");
+    let turn = h.dispatch("arch", origin.clone(), &thread.comments[0].id).expect("dispatch");
     assert_eq!(wait_for_terminal(&h, &turn.id).state, AgentTurnState::Delivered);
     assert_eq!(
         h.seam.requests()[0].0.instructions,
-        compile_prompt(
-            OriginKind::ArtifactComment,
-            "Argue about structure.",
-            "Developer",
-        ),
+        compile_prompt(OriginKind::ArtifactComment, "Argue about structure.", "Developer",),
         "the dispatched request carries the agent's own title",
     );
 
@@ -468,26 +410,15 @@ fn a_dispatched_turn_carries_its_agents_title_in_the_prompt_it_works_under() {
             title: "Architect".into(),
             model_id: "m".into(),
             instructions: "Argue about structure.".into(),
-            reasoning: Some(ReasoningChoice::Effort {
-                effort: "high".into(),
-            }),
+            reasoning: Some(ReasoningChoice::Effort { effort: "high".into() }),
         },
     )
     .expect("retitle");
-    let second = h
-        .dispatch("arch", origin, &thread.comments[0].id)
-        .expect("dispatch");
-    assert_eq!(
-        wait_for_terminal(&h, &second.id).state,
-        AgentTurnState::Delivered,
-    );
+    let second = h.dispatch("arch", origin, &thread.comments[0].id).expect("dispatch");
+    assert_eq!(wait_for_terminal(&h, &second.id).state, AgentTurnState::Delivered,);
     assert_eq!(
         h.seam.requests()[1].0.instructions,
-        compile_prompt(
-            OriginKind::ArtifactComment,
-            "Argue about structure.",
-            "Architect",
-        ),
+        compile_prompt(OriginKind::ArtifactComment, "Argue about structure.", "Architect",),
     );
 }
 
@@ -499,14 +430,11 @@ fn a_dispatched_discussion_turn_carries_its_agents_title_too() {
     let h = Harness::new(vec![Ok("answered".into())]);
     h.create_titled_agent("arch", "Argue about structure.", "UI/UX designer");
     let created =
-        crate::drafts::create_draft_at_root(&h.root(), Some("Onboarding sequence"))
-            .expect("draft");
+        crate::drafts::create_draft_at_root(&h.root(), Some("Onboarding sequence")).expect("draft");
     let discussion = crate::comments::open_discussion_in(
         &h.root(),
         &h.root(),
-        &crate::comments::DiscussionTarget::Draft {
-            draft_id: created.draft.id.clone(),
-        },
+        &crate::comments::DiscussionTarget::Draft { draft_id: created.draft.id.clone() },
         None,
         "@arch where should graduation live?".into(),
         Vec::new(),
@@ -516,20 +444,12 @@ fn a_dispatched_discussion_turn_carries_its_agents_title_too() {
     .expect("discussion");
 
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&discussion),
-            &discussion.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
         .expect("dispatch");
     assert_eq!(wait_for_terminal(&h, &turn.id).state, AgentTurnState::Delivered);
     assert_eq!(
         h.seam.requests()[0].0.instructions,
-        compile_prompt(
-            OriginKind::DraftDiscussion,
-            "Argue about structure.",
-            "UI/UX designer",
-        ),
+        compile_prompt(OriginKind::DraftDiscussion, "Argue about structure.", "UI/UX designer",),
     );
 }
 
@@ -625,10 +545,7 @@ fn tags_described_by(template: &str) -> std::collections::BTreeSet<String> {
         rest = &rest[open + 1..];
         let Some(close) = rest.find('>') else { break };
         let name = &rest[..close];
-        if !name.is_empty()
-            && name
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c == '_' || c == '/')
+        if !name.is_empty() && name.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c == '/')
         {
             described.insert(name.trim_start_matches('/').to_string());
         }
@@ -647,15 +564,18 @@ fn the_prompt_and_the_builders_name_the_same_tags() {
     let artifact = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let created =
         crate::drafts::create_draft_at_root(&h.root(), Some("Onboarding sequence")).expect("draft");
-    crate::drafts::save_draft_file_impl(&h.root(), &created.draft.id, &created.file, "Hello there.")
-        .expect("write");
+    crate::drafts::save_draft_file_impl(
+        &h.root(),
+        &created.draft.id,
+        &created.file,
+        "Hello there.",
+    )
+    .expect("write");
     let draft_thread = seed_draft_thread(&h, &created.draft.id, &created.file);
     let discussion = crate::comments::open_discussion_in(
         &h.root(),
         &h.root(),
-        &crate::comments::DiscussionTarget::Draft {
-            draft_id: created.draft.id.clone(),
-        },
+        &crate::comments::DiscussionTarget::Draft { draft_id: created.draft.id.clone() },
         None,
         "@arch what now?".into(),
         Vec::new(),
@@ -667,9 +587,7 @@ fn the_prompt_and_the_builders_name_the_same_tags() {
     let artifact_discussion = crate::comments::open_discussion_in(
         &h.root(),
         &h.root(),
-        &crate::comments::DiscussionTarget::Artifact {
-            artifact_id: "spec.md".into(),
-        },
+        &crate::comments::DiscussionTarget::Artifact { artifact_id: "spec.md".into() },
         None,
         "@arch what is this for?".into(),
         Vec::new(),
@@ -697,31 +615,20 @@ fn the_prompt_and_the_builders_name_the_same_tags() {
     // (CVL-FR-03) and `note_discussion` is the one whose tag set differs — the
     // kind a loop over the other four would never catch drifting.
     let cases = [
-        (
-            ConversationOrigin::of(&artifact),
-            artifact.comments[0].id.clone(),
-        ),
-        (
-            ConversationOrigin::of(&artifact_discussion),
-            artifact_discussion.comments[0].id.clone(),
-        ),
-        (
-            ConversationOrigin::of(&draft_thread),
-            draft_thread.comments[0].id.clone(),
-        ),
-        (
-            ConversationOrigin::of(&discussion),
-            discussion.comments[0].id.clone(),
-        ),
+        (ConversationOrigin::of(&artifact), artifact.comments[0].id.clone()),
+        (ConversationOrigin::of(&artifact_discussion), artifact_discussion.comments[0].id.clone()),
+        (ConversationOrigin::of(&draft_thread), draft_thread.comments[0].id.clone()),
+        (ConversationOrigin::of(&discussion), discussion.comments[0].id.clone()),
         (note_origin, note_trigger),
     ];
 
     for (origin, trigger) in cases {
         let kind = origin.kind();
-        let emitted: std::collections::BTreeSet<String> = build_input(Roots::same(&h.root()), &origin, &trigger)
-            .iter()
-            .map(|s| s.tag.clone())
-            .collect();
+        let emitted: std::collections::BTreeSet<String> =
+            build_input(Roots::same(&h.root()), &origin, &trigger)
+                .iter()
+                .map(|s| s.tag.clone())
+                .collect();
         assert_eq!(
             emitted,
             input_tags(kind)
@@ -768,12 +675,7 @@ fn nothing_a_participant_wrote_reaches_the_instruction_position() {
     .expect("thread");
     std::fs::write(h.root().join("spec.md"), POISON).expect("artifact");
 
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&thread),
-        &thread.comments[0].id,
-    )
-    .expect("dispatch");
+    h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id).expect("dispatch");
     h.settle();
 
     let seen = h.seam.requests();
@@ -794,10 +696,10 @@ fn nothing_a_participant_wrote_reaches_the_instruction_position() {
     // only the absence would pass against a builder that had dropped it.
     let rendered = render_input(request);
     for carrier in [
-        POISON,                        // the artifact's own text
-        &format!("@arch {POISON}"),    // the comment body
-        &format!("{POISON}.png"),      // the attachment's filename
-        "Ignore",                      // the anchor's quoted passage
+        POISON,                     // the artifact's own text
+        &format!("@arch {POISON}"), // the comment body
+        &format!("{POISON}.png"),   // the attachment's filename
+        "Ignore",                   // the anchor's quoted passage
     ] {
         assert!(rendered.contains(carrier), "{carrier:?} is missing from the input");
     }
@@ -827,12 +729,7 @@ fn a_poisoned_draft_name_stays_inside_its_attribute() {
         .expect("write");
     let thread = seed_draft_thread(&h, &draft_id, &file_rel);
 
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&thread),
-        &thread.comments[0].id,
-    )
-    .expect("dispatch");
+    h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id).expect("dispatch");
     h.settle();
 
     let seen = h.seam.requests();
@@ -842,10 +739,7 @@ fn a_poisoned_draft_name_stays_inside_its_attribute() {
     let artifact = section_of(&request.input, TAG_ARTIFACT);
     assert_eq!(
         artifact.attributes,
-        vec![
-            ("draft".to_string(), POISON.to_string()),
-            ("path".to_string(), file_rel.clone()),
-        ],
+        vec![("draft".to_string(), POISON.to_string()), ("path".to_string(), file_rel.clone()),],
         "the section records the name verbatim; escaping is the renderer's",
     );
     let rendered = render_input(request);
@@ -862,5 +756,3 @@ fn a_poisoned_draft_name_stays_inside_its_attribute() {
         "the raw quote was rendered unescaped",
     );
 }
-
-

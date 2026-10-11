@@ -10,20 +10,11 @@ fn temp_root() -> tempfile::TempDir {
 }
 
 fn human(login: &str) -> Participant {
-    Participant::Human {
-        login: login.into(),
-        display_name: None,
-        email: None,
-    }
+    Participant::Human { login: login.into(), display_name: None, email: None }
 }
 
 fn agent(id: &str, handle: &str) -> Participant {
-    Participant::Agent {
-        agent_id: id.into(),
-        handle: handle.into(),
-        model: None,
-        title: None,
-    }
+    Participant::Agent { agent_id: id.into(), handle: handle.into(), model: None, title: None }
 }
 
 /// A fragment position. The owner and the path are filled in by whatever the
@@ -34,15 +25,18 @@ fn anchor(start: usize, end: usize, quote: &str) -> FragmentTarget {
 
 /// A passage position as a legacy log line stores it.
 fn legacy_anchor(start: usize, end: usize, quote: &str) -> LegacyAnchor {
-    LegacyAnchor {
-        start,
-        end,
-        quote: quote.into(),
-    }
+    LegacyAnchor { start, end, quote: quote.into() }
 }
 
-fn open(root: &crate::fs::RootFs, artifact: &str, a: FragmentTarget, body: &str, at: &str) -> Discussion {
-    open_artifact_fragment_in(root, artifact, a, body.into(), Vec::new(), &human("raver119"), at).unwrap()
+fn open(
+    root: &crate::fs::RootFs,
+    artifact: &str,
+    a: FragmentTarget,
+    body: &str,
+    at: &str,
+) -> Discussion {
+    open_artifact_fragment_in(root, artifact, a, body.into(), Vec::new(), &human("raver119"), at)
+        .unwrap()
 }
 
 /// The fragment move of an artifact's fragment log, for tests of the move itself.
@@ -82,11 +76,7 @@ fn reanchor_to(
         Ok(d) => (d.target.clone(), d.fragment_path().to_string()),
         Err(_) => (artifact_target(""), String::new()),
     };
-    let moved = FragmentTarget {
-        owner,
-        path,
-        ..position
-    };
+    let moved = FragmentTarget { owner, path, ..position };
     move_fragment_to(root, log, id, moved, by, at)
 }
 
@@ -188,20 +178,19 @@ fn rename_and_follow(root: &crate::fs::RootFs, old_rel: &str, new_rel: &str) -> 
 
 fn log_lines(root: &Path, artifact: &str) -> Vec<String> {
     let path = log_path(root, artifact).unwrap();
-    std::fs::read_to_string(path)
-        .unwrap_or_default()
-        .lines()
-        .map(|l| l.to_string())
-        .collect()
+    std::fs::read_to_string(path).unwrap_or_default().lines().map(|l| l.to_string()).collect()
 }
 
 fn artifact_target(artifact_id: &str) -> DiscussionTarget {
-    DiscussionTarget::Artifact {
-        artifact_id: artifact_id.to_string(),
-    }
+    DiscussionTarget::Artifact { artifact_id: artifact_id.to_string() }
 }
 
-fn open_artifact_discussion(root: &crate::fs::RootFs, artifact_id: &str, body: &str, at: &str) -> Discussion {
+fn open_artifact_discussion(
+    root: &crate::fs::RootFs,
+    artifact_id: &str,
+    body: &str,
+    at: &str,
+) -> Discussion {
     open_discussion_in(
         root,
         root,
@@ -226,19 +215,14 @@ fn open_artifact_discussion(root: &crate::fs::RootFs, artifact_id: &str, body: &
 fn make_draft(root: &crate::fs::RootFs, name: &str) -> String {
     crate::drafts::create_drafts_folder_impl(root, "", "UI").ok();
     crate::drafts::create_drafts_folder_impl(root, "UI", "Components").ok();
-    crate::drafts::create_draft_impl(root, Some(name), Some("UI/Components"))
-        .unwrap()
-        .draft
-        .id
+    crate::drafts::create_draft_impl(root, Some(name), Some("UI/Components")).unwrap().draft.id
 }
 
 fn open_discussion(root: &crate::fs::RootFs, draft_id: &str, body: &str, at: &str) -> Discussion {
     open_discussion_in(
         root,
         root,
-        &DiscussionTarget::Draft {
-            draft_id: draft_id.to_string(),
-        },
+        &DiscussionTarget::Draft { draft_id: draft_id.to_string() },
         None,
         body.into(),
         Vec::new(),
@@ -256,21 +240,21 @@ fn discussion_log_lines(root: &crate::fs::RootFs, draft_id: &str) -> Vec<String>
         .collect()
 }
 
+mod agent_write_path;
+mod agents_and_titles;
+mod artifact_discussions;
+mod attachment_read;
+mod attachments;
+mod errors_and_lifecycle;
+mod local_participant;
 mod log_and_fold;
+mod note_discussions;
+mod project_wide_read;
+mod proposal_reference;
+mod question_bodies;
+mod question_sets;
 mod quoting_lock_resolve;
 mod reanchor_and_ordering;
 mod renames;
-mod agents_and_titles;
-mod agent_write_path;
-mod errors_and_lifecycle;
-mod wire_shape;
-mod attachments;
-mod project_wide_read;
-mod artifact_discussions;
 mod unified_model;
-mod attachment_read;
-mod proposal_reference;
-mod note_discussions;
-mod question_bodies;
-mod question_sets;
-mod local_participant;
+mod wire_shape;

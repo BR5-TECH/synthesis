@@ -26,18 +26,10 @@ fn publish_to(fx: &DeletionFixture, branch: &str) {
         fx.f.branch(branch);
     }
     let mut remote = repo.find_remote("origin").unwrap();
-    remote
-        .push(&[format!("refs/heads/{branch}:refs/heads/{branch}").as_str()], None)
-        .unwrap();
-    let id = repo
-        .find_branch(branch, BranchType::Local)
-        .unwrap()
-        .get()
-        .peel_to_commit()
-        .unwrap()
-        .id();
-    repo.reference(&format!("refs/remotes/origin/{branch}"), id, true, "test")
-        .unwrap();
+    remote.push(&[format!("refs/heads/{branch}:refs/heads/{branch}").as_str()], None).unwrap();
+    let id =
+        repo.find_branch(branch, BranchType::Local).unwrap().get().peel_to_commit().unwrap().id();
+    repo.reference(&format!("refs/remotes/origin/{branch}"), id, true, "test").unwrap();
     repo.find_branch(branch, BranchType::Local)
         .unwrap()
         .set_upstream(Some(&format!("origin/{branch}")))
@@ -45,10 +37,7 @@ fn publish_to(fx: &DeletionFixture, branch: &str) {
 }
 
 fn remote_has(bare: &TempDir, branch: &str) -> bool {
-    Repository::open_bare(bare.path())
-        .unwrap()
-        .find_branch(branch, BranchType::Local)
-        .is_ok()
+    Repository::open_bare(bare.path()).unwrap().find_branch(branch, BranchType::Local).is_ok()
 }
 
 fn tracking_exists(fx: &DeletionFixture, tracking: &str) -> bool {
@@ -96,7 +85,10 @@ fn a_remote_deletion_removes_the_remote_branch_and_its_tracking_ref() {
     assert_eq!(fx.events(), 1);
     let done = record_for(fx.buffer, "remote branch deleted");
     assert_eq!(done.fields.get("remote"), Some(&serde_json::json!("origin")));
-    assert!(!buffer_text(fx.buffer).contains(bare.path().to_str().unwrap()), "no remote URL in a record");
+    assert!(
+        !buffer_text(fx.buffer).contains(bare.path().to_str().unwrap()),
+        "no remote URL in a record"
+    );
 }
 
 // GTC-FR-FSRQ
@@ -128,10 +120,7 @@ fn a_remote_that_cannot_be_reached_is_reported_failed_and_the_local_results_stay
     assert!(outcome.remote.requested);
     assert_eq!(outcome.remote.state, "failed");
     assert_eq!(outcome.remote.branch.as_deref(), Some("origin/feature"));
-    assert_eq!(
-        outcome.remote.error.as_deref(),
-        Some(crate::github_tokens::ERR_GITHUB_UNREACHABLE)
-    );
+    assert_eq!(outcome.remote.error.as_deref(), Some(crate::github_tokens::ERR_GITHUB_UNREACHABLE));
     assert!(tracking_exists(&fx, "origin/feature"), "a failed push leaves the tracking ref");
     assert_eq!(fx.events(), 1, "the branch was removed, so the event is emitted");
     let failed = record_for(fx.buffer, "remote branch deletion failed");

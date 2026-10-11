@@ -32,11 +32,7 @@ const PROPOSED: &str = "# Review\n\nA better opening.\n\nAnd a second paragraph.
 const RATIONALE: &str = "The instructions bury the important step.";
 
 fn human() -> Participant {
-    Participant::Human {
-        login: "raver119".into(),
-        display_name: None,
-        email: None,
-    }
+    Participant::Human { login: "raver119".into(), display_name: None, email: None }
 }
 
 fn agent() -> Participant {
@@ -77,9 +73,7 @@ impl Fixture {
         let thread = crate::comments::open_discussion_in(
             &root,
             &root,
-            &DiscussionTarget::Artifact {
-                artifact_id: PROMPT.into(),
-            },
+            &DiscussionTarget::Artifact { artifact_id: PROMPT.into() },
             None,
             "@arch what would you change?".into(),
             Vec::new(),
@@ -106,10 +100,7 @@ impl Fixture {
     /// The pair a conversation-bound tool holds: one temporary directory
     /// serving as both the worktree and the repository machine store.
     fn roots(&self) -> crate::agent_conversations::OwnedRoots {
-        crate::agent_conversations::OwnedRoots {
-            worktree: self.root(),
-            store: self.root(),
-        }
+        crate::agent_conversations::OwnedRoots { worktree: self.root(), store: self.root() }
     }
 
     fn origin(&self) -> ConversationOrigin {
@@ -183,10 +174,7 @@ fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<String>) {
             walk(root, &path, out);
         } else {
             out.push(
-                path.strip_prefix(root)
-                    .expect("under root")
-                    .to_string_lossy()
-                    .replace('\\', "/"),
+                path.strip_prefix(root).expect("under root").to_string_lossy().replace('\\', "/"),
             );
         }
     }
@@ -203,19 +191,13 @@ fn assign(root: &crate::fs::RootFs, entries: &[(&str, ArtifactType)]) {
     for (rel, artifact_type) in entries {
         assignments.assignments.insert(
             (*rel).to_string(),
-            Assignment {
-                artifact_type: *artifact_type,
-                scope: Scope::File,
-            },
+            Assignment { artifact_type: *artifact_type, scope: Scope::File },
         );
     }
     let path = root.path().join(".synthesis");
     std::fs::create_dir_all(&path).expect("dirs");
-    std::fs::write(
-        path.join("library.toml"),
-        toml::to_string(&assignments).expect("toml"),
-    )
-    .expect("write");
+    std::fs::write(path.join("library.toml"), toml::to_string(&assignments).expect("toml"))
+        .expect("write");
 }
 
 // ---------------------------------------------------------------------------
@@ -233,10 +215,7 @@ fn it_is_a_portable_tool_with_no_command_or_event_of_its_own() {
         "propose_prompt_changes",
     );
     const LIB: &str = include_str!("../../lib.rs");
-    assert!(
-        !LIB.contains(NAME),
-        "no Tauri command and no event belongs to this tool",
-    );
+    assert!(!LIB.contains(NAME), "no Tauri command and no event belongs to this tool",);
     const MODULE: &str = include_str!("../propose_prompt_changes.rs");
     assert!(!MODULE.contains("#[tauri::command]"));
     assert!(!MODULE.contains("app.emit"));
@@ -248,19 +227,18 @@ fn its_definition_is_byte_identical_wherever_it_appears() {
     let one = Fixture::new();
     let two = Fixture::new();
     let a = rig::tool::tool_definition(&one.tool());
-    let b = rig::tool::tool_definition(&two.tool_for(
-        ConversationOrigin::stub_artifact(two.thread_id.clone(), "a.md", true),
-    ));
+    let b = rig::tool::tool_definition(&two.tool_for(ConversationOrigin::stub_artifact(
+        two.thread_id.clone(),
+        "a.md",
+        true,
+    )));
     assert_eq!(a.name, b.name);
     assert_eq!(a.description, b.description);
     assert_eq!(a.parameters, b.parameters);
     assert_eq!(a.description, DESCRIPTION);
 
     let schema = parameters();
-    assert_eq!(
-        schema["required"],
-        serde_json::json!(["path", "content", "rationale"]),
-    );
+    assert_eq!(schema["required"], serde_json::json!(["path", "content", "rationale"]),);
     for (name, description) in [
         ("path", PATH_DESCRIPTION),
         ("content", CONTENT_DESCRIPTION),
@@ -279,10 +257,7 @@ fn no_argument_names_a_conversation_an_agent_or_a_participant() {
     names.sort();
     assert_eq!(names, vec!["content", "path", "rationale"]);
     for forbidden in ["thread", "conversation", "agent", "participant", "artifact_id"] {
-        assert!(
-            !properties.contains_key(forbidden),
-            "no argument names {forbidden}",
-        );
+        assert!(!properties.contains_key(forbidden), "no argument names {forbidden}",);
     }
 }
 
@@ -315,24 +290,17 @@ fn a_successful_call_records_one_proposal_and_changes_no_file() {
     let after = f.tree();
     let added: Vec<&String> = after.iter().filter(|p| !before.contains(p)).collect();
     for path in &added {
-        assert!(
-            path.starts_with(".synthesis/"),
-            "nothing outside .synthesis/ was created: {path}",
-        );
+        assert!(path.starts_with(".synthesis/"), "nothing outside .synthesis/ was created: {path}",);
     }
-    assert!(
-        before.iter().all(|p| after.contains(p)),
-        "and nothing was deleted, renamed, or moved",
-    );
+    assert!(before.iter().all(|p| after.contains(p)), "and nothing was deleted, renamed, or moved",);
 }
 
 #[test]
 fn a_fragment_is_proposed_as_a_whole_file() {
     // PCP-FR-13 / PPC-FR-04: the tool applies no patch and merges nothing.
     let f = Fixture::new();
-    let output = f
-        .call_with(PROMPT, "Just the one paragraph I rewrote.\n", RATIONALE)
-        .expect("recorded");
+    let output =
+        f.call_with(PROMPT, "Just the one paragraph I rewrote.\n", RATIONALE).expect("recorded");
     assert_eq!(
         crate::prompt_proposals::load_content_impl(&f.root(), &output.proposal_id)
             .expect("candidate")
@@ -346,9 +314,7 @@ fn a_path_naming_nothing_the_project_holds_is_refused_and_creates_nothing() {
     // PPC-FR-05, PPC-FR-06.
     let f = Fixture::new();
     for path in ["prompts/missing.md", "/etc/hosts", "../outside.md", "prompts"] {
-        let refusal = f
-            .call_with(path, PROPOSED, RATIONALE)
-            .expect_err("refused");
+        let refusal = f.call_with(path, PROPOSED, RATIONALE).expect_err("refused");
         assert_eq!(refusal, ToolRefusal::PromptProposalPathMissing, "{path}");
         assert_eq!(refusal.kind(), ToolErrorKind::NotFound);
         assert!(refusal.retryable());
@@ -356,25 +322,15 @@ fn a_path_naming_nothing_the_project_holds_is_refused_and_creates_nothing() {
     }
     assert!(!f.path.join("prompts/missing.md").exists());
     assert!(!f.path.join("outside.md").exists());
-    assert_eq!(
-        f.discussion().comments.len(),
-        1,
-        "and no comment was posted for any of them",
-    );
+    assert_eq!(f.discussion().comments.len(), 1, "and no comment was posted for any of them",);
 }
 
 #[test]
 fn a_file_of_another_type_is_refused_distinctly_from_a_missing_one() {
     // PPC-FR-06.
     let f = Fixture::new();
-    for path in [
-        "specifications/ui/EDT-editor.md",
-        "flows/build.flow",
-        "notes/plain.md",
-    ] {
-        let refusal = f
-            .call_with(path, "different\n", RATIONALE)
-            .expect_err("refused");
+    for path in ["specifications/ui/EDT-editor.md", "flows/build.flow", "notes/plain.md"] {
+        let refusal = f.call_with(path, "different\n", RATIONALE).expect_err("refused");
         assert_eq!(refusal, ToolRefusal::NotAPromptArtifact, "{path}");
         assert_eq!(refusal.kind(), ToolErrorKind::InvalidArgs);
         assert!(refusal.retryable());
@@ -432,14 +388,8 @@ fn a_blank_rationale_and_a_no_change_candidate_are_told_apart() {
         assert!(refusal.retryable());
     }
     assert_ne!(blank.to_string(), same.to_string());
-    assert_eq!(
-        blank,
-        ToolRefusal::InvalidArguments(crate::tools::PROMPT_PROPOSAL_RATIONALE_BLANK),
-    );
-    assert_eq!(
-        same,
-        ToolRefusal::InvalidArguments(crate::tools::PROPOSAL_NO_CHANGE),
-    );
+    assert_eq!(blank, ToolRefusal::InvalidArguments(crate::tools::PROMPT_PROPOSAL_RATIONALE_BLANK),);
+    assert_eq!(same, ToolRefusal::InvalidArguments(crate::tools::PROPOSAL_NO_CHANGE),);
     assert!(f.proposals().is_empty());
     assert_eq!(f.artifact_body(), ORIGINAL);
 
@@ -453,10 +403,7 @@ fn a_blank_rationale_and_a_no_change_candidate_are_told_apart() {
 
     // …and none of this tool's refusals refuses a `content` for being empty.
     const MODULE: &str = include_str!("../propose_prompt_changes.rs");
-    assert!(
-        !MODULE.contains("content.is_empty()"),
-        "no refusal turns on an empty candidate",
-    );
+    assert!(!MODULE.contains("content.is_empty()"), "no refusal turns on an empty candidate",);
     for text in [
         crate::tools::PROMPT_PROPOSAL_RATIONALE_BLANK,
         crate::tools::PROPOSAL_NO_CHANGE,
@@ -491,9 +438,7 @@ fn a_pending_proposal_refuses_the_next_call_retryably() {
     // PPC-FR-09, PPC-FR-18.
     let f = Fixture::new();
     f.call().expect("recorded");
-    let refusal = f
-        .call_with(PROMPT, "# Review\n\nAnother.\n", RATIONALE)
-        .expect_err("refused");
+    let refusal = f.call_with(PROMPT, "# Review\n\nAnother.\n", RATIONALE).expect_err("refused");
     assert_eq!(refusal, ToolRefusal::PromptProposalPending);
     assert_eq!(refusal.kind(), ToolErrorKind::PermissionDenied);
     assert!(refusal.retryable());
@@ -530,15 +475,8 @@ fn a_pending_proposal_refuses_the_next_call_retryably() {
     // A different prompt artifact has its own slot.
     let second = "prompts/other.md";
     write_file(&f.root(), second, "# Other\n");
-    assign(
-        &f.root(),
-        &[
-            (PROMPT, ArtifactType::Prompt),
-            (second, ArtifactType::Prompt),
-        ],
-    );
-    f.call_with(second, "# Other\n\nBetter.\n", RATIONALE)
-        .expect("a second artifact succeeds");
+    assign(&f.root(), &[(PROMPT, ArtifactType::Prompt), (second, ArtifactType::Prompt)]);
+    f.call_with(second, "# Other\n\nBetter.\n", RATIONALE).expect("a second artifact succeeds");
 }
 
 #[test]
@@ -590,11 +528,7 @@ fn a_candidate_that_cannot_be_written_is_the_retryable_other_refusal() {
     assert_eq!(refusal.kind(), ToolErrorKind::Other);
     assert!(refusal.retryable(), "a write that failed once may succeed next time");
     assert!(f.proposals().is_empty(), "no candidate was left behind");
-    assert_eq!(
-        f.discussion().comments.len(),
-        1,
-        "and the conversation gained no line",
-    );
+    assert_eq!(f.discussion().comments.len(), 1, "and the conversation gained no line",);
     assert!(!f.proposed.load(Ordering::SeqCst), "the turn did not end");
 }
 
@@ -610,7 +544,10 @@ fn two_turns_racing_one_artifact_record_exactly_one_proposal() {
                 .map(|nickname| {
                     let tool = ProposePromptChangesTool::new(
                         f.handle(),
-                        crate::agent_conversations::OwnedRoots { worktree: f.root(), store: f.root() },
+                        crate::agent_conversations::OwnedRoots {
+                            worktree: f.root(),
+                            store: f.root(),
+                        },
                         f.origin(),
                         Participant::Agent {
                             agent_id: format!("agent-{nickname}"),
@@ -640,9 +577,7 @@ fn two_turns_racing_one_artifact_record_exactly_one_proposal() {
         "exactly one proposal was recorded: {outcomes:?}",
     );
     assert!(
-        outcomes
-            .iter()
-            .any(|o| o.as_ref().err() == Some(&ToolRefusal::PromptProposalPending)),
+        outcomes.iter().any(|o| o.as_ref().err() == Some(&ToolRefusal::PromptProposalPending)),
         "and the other refused for the pending one: {outcomes:?}",
     );
     assert_eq!(f.proposals().len(), 1);
@@ -660,18 +595,11 @@ fn the_comment_is_the_rationale_and_one_reference_and_nothing_else() {
     let posted = thread.comments.last().expect("the agent's comment");
     assert_eq!(posted.body, RATIONALE);
     for forbidden in [PROMPT, &output.proposal_id, "proposal", "accept"] {
-        assert!(
-            !posted.body.contains(forbidden),
-            "the body carries no {forbidden}",
-        );
+        assert!(!posted.body.contains(forbidden), "the body carries no {forbidden}",);
     }
     assert_eq!(posted.attachments.len(), 1);
     match &posted.attachments[0] {
-        crate::comments::Attachment::PromptProposal {
-            proposal_id,
-            artifact_id,
-            path,
-        } => {
+        crate::comments::Attachment::PromptProposal { proposal_id, artifact_id, path } => {
             assert_eq!(proposal_id, &output.proposal_id);
             assert_eq!(artifact_id, PROMPT);
             assert_eq!(path, PROMPT);
@@ -701,7 +629,10 @@ fn no_project_open_is_the_shared_refusal() {
     let dir = TempDir::new().expect("tempdir");
     let tool = ProposePromptChangesTool::new(
         app.handle().clone(),
-        crate::agent_conversations::OwnedRoots { worktree: crate::fs::RootFs::for_root(dir.path()), store: crate::fs::RootFs::for_root(dir.path()) },
+        crate::agent_conversations::OwnedRoots {
+            worktree: crate::fs::RootFs::for_root(dir.path()),
+            store: crate::fs::RootFs::for_root(dir.path()),
+        },
         ConversationOrigin::stub_artifact("t1", PROMPT, false),
         agent(),
         Arc::new(AtomicBool::new(false)),
@@ -742,14 +673,8 @@ fn each_call_records_the_tool_and_the_path_and_nothing_a_model_composed() {
     for domain in [Domain::Ai, Domain::Backend] {
         let records = records(&BUFFER, domain);
         assert_eq!(records.len(), 2, "one per call, under {domain:?}");
-        let info = records
-            .iter()
-            .find(|r| r.level == LogLevel::Info)
-            .expect("the success");
-        let warn = records
-            .iter()
-            .find(|r| r.level == LogLevel::Warn)
-            .expect("the refusal");
+        let info = records.iter().find(|r| r.level == LogLevel::Info).expect("the success");
+        let warn = records.iter().find(|r| r.level == LogLevel::Warn).expect("the refusal");
         for record in [info, warn] {
             let fields = serde_json::to_string(&record.fields).expect("fields");
             assert!(fields.contains(NAME), "names the tool");
@@ -760,9 +685,7 @@ fn each_call_records_the_tool_and_the_path_and_nothing_a_model_composed() {
             assert!(!whole.contains("original three"), "no file text: {whole}");
         }
         assert!(
-            serde_json::to_string(&warn.fields)
-                .expect("fields")
-                .contains("proposal_pending"),
+            serde_json::to_string(&warn.fields).expect("fields").contains("proposal_pending"),
             "the refusal names its reason",
         );
     }
@@ -790,12 +713,7 @@ fn it_reaches_nothing_of_the_draft_proposal_tool() {
     // A mention in a comment is how the module says the two are separate; a path
     // expression is what would make it false.
     const MODULE: &str = include_str!("../propose_prompt_changes.rs");
-    for reached in [
-        "propose_draft_changes::",
-        "draft_proposals::",
-        "drafts::",
-        "draft_id",
-    ] {
+    for reached in ["propose_draft_changes::", "draft_proposals::", "drafts::", "draft_id"] {
         assert!(!MODULE.contains(reached), "this tool reaches no {reached}");
     }
     // CVL-FR-08: the two are attached to disjoint origin kinds, so no turn

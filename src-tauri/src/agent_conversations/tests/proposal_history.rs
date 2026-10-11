@@ -83,11 +83,7 @@ fn a_decided_proposal_names_its_changes_and_their_outcomes() {
         .find(|t| t.id == thread.id)
         .expect("thread");
     let trigger = thread.comments.last().expect("a comment").id.clone();
-    let sections = build_input(
-        Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        &trigger,
-    );
+    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &trigger);
     let history = section_of(&sections, TAG_DISCUSSION_HISTORY);
 
     assert!(
@@ -125,11 +121,7 @@ fn only_a_refused_change_carries_the_text_it_offered() {
         .find(|t| t.id == thread.id)
         .expect("thread");
     let trigger = thread.comments.last().expect("a comment").id.clone();
-    let sections = build_input(
-        Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        &trigger,
-    );
+    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &trigger);
     let history = section_of(&sections, TAG_DISCUSSION_HISTORY);
 
     assert!(
@@ -164,11 +156,7 @@ fn an_older_proposal_contributes_its_counts_alone() {
         .find(|t| t.id == thread.id)
         .expect("thread");
     let trigger = thread.comments.last().expect("a comment").id.clone();
-    let sections = build_input(
-        Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        &trigger,
-    );
+    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &trigger);
     let history = section_of(&sections, TAG_DISCUSSION_HISTORY);
 
     // The two oldest references keep their count line and lose their changes.
@@ -207,12 +195,11 @@ fn change(
     }
 }
 
-fn digest_of(changes: Vec<crate::draft_proposals::ProposalChange>) -> super::sections::ProposalDigest {
+fn digest_of(
+    changes: Vec<crate::draft_proposals::ProposalChange>,
+) -> super::sections::ProposalDigest {
     let counts = crate::draft_proposals::hunks::HunkCounts::of(changes.iter().map(|c| c.state));
-    super::sections::ProposalDigest {
-        counts,
-        changes: Some(changes),
-    }
+    super::sections::ProposalDigest { counts, changes: Some(changes) }
 }
 
 /// AGC-FR-RVQP: every change names its kind, whichever kind it is.

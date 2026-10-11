@@ -106,9 +106,7 @@ impl LogRegistry {
             Ok(held) => held,
             Err(poisoned) => poisoned.into_inner(),
         };
-        held.entry(run_id.to_string())
-            .or_insert_with(|| Arc::new(Mutex::new(seed())))
-            .clone()
+        held.entry(run_id.to_string()).or_insert_with(|| Arc::new(Mutex::new(seed()))).clone()
     }
 
     /// Forget a run this process has stopped writing.
@@ -204,7 +202,10 @@ pub fn emit<R: tauri::Runtime>(
 ///
 /// Answers whether the streams are healthy afterwards. A run whose retry still
 /// fails stays interrupted and Continue stays available.
-pub fn retry_pending<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &mut GraduationRun) -> bool {
+pub fn retry_pending<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &mut GraduationRun,
+) -> bool {
     if run.logs.persistence.is_healthy() {
         return true;
     }
@@ -262,29 +263,19 @@ fn write_records<R: tauri::Runtime>(
             run.logs = indexes;
             // GRS-FR-UCZL: told after the records are durable, so a consumer
             // that re-reads on it reads the result rather than racing it.
-            announce_log_records(
-                app,
-                &run.id,
-                stream,
-                run.logs.stream(stream).latest_sequence,
-            );
+            announce_log_records(app, &run.id, stream, run.logs.stream(stream).latest_sequence);
             true
         }
         Err(indexes) => {
             run.logs = indexes;
-            let failure = run
-                .logs
-                .persistence
-                .failure
-                .clone()
-                .unwrap_or_else(|| {
-                    GraduationLogFailure::write(
-                        index::CODE_STORAGE_UNAVAILABLE,
-                        stream,
-                        "The run's log storage could not be reached.",
-                        Vec::new(),
-                    )
-                });
+            let failure = run.logs.persistence.failure.clone().unwrap_or_else(|| {
+                GraduationLogFailure::write(
+                    index::CODE_STORAGE_UNAVAILABLE,
+                    stream,
+                    "The run's log storage could not be reached.",
+                    Vec::new(),
+                )
+            });
             rest_on_log_failure(app, run, failure);
             false
         }
@@ -376,17 +367,14 @@ pub fn append_activity_records<R: tauri::Runtime>(
                 "graduation could not write a turn's activity to the run's activity stream",
                 log_fields! { "run_id" => run_id.to_string() },
             );
-            Err(indexes
-                .persistence
-                .failure
-                .unwrap_or_else(|| {
-                    GraduationLogFailure::write(
-                        index::CODE_STORAGE_UNAVAILABLE,
-                        GraduationLogStream::Activity,
-                        "The run's log storage could not be reached.",
-                        Vec::new(),
-                    )
-                }))
+            Err(indexes.persistence.failure.unwrap_or_else(|| {
+                GraduationLogFailure::write(
+                    index::CODE_STORAGE_UNAVAILABLE,
+                    GraduationLogStream::Activity,
+                    "The run's log storage could not be reached.",
+                    Vec::new(),
+                )
+            }))
         }
     }
 }
@@ -626,11 +614,12 @@ impl<R: tauri::Runtime> crate::tools::agent_exec::DurableOutputSink for Graduati
             );
             return Ok(());
         };
-        append_activity_records(&self.app, &self.run_id, self.seed.clone(), vec![record])
-            .map_err(|failure| crate::tools::agent_exec::DurableOutputFailure {
+        append_activity_records(&self.app, &self.run_id, self.seed.clone(), vec![record]).map_err(
+            |failure| crate::tools::agent_exec::DurableOutputFailure {
                 code: failure.code,
                 message: failure.message,
-            })
+            },
+        )
     }
 }
 
@@ -664,6 +653,5 @@ pub fn note_durable_failure<R: tauri::Runtime>(
 pub fn store_fs_of<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Option<std::sync::Arc<FsAccess>> {
-    app.try_state::<crate::fs::FsAccessState>()
-        .and_then(|state| state.get())
+    app.try_state::<crate::fs::FsAccessState>().and_then(|state| state.get())
 }

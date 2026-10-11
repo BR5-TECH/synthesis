@@ -32,8 +32,7 @@ fn the_definition_is_the_specs_text_and_documents_both_parameters() {
     // checked against the spec that defines it.
     const SPEC: &str = include_str!("../../../../../specifications/tools/LSK-load-skill-tool.md");
     assert!(
-        SPEC.lines()
-            .any(|line| line.trim().strip_prefix("> ") == Some(DESCRIPTION)),
+        SPEC.lines().any(|line| line.trim().strip_prefix("> ") == Some(DESCRIPTION)),
         "LSK-FR-02: the description must be the spec's contract-surface text",
     );
 
@@ -48,9 +47,7 @@ fn the_definition_is_the_specs_text_and_documents_both_parameters() {
     // LSK-FR-02: the `ecosystem` description names all four accepted values,
     // because a model reads the description and does not reliably infer a set
     // from a schema keyword (TLC-FR-06).
-    let documented = schema["properties"]["ecosystem"]["description"]
-        .as_str()
-        .unwrap();
+    let documented = schema["properties"]["ecosystem"]["description"].as_str().unwrap();
     for value in ["claude", "codex", "github", "opencode"] {
         assert!(
             documented.contains(value),
@@ -68,15 +65,8 @@ fn the_definition_is_the_specs_text_and_documents_both_parameters() {
     // Both parameter descriptions are pinned to the spec, not merely probed
     // for a phrase: TLC-FR-05 makes the text the model reads the contract, and
     // a reword away from the spec would otherwise go unnoticed.
-    for pointer in [
-        "/properties/name/description",
-        "/properties/ecosystem/description",
-    ] {
+    for pointer in ["/properties/name/description", "/properties/ecosystem/description"] {
         let text = schema.pointer(pointer).and_then(|d| d.as_str()).unwrap();
-        assert!(
-            SPEC.contains(text),
-            "LSK-FR-02: {pointer} must be the spec's text, got {text:?}",
-        );
+        assert!(SPEC.contains(text), "LSK-FR-02: {pointer} must be the spec's text, got {text:?}",);
     }
 }
-

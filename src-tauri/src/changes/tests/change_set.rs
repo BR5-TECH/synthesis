@@ -16,10 +16,7 @@ fn commands_report_not_a_git_repository_outside_a_repo() {
     let dir = TempDir::new().unwrap();
     let root = &crate::fs::RootFs::for_root(dir.path());
     assert_eq!(uncommitted_change_set(root).unwrap_err(), ERR_NOT_A_REPO);
-    assert_eq!(
-        branch_change_set(root, "main").unwrap_err(),
-        ERR_NOT_A_REPO
-    );
+    assert_eq!(branch_change_set(root, "main").unwrap_err(), ERR_NOT_A_REPO);
     assert_eq!(comparison_branches(root).unwrap_err(), ERR_NOT_A_REPO);
     assert!(open_repo(root).is_err());
 }
@@ -106,13 +103,11 @@ fn branch_changes_are_taken_against_the_merge_base() {
         "commits that landed on the target after the merge base must not appear: {got:?}"
     );
     match set.comparison {
-        Comparison::Branch {
-            ref target_branch,
-            ref merge_base,
-        } => {
+        Comparison::Branch { ref target_branch, ref merge_base } => {
             assert_eq!(target_branch, &current);
             assert_eq!(
-                merge_base, &base_oid.to_string(),
+                merge_base,
+                &base_oid.to_string(),
                 "the reported merge base is commit A, the fork point — not \
                  HEAD and not the target's tip"
             );
@@ -141,7 +136,8 @@ fn branch_changes_resolve_with_a_detached_head() {
     f.detach();
     f.write("dirty.md", "d\n");
 
-    let set = branch_change_set(&crate::fs::RootFs::for_root(f.root()), &current).expect("a detached HEAD is not an error");
+    let set = branch_change_set(&crate::fs::RootFs::for_root(f.root()), &current)
+        .expect("a detached HEAD is not an error");
     let got = paths(&set);
     assert!(got.contains(&"one.md".to_string()), "{got:?}");
     assert!(got.contains(&"two.md".to_string()), "{got:?}");

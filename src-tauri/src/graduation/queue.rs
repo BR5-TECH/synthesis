@@ -14,10 +14,7 @@ pub fn load_queue(fs: &fsa::FsAccess, base: &StoreBase, project_key: &str) -> Gr
         // one unreadable file cannot take every other run with it.
         .filter_map(|entry| store::read_run_record(fs, base, &entry.run_id).ok())
         .collect();
-    GraduationQueue {
-        project_key: project_key.to_string(),
-        runs,
-    }
+    GraduationQueue { project_key: project_key.to_string(), runs }
 }
 
 /// GRD-FR-EGWS: the run a queue starts next.
@@ -34,10 +31,7 @@ pub fn next_eligible<'a>(queue: &'a GraduationQueue, key: &str) -> Option<&'a Gr
 /// A run holds its queue from its first dispatch until it is `completed` or
 /// `discarded`, so a run at rest holds it as a run at work does.
 pub fn holder_of_queue<'a>(queue: &'a GraduationQueue, key: &str) -> Option<&'a GraduationRun> {
-    queue
-        .runs
-        .iter()
-        .find(|run| run.queue_key() == key && run.holds_queue())
+    queue.runs.iter().find(|run| run.queue_key() == key && run.holds_queue())
 }
 
 /// GRD-FR-EGWS: every member of a queue that may start, earliest first.
@@ -48,17 +42,9 @@ pub fn holder_of_queue<'a>(queue: &'a GraduationQueue, key: &str) -> Option<&'a 
 /// pinned branch is not checked out (GRD-FR-XRDY).
 pub fn eligible_members<'a>(queue: &'a GraduationQueue, key: &str) -> Vec<&'a GraduationRun> {
     if let Some(holder) = holder_of_queue(queue, key) {
-        return if holder.is_eligible() {
-            vec![holder]
-        } else {
-            Vec::new()
-        };
+        return if holder.is_eligible() { vec![holder] } else { Vec::new() };
     }
-    queue
-        .runs
-        .iter()
-        .filter(|run| run.queue_key() == key && run.is_eligible())
-        .collect()
+    queue.runs.iter().filter(|run| run.queue_key() == key && run.is_eligible()).collect()
 }
 
 /// GRD-FR-NYSH: every run the scheduler may start now, oldest first in the
@@ -70,18 +56,12 @@ pub fn eligible_members<'a>(queue: &'a GraduationQueue, key: &str) -> Vec<&'a Gr
 /// scheduler starts the first one it can and then passes over that queue, so
 /// each queue still starts one run at a time.
 pub fn dispatch_candidates(queue: &GraduationQueue) -> Vec<&GraduationRun> {
-    let held: std::collections::BTreeSet<String> = queue
-        .runs
-        .iter()
-        .filter(|run| run.holds_queue())
-        .map(|run| run.queue_key())
-        .collect();
+    let held: std::collections::BTreeSet<String> =
+        queue.runs.iter().filter(|run| run.holds_queue()).map(|run| run.queue_key()).collect();
     queue
         .runs
         .iter()
-        .filter(|run| {
-            run.is_eligible() && (run.holds_queue() || !held.contains(&run.queue_key()))
-        })
+        .filter(|run| run.is_eligible() && (run.holds_queue() || !held.contains(&run.queue_key())))
         .collect()
 }
 
@@ -90,30 +70,19 @@ pub fn dispatch_candidates(queue: &GraduationQueue) -> Vec<&GraduationRun> {
 /// Read from the stored runs, so a run at rest holds its slot as a run at work
 /// does, and a relaunch frees none (GRD-FR-BSWV).
 pub fn slot_holders(queue: &GraduationQueue) -> std::collections::BTreeSet<String> {
-    queue
-        .runs
-        .iter()
-        .filter(|run| run.holds_slot())
-        .map(|run| run.id.clone())
-        .collect()
+    queue.runs.iter().filter(|run| run.holds_slot()).map(|run| run.id.clone()).collect()
 }
 
 /// GRD-FR-VLFO: one queue, in the project's run order.
 pub fn queue_of<'a>(queue: &'a GraduationQueue, key: &str) -> Vec<&'a GraduationRun> {
-    queue
-        .runs
-        .iter()
-        .filter(|run| run.queue_key() == key && run.state.waits_in_queue())
-        .collect()
+    queue.runs.iter().filter(|run| run.queue_key() == key && run.state.waits_in_queue()).collect()
 }
 
 /// GRD-FR-RHNP: a run's index in its own queue, counted from the earliest
 /// member as zero.
 pub fn position_in_queue(queue: &GraduationQueue, run_id: &str) -> Option<usize> {
     let run = queue.runs.iter().find(|r| r.id == run_id)?;
-    queue_of(queue, &run.queue_key())
-        .iter()
-        .position(|r| r.id == run_id)
+    queue_of(queue, &run.queue_key()).iter().position(|r| r.id == run_id)
 }
 
 /// WKS-FR-YBST: how many non-terminal runs each stream holds.
@@ -201,17 +170,11 @@ pub(super) fn non_terminal_run_for_draft<'a>(
     queue: &'a GraduationQueue,
     draft_id: &str,
 ) -> Option<&'a GraduationRun> {
-    queue
-        .runs
-        .iter()
-        .find(|r| r.input.draft_id == draft_id && !r.state.is_terminal())
+    queue.runs.iter().find(|r| r.input.draft_id == draft_id && !r.state.is_terminal())
 }
 
 /// The most recent run for a draft, terminal or not.
-pub fn latest_run_for<'a>(
-    queue: &'a GraduationQueue,
-    draft_id: &str,
-) -> Option<&'a GraduationRun> {
+pub fn latest_run_for<'a>(queue: &'a GraduationQueue, draft_id: &str) -> Option<&'a GraduationRun> {
     queue.runs.iter().rev().find(|r| r.input.draft_id == draft_id)
 }
 
@@ -257,9 +220,7 @@ pub fn project_queue<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<Gra
 
 /// The open project's key, or an empty string where no project is open.
 pub(super) fn project_key<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> String {
-    app.try_state::<ProjectState>()
-        .map(|state| state.slot_key())
-        .unwrap_or_default()
+    app.try_state::<ProjectState>().map(|state| state.slot_key()).unwrap_or_default()
 }
 
 /// GHP-FR-SRDL: refuse a publication against a draft a **non-terminal** run

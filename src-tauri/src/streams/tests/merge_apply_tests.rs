@@ -92,12 +92,8 @@ fn an_uncommitted_apply_writes_the_settled_tree_unstaged() {
 #[test]
 fn a_committed_apply_makes_one_merge_commit_of_the_settled_tree() {
     let fx = Fixture::new();
-    let case = case(
-        &fx,
-        StreamMergePublication::Commit {
-            message: "Land the settled merge".into(),
-        },
-    );
+    let case =
+        case(&fx, StreamMergePublication::Commit { message: "Land the settled merge".into() });
     let base_before = tip_of(&fx.repo(), &case.stream.base_branch);
     let stream_before = tip_of(&fx.repo(), &case.stream.branch);
 
@@ -122,10 +118,7 @@ fn a_committed_apply_makes_one_merge_commit_of_the_settled_tree() {
         0,
         "the base worktree is clean after the commit"
     );
-    assert_eq!(
-        std::fs::read_to_string(fx.root().join("README.md")).unwrap(),
-        "settled readme\n"
-    );
+    assert_eq!(std::fs::read_to_string(fx.root().join("README.md")).unwrap(), "settled readme\n");
 }
 
 // GRB-FR-CWLD, GRB-FR-ZEPB, GRB-FR-BXEJ, WKS-FR-HLGN: a base tip that moved
@@ -134,9 +127,7 @@ fn a_committed_apply_makes_one_merge_commit_of_the_settled_tree() {
 fn an_apply_over_a_moved_base_branch_writes_nothing() {
     for publication in [
         StreamMergePublication::Uncommitted,
-        StreamMergePublication::Commit {
-            message: "never lands".into(),
-        },
+        StreamMergePublication::Commit { message: "never lands".into() },
     ] {
         let fx = Fixture::new();
         let case = case(&fx, publication);
@@ -218,9 +209,7 @@ fn an_apply_while_the_guard_is_held_is_refused_and_the_guard_is_released_after()
 
     apply(&fx, &case).expect("applied once the guard is free");
     assert!(
-        state
-            .begin_repository_update(&case.stream.id, Reconciliation::Merge)
-            .is_ok(),
+        state.begin_repository_update(&case.stream.id, Reconciliation::Merge).is_ok(),
         "the apply released the guard"
     );
 }
@@ -304,12 +293,7 @@ fn an_apply_for_an_unknown_stream_fails() {
 #[test]
 fn a_commit_apply_with_no_base_worktree_moves_the_ref_and_writes_no_worktree() {
     let fx = Fixture::new();
-    let case = case(
-        &fx,
-        StreamMergePublication::Commit {
-            message: "Land it".into(),
-        },
-    );
+    let case = case(&fx, StreamMergePublication::Commit { message: "Land it".into() });
     let repo = fx.repo();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     repo.branch("elsewhere", &head, false).unwrap();

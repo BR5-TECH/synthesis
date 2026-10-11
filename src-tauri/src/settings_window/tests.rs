@@ -4,9 +4,7 @@
 use super::*;
 
 fn open(section: Option<&str>) -> Request {
-    Request::Open {
-        section: section.map(str::to_string),
-    }
+    Request::Open { section: section.map(str::to_string) }
 }
 
 // SWN-FR-01 / SWN-FR-17: the one window has one label and the title Settings.
@@ -26,20 +24,14 @@ fn the_default_and_minimum_size_are_eight_hundred_by_six_hundred() {
 // SWN-FR-05: nothing is open, so the requested window is simply created.
 #[test]
 fn a_request_with_nothing_open_creates_the_window() {
-    assert_eq!(
-        decide(open(None), false, false),
-        Action::Create { section: None }
-    );
+    assert_eq!(decide(open(None), false, false), Action::Create { section: None });
 }
 
 // SWN-FR-05, SWN-FR-06: the window is already open, so it is focused and no
 // second one opens.
 #[test]
 fn a_request_for_the_open_window_focuses_it_and_opens_no_second() {
-    assert_eq!(
-        decide(open(None), true, false),
-        Action::Focus { section: None }
-    );
+    assert_eq!(decide(open(None), true, false), Action::Focus { section: None });
 }
 
 // SWN-FR-06, SWN-FR-HZWD: a request naming a section presents that section
@@ -48,15 +40,11 @@ fn a_request_for_the_open_window_focuses_it_and_opens_no_second() {
 fn a_sectioned_request_carries_its_section_to_a_new_or_an_open_window() {
     assert_eq!(
         decide(open(Some("global/agents")), true, false),
-        Action::Focus {
-            section: Some("global/agents".into())
-        }
+        Action::Focus { section: Some("global/agents".into()) }
     );
     assert_eq!(
         decide(open(Some("project/graduation")), false, false),
-        Action::Create {
-            section: Some("project/graduation".into())
-        }
+        Action::Create { section: Some("project/graduation".into()) }
     );
 }
 
@@ -65,10 +53,7 @@ fn a_sectioned_request_carries_its_section_to_a_new_or_an_open_window() {
 fn closing_the_open_window_sweeps_it_first() {
     assert_eq!(
         decide(Request::Close, true, false),
-        Action::Sweep(PendingSweep {
-            label: "settings".into(),
-            next: Transition::Close,
-        })
+        Action::Sweep(PendingSweep { label: "settings".into(), next: Transition::Close })
     );
 }
 
@@ -83,15 +68,9 @@ fn closing_a_window_that_is_not_open_does_nothing() {
 fn a_section_address_names_its_scope() {
     assert_eq!(address_scope("global/agents"), Some(SettingsScope::Global));
     assert_eq!(address_scope("project/agents"), Some(SettingsScope::Project));
-    assert_eq!(
-        address_scope("global/agents:new"),
-        Some(SettingsScope::Global)
-    );
+    assert_eq!(address_scope("global/agents:new"), Some(SettingsScope::Global));
     // An item that carries a slash of its own cannot change the scope.
-    assert_eq!(
-        address_scope("global/agents:project/x"),
-        Some(SettingsScope::Global)
-    );
+    assert_eq!(address_scope("global/agents:project/x"), Some(SettingsScope::Global));
     // A section with no scope, or an unknown scope, names none.
     assert_eq!(address_scope("agents"), None);
     assert_eq!(address_scope("team/agents"), None);
@@ -129,10 +108,7 @@ fn every_request_made_during_a_sweep_is_inert() {
 fn a_quit_sweeps_the_open_settings_window_first() {
     assert_eq!(
         decide(Request::Quit, true, false),
-        Action::Sweep(PendingSweep {
-            label: "settings".into(),
-            next: Transition::Quit,
-        })
+        Action::Sweep(PendingSweep { label: "settings".into(), next: Transition::Quit })
     );
     // With nothing open the quit is the ordinary exit path's.
     assert_eq!(decide(Request::Quit, false, false), Action::Inert);
@@ -152,18 +128,12 @@ fn only_a_failed_quit_releases_the_exit_hold() {
 fn a_quit_during_a_sweep_upgrades_it_rather_than_starting_another() {
     let state = SettingsWindows::default();
     assert!(!state.upgrade_to_quit(), "nothing to upgrade with no sweep");
-    state.set(Some(PendingSweep {
-        label: "settings".into(),
-        next: Transition::Close,
-    }));
+    state.set(Some(PendingSweep { label: "settings".into(), next: Transition::Close }));
     assert!(state.upgrade_to_quit());
     assert_eq!(state.peek().map(|s| s.next), Some(Transition::Quit));
 
     // …and the answer then performs the QUIT, not the close it started as.
-    assert_eq!(
-        state.take_for("settings").map(|s| s.next),
-        Some(Transition::Quit)
-    );
+    assert_eq!(state.take_for("settings").map(|s| s.next), Some(Transition::Quit));
 }
 
 // A sweep answer from a window that is not the one under sweep performs
@@ -171,10 +141,7 @@ fn a_quit_during_a_sweep_upgrades_it_rather_than_starting_another() {
 #[test]
 fn a_sweep_answer_is_taken_only_from_the_window_it_was_asked_of() {
     let state = SettingsWindows::default();
-    state.set(Some(PendingSweep {
-        label: "settings".into(),
-        next: Transition::Close,
-    }));
+    state.set(Some(PendingSweep { label: "settings".into(), next: Transition::Close }));
     assert_eq!(state.take_for("main"), None);
     assert!(state.peek().is_some(), "the sweep is still outstanding");
     assert!(state.take_for("settings").is_some());

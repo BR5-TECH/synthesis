@@ -19,10 +19,7 @@ fn quiet_fixture() -> Fixture {
 fn set_limit(fx: &Fixture, limit: GraduationConcurrency) {
     crate::project_settings::save_project_config_to(
         &crate::fs::RootFs::for_root(fx.root()),
-        ProjectConfig {
-            graduation_concurrency_limit: Some(limit),
-            ..Default::default()
-        },
+        ProjectConfig { graduation_concurrency_limit: Some(limit), ..Default::default() },
     )
     .expect("the limit is saved");
 }
@@ -154,15 +151,16 @@ fn a_discard_removes_the_runs_queued_behind_in_its_own_queue_alone() {
     let held = fx.enqueue_for(&stream, "held", "d-held");
     let off = fx.enqueue_for(&stream, "off", "d-off");
     let on = fx.enqueue_for(&stream, "on", "d-on");
-    let direct = fx.direct_in(&stream.worktree(), &stream.branch, Some(&stream), "direct", "d-direct");
+    let direct =
+        fx.direct_in(&stream.worktree(), &stream.branch, Some(&stream), "direct", "d-direct");
     let elsewhere = fx.enqueue_for(&other, "elsewhere", "d-else");
     crate::graduation::set_graduation_auto_start(fx.app.clone(), off.id.clone(), false)
         .expect("auto-start off");
     rest(&fx, &ahead, GraduationRunState::Completed);
     rest(&fx, &held, GraduationRunState::AwaitingAuthor);
 
-    let discarded =
-        crate::graduation::discard_graduation_run(fx.app.clone(), held.id.clone()).expect("discarded");
+    let discarded = crate::graduation::discard_graduation_run(fx.app.clone(), held.id.clone())
+        .expect("discarded");
     assert_eq!(discarded.state, GraduationRunState::Discarded);
 
     let queue = crate::graduation::project_queue(&fx.app).expect("the queue");
@@ -220,8 +218,8 @@ fn a_discard_removes_the_runs_behind_a_direct_run_on_an_ordinary_worktree() {
     rest(&fx, &ahead, GraduationRunState::Completed);
     rest(&fx, &held, GraduationRunState::AwaitingAuthor);
 
-    let discarded =
-        crate::graduation::discard_graduation_run(fx.app.clone(), held.id.clone()).expect("discarded");
+    let discarded = crate::graduation::discard_graduation_run(fx.app.clone(), held.id.clone())
+        .expect("discarded");
     assert_eq!(discarded.state, GraduationRunState::Discarded);
 
     let queue = crate::graduation::project_queue(&fx.app).expect("the queue");
@@ -289,8 +287,8 @@ fn a_failed_run_holds_its_queue_until_it_is_discarded() {
     .expect_err("a failed run is not restarted");
     assert!(refused.starts_with("run_state_not_permitted"), "{refused}");
 
-    let discarded =
-        crate::graduation::discard_graduation_run(fx.app.clone(), failed.id.clone()).expect("discarded");
+    let discarded = crate::graduation::discard_graduation_run(fx.app.clone(), failed.id.clone())
+        .expect("discarded");
     assert_eq!(discarded.state, GraduationRunState::Discarded);
     assert!(crate::graduation::load_run(&fx.app, &behind.id).is_err());
 }

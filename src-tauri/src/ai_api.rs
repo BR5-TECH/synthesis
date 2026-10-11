@@ -266,11 +266,7 @@ fn catalog_models(descriptor: &AiApiProvider) -> Vec<ModelOption> {
 /// nothing about a model it has never heard of — which leaves `false`, an
 /// undeclared capability being absent rather than guessed at.
 fn catalog_image_input(descriptor: &AiApiProvider, model_id: &str) -> Option<bool> {
-    descriptor
-        .model_catalog
-        .iter()
-        .find(|(id, _, _)| *id == model_id)
-        .map(|(_, _, images)| *images)
+    descriptor.model_catalog.iter().find(|(id, _, _)| *id == model_id).map(|(_, _, images)| *images)
 }
 
 /// AAP-FR-35: the three-step capability decision, applied to a whole model list.
@@ -280,7 +276,10 @@ fn catalog_image_input(descriptor: &AiApiProvider, model_id: &str) -> Option<boo
 /// about carries `false`. Applied at the one place a model list is produced, so
 /// `list_ai_api_integrations`, `resolve_ai_api_endpoint`, and the selector
 /// cannot disagree about what a model takes.
-fn settle_image_input(mut models: Vec<ModelOption>, descriptor: &AiApiProvider) -> Vec<ModelOption> {
+fn settle_image_input(
+    mut models: Vec<ModelOption>,
+    descriptor: &AiApiProvider,
+) -> Vec<ModelOption> {
     for model in &mut models {
         let catalog = catalog_image_input(descriptor, &model.id);
         *model = std::mem::take(model).with_catalog_image_input(catalog);
@@ -377,7 +376,10 @@ pub fn reasoning_label(choice: Option<&ReasoningChoice>) -> String {
 /// decide whether a stored choice survives. Two callers with two copies of this
 /// rule would eventually disagree, and the disagreement would be a choice
 /// stored that the model then ignores.
-pub fn reasoning_error(model: Option<&ModelOption>, choice: &ReasoningChoice) -> Option<&'static str> {
+pub fn reasoning_error(
+    model: Option<&ModelOption>,
+    choice: &ReasoningChoice,
+) -> Option<&'static str> {
     // No model selected means no capability is known: the provider is on its own
     // default, and which model that resolves to is the provider's business.
     let model = model?;
@@ -395,7 +397,11 @@ pub fn reasoning_error(model: Option<&ModelOption>, choice: &ReasoningChoice) ->
 
 /// Whether a stored choice still stands against the model now selected
 /// (AAP-FR-29).
-fn reasoning_survives(models: &[ModelOption], selected: Option<&str>, choice: &ReasoningChoice) -> bool {
+fn reasoning_survives(
+    models: &[ModelOption],
+    selected: Option<&str>,
+    choice: &ReasoningChoice,
+) -> bool {
     let model = selected.and_then(|id| models.iter().find(|m| m.id == id));
     model.is_some() && reasoning_error(model, choice).is_none()
 }
@@ -443,10 +449,7 @@ pub struct AiApiRecord {
 
 impl AiApiRecord {
     fn empty(provider: &str) -> Self {
-        Self {
-            provider: provider.to_string(),
-            ..Default::default()
-        }
+        Self { provider: provider.to_string(), ..Default::default() }
     }
 }
 
@@ -619,12 +622,7 @@ impl Default for AiApiIntegrations {
 
 impl AiApiIntegrations {
     pub fn new(prober: Box<dyn EndpointProber>, secrets: Box<dyn SecretStore>) -> Self {
-        Self {
-            prober,
-            openrouter_prober: None,
-            secrets,
-            write_lock: Mutex::new(()),
-        }
+        Self { prober, openrouter_prober: None, secrets, write_lock: Mutex::new(()) }
     }
 
     pub fn with_openrouter_prober(mut self, prober: Box<dyn EndpointProber>) -> Self {
@@ -651,11 +649,7 @@ impl AiApiIntegrations {
 ///
 /// `key_present` is a `bool` rather than a store handle so the rule stays pure
 /// and so no caller of this function is ever handed a key.
-pub fn state_of(
-    record: &AiApiRecord,
-    key_present: bool,
-    key_required: bool,
-) -> IntegrationState {
+pub fn state_of(record: &AiApiRecord, key_present: bool, key_required: bool) -> IntegrationState {
     match record.base_url.as_deref() {
         None | Some("") => IntegrationState::Unconfigured,
         // A record verified with a key must still have one.
@@ -735,16 +729,11 @@ pub fn active_provider(
     explicit: Option<&str>,
     present: &KeyPresence,
 ) -> Option<String> {
-    let verified: Vec<&AiApiRecord> = records
-        .iter()
-        .filter(|r| state_for(r, present) == IntegrationState::Verified)
-        .collect();
+    let verified: Vec<&AiApiRecord> =
+        records.iter().filter(|r| state_for(r, present) == IntegrationState::Verified).collect();
 
     if let Some(provider) = explicit {
-        return verified
-            .iter()
-            .find(|r| r.provider == provider)
-            .map(|r| r.provider.clone());
+        return verified.iter().find(|r| r.provider == provider).map(|r| r.provider.clone());
     }
     match verified.as_slice() {
         [only] => Some(only.provider.clone()),
@@ -809,10 +798,9 @@ pub fn resolve_project(
 ) -> ProjectAiApiIntegration {
     let active = active_provider(records, explicit_active, present);
     let is_verified = |provider: &str| {
-        records.iter().any(|r| {
-            r.provider == provider
-                && state_for(r, present) == IntegrationState::Verified
-        })
+        records
+            .iter()
+            .any(|r| r.provider == provider && state_for(r, present) == IntegrationState::Verified)
     };
 
     if let Some(over) = override_provider {
@@ -844,9 +832,8 @@ pub fn resolve_project(
     // Nothing resolves. The distinction the UI needs is whether there is
     // anything to choose between at all: something configured means "pick one",
     // nothing configured means "go and set one up".
-    let anything_configured = records
-        .iter()
-        .any(|r| state_for(r, present) != IntegrationState::Unconfigured);
+    let anything_configured =
+        records.iter().any(|r| state_for(r, present) != IntegrationState::Unconfigured);
     ProjectAiApiIntegration {
         provider: None,
         resolution: if anything_configured {
@@ -993,10 +980,7 @@ pub fn verify_integration_impl(
         (settle_image_input(probed, descriptor), ModelsOrigin::Probed)
     };
 
-    let _guard = ai
-        .write_lock
-        .lock()
-        .map_err(|e| format!("ai api registry poisoned: {e}"))?;
+    let _guard = ai.write_lock.lock().map_err(|e| format!("ai api registry poisoned: {e}"))?;
 
     // AAP-FR-06: a key the author supplied goes to the keychain first. A
     // keychain that refuses leaves the registry untouched, so a failed write
@@ -1008,9 +992,7 @@ pub fn verify_integration_impl(
     // so an author checking a working provider cannot lose their credential by
     // leaving the field alone.
     if let Some(supplied) = supplied {
-        ai.secrets
-            .set(provider, supplied)
-            .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
+        ai.secrets.set(provider, supplied).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
     }
 
     let (mut records, active) = store.load_ai_api_registry()?;
@@ -1064,10 +1046,7 @@ pub fn set_model_impl(
     model_id: Option<&str>,
 ) -> Result<AiApiIntegration, String> {
     let descriptor = provider_descriptor(provider).ok_or(ERR_UNKNOWN_PROVIDER)?;
-    let _guard = ai
-        .write_lock
-        .lock()
-        .map_err(|e| format!("ai api registry poisoned: {e}"))?;
+    let _guard = ai.write_lock.lock().map_err(|e| format!("ai api registry poisoned: {e}"))?;
     let (mut records, active) = store.load_ai_api_registry()?;
     let index = match records.iter().position(|r| r.provider == provider) {
         Some(i) => i,
@@ -1120,10 +1099,7 @@ pub fn set_reasoning_impl(
     choice: Option<ReasoningChoice>,
 ) -> Result<AiApiIntegration, String> {
     let descriptor = provider_descriptor(provider).ok_or(ERR_UNKNOWN_PROVIDER)?;
-    let _guard = ai
-        .write_lock
-        .lock()
-        .map_err(|e| format!("ai api registry poisoned: {e}"))?;
+    let _guard = ai.write_lock.lock().map_err(|e| format!("ai api registry poisoned: {e}"))?;
     let (mut records, active) = store.load_ai_api_registry()?;
     let index = match records.iter().position(|r| r.provider == provider) {
         Some(i) => i,
@@ -1175,10 +1151,7 @@ pub fn set_active_impl(
     provider: &str,
 ) -> Result<Vec<AiApiIntegration>, String> {
     provider_descriptor(provider).ok_or(ERR_UNKNOWN_PROVIDER)?;
-    let _guard = ai
-        .write_lock
-        .lock()
-        .map_err(|e| format!("ai api registry poisoned: {e}"))?;
+    let _guard = ai.write_lock.lock().map_err(|e| format!("ai api registry poisoned: {e}"))?;
     let (records, _) = store.load_ai_api_registry()?;
     let present = provider_presence(&*ai.secrets, &records);
     let verified = records
@@ -1200,13 +1173,8 @@ pub fn clear_integration_impl(
     provider: &str,
 ) -> Result<Vec<AiApiIntegration>, String> {
     provider_descriptor(provider).ok_or(ERR_UNKNOWN_PROVIDER)?;
-    let _guard = ai
-        .write_lock
-        .lock()
-        .map_err(|e| format!("ai api registry poisoned: {e}"))?;
-    ai.secrets
-        .delete(provider)
-        .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
+    let _guard = ai.write_lock.lock().map_err(|e| format!("ai api registry poisoned: {e}"))?;
+    ai.secrets.delete(provider).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
     let (mut records, active) = store.load_ai_api_registry()?;
     records.retain(|r| r.provider != provider);
     let active = match active {
@@ -1246,11 +1214,8 @@ pub fn get_project_impl(
     // An empty key is "no project open" (`ProjectState::slot_key`), whose slot is
     // the shared default one — an override read from there would belong to no
     // project in particular.
-    let override_provider = if project_key.is_empty() {
-        None
-    } else {
-        store.load_ai_api_override(project_key)?
-    };
+    let override_provider =
+        if project_key.is_empty() { None } else { store.load_ai_api_override(project_key)? };
     Ok(resolve_project(
         &records,
         active.as_deref(),
@@ -1318,21 +1283,12 @@ pub fn resolve_ai_api_call(
         (_, None) => return Err(ERR_NONE_SELECTED.into()),
     };
     let (records, _) = store.load_ai_api_registry()?;
-    let record = records
-        .iter()
-        .find(|r| r.provider == provider)
-        .ok_or(ERR_NONE_SELECTED)?;
-    let base_url = record
-        .base_url
-        .clone()
-        .filter(|u| !u.is_empty())
-        .ok_or(ERR_NONE_SELECTED)?;
+    let record = records.iter().find(|r| r.provider == provider).ok_or(ERR_NONE_SELECTED)?;
+    let base_url = record.base_url.clone().filter(|u| !u.is_empty()).ok_or(ERR_NONE_SELECTED)?;
     // The one place a key is read back out, and only for a caller that is about
     // to present it to the endpoint it belongs to.
     let api_key = if record.masked_hint.is_some() {
-        ai.secrets
-            .get(&provider)
-            .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
+        ai.secrets.get(&provider).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
     } else {
         None
     };
@@ -1405,10 +1361,7 @@ pub fn validate_ai_api_selection(
     }
 
     let models = available_models(&record, descriptor);
-    let model = models
-        .iter()
-        .find(|m| m.id == model_id)
-        .ok_or(ERR_UNKNOWN_MODEL)?;
+    let model = models.iter().find(|m| m.id == model_id).ok_or(ERR_UNKNOWN_MODEL)?;
     // AAP-FR-27: `None` is the model's own default and is always serviceable.
     if let Some(choice) = reasoning {
         if let Some(err) = reasoning_error(Some(model), choice) {
@@ -1443,15 +1396,10 @@ pub fn resolve_ai_api_endpoint(
     // is read rather than after.
     validate_ai_api_selection(store, provider, model_id, reasoning.as_ref())?;
     let (records, _) = store.load_ai_api_registry()?;
-    let record = records
-        .iter()
-        .find(|r| r.provider == provider)
-        .ok_or(ERR_PROVIDER_UNCONFIGURED)?;
-    let base_url = record
-        .base_url
-        .clone()
-        .filter(|u| !u.is_empty())
-        .ok_or(ERR_PROVIDER_UNCONFIGURED)?;
+    let record =
+        records.iter().find(|r| r.provider == provider).ok_or(ERR_PROVIDER_UNCONFIGURED)?;
+    let base_url =
+        record.base_url.clone().filter(|u| !u.is_empty()).ok_or(ERR_PROVIDER_UNCONFIGURED)?;
     let descriptor = provider_descriptor(provider);
     let api_key = if record.masked_hint.is_some() {
         match ai.secrets.get(provider) {
@@ -1850,8 +1798,8 @@ mod agent_provider;
 pub(crate) mod custom_gateway;
 mod probe_error;
 mod turn_timeout;
-use probe_error::api_probe_error;
 pub use agent_provider::*;
+use probe_error::api_probe_error;
 pub use turn_timeout::*;
 
 #[cfg(test)]

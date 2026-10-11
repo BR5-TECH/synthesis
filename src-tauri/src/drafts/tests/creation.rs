@@ -23,16 +23,8 @@ fn create_draft_writes_a_record_and_one_markdown_file() {
     // name stays bound to.
     assert_eq!(created.file, "artifact-window.md");
     assert_eq!(created.draft.prompt_path.as_deref(), Some("artifact-window.md"));
-    assert_eq!(
-        require_prompt(root, &created.draft.id).unwrap(),
-        "artifact-window.md"
-    );
-    assert_eq!(
-        load_draft_file_impl(root, &created.draft.id, &created.file)
-            .unwrap()
-            .body,
-        ""
-    );
+    assert_eq!(require_prompt(root, &created.draft.id).unwrap(), "artifact-window.md");
+    assert_eq!(load_draft_file_impl(root, &created.draft.id, &created.file).unwrap().body, "");
     assert!(!listed(root)[0].inconsistent);
     // DRS-FR-01: the three storage folders, each scaffolded and each empty.
     // DRS-FR-01: the draft's review is not among them — it stands in the
@@ -62,7 +54,6 @@ fn smuggle(root: &crate::fs::RootFs, id: &str, name: &str) {
     let files = draft_dir(root, id).unwrap().join(FILES_DIR);
     std::fs::write(files.join(name), "put here by hand").unwrap();
 }
-
 
 #[test]
 fn a_draft_holding_anything_but_its_one_prompt_is_reported_and_never_repaired() {
@@ -118,11 +109,8 @@ fn an_os_dropping_beside_the_prompt_leaves_the_draft_consistent() {
     let dir = project();
     let root = &crate::fs::RootFs::for_root(dir.path());
     let id = draft(root, "d");
-    std::fs::write(
-        draft_dir(root, &id).unwrap().join(FILES_DIR).join(".DS_Store"),
-        [0u8, 1, 2],
-    )
-    .unwrap();
+    std::fs::write(draft_dir(root, &id).unwrap().join(FILES_DIR).join(".DS_Store"), [0u8, 1, 2])
+        .unwrap();
     assert!(!listed(root)[0].inconsistent);
     assert_eq!(require_prompt(root, &id).unwrap(), FIRST_FILE);
 }
@@ -149,13 +137,9 @@ fn creating_a_draft_settles_no_version_and_announces_none() {
         }
     });
 
-    let created = create_draft(
-        Some("spec".into()),
-        None,
-        app.handle().clone(),
-        app.state::<ProjectState>(),
-    )
-    .expect("created");
+    let created =
+        create_draft(Some("spec".into()), None, app.handle().clone(), app.state::<ProjectState>())
+            .expect("created");
 
     let events = seen.lock().unwrap_or_else(|e| e.into_inner()).clone();
     assert_eq!(
@@ -166,10 +150,7 @@ fn creating_a_draft_settles_no_version_and_announces_none() {
     // …and the draft it did create holds none, its live prompt being the
     // `Original` (DHS-FR-07).
     let root = crate::fs::RootFs::for_root(dir.path());
-    assert!(crate::draft_history::list_impl(&root, &created.draft.id)
-        .unwrap()
-        .entries
-        .is_empty());
+    assert!(crate::draft_history::list_impl(&root, &created.draft.id).unwrap().entries.is_empty());
 }
 
 #[test]
@@ -201,10 +182,7 @@ fn an_unnamed_draft_is_untitled_and_then_untitled_n() {
     assert_eq!(first.draft.name, "Untitled");
     assert_eq!(first.file, "Untitled.md");
     assert_eq!(first.draft.prompt_path.as_deref(), Some("Untitled.md"));
-    assert_eq!(
-        load_draft_file_impl(root, &first.draft.id, "Untitled.md").unwrap().body,
-        ""
-    );
+    assert_eq!(load_draft_file_impl(root, &first.draft.id, "Untitled.md").unwrap().body, "");
 
     // A worktree accumulating unnamed drafts lists them distinguishably
     // rather than as a column of identical rows. Whitespace is no name.
@@ -274,10 +252,7 @@ fn renaming_a_draft_renames_the_file_bound_to_its_name() {
         "the old name is gone rather than left beside the new one"
     );
     // The content moved with the file rather than being recreated empty.
-    assert_eq!(
-        load_draft_file_impl(root, &id, "editor tweaks.md").unwrap().body,
-        "# working"
-    );
+    assert_eq!(load_draft_file_impl(root, &id, "editor tweaks.md").unwrap().body, "# working");
 
     // DRS-FR-25: the record keeps the free text; the file carries what a
     // filesystem will take. The two legitimately read differently.
@@ -328,8 +303,7 @@ fn a_prompt_removed_out_of_band_leaves_an_inconsistent_draft_rather_than_an_empt
     let dir = project();
     let root = &crate::fs::RootFs::for_root(dir.path());
     let id = draft(root, "spec");
-    std::fs::remove_file(draft_dir(root, &id).unwrap().join(FILES_DIR).join("spec.md"))
-        .unwrap();
+    std::fs::remove_file(draft_dir(root, &id).unwrap().join(FILES_DIR).join("spec.md")).unwrap();
 
     assert!(listed(root)[0].inconsistent);
     assert_eq!(require_prompt(root, &id).unwrap_err(), ERR_NOT_SINGLE_FILE);
@@ -356,10 +330,7 @@ fn a_primary_path_that_escapes_the_draft_is_read_as_no_binding_at_all() {
 
         // And a rename touches nothing outside the draft.
         rename_draft_impl(root, &id, "renamed").unwrap();
-        assert_eq!(
-            std::fs::read_to_string(&victim).unwrap(),
-            "not the draft's"
-        );
+        assert_eq!(std::fs::read_to_string(&victim).unwrap(), "not the draft's");
     }
 }
 
@@ -385,13 +356,11 @@ fn a_case_only_rename_is_a_rename_rather_than_a_collision() {
     assert_eq!(record.prompt_path.as_deref(), Some("naw SPEC.md"));
     assert_eq!(files_in(root, &id), vec!["naw SPEC.md"]);
     // No staging name was left behind by the two-step.
-    assert!(
-        !draft_dir(root, &id)
-            .unwrap()
-            .join(FILES_DIR)
-            .join("naw SPEC.md.synthesis-rename")
-            .exists()
-    );
+    assert!(!draft_dir(root, &id)
+        .unwrap()
+        .join(FILES_DIR)
+        .join("naw SPEC.md.synthesis-rename")
+        .exists());
 }
 
 #[test]
@@ -428,7 +397,10 @@ fn the_case_only_decision_is_about_two_strings_and_no_filesystem_at_all() {
     // is two names rather than one capitalisation — and treating it as a
     // case-only change would send a genuine rename through the staging
     // path and skip the collision check that protects the other file.
-    assert!(!is_case_only_rename("straße", "STRASSE"), "a fold that changes length is a different name");
+    assert!(
+        !is_case_only_rename("straße", "STRASSE"),
+        "a fold that changes length is a different name"
+    );
 }
 
 #[test]
@@ -457,10 +429,7 @@ fn a_case_only_rename_needs_its_staging_name_exactly_where_the_filesystem_folds(
              is the whole reason for the staging name: {direct:?}"
         );
     } else {
-        assert!(
-            direct.is_ok(),
-            "a case-sensitive filesystem renames straight across: {direct:?}"
-        );
+        assert!(direct.is_ok(), "a case-sensitive filesystem renames straight across: {direct:?}");
         // Put back, so the author's rename below starts from the same state
         // the folding branch starts from.
         root.rename_under(&files, "Spec.md", "spec.md").unwrap();
@@ -532,7 +501,6 @@ fn a_name_beginning_with_a_dot_still_yields_a_file_the_rail_can_show() {
     assert!(!listed(root)[0].inconsistent);
 }
 
-
 #[test]
 fn a_draft_renamed_into_the_untitled_slot_pushes_the_next_default_along() {
     // DRS-FR-27 reads the names in force rather than a counter.
@@ -587,7 +555,6 @@ fn two_drafts_may_carry_the_same_name_and_stay_distinct() {
     assert_eq!(listed(root).len(), 2);
 }
 
-
 #[test]
 fn the_prompt_path_survives_a_round_trip_through_the_record() {
     // DRS-FR-03: `draft.toml` carries it, so the binding outlives the
@@ -598,10 +565,7 @@ fn the_prompt_path_survives_a_round_trip_through_the_record() {
 
     let toml = std::fs::read_to_string(draft_dir(root, &id).unwrap().join(RECORD_FILE)).unwrap();
     assert!(toml.contains("promptPath"), "not written to disk: {toml}");
-    assert_eq!(
-        read_record(root, &id).unwrap().prompt_path.as_deref(),
-        Some("spec.md")
-    );
+    assert_eq!(read_record(root, &id).unwrap().prompt_path.as_deref(), Some("spec.md"));
 
     // And a record written before this field existed still reads: the draft
     // simply has no file bound to its name (DRS-FR-15's end state).

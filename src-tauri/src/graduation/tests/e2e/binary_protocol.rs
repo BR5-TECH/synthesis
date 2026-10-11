@@ -116,10 +116,7 @@ fn run_mock(document: serde_json::Value, argv: &[&str], stdin: &[u8]) -> MockRun
         .allow_root(directory.path())
         .build()
         .expect("a real directory")
-        .write_text_atomic(
-            &scenario,
-            &serde_json::to_string_pretty(&document).expect("a scenario"),
-        )
+        .write_text_atomic(&scenario, &serde_json::to_string_pretty(&document).expect("a scenario"))
         .expect("the scenario is writable");
 
     let mut child = Command::new(mock_binary())
@@ -136,12 +133,7 @@ fn run_mock(document: serde_json::Value, argv: &[&str], stdin: &[u8]) -> MockRun
         .expect("the mock launches");
     // ACM-FR-07: the mock reads stdin to EOF before it does anything else, so
     // the stream is always written and always closed.
-    child
-        .stdin
-        .take()
-        .expect("a stdin pipe")
-        .write_all(stdin)
-        .expect("the payload is written");
+    child.stdin.take().expect("a stdin pipe").write_all(stdin).expect("the payload is written");
     let output = child.wait_with_output().expect("the mock exits");
     MockRun {
         _directory: directory,

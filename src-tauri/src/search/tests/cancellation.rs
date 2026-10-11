@@ -101,8 +101,5 @@ fn a_search_cancelled_mid_sweep_still_ends_exactly_once() {
     // Exactly one terminal event; the reason depends on whether the sweep
     // finished before the cancel landed, and both are legitimate.
     let reason = sink.end_reason();
-    assert!(
-        matches!(reason, EndReason::Cancelled | EndReason::Completed),
-        "{reason:?}"
-    );
+    assert!(matches!(reason, EndReason::Cancelled | EndReason::Completed), "{reason:?}");
 }

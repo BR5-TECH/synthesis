@@ -51,10 +51,7 @@ fn a_result_overtaken_by_a_later_one_is_discarded() {
     let (fresh_second, _) = slots.settle(DashboardWidget::AgentActivity, 2);
     assert!(fresh_second);
     let (fresh_stale, _) = slots.settle(DashboardWidget::AgentActivity, 1);
-    assert!(
-        !fresh_stale,
-        "a sequence already overtaken is never applied, however late it returns"
-    );
+    assert!(!fresh_stale, "a sequence already overtaken is never applied, however late it returns");
 }
 
 #[test]
@@ -119,7 +116,11 @@ fn an_artifact_the_filesystem_cannot_describe_is_omitted_and_accounted_for() {
     let nodes = vec![
         ("gone.spec.md".to_string(), "gone.spec.md".to_string(), scanning::ArtifactType::Spec),
         ("kept-a.spec.md".to_string(), "kept-a.spec.md".to_string(), scanning::ArtifactType::Spec),
-        ("unstattable.spec.md".to_string(), "unstattable.spec.md".to_string(), scanning::ArtifactType::Spec),
+        (
+            "unstattable.spec.md".to_string(),
+            "unstattable.spec.md".to_string(),
+            scanning::ArtifactType::Spec,
+        ),
         ("kept-b.spec.md".to_string(), "kept-b.spec.md".to_string(), scanning::ArtifactType::Spec),
     ];
     let (readings, omitted) = stat_artifacts(nodes, |id| match id {

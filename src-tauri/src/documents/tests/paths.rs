@@ -27,8 +27,19 @@ fn supported_extensions_match_in_any_case() {
 #[test]
 fn other_files_are_ignored() {
     for name in [
-        "a.docx", "a.html", "a.rtf", "a.md.bak", "a.pdf.zip", "a", "a.", "mdfile", ".md", "pdf",
-        "a.mdx", "a.text", "a.markdn",
+        "a.docx",
+        "a.html",
+        "a.rtf",
+        "a.md.bak",
+        "a.pdf.zip",
+        "a",
+        "a.",
+        "mdfile",
+        ".md",
+        "pdf",
+        "a.mdx",
+        "a.text",
+        "a.markdn",
     ] {
         assert_eq!(format_of(name), None, "{name}");
     }

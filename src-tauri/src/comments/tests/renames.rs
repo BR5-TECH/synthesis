@@ -10,22 +10,12 @@ fn a_followed_rename_moves_the_log_without_rewriting_a_line() {
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
     touch(root, "specs/a.md");
-    let t = open(
-        root,
-        "specs/a.md",
-        anchor(0, 3, "abc"),
-        "keep me",
-        "2026-01-01T00:00:00Z",
-    );
+    let t = open(root, "specs/a.md", anchor(0, 3, "abc"), "keep me", "2026-01-01T00:00:00Z");
     let before = log_lines(root, "specs/a.md");
 
     assert_eq!(rename_and_follow(root, "specs/a.md", "specs/b.md"), 1);
 
-    assert_eq!(
-        log_lines(root, "specs/b.md"),
-        before,
-        "no line inside the log changed"
-    );
+    assert_eq!(log_lines(root, "specs/b.md"), before, "no line inside the log changed");
     let moved = list_fragment_discussions_in(root, "specs/b.md");
     assert_eq!(moved.len(), 1);
     assert_eq!(moved[0].id, t.id);
@@ -73,13 +63,7 @@ fn a_delete_leaves_the_log_in_place() {
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
     touch(root, "specs/a.md");
-    open(
-        root,
-        "specs/a.md",
-        anchor(0, 3, "abc"),
-        "orphan",
-        "2026-01-01T00:00:00Z",
-    );
+    open(root, "specs/a.md", anchor(0, 3, "abc"), "orphan", "2026-01-01T00:00:00Z");
     let path = log_path(root, "specs/a.md").unwrap();
     assert!(path.exists());
 
@@ -101,22 +85,13 @@ fn following_a_folder_rename_moves_the_logs_inside_it() {
     touch(root, "old/deep/b.md");
     touch(root, "other.md");
     open(root, "old/a.md", anchor(0, 3, "abc"), "one", "2026-01-01T00:00:00Z");
-    open(
-        root,
-        "old/deep/b.md",
-        anchor(0, 3, "abc"),
-        "two",
-        "2026-01-01T00:00:00Z",
-    );
+    open(root, "old/deep/b.md", anchor(0, 3, "abc"), "two", "2026-01-01T00:00:00Z");
     open(root, "other.md", anchor(0, 3, "abc"), "untouched", "2026-01-01T00:00:00Z");
 
     assert_eq!(rename_and_follow(root, "old", "new"), 2);
 
     assert_eq!(list_fragment_discussions_in(root, "new/a.md")[0].comments[0].body, "one");
-    assert_eq!(
-        list_fragment_discussions_in(root, "new/deep/b.md")[0].comments[0].body,
-        "two"
-    );
+    assert_eq!(list_fragment_discussions_in(root, "new/deep/b.md")[0].comments[0].body, "two");
     assert!(list_fragment_discussions_in(root, "old/a.md").is_empty());
     assert_eq!(
         list_fragment_discussions_in(root, "other.md")[0].comments[0].body,
@@ -127,10 +102,7 @@ fn following_a_folder_rename_moves_the_logs_inside_it() {
     // And a second folder rename is followed just as the first was.
     assert_eq!(rename_and_follow(root, "new", "newer"), 2);
     assert_eq!(list_fragment_discussions_in(root, "newer/a.md")[0].comments[0].body, "one");
-    assert_eq!(
-        list_fragment_discussions_in(root, "newer/deep/b.md")[0].comments[0].body,
-        "two"
-    );
+    assert_eq!(list_fragment_discussions_in(root, "newer/deep/b.md")[0].comments[0].body, "two");
 }
 
 #[test]

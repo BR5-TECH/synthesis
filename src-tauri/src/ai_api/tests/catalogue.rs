@@ -32,10 +32,7 @@ fn a_catalogue_names_every_provider_and_its_models() {
 
     // An untouched provider is `unconfigured` rather than absent, which is
     // what lets a surface say "configure one" instead of showing nothing.
-    assert_eq!(
-        catalog(&listed, "anthropic").state,
-        IntegrationState::Unconfigured,
-    );
+    assert_eq!(catalog(&listed, "anthropic").state, IntegrationState::Unconfigured,);
 }
 
 #[test]
@@ -61,11 +58,7 @@ fn a_catalogue_reads_no_key_and_survives_a_locked_keychain() {
     // interrupted the author. Counted, not inferred.
     let before = h.keys.reads();
     let listed = list_catalogs_impl(&h.store).unwrap();
-    assert_eq!(
-        h.keys.reads(),
-        before,
-        "building a catalogue touched the keychain",
-    );
+    assert_eq!(h.keys.reads(), before, "building a catalogue touched the keychain",);
     assert_eq!(
         catalog(&listed, "openrouter").state,
         IntegrationState::Verified,
@@ -275,4 +268,3 @@ fn an_untouched_provider_carries_its_bundled_catalogue() {
         "a bundled catalogue still names models for the selector",
     );
 }
-

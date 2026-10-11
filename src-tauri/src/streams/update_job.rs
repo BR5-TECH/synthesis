@@ -45,16 +45,8 @@ pub(super) fn spawn_with<R: tauri::Runtime>(
     decisions: Vec<StreamMergeDecision>,
     dispatch: Arc<dyn GraduationDispatch<R>>,
 ) -> Result<StreamUpdateRecord, String> {
-    start_with(
-        app,
-        stream,
-        strategy,
-        base_revision,
-        missing_commits,
-        decisions,
-        dispatch,
-    )
-    .map(|(record, _)| record)
+    start_with(app, stream, strategy, base_revision, missing_commits, decisions, dispatch)
+        .map(|(record, _)| record)
 }
 
 /// The same again, handing back the thread the update runs on.
@@ -82,10 +74,8 @@ pub(super) fn start_with<R: tauri::Runtime>(
     // thread, which leaves a window two requests could both pass.
     let record = {
         let _guard = state.as_ref().map(|state| state.write_guard());
-        let claimed = state
-            .as_ref()
-            .map(|state| state.claim_update_job(&stream.id))
-            .unwrap_or(true);
+        let claimed =
+            state.as_ref().map(|state| state.claim_update_job(&stream.id)).unwrap_or(true);
         if !claimed {
             return Err(commands::refuse(
                 app,
@@ -131,10 +121,7 @@ pub(super) fn start_with<R: tauri::Runtime>(
     let project_key = stream.project_key.clone();
     let started = record.clone();
     let handle = std::thread::spawn(move || {
-        let _job = UpdateJobRelease {
-            app: app.clone(),
-            stream_id: stream_id.clone(),
-        };
+        let _job = UpdateJobRelease { app: app.clone(), stream_id: stream_id.clone() };
         update_blocking(
             &app,
             &stream_id,
@@ -160,10 +147,7 @@ fn update_blocking<R: tauri::Runtime>(
     decisions: Vec<StreamMergeDecision>,
     dispatch: Arc<dyn GraduationDispatch<R>>,
 ) {
-    let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    else {
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else {
         // The update never ran, so the record must not be left claiming it is.
         record.state = update_record::StreamUpdateState::Failed;
         record.failure = ERR_UPDATE_ATTEMPTS_EXHAUSTED.to_string();

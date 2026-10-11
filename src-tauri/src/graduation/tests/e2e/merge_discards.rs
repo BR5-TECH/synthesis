@@ -89,7 +89,9 @@ fn a_discard_between_the_verdict_and_the_apply_applies_nothing() {
     conflicted_merge("discard after the verdict")
         .with_merge(as_one_commit())
         .merge_work_turn(settling())
-        .merge_review_turn(Script::answers_ready("Both intents stand.").discarding_the_run_after_the_verdict())
+        .merge_review_turn(
+            Script::answers_ready("Both intents stand.").discarding_the_run_after_the_verdict(),
+        )
         .run()
         .expect_state(GraduationRunState::Discarded)
         .expect_dispatch_order(&["merge_work", "merge_review"])
@@ -112,7 +114,9 @@ fn a_pause_between_the_verdict_and_the_apply_applies_nothing() {
     conflicted_merge("pause after the verdict")
         .with_merge(as_one_commit())
         .merge_work_turn(settling())
-        .merge_review_turn(Script::answers_ready("Both intents stand.").pausing_the_run_after_the_verdict())
+        .merge_review_turn(
+            Script::answers_ready("Both intents stand.").pausing_the_run_after_the_verdict(),
+        )
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("author_pause")
@@ -136,9 +140,7 @@ fn a_ready_verdict_that_arrives_with_a_discard_or_a_pause_applies_nothing() {
         .with_merge(as_one_commit())
         .merge_work_turn(settling())
         .merge_review_turn(
-            Script::answers_ready("Both intents stand.")
-                .discarding_the_run()
-                .finishing_anyway(),
+            Script::answers_ready("Both intents stand.").discarding_the_run().finishing_anyway(),
         )
         .run()
         .expect_state(GraduationRunState::Discarded)
@@ -151,9 +153,7 @@ fn a_ready_verdict_that_arrives_with_a_discard_or_a_pause_applies_nothing() {
         .with_merge(as_one_commit())
         .merge_work_turn(settling())
         .merge_review_turn(
-            Script::answers_ready("Both intents stand.")
-                .pausing_the_run()
-                .finishing_anyway(),
+            Script::answers_ready("Both intents stand.").pausing_the_run().finishing_anyway(),
         )
         .run()
         .expect_state(GraduationRunState::Interrupted)
@@ -173,7 +173,9 @@ fn a_lost_apply_record_does_not_undo_a_completed_apply() {
     conflicted_merge("apply record lost")
         .with_merge(as_one_commit())
         .merge_work_turn(settling())
-        .merge_review_turn(Script::answers_ready("Both intents stand.").losing_the_log_after_the_verdict())
+        .merge_review_turn(
+            Script::answers_ready("Both intents stand.").losing_the_log_after_the_verdict(),
+        )
         .run()
         .expect_structured_log_obstructed()
         .expect_state(GraduationRunState::Completed)

@@ -113,10 +113,7 @@ fn a_reply_loses_its_markers_in_text_and_arguments_and_nothing_else() {
 // CVL-FR-POAR: a clean reply is unchanged and reports nothing removed.
 #[test]
 fn a_clean_reply_is_left_alone() {
-    let mut reply = ModelReply {
-        text: "Nothing to remove.".into(),
-        ..Default::default()
-    };
+    let mut reply = ModelReply { text: "Nothing to remove.".into(), ..Default::default() };
     let before = reply.clone();
     assert_eq!(strip_reply_citation_markers(&mut reply), 0);
     assert_eq!(reply, before);
@@ -141,10 +138,7 @@ fn a_delivered_answer_carries_no_marker_and_the_record_holds_only_a_count() {
     assert_eq!(body, &format!("The {sentinel} answer."));
 
     let record = wait_for_record(&terminal.id, "removed citation markers from model reply");
-    assert_eq!(
-        require(&record, "markerCharsRemoved"),
-        (SPAN.chars().count() + 1).to_string(),
-    );
+    assert_eq!(require(&record, "markerCharsRemoved"), (SPAN.chars().count() + 1).to_string(),);
     let fields = serde_json::to_string(&record.fields).expect("fields serialize");
     assert!(!fields.contains(sentinel), "the record carries no text: {fields}");
 }
@@ -156,11 +150,9 @@ fn a_clean_answer_emits_no_removal_record() {
     h.create_agent("arch", "");
     let (terminal, _) = run_one(&h, "arch");
     assert_eq!(terminal.state, AgentTurnState::Delivered);
-    assert!(
-        records_where("turnId", &terminal.id)
-            .iter()
-            .all(|r| r.message != "removed citation markers from model reply"),
-    );
+    assert!(records_where("turnId", &terminal.id)
+        .iter()
+        .all(|r| r.message != "removed citation markers from model reply"),);
 }
 
 // CVL-FR-POAR, CVL-FR-18: a reply that was markers alone is empty, and is
@@ -213,12 +205,8 @@ fn a_posted_question_carries_no_marker() {
     let (terminal, thread) = run_one(&h, "arch");
 
     assert_eq!(terminal.state, AgentTurnState::AwaitingReply);
-    let body = folded(&h, "spec.md", &thread.id)
-        .comments
-        .last()
-        .expect("the question")
-        .body
-        .clone();
+    let body =
+        folded(&h, "spec.md", &thread.id).comments.last().expect("the question").body.clone();
     let mut lines = body.lines();
     assert_eq!(lines.next(), Some("Which route?"), "{body:?}");
     assert!(body.contains("- Converse\n"), "{body:?}");
@@ -242,11 +230,7 @@ fn a_draft_proposal_rationale_carries_no_marker() {
     h.create_agent("arch", "");
     let (draft_id, thread) = seed_discussion(&h, &["@arch what would you change?"]);
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     assert_eq!(wait_for_terminal(&h, &turn.id).state, AgentTurnState::AwaitingReply);
 
@@ -284,9 +268,7 @@ fn a_prompt_proposal_rationale_carries_no_marker() {
     let thread = crate::comments::open_discussion_in(
         &root,
         &root,
-        &crate::comments::DiscussionTarget::Artifact {
-            artifact_id: PATH.into(),
-        },
+        &crate::comments::DiscussionTarget::Artifact { artifact_id: PATH.into() },
         None,
         "@arch what would you change?".into(),
         Vec::new(),
@@ -295,11 +277,7 @@ fn a_prompt_proposal_rationale_carries_no_marker() {
     )
     .expect("discussion");
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     assert_eq!(wait_for_terminal(&h, &turn.id).state, AgentTurnState::AwaitingReply);
 
@@ -347,11 +325,7 @@ fn bodies_sent_back_to_the_model_lose_their_markers_and_the_store_keeps_them() {
     let (draft_id, thread) = seed_discussion(&h, &[&earlier, &current]);
 
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[1].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[1].id)
         .expect("dispatch");
     wait_for_terminal(&h, &turn.id);
 

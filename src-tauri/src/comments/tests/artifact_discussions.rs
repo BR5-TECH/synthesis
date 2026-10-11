@@ -92,26 +92,21 @@ fn an_artifact_discussion_writes_a_reserved_log_beside_the_anchored_one() {
     let artifact = make_artifact(root, "specifications/ui/EDT-editor.md", "# Editor\n");
     open(root, &artifact, anchor(0, 8, "# Editor"), "pinned", "2026-02-01T00:00:00Z");
 
-    let thread = open_artifact_discussion(root, &artifact, "@arch is this ready?", "2026-02-02T00:00:00Z");
+    let thread =
+        open_artifact_discussion(root, &artifact, "@arch is this ready?", "2026-02-02T00:00:00Z");
 
     let discussion_log = root.join(artifact_discussion_log_rel(&artifact));
     let anchored_log = root.join(log_rel(&artifact));
     assert!(discussion_log.is_file(), "the reserved log is written");
     assert!(anchored_log.is_file());
     // Two lines: the opening event and its first comment, in one append.
-    let lines: Vec<String> = std::fs::read_to_string(&discussion_log)
-        .unwrap()
-        .lines()
-        .map(str::to_string)
-        .collect();
+    let lines: Vec<String> =
+        std::fs::read_to_string(&discussion_log).unwrap().lines().map(str::to_string).collect();
     assert_eq!(lines.len(), 2);
     assert!(lines[0].contains("discussion_opened"));
     assert!(lines[0].contains("\"kind\":\"artifact\""));
     // CMS-FR-57: the anchored log beside it gained nothing.
-    assert_eq!(
-        std::fs::read_to_string(&anchored_log).unwrap().lines().count(),
-        2
-    );
+    assert_eq!(std::fs::read_to_string(&anchored_log).unwrap().lines().count(), 2);
 
     assert!(!thread.is_fragment_targeted());
     assert!(thread.artifact_id().is_some());
@@ -136,7 +131,8 @@ fn the_list_commands_divide_a_files_anchored_threads_from_its_discussions() {
     let artifact = make_artifact(root, "specifications/ui/EDT-editor.md", "# Editor\n");
     open(root, &artifact, anchor(0, 8, "# Editor"), "one", "2026-02-01T00:00:00Z");
     open(root, &artifact, anchor(0, 8, "# Editor"), "two", "2026-02-01T00:00:01Z");
-    let discussion = open_artifact_discussion(root, &artifact, "whole thing", "2026-02-02T00:00:00Z");
+    let discussion =
+        open_artifact_discussion(root, &artifact, "whole thing", "2026-02-02T00:00:00Z");
 
     let anchored = list_fragment_discussions_in(root, &artifact);
     assert_eq!(anchored.len(), 2);
@@ -239,15 +235,9 @@ fn every_command_but_the_reanchor_serves_an_artifact_discussion() {
     .unwrap();
     assert_eq!(replied.comments.len(), 2);
 
-    let (locked, changed) = set_lock_to(
-        root,
-        target,
-        &discussion.id,
-        true,
-        &human("raver119"),
-        "2026-02-04T00:00:00Z",
-    )
-    .unwrap();
+    let (locked, changed) =
+        set_lock_to(root, target, &discussion.id, true, &human("raver119"), "2026-02-04T00:00:00Z")
+            .unwrap();
     assert!(locked.locked && changed);
     let (resolved, changed) = set_resolution_to(
         root,

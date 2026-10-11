@@ -33,15 +33,9 @@ fn nothing_is_written_or_removed_outside_the_notes_folder() {
     assert!(update_note_in(
         root,
         "../victim",
-        NoteFields {
-            body: Some("clobbered".into()),
-            ..Default::default()
-        },
+        NoteFields { body: Some("clobbered".into()), ..Default::default() },
         "2026-01-01T00:00:00Z"
     )
     .is_err());
-    assert_eq!(
-        std::fs::read_to_string(root.join("victim.md")).unwrap(),
-        "precious"
-    );
+    assert_eq!(std::fs::read_to_string(root.join("victim.md")).unwrap(), "precious");
 }

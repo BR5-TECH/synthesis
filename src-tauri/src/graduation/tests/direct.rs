@@ -10,21 +10,14 @@ use tauri::Listener;
 impl Fixture {
     /// The branch the project's worktree holds.
     fn branch(&self) -> String {
-        self.repo()
-            .head()
-            .expect("a head")
-            .shorthand()
-            .expect("a branch")
-            .to_string()
+        self.repo().head().expect("a head").shorthand().expect("a branch").to_string()
     }
 
     /// Commit everything standing in the project's worktree, so it is clean.
     fn commit_all(&self, message: &str) {
         let repo = self.repo();
         let mut index = repo.index().expect("index");
-        index
-            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-            .expect("add");
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).expect("add");
         index.write().expect("write");
         let tree = repo.find_tree(index.write_tree().expect("tree")).expect("tree");
         let parent = repo.head().unwrap().peel_to_commit().unwrap();
@@ -43,9 +36,7 @@ impl Fixture {
     /// Move the project's worktree onto a branch, as an outside checkout does.
     pub(super) fn check_out(&self, name: &str) {
         let repo = self.repo();
-        let object = repo
-            .revparse_single(&format!("refs/heads/{name}"))
-            .expect("the branch");
+        let object = repo.revparse_single(&format!("refs/heads/{name}")).expect("the branch");
         repo.checkout_tree(&object, Some(git2::build::CheckoutBuilder::new().force()))
             .expect("checkout");
         repo.set_head(&format!("refs/heads/{name}")).expect("head");
@@ -106,15 +97,11 @@ impl Fixture {
     }
 
     fn runs(&self) -> Vec<GraduationRun> {
-        crate::graduation::list_graduation_queue(self.app.clone())
-            .expect("the queue")
-            .runs
+        crate::graduation::list_graduation_queue(self.app.clone()).expect("the queue").runs
     }
 
     fn tripwire(&self) -> Vec<(String, bool)> {
-        self.app
-            .state::<crate::graduation::driver::drive::SpawnTripwire>()
-            .take()
+        self.app.state::<crate::graduation::driver::drive::SpawnTripwire>().take()
     }
 }
 
@@ -126,8 +113,7 @@ fn head_tree_holds(root: &Path, path: &str) -> bool {
 
 fn tripwire_fixture() -> Fixture {
     let fx = Fixture::new();
-    fx.app
-        .manage(crate::graduation::driver::drive::SpawnTripwire::default());
+    fx.app.manage(crate::graduation::driver::drive::SpawnTripwire::default());
     fx
 }
 
@@ -214,10 +200,7 @@ fn the_preflight_names_the_stream_of_a_stream_worktree() {
     let stream = fx.stream("editor");
     fx.app
         .state::<crate::project::ProjectState>()
-        .set_root_with_access(
-            stream.worktree(),
-            fx.app.state::<crate::fs::FsAccessState>().get(),
-        );
+        .set_root_with_access(stream.worktree(), fx.app.state::<crate::fs::FsAccessState>().get());
     let found = crate::graduation::preflight_direct_graduation(fx.app.clone()).expect("read");
     assert_eq!(found.stream.expect("a stream").stream_id, stream.id);
 }
@@ -293,13 +276,9 @@ fn a_direct_start_refuses_a_worktree_it_cannot_start_from() {
     let repo = fx.repo();
     let head = repo.head().unwrap().peel_to_commit().unwrap().id();
     repo.set_head_detached(head).unwrap();
-    let detached = crate::graduation::start_direct_graduation(
-        fx.app.clone(),
-        draft.clone(),
-        root,
-        branch,
-    )
-    .unwrap_err();
+    let detached =
+        crate::graduation::start_direct_graduation(fx.app.clone(), draft.clone(), root, branch)
+            .unwrap_err();
     assert_eq!(detached, ERR_DIRECT_WORKTREE_DETACHED);
 
     assert!(fx.runs().is_empty(), "no refusal left a run");
@@ -335,9 +314,9 @@ fn edits_made_after_confirmation_are_part_of_the_result_commit() {
     let run = fx.drive(
         &run,
         ScriptedDispatch::new(vec![
-            Turn::work()
-                .writing("src/panel.ts", "1\n")
-                .doing(move || std::fs::write(during.join("later.md"), "written while it worked\n").unwrap()),
+            Turn::work().writing("src/panel.ts", "1\n").doing(move || {
+                std::fs::write(during.join("later.md"), "written while it worked\n").unwrap()
+            }),
             Turn::ready(),
         ]),
     );
@@ -400,10 +379,8 @@ fn a_direct_run_on_a_stream_worktree_shares_the_streams_queue() {
     assert_eq!(second.queue_key(), stream.id);
 
     let queue = crate::graduation::project_queue(&fx.app).unwrap();
-    let ids: Vec<&str> = crate::graduation::queue_of(&queue, &stream.id)
-        .iter()
-        .map(|r| r.id.as_str())
-        .collect();
+    let ids: Vec<&str> =
+        crate::graduation::queue_of(&queue, &stream.id).iter().map(|r| r.id.as_str()).collect();
     assert_eq!(ids, vec![first.id.as_str(), second.id.as_str(), third.id.as_str()]);
 
     // The first run works; the direct run waits for it and holds the stream's
@@ -438,7 +415,8 @@ fn a_direct_run_on_a_stream_worktree_is_a_run_of_that_stream() {
 
     // `force` reaches neither refusal: a run that has not ended keeps the stream.
     let refused =
-        crate::streams::delete_work_stream(fx.app.clone(), stream.id.clone(), true, false).unwrap_err();
+        crate::streams::delete_work_stream(fx.app.clone(), stream.id.clone(), true, false)
+            .unwrap_err();
     assert!(refused.starts_with(crate::streams::ERR_STREAM_HAS_RUNS), "{refused}");
 
     // Working: the stream is busy, and a switch to it is refused.
@@ -725,8 +703,8 @@ fn every_switching_route_refuses_while_a_direct_run_stands() {
         active_worktree_path: alt.to_string_lossy().into_owned(),
         remembered_worktree_unavailable: false,
     };
-    let opened = crate::project::open_resolved(&fx.app, &store, &project, &watcher, handle)
-        .unwrap_err();
+    let opened =
+        crate::project::open_resolved(&fx.app, &store, &project, &watcher, handle).unwrap_err();
     assert!(opened.starts_with(crate::worktree::ERR_DIRECT_GRADUATION_ACTIVE), "{opened}");
     assert_eq!(project.root(), active_before, "open moved nothing");
 }
@@ -745,7 +723,13 @@ fn a_claimed_direct_run_blocks_a_switch_before_it_is_saved() {
         "queued, not claimed"
     );
 
-    assert!(state.claim(&run.queue_key(), &run.id, true, crate::project_settings::GraduationConcurrency::limited(2), CancellationToken::new()));
+    assert!(state.claim(
+        &run.queue_key(),
+        &run.id,
+        true,
+        crate::project_settings::GraduationConcurrency::limited(2),
+        CancellationToken::new()
+    ));
     let refused = crate::graduation::require_no_dispatched_direct_run(&fx.app).unwrap_err();
     assert!(refused.starts_with(crate::worktree::ERR_DIRECT_GRADUATION_ACTIVE), "{refused}");
     assert!(refused.ends_with(&run.id));
@@ -754,7 +738,13 @@ fn a_claimed_direct_run_blocks_a_switch_before_it_is_saved() {
     assert!(crate::graduation::require_no_dispatched_direct_run(&fx.app).is_ok());
 
     // A claim of a stream run is not a direct claim.
-    assert!(state.claim("stream-1", "other-run", false, crate::project_settings::GraduationConcurrency::limited(2), CancellationToken::new()));
+    assert!(state.claim(
+        "stream-1",
+        "other-run",
+        false,
+        crate::project_settings::GraduationConcurrency::limited(2),
+        CancellationToken::new()
+    ));
     assert!(crate::graduation::require_no_dispatched_direct_run(&fx.app).is_ok());
 }
 
@@ -770,11 +760,7 @@ fn a_project_open_that_lands_on_another_worktree_is_a_switch() {
     crate::worktree::create_worktree_at(&fx.root(), "alt", &other.to_string_lossy())
         .expect("a second worktree");
 
-    assert!(crate::worktree::opens_other_worktree(
-        &project,
-        &anchor,
-        &other.to_string_lossy()
-    ));
+    assert!(crate::worktree::opens_other_worktree(&project, &anchor, &other.to_string_lossy()));
     assert!(!crate::worktree::opens_other_worktree(&project, &anchor, &anchor));
     assert!(!crate::worktree::opens_other_worktree(
         &project,
@@ -892,9 +878,7 @@ fn a_queue_event_names_the_worktree_of_a_direct_run() {
     let seen = Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
     let sink = seen.clone();
     fx.app.listen(GRADUATION_QUEUE_CHANGED, move |event| {
-        sink.lock()
-            .unwrap()
-            .push(serde_json::from_str(event.payload()).unwrap());
+        sink.lock().unwrap().push(serde_json::from_str(event.payload()).unwrap());
     });
     let stream = fx.stream("editor");
     fx.app.state::<GraduationState>().set_loop_enabled(false);

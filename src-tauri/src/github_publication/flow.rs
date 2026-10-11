@@ -461,10 +461,24 @@ pub fn update_existing(
         issue_type: choice.issue_type.clone().filter(|_| !type_matches(&existing, &choice)),
         milestone: choice.milestone_number.filter(|_| !milestone_matches(&existing, &choice)),
     };
-    let updated =
-        client.update_issue(secret, owner, repo, existing.number, &content.title, &content.body, &fields)?;
+    let updated = client.update_issue(
+        secret,
+        owner,
+        repo,
+        existing.number,
+        &content.title,
+        &content.body,
+        &fields,
+    )?;
     if let (true, Some(parent)) = (link, choice.parent_issue_number) {
-        client.link_sub_issue(secret, owner, repo, parent, existing.id, existing.parent.is_some())?;
+        client.link_sub_issue(
+            secret,
+            owner,
+            repo,
+            parent,
+            existing.id,
+            existing.parent.is_some(),
+        )?;
     }
     if let (true, Some(old)) = (unlink, existing.parent.as_ref()) {
         client.unlink_sub_issue(secret, &old.owner, &old.repo, old.number, existing.id)?;
@@ -588,8 +602,7 @@ pub fn resolve_choice(
     owner: &str,
     repo: &str,
 ) -> Result<PublicationChoice, String> {
-    let requested_type =
-        input.issue_type.as_deref().map(str::trim).filter(|name| !name.is_empty());
+    let requested_type = input.issue_type.as_deref().map(str::trim).filter(|name| !name.is_empty());
     let Some(parent_number) = input.parent_issue_number else {
         return resolve_root_choice(input, requested_type, client, secret, owner, repo);
     };
@@ -712,10 +725,7 @@ pub fn persist_choice(
     // this returns unchanged.
     crate::project_settings::save_publication_remote_selection_to(
         root,
-        Some(PublicationRemoteSelection {
-            name: remote.name.clone(),
-            url: remote.url.clone(),
-        }),
+        Some(PublicationRemoteSelection { name: remote.name.clone(), url: remote.url.clone() }),
     )
     .map_err(|_| ERR_STORE_WRITE_FAILED.to_string())
 }
@@ -736,9 +746,7 @@ pub fn is_openable_issue_url(url: &str, host: &str) -> bool {
         return false;
     };
     // No userinfo, and the host itself rather than a look-alike prefix.
-    !authority.contains('@')
-        && authority.eq_ignore_ascii_case(host)
-        && path.contains("/issues/")
+    !authority.contains('@') && authority.eq_ignore_ascii_case(host) && path.contains("/issues/")
 }
 
 /// GHP-FR-ZRFP / GHP-FR-WKDE: the resolution, from what the repository and the

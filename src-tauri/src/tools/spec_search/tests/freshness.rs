@@ -12,11 +12,9 @@ fn a_call_resolves_without_waiting_on_an_index_pass() {
     let tool = SpecSearchTool::new(fixture.handle());
 
     // `block_on` panics on `Pending`, so reaching the assertion is the proof.
-    let output = block_on(tool.call(SpecificationSearchArgs {
-        query: "teardown".to_string(),
-        limit: None,
-    }))
-    .expect("resolves on the first poll (SPS-FR-16)");
+    let output =
+        block_on(tool.call(SpecificationSearchArgs { query: "teardown".to_string(), limit: None }))
+            .expect("resolves on the first poll (SPS-FR-16)");
     assert!(!output.specifications.is_empty());
 }
 
@@ -78,10 +76,7 @@ fn searching_changes_nothing_on_disk() {
         for limit in [None, Some(1), Some(20)] {
             let _ = search(
                 &fixture.app.state::<Bm25Indexer>(),
-                &SpecificationSearchArgs {
-                    query: text.to_string(),
-                    limit,
-                },
+                &SpecificationSearchArgs { query: text.to_string(), limit },
             );
         }
     }
@@ -92,4 +87,3 @@ fn searching_changes_nothing_on_disk() {
         "searching leaves the project exactly as it was (SPS-FR-18)",
     );
 }
-

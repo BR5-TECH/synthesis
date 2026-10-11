@@ -19,7 +19,8 @@ fn an_escalation_of_a_merge_work_turn_is_answered_into_the_work_turn() {
     conflicted_merge("merge work escalates")
         .with_merge(as_one_commit())
         .merge_work_turn(
-            Script::escalates(&["Which limit stands?", "Keep the stream's file?"]).leaves_a_session(),
+            Script::escalates(&["Which limit stands?", "Keep the stream's file?"])
+                .leaves_a_session(),
         )
         .run()
         .expect_state(GraduationRunState::AwaitingAuthor)
@@ -66,10 +67,7 @@ fn an_escalation_of_a_merge_review_turn_is_answered_into_a_fresh_review() {
         .expect_escalation_origin(GraduationEscalationOrigin::Review)
         .expect_stream_held()
         .expect_slots_in_use(1)
-        .answered(
-            &["Yes, keep it."],
-            vec![Script::answers_ready("Both intents stand.")],
-        )
+        .answered(&["Yes, keep it."], vec![Script::answers_ready("Both intents stand.")])
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_order(&["merge_review"])
         .expect_dispatch(0, |d| {
@@ -129,9 +127,7 @@ fn a_discard_during_a_merge_turn_writes_nothing_and_reclaims_what_the_run_owned(
     conflicted_merge("merge discard mid-turn")
         .with_merge(as_one_commit())
         .merge_work_turn(
-            Script::reports_success()
-                .writes("README.md", "half done\n")
-                .discarding_the_run(),
+            Script::reports_success().writes("README.md", "half done\n").discarding_the_run(),
         )
         .run()
         .expect_state(GraduationRunState::Discarded)

@@ -38,9 +38,7 @@ impl DeletionFixture {
         app.manage(crate::streams::StreamState::rooted_at(store.clone()));
         app.manage(crate::graduation::GraduationState::rooted_at(store.clone()));
         let root = f.root();
-        app.state::<crate::fs::FsAccessState>()
-            .install_for_worktree_and(&root, &store)
-            .unwrap();
+        app.state::<crate::fs::FsAccessState>().install_for_worktree_and(&root, &store).unwrap();
         let access = app.state::<crate::fs::FsAccessState>().get().unwrap();
         let project = app.state::<crate::project::ProjectState>();
         project.set_root_with_access(root.clone(), Some(access));
@@ -75,9 +73,7 @@ impl DeletionFixture {
 
     /// Root the project in another worktree, as an activation does.
     pub fn activate(&self, path: &std::path::Path) {
-        self.app
-            .state::<crate::project::ProjectState>()
-            .set_root(path.to_path_buf());
+        self.app.state::<crate::project::ProjectState>().set_root(path.to_path_buf());
     }
 
     pub fn inspect(&self, name: &str) -> Result<BranchDeletionPlan, String> {
@@ -242,7 +238,8 @@ fn the_plan_serialises_to_the_camel_case_contract() {
     let mut keys: Vec<&str> = json.as_object().unwrap().keys().map(String::as_str).collect();
     keys.sort();
     assert_eq!(keys, vec!["branch", "remoteBranch", "uncommittedPaths", "worktree"]);
-    let mut worktree: Vec<&str> = json["worktree"].as_object().unwrap().keys().map(String::as_str).collect();
+    let mut worktree: Vec<&str> =
+        json["worktree"].as_object().unwrap().keys().map(String::as_str).collect();
     worktree.sort();
     assert_eq!(worktree, vec!["isActive", "isPrimary", "name", "path"]);
 }
@@ -465,7 +462,8 @@ fn an_untracked_path_is_discarded_with_the_worktree_once_confirmed() {
 #[test]
 fn inspecting_a_stream_branch_names_the_stream_its_worktree_and_its_uncommitted_paths() {
     let fx = DeletionFixture::new();
-    let stream = crate::streams::create_work_stream(fx.app.clone(), "Editor".into(), None, None).unwrap();
+    let stream =
+        crate::streams::create_work_stream(fx.app.clone(), "Editor".into(), None, None).unwrap();
     std::fs::write(std::path::Path::new(&stream.worktree_path).join("draft.txt"), "wip\n").unwrap();
 
     let plan = fx.inspect(&stream.branch).unwrap();
@@ -486,7 +484,8 @@ fn inspecting_a_stream_branch_names_the_stream_its_worktree_and_its_uncommitted_
 #[test]
 fn inspecting_a_stream_branch_counts_the_commits_its_base_lacks() {
     let fx = DeletionFixture::new();
-    let stream = crate::streams::create_work_stream(fx.app.clone(), "Ahead".into(), None, None).unwrap();
+    let stream =
+        crate::streams::create_work_stream(fx.app.clone(), "Ahead".into(), None, None).unwrap();
     let worktree = git2::Repository::open(&stream.worktree_path).unwrap();
     for (n, name) in ["one.txt", "two.txt"].iter().enumerate() {
         std::fs::write(std::path::Path::new(&stream.worktree_path).join(name), "work\n").unwrap();
@@ -496,9 +495,7 @@ fn inspecting_a_stream_branch_counts_the_commits_its_base_lacks() {
         let tree = worktree.find_tree(index.write_tree().unwrap()).unwrap();
         let sig = worktree.signature().unwrap();
         let parent = worktree.head().unwrap().peel_to_commit().unwrap();
-        worktree
-            .commit(Some("HEAD"), &sig, &sig, &format!("work {n}"), &tree, &[&parent])
-            .unwrap();
+        worktree.commit(Some("HEAD"), &sig, &sig, &format!("work {n}"), &tree, &[&parent]).unwrap();
     }
 
     let plan = fx.inspect(&stream.branch).unwrap();
@@ -512,7 +509,8 @@ fn inspecting_a_stream_branch_counts_the_commits_its_base_lacks() {
 #[test]
 fn a_stream_branch_is_refused_by_the_deletion_and_nothing_changes() {
     let fx = DeletionFixture::new();
-    let stream = crate::streams::create_work_stream(fx.app.clone(), "Editor".into(), None, None).unwrap();
+    let stream =
+        crate::streams::create_work_stream(fx.app.clone(), "Editor".into(), None, None).unwrap();
     let before = fx.f.snapshot_all();
     // The creation announces its own branch (WKS-FR-SPVK); the refusal adds none.
     let events_before = fx.events();
@@ -546,7 +544,10 @@ fn a_refusal_and_a_result_are_logged_with_names_and_counts_but_no_path() {
     assert_eq!(refused[0].level, crate::logging::LogLevel::Warn);
     assert_eq!(refused[0].fields.get("branch"), Some(&serde_json::json!("feature")));
     assert_eq!(refused[0].fields.get("uncommittedCount"), Some(&serde_json::json!(1)));
-    assert_eq!(record_for(fx.buffer, "branch deletion inspected").fields.get("uncommittedCount"), Some(&serde_json::json!(1)));
+    assert_eq!(
+        record_for(fx.buffer, "branch deletion inspected").fields.get("uncommittedCount"),
+        Some(&serde_json::json!(1))
+    );
     let done = record_for(fx.buffer, "branch deleted");
     assert_eq!(done.fields.get("removedWorktree"), Some(&serde_json::json!(true)));
     assert_eq!(done.fields.get("discardedCount"), Some(&serde_json::json!(1)));

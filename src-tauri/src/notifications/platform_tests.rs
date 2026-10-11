@@ -62,10 +62,7 @@ fn the_run_token_is_stable_and_one_id_gives_one_identifier() {
     assert!(!token.is_empty());
     assert!(!token.contains('.'), "a dot would break the identifier shape");
     assert_eq!(run_token(), token);
-    assert_eq!(
-        platform_identifier(token, "notif-0"),
-        platform_identifier(run_token(), "notif-0")
-    );
+    assert_eq!(platform_identifier(token, "notif-0"), platform_identifier(run_token(), "notif-0"));
     let identifier = platform_identifier(token, "notif-0");
     assert_eq!(own_id(run_token(), &identifier), Some("notif-0"));
 }
@@ -86,15 +83,8 @@ fn every_platform_status_gives_its_disposition() {
 // NTD-FR-03: only a state nobody asked for shows a prompt.
 #[test]
 fn only_an_unrequested_state_shows_a_prompt() {
-    assert_eq!(
-        request_decision(PermissionState::NotRequested),
-        RequestDecision::Ask
-    );
-    for state in [
-        PermissionState::Granted,
-        PermissionState::Denied,
-        PermissionState::Unsupported,
-    ] {
+    assert_eq!(request_decision(PermissionState::NotRequested), RequestDecision::Ask);
+    for state in [PermissionState::Granted, PermissionState::Denied, PermissionState::Unsupported] {
         assert_eq!(request_decision(state), RequestDecision::Answer(state));
     }
 }
@@ -102,10 +92,7 @@ fn only_an_unrequested_state_shows_a_prompt() {
 // NTD-FR-16, NTD-FR-14: only the platform's own "not allowed" is a refusal.
 #[test]
 fn only_the_not_allowed_error_is_a_permission_refusal() {
-    assert_eq!(
-        post_error_from("UNErrorDomain", 1),
-        PostError::PermissionDenied
-    );
+    assert_eq!(post_error_from("UNErrorDomain", 1), PostError::PermissionDenied);
     assert_eq!(post_error_from("UNErrorDomain", 2), PostError::DeliveryFailed);
     assert_eq!(post_error_from("NSCocoaErrorDomain", 1), PostError::DeliveryFailed);
     assert_eq!(post_error_from("", 0), PostError::DeliveryFailed);
@@ -119,10 +106,7 @@ fn the_subtitle_folds_onto_the_first_line_of_the_body() {
     assert_eq!(fold_subtitle("", "Run finished."), "Run finished.");
     assert_eq!(fold_subtitle("acme", ""), "acme");
     assert_eq!(fold_subtitle("", ""), "");
-    assert_eq!(
-        fold_subtitle("acme", "line one\nline two"),
-        "acme\nline one\nline two"
-    );
+    assert_eq!(fold_subtitle("acme", "line one\nline two"), "acme\nline one\nline two");
 }
 
 fn counting_route(count: &Arc<AtomicUsize>) -> Box<dyn FnOnce() + Send> {
@@ -222,11 +206,7 @@ fn an_unrequested_state_prompts_once_and_answers_with_the_new_read() {
 // NTD-FR-03: every other state is answered as read, with no prompt.
 #[test]
 fn a_known_state_is_answered_without_a_prompt() {
-    for state in [
-        PermissionState::Granted,
-        PermissionState::Denied,
-        PermissionState::Unsupported,
-    ] {
+    for state in [PermissionState::Granted, PermissionState::Denied, PermissionState::Unsupported] {
         assert_eq!(run_request(&[state]), (state, 1, 0), "state {state:?}");
     }
 }
@@ -256,27 +236,14 @@ fn a_response_is_planned_by_run_first_then_by_action() {
     let own = platform_identifier(token, "notif-3");
     let earlier = platform_identifier("run0", "notif-3");
 
-    assert_eq!(
-        plan_response(token, &own, ResponseAction::Open),
-        ResponsePlan::Open("notif-3")
-    );
+    assert_eq!(plan_response(token, &own, ResponseAction::Open), ResponsePlan::Open("notif-3"));
     assert_eq!(
         plan_response(token, &own, ResponseAction::Dismiss),
         ResponsePlan::Forget("notif-3")
     );
-    assert_eq!(
-        plan_response(token, &own, ResponseAction::Other),
-        ResponsePlan::Ignore
-    );
-    for action in [
-        ResponseAction::Open,
-        ResponseAction::Dismiss,
-        ResponseAction::Other,
-    ] {
+    assert_eq!(plan_response(token, &own, ResponseAction::Other), ResponsePlan::Ignore);
+    for action in [ResponseAction::Open, ResponseAction::Dismiss, ResponseAction::Other] {
         assert_eq!(plan_response(token, &earlier, action), ResponsePlan::Ignore);
-        assert_eq!(
-            plan_response(token, "com.other.app.notif-3", action),
-            ResponsePlan::Ignore
-        );
+        assert_eq!(plan_response(token, "com.other.app.notif-3", action), ResponsePlan::Ignore);
     }
 }

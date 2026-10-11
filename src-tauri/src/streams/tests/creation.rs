@@ -224,10 +224,7 @@ fn every_operation_refuses_a_project_that_is_not_a_repository() {
         create_work_stream(handle.clone(), "x".into(), None, None).expect_err("refused"),
         ERR_NOT_A_GIT_REPOSITORY
     );
-    assert_eq!(
-        list_work_streams(handle.clone()).expect_err("refused"),
-        ERR_NOT_A_GIT_REPOSITORY
-    );
+    assert_eq!(list_work_streams(handle.clone()).expect_err("refused"), ERR_NOT_A_GIT_REPOSITORY);
     assert_eq!(
         get_work_stream(handle.clone(), "w1".into()).expect_err("refused"),
         ERR_NOT_A_GIT_REPOSITORY
@@ -304,18 +301,10 @@ fn a_failed_creation_leaves_an_earlier_stream_alone() {
 fn the_working_copy_records_its_store_relatively() {
     let fx = Fixture::new();
     let stream = fx.create("relative", None).expect("created");
-    let commondir = fx
-        .root()
-        .join(".git")
-        .join("worktrees")
-        .join(&stream.id)
-        .join("commondir");
+    let commondir = fx.root().join(".git").join("worktrees").join(&stream.id).join("commondir");
     let recorded = std::fs::read_to_string(&commondir).expect("commondir");
     let recorded = recorded.trim();
-    assert!(
-        !Path::new(recorded).is_absolute(),
-        "commondir must be relative, found {recorded:?}",
-    );
+    assert!(!Path::new(recorded).is_absolute(), "commondir must be relative, found {recorded:?}",);
 }
 
 // ---------------------------------------------------------------------------
@@ -359,13 +348,8 @@ fn a_stream_created_without_the_flag_is_not_temporary() {
 #[test]
 fn a_temporary_stream_records_the_flag_and_the_listing_reports_it() {
     let fx = Fixture::new();
-    let stream = create_work_stream(
-        fx.app.clone(),
-        "scratch".to_string(),
-        None,
-        Some(true),
-    )
-    .expect("created");
+    let stream = create_work_stream(fx.app.clone(), "scratch".to_string(), None, Some(true))
+        .expect("created");
     assert!(stream.temporary);
     let read = get_work_stream(fx.app.clone(), stream.id.clone()).expect("read");
     assert!(read.temporary);

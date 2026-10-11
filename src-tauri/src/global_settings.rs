@@ -353,10 +353,7 @@ impl GlobalSettingsStore {
                 .ok()
                 .map(|a| crate::fs::RootFs::new(dir.to_path_buf(), std::sync::Arc::new(a)))
         });
-        let mut state = access
-            .as_ref()
-            .map(|a| load_or_default(a, &path))
-            .unwrap_or_default();
+        let mut state = access.as_ref().map(|a| load_or_default(a, &path)).unwrap_or_default();
         // GSS-FR-31: the one-time migration. A slot that still carries the
         // earlier enrolment loses it and the store is written once without it.
         // Every agent stays in the registry as a Personal agent, and none is
@@ -392,9 +389,7 @@ impl GlobalSettingsStore {
     }
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, PersistedState>, String> {
-        self.state
-            .lock()
-            .map_err(|e| format!("global settings store poisoned: {e}"))
+        self.state.lock().map_err(|e| format!("global settings store poisoned: {e}"))
     }
 
     // -- App preferences (GSS-FR-04) -------------------------------------
@@ -502,17 +497,9 @@ impl GlobalSettingsStore {
         if id.is_empty() {
             return Err("could not derive plugin id from source".into());
         }
-        let plugin = InstalledPlugin {
-            id: id.clone(),
-            name: id,
-            source: source.to_string(),
-        };
+        let plugin = InstalledPlugin { id: id.clone(), name: id, source: source.to_string() };
         let mut state = self.lock()?;
-        if let Some(existing) = state
-            .installed_plugins
-            .iter_mut()
-            .find(|p| p.id == plugin.id)
-        {
+        if let Some(existing) = state.installed_plugins.iter_mut().find(|p| p.id == plugin.id) {
             *existing = plugin.clone();
         } else {
             state.installed_plugins.push(plugin.clone());
@@ -554,17 +541,9 @@ impl GlobalSettingsStore {
         if id.is_empty() {
             return Err("could not derive adapter id from source".into());
         }
-        let adapter = InstalledAdapter {
-            id: id.clone(),
-            name: id,
-            source: source.to_string(),
-        };
+        let adapter = InstalledAdapter { id: id.clone(), name: id, source: source.to_string() };
         let mut state = self.lock()?;
-        if let Some(existing) = state
-            .installed_adapters
-            .iter_mut()
-            .find(|a| a.id == adapter.id)
-        {
+        if let Some(existing) = state.installed_adapters.iter_mut().find(|a| a.id == adapter.id) {
             *existing = adapter.clone();
         } else {
             state.installed_adapters.push(adapter.clone());
@@ -606,10 +585,7 @@ impl GlobalSettingsStore {
         &self,
     ) -> Result<(Vec<crate::agentic::AgenticRecord>, Option<String>), String> {
         let state = self.lock()?;
-        Ok((
-            state.agentic_integrations.clone(),
-            state.active_agentic.clone(),
-        ))
+        Ok((state.agentic_integrations.clone(), state.active_agentic.clone()))
     }
 
     /// Replace the registry and the active choice together, and persist. Both
@@ -640,10 +616,7 @@ impl GlobalSettingsStore {
         &self,
     ) -> Result<(Vec<crate::ai_api::AiApiRecord>, Option<String>), String> {
         let state = self.lock()?;
-        Ok((
-            state.ai_api_integrations.clone(),
-            state.active_ai_api.clone(),
-        ))
+        Ok((state.ai_api_integrations.clone(), state.active_ai_api.clone()))
     }
 
     /// Replace the API registry and its active choice together, and persist —
@@ -706,9 +679,7 @@ impl GlobalSettingsStore {
         at: &str,
     ) -> Result<crate::docker::DockerBackendRecord, String> {
         let mut state = self.lock()?;
-        state
-            .docker_backend
-            .record_success(config, server_version, at);
+        state.docker_backend.record_success(config, server_version, at);
         let record = state.docker_backend.clone();
         self.persist(&state)?;
         Ok(record)
@@ -764,9 +735,7 @@ impl GlobalSettingsStore {
         at: &str,
     ) -> Result<crate::relay_endpoint::RelayEndpointRecord, String> {
         let mut state = self.lock()?;
-        state
-            .relay_endpoint
-            .record_success(url, version, capabilities, at);
+        state.relay_endpoint.record_success(url, version, capabilities, at);
         let record = state.relay_endpoint.clone();
         self.persist(&state)?;
         Ok(record)
@@ -809,9 +778,7 @@ impl GlobalSettingsStore {
     /// Keyed by project (GSS-FR-18), so one binding serves every worktree of a
     /// repository and survives a change of active worktree.
     pub fn save_github_token_binding(&self, key: &str, token_id: &str) -> Result<(), String> {
-        self.update_slot(key, |slot| {
-            slot.github_token_id = Some(token_id.to_string())
-        })
+        self.update_slot(key, |slot| slot.github_token_id = Some(token_id.to_string()))
     }
 
     /// GSS-FR-26: the agentic integration this project overrides to, or `None`
@@ -847,9 +814,7 @@ impl GlobalSettingsStore {
     /// GSS-FR-28: remember which API provider this project uses. Keyed by
     /// project (GSS-FR-18), like every other per-project fact.
     pub fn save_ai_api_override(&self, key: &str, provider: &str) -> Result<(), String> {
-        self.update_slot(key, |slot| {
-            slot.ai_api_provider = Some(provider.to_string())
-        })
+        self.update_slot(key, |slot| slot.ai_api_provider = Some(provider.to_string()))
     }
 
     /// GSS-FR-28: return the project to inheriting the user-global API choice.
@@ -954,10 +919,7 @@ impl GlobalSettingsStore {
 /// written.
 fn drop_legacy_enrolment(state: &mut PersistedState) -> bool {
     let mut found = false;
-    let slots = state
-        .projects
-        .values_mut()
-        .chain(std::iter::once(&mut state.default_project));
+    let slots = state.projects.values_mut().chain(std::iter::once(&mut state.default_project));
     for slot in slots {
         if !slot.legacy_enrolled_agents.is_empty() {
             slot.legacy_enrolled_agents.clear();

@@ -7,7 +7,10 @@ use super::*;
 const NOW: &str = "2026-10-02T10:00:00Z";
 
 fn started(slot: &mut SessionSlot, key: &SessionKey) -> PollTicket {
-    let generation = { slot.enter(key); slot.generation() };
+    let generation = {
+        slot.enter(key);
+        slot.generation()
+    };
     match slot.begin_poll(key, PROJECT, generation) {
         PollStart::Started(ticket) => ticket,
         PollStart::AlreadyRunning => panic!("a poll was already running"),
@@ -78,7 +81,10 @@ fn a_failed_poll_keeps_the_rows_and_marks_them_stale() {
     let ticket = started(&mut slot, &key);
     slot.settle_poll(
         &ticket,
-        Err(PollFailure { code: ERR_STATUS_FIELD_MISSING.into(), project_title: Some("Roadmap".into()) }),
+        Err(PollFailure {
+            code: ERR_STATUS_FIELD_MISSING.into(),
+            project_title: Some("Roadmap".into()),
+        }),
         NOW,
     );
     let view = view_of(&slot, &key);
@@ -97,10 +103,7 @@ fn an_invalid_or_missing_configuration_refuses_polls() {
     let key = key(&dir);
     let mut slot = SessionSlot::default();
     poll(&mut slot, &key, &[1]);
-    assert_eq!(
-        slot.require_pollable(&key, &settings(None)),
-        Err(ERR_UNCONFIGURED.to_string())
-    );
+    assert_eq!(slot.require_pollable(&key, &settings(None)), Err(ERR_UNCONFIGURED.to_string()));
     assert_eq!(view_of(&slot, &key).tasks.len(), 1, "no row changed");
 
     let generation = slot.generation();
@@ -138,7 +141,12 @@ fn a_settings_write_records_its_validation() {
 
     slot.settings_changed(&key);
     let generation = slot.generation();
-    slot.record_configuration(&key, generation, PROJECT, GithubPollingConfiguration::valid("Roadmap"));
+    slot.record_configuration(
+        &key,
+        generation,
+        PROJECT,
+        GithubPollingConfiguration::valid("Roadmap"),
+    );
     let configuration = slot.configuration_for(&key, &settings(Some(PROJECT)));
     assert_eq!(configuration.state, ConfigurationState::Valid);
     assert_eq!(configuration.project_title.as_deref(), Some("Roadmap"));
@@ -263,7 +271,10 @@ fn the_event_payload_names_new_issues() {
     let mut slot = SessionSlot::default();
     let Settled::Succeeded(new_issues) = poll(&mut slot, &key, &[7]) else { panic!() };
     let payload = serde_json::to_value(GithubPollingChanged { new_issues }).unwrap();
-    assert_eq!(payload, serde_json::json!({ "newIssues": [{ "issueNumber": 7, "title": "Task 7" }] }));
+    assert_eq!(
+        payload,
+        serde_json::json!({ "newIssues": [{ "issueNumber": 7, "title": "Task 7" }] })
+    );
     let empty = serde_json::to_value(GithubPollingChanged::default()).unwrap();
     assert_eq!(empty, serde_json::json!({ "newIssues": [] }));
     assert_eq!(GITHUB_POLLING_CHANGED, "github-polling-changed");
@@ -277,18 +288,31 @@ fn the_view_excludes_rows_claimed_since_the_poll() {
     let key = key(&dir);
     let mut slot = SessionSlot::default();
     poll(&mut slot, &key, &[1, 2]);
-    let view = view::build_view(&slot, &key, settings(Some(PROJECT)), vec![pending(1, None)], Vec::new());
+    let view =
+        view::build_view(&slot, &key, settings(Some(PROJECT)), vec![pending(1, None)], Vec::new());
     assert_eq!(view.tasks.iter().map(|t| t.issue_number).collect::<Vec<_>>(), vec![2]);
     assert_eq!(view.pending_claims, vec![pending(1, None)]);
     let json = serde_json::to_value(&view).unwrap();
     for field in [
-        "settings", "configuration", "repository", "polling", "tasks", "stale", "lastErrorCode",
-        "lastError", "lastSuccessAt", "pendingClaims", "shadows",
+        "settings",
+        "configuration",
+        "repository",
+        "polling",
+        "tasks",
+        "stale",
+        "lastErrorCode",
+        "lastError",
+        "lastSuccessAt",
+        "pendingClaims",
+        "shadows",
     ] {
         assert!(json.get(field).is_some(), "{field}");
     }
     assert_eq!(json["configuration"]["state"], "valid");
-    assert_eq!(json["repository"], serde_json::json!({ "host": "github.com", "owner": "acme", "name": "widgets" }));
+    assert_eq!(
+        json["repository"],
+        serde_json::json!({ "host": "github.com", "owner": "acme", "name": "widgets" })
+    );
 }
 
 /// GPP-FR-DATH: a repository resolved under a key that is no longer the

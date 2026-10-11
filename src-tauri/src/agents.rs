@@ -297,9 +297,7 @@ fn sorted_personal(store: &GlobalSettingsStore) -> Result<Vec<Agent>, String> {
 
 /// AGR-FR-15: whether a Project agent of the same nickname hides this agent.
 fn is_shadowed(project: &[Agent], agent: &Agent) -> bool {
-    project
-        .iter()
-        .any(|p| same_nickname(&p.nickname, &agent.nickname))
+    project.iter().any(|p| same_nickname(&p.nickname, &agent.nickname))
 }
 
 /// AGR-FR-16: one agent with its scope and availability. A shadowed agent
@@ -316,11 +314,7 @@ fn describe(
     } else {
         availability_of(store, project_key, &agent)
     };
-    ProjectAgent {
-        agent,
-        scope,
-        availability,
-    }
+    ProjectAgent { agent, scope, availability }
 }
 
 /// AGR-FR-14: the Personal agents, answering whether or not a project is open.
@@ -357,23 +351,11 @@ pub fn roster_of(
     let files = project_store::list(worktree)?;
     let mut roster: Vec<ProjectAgent> = Vec::new();
     for agent in &files.agents {
-        roster.push(describe(
-            store,
-            project_key,
-            agent.clone(),
-            AgentScope::Project,
-            false,
-        ));
+        roster.push(describe(store, project_key, agent.clone(), AgentScope::Project, false));
     }
     for agent in sorted_personal(store)? {
         let shadowed = is_shadowed(&files.agents, &agent);
-        roster.push(describe(
-            store,
-            project_key,
-            agent,
-            AgentScope::Personal,
-            shadowed,
-        ));
+        roster.push(describe(store, project_key, agent, AgentScope::Personal, shadowed));
     }
     roster.sort_by(|a, b| {
         a.agent
@@ -463,9 +445,9 @@ fn validate_draft(
         Some(a.id.as_str()) == exclude && a.nickname.eq_ignore_ascii_case(&draft.nickname)
     });
     if !keeps_nickname
-        && agents.iter().any(|a| {
-            Some(a.id.as_str()) != exclude && same_nickname(&a.nickname, &draft.nickname)
-        })
+        && agents
+            .iter()
+            .any(|a| Some(a.id.as_str()) != exclude && same_nickname(&a.nickname, &draft.nickname))
     {
         return Err(ERR_NICKNAME_TAKEN.into());
     }
@@ -475,13 +457,8 @@ fn validate_draft(
     // model the active endpoint does not serve.
     let provider = ai_api::resolve_agent_provider(store, project_key)
         .map_err(|e| map_selection_error(&e).to_string())?;
-    ai_api::validate_ai_api_selection(
-        store,
-        &provider,
-        &draft.model_id,
-        draft.reasoning.as_ref(),
-    )
-    .map_err(|e| map_selection_error(&e).to_string())
+    ai_api::validate_ai_api_selection(store, &provider, &draft.model_id, draft.reasoning.as_ref())
+        .map_err(|e| map_selection_error(&e).to_string())
 }
 
 /// AGR-FR-09: validate the whole draft before writing anything, so a rejected
@@ -551,10 +528,7 @@ pub fn update_agent_impl(
     match scope {
         AgentScope::Personal => {
             let mut agents = store.load_agent_registry()?;
-            let index = agents
-                .iter()
-                .position(|a| a.id == id)
-                .ok_or(ERR_AGENT_NOT_FOUND)?;
+            let index = agents.iter().position(|a| a.id == id).ok_or(ERR_AGENT_NOT_FOUND)?;
             validate_draft(store, project_key, &agents, draft, Some(id))?;
             let updated = Agent {
                 id: agents[index].id.clone(),
@@ -781,13 +755,7 @@ pub fn delete_agent<R: tauri::Runtime>(
     progress: State<'_, crate::progress::ProgressRegistry>,
 ) -> Result<Vec<ProjectAgent>, String> {
     let key = project.slot_key();
-    let result = delete_agent_impl(
-        &store,
-        &key,
-        open_worktree(&project).as_ref(),
-        scope,
-        &id,
-    );
+    let result = delete_agent_impl(&store, &key, open_worktree(&project).as_ref(), scope, &id);
     log_write(&app, "delete", scope, &id, &result.as_ref().map(|_| ()).map_err(String::as_str));
     let agents = result?;
     let cancel_in = match scope {

@@ -14,12 +14,7 @@ fn asv_ts_01_three_kinds_share_one_entry() {
 
     set(&vault, &["github", "tokens", "t1"], "ghp_secret").unwrap();
     set(&vault, &["ai_api", "providers", "openai"], "sk-key").unwrap();
-    set(
-        &vault,
-        &["agentic", "vendors", "claude_code"],
-        "sk-ant-oat01-x",
-    )
-    .unwrap();
+    set(&vault, &["agentic", "vendors", "claude_code"], "sk-ant-oat01-x").unwrap();
 
     // ASV-FR-01 names both strings exactly; `keyring_entry_names_are_the_only_ones_used`
     // below is what ties them to the entry the backend actually opens.
@@ -38,15 +33,11 @@ fn asv_ts_01_three_kinds_share_one_entry() {
         Some("ghp_secret".into())
     );
     assert_eq!(
-        vault
-            .read_secret(&p(&["ai_api", "providers", "openai"]))
-            .unwrap(),
+        vault.read_secret(&p(&["ai_api", "providers", "openai"])).unwrap(),
         Some("sk-key".into())
     );
     assert_eq!(
-        vault
-            .read_secret(&p(&["agentic", "vendors", "claude_code"]))
-            .unwrap(),
+        vault.read_secret(&p(&["agentic", "vendors", "claude_code"])).unwrap(),
         Some("sk-ant-oat01-x".into())
     );
 }
@@ -60,9 +51,7 @@ fn asv_ts_02_unknown_namespace_needs_no_schema_change() {
     set(&vault, &["ssh", "deploy_keys", "prod", "ed25519"], "secret").unwrap();
 
     assert_eq!(
-        vault
-            .read_secret(&p(&["ssh", "deploy_keys", "prod", "ed25519"]))
-            .unwrap(),
+        vault.read_secret(&p(&["ssh", "deploy_keys", "prod", "ed25519"])).unwrap(),
         Some("secret".into())
     );
 }
@@ -86,10 +75,7 @@ fn asv_ts_03_unknown_fields_survive_a_write() {
             .and_then(Value::as_str),
         Some("kept")
     );
-    assert_eq!(
-        object.get("stray").and_then(Value::as_str),
-        Some("also kept")
-    );
+    assert_eq!(object.get("stray").and_then(Value::as_str), Some("also kept"));
     assert_eq!(
         vault.read_secret(&p(&["github", "tokens", "t1"])).unwrap(),
         Some("ghp_secret".into())
@@ -102,19 +88,12 @@ fn asv_ts_03_unknown_fields_survive_a_write() {
 fn asv_ts_04_absent_namespace_reads_empty_then_is_created() {
     let (vault, _keyring) = vault();
 
-    assert_eq!(
-        vault
-            .read_secret(&p(&["agentic", "vendors", "claude_code"]))
-            .unwrap(),
-        None
-    );
+    assert_eq!(vault.read_secret(&p(&["agentic", "vendors", "claude_code"])).unwrap(), None);
 
     set(&vault, &["agentic", "vendors", "claude_code"], "token").unwrap();
 
     assert_eq!(
-        vault
-            .read_secret(&p(&["agentic", "vendors", "claude_code"]))
-            .unwrap(),
+        vault.read_secret(&p(&["agentic", "vendors", "claude_code"])).unwrap(),
         Some("token".into())
     );
 }
@@ -127,12 +106,7 @@ fn asv_ts_04_absent_namespace_reads_empty_then_is_created() {
 fn asv_ts_05_projects_namespace_holds_only_secrets() {
     let (vault, keyring) = vault();
 
-    set(
-        &vault,
-        &["projects", "acme", "github", "deploy_key"],
-        "deploy-secret",
-    )
-    .unwrap();
+    set(&vault, &["projects", "acme", "github", "deploy_key"], "deploy-secret").unwrap();
 
     let object = keyring.object();
     let project = object
@@ -156,29 +130,15 @@ fn asv_ts_06_one_request_is_one_write() {
 
     vault
         .apply_secret_mutations(&[
-            Mutation::Set {
-                path: p(&["github", "tokens", "c"]),
-                secret: "C".into(),
-            },
-            Mutation::Remove {
-                path: p(&["github", "tokens", "a"]),
-            },
+            Mutation::Set { path: p(&["github", "tokens", "c"]), secret: "C".into() },
+            Mutation::Remove { path: p(&["github", "tokens", "a"]) },
         ])
         .unwrap();
 
     assert_eq!(keyring.count(&Call::Write) - writes_before, 1);
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        None
-    );
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "b"])).unwrap(),
-        Some("B".into())
-    );
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "c"])).unwrap(),
-        Some("C".into())
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), None);
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "b"])).unwrap(), Some("B".into()));
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "c"])).unwrap(), Some("C".into()));
 }
 
 /// ASV-FR-12, ASV-FR-31: a refused write changes nothing and returns `vault_write_failed`.
@@ -196,14 +156,8 @@ fn asv_ts_07_refused_write_changes_nothing() {
     assert_eq!(keyring.entry(), before);
 
     keyring.state().refuse_write = false;
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        Some("A".into())
-    );
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "b"])).unwrap(),
-        None
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), Some("A".into()));
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "b"])).unwrap(), None);
 }
 
 /// ASV-FR-11, ASV-FR-12: a read-back that does not match what was written fails the
@@ -219,10 +173,7 @@ fn asv_ts_08_unverified_write_fails_and_rolls_back() {
 
     assert_eq!(err, VaultError::VerifyFailed);
     assert_eq!(keyring.entry(), before);
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "b"])).unwrap(),
-        None
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "b"])).unwrap(), None);
 }
 
 /// ASV-FR-11, ASV-FR-12 (second half): a verification failure on an entry that did not
@@ -269,9 +220,7 @@ fn asv_ts_09_concurrent_mutations_lose_no_update() {
 
     for i in 0..8 {
         assert_eq!(
-            vault
-                .read_secret(&path(&["github", "tokens", &format!("t{i}")]))
-                .unwrap(),
+            vault.read_secret(&path(&["github", "tokens", &format!("t{i}")])).unwrap(),
             Some(format!("secret-{i}")),
             "the write of thread {i} survived every other"
         );
@@ -302,15 +251,8 @@ fn asv_ts_09_same_path_leaves_one_whole_value() {
         handle.join().unwrap();
     }
 
-    let stored = vault
-        .read_secret(&p(&["ai_api", "providers", "openai"]))
-        .unwrap()
-        .unwrap();
+    let stored = vault.read_secret(&p(&["ai_api", "providers", "openai"])).unwrap().unwrap();
     assert!(stored == "first" || stored == "second", "{stored}");
     // Every value the entry ever held decoded as a whole object.
-    assert!(matches!(
-        decode(&keyring.entry().unwrap()),
-        Decoded::Object(_)
-    ));
+    assert!(matches!(decode(&keyring.entry().unwrap()), Decoded::Object(_)));
 }
-

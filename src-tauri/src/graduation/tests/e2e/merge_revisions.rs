@@ -11,9 +11,7 @@ use crate::graduation::{GraduationRunState, ReviewSeverity};
 use crate::streams::StreamMergePublication;
 
 fn settling() -> Script {
-    Script::reports_success()
-        .writes("README.md", "both sides\n")
-        .checking_the_live_trees_stand()
+    Script::reports_success().writes("README.md", "both sides\n").checking_the_live_trees_stand()
 }
 
 // GTE-FR-RDPE, GTE-FR-XKGB, GTE-FR-QVHM / GRL-FR-MWPQ, GRL-FR-TXEB, GRL-FR-SLQF,
@@ -28,7 +26,9 @@ fn a_ready_merge_review_applies_the_merge_after_one_pass_and_no_further_turn() {
     let outcome = conflicted_merge("one merge pass")
         .with_merge(as_one_commit())
         .merge_work_turn(settling().writes("src/glue.ts", "glue\n"))
-        .merge_review_turn(Script::answers_ready("Both intents stand.").checking_the_live_trees_stand())
+        .merge_review_turn(
+            Script::answers_ready("Both intents stand.").checking_the_live_trees_stand(),
+        )
         .run();
     let (worktree, checkout, stream_worktree) = (
         outcome.merge_worktree_path(),
@@ -114,8 +114,14 @@ fn a_revise_merge_review_sends_its_findings_whole_into_the_next_merge_work_turn(
             d.part("merge_work")
                 .purpose("revise")
                 .pass(2)
-                .field_contains("loop_instruction", "[critical] The limit of README.md lost the base side.")
-                .field_contains("loop_instruction", "[major] The stream-only file is not mentioned.")
+                .field_contains(
+                    "loop_instruction",
+                    "[critical] The limit of README.md lost the base side.",
+                )
+                .field_contains(
+                    "loop_instruction",
+                    "[major] The stream-only file is not mentioned.",
+                )
                 .merge_paths("unresolved_paths", &["README.md"])
                 .merge_has_no("reconciled_paths")
         })
@@ -141,7 +147,9 @@ fn a_single_minor_finding_of_a_merge_review_still_starts_another_pass() {
         .run()
         .expect_state(GraduationRunState::AwaitingAuthor)
         .expect_dispatch_count(4)
-        .expect_dispatch(2, |d| d.part("merge_work").pass(2).field_contains("loop_instruction", "Name the glue file."))
+        .expect_dispatch(2, |d| {
+            d.part("merge_work").pass(2).field_contains("loop_instruction", "Name the glue file.")
+        })
         .expect_pass(2)
         .expect_no_merge_result()
         .expect_commits(0)

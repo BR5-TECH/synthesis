@@ -87,10 +87,7 @@ fn a_direct_runs_abandoned_turn_is_retitled_to_its_own_name() {
 // name of nothing but those falls back to `Graduation run`.
 #[test]
 fn a_direct_runs_name_is_one_line_in_its_commit_message() {
-    for (name, expected) in [
-        ("  two\nlines\t ", "two lines"),
-        ("\n\u{7}\n", "Graduation run"),
-    ] {
+    for (name, expected) in [("  two\nlines\t ", "two lines"), ("\n\u{7}\n", "Graduation run")] {
         let fx = fixture();
         let draft = fx.committed_draft("direct");
         let mut run = fx.direct("Add the empty state.", &draft);

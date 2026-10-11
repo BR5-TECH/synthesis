@@ -59,10 +59,7 @@ fn ts17_identity_resolution_reports_the_same_distinction_the_ui_routes_on() {
     let Harness { store, tokens, .. } =
         harness(FakeVerifier::accepting("ghp_secret_1234", "raver119", &["repo"]));
 
-    assert_eq!(
-        resolve_github_identity(&store, "/dev/acme").unwrap_err(),
-        ERR_TOKEN_MISSING
-    );
+    assert_eq!(resolve_github_identity(&store, "/dev/acme").unwrap_err(), ERR_TOKEN_MISSING);
 
     add_token_impl(&store, &tokens, "work", "ghp_secret_1234", "").unwrap();
     assert_eq!(
@@ -78,10 +75,7 @@ fn ts17_identity_resolution_reports_the_same_distinction_the_ui_routes_on() {
             r
         })
         .unwrap();
-    assert_eq!(
-        resolve_github_identity(&store, "/dev/acme").unwrap_err(),
-        ERR_SELECTION_REQUIRED
-    );
+    assert_eq!(resolve_github_identity(&store, "/dev/acme").unwrap_err(), ERR_SELECTION_REQUIRED);
 
     // And binding the project resolves it again.
     set_binding_impl(&store, "/dev/acme", "b").unwrap();
@@ -106,14 +100,13 @@ fn ts17_re_verifying_refreshes_the_account_facts_with_the_login() {
     assert_eq!(added.account_display_name.as_deref(), Some("Old Name"));
 
     // The account is renamed on GitHub and gains a public email.
-    let Harness { store: store2, tokens: tokens2, .. } =
-        harness(FakeVerifier::accepting_account(
-            "ghp_secret_1234",
-            "raver119",
-            Some("New Name"),
-            Some("new@example.com"),
-            &["repo"],
-        ));
+    let Harness { store: store2, tokens: tokens2, .. } = harness(FakeVerifier::accepting_account(
+        "ghp_secret_1234",
+        "raver119",
+        Some("New Name"),
+        Some("new@example.com"),
+        &["repo"],
+    ));
     let re_added = add_token_impl(&store2, &tokens2, "work", "ghp_secret_1234", "").unwrap();
     let validated = validate_token_impl(&store2, &tokens2, &re_added.id).unwrap();
     assert_eq!(validated.account_display_name.as_deref(), Some("New Name"));
@@ -123,10 +116,9 @@ fn ts17_re_verifying_refreshes_the_account_facts_with_the_login() {
 #[test]
 fn account_payload_parsing_tolerates_the_nullable_fields() {
     // GitHub returns `name` and `email` as null far more often than not.
-    let full = account_from_user_payload(
-        r#"{"login":"raver119","name":"Demo Author","email":"a@b.c"}"#,
-    )
-    .unwrap();
+    let full =
+        account_from_user_payload(r#"{"login":"raver119","name":"Demo Author","email":"a@b.c"}"#)
+            .unwrap();
     assert_eq!(full.login, "raver119");
     assert_eq!(full.display_name.as_deref(), Some("Demo Author"));
     assert_eq!(full.email.as_deref(), Some("a@b.c"));
@@ -145,10 +137,7 @@ fn account_payload_parsing_tolerates_the_nullable_fields() {
     assert!(account_from_user_payload(r#"{"name":"nobody"}"#).is_none());
     assert!(account_from_user_payload("not json").is_none());
     // And the older single-field helper still agrees with it.
-    assert_eq!(
-        login_from_user_payload(r#"{"login":"raver119"}"#).as_deref(),
-        Some("raver119")
-    );
+    assert_eq!(login_from_user_payload(r#"{"login":"raver119"}"#).as_deref(), Some("raver119"));
 }
 
 #[test]

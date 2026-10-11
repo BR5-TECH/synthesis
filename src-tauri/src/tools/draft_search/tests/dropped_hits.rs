@@ -153,9 +153,7 @@ fn two_drafts_of_the_same_name_are_two_results() {
     for m in &matches {
         let loaded = crate::tools::draft_read::read(
             &root,
-            &crate::tools::draft_read::ReadDraftArgs {
-                draft_id: m.draft_id.clone(),
-            },
+            &crate::tools::draft_read::ReadDraftArgs { draft_id: m.draft_id.clone() },
         )
         .expect("loads");
         let expected = if loaded.draft_id == first { "first way" } else { "second way" };
@@ -198,12 +196,8 @@ fn logs_omit_an_undecodable_limit_and_an_applied_limit_on_refusal() {
     DST_LIMIT_BUFFER.clear();
     let app = crate::tools::tests::closed_project();
     block_on(
-        DraftSearchTool::with_buffer(app.handle().clone(), "closed", &DST_LIMIT_BUFFER).call(
-            DraftSearchArgs {
-                query: "teardown".into(),
-                limit: Some(3),
-            },
-        ),
+        DraftSearchTool::with_buffer(app.handle().clone(), "closed", &DST_LIMIT_BUFFER)
+            .call(DraftSearchArgs { query: "teardown".into(), limit: Some(3) }),
     )
     .expect_err("refuses");
 
@@ -217,8 +211,5 @@ fn logs_omit_an_undecodable_limit_and_an_applied_limit_on_refusal() {
     assert_eq!(refusal.fields["reason"], serde_json::json!("no_project_open"));
     assert_eq!(refusal.fields["query"], serde_json::json!("teardown"));
     assert_eq!(refusal.fields["limit"], serde_json::json!(3));
-    assert!(
-        refusal.fields.get("limitApplied").is_none(),
-        "no applied limit on a refusal",
-    );
+    assert!(refusal.fields.get("limitApplied").is_none(), "no applied limit on a refusal",);
 }

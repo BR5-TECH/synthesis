@@ -112,7 +112,9 @@ fn every_registered_command_is_named_in_command_names() {
         let Some(name) = entry.rsplit("::").next() else {
             continue;
         };
-        if name.is_empty() || !name.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c.is_ascii_digit()) {
+        if name.is_empty()
+            || !name.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c.is_ascii_digit())
+        {
             continue;
         }
         assert!(
@@ -185,12 +187,9 @@ fn no_vault_operation_is_reachable_from_the_frontend() {
         .split_once("])")
         .expect("end of generate_handler!")
         .0;
-    for operation in [
-        "read_secret",
-        "secret_presence",
-        "apply_secret_mutations",
-        "migrate_legacy_secrets",
-    ] {
+    for operation in
+        ["read_secret", "secret_presence", "apply_secret_mutations", "migrate_legacy_secrets"]
+    {
         assert!(
             !handler.contains(operation),
             "{operation} must never be a registered command: the vault's \
@@ -274,10 +273,7 @@ fn no_agent_conversation_internal_is_reachable_from_the_frontend() {
         // nothing the frontend can reach.
         "reserve_discussion_question_set",
     ] {
-        assert!(
-            !handler.contains(internal),
-            "{internal} must never be a registered command",
-        );
+        assert!(!handler.contains(internal), "{internal} must never be a registered command",);
         assert!(!COMMAND_NAMES.contains(&internal));
     }
 }

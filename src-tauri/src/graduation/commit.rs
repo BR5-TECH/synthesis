@@ -89,9 +89,7 @@ pub fn run_tree(worktree: &Path, base_commit: &str) -> Result<Option<RunTree>, S
             }
         }
     }
-    let tree = update
-        .create_updated(&repo, &base_tree)
-        .map_err(|e| e.to_string())?;
+    let tree = update.create_updated(&repo, &base_tree).map_err(|e| e.to_string())?;
     Ok(Some(RunTree { tree, paths }))
 }
 
@@ -106,10 +104,7 @@ pub fn commit_run_work(
 ) -> Result<Option<Committed>, String> {
     let derived = run_tree(worktree, base_commit)?;
     let repo = git2::Repository::open(worktree).map_err(|e| e.to_string())?;
-    let head = repo
-        .head()
-        .and_then(|h| h.peel_to_commit())
-        .map_err(|e| e.to_string())?;
+    let head = repo.head().and_then(|h| h.peel_to_commit()).map_err(|e| e.to_string())?;
     let derived = match derived {
         Some(derived) => derived,
         // GRD-FR-ARLT: a working copy that holds the base again, after an
@@ -144,12 +139,8 @@ pub fn commit_run_work(
     // before it, every committed path would read back to the author as an
     // uncommitted change of their own.
     let committed = repo.find_object(oid, None).map_err(|e| e.to_string())?;
-    repo.reset(&committed, git2::ResetType::Mixed, None)
-        .map_err(|e| e.to_string())?;
-    Ok(Some(Committed {
-        revision: oid.to_string(),
-        paths: derived.paths,
-    }))
+    repo.reset(&committed, git2::ResetType::Mixed, None).map_err(|e| e.to_string())?;
+    Ok(Some(Committed { revision: oid.to_string(), paths: derived.paths }))
 }
 
 /// GRD-FR-WQTN: rewrite the message of the branch head, where the head is the
@@ -165,10 +156,7 @@ pub fn retitle_head_commit(
     message: &str,
 ) -> Result<Option<String>, String> {
     let repo = git2::Repository::open(worktree).map_err(|e| e.to_string())?;
-    let head = repo
-        .head()
-        .and_then(|h| h.peel_to_commit())
-        .map_err(|e| e.to_string())?;
+    let head = repo.head().and_then(|h| h.peel_to_commit()).map_err(|e| e.to_string())?;
     if head.id().to_string() != revision || !head.message().unwrap_or_default().starts_with(title) {
         return Ok(None);
     }
@@ -182,12 +170,14 @@ pub fn retitle_head_commit(
 }
 
 /// The paths two trees of one repository differ at, sorted and unique.
-fn paths_between(repo: &git2::Repository, from: git2::Oid, to: git2::Oid) -> Result<Vec<String>, String> {
+fn paths_between(
+    repo: &git2::Repository,
+    from: git2::Oid,
+    to: git2::Oid,
+) -> Result<Vec<String>, String> {
     let from = repo.find_tree(from).map_err(|e| e.to_string())?;
     let to = repo.find_tree(to).map_err(|e| e.to_string())?;
-    let diff = repo
-        .diff_tree_to_tree(Some(&from), Some(&to), None)
-        .map_err(|e| e.to_string())?;
+    let diff = repo.diff_tree_to_tree(Some(&from), Some(&to), None).map_err(|e| e.to_string())?;
     let mut paths: Vec<String> = Vec::new();
     for delta in diff.deltas() {
         for file in [delta.new_file(), delta.old_file()] {
@@ -213,10 +203,7 @@ pub fn commit_author_work(worktree: &Path, message: &str) -> Result<Option<Strin
     let _lock = crate::git::index_lock::IndexLock::try_acquire(&repo)?
         .ok_or_else(|| "the repository index is held by another write".to_string())?;
     let mut status = git2::StatusOptions::new();
-    status
-        .include_untracked(true)
-        .recurse_untracked_dirs(true)
-        .include_ignored(false);
+    status.include_untracked(true).recurse_untracked_dirs(true).include_ignored(false);
     let dirty = repo
         .statuses(Some(&mut status))
         .map(|s| s.iter().any(|e| !e.status().is_empty()))
@@ -225,26 +212,14 @@ pub fn commit_author_work(worktree: &Path, message: &str) -> Result<Option<Strin
         return Ok(None);
     }
     let mut index = repo.index().map_err(|e| e.to_string())?;
-    index
-        .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-        .map_err(|e| e.to_string())?;
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).map_err(|e| e.to_string())?;
     index.write().map_err(|e| e.to_string())?;
     let tree_oid = index.write_tree().map_err(|e| e.to_string())?;
     let tree = repo.find_tree(tree_oid).map_err(|e| e.to_string())?;
-    let head = repo
-        .head()
-        .and_then(|h| h.peel_to_commit())
-        .map_err(|e| e.to_string())?;
+    let head = repo.head().and_then(|h| h.peel_to_commit()).map_err(|e| e.to_string())?;
     let signature = repo.signature().map_err(|e| e.to_string())?;
     let oid = repo
-        .commit(
-            Some("HEAD"),
-            &signature,
-            &signature,
-            message,
-            &tree,
-            &[&head],
-        )
+        .commit(Some("HEAD"), &signature, &signature, message, &tree, &[&head])
         .map_err(|e| e.to_string())?;
     Ok(Some(oid.to_string()))
 }
@@ -272,10 +247,7 @@ pub fn revert_run_commits(worktree: &Path, revisions: &[String]) -> Result<usize
         }
         let tree_oid = index.write_tree().map_err(|e| e.to_string())?;
         let tree = repo.find_tree(tree_oid).map_err(|e| e.to_string())?;
-        let head = repo
-            .head()
-            .and_then(|h| h.peel_to_commit())
-            .map_err(|e| e.to_string())?;
+        let head = repo.head().and_then(|h| h.peel_to_commit()).map_err(|e| e.to_string())?;
         let signature = repo.signature().map_err(|e| e.to_string())?;
         repo.commit(
             Some("HEAD"),

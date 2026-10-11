@@ -70,11 +70,9 @@ fn start(
         let _ = outgoing.fail(reason, request_id);
         return None;
     }
-    let (Ok(registration_id), Ok(instance_id), Ok(payload)) = (
-        frame.text("registration_id"),
-        frame.text("instance_id"),
-        frame.payload("payload"),
-    ) else {
+    let (Ok(registration_id), Ok(instance_id), Ok(payload)) =
+        (frame.text("registration_id"), frame.text("instance_id"), frame.payload("payload"))
+    else {
         let _ = outgoing.fail(ReasonCode::InvalidFrameShape, request_id);
         return None;
     };
@@ -82,10 +80,7 @@ fn start(
     // RSN-FR-NGKW: the registration identifier is routing state, so two live
     // exchanges never share one. The second is refused before a handle is
     // assigned, rather than becoming reachable by the first one's answers.
-    if !state
-        .hub
-        .put_registration(socket_id, &registration_id, outgoing.sink.clone())
-    {
+    if !state.hub.put_registration(socket_id, &registration_id, outgoing.sink.clone()) {
         let _ = outgoing.fail(ReasonCode::InvalidFrameShape, request_id);
         return None;
     }
@@ -129,11 +124,7 @@ fn start(
         state.relay.drop_pending_registration(&client.handle);
         return None;
     }
-    outgoing.send(
-        "registration_bound",
-        request_id,
-        json!({ "handle": client.handle }),
-    );
+    outgoing.send("registration_bound", request_id, json!({ "handle": client.handle }));
 
     Some(client.handle)
 }

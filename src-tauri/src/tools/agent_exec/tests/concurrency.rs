@@ -18,13 +18,9 @@ fn a_filesystem_claim_in_an_envelope_is_never_verified_by_the_executor() {
     });
     let runtime = RecordingRuntime::replying(&claude_stdout(&envelope.to_string()));
 
-    let before = std::fs::read_dir(harness.workspace())
-        .expect("read")
-        .count();
+    let before = std::fs::read_dir(harness.workspace()).expect("read").count();
     let outcome = run(&harness, runtime, task("go")).expect("ran");
-    let after = std::fs::read_dir(harness.workspace())
-        .expect("read")
-        .count();
+    let after = std::fs::read_dir(harness.workspace()).expect("read").count();
 
     assert_eq!(outcome.process_outcome, ProcessOutcome::Completed);
     // The claim is carried through verbatim as the agent's own report…
@@ -66,8 +62,7 @@ fn one_executor_driving_two_launches_keeps_them_separate() {
         images_asked: StdMutex::new(Vec::new()),
     });
     let executor = Arc::new(
-        AgentCliExecutor::new(shared.clone())
-            .with_session_state_root(claude.sessions_root()),
+        AgentCliExecutor::new(shared.clone()).with_session_state_root(claude.sessions_root()),
     );
 
     let claude_context = claude.context();
@@ -78,7 +73,7 @@ fn one_executor_driving_two_launches_keeps_them_separate() {
                 &Silent,
                 &claude_context,
                 AgentExecutionRequest {
-            turn_kind: super::super::TurnKind::Work,
+                    turn_kind: super::super::TurnKind::Work,
                     execution_directory: claude.workspace(),
                     task: task("CLAUDE-ONLY"),
                     cancellation: CancellationToken::new(),
@@ -91,7 +86,7 @@ fn one_executor_driving_two_launches_keeps_them_separate() {
                 &Silent,
                 &codex_context,
                 AgentExecutionRequest {
-            turn_kind: super::super::TurnKind::Work,
+                    turn_kind: super::super::TurnKind::Work,
                     execution_directory: codex.workspace(),
                     task: task("CODEX-ONLY"),
                     cancellation: CancellationToken::new(),
@@ -112,15 +107,10 @@ fn one_executor_driving_two_launches_keeps_them_separate() {
     // Distinct containers, distinct stdin, and the token on exactly one of them
     // — through one executor and one runtime object.
     assert_ne!(container_name(&runs[0].argv), container_name(&runs[1].argv));
-    let with_token = runs
-        .iter()
-        .filter(|r| r.env.contains_key("CLAUDE_CODE_OAUTH_TOKEN"))
-        .count();
+    let with_token = runs.iter().filter(|r| r.env.contains_key("CLAUDE_CODE_OAUTH_TOKEN")).count();
     assert_eq!(with_token, 1, "the token reached exactly one of the two");
-    let stdins: Vec<String> = runs
-        .iter()
-        .map(|r| String::from_utf8_lossy(&r.stdin).into_owned())
-        .collect();
+    let stdins: Vec<String> =
+        runs.iter().map(|r| String::from_utf8_lossy(&r.stdin).into_owned()).collect();
     assert!(stdins.iter().any(|s| s.contains("CLAUDE-ONLY")));
     assert!(stdins.iter().any(|s| s.contains("CODEX-ONLY")));
     for stdin in &stdins {
@@ -156,7 +146,7 @@ fn concurrent_requests_cannot_cross_contaminate() {
                 &Silent,
                 &claude_context,
                 AgentExecutionRequest {
-            turn_kind: super::super::TurnKind::Work,
+                    turn_kind: super::super::TurnKind::Work,
                     execution_directory: claude.workspace(),
                     task: task("CLAUDE-WORK"),
                     cancellation: CancellationToken::new(),
@@ -169,7 +159,7 @@ fn concurrent_requests_cannot_cross_contaminate() {
                 &Silent,
                 &codex_context,
                 AgentExecutionRequest {
-            turn_kind: super::super::TurnKind::Work,
+                    turn_kind: super::super::TurnKind::Work,
                     execution_directory: codex.workspace(),
                     task: task("CODEX-WORK"),
                     cancellation: CancellationToken::new(),
@@ -181,14 +171,8 @@ fn concurrent_requests_cannot_cross_contaminate() {
         )
     });
 
-    assert_eq!(
-        claude_result.expect("ran").process_outcome,
-        ProcessOutcome::Completed
-    );
-    assert_eq!(
-        codex_result.expect("ran").process_outcome,
-        ProcessOutcome::Completed
-    );
+    assert_eq!(claude_result.expect("ran").process_outcome, ProcessOutcome::Completed);
+    assert_eq!(codex_result.expect("ran").process_outcome, ProcessOutcome::Completed);
 
     let a = claude_runtime.only_run();
     let b = codex_runtime.only_run();
@@ -198,11 +182,7 @@ fn concurrent_requests_cannot_cross_contaminate() {
     assert!(String::from_utf8_lossy(&a.stdin).contains("CLAUDE-WORK"));
     assert!(!String::from_utf8_lossy(&a.stdin).contains("CODEX-WORK"));
     assert!(String::from_utf8_lossy(&b.stdin).contains("CODEX-WORK"));
-    assert_ne!(
-        container_name(&a.argv),
-        container_name(&b.argv),
-        "distinct container names"
-    );
+    assert_ne!(container_name(&a.argv), container_name(&b.argv), "distinct container names");
 
     // Claude's token is in Claude's environment alone; Codex's mount is in
     // Codex's argv alone.
@@ -227,21 +207,14 @@ fn log_records_name_the_launch_without_carrying_anything_sensitive() {
     let runtime = RecordingRuntime::replying(&valid_claude_stdout());
 
     let mut request = task(INSTRUCTION);
-    request.resume = Some(SessionRef {
-        session_id: Some(RESUME.to_string()),
-        continuation_token: None,
-    });
+    request.resume =
+        Some(SessionRef { session_id: Some(RESUME.to_string()), continuation_token: None });
     let mut input = serde_json::Map::new();
     input.insert("ctx".into(), json!("MARKER-INPUT-c33d"));
     request.input = Some(input);
 
     run(&harness, runtime.clone(), request).expect("ran");
-    let runtime_container = runtime
-        .runs
-        .lock()
-        .unwrap()
-        .first()
-        .map(|r| container_name(&r.argv));
+    let runtime_container = runtime.runs.lock().unwrap().first().map(|r| container_name(&r.argv));
     // A pre-launch failure too, so a handled error path is represented. This one
     // fails in `ensure_available` and returns before any container is created,
     // so it reaches the pre-launch error record rather than the one below.
@@ -270,10 +243,8 @@ fn log_records_name_the_launch_without_carrying_anything_sensitive() {
         images_asked: StdMutex::new(Vec::new()),
     });
     let mut refused_task = task("go");
-    refused_task.resume = Some(SessionRef {
-        session_id: Some(RESUME.to_string()),
-        continuation_token: None,
-    });
+    refused_task.resume =
+        Some(SessionRef { session_id: Some(RESUME.to_string()), continuation_token: None });
     let _ = run(&harness, refused.clone(), refused_task);
     let refused_container = container_name(&refused.only_run().argv);
 
@@ -285,25 +256,18 @@ fn log_records_name_the_launch_without_carrying_anything_sensitive() {
     // or they prove nothing. The container name is unique per launch
     // (EAC-FR-13), which is what makes that possible.
     let container = runtime_container.expect("a launch was recorded");
-    let page = super::super::log_buffer()
-        .query(&LogFilter::default(), None, 20_000)
-        .expect("query");
+    let page =
+        super::super::log_buffer().query(&LogFilter::default(), None, 20_000).expect("query");
     let mine: Vec<_> = page
         .records
         .iter()
         .filter(|record| {
-            record
-                .fields
-                .values()
-                .any(|value| value.as_str() == Some(container.as_str()))
+            record.fields.values().any(|value| value.as_str() == Some(container.as_str()))
                 || serde_json::to_string(&record.fields)
                     .is_ok_and(|f| f.contains(container.as_str()))
         })
         .collect();
-    assert!(
-        !mine.is_empty(),
-        "no record could be attributed to this launch"
-    );
+    assert!(!mine.is_empty(), "no record could be attributed to this launch");
 
     let rendered = serde_json::to_string(&page).expect("serialise");
     assert!(rendered.contains("agent execution starting"));
@@ -361,11 +325,8 @@ fn log_records_name_the_launch_without_carrying_anything_sensitive() {
     // queries and comparing them — the suite is multi-threaded and other tests
     // append to this buffer between any two calls, which would make the
     // comparison a race rather than a claim.
-    let ours: Vec<_> = page
-        .records
-        .iter()
-        .filter(|r| r.message.starts_with("agent execution"))
-        .collect();
+    let ours: Vec<_> =
+        page.records.iter().filter(|r| r.message.starts_with("agent execution")).collect();
     assert!(!ours.is_empty());
     for record in &ours {
         assert!(
@@ -380,10 +341,7 @@ fn log_records_name_the_launch_without_carrying_anything_sensitive() {
     // identity, and not the location of a credential this application is
     // forbidden to read.
     for secret in [SAMPLE_TOKEN, "sk-ant-oat01-", RESUME, ".codex"] {
-        assert!(
-            !rendered.contains(secret),
-            "log records leaked {secret:?}"
-        );
+        assert!(!rendered.contains(secret), "log records leaked {secret:?}");
     }
 
     // EAC-FR-34: the task and the agent's own words *do* reach the log now,
@@ -392,28 +350,17 @@ fn log_records_name_the_launch_without_carrying_anything_sensitive() {
     // launch itself stay a boundary account, so a reader who raises the level
     // floor to hide a chatty run still has an unbroken record of every turn
     // (LOG-FR-07).
-    let activity: Vec<_> = page
-        .records
-        .iter()
-        .filter(|r| r.message == "agent activity")
-        .collect();
+    let activity: Vec<_> = page.records.iter().filter(|r| r.message == "agent activity").collect();
     assert!(!activity.is_empty(), "no activity reached the log");
     for record in &activity {
         assert_eq!(record.level, crate::logging::LogLevel::Debug);
     }
     let boundary = serde_json::to_string(
-        &page
-            .records
-            .iter()
-            .filter(|r| r.message != "agent activity")
-            .collect::<Vec<_>>(),
+        &page.records.iter().filter(|r| r.message != "agent activity").collect::<Vec<_>>(),
     )
     .expect("serialise");
     for content in [INSTRUCTION, "MARKER-INPUT-c33d", "did the thing"] {
-        assert!(
-            !boundary.contains(content),
-            "a boundary record carried run content: {content:?}"
-        );
+        assert!(!boundary.contains(content), "a boundary record carried run content: {content:?}");
     }
     let observed = serde_json::to_string(&activity).expect("serialise");
     assert!(
@@ -457,10 +404,8 @@ fn a_resumed_turn_carries_the_session_and_an_unsupported_one_says_so() {
     // drops the `--session-id` a fresh turn would have carried.
     let runtime = RecordingRuntime::replying(&valid_claude_stdout());
     let mut second = task("continue");
-    second.resume = Some(SessionRef {
-        session_id: Some(assigned.clone()),
-        continuation_token: None,
-    });
+    second.resume =
+        Some(SessionRef { session_id: Some(assigned.clone()), continuation_token: None });
     run(&harness, runtime.clone(), second).expect("ran");
     let argv = runtime.only_run().argv;
     let at = argv.iter().position(|a| a == "--resume").expect("--resume");
@@ -474,10 +419,7 @@ fn a_resumed_turn_carries_the_session_and_an_unsupported_one_says_so() {
     let codex = harness_for("codex");
     let runtime = RecordingRuntime::replying(&codex_stdout(&envelope_json("success")));
     let mut resumed = task("continue");
-    resumed.resume = Some(SessionRef {
-        session_id: Some("abc".into()),
-        continuation_token: None,
-    });
+    resumed.resume = Some(SessionRef { session_id: Some("abc".into()), continuation_token: None });
     run(&codex, runtime.clone(), resumed).expect("ran");
     let argv = runtime.only_run().argv;
     let image = test_image_reference("codex");
@@ -720,19 +662,13 @@ fn codexs_two_vectors_are_the_ordered_sequences_cdx_defines() {
     // CDX-FR-02, CDX-FR-06, CDX-FR-07: neither model nor effort resolved.
     assert_eq!(
         descriptor::CODEX.vendor_args(None, None, "IGNORED", None, None),
-        [
-            "exec",
-            "--json",
-            "--sandbox",
-            "danger-full-access",
-            "--skip-git-repo-check",
-            "-",
-        ]
+        ["exec", "--json", "--sandbox", "danger-full-access", "--skip-git-repo-check", "-",]
     );
 
     // CDX-FR-09, CDX-FR-10: the resumed grammar is its own, with the session id before the
     // `-` prompt and the sandbox policy as a config override.
-    let resumed = descriptor::CODEX.vendor_args(Some("gpt-5"), Some("low"), "IGNORED", Some("thr"), None);
+    let resumed =
+        descriptor::CODEX.vendor_args(Some("gpt-5"), Some("low"), "IGNORED", Some("thr"), None);
     assert_eq!(
         resumed,
         [

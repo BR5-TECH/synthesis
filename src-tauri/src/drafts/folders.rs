@@ -27,10 +27,7 @@ pub fn create_drafts_folder_impl(
         return Err(format!("a folder called {name:?} is already here"));
     }
     root.create_dir_under(&parent_dir, name).map_err(|e| e.to_string())?;
-    Ok(DraftFolder {
-        path: folder_join(parent, name),
-        parent: parent.to_string(),
-    })
+    Ok(DraftFolder { path: folder_join(parent, name), parent: parent.to_string() })
 }
 
 /// DRS-FR-30: rename a folder in place, keeping its parent and its subtree.
@@ -73,10 +70,7 @@ pub fn rename_drafts_folder_impl(
     rename_entry_named(root, &drafts_dir(root), path, name, &|n: &str| {
         format!("a folder called {n:?} is already here")
     })?;
-    Ok(DraftFolder {
-        path: with_basename(path, name),
-        parent: parent.to_string(),
-    })
+    Ok(DraftFolder { path: with_basename(path, name), parent: parent.to_string() })
 }
 
 /// DRS-FR-31: remove a folder without removing anything it holds.
@@ -130,21 +124,14 @@ pub fn delete_drafts_folder_impl(root: &fs::RootFs, path: &str) -> Result<(), St
     for (i, child) in children.iter().enumerate() {
         let folded = child.to_lowercase();
         if children[..i].iter().any(|other| other.to_lowercase() == folded) {
-            return Err(format!(
-                "{path:?} holds two entries called {child:?}; nothing was moved"
-            ));
+            return Err(format!("{path:?} holds two entries called {child:?}; nothing was moved"));
         }
     }
     for child in &children {
-        root.move_under(
-            drafts_dir(root),
-            folder_join(path, child),
-            folder_join(&parent, child),
-        )
-        .map_err(|e| format!("{child:?} could not be moved out of {path:?}: {e}"))?;
+        root.move_under(drafts_dir(root), folder_join(path, child), folder_join(&parent, child))
+            .map_err(|e| format!("{child:?} could not be moved out of {path:?}: {e}"))?;
     }
-    root.delete_under(drafts_dir(root), path, false)
-        .map_err(|e| e.to_string())?;
+    root.delete_under(drafts_dir(root), path, false).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -185,12 +172,8 @@ pub fn move_draft_to_folder_impl(
     if name_taken(root, &dest_dir, id) {
         return Err(format!("{id:?} is already in the destination"));
     }
-    root.move_under(
-        drafts_dir(root),
-        folder_join(&at.folder, id),
-        folder_join(folder, id),
-    )
-    .map_err(|e| e.to_string())?;
+    root.move_under(drafts_dir(root), folder_join(&at.folder, id), folder_join(folder, id))
+        .map_err(|e| e.to_string())?;
     // DRS-FR-24: filing a draft is a change to it, so its last-activity instant
     // moves with it.
     touch(root, id);
@@ -233,15 +216,7 @@ pub fn move_drafts_folder_impl(
     if name_taken(root, &dest_dir, name) {
         return Err(format!("a folder called {name:?} is already there"));
     }
-    root.move_under(
-        drafts_dir(root),
-        path,
-        folder_join(destination, name),
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(DraftFolder {
-        path: folder_join(destination, name),
-        parent: destination.to_string(),
-    })
+    root.move_under(drafts_dir(root), path, folder_join(destination, name))
+        .map_err(|e| e.to_string())?;
+    Ok(DraftFolder { path: folder_join(destination, name), parent: destination.to_string() })
 }
-

@@ -13,10 +13,7 @@ fn is_a_portable_tool_named_search_notes() {
     let fixture = NoteFixture::new();
     let tool = fixture.tool();
     assert_eq!(NAME, "search_notes");
-    assert_eq!(
-        <NoteSearchTool<tauri::test::MockRuntime> as PortableTool>::NAME,
-        NAME
-    );
+    assert_eq!(<NoteSearchTool<tauri::test::MockRuntime> as PortableTool>::NAME, NAME);
     assert_eq!(rig::tool::tool_definition(&tool).name, NAME);
 
     // Absent from `invoke_handler`, and no event belongs to it. The claim rests

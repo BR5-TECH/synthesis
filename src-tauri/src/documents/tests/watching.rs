@@ -1,17 +1,12 @@
 //! The watch over the selected paths (DCL-FR-ZYQC, DCL-FR-XHSJ).
 
 use super::*;
+use crate::documents::log::NullLog;
 use crate::documents::model::{Availability, DocumentSource};
 use crate::documents::watcher::{watch_targets, DocumentsWatcher, WatchTarget, DEBOUNCE};
-use crate::documents::log::NullLog;
 
 fn source(kind: SourceKind, path: &str, status: Availability) -> DocumentSource {
-    DocumentSource {
-        kind,
-        path: path.to_string(),
-        status,
-        reason: None,
-    }
+    DocumentSource { kind, path: path.to_string(), status, reason: None }
 }
 
 // DCL-FR-ZYQC: a folder is watched recursively, a file through its parent
@@ -46,13 +41,9 @@ fn a_change_under_a_watched_folder_is_reported_and_stop_ends_it() {
     let watcher = DocumentsWatcher::default();
     let (sender, receiver) = std::sync::mpsc::channel();
     let sender = Mutex::new(sender);
-    watcher.watch(
-        vec![WatchTarget { path: root.clone(), recursive: true }],
-        &NullLog,
-        move || {
-            let _ = sender.lock().unwrap().send(());
-        },
-    );
+    watcher.watch(vec![WatchTarget { path: root.clone(), recursive: true }], &NullLog, move || {
+        let _ = sender.lock().unwrap().send(());
+    });
     assert!(watcher.is_armed());
     std::fs::create_dir_all(root.join("sub")).unwrap();
     for i in 0..5 {

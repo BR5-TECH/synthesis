@@ -20,27 +20,26 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
 
-mod diff;
-mod wire_shape;
-mod file_revisions;
-mod branches;
-mod fetch;
-mod commit_paths;
-mod rollback;
-mod upstream;
-mod push;
-mod log_records;
-mod working_tree;
-mod history;
-mod branch_info;
 mod branch_compare;
 mod branch_deletion;
 mod branch_deletion_remote;
-mod pull_requests;
+mod branch_info;
+mod branches;
+mod commit_paths;
+mod diff;
+mod fetch;
+mod file_revisions;
 mod github_hosts;
+mod history;
+mod log_records;
 mod pull_request_create;
 mod pull_request_timeline;
-
+mod pull_requests;
+mod push;
+mod rollback;
+mod upstream;
+mod wire_shape;
+mod working_tree;
 
 /// A `LogSink` that publishes nowhere: no Tauri runtime is running to
 /// deliver an event, and the records themselves reach the buffer regardless.
@@ -74,31 +73,20 @@ fn own_buffer() -> &'static LogBuffer {
 
 /// Every record in `buffer` whose message is exactly `message`.
 fn records_for(buffer: &'static LogBuffer, message: &str) -> Vec<crate::logging::LogRecord> {
-    all_records(buffer)
-        .into_iter()
-        .filter(|r| r.message == message)
-        .collect()
+    all_records(buffer).into_iter().filter(|r| r.message == message).collect()
 }
 
 /// The one record in `buffer` reading `message`, and a readable failure when
 /// there is not exactly one.
 fn record_for(buffer: &'static LogBuffer, message: &str) -> crate::logging::LogRecord {
     let mut found = records_for(buffer, message);
-    assert_eq!(
-        found.len(),
-        1,
-        "expected exactly one {message:?} record, got {found:?}"
-    );
+    assert_eq!(found.len(), 1, "expected exactly one {message:?} record, got {found:?}");
     found.remove(0)
 }
 
 fn all_records(buffer: &'static LogBuffer) -> Vec<crate::logging::LogRecord> {
     buffer
-        .query(
-            &crate::logging::LogFilter::default(),
-            None,
-            crate::logging::BUFFER_CAPACITY,
-        )
+        .query(&crate::logging::LogFilter::default(), None, crate::logging::BUFFER_CAPACITY)
         .expect("the buffer answers a default filter")
         .records
 }
@@ -149,9 +137,7 @@ impl Fixture {
     fn commit(&self, message: &str) -> Oid {
         let repo = self.repo();
         let mut index = repo.index().unwrap();
-        index
-            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-            .unwrap();
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
         index.update_all(["*"].iter(), None).unwrap();
         index.write().unwrap();
         let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
@@ -162,16 +148,13 @@ impl Fixture {
                 None => vec![],
             };
         let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
-        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parent_refs)
-            .unwrap()
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parent_refs).unwrap()
     }
 
     fn stage_all(&self) {
         let repo = self.repo();
         let mut index = repo.index().unwrap();
-        index
-            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-            .unwrap();
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
         index.update_all(["*"].iter(), None).unwrap();
         index.write().unwrap();
     }
@@ -184,14 +167,10 @@ impl Fixture {
         let repo = self.repo();
         let head = repo.head().unwrap().peel_to_commit().unwrap();
         repo.branch(name, &head, false).unwrap();
-        let reference = repo
-            .find_branch(name, BranchType::Local)
-            .unwrap()
-            .into_reference();
+        let reference = repo.find_branch(name, BranchType::Local).unwrap().into_reference();
         let target = reference.name().unwrap().to_string();
         repo.set_head(&target).unwrap();
-        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
-            .unwrap();
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force())).unwrap();
     }
 }
 
@@ -259,9 +238,7 @@ impl WorktreeFixture {
     fn commit(&self) {
         let repo = self.repo();
         let mut index = repo.index().unwrap();
-        index
-            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-            .unwrap();
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
         index.update_all(["*"].iter(), None).unwrap();
         index.write().unwrap();
         let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
@@ -272,8 +249,7 @@ impl WorktreeFixture {
                 None => vec![],
             };
         let refs: Vec<&git2::Commit> = parents.iter().collect();
-        repo.commit(Some("HEAD"), &sig, &sig, "c", &tree, &refs)
-            .unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "c", &tree, &refs).unwrap();
     }
 
     fn current(&self) -> String {
@@ -295,8 +271,7 @@ impl WorktreeFixture {
             repo.remote(remote, "file:///nonexistent").unwrap();
         }
         let head = repo.head().unwrap().peel_to_commit().unwrap();
-        repo.reference(&format!("refs/remotes/{name}"), head.id(), true, "t")
-            .unwrap();
+        repo.reference(&format!("refs/remotes/{name}"), head.id(), true, "t").unwrap();
     }
 }
 
@@ -339,10 +314,7 @@ impl RemoteFixture {
         let downstream = WorktreeFixture::new();
         let url = format!("file://{}", upstream.root().to_string_lossy());
         downstream.repo().remote("origin", &url).unwrap();
-        RemoteFixture {
-            upstream,
-            downstream,
-        }
+        RemoteFixture { upstream, downstream }
     }
 
     fn root(&self) -> PathBuf {
@@ -394,10 +366,7 @@ struct RecordingSink {
 
 impl ProgressSink for RecordingSink {
     fn publish(&self, operation: &crate::progress::Operation) {
-        self.seen
-            .lock()
-            .unwrap()
-            .push((operation.kind.clone(), format!("{:?}", operation.state)));
+        self.seen.lock().unwrap().push((operation.kind.clone(), format!("{:?}", operation.state)));
     }
 }
 

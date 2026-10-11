@@ -87,10 +87,8 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
             },
         );
         let started = std::time::Instant::now();
-        let outcome = turns
-            .seam
-            .complete(&plan.request, exchange, endpoint, call_timeout)
-            .map(|mut reply| {
+        let outcome = turns.seam.complete(&plan.request, exchange, endpoint, call_timeout).map(
+            |mut reply| {
                 // CVL-FR-VSSU: the markers go before anything reads the reply,
                 // so a reply that held markers alone is empty (CVL-FR-POAR).
                 let removed = strip_reply_citation_markers(&mut reply);
@@ -114,7 +112,8 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                     );
                 }
                 reply
-            });
+            },
+        );
         // CVL-FR-TQRD: a reply the Custom gateway repair changed. Recorded for
         // every answered attempt, usable or not, and also when the framework
         // still refused the repaired reply, so a gateway that keeps returning
@@ -151,10 +150,8 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 // call — counting either would report a turn as having paid for
                 // input it was not charged for.
                 if let Some(tokens) = reply.input_tokens {
-                    plan.cached_input_tokens
-                        .fetch_add(tokens.cached, Ordering::SeqCst);
-                    plan.uncached_input_tokens
-                        .fetch_add(tokens.uncached, Ordering::SeqCst);
+                    plan.cached_input_tokens.fetch_add(tokens.cached, Ordering::SeqCst);
+                    plan.uncached_input_tokens.fetch_add(tokens.uncached, Ordering::SeqCst);
                     plan.tokens_reported.store(true, Ordering::SeqCst);
                 }
                 // CVL-FR-WQZD / AGC-FR-BVNT: the reliable usage record this
@@ -289,9 +286,7 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
         // *before* the delay is planned, so a record never promises a retry that
         // will not be made.
         let budget_left = attempt < policy.max_attempts;
-        let time_left = !deadline
-            .saturating_duration_since(std::time::Instant::now())
-            .is_zero();
+        let time_left = !deadline.saturating_duration_since(std::time::Instant::now()).is_zero();
         let cancelled = plan.cancelled.load(Ordering::SeqCst);
         // AGC-FR-19: a lock is what stops a conversation taking further
         // contributions, so a turn whose thread was locked while it was failing
@@ -301,8 +296,7 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
             && time_left
             && !cancelled
             && thread_is_locked(plan.roots.borrowed(), &plan.origin);
-        let will_retry =
-            failure.repeatable() && budget_left && time_left && !cancelled && !locked;
+        let will_retry = failure.repeatable() && budget_left && time_left && !cancelled && !locked;
         let planned = if will_retry {
             backoff_delay(&policy, attempt + 1, turns.jitter.as_ref())
         } else {
@@ -316,11 +310,7 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
         logging::log(
             app,
             turns.buffer(),
-            if will_retry {
-                logging::LogLevel::Warn
-            } else {
-                logging::LogLevel::Error
-            },
+            if will_retry { logging::LogLevel::Warn } else { logging::LogLevel::Error },
             // CVL-FR-28: `ai` and `backend` together, as every record a turn
             // emits carries — and `remote` besides, because an attempt at
             // reaching a provider is exactly what that domain is for. A reader
@@ -490,7 +480,5 @@ const IDENTIFIER_LIMIT: usize = 120;
 
 /// CVL-FR-28: a count the provider gave, or `not reported` where it gave none.
 fn reported(tokens: Option<u64>) -> String {
-    tokens
-        .map(|tokens| tokens.to_string())
-        .unwrap_or_else(|| "not reported".to_string())
+    tokens.map(|tokens| tokens.to_string()).unwrap_or_else(|| "not reported".to_string())
 }

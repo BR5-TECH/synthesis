@@ -23,9 +23,7 @@ fn a_per_project_slot_survives_a_round_trip_through_disk() {
 
     {
         let store = GlobalSettingsStore::with_path(path.clone());
-        store
-            .save_active_worktree("/dev/acme", "/dev/acme-main")
-            .unwrap();
+        store.save_active_worktree("/dev/acme", "/dev/acme-main").unwrap();
         store
             .save_project_layout(
                 "/dev/acme",
@@ -55,20 +53,10 @@ fn a_per_project_slot_survives_a_round_trip_through_disk() {
         Some("/dev/acme-main".to_string()),
     );
     assert_eq!(
-        reloaded
-            .load_project_layout("/dev/acme")
-            .unwrap()
-            .unwrap()
-            .vertical_panel_fraction,
+        reloaded.load_project_layout("/dev/acme").unwrap().unwrap().vertical_panel_fraction,
         0.28,
     );
-    assert!(
-        reloaded
-            .load_project_layout("/dev/acme")
-            .unwrap()
-            .unwrap()
-            .main_window_maximized
-    );
+    assert!(reloaded.load_project_layout("/dev/acme").unwrap().unwrap().main_window_maximized);
     assert_eq!(
         reloaded.load_active_worktree("/dev/other").unwrap(),
         Some("/dev/other".to_string()),
@@ -96,9 +84,7 @@ fn saving_a_slot_leaves_the_rest_of_the_store_intact() {
         .save_app_preferences(AppPreferences { theme: Theme::Dark, ..Default::default() })
         .unwrap();
 
-    store
-        .save_active_worktree("/dev/acme", "/dev/acme-main")
-        .unwrap();
+    store.save_active_worktree("/dev/acme", "/dev/acme-main").unwrap();
 
     let reloaded = GlobalSettingsStore::with_path(path);
     assert_eq!(reloaded.list_recent_projects().unwrap().len(), 1);
@@ -166,11 +152,7 @@ fn a_file_written_before_the_slot_existed_still_loads() {
     // GSS-FR-13: `#[serde(default)]` is what makes the new tables optional.
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("synthesis.toml");
-    std::fs::write(
-        &path,
-        "[appPreferences]\ntheme = \"dark\"\n",
-    )
-    .unwrap();
+    std::fs::write(&path, "[appPreferences]\ntheme = \"dark\"\n").unwrap();
 
     let store = GlobalSettingsStore::with_path(path);
     assert_eq!(store.load_app_preferences().unwrap().theme, Theme::Dark);

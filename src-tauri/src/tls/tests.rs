@@ -4,9 +4,7 @@ use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener};
 use std::time::Duration;
 
-use rcgen::{
-    date_time_ymd, BasicConstraints, CertificateParams, DnType, IsCa, KeyPair,
-};
+use rcgen::{date_time_ymd, BasicConstraints, CertificateParams, DnType, IsCa, KeyPair};
 
 // ---------------------------------------------------------------------------
 // The typed error
@@ -18,12 +16,9 @@ fn a_tls_failure_is_written_as_cause_then_host_and_read_back() {
     let failure = TlsFailure::new("api.example.com", TlsCause::UnknownIssuer);
     assert_eq!(failure.wire(), "tls_untrusted:unknown_issuer:api.example.com");
     assert_eq!(TlsFailure::parse_wire(&failure.wire()), Some(failure));
-    for cause in [
-        TlsCause::UnknownIssuer,
-        TlsCause::Expired,
-        TlsCause::HostnameMismatch,
-        TlsCause::Other,
-    ] {
+    for cause in
+        [TlsCause::UnknownIssuer, TlsCause::Expired, TlsCause::HostnameMismatch, TlsCause::Other]
+    {
         let failure = TlsFailure::new("h.test", cause);
         assert_eq!(TlsFailure::parse_wire(&failure.wire()), Some(failure));
     }
@@ -86,7 +81,8 @@ fn certificate_errors_map_to_their_cause_codes() {
 #[test]
 fn a_tls_error_is_found_inside_wrapping_io_errors() {
     let inner = rustls::Error::InvalidCertificate(rustls::CertificateError::Expired);
-    let wrapped = std::io::Error::other(std::io::Error::new(std::io::ErrorKind::InvalidData, inner));
+    let wrapped =
+        std::io::Error::other(std::io::Error::new(std::io::ErrorKind::InvalidData, inner));
     assert_eq!(classify_error(&wrapped), Some(TlsCause::Expired));
     let plain = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "refused");
     assert_eq!(classify_error(&plain), None);
@@ -198,9 +194,9 @@ fn a_clients_record_holds_its_own_refusal_and_gives_it_once() {
 pub(crate) fn serve(leaf: &Leaf) -> SocketAddr {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let chain = vec![rustls::pki_types::CertificateDer::from(leaf.der.clone())];
-    let key = rustls::pki_types::PrivateKeyDer::Pkcs8(
-        rustls::pki_types::PrivatePkcs8KeyDer::from(leaf.key.clone()),
-    );
+    let key = rustls::pki_types::PrivateKeyDer::Pkcs8(rustls::pki_types::PrivatePkcs8KeyDer::from(
+        leaf.key.clone(),
+    ));
     let config = Arc::new(
         rustls::ServerConfig::builder_with_provider(provider)
             .with_safe_default_protocol_versions()
@@ -252,10 +248,7 @@ fn ureq_cause(roots: &TrustRoots, port: u16) -> Option<TlsCause> {
 }
 
 fn runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("runtime")
+    tokio::runtime::Builder::new_current_thread().enable_all().build().expect("runtime")
 }
 
 /// Call the server through the `reqwest` client of `rig`. `name` is a unique
@@ -320,7 +313,8 @@ fn trusting(ca: &(rcgen::Certificate, KeyPair)) -> TrustRoots {
 #[test]
 fn a_certificate_from_a_root_in_the_operating_system_store_is_trusted() {
     let ca = private_ca();
-    let addr = serve(&leaf_signed_by(&ca, &["localhost", "trusted-rig.test", "trusted-or.test"], false));
+    let addr =
+        serve(&leaf_signed_by(&ca, &["localhost", "trusted-rig.test", "trusted-or.test"], false));
     let roots = trusting(&ca);
     assert_eq!(ureq_get(&roots, addr.port()).expect("ureq connects"), "{}");
     assert_eq!(rig_get(&roots, "trusted-rig.test", addr).0.expect("rig connects"), "{}");
@@ -334,46 +328,36 @@ fn a_certificate_from_a_root_in_the_operating_system_store_is_trusted() {
 #[test]
 fn a_certificate_from_an_unknown_root_is_refused_with_unknown_issuer() {
     let ca = private_ca();
-    let addr = serve(&leaf_signed_by(&ca, &["localhost", "unknown-rig.test", "unknown-or.test"], false));
+    let addr =
+        serve(&leaf_signed_by(&ca, &["localhost", "unknown-rig.test", "unknown-or.test"], false));
     let roots = TrustRoots::assemble(Vec::new(), 0);
     assert_eq!(ureq_cause(&roots, addr.port()), Some(TlsCause::UnknownIssuer));
 
     let (result, record) = rig_get(&roots, "unknown-rig.test", addr);
     assert!(result.is_err());
-    assert_eq!(
-        record.take(),
-        Some(TlsFailure::new("unknown-rig.test", TlsCause::UnknownIssuer))
-    );
+    assert_eq!(record.take(), Some(TlsFailure::new("unknown-rig.test", TlsCause::UnknownIssuer)));
 
     let (result, record) = openrouter_get(&roots, "unknown-or.test", addr);
     assert!(result.is_err());
-    assert_eq!(
-        record.take(),
-        Some(TlsFailure::new("unknown-or.test", TlsCause::UnknownIssuer))
-    );
+    assert_eq!(record.take(), Some(TlsFailure::new("unknown-or.test", TlsCause::UnknownIssuer)));
 }
 
 // AAP-FR-QLNV, AAP-FR-HZTB
 #[test]
 fn an_expired_certificate_is_refused_with_expired() {
     let ca = private_ca();
-    let addr = serve(&leaf_signed_by(&ca, &["localhost", "expired-rig.test", "expired-or.test"], true));
+    let addr =
+        serve(&leaf_signed_by(&ca, &["localhost", "expired-rig.test", "expired-or.test"], true));
     let roots = trusting(&ca);
     assert_eq!(ureq_cause(&roots, addr.port()), Some(TlsCause::Expired));
 
     let (result, record) = rig_get(&roots, "expired-rig.test", addr);
     assert!(result.is_err());
-    assert_eq!(
-        record.take(),
-        Some(TlsFailure::new("expired-rig.test", TlsCause::Expired))
-    );
+    assert_eq!(record.take(), Some(TlsFailure::new("expired-rig.test", TlsCause::Expired)));
 
     let (result, record) = openrouter_get(&roots, "expired-or.test", addr);
     assert!(result.is_err());
-    assert_eq!(
-        record.take(),
-        Some(TlsFailure::new("expired-or.test", TlsCause::Expired))
-    );
+    assert_eq!(record.take(), Some(TlsFailure::new("expired-or.test", TlsCause::Expired)));
 }
 
 // AAP-FR-QLNV, AAP-FR-HZTB
@@ -427,7 +411,14 @@ fn no_client_of_the_application_builds_its_own_trust_setup() {
             !code.contains("ureq::Agent::config_builder"),
             "{name} builds a ureq agent with the default trust setup"
         );
-        for forbidden in ["reqwest::Client", "reqwest013::Client", "reqwest012::Client", "ureq::agent(", "ureq::get(", "ureq::post("] {
+        for forbidden in [
+            "reqwest::Client",
+            "reqwest013::Client",
+            "reqwest012::Client",
+            "ureq::agent(",
+            "ureq::get(",
+            "ureq::post(",
+        ] {
             assert!(!code.contains(forbidden), "{name} builds its own HTTP client: {forbidden}");
         }
         let builders = code.matches("Client::builder()").count();
@@ -466,9 +457,7 @@ fn the_endpoint_prober_reports_an_untrusted_certificate_as_tls_untrusted() {
 // AAP-FR-23, AAP-FR-WMCX, AAP-FR-HZTB
 #[test]
 fn the_openrouter_prober_reports_an_untrusted_certificate_as_tls_untrusted() {
-    use crate::ai_shared::{
-        AuthStyle, EndpointProber, ModelsFormat, ProbeError, ProbeRequest,
-    };
+    use crate::ai_shared::{AuthStyle, EndpointProber, ModelsFormat, ProbeError, ProbeRequest};
     let ca = private_ca();
     let addr = serve(&leaf_signed_by(&ca, &["localhost"], false));
     let base_url = format!("https://localhost:{}", addr.port());
@@ -527,7 +516,10 @@ fn a_refused_certificate_reads_as_a_sentence_naming_the_host_and_the_cause() {
 fn an_error_of_a_lower_layer_that_is_the_typed_tls_error_is_kept() {
     let wire = "tls_untrusted:expired:api.github.com".to_string();
     assert_eq!(keep_tls(wire.clone(), "status_update_failed"), wire);
-    assert_eq!(keep_tls("github_unreachable".into(), "status_update_failed"), "status_update_failed");
+    assert_eq!(
+        keep_tls("github_unreachable".into(), "status_update_failed"),
+        "status_update_failed"
+    );
 }
 
 // AAP-FR-LRTC

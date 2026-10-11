@@ -52,11 +52,8 @@ fn a_created_worktree_records_its_store_relative_to_its_own_git_directory() {
     let checkout = elsewhere.join("checkout");
     copy_tree(&f.root().join(".git"), &store);
     copy_tree(&target, &checkout);
-    fs::write(
-        checkout.join(".git"),
-        format!("gitdir: {}/worktrees/wt-spike\n", store.display()),
-    )
-    .unwrap();
+    fs::write(checkout.join(".git"), format!("gitdir: {}/worktrees/wt-spike\n", store.display()))
+        .unwrap();
     fs::remove_dir_all(f.root().join(".git")).unwrap();
 
     let moved = Repository::open(&checkout).expect("the worktree resolves");
@@ -67,9 +64,7 @@ fn a_created_worktree_records_its_store_relative_to_its_own_git_directory() {
     // Without it this half would pass on a Git that never read the record.
     fs::write(store.join("worktrees/wt-spike/commondir"), "../../nowhere\n").unwrap();
     assert!(
-        Repository::open(&checkout)
-            .and_then(|r| r.head().map(|_| ()))
-            .is_err(),
+        Repository::open(&checkout).and_then(|r| r.head().map(|_| ())).is_err(),
         "the record is what the resolution goes through",
     );
 }
@@ -120,17 +115,13 @@ fn a_creation_that_cannot_finish_reclaims_the_worktree_and_only_a_branch_it_made
     let main = Repository::open(f.root()).unwrap();
     let target = f.sibling("wt-spike");
     let seam = BreakRecord(f.root().join(".git/worktrees/wt-spike/commondir"));
-    let refusal =
-        create_worktree_seamed(&f.root(), "spike", &target.to_string_lossy(), &seam)
-            .expect_err("a creation that cannot be finished is refused");
+    let refusal = create_worktree_seamed(&f.root(), "spike", &target.to_string_lossy(), &seam)
+        .expect_err("a creation that cannot be finished is refused");
 
     assert!(refusal.starts_with("failed to create worktree"), "{refusal}");
     assert!(!target.exists(), "the working copy is gone");
     assert!(
-        !worktree_entries(&main)
-            .unwrap()
-            .iter()
-            .any(|w| w.name == "wt-spike"),
+        !worktree_entries(&main).unwrap().iter().any(|w| w.name == "wt-spike"),
         "and so is the registration",
     );
     assert!(
@@ -162,10 +153,7 @@ fn a_reclaimed_creation_removes_the_worktree_and_only_a_branch_it_made() {
     reclaim_partial_worktree(&main, "wt-spike", &target, "spike", true);
     assert!(!target.exists(), "the working copy is gone");
     assert!(
-        !worktree_entries(&main)
-            .unwrap()
-            .iter()
-            .any(|w| w.name == "wt-spike"),
+        !worktree_entries(&main).unwrap().iter().any(|w| w.name == "wt-spike"),
         "and so is the registration",
     );
     assert!(
@@ -203,8 +191,8 @@ fn copy_tree(from: &Path, to: &Path) {
 fn creating_a_worktree_for_an_existing_branch_reuses_it() {
     let f = Fixture::new();
     f.branch("alpha");
-    let created = create_worktree_at(&f.root(), "alpha", &f.sibling("wt-a").to_string_lossy())
-        .unwrap();
+    let created =
+        create_worktree_at(&f.root(), "alpha", &f.sibling("wt-a").to_string_lossy()).unwrap();
     let repo = Repository::open(&created).unwrap();
     assert_eq!(repo.head().unwrap().shorthand().unwrap(), "alpha");
 }
@@ -215,18 +203,13 @@ fn creating_at_an_existing_path_is_the_typed_error_and_creates_nothing() {
     let f = Fixture::new();
     let occupied = f.sibling("wt-taken");
     fs::create_dir_all(&occupied).unwrap();
-    let err =
-        create_worktree_at(&f.root(), "other", &occupied.to_string_lossy()).unwrap_err();
+    let err = create_worktree_at(&f.root(), "other", &occupied.to_string_lossy()).unwrap_err();
     assert_eq!(err, ERR_WORKTREE_PATH_EXISTS);
     assert!(
         f.repo().find_branch("other", BranchType::Local).is_err(),
         "no branch is created when the path is refused"
     );
-    assert_eq!(
-        context_for(&f.root()).unwrap().worktrees.len(),
-        1,
-        "and no worktree is registered"
-    );
+    assert_eq!(context_for(&f.root()).unwrap().worktrees.len(), 1, "and no worktree is registered");
     fs::remove_dir_all(&occupied).unwrap();
 }
 

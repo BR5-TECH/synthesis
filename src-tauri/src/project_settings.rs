@@ -31,16 +31,16 @@ pub mod concurrency;
 pub mod github_polling;
 pub mod image_builder;
 pub mod images;
-pub use build_seam::ImageBuilderSeam;
 use build_seam::AppBuildEvents;
+pub use build_seam::ImageBuilderSeam;
 pub mod loop_settings;
 pub mod public_store;
 pub mod publication_settings;
 pub use concurrency::GraduationConcurrency;
-pub use public_store::*;
 pub use github_polling::*;
-pub use publication_settings::*;
+pub use public_store::*;
 use public_store::{load_public, save_public};
+pub use publication_settings::*;
 
 // ---------------------------------------------------------------------------
 // Wire + on-disk shapes
@@ -316,7 +316,6 @@ where
     Option::<T>::deserialize(deserializer).map(Some)
 }
 
-
 impl Default for ProjectConfig {
     fn default() -> Self {
         Self {
@@ -371,7 +370,6 @@ pub(crate) const GRADUATION_CONCURRENCY_KEY: &str = "graduationConcurrencyLimit"
 /// is read where the current key is absent, and removed by a save that names a
 /// limit.
 pub(crate) const LEGACY_STREAM_CONCURRENCY_KEY: &str = "streamConcurrencyLimit";
-
 
 /// `<project_root>/.synthesis`.
 fn synthesis_dir(root: &Path) -> PathBuf {
@@ -573,10 +571,7 @@ pub fn build_project_vendor_image(
     // PSS-FR-26 / PSS-FR-BCTX: the root is the active worktree root now, and
     // the context is the folder the entry names, or that root by default.
     let project_root = root.path().to_path_buf();
-    let context_root = match entries
-        .get(&vendor)
-        .and_then(|entry| entry.build_context.as_deref())
-    {
+    let context_root = match entries.get(&vendor).and_then(|entry| entry.build_context.as_deref()) {
         Some(context) => images::validate_build_context(&root, context),
         None => Ok(project_root.clone()),
     };
@@ -620,9 +615,7 @@ pub fn build_project_vendor_image(
     // The build runs on its own thread: it is minutes long, it streams, and the
     // command that started it must return the operation id at once so the
     // section can render against it.
-    let started = images::StartedImageBuild {
-        operation_id: operation_id.clone(),
-    };
+    let started = images::StartedImageBuild { operation_id: operation_id.clone() };
     let scope = root.path().to_path_buf();
     std::thread::spawn(move || {
         use tauri::Manager;
@@ -714,7 +707,10 @@ pub fn load_changes_panel_state_from(root: &crate::fs::RootFs) -> ChangesPanelSt
 
 /// PSS-FR-15: persist the panel's mode and target branch to project-local scope,
 /// leaving every other section of `local.toml` exactly as it was.
-pub fn save_changes_panel_state_to(root: &crate::fs::RootFs, state: ChangesPanelState) -> Result<(), String> {
+pub fn save_changes_panel_state_to(
+    root: &crate::fs::RootFs,
+    state: ChangesPanelState,
+) -> Result<(), String> {
     let mut config = load_local(root);
     let value = toml::Value::try_from(state)
         .map_err(|e| format!("failed to encode changes panel state: {e}"))?;
@@ -779,7 +775,10 @@ pub fn load_library_panel_state_from(root: &crate::fs::RootFs) -> LibraryPanelSt
 /// The record is written whole — the caller supplies all three values — so a
 /// change to the lens carries the expanded set and text filter through unchanged
 /// (`../ui/LIB-library.md` LIB-FR-17).
-pub fn save_library_panel_state_to(root: &crate::fs::RootFs, state: LibraryPanelState) -> Result<(), String> {
+pub fn save_library_panel_state_to(
+    root: &crate::fs::RootFs,
+    state: LibraryPanelState,
+) -> Result<(), String> {
     let mut config = load_local(root);
     let value = toml::Value::try_from(state)
         .map_err(|e| format!("failed to encode library panel state: {e}"))?;
@@ -837,7 +836,10 @@ pub fn load_notes_panel_state_from(root: &crate::fs::RootFs) -> NotesPanelState 
 /// every other section of `local.toml` exactly as it was. The record is written
 /// whole, so persisting a new position carries the filter text through unchanged
 /// (`../ui/NTS-notes.md` NTS-FR-09 / NTS-FR-13).
-pub fn save_notes_panel_state_to(root: &crate::fs::RootFs, state: NotesPanelState) -> Result<(), String> {
+pub fn save_notes_panel_state_to(
+    root: &crate::fs::RootFs,
+    state: NotesPanelState,
+) -> Result<(), String> {
     let mut config = load_local(root);
     let value = toml::Value::try_from(state)
         .map_err(|e| format!("failed to encode notes panel state: {e}"))?;
@@ -846,9 +848,7 @@ pub fn save_notes_panel_state_to(root: &crate::fs::RootFs, state: NotesPanelStat
 }
 
 #[tauri::command]
-pub fn load_notes_panel_state(
-    project: State<'_, ProjectState>,
-) -> Result<NotesPanelState, String> {
+pub fn load_notes_panel_state(project: State<'_, ProjectState>) -> Result<NotesPanelState, String> {
     // No project open -> the defaults, exactly as a worktree with no persisted
     // state; the panel has nothing to restore either way.
     match project.require_root() {

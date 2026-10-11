@@ -87,19 +87,14 @@ fn build_note_discussion_input(
     if let Some(note) = crate::notes::load_note(roots.worktree, note_id) {
         let mut attributes = vec![("note_id".to_string(), note_id.to_string())];
         match &note.scope {
-            crate::notes::NoteScope::Entity {
-                entity_id,
-                entity_path,
-            } => {
+            crate::notes::NoteScope::Entity { entity_id, entity_path } => {
                 attributes.push(("scope_kind".to_string(), "entity".to_string()));
                 // Resolved where the entity still exists; the last-known path
                 // where it does not, which is what the panel renders for it too
                 // (NTS-FR-23).
                 if crate::notes::entity_resolves(roots.worktree, entity_id) {
-                    attributes.push((
-                        "entity_name".to_string(),
-                        crate::project::basename(entity_id),
-                    ));
+                    attributes
+                        .push(("entity_name".to_string(), crate::project::basename(entity_id)));
                     attributes.push(("entity_path".to_string(), entity_id.clone()));
                 } else {
                     let last_known = if entity_path.is_empty() {

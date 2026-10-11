@@ -105,12 +105,7 @@ where
     let repo_store = project.require_store()?;
     let by = comments::acting_participant(&store, &project)?;
     let operation = if decision == Decision::Accept { "accept_hunk" } else { "reject_hunk" };
-    let Decided {
-        proposal,
-        comment_id,
-        origin_kind,
-        comment_failed,
-    } = decide(
+    let Decided { proposal, comment_id, origin_kind, comment_failed } = decide(
         &app,
         &root,
         &repo_store,
@@ -162,11 +157,7 @@ where
     // change is named by.
     let dir = drafts::draft_proposals_dir(&root, &draft_id)?;
     backfill_legacy_ledger(&root, &dir, &mut record, &prompt_of(&root, &draft_id));
-    let row = record
-        .ledger
-        .iter()
-        .find(|row| row.id == hunk_id)
-        .ok_or(ERR_HUNK_NOT_FOUND)?;
+    let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
     if !row.state.is_undecided() {
         return Err(ERR_HUNK_ALREADY_DECIDED.to_string());
     }
@@ -214,11 +205,7 @@ pub fn edit_hunk_impl(
     if legacy {
         return Err(ERR_WRITE_FAILED.to_string());
     }
-    let row = record
-        .ledger
-        .iter()
-        .find(|row| row.id == hunk_id)
-        .ok_or(ERR_HUNK_NOT_FOUND)?;
+    let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
     // DCP-FR-26: a change is the author's to shape only while the decision it is
     // for is still owed.
     if !row.state.is_undecided() {
@@ -229,11 +216,7 @@ pub fn edit_hunk_impl(
     if doc.checksum() != baseline_checksum {
         return Err(ERR_CANDIDATE_STALE.to_string());
     }
-    let slot = doc
-        .hunks
-        .iter_mut()
-        .find(|h| h.id == hunk_id)
-        .ok_or(ERR_HUNK_NOT_FOUND)?;
+    let slot = doc.hunks.iter_mut().find(|h| h.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
     slot.after = (!after.is_empty()).then(|| after.to_string());
     let checksum = doc.checksum();
     root.write_text_atomic(hunks_path(&dir, proposal_id), &doc.to_toml())
@@ -284,12 +267,7 @@ where
     let root = project.require_root()?;
     let repo_store = project.require_store()?;
     let by = comments::acting_participant(&store, &project)?;
-    let Decided {
-        proposal,
-        comment_id,
-        origin_kind,
-        comment_failed,
-    } = decide(
+    let Decided { proposal, comment_id, origin_kind, comment_failed } = decide(
         &app,
         &root,
         &repo_store,
@@ -305,10 +283,5 @@ where
     }
     // DCP-FR-14: nothing was written into the draft, so no `drafts-changed`.
     announce(&app, &BUFFER, &proposal);
-    Ok(DecisionOutcome {
-        proposal,
-        comment_id,
-        origin_kind,
-    })
+    Ok(DecisionOutcome { proposal, comment_id, origin_kind })
 }
-

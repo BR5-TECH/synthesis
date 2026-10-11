@@ -13,11 +13,7 @@ fn note_documents_returns_every_well_formed_note_and_names_the_rest() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     let first = create(root, NoteScope::Project, "first body", "2026-01-01T00:00:00Z");
     let second = create(root, NoteScope::Project, "second body", "2026-01-02T00:00:00Z");
-    std::fs::write(
-        notes_dir(dir.path()).join("broken.toml"),
-        "this is not = = toml",
-    )
-    .unwrap();
+    std::fs::write(notes_dir(dir.path()).join("broken.toml"), "this is not = = toml").unwrap();
 
     let (documents, skipped) = note_documents(root);
     assert_eq!(documents.len(), 2, "exactly the two well-formed notes");
@@ -25,21 +21,12 @@ fn note_documents_returns_every_well_formed_note_and_names_the_rest() {
     assert_eq!(
         documents,
         vec![
-            NoteDocument {
-                note_id: second.id.clone(),
-                body: "second body".to_string(),
-            },
-            NoteDocument {
-                note_id: first.id.clone(),
-                body: "first body".to_string(),
-            },
+            NoteDocument { note_id: second.id.clone(), body: "second body".to_string() },
+            NoteDocument { note_id: first.id.clone(), body: "first body".to_string() },
         ],
     );
     assert_eq!(
-        skipped
-            .iter()
-            .map(|s| (s.note_id.as_str(), s.reason))
-            .collect::<Vec<_>>(),
+        skipped.iter().map(|s| (s.note_id.as_str(), s.reason)).collect::<Vec<_>>(),
         vec![("broken", SKIP_UNREADABLE)],
         "the malformed file is named rather than swallowed",
     );
@@ -87,10 +74,8 @@ fn note_documents_tells_the_three_skip_reasons_apart() {
         documents.iter().map(|d| d.note_id.as_str()).collect::<Vec<_>>(),
         vec![good.id.as_str()],
     );
-    let reasons: std::collections::BTreeMap<&str, &str> = skipped
-        .iter()
-        .map(|s| (s.note_id.as_str(), s.reason))
-        .collect();
+    let reasons: std::collections::BTreeMap<&str, &str> =
+        skipped.iter().map(|s| (s.note_id.as_str(), s.reason)).collect();
     assert_eq!(
         reasons,
         [
@@ -158,15 +143,8 @@ fn note_record_reports_the_note_as_it_now_stands() {
     }
 
     // NTC-FR-14: an unknown id and a malformed file are both "not found".
-    assert_eq!(
-        note_record(root, "no-such-note").unwrap_err(),
-        ERR_NOTE_NOT_FOUND,
-    );
-    std::fs::write(
-        notes_dir(dir.path()).join("damaged.toml"),
-        "not = = toml",
-    )
-    .unwrap();
+    assert_eq!(note_record(root, "no-such-note").unwrap_err(), ERR_NOTE_NOT_FOUND,);
+    std::fs::write(notes_dir(dir.path()).join("damaged.toml"), "not = = toml").unwrap();
     assert_eq!(note_record(root, "damaged").unwrap_err(), ERR_NOTE_NOT_FOUND);
 
     // NTC-FR-14: and one whose file name disagrees with the id inside it,
@@ -177,14 +155,9 @@ fn note_record_reports_the_note_as_it_now_stands() {
          created_at = \"2026-01-01T00:00:00Z\"\nupdated_at = \"2026-01-01T00:00:00Z\"\n"
     );
     std::fs::write(notes_dir(dir.path()).join("mislabelled.toml"), mismatched).unwrap();
-    assert_eq!(
-        note_record(root, "mislabelled").unwrap_err(),
-        ERR_NOTE_NOT_FOUND,
-    );
+    assert_eq!(note_record(root, "mislabelled").unwrap_err(), ERR_NOTE_NOT_FOUND,);
     assert!(
-        !list_all_notes_in(root, root)
-            .iter()
-            .any(|i| i.note.id == "somebody-else"),
+        !list_all_notes_in(root, root).iter().any(|i| i.note.id == "somebody-else"),
         "and the listing path skips it too",
     );
 }

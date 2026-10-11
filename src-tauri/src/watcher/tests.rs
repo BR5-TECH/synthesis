@@ -33,10 +33,7 @@ fn external_divergence_only_fires_for_changed_tracked_files() {
 fn route_watch_change_splits_content_quiet_and_structural() {
     // PST-FR-16 / ASC-FR-15: the routing the watcher composes over a batch.
     // A tracked file whose checksum changed -> the content channel.
-    assert_eq!(
-        route_watch_change(Some("a"), Some("b")),
-        WatchRoute::Content("b".to_string())
-    );
+    assert_eq!(route_watch_change(Some("a"), Some("b")), WatchRoute::Content("b".to_string()));
     // A tracked file unchanged (the Editor's own save) -> quiet, NOT a tree
     // reload (PST-FR-16: a content path never cross-fires to structural).
     assert_eq!(route_watch_change(Some("a"), Some("a")), WatchRoute::Quiet);
@@ -92,10 +89,7 @@ fn the_watched_git_dir_and_the_attributed_git_dir_are_the_same_path() {
 
     // And the strip actually works for a real event path under it.
     let event = attributed.join("refs/heads/main");
-    assert!(
-        event.strip_prefix(&attributed).is_ok(),
-        "a Git-directory event must be attributable"
-    );
+    assert!(event.strip_prefix(&attributed).is_ok(), "a Git-directory event must be attributable");
 }
 
 #[test]
@@ -126,11 +120,7 @@ fn a_co_located_projects_git_dir_is_watched_and_its_events_are_counted() {
         },
     ];
     assert_eq!(
-        crate::changes::changes_change_count(
-            &Ok(events),
-            &project_root,
-            Some(&attributed),
-        ),
+        crate::changes::changes_change_count(&Ok(events), &project_root, Some(&attributed),),
         2,
         "a commit in a co-located repository must be a change (CHC-FR-16)"
     );
@@ -201,10 +191,7 @@ fn a_watched_change_invalidates_the_candidate_list() {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    assert!(
-        invalidated,
-        "a filesystem change must invalidate the mounted candidate list"
-    );
+    assert!(invalidated, "a filesystem change must invalidate the mounted candidate list");
 
     // And the rebuilt list holds the new file.
     let rebuilt = store.candidates(&crate::fs::RootFs::for_root(root));
@@ -249,15 +236,8 @@ fn the_attribution_file_never_reaches_the_per_path_routing_loop() {
     // TAB-FR-19 would try to close a tab for.
     use notify_debouncer_mini::{DebouncedEvent, DebouncedEventKind};
     let root = Path::new("/p");
-    let ev = |p: &str| DebouncedEvent {
-        path: PathBuf::from(p),
-        kind: DebouncedEventKind::Any,
-    };
-    let batch = Ok(vec![
-        ev("/p/a.md"),
-        ev("/p/.synthesis/library.toml"),
-        ev("/p/sub/b.md"),
-    ]);
+    let ev = |p: &str| DebouncedEvent { path: PathBuf::from(p), kind: DebouncedEventKind::Any };
+    let batch = Ok(vec![ev("/p/a.md"), ev("/p/.synthesis/library.toml"), ev("/p/sub/b.md")]);
 
     let mut changed = scanning::changed_rel_paths(&batch, root);
     assert!(
@@ -327,19 +307,13 @@ fn an_external_attribution_write_invalidates_the_candidate_list() {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    assert!(
-        invalidated,
-        "an external attribution write must invalidate the mounted list"
-    );
+    assert!(invalidated, "an external attribution write must invalidate the mounted list");
 
     // And the rebuilt list carries the inherited type, which is what a pass
     // reads to decide index membership (BMI-FR-03).
     let rebuilt = store.candidates(&crate::fs::RootFs::for_root(root));
     assert_eq!(
-        rebuilt
-            .iter()
-            .find(|c| c.path == "notes/x.md")
-            .and_then(|c| c.artifact_type),
+        rebuilt.iter().find(|c| c.path == "notes/x.md").and_then(|c| c.artifact_type),
         Some(scanning::ArtifactType::Scenario),
         "the pulled folder-scope assignment must resolve onto the file"
     );
@@ -392,7 +366,8 @@ fn an_applications_own_attribution_write_is_suppressed_while_the_batch_still_lan
     let dir = tempfile::TempDir::new().unwrap();
     let root = &crate::changes::canonicalize_lenient(dir.path());
     std::fs::create_dir_all(root.join(".synthesis")).unwrap();
-    let contents = "[assignments]\n[assignments.\"notes\"]\ntype = \"scenario\"\nscope = \"folder\"\n";
+    let contents =
+        "[assignments]\n[assignments.\"notes\"]\ntype = \"scenario\"\nscope = \"folder\"\n";
     std::fs::write(root.join(scanning::LIBRARY_TOML_REL), contents).unwrap();
 
     let app = tauri::test::mock_app();
@@ -529,8 +504,7 @@ fn an_artifact_write_moves_the_recently_edited_widget_ours_included() {
     // checksumming after would put an external change in front of it and
     // make this half pass for the wrong reason.
     let before = seen.load(std::sync::atomic::Ordering::SeqCst);
-    app.state::<ContentTracker>()
-        .record("a.spec.md", &crate::fs::sha256_bytes(b"three"));
+    app.state::<ContentTracker>().record("a.spec.md", &crate::fs::sha256_bytes(b"three"));
     std::fs::write(root.join("a.spec.md"), b"three").unwrap();
     assert!(
         wait_until(|| seen.load(std::sync::atomic::Ordering::SeqCst) > before),
@@ -685,11 +659,7 @@ fn a_pull_rewriting_the_attribution_file_and_ordinary_files_lands_as_one_burst()
         seen.lock().unwrap()
     );
     for e in seen.lock().unwrap().iter() {
-        let removed = e
-            .get("removedPaths")
-            .and_then(|r| r.as_array())
-            .cloned()
-            .unwrap_or_default();
+        let removed = e.get("removedPaths").and_then(|r| r.as_array()).cloned().unwrap_or_default();
         assert!(
             !removed.iter().any(|p| p.as_str() == Some(scanning::LIBRARY_TOML_REL)),
             "the attribution file is never a removed path: {e:?}"
@@ -732,10 +702,7 @@ fn reverting_the_attribution_file_to_bytes_this_application_wrote_is_still_exter
     // A teammate's `b` arrives and is reported.
     let _ = store.candidates(&crate::fs::RootFs::for_root(root));
     std::fs::write(root.join(scanning::LIBRARY_TOML_REL), b).unwrap();
-    assert!(
-        wait_until(|| !store.is_mounted()),
-        "the external write to `b` must invalidate"
-    );
+    assert!(wait_until(|| !store.is_mounted()), "the external write to `b` must invalidate");
 
     // A checkout restores `a` — bytes this application once wrote.
     let _ = store.candidates(&crate::fs::RootFs::for_root(root));

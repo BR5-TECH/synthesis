@@ -160,4 +160,3 @@ pub(super) fn log_clear_outcome<S: LogSink + Clone + Send + 'static>(
         ),
     }
 }
-

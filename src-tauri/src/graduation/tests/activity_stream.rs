@@ -6,7 +6,9 @@ use super::*;
 
 use super::log_reads::driven;
 use crate::graduation::logs::read::{STATUS_AVAILABLE, STATUS_EMPTY};
-use crate::graduation::logs::{self, GraduationLogPage, GraduationLogProducer, GraduationLogStream};
+use crate::graduation::logs::{
+    self, GraduationLogPage, GraduationLogProducer, GraduationLogStream,
+};
 use crate::tools::agent_exec::{DurableActivity, DurableOutputSink};
 
 fn activity(kind: &'static str, summary: &str) -> DurableActivity {
@@ -51,17 +53,39 @@ fn summaries(page: &GraduationLogPage) -> Vec<String> {
 /// a safe kind from an agent turn and for nothing else.
 #[test]
 fn only_a_safe_kind_of_an_agent_turn_becomes_a_record() {
-    for kind in ["started", "message", "tool_call", "tool_result", "command", "file_change", "retry", "usage", "finished", "error", "diagnostic"] {
+    for kind in [
+        "started",
+        "message",
+        "tool_call",
+        "tool_result",
+        "command",
+        "file_change",
+        "retry",
+        "usage",
+        "finished",
+        "error",
+        "diagnostic",
+    ] {
         assert!(
-            logs::activity_record("g1", GraduationLogProducer::WorkTurn, Some(1), &activity(kind, "x"))
-                .is_some(),
+            logs::activity_record(
+                "g1",
+                GraduationLogProducer::WorkTurn,
+                Some(1),
+                &activity(kind, "x")
+            )
+            .is_some(),
             "{kind} is a safe kind"
         );
     }
     for kind in ["invocation", "task", "reasoning", "unrecognized", "turn"] {
         assert!(
-            logs::activity_record("g1", GraduationLogProducer::WorkTurn, Some(1), &activity(kind, "x"))
-                .is_none(),
+            logs::activity_record(
+                "g1",
+                GraduationLogProducer::WorkTurn,
+                Some(1),
+                &activity(kind, "x")
+            )
+            .is_none(),
             "{kind} is excluded"
         );
     }
@@ -81,19 +105,34 @@ fn only_a_safe_kind_of_an_agent_turn_becomes_a_record() {
 /// producer table, and a run-level record names a non-agent origin.
 #[test]
 fn a_record_is_attributed_by_its_producer_and_a_run_level_record_names_the_executor() {
-    let work = logs::activity_record("g1", GraduationLogProducer::WorkTurn, Some(2), &activity("message", "a"))
-        .expect("a record");
+    let work = logs::activity_record(
+        "g1",
+        GraduationLogProducer::WorkTurn,
+        Some(2),
+        &activity("message", "a"),
+    )
+    .expect("a record");
     assert_eq!(work.attribution.phase_id, "working");
     assert_eq!(work.attribution.pass, Some(2));
     assert_eq!(work.attribution.producer, "work_turn");
     assert_eq!(serde_json::to_value(work.attribution.origin).unwrap(), "agent");
 
-    let review = logs::activity_record("g1", GraduationLogProducer::ReviewTurn, Some(1), &activity("message", "a"))
-        .expect("a record");
+    let review = logs::activity_record(
+        "g1",
+        GraduationLogProducer::ReviewTurn,
+        Some(1),
+        &activity("message", "a"),
+    )
+    .expect("a record");
     assert_eq!(review.attribution.phase_id, "review");
 
-    let merge = logs::activity_record("g1", GraduationLogProducer::SemanticMergeTurn, Some(3), &activity("message", "a"))
-        .expect("a record");
+    let merge = logs::activity_record(
+        "g1",
+        GraduationLogProducer::SemanticMergeTurn,
+        Some(3),
+        &activity("message", "a"),
+    )
+    .expect("a record");
     assert_eq!(merge.attribution.phase_id, "done");
     assert_eq!(merge.attribution.pass, None, "a semantic merge turn stands in no pass");
     assert_eq!(serde_json::to_value(merge.attribution.origin).unwrap(), "executor");
@@ -103,8 +142,13 @@ fn a_record_is_attributed_by_its_producer_and_a_run_level_record_names_the_execu
 #[test]
 fn a_summary_is_one_bounded_line() {
     let long = format!("first\nsecond\t{}", "x".repeat(900));
-    let record = logs::activity_record("g1", GraduationLogProducer::WorkTurn, Some(1), &activity("message", &long))
-        .expect("a record");
+    let record = logs::activity_record(
+        "g1",
+        GraduationLogProducer::WorkTurn,
+        Some(1),
+        &activity("message", &long),
+    )
+    .expect("a record");
     assert!(!record.summary.contains('\n') && !record.summary.contains('\t'));
     assert!(record.summary.chars().count() <= 301);
 }
@@ -123,7 +167,13 @@ fn a_record_is_readable_as_soon_as_the_sink_acknowledges_it() {
     sink.record(activity("message", "first line")).expect("acknowledged");
     sink.record(activity("tool_call", "second line")).expect("acknowledged");
 
-    let page = command(&fx, &run.id, "working", serde_json::json!({ "kind": "pass", "pass": run.pass() }), None);
+    let page = command(
+        &fx,
+        &run.id,
+        "working",
+        serde_json::json!({ "kind": "pass", "pass": run.pass() }),
+        None,
+    );
     assert_eq!(page.status, STATUS_AVAILABLE);
     assert_eq!(summaries(&page), vec!["first line", "second line"]);
     assert_eq!(page.latest_sequence, 2);
@@ -218,7 +268,8 @@ fn earlier_review_passes_stay_separate_after_the_run_returns_to_working() {
     assert!(working.entries.iter().all(|e| e.record["phase_id"] == "working"));
 
     // A pass that never entered a phase holds nothing there.
-    let none = command(&fx, &run.id, "review", serde_json::json!({ "kind": "pass", "pass": 9 }), None);
+    let none =
+        command(&fx, &run.id, "review", serde_json::json!({ "kind": "pass", "pass": 9 }), None);
     assert_eq!(none.status, STATUS_EMPTY);
 }
 

@@ -5,8 +5,8 @@
 use super::*;
 
 use crate::graduation::logs::read::{
-    GraduationLogCursor, GraduationLogPassScope, DIRECTION_AFTER, DIRECTION_BEFORE,
-    SEARCH_MATCHED, SEARCH_NOT_REQUESTED, SEARCH_NO_MATCH, STATUS_AVAILABLE, STATUS_EMPTY,
+    GraduationLogCursor, GraduationLogPassScope, DIRECTION_AFTER, DIRECTION_BEFORE, SEARCH_MATCHED,
+    SEARCH_NOT_REQUESTED, SEARCH_NO_MATCH, STATUS_AVAILABLE, STATUS_EMPTY,
     STATUS_PERSISTENCE_FAILED, STATUS_UNAVAILABLE,
 };
 use crate::graduation::logs::{self, GraduationLogPage, GraduationLogStream};
@@ -57,13 +57,7 @@ fn read(
 fn sequences(page: &GraduationLogPage) -> Vec<u64> {
     page.entries
         .iter()
-        .map(|entry| {
-            entry
-                .record
-                .get("sequence")
-                .and_then(|v| v.as_u64())
-                .unwrap_or_default()
-        })
+        .map(|entry| entry.record.get("sequence").and_then(|v| v.as_u64()).unwrap_or_default())
         .collect()
 }
 
@@ -181,10 +175,7 @@ fn a_phase_scope_returns_everything_the_phase_holds_in_one_order() {
             )));
         }
         parts.sort_unstable();
-        assert_eq!(
-            parts, read_sequences,
-            "{phase_id} holds nothing outside its own scopes"
-        );
+        assert_eq!(parts, read_sequences, "{phase_id} holds nothing outside its own scopes");
     }
 
     // The run-level records stand in the phase that wrote them and are marked
@@ -283,10 +274,7 @@ fn paging_walks_backwards_without_returning_a_record_twice() {
     );
     let head: Vec<u64> = sequences(&older);
     let tail: Vec<u64> = sequences(&newest);
-    assert!(
-        head.iter().all(|s| !tail.contains(s)),
-        "the two pages are disjoint"
-    );
+    assert!(head.iter().all(|s| !tail.contains(s)), "the two pages are disjoint");
     assert!(head.iter().max() < tail.iter().min(), "older is older");
     assert_eq!(newest.matched_total, older.matched_total);
 }
@@ -353,10 +341,7 @@ fn a_cursor_of_another_scope_is_refused() {
         None,
         None,
     );
-    assert_eq!(
-        refused.unwrap_err(),
-        logs::read::ERR_CURSOR_NOT_FOR_THIS_SCOPE
-    );
+    assert_eq!(refused.unwrap_err(), logs::read::ERR_CURSOR_NOT_FOR_THIS_SCOPE);
 }
 
 /// GRS-FR-OYIC, GRS-FR-NSGX: search is case-insensitive substring over what the
@@ -378,10 +363,7 @@ fn search_matches_what_is_displayed_and_never_empties_the_scope() {
     );
     assert_eq!(plain.search, SEARCH_NOT_REQUESTED);
 
-    let event = plain.entries[0].record["event"]
-        .as_str()
-        .expect("an event")
-        .to_string();
+    let event = plain.entries[0].record["event"].as_str().expect("an event").to_string();
     let matched = read(
         &fx,
         &run,
@@ -407,10 +389,7 @@ fn search_matches_what_is_displayed_and_never_empties_the_scope() {
     );
     assert_eq!(missing.search, SEARCH_NO_MATCH);
     assert_eq!(missing.matched_total, 0);
-    assert_eq!(
-        missing.status, STATUS_AVAILABLE,
-        "the scope's own records settle the status"
-    );
+    assert_eq!(missing.status, STATUS_AVAILABLE, "the scope's own records settle the status");
 }
 
 /// GRS-FR-OYIC: an activity search matches the summary a row shows, whatever
@@ -684,10 +663,7 @@ fn the_backward_walk_reaches_the_beginning_and_covers_the_whole_scope() {
             None,
         );
         let older = sequences(&page);
-        assert!(
-            older.iter().all(|s| !walked.contains(s)),
-            "the pages are disjoint"
-        );
+        assert!(older.iter().all(|s| !walked.contains(s)), "the pages are disjoint");
         walked.extend(older);
     }
     assert!(page.older_cursor.is_none(), "null exactly at the beginning");
@@ -801,11 +777,7 @@ fn a_structured_search_matches_the_fields_the_surface_renders() {
     let with_fields = page
         .entries
         .iter()
-        .find(|entry| {
-            entry.record["fields"]
-                .as_object()
-                .is_some_and(|fields| !fields.is_empty())
-        })
+        .find(|entry| entry.record["fields"].as_object().is_some_and(|fields| !fields.is_empty()))
         .expect("a record carrying fields");
     let fields = with_fields.record["fields"].as_object().unwrap();
     let (key, value) = fields.iter().next().unwrap();
@@ -888,9 +860,8 @@ fn a_failed_write_of_one_stream_leaves_the_other_readable() {
 fn a_stream_that_cannot_be_read_at_all_is_unavailable() {
     let fx = Fixture::new();
     let run = driven(&fx);
-    let path = logs::paths_for(&fx.app, &run.id)
-        .expect("the paths")
-        .stream(GraduationLogStream::Activity);
+    let path =
+        logs::paths_for(&fx.app, &run.id).expect("the paths").stream(GraduationLogStream::Activity);
     // A directory where the stream should be: it exists, and it is no file.
     std::fs::remove_file(&path).expect("the stream");
     std::fs::create_dir(&path).expect("something unreadable in its place");

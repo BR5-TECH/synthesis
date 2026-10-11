@@ -32,7 +32,9 @@ pub fn pending_claim(
     number: u64,
     held: &[GithubPendingClaim],
 ) -> Option<GithubPendingClaim> {
-    let names = |claim: &GithubPendingClaim| claim.names(&repository.host, &repository.owner, &repository.name, number);
+    let names = |claim: &GithubPendingClaim| {
+        claim.names(&repository.host, &repository.owner, &repository.name, number)
+    };
     load_github_pending_claims_from(root)
         .into_iter()
         .find(names)
@@ -86,12 +88,21 @@ fn shadow_for(
     // A draft the pending claim already names, where it still exists.
     if let Some(id) = claim.draft_id.as_deref() {
         if let Ok(record) = crate::drafts::read_draft_record(root, id) {
-            if record.github_issue.as_ref().is_some_and(|l| l.names(host, owner, name, claim.issue_number)) {
-                return Ok((GithubClaimResult { draft_id: record.id, draft_name: record.name }, false));
+            if record
+                .github_issue
+                .as_ref()
+                .is_some_and(|l| l.names(host, owner, name, claim.issue_number))
+            {
+                return Ok((
+                    GithubClaimResult { draft_id: record.id, draft_name: record.name },
+                    false,
+                ));
             }
         }
     }
-    if let Some(existing) = crate::drafts::find_github_shadow(root, host, owner, name, claim.issue_number) {
+    if let Some(existing) =
+        crate::drafts::find_github_shadow(root, host, owner, name, claim.issue_number)
+    {
         return Ok((GithubClaimResult { draft_id: existing.id, draft_name: existing.name }, false));
     }
     let link = GithubIssueLink {
@@ -105,10 +116,7 @@ fn shadow_for(
     };
     let created = crate::drafts::create_github_shadow_draft(root, &issue.title, &issue.body, link)
         .map_err(|_| ERR_SHADOW_CREATE_FAILED.to_string())?;
-    Ok((
-        GithubClaimResult { draft_id: created.draft.id, draft_name: created.draft.name },
-        true,
-    ))
+    Ok((GithubClaimResult { draft_id: created.draft.id, draft_name: created.draft.name }, true))
 }
 
 /// What a successful claim or retry did.
@@ -216,7 +224,8 @@ pub fn retry(
         .into_iter()
         .find(|c| c.names(&repository.host, &repository.owner, &repository.name, number));
     let from_disk = on_disk.is_some();
-    let Some(mut pending) = on_disk.or_else(|| pending_claim(root, repository, number, held)) else {
+    let Some(mut pending) = on_disk.or_else(|| pending_claim(root, repository, number, held))
+    else {
         return Err(ERR_NO_PENDING_CLAIM.to_string());
     };
     // GPP-FR-TOED: the latest title and body. A re-fetch that fails keeps the

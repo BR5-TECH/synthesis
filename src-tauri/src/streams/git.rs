@@ -24,9 +24,10 @@ pub(super) struct Created {
 /// Both are needed together: the primary is where a branch and a worktree
 /// registration must be made, whatever worktree the caller is in.
 pub(super) fn primary_repo(path: &Path) -> Result<git2::Repository, String> {
-    let repo = git2::Repository::discover(path).map_err(|_| ERR_NOT_A_GIT_REPOSITORY.to_string())?;
-    let primary =
-        crate::worktree::primary_worktree_root(&repo).ok_or(ERR_NOT_A_GIT_REPOSITORY.to_string())?;
+    let repo =
+        git2::Repository::discover(path).map_err(|_| ERR_NOT_A_GIT_REPOSITORY.to_string())?;
+    let primary = crate::worktree::primary_worktree_root(&repo)
+        .ok_or(ERR_NOT_A_GIT_REPOSITORY.to_string())?;
     git2::Repository::open(&primary).map_err(|_| ERR_NOT_A_GIT_REPOSITORY.to_string())
 }
 
@@ -48,10 +49,7 @@ pub(super) fn branch_revision(main: &git2::Repository, branch: &str) -> Result<S
     let found = main
         .find_branch(branch, git2::BranchType::Local)
         .map_err(|_| ERR_BASE_BRANCH_REQUIRED.to_string())?;
-    let commit = found
-        .get()
-        .peel_to_commit()
-        .map_err(|_| ERR_BASE_BRANCH_REQUIRED.to_string())?;
+    let commit = found.get().peel_to_commit().map_err(|_| ERR_BASE_BRANCH_REQUIRED.to_string())?;
     Ok(commit.id().to_string())
 }
 
@@ -68,12 +66,10 @@ pub(super) fn create_stream_checkout(
     target: &Path,
     created: &mut Created,
 ) -> Result<(), String> {
-    let oid = git2::Oid::from_str(base_revision).map_err(|_| ERR_STREAM_CREATION_FAILED.to_string())?;
-    let base_commit = main
-        .find_commit(oid)
-        .map_err(|_| ERR_STREAM_CREATION_FAILED.to_string())?;
-    main.branch(branch, &base_commit, false)
-        .map_err(|_| ERR_STREAM_CREATION_FAILED.to_string())?;
+    let oid =
+        git2::Oid::from_str(base_revision).map_err(|_| ERR_STREAM_CREATION_FAILED.to_string())?;
+    let base_commit = main.find_commit(oid).map_err(|_| ERR_STREAM_CREATION_FAILED.to_string())?;
+    main.branch(branch, &base_commit, false).map_err(|_| ERR_STREAM_CREATION_FAILED.to_string())?;
     created.branch = Some(branch.to_string());
 
     if let Some(parent) = target.parent() {
@@ -165,10 +161,7 @@ pub(super) fn delete_branch(main: &git2::Repository, branch: &str) -> Result<(),
 /// always the primary one: a stream's base is whatever the author was standing
 /// on when they created it. Writing into the primary regardless would rewrite
 /// an unrelated checkout's files under a `HEAD` that names another branch.
-pub(super) fn worktree_holding(
-    main: &git2::Repository,
-    branch: &str,
-) -> Option<git2::Repository> {
+pub(super) fn worktree_holding(main: &git2::Repository, branch: &str) -> Option<git2::Repository> {
     let wanted = format!("refs/heads/{branch}");
     let holds = |repo: &git2::Repository| -> bool {
         repo.head()
@@ -181,11 +174,7 @@ pub(super) fn worktree_holding(
     }
     let names: Vec<String> = main
         .worktrees()
-        .map(|list| {
-            list.iter()
-                .filter_map(|n| n.ok().flatten().map(str::to_string))
-                .collect()
-        })
+        .map(|list| list.iter().filter_map(|n| n.ok().flatten().map(str::to_string)).collect())
         .unwrap_or_default();
     for name in names {
         let Ok(worktree) = main.find_worktree(&name) else {
@@ -218,9 +207,7 @@ pub(super) fn ahead_of_base(main: &git2::Repository, stream: &WorkStream) -> u32
     let (Some(head), Some(base)) = (resolve(&stream.branch), resolve(&stream.base_branch)) else {
         return 0;
     };
-    main.graph_ahead_behind(head, base)
-        .map(|(ahead, _)| ahead as u32)
-        .unwrap_or(0)
+    main.graph_ahead_behind(head, base).map(|(ahead, _)| ahead as u32).unwrap_or(0)
 }
 
 /// WKS-FR-UZHT / WKS-FR-JVLM / `GRB-graduation-rebase.md` GRB-FR-QIHE: the
@@ -243,9 +230,7 @@ pub(crate) fn uncommitted_paths(worktree: &Path, checked_out: bool) -> Vec<Strin
         return Vec::new();
     };
     let mut opts = git2::StatusOptions::new();
-    opts.include_untracked(true)
-        .recurse_untracked_dirs(true)
-        .include_ignored(false);
+    opts.include_untracked(true).recurse_untracked_dirs(true).include_ignored(false);
     let Ok(statuses) = repo.statuses(Some(&mut opts)) else {
         return Vec::new();
     };

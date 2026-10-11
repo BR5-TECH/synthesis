@@ -38,9 +38,8 @@ fn a_destination_is_classified_by_the_standard_relative_path_rule() {
 fn a_reference_inside_a_code_construct_protects_nothing() {
     // DAS-FR-06: the reading is the renderer's, and a renderer draws no image
     // inside a fenced block or a code span — so neither protects a file.
-    let references = read_references(
-        "```\n![a](../assets/a.png)\n```\n\nand `![b](../assets/b.png)` inline.\n",
-    );
+    let references =
+        read_references("```\n![a](../assets/a.png)\n```\n\nand `![b](../assets/b.png)` inline.\n");
     assert!(references.protected.is_empty(), "{:?}", references.protected);
     assert!(references.images.is_empty());
 }
@@ -52,7 +51,10 @@ fn an_image_use_carries_its_alt_text_and_its_span() {
     let used = &references.images[0];
     assert_eq!(used.alt, "a diagram");
     assert_eq!(used.reference, "../assets/a.png");
-    assert_eq!(&"before ![a diagram](../assets/a.png) after\n"[used.start..used.end], "![a diagram](../assets/a.png)");
+    assert_eq!(
+        &"before ![a diagram](../assets/a.png) after\n"[used.start..used.end],
+        "![a diagram](../assets/a.png)"
+    );
     assert_eq!(references.protected, ["a.png".to_string()].into_iter().collect());
 }
 
@@ -75,7 +77,6 @@ fn the_accepted_image_kinds_are_recognised_by_their_bytes_and_no_others() {
     assert!(!is_image_media_type("text/plain"));
     assert!(is_image_media_type("image/png; charset=binary"));
 }
-
 
 // ---------------------------------------------------------------------------
 // a removal that succeeds beside one that fails (DAS-FR-28)
@@ -136,8 +137,20 @@ fn das_ts18_both_reads_are_indifferent_to_the_lock() {
     // here so a rename fails to compile rather than silently leaving the guard
     // covering nothing.
     let _guarded: (
-        fn(&crate::fs::RootFs, &str, &str, Option<&str>, &str, &dyn Fn(&str)) -> Result<DraftAsset, String>,
-        fn(&crate::fs::RootFs, &str, &str, &DraftAssetSweeper) -> Result<DraftAssetDiscarded, String>,
+        fn(
+            &crate::fs::RootFs,
+            &str,
+            &str,
+            Option<&str>,
+            &str,
+            &dyn Fn(&str),
+        ) -> Result<DraftAsset, String>,
+        fn(
+            &crate::fs::RootFs,
+            &str,
+            &str,
+            &DraftAssetSweeper,
+        ) -> Result<DraftAssetDiscarded, String>,
     ) = (store_image_impl, discard_image_impl);
     const LIB: &str = include_str!("../../draft_assets.rs");
     for command in ["store_draft_image", "discard_draft_image"] {
@@ -158,7 +171,6 @@ fn das_ts18_both_reads_are_indifferent_to_the_lock() {
         );
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // DAS-FR-24 — an asset is not the draft's record and not its prompt

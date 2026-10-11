@@ -156,9 +156,7 @@ impl Service {
             // Killing the child closes the pipe, which ends the reading thread.
             let _ = child.kill();
             let _ = child.wait();
-            return Err(format!(
-                "the process wrote no record inside {START_DEADLINE:?}"
-            ));
+            return Err(format!("the process wrote no record inside {START_DEADLINE:?}"));
         }
 
         let (reader, line, read) = reading.join().expect("the reading thread does not panic");
@@ -184,12 +182,7 @@ impl Service {
             }
         };
 
-        Ok(Self {
-            child,
-            port,
-            record,
-            stdout: Some(reader),
-        })
+        Ok(Self { child, port, record, stdout: Some(reader) })
     }
 
     fn reader(&mut self) -> &mut BufReader<ChildStdout> {
@@ -206,13 +199,8 @@ impl Service {
     /// Blocking, so it is called only where the process is known to write one.
     fn next_record(&mut self) -> serde_json::Value {
         let mut line = String::new();
-        self.reader()
-            .read_line(&mut line)
-            .expect("standard output is readable");
-        assert!(
-            !line.trim().is_empty(),
-            "the process wrote no further record"
-        );
+        self.reader().read_line(&mut line).expect("standard output is readable");
+        assert!(!line.trim().is_empty(), "the process wrote no further record");
 
         serde_json::from_str(line.trim())
             .unwrap_or_else(|error| panic!("a record is not JSON: {line:?} ({error})"))
@@ -224,9 +212,7 @@ impl Service {
     /// rather than blocking. The records are small and the pipe holds them.
     fn remaining_records(&mut self) -> Vec<serde_json::Value> {
         let mut rest = String::new();
-        self.reader()
-            .read_to_string(&mut rest)
-            .expect("standard output is readable");
+        self.reader().read_to_string(&mut rest).expect("standard output is readable");
 
         rest.lines()
             .filter(|line| !line.trim().is_empty())
@@ -240,22 +226,15 @@ impl Service {
     /// The `outcome` the last record reports (BMS-FR-10).
     fn drain_outcome(&mut self) -> String {
         let records = self.remaining_records();
-        let last = records
-            .last()
-            .unwrap_or_else(|| panic!("the process wrote no record after the first"));
+        let last =
+            records.last().unwrap_or_else(|| panic!("the process wrote no record after the first"));
         assert_eq!(last["event"], "stopped", "the last record ends the process");
-        last["outcome"]
-            .as_str()
-            .expect("the outcome is a string")
-            .to_string()
+        last["outcome"].as_str().expect("the outcome is a string").to_string()
     }
 
     /// True while the process has not left.
     fn is_running(&mut self) -> bool {
-        self.child
-            .try_wait()
-            .expect("the child is waitable")
-            .is_none()
+        self.child.try_wait().expect("the child is waitable").is_none()
     }
 
     fn address(&self) -> SocketAddr {
@@ -325,10 +304,7 @@ where
 
 /// Starts the service on the loopback interface and on the given port.
 fn local_bind(port: u16) -> (Vec<String>, Vec<(String, String)>) {
-    (
-        arguments(&["--host", "127.0.0.1", "--port", &port.to_string()]),
-        vec![],
-    )
+    (arguments(&["--host", "127.0.0.1", "--port", &port.to_string()]), vec![])
 }
 
 fn arguments(values: &[&str]) -> Vec<String> {
@@ -336,10 +312,7 @@ fn arguments(values: &[&str]) -> Vec<String> {
 }
 
 fn variables(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
-    pairs
-        .iter()
-        .map(|(name, value)| ((*name).to_string(), (*value).to_string()))
-        .collect()
+    pairs.iter().map(|(name, value)| ((*name).to_string(), (*value).to_string())).collect()
 }
 
 /// One HTTP response, as the tests read it.
@@ -366,14 +339,9 @@ impl Response {
 /// tests add no HTTP client dependency to the crate.
 fn request(address: SocketAddr, method: &str, path: &str) -> Response {
     let mut stream = TcpStream::connect(address).expect("the service accepts the connection");
-    stream
-        .set_read_timeout(Some(Duration::from_secs(10)))
-        .expect("the timeout is accepted");
-    write!(
-        stream,
-        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
-    )
-    .expect("the request is written");
+    stream.set_read_timeout(Some(Duration::from_secs(10))).expect("the timeout is accepted");
+    write!(stream, "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .expect("the request is written");
 
     read_response(&mut stream)
 }
@@ -381,9 +349,7 @@ fn request(address: SocketAddr, method: &str, path: &str) -> Response {
 /// One request that carries the bearer token (SAS-FR-LFCA).
 fn request_with_token(address: SocketAddr, method: &str, path: &str, token: &str) -> Response {
     let mut stream = TcpStream::connect(address).expect("the service accepts the connection");
-    stream
-        .set_read_timeout(Some(Duration::from_secs(10)))
-        .expect("the timeout is accepted");
+    stream.set_read_timeout(Some(Duration::from_secs(10))).expect("the timeout is accepted");
     write!(
         stream,
         "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {token}\r\nConnection: close\r\n\r\n"
@@ -428,14 +394,9 @@ fn read_response(stream: &mut TcpStream) -> Response {
 
 fn parse_response(raw: &[u8]) -> Response {
     let separator = b"\r\n\r\n";
-    let head_end = raw
-        .windows(separator.len())
-        .position(|window| window == separator)
-        .unwrap_or_else(|| {
-            panic!(
-                "the answer holds no header block: {:?}",
-                String::from_utf8_lossy(raw)
-            )
+    let head_end =
+        raw.windows(separator.len()).position(|window| window == separator).unwrap_or_else(|| {
+            panic!("the answer holds no header block: {:?}", String::from_utf8_lossy(raw))
         });
 
     let head = String::from_utf8_lossy(&raw[..head_end]).to_string();
@@ -454,12 +415,7 @@ fn parse_response(raw: &[u8]) -> Response {
         .map(|(name, value)| (name.trim().to_string(), value.trim().to_string()))
         .collect();
 
-    Response {
-        status,
-        headers,
-        body,
-        raw: raw.to_vec(),
-    }
+    Response { status, headers, body, raw: raw.to_vec() }
 }
 
 // BMS-FR-03, BMS-FR-05, BMS-FR-09, BMS-FR-11: with no host option and no host variable, the service
@@ -487,10 +443,7 @@ fn it_binds_the_default_host_and_answers_health() {
     assert_eq!(object.len(), 2);
     assert_eq!(object["version"], service.record["version"]);
     // BMS-FR-JQZW: the running process advertises the two capabilities of V1.
-    assert_eq!(
-        object["capabilities"],
-        serde_json::json!(["remote_session", "websocket"])
-    );
+    assert_eq!(object["capabilities"], serde_json::json!(["remote_session", "websocket"]));
 }
 
 // BMS-FR-05: the variables configure the bind when no option is given.
@@ -555,11 +508,7 @@ fn an_invalid_port_exits_two_and_binds_no_socket() {
     assert_eq!(output.status.code(), Some(2));
 
     let diagnostic = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(
-        diagnostic.lines().count(),
-        1,
-        "one diagnostic: {diagnostic}"
-    );
+    assert_eq!(diagnostic.lines().count(), 1, "one diagnostic: {diagnostic}");
     assert!(diagnostic.contains("port"), "{diagnostic}");
     assert!(diagnostic.contains("not-a-port"), "{diagnostic}");
     assert!(diagnostic.contains("1..=65535"), "{diagnostic}");
@@ -577,11 +526,7 @@ fn an_invalid_host_exits_two() {
 
     assert_eq!(output.status.code(), Some(2));
     let diagnostic = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(
-        diagnostic.lines().count(),
-        1,
-        "one diagnostic: {diagnostic}"
-    );
+    assert_eq!(diagnostic.lines().count(), 1, "one diagnostic: {diagnostic}");
     assert!(diagnostic.contains("host"), "{diagnostic}");
     assert!(diagnostic.contains("999.999.999.999"), "{diagnostic}");
     assert!(output.stdout.is_empty(), "no record was written");
@@ -595,19 +540,12 @@ fn an_invalid_host_exits_two() {
 fn an_argument_that_is_not_unicode_exits_two() {
     use std::os::unix::ffi::OsStringExt;
 
-    let child = spawn(
-        &[std::ffi::OsString::from_vec(vec![0xff, 0xfe])],
-        &variables(&[]),
-    );
+    let child = spawn(&[std::ffi::OsString::from_vec(vec![0xff, 0xfe])], &variables(&[]));
     let output = child.wait_with_output().expect("the process leaves");
 
     assert_eq!(output.status.code(), Some(2));
     let diagnostic = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(
-        diagnostic.lines().count(),
-        1,
-        "one diagnostic: {diagnostic}"
-    );
+    assert_eq!(diagnostic.lines().count(), 1, "one diagnostic: {diagnostic}");
     assert!(diagnostic.contains("Unicode"), "{diagnostic}");
     assert!(!diagnostic.contains("panicked"), "{diagnostic}");
     assert!(output.stdout.is_empty(), "no record was written");
@@ -620,10 +558,7 @@ fn a_port_that_is_already_held_exits_one() {
     let (holder, port) = hold_port();
 
     let port_text = port.to_string();
-    let child = spawn(
-        &arguments(&["--host", "127.0.0.1", "--port", &port_text]),
-        &variables(&[]),
-    );
+    let child = spawn(&arguments(&["--host", "127.0.0.1", "--port", &port_text]), &variables(&[]));
     let output = child.wait_with_output().expect("the process leaves");
 
     assert_eq!(output.status.code(), Some(1));
@@ -688,18 +623,14 @@ fn no_other_path_and_no_other_method_is_served() {
 #[cfg(unix)]
 fn connection_with_a_request_in_flight(address: SocketAddr) -> TcpStream {
     let mut stream = TcpStream::connect(address).expect("the service accepts");
-    stream
-        .set_read_timeout(Some(Duration::from_secs(20)))
-        .expect("the timeout is accepted");
+    stream.set_read_timeout(Some(Duration::from_secs(20))).expect("the timeout is accepted");
 
     // Headers that have not ended: the service is reading a request that has
     // not arrived in full.
     stream
         .write_all(b"GET /v1/health HTTP/1.1\r\nHost: 127.0.0.1\r\n")
         .expect("the partial request is written");
-    stream
-        .flush()
-        .expect("the partial request reaches the service");
+    stream.flush().expect("the partial request reaches the service");
 
     // The proof of acceptance, on its own connection.
     assert_eq!(
@@ -790,9 +721,7 @@ fn sigterm_drains_the_request_in_flight_and_refuses_new_connections() {
         }
 
         // The request in flight is ended and still receives its answer.
-        stream
-            .write_all(b"Connection: close\r\n\r\n")
-            .expect("the rest of the request is written");
+        stream.write_all(b"Connection: close\r\n\r\n").expect("the rest of the request is written");
         stream.flush().expect("the rest reaches the service");
 
         let response = read_response(stream);
@@ -902,20 +831,13 @@ fn a_closed_standard_output_does_not_change_the_exit_status() {
 // each a startup failure with the configuration status of BMS-FR-07.
 #[test]
 fn a_missing_identity_setting_exits_two() {
-    for (name, value) in [
-        ("SYNTHESIS_SERVER_ADMIN_ID", ""),
-        ("SYNTHESIS_SERVER_TOKEN", ""),
-    ] {
+    for (name, value) in [("SYNTHESIS_SERVER_ADMIN_ID", ""), ("SYNTHESIS_SERVER_TOKEN", "")] {
         let child = spawn(&arguments(&[]), &variables(&[(name, value)]));
         let output = child.wait_with_output().expect("the process leaves");
 
         assert_eq!(output.status.code(), Some(2), "{name}");
         let diagnostic = String::from_utf8_lossy(&output.stderr);
-        assert_eq!(
-            diagnostic.lines().count(),
-            1,
-            "one diagnostic: {diagnostic}"
-        );
+        assert_eq!(diagnostic.lines().count(), 1, "one diagnostic: {diagnostic}");
         assert!(diagnostic.contains(name), "{diagnostic}");
         assert!(output.stdout.is_empty(), "no record was written");
     }
@@ -925,10 +847,9 @@ fn a_missing_identity_setting_exits_two() {
 // that is too short, are each refused before the listener is bound.
 #[test]
 fn a_malformed_identity_setting_exits_two() {
-    for (name, value) in [
-        ("SYNTHESIS_SERVER_ADMIN_ID", "administrator"),
-        ("SYNTHESIS_SERVER_TOKEN", "short"),
-    ] {
+    for (name, value) in
+        [("SYNTHESIS_SERVER_ADMIN_ID", "administrator"), ("SYNTHESIS_SERVER_TOKEN", "short")]
+    {
         let child = spawn(&arguments(&[]), &variables(&[(name, value)]));
         let output = child.wait_with_output().expect("the process leaves");
 
@@ -951,10 +872,7 @@ fn no_record_and_no_diagnostic_holds_the_token() {
         "the health answer holds the token"
     );
 
-    let child = spawn(
-        &arguments(&[]),
-        &variables(&[("SYNTHESIS_SERVER_TOKEN", "short")]),
-    );
+    let child = spawn(&arguments(&[]), &variables(&[("SYNTHESIS_SERVER_TOKEN", "short")]));
     let output = child.wait_with_output().expect("the process leaves");
     let diagnostic = String::from_utf8_lossy(&output.stderr);
     assert!(!diagnostic.contains("short"), "{diagnostic}");
@@ -975,10 +893,7 @@ fn the_running_process_records_the_route_and_the_status_of_a_request() {
     assert_eq!(record["method"], "GET");
     assert_eq!(record["route"], "/v1/projects");
     assert_eq!(record["status"], 200);
-    assert!(
-        !record.to_string().contains(DEFAULT_TOKEN),
-        "the record holds the token: {record}"
-    );
+    assert!(!record.to_string().contains(DEFAULT_TOKEN), "the record holds the token: {record}");
 }
 
 // SAS-FR-LFCA: an application route needs the token, and the health route needs

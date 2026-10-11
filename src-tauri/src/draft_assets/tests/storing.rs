@@ -79,8 +79,8 @@ fn das_ts01_an_image_supplied_under_no_name_carries_none() {
     assert_eq!(asset.filename, None);
     assert_eq!(read_image_impl(&root, &id, &asset.path).unwrap().filename, None);
     // A whitespace-only name is no name at all.
-    let blank =
-        store_image_impl(&root, &id, "image/png", Some("   "), &b64(&png("b")), &no_hold()).unwrap();
+    let blank = store_image_impl(&root, &id, "image/png", Some("   "), &b64(&png("b")), &no_hold())
+        .unwrap();
     assert_eq!(blank.filename, None);
 
     // DAS-FR-22: and a prompt image carries the recorded name where there is
@@ -110,13 +110,11 @@ fn das_ts01_every_command_of_the_contract_surface_answers_its_documented_shape()
     assert!(discarded.discarded && !discarded.retained);
 
     assert_eq!(
-        store_image_impl(&root, &id, "application/pdf", None, &b64(b"%PDF"), &no_hold()).unwrap_err(),
+        store_image_impl(&root, &id, "application/pdf", None, &b64(b"%PDF"), &no_hold())
+            .unwrap_err(),
         ERR_UNSUPPORTED_MEDIA_TYPE
     );
-    assert_eq!(
-        read_image_impl(&root, &id, "../../escape.png").unwrap_err(),
-        ERR_PATH_ESCAPE
-    );
+    assert_eq!(read_image_impl(&root, &id, "../../escape.png").unwrap_err(), ERR_PATH_ESCAPE);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,8 +129,15 @@ fn das_ts02_a_refused_store_writes_nothing_at_all() {
     let before = tree_bytes(dir.path());
 
     assert_eq!(
-        store_image_impl(&root, &id, "application/pdf", Some("a.pdf"), &b64(b"%PDF-1.7"), &no_hold())
-            .unwrap_err(),
+        store_image_impl(
+            &root,
+            &id,
+            "application/pdf",
+            Some("a.pdf"),
+            &b64(b"%PDF-1.7"),
+            &no_hold()
+        )
+        .unwrap_err(),
         ERR_UNSUPPORTED_MEDIA_TYPE,
     );
     assert_eq!(
@@ -148,12 +153,20 @@ fn das_ts02_a_refused_store_writes_nothing_at_all() {
         ERR_IMAGE_TOO_LARGE,
     );
     assert_eq!(
-        store_image_impl(&root, &id, "image/png", Some("a.png"), "not base64!!", &no_hold()).unwrap_err(),
+        store_image_impl(&root, &id, "image/png", Some("a.png"), "not base64!!", &no_hold())
+            .unwrap_err(),
         ERR_MALFORMED_IMAGE,
     );
     assert_eq!(
-        store_image_impl(&root, &id, "image/png", Some("a.png"), &b64(b"GIF89a not a png"), &no_hold())
-            .unwrap_err(),
+        store_image_impl(
+            &root,
+            &id,
+            "image/png",
+            Some("a.png"),
+            &b64(b"GIF89a not a png"),
+            &no_hold()
+        )
+        .unwrap_err(),
         ERR_MALFORMED_IMAGE,
     );
 
@@ -171,7 +184,8 @@ fn das_ts02_an_image_type_this_module_cannot_name_a_file_for_is_malformed() {
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "spec");
     assert_eq!(
-        store_image_impl(&root, &id, "image/x-unheard-of", None, &b64(&png("one")), &no_hold()).unwrap_err(),
+        store_image_impl(&root, &id, "image/x-unheard-of", None, &b64(&png("one")), &no_hold())
+            .unwrap_err(),
         ERR_MALFORMED_IMAGE,
     );
     assert!(asset_names(&root, &id).is_empty());
@@ -194,8 +208,9 @@ fn das_ts03_a_store_that_cannot_complete_leaves_no_entry_and_names_no_path() {
     std::fs::remove_dir_all(&assets).unwrap();
     std::fs::write(&assets, b"not a directory").unwrap();
 
-    let error = store_image_impl(&root, &id, "image/png", Some("a.png"), &b64(&png("one")), &no_hold())
-        .unwrap_err();
+    let error =
+        store_image_impl(&root, &id, "image/png", Some("a.png"), &b64(&png("one")), &no_hold())
+            .unwrap_err();
     assert!(is_typed(&error, ERR_ASSET_STORE_FAILED), "{error}");
     // DAS-FR-04 / DAS-FR-27: carrying a **safe diagnostic category** rather than
     // the underlying error's own text — which is what tells a reader of the log
@@ -235,8 +250,9 @@ fn das_ts03_a_folder_that_cannot_be_created_names_the_folder() {
     readonly.set_mode(0o500);
     std::fs::set_permissions(&draft_dir, readonly).unwrap();
 
-    let error = store_image_impl(&root, &id, "image/png", Some("a.png"), &b64(&png("one")), &no_hold())
-        .unwrap_err();
+    let error =
+        store_image_impl(&root, &id, "image/png", Some("a.png"), &b64(&png("one")), &no_hold())
+            .unwrap_err();
 
     std::fs::set_permissions(&draft_dir, original).unwrap();
 
@@ -308,4 +324,3 @@ fn das_ts03_a_temporary_name_an_interrupted_store_left_behind_is_retained() {
     assert_eq!((pass.scanned, pass.removed, pass.retained), (1, 0, 1));
     assert_eq!(asset_names(&root, &id), vec![".tmp-abc123".to_string()]);
 }
-

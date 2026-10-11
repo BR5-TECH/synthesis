@@ -127,10 +127,7 @@ impl Fixture {
             .state::<crate::fs::FsAccessState>()
             .install_for_worktree_and(&root, &store_root)
             .expect("two real directories");
-        let access = handle
-            .state::<crate::fs::FsAccessState>()
-            .get()
-            .expect("an instance");
+        let access = handle.state::<crate::fs::FsAccessState>().get().expect("an instance");
         let state = handle.state::<crate::project::ProjectState>();
         state.set_root_with_access(root.clone(), Some(access));
         state.set_anchor(root.to_string_lossy().into_owned());
@@ -138,11 +135,7 @@ impl Fixture {
         // suite writes into its own tempdir (RMS-FR-ZXHM).
         state.set_store(root.clone());
 
-        Fixture {
-            app: handle,
-            project,
-            store,
-        }
+        Fixture { app: handle, project, store }
     }
 
     fn root(&self) -> PathBuf {
@@ -189,11 +182,7 @@ impl Fixture {
             )
             .expect("a registry");
 
-        let access = self
-            .app
-            .state::<crate::fs::FsAccessState>()
-            .get()
-            .expect("an instance");
+        let access = self.app.state::<crate::fs::FsAccessState>().get().expect("an instance");
         let root = crate::fs::RootFs::new(self.root(), access);
         crate::project_settings::save_project_vendor_image_to(
             &root,
@@ -235,16 +224,9 @@ impl Fixture {
     /// (`DRS-draft-storage.md` DRS-FR-ZLBK), so a run whose source draft the
     /// fixture never made is counted nowhere.
     fn draft(&self, name: &str) -> String {
-        let access = self
-            .app
-            .state::<crate::fs::FsAccessState>()
-            .get()
-            .expect("an instance");
+        let access = self.app.state::<crate::fs::FsAccessState>().get().expect("an instance");
         let root = crate::fs::RootFs::new(self.root(), access);
-        crate::drafts::create_draft_at_root(&root, Some(name))
-            .expect("a draft")
-            .draft
-            .id
+        crate::drafts::create_draft_at_root(&root, Some(name)).expect("a draft").draft.id
     }
 
     /// A queued run over a captured prompt, on the production record shape.
@@ -305,9 +287,7 @@ impl Fixture {
     }
 
     fn project_key(&self) -> String {
-        self.app
-            .state::<crate::project::ProjectState>()
-            .slot_key()
+        self.app.state::<crate::project::ProjectState>().slot_key()
     }
 
     /// Drive one run to rest, with the agent scripted.
@@ -365,16 +345,11 @@ fn init_repo(root: &Path) -> git2::Repository {
     std::fs::write(root.join("README.md"), "seed\n").unwrap();
     std::fs::write(root.join(".gitignore"), "target/\n").unwrap();
     let mut index = repo.index().expect("index");
-    index
-        .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-        .expect("add");
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).expect("add");
     index.write().expect("write");
-    let tree = repo
-        .find_tree(index.write_tree().expect("tree"))
-        .expect("tree");
+    let tree = repo.find_tree(index.write_tree().expect("tree")).expect("tree");
     let signature = repo.signature().expect("signature");
-    repo.commit(Some("HEAD"), &signature, &signature, "seed", &tree, &[])
-        .expect("commit");
+    repo.commit(Some("HEAD"), &signature, &signature, "seed", &tree, &[]).expect("commit");
     drop(index);
     drop(tree);
     repo
@@ -567,30 +542,19 @@ struct Seen {
 
 impl Seen {
     fn instruction_field(&self, key: &str) -> Option<String> {
-        self.input
-            .get(key)
-            .and_then(|v| v.as_str())
-            .map(str::to_string)
+        self.input.get(key).and_then(|v| v.as_str()).map(str::to_string)
     }
 
     /// How many entries a list field holds, whatever their shape.
     fn list_len(&self, key: &str) -> usize {
-        self.input
-            .get(key)
-            .and_then(|v| v.as_array())
-            .map(|list| list.len())
-            .unwrap_or(0)
+        self.input.get(key).and_then(|v| v.as_array()).map(|list| list.len()).unwrap_or(0)
     }
 
     fn path_list(&self, key: &str) -> Vec<String> {
         self.input
             .get(key)
             .and_then(|v| v.as_array())
-            .map(|list| {
-                list.iter()
-                    .filter_map(|v| v.as_str().map(str::to_string))
-                    .collect()
-            })
+            .map(|list| list.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
             .unwrap_or_default()
     }
 }
@@ -622,10 +586,7 @@ impl ScriptedDispatch {
 
     /// The turns of one part, in the order the loop dispatched them.
     fn of_part(&self, part: &str) -> Vec<Seen> {
-        self.seen()
-            .into_iter()
-            .filter(|seen| seen.part == part)
-            .collect()
+        self.seen().into_iter().filter(|seen| seen.part == part).collect()
     }
 }
 
@@ -664,20 +625,11 @@ fn read_git_state(directory: &Path) -> (Option<String>, Vec<String>, Option<Stri
     let Ok(repo) = git2::Repository::open(directory) else {
         return (None, Vec::new(), None);
     };
-    let head = repo
-        .head()
-        .ok()
-        .and_then(|h| h.peel_to_commit().ok())
-        .map(|c| c.id().to_string());
-    let head_tree = repo
-        .head()
-        .ok()
-        .and_then(|h| h.peel_to_commit().ok())
-        .and_then(|c| c.tree().ok());
+    let head = repo.head().ok().and_then(|h| h.peel_to_commit().ok()).map(|c| c.id().to_string());
+    let head_tree =
+        repo.head().ok().and_then(|h| h.peel_to_commit().ok()).and_then(|c| c.tree().ok());
     let mut opts = git2::DiffOptions::new();
-    opts.include_untracked(true)
-        .recurse_untracked_dirs(true)
-        .include_ignored(false);
+    opts.include_untracked(true).recurse_untracked_dirs(true).include_ignored(false);
     let mut diff_paths: Vec<String> = Vec::new();
     if let Ok(diff) = repo.diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts)) {
         for delta in diff.deltas() {
@@ -694,9 +646,7 @@ fn read_git_state(directory: &Path) -> (Option<String>, Vec<String>, Option<Stri
     // The checkout is thrown away when the turn ends, so staging it here costs
     // nothing and is the cheapest way to name the tree it holds.
     let worktree_tree = repo.index().ok().and_then(|mut index| {
-        index
-            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-            .ok()?;
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).ok()?;
         index.write_tree().ok().map(|oid| oid.to_string())
     });
     (head, diff_paths, worktree_tree)
@@ -715,20 +665,9 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
         let request = std::sync::Arc::new(request);
         let (head, diff_paths, worktree_tree) = read_git_state(&directory);
         self.seen.lock().unwrap().push(Seen {
-            part: input
-                .get("part")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string(),
-            purpose: input
-                .get("purpose")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string(),
-            pass: input
-                .get("pass")
-                .and_then(|v| v.as_u64())
-                .unwrap_or_default() as u32,
+            part: input.get("part").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            purpose: input.get("purpose").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            pass: input.get("pass").and_then(|v| v.as_u64()).unwrap_or_default() as u32,
             turn_kind: request.turn_kind,
             directory: directory.clone(),
             had_activity: request.activity.is_some(),
@@ -945,10 +884,8 @@ fn execution(
         stderr: CapturedStream::default(),
         duration_ms: 0,
         resume_unavailable: false,
-        session: session.then(|| SessionRef {
-            session_id: Some("s1".to_string()),
-            continuation_token: None,
-        }),
+        session: session
+            .then(|| SessionRef { session_id: Some("s1".to_string()), continuation_token: None }),
         container_removed: true,
     }
 }

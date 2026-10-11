@@ -82,11 +82,7 @@ pub(super) fn resolve_from(dest: &str, base: &[&str]) -> Destination {
     // A destination may carry a fragment or a query; neither is part of the file
     // it names. Split before the walk so `../assets/a.png#fig` resolves to the
     // asset rather than to a name no file carries.
-    let path = normalized
-        .split(['#', '?'])
-        .next()
-        .unwrap_or("")
-        .to_string();
+    let path = normalized.split(['#', '?']).next().unwrap_or("").to_string();
     let path = percent_decode(&path);
     if path.is_empty() {
         return Destination::Outside;
@@ -214,12 +210,7 @@ pub fn read_references(markdown: &str) -> PromptReferences {
             }
             Event::End(TagEnd::Image) => {
                 if let Some((reference, start, end, alt)) = open_image.take() {
-                    images.push(ImageUse {
-                        reference,
-                        alt,
-                        start,
-                        end,
-                    });
+                    images.push(ImageUse { reference, alt, start, end });
                 }
             }
             // DAS-FR-17: a valid link destination protects a draft-owned asset
@@ -260,12 +251,7 @@ pub fn read_references(markdown: &str) -> PromptReferences {
     // accounted for is excluded, as is anything inside a code span, a fenced
     // block, or raw HTML, where a renderer would draw no image either.
     for (start, end, label, alt) in unresolved_reference_images(markdown, &covered, &literal) {
-        images.push(ImageUse {
-            reference: label,
-            alt,
-            start,
-            end,
-        });
+        images.push(ImageUse { reference: label, alt, start, end });
     }
     images.sort_by_key(|i| (i.start, i.end));
 
@@ -299,9 +285,8 @@ pub(super) fn unresolved_reference_images(
     literal: &[(usize, usize)],
 ) -> Vec<(usize, usize, String, String)> {
     let bytes = markdown.as_bytes();
-    let inside = |pos: usize, spans: &[(usize, usize)]| {
-        spans.iter().any(|(s, e)| pos >= *s && pos < *e)
-    };
+    let inside =
+        |pos: usize, spans: &[(usize, usize)]| spans.iter().any(|(s, e)| pos >= *s && pos < *e);
     let mut out = Vec::new();
     let mut i = 0;
     while i + 1 < bytes.len() {

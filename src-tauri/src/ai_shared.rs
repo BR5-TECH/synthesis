@@ -60,9 +60,7 @@ pub struct ModelReasoning {
 impl ModelReasoning {
     /// Whether `effort` is one this model actually offers (AAP-FR-26).
     pub fn offers_effort(&self, effort: &str) -> bool {
-        self.supported_efforts
-            .as_ref()
-            .is_some_and(|l| l.iter().any(|e| e == effort))
+        self.supported_efforts.as_ref().is_some_and(|l| l.iter().any(|e| e == effort))
     }
 }
 
@@ -206,10 +204,7 @@ pub struct EffortOption {
 
 impl EffortOption {
     pub fn new(id: &str, label: &str) -> Self {
-        Self {
-            id: id.to_string(),
-            label: label.to_string(),
-        }
+        Self { id: id.to_string(), label: label.to_string() }
     }
 }
 
@@ -347,21 +342,12 @@ mod key_presence_tests {
         fn delete(&self, _id: &str) -> Result<(), SecretUnavailable> {
             Ok(())
         }
-        fn presence(
-            &self,
-            ids: &[&str],
-        ) -> Result<HashMap<String, bool>, SecretUnavailable> {
-            self.queries
-                .lock()
-                .unwrap()
-                .push(ids.iter().map(|s| s.to_string()).collect());
+        fn presence(&self, ids: &[&str]) -> Result<HashMap<String, bool>, SecretUnavailable> {
+            self.queries.lock().unwrap().push(ids.iter().map(|s| s.to_string()).collect());
             if self.broken {
                 return Err(SecretUnavailable("locked".into()));
             }
-            Ok(ids
-                .iter()
-                .map(|id| ((*id).to_string(), self.entries.contains_key(*id)))
-                .collect())
+            Ok(ids.iter().map(|id| ((*id).to_string(), self.entries.contains_key(*id))).collect())
         }
     }
 
@@ -405,8 +391,7 @@ mod key_presence_tests {
 
     #[test]
     fn from_pairs_asserts_exactly_what_it_is_given() {
-        let presence =
-            KeyPresence::from_pairs([("a".to_string(), true), ("b".to_string(), false)]);
+        let presence = KeyPresence::from_pairs([("a".to_string(), true), ("b".to_string(), false)]);
         assert!(presence.has("a"));
         assert!(!presence.has("b"));
         assert!(!presence.has("c"));
@@ -561,9 +546,7 @@ pub fn loggable_base_url(raw: &str) -> String {
         return INVALID.to_string();
     }
     let after_authority = &rest[authority_end..];
-    let path_end = after_authority
-        .find(['?', '#'])
-        .unwrap_or(after_authority.len());
+    let path_end = after_authority.find(['?', '#']).unwrap_or(after_authority.len());
     let path = after_authority[..path_end].trim_end_matches('/');
     format!("{scheme}://{host}{path}")
 }
@@ -692,9 +675,7 @@ pub fn parse_models_payload(body: &str) -> Option<Vec<ModelOption>> {
             .or_else(|| entry.get("architecture").and_then(|a| a.get("input_modalities")))
             .and_then(|v| v.as_array())
             .map(|list| {
-                list.iter()
-                    .filter_map(|v| v.as_str().map(str::to_string))
-                    .collect::<Vec<_>>()
+                list.iter().filter_map(|v| v.as_str().map(str::to_string)).collect::<Vec<_>>()
             });
         models.push(
             ModelOption::new(id, label)
@@ -751,9 +732,9 @@ impl EndpointProber for HttpEndpointProber {
         if let Some(key) = request.api_key.filter(|k| !k.is_empty()) {
             call = match request.auth {
                 AuthStyle::Bearer => call.header("Authorization", &format!("Bearer {key}")),
-                AuthStyle::AnthropicApiKey => call
-                    .header("x-api-key", key)
-                    .header("anthropic-version", "2023-06-01"),
+                AuthStyle::AnthropicApiKey => {
+                    call.header("x-api-key", key).header("anthropic-version", "2023-06-01")
+                }
             };
         }
 
@@ -785,8 +766,6 @@ impl EndpointProber for HttpEndpointProber {
 mod tests {
     use super::*;
 
-
-
     // -- mask_hint -------------------------------------------------------
 
     #[test]
@@ -812,10 +791,7 @@ mod tests {
         // A scheme with no authority is not something a request can be made to.
         assert_eq!(normalize_base_url("https://"), Err(BaseUrlError::Invalid));
         assert_eq!(normalize_base_url("https:///v1"), Err(BaseUrlError::Invalid));
-        assert_eq!(
-            normalize_base_url("https://exa mple.com"),
-            Err(BaseUrlError::Invalid)
-        );
+        assert_eq!(normalize_base_url("https://exa mple.com"), Err(BaseUrlError::Invalid));
     }
 
     #[test]
@@ -829,15 +805,9 @@ mod tests {
             normalize_base_url("https://sk-abc123@api.openai.com/v1"),
             Err(BaseUrlError::Invalid)
         );
-        assert_eq!(
-            normalize_base_url("https://user:pass@host/v1"),
-            Err(BaseUrlError::Invalid)
-        );
+        assert_eq!(normalize_base_url("https://user:pass@host/v1"), Err(BaseUrlError::Invalid));
         // Only the *authority* is policed: an `@` later in the path is ordinary.
-        assert_eq!(
-            normalize_base_url("https://host/v1/@scope").unwrap(),
-            "https://host/v1/@scope"
-        );
+        assert_eq!(normalize_base_url("https://host/v1/@scope").unwrap(), "https://host/v1/@scope");
     }
 
     #[test]
@@ -856,10 +826,7 @@ mod tests {
             normalize_base_url("http://localhost:11434/v1").unwrap(),
             "http://localhost:11434/v1"
         );
-        assert_eq!(
-            normalize_base_url("HTTPS://Example.com/v1").unwrap(),
-            "HTTPS://Example.com/v1"
-        );
+        assert_eq!(normalize_base_url("HTTPS://Example.com/v1").unwrap(), "HTTPS://Example.com/v1");
     }
 
     // -- loggable_base_url -----------------------------------------------
@@ -899,16 +866,10 @@ mod tests {
         );
         // An ordinary URL survives intact, which is the whole point of logging
         // it: an endpoint a reader cannot recognise explains nothing.
-        assert_eq!(
-            loggable_base_url("  http://localhost:11434/v1  "),
-            "http://localhost:11434/v1",
-        );
+        assert_eq!(loggable_base_url("  http://localhost:11434/v1  "), "http://localhost:11434/v1",);
         // An IPv6 literal is a host like any other — the brackets and the port
         // must survive the authority split.
-        assert_eq!(
-            loggable_base_url("http://[::1]:8080/v1"),
-            "http://[::1]:8080/v1",
-        );
+        assert_eq!(loggable_base_url("http://[::1]:8080/v1"), "http://[::1]:8080/v1",);
         // An `@` in the *path* is ordinary (a scoped package, say). The
         // authority ends at the first `/`, so it is never mistaken for userinfo
         // — the same distinction `normalize_base_url` draws.
@@ -935,10 +896,7 @@ mod tests {
         assert_eq!(probe_failure_for_status(418), ProbeError::NotExpectedKind);
         // The right endpoint, unwell — telling the author their key is bad
         // would send them to fix the wrong thing.
-        assert!(matches!(
-            probe_failure_for_status(503),
-            ProbeError::Unreachable(_)
-        ));
+        assert!(matches!(probe_failure_for_status(503), ProbeError::Unreachable(_)));
     }
 
     // -- parse_models_payload --------------------------------------------
@@ -986,9 +944,6 @@ mod tests {
             r#"{"data":[{"id":"a"},{"no-id":true},{"id":""},{"id":"a"},{"id":"b"}]}"#,
         )
         .unwrap();
-        assert_eq!(
-            models,
-            vec![ModelOption::new("a", "a"), ModelOption::new("b", "b")]
-        );
+        assert_eq!(models, vec![ModelOption::new("a", "a"), ModelOption::new("b", "b")]);
     }
 }

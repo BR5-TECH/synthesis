@@ -75,8 +75,5 @@ fn active_drafts_break_a_tie_on_the_draft_id_ascending() {
         draft("b", "b", DraftStatus::Active, Some("2026-01-01T00:00:00.000Z")),
         draft("a", "a", DraftStatus::Active, Some("2026-01-01T00:00:00.000Z")),
     ]);
-    assert_eq!(
-        items.iter().map(|i| i.draft_id.as_str()).collect::<Vec<_>>(),
-        vec!["a", "b"]
-    );
+    assert_eq!(items.iter().map(|i| i.draft_id.as_str()).collect::<Vec<_>>(), vec!["a", "b"]);
 }

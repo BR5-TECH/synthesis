@@ -8,13 +8,13 @@ use super::pull_requests::{
     repo_with_origin, token_missing, token_selection_required, FakeGithub, PLATFORM, SECRET,
 };
 use super::*;
-use crate::git::pull_requests::client::{GithubWriteFailure, invalid_reason};
+use crate::git::pull_requests::client::{invalid_reason, GithubWriteFailure};
 use crate::git::pull_requests::create::{
     checkout_holding, create_pull_request_reported as create_reported, head_state_in,
 };
 use crate::git::pull_requests::{
-    ERR_GITHUB_TOKEN_REJECTED,
-    ERR_PULL_REQUEST_EXISTS, ERR_PULL_REQUEST_REJECTED, ERR_PULL_REQUEST_TITLE_REQUIRED,
+    ERR_GITHUB_TOKEN_REJECTED, ERR_PULL_REQUEST_EXISTS, ERR_PULL_REQUEST_REJECTED,
+    ERR_PULL_REQUEST_TITLE_REQUIRED,
 };
 use serde_json::{json, Value};
 
@@ -35,8 +35,18 @@ fn create(
     draft: bool,
 ) -> Result<crate::git::CreatedPullRequest, String> {
     create_reported(
-        &NullSink, buffer, &f.root(), &tokens.0, &tokens.1, "/dev/acme", github, title,
-        "the description", "main", "feature", draft,
+        &NullSink,
+        buffer,
+        &f.root(),
+        &tokens.0,
+        &tokens.1,
+        "/dev/acme",
+        github,
+        title,
+        "the description",
+        "main",
+        "feature",
+        draft,
     )
 }
 
@@ -66,10 +76,7 @@ fn creating_a_pull_request_posts_the_request_and_keeps_the_number_and_the_page_o
         )]
     );
     let wire = serde_json::to_value(&created).unwrap();
-    assert_eq!(
-        wire,
-        json!({ "number": 42, "url": "https://github.com/acme/platform/pull/42" })
-    );
+    assert_eq!(wire, json!({ "number": 42, "url": "https://github.com/acme/platform/pull/42" }));
 }
 
 // GTC-FR-MMFM
@@ -83,8 +90,18 @@ fn an_empty_title_head_or_base_makes_no_request_and_opens_no_repository() {
         ERR_PULL_REQUEST_TITLE_REQUIRED
     );
     let error = create_reported(
-        &NullSink, own_buffer(), &f.root(), &tokens.0, &tokens.1, "/dev/acme", &github, "t",
-        "", "main", " ", false,
+        &NullSink,
+        own_buffer(),
+        &f.root(),
+        &tokens.0,
+        &tokens.1,
+        "/dev/acme",
+        &github,
+        "t",
+        "",
+        "main",
+        " ",
+        false,
     )
     .unwrap_err();
     assert_eq!(error, ERR_UNKNOWN_BRANCH);
@@ -112,9 +129,8 @@ fn a_project_without_a_token_makes_no_request_and_returns_the_typed_cause() {
 fn a_remote_that_is_not_on_github_makes_no_request() {
     let f = repo_with_origin("https://example.com/acme/platform.git");
     let github = FakeGithub::new();
-    let error =
-        create(&f, &github, &super::pull_requests::token_ready(), own_buffer(), "t", false)
-            .unwrap_err();
+    let error = create(&f, &github, &super::pull_requests::token_ready(), own_buffer(), "t", false)
+        .unwrap_err();
     assert_eq!(error, crate::git::ERR_NOT_A_GITHUB_REMOTE);
     assert!(github.posts().is_empty());
 }
@@ -126,7 +142,9 @@ fn the_refusals_of_github_map_to_typed_errors() {
     let tokens = super::pull_requests::token_ready();
     let cases = [
         (
-            GithubWriteFailure::Invalid("Validation Failed; A pull request already exists for acme:feature.".into()),
+            GithubWriteFailure::Invalid(
+                "Validation Failed; A pull request already exists for acme:feature.".into(),
+            ),
             ERR_PULL_REQUEST_EXISTS.to_string(),
         ),
         (
@@ -177,7 +195,8 @@ fn the_log_holds_neither_the_token_the_title_nor_the_description() {
 // GTC-FR-YQAE
 #[test]
 fn the_reason_of_a_422_joins_the_message_and_each_error() {
-    let body = r#"{"message":"Validation Failed","errors":[{"message":"No commits between a and b"}]}"#;
+    let body =
+        r#"{"message":"Validation Failed","errors":[{"message":"No commits between a and b"}]}"#;
     assert_eq!(invalid_reason(body), "Validation Failed; No commits between a and b");
     assert_eq!(invalid_reason("not json"), "");
     // A branch GitHub does not hold is named by field and code only.
@@ -280,10 +299,7 @@ fn a_base_may_be_a_remote_tracking_branch_and_an_unknown_name_is_refused() {
         head_state_in(&f.repo(), "feature", Some("nope"), vec![]).unwrap_err(),
         ERR_UNKNOWN_BRANCH
     );
-    assert_eq!(
-        head_state_in(&f.repo(), "ghost", None, vec![]).unwrap_err(),
-        ERR_UNKNOWN_BRANCH
-    );
+    assert_eq!(head_state_in(&f.repo(), "ghost", None, vec![]).unwrap_err(), ERR_UNKNOWN_BRANCH);
 }
 
 // GTC-FR-YWCP
@@ -292,8 +308,7 @@ fn the_uncommitted_paths_given_are_reported_as_they_are() {
     let f = fixture_with_feature();
     let default = f.current_branch();
     f.branch_and_checkout("feature");
-    let state =
-        head_state_in(&f.repo(), "feature", Some(&default), vec!["a.md".into()]).unwrap();
+    let state = head_state_in(&f.repo(), "feature", Some(&default), vec!["a.md".into()]).unwrap();
     assert_eq!(state.uncommitted_paths, vec!["a.md".to_string()]);
 }
 
@@ -347,10 +362,7 @@ fn only_the_primary_remote_counts_as_the_remote_of_the_branch() {
 
     let state = head_state_in(&f.repo(), "feature", Some(&default), vec![]).unwrap();
 
-    assert!(
-        !state.remote_branch_exists,
-        "a branch on another remote is not on the primary remote"
-    );
+    assert!(!state.remote_branch_exists, "a branch on another remote is not on the primary remote");
 }
 
 // GTC-FR-NEIW
@@ -404,8 +416,18 @@ fn an_empty_base_makes_no_request_and_a_blank_title_wins_over_a_missing_token() 
     let github = FakeGithub::new();
     let ready = super::pull_requests::token_ready();
     let error = create_reported(
-        &NullSink, own_buffer(), &f.root(), &ready.0, &ready.1, "/dev/acme", &github, "t", "",
-        "", "feature", false,
+        &NullSink,
+        own_buffer(),
+        &f.root(),
+        &ready.0,
+        &ready.1,
+        "/dev/acme",
+        &github,
+        "t",
+        "",
+        "",
+        "feature",
+        false,
     )
     .unwrap_err();
     assert_eq!(error, ERR_UNKNOWN_BRANCH);
@@ -426,9 +448,18 @@ fn the_title_and_description_are_sent_as_given_and_draft_false_is_sent_as_false(
     let github = FakeGithub::new();
     github.answer_post(Ok(created_json(3)));
     create_reported(
-        &NullSink, own_buffer(), &f.root(), &super::pull_requests::token_ready().0,
-        &super::pull_requests::token_ready().1, "/dev/acme", &github, "  spaced title  ",
-        "  body\n", "main", "feature", false,
+        &NullSink,
+        own_buffer(),
+        &f.root(),
+        &super::pull_requests::token_ready().0,
+        &super::pull_requests::token_ready().1,
+        "/dev/acme",
+        &github,
+        "  spaced title  ",
+        "  body\n",
+        "main",
+        "feature",
+        false,
     )
     .unwrap();
     let body = &github.posts()[0].2;
@@ -467,7 +498,9 @@ fn the_log_names_the_branches_the_draft_flag_and_the_number() {
 fn a_failed_creation_logs_the_error_code_and_still_no_secret() {
     let f = repo_with_origin(PLATFORM);
     let github = FakeGithub::new();
-    github.answer_post(Err(GithubWriteFailure::Invalid("No commits between main and feature".into())));
+    github.answer_post(Err(GithubWriteFailure::Invalid(
+        "No commits between main and feature".into(),
+    )));
     let buffer = own_buffer();
     create(&f, &github, &super::pull_requests::token_ready(), buffer, "secret title", false)
         .unwrap_err();
@@ -483,9 +516,8 @@ fn a_reason_that_does_not_name_an_existing_pull_request_is_a_rejection() {
     let f = repo_with_origin(PLATFORM);
     let github = FakeGithub::new();
     github.answer_post(Err(GithubWriteFailure::Invalid("Validation Failed".into())));
-    let error =
-        create(&f, &github, &super::pull_requests::token_ready(), own_buffer(), "t", false)
-            .unwrap_err();
+    let error = create(&f, &github, &super::pull_requests::token_ready(), own_buffer(), "t", false)
+        .unwrap_err();
     assert_eq!(error, format!("{ERR_PULL_REQUEST_REJECTED}: Validation Failed"));
 }
 

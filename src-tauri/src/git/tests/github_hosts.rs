@@ -4,9 +4,7 @@
 //! GitHub is a scripted fake that records every request, so "no request is
 //! made" is an assertion about that record.
 
-use super::pull_requests::{
-    pr_json, repo_with_origin, token_on, token_ready, FakeGithub, SECRET,
-};
+use super::pull_requests::{pr_json, repo_with_origin, token_on, token_ready, FakeGithub, SECRET};
 use super::*;
 use crate::git::pull_requests::client::GithubWriteFailure;
 use crate::git::pull_requests::create::create_pull_request_reported as create_reported;
@@ -22,15 +20,19 @@ fn list_open(
     tokens: &(GlobalSettingsStore, GithubTokens),
 ) -> Result<Vec<PullRequestSummary>, String> {
     list_pull_requests_reported(
-        &NullSink, own_buffer(), &f.root(), &tokens.0, &tokens.1, "/dev/acme", github, "open",
+        &NullSink,
+        own_buffer(),
+        &f.root(),
+        &tokens.0,
+        &tokens.1,
+        "/dev/acme",
+        github,
+        "open",
     )
 }
 
 fn open_answer(github: &FakeGithub) {
-    github.pages(
-        OPEN_PATH,
-        vec![vec![pr_json(3, "open", None, "2024-03-01T00:00:00Z")]],
-    );
+    github.pages(OPEN_PATH, vec![vec![pr_json(3, "open", None, "2024-03-01T00:00:00Z")]]);
 }
 
 // GTC-FR-GXUB, GTC-FR-09
@@ -105,8 +107,18 @@ fn create(
     tokens: &(GlobalSettingsStore, GithubTokens),
 ) -> Result<crate::git::CreatedPullRequest, String> {
     create_reported(
-        &NullSink, own_buffer(), &f.root(), &tokens.0, &tokens.1, "/dev/acme", github, "title",
-        "body", "main", "feature", false,
+        &NullSink,
+        own_buffer(),
+        &f.root(),
+        &tokens.0,
+        &tokens.1,
+        "/dev/acme",
+        github,
+        "title",
+        "body",
+        "main",
+        "feature",
+        false,
     )
 }
 

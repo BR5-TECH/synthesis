@@ -270,14 +270,8 @@ mod tests {
 
     #[test]
     fn vertical_panel_side_serializes_lowercase() {
-        assert_eq!(
-            serde_json::to_string(&VerticalPanelSide::Left).unwrap(),
-            "\"left\""
-        );
-        assert_eq!(
-            serde_json::to_string(&VerticalPanelSide::Right).unwrap(),
-            "\"right\""
-        );
+        assert_eq!(serde_json::to_string(&VerticalPanelSide::Left).unwrap(), "\"left\"");
+        assert_eq!(serde_json::to_string(&VerticalPanelSide::Right).unwrap(), "\"right\"");
     }
 
     #[test]
@@ -287,18 +281,9 @@ mod tests {
 
     #[test]
     fn bottom_surface_serializes_lowercase() {
-        assert_eq!(
-            serde_json::to_string(&BottomSurface::Runs).unwrap(),
-            "\"runs\""
-        );
-        assert_eq!(
-            serde_json::to_string(&BottomSurface::Git).unwrap(),
-            "\"git\""
-        );
-        assert_eq!(
-            serde_json::to_string(&BottomSurface::History).unwrap(),
-            "\"history\""
-        );
+        assert_eq!(serde_json::to_string(&BottomSurface::Runs).unwrap(), "\"runs\"");
+        assert_eq!(serde_json::to_string(&BottomSurface::Git).unwrap(), "\"git\"");
+        assert_eq!(serde_json::to_string(&BottomSurface::History).unwrap(), "\"history\"");
     }
 
     #[test]
@@ -351,9 +336,7 @@ mod tests {
     #[test]
     fn store_save_overwrites_previous() {
         let store = GlobalSettingsStore::in_memory();
-        store
-            .save_project_layout("/p", LayoutPreferences::default())
-            .unwrap();
+        store.save_project_layout("/p", LayoutPreferences::default()).unwrap();
         let updated = sample_prefs();
         store.save_project_layout("/p", updated.clone()).unwrap();
         assert_eq!(store.load_project_layout("/p").unwrap(), Some(updated));

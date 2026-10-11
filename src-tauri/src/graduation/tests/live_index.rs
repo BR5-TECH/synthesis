@@ -22,7 +22,12 @@ fn saved(fx: &Fixture, run_id: &str) -> GraduationRun {
 }
 
 /// Whether a stream's index names a phase and a pass.
-fn names(logs: &GraduationLogIndexes, stream: GraduationLogStream, phase: &str, pass: Option<u32>) -> bool {
+fn names(
+    logs: &GraduationLogIndexes,
+    stream: GraduationLogStream,
+    phase: &str,
+    pass: Option<u32>,
+) -> bool {
     logs.stream(stream)
         .segments
         .iter()
@@ -104,7 +109,8 @@ fn the_run_record_and_the_listing_name_the_output_of_a_turn_that_is_still_runnin
         "the saved copy is behind the files inside a turn"
     );
 
-    let got = crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
+    let got =
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
     assert_eq!(got.logs.activity.record_count, 2);
     assert_eq!(got.logs.activity.latest_sequence, 2);
     assert!(names(&got.logs, GraduationLogStream::Activity, "working", Some(run.pass())));
@@ -112,11 +118,7 @@ fn the_run_record_and_the_listing_name_the_output_of_a_turn_that_is_still_runnin
     // The queue itself rather than the command: the command first sweeps a
     // working run no loop drives, and the sweep saves it.
     let listed = crate::graduation::project_queue(&fx.app).expect("the queue");
-    let entry = listed
-        .runs
-        .iter()
-        .find(|entry| entry.id == run.id)
-        .expect("the run is listed");
+    let entry = listed.runs.iter().find(|entry| entry.id == run.id).expect("the run is listed");
     assert_eq!(entry.logs, got.logs, "the listing and the record report one index");
     assert_eq!(
         saved(&fx, &run.id).logs.activity.record_count,
@@ -196,7 +198,8 @@ fn a_read_of_a_run_nobody_writes_answers_with_the_saved_copy_and_holds_nothing()
     }
     std::fs::write(&path, held).expect("written");
 
-    let got = crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
+    let got =
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
     assert_eq!(got.logs.structured.record_count, 1, "the saved copy, as saved");
     let listed = crate::graduation::list_graduation_queue(fx.app.clone()).expect("the queue");
     assert_eq!(
@@ -251,13 +254,9 @@ fn a_swept_run_names_what_its_stopped_turn_wrote() {
     assert_eq!(source.record_count, 3);
     assert_eq!(source.latest_sequence, 3);
     assert_eq!(source.durable_through_sequence, 3);
-    let path = logs::paths_for(&fx.app, &run.id)
-        .expect("the paths")
-        .stream(GraduationLogStream::Activity);
-    assert_eq!(
-        source.byte_length,
-        std::fs::metadata(&path).expect("the stream").len()
-    );
+    let path =
+        logs::paths_for(&fx.app, &run.id).expect("the paths").stream(GraduationLogStream::Activity);
+    assert_eq!(source.byte_length, std::fs::metadata(&path).expect("the stream").len());
     assert!(names(&swept.logs, GraduationLogStream::Activity, "working", Some(1)));
     assert_eq!(
         swept.logs.structured.record_count as usize,
@@ -329,8 +328,9 @@ fn a_driven_work_turn_is_readable_before_it_ends() {
     let run = fx.enqueue(&stream, "Write the panel.");
     let app = fx.app.clone();
     let run_id = run.id.clone();
-    let seen: Arc<Mutex<Option<(GraduationLogIndexes, GraduationLogIndexes, GraduationLogIndexes)>>> =
-        Arc::new(Mutex::new(None));
+    let seen: Arc<
+        Mutex<Option<(GraduationLogIndexes, GraduationLogIndexes, GraduationLogIndexes)>>,
+    > = Arc::new(Mutex::new(None));
     let into = seen.clone();
 
     let dispatch = ScriptedDispatch::new(vec![
@@ -396,7 +396,8 @@ fn a_read_of_a_run_inside_a_turn_keeps_the_damaged_read_the_saved_copy_records()
     crate::graduation::save_run(&fx.app, &mut run).expect("saved");
     work_output(&fx, &run, &["first"]);
 
-    let got = crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
+    let got =
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("the run");
     assert_eq!(got.logs.activity.record_count, 1, "the live stream index");
     assert_eq!(got.logs.last_read_failure, Some(damaged), "the saved damaged read");
 }

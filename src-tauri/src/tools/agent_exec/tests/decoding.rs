@@ -12,14 +12,8 @@ fn decode_envelope_distinguishes_absent_malformed_and_repeated_documents() {
     assert!(decode_envelope(&format!("{valid}\n\n  ")).is_ok());
 
     assert_eq!(decode_envelope("").unwrap_err(), EnvelopeInvalid::NotFound);
-    assert_eq!(
-        decode_envelope("hello").unwrap_err(),
-        EnvelopeInvalid::Malformed
-    );
-    assert_eq!(
-        decode_envelope(&valid[..valid.len() - 3]).unwrap_err(),
-        EnvelopeInvalid::Malformed
-    );
+    assert_eq!(decode_envelope("hello").unwrap_err(), EnvelopeInvalid::Malformed);
+    assert_eq!(decode_envelope(&valid[..valid.len() - 3]).unwrap_err(), EnvelopeInvalid::Malformed);
     assert_eq!(
         decode_envelope(&format!("{valid} {valid}")).unwrap_err(),
         EnvelopeInvalid::MultipleDocuments
@@ -87,21 +81,12 @@ fn the_codex_reader_takes_the_last_completed_agent_message() {
         json!({"type":"item.completed","item":{"id":"i1","type":"agent_message","text":valid}}),
         json!({"type": "turn.failed", "error": {"message": "model unavailable"}})
     );
-    assert_eq!(
-        descriptor.extract(&failed, None).unwrap_err(),
-        EnvelopeInvalid::VendorRunFailed
-    );
+    assert_eq!(descriptor.extract(&failed, None).unwrap_err(), EnvelopeInvalid::VendorRunFailed);
 
     // CDX-FR-13: events but never an agent message, and nothing at all.
     let no_message = format!("{}\n", json!({"type":"thread.started","thread_id":"thr-5"}));
-    assert_eq!(
-        descriptor.extract(&no_message, None).unwrap_err(),
-        EnvelopeInvalid::NotFound
-    );
-    assert_eq!(
-        descriptor.extract("", None).unwrap_err(),
-        EnvelopeInvalid::NotFound
-    );
+    assert_eq!(descriptor.extract(&no_message, None).unwrap_err(), EnvelopeInvalid::NotFound);
+    assert_eq!(descriptor.extract("", None).unwrap_err(), EnvelopeInvalid::NotFound);
     // An agent message whose text is prose rather than an envelope. The CLI does
     // not validate the shape (CDX-FR-14), so this is the expected failure mode.
     let prose = format!(
@@ -109,10 +94,7 @@ fn the_codex_reader_takes_the_last_completed_agent_message() {
         json!({"type":"item.completed","item":{"id":"i1","type":"agent_message",
                "text":"I finished the task."}})
     );
-    assert_eq!(
-        descriptor.extract(&prose, None).unwrap_err(),
-        EnvelopeInvalid::Malformed
-    );
+    assert_eq!(descriptor.extract(&prose, None).unwrap_err(), EnvelopeInvalid::Malformed);
 }
 
 /// CCP-FR-09 / CCP-FR-10 / CCP-FR-12 / CCP-FR-13 / CCP-FR-16 — the Claude Code
@@ -132,17 +114,15 @@ fn the_claude_code_reader_prefers_structured_output_then_falls_back_to_result() 
         "result": other.to_string(),
         "session_id": "s-1"
     });
-    let (envelope, session) = descriptor::CLAUDE_CODE
-        .extract(&both.to_string(), None)
-        .expect("extracts");
+    let (envelope, session) =
+        descriptor::CLAUDE_CODE.extract(&both.to_string(), None).expect("extracts");
     assert_eq!(envelope.summary, "did the thing");
     assert_eq!(session.as_deref(), Some("s-1"));
 
     // CCP-FR-09, second half: no `structured_output`, so the text position is
     // used.
-    let (envelope, _) = descriptor::CLAUDE_CODE
-        .extract(&claude_stdout(&valid), None)
-        .expect("extracts");
+    let (envelope, _) =
+        descriptor::CLAUDE_CODE.extract(&claude_stdout(&valid), None).expect("extracts");
     assert_eq!(envelope.summary, "did the thing");
 
     // CCP-FR-10: neither position yields a document.
@@ -151,16 +131,12 @@ fn the_claude_code_reader_prefers_structured_output_then_falls_back_to_result() 
         "result": "I finished the task.", "session_id": "s-1"
     });
     assert_eq!(
-        descriptor::CLAUDE_CODE
-            .extract(&neither.to_string(), None)
-            .unwrap_err(),
+        descriptor::CLAUDE_CODE.extract(&neither.to_string(), None).unwrap_err(),
         EnvelopeInvalid::Malformed
     );
     let absent = json!({"type":"result","subtype":"success","is_error":false,"session_id":"s"});
     assert_eq!(
-        descriptor::CLAUDE_CODE
-            .extract(&absent.to_string(), None)
-            .unwrap_err(),
+        descriptor::CLAUDE_CODE.extract(&absent.to_string(), None).unwrap_err(),
         EnvelopeInvalid::NotFound
     );
 
@@ -175,9 +151,7 @@ fn the_claude_code_reader_prefers_structured_output_then_falls_back_to_result() 
                "result":valid,"session_id":"s"}),
     ] {
         assert_eq!(
-            descriptor::CLAUDE_CODE
-                .extract(&document.to_string(), None)
-                .unwrap_err(),
+            descriptor::CLAUDE_CODE.extract(&document.to_string(), None).unwrap_err(),
             EnvelopeInvalid::VendorRunFailed,
             "{document} should be a failed run"
         );
@@ -185,13 +159,9 @@ fn the_claude_code_reader_prefers_structured_output_then_falls_back_to_result() 
 
     // CCP-FR-16: the identity the executor assigned is asserted back.
     let assigned = claude_stdout(&valid).replace(SESSION_PLACEHOLDER, "mine");
-    assert!(descriptor::CLAUDE_CODE
-        .extract(&assigned, Some("mine"))
-        .is_ok());
+    assert!(descriptor::CLAUDE_CODE.extract(&assigned, Some("mine")).is_ok());
     assert_eq!(
-        descriptor::CLAUDE_CODE
-            .extract(&assigned, Some("theirs"))
-            .unwrap_err(),
+        descriptor::CLAUDE_CODE.extract(&assigned, Some("theirs")).unwrap_err(),
         EnvelopeInvalid::SessionMismatch
     );
 
@@ -199,18 +169,13 @@ fn the_claude_code_reader_prefers_structured_output_then_falls_back_to_result() 
     // one extraction reads. The progress events beside it are not documents
     // competing with it, so a stream is read rather than rejected.
     let stream = claude_stdout(&valid);
-    assert!(
-        stream.lines().count() > 1,
-        "the fixture must be a stream, or this asserts nothing"
-    );
+    assert!(stream.lines().count() > 1, "the fixture must be a stream, or this asserts nothing");
     assert!(descriptor::CLAUDE_CODE.extract(&stream, None).is_ok());
 
     // A line this build cannot parse is skipped rather than failing the read:
     // the CLI writes its own notices into this stream, and one appearing beside
     // a well-formed result is not a reason to discard the result.
-    assert!(descriptor::CLAUDE_CODE
-        .extract(&format!("Starting up…\n{stream}"), None)
-        .is_ok());
+    assert!(descriptor::CLAUDE_CODE.extract(&format!("Starting up…\n{stream}"), None).is_ok());
 
     // Two result events is the turn ending twice, and the turn that ended last
     // is the turn. Reading the first would answer with a superseded document.
@@ -223,14 +188,8 @@ fn the_claude_code_reader_prefers_structured_output_then_falls_back_to_result() 
     // A stream whose result line was cut off has no result event in it, however
     // many complete events came before.
     let cut = &stream[..stream.len() - 4];
-    assert_eq!(
-        descriptor::CLAUDE_CODE.extract(cut, None).unwrap_err(),
-        EnvelopeInvalid::NotFound
-    );
-    assert_eq!(
-        descriptor::CLAUDE_CODE.extract("", None).unwrap_err(),
-        EnvelopeInvalid::NotFound
-    );
+    assert_eq!(descriptor::CLAUDE_CODE.extract(cut, None).unwrap_err(), EnvelopeInvalid::NotFound);
+    assert_eq!(descriptor::CLAUDE_CODE.extract("", None).unwrap_err(), EnvelopeInvalid::NotFound);
     // Progress alone, with no result event at all: a turn that was killed
     // mid-flight looks exactly like this.
     let progress = stream.lines().next().unwrap();
@@ -273,10 +232,8 @@ fn a_resume_that_silently_started_a_new_session_is_reported() {
 
     // And a resume the vendor genuinely honoured is not flagged.
     let mut honoured = task("continue");
-    honoured.resume = Some(SessionRef {
-        session_id: Some(CODEX_THREAD_ID.into()),
-        continuation_token: None,
-    });
+    honoured.resume =
+        Some(SessionRef { session_id: Some(CODEX_THREAD_ID.into()), continuation_token: None });
     let runtime = RecordingRuntime::replying(&codex_stdout(&envelope_json("success")));
     let outcome = run(&harness, runtime, honoured).expect("ran");
     assert!(!outcome.resume_unavailable);
@@ -291,20 +248,14 @@ fn a_session_state_directory_that_cannot_be_established_refuses_the_launch() {
     // Something that is not a directory, exactly where the mount's source
     // belongs. A launch that shrugged and continued would produce a turn that
     // looks successful while losing every session it creates.
-    let occupied = descriptor::session_state_dir(
-        &harness.sessions_root(),
-        "claude_code",
-        PROJECT_KEY,
-    );
+    let occupied =
+        descriptor::session_state_dir(&harness.sessions_root(), "claude_code", PROJECT_KEY);
     std::fs::create_dir_all(occupied.parent().expect("a parent")).expect("parent");
     std::fs::write(&occupied, b"not a directory").expect("occupy the path");
 
     let runtime = RecordingRuntime::replying(&valid_claude_stdout());
     let error = run(&harness, runtime.clone(), task("go")).expect_err("must refuse");
-    assert_eq!(
-        error,
-        AgentExecutionError::SessionStateUnavailable(SessionStateProblem::Unusable)
-    );
+    assert_eq!(error, AgentExecutionError::SessionStateUnavailable(SessionStateProblem::Unusable));
     assert_eq!(error.kind(), "session_state_unavailable");
     // Refused before anything was launched.
     assert!(runtime.runs.lock().unwrap().is_empty());
@@ -323,17 +274,37 @@ fn a_run_the_vendor_reports_as_failed_is_invalid_output_even_under_exit_zero() {
     let valid = envelope_json("success");
 
     let claude_failures = [
-        ("subtype error_max_turns", json!({"type":"result","subtype":"error_max_turns",
-            "result":valid,"session_id":SESSION_PLACEHOLDER}).to_string()),
-        ("subtype error_during_execution", json!({"type":"result","subtype":"error_during_execution",
-            "result":valid,"session_id":SESSION_PLACEHOLDER}).to_string()),
-        ("schema retries exhausted", json!({"type":"result",
+        (
+            "subtype error_max_turns",
+            json!({"type":"result","subtype":"error_max_turns",
+            "result":valid,"session_id":SESSION_PLACEHOLDER})
+            .to_string(),
+        ),
+        (
+            "subtype error_during_execution",
+            json!({"type":"result","subtype":"error_during_execution",
+            "result":valid,"session_id":SESSION_PLACEHOLDER})
+            .to_string(),
+        ),
+        (
+            "schema retries exhausted",
+            json!({"type":"result",
             "subtype":"error_max_structured_output_retries",
-            "result":valid,"session_id":SESSION_PLACEHOLDER}).to_string()),
-        ("is_error under a success subtype", json!({"type":"result","subtype":"success",
-            "is_error":true,"result":valid,"session_id":SESSION_PLACEHOLDER}).to_string()),
-        ("no subtype at all", json!({"type":"result","result":valid,
-            "session_id":SESSION_PLACEHOLDER}).to_string()),
+            "result":valid,"session_id":SESSION_PLACEHOLDER})
+            .to_string(),
+        ),
+        (
+            "is_error under a success subtype",
+            json!({"type":"result","subtype":"success",
+            "is_error":true,"result":valid,"session_id":SESSION_PLACEHOLDER})
+            .to_string(),
+        ),
+        (
+            "no subtype at all",
+            json!({"type":"result","result":valid,
+            "session_id":SESSION_PLACEHOLDER})
+            .to_string(),
+        ),
     ];
 
     let harness = harness_for("claude_code");
@@ -359,10 +330,7 @@ fn a_run_the_vendor_reports_as_failed_is_invalid_output_even_under_exit_zero() {
         json!({"type":"turn.failed","error":{"message":"model unavailable"}})
     );
     let outcome = run(&codex, RecordingRuntime::replying(&failed), task("go")).expect("ran");
-    assert_eq!(
-        outcome.process_outcome,
-        ProcessOutcome::InvalidStructuredOutput
-    );
+    assert_eq!(outcome.process_outcome, ProcessOutcome::InvalidStructuredOutput);
     assert!(outcome.response.is_none());
 
     // And the reason reaches the log, so a reader can tell a failed run from a
@@ -390,11 +358,7 @@ fn diagnostics_on_stderr_do_not_disturb_a_good_answer_on_stdout() {
 
     for (vendor, stdout, stderr) in [
         ("claude_code", valid_claude_stdout(), CLAUDE_NOISE),
-        (
-            "codex",
-            codex_stdout(&envelope_json("success")),
-            CODEX_NOISE,
-        ),
+        ("codex", codex_stdout(&envelope_json("success")), CODEX_NOISE),
     ] {
         let harness = harness_for(vendor);
         let runtime = RecordingRuntime::replying_with_stderr(&stdout, stderr);
@@ -437,10 +401,7 @@ fn only_a_completed_codex_item_can_carry_the_envelope() {
         json!({"type":"item.updated","item":{"id":"i1","type":"agent_message",
                "text": other.to_string()}})
     );
-    assert_eq!(
-        descriptor.extract(&only_updated, None).unwrap_err(),
-        EnvelopeInvalid::NotFound
-    );
+    assert_eq!(descriptor.extract(&only_updated, None).unwrap_err(), EnvelopeInvalid::NotFound);
 
     // And where both appear, the completed one wins whatever the update said.
     let updated_then_completed = format!(
@@ -450,9 +411,7 @@ fn only_a_completed_codex_item_can_carry_the_envelope() {
                "text": other.to_string()}}),
         json!({"type":"item.completed","item":{"id":"i1","type":"agent_message","text":valid}})
     );
-    let (envelope, _) = descriptor
-        .extract(&updated_then_completed, None)
-        .expect("extracts");
+    let (envelope, _) = descriptor.extract(&updated_then_completed, None).expect("extracts");
     assert_eq!(envelope.summary, "did the thing");
 
     // A final completed message carrying no usable text is a *missing* answer,
@@ -464,10 +423,7 @@ fn only_a_completed_codex_item_can_carry_the_envelope() {
         json!({"type":"item.completed","item":{"id":"i1","type":"agent_message","text":valid}}),
         json!({"type":"item.completed","item":{"id":"i2","type":"agent_message"}})
     );
-    assert_eq!(
-        descriptor.extract(&last_has_no_text, None).unwrap_err(),
-        EnvelopeInvalid::NotFound
-    );
+    assert_eq!(descriptor.extract(&last_has_no_text, None).unwrap_err(), EnvelopeInvalid::NotFound);
 }
 
 /// An empty resolved model or effort generates no flag at all.
@@ -495,16 +451,8 @@ fn an_empty_model_or_effort_generates_no_flag() {
 /// bad effort id being dropped and a bad effort id rewriting the sandbox policy.
 #[test]
 fn a_codex_override_value_cannot_break_out_of_its_quotes() {
-    for hostile in [
-        "high\" \nsandbox_mode=\"danger-full-access",
-        "a\"b",
-        "a\\b",
-        "a\nb",
-    ] {
-        assert!(
-            !descriptor::CODEX.effort_supported(hostile),
-            "{hostile:?} should be refused"
-        );
+    for hostile in ["high\" \nsandbox_mode=\"danger-full-access", "a\"b", "a\\b", "a\nb"] {
+        assert!(!descriptor::CODEX.effort_supported(hostile), "{hostile:?} should be refused");
         let argv = descriptor::CODEX.vendor_args(None, Some(hostile), "SID", None, None);
         assert!(
             !argv.iter().any(|a| a.contains("sandbox_mode")),
@@ -524,9 +472,7 @@ fn each_descriptor_declares_the_positions_its_specification_defines() {
     assert_eq!(
         descriptor::CLAUDE_CODE.response_sources,
         &[
-            ResponseSource::JsonObjectField {
-                key: "structured_output"
-            },
+            ResponseSource::JsonObjectField { key: "structured_output" },
             ResponseSource::JsonStringField { key: "result" },
         ]
     );
@@ -547,10 +493,7 @@ fn each_descriptor_declares_the_positions_its_specification_defines() {
     // container to do it (EAC-FR-31).
     assert!(descriptor::CLAUDE_CODE.supports_resume());
     assert!(descriptor::CODEX.supports_resume());
-    assert!(matches!(
-        descriptor::CLAUDE_CODE.session_state,
-        SessionStateMount::Dedicated { .. }
-    ));
+    assert!(matches!(descriptor::CLAUDE_CODE.session_state, SessionStateMount::Dedicated { .. }));
     assert!(matches!(
         descriptor::CODEX.session_state,
         SessionStateMount::SharedWithCredentialMount { .. }
@@ -578,8 +521,8 @@ fn the_container_is_created_from_the_image_the_project_commits() {
     let harness = harness_for("claude_code");
     let runtime = RecordingRuntime::replying(&valid_claude_stdout());
 
-    let executor = AgentCliExecutor::new(runtime.clone())
-        .with_session_state_root(harness.sessions_root());
+    let executor =
+        AgentCliExecutor::new(runtime.clone()).with_session_state_root(harness.sessions_root());
     let result = block_on(executor.execute_agent_cli(
         &Silent,
         &harness.context(),
@@ -594,10 +537,7 @@ fn the_container_is_created_from_the_image_the_project_commits() {
         },
     ));
 
-    assert_eq!(
-        result.expect("ran").process_outcome,
-        ProcessOutcome::Completed
-    );
+    assert_eq!(result.expect("ran").process_outcome, ProcessOutcome::Completed);
     let asked = runtime.images_asked.lock().unwrap().clone();
     assert_eq!(
         asked,
@@ -625,8 +565,8 @@ fn a_project_that_configures_no_image_launches_nothing() {
     let harness = harness_for("claude_code");
     let runtime = RecordingRuntime::replying(&valid_claude_stdout());
 
-    let executor = AgentCliExecutor::new(runtime.clone())
-        .with_session_state_root(harness.sessions_root());
+    let executor =
+        AgentCliExecutor::new(runtime.clone()).with_session_state_root(harness.sessions_root());
     let context = LaunchContext {
         store: &harness.store,
         integrations: &harness.ai,
@@ -650,18 +590,9 @@ fn a_project_that_configures_no_image_launches_nothing() {
     .expect_err("a project that configures no image launches nothing");
 
     assert_eq!(error.kind(), "vendor_image_unresolved");
-    assert!(
-        matches!(error, AgentExecutionError::VendorImageUnresolved(_)),
-        "{error:?}"
-    );
-    assert!(
-        runtime.images_asked.lock().unwrap().is_empty(),
-        "no image was asked for",
-    );
-    assert!(
-        runtime.runs.lock().unwrap().is_empty(),
-        "no container was created",
-    );
+    assert!(matches!(error, AgentExecutionError::VendorImageUnresolved(_)), "{error:?}");
+    assert!(runtime.images_asked.lock().unwrap().is_empty(), "no image was asked for",);
+    assert!(runtime.runs.lock().unwrap().is_empty(), "no container was created",);
 }
 
 /// EAC-FR-39, EAC-FR-17 — a configured image the backend cannot find or pull is
@@ -672,8 +603,8 @@ fn a_configured_image_that_cannot_be_pulled_is_image_unavailable() {
     let harness = harness_for("claude_code");
     let runtime = RecordingRuntime::broken(true, false, None);
 
-    let executor = AgentCliExecutor::new(runtime.clone())
-        .with_session_state_root(harness.sessions_root());
+    let executor =
+        AgentCliExecutor::new(runtime.clone()).with_session_state_root(harness.sessions_root());
     let error = block_on(executor.execute_agent_cli(
         &Silent,
         &harness.context(),
@@ -690,10 +621,7 @@ fn a_configured_image_that_cannot_be_pulled_is_image_unavailable() {
     .expect_err("an image nothing can supply refuses the launch");
 
     assert_eq!(error.kind(), "image_unavailable");
-    assert!(
-        runtime.runs.lock().unwrap().is_empty(),
-        "no container was created",
-    );
+    assert!(runtime.runs.lock().unwrap().is_empty(), "no container was created",);
 }
 
 /// EAC-FR-39, EAC-FR-13, EAC-FR-17 — the seam receives the container specification, and the vector
@@ -704,8 +632,8 @@ fn the_seam_receives_the_specification_the_cli_vector_is_rendered_from() {
     let harness = harness_for("codex");
     let runtime = RecordingRuntime::replying(&codex_stdout(&envelope_json("success")));
 
-    let executor = AgentCliExecutor::new(runtime.clone())
-        .with_session_state_root(harness.sessions_root());
+    let executor =
+        AgentCliExecutor::new(runtime.clone()).with_session_state_root(harness.sessions_root());
     block_on(executor.execute_agent_cli(
         &Silent,
         &harness.context(),

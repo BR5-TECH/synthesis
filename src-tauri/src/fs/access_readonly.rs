@@ -52,10 +52,8 @@ fn establish(
     raw: &Path,
     kind: GrantKind,
 ) -> Result<(PathBuf, Option<PathBuf>), FsAccessBuildError> {
-    let refuse = |reason: GrantRefusal| FsAccessBuildError::GrantRefused {
-        path: raw.to_path_buf(),
-        reason,
-    };
+    let refuse =
+        |reason: GrantRefusal| FsAccessBuildError::GrantRefused { path: raw.to_path_buf(), reason };
     if !raw.is_absolute() {
         return Err(refuse(GrantRefusal::Unreadable));
     }
@@ -98,7 +96,11 @@ fn establish(
 /// Refused outright when the builder also holds a read-write root or a session
 /// temp directory, so a read-only instance can never be one that writes.
 pub(super) fn build_read_only(builder: FsAccessBuilder) -> Result<FsAccess, FsAccessBuildError> {
-    if !builder.roots.is_empty() || !builder.owned.is_empty() || !builder.author.is_empty() || builder.session_temp {
+    if !builder.roots.is_empty()
+        || !builder.owned.is_empty()
+        || !builder.author.is_empty()
+        || builder.session_temp
+    {
         return Err(FsAccessBuildError::MixedProfile);
     }
     let mut roots = Vec::new();

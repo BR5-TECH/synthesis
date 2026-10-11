@@ -64,10 +64,7 @@ impl DomainError {
 
     /// A field that a request may not use.
     pub fn invalid_field(field: &str, reason: &str) -> Self {
-        DomainError::InvalidField {
-            field: field.to_string(),
-            reason: reason.to_string(),
-        }
+        DomainError::InvalidField { field: field.to_string(), reason: reason.to_string() }
     }
 }
 
@@ -77,10 +74,9 @@ impl fmt::Display for DomainError {
             DomainError::Unauthenticated => {
                 write!(formatter, "the request carries no accepted credential")
             }
-            DomainError::Forbidden { permission } => write!(
-                formatter,
-                "the principal holds no {permission} permission on this project"
-            ),
+            DomainError::Forbidden { permission } => {
+                write!(formatter, "the principal holds no {permission} permission on this project")
+            }
             DomainError::NotFound { resource } => {
                 write!(formatter, "no {resource} holds that identifier")
             }
@@ -94,23 +90,18 @@ impl fmt::Display for DomainError {
                 write!(formatter, "the permission \"{permission}\" is unknown")
             }
             DomainError::DuplicateId { resource } => {
-                write!(
-                    formatter,
-                    "another {resource} already holds that identifier"
-                )
+                write!(formatter, "another {resource} already holds that identifier")
             }
-            DomainError::DuplicateMembership => write!(
-                formatter,
-                "the member already holds an active membership of that target"
-            ),
+            DomainError::DuplicateMembership => {
+                write!(formatter, "the member already holds an active membership of that target")
+            }
             DomainError::DuplicateGrant => write!(
                 formatter,
                 "the project already holds a grant with that target and that role"
             ),
-            DomainError::OwnerProtected => write!(
-                formatter,
-                "the owner grant is changed by a transfer of ownership alone"
-            ),
+            DomainError::OwnerProtected => {
+                write!(formatter, "the owner grant is changed by a transfer of ownership alone")
+            }
             DomainError::Referenced { reason } => {
                 write!(formatter, "the record is referenced: {reason}")
             }
@@ -119,10 +110,7 @@ impl fmt::Display for DomainError {
                 "the request carries revision {expected}, and the record holds revision {actual}"
             ),
             DomainError::ConversationLocked => {
-                write!(
-                    formatter,
-                    "the conversation is locked and accepts no message"
-                )
+                write!(formatter, "the conversation is locked and accepts no message")
             }
             DomainError::InvitationNotPending => {
                 write!(formatter, "the invitation is expired, revoked, or accepted")
@@ -143,33 +131,17 @@ mod tests {
     fn every_error_reports_the_code_the_specification_names() {
         let codes = [
             DomainError::Unauthenticated.code(),
-            DomainError::Forbidden {
-                permission: "project.read".into(),
-            }
-            .code(),
-            DomainError::NotFound {
-                resource: "project",
-            }
-            .code(),
+            DomainError::Forbidden { permission: "project.read".into() }.code(),
+            DomainError::NotFound { resource: "project" }.code(),
             DomainError::invalid_field("name", "empty").code(),
             DomainError::InvalidRole { role: "x".into() }.code(),
-            DomainError::InvalidPermission {
-                permission: "x".into(),
-            }
-            .code(),
+            DomainError::InvalidPermission { permission: "x".into() }.code(),
             DomainError::DuplicateId { resource: "user" }.code(),
             DomainError::DuplicateMembership.code(),
             DomainError::DuplicateGrant.code(),
             DomainError::OwnerProtected.code(),
-            DomainError::Referenced {
-                reason: "a project".into(),
-            }
-            .code(),
-            DomainError::StaleRevision {
-                expected: 1,
-                actual: 2,
-            }
-            .code(),
+            DomainError::Referenced { reason: "a project".into() }.code(),
+            DomainError::StaleRevision { expected: 1, actual: 2 }.code(),
             DomainError::ConversationLocked.code(),
             DomainError::InvitationNotPending.code(),
             DomainError::Internal { reason: "x".into() }.code(),

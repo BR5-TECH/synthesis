@@ -122,8 +122,11 @@ pub trait GithubProjects: Send + Sync {
 
     /// GPP-FR-WYRP: the Projects of one repository owner. Changes nothing on
     /// GitHub.
-    fn owner_projects(&self, secret: &str, owner: &str)
-        -> Result<Paged<GithubProjectOption>, String>;
+    fn owner_projects(
+        &self,
+        secret: &str,
+        owner: &str,
+    ) -> Result<Paged<GithubProjectOption>, String>;
 
     /// GPP-FR-DEZO: the Project's title and `Status` field. A Project that
     /// does not resolve, or that the token cannot read, is
@@ -260,10 +263,7 @@ pub fn projects_of(connection: Option<&Value>) -> Vec<GithubProjectOption> {
             Some(GithubProjectOption {
                 node_id: str_of(node, "id")?,
                 title: str_of(node, "title").unwrap_or_default(),
-                owner_login: node
-                    .get("owner")
-                    .and_then(|o| str_of(o, "login"))
-                    .unwrap_or_default(),
+                owner_login: node.get("owner").and_then(|o| str_of(o, "login")).unwrap_or_default(),
                 number: node.get("number").and_then(Value::as_u64).unwrap_or_default(),
             })
         })
@@ -285,9 +285,8 @@ pub fn shape_of(response: &Value) -> Result<ProjectShape, String> {
         // token cannot read all answer the same way. Any other GraphQL
         // failure is the request's, not the Project's.
         let types = error_types(response);
-        let unavailable = types
-            .iter()
-            .all(|t| t == "NOT_FOUND" || t == "FORBIDDEN" || t.is_empty());
+        let unavailable =
+            types.iter().all(|t| t == "NOT_FOUND" || t == "FORBIDDEN" || t.is_empty());
         return Err(match unavailable {
             true => ERR_PROJECT_UNAVAILABLE,
             false => ERR_REQUEST_FAILED,
@@ -309,17 +308,15 @@ pub fn shape_of(response: &Value) -> Result<ProjectShape, String> {
 
 /// GPP-FR-XSKT: the items of one page, and the cursor of the next page.
 pub fn items_page_of(response: &Value) -> Result<(Vec<ProjectItem>, Option<String>), String> {
-    let Some(items) = response
-        .get("data")
-        .and_then(|d| d.get("node"))
-        .and_then(|n| n.get("items"))
+    let Some(items) = response.get("data").and_then(|d| d.get("node")).and_then(|n| n.get("items"))
     else {
-        return Err(match error_types(response).iter().all(|t| t == "NOT_FOUND" || t == "FORBIDDEN")
-        {
-            true if has_errors(response) => ERR_PROJECT_UNAVAILABLE,
-            _ => ERR_REQUEST_FAILED,
-        }
-        .to_string());
+        return Err(
+            match error_types(response).iter().all(|t| t == "NOT_FOUND" || t == "FORBIDDEN") {
+                true if has_errors(response) => ERR_PROJECT_UNAVAILABLE,
+                _ => ERR_REQUEST_FAILED,
+            }
+            .to_string(),
+        );
     };
     let nodes = items.get("nodes").and_then(Value::as_array).cloned().unwrap_or_default();
     let parsed = nodes
@@ -355,10 +352,8 @@ fn item_issue_of(content: &Value) -> Option<ItemIssue> {
 
 /// GPP-FR-IFVC: the issue a re-fetch answered with.
 pub fn fetched_issue_of(response: &Value) -> Result<Option<FetchedIssue>, String> {
-    let Some(repository) = response
-        .get("data")
-        .and_then(|d| d.get("repository"))
-        .filter(|r| !r.is_null())
+    let Some(repository) =
+        response.get("data").and_then(|d| d.get("repository")).filter(|r| !r.is_null())
     else {
         return Err(ERR_REQUEST_FAILED.to_string());
     };
@@ -407,8 +402,10 @@ impl GithubProjects for HttpGithubProjects {
         );
         paginate(MAX_PROJECT_PAGES, |cursor| {
             let response = graphql(&self.url, secret, &query, json!({ "cursor": cursor }))?;
-            let connection =
-                response.get("data").and_then(|d| d.get("viewer")).and_then(|v| v.get("projectsV2"));
+            let connection = response
+                .get("data")
+                .and_then(|d| d.get("viewer"))
+                .and_then(|v| v.get("projectsV2"));
             if connection.is_none() {
                 return Err(ERR_REQUEST_FAILED.to_string());
             }
@@ -427,7 +424,8 @@ impl GithubProjects for HttpGithubProjects {
              ... on User {{ projectsV2(first: 100, after: $cursor) {{ {PROJECT_FIELDS} }} }} }} }}"
         );
         paginate(MAX_PROJECT_PAGES, |cursor| {
-            let response = graphql(&self.url, secret, &query, json!({ "owner": owner, "cursor": cursor }))?;
+            let response =
+                graphql(&self.url, secret, &query, json!({ "owner": owner, "cursor": cursor }))?;
             let connection = response
                 .get("data")
                 .and_then(|d| d.get("repositoryOwner"))
@@ -453,7 +451,8 @@ impl GithubProjects for HttpGithubProjects {
                      content { ... on Issue { number title url state issueType { name } \
                      repository { name owner { login } } } } } } } } }";
         paginate(MAX_ITEM_PAGES, |cursor| {
-            let response = graphql(&self.url, secret, query, json!({ "id": project_id, "cursor": cursor }))?;
+            let response =
+                graphql(&self.url, secret, query, json!({ "id": project_id, "cursor": cursor }))?;
             items_page_of(&response)
         })
     }

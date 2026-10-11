@@ -53,10 +53,7 @@ fn every_provider_client_reports_an_untrusted_certificate_as_the_typed_failure()
         assert_eq!(failure.class, class::TLS, "{provider}");
         assert_eq!(
             failure.tls,
-            Some(crate::tls::TlsFailure::new(
-                "localhost",
-                crate::tls::TlsCause::UnknownIssuer
-            )),
+            Some(crate::tls::TlsFailure::new("localhost", crate::tls::TlsCause::UnknownIssuer)),
             "{provider}",
         );
         assert!(failure.recoverable(), "{provider}: the author can fix the trust and retry");

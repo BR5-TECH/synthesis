@@ -55,7 +55,10 @@ fn what_a_review_turn_writes_reaches_neither_the_stream_nor_the_commit() {
 // ---------------------------------------------------------------------------
 
 fn ready_carrying_findings() -> Script {
-    Script::answers_ready_with(vec![finding(ReviewSeverity::Minor, "The comment could be shorter.")])
+    Script::answers_ready_with(vec![finding(
+        ReviewSeverity::Minor,
+        "The comment could be shorter.",
+    )])
 }
 
 // GTE-FR-XKGB / GRL-FR-VIAT, GRL-FR-TVXI: a `ready` verdict carrying findings, a

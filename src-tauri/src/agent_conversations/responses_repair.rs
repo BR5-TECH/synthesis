@@ -118,11 +118,7 @@ pub(super) struct ResponsesRepair<C> {
 
 impl<C> ResponsesRepair<C> {
     pub(super) fn new(inner: C, enabled: bool) -> Self {
-        Self {
-            inner,
-            enabled,
-            repairs: Arc::new(Mutex::new(ReplyRepairs::default())),
-        }
+        Self { inner, enabled, repairs: Arc::new(Mutex::new(ReplyRepairs::default())) }
     }
 
     /// What the repair changed in the reply this client received. Read after

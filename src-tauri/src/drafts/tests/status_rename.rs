@@ -42,9 +42,7 @@ fn archiving_moves_the_record_and_not_one_byte_under_the_draft() {
     let after = tree_bytes(&home);
     // Everything under the draft except the record itself, byte-for-byte.
     let without_record = |t: Vec<(PathBuf, Vec<u8>)>| {
-        t.into_iter()
-            .filter(|(p, _)| p.file_name().unwrap() != RECORD_FILE)
-            .collect::<Vec<_>>()
+        t.into_iter().filter(|(p, _)| p.file_name().unwrap() != RECORD_FILE).collect::<Vec<_>>()
     };
     assert_eq!(
         without_record(before),
@@ -118,7 +116,6 @@ fn a_record_carrying_a_status_this_enum_never_had_still_lists_and_opens() {
     }
 }
 
-
 #[test]
 fn every_command_answers_the_same_for_an_archived_draft() {
     // DRS-FR-06, DRS-FR-22 (DRS-FR-10): the status governs nothing this module does.
@@ -136,7 +133,6 @@ fn every_command_answers_the_same_for_an_archived_draft() {
     assert_eq!(renamed.status, DraftStatus::Archived);
     assert_eq!(files_in(root, &id), vec!["other.md"]);
 }
-
 
 #[test]
 fn renaming_to_an_empty_name_is_refused_and_leaves_the_name_untouched() {

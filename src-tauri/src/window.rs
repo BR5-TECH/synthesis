@@ -76,10 +76,8 @@ pub fn pick_display_for_cursor(
 /// corner can easily sit on the other. Reuses the cursor test, a centre being a
 /// point like any other, so both routes agree about shared edges.
 pub fn pick_display_for_rect(rect: DisplayRect, displays: &[DisplayRect]) -> Option<DisplayRect> {
-    let centre = (
-        rect.x as f64 + rect.width as f64 / 2.0,
-        rect.y as f64 + rect.height as f64 / 2.0,
-    );
+    let centre =
+        (rect.x as f64 + rect.width as f64 / 2.0, rect.y as f64 + rect.height as f64 / 2.0);
     pick_display_for_cursor(centre, displays)
 }
 
@@ -93,12 +91,7 @@ fn displays_of<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Vec<DisplayRect>
         .map(|m| {
             let pos = m.position();
             let size = m.size();
-            DisplayRect {
-                x: pos.x,
-                y: pos.y,
-                width: size.width,
-                height: size.height,
-            }
+            DisplayRect { x: pos.x, y: pos.y, width: size.width, height: size.height }
         })
         .collect()
 }
@@ -160,10 +153,7 @@ pub fn work_area_for_rect<R: tauri::Runtime>(
 /// the window is (pathologically) larger than the display; the result is
 /// clamped to the display's top-left in that case so the window's title bar
 /// stays reachable.
-pub fn center_window_on_display(
-    display: DisplayRect,
-    window_size: (u32, u32),
-) -> (i32, i32) {
+pub fn center_window_on_display(display: DisplayRect, window_size: (u32, u32)) -> (i32, i32) {
     let (ww, wh) = window_size;
     let dx = display.x as i64;
     let dy = display.y as i64;
@@ -190,18 +180,14 @@ pub struct OnceGate {
 
 impl OnceGate {
     pub fn new() -> Self {
-        Self {
-            fired: AtomicBool::new(false),
-        }
+        Self { fired: AtomicBool::new(false) }
     }
 
     /// Returns `true` exactly once — the first time it's called. All
     /// subsequent calls return `false`. Uses `compare_exchange` for a true
     /// "test-and-set" so concurrent callers can't both observe `true`.
     pub fn try_pass(&self) -> bool {
-        self.fired
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_ok()
+        self.fired.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_ok()
     }
 }
 
@@ -275,9 +261,7 @@ pub fn center_picker_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     // OS lands on, which is exactly what stage 2 corrects.
     match window.outer_size() {
         Ok(s) => apply_centering(app, &window, (s.width, s.height)),
-        Err(e) => eprintln!(
-            "synthesis: outer_size() failed during initial picker centering: {e}"
-        ),
+        Err(e) => eprintln!("synthesis: outer_size() failed during initial picker centering: {e}"),
     }
 
     // Stage 2: re-center exactly once on the first Resized event. The event
@@ -288,11 +272,7 @@ pub fn center_picker_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     window.on_window_event(move |event| {
         if let WindowEvent::Resized(size) = event {
             if gate.try_pass() {
-                recenter_on_resize(
-                    &app_handle,
-                    &window_for_handler,
-                    (size.width, size.height),
-                );
+                recenter_on_resize(&app_handle, &window_for_handler, (size.width, size.height));
             }
         }
     });
@@ -378,20 +358,14 @@ mod tests {
         // Straddling: most of it is on B, and its centre says so even though
         // its left edge is still on A.
         let straddling = DisplayRect { x: 1700, y: 0, width: 800, height: 600 };
-        assert_eq!(
-            pick_display_for_rect(straddling, &displays).unwrap(),
-            display_b()
-        );
+        assert_eq!(pick_display_for_rect(straddling, &displays).unwrap(), display_b());
     }
 
     #[test]
     fn a_window_off_every_display_falls_back_to_the_first() {
         let displays = [display_a(), display_b()];
         let nowhere = DisplayRect { x: -9000, y: -9000, width: 800, height: 600 };
-        assert_eq!(
-            pick_display_for_rect(nowhere, &displays).unwrap(),
-            display_a()
-        );
+        assert_eq!(pick_display_for_rect(nowhere, &displays).unwrap(), display_a());
         assert_eq!(pick_display_for_rect(nowhere, &[]), None);
     }
 
@@ -551,9 +525,8 @@ mod tests {
         // window declared without an explicit `label` is `"main"`.
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let conf_path = std::path::Path::new(manifest_dir).join("tauri.conf.json");
-        let raw = std::fs::read_to_string(&conf_path).unwrap_or_else(|e| {
-            panic!("failed to read {}: {e}", conf_path.display())
-        });
+        let raw = std::fs::read_to_string(&conf_path)
+            .unwrap_or_else(|e| panic!("failed to read {}: {e}", conf_path.display()));
         let v: serde_json::Value =
             serde_json::from_str(&raw).expect("tauri.conf.json must be valid JSON");
 
@@ -562,10 +535,7 @@ mod tests {
             .and_then(|a| a.get("windows"))
             .and_then(|w| w.as_array())
             .expect("tauri.conf.json must declare app.windows as an array");
-        assert!(
-            !windows.is_empty(),
-            "tauri.conf.json app.windows must not be empty"
-        );
+        assert!(!windows.is_empty(), "tauri.conf.json app.windows must not be empty");
         let first = &windows[0];
 
         match first.get("label") {
@@ -662,10 +632,7 @@ mod tests {
         let gate = OnceGate::new();
         assert!(gate.try_pass());
         for _ in 0..5 {
-            assert!(
-                !gate.try_pass(),
-                "subsequent try_pass calls must return false (one-shot)"
-            );
+            assert!(!gate.try_pass(), "subsequent try_pass calls must return false (one-shot)");
         }
     }
 
@@ -697,11 +664,7 @@ mod tests {
                     })
                 })
                 .collect();
-            let winners = handles
-                .into_iter()
-                .filter_map(|h| h.join().ok())
-                .filter(|v| *v)
-                .count();
+            let winners = handles.into_iter().filter_map(|h| h.join().ok()).filter(|v| *v).count();
             assert_eq!(winners, 1, "exactly one thread must win the gate");
         }
     }
@@ -718,10 +681,7 @@ mod tests {
         //
         // Same fn-pointer-shape pattern as
         // `center_picker_does_not_read_persisted_position_ts11`.
-        let _: fn(
-            &tauri::AppHandle<tauri::Wry>,
-            &tauri::WebviewWindow<tauri::Wry>,
-            (u32, u32),
-        ) = recenter_on_resize::<tauri::Wry>;
+        let _: fn(&tauri::AppHandle<tauri::Wry>, &tauri::WebviewWindow<tauri::Wry>, (u32, u32)) =
+            recenter_on_resize::<tauri::Wry>;
     }
 }

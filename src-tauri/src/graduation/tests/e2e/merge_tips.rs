@@ -134,7 +134,9 @@ fn a_tip_that_moves_before_the_apply_fails_the_run_and_writes_nothing() {
     conflicted_merge("tip moves before apply")
         .with_merge(as_one_commit())
         .merge_work_turn(Script::reports_success().writes("README.md", "both sides\n"))
-        .merge_review_turn(Script::answers_ready("Both intents stand.").moving_the_stream_tip_meanwhile())
+        .merge_review_turn(
+            Script::answers_ready("Both intents stand.").moving_the_stream_tip_meanwhile(),
+        )
         .run()
         .expect_state(GraduationRunState::Failed)
         .expect_failure_code("merge_branch_moved")

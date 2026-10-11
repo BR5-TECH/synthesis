@@ -17,17 +17,11 @@ fn the_success_and_refusal_records_name_the_arguments_and_nothing_returned() {
     fixture.reindex();
 
     let tool = fixture.logged(&NST_BUFFER);
-    let output = block_on(tool.call(NoteSearchArgs {
-        query: "teardown".into(),
-        limit: Some(2),
-    }))
-    .expect("the call succeeds");
+    let output = block_on(tool.call(NoteSearchArgs { query: "teardown".into(), limit: Some(2) }))
+        .expect("the call succeeds");
     assert_eq!(output.notes.len(), 1);
-    let _ = block_on(tool.call(NoteSearchArgs {
-        query: String::new(),
-        limit: None,
-    }))
-    .expect_err("the call refuses");
+    let _ = block_on(tool.call(NoteSearchArgs { query: String::new(), limit: None }))
+        .expect_err("the call refuses");
 
     // Querying either domain returns the same two records — a tool call is work
     // the backend performs because a model asked for it (TLC-FR-14).
@@ -36,27 +30,18 @@ fn the_success_and_refusal_records_name_the_arguments_and_nothing_returned() {
     assert_eq!(ai.len(), 2, "one success and one refusal");
     assert_eq!(ai, backend, "both domains return the same two records");
 
-    let success = ai
-        .iter()
-        .find(|r| r.level == LogLevel::Info)
-        .expect("an INFO record");
+    let success = ai.iter().find(|r| r.level == LogLevel::Info).expect("an INFO record");
     assert_eq!(success.fields["tool"], serde_json::json!(NAME));
     assert_eq!(success.fields["query"], serde_json::json!("teardown"));
     assert_eq!(success.fields["limit"], serde_json::json!(2));
     assert_eq!(success.fields["limitApplied"], serde_json::json!(2));
     assert_eq!(success.fields["notes"], serde_json::json!(1));
 
-    let refusal = ai
-        .iter()
-        .find(|r| r.level == LogLevel::Warn)
-        .expect("a WARN record");
+    let refusal = ai.iter().find(|r| r.level == LogLevel::Warn).expect("a WARN record");
     assert_eq!(refusal.fields["tool"], serde_json::json!(NAME));
     assert_eq!(refusal.fields["query"], serde_json::json!(""));
     assert!(refusal.fields.contains_key("reason"));
-    assert!(
-        !refusal.fields.contains_key("limit"),
-        "no `limit` at all when the model sent none",
-    );
+    assert!(!refusal.fields.contains_key("limit"), "no `limit` at all when the model sent none",);
     assert!(
         !refusal.fields.contains_key("limitApplied"),
         "the applied limit appears on a success alone",
@@ -87,11 +72,8 @@ fn a_very_long_query_is_bounded_in_the_record() {
     assert!(query.len() >= 20_000 - 10);
     assert!(query.chars().count() < query.len(), "multibyte, as intended");
     let tool = fixture.logged(&NST_BOUND_BUFFER);
-    let output = block_on(tool.call(NoteSearchArgs {
-        query: query.clone(),
-        limit: None,
-    }))
-    .expect("the call succeeds");
+    let output = block_on(tool.call(NoteSearchArgs { query: query.clone(), limit: None }))
+        .expect("the call succeeds");
 
     let records = records_of(&NST_BOUND_BUFFER, Domain::Ai);
     let record = records.first().expect("a record");
@@ -122,11 +104,8 @@ fn the_record_says_what_was_asked_for_and_what_was_applied() {
     fixture.reindex();
 
     let tool = fixture.logged(&NST_LIMIT_BUFFER);
-    let _ = block_on(tool.call(NoteSearchArgs {
-        query: "teardown".into(),
-        limit: Some(1000),
-    }))
-    .expect("the call succeeds");
+    let _ = block_on(tool.call(NoteSearchArgs { query: "teardown".into(), limit: Some(1000) }))
+        .expect("the call succeeds");
 
     // A `limit` no number could be made of decodes to `None` (TLC-FR-07), and
     // the record then names none.
@@ -157,11 +136,8 @@ static NST_CLOSED_BUFFER: LogBuffer = LogBuffer::new();
 fn a_no_project_refusal_names_both_arguments_and_no_applied_limit() {
     let app = crate::tools::tests::closed_project();
     let tool = NoteSearchTool::with_buffer(app.handle().clone(), "closed", &NST_CLOSED_BUFFER);
-    let _ = block_on(tool.call(NoteSearchArgs {
-        query: "teardown".into(),
-        limit: Some(3),
-    }))
-    .expect_err("no project is open");
+    let _ = block_on(tool.call(NoteSearchArgs { query: "teardown".into(), limit: Some(3) }))
+        .expect_err("no project is open");
 
     let records = records_of(&NST_CLOSED_BUFFER, Domain::Backend);
     let record = records.first().expect("a record");

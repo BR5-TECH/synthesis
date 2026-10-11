@@ -51,9 +51,8 @@ pub fn match_required_args(expected: &[Requirement], received: &[&OsStr]) -> Opt
     // ACM-FR-17: the first unsatisfied requirement, in the order the scenario
     // lists them.
     for (index, requirement) in expected.iter().enumerate() {
-        let satisfied = received
-            .iter()
-            .any(|arg| arg.as_encoded_bytes() == requirement.value.as_bytes());
+        let satisfied =
+            received.iter().any(|arg| arg.as_encoded_bytes() == requirement.value.as_bytes());
 
         if !satisfied {
             return Some(Mismatch {
@@ -155,11 +154,9 @@ mod tests {
     #[test]
     fn a_differing_value_reports_the_lowest_index_and_byte_lengths() {
         let received = os(&["-p", "wrong", "also wrong"]);
-        let mismatch = match_args(
-            &strings(&["-p", "sk-ant-oat01-REDACTEDVALUE", "nope"]),
-            &refs(&received),
-        )
-        .expect("should fail");
+        let mismatch =
+            match_args(&strings(&["-p", "sk-ant-oat01-REDACTEDVALUE", "nope"]), &refs(&received))
+                .expect("should fail");
 
         assert_eq!(mismatch.check, Check::Args);
         assert_eq!(mismatch.mismatch_type, MismatchType::ValueMismatch);
@@ -190,14 +187,8 @@ mod tests {
     fn a_requirement_is_satisfied_from_any_position() {
         let received = os(&["hello", "--model", "opus", "-p"]);
         let expected = vec![
-            Requirement {
-                name: None,
-                value: "-p".into(),
-            },
-            Requirement {
-                name: Some("prompt".into()),
-                value: "hello".into(),
-            },
+            Requirement { name: None, value: "-p".into() },
+            Requirement { name: Some("prompt".into()), value: "hello".into() },
         ];
         assert!(match_required_args(&expected, &refs(&received)).is_none());
     }
@@ -213,14 +204,8 @@ mod tests {
     fn an_unsatisfied_requirement_reports_index_name_and_expected_length_only() {
         let received = os(&["-p", "goodbye"]);
         let expected = vec![
-            Requirement {
-                name: None,
-                value: "-p".into(),
-            },
-            Requirement {
-                name: Some("prompt".into()),
-                value: "hello".into(),
-            },
+            Requirement { name: None, value: "-p".into() },
+            Requirement { name: Some("prompt".into()), value: "hello".into() },
         ];
         let mismatch = match_required_args(&expected, &refs(&received)).expect("should fail");
 
@@ -235,10 +220,7 @@ mod tests {
     #[test]
     fn an_unnamed_requirement_reports_no_name() {
         let received = os(&["x"]);
-        let expected = vec![Requirement {
-            name: None,
-            value: "-p".into(),
-        }];
+        let expected = vec![Requirement { name: None, value: "-p".into() }];
         let mismatch = match_required_args(&expected, &refs(&received)).expect("should fail");
         assert_eq!(mismatch.index, Some(0));
         assert_eq!(mismatch.name, None);
@@ -249,10 +231,7 @@ mod tests {
     #[test]
     fn a_name_is_never_matched_against_the_vector() {
         let received = os(&["prompt"]);
-        let expected = vec![Requirement {
-            name: Some("prompt".into()),
-            value: "hello".into(),
-        }];
+        let expected = vec![Requirement { name: Some("prompt".into()), value: "hello".into() }];
         assert!(match_required_args(&expected, &refs(&received)).is_some());
 
         // And the value alone satisfies it, whatever the name says.
@@ -264,14 +243,8 @@ mod tests {
     fn the_first_unsatisfied_requirement_in_scenario_order_is_reported() {
         let received = os(&["c"]);
         let expected = vec![
-            Requirement {
-                name: None,
-                value: "a".into(),
-            },
-            Requirement {
-                name: None,
-                value: "b".into(),
-            },
+            Requirement { name: None, value: "a".into() },
+            Requirement { name: None, value: "b".into() },
         ];
         let mismatch = match_required_args(&expected, &refs(&received)).expect("should fail");
         assert_eq!(mismatch.index, Some(0));

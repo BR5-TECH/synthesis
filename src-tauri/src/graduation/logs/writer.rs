@@ -68,15 +68,14 @@ pub fn initialize(fs: &FsAccess, paths: &LogPaths) -> Result<(), GraduationLogFa
         if path.is_file() {
             continue;
         }
-        fs.create_file(&path, fsa::CreateMode::Exclusive)
-            .map_err(|error| {
-                GraduationLogFailure::write(
-                    CODE_STREAM_CREATE_FAILED,
-                    stream,
-                    format!("the run's {} stream could not be created: {error}", stream.as_str()),
-                    Vec::new(),
-                )
-            })?;
+        fs.create_file(&path, fsa::CreateMode::Exclusive).map_err(|error| {
+            GraduationLogFailure::write(
+                CODE_STREAM_CREATE_FAILED,
+                stream,
+                format!("the run's {} stream could not be created: {error}", stream.as_str()),
+                Vec::new(),
+            )
+        })?;
     }
     Ok(())
 }
@@ -183,15 +182,9 @@ pub fn reconcile(fs: &FsAccess, paths: &LogPaths, indexes: &mut GraduationLogInd
                 continue;
             };
             let sequence = value.get("sequence").and_then(|v| v.as_u64()).unwrap_or(0);
-            let phase = value
-                .get("phase_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string();
-            let pass = value
-                .get("pass")
-                .and_then(|v| v.as_u64())
-                .map(|pass| pass as u32);
+            let phase =
+                value.get("phase_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+            let pass = value.get("pass").and_then(|v| v.as_u64()).map(|pass| pass as u32);
             rebuilt.note(&phase, pass, sequence.max(durable + 1));
             durable = rebuilt.latest_sequence;
         }
@@ -264,7 +257,10 @@ fn repair_partial_tail(
         GraduationLogFailure::write(
             CODE_APPEND_FAILED,
             stream,
-            format!("a partial record could not be cut from the {} stream: {error}", stream.as_str()),
+            format!(
+                "a partial record could not be cut from the {} stream: {error}",
+                stream.as_str()
+            ),
             Vec::new(),
         )
     })?;
@@ -274,11 +270,7 @@ fn repair_partial_tail(
 
 /// Every `record_id` a stream's file already holds.
 fn record_ids_in(fs: &FsAccess, path: &Path) -> Vec<String> {
-    fs.read_text(path)
-        .unwrap_or_default()
-        .lines()
-        .filter_map(record_id_of_line)
-        .collect()
+    fs.read_text(path).unwrap_or_default().lines().filter_map(record_id_of_line).collect()
 }
 
 /// Keep records a write could not store, where a retry can find them.
@@ -287,17 +279,14 @@ fn queue_pending(
     paths: &LogPaths,
     records: &[GraduationLogRecord],
 ) -> Result<(), String> {
-    let queued: Vec<String> = read_pending(fs, paths)
-        .iter()
-        .map(|record| record.record_id().to_string())
-        .collect();
+    let queued: Vec<String> =
+        read_pending(fs, paths).iter().map(|record| record.record_id().to_string()).collect();
     let lines: Vec<String> = records
         .iter()
         .filter(|record| !queued.iter().any(|id| id == record.record_id()))
         .filter_map(|record| serde_json::to_string(record).ok())
         .collect();
-    fs.append_lines(paths.pending(), &lines)
-        .map_err(|error| error.to_string())
+    fs.append_lines(paths.pending(), &lines).map_err(|error| error.to_string())
 }
 
 /// What a failed write left to be retried, in append order and once each.
@@ -330,8 +319,5 @@ fn clear_pending(fs: &FsAccess, paths: &LogPaths) {
 
 /// The ids a failure names, in append order (GRS-FR-DDSB).
 fn ids_of(records: &[GraduationLogRecord]) -> Vec<String> {
-    records
-        .iter()
-        .map(|record| record.record_id().to_string())
-        .collect()
+    records.iter().map(|record| record.record_id().to_string()).collect()
 }

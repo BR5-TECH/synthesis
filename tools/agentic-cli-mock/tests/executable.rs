@@ -25,10 +25,7 @@ impl Fixture {
         let directory = tempfile::tempdir().expect("temp dir");
         let scenario = directory.path().join("scenario.json");
         std::fs::write(&scenario, scenario_text).expect("write scenario");
-        Fixture {
-            _directory: directory,
-            scenario,
-        }
+        Fixture { _directory: directory, scenario }
     }
 
     fn command(&self, tool: &str, tool_args: &[&str]) -> Command {
@@ -46,9 +43,7 @@ impl Fixture {
     /// stdin, which the mock sees as instant EOF, and drains both pipes
     /// concurrently so a large payload on one cannot deadlock the other.
     fn run(&self, tool: &str, tool_args: &[&str]) -> Output {
-        self.command(tool, tool_args)
-            .output()
-            .expect("launch the mock")
+        self.command(tool, tool_args).output().expect("launch the mock")
     }
 
     /// Run with bytes written to stdin, then closed.
@@ -275,11 +270,7 @@ fn a_configured_delay_keeps_the_process_alive_and_silent() {
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt;
-        assert_eq!(
-            output.status.code(),
-            None,
-            "a signalled process reports no exit code"
-        );
+        assert_eq!(output.status.code(), None, "a signalled process reports no exit code");
         assert_eq!(output.status.signal(), Some(libc_sigkill()));
     }
     #[cfg(not(unix))]
@@ -529,17 +520,9 @@ fn each_invocation_error_has_its_own_category_and_tool_presence() {
 
     let cases: [(Vec<&str>, &str, bool); 4] = [
         (vec!["--scenario", path], "missing_tool_option", false),
-        (
-            vec!["--tool", "opencode", "--scenario", path],
-            "unknown_tool",
-            false,
-        ),
+        (vec!["--tool", "opencode", "--scenario", path], "unknown_tool", false),
         (vec!["--tool", "claude"], "missing_scenario_option", true),
-        (
-            vec!["--tool", "claude", "--scenario", path, "--verbose"],
-            "unknown_option",
-            true,
-        ),
+        (vec!["--tool", "claude", "--scenario", path, "--verbose"], "unknown_option", true),
     ];
 
     for (args, expected, carries_tool) in cases {
@@ -549,11 +532,7 @@ fn each_invocation_error_has_its_own_category_and_tool_presence() {
         assert!(output.stdout.is_empty(), "for {args:?}");
         let record = failure_record(&output);
         assert_eq!(record["mismatch_type"], expected, "for {args:?}");
-        assert_eq!(
-            record.get("tool").is_some(),
-            carries_tool,
-            "tool presence for {args:?}"
-        );
+        assert_eq!(record.get("tool").is_some(), carries_tool, "tool presence for {args:?}");
     }
 }
 
@@ -868,9 +847,8 @@ fn the_shipped_example_scenarios_run_end_to_end() {
 /// tail — is pinned.
 #[test]
 fn the_docker_example_asserts_the_runtime_and_vendor_vectors_together() {
-    let scenario = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("scenarios")
-        .join("docker-run.json");
+    let scenario =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scenarios").join("docker-run.json");
 
     let vector = [
         "run",
@@ -935,11 +913,8 @@ fn the_docker_example_asserts_the_runtime_and_vendor_vectors_together() {
         .map(|line| serde_json::from_str(line).expect("valid JSON"))
         .collect();
     assert!(events.len() > 1, "the replay is a stream, not one document");
-    let result = events
-        .iter()
-        .rev()
-        .find(|event| event["type"] == "result")
-        .expect("a result event");
+    let result =
+        events.iter().rev().find(|event| event["type"] == "result").expect("a result event");
     let envelope: Value =
         serde_json::from_str(result["result"].as_str().expect("result is JSON text"))
             .expect("the envelope parses");
@@ -956,10 +931,7 @@ fn the_docker_example_asserts_the_runtime_and_vendor_vectors_together() {
     // unable to run the commands its turn depends on, and it is exactly what
     // this vector used to carry.
     let mut wrong = vector;
-    let at = wrong
-        .iter()
-        .position(|a| *a == "bypassPermissions")
-        .expect("the permission mode");
+    let at = wrong.iter().position(|a| *a == "bypassPermissions").expect("the permission mode");
     wrong[at] = "acceptEdits";
     let output = run_at(&scenario, "docker", &wrong, stdin.as_bytes());
     assert_eq!(code(&output), 65);
@@ -1043,14 +1015,8 @@ fn the_manifest_keeps_the_crate_independent_of_the_application() {
         .collect::<Vec<_>>()
         .join("\n");
 
-    assert!(
-        !manifest.contains("path ="),
-        "a path dependency ties this crate to its neighbours"
-    );
-    assert!(
-        !manifest.contains("synthesis"),
-        "this crate must not depend on the application"
-    );
+    assert!(!manifest.contains("path ="), "a path dependency ties this crate to its neighbours");
+    assert!(!manifest.contains("synthesis"), "this crate must not depend on the application");
     assert!(
         !manifest.contains("[workspace]"),
         "this crate is its own workspace root and declares no membership"
@@ -1058,22 +1024,15 @@ fn the_manifest_keeps_the_crate_independent_of_the_application() {
 
     // Exactly the dependency set ACM-FR-01 allows: a JSON reader and a base64
     // codec, plus a test-only temp-directory helper.
-    let (runtime, development) = manifest
-        .split_once("[dev-dependencies]")
-        .expect("manifest declares dev-dependencies");
-    let runtime = runtime
-        .split_once("[dependencies]")
-        .expect("manifest declares dependencies")
-        .1;
+    let (runtime, development) =
+        manifest.split_once("[dev-dependencies]").expect("manifest declares dev-dependencies");
+    let runtime = runtime.split_once("[dependencies]").expect("manifest declares dependencies").1;
 
     for crate_name in ["serde", "serde_json", "base64"] {
         assert!(runtime.contains(crate_name), "missing {crate_name}");
     }
     for forbidden in ["tauri", "git2", "keyring", "ureq", "reqwest", "tokio"] {
-        assert!(
-            !runtime.contains(forbidden),
-            "{forbidden} is not permitted in this crate"
-        );
+        assert!(!runtime.contains(forbidden), "{forbidden} is not permitted in this crate");
     }
     assert!(development.contains("tempfile"));
 }
@@ -1218,10 +1177,7 @@ fn an_arity_mismatch_reports_counts_and_no_index() {
     let record = failure_record(&output);
     assert_eq!(record["check"], "args");
     assert_eq!(record["mismatch_type"], "arity");
-    assert!(
-        record.get("index").is_none(),
-        "an arity failure has no single position to blame"
-    );
+    assert!(record.get("index").is_none(), "an arity failure has no single position to blame");
     assert_eq!(record["expected_length"], 3);
     assert_eq!(record["actual_length"], 1);
     assert!(record.get("name").is_none());
@@ -1261,13 +1217,8 @@ fn a_non_utf8_argument_is_compared_as_bytes_and_never_disclosed() {
 
     // Four bytes, one of them a lone continuation byte: not valid UTF-8.
     let invalid = OsString::from_vec(vec![b'a', 0xff, b'c', b'd']);
-    let output = fixture
-        .command("claude", &[])
-        .arg("--")
-        .arg("-p")
-        .arg(&invalid)
-        .output()
-        .expect("launch");
+    let output =
+        fixture.command("claude", &[]).arg("--").arg("-p").arg(&invalid).output().expect("launch");
 
     assert_eq!(code(&output), 65, "the argument does not match `abc`");
     let record = failure_record(&output);
@@ -1295,10 +1246,7 @@ fn the_readme_documents_everything_the_spec_requires() {
     let required: [(&str, &str); 9] = [
         ("the build command", "cargo build --manifest-path tools/agentic-cli-mock/Cargo.toml"),
         ("the executable path", "tools/agentic-cli-mock/target/debug/agentic-cli-mock"),
-        (
-            "the command-line grammar",
-            "--tool <claude|codex|docker|docker+claude|docker+codex>",
-        ),
+        ("the command-line grammar", "--tool <claude|codex|docker|docker+claude|docker+codex>"),
         ("the delay bound", "0..=10000"),
         ("the configuration-error code", "`64`"),
         ("the expectation-mismatch code", "`65`"),

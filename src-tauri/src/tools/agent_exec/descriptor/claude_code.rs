@@ -138,10 +138,7 @@ pub fn schema_argument(result_contract: Option<ResultContract>) -> Cow<'static, 
         // leaving the agent no shape to move to but an invented verdict.
         Some(contract) => Cow::Owned(ENVELOPE_SCHEMA.replacen(
             RESULT_FREE_FORM,
-            &format!(
-                r#""result":{{"oneOf":[{{"type":"null"}},{}]}},"#,
-                contract.schema_text()
-            ),
+            &format!(r#""result":{{"oneOf":[{{"type":"null"}},{}]}},"#, contract.schema_text()),
             1,
         )),
     }
@@ -334,10 +331,7 @@ pub fn extract(context: &ExtractContext<'_>) -> Result<Extracted, EnvelopeInvali
         Some(_) => return Err(EnvelopeInvalid::Malformed),
     };
 
-    Ok(Extracted {
-        envelope,
-        session_id: reported,
-    })
+    Ok(Extracted { envelope, session_id: reported })
 }
 
 // ---------------------------------------------------------------------------
@@ -379,11 +373,7 @@ fn system_activity(event: &Map<String, Value>) -> VendorActivity {
     match event.get(KEY_SUBTYPE).and_then(Value::as_str) {
         Some(SUBTYPE_INIT) => {
             let model = event.get("model").and_then(Value::as_str).unwrap_or("?");
-            let tools = event
-                .get("tools")
-                .and_then(Value::as_array)
-                .map(Vec::len)
-                .unwrap_or(0);
+            let tools = event.get("tools").and_then(Value::as_array).map(Vec::len).unwrap_or(0);
             VendorActivity {
                 kind: ActivityKind::Started,
                 summary: format!("session started · model {model} · {tools} tools"),
@@ -399,17 +389,15 @@ fn system_activity(event: &Map<String, Value>) -> VendorActivity {
             let error = event.get("error").and_then(Value::as_str).unwrap_or("");
             VendorActivity {
                 kind: ActivityKind::Retry,
-                summary: format!("API retry {attempt}/{max} · {status} {error}").trim_end().to_string(),
+                summary: format!("API retry {attempt}/{max} · {status} {error}")
+                    .trim_end()
+                    .to_string(),
             }
         }
-        Some(other) => VendorActivity {
-            kind: ActivityKind::Diagnostic,
-            summary: format!("system · {other}"),
-        },
-        None => VendorActivity {
-            kind: ActivityKind::Diagnostic,
-            summary: "system".to_string(),
-        },
+        Some(other) => {
+            VendorActivity { kind: ActivityKind::Diagnostic, summary: format!("system · {other}") }
+        }
+        None => VendorActivity { kind: ActivityKind::Diagnostic, summary: "system".to_string() },
     }
 }
 
@@ -426,10 +414,7 @@ fn message_activity(event: &Map<String, Value>, event_type: &str) -> VendorActiv
         .and_then(|message| message.get("content"))
         .and_then(Value::as_array);
     let Some(blocks) = blocks else {
-        return VendorActivity {
-            kind: ActivityKind::Message,
-            summary: event_type.to_string(),
-        };
+        return VendorActivity { kind: ActivityKind::Message, summary: event_type.to_string() };
     };
 
     let mut kind = ActivityKind::Message;
@@ -468,18 +453,12 @@ fn message_activity(event: &Map<String, Value>, event_type: &str) -> VendorActiv
     if parts.is_empty() {
         parts.push(event_type.to_string());
     }
-    VendorActivity {
-        kind,
-        summary: parts.join(" · "),
-    }
+    VendorActivity { kind, summary: parts.join(" · ") }
 }
 
 /// The turn's own ending, which is also the document extraction reads.
 fn result_activity(event: &Map<String, Value>) -> VendorActivity {
-    let subtype = event
-        .get(KEY_SUBTYPE)
-        .and_then(Value::as_str)
-        .unwrap_or("?");
+    let subtype = event.get(KEY_SUBTYPE).and_then(Value::as_str).unwrap_or("?");
     let failed = event.get(KEY_IS_ERROR).and_then(Value::as_bool) == Some(true);
     let turns = number(event.get("num_turns"));
     let duration = number(event.get("duration_ms"));
@@ -494,11 +473,7 @@ fn result_activity(event: &Map<String, Value>) -> VendorActivity {
         }
     }
     VendorActivity {
-        kind: if failed {
-            ActivityKind::Error
-        } else {
-            ActivityKind::Finished
-        },
+        kind: if failed { ActivityKind::Error } else { ActivityKind::Finished },
         summary,
     }
 }
@@ -521,10 +496,7 @@ fn tool_target(input: Option<&Value>) -> String {
 }
 
 fn unrecognized(line: &str) -> VendorActivity {
-    VendorActivity {
-        kind: ActivityKind::Unrecognized,
-        summary: one_line(line),
-    }
+    VendorActivity { kind: ActivityKind::Unrecognized, summary: one_line(line) }
 }
 
 /// A number as text, whatever JSON shape it arrived in.
@@ -534,4 +506,3 @@ fn number(value: Option<&Value>) -> String {
         _ => "?".to_string(),
     }
 }
-

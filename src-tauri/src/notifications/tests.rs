@@ -21,26 +21,15 @@ struct Recorder {
 
 impl Recorder {
     fn granted() -> Self {
-        Recorder {
-            permission: Mutex::new(PermissionState::Granted),
-            ..Default::default()
-        }
+        Recorder { permission: Mutex::new(PermissionState::Granted), ..Default::default() }
     }
 
     fn with_permission(state: PermissionState) -> Self {
-        Recorder {
-            permission: Mutex::new(state),
-            ..Default::default()
-        }
+        Recorder { permission: Mutex::new(state), ..Default::default() }
     }
 
     fn delivered_ids(&self) -> Vec<String> {
-        self.delivered
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|(id, _)| id.clone())
-            .collect()
+        self.delivered.lock().unwrap().iter().map(|(id, _)| id.clone()).collect()
     }
 
     fn fire_click(&self, id: &str) {
@@ -61,10 +50,7 @@ impl NotificationSink for Recorder {
         if *self.fail_delivery.lock().unwrap() {
             return Err(PostError::DeliveryFailed);
         }
-        self.delivered
-            .lock()
-            .unwrap()
-            .push((id.to_string(), request.clone()));
+        self.delivered.lock().unwrap().push((id.to_string(), request.clone()));
         self.clicks.lock().unwrap().insert(id.to_string(), on_click);
         Ok(())
     }
@@ -116,10 +102,7 @@ fn the_wire_shapes_match_the_contract_surface() {
     let json = serde_json::to_value(&activation).unwrap();
     assert_eq!(json.get("id").and_then(|v| v.as_str()), Some("notif-0"));
     assert_eq!(json.get("key").and_then(|v| v.as_str()), Some("run:abc"));
-    assert_eq!(
-        json.get("payload").and_then(|v| v.as_str()),
-        Some("synthesis://p/w/dashboard")
-    );
+    assert_eq!(json.get("payload").and_then(|v| v.as_str()), Some("synthesis://p/w/dashboard"));
 
     for (state, wire) in [
         (PermissionState::Granted, "granted"),
@@ -413,10 +396,7 @@ fn a_granted_post_reaches_the_platform_and_a_click_calls_back() {
     assert!(seen.lock().unwrap().is_empty(), "no click yet, no callback");
 
     sink.fire_click(&posted.id);
-    assert_eq!(
-        *seen.lock().unwrap(),
-        vec!["synthesis://p/w/bottom/runs".to_string()]
-    );
+    assert_eq!(*seen.lock().unwrap(), vec!["synthesis://p/w/bottom/runs".to_string()]);
     assert_eq!(registry.showing_count(), 0);
 }
 
@@ -441,11 +421,7 @@ fn a_dismissal_calls_nothing_back() {
 
     drop(sink); // the notification goes without an interaction
     assert_eq!(called.load(Ordering::SeqCst), 0);
-    assert_eq!(
-        registry.showing_count(),
-        1,
-        "and it is still showing as far as this run knows"
-    );
+    assert_eq!(registry.showing_count(), 1, "and it is still showing as far as this run knows");
 }
 
 // -----------------------------------------------------------------------
@@ -747,10 +723,7 @@ fn an_activation_raises_the_window_before_it_emits_and_emits_once() {
     drop(delivered);
 
     // NTD-FR-10: the notification is consumed as part of the activation.
-    assert_eq!(
-        handle.state::<NotificationRegistry>().showing_count(),
-        0
-    );
+    assert_eq!(handle.state::<NotificationRegistry>().showing_count(), 0);
 
     // A second activation of the same id routes nowhere.
     deliver_activation(&handle, &posted.id);
@@ -825,19 +798,12 @@ fn ids_stay_unique_and_the_two_maps_stay_in_step_under_concurrent_use() {
             ids
         }));
     }
-    let mut all: Vec<String> = handles
-        .into_iter()
-        .flat_map(|h| h.join().unwrap())
-        .collect();
+    let mut all: Vec<String> = handles.into_iter().flat_map(|h| h.join().unwrap()).collect();
     let total = all.len();
     all.sort();
     all.dedup();
     assert_eq!(all.len(), total, "no id was handed out twice");
-    assert_eq!(
-        registry.showing_count(),
-        0,
-        "every post was withdrawn or activated"
-    );
+    assert_eq!(registry.showing_count(), 0, "every post was withdrawn or activated");
     assert!(
         registry.lock().by_key.is_empty(),
         "and the key map did not leak entries behind the showing map"

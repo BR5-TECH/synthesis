@@ -23,31 +23,25 @@ impl AgentCliExecutor {
         S: LogSink + Clone + Send + Sync + 'static,
     {
         // --- 1. The task document, before anything external is touched ------
-        request
-            .task
-            .validate()
-            .map_err(AgentExecutionError::TaskInvalid)?;
-        let stdin_bytes = request
-            .task
-            .to_stdin_bytes()
-            .map_err(AgentExecutionError::RequestTooLarge)?;
+        request.task.validate().map_err(AgentExecutionError::TaskInvalid)?;
+        let stdin_bytes =
+            request.task.to_stdin_bytes().map_err(AgentExecutionError::RequestTooLarge)?;
 
         // --- 2. The integration, resolved by the executor itself ------------
         //
         // EAC-FR-03: the executor calls AIC, never the caller. A caller cannot
         // pre-resolve and hand in a vendor, because there is no field for one.
-        let invocation =
-            agentic::resolve_agentic_invocation(
-                context.store,
-                context.integrations,
-                context.project_key,
-                // EAC-FR-IRRD: which of the author's own model and effort
-                // selections apply to this turn. The kind is the whole of what
-                // the caller says about either; both are read here from the
-                // resolved integration.
-                Some(request.turn_kind.selection_key()),
-            )
-                .map_err(AgentExecutionError::IntegrationUnresolved)?;
+        let invocation = agentic::resolve_agentic_invocation(
+            context.store,
+            context.integrations,
+            context.project_key,
+            // EAC-FR-IRRD: which of the author's own model and effort
+            // selections apply to this turn. The kind is the whole of what
+            // the caller says about either; both are read here from the
+            // resolved integration.
+            Some(request.turn_kind.selection_key()),
+        )
+        .map_err(AgentExecutionError::IntegrationUnresolved)?;
 
         let (vendor, model_id, effort_id) = match invocation {
             AgenticInvocation::Cli {
@@ -132,10 +126,10 @@ impl AgentCliExecutor {
         }
 
         // --- 4. The execution directory -------------------------------------
-        let execution_directory = self.validate_directory(context.fs, &request.execution_directory)?;
-        let mount_source = descriptor::mount_source(&execution_directory).ok_or(
-            AgentExecutionError::ExecutionDirectoryInvalid(DirectoryProblem::Unmountable),
-        )?;
+        let execution_directory =
+            self.validate_directory(context.fs, &request.execution_directory)?;
+        let mount_source = descriptor::mount_source(&execution_directory)
+            .ok_or(AgentExecutionError::ExecutionDirectoryInvalid(DirectoryProblem::Unmountable))?;
 
         // --- 5. Launch material, from AIC and nowhere else -------------------
         let credential =
@@ -148,9 +142,7 @@ impl AgentCliExecutor {
         // where it is not, the launch takes the fallback shape and the directory
         // stands at the fixed path.
         let aligned = descriptor::container_path(&execution_directory);
-        let workspace = aligned
-            .clone()
-            .unwrap_or_else(|| WORKSPACE_TARGET.to_string());
+        let workspace = aligned.clone().unwrap_or_else(|| WORKSPACE_TARGET.to_string());
         let mut mounts = vec![BindMount {
             source: mount_source.clone(),
             target: workspace.clone(),
@@ -198,11 +190,7 @@ impl AgentCliExecutor {
                 // path it was mounted from.
                 masked_paths.push(source.clone());
                 masked_paths.push(target.clone());
-                mounts.push(BindMount {
-                    source,
-                    target: target.clone(),
-                    read_only: false,
-                });
+                mounts.push(BindMount { source, target: target.clone(), read_only: false });
                 // CDX-FR-24: the same directory, named to the CLI.
                 if let descriptor::SessionStateMount::SharedWithCredentialMount { env: name } =
                     descriptor.session_state
@@ -225,11 +213,7 @@ impl AgentCliExecutor {
             let source = descriptor::mount_source(&host_dir).ok_or(
                 AgentExecutionError::ExecutionDirectoryInvalid(DirectoryProblem::Unmountable),
             )?;
-            mounts.push(BindMount {
-                source,
-                target: target.to_string(),
-                read_only: false,
-            });
+            mounts.push(BindMount { source, target: target.to_string(), read_only: false });
             env_literals.push((env_name.to_string(), target.to_string()));
             session_state_dir = Some(host_dir);
         }
@@ -273,12 +257,11 @@ impl AgentCliExecutor {
         // turn that reached here under the wrong name still cannot read a
         // repository. Masking and the read-only access below are exclusive, and
         // masking wins wherever both would apply.
-        let masked = request.supplementary_mount.is_some()
-            || request.turn_kind == TurnKind::SemanticRebase;
+        let masked =
+            request.supplementary_mount.is_some() || request.turn_kind == TurnKind::SemanticRebase;
         if masked {
             let mask = self.empty_mask_dir(context.fs)?;
-            for (rel, kind) in
-                repository_metadata_paths(context.fs, &request.execution_directory)?
+            for (rel, kind) in repository_metadata_paths(context.fs, &request.execution_directory)?
             {
                 // EAC-FR-41: masked by something of its own kind, or the kernel
                 // refuses the mount and the repository stays reachable.
@@ -307,8 +290,12 @@ impl AgentCliExecutor {
         // no error. Repository access is a convenience of a turn and never a
         // precondition of one, which is the opposite of the masking above.
         if !masked {
-            match self.repository_mounts(context.fs, &execution_directory, &workspace, aligned.is_some())
-            {
+            match self.repository_mounts(
+                context.fs,
+                &execution_directory,
+                &workspace,
+                aligned.is_some(),
+            ) {
                 Some((repository, env, linked)) => {
                     mounts.extend(repository);
                     env_literals.extend(env);
@@ -365,16 +352,11 @@ impl AgentCliExecutor {
         // that cannot find or fetch it is `ImageUnavailable`. `ensure_image`
         // inspects before it pulls, so an image the author built locally runs
         // without a registry ever being reached.
-        runtime
-            .ensure_image(&image)
-            .await
-            .map_err(|error| match error {
-                RuntimeError::ImageUnavailable => {
-                    AgentExecutionError::ImageUnavailable(vendor.clone())
-                }
-                RuntimeError::Unavailable => AgentExecutionError::RuntimeUnavailable,
-                RuntimeError::LaunchFailed(reason) => AgentExecutionError::LaunchFailed(reason),
-            })?;
+        runtime.ensure_image(&image).await.map_err(|error| match error {
+            RuntimeError::ImageUnavailable => AgentExecutionError::ImageUnavailable(vendor.clone()),
+            RuntimeError::Unavailable => AgentExecutionError::RuntimeUnavailable,
+            RuntimeError::LaunchFailed(reason) => AgentExecutionError::LaunchFailed(reason),
+        })?;
 
         // --- 7. The invocation ------------------------------------------------
         let (host_uid, host_gid) = descriptor::host_ids();
@@ -396,12 +378,8 @@ impl AgentCliExecutor {
         );
         // EAC-FR-OWPP: a variable the executor sets itself is not overridden by
         // one of the launch environment. The name is logged and the value is not.
-        let dropped = drop_executor_set_variables(
-            &mut env_names,
-            &mut env,
-            &mut masked_env,
-            &env_literals,
-        );
+        let dropped =
+            drop_executor_set_variables(&mut env_names, &mut env, &mut masked_env, &env_literals);
         if !dropped.is_empty() {
             logging::log_warn(
                 sink,
@@ -517,7 +495,11 @@ impl AgentCliExecutor {
             at: crate::notes::now_rfc3339(),
             channel: CHANNEL_EXECUTOR,
             kind: descriptor::ActivityKind::Invocation.as_str(),
-            summary: descriptor::summary_line(&format!("{} {}", descriptor::DOCKER_PROGRAM, argv_text)),
+            summary: descriptor::summary_line(&format!(
+                "{} {}",
+                descriptor::DOCKER_PROGRAM,
+                argv_text
+            )),
             payload,
             payload_truncated,
         });
@@ -591,13 +573,8 @@ impl AgentCliExecutor {
         let expected_session_id = (descriptor.assigns_session_id() && resume_session.is_none())
             .then_some(assigned_session_id.as_str());
 
-        let (mut execution, invalid) = self.interpret(
-            descriptor,
-            outcome,
-            started,
-            container_removed,
-            expected_session_id,
-        );
+        let (mut execution, invalid) =
+            self.interpret(descriptor, outcome, started, container_removed, expected_session_id);
 
         // EAC-FR-30's last clause. One pinned vendor cannot fail a resume: asked
         // to continue a session it no longer holds, it starts a fresh one and
@@ -605,13 +582,9 @@ impl AgentCliExecutor {
         // two is the identity the run came back with, so that is what decides
         // it rather than the run's own verdict — otherwise a caller believes it
         // continued a conversation that in fact began again with no memory.
-        if let (Some(asked), Some(got)) = (
-            resume_session,
-            execution
-                .session
-                .as_ref()
-                .and_then(|s| s.session_id.as_deref()),
-        ) {
+        if let (Some(asked), Some(got)) =
+            (resume_session, execution.session.as_ref().and_then(|s| s.session_id.as_deref()))
+        {
             if asked != got {
                 logging::log_warn(
                     sink,
@@ -746,9 +719,7 @@ impl AgentCliExecutor {
     ) -> Result<PathBuf, AgentExecutionError> {
         use AgentExecutionError::ExecutionDirectoryInvalid as Invalid;
 
-        let info = fs
-            .file_info(path)
-            .map_err(|error| Invalid(directory_problem(&error)))?;
+        let info = fs.file_info(path).map_err(|error| Invalid(directory_problem(&error)))?;
         if info.kind != EntryKind::Dir {
             return Err(Invalid(DirectoryProblem::NotADirectory));
         }
@@ -821,10 +792,9 @@ impl AgentCliExecutor {
                 let session = merge_session(envelope.session.clone(), vendor_session);
                 (base(ProcessOutcome::Completed, Some(envelope), session), None)
             }
-            Err(reason) => (
-                base(ProcessOutcome::InvalidStructuredOutput, None, None),
-                Some(reason),
-            ),
+            Err(reason) => {
+                (base(ProcessOutcome::InvalidStructuredOutput, None, None), Some(reason))
+            }
         }
     }
 }

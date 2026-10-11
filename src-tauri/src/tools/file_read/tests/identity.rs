@@ -12,10 +12,7 @@ fn the_tool_is_a_portable_tool_named_for_the_contract() {
     let tool = FileReadTool::new(app.handle().clone(), "identity");
     let definition = rig::tool::tool_definition(&tool);
 
-    assert_eq!(
-        <FileReadTool<tauri::test::MockRuntime> as PortableTool>::NAME,
-        "read_file",
-    );
+    assert_eq!(<FileReadTool<tauri::test::MockRuntime> as PortableTool>::NAME, "read_file",);
     assert_eq!(definition.name, "read_file");
 }
 
@@ -43,10 +40,7 @@ fn the_description_and_schema_are_the_contract_surfaces_own_text() {
         OFFSET_DESCRIPTION.contains("past the end"),
         "offset states what reading past the end does",
     );
-    assert!(
-        LIMIT_DESCRIPTION.contains("rest of the file"),
-        "limit states its default",
-    );
+    assert!(LIMIT_DESCRIPTION.contains("rest of the file"), "limit states its default",);
     assert!(
         LIMIT_DESCRIPTION.contains("below 1"),
         "limit states how an out-of-range value is treated",
@@ -58,4 +52,3 @@ fn the_description_and_schema_are_the_contract_surfaces_own_text() {
     assert!(SPEC.contains(OFFSET_DESCRIPTION));
     assert!(SPEC.contains(LIMIT_DESCRIPTION));
 }
-

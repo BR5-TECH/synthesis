@@ -26,12 +26,8 @@ fn main() {
 
     let sleep = |duration: Duration| thread::sleep(duration);
 
-    let mut environment = Environment {
-        stdin: &mut stdin,
-        stdout: &mut stdout,
-        stderr: &mut stderr,
-        sleep: &sleep,
-    };
+    let mut environment =
+        Environment { stdin: &mut stdin, stdout: &mut stdout, stderr: &mut stderr, sleep: &sleep };
 
     let code = run(&argv, agentic_cli_mock::adapter::REGISTRY, &mut environment);
 

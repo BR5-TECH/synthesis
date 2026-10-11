@@ -69,9 +69,7 @@ pub(super) fn insert_at(object: &mut Map<String, Value>, path: &[String], secret
     };
     let mut current = object;
     for key in parents {
-        let entry = current
-            .entry(key.clone())
-            .or_insert_with(|| Value::Object(Map::new()));
+        let entry = current.entry(key.clone()).or_insert_with(|| Value::Object(Map::new()));
         match entry.as_object_mut() {
             Some(next) => current = next,
             None => return false,

@@ -48,12 +48,12 @@ describe("routing an address that resolves (NTF-FR-17)", () => {
         { kind: "bottom", surface: "git" },
       ],
       [
-        { kind: "settings", which: "global" },
-        { kind: "settings", which: "global" },
+        { kind: "settings", scope: "global", section: null },
+        { kind: "settings", scope: "global", section: null },
       ],
       [
-        { kind: "settings", which: "project" },
-        { kind: "settings", which: "project" },
+        { kind: "settings", scope: "project", section: null },
+        { kind: "settings", scope: "project", section: null },
       ],
     ];
 
@@ -170,7 +170,7 @@ describe("routing an address that does not resolve (NTF-FR-19)", () => {
       { kind: "dashboard" } as const,
       { kind: "panel", surface: "drafts" } as const,
       { kind: "bottom", surface: "logs" } as const,
-      { kind: "settings", which: "global" } as const,
+      { kind: "settings", scope: "global", section: null } as const,
     ]) {
       expect(resolveActivation(address(target), ctx).kind).toBe("open");
     }
@@ -229,9 +229,8 @@ const handlers = (): ActivationHandlers & { calls: string[] } => {
     openDashboard: () => calls.push("dashboard"),
     openPanelSurface: (s) => calls.push(`panel:${s}`),
     openBottomSurface: (s) => calls.push(`bottom:${s}`),
-    openGlobalSettings: () => calls.push("settings:global"),
+    openSettings: (address) => calls.push(`settings:${address}`),
     openRun: (r) => calls.push(`run:${r}`),
-    openProjectSettings: () => calls.push("settings:project"),
   };
 };
 
@@ -252,8 +251,20 @@ describe("the hook dispatches an activation (NTF-FR-17 / NTF-FR-18)", () => {
       [{ kind: "draft", draftId: "d1" }, "draft:d1"],
       [{ kind: "panel", surface: "comments" }, "panel:comments"],
       [{ kind: "bottom", surface: "git" }, "bottom:git"],
-      [{ kind: "settings", which: "global" }, "settings:global"],
-      [{ kind: "settings", which: "project" }, "settings:project"],
+      // SWN-FR-HZWD: an address that names a scope and no section lands on the
+      // first section of that scope; one that names a section lands on it.
+      [
+        { kind: "settings", scope: "global", section: null },
+        "settings:global/appearance",
+      ],
+      [
+        { kind: "settings", scope: "project", section: null },
+        "settings:project/project",
+      ],
+      [
+        { kind: "settings", scope: "global", section: "notifications" },
+        "settings:global/notifications",
+      ],
     ];
     for (const [target, expected] of cases) {
       listeners.length = 0;
@@ -342,7 +353,7 @@ describe("the hook dispatches an activation (NTF-FR-17 / NTF-FR-18)", () => {
         visibleBottomSurface: null,
     visibleRun: null,
     // SWN-FR-05 / NTF-FR-08: no settings child window is open.
-    openSettingsWindow: null,
+    settingsWindowOpen: false,
       }),
       resolveTab: () => null,
     });

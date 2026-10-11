@@ -58,7 +58,7 @@ const backgrounded: WindowSnapshot = {
   visibleBottomSurface: null,
   visibleRun: null,
   // SWN-FR-05 / NTF-FR-08: no settings child window is open.
-  openSettingsWindow: null,
+  settingsWindowOpen: false,
 };
 
 const raiseFor = (address: string): Raise => ({
@@ -203,7 +203,7 @@ describe("the post policy (NTF-FR-08 through NTF-FR-11)", () => {
       visibleBottomSurface: null,
     visibleRun: null,
     // SWN-FR-05 / NTF-FR-08: no settings child window is open.
-    openSettingsWindow: null,
+    settingsWindowOpen: false,
     };
     expect(decideDelivery(raiseFor(dashboard), picker, granted)).toEqual({
       channel: "toast",
@@ -271,12 +271,12 @@ describe("a settings address is judged against the window (NTF-FR-08, SWN-FR-05)
     ...backgrounded,
     focused: true,
     mainFocused: true,
-    openSettingsWindow: "global",
+    settingsWindowOpen: true,
   };
-  const settingsAddress = (which: "global" | "project") =>
-    mintAddress(PROJECT, WORKTREE, { kind: "settings", which });
+  const settingsAddress = (scope: "global" | "project") =>
+    mintAddress(PROJECT, WORKTREE, { kind: "settings", scope, section: null });
 
-  it("NTF-FR-25, NTF-FR-08: suppresses a raise naming the settings window that is open", () => {
+  it("NTF-FR-25, NTF-FR-08: suppresses a raise naming the Settings window while it is open", () => {
     // The author has already been told by the thing itself. A settings surface
     // is a window rather than a tab (SWN-FR-01), so this is answered from the
     // window snapshot — the active TAB says nothing about it.
@@ -288,15 +288,15 @@ describe("a settings address is judged against the window (NTF-FR-08, SWN-FR-05)
     ).toEqual({ channel: "none", reason: "already-looking" });
   });
 
-  it("posts a raise naming the OTHER settings window", () => {
-    // At most one is ever open (SWN-FR-05), so the one that is not open is
-    // somewhere the author is not.
+  it("NTF-FR-08, SWN-FR-05: suppresses a raise naming either scope of the one open Settings window", () => {
+    // There is one Settings window, so a raise naming either of its scopes names
+    // the thing the author is already looking at.
     expect(
       decideDelivery(raiseFor(settingsAddress("project")), inGlobalSettings, {
         enabled: true,
         permissionGranted: true,
       }),
-    ).toEqual({ channel: "toast" });
+    ).toEqual({ channel: "none", reason: "already-looking" });
   });
 
   it("posts when no settings window is open, whatever the active tab claims", () => {
@@ -306,8 +306,8 @@ describe("a settings address is judged against the window (NTF-FR-08, SWN-FR-05)
     // window is what decides, and none is open.
     const noWindow: WindowSnapshot = {
       ...inGlobalSettings,
-      openSettingsWindow: null,
-      activeTarget: { kind: "settings", which: "global" },
+      settingsWindowOpen: false,
+      activeTarget: { kind: "settings", scope: "global", section: null },
     };
     expect(
       decideDelivery(raiseFor(settingsAddress("global")), noWindow, {

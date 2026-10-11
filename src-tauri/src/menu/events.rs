@@ -25,31 +25,23 @@ pub(super) enum MenuAction {
     Find,
     /// The same for the Find & Replace panel (SNV-FR-43).
     FindReplace,
-    /// Open, focus, or switch to the Global settings child window (SWN-FR-14).
-    GlobalSettings,
-    /// The same for Project settings, offered only while a project is open
-    /// (SWN-FR-16).
-    ProjectSettings,
+    /// Open or focus the Settings child window (SWN-FR-14).
+    Settings,
     /// Open the About panel in the window that is showing (SNV-FR-KXPE,
     /// ABT-FR-KMVD).
     About,
 }
 
 impl MenuAction {
-    /// SWN-FR-02: whether this action survives a settings window being open.
+    /// SWN-FR-02: whether this action survives the Settings window being open.
     ///
-    /// While one is open the parent window "accepts no pointer, keyboard, or
+    /// While it is open the parent window "accepts no pointer, keyboard, or
     /// menu interaction", so every item that acts on the parent is inert. The
-    /// two settings entries are not among them — they are how the author
-    /// switches between the two windows (SWN-FR-07) and how a second activation
-    /// focuses the one already open (SWN-FR-06) — and neither is the quit,
-    /// which writes the settings window's pending changes first and then goes
-    /// (SWN-FR-19).
+    /// settings entry is not among them — a second activation focuses the
+    /// window already open (SWN-FR-06) — and neither is the quit, which writes
+    /// the window's pending changes first and then goes (SWN-FR-19).
     pub(super) fn reaches_past_a_settings_window(self) -> bool {
-        matches!(
-            self,
-            Self::GlobalSettings | Self::ProjectSettings | Self::Exit
-        )
+        matches!(self, Self::Settings | Self::Exit)
     }
 }
 
@@ -66,8 +58,7 @@ pub(super) fn menu_event_action(id: &str) -> Option<MenuAction> {
         MENU_CLOSE_PROJECT => Some(MenuAction::CloseProject),
         MENU_FIND => Some(MenuAction::Find),
         MENU_FIND_REPLACE => Some(MenuAction::FindReplace),
-        MENU_GLOBAL_SETTINGS => Some(MenuAction::GlobalSettings),
-        MENU_PROJECT_SETTINGS => Some(MenuAction::ProjectSettings),
+        MENU_SETTINGS => Some(MenuAction::Settings),
         MENU_ABOUT => Some(MenuAction::About),
         // Both quit entry points — File -> Exit and the app submenu's Quit —
         // are the same action (SNV-FR-26).
@@ -87,7 +78,7 @@ pub fn handle_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str)
     let Some(action) = menu_event_action(id) else {
         return;
     };
-    // SWN-FR-02: a settings window blocks its parent, and the
+    // SWN-FR-02: the Settings window blocks its parent, and the
     // application menu is the parent's. Everything that would act on the parent
     // is swallowed here rather than relayed to a window that cannot show what it
     // did — a disabled webview still runs its JavaScript, so an unfiltered
@@ -98,24 +89,12 @@ pub fn handle_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str)
         return;
     }
     let event = match action {
-        // SWN-FR-14: the two settings entries open, focus, or switch to their
-        // window from this side. They relay nothing: a settings window is a
-        // window of the application rather than a surface of the main one, so
-        // there is no frontend to ask (SWN-FR-01).
-        MenuAction::GlobalSettings => {
-            crate::settings_window::request_open(
-                app,
-                crate::settings_window::SettingsWindowKind::Global,
-                None,
-            );
-            return;
-        }
-        MenuAction::ProjectSettings => {
-            crate::settings_window::request_open(
-                app,
-                crate::settings_window::SettingsWindowKind::Project,
-                None,
-            );
+        // SWN-FR-14: the settings entry opens or focuses the window from this
+        // side. It relays nothing: the Settings window is a window of the
+        // application rather than a surface of the main one, so there is no
+        // frontend to ask (SWN-FR-01).
+        MenuAction::Settings => {
+            crate::settings_window::request_open(app, None);
             return;
         }
         MenuAction::NewFile => MENU_NEW_FILE,

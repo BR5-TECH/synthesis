@@ -22,6 +22,7 @@ import {
   onProjectImageBuildProgress,
 } from "../events";
 import { logWarn } from "../logging";
+import { formatSectionAddress } from "../settingsWindow";
 import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
 import type {
   AgenticCliVendor,
@@ -475,12 +476,13 @@ export function ProjectDockerImages() {
    * SET-FR-24: where the backend is set up, as something the author can follow.
    *
    * Naming a section they then have to find themselves is a pointer; opening it
-   * is an answer. The two settings windows are one window at a time (SWN-FR-05,
-   * SWN-FR-07), so this replaces the window it is activated from — which is the
-   * documented behaviour of every other route into a settings section.
+   * is an answer. The Settings window is one window (SWN-FR-05), so this
+   * presents the Global Docker section in the window it is activated from —
+   * which is the documented behaviour of every other route into a section
+   * (SWN-FR-06, SWN-FR-HZWD).
    */
   const openBackendSettings = () => {
-    void api.openSettingsWindow("global", "docker").catch((e) => {
+    void api.openSettingsWindow(formatSectionAddress("global", "docker")).catch((e) => {
       logWarn(["frontend"], "global docker settings could not be opened", {
         error: e instanceof Error ? e.message : String(e),
       });

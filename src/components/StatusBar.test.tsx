@@ -24,7 +24,6 @@ function operation(overrides: Partial<Operation> = {}): Operation {
 
 function renderBar(overrides: Partial<StatusBarProps> = {}) {
   const props: StatusBarProps = {
-    onGlobalSettings: vi.fn(),
     onSettings: vi.fn(),
     operations: [],
     overlayOpen: false,
@@ -42,23 +41,27 @@ function renderBar(overrides: Partial<StatusBarProps> = {}) {
 }
 
 describe("leading region (STB-FR-04)", () => {
-  it("hosts both settings buttons and activates the matching tab", async () => {
+  it("STB-FR-04: hosts the one Settings button and hands it to the handler", async () => {
     const { props } = renderBar();
     const leading = screen.getByTestId("status-bar").firstElementChild!;
 
-    await userEvent.click(
-      within(leading as HTMLElement).getByRole("button", {
+    const buttons = within(leading as HTMLElement).getAllByRole("button");
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual(["Settings"]);
+    expect(
+      within(leading as HTMLElement).queryByRole("button", {
         name: "Global settings",
       }),
-    );
-    expect(props.onGlobalSettings).toHaveBeenCalledTimes(1);
-
-    await userEvent.click(
-      within(leading as HTMLElement).getByRole("button", {
+    ).toBeNull();
+    expect(
+      within(leading as HTMLElement).queryByRole("button", {
         name: "Project settings",
       }),
-    );
+    ).toBeNull();
+
+    await userEvent.click(buttons[0]);
+    // SWN-FR-FCRT: the handler learns which control invoked the window.
     expect(props.onSettings).toHaveBeenCalledTimes(1);
+    expect(props.onSettings).toHaveBeenCalledWith(buttons[0]);
   });
 });
 
@@ -341,8 +344,7 @@ describe("trailing region — diff summary (STB-FR-25–STB-FR-29)", () => {
     // strip is unaffected.
     renderBar({ diffTotals: null });
     expect(screen.queryByTestId("status-bar-diffstat")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Global settings" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Project settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
     expect(screen.getByTestId("line-ending-select")).toBeInTheDocument();
     expect(screen.getByTestId("indentation-select")).toBeInTheDocument();
   });

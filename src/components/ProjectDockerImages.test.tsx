@@ -585,8 +585,7 @@ describe("Project settings → Docker (SET-FR-21..SET-FR-27)", () => {
     );
     await waitFor(() => expect(calls("open_settings_window")).toHaveLength(1));
     expect(calls("open_settings_window")[0][1]).toEqual({
-      kind: "global",
-      section: "docker",
+      section: "global/docker",
     });
   });
 

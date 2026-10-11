@@ -49,7 +49,7 @@ interface DraftTemplateSectionProps {
  * rest after the last keystroke, and immediately when this section is left or
  * the window closes — so the section takes no part in the per-section dirty
  * state of SET-FR-08 and raises no discard-unsaved-changes confirmation
- * (SET-FR-09, SWN-FR-10). There is nothing to discard, because what the author
+ * (SWN-FR-10). There is nothing to discard, because what the author
  * typed is already on its way to disk.
  */
 export function DraftTemplateSection({
@@ -221,7 +221,7 @@ export function DraftTemplateSection({
   useEffect(
     () =>
       registerSettingsSection({
-        section: "template",
+        section: "project/template",
         pending: () =>
           inFlight.current !== null ||
           storeRef.current?.ensure(TEMPLATE_DOC_KEY).dirty === true,

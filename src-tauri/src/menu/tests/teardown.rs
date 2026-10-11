@@ -443,8 +443,7 @@ fn file_menu_full_order_is_the_ten_items_the_spec_names() {
             "New Folder",
             "Save",
             "Save All",
-            "Global settings",
-            "Project settings",
+            "Settings",
             "Close Project",
             "About",
             "Exit"

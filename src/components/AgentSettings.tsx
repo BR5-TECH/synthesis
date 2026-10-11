@@ -286,8 +286,8 @@ function PersonaEditor({ agent, catalog, onCancel, onSaved }: PersonaEditorProps
         </span>
       )}
 
-      {/* The editor is taller than the window it opens in — the Global settings
-          window is fixed at 800 × 600 (per `SWN-settings-windows.md`
+      {/* The editor is taller than the window it opens in — the Settings window
+          opens at 800 × 600 and can be no smaller (per `SWN-settings-windows.md`
           SWN-FR-03), which is roughly 572 px of body once the title bar is
           taken — so the card scrolls. Its two actions must not scroll away with
           it: a confirm the author cannot see on open reads as a form with no

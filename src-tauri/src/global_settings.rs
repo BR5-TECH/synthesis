@@ -170,6 +170,16 @@ pub struct ProjectSlot {
     pub layout: Option<crate::layout::LayoutPreferences>,
 }
 
+/// The Settings window's size in logical pixels (GSS-FR-WSZK). Persisted
+/// without interpretation: the default, the minimum, and the clamping to a
+/// display belong to the window's owner (`SWN-settings-windows.md`).
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SettingsWindowSize {
+    pub width: u32,
+    pub height: u32,
+}
+
 /// The on-disk shape of `synthesis.toml` (GSS-FR-02). `#[serde(default)]` makes
 /// every field optional, so a partial or forward-versioned file deserialises
 /// with the missing pieces defaulted — the logic-level half of GSS-FR-13.
@@ -258,6 +268,13 @@ pub struct PersistedState {
     /// (GSS-FR-ZKQT). One table, declared beside `docker_backend` and before the
     /// two project tables below. It holds no token and no key (GSS-FR-VMRB).
     pub relay_endpoint: crate::relay_endpoint::RelayEndpointRecord,
+    /// GSS-FR-WSZK: the size the author gave the Settings window, or `None`
+    /// until they resize it. One table, declared beside the other user-global
+    /// tables and before the two project tables below. It is deliberately not a
+    /// field of `app_preferences`: that record is written whole by the
+    /// frontend, which would carry a stale copy of this size over a fresh one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settings_window_size: Option<SettingsWindowSize>,
     /// Per-project slots, keyed by project (GSS-FR-18). A `BTreeMap` so the
     /// serialised file has a stable key order rather than churning on save.
     pub projects: std::collections::BTreeMap<String, ProjectSlot>,
@@ -709,6 +726,23 @@ impl GlobalSettingsStore {
         let record = state.docker_backend.clone();
         self.persist(&state)?;
         Ok(record)
+    }
+
+    // -- Settings window size (GSS-FR-WSZK) ------------------------------
+
+    /// GSS-FR-WSZK: the stored Settings window size, or `None` when the author
+    /// never resized the window. Reads the store and nothing else.
+    pub fn load_settings_window_size(&self) -> Result<Option<SettingsWindowSize>, String> {
+        Ok(self.lock()?.settings_window_size)
+    }
+
+    /// GSS-FR-WSZK: remember the size the author gave the window. Touches no
+    /// other field, so it never depends on a project and never clobbers a
+    /// preference.
+    pub fn save_settings_window_size(&self, width: u32, height: u32) -> Result<(), String> {
+        let mut state = self.lock()?;
+        state.settings_window_size = Some(SettingsWindowSize { width, height });
+        self.persist(&state)
     }
 
     // -- Relay endpoint (GSS-FR-ZKQT) ------------------------------------

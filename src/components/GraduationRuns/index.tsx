@@ -93,7 +93,7 @@ export interface GraduationRunsProps {
    * GRU-FR-QLRQ: open Project settings on a named section. A run stopped at
    * its time limit routes the author to the section that sets the limit.
    */
-  onOpenSettings?: (section: string) => void;
+  onOpenSettings?: (address: string) => void;
 }
 
 export function GraduationRuns({

@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { onNotificationActivated } from "../events";
 import { logInfo } from "../logging";
+import { firstSectionOf, formatSectionAddress } from "../settingsWindow";
 import {
   describeTarget,
   parseAddress,
@@ -102,8 +103,7 @@ export interface ActivationHandlers {
   openBottomSurface: (surface: string) => void;
   /** NTF-FR-17 / GRU-FR-BLSS: open the Runs panel's graduation section on a run. */
   openRun: (runId: string) => void;
-  openGlobalSettings: () => void;
-  openProjectSettings: () => void;
+  openSettings: (address: string | null) => void;
 }
 
 /** NTF-FR-20: the key of the toast that says an address cannot be reached. */
@@ -184,8 +184,14 @@ export function useNotifications(
         h.openBottomSurface(outcome.target.surface);
         break;
       case "settings":
-        if (outcome.target.which === "global") h.openGlobalSettings();
-        else h.openProjectSettings();
+        // SWN-FR-HZWD: the address names a scope, and a section within it
+        // unless it names none, in which case the scope's first section.
+        h.openSettings(
+          formatSectionAddress(
+            outcome.target.scope,
+            outcome.target.section ?? firstSectionOf(outcome.target.scope),
+          ),
+        );
         break;
     }
   }, []);

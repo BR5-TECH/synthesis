@@ -19,6 +19,8 @@ import {
 import { useExternalChanges } from "./useExternalChanges";
 import { onProjectTreeChanged } from "../events";
 import { logDebug, logWarn } from "../logging";
+import { formatSectionAddress } from "../settingsWindow";
+import { noteSettingsInvoker } from "../state/settingsInvoker";
 import type {
   NewFileSeed,
   NewFolderSeed,
@@ -489,31 +491,42 @@ export function useShellSession(stores: ShellSessionStores = {}) {
   }, [findEnabled]);
 
   /**
-   * SWN-FR-13 / SET-FR-01: open the Project settings child window.
+   * SWN-FR-13: open the Settings child window, on the section `address` names
+   * (SWN-FR-HZWD) or on Appearance where it names none (SWN-FR-MRNB).
    *
    * A window rather than a tab (SWN-FR-01, TAB-FR-03): nothing is added to the
    * strip, nothing is focused in it, and the never-empty invariant is untouched
-   * (SWN-FR-18). Everything about which window ends up on screen — focusing the
-   * one already open, closing the other one first, refusing while a save sweep
-   * runs — is the backend's single decision (SWN-FR-05 through SWN-FR-07,
-   * SWN-FR-12), so this side asks and does not arbitrate.
+   * (SWN-FR-18). Everything about what ends up on screen — focusing the window
+   * already open, refusing a Project section while no project is open, refusing
+   * while a save sweep runs — is the backend's single decision (SWN-FR-05,
+   * SWN-FR-06, SWN-FR-12, SWN-FR-16), so this side asks and does not arbitrate.
+   *
+   * `invoker` is the control the request came from, so focus goes back to it
+   * when the window closes (SWN-FR-FCRT).
    */
-  const openSettings = (section: string | null = null) => {
-    void api.openSettingsWindow("project", section).catch((e) => {
-      logWarn(["frontend"], "Project settings window could not be opened", {
+  const openSettings = (
+    address: string | null = null,
+    invoker: Element | null = null,
+  ) => {
+    noteSettingsInvoker(invoker);
+    void api.openSettingsWindow(address).catch((e) => {
+      logWarn(["frontend"], "Settings window could not be opened", {
         reason: e instanceof Error ? e.message : String(e),
       });
     });
   };
 
-  /** SWN-FR-13 / GLS-FR-01: the same for the Global settings child window. */
-  const openGlobalSettings = (section: string | null = null) => {
-    void api.openSettingsWindow("global", section).catch((e) => {
-      logWarn(["frontend"], "Global settings window could not be opened", {
-        reason: e instanceof Error ? e.message : String(e),
-      });
-    });
-  };
+  /** SWN-FR-HZWD: open the Settings window on a section of its Global group. */
+  const openGlobalSettings = (section: string | null = null) =>
+    openSettings(
+      section === null ? null : formatSectionAddress("global", section),
+    );
+
+  /** SWN-FR-HZWD: the same for a section of its Project group. */
+  const openProjectSettings = (section: string | null = null) =>
+    openSettings(
+      section === null ? null : formatSectionAddress("project", section),
+    );
 
   /**
    * SNV-FR-41: the Home affordance opens the Dashboard in the leading position
@@ -797,6 +810,7 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     closeTabGroup,
     openSettings,
     openGlobalSettings,
+    openProjectSettings,
     goHome,
     // vertical panel
     panelSurface,

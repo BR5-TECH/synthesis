@@ -15,18 +15,19 @@ import { resetAppPreferencesCache } from "./state/appPreferences";
 import { resetSettingsSections } from "./state/settingsSweep";
 
 /**
- * A settings **child window** end to end
+ * The Settings **child window** end to end
  * (`../specifications/ui/SWN-settings-windows.md`).
  *
- * This is the window's own half of the contract: the save-before-close sweep it
- * runs when the backend asks (SWN-FR-08 through SWN-FR-12), the section it
- * presents when routed or when a save fails (SWN-FR-11, SWN-FR-13), the absence
- * of any discard prompt (SWN-FR-10), and the two things it holds that the main
- * window used to — the GitHub token picker of GHA-FR-20 and the project's
- * line-ending convention of SET-FR-11.
+ * This is the window's own half of the contract: the side nav with its two
+ * groups (SWN-FR-QXTV, SWN-FR-16), the save-before-close sweep it runs when the
+ * backend asks (SWN-FR-08 through SWN-FR-12), the section it presents when
+ * routed or when a save fails (SWN-FR-11, SWN-FR-HZWD), the absence of any
+ * discard prompt (SWN-FR-10), and the two things it holds that the main window
+ * used to — the GitHub token picker of GHA-FR-20 and the project's line-ending
+ * convention of SET-FR-11.
  *
- * The frame itself — the fixed size, the centring, the modality, the title, and
- * the one-window rule — is the backend's, and is pinned in
+ * The frame itself — the size, the centring, the modality, the title, and the
+ * one-window rule — is the backend's, and is pinned in
  * `src-tauri/src/settings_window.rs`.
  */
 
@@ -79,6 +80,11 @@ const CONTEXT = {
   contentRoot: "~/dev/acme",
 };
 
+/** SWN-FR-15: the same answer while no project is open. */
+const NO_PROJECT = { projectName: "", projectKey: "", contentRoot: "" };
+
+let context = CONTEXT;
+
 let projectConfig: { lineEndings: string; draftTemplate: string | null };
 let saveConfigOutcome: "ok" | "fail";
 let savedConfigs: unknown[];
@@ -89,7 +95,7 @@ function backend() {
     async (cmd: string, args?: Record<string, unknown>) => {
       switch (cmd) {
         case "get_settings_window_context":
-          return CONTEXT;
+          return context;
         case "load_app_preferences":
           return { theme: "dark" };
         case "save_app_preferences":
@@ -151,6 +157,7 @@ function backend() {
 }
 
 beforeEach(() => {
+  context = CONTEXT;
   invokeMock.mockReset();
   emitMock.mockReset();
   for (const k in eventHandlers) delete eventHandlers[k];
@@ -169,13 +176,22 @@ afterEach(() => {
   resetSettingsSections();
 });
 
+/** Render the window as the backend builds it, on a section address or none. */
+const renderWindow = (address: string | null = null) =>
+  render(<SettingsWindowApp initialSection={address} />);
 const renderGlobal = (section: string | null = null) =>
-  render(<SettingsWindowApp kind="global" initialSection={section} />);
+  renderWindow(section === null ? null : `global/${section}`);
 const renderProject = (section: string | null = null) =>
-  render(<SettingsWindowApp kind="project" initialSection={section} />);
+  renderWindow(`project/${section ?? "project"}`);
+
+/** The names of the nav rows of one group, in order (SWN-FR-QXTV). */
+const rowsOf = (group: "Global" | "Project") =>
+  within(screen.getByRole("tablist", { name: group }))
+    .getAllByRole("tab")
+    .map((tab) => tab.textContent);
 
 describe("the window renders its own settings and nothing of the shell (SWN-FR-01)", () => {
-  it("renders Global settings with none of the main window's chrome", async () => {
+  it("SWN-FR-01, SWN-FR-18: renders the settings with none of the main window's chrome", async () => {
     renderGlobal();
     await screen.findByTestId("global-settings");
     // SWN-FR-01 / SWN-FR-18: no tab strip, no activity bar, no status bar — the
@@ -185,13 +201,182 @@ describe("the window renders its own settings and nothing of the shell (SWN-FR-0
     expect(screen.queryByTestId("status-bar")).toBeNull();
   });
 
-  it("renders Project settings, and reads the project behind it", async () => {
+  it("SWN-FR-02, SET-FR-03: renders the Project group, and reads the project behind it", async () => {
     renderProject();
     await screen.findByText("Draft template");
     await waitFor(() =>
       expect(calls("get_settings_window_context")).toHaveLength(1),
     );
     expect(document.querySelector(".tabstrip")).toBeNull();
+  });
+});
+
+describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-16)", () => {
+  it("SWN-FR-QXTV: lists the Global group first and the Project group second, divided", async () => {
+    renderWindow();
+    await screen.findByTestId("global-settings");
+
+    expect(rowsOf("Global")).toEqual([
+      "Appearance",
+      "Navigation",
+      "Notifications",
+      "Recent projects",
+      "Installed plugins",
+      "Installed adapters",
+      "GitHub",
+      "AI API",
+      "Agentic AI",
+      "Agents",
+      "Docker",
+      "Remote connectivity",
+    ]);
+    expect(rowsOf("Project")).toEqual([
+      "Project",
+      "Draft template",
+      "Target repo bindings",
+      "GitHub Project settings",
+      "Agent adapters",
+      "MCP servers",
+      "Plugins",
+      "Agents",
+      "Docker",
+      "Graduation",
+    ]);
+    const global = screen.getByTestId("settings-group-global");
+    const project = screen.getByTestId("settings-group-project");
+    // Global first, then Project, with a visible boundary on the second.
+    expect(
+      global.compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(project.style.borderTop).not.toBe("");
+    expect(global.style.borderTop).toBe("");
+  });
+
+  it("SWN-FR-MRNB: opens on Appearance when the request names no section", async () => {
+    renderWindow();
+    expect(
+      await screen.findByRole("heading", { name: "Appearance" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Appearance" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("SWN-FR-KBNV: every tab controls one tabpanel that its group and its section name", async () => {
+    renderWindow("project/agents");
+    await screen.findByTestId("project-settings");
+
+    const panel = screen.getByRole("tabpanel");
+    const projectAgents = within(
+      screen.getByRole("tablist", { name: "Project" }),
+    ).getByRole("tab", { name: "Agents" });
+    const globalAgents = within(
+      screen.getByRole("tablist", { name: "Global" }),
+    ).getByRole("tab", { name: "Agents" });
+    for (const tab of screen.getAllByRole("tab")) {
+      expect(tab.id).not.toBe("");
+      expect(tab).toHaveAttribute("aria-controls", panel.id);
+    }
+    expect(panel).toHaveAccessibleName("Project Agents");
+    expect(panel).toContainElement(screen.getByTestId("project-settings"));
+
+    await userEvent.click(globalAgents);
+    await screen.findByTestId("global-settings");
+    expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Global Agents");
+    expect(screen.getByRole("tabpanel")).toContainElement(
+      screen.getByTestId("global-settings"),
+    );
+    expect(projectAgents.id).not.toBe(globalAgents.id);
+  });
+
+  it("SWN-FR-QXTV, SWN-FR-KBNV: tells a section that exists in both groups apart by its group", async () => {
+    renderWindow("project/agents");
+    await screen.findByTestId("project-settings");
+
+    const globalAgents = within(
+      screen.getByRole("tablist", { name: "Global" }),
+    ).getByRole("tab", { name: "Agents" });
+    const projectAgents = within(
+      screen.getByRole("tablist", { name: "Project" }),
+    ).getByRole("tab", { name: "Agents" });
+    expect(globalAgents).toHaveAttribute("aria-selected", "false");
+    expect(projectAgents).toHaveAttribute("aria-selected", "true");
+    // The presented section is marked as current (SWN-FR-KBNV).
+    expect(projectAgents).toHaveAttribute("aria-current", "page");
+    expect(globalAgents).not.toHaveAttribute("aria-current");
+
+    await userEvent.click(globalAgents);
+    expect(globalAgents).toHaveAttribute("aria-selected", "true");
+    expect(projectAgents).toHaveAttribute("aria-selected", "false");
+    expect(await screen.findByTestId("global-settings")).toBeInTheDocument();
+    expect(screen.queryByTestId("project-settings")).toBeNull();
+  });
+
+  it("SWN-FR-16: offers the Global group alone while no project is open", async () => {
+    context = NO_PROJECT;
+    renderWindow();
+    await screen.findByTestId("global-settings");
+
+    expect(screen.getByRole("tablist", { name: "Global" })).toBeInTheDocument();
+    // Absent, not disabled: no list, no label, no divider, no row.
+    expect(screen.queryByRole("tablist", { name: "Project" })).toBeNull();
+    expect(screen.queryByTestId("settings-group-project")).toBeNull();
+    expect(screen.queryByText("Draft template")).toBeNull();
+  });
+
+  it("SWN-FR-16: no route presents a Project section while no project is open", async () => {
+    context = NO_PROJECT;
+    renderWindow("project/template");
+    expect(
+      await screen.findByRole("heading", { name: "Appearance" }),
+    ).toBeInTheDocument();
+
+    act(() => {
+      fireBusEvent("settings-window:route", { section: "project/graduation" });
+    });
+    act(() => {
+      fireBusEvent("settings-window:present-failure", {
+        section: "project/template",
+      });
+    });
+    expect(screen.getByRole("heading", { name: "Appearance" })).toBeInTheDocument();
+    expect(screen.queryByTestId("project-settings")).toBeNull();
+  });
+
+  it("SWN-FR-KBNV: the arrow keys move between sections and across the divider", async () => {
+    renderWindow();
+    await screen.findByTestId("global-settings");
+
+    const appearance = screen.getByRole("tab", { name: "Appearance" });
+    await userEvent.click(appearance);
+    appearance.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(screen.getByRole("tab", { name: "Navigation" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "Navigation" })).toHaveFocus();
+
+    // From the first row, ArrowUp wraps to the last row of the last group.
+    await userEvent.keyboard("{ArrowUp}{ArrowUp}");
+    const graduation = screen.getByRole("tab", { name: "Graduation" });
+    expect(graduation).toHaveAttribute("aria-selected", "true");
+    expect(graduation).toHaveFocus();
+    expect(await screen.findByTestId("project-settings")).toBeInTheDocument();
+
+    // …and ArrowDown from there crosses back over the divider to the top.
+    await userEvent.keyboard("{ArrowDown}");
+    expect(screen.getByRole("tab", { name: "Appearance" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("SWN-FR-FCRT: moves the keyboard focus into the window when it opens", async () => {
+    renderWindow("global/github");
+    await screen.findByRole("heading", { name: "GitHub" });
+    expect(screen.getByRole("tab", { name: "GitHub" })).toHaveFocus();
   });
 });
 
@@ -278,7 +463,7 @@ describe("the save-before-close sweep (SWN-FR-08 / SWN-FR-10)", () => {
     vi.unstubAllGlobals();
   });
 
-  it("SWN-FR-08, SWN-FR-07: writes a section that is not the one on screen", async () => {
+  it("SWN-FR-08, SWN-FR-09: writes a section that is not the one on screen", async () => {
     // The Draft template section holds the window's one pending change in this
     // build. Open it, type, navigate away to another section — leaving it
     // mounted-and-gone — and close from there.
@@ -291,7 +476,7 @@ describe("the save-before-close sweep (SWN-FR-08 / SWN-FR-10)", () => {
     fireEvent.change(area, { target: { value: "# Context" } });
 
     // Away to another section, so the one holding the change is no longer the
-    // one on screen — which is the whole of what SWN-FR-08, SWN-FR-07 is about.
+    // one on screen — which is the whole of what SWN-FR-08 is about.
     await userEvent.click(screen.getByRole("tab", { name: "Plugins" }));
     await screen.findByRole("heading", { name: "Plugins" });
     expect(screen.queryByLabelText("Markdown source")).toBeNull();
@@ -325,7 +510,7 @@ describe("a failed save cancels the close (SWN-FR-11)", () => {
     // The backend is told the transition is cancelled, and which section to
     // present so the error and the retry are visible.
     await waitFor(() =>
-      expect(answers()).toEqual([{ ok: false, section: "template" }]),
+      expect(answers()).toEqual([{ ok: false, section: "project/template" }]),
     );
     // The author's text is exactly as they left it — nothing reverted, reloaded
     // or replaced (SET-FR-18).
@@ -354,14 +539,14 @@ describe("a failed save cancels the close (SWN-FR-11)", () => {
 
     await requestSaveAndClose();
     await waitFor(() =>
-      expect(answers()).toEqual([{ ok: false, section: "template" }]),
+      expect(answers()).toEqual([{ ok: false, section: "project/template" }]),
     );
 
     // The backend routes the window to the failed section (SWN-FR-11); the
     // author had navigated to Plugins in the meantime.
     await userEvent.click(screen.getByText("Plugins"));
     act(() => {
-      fireBusEvent("settings-window:present-failure", { section: "template" });
+      fireBusEvent("settings-window:present-failure", { section: "project/template" });
     });
 
     expect(
@@ -396,7 +581,7 @@ describe("failure paths that would otherwise wedge the window", () => {
     await waitFor(() => expect(calls("finish_settings_close")).toHaveLength(2));
   });
 
-  it("SWN-FR-15: renders anyway when the project behind it cannot be read", async () => {
+  it("SWN-FR-15, SWN-FR-16: renders its Global group anyway when the project behind it cannot be read", async () => {
     // Global settings is reachable with no project open at all, so a context
     // read that fails must not take the window with it — the sections that need
     // a project disable themselves instead.
@@ -421,7 +606,7 @@ describe("failure paths that would otherwise wedge the window", () => {
   });
 });
 
-describe("section routing (SWN-FR-06 / SWN-FR-13)", () => {
+describe("section routing (SWN-FR-06 / SWN-FR-HZWD)", () => {
   it("opens on the section the request that created the window named", async () => {
     renderGlobal("github");
     // The GitHub section of GHA-FR-01, rather than Appearance.
@@ -435,7 +620,7 @@ describe("section routing (SWN-FR-06 / SWN-FR-13)", () => {
     await screen.findByRole("heading", { name: "Appearance" });
 
     act(() => {
-      fireBusEvent("settings-window:route", { section: "notifications" });
+      fireBusEvent("settings-window:route", { section: "global/notifications" });
     });
 
     expect(
@@ -476,16 +661,16 @@ describe("section routing (SWN-FR-06 / SWN-FR-13)", () => {
 
     // Nothing brings it back on its own.
     act(() => {
-      fireBusEvent("settings-window:route", { section: "appearance" });
-      fireBusEvent("settings-window:route", { section: "agents" });
+      fireBusEvent("settings-window:route", { section: "global/appearance" });
+      fireBusEvent("settings-window:route", { section: "global/agents" });
     });
     await screen.findByTestId("agents-section");
     expect(screen.queryByLabelText(/nickname/i)).toBeNull();
   });
 
-  it("ignores a section this window does not have", async () => {
-    // A `project` address routed at the Global window, or the reverse, names
-    // nothing here — and must not blank the body.
+  it("SWN-FR-HZWD: ignores a section its scope does not have", async () => {
+    // An address naming a section the named scope lacks names nothing here, and
+    // must not blank the body.
     renderGlobal("mcp");
     expect(
       await screen.findByRole("heading", { name: "Appearance" }),
@@ -596,5 +781,124 @@ describe("the project's line-ending convention (SET-FR-10 / SET-FR-11)", () => {
     );
     // It reflected the write rather than repeating it.
     expect(savedConfigs).toEqual([]);
+  });
+});
+
+describe("both groups in one window (SWN-FR-06 / SWN-FR-08 / SWN-FR-11 / SWN-FR-HZWD)", () => {
+  it("SWN-FR-06, SWN-FR-HZWD: a request for the open window presents a section of the other group", async () => {
+    renderWindow();
+    await screen.findByRole("heading", { name: "Appearance" });
+
+    act(() => {
+      fireBusEvent("settings-window:route", { section: "project/graduation" });
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Graduation" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Graduation" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    // Not reloaded: the context was read once, at the first mount.
+    expect(calls("get_settings_window_context")).toHaveLength(1);
+  });
+
+  it("SWN-FR-HZWD: the same section asked for twice presents twice", async () => {
+    renderWindow();
+    await screen.findByRole("heading", { name: "Appearance" });
+
+    act(() => {
+      fireBusEvent("settings-window:route", { section: "global/notifications" });
+    });
+    await screen.findByRole("heading", { name: "Notifications" });
+    await userEvent.click(screen.getByRole("tab", { name: "Navigation" }));
+    await screen.findByRole("heading", { name: "Navigation" });
+
+    act(() => {
+      fireBusEvent("settings-window:route", { section: "global/notifications" });
+    });
+    expect(
+      await screen.findByRole("heading", { name: "Notifications" }),
+    ).toBeInTheDocument();
+  });
+
+  it("SWN-FR-08: writes a Project change while the Global group is on screen", async () => {
+    renderWindow("project/template");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Edit as Markdown source" }),
+    );
+    fireEvent.change(await screen.findByLabelText("Markdown source"), {
+      target: { value: "# Context" },
+    });
+
+    // Across the divider, so the group that holds the change is not on screen.
+    await userEvent.click(screen.getByRole("tab", { name: "Appearance" }));
+    await screen.findByTestId("global-settings");
+    expect(screen.queryByTestId("project-settings")).toBeNull();
+
+    await requestSaveAndClose();
+
+    await waitFor(() => expect(answers()).toEqual([{ ok: true, section: null }]));
+    expect(savedConfigs).toEqual([
+      { lineEndings: "lf", draftTemplate: "# Context" },
+    ]);
+  });
+
+  it("SWN-FR-08, SWN-FR-11: writes a Global change while the Project group is on screen, and presents it when it fails", async () => {
+    // Appearance's selection is applied to the root but not persisted: its save
+    // fails, which is what a failed sweep of the Global group looks like.
+    const original = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "save_app_preferences") throw "disk full";
+      return original(cmd, args as Record<string, unknown>);
+    });
+    renderWindow();
+    await screen.findByRole("heading", { name: "Appearance" });
+    await userEvent.click(screen.getByRole("radio", { name: "Light" }));
+    await waitFor(() =>
+      expect(screen.getByText(/Unsaved theme change/)).toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByRole("tab", { name: "Graduation" }));
+    await screen.findByTestId("project-settings");
+
+    await requestSaveAndClose();
+
+    await waitFor(() =>
+      expect(answers()).toEqual([{ ok: false, section: "global/appearance" }]),
+    );
+    // The failed section is presented in its own group, with its error visible
+    // (SWN-FR-11).
+    act(() => {
+      fireBusEvent("settings-window:present-failure", {
+        section: "global/appearance",
+      });
+    });
+    expect(
+      await screen.findByRole("heading", { name: "Appearance" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Appearance" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("SWN-FR-12: a second close request during a sweep starts no further save", async () => {
+    renderWindow("project/template");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Edit as Markdown source" }),
+    );
+    fireEvent.change(await screen.findByLabelText("Markdown source"), {
+      target: { value: "# Context" },
+    });
+
+    await requestSaveAndClose();
+    await requestSaveAndClose();
+
+    await waitFor(() => expect(answers().length).toBeGreaterThan(0));
+    expect(savedConfigs).toEqual([
+      { lineEndings: "lf", draftTemplate: "# Context" },
+    ]);
   });
 });

@@ -22,7 +22,7 @@ Shell / layout (per `../ui/SNV-shell-navigation.md`; persisted in the user-globa
 - `"load layout preferences"` → `load_layout_preferences`
 - `"save layout preferences"` → `save_layout_preferences`
 
-Project settings window (per `../ui/SET-project-settings.md`):
+Settings window (per `../ui/SET-project-settings.md`):
 - `"load project config"` → `load_project_config` (project-public)
 - `"save project config"` → `save_project_config` (project-public)
 - `"enable plugin"` → `enable_plugin` (writes project-public)
@@ -116,7 +116,7 @@ Drafts panel (per `../ui/DRP-drafts-panel.md`; project-local scope):
 
 This module exposes **no recently-edited artifacts list** and no command that records or serves one (PSS-FR-12, PSS-FR-13). The Dashboard's Recently edited widget is served from the project's current artifact records and the filesystem instead, by `PST-project-storage.md`'s `list_recently_edited_artifacts` (PST-FR-31).
 
-The registry reads `list_installed_plugins` and `list_agent_adapters` are owned by `GSS-global-settings-storage.md`; the Project settings window consumes them to render its enablement/configuration controls but the enablement/configuration **writes** above are owned here.
+The registry reads `list_installed_plugins` and `list_agent_adapters` are owned by `GSS-global-settings-storage.md`; the Settings window consumes them to render its enablement/configuration controls but the enablement/configuration **writes** above are owned here.
 
 ## Functional requirements
 1. **PSS-FR-01** Project-public and project-local are two independent stores; together with the user-global store (`GSS-global-settings-storage.md` GSS-FR-02) the three scopes are mutually exclusive — a key appears in exactly one scope, and if a value must be observed in more than one scope the spec designates the canonical one.

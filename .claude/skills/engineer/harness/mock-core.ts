@@ -7095,13 +7095,13 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
 
     // ---- settings child windows (SWN-settings-windows.md) ----------------
     //
-    // The two settings surfaces are native child windows of the application
-    // (SWN-FR-01), which a browser harness cannot create: their frame, their
-    // fixed size, their modality, and the one-window rule are all the Rust
+    // The Settings surface is a native child window of the application
+    // (SWN-FR-01), which a browser harness cannot create: its frame, its
+    // size, its modality, and the one-window rule are all the Rust
     // side's. What IS verifiable here is the window's BODY, because all three
-    // windows boot one entry point — navigate to `/?settings=global` or
-    // `/?settings=project` (optionally with `&section=`) and `main.tsx` renders
-    // the settings window's root instead of the shell.
+    // windows boot one entry point — navigate to `/?settings=1` (optionally with
+    // `&section=global%2Fagents`, a scope and a section) and `main.tsx` renders
+    // the Settings window's root instead of the shell.
     //
     // So these three record the request rather than performing it: opening a
     // window from the shell is a no-op the harness reports through
@@ -7113,7 +7113,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           | unknown[]
           | undefined ??
         ((globalThis as Record<string, unknown>).__settingsWindowRequests = [])
-      ).push({ kind: a.kind, section: a.section ?? null });
+      ).push({ section: a.section ?? null });
       return undefined;
     case "finish_settings_close":
       return undefined;

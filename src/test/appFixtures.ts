@@ -387,7 +387,7 @@ export async function enterIde() {
   const recent = await screen.findByText("acme");
   await userEvent.click(recent);
   // Activity bar Global settings button only exists in the IDE shell.
-  await screen.findByRole("button", { name: "Global settings" });
+  await screen.findByRole("button", { name: "Settings" });
 }
 
 /**

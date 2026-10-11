@@ -5,8 +5,7 @@ import "./styles/kit.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import * as api from "./api";
-import { GlobalSettings } from "./components/GlobalSettings";
-import { Settings } from "./components/Settings";
+import { SettingsBody } from "./components/SettingsBody";
 import { GithubTokenPicker } from "./components/GithubTokenPicker";
 import { useThemePreference } from "./hooks/useThemePreference";
 import { useFontRoles } from "./hooks/useFontRoles";
@@ -21,32 +20,31 @@ import { runSettingsSaveSweep, type SectionRequest } from "./state/settingsSweep
 import {
   NEW_AGENT_ITEM,
   parseSectionAddress,
+  type SettingsScope,
   type SettingsWindowContext,
-  type SettingsWindowKind,
 } from "./settingsWindow";
 import type { AgentEditorRequest } from "./components/Agents";
 
 /**
- * The root of a settings **child window**
+ * The root of the Settings **child window**
  * (`../specifications/ui/SWN-settings-windows.md`).
  *
- * Global settings and Project settings are native child windows rather than
- * tabs of the main viewport (SWN-FR-01), and each is a webview of its own. This
- * is what that webview renders: the window's one section-navigated body, and
- * the two things a window owes the rest of the application — the save sweep it
- * runs before it goes (SWN-FR-08) and the section it presents when asked to
- * (SWN-FR-13) or when a save fails (SWN-FR-11).
+ * Global settings and Project settings are the two groups of one native child
+ * window rather than tabs of the main viewport (SWN-FR-01), and the window is a
+ * webview of its own. This is what that webview renders: the one side nav with
+ * its two groups and the section on screen, and the things the window owes the
+ * rest of the application — the save sweep it runs before it goes (SWN-FR-08)
+ * and the section it presents when asked to (SWN-FR-HZWD) or when a save fails
+ * (SWN-FR-11).
  *
  * Nothing of the main window's chrome is drawn here: no tab strip, no activity
  * bar, no status bar. The frame is the platform's own, and its size, position,
  * modality, and title all belong to the backend (`settings_window.rs`).
  */
 export function SettingsWindowApp({
-  kind,
   initialSection,
 }: {
-  kind: SettingsWindowKind;
-  /** SWN-FR-13: the section the request that opened the window named. */
+  /** SWN-FR-HZWD: the section address the request that opened the window named. */
   initialSection: string | null;
 }) {
   // OVW-FR-13 / OVW-FR-14: the window renders in the current theme and the
@@ -60,9 +58,12 @@ export function SettingsWindowApp({
    *
    * Read once, because it cannot change while the window is open — the parent
    * is blocked, so no project close, project switch, or worktree change can
-   * start (SET-FR-20).
+   * start (SET-FR-20). `undefined` while the read is outstanding, `null` when it
+   * failed, which reads as no project.
    */
-  const [context, setContext] = useState<SettingsWindowContext | null>(null);
+  const [context, setContext] = useState<SettingsWindowContext | null | undefined>(
+    undefined,
+  );
   useEffect(() => {
     let cancelled = false;
     void api
@@ -71,22 +72,31 @@ export function SettingsWindowApp({
         if (!cancelled) setContext(ctx);
       })
       .catch((e) => {
-        // The window still renders: Global settings is reachable with no
-        // project at all (SWN-FR-15), and every section that needs one
-        // disables itself rather than failing.
+        // The window still renders: it is reachable with no project at all
+        // (SWN-FR-15), and then offers its Global group alone (SWN-FR-16).
         if (!cancelled) setContext(null);
         logWarn(["frontend"], "settings window could not read its project", {
-          window: kind,
           reason: e instanceof Error ? e.message : String(e),
         });
       });
     return () => {
       cancelled = true;
     };
-  }, [kind]);
+  }, []);
 
   /**
-   * SWN-FR-13 / SWN-FR-11: the section to present, seeded from the request that
+   * SWN-FR-16: the Project group is present only while a project is open. Read
+   * from the context, because the window is a webview of its own and cannot see
+   * the main window's state.
+   */
+  const projectOpen = Boolean(context?.projectKey);
+  const scopes = useMemo<SettingsScope[]>(
+    () => (projectOpen ? ["global", "project"] : ["global"]),
+    [projectOpen],
+  );
+
+  /**
+   * SWN-FR-HZWD / SWN-FR-11: the section address to present, seeded from the request that
    * opened the window and replaced by every later route or failure.
    */
   const [sectionRequest, setSectionRequest] = useState<SectionRequest | null>(
@@ -115,7 +125,9 @@ export function SettingsWindowApp({
     // time its agent list changed underneath it — which is every create, every
     // edit, and every delete the author makes while it is open.
     if (honouredEditor === sectionRequest.nonce) return null;
-    const { section, item } = parseSectionAddress(sectionRequest.section);
+    const parsed = parseSectionAddress(sectionRequest.section);
+    if (!parsed || parsed.scope !== "global") return null;
+    const { section, item } = parsed;
     if (section !== "agents" || item === null) return null;
     return {
       agentId: item === NEW_AGENT_ITEM ? null : item,
@@ -133,7 +145,7 @@ export function SettingsWindowApp({
       if (cancelled) fn();
       else unlisten.push(fn);
     };
-    // SWN-FR-06 / SWN-FR-13: a request for the window already open focuses it
+    // SWN-FR-06 / SWN-FR-HZWD: a request for the window already open focuses it
     // and presents the section it named. The window is not reloaded, so its
     // sections keep their state.
     void onSettingsRoute(presentSection).then(keep);
@@ -149,10 +161,9 @@ export function SettingsWindowApp({
   /**
    * SWN-FR-08 through SWN-FR-12: the save-before-close sweep.
    *
-   * Every close — the author's own, the first half of a switch, and the one a
-   * quit performs first — reaches this window as one request, and this is the
-   * whole of the answer: write every pending change in every section, then
-   * report. No discard prompt exists anywhere in it (SWN-FR-10), because the
+   * Every close — the author's own and the one a quit performs first — reaches
+   * this window as one request, and this is the whole of the answer: write every
+   * pending change in every section of both groups, then report. No discard prompt exists anywhere in it (SWN-FR-10), because the
    * close writes what would otherwise be discarded.
    */
   const sweeping = useRef(false);
@@ -172,13 +183,12 @@ export function SettingsWindowApp({
         await api.finishSettingsClose(ok, section);
       } catch (e) {
         logError(["frontend"], "settings window could not answer its save sweep", {
-          window: kind,
           ok,
           reason: e instanceof Error ? e.message : String(e),
         });
       }
     },
-    [kind],
+    [],
   );
   useEffect(() => {
     let cancelled = false;
@@ -192,15 +202,12 @@ export function SettingsWindowApp({
       void runSettingsSaveSweep()
         .then((result) => {
           if (result.ok) {
-            logInfo(["frontend"], "settings window saved its pending changes", {
-              window: kind,
-            });
+            logInfo(["frontend"], "settings window saved its pending changes", {});
             return answer(true, null);
           }
           // SWN-FR-11: the transition is cancelled, the window stays open, and
           // the failed section keeps the author's edits exactly as they were.
           logWarn(["frontend"], "settings window save failed; close cancelled", {
-            window: kind,
             section: result.section,
           });
           presentSection(result.section);
@@ -217,83 +224,71 @@ export function SettingsWindowApp({
       cancelled = true;
       unlisten?.();
     };
-  }, [answer, kind, presentSection]);
+  }, [answer, presentSection]);
 
-  return kind === "global" ? (
-    <div className="app settings-window">
-      <GlobalSettings
-        sectionRequest={sectionRequest}
-        agentEditorRequest={agentEditorRequest}
-        onAgentEditorRequestHandled={() =>
-          setHonouredEditor(sectionRequest?.nonce ?? null)
-        }
-        controlledTheme={themePref}
-        onThemeChange={setThemePref}
-        controlledFonts={fonts}
-        onFontsChange={setFonts}
-        // GLS-FR-27: the rehearsal needs a real project to address. Null while
-        // none is open, which greys the control out rather than sending a
-        // notification nothing could route.
-        rehearsalTarget={
-          context && context.projectKey && context.contentRoot
-            ? {
-                projectKey: context.projectKey,
-                worktree: context.contentRoot,
-              }
-            : null
-        }
-      />
-    </div>
-  ) : (
-    <ProjectSettingsWindow
-      sectionRequest={sectionRequest}
-      context={context}
-    />
-  );
-}
-
-/**
- * The Project settings window's body.
- *
- * Split out because it owns two things Global settings has no use for: the
- * project's line-ending convention, which it edits jointly with the main
- * window's status bar (SET-FR-11), and the GitHub token picker, which
- * GHA-FR-20 requires be presented **within this window** rather than over the
- * main one — that window being modal to it and unable to show anything.
- */
-function ProjectSettingsWindow({
-  sectionRequest,
-  context,
-}: {
-  sectionRequest: SectionRequest | null;
-  context: SettingsWindowContext | null;
-}) {
   const { lineEndings, selectLineEndings } = useLineEndings(
     context?.contentRoot ?? "",
   );
 
   /**
-   * GHA-FR-20 / GHA-FR-21: the picker, opened from the Project section with
-   * nothing waiting on it. One instance for the window, exactly as the main
-   * window holds one for itself, so it cannot coexist with a second.
+   * GHA-FR-20 / GHA-FR-21: the token picker, opened from the Project section
+   * with nothing waiting on it. One instance for the window, exactly as the main
+   * window holds one for itself, so it cannot coexist with a second. It is
+   * presented **within this window** rather than over the main one — that window
+   * being modal to this one and unable to show anything.
    */
   const [picker, setPicker] = useState<{
     currentTokenId: string | null;
     onConfirmed: () => void;
   } | null>(null);
 
+  // The body waits for the project question to be answered, so the Project
+  // group is never seen to appear after the window is already on screen
+  // (SWN-FR-16, and the window being at its final state before it is
+  // interactive).
+  if (context === undefined) {
+    return <div className="app settings-window" />;
+  }
+
   return (
     <div className="app settings-window">
-      <Settings
+      <SettingsBody
+        scopes={scopes}
         sectionRequest={sectionRequest}
-        // SET-FR-20: the Draft template section reads again whenever this
-        // changes. It cannot change while the window is open (SWN-FR-02), so in
-        // practice this settles once and the section reads once.
-        contentRoot={context?.contentRoot ?? ""}
-        lineEndings={lineEndings}
-        onSelectLineEndings={selectLineEndings}
-        onOpenGithubTokenPicker={(currentTokenId, onConfirmed) =>
-          setPicker({ currentTokenId, onConfirmed })
+        autoFocus
+        global={{
+          agentEditorRequest,
+          onAgentEditorRequestHandled: () =>
+            setHonouredEditor(sectionRequest?.nonce ?? null),
+          controlledTheme: themePref,
+          onThemeChange: setThemePref,
+          controlledFonts: fonts,
+          onFontsChange: setFonts,
+          // GLS-FR-27: the rehearsal needs a real project to address. Null
+          // while none is open, which greys the control out rather than sending
+          // a notification nothing could route.
+          rehearsalTarget:
+            context && context.projectKey && context.contentRoot
+              ? {
+                  projectKey: context.projectKey,
+                  worktree: context.contentRoot,
+                }
+              : null,
+        }}
+        project={
+          projectOpen
+            ? {
+                // SET-FR-20: the Draft template section reads again whenever
+                // this changes. It cannot change while the window is open
+                // (SWN-FR-02), so in practice this settles once and the section
+                // reads once.
+                contentRoot: context?.contentRoot ?? "",
+                lineEndings,
+                onSelectLineEndings: selectLineEndings,
+                onOpenGithubTokenPicker: (currentTokenId, onConfirmed) =>
+                  setPicker({ currentTokenId, onConfirmed }),
+              }
+            : undefined
         }
       />
       {picker && (

@@ -13,6 +13,7 @@
 import type { MutableRefObject } from "react";
 
 import { logInfo } from "../../logging";
+import { formatSectionAddress } from "../../settingsWindow";
 
 import {
   aheadOf,
@@ -68,7 +69,7 @@ export interface RunRegionProps {
   act: RunAct;
   onOpenDraft?: (draftId: string) => void;
   /** GRU-FR-QLRQ: opens a project settings section. */
-  onOpenSettings?: (section: string) => void;
+  onOpenSettings?: (address: string) => void;
   /** GLW-FR-ALZI: the author activated a stage that holds a log. */
   onActivateStage: (stageId: string) => void;
   /** GEA-FR-VIPR: the backend accepted an answer set. */
@@ -240,7 +241,7 @@ export function RunRegion({
                   logInfo(["frontend"], "graduation run routed to the time limit setting", {
                     runId: run.id,
                   });
-                  onOpenSettings("graduation");
+                  onOpenSettings(formatSectionAddress("project", "graduation"));
                 }}
               >
                 Change the time limit

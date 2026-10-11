@@ -35,7 +35,7 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "export_logs",
     // Picker window re-centering on re-show (PPK-FR-12).
     "center_picker",
-    // The two settings child windows (SWN-settings-windows.md SWN-FR-13,
+    // The Settings child window (SWN-settings-windows.md SWN-FR-13,
     // SWN-FR-08).
     "open_settings_window",
     "finish_settings_close",

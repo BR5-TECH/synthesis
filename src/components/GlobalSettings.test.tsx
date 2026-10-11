@@ -3,7 +3,8 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
-import { GlobalSettings, resolveTheme } from "./GlobalSettings";
+import { resolveTheme } from "./GlobalSettings";
+import { GlobalSettings } from "../test/settingsHarness";
 import { resetAppPreferencesCache } from "../state/appPreferences";
 import {
   resetSettingsSections,
@@ -378,14 +379,14 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
     // window's sweep now has something to write.
     expect(await screen.findByText(/disk full/)).toBeInTheDocument();
     await waitFor(() =>
-      expect(settingsSectionsPending()).toEqual(["appearance"]),
+      expect(settingsSectionsPending()).toEqual(["global/appearance"]),
     );
 
     // SWN-FR-11: while the write still fails, the sweep reports this section and
     // the author's selection is kept exactly as it was.
     await expect(runSettingsSaveSweep()).resolves.toEqual({
       ok: false,
-      section: "appearance",
+      section: "global/appearance",
     });
     expect(screen.getByRole("radio", { name: "Dark" })).toHaveAttribute(
       "aria-checked",

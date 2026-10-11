@@ -116,6 +116,42 @@ pub fn display_for_rect<R: tauri::Runtime>(
     pick_display_for_rect(rect, &displays)
 }
 
+/// The work area and scale factor of the display containing `rect`, or `None`
+/// when this machine reports no display.
+///
+/// The work area is the part of a display a window may occupy: it leaves out a
+/// menu bar, a dock, or a taskbar. The display is chosen on its full geometry,
+/// exactly as [`display_for_rect`] chooses it, so both agree about which display
+/// a window is on (`SWN-settings-windows.md` SWN-FR-04, SWN-FR-CLMP).
+pub fn work_area_for_rect<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    rect: DisplayRect,
+) -> Option<(DisplayRect, f64)> {
+    let monitors = app.available_monitors().ok()?;
+    let fulls: Vec<DisplayRect> = monitors
+        .iter()
+        .map(|m| DisplayRect {
+            x: m.position().x,
+            y: m.position().y,
+            width: m.size().width,
+            height: m.size().height,
+        })
+        .collect();
+    let chosen = pick_display_for_rect(rect, &fulls)?;
+    let index = fulls.iter().position(|d| *d == chosen)?;
+    let monitor = monitors.get(index)?;
+    let work = monitor.work_area();
+    Some((
+        DisplayRect {
+            x: work.position.x,
+            y: work.position.y,
+            width: work.size.width,
+            height: work.size.height,
+        },
+        monitor.scale_factor(),
+    ))
+}
+
 /// Compute the top-left position to place a window of `window_size` centered
 /// inside `display`. Returns physical-pixel coordinates suitable for
 /// `Window::set_position`.

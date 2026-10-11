@@ -2,16 +2,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   registerSettingsSection,
+  settingsSectionsPending,
   resetSettingsSections,
   runSettingsSaveSweep,
   settingsSweepRunning,
 } from "./settingsSweep";
 
 /**
- * The save-before-close sweep of a settings window
+ * The save-before-close sweep of the Settings window
  * (`../../specifications/ui/SWN-settings-windows.md` SWN-FR-08 through
- * SWN-FR-12), covering SWN-FR-08, SWN-FR-10, SWN-FR-09, SWN-FR-07 and SWN-FR-12 at the
- * level the rules actually live.
+ * SWN-FR-12), covering SWN-FR-08, SWN-FR-09, SWN-FR-10, SWN-FR-11 and SWN-FR-12 at
+ * the level the rules actually live.
  */
 
 afterEach(() => resetSettingsSections());
@@ -39,12 +40,12 @@ function section(
 
 describe("the sweep writes every section (SWN-FR-08)", () => {
   it("SWN-FR-08, SWN-FR-10: invokes each dirty section's save, including one not on screen", async () => {
-    // SWN-FR-08, SWN-FR-07's point too: a section holding edits the author never scrolled
+    // SWN-FR-08's point too: a section holding edits the author never scrolled
     // back to is saved on exactly the terms the visible one is. The registry is
     // deliberately blind to which section is presented, which is what makes
     // that true rather than something the window has to remember.
-    const visible = section("appearance");
-    const hidden = section("mcp");
+    const visible = section("global/appearance");
+    const hidden = section("project/mcp");
 
     await expect(runSettingsSaveSweep()).resolves.toEqual({ ok: true });
 
@@ -53,8 +54,8 @@ describe("the sweep writes every section (SWN-FR-08)", () => {
   });
 
   it("asks nothing of a section holding no pending change", async () => {
-    const clean = section("appearance", { pending: false });
-    const dirty = section("mcp");
+    const clean = section("global/appearance", { pending: false });
+    const dirty = section("project/mcp");
 
     await expect(runSettingsSaveSweep()).resolves.toEqual({ ok: true });
 
@@ -72,7 +73,7 @@ describe("the sweep writes every section (SWN-FR-08)", () => {
     });
     const issued = vi.fn(() => inFlight);
     registerSettingsSection({
-      section: "template",
+      section: "project/template",
       pending: () => true,
       save: issued,
     });
@@ -94,12 +95,12 @@ describe("the sweep writes every section (SWN-FR-08)", () => {
 
 describe("a failed save cancels the transition (SWN-FR-11)", () => {
   it("SWN-FR-08, SWN-FR-11: names the failed section, and writes the ones that can be written", async () => {
-    const failing = section("mcp", { ok: false });
-    const other = section("appearance");
+    const failing = section("project/mcp", { ok: false });
+    const other = section("global/appearance");
 
     await expect(runSettingsSaveSweep()).resolves.toEqual({
       ok: false,
-      section: "mcp",
+      section: "project/mcp",
     });
 
     // Every pending section was asked, not only up to the first failure: the
@@ -109,12 +110,12 @@ describe("a failed save cancels the transition (SWN-FR-11)", () => {
   });
 
   it("reports the FIRST failure, so one section is presented rather than the last", async () => {
-    section("appearance", { ok: false });
-    section("mcp", { ok: false });
+    section("global/appearance", { ok: false });
+    section("project/mcp", { ok: false });
 
     await expect(runSettingsSaveSweep()).resolves.toEqual({
       ok: false,
-      section: "appearance",
+      section: "global/appearance",
     });
   });
 
@@ -123,9 +124,9 @@ describe("a failed save cancels the transition (SWN-FR-11)", () => {
     // `pending()` outside the try would abort the pass, the window would never
     // answer, and the author would be left with a settings window that cannot
     // be closed over a parent that cannot be reached (SWN-FR-02, SWN-FR-12).
-    const later = section("mcp");
+    const later = section("project/mcp");
     registerSettingsSection({
-      section: "appearance",
+      section: "global/appearance",
       pending: () => {
         throw new Error("state is gone");
       },
@@ -134,14 +135,14 @@ describe("a failed save cancels the transition (SWN-FR-11)", () => {
 
     await expect(runSettingsSaveSweep()).resolves.toEqual({
       ok: false,
-      section: "appearance",
+      section: "global/appearance",
     });
     expect(later.save).toHaveBeenCalledTimes(1);
   });
 
   it("treats a section that threw as a failed save rather than a crash", async () => {
     registerSettingsSection({
-      section: "mcp",
+      section: "project/mcp",
       pending: () => true,
       save: async () => {
         throw new Error("disk full");
@@ -150,22 +151,22 @@ describe("a failed save cancels the transition (SWN-FR-11)", () => {
 
     await expect(runSettingsSaveSweep()).resolves.toEqual({
       ok: false,
-      section: "mcp",
+      section: "project/mcp",
     });
   });
 
   it("SWN-FR-11: does not write a section again that already saved in the sweep", async () => {
-    const saved = section("appearance");
-    const failing = section("mcp", { ok: false });
+    const saved = section("global/appearance");
+    const failing = section("project/mcp", { ok: false });
 
     await expect(runSettingsSaveSweep()).resolves.toEqual({
       ok: false,
-      section: "mcp",
+      section: "project/mcp",
     });
     // The author retries the close.
     await expect(runSettingsSaveSweep()).resolves.toEqual({
       ok: false,
-      section: "mcp",
+      section: "project/mcp",
     });
 
     expect(saved.save).toHaveBeenCalledTimes(1);
@@ -181,7 +182,7 @@ describe("the sweep is inert while it runs (SWN-FR-12)", () => {
     });
     const save = vi.fn(() => inFlight);
     registerSettingsSection({
-      section: "template",
+      section: "project/template",
       pending: () => true,
       save,
     });
@@ -210,8 +211,8 @@ describe("the sweep is inert while it runs (SWN-FR-12)", () => {
 
 describe("what the registry holds", () => {
   it("replaces a section's entry on a remount rather than keeping both", async () => {
-    const first = section("appearance");
-    const second = section("appearance");
+    const first = section("global/appearance");
+    const second = section("global/appearance");
 
     await runSettingsSaveSweep();
 
@@ -222,7 +223,7 @@ describe("what the registry holds", () => {
   it("forgets a section that unmounted", async () => {
     const save = vi.fn(async () => true);
     const drop = registerSettingsSection({
-      section: "appearance",
+      section: "global/appearance",
       pending: () => true,
       save,
     });
@@ -240,7 +241,7 @@ describe("what the registry holds", () => {
     const laterSave = vi.fn(async () => true);
     let dropLater = () => {};
     registerSettingsSection({
-      section: "appearance",
+      section: "global/appearance",
       pending: () => true,
       save: async () => {
         dropLater();
@@ -248,7 +249,7 @@ describe("what the registry holds", () => {
       },
     });
     dropLater = registerSettingsSection({
-      section: "mcp",
+      section: "project/mcp",
       pending: () => true,
       save: laterSave,
     });
@@ -256,5 +257,31 @@ describe("what the registry holds", () => {
     await runSettingsSaveSweep();
 
     expect(laterSave).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("two sections of one name stay two sections (SWN-FR-HZWD / SWN-FR-08)", () => {
+  it("SWN-FR-HZWD, SWN-FR-08: a Global and a Project section of the same name are both swept", async () => {
+    // Plugins, Agents, Docker, and the adapters exist in both groups. The
+    // registry keys a section by its scope as well, so one cannot replace the
+    // other and neither escapes the sweep.
+    const globalOne = section("global/agents");
+    const projectOne = section("project/agents");
+
+    expect(settingsSectionsPending()).toEqual(["global/agents", "project/agents"]);
+    await expect(runSettingsSaveSweep()).resolves.toEqual({ ok: true });
+
+    expect(globalOne.save).toHaveBeenCalledTimes(1);
+    expect(projectOne.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("SWN-FR-11, SWN-FR-HZWD: reports the failed section with its scope", async () => {
+    section("global/agents");
+    section("project/agents", { ok: false });
+
+    await expect(runSettingsSaveSweep()).resolves.toEqual({
+      ok: false,
+      section: "project/agents",
+    });
   });
 });

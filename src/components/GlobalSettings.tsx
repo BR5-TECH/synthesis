@@ -5,13 +5,9 @@ import {
   patchAppPreferences,
 } from "../state/appPreferences";
 
-import {
-  registerSettingsSection,
-  type SectionRequest,
-} from "../state/settingsSweep";
-import { parseSectionAddress } from "../settingsWindow";
+import { registerSettingsSection } from "../state/settingsSweep";
 import { logWarn } from "../logging";
-import { SettingsSectionNav } from "./SettingsSectionNav";
+import type { GlobalSectionKey } from "../settingsWindow";
 import { Icon } from "./icons";
 import {
   NotificationSettings,
@@ -37,25 +33,17 @@ import type {
   ThemePreference,
 } from "../types";
 
-// Implements specifications/ui/GLS-global-settings.md (GLS-FR-01..13). Backend
-// is specifications/core/GSS-global-settings-storage.md; every operation name
+// Implements specifications/ui/GLS-global-settings.md: the sections of the Global
+// group of the Settings window. The window, its side nav, and the choice of the
+// section on screen belong to `SWN-settings-windows.md`; this module renders the
+// content of the section it is told to present. Backend is
+// specifications/core/GSS-global-settings-storage.md; every operation name
 // below matches that spec's contract surface byte-for-byte.
 
-type SectionKey =
-  | "appearance"
-  | "navigation"
-  | "notifications"
-  | "recents"
-  | "plugins"
-  | "adapters"
-  | "github"
-  | "ai-api"
-  | "ai-agentic"
-  | "agents"
-  | "docker"
-  | "remote";
+export type { GlobalSectionKey };
 
-const SECTIONS: [SectionKey, string][] = [
+/** GLS-FR-03: the Global group's sections, in the order the side nav lists them. */
+export const GLOBAL_SECTIONS: [GlobalSectionKey, string][] = [
   ["appearance", "Appearance"],
   // GLS-FR-03 / GLS-FR-28: the Navigation section, directly after Appearance
   // because the two answer the same kind of question — how the application
@@ -145,13 +133,22 @@ function errorMessage(e: unknown): string {
   return "operation failed";
 }
 
-interface GlobalSettingsProps {
+export interface GlobalSettingsProps {
   /**
-   * SWN-FR-06 / SWN-FR-11 / SWN-FR-13: present a named section — the one a
-   * request routed to, or the one whose save failed. Ignored when it names a
-   * section this window does not have.
+   * The section on screen. The Settings window chooses it (`SWN-settings-
+   * windows.md` SWN-FR-QXTV); every section's state survives a visit to
+   * another because the sections that hold any publish it to the window's
+   * save sweep rather than keeping it in what is on screen.
    */
-  sectionRequest?: SectionRequest | null;
+  section: GlobalSectionKey;
+  /**
+   * Whether the Global group is the one on screen. The group stays mounted while
+   * the Project group is on screen, because what it holds — the Appearance
+   * selection among it — is a pending change the window's save sweep reaches
+   * whichever group is presented (`SWN-settings-windows.md` SWN-FR-08), and it
+   * renders nothing then.
+   */
+  active?: boolean;
   /// Report the selected theme *preference* so the app applies it to the root
   /// (GLS-FR-05). The app owns app-wide application and OS-scheme tracking
   /// (OVW-FR-09 / OVW-FR-10), so this surface reports the preference rather than
@@ -169,7 +166,7 @@ interface GlobalSettingsProps {
   /// the same two-way arrangement the theme uses.
   controlledFonts?: FontSettings;
   onFontsChange?: (fonts: FontSettings | undefined) => void;
-  /// AGT-FR-06 / AGT-FR-07: the chrome roster asking this tab to open an editor
+  /// AGT-FR-06 / AGT-FR-07: the chrome roster asking this group to open an editor
   /// on its Agents section — an agent's when a row was activated, a fresh one
   /// when **Add an agent** was. `null` is every other way this tab is reached.
   agentEditorRequest?: AgentEditorRequest | null;
@@ -185,7 +182,8 @@ interface GlobalSettingsProps {
 }
 
 export function GlobalSettings({
-  sectionRequest,
+  section,
+  active = true,
   onThemeChange,
   controlledTheme,
   controlledFonts,
@@ -194,30 +192,6 @@ export function GlobalSettings({
   onAgentEditorRequestHandled,
   rehearsalTarget,
 }: GlobalSettingsProps) {
-  const [section, setSection] = useState<SectionKey>("appearance");
-
-  // SWN-FR-13: a route the window was opened or focused on, and SWN-FR-11's
-  // presentation of the section whose save failed. Keyed on the nonce rather
-  // than on the section, so the same section asked for twice presents twice.
-  useEffect(() => {
-    if (!sectionRequest) return;
-    // The address may name something within the section (`agents:<id>`), which
-    // the window turns into an editor request; the section it selects is the
-    // part before the colon either way.
-    const { section: wanted } = parseSectionAddress(sectionRequest.section);
-    const known = SECTIONS.find(([k]) => k === wanted);
-    if (known) setSection(known[0]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sectionRequest?.nonce, sectionRequest?.section]);
-
-  // AGT-FR-06: a requested editor implies the section it lives in, so the tab
-  // shows that section rather than opening a modal over Appearance. Runs on
-  // every request rather than only at mount, because the roster addresses this
-  // tab whether or not it was already open.
-  useEffect(() => {
-    if (agentEditorRequest) setSection("agents");
-  }, [agentEditorRequest]);
-
   // Appearance (GLS-FR-04 / GLS-FR-05). `saved` is the last successfully
   // persisted value; the section is dirty when the selection diverges from it
   // (i.e. a selection was applied to the root but not yet persisted).
@@ -274,7 +248,7 @@ export function GlobalSettings({
   useEffect(
     () =>
       registerSettingsSection({
-        section: "appearance",
+        section: "global/appearance",
         pending: () => appearanceDirtyRef.current,
         save: async () => {
           const pref = themeRef.current;
@@ -496,301 +470,294 @@ export function GlobalSettings({
     }
   };
 
-  const current = SECTIONS.find((s) => s[0] === section)!;
+  const current = GLOBAL_SECTIONS.find((s) => s[0] === section)!;
+
+  if (!active) return null;
 
   return (
     <div
-      style={{ display: "grid", gridTemplateColumns: "200px 1fr", height: "100%" }}
       data-testid="global-settings"
+      style={{ padding: "28px 36px", maxWidth: 760, overflow: "auto" }}
     >
-      <SettingsSectionNav
-        sections={SECTIONS}
-        selected={section}
-        onSelect={setSection}
-        label="Global settings sections"
-      />
+      <h2 className="t-h2" style={{ margin: "0 0 4px" }}>
+        {current[1]}
+      </h2>
 
-      <div style={{ padding: "28px 36px", maxWidth: 760, overflow: "auto" }}>
-        <h2 className="t-h2" style={{ margin: "0 0 4px" }}>
-          {current[1]}
-        </h2>
-
-        {section === "appearance" && (
-          <div>
-            <p className="t-p" style={{ marginBottom: 20 }}>
-              Choose how Synthesis looks. Applies immediately across the app.
+      {section === "appearance" && (
+        <div>
+          <p className="t-p" style={{ marginBottom: 20 }}>
+            Choose how Synthesis looks. Applies immediately across the app.
+          </p>
+          <div
+            role="radiogroup"
+            aria-label="Theme"
+            style={{ display: "flex", gap: 8 }}
+          >
+            {THEME_CHOICES.map(([value, label]) => (
+              <button
+                key={value}
+                role="radio"
+                aria-checked={theme === value}
+                className="btn btn--default btn--sm"
+                data-active={theme === value}
+                style={{
+                  background:
+                    theme === value ? "var(--bg-active)" : undefined,
+                  borderColor:
+                    theme === value ? "var(--accent)" : undefined,
+                }}
+                onClick={() => onSelectTheme(value)}
+              >
+                {value === "light" && <Icon.Sun size={13} />}
+                {value === "dark" && <Icon.Moon size={13} />}
+                {value === "system" && <Icon.Settings size={13} />}
+                {label}
+              </button>
+            ))}
+          </div>
+          {appearanceDirty && (
+            <p className="t-ui-xs t-muted" style={{ marginTop: 10 }}>
+              Unsaved theme change.
             </p>
+          )}
+
+          {/* GLS-FR-17: the three typographic roles. Placed in Appearance
+              rather than a section of their own — the theme and the fonts are
+              one question about how the app looks, asked in one place. */}
+          <h3 className="t-eyebrow" style={{ margin: "28px 0 10px" }}>
+            Typography
+          </h3>
+          <p className="t-p" style={{ marginBottom: 16 }}>
+            Every piece of text belongs to one of three roles. Changes apply
+            across the app as you make them.
+          </p>
+          <FontRoleControls
+            fonts={fonts}
+            families={families}
+            onChange={(next) => void onChangeFonts(next)}
+          />
+
+          {appearanceError && (
+            <span className="picker-error" style={{ display: "block", marginTop: 8 }}>
+              ✗ {appearanceError}
+            </span>
+          )}
+        </div>
+      )}
+
+      {section === "navigation" && <NavigationSettings />}
+
+      {section === "notifications" && (
+        <NotificationSettings rehearsalTarget={rehearsalTarget ?? null} />
+      )}
+
+      {section === "recents" && (
+        <div>
+          <p className="t-p" style={{ marginBottom: 20 }}>
+            Manage the projects shown in the picker. Removing or clearing
+            never deletes a project on disk.
+          </p>
+          {recents === null && <div className="t-muted">Loading…</div>}
+          {recents !== null && recents.length === 0 && (
             <div
-              role="radiogroup"
-              aria-label="Theme"
-              style={{ display: "flex", gap: 8 }}
+              className="card"
+              style={{ padding: "32px 20px", textAlign: "center", color: "var(--fg-3)" }}
             >
-              {THEME_CHOICES.map(([value, label]) => (
-                <button
-                  key={value}
-                  role="radio"
-                  aria-checked={theme === value}
-                  className="btn btn--default btn--sm"
-                  data-active={theme === value}
-                  style={{
-                    background:
-                      theme === value ? "var(--bg-active)" : undefined,
-                    borderColor:
-                      theme === value ? "var(--accent)" : undefined,
-                  }}
-                  onClick={() => onSelectTheme(value)}
+              No recent projects yet.
+            </div>
+          )}
+          {recents !== null && recents.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {recents.map((r) => (
+                <div
+                  key={`${r.name}:${r.path}`}
+                  className="card"
+                  data-testid="recent-row"
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px" }}
                 >
-                  {value === "light" && <Icon.Sun size={13} />}
-                  {value === "dark" && <Icon.Moon size={13} />}
-                  {value === "system" && <Icon.Settings size={13} />}
-                  {label}
-                </button>
+                  <Icon.Folder size={14} className="icon" />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "var(--fs-ui-md)", fontWeight: 600, color: "var(--fg-1)" }}>
+                      {r.name}
+                      {r.pinned && (
+                        <span className="badge" style={{ marginLeft: 6 }}>
+                          pinned
+                        </span>
+                      )}
+                      {r.missing && (
+                        <span className="badge badge--warn" style={{ marginLeft: 6 }}>
+                          missing
+                        </span>
+                      )}
+                    </div>
+                    <div className="t-ui-sm t-muted">{r.path}</div>
+                  </div>
+                  <span className="t-meta">{formatRelative(r.lastOpenedAt)}</span>
+                  <button
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => onTogglePin(r)}
+                  >
+                    {r.pinned ? "Unpin" : "Pin"}
+                  </button>
+                  <button
+                    className="btn btn--ghost btn--icon btn--sm"
+                    title="Remove from list"
+                    aria-label={`Remove ${r.name}`}
+                    onClick={() => onRemoveRecent(r.path)}
+                  >
+                    <Icon.X size={12} />
+                  </button>
+                </div>
+              ))}
+              <button
+                className="btn btn--default btn--sm"
+                style={{ alignSelf: "flex-start", marginTop: 8 }}
+                onClick={onClearRecents}
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+          {recentsError && (
+            <span className="picker-error" style={{ display: "block", marginTop: 8 }}>
+              ✗ {recentsError}
+            </span>
+          )}
+        </div>
+      )}
+
+      {section === "plugins" && (
+        <div>
+          <p className="t-p" style={{ marginBottom: 20 }}>
+            Plugins installed for this machine. Enablement per project lives in
+            Project settings.
+          </p>
+          {plugins === null && <div className="t-muted">Loading…</div>}
+          {plugins !== null && plugins.length === 0 && (
+            <div
+              className="card"
+              style={{ padding: "32px 20px", textAlign: "center", color: "var(--fg-3)" }}
+            >
+              No plugins installed.
+            </div>
+          )}
+          {plugins !== null && plugins.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {plugins.map((p) => (
+                <div
+                  key={p.id}
+                  className="card"
+                  data-testid="plugin-row"
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px" }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: "var(--fs-ui-md)", fontWeight: 600, color: "var(--fg-1)" }}>
+                      {p.name}
+                    </div>
+                    <div className="t-ui-sm t-muted">{p.source}</div>
+                  </div>
+                  <button
+                    className="btn btn--ghost btn--sm"
+                    aria-label={`Uninstall ${p.name}`}
+                    onClick={() => onUninstallPlugin(p.id)}
+                  >
+                    Uninstall
+                  </button>
+                </div>
               ))}
             </div>
-            {appearanceDirty && (
-              <p className="t-ui-xs t-muted" style={{ marginTop: 10 }}>
-                Unsaved theme change.
-              </p>
-            )}
+          )}
+          <button
+            className="btn btn--default btn--sm"
+            style={{ alignSelf: "flex-start", marginTop: 12 }}
+            onClick={onInstallPlugin}
+          >
+            <Icon.Plus size={12} /> Install plugin…
+          </button>
+          {pluginsError && (
+            <span className="picker-error" style={{ display: "block", marginTop: 8 }}>
+              ✗ {pluginsError}
+            </span>
+          )}
+        </div>
+      )}
 
-            {/* GLS-FR-17: the three typographic roles. Placed in Appearance
-                rather than a section of their own — the theme and the fonts are
-                one question about how the app looks, asked in one place. */}
-            <h3 className="t-eyebrow" style={{ margin: "28px 0 10px" }}>
-              Typography
-            </h3>
-            <p className="t-p" style={{ marginBottom: 16 }}>
-              Every piece of text belongs to one of three roles. Changes apply
-              across the app as you make them.
-            </p>
-            <FontRoleControls
-              fonts={fonts}
-              families={families}
-              onChange={(next) => void onChangeFonts(next)}
-            />
-
-            {appearanceError && (
-              <span className="picker-error" style={{ display: "block", marginTop: 8 }}>
-                ✗ {appearanceError}
-              </span>
-            )}
-          </div>
-        )}
-
-        {section === "navigation" && <NavigationSettings />}
-
-        {section === "notifications" && (
-          <NotificationSettings rehearsalTarget={rehearsalTarget ?? null} />
-        )}
-
-        {section === "recents" && (
-          <div>
-            <p className="t-p" style={{ marginBottom: 20 }}>
-              Manage the projects shown in the picker. Removing or clearing
-              never deletes a project on disk.
-            </p>
-            {recents === null && <div className="t-muted">Loading…</div>}
-            {recents !== null && recents.length === 0 && (
-              <div
-                className="card"
-                style={{ padding: "32px 20px", textAlign: "center", color: "var(--fg-3)" }}
-              >
-                No recent projects yet.
-              </div>
-            )}
-            {recents !== null && recents.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {recents.map((r) => (
-                  <div
-                    key={`${r.name}:${r.path}`}
-                    className="card"
-                    data-testid="recent-row"
-                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px" }}
-                  >
-                    <Icon.Folder size={14} className="icon" />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: "var(--fs-ui-md)", fontWeight: 600, color: "var(--fg-1)" }}>
-                        {r.name}
-                        {r.pinned && (
-                          <span className="badge" style={{ marginLeft: 6 }}>
-                            pinned
-                          </span>
-                        )}
-                        {r.missing && (
-                          <span className="badge badge--warn" style={{ marginLeft: 6 }}>
-                            missing
-                          </span>
-                        )}
-                      </div>
-                      <div className="t-ui-sm t-muted">{r.path}</div>
-                    </div>
-                    <span className="t-meta">{formatRelative(r.lastOpenedAt)}</span>
-                    <button
-                      className="btn btn--ghost btn--sm"
-                      onClick={() => onTogglePin(r)}
-                    >
-                      {r.pinned ? "Unpin" : "Pin"}
-                    </button>
-                    <button
-                      className="btn btn--ghost btn--icon btn--sm"
-                      title="Remove from list"
-                      aria-label={`Remove ${r.name}`}
-                      onClick={() => onRemoveRecent(r.path)}
-                    >
-                      <Icon.X size={12} />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  className="btn btn--default btn--sm"
-                  style={{ alignSelf: "flex-start", marginTop: 8 }}
-                  onClick={onClearRecents}
+      {section === "adapters" && (
+        <div>
+          <p className="t-p" style={{ marginBottom: 20 }}>
+            Agent adapters installed for this machine. Per-project
+            configuration lives in Project settings.
+          </p>
+          {adapters === null && <div className="t-muted">Loading…</div>}
+          {adapters !== null && adapters.length === 0 && (
+            <div
+              className="card"
+              style={{ padding: "32px 20px", textAlign: "center", color: "var(--fg-3)" }}
+            >
+              No adapters installed.
+            </div>
+          )}
+          {adapters !== null && adapters.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {adapters.map((a) => (
+                <div
+                  key={a.id}
+                  className="card"
+                  data-testid="adapter-row"
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px" }}
                 >
-                  Clear all
-                </button>
-              </div>
-            )}
-            {recentsError && (
-              <span className="picker-error" style={{ display: "block", marginTop: 8 }}>
-                ✗ {recentsError}
-              </span>
-            )}
-          </div>
-        )}
-
-        {section === "plugins" && (
-          <div>
-            <p className="t-p" style={{ marginBottom: 20 }}>
-              Plugins installed for this machine. Enablement per project lives in
-              Project settings.
-            </p>
-            {plugins === null && <div className="t-muted">Loading…</div>}
-            {plugins !== null && plugins.length === 0 && (
-              <div
-                className="card"
-                style={{ padding: "32px 20px", textAlign: "center", color: "var(--fg-3)" }}
-              >
-                No plugins installed.
-              </div>
-            )}
-            {plugins !== null && plugins.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {plugins.map((p) => (
-                  <div
-                    key={p.id}
-                    className="card"
-                    data-testid="plugin-row"
-                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px" }}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: "var(--fs-ui-md)", fontWeight: 600, color: "var(--fg-1)" }}>
-                        {p.name}
-                      </div>
-                      <div className="t-ui-sm t-muted">{p.source}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: "var(--fs-ui-md)", fontWeight: 600, color: "var(--fg-1)" }}>
+                      {a.name}
                     </div>
-                    <button
-                      className="btn btn--ghost btn--sm"
-                      aria-label={`Uninstall ${p.name}`}
-                      onClick={() => onUninstallPlugin(p.id)}
-                    >
-                      Uninstall
-                    </button>
+                    <div className="t-ui-sm t-muted">{a.source}</div>
                   </div>
-                ))}
-              </div>
-            )}
-            <button
-              className="btn btn--default btn--sm"
-              style={{ alignSelf: "flex-start", marginTop: 12 }}
-              onClick={onInstallPlugin}
-            >
-              <Icon.Plus size={12} /> Install plugin…
-            </button>
-            {pluginsError && (
-              <span className="picker-error" style={{ display: "block", marginTop: 8 }}>
-                ✗ {pluginsError}
-              </span>
-            )}
-          </div>
-        )}
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            className="btn btn--default btn--sm"
+            style={{ alignSelf: "flex-start", marginTop: 12 }}
+            onClick={onInstallAdapter}
+          >
+            <Icon.Plus size={12} /> Install adapter…
+          </button>
+          {adaptersError && (
+            <span className="picker-error" style={{ display: "block", marginTop: 8 }}>
+              ✗ {adaptersError}
+            </span>
+          )}
+        </div>
+      )}
 
-        {section === "adapters" && (
-          <div>
-            <p className="t-p" style={{ marginBottom: 20 }}>
-              Agent adapters installed for this machine. Per-project
-              configuration lives in Project settings.
-            </p>
-            {adapters === null && <div className="t-muted">Loading…</div>}
-            {adapters !== null && adapters.length === 0 && (
-              <div
-                className="card"
-                style={{ padding: "32px 20px", textAlign: "center", color: "var(--fg-3)" }}
-              >
-                No adapters installed.
-              </div>
-            )}
-            {adapters !== null && adapters.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {adapters.map((a) => (
-                  <div
-                    key={a.id}
-                    className="card"
-                    data-testid="adapter-row"
-                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px" }}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: "var(--fs-ui-md)", fontWeight: 600, color: "var(--fg-1)" }}>
-                        {a.name}
-                      </div>
-                      <div className="t-ui-sm t-muted">{a.source}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button
-              className="btn btn--default btn--sm"
-              style={{ alignSelf: "flex-start", marginTop: 12 }}
-              onClick={onInstallAdapter}
-            >
-              <Icon.Plus size={12} /> Install adapter…
-            </button>
-            {adaptersError && (
-              <span className="picker-error" style={{ display: "block", marginTop: 8 }}>
-                ✗ {adaptersError}
-              </span>
-            )}
-          </div>
-        )}
+      {/* GLS-FR-15: every action in this section applies immediately, so it
+          reports no dirty state and never contributes to the window's
+          save-before-close sweep (GLS-FR-13, SWN-FR-08). */}
+      {section === "github" && <GithubTokens />}
 
-        {/* GLS-FR-15: every action in this section applies immediately, so it
-            reports no dirty state and never contributes to the window's
-            save-before-close sweep (GLS-FR-13, SWN-FR-08). */}
-        {section === "github" && <GithubTokens />}
+      {/* GLS-FR-16: every action in either section applies immediately, so
+          neither reports a dirty state nor contributes to the window's
+          save-before-close sweep (GLS-FR-13). Only the selected one is
+          mounted, which is what keeps a level's requests, state, and errors
+          wholly its own (AII-FR-02). */}
+      {section === "ai-api" && <AiApiIntegrations />}
+      {section === "ai-agentic" && <AgenticAiIntegrations />}
 
-        {/* GLS-FR-16: every action in either section applies immediately, so
-            neither reports a dirty state nor contributes to the window's
-            save-before-close sweep (GLS-FR-13). Only the selected one is
-            mounted, which is what keeps a level's requests, state, and errors
-            wholly its own (AII-FR-02). */}
-        {section === "ai-api" && <AiApiIntegrations />}
-        {section === "ai-agentic" && <AgenticAiIntegrations />}
-
-        {/* GLS-FR-24 / AGT-FR-21: every action here applies immediately through
-            its own operation, so the section never contributes to the window's
-            save-before-close sweep (GLS-FR-13, SWN-FR-08). */}
-        {section === "docker" && <DockerSettings />}
-        {/* GLS-FR-RBLM: every change applies immediately through its own
-            operation, so the section never contributes to the window's
-            save-before-close sweep (GLS-FR-13, SWN-FR-08). */}
-        {section === "remote" && <RemoteConnectivitySettings />}
-        {section === "agents" && (
-          <GlobalAgents
-            editorRequest={agentEditorRequest}
-            onEditorRequestHandled={onAgentEditorRequestHandled}
-          />
-        )}
-      </div>
+      {/* GLS-FR-24 / AGT-FR-21: every action here applies immediately through
+          its own operation, so the section never contributes to the window's
+          save-before-close sweep (GLS-FR-13, SWN-FR-08). */}
+      {section === "docker" && <DockerSettings />}
+      {/* GLS-FR-RBLM: every change applies immediately through its own
+          operation, so the section never contributes to the window's
+          save-before-close sweep (GLS-FR-13, SWN-FR-08). */}
+      {section === "remote" && <RemoteConnectivitySettings />}
+      {section === "agents" && (
+        <GlobalAgents
+          editorRequest={agentEditorRequest}
+          onEditorRequestHandled={onAgentEditorRequestHandled}
+        />
+      )}
     </div>
   );
 }

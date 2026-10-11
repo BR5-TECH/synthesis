@@ -299,24 +299,24 @@ export function AppShell(props: AppShellProps) {
           }
           // WTS-FR-35 / GHA-FR-19: no token stored at all — nothing to choose
           // between, so the note routes to where one is added — the Global
-          // settings window's GitHub section (SWN-FR-13, GIT-FR-10).
+          // Settings window's Global GitHub section (SWN-FR-13, GIT-FR-10).
           onOpenGlobalSettings={() => s.openGlobalSettings("github")}
           // AGT-FR-06 / AGT-FR-07: the roster is how an agent is reached to be
           // looked at or changed, and how a new one is described. Both open the
-          // Global settings **window** on its Agents section with an editor
-          // already open (SWN-FR-13), focusing that window where it is already
-          // open and closing Project settings first where that one is
-          // (SWN-FR-06, SWN-FR-07). The editor travels as part of the section
-          // address, because the window it opens is a window of its own and
-          // shares no state with this one.
+          // Settings **window** on the Agents section of its Global group with
+          // an editor already open (SWN-FR-13), focusing that window where it
+          // is already open (SWN-FR-06). The editor travels as part of the
+          // section address, because the window it opens is a window of its
+          // own and shares no state with this one.
           onOpenAgentInSettings={(agentId) => {
-            s.openGlobalSettings(
-              formatSectionAddress("agents", agentId ?? NEW_AGENT_ITEM),
+            s.openSettings(
+              formatSectionAddress("global", "agents", agentId ?? NEW_AGENT_ITEM),
             );
           }}
           // AGT-FR-08: a project enrolling nothing names where agents are
-          // enrolled, which is the Project settings window's Agents section.
-          onOpenProjectSettings={() => s.openSettings("agents")}
+          // enrolled, which is the Agents section of the Settings window's
+          // Project group.
+          onOpenProjectSettings={() => s.openProjectSettings("agents")}
           agentsRosterOpen={agentsRosterOpen}
           setAgentsRosterOpen={setAgentsRosterOpen}
         />
@@ -593,8 +593,8 @@ export function AppShell(props: AppShellProps) {
             // GRU-FR-RZDI: the section routes to a run's source draft.
             onOpenDraft={(draftId) => void s.openDraftById(draftId)}
             // GRU-FR-QLRQ / SWN-FR-13: a run stopped at its time limit routes
-            // to the Project settings section that sets the limit.
-            onOpenSettings={(section) => s.openSettings(section)}
+            // to the Project group's section that sets the limit.
+            onOpenSettings={(address) => s.openSettings(address)}
             // GLW-FR-ALZI / SNV-FR-56: the graduation log window is one of the
             // window's floating overlays, so opening it closes every other.
             onOverlayOpening={() => {
@@ -640,7 +640,7 @@ export function AppShell(props: AppShellProps) {
             // polling section of Project settings.
             readyTasks={{
               polling: githubPolling,
-              onOpenProjectSettings: () => s.openSettings("github-polling"),
+              onOpenProjectSettings: () => s.openProjectSettings("github-polling"),
             }}
           />
         )}
@@ -651,12 +651,11 @@ export function AppShell(props: AppShellProps) {
           other zone — and, being outside the keyed subtree, it is not torn down
           and remounted by a project or worktree switch (STB-FR-02). */}
       <StatusBar
-        // STB-FR-04: each button opens its native settings child window, and
-        // neither creates a tab. Wrapped rather than passed straight through:
-        // the control hands its click event to the handler, and the handler's
-        // first parameter is the section to open on.
-        onGlobalSettings={() => s.openGlobalSettings()}
-        onSettings={() => s.openSettings()}
+        // STB-FR-04: the button opens the native Settings child window on
+        // Appearance, and creates no tab. Wrapped rather than passed straight
+        // through: the handler's first parameter is the section to open on, and
+        // the button is the control focus returns to (SWN-FR-FCRT).
+        onSettings={(invoker) => s.openSettings(null, invoker)}
         operations={operations}
         overlayOpen={s.progressOverlayOpen}
         onOpenOverlay={() => {

@@ -8,7 +8,6 @@
  * subscribe-once / cancel-flag pattern they used with raw `listen`.
  */
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { SettingsWindowKind } from "./settingsWindow";
 import type {
   ImageBuildFinished,
   ImageBuildProgress,
@@ -656,8 +655,9 @@ export const SETTINGS_ROUTE = "settings-window:route";
 /** SWN-FR-11: the sweep failed; present the section that could not be written. */
 export const SETTINGS_PRESENT_FAILURE = "settings-window:present-failure";
 /**
- * Which settings window is open, or that none is. The main window needs it for
- * the already-looking-at suppression of NTF-FR-08.
+ * Whether the Settings window is open. The main window needs it for the
+ * already-looking-at suppression of NTF-FR-08, and for returning focus to the
+ * control that invoked the window (SWN-FR-FCRT).
  */
 export const SETTINGS_CHANGED = "settings-window:changed";
 /**
@@ -709,12 +709,12 @@ export const onSettingsPresentFailure = (
     handler(event.payload?.section ?? null),
   );
 
-/** SWN-FR-05: subscribe to which settings window is open. */
+/** SWN-FR-05: subscribe to whether the Settings window is open. */
 export const onSettingsWindowChanged = (
-  handler: (open: SettingsWindowKind | null) => void,
+  handler: (open: boolean) => void,
 ): Promise<UnlistenFn> =>
-  listen<{ open: SettingsWindowKind | null }>(SETTINGS_CHANGED, (event) =>
-    handler(event.payload?.open ?? null),
+  listen<{ open: boolean }>(SETTINGS_CHANGED, (event) =>
+    handler(event.payload?.open === true),
   );
 
 /** NTF-FR-08: subscribe to a settings window taking or losing OS focus. */

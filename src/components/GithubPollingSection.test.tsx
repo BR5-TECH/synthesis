@@ -3,7 +3,7 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { GithubPollingSection } from "./GithubPollingSection";
-import { Settings } from "./Settings";
+import { Settings } from "../test/settingsHarness";
 import { pollingView } from "../test/githubPollingFixtures";
 import { resetSettingsSections, settingsSectionsPending } from "../state/settingsSweep";
 import type { GithubPollingView, GithubProjectOption } from "../types";

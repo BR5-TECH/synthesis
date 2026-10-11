@@ -10,24 +10,12 @@ import { GithubPublicationSettingsGroup } from "./GithubPublicationSettings";
 import { GraduationSettingsSection } from "./GraduationSettingsSection";
 import { ProjectDockerImages } from "./ProjectDockerImages";
 import { GraduationSettings } from "./GraduationSettings";
-import { SettingsSectionNav } from "./SettingsSectionNav";
 import { LINE_ENDING_CHOICES } from "../hooks/useLineEndings";
-import type { SectionRequest } from "../state/settingsSweep";
 import { useGraduationConcurrencySetting } from "../state/graduationConcurrency";
-import { parseSectionAddress } from "../settingsWindow";
+import type { ProjectSectionKey } from "../settingsWindow";
 import type { GithubTokenBinding, GithubTokenRecord, LineEndings } from "../types";
 
-type SectionKey =
-  | "project"
-  | "template"
-  | "bindings"
-  | "github-polling"
-  | "adapters"
-  | "mcp"
-  | "plugins"
-  | "agents"
-  | "docker"
-  | "graduation";
+export type { ProjectSectionKey };
 
 /**
  * A section's nav label and the sentence under its heading. The sentence is
@@ -35,7 +23,7 @@ type SectionKey =
  * derive the tautology "Manage project for this project", and lowercasing a
  * label to fit a template destroys an acronym ("Manage mcp servers…").
  */
-const sections: [SectionKey, string, string][] = [
+export const PROJECT_SECTIONS: [ProjectSectionKey, string, string][] = [
   ["project", "Project", "How this project writes, and who it works through."],
   // SET-FR-03 / SET-FR-16: the Draft template section, second in the tab's
   // order. It holds the project's optional Markdown draft template and nothing
@@ -101,11 +89,18 @@ const plugins: [string, string, boolean][] = [
  */
 export interface SettingsProps {
   /**
-   * SWN-FR-06 / SWN-FR-11 / SWN-FR-13: present a named section — the one a
-   * request routed to, or the one whose save failed. Ignored when it names a
-   * section this window does not have.
+   * The section on screen. The Settings window chooses it (`SWN-settings-
+   * windows.md` SWN-FR-QXTV).
    */
-  sectionRequest?: SectionRequest | null;
+  section: ProjectSectionKey;
+  /**
+   * Whether the Project group is the one on screen. The group stays mounted
+   * while the Global group is on screen, because the Graduation limit it holds
+   * is a pending change the window's save sweep reaches whichever group is
+   * presented (`SWN-settings-windows.md` SWN-FR-08), and it renders nothing
+   * then.
+   */
+  active?: boolean;
   /**
    * SET-FR-20: the open project and its active worktree, as one key. The Draft
    * template section reads again whenever it changes, so it never shows — or
@@ -126,33 +121,19 @@ export interface SettingsProps {
 }
 
 export function Settings({
-  sectionRequest,
+  section,
+  active = true,
   contentRoot,
   lineEndings,
   onSelectLineEndings,
   onOpenGithubTokenPicker,
 }: SettingsProps) {
-  // SET-FR-03 / SWN-FR-13: the window opens on the first section it lists —
-  // the one that settles how the project writes and who it works through —
-  // rather than on whichever section happened to be built first.
-  const [section, setSection] = useState<SectionKey>("project");
-  const current = sections.find((s) => s[0] === section)!;
+  const current = PROJECT_SECTIONS.find((s) => s[0] === section)!;
 
   // SET-FR-HQKK / SET-FR-IHQE: the Graduation limit lives here, with the window,
   // so a choice survives a visit to another section and the close sweep reaches
   // it whichever section is on screen.
   const graduation = useGraduationConcurrencySetting(contentRoot);
-
-  // SWN-FR-13: a route the window was opened or focused on, and SWN-FR-11's
-  // presentation of the section whose save failed. Keyed on the nonce rather
-  // than on the section, so the same section asked for twice presents twice.
-  useEffect(() => {
-    if (!sectionRequest) return;
-    const { section: wanted } = parseSectionAddress(sectionRequest.section);
-    const known = sections.find(([k]) => k === wanted);
-    if (known) setSection(known[0]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sectionRequest?.nonce, sectionRequest?.section]);
 
   // SET-FR-12: which GitHub token this project's authenticated operations use.
   // Read on mount; the picker is what changes it, and the change persists at
@@ -183,265 +164,259 @@ export function Settings({
 
   const boundToken = tokens.find((t) => t.id === binding?.tokenId) ?? null;
 
+  if (!active) return null;
+
+  // The window is bounded, so the content column is a flex column rather than a
+  // block that grows — a section that fills the space available (the Draft
+  // template's editing surface) can then be sized to it rather than running past
+  // a fold. `minHeight: 0` is what lets it shrink inside the grid track.
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", height: "100%" }}>
-      <SettingsSectionNav
-        sections={sections}
-        selected={section}
-        onSelect={setSection}
-        label="Project settings sections"
-      />
-      {/* SWN-FR-03: the window is fixed at 800 × 600, so the content column is
-          a flex column rather than a block that grows — a section that fills
-          the space available (the Draft template's editing surface) can then be
-          sized to it rather than running past a fold nothing can be resized
-          past. `minHeight: 0` is what lets it shrink inside the grid track. */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          minHeight: 0,
-          padding: "28px 36px",
-          maxWidth: 760,
-          overflow: "auto",
-        }}
-      >
-        <h2 className="t-h2" style={{ margin: "0 0 4px" }}>
-          {current[1]}
-        </h2>
-        <p className="t-p" style={{ marginBottom: 24 }}>
-          {current[2]}
-        </p>
+    <div
+      data-testid="project-settings"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        padding: "28px 36px",
+        maxWidth: 760,
+        overflow: "auto",
+      }}
+    >
+      <h2 className="t-h2" style={{ margin: "0 0 4px" }}>
+        {current[1]}
+      </h2>
+      <p className="t-p" style={{ marginBottom: 24 }}>
+        {current[2]}
+      </p>
 
-        {/* SET-FR-16 … SET-FR-20: the Draft template section. Keyed on the
-            content root so a project or worktree change gives it a fresh mount
-            rather than one holding the outgoing project's buffer. */}
-        {section === "template" && (
-          <DraftTemplateSection contentRoot={contentRoot} />
-        )}
+      {/* SET-FR-16 … SET-FR-20: the Draft template section. Keyed on the
+          content root so a project or worktree change gives it a fresh mount
+          rather than one holding the outgoing project's buffer. */}
+      {section === "template" && (
+        <DraftTemplateSection contentRoot={contentRoot} />
+      )}
 
-        {section === "plugins" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {plugins.map(([id, label, on]) => (
-              <div
-                key={id}
-                className="card"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: "12px 14px",
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div
-                    style={{
-                      fontSize: "var(--fs-ui-md)",
-                      fontWeight: 600,
-                      color: "var(--fg-1)",
-                    }}
-                  >
-                    {id}
-                  </div>
-                  <div className="t-ui-sm t-muted">{label}</div>
-                </div>
-                <button className="btn btn--ghost btn--sm">Configure</button>
-                <div className="toggle" data-on={on}></div>
-              </div>
-            ))}
-            <button
-              className="btn btn--default btn--sm"
-              style={{ alignSelf: "flex-start", marginTop: 8 }}
-            >
-              <Icon.Plus size={12} /> Install plugin…
-            </button>
-          </div>
-        )}
-
-        {/* SET-FR-10: exactly two mutually-exclusive choices, persisted the
-            moment one is selected rather than on a section save — so this
-            control sits outside the section's dirty state (SET-FR-08) and
-            behaves identically to the status bar's (SET-FR-11). Every artifact
-            written from then on uses it (PST-FR-23). */}
-        {section === "project" && lineEndings && (
-          <div
-            className="card"
-            style={{ padding: "14px 16px", marginBottom: 16 }}
-          >
+      {section === "plugins" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {plugins.map(([id, label, on]) => (
             <div
-              style={{ fontSize: "var(--fs-ui-md)", fontWeight: 600, color: "var(--fg-1)" }}
+              key={id}
+              className="card"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "12px 14px",
+              }}
             >
-              Line endings
-            </div>
-            <div className="t-ui-sm t-muted" style={{ marginBottom: 10 }}>
-              Every artifact this project writes uses this convention.
-            </div>
-            <div
-              role="radiogroup"
-              aria-label="Line endings"
-              data-testid="settings-line-endings"
-              style={{ display: "inline-flex", gap: 6 }}
-            >
-              {LINE_ENDING_CHOICES.map(([value, label]) => (
-                <button
-                  key={value}
-                  role="radio"
-                  aria-checked={lineEndings === value}
-                  aria-label={label}
-                  className="btn btn--ghost btn--sm"
-                  data-active={lineEndings === value}
+              <div style={{ flex: 1 }}>
+                <div
                   style={{
-                    background:
-                      lineEndings === value ? "var(--bg-active)" : undefined,
-                    color: lineEndings === value ? "var(--accent)" : undefined,
+                    fontSize: "var(--fs-ui-md)",
+                    fontWeight: 600,
+                    color: "var(--fg-1)",
                   }}
-                  onClick={() => onSelectLineEndings(value)}
                 >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* SET-FR-12: which GitHub token this project authenticates with. The
-            token is described, never rendered beyond its masked hint
-            (GHA-FR-03), and changing it goes through the same picker modal the
-            Git panel opens (GHA-FR-20). */}
-        {section === "project" && (
-          <div
-            className="card"
-            style={{ padding: "14px 16px", marginBottom: 16 }}
-            data-testid="settings-github-token"
-          >
-            <div style={{ fontSize: "var(--fs-ui-md)", fontWeight: 600, color: "var(--fg-1)" }}>
-              GitHub token
-            </div>
-            <div className="t-ui-sm t-muted" style={{ marginBottom: 10 }}>
-              Used when this project opens pull requests or pushes over HTTPS.
-            </div>
-
-            {binding === null && !tokenError && (
-              <div className="t-muted t-ui-sm">Loading…</div>
-            )}
-
-            {binding?.resolution === "none_stored" && (
-              <div className="t-ui-sm" data-testid="github-token-none">
-                No token is stored. Add one in Global settings → GitHub.
-              </div>
-            )}
-
-            {binding?.resolution === "selection_required" && (
-              <div className="t-ui-sm" data-testid="github-token-unbound">
-                No token chosen for this project yet.
-              </div>
-            )}
-
-            {boundToken &&
-              (binding?.resolution === "bound" ||
-                binding?.resolution === "implicit") && (
-                <div data-testid="github-token-bound">
-                  <div style={{ fontSize: "var(--fs-ui-md)", color: "var(--fg-1)" }}>
-                    {boundToken.label}
-                  </div>
-                  <TokenIdentityLine token={boundToken} />
-                  {binding.resolution === "implicit" && (
-                    <div className="t-ui-xs t-muted" style={{ marginTop: 4 }}>
-                      Used automatically — it is the only token stored.
-                    </div>
-                  )}
+                  {id}
                 </div>
-              )}
-
-            {/* Nothing to choose between until at least one token exists. */}
-            {binding && binding.resolution !== "none_stored" && (
-              <button
-                className="btn btn--ghost btn--sm btn--inline-start"
-                style={{ marginTop: 10 }}
-                onClick={() =>
-                  onOpenGithubTokenPicker?.(binding.tokenId, () =>
-                    void loadBinding(),
-                  )
-                }
-              >
-                Change…
-              </button>
-            )}
-
-            {tokenError && (
-              <span className="picker-error" style={{ display: "block", marginTop: 8 }}>
-                ✗ {tokenError}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* SET-FR-13: which AI CLI integration this project uses and how it
-            resolved. The control's content and behaviour are owned by
-            `AII-ai-integrations.md` (AII-FR-17..20); the integrations
-            themselves are configured and verified in Global settings
-            (GLS-FR-16), never here. It applies at once, so it sits outside the
-            section's dirty state (SET-FR-08). */}
-        {section === "project" && <ProjectAiIntegrations />}
-
-        {/* SET-FR-15: enrolment applies at once through its own operation, so
-            this section holds no dirty state and never contributes to the tab's
-            save-before-close sweep (SET-FR-08, SWN-FR-08). */}
-        {section === "agents" && <ProjectAgents />}
-
-        {/* SET-FR-21 through SET-FR-27: the Docker section. Every field in it
-            persists at once, so it holds no dirty state and takes no part in
-            the tab's save-before-close sweep (SET-FR-08, SWN-FR-08). */}
-        {section === "docker" && <ProjectDockerImages />}
-
-        {/* SET-FR-QKKQ through SET-FR-IHQE: the concurrency limit. SET-FR-DHFS /
-            SET-FR-YMRV: the time limit row persists at once, so it takes no
-            part in the save-before-close sweep (SET-FR-08, SWN-FR-08). */}
-        {section === "graduation" && (
-          <>
-            <GraduationSettings setting={graduation} />
-            <GraduationSettingsSection />
-          </>
-        )}
-
-        {/* SET-FR-TTTB through SET-FR-GXJU, SET-FR-BLQN through SET-FR-LJYT: the
-            GitHub Project settings section. */}
-        {section === "github-polling" && (
-          <>
-            <GithubPollingSection />
-            <GithubPublicationSettingsGroup />
-          </>
-        )}
-
-        {/* The placeholder for the sections that are still stubs. Listed as the
-            ones it *excludes*, so a section built later has to be named here —
-            the Draft template section is one of them (SET-FR-16), and the stub
-            painted under its editor otherwise. */}
-        {section !== "plugins" &&
-          section !== "project" &&
-          section !== "template" &&
-          section !== "docker" &&
-          section !== "graduation" &&
-          section !== "github-polling" &&
-          section !== "agents" && (
-          <div
-            className="card"
-            style={{
-              textAlign: "center",
-              padding: "40px 20px",
-              color: "var(--fg-3)",
-            }}
+                <div className="t-ui-sm t-muted">{label}</div>
+              </div>
+              <button className="btn btn--ghost btn--sm">Configure</button>
+              <div className="toggle" data-on={on}></div>
+            </div>
+          ))}
+          <button
+            className="btn btn--default btn--sm"
+            style={{ alignSelf: "flex-start", marginTop: 8 }}
           >
-            <div style={{ fontSize: "var(--fs-ui-md)" }}>
-              Section forms are stubbed in this UI kit.
-            </div>
-            <div className="t-ui-xs" style={{ marginTop: 6 }}>
-              See specifications/ui/SET-project-settings.md SET-FR-04 through SET-FR-08 for the
-              full surface.
-            </div>
+            <Icon.Plus size={12} /> Install plugin…
+          </button>
+        </div>
+      )}
+
+      {/* SET-FR-10: exactly two mutually-exclusive choices, persisted the
+          moment one is selected rather than on a section save — so this
+          control sits outside the section's dirty state (SET-FR-08) and
+          behaves identically to the status bar's (SET-FR-11). Every artifact
+          written from then on uses it (PST-FR-23). */}
+      {section === "project" && lineEndings && (
+        <div
+          className="card"
+          style={{ padding: "14px 16px", marginBottom: 16 }}
+        >
+          <div
+            style={{ fontSize: "var(--fs-ui-md)", fontWeight: 600, color: "var(--fg-1)" }}
+          >
+            Line endings
           </div>
+          <div className="t-ui-sm t-muted" style={{ marginBottom: 10 }}>
+            Every artifact this project writes uses this convention.
+          </div>
+          <div
+            role="radiogroup"
+            aria-label="Line endings"
+            data-testid="settings-line-endings"
+            style={{ display: "inline-flex", gap: 6 }}
+          >
+            {LINE_ENDING_CHOICES.map(([value, label]) => (
+              <button
+                key={value}
+                role="radio"
+                aria-checked={lineEndings === value}
+                aria-label={label}
+                className="btn btn--ghost btn--sm"
+                data-active={lineEndings === value}
+                style={{
+                  background:
+                    lineEndings === value ? "var(--bg-active)" : undefined,
+                  color: lineEndings === value ? "var(--accent)" : undefined,
+                }}
+                onClick={() => onSelectLineEndings(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* SET-FR-12: which GitHub token this project authenticates with. The
+          token is described, never rendered beyond its masked hint
+          (GHA-FR-03), and changing it goes through the same picker modal the
+          Git panel opens (GHA-FR-20). */}
+      {section === "project" && (
+        <div
+          className="card"
+          style={{ padding: "14px 16px", marginBottom: 16 }}
+          data-testid="settings-github-token"
+        >
+          <div style={{ fontSize: "var(--fs-ui-md)", fontWeight: 600, color: "var(--fg-1)" }}>
+            GitHub token
+          </div>
+          <div className="t-ui-sm t-muted" style={{ marginBottom: 10 }}>
+            Used when this project opens pull requests or pushes over HTTPS.
+          </div>
+
+          {binding === null && !tokenError && (
+            <div className="t-muted t-ui-sm">Loading…</div>
           )}
-      </div>
+
+          {binding?.resolution === "none_stored" && (
+            <div className="t-ui-sm" data-testid="github-token-none">
+              No token is stored. Add one in Global settings → GitHub.
+            </div>
+          )}
+
+          {binding?.resolution === "selection_required" && (
+            <div className="t-ui-sm" data-testid="github-token-unbound">
+              No token chosen for this project yet.
+            </div>
+          )}
+
+          {boundToken &&
+            (binding?.resolution === "bound" ||
+              binding?.resolution === "implicit") && (
+              <div data-testid="github-token-bound">
+                <div style={{ fontSize: "var(--fs-ui-md)", color: "var(--fg-1)" }}>
+                  {boundToken.label}
+                </div>
+                <TokenIdentityLine token={boundToken} />
+                {binding.resolution === "implicit" && (
+                  <div className="t-ui-xs t-muted" style={{ marginTop: 4 }}>
+                    Used automatically — it is the only token stored.
+                  </div>
+                )}
+              </div>
+            )}
+
+          {/* Nothing to choose between until at least one token exists. */}
+          {binding && binding.resolution !== "none_stored" && (
+            <button
+              className="btn btn--ghost btn--sm btn--inline-start"
+              style={{ marginTop: 10 }}
+              onClick={() =>
+                onOpenGithubTokenPicker?.(binding.tokenId, () =>
+                  void loadBinding(),
+                )
+              }
+            >
+              Change…
+            </button>
+          )}
+
+          {tokenError && (
+            <span className="picker-error" style={{ display: "block", marginTop: 8 }}>
+              ✗ {tokenError}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* SET-FR-13: which AI CLI integration this project uses and how it
+          resolved. The control's content and behaviour are owned by
+          `AII-ai-integrations.md` (AII-FR-17..20); the integrations
+          themselves are configured and verified in Global settings
+          (GLS-FR-16), never here. It applies at once, so it sits outside the
+          section's dirty state (SET-FR-08). */}
+      {section === "project" && <ProjectAiIntegrations />}
+
+      {/* SET-FR-15: enrolment applies at once through its own operation, so
+          this section holds no dirty state and never contributes to the tab's
+          save-before-close sweep (SET-FR-08, SWN-FR-08). */}
+      {section === "agents" && <ProjectAgents />}
+
+      {/* SET-FR-21 through SET-FR-27: the Docker section. Every field in it
+          persists at once, so it holds no dirty state and takes no part in
+          the tab's save-before-close sweep (SET-FR-08, SWN-FR-08). */}
+      {section === "docker" && <ProjectDockerImages />}
+
+      {/* SET-FR-QKKQ through SET-FR-IHQE: the concurrency limit. SET-FR-DHFS /
+          SET-FR-YMRV: the time limit row persists at once, so it takes no
+          part in the save-before-close sweep (SET-FR-08, SWN-FR-08). */}
+      {section === "graduation" && (
+        <>
+          <GraduationSettings setting={graduation} />
+          <GraduationSettingsSection />
+        </>
+      )}
+
+      {/* SET-FR-TTTB through SET-FR-GXJU, SET-FR-BLQN through SET-FR-LJYT: the
+          GitHub Project settings section. */}
+      {section === "github-polling" && (
+        <>
+          <GithubPollingSection />
+          <GithubPublicationSettingsGroup />
+        </>
+      )}
+
+      {/* The placeholder for the sections that are still stubs. Listed as the
+          ones it *excludes*, so a section built later has to be named here —
+          the Draft template section is one of them (SET-FR-16), and the stub
+          painted under its editor otherwise. */}
+      {section !== "plugins" &&
+        section !== "project" &&
+        section !== "template" &&
+        section !== "docker" &&
+        section !== "graduation" &&
+        section !== "github-polling" &&
+        section !== "agents" && (
+        <div
+          className="card"
+          style={{
+            textAlign: "center",
+            padding: "40px 20px",
+            color: "var(--fg-3)",
+          }}
+        >
+          <div style={{ fontSize: "var(--fs-ui-md)" }}>
+            Section forms are stubbed in this UI kit.
+          </div>
+          <div className="t-ui-xs" style={{ marginTop: 6 }}>
+            See specifications/ui/SET-project-settings.md SET-FR-04 through SET-FR-08 for the
+            full surface.
+          </div>
+        </div>
+        )}
     </div>
   );
 }

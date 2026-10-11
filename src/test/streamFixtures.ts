@@ -30,6 +30,7 @@ export function stream(over: Partial<WorkStreamSummary["stream"]> = {}) {
     createdAt: "2026-05-01T00:00:00Z",
     busyRunId: null,
     isMissing: false,
+    temporary: false,
     ...over,
   };
 }

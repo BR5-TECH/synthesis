@@ -47,6 +47,7 @@ pub mod observability;
 pub mod statistics;
 
 mod arrangement;
+mod cascade;
 mod commands;
 mod commit;
 mod direct;
@@ -78,7 +79,7 @@ pub use observability::{
 };
 pub use queue::{
     draft_graduation, draft_graduation_stands, latest_run_for, load_queue, merge_runs_by_stream,
-    next_eligible,
+    holder_of_queue, next_eligible, slot_holders,
     position_in_queue, project_queue, queue_of, queued_counts_by_stream, require_no_running_graduation,
     require_unlocked_draft,
     streams_with_runs,

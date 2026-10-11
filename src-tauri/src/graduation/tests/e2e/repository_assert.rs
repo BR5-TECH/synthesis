@@ -127,12 +127,13 @@ impl Outcome {
     }
 
     /// GRD-FR-BNTC / WKS-FR-JQJA: whether the stream is free once the run has
-    /// come to rest, in memory and on the stream's own durable record.
+    /// ended, in memory, on the stored run and on the stream's own durable
+    /// record. A run that is `completed` or `discarded` leaves it free.
     pub(crate) fn expect_stream_released(self) -> Self {
         let (holder, busy) = self.stream_holders();
         assert_eq!(
             holder, None,
-            "[{}] the stream is free once the run rests",
+            "[{}] the stream is free once the run has ended",
             self.name
         );
         assert_eq!(
@@ -140,24 +141,52 @@ impl Outcome {
             "[{}] the stream's durable busy mark is cleared",
             self.name
         );
+        // A run that was never stored holds nothing, as a clean merge's none does.
+        let stored = crate::graduation::load_run(&self.fx.app, &self.run.id).ok();
+        assert!(
+            !stored.is_some_and(|run| run.holds_queue()),
+            "[{}] the stored run no longer holds its queue",
+            self.name
+        );
         self
     }
 
+    /// GRD-FR-BNTC / GRD-FR-BSWV: a run at rest still holds its queue. The hold
+    /// is the stored run's and the stream's durable busy mark, because the loop
+    /// that drove the run has ended and holds nothing in memory.
     pub(crate) fn expect_stream_held(self) -> Self {
-        let (holder, busy) = self.stream_holders();
-        assert_eq!(
-            holder.as_deref(),
-            Some(self.run.id.as_str()),
-            "[{}] the run still holds its stream",
+        let (_, busy) = self.stream_holders();
+        assert!(
+            self.stored_run().holds_queue(),
+            "[{}] the stored run still holds its queue",
             self.name
         );
+        if !crate::graduation::is_worktree_queue_key(&self.stream_id) {
+            assert_eq!(
+                busy.as_deref(),
+                Some(self.run.id.as_str()),
+                "[{}] the stream's durable busy mark names the run",
+                self.name
+            );
+        }
+        self
+    }
+
+    /// GRD-FR-KKKN: whether the run holds one project slot, read from the
+    /// stored run order.
+    pub(crate) fn expect_slot_held(self, held: bool) -> Self {
         assert_eq!(
-            busy.as_deref(),
-            Some(self.run.id.as_str()),
-            "[{}] the stream's durable busy mark names the run",
+            self.stored_run().holds_slot(),
+            held,
+            "[{}] whether the run holds a project slot",
             self.name
         );
         self
+    }
+
+    /// The run as the store holds it now.
+    pub(super) fn stored_run(&self) -> crate::graduation::GraduationRun {
+        crate::graduation::load_run(&self.fx.app, &self.run.id).expect("the run is stored")
     }
 
     /// Who holds the stream in memory, and whom its durable record names.

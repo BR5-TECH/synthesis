@@ -147,7 +147,7 @@ fn a_single_minor_finding_of_a_merge_review_still_starts_another_pass() {
         .expect_commits(0)
         .expect_base_branch_at_the_pinned_tip()
         .expect_base_working_copy_clean()
-        .expect_stream_released();
+        .expect_stream_held();
 }
 
 // GTE-FR-CZPM, GTE-FR-RDPE / GRL-FR-NDHW, GRD-FR-AQNW, GRL-FR-MRVK: a `ready`

@@ -83,6 +83,7 @@ pub fn create_work_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     name: String,
     base_branch: Option<String>,
+    temporary: Option<bool>,
 ) -> Result<WorkStream, String> {
     let buffer = &crate::logging::BUFFER;
     let root = project_root(&app)?;
@@ -165,6 +166,8 @@ pub fn create_work_stream<R: tauri::Runtime>(
         created_at: crate::notes::now_rfc3339(),
         busy_run_id: None,
         is_missing: false,
+        // WKS-FR-KCTR: an omitted flag makes a stream that is not temporary.
+        temporary: temporary.unwrap_or(false),
     };
     if let Err(reason) = store::write_stream(&fs, &store, &stream) {
         return Err(fail_and_reclaim(&app, &fs, &main, &store, created, &stream_id, reason));
@@ -175,7 +178,11 @@ pub fn create_work_stream<R: tauri::Runtime>(
         buffer,
         &[Domain::Backend],
         "work stream created",
-        log_fields! { "stream_id" => stream.id.clone(), "branch" => stream.branch.clone() },
+        log_fields! {
+            "stream_id" => stream.id.clone(),
+            "branch" => stream.branch.clone(),
+            "temporary" => stream.temporary
+        },
     );
     announce(&app, &key);
     // WKS-FR-SPVK: the stream's branch is new to every branch listing.

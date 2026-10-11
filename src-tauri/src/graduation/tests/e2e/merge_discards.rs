@@ -122,8 +122,8 @@ fn a_pause_between_the_verdict_and_the_apply_applies_nothing() {
         .expect_live_state_unchanged()
         .expect_base_branch_at_the_pinned_tip()
         .expect_base_working_copy_clean()
-        .expect_stream_released()
-        .expect_slots_in_use(0)
+        .expect_stream_held()
+        .expect_slots_in_use(1)
         .expect_merge_workspace_standing();
 }
 

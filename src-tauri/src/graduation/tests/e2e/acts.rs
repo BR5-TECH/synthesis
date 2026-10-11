@@ -182,6 +182,19 @@ impl Outcome {
         self
     }
 
+    /// GRD-FR-QCZF: the author discards a run the scenario enqueued beside its
+    /// own, while the run in focus stays as it is.
+    pub(crate) fn discarding(self, label: &'static str) -> Self {
+        let other = self.ctx.others.get(label);
+        without_loop(&self.fx.app, || {
+            crate::graduation::discard_graduation_run(self.fx.app.clone(), other.run_id.clone())
+        })
+        .unwrap_or_else(|reason| {
+            panic!("[{}] the discard of the run labelled {label} was refused: {reason}", self.name)
+        });
+        self
+    }
+
     /// GRD-FR-BLCR: the author reverts what the run committed.
     pub(crate) fn reverted(mut self) -> Self {
         self.dispatch = ScriptedDispatch::new(Vec::new());

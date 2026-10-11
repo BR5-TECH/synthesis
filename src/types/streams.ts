@@ -26,6 +26,11 @@ export interface WorkStream {
   busyRunId?: string | null;
   /** WKS-FR-AXRD: Git lists it but its directory has gone. */
   isMissing: boolean;
+  /**
+   * WKS-FR-KCTR: the stream is temporary. It is merged and deleted when its
+   * work is done. Absent on a record from a backend that predates the flag.
+   */
+  temporary?: boolean;
 }
 
 /** WKS-FR-SGCM: one stream as a listing reports it. */

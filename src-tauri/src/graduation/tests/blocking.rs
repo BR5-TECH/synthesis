@@ -38,13 +38,13 @@ fn the_first_block_rests_the_run_blocked_and_keeps_the_stream() {
         Some("review_verdict_invalid")
     );
     assert!(
-        run.state.holds_stream(),
-        "GRD-FR-BNTC: a blocked run holds its stream"
+        run.state.holds_queue(),
+        "GRD-FR-BNTC: a blocked run holds its queue"
     );
 }
 
 /// GRL-FR-QZFB / GRD-FR-WKMD: the same condition twice rests the run for the
-/// author instead, which releases the stream so the queue behind it moves.
+/// author instead. The run still holds its queue and its slot (GRD-FR-BNTC).
 #[test]
 fn the_same_condition_twice_rests_the_run_for_the_author() {
     let fx = Fixture::new();
@@ -76,31 +76,27 @@ fn the_same_condition_twice_rests_the_run_for_the_author() {
         "GRD-FR-WKMD: this shape holds no escalation"
     );
     assert!(
-        !run.state.holds_stream(),
-        "GRD-FR-WKMD: resting for the author releases the stream"
+        run.state.holds_queue(),
+        "GRD-FR-BNTC: resting for the author keeps the queue held"
     );
 }
 
-/// GRD-FR-WKMD: the release is what unwedges the queue. The stream a run at
-/// rest was holding stops being held by it, so the run behind is no longer
-/// waiting on a fault that nobody can clear.
+/// GRD-FR-BNTC / GRD-FR-WKMD: a run resting for the author after a repeated
+/// fault keeps its queue, so the run behind it waits for the author's decision
+/// rather than starting on top of the work the fault left standing.
 ///
 /// A captured prompt of nothing is refused before any container exists
 /// (GXD-FR-ODGX), which is the cheapest way to reach the same blocker twice.
 #[test]
-fn the_queue_behind_a_repeated_fault_moves_again() {
+fn the_queue_behind_a_repeated_fault_stays_held() {
     let fx = Fixture::new();
     let stream = fx.stream("editor");
     let first = fx.enqueue(&stream, "   ");
     let behind = fx.enqueue(&stream, "The run behind it.");
 
-    // The first block holds the stream, so the run behind it waits.
+    // The first block holds the queue, so the run behind it waits.
     let first = fx.drive(&first, ScriptedDispatch::new(Vec::new()));
     assert_eq!(first.state, GraduationRunState::Blocked);
-    assert_eq!(
-        fx.app.state::<GraduationState>().holder_of(&stream.id).as_deref(),
-        Some(first.id.as_str())
-    );
     let waiting = ScriptedDispatch::new(vec![Turn::work(), Turn::ready()]);
     assert!(
         !fx.try_drive(&behind, waiting.clone()),
@@ -112,25 +108,18 @@ fn the_queue_behind_a_repeated_fault_moves_again() {
     let first = fx.continue_run(&first);
     let first = fx.drive(&first, ScriptedDispatch::new(Vec::new()));
     assert_eq!(first.state, GraduationRunState::AwaitingAuthor);
+    assert!(first.holds_queue() && first.holds_slot());
 
-    // The stream is no longer this run's, so the queue is not wedged on it.
-    assert_ne!(
-        fx.app.state::<GraduationState>().holder_of(&stream.id).as_deref(),
-        Some(first.id.as_str()),
-        "GRD-FR-WKMD: resting for the author gives the stream back"
+    // The queue is still the run's: the run behind it is not dispatched.
+    let waiting = ScriptedDispatch::new(vec![Turn::work(), Turn::ready()]);
+    assert!(
+        !fx.try_drive(&behind, waiting.clone()),
+        "GRD-FR-BNTC: the run behind a run at rest waits"
     );
-    assert!(!first.holds_stream());
-
-    // And the stream passed to the run behind it, which is what the release is
-    // for. The scheduler takes it the moment it comes free, so the handoff is
-    // what proves the queue moved rather than waiting on a fault nobody clears.
-    assert_eq!(
-        fx.app.state::<GraduationState>().holder_of(&stream.id).as_deref(),
-        Some(behind.id.as_str()),
-        "GRD-FR-WKMD: the run behind never got the stream"
-    );
+    assert_eq!(waiting.turns_taken(), 0);
+    assert_eq!(fx.reload(&behind.id).state, GraduationRunState::Queued);
     let record = crate::streams::stream_of(&fx.app, &stream.id).expect("the stream");
-    assert_eq!(record.busy_run_id.as_deref(), Some(behind.id.as_str()));
+    assert_eq!(record.busy_run_id.as_deref(), Some(first.id.as_str()));
 }
 
 /// GRL-FR-QZFB: a block carrying a different code starts the count again, so

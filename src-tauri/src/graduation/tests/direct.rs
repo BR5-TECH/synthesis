@@ -368,12 +368,10 @@ fn direct_runs_on_one_worktree_share_a_queue_and_never_work_together() {
 
     let blocked = fx.drive(&first, ScriptedDispatch::new(Vec::new()));
     assert_eq!(blocked.state, GraduationRunState::Blocked);
-    let held = fx
-        .app
-        .state::<GraduationState>()
-        .holder_of(&first.queue_key())
-        .expect("the worktree is held");
-    assert_eq!(held, first.id);
+    assert!(
+        fx.reload(&first.id).holds_queue(),
+        "GRD-FR-BNTC: the blocked run holds the worktree's queue"
+    );
 
     let dispatch = ScriptedDispatch::new(vec![Turn::work(), Turn::ready()]);
     assert!(!fx.try_drive(&second, dispatch.clone()), "the worktree is held");

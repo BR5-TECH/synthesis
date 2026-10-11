@@ -368,7 +368,11 @@ describe("a stream the dialog creates", () => {
     await userEvent.type(screen.getByRole("textbox", { name: "Name" }), "fresh");
     await userEvent.click(graduate());
     await waitFor(() => expect(onStarted).toHaveBeenCalled());
-    expect(calls("create_work_stream")[0][1]).toEqual({ name: "fresh", baseBranch: "main" });
+    expect(calls("create_work_stream")[0][1]).toEqual({
+      name: "fresh",
+      baseBranch: "main",
+      temporary: false,
+    });
     expect(calls("start_graduation")[0][1]).toEqual({
       draftId: "d-1",
       streamId: "fresh",

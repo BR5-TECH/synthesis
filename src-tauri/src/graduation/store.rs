@@ -51,6 +51,32 @@ pub struct QueueIndexEntry {
     /// archived merge run out of a stream's row without opening the record.
     #[serde(default)]
     pub archived: bool,
+    /// GRD-FR-BNTC: the run was dispatched before, so a `queued` run still holds
+    /// its queue and its project slot.
+    #[serde(default)]
+    pub dispatched: bool,
+}
+
+impl QueueIndexEntry {
+    /// GRD-FR-ZVNO: the key of the queue this run belongs to.
+    pub fn queue_key(&self) -> String {
+        if self.stream_id.is_empty() && !self.worktree_path.is_empty() {
+            worktree_queue_key(&self.worktree_path)
+        } else {
+            self.stream_id.clone()
+        }
+    }
+
+    /// GRD-FR-BNTC: whether this run holds its queue (see
+    /// `GraduationRun::holds_queue`).
+    pub fn holds_queue(&self) -> bool {
+        self.state.holds_queue() || (self.state == GraduationRunState::Queued && self.dispatched)
+    }
+
+    /// GRD-FR-KKKN: whether this run holds a project slot.
+    pub fn holds_slot(&self) -> bool {
+        self.state.holds_slot() || (self.state == GraduationRunState::Queued && self.dispatched)
+    }
 }
 
 /// GSU-FR-RJRF: the one root this module writes under.

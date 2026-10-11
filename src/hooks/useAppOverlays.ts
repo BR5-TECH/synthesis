@@ -209,6 +209,8 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
   interface PendingStreamMerge {
     streamId: string;
     streamName: string;
+    /** CMW-FR-KQLV: the message the window opens with. */
+    defaultMessage?: string;
     settle: (message: string | null) => void;
   }
   const [streamMergeWindow, setStreamMergeWindow] =
@@ -216,7 +218,11 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
   // Mirrored in a ref for the reason the commit window's is: a caller left
   // unsettled is a promise the selector awaits forever.
   const streamMergeRef = useRef<PendingStreamMerge | null>(null);
-  const requestMergeCommit = (streamId: string, streamName: string) =>
+  const requestMergeCommit = (
+    streamId: string,
+    streamName: string,
+    defaultMessage?: string,
+  ) =>
     new Promise<string | null>((settle) => {
       // CMW-FR-01 / SNV-FR-56: opening this window closes every overlay the
       // shell owns, exactly as `openCommitWindow` does. The work stream
@@ -228,7 +234,7 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
       // Re-opening while one is outstanding settles the previous caller rather
       // than abandoning it.
       streamMergeRef.current?.settle(null);
-      const pending = { streamId, streamName, settle };
+      const pending = { streamId, streamName, defaultMessage, settle };
       streamMergeRef.current = pending;
       setStreamMergeWindow(pending);
     });

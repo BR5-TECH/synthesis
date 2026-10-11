@@ -222,6 +222,7 @@ describe("the window a graduation starts in", () => {
       "new",
       "standing-work-message-graduation-start",
       "stream",
+      "temporary",
     ]);
   });
 
@@ -231,7 +232,13 @@ describe("the window a graduation starts in", () => {
     const answered = Array.from(
       dialog().querySelectorAll<HTMLElement>("input, select, textarea"),
     ).map((control) => control.id || control.getAttribute("value"));
-    expect(answered).toEqual(["stream", "new", "direct", "graduation-stream"]);
+    expect(answered).toEqual([
+      "stream",
+      "new",
+      "temporary",
+      "direct",
+      "graduation-stream",
+    ]);
   });
 });
 
@@ -269,7 +276,7 @@ describe("which stream the run belongs to", () => {
     const { onStarted } = draw();
     await waitFor(() => expect(picker()).toBeInTheDocument());
     expect(screen.getByTestId("graduation-start-busy")).toHaveTextContent(
-      /A run is working in .editor-work. now\. This one waits behind it\./,
+      /A run holds .editor-work. now, working or at rest\. This one waits behind it until that run is completed or discarded\./,
     );
     // Offered like any other: the busy stream is the one chosen, and starting
     // is available.

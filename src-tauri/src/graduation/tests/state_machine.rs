@@ -25,6 +25,7 @@ fn run_at(state: GraduationRunState) -> GraduationRun {
         base_commit: None,
         commits: Vec::new(),
         auto_start: true,
+        dispatched: false,
         archived: false,
         archived_at: None,
         work_turns: 0,
@@ -62,26 +63,40 @@ fn only_the_three_terminal_states_are_terminal() {
     }
 }
 
-// GRD-FR-BNTC: a run holds its stream while it is doing agent work or resting
-// on a condition inside one. Every other state holds nothing.
+// GRD-FR-BNTC, GRD-FR-KKKN: a run holds its queue from its first dispatch until
+// it is completed or discarded, and a failed run holds the queue and no slot.
 #[test]
-fn a_run_holds_its_stream_only_while_it_is_working_reviewing_or_blocked() {
+fn a_run_holds_its_queue_from_its_first_dispatch_until_it_is_completed_or_discarded() {
     use GraduationRunState as S;
-    for state in [S::Working, S::Reviewing, S::Blocked] {
-        assert!(state.holds_stream(), "{} holds", state.as_str());
-    }
-    // A paused, interrupted, waiting, queued or ended run releases it — a
-    // stream a paused run kept would be stuck behind an author who has stopped.
     for state in [
-        S::Queued,
+        S::Working,
+        S::Reviewing,
+        S::Blocked,
         S::AwaitingAuthor,
         S::Interrupted,
-        S::Completed,
-        S::Discarded,
-        S::Failed,
     ] {
-        assert!(!state.holds_stream(), "{} releases", state.as_str());
+        assert!(state.holds_queue(), "{} holds the queue", state.as_str());
+        assert!(state.holds_slot(), "{} holds a slot", state.as_str());
     }
+    assert!(S::Failed.holds_queue(), "failed holds the queue");
+    assert!(!S::Failed.holds_slot(), "failed holds no slot");
+    for state in [S::Queued, S::Completed, S::Discarded] {
+        assert!(!state.holds_queue(), "{} holds no queue", state.as_str());
+        assert!(!state.holds_slot(), "{} holds no slot", state.as_str());
+    }
+}
+
+// GRD-FR-BNTC: a run that was dispatched before and waits in `queued` again, as
+// Continue and an answer leave it, still holds its queue and its slot.
+#[test]
+fn a_queued_run_that_was_dispatched_before_still_holds_its_queue() {
+    let mut run = run_at(GraduationRunState::Queued);
+    assert!(!run.holds_queue() && !run.holds_slot());
+    run.dispatched = true;
+    assert!(run.holds_queue() && run.holds_slot());
+    assert!(run.is_eligible(), "it is dispatched whatever its auto-start says");
+    run.auto_start = false;
+    assert!(run.is_eligible());
 }
 
 // GRD-FR-DXWL: a draft a non-terminal run holds is locked, and a terminal run

@@ -37,8 +37,22 @@ export const TERMINAL_RUN_STATES: readonly GraduationRunState[] = [
   "failed",
 ];
 
-/** GRD-FR-BNTC: the states in which a run is holding its stream. */
-export const STREAM_HOLDING_STATES: readonly GraduationRunState[] = [
+/**
+ * GRD-FR-BNTC: the states in which a run holds its queue. A run holds it from
+ * its first dispatch until it is completed or discarded, so a run at rest holds
+ * it as a run at work does, and a failed run holds it until it is discarded.
+ */
+export const QUEUE_HOLDING_STATES: readonly GraduationRunState[] = [
+  "working",
+  "reviewing",
+  "blocked",
+  "awaiting_author",
+  "interrupted",
+  "failed",
+];
+
+/** The states in which an agent turn runs, or a condition stops one that ran. */
+export const AGENT_WORK_STATES: readonly GraduationRunState[] = [
   "working",
   "reviewing",
   "blocked",
@@ -130,8 +144,6 @@ export interface GraduationInterruption {
   at: string;
   /** A short, author-facing explanation. Never a credential, never content. */
   detail: string;
-  /** GRD-FR-MDQZ: the run gave its stream back. True for an author pause. */
-  streamReleased: boolean;
   resumeRequestedAt?: string | null;
 }
 
@@ -383,6 +395,11 @@ export interface GraduationRun {
   /** The revisions this run created, in order. */
   commits: string[];
   autoStart: boolean;
+  /**
+   * GRD-FR-BNTC: the run was dispatched before. A queued run that was holds its
+   * queue while it waits to be dispatched again.
+   */
+  dispatched?: boolean;
   /** GRD-FR-JOFE: where the author filed it. Independent of `state`. */
   archived: boolean;
   archivedAt?: string | null;
@@ -455,7 +472,12 @@ export function isTerminalRun(state: GraduationRunState): boolean {
   return TERMINAL_RUN_STATES.includes(state);
 }
 
-/** GRD-FR-BNTC: whether a run in this state is holding its stream. */
-export function holdsStream(state: GraduationRunState): boolean {
-  return STREAM_HOLDING_STATES.includes(state);
+/** GRD-FR-BNTC: whether a run in this state is holding its queue. */
+export function holdsQueue(state: GraduationRunState): boolean {
+  return QUEUE_HOLDING_STATES.includes(state);
+}
+
+/** Whether a run in this state is working, reviewing or blocked on its work. */
+export function isAgentWork(state: GraduationRunState): boolean {
+  return AGENT_WORK_STATES.includes(state);
 }

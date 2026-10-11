@@ -212,7 +212,7 @@ fn an_update_is_refused_while_the_stream_holds_a_resting_run() {
         .work_turn(Script::escalates(&["Which panel is meant?"]))
         .run()
         .expect_state(GraduationRunState::AwaitingAuthor)
-        .expect_stream_released()
+        .expect_stream_held()
         .committing_on_the_base("base-only.txt", "from the base\n")
         .updated(StreamUpdateStrategy::MergeSource, Vec::new())
         .expect_reconciliation_refused("stream_busy")

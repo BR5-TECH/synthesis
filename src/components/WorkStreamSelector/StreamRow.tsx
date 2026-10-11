@@ -187,6 +187,16 @@ export function StreamRow({
           {aheadOfBase} ahead of {stream.baseBranch} · {behindBase} behind ·{" "}
           {queuedRunCount} queued
         </span>
+        {/* WSS-FR-DNQM: the row says in words that the stream is temporary. */}
+        {stream.temporary && (
+          <span
+            className="stream-select__meta t-muted"
+            data-testid={`stream-temporary-${stream.id}`}
+          >
+            Temporary stream — merged into {stream.baseBranch} and deleted when
+            its work is done
+          </span>
+        )}
       </button>
 
       {/* WSS-FR-PSXK: the busy line replaces the idle actions. Only Create a PR

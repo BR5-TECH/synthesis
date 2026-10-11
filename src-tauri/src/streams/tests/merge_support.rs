@@ -305,6 +305,7 @@ pub(super) fn save_plain_run(
         base_commit: None,
         commits: Vec::new(),
         auto_start: true,
+        dispatched: false,
         archived: false,
         archived_at: None,
         work_turns: 0,

@@ -131,8 +131,21 @@ fn claim<R: tauri::Runtime>(
     let direct = crate::graduation::load_run(app, run_id)
         .map(|run| run.is_direct())
         .unwrap_or(false);
+    // GRD-FR-BNTC, GRD-FR-KKKN: the stored runs say which run holds this queue
+    // and which runs hold a slot. A run at rest holds both as a run at work does.
+    let (holders, other_holder) = stored_holds(app, run_id, stream_id);
+    if let Some(holder) = other_holder {
+        logging::log_debug(
+            app,
+            &crate::logging::BUFFER,
+            &[Domain::Backend],
+            "graduation refused a claim: another run holds the queue",
+            log_fields! { "run_id" => run_id.to_string(), "holder" => holder },
+        );
+        return None;
+    }
     let cancellation = CancellationToken::new();
-    if !state.claim(stream_id, run_id, direct, limit, cancellation.clone()) {
+    if !state.claim_with_holders(stream_id, run_id, direct, limit, &holders, cancellation.clone()) {
         return None;
     }
     // GRD-FR-ZVNO: an ordinary worktree has no stream record to mark busy; its
@@ -155,6 +168,35 @@ fn claim<R: tauri::Runtime>(
     }
     state.begin_loop(run_id);
     Some(cancellation)
+}
+
+/// GRD-FR-BNTC, GRD-FR-KKKN: from the run order's index, the runs that hold a
+/// project slot and the run, other than this one, that holds this queue.
+fn stored_holds<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run_id: &str,
+    queue_key: &str,
+) -> (std::collections::BTreeSet<String>, Option<String>) {
+    let project_key = crate::graduation::queue::project_key(app);
+    let (Ok(fs), Ok(base)) = (
+        crate::graduation::store_fs(app),
+        crate::graduation::store_base(app),
+    ) else {
+        return (std::collections::BTreeSet::new(), None);
+    };
+    let index = crate::graduation::read_queue_index(&fs, &base, &project_key);
+    let holders = index
+        .runs
+        .iter()
+        .filter(|entry| entry.holds_slot())
+        .map(|entry| entry.run_id.clone())
+        .collect();
+    let other = index
+        .runs
+        .iter()
+        .find(|entry| entry.holds_queue() && entry.run_id != run_id && entry.queue_key() == queue_key)
+        .map(|entry| entry.run_id.clone());
+    (holders, other)
 }
 
 /// Drive one claimed run to rest, on a runtime of this thread's own.
@@ -195,38 +237,38 @@ fn release_logs<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run_id: &str) {
     logs::release(app, run_id);
 }
 
-/// Give the stream back, and start whatever waits behind this run.
+/// End the claim of this loop, and offer the project's slots again.
 ///
-/// GRD-FR-BNTC: a run resting `blocked` still holds its stream. The condition is
-/// one the author clears, and the work it left standing in the working copy is
-/// what they clear it against — so the queue waits rather than starting the run
-/// behind it on top of that work.
+/// GRD-FR-BNTC: a run at rest still holds its queue and its project slot, in
+/// `blocked`, `awaiting_author`, `interrupted` and `failed` alike. The work it
+/// left standing in the working copy is what the author clears the stop against,
+/// so the queue waits rather than starting the run behind it on top of that
+/// work. Only a run that is `completed` or `discarded` gives the stream back.
 fn release_and_advance<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run_id: &str,
     stream_id: &str,
 ) {
     let holds = crate::graduation::load_run(app, run_id)
-        .map(|run| run.holds_stream())
+        .map(|run| run.holds_queue())
         .unwrap_or(false);
+    if let Some(state) = app.try_state::<GraduationState>() {
+        state.release_run(stream_id, run_id);
+    }
     if holds {
         logging::log_info(
             app,
             &crate::logging::BUFFER,
             &[Domain::Backend],
-            "graduation left a stream held by a run at rest",
+            "graduation left a queue held by a run at rest",
             log_fields! { "run_id" => run_id.to_string(), "stream_id" => stream_id.to_string() },
         );
-        return;
-    }
-    if let Some(state) = app.try_state::<GraduationState>() {
-        state.release(stream_id);
-    }
-    if !is_worktree_queue_key(stream_id) {
+    } else if !is_worktree_queue_key(stream_id) {
         let _ = crate::streams::release_stream(app, stream_id, run_id);
     }
-    // The stream and its project slot are free, so the oldest eligible run of
-    // the project may start, whichever queue it waits in (GRD-FR-NYSH).
+    // A `failed` run frees its project slot, and a finished run frees its queue
+    // too, so the oldest eligible run of the project may start, whichever queue
+    // it waits in (GRD-FR-NYSH).
     crate::graduation::advance_all_queues(app);
 }
 

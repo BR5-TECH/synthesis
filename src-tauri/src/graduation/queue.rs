@@ -29,18 +29,30 @@ pub fn next_eligible<'a>(queue: &'a GraduationQueue, key: &str) -> Option<&'a Gr
     eligible_members(queue, key).into_iter().next()
 }
 
-/// GRD-FR-EGWS: every member of a queue that may start, earliest first.
+/// GRD-FR-BNTC: the run that holds a queue, wherever it stands in the order.
 ///
-/// Empty while a member of the queue holds the queue's stream or worktree. The
-/// dispatcher walks the list and passes over a direct run whose pinned branch is
-/// not checked out (GRD-FR-XRDY).
-pub fn eligible_members<'a>(queue: &'a GraduationQueue, key: &str) -> Vec<&'a GraduationRun> {
-    if queue
+/// A run holds its queue from its first dispatch until it is `completed` or
+/// `discarded`, so a run at rest holds it as a run at work does.
+pub fn holder_of_queue<'a>(queue: &'a GraduationQueue, key: &str) -> Option<&'a GraduationRun> {
+    queue
         .runs
         .iter()
-        .any(|run| run.queue_key() == key && run.holds_stream())
-    {
-        return Vec::new();
+        .find(|run| run.queue_key() == key && run.holds_queue())
+}
+
+/// GRD-FR-EGWS: every member of a queue that may start, earliest first.
+///
+/// While a run holds the queue (GRD-FR-BNTC) the only member that may start is
+/// the holder itself, and only where Continue or an answer returned it to
+/// `queued`. The dispatcher walks the list and passes over a direct run whose
+/// pinned branch is not checked out (GRD-FR-XRDY).
+pub fn eligible_members<'a>(queue: &'a GraduationQueue, key: &str) -> Vec<&'a GraduationRun> {
+    if let Some(holder) = holder_of_queue(queue, key) {
+        return if holder.is_eligible() {
+            vec![holder]
+        } else {
+            Vec::new()
+        };
     }
     queue
         .runs
@@ -52,21 +64,37 @@ pub fn eligible_members<'a>(queue: &'a GraduationQueue, key: &str) -> Vec<&'a Gr
 /// GRD-FR-NYSH: every run the scheduler may start now, oldest first in the
 /// project's run order, taken across every queue.
 ///
-/// A queue that a member holds offers nothing. A run that is not eligible is
-/// passed over, and it blocks no run of another queue. A queue may list several
-/// runs: the scheduler starts the first one it can and then passes over that
-/// queue, so each queue still starts one run at a time (GRD-FR-BNTC).
+/// A queue that a run holds offers that run alone, and only while it waits to be
+/// dispatched again (GRD-FR-BNTC). A run that is not eligible is passed over,
+/// and it blocks no run of another queue. A queue may list several runs: the
+/// scheduler starts the first one it can and then passes over that queue, so
+/// each queue still starts one run at a time.
 pub fn dispatch_candidates(queue: &GraduationQueue) -> Vec<&GraduationRun> {
     let held: std::collections::BTreeSet<String> = queue
         .runs
         .iter()
-        .filter(|run| run.holds_stream())
+        .filter(|run| run.holds_queue())
         .map(|run| run.queue_key())
         .collect();
     queue
         .runs
         .iter()
-        .filter(|run| run.is_eligible() && !held.contains(&run.queue_key()))
+        .filter(|run| {
+            run.is_eligible() && (run.holds_queue() || !held.contains(&run.queue_key()))
+        })
+        .collect()
+}
+
+/// GRD-FR-KKKN: the runs that hold a project slot now, by id.
+///
+/// Read from the stored runs, so a run at rest holds its slot as a run at work
+/// does, and a relaunch frees none (GRD-FR-BSWV).
+pub fn slot_holders(queue: &GraduationQueue) -> std::collections::BTreeSet<String> {
+    queue
+        .runs
+        .iter()
+        .filter(|run| run.holds_slot())
+        .map(|run| run.id.clone())
         .collect()
 }
 

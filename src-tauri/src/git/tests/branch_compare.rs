@@ -362,7 +362,7 @@ fn a_stream_branch_is_compared_with_its_base_and_the_reads_are_logged() {
     let fx = super::branch_deletion::DeletionFixture::new();
     let base = fx.f.current();
     let stream =
-        crate::streams::create_work_stream(fx.app.clone(), "Compare".into(), Some(base.clone()))
+        crate::streams::create_work_stream(fx.app.clone(), "Compare".into(), Some(base.clone()), None)
             .unwrap();
     let worktree = git2::Repository::open(&stream.worktree_path).unwrap();
     commit_at(&worktree, "stream work", 1_700_000_500, &[("s.md", Some(b"secret body\n"))]);

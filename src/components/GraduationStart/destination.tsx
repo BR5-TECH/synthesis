@@ -2,12 +2,13 @@
  * Where a graduation run works
  * (`../../../specifications/ui/GSD-graduation-start-dialog.md` GSD-FR-BZHW).
  *
- * One choice of three: an existing stream, a stream this dialog creates, and
- * the worktree that is active when the author confirms. Each choice shows only
+ * One choice of four: an existing stream, a stream this dialog creates, a
+ * temporary stream this dialog creates, and the worktree that is active when
+ * the author confirms. Each choice shows only
  * its own fields.
  */
 
-export type Destination = "stream" | "new" | "direct";
+export type Destination = "stream" | "new" | "temporary" | "direct";
 
 export interface DestinationChoiceProps {
   value: Destination;
@@ -20,6 +21,7 @@ export interface DestinationChoiceProps {
 const CHOICES: Array<{ value: Destination; label: string }> = [
   { value: "stream", label: "Existing stream" },
   { value: "new", label: "New stream" },
+  { value: "temporary", label: "Temporary stream" },
   { value: "direct", label: "Work directly" },
 ];
 

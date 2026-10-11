@@ -13,8 +13,14 @@ import type { DirectGraduationPreflight } from "../../types";
 /** Why **Work directly** cannot be confirmed, or `null` when it can be. */
 export function directBlocker(
   preflight: DirectGraduationPreflight | null,
+  temporaryStreamIds: ReadonlySet<string> = new Set(),
 ): string | null {
   if (!preflight) return null;
+  // GSD-FR-RLFC: a temporary stream takes the runs of Temporary stream and of
+  // Existing stream alone, so its working copy is no direct target.
+  if (preflight.stream && temporaryStreamIds.has(preflight.stream.streamId)) {
+    return "This worktree is the working copy of a temporary stream, and a temporary stream takes no direct run. Choose Existing stream to add the run to its queue.";
+  }
   if (preflight.isDetached || !preflight.branch) {
     return "This worktree is not on a branch, so a run has no branch to work on. Check a branch out first.";
   }
@@ -25,13 +31,19 @@ export function directBlocker(
 }
 
 export interface DirectChoiceProps {
+  /** GSD-FR-RLFC: the temporary streams of the project, by id. */
+  temporaryStreamIds?: ReadonlySet<string>;
   /** `null` while the preflight is being read. */
   preflight: DirectGraduationPreflight | null;
   /** The refusal the preflight itself returned. */
   unreadable: string | null;
 }
 
-export function DirectChoice({ preflight, unreadable }: DirectChoiceProps) {
+export function DirectChoice({
+  preflight,
+  unreadable,
+  temporaryStreamIds,
+}: DirectChoiceProps) {
   if (unreadable) {
     return (
       <p
@@ -46,7 +58,7 @@ export function DirectChoice({ preflight, unreadable }: DirectChoiceProps) {
   if (!preflight) {
     return <p className="t-ui-sm">Reading the active worktree…</p>;
   }
-  const blocker = directBlocker(preflight);
+  const blocker = directBlocker(preflight, temporaryStreamIds);
   return (
     <div data-testid="graduation-direct">
       {preflight.branch && (

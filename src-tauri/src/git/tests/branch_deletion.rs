@@ -465,7 +465,7 @@ fn an_untracked_path_is_discarded_with_the_worktree_once_confirmed() {
 #[test]
 fn inspecting_a_stream_branch_names_the_stream_its_worktree_and_its_uncommitted_paths() {
     let fx = DeletionFixture::new();
-    let stream = crate::streams::create_work_stream(fx.app.clone(), "Editor".into(), None).unwrap();
+    let stream = crate::streams::create_work_stream(fx.app.clone(), "Editor".into(), None, None).unwrap();
     std::fs::write(std::path::Path::new(&stream.worktree_path).join("draft.txt"), "wip\n").unwrap();
 
     let plan = fx.inspect(&stream.branch).unwrap();
@@ -486,7 +486,7 @@ fn inspecting_a_stream_branch_names_the_stream_its_worktree_and_its_uncommitted_
 #[test]
 fn inspecting_a_stream_branch_counts_the_commits_its_base_lacks() {
     let fx = DeletionFixture::new();
-    let stream = crate::streams::create_work_stream(fx.app.clone(), "Ahead".into(), None).unwrap();
+    let stream = crate::streams::create_work_stream(fx.app.clone(), "Ahead".into(), None, None).unwrap();
     let worktree = git2::Repository::open(&stream.worktree_path).unwrap();
     for (n, name) in ["one.txt", "two.txt"].iter().enumerate() {
         std::fs::write(std::path::Path::new(&stream.worktree_path).join(name), "work\n").unwrap();
@@ -512,7 +512,7 @@ fn inspecting_a_stream_branch_counts_the_commits_its_base_lacks() {
 #[test]
 fn a_stream_branch_is_refused_by_the_deletion_and_nothing_changes() {
     let fx = DeletionFixture::new();
-    let stream = crate::streams::create_work_stream(fx.app.clone(), "Editor".into(), None).unwrap();
+    let stream = crate::streams::create_work_stream(fx.app.clone(), "Editor".into(), None, None).unwrap();
     let before = fx.f.snapshot_all();
     // The creation announces its own branch (WKS-FR-SPVK); the refusal adds none.
     let events_before = fx.events();

@@ -68,7 +68,7 @@ fn a_standing_commit_the_index_refuses_blocks_before_any_turn() {
 // GTE-FR-TCUW, GTE-FR-PFEO / GRL-FR-QZFB, GRD-FR-WKMD, GXD-FR-ODGX: a blank
 // prompt is refused before any container exists. The first refusal blocks
 // the run and holds the stream; the same refusal after Continue rests the run
-// for the author, keeps the blocker, and releases the stream. Continue from
+// for the author, keeps the blocker, and keeps the stream. Continue from
 // there starts the count over.
 #[test]
 fn a_blank_prompt_blocks_twice_and_rests_for_the_author_keeping_the_blocker() {
@@ -86,7 +86,7 @@ fn a_blank_prompt_blocks_twice_and_rests_for_the_author_keeping_the_blocker() {
         .expect_blocker_attempt(2)
         .expect_no_escalation()
         .expect_dispatch_count(0)
-        .expect_stream_released()
+        .expect_stream_held()
         .expect_commits(0)
         .continued(Vec::new())
         .expect_state(GraduationRunState::Blocked)
@@ -110,7 +110,7 @@ fn an_unreadable_verdict_repeated_after_continue_rests_the_run_for_the_author() 
         .expect_blocker("review_verdict_invalid")
         .expect_blocker_attempt(2)
         .expect_dispatch_order(&["review", "review"])
-        .expect_stream_released()
+        .expect_stream_held()
         .expect_commits(0)
         .continued(vec![Script::answers_ready("The work answers the prompt.")])
         .expect_state(GraduationRunState::Completed)

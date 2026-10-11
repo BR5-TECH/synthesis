@@ -92,7 +92,7 @@ describe("the rail's views", () => {
   });
 
   it("GRH-FR-DYNU: an archived run stands in Archived and All, and in no state position", () => {
-    for (const state of ["queued", "completed", "discarded", "failed", "interrupted", "awaiting_author"] as const) {
+    for (const state of ["queued", "completed", "discarded", "failed"] as const) {
       const run = makeRun("r", state, { archived: true });
       expect(admits("in-flight", run)).toBe(false);
       expect(admits("completed", run)).toBe(false);
@@ -108,7 +108,8 @@ describe("the rail's views", () => {
   });
 
   it("GRH-FR-YMIM: a filed-away run holding a stream stands in In-flight and in Archived", () => {
-    for (const state of ["working", "reviewing", "blocked"] as const) {
+    // GRD-FR-BNTC: a run at rest holds its queue as a run at work does.
+    for (const state of ["working", "reviewing", "blocked", "awaiting_author", "interrupted"] as const) {
       const filed = makeRun("r", state, { archived: true });
       expect(admits("in-flight", filed)).toBe(true);
       expect(admits("archived", filed)).toBe(true);

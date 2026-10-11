@@ -118,6 +118,13 @@ export function GraduationRuns({
   // read, and a queued run then says nothing about a slot.
   const [capacity, setCapacity] = useState<GraduationCapacity | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  // GRU-FR-CASZ: the selected run was removed from the project's listing, so the
+  // region stands empty until the author selects another run.
+  const [vacated, setVacated] = useState(false);
+  // The run this project's listing last held under the selection. A selection
+  // that was listed and then left was removed; one that never was listed, such
+  // as a remembered run or a run of another project, falls back instead.
+  const seenRef = useRef<{ runId: string; projectKey: string } | null>(null);
   const [view, setView] = useState<GraduationView>(DEFAULT_VIEW);
   const [filter, setFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -282,13 +289,33 @@ export function GraduationRuns({
     [runs, view, filter],
   );
 
-  // GRH-FR-WDSH: a selection naming a run the listing no longer holds falls
-  // back to the first row, and to nothing where the filters admit none. The
-  // fallback reveals nothing: a rail that opened in In-flight stays there and
-  // renders its empty result, rather than relaxing itself to show a run the
-  // author never asked for.
+  // GRH-FR-WDSH: a selection naming a run the rail does not list falls back to
+  // the first row, and to nothing where the filters admit none. The fallback
+  // reveals nothing: a rail that opened in In-flight stays there and renders its
+  // empty result, rather than relaxing itself to show a run the author never
+  // asked for. A run the project's listing no longer holds at all was removed
+  // (GRD-FR-EPWW), and its region stands empty rather than showing another run
+  // (GRU-FR-CASZ).
   useEffect(() => {
     if (!queue) return;
+    const stands = Boolean(selected) && runs.some((run: GraduationRun) => run.id === selected);
+    if (selected && stands) {
+      seenRef.current = { runId: selected, projectKey: queue.projectKey };
+    } else if (
+      selected &&
+      seenRef.current?.runId === selected &&
+      seenRef.current.projectKey === queue.projectKey
+    ) {
+      logDebug(["frontend"], "the selected run left the run history", {
+        runId: selected,
+        listed: runs.length,
+      });
+      seenRef.current = null;
+      setVacated(true);
+      setSelected(null);
+      return;
+    }
+    if (selected === null && vacated) return;
     if (selected && listed.some((run: GraduationRun) => run.id === selected)) return;
     const next = listed[0]?.id ?? null;
     if (next === selected) return;
@@ -303,7 +330,12 @@ export function GraduationRuns({
       listed: listed.length,
     });
     setSelected(next);
-  }, [queue, listed, selected, view]);
+  }, [queue, runs, listed, selected, view, vacated]);
+
+  // GRU-FR-CASZ: a run the author selects ends the empty state a removal left.
+  useEffect(() => {
+    if (selected) setVacated(false);
+  }, [selected]);
 
   useEffect(() => {
     selectedRef.current = selected;

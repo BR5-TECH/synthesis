@@ -579,10 +579,14 @@ impl Outcome {
         self
     }
 
-    /// GTE-FR-PFEO, GRD-FR-KKKN: how many project slots are held now.
+    /// GTE-FR-PFEO, GRD-FR-KKKN: how many project slots are held now, by the
+    /// claims of this process and by the stored runs together.
     pub(crate) fn expect_slots_in_use(self, count: usize) -> Self {
+        let app = &self.fx.app;
+        let queue = crate::graduation::project_queue(app).expect("the project's queue");
+        let holders = crate::graduation::slot_holders(&queue);
         assert_eq!(
-            self.fx.app.state::<crate::graduation::GraduationState>().working_count(),
+            app.state::<crate::graduation::GraduationState>().slots_in_use(&holders),
             count,
             "[{}] the project slots held",
             self.name

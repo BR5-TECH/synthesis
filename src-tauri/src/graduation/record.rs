@@ -51,10 +51,33 @@ impl GraduationRunState {
         matches!(self, Self::Completed | Self::Discarded | Self::Failed)
     }
 
-    /// GRD-FR-BNTC: a run holds its stream while it is doing agent work or
-    /// resting on a condition inside one. Every other state holds nothing.
-    pub fn holds_stream(self) -> bool {
-        matches!(self, Self::Working | Self::Reviewing | Self::Blocked)
+    /// GRD-FR-BNTC: a run holds its queue from its first dispatch until it is
+    /// `completed` or `discarded`. It holds it while it works, and while it
+    /// rests in `blocked`, `awaiting_author`, `interrupted` and `failed`.
+    ///
+    /// A `queued` run is not listed: it holds the queue only after a first
+    /// dispatch, which the run itself records (`GraduationRun::holds_queue`).
+    pub fn holds_queue(self) -> bool {
+        matches!(
+            self,
+            Self::Working
+                | Self::Reviewing
+                | Self::Blocked
+                | Self::AwaitingAuthor
+                | Self::Interrupted
+                | Self::Failed
+        )
+    }
+
+    /// GRD-FR-KKKN: a run holds a project slot wherever it holds its queue,
+    /// except in `failed`, which holds the queue and no slot.
+    pub fn holds_slot(self) -> bool {
+        self.holds_queue() && self != Self::Failed
+    }
+
+    /// GRD-FR-QJHM: whether the state is one the run's own loop is driving.
+    pub fn is_agent_work(self) -> bool {
+        matches!(self, Self::Working | Self::Reviewing)
     }
 
     /// GRD-FR-DXWL: a draft a non-terminal run holds is locked.
@@ -309,9 +332,6 @@ pub struct GraduationInterruption {
     /// content.
     #[serde(default)]
     pub detail: String,
-    /// GRD-FR-MDQZ: the run gave its stream back. True for an author pause.
-    #[serde(default)]
-    pub stream_released: bool,
     /// GRD-FR-CYIB: when the author resumed a paused run; null otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume_requested_at: Option<String>,
@@ -537,6 +557,11 @@ pub struct GraduationRun {
     /// GRD-FR-TKUR: whether the stream's queue may start it.
     #[serde(default = "yes")]
     pub auto_start: bool,
+    /// GRD-FR-BNTC: whether the run was ever dispatched. It is what lets a run
+    /// that Continue or an answer returned to `queued` keep holding its queue
+    /// and its project slot.
+    #[serde(default)]
+    pub dispatched: bool,
     /// GRD-FR-JOFE: where the author filed it. Independent of `state`.
     #[serde(default)]
     pub archived: bool,
@@ -678,6 +703,7 @@ impl GraduationRun {
             base_commit: None,
             commits: Vec::new(),
             auto_start: true,
+            dispatched: false,
             archived: false,
             archived_at: None,
             work_turns: 0,
@@ -696,9 +722,17 @@ impl GraduationRun {
         }
     }
 
-    /// GRD-FR-BNTC: whether this run is holding its stream right now.
-    pub fn holds_stream(&self) -> bool {
-        self.state.holds_stream()
+    /// GRD-FR-BNTC: whether this run is holding its queue right now.
+    ///
+    /// A `queued` run holds it when it was dispatched before and waits to be
+    /// dispatched again, which is what Continue and an answer leave it as.
+    pub fn holds_queue(&self) -> bool {
+        self.state.holds_queue() || (self.state == GraduationRunState::Queued && self.dispatched)
+    }
+
+    /// GRD-FR-KKKN: whether this run is holding a project slot right now.
+    pub fn holds_slot(&self) -> bool {
+        self.state.holds_slot() || (self.state == GraduationRunState::Queued && self.dispatched)
     }
 
     /// GRD-FR-BSNI: whether this run works directly in a worktree.
@@ -720,7 +754,7 @@ impl GraduationRun {
     pub fn is_dispatched_direct(&self) -> bool {
         self.is_direct()
             && !self.state.is_terminal()
-            && (self.base_commit.is_some() || self.holds_stream())
+            && (self.base_commit.is_some() || self.holds_queue())
     }
 
     /// What the run's provenance names: the stream, or the pinned worktree.
@@ -780,8 +814,11 @@ impl GraduationRun {
     }
 
     /// GRD-FR-EGWS: whether a stream's queue may start this run.
+    ///
+    /// A run that holds its queue is eligible whatever its auto-start says: the
+    /// queue has no other run to start (GRD-FR-BNTC).
     pub fn is_eligible(&self) -> bool {
-        self.auto_start && self.state.waits_in_queue()
+        (self.auto_start || self.dispatched) && self.state.waits_in_queue()
     }
 
     /// GRD-FR-DXWL: whether this run locks its draft.

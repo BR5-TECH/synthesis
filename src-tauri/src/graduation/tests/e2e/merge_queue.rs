@@ -2,7 +2,8 @@
 //! (`../../../../../specifications/infra/GTE-graduation-end-to-end-tests.md`).
 //!
 //! A merge run claims the stream and one project slot like every run, holds both
-//! while it works, reviews or is blocked, and holds neither once it rests.
+//! from its first dispatch until it is completed or discarded, and holds the
+//! stream alone once it has failed.
 
 use super::merge_arrange::{as_one_commit, conflicted_merge};
 use super::scenario::{Setting, TurnScript as Script};
@@ -14,10 +15,10 @@ fn settling() -> Script {
 
 // GTE-FR-YCQW, GTE-FR-PFEO / GRD-FR-DLWB, GRD-FR-BNTC, GRD-FR-KKKN:
 // a merge run holds the stream and one project slot while it works and while it
-// reviews, and holds neither once it rests in `awaiting_author`, `interrupted` or
-// a terminal state.
+// reviews, keeps both while it rests in `awaiting_author` or `interrupted`, and
+// frees both once it is completed.
 #[test]
-fn a_merge_run_holds_the_stream_and_a_slot_while_it_works_and_neither_at_rest() {
+fn a_merge_run_holds_the_stream_and_a_slot_while_it_works_and_keeps_both_at_rest() {
     use GraduationRunState::{Reviewing, Working};
     conflicted_merge("merge claims")
         .with_merge(as_one_commit())
@@ -25,8 +26,8 @@ fn a_merge_run_holds_the_stream_and_a_slot_while_it_works_and_neither_at_rest() 
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("author_pause")
-        .expect_stream_released()
-        .expect_slots_in_use(0)
+        .expect_stream_held()
+        .expect_slots_in_use(1)
         .continued(vec![
             settling().holding_the_stream_and_a_slot(Working),
             Script::answers_revise(ReviewSeverity::Major, "Say what the merge kept.")
@@ -36,8 +37,8 @@ fn a_merge_run_holds_the_stream_and_a_slot_while_it_works_and_neither_at_rest() 
                 .holding_the_stream_and_a_slot(Reviewing),
         ])
         .expect_state(GraduationRunState::AwaitingAuthor)
-        .expect_stream_released()
-        .expect_slots_in_use(0)
+        .expect_stream_held()
+        .expect_slots_in_use(1)
         .continued(vec![
             Script::reports_success().writes("README.md", "both sides, said twice\n"),
             Script::answers_ready("Both intents stand.").holding_the_stream_and_a_slot(Reviewing),

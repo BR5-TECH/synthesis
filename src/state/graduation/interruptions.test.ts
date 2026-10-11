@@ -16,7 +16,6 @@ function interrupted(reason: GraduationInterruptionReason) {
     interruption: {
       reason,
       detail: "What the backend said.",
-      streamReleased: true,
       at: "2026-10-03T22:02:36Z",
     },
   });

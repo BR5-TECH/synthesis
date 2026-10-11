@@ -316,6 +316,7 @@ describe("GitHub polling in the main window", () => {
       "new",
       "standing-work-message-graduation-start",
       "stream",
+      "temporary",
     ]);
 
     // GIT-FR-FTHT: cancelling keeps the row and its Graduate.

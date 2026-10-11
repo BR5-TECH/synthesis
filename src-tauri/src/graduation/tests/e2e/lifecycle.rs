@@ -276,9 +276,10 @@ fn a_queued_run_refuses_revert() {
 }
 
 // GTE-FR-RZKC / GRD-FR-BLCR: a revert is refused with `run_not_revertable`
-// where the run committed nothing, and while the run holds its stream.
+// where the run committed nothing, also where it rests `blocked` and holds its
+// queue. The state check refuses only a run doing agent work.
 #[test]
-fn revert_is_refused_where_nothing_was_committed_or_the_run_holds_its_stream() {
+fn revert_is_refused_where_nothing_was_committed() {
     Scenario::named("revert with nothing committed")
         .work_turn(Script::escalates(&["Which panel is meant?"]))
         .run()
@@ -290,7 +291,7 @@ fn revert_is_refused_where_nothing_was_committed_or_the_run_holds_its_stream() {
         .review_turn(Script::answers_unreadably())
         .run()
         .expect_state(GraduationRunState::Blocked)
-        .refusing_revert("run_state_not_permitted")
+        .refusing_revert("run_not_revertable")
         .expect_stream_held();
 }
 

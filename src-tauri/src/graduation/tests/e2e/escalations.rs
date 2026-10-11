@@ -79,7 +79,7 @@ fn an_answered_review_escalation_asks_a_fresh_review_turn() {
         .run()
         .expect_state(GraduationRunState::AwaitingAuthor)
         .expect_escalation_origin(GraduationEscalationOrigin::Review)
-        .expect_stream_released()
+        .expect_stream_held()
         .expect_commits(0)
         .answered(
             &["Yes."],

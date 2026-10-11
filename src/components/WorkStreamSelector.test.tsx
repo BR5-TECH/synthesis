@@ -284,6 +284,7 @@ describe("creating a stream (WSS-FR-PDFX, WSS-FR-XZRO, WSS-FR-CRJD)", () => {
     expect(calls("create_work_stream")[0][1]).toEqual({
       name: "docs pass",
       baseBranch: "main",
+      temporary: false,
     });
   });
 
@@ -375,7 +376,7 @@ describe("merging a stream (WSS-FR-YPDA, WSS-FR-VMNV, WSS-FR-OMAP)", () => {
     const row = await openMerge();
     await userEvent.click(within(row).getByRole("button", { name: "Commit…" }));
     await waitFor(() =>
-      expect(onRequestMergeCommit).toHaveBeenCalledWith("w1", "editor work"),
+      expect(onRequestMergeCommit).toHaveBeenCalledWith("w1", "editor work", undefined),
     );
     // The surface does not merge behind the window's back.
     expect(calls("merge_work_stream")).toHaveLength(0);

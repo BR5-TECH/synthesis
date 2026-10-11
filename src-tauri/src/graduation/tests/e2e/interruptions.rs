@@ -36,7 +36,7 @@ fn an_author_pause_mid_work_rests_the_run_and_continue_resumes_it() {
         .expect_commit_message_contains(0, "Abandoned graduation turn")
         .expect_committed_paths(&["src/panel.ts"])
         .expect_checkpoint_paths(&["src/panel.ts"])
-        .expect_stream_released()
+        .expect_stream_held()
         // A run at rest does no agent work, so a second pause is refused.
         .refusing_pause("run_state_not_permitted")
         .continued(vec![
@@ -74,7 +74,7 @@ fn an_author_pause_during_the_review_resumes_at_the_review() {
         .expect_commit_message_contains(0, "Abandoned graduation turn")
         .expect_committed_paths(&["src/panel.ts"])
         .expect_review_checkout_reclaimed()
-        .expect_stream_released()
+        .expect_stream_held()
         .continued(vec![Script::answers_ready("The work answers the prompt.")])
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_order(&["review"])
@@ -201,7 +201,7 @@ fn a_turn_that_finishes_as_the_author_pauses_still_rests_paused() {
         .expect_interruption("author_pause")
         .expect_commits(1)
         .expect_commit_message_contains(0, "Abandoned graduation turn")
-        .expect_stream_released();
+        .expect_stream_held();
 }
 
 // GTE-FR-RSQD / GRD-FR-MDQZ, GXD-FR-XEUX, GXD-FR-UZHX, GXD-FR-WJOW,
@@ -224,7 +224,7 @@ fn a_timeout_after_an_earlier_pause_is_not_called_a_pause() {
         .expect_interruption_detail_contains("reached the execution time limit")
         .expect_interrupted_records(&[("author_pause", "info"), ("execution_timeout", "error")])
         .expect_commits(2)
-        .expect_stream_released();
+        .expect_stream_held();
 }
 
 // GTE-FR-RSQD / GXD-FR-UZHX, GLG-FR-RLQZ: a pause that races the time limit is
@@ -256,7 +256,7 @@ fn a_pause_that_races_the_time_limit_reads_as_the_pause() {
             ],
         )
         .expect_commits(1)
-        .expect_stream_released();
+        .expect_stream_held();
 }
 
 // GTE-FR-RSQD / GXD-FR-UZHX, GLG-FR-RLQZ: a shutdown that races an agent's own
@@ -281,7 +281,7 @@ fn a_shutdown_that_races_an_exit_reads_as_the_shutdown() {
                 ("exit_code", serde_json::json!(1)),
             ],
         )
-        .expect_stream_released();
+        .expect_stream_held();
 }
 
 // GTE-FR-HWQM / GLG-FR-RLQZ, GRD-FR-IKVE: a stop whose record cannot be stored
@@ -301,7 +301,7 @@ fn a_timeout_whose_stop_cannot_be_logged_rests_on_the_log_failure() {
         .expect_logs_failed(GraduationLogStream::Structured)
         .expect_no_interrupted_record()
         .expect_commits(1)
-        .expect_stream_released();
+        .expect_stream_held();
 }
 
 // GTE-FR-RSQD / GXD-FR-WJOW, GLG-FR-RLQZ, GRL-FR-KWNP: the limit a timeout
@@ -360,7 +360,7 @@ fn an_application_shutdown_stops_the_turn_and_names_itself() {
         .expect_commits(1)
         .expect_commit_message_contains(0, "Abandoned graduation turn")
         .expect_committed_paths(&["src/panel.ts"])
-        .expect_stream_released()
+        .expect_stream_held()
         .expect_draft_locked(true);
 }
 
@@ -379,7 +379,7 @@ fn a_project_change_during_the_review_resumes_at_the_review() {
         .expect_interruption("project_changed")
         .expect_interrupted_record("project_changed", "info", &[])
         .expect_resume_phase("review")
-        .expect_stream_released()
+        .expect_stream_held()
         .continued(vec![Script::answers_ready("The work answers the prompt.")])
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_order(&["review"])
@@ -404,7 +404,7 @@ fn an_application_shutdown_during_the_review_resumes_at_the_review() {
         .expect_interruption("application_shutdown")
         .expect_resume_phase("review")
         .expect_commits(1)
-        .expect_stream_released()
+        .expect_stream_held()
         .continued(vec![Script::answers_ready("The work answers the prompt.")])
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_order(&["review"])
@@ -455,7 +455,7 @@ fn a_run_abandoned_by_a_relaunch_rests_as_execution_abandoned() {
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("execution_abandoned")
-        .expect_stream_released()
+        .expect_stream_held()
         // What the turn left is committed as an abandoned turn, as for any
         // other stop, so the stream is usable by what runs next.
         .expect_commits(1)
@@ -522,7 +522,7 @@ fn a_turn_that_exits_nonzero_answers_malformed_or_is_terminated_rests_with_its_w
             .expect_commits(1)
             .expect_commit_message_contains(0, "Abandoned graduation turn")
             .expect_committed_paths(&["src/half-done.ts"])
-            .expect_stream_released();
+            .expect_stream_held();
     }
 }
 
@@ -542,7 +542,7 @@ fn a_review_turn_that_times_out_commits_the_unreviewed_work_and_resumes_with_a_w
         .expect_commits(1)
         .expect_committed_paths(&["src/panel.ts"])
         .expect_review_checkout_reclaimed()
-        .expect_stream_released()
+        .expect_stream_held()
         .continued(vec![
             Script::reports_success(),
             Script::answers_ready("The work answers the prompt."),
@@ -615,7 +615,7 @@ fn a_log_stream_lost_mid_run_rests_the_run_and_continue_waits_for_the_repair() {
         .expect_dispatch_count(1)
         .expect_commits(0)
         .worktree_holds("src/panel.ts", "1\n")
-        .expect_stream_released()
+        .expect_stream_held()
         .refusing_continue("run_state_not_permitted")
         .repairing_the_log(GraduationLogStream::Structured)
         .continued(vec![

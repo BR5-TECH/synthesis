@@ -238,10 +238,9 @@ impl GithubIssues for FakeGithub {
         _owner: &str,
         _repo: &str,
         number: u64,
-        title: &str,
-        body: &str,
-        fields: &client::IssueFields,
+        edit: &client::IssueEdit<'_>,
     ) -> Result<IssueRef, String> {
+        let client::IssueEdit { title, body, fields } = *edit;
         self.record(Call::Update(number));
         self.fields.lock().unwrap().push(fields.clone());
         let milestones = self.milestones.lock().unwrap().clone().unwrap_or_default();

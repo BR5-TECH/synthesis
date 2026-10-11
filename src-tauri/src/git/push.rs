@@ -95,6 +95,16 @@ pub fn redact_credentials(line: &str) -> String {
     out
 }
 
+/// The checkout that an operation works in, and where the project's GitHub
+/// token is resolved from (GTC-FR-09, GTC-FR-10).
+#[derive(Clone, Copy)]
+pub struct GithubAccess<'a> {
+    pub root: &'a Path,
+    pub store: &'a GlobalSettingsStore,
+    pub tokens: &'a GithubTokens,
+    pub project_key: &'a str,
+}
+
 /// The refspec that publishes `branch`, and the ref it lands on.
 pub(crate) fn push_refspec(branch: &str) -> String {
     format!("refs/heads/{branch}:refs/heads/{branch}")
@@ -114,15 +124,12 @@ pub fn push_branch_at<S>(
     buffer: &'static LogBuffer,
     emit: &impl Fn(&str, serde_json::Value),
     registry: &ProgressRegistry,
-    root: &Path,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
-    project_key: &str,
+    access: GithubAccess<'_>,
 ) -> Result<(), String>
 where
     S: ProgressSink + LogSink + Clone + Send + 'static,
 {
-    let outcome = push_inner(sink, buffer, emit, registry, root, store, tokens, project_key);
+    let outcome = push_inner(sink, buffer, emit, registry, access);
     // GTC-FR-04: exactly one terminal event, whatever the outcome.
     emit(
         GIT_OPERATION_FINISHED,
@@ -141,14 +148,12 @@ pub(crate) fn push_inner<S>(
     buffer: &'static LogBuffer,
     emit: &impl Fn(&str, serde_json::Value),
     registry: &ProgressRegistry,
-    root: &Path,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
-    project_key: &str,
+    access: GithubAccess<'_>,
 ) -> Result<(), String>
 where
     S: ProgressSink + LogSink + Clone + Send + 'static,
 {
+    let GithubAccess { root, store, tokens, project_key } = access;
     // Every failure below is reported before it is returned, so a push that
     // never reached the wire is as visible in the panel as one the remote
     // refused — the two look identical to an author whose branch did not move.

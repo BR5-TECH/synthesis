@@ -455,13 +455,18 @@ fn a_run_abandoned_by_a_relaunch_rests_as_execution_abandoned() {
 // 14 — a turn that ended without an answer
 // ---------------------------------------------------------------------------
 
+/// A turn ending: its name, the script that ends the turn, the interruption
+/// reason, a part of the detail, the process outcome, and the exit code.
+type TurnEnding =
+    (&'static str, fn() -> Script, &'static str, &'static str, &'static str, Option<i32>);
+
 // GTE-FR-RSQD / GXD-FR-XEUX, GXD-FR-NRWD, GRD-FR-SWOJ, GXD-FR-UZHX,
 // GXD-FR-WJOW, GLG-FR-RLQZ: a non-zero exit, a malformed answer and a
 // terminated process each rest the run on the reason that names how the turn
 // ended, with what the turn wrote committed as an abandoned turn.
 #[test]
 fn a_turn_that_exits_nonzero_answers_malformed_or_is_terminated_rests_with_its_work_committed() {
-    let endings: [(&'static str, fn() -> Script, &str, &str, &str, Option<i32>); 3] = [
+    let endings: [TurnEnding; 3] = [
         (
             "non-zero exit",
             Script::exits_nonzero,

@@ -427,10 +427,7 @@ pub async fn push_current_branch(
             &logging::BUFFER,
             &emit,
             &registry,
-            &root,
-            &store,
-            &tokens,
-            &project_key,
+            GithubAccess { root: &root, store: &store, tokens: &tokens, project_key: &project_key },
         )
     })
     .await

@@ -324,9 +324,7 @@ impl crate::github_publication::GithubIssues for OpenRepositories {
         _: &str,
         _: &str,
         _: u64,
-        _: &str,
-        _: &str,
-        _: &crate::github_publication::client::IssueFields,
+        _: &crate::github_publication::client::IssueEdit<'_>,
     ) -> Result<crate::github_publication::IssueRef, String> {
         unreachable!("polling never edits an issue")
     }

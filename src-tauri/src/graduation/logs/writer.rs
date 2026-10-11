@@ -52,7 +52,7 @@ impl LogPaths {
 
 /// GRS-FR-KDOY: create both streams, so a run that has emitted nothing still
 /// has two readable ones.
-pub fn initialize(fs: &FsAccess, paths: &LogPaths) -> Result<(), GraduationLogFailure> {
+pub fn initialize(fs: &FsAccess, paths: &LogPaths) -> Result<(), Box<GraduationLogFailure>> {
     if !paths.directory.is_dir() {
         fs.create_dir(&paths.directory).map_err(|error| {
             GraduationLogFailure::write(
@@ -91,7 +91,7 @@ pub fn append(
     indexes: &mut GraduationLogIndexes,
     stream: GraduationLogStream,
     mut records: Vec<GraduationLogRecord>,
-) -> Result<(), GraduationLogFailure> {
+) -> Result<(), Box<GraduationLogFailure>> {
     if records.is_empty() {
         return Ok(());
     }
@@ -123,12 +123,12 @@ pub fn append(
         }
     }
     if let Some(error) = refused {
-        return Err(GraduationLogFailure::write(
+        return Err(Box::new(GraduationLogFailure::write(
             CODE_APPEND_FAILED,
             stream,
             format!("a record could not be serialized: {error}"),
             ids_of(&records),
-        ));
+        )));
     }
 
     let written: u64 = lines.iter().map(|line| line.len() as u64 + 1).sum();
@@ -137,12 +137,12 @@ pub fn append(
         // The records are kept where a retry can find them, and the caller is
         // told the write did not happen.
         let _ = queue_pending(fs, paths, &records);
-        return Err(GraduationLogFailure::write(
+        return Err(Box::new(GraduationLogFailure::write(
             CODE_APPEND_FAILED,
             stream,
             format!("the run's {} stream could not be appended to: {error}", stream.as_str()),
             ids,
-        ));
+        )));
     }
 
     // The append flushed and synced, so the index is now describing records the
@@ -205,7 +205,7 @@ pub fn replay_pending(
     fs: &FsAccess,
     paths: &LogPaths,
     indexes: &mut GraduationLogIndexes,
-) -> Result<u32, GraduationLogFailure> {
+) -> Result<u32, Box<GraduationLogFailure>> {
     let pending = read_pending(fs, paths);
     if pending.is_empty() {
         clear_pending(fs, paths);
@@ -238,7 +238,7 @@ fn repair_partial_tail(
     path: &Path,
     indexes: &mut GraduationLogIndexes,
     stream: GraduationLogStream,
-) -> Result<(), GraduationLogFailure> {
+) -> Result<(), Box<GraduationLogFailure>> {
     let Ok(bytes) = fs.read_bytes(path) else {
         // A stream that is not there yet is created by the append itself.
         return Ok(());

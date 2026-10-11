@@ -34,7 +34,7 @@ fn every_failure_is_one_log_record_naming_operation_code_and_issue() {
     assert!(poll[0].domains.contains(&Domain::Backend));
     assert_eq!(poll[0].fields["operation"], "poll");
     assert_eq!(poll[0].fields["code"], ERR_GITHUB_UNREACHABLE);
-    assert!(poll[0].fields.get("issue").is_none());
+    assert!(!poll[0].fields.contains_key("issue"));
 
     let h = Harness::with_buffer(&GPP_CLAIM_LOG);
     h.select(Some(PROJECT));

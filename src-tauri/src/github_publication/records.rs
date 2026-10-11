@@ -452,7 +452,9 @@ pub struct DraftPublicationView {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum PublicationOutcome {
     Published {
-        record: PublicationRecord,
+        /// Boxed to keep the enum small. Serde writes the same JSON for
+        /// `Box<T>` and `T`.
+        record: Box<PublicationRecord>,
     },
     RecoveryRequired {
         issue_number: u64,

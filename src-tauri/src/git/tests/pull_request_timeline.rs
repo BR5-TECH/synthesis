@@ -23,11 +23,15 @@ fn timeline(
     list_pull_request_timeline_reported(
         &NullSink,
         buffer,
-        &f.root(),
-        &store,
-        &tokens,
-        "/dev/acme",
-        github,
+        &PullRequestAccess {
+            project: GithubAccess {
+                root: &f.root(),
+                store: &store,
+                tokens: &tokens,
+                project_key: "/dev/acme",
+            },
+            client: github,
+        },
         9,
     )
 }

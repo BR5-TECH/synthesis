@@ -5,7 +5,7 @@ use super::turns::*;
 use super::*;
 use crate::graduation::is_worktree_queue_key;
 use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// What the loop does after a turn.
 pub(super) enum Step {
@@ -543,9 +543,9 @@ async fn work_turn<R: tauri::Runtime>(
     }
 
     let limit_ms = settings.execution_timeout_ms;
-    let outcome =
-        execute(app, run, worktree, phases::PART_WORK, input, settings, cancellation, dispatch)
-            .await;
+    let turn =
+        TurnRequest { execution_directory: worktree, part: phases::PART_WORK, input, settings };
+    let outcome = execute(app, run, turn, cancellation, dispatch).await;
     let step = settle_turn(app, run, worktree, outcome, GraduationEscalationOrigin::Work, limit_ms);
     if matches!(step, Step::Continue)
         && !logs::emit(
@@ -658,17 +658,13 @@ async fn review_turn<R: tauri::Runtime>(
             }
         };
         let limit_ms = settings.execution_timeout_ms;
-        let outcome = execute(
-            app,
-            run,
-            &checkout,
-            phases::PART_REVIEW,
+        let turn = TurnRequest {
+            execution_directory: &checkout,
+            part: phases::PART_REVIEW,
             input,
             settings,
-            cancellation,
-            dispatch,
-        )
-        .await;
+        };
+        let outcome = execute(app, run, turn, cancellation, dispatch).await;
         // GRL-FR-YKRI: removed when the turn ends, whatever it decided.
         //
         // A release that does not finish is reported rather than dropped. What
@@ -816,17 +812,24 @@ pub(super) fn revise_or_rest<R: tauri::Runtime>(
     Step::Continue
 }
 
+/// One turn to dispatch: where it runs, which part of the loop it is, its
+/// input, and the settings read for this dispatch.
+struct TurnRequest<'a> {
+    execution_directory: &'a Path,
+    part: &'a str,
+    input: task_input::GraduationTaskInput,
+    settings: settings::LoopSettings,
+}
+
 /// GXD-FR-KXXB: one turn is one call through the dispatch seam.
 async fn execute<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &GraduationRun,
-    execution_directory: &PathBuf,
-    part: &str,
-    input: task_input::GraduationTaskInput,
-    settings: settings::LoopSettings,
+    turn: TurnRequest<'_>,
     cancellation: &CancellationToken,
     dispatch: &dyn seams::GraduationDispatch<R>,
 ) -> Result<AgentExecution, AgentExecutionError> {
+    let TurnRequest { execution_directory, part, input, settings } = turn;
     let task = AgentTaskRequest {
         protocol_version: PROTOCOL_VERSION,
         instruction: prompts::instruction_for_run(run, part).to_string(),
@@ -842,7 +845,7 @@ async fn execute<R: tauri::Runtime>(
         },
     };
     let request = AgentExecutionRequest {
-        execution_directory: execution_directory.clone(),
+        execution_directory: execution_directory.to_path_buf(),
         task,
         supplementary_mount: None,
         turn_kind: task_input::turn_kind_for_run(run, part),

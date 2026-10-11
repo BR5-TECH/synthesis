@@ -4,7 +4,7 @@
 //! Pure of Tauri, so the whole of GHP-FR-AKUM through GHP-FR-QLDF is tested
 //! against a fake client and a temporary worktree.
 
-use super::client::{GithubIssues, IssueFields, IssueRef};
+use super::client::{GithubIssues, IssueEdit, IssueFields, IssueRef};
 use super::records::*;
 use super::remotes::{self, ConfiguredRemote};
 use super::store;
@@ -423,7 +423,7 @@ pub fn publish_with_attempt(
     };
 
     let record = store::complete_attempt(root, draft_id, record_of(attempt, &issue))?;
-    Ok(PublicationOutcome::Published { record })
+    Ok(PublicationOutcome::Published { record: Box::new(record) })
 }
 
 /// GHP-FR-YPGL / GHP-FR-RCNL: reconcile the found issue to the latest title and
@@ -446,7 +446,7 @@ pub fn update_existing(
         // marker, so nothing is duplicated.
         let created = create_with_choice(client, secret, owner, repo, &content, &choice)?;
         let record = store::complete_attempt(root, draft_id, record_of(attempt, &created))?;
-        return Ok(PublicationOutcome::Published { record });
+        return Ok(PublicationOutcome::Published { record: Box::new(record) });
     };
 
     let link = choice.kind == PublicationKind::SubIssue
@@ -461,15 +461,8 @@ pub fn update_existing(
         issue_type: choice.issue_type.clone().filter(|_| !type_matches(&existing, &choice)),
         milestone: choice.milestone_number.filter(|_| !milestone_matches(&existing, &choice)),
     };
-    let updated = client.update_issue(
-        secret,
-        owner,
-        repo,
-        existing.number,
-        &content.title,
-        &content.body,
-        &fields,
-    )?;
+    let edit = IssueEdit { title: &content.title, body: &content.body, fields: &fields };
+    let updated = client.update_issue(secret, owner, repo, existing.number, &edit)?;
     if let (true, Some(parent)) = (link, choice.parent_issue_number) {
         client.link_sub_issue(
             secret,
@@ -484,7 +477,7 @@ pub fn update_existing(
         client.unlink_sub_issue(secret, &old.owner, &old.repo, old.number, existing.id)?;
     }
     let record = store::complete_attempt(root, draft_id, record_of(attempt, &updated))?;
-    Ok(PublicationOutcome::Published { record })
+    Ok(PublicationOutcome::Published { record: Box::new(record) })
 }
 
 /// GHP-FR-DZLB: a list read, folded into the state the chooser renders. The

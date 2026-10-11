@@ -17,7 +17,6 @@ pub(crate) mod create;
 mod model;
 mod timeline;
 
-use std::path::Path;
 use std::time::Instant;
 
 use tauri::{Manager, State};
@@ -30,7 +29,7 @@ use crate::log_fields;
 use crate::logging::{self, Fields, LogBuffer, LogLevel, LogSink};
 use crate::project::ProjectState;
 
-use super::{duration_ms, ERR_NO_REMOTE_CONFIGURED, TRANSFER};
+use super::{duration_ms, GithubAccess, ERR_NO_REMOTE_CONFIGURED, TRANSFER};
 use client::{read_pages, GithubFailure, GithubPullRequests, HttpGithubPullRequests};
 pub use create::{
     PullRequestHeadState, ERR_PULL_REQUEST_EXISTS, ERR_PULL_REQUEST_REJECTED,
@@ -61,6 +60,14 @@ struct Target {
     secret: String,
 }
 
+/// What a pull request operation reads with: the project and the source of its
+/// token, and the client that sends the requests.
+#[derive(Clone, Copy)]
+pub(crate) struct PullRequestAccess<'a> {
+    pub(crate) project: GithubAccess<'a>,
+    pub(crate) client: &'a dyn GithubPullRequests,
+}
+
 /// Is `part` safe to place in a request path? GitHub names are letters, digits,
 /// `-`, `_` and `.`. Anything else is not an owner or a repository of GitHub.
 fn is_path_safe(part: &str) -> bool {
@@ -73,12 +80,8 @@ fn is_path_safe(part: &str) -> bool {
 /// The checks run in the order of what they cost: nothing leaves the machine
 /// until the remote is known to be on GitHub and the token is known to exist
 /// (GTC-FR-05, GTC-FR-10).
-fn resolve_target(
-    root: &Path,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
-    project_key: &str,
-) -> Result<Target, String> {
+fn resolve_target(project: GithubAccess<'_>) -> Result<Target, String> {
+    let GithubAccess { root, store, tokens, project_key } = project;
     let repo = changes::open_repo(root)?;
     let remote_name =
         changes::primary_remote_name(&repo).ok_or_else(|| ERR_NO_REMOTE_CONFIGURED.to_string())?;
@@ -125,16 +128,15 @@ fn is_refusal(error: &str) -> bool {
         || error.starts_with(ERR_PULL_REQUEST_REJECTED)
 }
 
-/// Run one read and report it. `work` gets the resolved target; `outcome` turns
-/// its result into the counts the record carries. Records hold names, numbers,
+/// Run one read and report it. The target is resolved from `access`, and `work`
+/// gets it; `outcome` turns its result into the counts the record carries. Records hold names, numbers,
 /// and counts only: never the token, never text of a pull request.
 fn run_reported<S, T>(
     sink: &S,
     buffer: &'static LogBuffer,
     operation: &str,
     mut fields: Fields,
-    client: &dyn GithubPullRequests,
-    resolve: impl FnOnce() -> Result<Target, String>,
+    access: &PullRequestAccess<'_>,
     work: impl FnOnce(&Target, &dyn GithubPullRequests) -> Result<T, String>,
     outcome: impl FnOnce(&T) -> Fields,
 ) -> Result<T, String>
@@ -145,7 +147,8 @@ where
     fields.insert("operation".to_string(), serde_json::json!(operation));
     logging::log_debug(sink, buffer, TRANSFER, "pull request read started", fields.clone());
 
-    let result = resolve().and_then(|target| {
+    let client = access.client;
+    let result = resolve_target(access.project).and_then(|target| {
         fields.insert("owner".to_string(), serde_json::json!(target.owner));
         fields.insert("repo".to_string(), serde_json::json!(target.repo));
         fields.insert("host".to_string(), serde_json::json!(target.host));
@@ -173,11 +176,7 @@ where
 pub(crate) fn list_pull_requests_reported<S>(
     sink: &S,
     buffer: &'static LogBuffer,
-    root: &Path,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
-    project_key: &str,
-    client: &dyn GithubPullRequests,
+    access: &PullRequestAccess<'_>,
     state: &str,
 ) -> Result<Vec<PullRequestSummary>, String>
 where
@@ -209,8 +208,7 @@ where
         buffer,
         "list_pull_requests",
         log_fields! { "state" => state },
-        client,
-        || resolve_target(root, store, tokens, project_key),
+        access,
         |target, client| {
             let path = format!(
                 "/repos/{}/{}/pulls?state={state}&sort=updated&direction=desc",
@@ -240,11 +238,7 @@ where
 pub(crate) fn get_pull_request_detail_reported<S>(
     sink: &S,
     buffer: &'static LogBuffer,
-    root: &Path,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
-    project_key: &str,
-    client: &dyn GithubPullRequests,
+    access: &PullRequestAccess<'_>,
     id: u64,
 ) -> Result<PullRequestDetail, String>
 where
@@ -255,8 +249,7 @@ where
         buffer,
         "get_pull_request_detail",
         log_fields! { "number" => id },
-        client,
-        || resolve_target(root, store, tokens, project_key),
+        access,
         |target, client| {
             let path = format!("/repos/{}/{}/pulls/{id}", target.owner, target.repo);
             let body = client
@@ -279,11 +272,7 @@ where
 pub(crate) fn list_pull_request_timeline_reported<S>(
     sink: &S,
     buffer: &'static LogBuffer,
-    root: &Path,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
-    project_key: &str,
-    client: &dyn GithubPullRequests,
+    access: &PullRequestAccess<'_>,
     id: u64,
 ) -> Result<PullRequestTimeline, String>
 where
@@ -294,8 +283,7 @@ where
         buffer,
         "list_pull_request_timeline",
         log_fields! { "number" => id },
-        client,
-        || resolve_target(root, store, tokens, project_key),
+        access,
         |target, client| {
             let base = format!("/repos/{}/{}", target.owner, target.repo);
             let read = |path: String| {
@@ -336,16 +324,16 @@ pub async fn list_pull_requests(
     tauri::async_runtime::spawn_blocking(move || {
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
-        list_pull_requests_reported(
-            &app,
-            &logging::BUFFER,
-            &root,
-            &store,
-            &tokens,
-            &project_key,
-            &HttpGithubPullRequests,
-            &state,
-        )
+        let access = PullRequestAccess {
+            project: GithubAccess {
+                root: &root,
+                store: &store,
+                tokens: &tokens,
+                project_key: &project_key,
+            },
+            client: &HttpGithubPullRequests,
+        };
+        list_pull_requests_reported(&app, &logging::BUFFER, &access, &state)
     })
     .await
     .map_err(join_error)?
@@ -363,16 +351,16 @@ pub async fn get_pull_request_detail(
     tauri::async_runtime::spawn_blocking(move || {
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
-        get_pull_request_detail_reported(
-            &app,
-            &logging::BUFFER,
-            &root,
-            &store,
-            &tokens,
-            &project_key,
-            &HttpGithubPullRequests,
-            id,
-        )
+        let access = PullRequestAccess {
+            project: GithubAccess {
+                root: &root,
+                store: &store,
+                tokens: &tokens,
+                project_key: &project_key,
+            },
+            client: &HttpGithubPullRequests,
+        };
+        get_pull_request_detail_reported(&app, &logging::BUFFER, &access, id)
     })
     .await
     .map_err(join_error)?
@@ -390,16 +378,16 @@ pub async fn list_pull_request_timeline(
     tauri::async_runtime::spawn_blocking(move || {
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
-        list_pull_request_timeline_reported(
-            &app,
-            &logging::BUFFER,
-            &root,
-            &store,
-            &tokens,
-            &project_key,
-            &HttpGithubPullRequests,
-            id,
-        )
+        let access = PullRequestAccess {
+            project: GithubAccess {
+                root: &root,
+                store: &store,
+                tokens: &tokens,
+                project_key: &project_key,
+            },
+            client: &HttpGithubPullRequests,
+        };
+        list_pull_request_timeline_reported(&app, &logging::BUFFER, &access, id)
     })
     .await
     .map_err(join_error)?
@@ -421,20 +409,18 @@ pub async fn create_pull_request(
     tauri::async_runtime::spawn_blocking(move || {
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
-        create::create_pull_request_reported(
-            &app,
-            &logging::BUFFER,
-            &root,
-            &store,
-            &tokens,
-            &project_key,
-            &HttpGithubPullRequests,
-            &title,
-            &body,
-            &base,
-            &head,
-            draft,
-        )
+        let access = PullRequestAccess {
+            project: GithubAccess {
+                root: &root,
+                store: &store,
+                tokens: &tokens,
+                project_key: &project_key,
+            },
+            client: &HttpGithubPullRequests,
+        };
+        let request =
+            create::NewPullRequest { title: &title, body: &body, base: &base, head: &head, draft };
+        create::create_pull_request_reported(&app, &logging::BUFFER, &access, &request)
     })
     .await
     .map_err(join_error)?

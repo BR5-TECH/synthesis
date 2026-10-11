@@ -61,12 +61,15 @@ fn ready_carrying_findings() -> Script {
     )])
 }
 
+/// A named review verdict and the script that gives it.
+type NamedVerdict = (&'static str, fn() -> Script);
+
 // GTE-FR-XKGB / GRL-FR-VIAT, GRL-FR-TVXI: a `ready` verdict carrying findings, a
 // `revise` verdict carrying none, and a verdict with a blank rationale are
 // each refused whole, and the review is asked once more with the correction.
 #[test]
 fn a_verdict_that_breaks_its_own_shape_is_refused_and_asked_again() {
-    let verdicts: [(&'static str, fn() -> Script); 3] = [
+    let verdicts: [NamedVerdict; 3] = [
         ("ready carrying findings", ready_carrying_findings),
         ("revise carrying no finding", Script::answers_revise_without_findings),
         ("blank rationale", Script::answers_with_blank_rationale),

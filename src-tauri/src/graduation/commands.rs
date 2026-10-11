@@ -752,6 +752,8 @@ fn mut_app<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::AppHandle<R> 
 ///
 /// Read-only. It writes nothing to either stream, and the only thing it may
 /// change about the run is the record of a damaged file (GRS-FR-EYNU).
+// Reason: the flat named parameters are the IPC contract with the frontend `invoke()`.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn read_graduation_logs<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -809,7 +811,18 @@ pub fn read_graduation_logs<R: tauri::Runtime>(
     let paths = logs::paths_for(&app, &run_id)?;
 
     let page = logs::read::read_page(
-        &fs, &paths, &run.logs, &run_id, &phase_id, &scope, selected, cursor, limit, query,
+        &fs,
+        &paths,
+        &run.logs,
+        logs::read::PageRequest {
+            run_id: &run_id,
+            phase_id: &phase_id,
+            scope: &scope,
+            stream: selected,
+            cursor,
+            limit,
+            query,
+        },
     )
     .inspect_err(|reason| {
         refuse(reason);

@@ -47,8 +47,9 @@ fn a_push_streams_its_output_and_ends_in_one_terminal_event() {
     let store = GlobalSettingsStore::default();
     let tokens = GithubTokens::default();
 
-    push_branch_at(&sink, &SCRATCH_BUFFER, &emit, &registry, &f.root(), &store, &tokens, "key")
-        .unwrap();
+    let access =
+        GithubAccess { root: &f.root(), store: &store, tokens: &tokens, project_key: "key" };
+    push_branch_at(&sink, &SCRATCH_BUFFER, &emit, &registry, access).unwrap();
 
     let events = emitted.borrow();
     let finished: Vec<&(String, serde_json::Value)> =
@@ -93,10 +94,12 @@ fn a_push_operation_names_the_branch_it_publishes_as_its_destination() {
         &SCRATCH_BUFFER,
         &emit,
         &registry,
-        &f.root(),
-        &GlobalSettingsStore::default(),
-        &GithubTokens::default(),
-        "key",
+        GithubAccess {
+            root: &f.root(),
+            store: &GlobalSettingsStore::default(),
+            tokens: &GithubTokens::default(),
+            project_key: "key",
+        },
     )
     .unwrap();
 
@@ -127,10 +130,12 @@ fn a_push_with_no_remote_is_the_typed_error_and_still_announces_its_end() {
         &SCRATCH_BUFFER,
         &emit,
         &registry,
-        &f.root(),
-        &GlobalSettingsStore::default(),
-        &GithubTokens::default(),
-        "key",
+        GithubAccess {
+            root: &f.root(),
+            store: &GlobalSettingsStore::default(),
+            tokens: &GithubTokens::default(),
+            project_key: "key",
+        },
     )
     .unwrap_err();
     assert_eq!(err, ERR_NO_REMOTE_CONFIGURED);

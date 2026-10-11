@@ -349,10 +349,12 @@ fn push_for_logging(log: &'static LogBuffer, root: &Path) -> Result<(), String> 
         log,
         &emit,
         &ProgressRegistry::default(),
-        root,
-        &GlobalSettingsStore::in_memory(),
-        &GithubTokens::default(),
-        "key",
+        GithubAccess {
+            root,
+            store: &GlobalSettingsStore::in_memory(),
+            tokens: &GithubTokens::default(),
+            project_key: "key",
+        },
     )
 }
 

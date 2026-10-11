@@ -62,8 +62,11 @@ fn gts_fr17_a_candidate_is_supplied_for_every_record() {
     }
 }
 
+/// One named vault failure and the switch that provokes it.
+type VaultProvocation = (&'static str, Box<dyn Fn(&FakeKeyring)>);
+
 /// The five typed vault failures, each with the switch that provokes it.
-fn vault_provocations() -> Vec<(&'static str, Box<dyn Fn(&FakeKeyring)>)> {
+fn vault_provocations() -> Vec<VaultProvocation> {
     vec![
         ("vault_unavailable", Box::new(|k: &FakeKeyring| k.state().refuse_read = true)),
         ("vault_write_failed", Box::new(|k: &FakeKeyring| k.state().refuse_write = true)),

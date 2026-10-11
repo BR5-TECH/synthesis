@@ -192,11 +192,15 @@ fn list(
     list_pull_requests_reported(
         &NullSink,
         buffer,
-        &f.root(),
-        &tokens.0,
-        &tokens.1,
-        "/dev/acme",
-        github,
+        &PullRequestAccess {
+            project: GithubAccess {
+                root: &f.root(),
+                store: &tokens.0,
+                tokens: &tokens.1,
+                project_key: "/dev/acme",
+            },
+            client: github,
+        },
         state,
     )
 }
@@ -211,11 +215,15 @@ fn detail(
     get_pull_request_detail_reported(
         &NullSink,
         buffer,
-        &f.root(),
-        &tokens.0,
-        &tokens.1,
-        "/dev/acme",
-        github,
+        &PullRequestAccess {
+            project: GithubAccess {
+                root: &f.root(),
+                store: &tokens.0,
+                tokens: &tokens.1,
+                project_key: "/dev/acme",
+            },
+            client: github,
+        },
         id,
     )
 }
@@ -442,11 +450,15 @@ fn a_project_with_no_resolvable_token_makes_no_request() {
             list_pull_request_timeline_reported(
                 &NullSink,
                 buffer,
-                &f.root(),
-                &tokens.0,
-                &tokens.1,
-                "/dev/acme",
-                &github,
+                &PullRequestAccess {
+                    project: GithubAccess {
+                        root: &f.root(),
+                        store: &tokens.0,
+                        tokens: &tokens.1,
+                        project_key: "/dev/acme"
+                    },
+                    client: &github
+                },
                 3,
             )
             .unwrap_err(),

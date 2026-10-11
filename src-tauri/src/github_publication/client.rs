@@ -79,6 +79,14 @@ pub struct IssueFields {
     pub milestone: Option<u64>,
 }
 
+/// GHP-FR-OHGY: what an edit of one existing issue sends: the title, the body,
+/// and the metadata to change.
+pub struct IssueEdit<'a> {
+    pub title: &'a str,
+    pub body: &'a str,
+    pub fields: &'a IssueFields,
+}
+
 /// The GitHub operations publication performs. Every method takes the secret
 /// rather than holding it, so no implementation retains a credential.
 pub trait GithubIssues: Send + Sync {
@@ -118,9 +126,7 @@ pub trait GithubIssues: Send + Sync {
         owner: &str,
         repo: &str,
         number: u64,
-        title: &str,
-        body: &str,
-        fields: &IssueFields,
+        edit: &IssueEdit<'_>,
     ) -> Result<IssueRef, String>;
 
     /// GHP-FR-RMVQ / GHP-FR-PWJG: one issue, or `None` where it does not exist.
@@ -516,13 +522,11 @@ impl GithubIssues for HttpGithubIssues {
         owner: &str,
         repo: &str,
         number: u64,
-        title: &str,
-        body: &str,
-        fields: &IssueFields,
+        edit: &IssueEdit<'_>,
     ) -> Result<IssueRef, String> {
         let api = self.api.as_str();
         let url = format!("{api}/repos/{owner}/{repo}/issues/{number}");
-        let payload = issue_payload(title, body, fields);
+        let payload = issue_payload(edit.title, edit.body, edit.fields);
         let response = send_json(secret, "PATCH", &url, payload)
             .map_err(|e| transport_or(&e, api, ERR_ISSUE_UPDATE_FAILED))?;
         let value = read_json(response).map_err(|_| ERR_ISSUE_UPDATE_FAILED.to_string())?;
@@ -581,7 +585,7 @@ impl GithubIssues for HttpGithubIssues {
                 }
             }
         }
-        found.sort_by(|a, b| b.number.cmp(&a.number));
+        found.sort_by_key(|issue| std::cmp::Reverse(issue.number));
         Ok(found)
     }
 

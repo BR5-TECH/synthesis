@@ -168,7 +168,7 @@ pub fn initialize<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &mut Gradua
         return;
     };
     if let Err(failure) = writer::initialize(&fs, &paths) {
-        run.logs.note_failed(failure, 0);
+        run.logs.note_failed(*failure, 0);
     }
 }
 
@@ -236,7 +236,7 @@ pub fn retry_pending<R: tauri::Runtime>(
         }
         Err(failure) => {
             let pending = failure.pending_record_ids.len() as u32;
-            indexes.note_failed(failure, pending);
+            indexes.note_failed(*failure, pending);
             let settled = indexes.clone();
             drop(held);
             run.logs = settled;
@@ -267,7 +267,7 @@ fn write_records<R: tauri::Runtime>(
             true
         }
         Err(indexes) => {
-            run.logs = indexes;
+            run.logs = *indexes;
             let failure = run.logs.persistence.failure.clone().unwrap_or_else(|| {
                 GraduationLogFailure::write(
                     index::CODE_STORAGE_UNAVAILABLE,
@@ -285,14 +285,15 @@ fn write_records<R: tauri::Runtime>(
 /// Append to one stream under the run's shared indexes.
 ///
 /// Answers the indexes as they now stand, whichever way it went, so the caller's
-/// own copy of the run record is never left behind what the files hold.
+/// own copy of the run record is never left behind what the files hold. The
+/// indexes of a failure are boxed to keep the error small.
 fn append_shared<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run_id: &str,
     seed: GraduationLogIndexes,
     stream: GraduationLogStream,
     records: Vec<GraduationLogRecord>,
-) -> Result<GraduationLogIndexes, GraduationLogIndexes> {
+) -> Result<GraduationLogIndexes, Box<GraduationLogIndexes>> {
     let ids: Vec<String> = records.iter().map(|r| r.record_id().to_string()).collect();
     let unavailable = |mut indexes: GraduationLogIndexes| {
         let count = ids.len() as u32;
@@ -308,10 +309,10 @@ fn append_shared<R: tauri::Runtime>(
         indexes
     };
     let (Ok(fs), Ok(paths)) = (super::store_fs(app), paths_for(app, run_id)) else {
-        return Err(unavailable(seed));
+        return Err(Box::new(unavailable(seed)));
     };
     let Some(handle) = handle_of(app, run_id, || seed.clone()) else {
-        return Err(unavailable(seed));
+        return Err(Box::new(unavailable(seed)));
     };
     let mut indexes = locked(&handle);
     match writer::append(&fs, &paths, &mut indexes, stream, records) {
@@ -323,8 +324,8 @@ fn append_shared<R: tauri::Runtime>(
         }
         Err(failure) => {
             let count = failure.pending_record_ids.len() as u32;
-            indexes.note_failed(failure, count);
-            Err(indexes.clone())
+            indexes.note_failed(*failure, count);
+            Err(Box::new(indexes.clone()))
         }
     }
 }
@@ -341,7 +342,7 @@ pub fn append_activity_records<R: tauri::Runtime>(
     run_id: &str,
     seed: GraduationLogIndexes,
     activity: Vec<GraduationActivityRecord>,
-) -> Result<(), GraduationLogFailure> {
+) -> Result<(), Box<GraduationLogFailure>> {
     if activity.is_empty() {
         return Ok(());
     }
@@ -367,14 +368,14 @@ pub fn append_activity_records<R: tauri::Runtime>(
                 "graduation could not write a turn's activity to the run's activity stream",
                 log_fields! { "run_id" => run_id.to_string() },
             );
-            Err(indexes.persistence.failure.unwrap_or_else(|| {
+            Err(Box::new(indexes.persistence.failure.unwrap_or_else(|| {
                 GraduationLogFailure::write(
                     index::CODE_STORAGE_UNAVAILABLE,
                     GraduationLogStream::Activity,
                     "The run's log storage could not be reached.",
                     Vec::new(),
                 )
-            }))
+            })))
         }
     }
 }

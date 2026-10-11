@@ -47,6 +47,9 @@ pub(crate) fn tree_mode(raw: u32) -> git2::FileMode {
 /// GTC-FR-19: which named paths differ from `HEAD`, and where a renamed one
 /// came from.
 ///
+/// The changed paths and the `(new, previous)` pair of each renamed entry.
+type ChangedNamedPaths = (Vec<String>, Vec<(String, String)>);
+
 /// Returns `(changed, previous_of)`: the repository-relative paths among
 /// `specs` that the working tree reports as differing from `HEAD`, and the
 /// pre-rename location of each renamed entry. Computed from a diff rather than
@@ -57,7 +60,7 @@ pub(crate) fn changed_named_paths(
     prefix: &str,
     specs: &[String],
     pair_renames: bool,
-) -> Result<(Vec<String>, Vec<(String, String)>), String> {
+) -> Result<ChangedNamedPaths, String> {
     // Deliberately NOT narrowed to `specs`: a pathspec filters deltas before
     // rename detection runs, so scoping the diff to the ticked path alone drops
     // the deletion half of a rename and the pair never forms — the commit would

@@ -11,6 +11,7 @@ use super::*;
 use crate::git::pull_requests::client::{invalid_reason, GithubWriteFailure};
 use crate::git::pull_requests::create::{
     checkout_holding, create_pull_request_reported as create_reported, head_state_in,
+    NewPullRequest,
 };
 use crate::git::pull_requests::{
     ERR_GITHUB_TOKEN_REJECTED, ERR_PULL_REQUEST_EXISTS, ERR_PULL_REQUEST_REJECTED,
@@ -37,16 +38,16 @@ fn create(
     create_reported(
         &NullSink,
         buffer,
-        &f.root(),
-        &tokens.0,
-        &tokens.1,
-        "/dev/acme",
-        github,
-        title,
-        "the description",
-        "main",
-        "feature",
-        draft,
+        &PullRequestAccess {
+            project: GithubAccess {
+                root: &f.root(),
+                store: &tokens.0,
+                tokens: &tokens.1,
+                project_key: "/dev/acme",
+            },
+            client: github,
+        },
+        &NewPullRequest { title, body: "the description", base: "main", head: "feature", draft },
     )
 }
 
@@ -92,16 +93,16 @@ fn an_empty_title_head_or_base_makes_no_request_and_opens_no_repository() {
     let error = create_reported(
         &NullSink,
         own_buffer(),
-        &f.root(),
-        &tokens.0,
-        &tokens.1,
-        "/dev/acme",
-        &github,
-        "t",
-        "",
-        "main",
-        " ",
-        false,
+        &PullRequestAccess {
+            project: GithubAccess {
+                root: &f.root(),
+                store: &tokens.0,
+                tokens: &tokens.1,
+                project_key: "/dev/acme",
+            },
+            client: &github,
+        },
+        &NewPullRequest { title: "t", body: "", base: "main", head: " ", draft: false },
     )
     .unwrap_err();
     assert_eq!(error, ERR_UNKNOWN_BRANCH);
@@ -418,16 +419,16 @@ fn an_empty_base_makes_no_request_and_a_blank_title_wins_over_a_missing_token() 
     let error = create_reported(
         &NullSink,
         own_buffer(),
-        &f.root(),
-        &ready.0,
-        &ready.1,
-        "/dev/acme",
-        &github,
-        "t",
-        "",
-        "",
-        "feature",
-        false,
+        &PullRequestAccess {
+            project: GithubAccess {
+                root: &f.root(),
+                store: &ready.0,
+                tokens: &ready.1,
+                project_key: "/dev/acme",
+            },
+            client: &github,
+        },
+        &NewPullRequest { title: "t", body: "", base: "", head: "feature", draft: false },
     )
     .unwrap_err();
     assert_eq!(error, ERR_UNKNOWN_BRANCH);
@@ -450,16 +451,22 @@ fn the_title_and_description_are_sent_as_given_and_draft_false_is_sent_as_false(
     create_reported(
         &NullSink,
         own_buffer(),
-        &f.root(),
-        &super::pull_requests::token_ready().0,
-        &super::pull_requests::token_ready().1,
-        "/dev/acme",
-        &github,
-        "  spaced title  ",
-        "  body\n",
-        "main",
-        "feature",
-        false,
+        &PullRequestAccess {
+            project: GithubAccess {
+                root: &f.root(),
+                store: &super::pull_requests::token_ready().0,
+                tokens: &super::pull_requests::token_ready().1,
+                project_key: "/dev/acme",
+            },
+            client: &github,
+        },
+        &NewPullRequest {
+            title: "  spaced title  ",
+            body: "  body\n",
+            base: "main",
+            head: "feature",
+            draft: false,
+        },
     )
     .unwrap();
     let body = &github.posts()[0].2;

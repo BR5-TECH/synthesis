@@ -138,7 +138,8 @@ pub struct ClaimOutcome {
 pub struct ClaimFailure {
     pub code: String,
     pub project_title: Option<String>,
-    pub unsaved_claim: Option<GithubPendingClaim>,
+    /// Boxed to keep the error small.
+    pub unsaved_claim: Option<Box<GithubPendingClaim>>,
 }
 
 impl From<PollFailure> for ClaimFailure {
@@ -198,7 +199,11 @@ pub fn claim(
         claimed_at: now.to_string(),
     };
     if let Err(code) = put_claim(ctx.root, &pending) {
-        return Err(ClaimFailure { code, project_title: None, unsaved_claim: Some(pending) });
+        return Err(ClaimFailure {
+            code,
+            project_title: None,
+            unsaved_claim: Some(Box::new(pending)),
+        });
     }
     // GPP-FR-XPUO / GPP-FR-CWGH: the shadow draft, then its id in the claim.
     let (result, created) = shadow_for(ctx.root, &pending, &issue).map_err(ClaimFailure::code)?;

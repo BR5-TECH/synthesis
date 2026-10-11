@@ -12,7 +12,7 @@ use super::stops::{self, Stop};
 use super::*;
 use crate::graduation::commit;
 use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// What a completed turn means for the run.
 pub(super) fn settle_turn<R: tauri::Runtime>(
@@ -59,7 +59,7 @@ pub(super) fn settle_turn<R: tauri::Runtime>(
 pub(super) fn settle_execution<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &mut GraduationRun,
-    worktree: &PathBuf,
+    worktree: &Path,
     outcome: Result<AgentExecution, AgentExecutionError>,
     origin: GraduationEscalationOrigin,
     limit_ms: u64,
@@ -262,7 +262,7 @@ pub(super) fn settle_execution<R: tauri::Runtime>(
 pub(super) fn finish<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &mut GraduationRun,
-    worktree: &PathBuf,
+    worktree: &Path,
 ) {
     // GRD-FR-VAUE: a direct run commits only on the branch it pinned, in the
     // worktree it pinned. Anything else commits nothing and rests the run.
@@ -359,7 +359,7 @@ pub(super) const ABANDONED_TITLE: &str = "Abandoned graduation turn";
 pub(super) fn abandon<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &mut GraduationRun,
-    worktree: &PathBuf,
+    worktree: &Path,
     stop: Stop,
 ) {
     let reason = stop.reason;

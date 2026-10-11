@@ -297,6 +297,18 @@ fn searchable(value: &serde_json::Value, stream: GraduationLogStream) -> String 
     haystack.to_lowercase()
 }
 
+/// GRS-FR-RZXA: what one page read asks for: the run, the phase and the pass
+/// scope, the stream, the cursor, the page size, and the search text.
+pub struct PageRequest<'a> {
+    pub run_id: &'a str,
+    pub phase_id: &'a str,
+    pub scope: &'a GraduationLogPassScope,
+    pub stream: GraduationLogStream,
+    pub cursor: Option<GraduationLogCursor>,
+    pub limit: Option<u32>,
+    pub query: Option<String>,
+}
+
 /// GRS-FR-RZXA: one page of one stream for one run, phase, and scope.
 ///
 /// `indexes` is the run record's own, which is what says how far the stream
@@ -305,14 +317,9 @@ pub fn read_page(
     fs: &FsAccess,
     paths: &LogPaths,
     indexes: &GraduationLogIndexes,
-    run_id: &str,
-    phase_id: &str,
-    scope: &GraduationLogPassScope,
-    stream: GraduationLogStream,
-    cursor: Option<GraduationLogCursor>,
-    limit: Option<u32>,
-    query: Option<String>,
+    request: PageRequest<'_>,
 ) -> Result<GraduationLogPage, String> {
+    let PageRequest { run_id, phase_id, scope, stream, cursor, limit, query } = request;
     // GRS-FR-UEIL: a cursor answers for the run and the stream it names.
     if let Some(cursor) = cursor.as_ref() {
         if cursor.run_id != run_id

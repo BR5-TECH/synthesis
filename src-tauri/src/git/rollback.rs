@@ -414,7 +414,7 @@ pub(crate) fn remove_one(
     match root.access().delete_path(&absolute, false) {
         Ok(()) => {}
         // Already gone is the outcome the caller asked for.
-        Err(e) if matches!(e, crate::fs::FsError::NotFound { .. }) => {}
+        Err(crate::fs::FsError::NotFound { .. }) => {}
         Err(e) => return Err(failure_kind(&e)),
     }
     // A staged addition is also unstaged, or the path would still be in the

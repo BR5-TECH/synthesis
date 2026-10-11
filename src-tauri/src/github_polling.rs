@@ -613,7 +613,7 @@ pub(crate) fn claim_impl<R: Runtime>(
                 );
             }
             if let Some(claim) = failure.unsaved_claim {
-                hold_unsaved(app, &ctx.key, claim);
+                hold_unsaved(app, &ctx.key, *claim);
             }
             Err(fail(&failure.code))
         }

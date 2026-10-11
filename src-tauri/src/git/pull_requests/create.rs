@@ -12,12 +12,11 @@ use std::path::Path;
 use git2::{BranchType, Oid, Repository};
 use serde_json::json;
 
-use super::client::{GithubPullRequests, GithubWriteFailure};
+use super::client::GithubWriteFailure;
 use super::model::CreatedPullRequest;
-use super::{resolve_target, run_reported, ERR_GITHUB_TOKEN_REJECTED};
+use super::{run_reported, PullRequestAccess, ERR_GITHUB_TOKEN_REJECTED};
 use crate::changes::{self, ERR_UNKNOWN_BRANCH};
-use crate::github_tokens::{self, GithubTokens};
-use crate::global_settings::GlobalSettingsStore;
+use crate::github_tokens;
 use crate::log_fields;
 use crate::logging::{self, LogBuffer, LogSink};
 
@@ -52,6 +51,16 @@ fn write_error(failure: GithubWriteFailure) -> String {
     }
 }
 
+/// GTC-FR-MMFM: what the author asks GitHub to open: a pull request from
+/// `head` into `base`.
+pub(crate) struct NewPullRequest<'a> {
+    pub(crate) title: &'a str,
+    pub(crate) body: &'a str,
+    pub(crate) base: &'a str,
+    pub(crate) head: &'a str,
+    pub(crate) draft: bool,
+}
+
 /// GTC-FR-MMFM: open a pull request from `head` into `base`.
 ///
 /// The arguments are checked before the repository is opened, so a refusal that
@@ -60,20 +69,13 @@ fn write_error(failure: GithubWriteFailure) -> String {
 pub(crate) fn create_pull_request_reported<S>(
     sink: &S,
     buffer: &'static LogBuffer,
-    root: &Path,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
-    project_key: &str,
-    client: &dyn GithubPullRequests,
-    title: &str,
-    body: &str,
-    base: &str,
-    head: &str,
-    draft: bool,
+    access: &PullRequestAccess<'_>,
+    request: &NewPullRequest<'_>,
 ) -> Result<CreatedPullRequest, String>
 where
     S: LogSink + Clone + Send + 'static,
 {
+    let NewPullRequest { title, body, base, head, draft } = *request;
     let (base, head) = (base.trim(), head.trim());
     if title.trim().is_empty() || head.is_empty() || base.is_empty() {
         let error = if title.trim().is_empty() {
@@ -98,8 +100,7 @@ where
         buffer,
         "create_pull_request",
         log_fields! { "head" => head, "base" => base, "draft" => draft },
-        client,
-        || resolve_target(root, store, tokens, project_key),
+        access,
         |target, client| {
             let path = format!("/repos/{}/{}/pulls", target.owner, target.repo);
             let request = json!({

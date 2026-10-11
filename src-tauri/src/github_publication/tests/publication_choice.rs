@@ -58,7 +58,7 @@ impl Fixture {
 
 fn published(outcome: Result<PublicationOutcome, String>) -> PublicationRecord {
     match outcome.unwrap() {
-        PublicationOutcome::Published { record } => record,
+        PublicationOutcome::Published { record } => *record,
         other => panic!("expected a publication, got {other:?}"),
     }
 }
@@ -428,8 +428,10 @@ fn a_failed_list_does_not_fail_the_others() {
 #[test]
 fn the_parent_filter_uses_githubs_spelling_of_each_type() {
     let f = fixture();
-    let mut saved = GithubPublicationSettings::default();
-    saved.parent_issue_types = vec!["feature".into(), "Retired".into()];
+    let saved = GithubPublicationSettings {
+        parent_issue_types: vec!["feature".into(), "Retired".into()],
+        ..Default::default()
+    };
     flow::load_metadata(&f.github, "secret", "acme", "widgets", saved);
     assert_eq!(
         f.github.parent_filters.lock().unwrap().as_slice(),
@@ -437,8 +439,10 @@ fn the_parent_filter_uses_githubs_spelling_of_each_type() {
     );
 
     *f.github.types.lock().unwrap() = None;
-    let mut unreadable = GithubPublicationSettings::default();
-    unreadable.parent_issue_types = vec!["feature".into()];
+    let unreadable = GithubPublicationSettings {
+        parent_issue_types: vec!["feature".into()],
+        ..Default::default()
+    };
     flow::load_metadata(&f.github, "secret", "acme", "widgets", unreadable);
     assert_eq!(f.github.parent_filters.lock().unwrap()[1], vec!["feature".to_string()]);
 }

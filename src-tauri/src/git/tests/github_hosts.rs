@@ -7,7 +7,9 @@
 use super::pull_requests::{pr_json, repo_with_origin, token_on, token_ready, FakeGithub, SECRET};
 use super::*;
 use crate::git::pull_requests::client::GithubWriteFailure;
-use crate::git::pull_requests::create::create_pull_request_reported as create_reported;
+use crate::git::pull_requests::create::{
+    create_pull_request_reported as create_reported, NewPullRequest,
+};
 use crate::git::pull_requests::ERR_NOT_A_GITHUB_REMOTE;
 use serde_json::json;
 
@@ -22,11 +24,15 @@ fn list_open(
     list_pull_requests_reported(
         &NullSink,
         own_buffer(),
-        &f.root(),
-        &tokens.0,
-        &tokens.1,
-        "/dev/acme",
-        github,
+        &PullRequestAccess {
+            project: GithubAccess {
+                root: &f.root(),
+                store: &tokens.0,
+                tokens: &tokens.1,
+                project_key: "/dev/acme",
+            },
+            client: github,
+        },
         "open",
     )
 }
@@ -109,16 +115,22 @@ fn create(
     create_reported(
         &NullSink,
         own_buffer(),
-        &f.root(),
-        &tokens.0,
-        &tokens.1,
-        "/dev/acme",
-        github,
-        "title",
-        "body",
-        "main",
-        "feature",
-        false,
+        &PullRequestAccess {
+            project: GithubAccess {
+                root: &f.root(),
+                store: &tokens.0,
+                tokens: &tokens.1,
+                project_key: "/dev/acme",
+            },
+            client: github,
+        },
+        &NewPullRequest {
+            title: "title",
+            body: "body",
+            base: "main",
+            head: "feature",
+            draft: false,
+        },
     )
 }
 

@@ -50,7 +50,7 @@ function status(
 interface Scripted {
   statuses?: ProjectVendorImageStatus[];
   /** Answers a save, or rejects it with the typed refusal. */
-  save?: (entry: ProjectVendorImage) => ProjectVendorImageStatus;
+  save?: (entry: ProjectVendorImage, vendor: AgenticCliVendor) => ProjectVendorImageStatus;
   build?: () => { operationId: string };
 }
 
@@ -82,10 +82,10 @@ function backend(options: Scripted = {}) {
       case "append_log_records":
         return Promise.resolve();
       case "save_project_vendor_image": {
-        const { entry } = args as { entry: ProjectVendorImage };
+        const { entry, vendor } = args as { entry: ProjectVendorImage; vendor: AgenticCliVendor };
         if (!options.save) return Promise.reject(new Error("image_name_empty"));
         try {
-          return Promise.resolve(options.save(entry));
+          return Promise.resolve(options.save(entry, vendor));
         } catch (e) {
           return Promise.reject(e);
         }
@@ -396,5 +396,49 @@ describe("Project settings → Docker → Build context (SET-FR-KDRP, SET-FR-FPC
       ),
     );
     expect(calls("build_project_vendor_image")).toHaveLength(0);
+  });
+
+  it("SET-FR-25: a refused save on one vendor's tab does not hold back the Build of another vendor", async () => {
+    const user = userEvent.setup();
+    backend({
+      save: (entry, vendor) => {
+        if (vendor === "claude_code") throw new Error("build_context_not_a_directory");
+        return status(vendor, { buildContext: entry.buildContext ?? null });
+      },
+      build: () => ({ operationId: "op-codex" }),
+    });
+    render(<ProjectDockerImages contentRoot={ROOT} />);
+    await waitFor(() => expect(contextInput()).toBeInTheDocument());
+
+    await user.type(contextInput(), "missing");
+    await user.click(screen.getByRole("tab", { name: "Codex" }));
+    await waitFor(() => expect(savedEntries()).toHaveLength(1));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Build" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Build" }));
+    await waitFor(() => expect(calls("build_project_vendor_image")).toHaveLength(1));
+    expect(calls("build_project_vendor_image")[0][1]).toMatchObject({ vendor: "codex" });
+  });
+
+  it("SET-FR-25, SET-FR-FPCX: a second Build after a refused save is held back again and its message stays in the tab", async () => {
+    const user = userEvent.setup();
+    backend({
+      save: () => {
+        throw new Error("build_context_not_a_directory");
+      },
+      build: () => ({ operationId: "op-1" }),
+    });
+    render(<ProjectDockerImages contentRoot={ROOT} />);
+    await waitFor(() => expect(contextInput()).toBeInTheDocument());
+
+    await user.type(contextInput(), "missing");
+    await user.click(screen.getByRole("button", { name: "Build" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Build" }));
+    await waitFor(() => expect(savedEntries().length).toBeGreaterThanOrEqual(2));
+    expect(calls("build_project_vendor_image")).toHaveLength(0);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "That build context does not name an existing folder.",
+    );
   });
 });

@@ -474,14 +474,15 @@ export function ProjectDockerImages({ contentRoot = "" }: ProjectDockerImagesPro
   };
 
   /**
-   * The save in flight, if any. Build waits for it, so a field that is still
-   * focused when the author clicks Build is saved before the build reads the
-   * committed configuration (SET-FR-25).
+   * The latest save of each vendor's entry. Build waits for the save of the
+   * vendor it builds, so a field that is still focused when the author clicks
+   * Build is saved before the build reads the committed configuration
+   * (SET-FR-25). A save of another vendor's entry takes no part.
    */
-  const pendingSave = useRef<Promise<boolean> | null>(null);
+  const pendingSave = useRef<Partial<Record<AgenticCliVendor, Promise<boolean>>>>({});
   const persist = (vendor: AgenticCliVendor, patch: Partial<FieldDraft> = {}) => {
     const saving = persistNow(vendor, patch);
-    pendingSave.current = saving;
+    pendingSave.current[vendor] = saving;
     return saving;
   };
 
@@ -545,8 +546,20 @@ export function ProjectDockerImages({ contentRoot = "" }: ProjectDockerImagesPro
    * retries on its own.
    */
   const build = async (vendor: AgenticCliVendor) => {
-    // A refused save keeps its message and starts no build.
-    if (pendingSave.current && !(await pendingSave.current)) {
+    // A refused save of this entry keeps its message in this tab and starts no
+    // build. The result is read once, so a later Build is judged on its own.
+    const waiting = pendingSave.current[vendor];
+    let saved = true;
+    if (waiting) {
+      saved = await waiting;
+      if (pendingSave.current[vendor] === waiting) delete pendingSave.current[vendor];
+    } else if (drafts[vendor]) {
+      // Text that an earlier refused save left in the field is not committed:
+      // it is tried again, so the build never runs on a configuration that the
+      // tab does not show.
+      saved = await persistNow(vendor);
+    }
+    if (!saved) {
       logInfo(["frontend"], "project image build held back by a refused save", { vendor });
       return;
     }

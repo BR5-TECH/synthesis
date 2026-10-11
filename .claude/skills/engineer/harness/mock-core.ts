@@ -6759,16 +6759,19 @@ const mockDockerImages: Array<Record<string, any>> = [
   {
     vendor: "claude_code", configuration: "configured", imageName: "acme/agent", tag: "latest",
     imageReference: "acme/agent:latest", dockerfile: null, dockerfileState: "absent",
-    dockerfileProblem: null, graduationState: "usable",
+    dockerfileProblem: null, buildContext: null, buildContextState: "absent",
+    graduationState: "usable",
   },
   {
     vendor: "codex", configuration: "unset", imageName: "", tag: null, imageReference: null,
     dockerfile: null, dockerfileState: "absent", dockerfileProblem: null,
+    buildContext: null, buildContextState: "absent",
     graduationState: "image_name_missing",
   },
   {
     vendor: "opencode", configuration: "unset", imageName: "", tag: null, imageReference: null,
     dockerfile: null, dockerfileState: "absent", dockerfileProblem: null,
+    buildContext: null, buildContextState: "absent",
     graduationState: "execution_unsupported",
   },
 ];
@@ -7125,7 +7128,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return {
         projectName: "acme",
         projectKey: "~/dev/acme",
-        contentRoot: "~/dev/acme",
+        // An absolute path, as the real backend answers, and the one that the
+        // mock dialog's default pick lies in: a path field reads a picked path
+        // against this folder.
+        contentRoot: "/Users/demo/dev/acme",
       };
 
     // ---- preferences -----------------------------------------------------
@@ -9483,9 +9489,20 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "load_project_image_build_in_flight":
       return null;
     case "save_project_vendor_image": {
-      const entry = (a.entry ?? {}) as { imageName?: string; tag?: string | null };
+      const entry = (a.entry ?? {}) as {
+        imageName?: string; tag?: string | null; dockerfile?: string | null; buildContext?: string | null;
+      };
       const status = mockDockerImages.find((s) => s.vendor === a.vendor);
       if (!status) throw "unknown_vendor";
+      // PSS-FR-BCTX: a build context must name an existing folder. The mock
+      // treats any path containing "missing" as one that does not exist.
+      if (entry.buildContext && entry.buildContext.includes("missing")) {
+        throw "build_context_not_a_directory";
+      }
+      status.dockerfile = entry.dockerfile ?? null;
+      status.dockerfileState = status.dockerfile ? "valid" : "absent";
+      status.buildContext = entry.buildContext ?? null;
+      status.buildContextState = status.buildContext ? "valid" : "absent";
       status.imageName = entry.imageName ?? "";
       status.tag = entry.tag ?? null;
       status.configuration = status.imageName ? "configured" : "unset";

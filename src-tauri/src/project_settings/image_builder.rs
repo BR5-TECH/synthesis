@@ -2,8 +2,9 @@
 //! (`specifications/core/PSS-project-settings-storage.md` PSS-FR-26, PSS-FR-27).
 //!
 //! Two backends, one contract. In **Docker CLI** mode the verified executable is
-//! run with `docker build --file <project-relative-Dockerfile> --tag
-//! <image[:tag]> <project-root>` and its two pipes are read as they fill. In
+//! run from the project root with `docker build --file
+//! <project-relative-Dockerfile> --tag <image[:tag]> <build-context>` and its
+//! two pipes are read as they fill. In
 //! **Bollard / Docker Engine** mode the same build runs over the Docker Engine
 //! connection at the configured endpoint, whose image-build stream is read the
 //! same way; the Docker CLI path takes no part in it.
@@ -20,8 +21,10 @@ use std::time::Duration;
 
 use super::images::{
     docker_build_args, read_build_line, BuildTerminal, ImageBuildRequest, ImageBuildSink,
-    ImageBuilder, PHASE_BUILDING,
+    ImageBuilder, PHASE_BUILDING, PSS_DOCKERFILE_NAME,
 };
+#[cfg(not(test))]
+use super::images::{engine_dockerfile_option, DockerfilePlacement};
 use crate::docker::{DockerEndpoint, ResolvedDockerBackend};
 
 /// How often the CLI build's pipes are checked while nothing is arriving, so a
@@ -85,10 +88,10 @@ fn build_with_cli(
     );
     let mut child = match Command::new(program)
         .args(&args)
-        // The context is the project root, and `docker build` resolves
-        // `--file` against the directory it is run in, so the root is both the
-        // working directory and the context argument.
-        .current_dir(&request.context_root)
+        // `docker build` resolves `--file` against the directory it is run in,
+        // so the project root is the working directory. The context is a
+        // separate argument, and a Dockerfile outside it needs no other step.
+        .current_dir(&request.project_root)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -287,6 +290,9 @@ fn build_with_engine(
     let (chunks_tx, chunks_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(CONTEXT_CHUNKS_IN_FLIGHT);
     let (packed_tx, packed_rx) = std::sync::mpsc::channel::<Result<(), String>>();
     let context_root = request.context_root.clone();
+    let project_root = request.project_root.clone();
+    let outside_dockerfile = (request.placement == DockerfilePlacement::Outside)
+        .then(|| request.dockerfile.clone());
     // A scope rather than a bare spawn, so the packing thread can read the
     // build's own cancellation. The scope ends only after that thread has, so
     // the packer never outlives the build it packs for.
@@ -294,7 +300,13 @@ fn build_with_engine(
         threads.spawn(|| {
             let cancelled = || sink.cancelled();
             let mut writer = ChannelWriter::new(chunks_tx).stops_when(&cancelled);
-            let outcome = pack_context(&context_root, &mut writer)
+            // PSS-FR-BDFX: a Dockerfile outside the context is read from the
+            // project and added to the archive, bytes unchanged.
+            let outcome = outside_dockerfile
+                .as_deref()
+                .map(|dockerfile| read_project_file(&project_root, dockerfile))
+                .transpose()
+                .and_then(|extra| pack_context_with(&context_root, &mut writer, extra.as_deref()))
                 .and_then(|()| std::io::Write::flush(&mut writer).map_err(|e| e.to_string()));
             let _ = packed_tx.send(outcome);
         });
@@ -331,8 +343,11 @@ fn build_over_connection(
                 return BuildTerminal::Failed(format!("the Docker Engine could not be reached: {e}"));
             }
         };
+        // PSS-FR-BDFX: the option names the Dockerfile relative to the context,
+        // or the unique name it is added under when it lies outside.
+        let dockerfile_option = engine_dockerfile_option(&request.placement);
         let options = bollard::query_parameters::BuildImageOptionsBuilder::default()
-            .dockerfile(&request.dockerfile)
+            .dockerfile(dockerfile_option)
             .t(&request.image_reference)
             // Intermediate containers are removed, exactly as `docker build`
             // does by default. Nothing here names a registry, a credential, or
@@ -614,14 +629,38 @@ fn matches_segment(pattern: &str, name: &str) -> bool {
     pi == p.len()
 }
 
-/// Pack the build context — the project root — into `writer` as a tar archive.
+/// Read the Dockerfile of a build from the project, through a grant limited to
+/// the project root (`FSA-filesystem-access.md`).
+#[cfg_attr(test, allow(dead_code))]
+pub fn read_project_file(project_root: &Path, relative: &str) -> Result<Vec<u8>, String> {
+    let access = crate::fs::FsAccess::builder()
+        .allow_root(project_root)
+        .build()
+        .map_err(|e| e.to_string())?;
+    access
+        .read_bytes(project_root.join(relative))
+        .map_err(|e| e.to_string())
+}
+
+/// Pack the build context into `writer` as a tar archive.
+pub fn pack_context<W: std::io::Write>(root: &Path, writer: W) -> Result<(), String> {
+    pack_context_with(root, writer, None)
+}
+
+/// Pack the build context — the folder at `root` — into `writer` as a tar
+/// archive, and add `extra_dockerfile` under [`PSS_DOCKERFILE_NAME`] when the
+/// Dockerfile lies outside the context (PSS-FR-BDFX).
 ///
-/// Every byte of the project is read through the governed instance rather than
+/// Every byte of the context is read through the governed instance rather than
 /// by a bare directory walk, so the context is subject to the same allowlist
 /// every other read in the application is (`FSA-filesystem-access.md`). Nothing
 /// is buffered whole: the writer is handed each piece as the archive is built,
 /// and what the writer does with it decides how much memory a build costs.
-pub fn pack_context<W: std::io::Write>(root: &Path, writer: W) -> Result<(), String> {
+pub fn pack_context_with<W: std::io::Write>(
+    root: &Path,
+    writer: W,
+    extra_dockerfile: Option<&[u8]>,
+) -> Result<(), String> {
     let access = crate::fs::RootFs::new(
         root.to_path_buf(),
         std::sync::Arc::new(
@@ -641,7 +680,16 @@ pub fn pack_context<W: std::io::Write>(root: &Path, writer: W) -> Result<(), Str
         .unwrap_or_default();
     let probe = crate::agentic::RealFileProbe;
     let mut archive = tar::Builder::new(writer);
-    append_dir(&access, &ignore, &probe, &mut archive, Path::new(""))?;
+    append_dir(&access, &ignore, &probe, &mut archive, Path::new(""), extra_dockerfile.is_some())?;
+    if let Some(bytes) = extra_dockerfile {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        archive
+            .append_data(&mut header, PSS_DOCKERFILE_NAME, bytes)
+            .map_err(|e| e.to_string())?;
+    }
     archive.finish().map_err(|e| e.to_string())
 }
 
@@ -652,6 +700,7 @@ pub fn append_dir<W: std::io::Write>(
     probe: &dyn crate::agentic::FileProbe,
     archive: &mut tar::Builder<W>,
     relative: &Path,
+    reserve_dockerfile_name: bool,
 ) -> Result<(), String> {
     let entries = access
         .access()
@@ -662,6 +711,15 @@ pub fn append_dir<W: std::io::Write>(
         if ALWAYS_EXCLUDED.contains(&entry.name.as_str()) {
             continue;
         }
+        // PSS-FR-BDFX: the name is reserved at the context root only when the
+        // archive adds the Dockerfile under it, so the archive never holds two
+        // entries of it. A Dockerfile inside the context keeps its own name.
+        if reserve_dockerfile_name
+            && relative.as_os_str().is_empty()
+            && entry.name == PSS_DOCKERFILE_NAME
+        {
+            continue;
+        }
         let excluded = ignore.excludes(&child);
         match entry.kind {
             crate::fs::EntryKind::Dir => {
@@ -670,7 +728,7 @@ pub fn append_dir<W: std::io::Write>(
                 if excluded && !ignore.may_reinclude_below(&child) {
                     continue;
                 }
-                append_dir(access, ignore, probe, archive, &child)?;
+                append_dir(access, ignore, probe, archive, &child, reserve_dockerfile_name)?;
             }
             crate::fs::EntryKind::File => {
                 if excluded {

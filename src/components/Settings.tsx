@@ -365,10 +365,10 @@ export function Settings({
           save-before-close sweep (SET-FR-08, SWN-FR-08). */}
       {section === "agents" && <ProjectAgents />}
 
-      {/* SET-FR-21 through SET-FR-27: the Docker section. Every field in it
+      {/* SET-FR-21 through SET-FR-27, SET-FR-KDRP, SET-FR-FPCX, SET-FR-HYTR: the Docker section. Every field in it
           persists at once, so it holds no dirty state and takes no part in
           the tab's save-before-close sweep (SET-FR-08, SWN-FR-08). */}
-      {section === "docker" && <ProjectDockerImages />}
+      {section === "docker" && <ProjectDockerImages contentRoot={contentRoot} />}
 
       {/* SET-FR-QKKQ through SET-FR-IHQE: the concurrency limit. SET-FR-DHFS /
           SET-FR-YMRV: the time limit row persists at once, so it takes no

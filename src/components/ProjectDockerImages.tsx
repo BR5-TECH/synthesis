@@ -1,11 +1,13 @@
 /**
- * Project settings → **Docker** (SET-FR-21 through SET-FR-27).
+ * Project settings → **Docker** (SET-FR-21 through SET-FR-27, SET-FR-KDRP,
+ * SET-FR-FPCX, SET-FR-HYTR).
  *
  * Which container image each agentic CLI vendor's work runs in for this
  * project. One tab per vendor, each holding the image reference — the image
  * name and its optional tag, written as one control because that is how Docker
- * writes them — the optional project-relative Dockerfile, a Build control, and
- * the region a build's progress and its result are rendered in.
+ * writes them — the optional project-relative Dockerfile, the optional build
+ * context, a Build control, and the region a build's progress and its result
+ * are rendered in.
  *
  * Every field persists at once through "save project vendor image", so the
  * section holds no dirty state and takes no part in the per-section save model
@@ -15,14 +17,17 @@
  * it (SET-FR-24).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 import * as api from "../api";
 import {
   onProjectImageBuildFinished,
   onProjectImageBuildProgress,
 } from "../events";
-import { logWarn } from "../logging";
+import { logInfo, logWarn } from "../logging";
 import { formatSectionAddress } from "../settingsWindow";
+import { pickerStart, projectRelativePath } from "../projectPaths";
+import { PathField } from "./PathField";
 import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
 import type {
   AgenticCliVendor,
@@ -55,6 +60,15 @@ export function dockerfileProblemMessage(status: ProjectVendorImageStatus): stri
   }
 }
 
+/** SET-FR-FPCX: a configured build context that no longer names a folder. */
+export function buildContextProblemMessage(status: ProjectVendorImageStatus): string | null {
+  return status.buildContextState === "invalid"
+    ? BUILD_CONTEXT_PROBLEM
+    : null;
+}
+
+const BUILD_CONTEXT_PROBLEM = "That build context does not name an existing folder.";
+
 /** SET-FR-22: the same three, as a save's typed refusal reports them. */
 export function saveRefusalMessage(error: unknown): string {
   const raw = String(error instanceof Error ? error.message : (error ?? ""));
@@ -72,6 +86,7 @@ export function saveRefusalMessage(error: unknown): string {
       "dockerfile_not_a_regular_file",
       "That path does not name a file in this project.",
     ],
+    ["build_context_not_a_directory", BUILD_CONTEXT_PROBLEM],
   ];
   for (const [code, sentence] of known) {
     if (raw.includes(code)) return sentence;
@@ -93,6 +108,7 @@ export function buildRefusalMessage(error: unknown): string {
       "docker_backend_unverified",
       "Verify the Docker backend in Global settings first.",
     ],
+    ["build_context_not_a_directory", BUILD_CONTEXT_PROBLEM],
   ];
   for (const [code, sentence] of known) {
     if (raw.includes(code)) return sentence;
@@ -184,7 +200,30 @@ function appended(lines: string[], line: string): string[] {
     : next;
 }
 
-export function ProjectDockerImages() {
+/** What a tab holds in its four editable fields. */
+interface FieldDraft {
+  imageName: string;
+  tag: string;
+  dockerfile: string;
+  buildContext: string;
+}
+
+/**
+ * SET-FR-22: a file chosen outside the project is refused in the tab's own
+ * words, because the backend never sees it.
+ */
+const DOCKERFILE_OUTSIDE_PROJECT =
+  "That path leaves the project. A Dockerfile is named relative to the project.";
+
+export interface ProjectDockerImagesProps {
+  /**
+   * SET-FR-22, SET-FR-FPCX: the active worktree's directory, where both native
+   * pickers open and which a path chosen in them is read against.
+   */
+  contentRoot?: string;
+}
+
+export function ProjectDockerImages({ contentRoot = "" }: ProjectDockerImagesProps) {
   const [statuses, setStatuses] = useState<ProjectVendorImageStatus[] | null>(
     null,
   );
@@ -205,7 +244,7 @@ export function ProjectDockerImages() {
   // The draft each field holds while the author is typing in it. The committed
   // status is what a tab renders from; this is only what is being typed.
   const [drafts, setDrafts] = useState<
-    Partial<Record<AgenticCliVendor, { imageName: string; tag: string; dockerfile: string }>>
+    Partial<Record<AgenticCliVendor, FieldDraft>>
   >({});
   const mounted = useRef(true);
 
@@ -366,28 +405,23 @@ export function ProjectDockerImages() {
 
   const status = statuses?.find((entry) => entry.vendor === selected) ?? null;
 
-  const draftFor = (entry: ProjectVendorImageStatus) =>
-    drafts[entry.vendor] ?? {
-      imageName: entry.imageName,
-      tag: entry.tag ?? "",
-      dockerfile: entry.dockerfile ?? "",
-    };
+  const committedFields = (entry: ProjectVendorImageStatus | undefined): FieldDraft =>
+    entry
+      ? {
+          imageName: entry.imageName,
+          tag: entry.tag ?? "",
+          dockerfile: entry.dockerfile ?? "",
+          buildContext: entry.buildContext ?? "",
+        }
+      : { imageName: "", tag: "", dockerfile: "", buildContext: "" };
 
-  const setDraft = (
-    vendor: AgenticCliVendor,
-    patch: Partial<{ imageName: string; tag: string; dockerfile: string }>,
-  ) =>
+  const draftFor = (entry: ProjectVendorImageStatus): FieldDraft =>
+    drafts[entry.vendor] ?? committedFields(entry);
+
+  const setDraft = (vendor: AgenticCliVendor, patch: Partial<FieldDraft>) =>
     setDrafts((current) => {
-      const entry = statuses?.find((s) => s.vendor === vendor);
       const base =
-        current[vendor] ??
-        (entry
-          ? {
-              imageName: entry.imageName,
-              tag: entry.tag ?? "",
-              dockerfile: entry.dockerfile ?? "",
-            }
-          : { imageName: "", tag: "", dockerfile: "" });
+        current[vendor] ?? committedFields(statuses?.find((s) => s.vendor === vendor));
       return { ...current, [vendor]: { ...base, ...patch } };
     });
 
@@ -396,29 +430,113 @@ export function ProjectDockerImages() {
    * state. A refused save writes nothing and says which of the three the path
    * was (SET-FR-22).
    */
-  const persist = async (vendor: AgenticCliVendor) => {
-    const draft = drafts[vendor];
-    if (!draft) return;
+  const persistNow = async (
+    vendor: AgenticCliVendor,
+    patch: Partial<FieldDraft> = {},
+  ): Promise<boolean> => {
+    const edited = drafts[vendor];
+    if (!edited && Object.keys(patch).length === 0) return true;
+    const draft: FieldDraft = {
+      ...(edited ?? committedFields(statuses?.find((s) => s.vendor === vendor))),
+      ...patch,
+    };
     setFieldError((current) => ({ ...current, [vendor]: undefined }));
     try {
       const saved = await api.saveProjectVendorImage(vendor, {
         imageName: draft.imageName,
         tag: draft.tag.trim() === "" ? null : draft.tag,
         dockerfile: draft.dockerfile.trim() === "" ? null : draft.dockerfile,
+        buildContext: draft.buildContext.trim() === "" ? null : draft.buildContext,
       });
-      if (!mounted.current) return;
+      if (!mounted.current) return false;
       setStatuses((current) =>
         (current ?? []).map((entry) =>
           entry.vendor === vendor ? saved : entry,
         ),
       );
       setDrafts((current) => ({ ...current, [vendor]: undefined }));
+      return true;
     } catch (e) {
-      if (!mounted.current) return;
+      if (!mounted.current) return false;
+      // A refused save leaves the typed text in the field, so the author
+      // corrects it rather than retyping it.
+      if (Object.keys(patch).length > 0) setDraft(vendor, patch);
       setFieldError((current) => ({
         ...current,
         [vendor]: saveRefusalMessage(e),
       }));
+      logWarn(["frontend"], "project vendor image save refused", {
+        vendor,
+        reason: e instanceof Error ? e.message : String(e),
+      });
+      return false;
+    }
+  };
+
+  /**
+   * The save in flight, if any. Build waits for it, so a field that is still
+   * focused when the author clicks Build is saved before the build reads the
+   * committed configuration (SET-FR-25).
+   */
+  const pendingSave = useRef<Promise<boolean> | null>(null);
+  const persist = (vendor: AgenticCliVendor, patch: Partial<FieldDraft> = {}) => {
+    const saving = persistNow(vendor, patch);
+    pendingSave.current = saving;
+    return saving;
+  };
+
+  /**
+   * SET-FR-22, SET-FR-HYTR: select a Dockerfile in the native OS file picker,
+   * opened in the project folder. A file inside the project fills the field
+   * with its project-relative path; one outside is refused inline and the field
+   * stays as it was. A cancelled picker changes nothing.
+   */
+  const pickDockerfile = async (vendor: AgenticCliVendor) => {
+    try {
+      const picked = await openDialog({
+        directory: false,
+        multiple: false,
+        defaultPath: pickerStart(contentRoot, ""),
+        title: "Select a Dockerfile",
+      });
+      if (typeof picked !== "string" || !mounted.current) return;
+      const relative = projectRelativePath(contentRoot, picked);
+      if (relative === null) {
+        setFieldError((current) => ({
+          ...current,
+          [vendor]: DOCKERFILE_OUTSIDE_PROJECT,
+        }));
+        return;
+      }
+      await persist(vendor, { dockerfile: relative });
+    } catch (e) {
+      logWarn(["frontend"], "dockerfile picker failed", {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
+  /**
+   * SET-FR-FPCX, SET-FR-HYTR: select the build context in the native OS folder
+   * picker. It opens in the current context folder, or in the project folder.
+   * A folder inside the project is stored project-relative; a folder outside is
+   * kept as selected. The backend checks it like a typed path.
+   */
+  const pickBuildContext = async (vendor: AgenticCliVendor, current: string) => {
+    try {
+      const picked = await openDialog({
+        directory: true,
+        multiple: false,
+        defaultPath: pickerStart(contentRoot, current),
+        title: "Select the build context folder",
+      });
+      if (typeof picked !== "string" || !mounted.current) return;
+      const relative = projectRelativePath(contentRoot, picked);
+      await persist(vendor, { buildContext: relative ?? picked });
+    } catch (e) {
+      logWarn(["frontend"], "build context picker failed", {
+        error: e instanceof Error ? e.message : String(e),
+      });
     }
   };
 
@@ -427,6 +545,11 @@ export function ProjectDockerImages() {
    * retries on its own.
    */
   const build = async (vendor: AgenticCliVendor) => {
+    // A refused save keeps its message and starts no build.
+    if (pendingSave.current && !(await pendingSave.current)) {
+      logInfo(["frontend"], "project image build held back by a refused save", { vendor });
+      return;
+    }
     setFieldError((current) => ({ ...current, [vendor]: undefined }));
     setBuilds((current) => ({
       ...current,
@@ -508,6 +631,7 @@ export function ProjectDockerImages() {
   const draft = draftFor(status);
   const report = builds[status.vendor];
   const dockerfileProblem = dockerfileProblemMessage(status);
+  const contextProblem = buildContextProblemMessage(status);
   const needsThisTab = resolvedVendor === status.vendor;
   const buildable =
     draft.dockerfile.trim() !== "" &&
@@ -632,20 +756,17 @@ export function ProjectDockerImages() {
           <label className="picker-field__label" htmlFor="docker-dockerfile">
             Dockerfile <span className="docker-field__optional">optional</span>
           </label>
-          <input
+          <PathField
             id="docker-dockerfile"
-            type="text"
-            aria-label="Dockerfile (optional)"
-            className="input input--mono input--sm"
+            label="Dockerfile (optional)"
+            kind="file"
+            pickLabel="Choose a Dockerfile"
             list="docker-dockerfile-candidates"
-            spellCheck={false}
-            autoComplete="off"
             value={draft.dockerfile}
             placeholder="docker/agent.Dockerfile"
-            onChange={(e) =>
-              setDraft(status.vendor, { dockerfile: e.target.value })
-            }
+            onChange={(value) => setDraft(status.vendor, { dockerfile: value })}
             onBlur={() => void persist(status.vendor)}
+            onPick={() => void pickDockerfile(status.vendor)}
           />
           <datalist id="docker-dockerfile-candidates">
             {candidates.map((path) => (
@@ -654,9 +775,31 @@ export function ProjectDockerImages() {
           </datalist>
         </div>
 
+        <div className="docker-field">
+          <label className="picker-field__label" htmlFor="docker-build-context">
+            Build context <span className="docker-field__optional">optional</span>
+          </label>
+          <PathField
+            id="docker-build-context"
+            label="Build context (optional)"
+            kind="folder"
+            pickLabel="Choose a build context folder"
+            value={draft.buildContext}
+            placeholder="Project root (default)"
+            onChange={(value) => setDraft(status.vendor, { buildContext: value })}
+            onBlur={() => void persist(status.vendor)}
+            onPick={() => void pickBuildContext(status.vendor, draft.buildContext)}
+          />
+        </div>
+
         {dockerfileProblem && (
           <p className="docker-alert" role="alert">
             {dockerfileProblem}
+          </p>
+        )}
+        {contextProblem && (
+          <p className="docker-alert" role="alert">
+            {contextProblem}
           </p>
         )}
         {fieldError?.[status.vendor] && (

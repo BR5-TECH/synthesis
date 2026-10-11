@@ -221,7 +221,7 @@ describe("GitHub token picker", () => {
     const second = screen.getByRole("radio", { name: "personal" });
     second.focus();
     await userEvent.keyboard(" ");
-    expect(second).toHaveAttribute("aria-checked", "true");
+    await waitFor(() => expect(second).toHaveAttribute("aria-checked", "true"));
 
     await userEvent.click(screen.getByRole("button", { name: "Use" }));
     await waitFor(() => expect(onConfirm).toHaveBeenCalledWith("t2"));

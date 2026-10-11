@@ -22,6 +22,7 @@ fn the_image_reference_carries_the_tag_only_where_one_is_configured() {
         image_name: "acme/agent".into(),
         tag: None,
         dockerfile: None,
+        build_context: None,
     };
     assert_eq!(untagged.image_reference().as_deref(), Some("acme/agent"));
 
@@ -29,6 +30,7 @@ fn the_image_reference_carries_the_tag_only_where_one_is_configured() {
         image_name: "acme/agent".into(),
         tag: Some("2.1".into()),
         dockerfile: None,
+        build_context: None,
     };
     assert_eq!(tagged.image_reference().as_deref(), Some("acme/agent:2.1"));
 
@@ -38,6 +40,7 @@ fn the_image_reference_carries_the_tag_only_where_one_is_configured() {
         image_name: "acme/agent".into(),
         tag: Some("   ".into()),
         dockerfile: None,
+        build_context: None,
     };
     assert_eq!(blank.image_reference().as_deref(), Some("acme/agent"));
 
@@ -45,6 +48,7 @@ fn the_image_reference_carries_the_tag_only_where_one_is_configured() {
         image_name: "  ".into(),
         tag: Some("2.1".into()),
         dockerfile: None,
+        build_context: None,
     };
     assert_eq!(nameless.image_reference(), None);
 }
@@ -97,6 +101,7 @@ fn a_status_says_what_the_entry_is_worth() {
         image_name: "acme/agent".into(),
         tag: None,
         dockerfile: None,
+        build_context: None,
     };
     let status = status_for(&root, "claude_code", Some(&no_build));
     assert_eq!(status.configuration, VendorImageConfiguration::Configured);
@@ -109,6 +114,7 @@ fn a_status_says_what_the_entry_is_worth() {
         image_name: "acme/agent".into(),
         tag: Some("2.1".into()),
         dockerfile: Some("docker/agent.Dockerfile".into()),
+        build_context: None,
     };
     let status = status_for(&root, "codex", Some(&buildable));
     assert_eq!(status.dockerfile_state, DockerfileState::Valid);
@@ -120,6 +126,7 @@ fn a_status_says_what_the_entry_is_worth() {
         image_name: "acme/agent".into(),
         tag: None,
         dockerfile: Some("docker/gone.Dockerfile".into()),
+        build_context: None,
     };
     let status = status_for(&root, "codex", Some(&broken));
     assert_eq!(status.dockerfile_state, DockerfileState::Invalid);
@@ -144,6 +151,7 @@ fn opencode_reports_execution_unsupported_rather_than_a_bad_entry() {
         image_name: "acme/agent".into(),
         tag: None,
         dockerfile: Some("docker/agent.Dockerfile".into()),
+        build_context: None,
     };
     let status = status_for(&root, "opencode", Some(&entry));
     assert_eq!(status.dockerfile_state, DockerfileState::Valid);
@@ -169,7 +177,8 @@ fn a_refused_entry_never_reaches_the_table() {
             &ProjectVendorImage {
                 image_name: "   ".into(),
                 tag: None,
-                dockerfile: None
+                dockerfile: None,
+                build_context: None,
             }
         )
         .unwrap_err(),
@@ -182,7 +191,8 @@ fn a_refused_entry_never_reaches_the_table() {
             &ProjectVendorImage {
                 image_name: String::new(),
                 tag: None,
-                dockerfile: Some("docker/agent.Dockerfile".into())
+                dockerfile: Some("docker/agent.Dockerfile".into()),
+                build_context: None,
             }
         )
         .unwrap_err(),
@@ -194,7 +204,8 @@ fn a_refused_entry_never_reaches_the_table() {
             &ProjectVendorImage {
                 image_name: "acme/agent".into(),
                 tag: None,
-                dockerfile: Some("/etc/Dockerfile".into())
+                dockerfile: Some("/etc/Dockerfile".into()),
+                build_context: None,
             }
         )
         .unwrap_err(),
@@ -215,6 +226,7 @@ fn writing_one_vendor_carries_every_other_section_through() {
             image_name: "acme/claude".into(),
             tag: Some("1".into()),
             dockerfile: None,
+            build_context: None,
         },
     );
     write_entry(
@@ -224,6 +236,7 @@ fn writing_one_vendor_carries_every_other_section_through() {
             image_name: "acme/codex".into(),
             tag: None,
             dockerfile: Some("docker/codex.Dockerfile".into()),
+            build_context: None,
         },
     );
 
@@ -245,6 +258,7 @@ fn writing_one_vendor_carries_every_other_section_through() {
             image_name: "acme/claude".into(),
             tag: Some("2".into()),
             dockerfile: None,
+            build_context: None,
         },
     );
     let entries = read_entries(&table);
@@ -385,6 +399,7 @@ fn buildable_entry() -> ProjectVendorImage {
         image_name: "acme/agent".into(),
         tag: Some("2.1".into()),
         dockerfile: Some("docker/agent.Dockerfile".into()),
+        build_context: None,
     }
 }
 
@@ -398,6 +413,7 @@ fn a_build_targets_the_entrys_reference_and_the_project_root() {
         Some(&entry),
         Ok(verified_cli_backend()),
         PathBuf::from("/projects/acme"),
+        Ok(PathBuf::from("/projects/acme")),
         "claude_code",
         "op-1",
         &registry,
@@ -429,6 +445,7 @@ fn an_unverified_backend_refuses_before_anything_starts() {
             Some(&entry),
             Err(crate::docker::ERR_DOCKER_BACKEND_UNVERIFIED.to_string()),
             PathBuf::from("/projects/acme"),
+            Ok(PathBuf::from("/projects/acme")),
             "claude_code",
             "op-1",
             &registry,
@@ -448,12 +465,14 @@ fn a_build_needs_both_a_dockerfile_and_an_image_name() {
         image_name: "acme/agent".into(),
         tag: None,
         dockerfile: None,
+        build_context: None,
     };
     assert_eq!(
         prepare_build(
             Some(&no_dockerfile),
             Ok(verified_cli_backend()),
             PathBuf::from("/p"),
+            Ok(PathBuf::from("/p")),
             "codex",
             "op-1",
             &registry
@@ -465,12 +484,14 @@ fn a_build_needs_both_a_dockerfile_and_an_image_name() {
         image_name: String::new(),
         tag: None,
         dockerfile: Some("Dockerfile".into()),
+        build_context: None,
     };
     assert_eq!(
         prepare_build(
             Some(&no_name),
             Ok(verified_cli_backend()),
             PathBuf::from("/p"),
+            Ok(PathBuf::from("/p")),
             "codex",
             "op-1",
             &registry
@@ -484,6 +505,7 @@ fn a_build_needs_both_a_dockerfile_and_an_image_name() {
             None,
             Ok(verified_cli_backend()),
             PathBuf::from("/p"),
+            Ok(PathBuf::from("/p")),
             "codex",
             "op-1",
             &registry
@@ -505,6 +527,7 @@ fn a_successful_build_reports_progress_then_one_terminal_result() {
         Some(&entry),
         Ok(verified_cli_backend()),
         PathBuf::from("/projects/acme"),
+        Ok(PathBuf::from("/projects/acme")),
         "claude_code",
         "op-1",
         &registry,
@@ -546,6 +569,7 @@ fn a_failed_build_carries_a_diagnostic_and_frees_the_project() {
         Some(&entry),
         Ok(verified_cli_backend()),
         PathBuf::from("/projects/acme"),
+        Ok(PathBuf::from("/projects/acme")),
         "codex",
         "op-1",
         &registry,
@@ -568,6 +592,7 @@ fn a_failed_build_carries_a_diagnostic_and_frees_the_project() {
         Some(&entry),
         Ok(verified_cli_backend()),
         PathBuf::from("/projects/acme"),
+        Ok(PathBuf::from("/projects/acme")),
         "codex",
         "op-2",
         &registry
@@ -601,6 +626,7 @@ fn a_cancelled_build_reports_cancelled() {
         Some(&entry),
         Ok(verified_cli_backend()),
         PathBuf::from("/projects/acme"),
+        Ok(PathBuf::from("/projects/acme")),
         "claude_code",
         "op-1",
         &registry,
@@ -628,6 +654,7 @@ fn a_second_build_while_one_runs_is_refused() {
         Some(&entry),
         Ok(verified_cli_backend()),
         PathBuf::from("/p"),
+        Ok(PathBuf::from("/p")),
         "claude_code",
         "op-1",
         &registry,
@@ -638,6 +665,7 @@ fn a_second_build_while_one_runs_is_refused() {
             Some(&entry),
             Ok(verified_cli_backend()),
             PathBuf::from("/p"),
+            Ok(PathBuf::from("/p")),
             "codex",
             "op-2",
             &registry
@@ -667,4 +695,205 @@ fn a_step_line_is_what_makes_a_build_determinate() {
     // A malformed position is a message rather than a bad total.
     assert_eq!(read_build_line("Step x/y : RUN").0, None);
     assert_eq!(read_build_line("Step 9/0 : RUN").0, None);
+}
+
+// -- the build context (PSS-FR-BCTX, PSS-FR-BDFX) ---------------------
+
+fn entry_with_context(context: Option<&str>) -> ProjectVendorImage {
+    ProjectVendorImage {
+        image_name: "acme/agent".into(),
+        tag: None,
+        dockerfile: Some("docker/agent.Dockerfile".into()),
+        build_context: context.map(str::to_string),
+    }
+}
+
+// PSS-FR-BCTX: a relative context resolves against the project root and may
+// leave it. An absolute context is taken as given.
+#[test]
+fn a_build_context_is_relative_or_absolute_and_may_leave_the_project() {
+    let outer = tempfile::tempdir().unwrap();
+    let project = outer.path().join("project");
+    std::fs::create_dir_all(project.join("docker/certs")).unwrap();
+    std::fs::create_dir_all(outer.path().join("certs")).unwrap();
+    let root = crate::fs::RootFs::for_root(&project);
+
+    let inside = validate_build_context(&root, "docker/certs").unwrap();
+    assert!(inside.ends_with("project/docker/certs"), "{inside:?}");
+    let sibling = validate_build_context(&root, "../certs").unwrap();
+    assert!(sibling.ends_with("certs") && !sibling.starts_with(project.canonicalize().unwrap()));
+    let absolute = outer.path().join("certs");
+    let resolved = validate_build_context(&root, absolute.to_str().unwrap()).unwrap();
+    assert_eq!(resolved, absolute.canonicalize().unwrap());
+}
+
+// PSS-FR-BCTX: a value that names no existing folder is refused, and a file
+// is not a folder.
+#[test]
+fn a_build_context_must_name_an_existing_folder() {
+    let (_dir, root) = root_with(&["docker/agent.Dockerfile"]);
+    for bad in ["missing", "docker/agent.Dockerfile", "../does-not-exist"] {
+        assert_eq!(
+            validate_build_context(&root, bad).unwrap_err(),
+            ERR_BUILD_CONTEXT_NOT_A_DIRECTORY,
+            "{bad}"
+        );
+        assert_eq!(
+            validate_entry(&root, &entry_with_context(Some(bad))).unwrap_err(),
+            ERR_BUILD_CONTEXT_NOT_A_DIRECTORY,
+            "{bad}"
+        );
+    }
+}
+
+// PSS-FR-BCTX: an empty or blank context is the project root, and is stored
+// as absent.
+#[test]
+fn an_empty_build_context_is_absent() {
+    let (_dir, root) = root_with(&["docker/agent.Dockerfile"]);
+    for blank in [None, Some(""), Some("   ")] {
+        let validated = validate_entry(&root, &entry_with_context(blank)).unwrap();
+        assert_eq!(validated.build_context, None);
+    }
+    let validated = validate_entry(&root, &entry_with_context(Some(" docker "))).unwrap();
+    assert_eq!(validated.build_context.as_deref(), Some("docker"));
+}
+
+// PSS-FR-BCTX, PSS-FR-25: the status reports the context and whether it
+// still names a folder, and the context takes no part in graduation.
+#[test]
+fn the_status_reports_the_build_context_state() {
+    let (dir, root) = root_with(&["docker/agent.Dockerfile"]);
+    std::fs::create_dir_all(dir.path().join("ctx")).unwrap();
+
+    let absent = status_for(&root, "claude_code", Some(&entry_with_context(None)));
+    assert_eq!(absent.build_context_state, BuildContextState::Absent);
+    assert_eq!(absent.build_context, None);
+
+    let valid = status_for(&root, "claude_code", Some(&entry_with_context(Some("ctx"))));
+    assert_eq!(valid.build_context_state, BuildContextState::Valid);
+    assert_eq!(valid.build_context.as_deref(), Some("ctx"));
+    assert_eq!(valid.graduation_state, VendorGraduationState::Usable);
+
+    std::fs::remove_dir_all(dir.path().join("ctx")).unwrap();
+    let invalid = status_for(&root, "claude_code", Some(&entry_with_context(Some("ctx"))));
+    assert_eq!(invalid.build_context_state, BuildContextState::Invalid);
+    assert_eq!(invalid.graduation_state, VendorGraduationState::Usable);
+}
+
+// PSS-FR-22: the context is committed with the entry under its camelCase key.
+#[test]
+fn the_build_context_round_trips_through_the_table() {
+    let mut table = toml::Table::new();
+    write_entry(&mut table, "codex", &entry_with_context(Some("../certs")));
+    let text = toml::to_string(&table).unwrap();
+    assert!(text.contains("buildContext = \"../certs\""), "{text}");
+    let read = read_entries(&table);
+    assert_eq!(read["codex"].build_context.as_deref(), Some("../certs"));
+
+    write_entry(&mut table, "codex", &entry_with_context(None));
+    assert!(!toml::to_string(&table).unwrap().contains("buildContext"));
+}
+
+// PSS-FR-BDFX: a Dockerfile inside the context is named relative to it, and
+// one outside is placed under the unique name.
+#[test]
+fn the_dockerfile_placement_follows_the_context() {
+    let outer = tempfile::tempdir().unwrap();
+    let project = outer.path().join("project");
+    std::fs::create_dir_all(project.join("docker/ctx")).unwrap();
+    std::fs::create_dir_all(outer.path().join("certs")).unwrap();
+    std::fs::write(project.join("docker/ctx/Dockerfile"), "FROM scratch\n").unwrap();
+    std::fs::write(project.join("docker/agent.Dockerfile"), "FROM scratch\n").unwrap();
+
+    assert_eq!(
+        dockerfile_placement(&project, &project, "docker/agent.Dockerfile"),
+        DockerfilePlacement::InContext("docker/agent.Dockerfile".into())
+    );
+    assert_eq!(
+        dockerfile_placement(&project, &project.join("docker/ctx"), "docker/ctx/Dockerfile"),
+        DockerfilePlacement::InContext("Dockerfile".into())
+    );
+    assert_eq!(
+        dockerfile_placement(&project, &project.join("docker/ctx"), "docker/agent.Dockerfile"),
+        DockerfilePlacement::Outside
+    );
+    assert_eq!(
+        dockerfile_placement(&project, &outer.path().join("certs"), "docker/agent.Dockerfile"),
+        DockerfilePlacement::Outside
+    );
+}
+
+// PSS-FR-BDFX: a `..` segment in the Dockerfile path is folded before the
+// path is compared with the context, so a file that leaves the context through
+// it counts as outside.
+#[test]
+fn a_parent_segment_in_the_dockerfile_path_is_folded() {
+    let outer = tempfile::tempdir().unwrap();
+    let project = outer.path().join("project");
+    std::fs::create_dir_all(project.join("docker/ctx")).unwrap();
+    assert_eq!(
+        dockerfile_placement(&project, &project.join("docker/ctx"), "docker/ctx/../agent.Dockerfile"),
+        DockerfilePlacement::Outside
+    );
+    assert_eq!(
+        dockerfile_placement(&project, &project.join("docker/ctx"), "docker/../docker/ctx/Dockerfile"),
+        DockerfilePlacement::InContext("Dockerfile".into())
+    );
+}
+
+// PSS-FR-BDFX: the Engine option names the Dockerfile relative to the context,
+// or the unique name when the file lies outside it.
+#[test]
+fn the_engine_dockerfile_option_follows_the_placement() {
+    assert_eq!(
+        engine_dockerfile_option(&DockerfilePlacement::InContext("docker/a.Dockerfile".into())),
+        "docker/a.Dockerfile"
+    );
+    assert_eq!(engine_dockerfile_option(&DockerfilePlacement::Outside), PSS_DOCKERFILE_NAME);
+}
+
+// PSS-FR-26: the CLI receives a Windows path without its verbatim prefix.
+#[test]
+fn the_cli_context_argument_has_no_verbatim_prefix() {
+    let args = docker_build_args("Dockerfile", "a:1", Path::new(r"\\?\C:\certs"));
+    assert_eq!(args.last().unwrap(), r"C:\certs");
+    let args = docker_build_args("Dockerfile", "a:1", Path::new("/work/certs"));
+    assert_eq!(args.last().unwrap(), "/work/certs");
+}
+
+// PSS-FR-26, PSS-FR-BCTX: a context that no longer names a folder refuses a
+// build before the build slot is taken, and a good one reaches the request.
+#[test]
+fn a_build_refuses_a_missing_context_and_carries_a_good_one() {
+    let registry = ImageBuildRegistry::default();
+    let entry = buildable_entry();
+    assert_eq!(
+        prepare_build(
+            Some(&entry),
+            Ok(verified_cli_backend()),
+            PathBuf::from("/projects/acme"),
+            Err(ERR_BUILD_CONTEXT_NOT_A_DIRECTORY.to_string()),
+            "claude_code",
+            "op-1",
+            &registry,
+        )
+        .unwrap_err(),
+        ERR_BUILD_CONTEXT_NOT_A_DIRECTORY
+    );
+    assert_eq!(registry.in_flight(), None, "a refusal took no build slot");
+
+    let prepared = prepare_build(
+        Some(&entry),
+        Ok(verified_cli_backend()),
+        PathBuf::from("/projects/acme"),
+        Ok(PathBuf::from("/certs")),
+        "claude_code",
+        "op-2",
+        &registry,
+    )
+    .unwrap();
+    assert_eq!(prepared.request.project_root, PathBuf::from("/projects/acme"));
+    assert_eq!(prepared.request.context_root, PathBuf::from("/certs"));
+    assert_eq!(prepared.request.placement, DockerfilePlacement::Outside);
 }

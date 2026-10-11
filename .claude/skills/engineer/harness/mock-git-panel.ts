@@ -242,6 +242,11 @@ export function gitPanelInvoke(cmd: string, a: Record<string, any>): unknown {
       return {
         branch: name,
         worktree,
+        // GIT-FR-LUEY: a worktree an agent tool has locked.
+        worktreeLock:
+          name === "feature/stale-work"
+            ? { reason: "claude agent agent-aea84b2bc26964e2b (pid 89346 start Sun Oct 11 14:19:41 2026)" }
+            : undefined,
         stream:
           name === "synthesis/stream/demo"
             ? { streamId: "s-demo", streamName: "demo", busyRunId: null, aheadOfBase: 6 }

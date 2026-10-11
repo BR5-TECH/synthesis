@@ -35,6 +35,7 @@ mod history;
 mod branch_info;
 mod branch_compare;
 mod branch_deletion;
+mod branch_deletion_lock;
 mod branch_deletion_remote;
 mod pull_requests;
 mod pull_request_timeline;

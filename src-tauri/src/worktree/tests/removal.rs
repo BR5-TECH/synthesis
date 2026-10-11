@@ -1,4 +1,4 @@
-//! Removing one linked worktree (WTC-FR-RDVK, WTC-FR-BHFE).
+//! Removing one linked worktree (WTC-FR-RDVK, WTC-FR-BHFE, WTC-FR-KELA).
 //!
 //! One part of `mod.rs`, which holds the fixture and the helpers these use. A
 //! work stream's working copy is refused in `streams/tests/deletion_guards.rs`,
@@ -41,6 +41,34 @@ fn a_worktree_whose_directory_is_gone_has_its_registration_pruned() {
     remove_linked_worktree(app.handle(), &f.root(), &path).unwrap();
 
     assert_eq!(linked_count(&f), 0);
+}
+
+// WTC-FR-KELA
+#[test]
+fn a_locked_registration_is_pruned_with_its_lock_whether_or_not_its_directory_is_there() {
+    for directory_gone in [false, true] {
+        let f = Fixture::new();
+        f.branch("alpha");
+        let path = f.add_worktree("wt-alpha", "alpha");
+        let repo = f.repo();
+        let name = repo.worktrees().unwrap().get(0).unwrap().unwrap().to_string();
+        repo.find_worktree(&name).unwrap().lock(Some("claude agent x (pid 1)")).unwrap();
+        if directory_gone {
+            fs::remove_dir_all(&path).unwrap();
+        }
+        let app = mock_app_on(&f.root(), &f.root());
+
+        remove_linked_worktree(app.handle(), &f.root(), &path).unwrap();
+
+        assert!(!path.exists(), "directory gone: {directory_gone}");
+        assert_eq!(linked_count(&f), 0, "directory gone: {directory_gone}");
+        assert!(f.repo().find_worktree(&name).is_err());
+        assert!(
+            !f.repo().commondir().join("worktrees").join(&name).exists(),
+            "the lock goes with the registration"
+        );
+        assert!(f.repo().find_branch("alpha", BranchType::Local).is_ok());
+    }
 }
 
 // WTC-FR-RDVK

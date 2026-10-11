@@ -51,8 +51,8 @@ function PathWarning({ paths }: { paths: string[] }) {
 }
 
 /**
- * GIT-FR-QYWP, GIT-FR-GAMV, GIT-FR-SIJB, GIT-FR-CTHN, GIT-FR-XOLE: the
- * confirmation of a branch deletion.
+ * GIT-FR-QYWP, GIT-FR-GAMV, GIT-FR-SIJB, GIT-FR-CTHN, GIT-FR-XOLE,
+ * GIT-FR-LUEY: the confirmation of a branch deletion.
  *
  * Nothing is removed before **Delete** is confirmed. Cancel, Escape and the
  * backdrop close it and change nothing. A branch of a work stream is removed
@@ -88,6 +88,8 @@ export function BranchDeleteDialog({
     logDebug(["frontend"], "branch deletion dialog shown", {
       stream: stream !== undefined,
       paths: plan.uncommittedPaths?.length ?? 0,
+      // GTC-FR-JUZP: whether it is locked, never the lock reason.
+      locked: plan.worktreeLock !== undefined,
       unmerged: stream?.aheadOfBase ?? 0,
     });
     // Logged once, when the dialog opens.
@@ -184,6 +186,7 @@ export function BranchDeleteDialog({
   };
 
   const worktreePath = plan.worktree?.path;
+  const lock = plan.worktreeLock;
   const discarding = paths.length > 0;
   const forcing = stream !== undefined && unmerged > 0;
 
@@ -272,6 +275,17 @@ export function BranchDeleteDialog({
         )}{" "}
         Nothing is removed until you confirm.
       </p>
+      {lock && (
+        <div
+          className="git-delete__notice"
+          role="note"
+          data-testid="git-delete-lock-notice"
+        >
+          {lock.reason
+            ? `This worktree is locked: ${lock.reason}. Deleting it removes the lock.`
+            : "This worktree is locked. Deleting it removes the lock."}
+        </div>
+      )}
       {pathsLoading && (
         <div className="git__state" role="status">
           Reading uncommitted paths…

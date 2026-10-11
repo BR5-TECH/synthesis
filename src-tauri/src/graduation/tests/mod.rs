@@ -31,6 +31,7 @@ mod direct;
 mod direct_message;
 mod e2e;
 mod github_shadow;
+mod hold;
 mod live_index;
 mod log_read_command;
 mod log_reads;

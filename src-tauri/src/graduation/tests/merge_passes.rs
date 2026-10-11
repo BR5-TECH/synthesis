@@ -98,7 +98,7 @@ fn a_merge_pass_is_a_work_turn_then_a_fresh_review_in_its_own_checkout() {
 // GRB-FR-TGAZ, GRL-FR-CZBT, GXD-FR-BQLN, GRB-FR-JQFO: a merge run takes two passes.
 // (That the project's own budget does not reach it is pinned in `merge_input`.) When the budget is spent and the review still
 // says `revise` the run rests in `awaiting_author` with the reason
-// `pass_budget_exhausted`, releases its stream, and keeps its worktree and its
+// `pass_budget_exhausted`, keeps its stream, and keeps its worktree and its
 // snapshot ref. Continue adds two passes and resumes in the same worktree.
 #[test]
 fn a_spent_budget_rests_the_run_and_continue_adds_two_passes() {
@@ -124,12 +124,13 @@ fn a_spent_budget_rests_the_run_and_continue_adds_two_passes() {
     assert_eq!(rest["fields"]["reason"], "pass_budget_exhausted");
     assert_eq!(rest["fields"]["pass_budget"], 2);
     assert_eq!(rest["fields"]["passes_made"], 2);
-    assert!(
+    assert_eq!(
         crate::streams::get_work_stream(fx.app.clone(), stream.id.clone())
             .unwrap()
             .busy_run_id
-            .is_none(),
-        "the stream is released"
+            .as_deref(),
+        Some(run.id.as_str()),
+        "the run keeps the stream (GRD-FR-BNTC)"
     );
     let worktree = merge_worktree_of(&fx, &run.id);
     assert!(worktree.exists() && snapshot_ref_stands(&fx, &run.id), "worktree and snapshot are kept");

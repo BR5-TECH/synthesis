@@ -18,8 +18,8 @@ fn revising(description: &str) -> Script {
 // pass budget holds, and a budget the author changes while it works does not move
 // its window. A review that still answers `revise` after the second pass, with
 // minor findings alone, rests the run `awaiting_author` with the reason
-// `pass_budget_exhausted`. The stream and the slot are free, the findings stand,
-// and the merge worktree and the snapshot are kept.
+// `pass_budget_exhausted`. The run keeps its stream and its slot, the findings
+// stand, and the merge worktree and the snapshot are kept.
 #[test]
 fn a_merge_run_takes_two_passes_whatever_the_project_budget_and_then_rests() {
     conflicted_merge("merge budget spent")
@@ -43,8 +43,8 @@ fn a_merge_run_takes_two_passes_whatever_the_project_budget_and_then_rests() {
         .expect_blocker_absent()
         .expect_no_escalation()
         .expect_loop_instruction_contains("Say it once more.")
-        .expect_stream_released()
-        .expect_slots_in_use(0)
+        .expect_stream_held()
+        .expect_slots_in_use(1)
         .expect_merge_workspace_standing()
         .expect_merge_worktree_holds("README.md", "both sides, said\n")
         .expect_no_merge_result()
@@ -112,7 +112,7 @@ fn continue_again_after_a_second_exhaustion_grants_two_more_passes() {
         .expect_pass(4)
         .expect_pass_window(3, 4)
         .expect_rest_reason_count("pass_budget_exhausted", 2)
-        .expect_stream_released()
+        .expect_stream_held()
         .continued(vec![
             Script::reports_success().writes("README.md", "five\n"),
             Script::answers_ready("Both intents stand."),

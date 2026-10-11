@@ -34,7 +34,7 @@ fn a_base_tip_that_moved_before_the_first_dispatch_fails_the_run() {
         .expect_base_head_message_contains("Edit moved-on-base.txt")
         .expect_stream_branch_unchanged()
         .expect_base_working_copy_clean()
-        .expect_stream_released()
+        .expect_stream_held()
         .expect_slots_in_use(0)
         .expect_merge_workspace_reclaimed()
         .expect_stream_row_merge_run(GraduationRunState::Failed);
@@ -122,7 +122,7 @@ fn a_tip_that_moves_during_a_turn_fails_the_run_at_the_next_dispatch() {
         .expect_no_merge_result()
         .expect_stream_branch_unchanged()
         .expect_base_working_copy_clean()
-        .expect_stream_released()
+        .expect_stream_held()
         .expect_merge_workspace_reclaimed();
 }
 
@@ -143,6 +143,6 @@ fn a_tip_that_moves_before_the_apply_fails_the_run_and_writes_nothing() {
         .expect_no_merge_result()
         .expect_base_branch_unchanged()
         .expect_base_working_copy_clean()
-        .expect_stream_released()
+        .expect_stream_held()
         .expect_merge_workspace_reclaimed();
 }

@@ -18,6 +18,7 @@ export * from "./stages";
 export * from "./restart";
 export * from "./standingWork";
 export * from "./arrangement";
+export * from "./cascade";
 export * from "./coalesce";
 export * from "./pathTree";
 export * from "./pathsWidth";

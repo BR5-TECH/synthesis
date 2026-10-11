@@ -4,10 +4,10 @@
  */
 
 import type { GraduationRun, GraduationRunState } from "../../types/graduation";
-import { holdsStream, isTerminalRun } from "../../types/graduation";
+import { holdsQueue, isAgentWork, isTerminalRun } from "../../types/graduation";
 import { isMergeRun, mergeProvenanceLine } from "./merge";
 
-export { holdsStream, isTerminalRun };
+export { holdsQueue, isAgentWork, isTerminalRun };
 
 /** GRU-FR-BHJO: the state, in the author's words. */
 export function stateLabel(state: GraduationRunState): string {
@@ -118,13 +118,16 @@ export function actionsFor(run: GraduationRun): RunAction[] {
       break;
   }
   // GRU-FR-DVWY / GRD-FR-BLCR: revert is offered for every run that made
-  // commits, holds no stream, and is not queued — the queue may start a queued
-  // run on the reverted branch. A record that names no commits made none.
+  // commits, does no agent work, and is not queued — the queue may start a
+  // queued run on the reverted branch. A run at rest holds its queue, so
+  // nothing starts on the reverted branch while it waits. A record that names
+  // no commits made none.
   // GRU-FR-DVWY: a merge run offers none, whatever it published.
   if (
     !merge &&
     (run.commits ?? []).length > 0 &&
-    !holdsStream(run.state) &&
+    run.state !== "working" &&
+    run.state !== "reviewing" &&
     run.state !== "queued"
   ) {
     offered.add("revert");

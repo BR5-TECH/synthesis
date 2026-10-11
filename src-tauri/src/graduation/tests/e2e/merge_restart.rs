@@ -49,8 +49,8 @@ fn a_working_merge_run_found_after_a_relaunch_rests_interrupted_and_continue_res
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("execution_abandoned")
-        .expect_stream_released()
-        .expect_slots_in_use(0)
+        .expect_stream_held()
+        .expect_slots_in_use(1)
         .expect_commits(0)
         .expect_merge_workspace_standing()
         .expect_base_branch_at_the_pinned_tip()
@@ -78,8 +78,8 @@ fn a_reviewing_merge_run_found_after_a_relaunch_rests_interrupted_and_continue_r
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("execution_abandoned")
-        .expect_stream_released()
-        .expect_slots_in_use(0)
+        .expect_stream_held()
+        .expect_slots_in_use(1)
         .expect_merge_workspace_standing()
         .continued(vec![
             Script::reports_success(),

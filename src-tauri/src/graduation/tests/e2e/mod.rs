@@ -26,6 +26,7 @@ mod dispatch_assert;
 mod budget;
 mod escalations;
 mod hooks;
+mod holds;
 mod interruptions;
 mod journeys;
 mod lifecycle;

@@ -11,7 +11,7 @@ use crate::graduation::{GraduationEscalationOrigin, GraduationRunState};
 
 // GTE-FR-WXEJ, GTE-FR-XKGB / GRL-FR-VBCL, GRL-FR-MWPQ, GXD-FR-HSQV, GXD-FR-BJYT,
 // GXD-FR-XPUR: an escalation of a `merge_work` turn rests the run
-// `awaiting_author` with its ordered questions and frees the stream and the slot.
+// `awaiting_author` with its ordered questions and keeps the stream and the slot.
 // The answers reach the next `merge_work` turn of the same pass, which resumes the
 // session that asked, and the pass does not advance.
 #[test]
@@ -26,8 +26,8 @@ fn an_escalation_of_a_merge_work_turn_is_answered_into_the_work_turn() {
         .expect_escalation_questions(&["Which limit stands?", "Keep the stream's file?"])
         .expect_escalation_origin(GraduationEscalationOrigin::Work)
         .expect_pass(1)
-        .expect_stream_released()
-        .expect_slots_in_use(0)
+        .expect_stream_held()
+        .expect_slots_in_use(1)
         .expect_merge_workspace_standing()
         .answered(
             &["The base limit stands.", "Yes."],
@@ -64,8 +64,8 @@ fn an_escalation_of_a_merge_review_turn_is_answered_into_a_fresh_review() {
         .expect_state(GraduationRunState::AwaitingAuthor)
         .expect_escalation_questions(&["Is the stream's file wanted?"])
         .expect_escalation_origin(GraduationEscalationOrigin::Review)
-        .expect_stream_released()
-        .expect_slots_in_use(0)
+        .expect_stream_held()
+        .expect_slots_in_use(1)
         .answered(
             &["Yes, keep it."],
             vec![Script::answers_ready("Both intents stand.")],
@@ -102,7 +102,7 @@ fn a_pause_rests_a_merge_run_and_continue_resumes_the_phase_that_stopped() {
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("author_pause")
         .expect_commits(0)
-        .expect_stream_released()
+        .expect_stream_held()
         .expect_merge_worktree_holds("README.md", "half done\n")
         .expect_base_branch_at_the_pinned_tip()
         .expect_base_working_copy_clean()
@@ -113,7 +113,7 @@ fn a_pause_rests_a_merge_run_and_continue_resumes_the_phase_that_stopped() {
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("author_pause")
         .expect_resume_phase("review")
-        .expect_stream_released()
+        .expect_stream_held()
         .continued(vec![Script::answers_ready("Both intents stand.")])
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_order(&["merge_review"])

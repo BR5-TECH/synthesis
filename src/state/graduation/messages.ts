@@ -49,7 +49,7 @@ export function graduationErrorMessage(error: string): string {
     case "docker_backend_unverified":
       return "The machine's Docker backend has not been verified.";
     case "stream_busy":
-      return "A run is working in that work stream.";
+      return "A run holds that work stream.";
     case "stream_dirty":
       return detail
         ? `The work stream holds uncommitted work: ${detail}`

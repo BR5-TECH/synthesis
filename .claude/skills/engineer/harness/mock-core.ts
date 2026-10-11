@@ -6056,7 +6056,6 @@ graduationRuns.push(
       reason: "execution_timeout",
       at: "2026-09-06T11:00:00Z",
       detail: "The agent turn ran for 120 minutes and was stopped.",
-      streamReleased: true,
     },
     input: {
       draftId: "d-25",
@@ -6074,7 +6073,6 @@ graduationRuns.push(
       reason: "agent_exited",
       at: "2026-09-06T11:30:00Z",
       detail: "The agent process exited with status 1.",
-      streamReleased: true,
     },
     input: {
       draftId: "d-26",
@@ -8314,7 +8312,6 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         reason: "author_pause",
         at: new Date().toISOString(),
         detail: "The author paused the run.",
-        streamReleased: true,
       };
       return graduationChanged(run);
     }

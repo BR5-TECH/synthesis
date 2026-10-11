@@ -440,8 +440,8 @@ pub(super) fn cancellation_reason<R: tauri::Runtime>(
 /// What the run's own record says stopped it, whatever the token says.
 ///
 /// GRD-FR-MDQZ / GRD-FR-TWMA: a pause, a shutdown and a project change each
-/// interrupt the run before its turn returns, and that interruption releases
-/// the stream and the in-memory reason with it. The stored interruption is then
+/// interrupt the run before its turn returns, and that interruption ends the
+/// loop's claim and the in-memory reason with it. The stored interruption is then
 /// the only record of who stopped the turn.
 pub(super) fn cancellation_reason_of<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,

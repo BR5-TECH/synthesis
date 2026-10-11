@@ -409,20 +409,15 @@ impl Outcome {
         self
     }
 
-    /// GRD-FR-BNTC: the run the focus moved from still holds its stream, in
-    /// memory and on the stream's durable record.
+    /// GRD-FR-BNTC: the run the focus moved from still holds its queue, in the
+    /// stored run and on the stream's durable record.
     pub(crate) fn expect_previous_holds_its_stream(self) -> Self {
         let previous = self.previous_run();
-        let holder = self
-            .fx
-            .app
-            .state::<crate::graduation::GraduationState>()
-            .holder_of(&previous.stream_id);
         let busy = crate::streams::stream_of(&self.fx.app, &previous.stream_id)
             .and_then(|stream| stream.busy_run_id);
         assert_eq!(
-            (holder.as_deref(), busy.as_deref()),
-            (Some(previous.id.as_str()), Some(previous.id.as_str())),
+            (previous.holds_queue(), busy.as_deref()),
+            (true, Some(previous.id.as_str())),
             "[{}] the run before this one still holds its stream",
             self.name
         );
@@ -436,6 +431,46 @@ impl Outcome {
             self.fx.reload(&other.run_id).state,
             state,
             "[{}] the state of the run labelled {label}",
+            self.name
+        );
+        self
+    }
+
+    /// GRD-FR-EPWW: a run the scenario enqueued beside its own was removed. Its
+    /// record, its place in the run order and its listing are gone, and its
+    /// draft is unlocked and carries no run-state tag (DRS-FR-CFJJ).
+    pub(crate) fn expect_run_removed(self, label: &'static str) -> Self {
+        let other = self.ctx.others.get(label);
+        assert!(
+            crate::graduation::load_run(&self.fx.app, &other.run_id).is_err(),
+            "[{}] the record of the run labelled {label} is deleted",
+            self.name
+        );
+        let queue = crate::graduation::project_queue(&self.fx.app).expect("the project's queue");
+        assert!(
+            !queue.runs.iter().any(|run| run.id == other.run_id),
+            "[{}] the run labelled {label} left the listing",
+            self.name
+        );
+        let index = crate::graduation::read_queue_index(
+            &crate::graduation::store_fs(&self.fx.app).expect("the store"),
+            &crate::graduation::store_base(&self.fx.app).expect("the store root"),
+            &self.fx.project_key(),
+        );
+        assert!(
+            !index.runs.iter().any(|entry| entry.run_id == other.run_id),
+            "[{}] the run labelled {label} left the run order",
+            self.name
+        );
+        let draft = format!("d-{label}");
+        assert!(
+            crate::graduation::draft_graduation(&queue, &draft).is_none(),
+            "[{}] the draft of the run labelled {label} carries no run-state tag",
+            self.name
+        );
+        assert!(
+            crate::graduation::require_unlocked_draft(&self.fx.app, &draft).is_ok(),
+            "[{}] the draft of the run labelled {label} is unlocked",
             self.name
         );
         self

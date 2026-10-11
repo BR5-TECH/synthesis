@@ -24,6 +24,8 @@ import {
   conditionOf,
   conditionSentence,
   failureStatement,
+  FAILED_HOLD_STATEMENT,
+  runsRemovedByDiscard,
   hasReadableProgress,
   iterationLabel,
   retryStatement,
@@ -287,6 +289,13 @@ export function RunRegion({
           {failureStatement(run)}
         </p>
       )}
+      {/* GRU-FR-QYEE: a failed run holds its queue until the author discards
+          it, so the runs behind it say they wait and what the discard does. */}
+      {run.state === "failed" && runsRemovedByDiscard(queue, run).length > 0 && (
+        <p className="t-meta" data-testid="graduation-failed-hold">
+          {FAILED_HOLD_STATEMENT}
+        </p>
+      )}
 
       {run.state === "completed" && commitSummary(run) && (
         <p className="graduation__outcome" data-testid="graduation-commits">
@@ -314,6 +323,7 @@ export function RunRegion({
       <div className="graduation__foot">
         <RunActionRow
           run={run}
+          queue={queue}
           busy={busy}
           act={act}
           onOpenDraft={onOpenDraft}

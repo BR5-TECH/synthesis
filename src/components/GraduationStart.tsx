@@ -505,8 +505,9 @@ export function GraduationStart({
                     className="t-ui-xs graduation-start__note"
                     data-testid="graduation-start-busy"
                   >
-                    A run is working in “{chosen.stream.name}” now. This one
-                    waits behind it.
+                    A run holds “{chosen.stream.name}” now, working or at rest.
+                    This one waits behind it until that run is completed or
+                    discarded.
                   </p>
                 )}
                 {/* GSD-FR-LHQY / GSD-FR-KDBU: the limit is a reason of its own,

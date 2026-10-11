@@ -269,7 +269,7 @@ describe("which stream the run belongs to", () => {
     const { onStarted } = draw();
     await waitFor(() => expect(picker()).toBeInTheDocument());
     expect(screen.getByTestId("graduation-start-busy")).toHaveTextContent(
-      /A run is working in .editor-work. now\. This one waits behind it\./,
+      /A run holds .editor-work. now, working or at rest\. This one waits behind it until that run is completed or discarded\./,
     );
     // Offered like any other: the busy stream is the one chosen, and starting
     // is available.

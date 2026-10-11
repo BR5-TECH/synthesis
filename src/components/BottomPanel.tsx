@@ -8,7 +8,7 @@ import {
 import { logWarn } from "../logging";
 import {
   coalesce,
-  holdsStream,
+  isAgentWork,
   isActive,
   isWorking,
   runTitle,
@@ -440,7 +440,7 @@ export function BottomPanel({
       // once.
       const byRecency = (a: GraduationRun, b: GraduationRun) =>
         a.updatedAt < b.updatedAt ? 1 : -1;
-      const working = queue.runs.filter((entry) => holdsStream(entry.state));
+      const working = queue.runs.filter((entry) => isAgentWork(entry.state));
       // RUN-FR-02 / RUN-FR-LQDT: where no run is working, the most recently
       // updated run that ran a turn stays, so a turn that has just ended — a
       // merge run's included — is still readable.

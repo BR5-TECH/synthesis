@@ -35,12 +35,13 @@ fn a_run_behind_a_completed_run_starts_from_its_commit() {
         .expect_committed_paths(&["src/header.ts"]);
 }
 
-// GTE-FR-YAEB, GTE-FR-PFEO / GRD-FR-BNTC, GRL-FR-QZFB, GRD-FR-WKMD: a run behind
-// a `blocked` run cannot start, because the blocked run holds the stream. Once
-// the same condition rests the first run for the author, the stream is free
-// and the run behind it works to completion.
+// GTE-FR-YAEB, GTE-FR-PFEO, GTE-FR-ANSL / GRD-FR-BNTC, GRL-FR-QZFB, GRD-FR-WKMD:
+// a run behind a `blocked` run cannot start, because the blocked run holds the
+// queue. The same condition again rests the first run for the author, and it
+// keeps the queue: the run behind it still cannot start. The author's discard
+// of the first run is what ends the hold, and it removes the run behind it.
 #[test]
-fn a_run_behind_a_blocked_run_waits_until_the_repeat_rests_the_first_for_the_author() {
+fn a_run_behind_a_blocked_run_waits_for_the_author_and_goes_with_a_discard() {
     Scenario::named("run behind a blocked run")
         .with_prompt("   ")
         .with_run_on_stream("behind", "editor", "Write the header.")
@@ -49,17 +50,12 @@ fn a_run_behind_a_blocked_run_waits_until_the_repeat_rests_the_first_for_the_aut
         .expect_cannot_start("behind")
         .continued(Vec::new())
         .expect_state(GraduationRunState::AwaitingAuthor)
+        .expect_stream_held()
+        .expect_cannot_start("behind")
+        .discarded()
+        .expect_state(GraduationRunState::Discarded)
         .expect_stream_released()
-        .driving(
-            "behind",
-            vec![
-                Script::reports_success().writes("src/header.ts", "1\n"),
-                Script::answers_ready("The header is there."),
-            ],
-        )
-        .expect_state(GraduationRunState::Completed)
-        .expect_previous_state(GraduationRunState::AwaitingAuthor)
-        .expect_committed_paths(&["src/header.ts"]);
+        .expect_run_removed("behind");
 }
 
 // GTE-FR-HWQM, GTE-FR-KAZX / GRD-FR-BNTC, WKS-FR-NDSV: under the default limit of
@@ -119,12 +115,12 @@ fn a_wider_stream_limit_lets_a_second_stream_work_alongside() {
         .expect_stream_released();
 }
 
-// GTE-FR-HWQM, GTE-FR-YAEB / GRD-FR-EWTN, GRD-FR-HQPD, WKS-FR-JQJA: a discard
-// during a turn releases the stream in memory and on its durable record, so
-// the run behind it claims the stream and takes the discarded turn's work as
-// standing work.
+// GTE-FR-HWQM, GTE-FR-TKTJ / GRD-FR-EWTN, GRD-FR-QCZF, WKS-FR-JQJA: a discard
+// during a turn releases the stream in memory and on its durable record and
+// removes the run queued behind it. The cancelled turn's work stays uncommitted
+// in the working copy.
 #[test]
-fn a_run_behind_a_run_discarded_mid_turn_takes_the_stream_and_its_work() {
+fn a_run_behind_a_run_discarded_mid_turn_is_removed_and_the_turns_work_stays() {
     Scenario::named("run behind a mid-turn discard")
         .with_run_on_stream("behind", "editor", "Write the header.")
         .work_turn(
@@ -135,16 +131,6 @@ fn a_run_behind_a_run_discarded_mid_turn_takes_the_stream_and_its_work() {
         .run()
         .expect_state(GraduationRunState::Discarded)
         .expect_stream_released()
-        .driving(
-            "behind",
-            vec![
-                Script::reports_success().writes("src/header.ts", "1\n"),
-                Script::answers_ready("The header is there."),
-            ],
-        )
-        .expect_state(GraduationRunState::Completed)
-        .expect_standing_work(true, None, None)
-        .expect_base_is_standing_commit()
-        .expect_paths_since_run_base(&["src/header.ts"])
-        .expect_committed_paths(&["src/header.ts", "src/left.ts"]);
+        .expect_run_removed("behind")
+        .worktree_holds("src/left.ts", "left behind\n");
 }

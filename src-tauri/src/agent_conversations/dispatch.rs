@@ -322,9 +322,10 @@ pub fn dispatch_impl<R: tauri::Runtime>(
     };
 
     let app = app.clone();
-    std::thread::spawn(move || {
+    let thread = std::thread::spawn(move || {
         run_turn(&app, plan);
     });
+    turns.keep_turn_thread(thread);
 
     Ok(turn)
 }

@@ -147,6 +147,12 @@ pub struct TurnRegistry {
     /// when a project closes or a worktree changes (LGC-FR-15) and the tests of
     /// those paths run alongside these.
     pub(super) buffer: &'static LogBuffer,
+    /// The threads of the turns this registry ran. Test-only: a test joins them
+    /// to know that every turn has fully ended, including the release of its
+    /// progress operation, without a wait on time. The application keeps no
+    /// handle, and each turn thread stays detached.
+    #[cfg(test)]
+    turn_threads: Mutex<Vec<std::thread::JoinHandle<()>>>,
 }
 
 /// CVL-FR-PDXK: what one turn is bounded by, read before that turn runs.
@@ -176,6 +182,8 @@ impl TurnRegistry {
             jitter: Box::new(SystemJitter),
             retry: RetryPolicy::default(),
             buffer: &logging::BUFFER,
+            #[cfg(test)]
+            turn_threads: Mutex::new(Vec::new()),
         }
     }
 
@@ -818,6 +826,34 @@ impl TurnRegistry {
 
     pub(super) fn all_turn_ids(&self) -> Vec<String> {
         self.lock().live.keys().cloned().collect()
+    }
+
+    /// Keep the thread of a dispatched turn so that a test can join it. The
+    /// application keeps nothing, so the thread stays detached.
+    #[cfg(not(test))]
+    pub(super) fn keep_turn_thread(&self, _thread: std::thread::JoinHandle<()>) {}
+
+    /// Keep the thread of a dispatched turn so that a test can join it.
+    #[cfg(test)]
+    pub(super) fn keep_turn_thread(&self, thread: std::thread::JoinHandle<()>) {
+        self.turn_threads.lock().unwrap_or_else(|e| e.into_inner()).push(thread);
+    }
+
+    /// Block until every turn thread this registry ran has returned. After this,
+    /// each turn has done all of its work, including the release of its progress
+    /// operation. A thread that panicked is joined like any other.
+    #[cfg(test)]
+    pub(super) fn join_turn_threads(&self) {
+        loop {
+            let threads =
+                std::mem::take(&mut *self.turn_threads.lock().unwrap_or_else(|e| e.into_inner()));
+            if threads.is_empty() {
+                return;
+            }
+            for thread in threads {
+                let _ = thread.join();
+            }
+        }
     }
 
     /// How many of the AGC-FR-25 slots are free right now.

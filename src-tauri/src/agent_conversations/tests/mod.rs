@@ -544,6 +544,13 @@ impl Harness {
 
     /// Wait until every turn has left the in-flight set. Turns run on their own
     /// threads, so the alternative is a fixed sleep — flaky in both directions.
+    /// Block until every turn this harness dispatched has fully ended: its
+    /// thread has returned, so its delivery, its terminal state and the release
+    /// of its progress operation are all done. A wait on an event, not on time.
+    fn join_turns(&self) {
+        self.turns().join_turn_threads();
+    }
+
     fn settle(&self) {
         for _ in 0..600 {
             if self.turns().in_flight(None).is_empty() {

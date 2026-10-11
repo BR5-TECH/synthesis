@@ -503,19 +503,6 @@ fn wait_for_agent_operation(h: &Harness) -> crate::progress::Operation {
     panic!("no agent operation was reported");
 }
 
-/// Wait until no agent operation is in flight. A turn leaves the registry
-/// before `finish` releases its operation, so an empty registry does not yet
-/// mean an empty operation set.
-fn wait_for_no_agent_operation(h: &Harness) {
-    for _ in 0..500 {
-        if agent_operations(h).is_empty() {
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(10));
-    }
-    panic!("an agent operation was still reported: {:?}", agent_operations(h));
-}
-
 #[test]
 fn a_running_turn_is_reported_as_an_agent_operation_and_leaves_the_set_when_it_ends() {
     // PRG-FR-02, PRG-FR-08 / AGC-FR-24, PRG-FR-KXQW.
@@ -584,11 +571,43 @@ fn a_turn_waiting_for_a_call_slot_is_not_reported_until_it_holds_one() {
     panic!("the second turn was never reported");
 }
 
+/// A seam that tells the test when a call reached the model, and then holds the
+/// call until the test opens the gate. The turn that makes the call holds its
+/// slot for as long as the gate is shut, so a test orders the turns by events
+/// and never by a delay.
+struct HeldCompletion {
+    entered: Mutex<std::sync::mpsc::Sender<()>>,
+    gate: Arc<(Mutex<bool>, Condvar)>,
+}
+
+impl CompletionSeam for HeldCompletion {
+    fn complete(
+        &self,
+        _request: &AgentRequest,
+        _exchange: &[rig::completion::Message],
+        _endpoint: &AiApiCall,
+        _timeout: Duration,
+    ) -> Result<ModelReply, CallFailure> {
+        let _ = self.entered.lock().unwrap_or_else(|e| e.into_inner()).send(());
+        let (lock, cvar) = &*self.gate;
+        let mut open = lock.lock().unwrap_or_else(|e| e.into_inner());
+        while !*open {
+            open = cvar.wait(open).unwrap_or_else(|e| e.into_inner());
+        }
+        Ok(ModelReply { text: "1".into(), ..Default::default() })
+    }
+}
+
 #[test]
 fn a_turn_cancelled_while_it_waits_for_a_slot_never_registers_an_operation() {
     // AGC-FR-24: a turn that ends before it holds a slot registers no operation,
     // and the turn holding the slot is unaffected.
-    let h = Harness::with(vec![Ok("1".into()), Ok("2".into())], Duration::from_millis(300), 1);
+    let (entered, reached_model) = std::sync::mpsc::channel();
+    let gate = Arc::new((Mutex::new(false), Condvar::new()));
+    let h = Harness::with_seam(
+        Box::new(HeldCompletion { entered: Mutex::new(entered), gate: gate.clone() }),
+        1,
+    );
     let arch = h.create_agent("arch", "");
     let sec = h.create_agent("sec", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
@@ -602,8 +621,12 @@ fn a_turn_cancelled_while_it_waits_for_a_slot_never_registers_an_operation() {
         });
     }
 
+    // The first turn reaches the model, so it holds the only slot and its
+    // operation is registered. The shut gate keeps it there.
     h.dispatch("arch", origin.clone(), &trigger).expect("arch");
-    wait_for_agent_operation(&h);
+    // The bound only turns a hang into a failure. A correct run never comes
+    // near it, so it decides no result.
+    reached_model.recv_timeout(Duration::from_secs(60)).expect("the first turn reached the model");
     h.dispatch("sec", origin, &trigger).expect("sec");
     assert_eq!(h.turns().in_flight(None).len(), 2);
 
@@ -616,8 +639,11 @@ fn a_turn_cancelled_while_it_waits_for_a_slot_never_registers_an_operation() {
     assert!(agent_operations(&h)[0].label.contains("@arch"));
 
     // The slot frees and the cancelled turn wakes: it still registers nothing.
-    h.settle();
-    wait_for_no_agent_operation(&h);
+    // Both threads are joined, so each turn has done all of its work.
+    *gate.0.lock().unwrap() = true;
+    gate.1.notify_all();
+    h.join_turns();
+    assert!(agent_operations(&h).is_empty());
     let events = seen.lock().unwrap();
     assert!(
         !events.iter().any(|payload| payload.contains("@sec")),

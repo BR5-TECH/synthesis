@@ -45,7 +45,11 @@ import {
 import { Icon } from "./icons";
 import { StandingWorkChoice } from "./StandingWorkChoice";
 import { CapacityUnread, SlotWait, useGraduationCapacity } from "./GraduationStart/capacity";
-import { DestinationChoice, type Destination } from "./GraduationStart/destination";
+import {
+  DestinationChoice,
+  type Destination,
+  type DestinationInput,
+} from "./GraduationStart/destination";
 import { DirectChoice, directBlocker } from "./GraduationStart/direct";
 import { NewStreamFields } from "./GraduationStart/newStream";
 import { useGraduationQueueRuns } from "./GraduationStart/queue";
@@ -85,6 +89,10 @@ export function GraduationStart({
   const [preflight, setPreflight] = useState<DirectGraduationPreflight | null>(null);
   const [preflightError, setPreflightError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
+  // GSD-FR-WMTD: the name field takes focus when the dialog opens on a choice
+  // that asks it and when such a choice is clicked, but not while the arrow
+  // keys walk the destination toggle, which would take focus out of it.
+  const nameTakesFocus = useRef(true);
   const [standingWork, setStandingWork] =
     useState<StandingWork>(DEFAULT_STANDING_WORK);
   const [message, setMessage] = useState("");
@@ -208,7 +216,7 @@ export function GraduationStart({
   // stream is chosen. The branch checked out in the active worktree rests first.
   useEffect(() => {
     if (!makesStream) return;
-    nameRef.current?.focus();
+    if (nameTakesFocus.current) nameRef.current?.focus();
     let live = true;
     api
       .listWorktreesAndBranches()
@@ -265,8 +273,9 @@ export function GraduationStart({
    * other destination held is cleared. A return to Existing stream applies the
    * selected stream's default again.
    */
-  const selectDestination = (value: Destination) => {
+  const selectDestination = (value: Destination, via: DestinationInput) => {
     setError(null);
+    nameTakesFocus.current = via === "click";
     const makes = value === "new" || value === "temporary";
     if (makes && !makesStream) {
       messageEdited.current = false;

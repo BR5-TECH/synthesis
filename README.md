@@ -4,7 +4,7 @@ Synthesis is an IDE for software engineers working with AI in a spec-driven way.
 
 ### How to use it
 
-Engineer writes a draft of a feature/change/requirement as a prompt. AI agent personas read it, ask questions, and propose edits. Engineer brainstorms it with AI agent personas. When the draft is ready, engineer may **graduate** it. Then your coding agent (e.g. Claude Code or Codex) does the work using the skills defined in the repository in a Docker container on a Git branch. A second agent session reviews the result.  This loop repeats until reviewer is happy.
+Engineer writes a draft of a feature/change/requirement as a prompt. AI agent personas read it, ask questions, and propose edits. Engineer brainstorms it with AI agent personas. When the draft is ready, engineer may **graduate** it. Then your coding agent (e.g. Claude Code or Codex) does the work using the skills defined in the repository in a Docker container on a Git branch. A second agent session reviews the result. This loop repeats until reviewer is happy.
 
 ### What it is not
 
@@ -18,9 +18,16 @@ Synthesis is a Tauri 2 application. The user interface uses React 19 and TypeScr
 
 You bring your own AI API keys, subscriptions. You bring the intelligence.
 
+### How it runs
+
+The process is split in two phases:
+
+- Work on feature/change requirement as a prompt: AI agent is isolated from the filesystem, and can only access few specific tools and artifact types inside the project. No source code access. No raw files access. No grep. No exec.
+- Agentic harness as a CLI (E.g. Claude Code): runs in a Docker container engineer defines in headlesss mode with all capabilities dropped. 
+
 ## Status
 
-Synthesis is in early development. The version is 0.1.0.
+Synthesis is in very early development. The version is 0.1.0.
 
 - The application is for one author on one computer.
 - There are no signed builds and no published releases. You build it from source.

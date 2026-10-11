@@ -15,6 +15,8 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { resetLogBufferForTest } from "../logging";
+
 import { type AgenticIntegration, type AgenticVendorId, AI_ERRORS } from "../types";
 import {
   AGENTIC_ALL,
@@ -29,6 +31,7 @@ import {
   cliVerified,
   commandsFor,
 } from "../test/aiIntegrationsFixtures";
+import { implementAllAgenticVendorsForTest } from "./agenticImplemented";
 
 // The section reaches the backend only through `invoke`; mock the bridge so
 // jsdom never needs the Tauri runtime — and so no test can spawn a real CLI or
@@ -45,6 +48,9 @@ const argsOf = argsOfFor(invokeMock);
 
 beforeEach(() => {
   invokeMock.mockReset();
+  // AII-FR-OTQY logs when a read-only tab opens. The flush timer must not
+  // go to the next test.
+  resetLogBufferForTest();
 });
 
 afterEach(cleanup);
@@ -168,6 +174,9 @@ describe("the Agentic level", () => {
   });
 
   it("verifies an API-kind agent with the fields of its own kind (AII-FR-19, AII-FR-20)", async () => {
+    // AII-FR-OTQY / SET-FR-GVED: this test uses a vendor that the settings UI
+    // does not implement yet, so it opens the vendor gate.
+    implementAllAgenticVendorsForTest();
     // AII-FR-19 / FR-20 / AIC-FR-25: the config carries a base URL and a key,
     // and no path.
     backend(
@@ -224,6 +233,9 @@ describe("the Agentic level", () => {
   });
 
   it("commits a CLI path on a successful verification (AII-FR-20, AII-FR-21, AII-FR-49)", async () => {
+    // AII-FR-OTQY / SET-FR-GVED: this test uses a vendor that the settings UI
+    // does not implement yet, so it opens the vendor gate.
+    implementAllAgenticVendorsForTest();
     // AII-FR-20 / FR-21 / FR-49. Codex rather than Claude Code, because the
     // payload under test is the credential-free one: a path and nothing else,
     // with no token value of any kind riding along.
@@ -327,6 +339,9 @@ describe("the Agentic level", () => {
 
 describe("the Agentic level", () => {
   it("hands the single active marker across kinds (AII-FR-25)", async () => {
+    // AII-FR-OTQY / SET-FR-GVED: this test uses a vendor that the settings UI
+    // does not implement yet, so it opens the vendor gate.
+    implementAllAgenticVendorsForTest();
     // AII-FR-25: one active choice spans CLI and API vendors alike.
     let list: AgenticIntegration[] = [
       cliVerified("claude_code", "/usr/bin/claude", { active: true }),

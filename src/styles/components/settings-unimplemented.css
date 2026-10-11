@@ -1,0 +1,33 @@
+/* AII-FR-OTQY, SET-FR-GVED: a settings tab whose vendor is not implemented yet. */
+.to-be-implemented {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-1);
+  border-radius: 6px;
+  background: var(--bg-sunken);
+}
+
+.to-be-implemented__title {
+  font-size: var(--fs-ui-md);
+  font-weight: 600;
+  color: var(--fg-1);
+}
+
+.to-be-implemented__detail {
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-2);
+}
+
+/* The fieldset that holds a tab's rows. The reset removes the browser frame,
+   so the rows have the same layout in every tab. */
+.settings-panel {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+/* A disabled fieldset disables every control in it. */
+.settings-panel--unimplemented {
+  opacity: 0.5;
+}

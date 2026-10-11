@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { implementAllAgenticVendorsForTest } from "./agenticImplemented";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -399,6 +400,9 @@ describe("Project settings → Docker → Build context (SET-FR-KDRP, SET-FR-FPC
   });
 
   it("SET-FR-25: a refused save on one vendor's tab does not hold back the Build of another vendor", async () => {
+    // AII-FR-OTQY / SET-FR-GVED: this test uses a vendor that the settings UI
+    // does not implement yet, so it opens the vendor gate.
+    implementAllAgenticVendorsForTest();
     const user = userEvent.setup();
     backend({
       save: (entry, vendor) => {

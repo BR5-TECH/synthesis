@@ -301,7 +301,7 @@ describe("GitHub polling in the main window", () => {
     let dialog = await screen.findByRole("dialog", { name: /Graduate/ });
     await within(dialog).findByRole("combobox", { name: "Work stream" });
     const answered = Array.from(
-      dialog.querySelectorAll<HTMLElement>("input, select, textarea"),
+      dialog.querySelectorAll<HTMLElement>('input, select, textarea, [role="radio"]'),
     )
       .map((control) => control.id || control.getAttribute("value"))
       .sort();

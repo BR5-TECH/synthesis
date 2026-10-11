@@ -11,6 +11,7 @@ import type {
   ProjectAgenticIntegration,
   ProjectAiApiIntegration,
 } from "../types";
+import { implementAllAgenticVendorsForTest } from "./agenticImplemented";
 
 // SET-FR-13 / SET-FR-14: the Project section names which agentic integration and
 // which AI API integration this project uses, and how each resolved. The
@@ -142,6 +143,9 @@ const invoked = (cmd: string) =>
 
 describe("the Project section's AI integration controls (SET-FR-13 / SET-FR-14)", () => {
   it("SET-FR-13 names the inherited agentic choice, then overrides it without a dirty state", async () => {
+    // AII-FR-OTQY / SET-FR-GVED: this test uses a vendor that the settings UI
+    // does not implement yet, so it opens the vendor gate.
+    implementAllAgenticVendorsForTest();
     backend({
       agenticResolved: {
         vendor: "claude_code",

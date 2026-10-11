@@ -9,6 +9,7 @@ import {
   type ProjectAiApiIntegration,
 } from "../types";
 import { aiErrorMessage } from "./aiErrorMessage";
+import { isAgenticVendorImplemented } from "./agenticImplemented";
 import { notifyAgentRegistryChanged } from "../state/agentRegistry";
 
 // ---------------------------------------------------------------------------
@@ -113,8 +114,12 @@ function ProjectIntegrationControl<Id extends string>(props: {
         </div>
       )}
 
-      {/* Nothing to choose between until at least one integration verifies. */}
-      {resolved && choosable.length > 0 && !choosing && (
+      {/* Nothing to choose between until at least one integration verifies.
+          A recorded override keeps the action, so the author can always
+          return to the inherit entry (AII-FR-OTQY). */}
+      {resolved &&
+        (choosable.length > 0 || resolved.overrideId !== null) &&
+        !choosing && (
         <button
           className="btn btn--ghost btn--sm btn--inline-start"
           style={{ marginTop: 10 }}
@@ -138,6 +143,15 @@ function ProjectIntegrationControl<Id extends string>(props: {
           {/* AII-FR-32: the entry meaning "inherit the global choice", which
               clears the override rather than naming one. */}
           <option value="">Inherit the global choice</option>
+          {/* AII-FR-OTQY: a recorded override the list does not offer stays
+              the shown value, disabled. Without it the inherit entry shows
+              first, and choosing it fires no change. */}
+          {resolved?.overrideId &&
+            !choosable.some((i) => i.id === resolved.overrideId) && (
+              <option value={resolved.overrideId} disabled>
+                {nameOf(resolved.overrideId)}
+              </option>
+            )}
           {choosable.map((i) => (
             <option key={i.id} value={i.id}>
               {i.displayName}
@@ -245,8 +259,12 @@ export function ProjectAiIntegrations() {
             resolution: agentic.resolution,
           }
         }
+        // AII-FR-32 / AII-FR-OTQY: verified and implemented integrations only.
+        // A recorded override to any other still renders as resolved above.
         choosable={agenticList
-          .filter((i) => i.state === "verified")
+          .filter(
+            (i) => i.state === "verified" && isAgenticVendorImplemented(i.vendor),
+          )
           .map((i) => ({ id: i.vendor, displayName: i.displayName }))}
         nameOf={(id) =>
           agenticList.find((i) => i.vendor === id)?.displayName ?? id ?? ""

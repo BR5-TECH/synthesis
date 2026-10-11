@@ -15,6 +15,8 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { resetLogBufferForTest } from "../logging";
+
 import {
   AGENTIC_TURN_KINDS,
   type AgenticIntegration,
@@ -32,6 +34,7 @@ import {
   commandsFor,
   optionsOf,
 } from "../test/aiIntegrationsFixtures";
+import { implementAllAgenticVendorsForTest } from "./agenticImplemented";
 
 // The section reaches the backend only through `invoke`; mock the bridge so
 // jsdom never needs the Tauri runtime — and so no test can spawn a real CLI or
@@ -48,6 +51,9 @@ const argsOf = argsOfFor(invokeMock);
 
 beforeEach(() => {
   invokeMock.mockReset();
+  // AII-FR-OTQY logs when a read-only tab opens. The flush timer must not
+  // go to the next test.
+  resetLogBufferForTest();
 });
 
 afterEach(cleanup);
@@ -663,6 +669,9 @@ describe("the Agentic level", () => {
   });
 
   it("counts only the per-task selectors it renders (AII-FR-PMZK, AII-FR-24)", async () => {
+    // AII-FR-OTQY / SET-FR-GVED: this test uses a vendor that the settings UI
+    // does not implement yet, so it opens the vendor gate.
+    implementAllAgenticVendorsForTest();
     // AII-FR-PMZK: the summary counts what the section renders, so it and the
     // rows beneath it always agree. A vendor that declares no effort levels can
     // still hold a stored effort override — the backend keys its maps on the

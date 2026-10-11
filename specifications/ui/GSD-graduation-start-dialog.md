@@ -28,7 +28,7 @@ The one surface a graduation run is started from. A draft's **Graduate** action 
 14. **GSD-FR-WMTD** The dialog is operable by keyboard alone. Focus moves into it when it opens, **Escape** and the backdrop dismiss it while no start is in flight, and every choice, state and refusal is carried in words rather than by colour alone.
 15. **GSD-FR-LXAF** For a GitHub-shadow draft the dialog is unchanged: it asks the same questions, offers the same choices, and starts nothing on its own. Cancelling it, or a refused start, changes nothing about the draft or its GitHub issue (per `../core/GPP-github-polling.md` GPP-FR-ZLBF).
 
-16. **GSD-FR-BZHW** The destination is one choice of four: **Existing stream**, **New stream**, **Temporary stream** and **Work directly**. It rests on **Existing stream** where the project holds a usable stream. Each choice shows only its own fields, and the confirm names the choice.
+16. **GSD-FR-BZHW** The destination is one choice of four: **Existing stream**, **New stream**, **Temporary stream** and **Work directly**. The four are one segmented toggle on one line, and the four segments have equal width. A choice that is not offered stays in the toggle as a disabled segment. It rests on **Existing stream** where the project holds a usable stream. Each choice shows only its own fields, and the confirm names the choice.
 17. **GSD-FR-QGTC** **New stream** and **Temporary stream** each ask a name and the branch the stream is created from, on the terms of `WSS-work-stream-selector.md` WSS-FR-XZRO, inside this dialog. Confirming invokes `create_work_stream`, then `start_graduation` on the new stream. The new stream is free, so the standing-work choice is asked only where the project-wide limit is full (GSD-FR-LHQY). A name refusal renders against the name field.
 18. **GSD-FR-TZGT** A stream the dialog created stays when the start that follows is refused. The dialog lists it, selects it as an existing stream, and a retry starts on it without creating a second one. A temporary stream stays temporary.
 19. **GSD-FR-FQQP** **Work directly** names the active worktree by its directory name and absolute path, and its branch, read through `preflight_direct_graduation`. It states that the run writes in that worktree on that branch and commits there. It asks no standing-work choice and no commit message.
@@ -52,8 +52,10 @@ The one surface a graduation run is started from. A draft's **Graduate** action 
         │  through.                                                │
         │                                                          │
         │  WHERE THE RUN WORKS                                     │
-        │  (•) Existing stream  ( ) New stream ( ) Temporary stream │
-        │  ( ) Work directly                                       │
+        │  ┌────────────┬────────────┬────────────┬────────────┐   │
+        │  │▓ Existing ▓│    New     │ Temporary  │    Work    │   │
+        │  │▓  stream  ▓│   stream   │   stream   │  directly  │   │
+        │  └────────────┴────────────┴────────────┴────────────┘   │
         │                                                          │
         │  WORK STREAM                                             │
         │  ┌────────────────────────────────────────────────────┐  │
@@ -88,8 +90,10 @@ A stream that dispatches at once asks the stream and nothing else:
         │  through.                                                │
         │                                                          │
         │  WHERE THE RUN WORKS                                     │
-        │  (•) Existing stream  ( ) New stream ( ) Temporary stream │
-        │  ( ) Work directly                                       │
+        │  ┌────────────┬────────────┬────────────┬────────────┐   │
+        │  │▓ Existing ▓│    New     │ Temporary  │    Work    │   │
+        │  │▓  stream  ▓│   stream   │   stream   │  directly  │   │
+        │  └────────────┴────────────┴────────────┴────────────┘   │
         │                                                          │
         │  WORK STREAM                                             │
         │  ┌────────────────────────────────────────────────────┐  │
@@ -125,8 +129,10 @@ Work directly names the worktree and asks nothing else:
         ┌─ ↥  Graduate "Run logs" ───────────────────────────── ✕ ─┐
         │                                                          │
         │  WHERE THE RUN WORKS                                     │
-        │  ( ) Existing stream  ( ) New stream ( ) Temporary stream │
-        │  (•) Work directly                                       │
+        │  ┌────────────┬────────────┬────────────┬────────────┐   │
+        │  │  Existing  │    New     │ Temporary  │▓   Work   ▓│   │
+        │  │   stream   │   stream   │   stream   │▓ directly ▓│   │
+        │  └────────────┴────────────┴────────────┴────────────┘   │
         │                                                          │
         │  The run works in acme-platform-main, on branch          │
         │  feature/new-window, and commits there. Edits you make   │
@@ -137,7 +143,7 @@ Work directly names the worktree and asks nothing else:
         └──────────────────────────────────────────────────────────┘
 ```
 
-- Layout notes: the dialog is one modal window over a backdrop, with a head carrying the draft's name and a close control, a body, and an action row at the foot. The body scrolls on its own where the window is short, and the action row stays reachable at every window height. What is asked reads top to bottom in the order it is answered: the destination first, then the fields of that destination, then — for a waiting stream run — what the run does with standing work in it, then the message that commit takes. The busy statement stands with the stream control it is about, and the message field stands under the positions that commit. A refusal renders above the action row and moves no answer.
+- Layout notes: the dialog is one modal window over a backdrop, with a head carrying the draft's name and a close control, a body, and an action row at the foot. The body scrolls on its own where the window is short, and the action row stays reachable at every window height. The destination toggle fills the width of the body, and the chosen segment shows by fill and by weight. What is asked reads top to bottom in the order it is answered: the destination first, then the fields of that destination, then — for a waiting stream run — what the run does with standing work in it, then the message that commit takes. The busy statement stands with the stream control it is about, and the message field stands under the positions that commit. A refusal renders above the action row and moves no answer.
 
 ## UI contract boundary
 

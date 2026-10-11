@@ -11,7 +11,7 @@ import {
   type AgenticVendorId,
   type AgenticVerifyConfig,
 } from "../types";
-import { logWarn } from "../logging";
+import { logDebug, logWarn } from "../logging";
 import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
 import { aiErrorMessage } from "./aiErrorMessage";
 import { FilterableSelect, type FilterableOption } from "./FilterableSelect";
@@ -34,6 +34,8 @@ import {
   rendersOauthTokenField,
   type AgenticDraft,
 } from "./agenticDraft";
+import { isAgenticVendorImplemented } from "./agenticImplemented";
+import { ToBeImplementedNotice } from "./ToBeImplementedNotice";
 
 /**
  * The **Agentic AI** level of `specifications/ui/AII-ai-integrations.md`
@@ -92,6 +94,20 @@ export function AgenticAiIntegrations() {
   }, []);
 
   const current = integrations?.find((i) => i.vendor === vendor) ?? null;
+  /** AII-FR-OTQY: a tab of a vendor that is not implemented yet is read-only. */
+  const currentImplemented = current
+    ? isAgenticVendorImplemented(current.vendor)
+    : true;
+
+  // AII-FR-OTQY: one record each time a read-only tab opens, so a report of
+  // "the fields do nothing" can be matched to the gate.
+  useEffect(() => {
+    if (current && !currentImplemented) {
+      logDebug(["frontend", "ai"], "agentic tab not implemented", {
+        vendor: current.vendor,
+      });
+    }
+  }, [current?.vendor, currentImplemented]);
 
   /** AII-FR-21: leaving a tab discards its unverified candidate. */
   const onSelectVendor = (next: AgenticVendorId) => {
@@ -127,6 +143,8 @@ export function AgenticAiIntegrations() {
   // Detection persists nothing, so a value it produces is still only a candidate.
   useEffect(() => {
     if (!current || current.kind !== "cli" || detected[current.vendor]) return;
+    // AII-FR-OTQY: a tab that is not implemented invokes no operation.
+    if (!isAgenticVendorImplemented(current.vendor)) return;
     if (gatewayOpen) return;
     if (current.binaryPath) return;
     const target = current.vendor;
@@ -165,6 +183,8 @@ export function AgenticAiIntegrations() {
   };
 
   const onBrowse = async (target: AgenticVendorId) => {
+    // AII-FR-OTQY: a tab that is not implemented invokes no operation.
+    if (!isAgenticVendorImplemented(target)) return;
     try {
       const result = await api.browseForFile();
       if (result !== "cancelled" && result?.selected?.path) {
@@ -180,6 +200,8 @@ export function AgenticAiIntegrations() {
     target: AgenticVendorId,
     config: AgenticVerifyConfig,
   ): Promise<void> => {
+    // AII-FR-OTQY: a tab that is not implemented invokes no operation.
+    if (!isAgenticVendorImplemented(target)) return;
     setBusy((prev) => ({ ...prev, [target]: "verifying" }));
     setConfigErrors((prev) => ({ ...prev, [target]: "" }));
     try {
@@ -224,6 +246,8 @@ export function AgenticAiIntegrations() {
     turnKind: AgenticTurnKind | null,
     modelId: string | null,
   ) => {
+    // AII-FR-OTQY: a tab that is not implemented invokes no operation.
+    if (!isAgenticVendorImplemented(target)) return;
     setActionErrors((prev) => ({ ...prev, [target]: "" }));
     try {
       replace(await api.setAgenticIntegrationModel(target, turnKind, modelId));
@@ -249,6 +273,8 @@ export function AgenticAiIntegrations() {
     turnKind: AgenticTurnKind | null,
     effortId: string | null,
   ) => {
+    // AII-FR-OTQY: a tab that is not implemented invokes no operation.
+    if (!isAgenticVendorImplemented(target)) return;
     setActionErrors((prev) => ({ ...prev, [target]: "" }));
     try {
       replace(await api.setAgenticIntegrationEffort(target, turnKind, effortId));
@@ -264,6 +290,8 @@ export function AgenticAiIntegrations() {
 
   // AII-FR-25: exactly one integration is active in this level, across kinds.
   const onActivate = async (target: AgenticVendorId) => {
+    // AII-FR-OTQY: a tab that is not implemented invokes no operation.
+    if (!isAgenticVendorImplemented(target)) return;
     setBusy((prev) => ({ ...prev, [target]: "working" }));
     setActionErrors((prev) => ({ ...prev, [target]: "" }));
     try {
@@ -278,6 +306,8 @@ export function AgenticAiIntegrations() {
 
   // AII-FR-26: back to the unconfigured presentation.
   const onClear = async (target: AgenticVendorId) => {
+    // AII-FR-OTQY: a tab that is not implemented invokes no operation.
+    if (!isAgenticVendorImplemented(target)) return;
     setBusy((prev) => ({ ...prev, [target]: "working" }));
     setActionErrors((prev) => ({ ...prev, [target]: "" }));
     try {
@@ -364,7 +394,12 @@ export function AgenticAiIntegrations() {
             className="btn btn--ghost btn--sm"
             data-active={i.vendor === vendor}
             data-kind={i.kind}
-            style={settingsTabStyle(i.vendor === vendor)}
+            // AII-FR-OTQY: still selectable, with a grayed label.
+            data-unimplemented={!isAgenticVendorImplemented(i.vendor)}
+            style={settingsTabStyle(
+              i.vendor === vendor,
+              !isAgenticVendorImplemented(i.vendor),
+            )}
             onClick={() => onSelectVendor(i.vendor)}
           >
             {i.displayName}
@@ -389,335 +424,347 @@ export function AgenticAiIntegrations() {
           role="tabpanel"
           aria-label={current.displayName}
         >
-          {current.active && (
-            <div
-              className="badge badge--ok"
-              style={{ marginBottom: 14 }}
-              data-testid="agentic-active-marker"
-            >
-              ● Active
-            </div>
-          )}
+          {/* AII-FR-OTQY: the statement comes first. A disabled fieldset then
+              disables every field, selector, and action of the tab at once. */}
+          {!currentImplemented && <ToBeImplementedNotice />}
+          <fieldset
+            disabled={!currentImplemented}
+            className={
+              currentImplemented
+                ? "settings-panel"
+                : "settings-panel settings-panel--unimplemented"
+            }
+          >
+            {current.active && (
+              <div
+                className="badge badge--ok"
+                style={{ marginBottom: 14 }}
+                data-testid="agentic-active-marker"
+              >
+                ● Active
+              </div>
+            )}
 
-          {/* AII-FR-16: a tab renders the configuration fields of its own kind
-              and no others, in the same position either way. */}
-          {current.kind === "cli" ? (
-            <>
-              {/* AII-FR-IUUM: Claude Code chooses between its two credential
-                  shapes above the binary field. */}
-              {hasTokenField && (
-                <ClaudeAuthTabs
-                  mode={draft.authMode}
-                  // AII-FR-53: a token typed under the sub-tab being left
-                  // goes with it, so neither field outlives the view it was
-                  // typed in.
-                  onChoose={(authMode) =>
-                    onEditDraft(
-                      current.vendor,
-                      authMode === "custom_gateway"
-                        ? { authMode, oauthToken: "" }
-                        : { authMode, gatewayToken: "" },
-                    )
-                  }
-                />
-              )}
-              {/* AII-FR-IUUM: the Custom Gateway sub-tab runs no binary, so it
-                  renders no binary field. */}
-              {!(hasTokenField && draft.authMode === "custom_gateway") && (
-                <div
-                  className="picker-field"
-                  style={{ marginBottom: hasTokenField ? 10 : 4 }}
-                >
+            {/* AII-FR-16: a tab renders the configuration fields of its own kind
+                and no others, in the same position either way. */}
+            {current.kind === "cli" ? (
+              <>
+                {/* AII-FR-IUUM: Claude Code chooses between its two credential
+                    shapes above the binary field. */}
+                {hasTokenField && (
+                  <ClaudeAuthTabs
+                    mode={draft.authMode}
+                    // AII-FR-53: a token typed under the sub-tab being left
+                    // goes with it, so neither field outlives the view it was
+                    // typed in.
+                    onChoose={(authMode) =>
+                      onEditDraft(
+                        current.vendor,
+                        authMode === "custom_gateway"
+                          ? { authMode, oauthToken: "" }
+                          : { authMode, gatewayToken: "" },
+                      )
+                    }
+                  />
+                )}
+                {/* AII-FR-IUUM: the Custom Gateway sub-tab runs no binary, so it
+                    renders no binary field. */}
+                {!(hasTokenField && draft.authMode === "custom_gateway") && (
+                  <div
+                    className="picker-field"
+                    style={{ marginBottom: hasTokenField ? 10 : 4 }}
+                  >
+                    <label
+                      className="picker-field__label"
+                      htmlFor={`agentic-path-${current.vendor}`}
+                    >
+                      Binary
+                    </label>
+                    {/* AII-FR-16: Verify occupies the same position in every tab,
+                        so this row centres its controls exactly as the token row
+                        and the API key row do. Without it Verify sits 3px higher
+                        here than on the Claude Code tab. */}
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <input
+                        id={`agentic-path-${current.vendor}`}
+                        className="input input--mono"
+                        spellCheck={false}
+                        autoComplete="off"
+                        placeholder={`path to the ${current.displayName} CLI`}
+                        value={draft.path}
+                        onChange={(e) =>
+                          onEditDraft(current.vendor, { path: e.target.value })
+                        }
+                        style={{ flex: 1 }}
+                      />
+                      {/* AII-FR-18: a path of the author's own, typed or picked. */}
+                      <button
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => void onBrowse(current.vendor)}
+                      >
+                        Browse…
+                      </button>
+                      {/* AII-FR-49: where a token field follows, Verify sits on it
+                          instead, so the path and the credential are submitted as
+                          one act rather than two. */}
+                      {!hasTokenField && (
+                        <button
+                          className="btn btn--default btn--sm"
+                          disabled={
+                            vendorBusy === "verifying" || vendorBusy === "detecting"
+                          }
+                          onClick={() => void onVerify(current.vendor, "cli")}
+                        >
+                          {vendorBusy === "verifying" ? "Verifying…" : "Verify"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* AII-FR-49 .. AII-FR-53, AII-FR-PHFX, AII-FR-EJMG: the open
+                    sub-tab's credential row and the shared environment field.
+                    Rendered by this tab alone. */}
+                {hasTokenField && (
+                  <ClaudeCredentialRows
+                    integration={current}
+                    draft={draft}
+                    busy={vendorBusy === "working" ? "idle" : vendorBusy}
+                    onEdit={(patch) => onEditDraft(current.vendor, patch)}
+                    onVerify={() => void onVerify(current.vendor, "cli")}
+                  />
+                )}
+              </>
+            ) : (
+              <>
+                {/* AII-FR-19: prefilled for the named vendor, empty for Custom
+                    agent API, which is how a self-hosted deployment is pointed at. */}
+                <div className="picker-field" style={{ marginBottom: 10 }}>
                   <label
                     className="picker-field__label"
-                    htmlFor={`agentic-path-${current.vendor}`}
+                    htmlFor={`agentic-url-${current.vendor}`}
                   >
-                    Binary
+                    Base URL
                   </label>
-                  {/* AII-FR-16: Verify occupies the same position in every tab,
-                      so this row centres its controls exactly as the token row
-                      and the API key row do. Without it Verify sits 3px higher
-                      here than on the Claude Code tab. */}
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <input
-                      id={`agentic-path-${current.vendor}`}
-                      className="input input--mono"
-                      spellCheck={false}
-                      autoComplete="off"
-                      placeholder={`path to the ${current.displayName} CLI`}
-                      value={draft.path}
-                      onChange={(e) =>
-                        onEditDraft(current.vendor, { path: e.target.value })
-                      }
-                      style={{ flex: 1 }}
-                    />
-                    {/* AII-FR-18: a path of the author's own, typed or picked. */}
-                    <button
-                      className="btn btn--ghost btn--sm"
-                      onClick={() => void onBrowse(current.vendor)}
-                    >
-                      Browse…
-                    </button>
-                    {/* AII-FR-49: where a token field follows, Verify sits on it
-                        instead, so the path and the credential are submitted as
-                        one act rather than two. */}
-                    {!hasTokenField && (
-                      <button
-                        className="btn btn--default btn--sm"
-                        disabled={
-                          vendorBusy === "verifying" || vendorBusy === "detecting"
-                        }
-                        onClick={() => void onVerify(current.vendor, "cli")}
-                      >
-                        {vendorBusy === "verifying" ? "Verifying…" : "Verify"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* AII-FR-49 .. AII-FR-53, AII-FR-PHFX, AII-FR-EJMG: the open
-                  sub-tab's credential row and the shared environment field.
-                  Rendered by this tab alone. */}
-              {hasTokenField && (
-                <ClaudeCredentialRows
-                  integration={current}
-                  draft={draft}
-                  busy={vendorBusy === "working" ? "idle" : vendorBusy}
-                  onEdit={(patch) => onEditDraft(current.vendor, patch)}
-                  onVerify={() => void onVerify(current.vendor, "cli")}
-                />
-              )}
-            </>
-          ) : (
-            <>
-              {/* AII-FR-19: prefilled for the named vendor, empty for Custom
-                  agent API, which is how a self-hosted deployment is pointed at. */}
-              <div className="picker-field" style={{ marginBottom: 10 }}>
-                <label
-                  className="picker-field__label"
-                  htmlFor={`agentic-url-${current.vendor}`}
-                >
-                  Base URL
-                </label>
-                <input
-                  id={`agentic-url-${current.vendor}`}
-                  className="input input--mono"
-                  spellCheck={false}
-                  autoComplete="off"
-                  placeholder={
-                    defaultAgenticBaseUrl(current.vendor) ||
-                    "https://your-agent.example/v1"
-                  }
-                  value={draft.baseUrl}
-                  onChange={(e) =>
-                    onEditDraft(current.vendor, { baseUrl: e.target.value })
-                  }
-                />
-              </div>
-              <div className="picker-field" style={{ marginBottom: 4 }}>
-                <label
-                  className="picker-field__label"
-                  htmlFor={`agentic-key-${current.vendor}`}
-                >
-                  API key
-                </label>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <input
-                    id={`agentic-key-${current.vendor}`}
-                    type="password"
+                    id={`agentic-url-${current.vendor}`}
                     className="input input--mono"
                     spellCheck={false}
                     autoComplete="off"
                     placeholder={
-                      current.maskedHint
-                        ? `•••• ${current.maskedHint}`
-                        : current.keyRequired
-                          ? "required"
-                          : "optional"
+                      defaultAgenticBaseUrl(current.vendor) ||
+                      "https://your-agent.example/v1"
                     }
-                    value={draft.apiKey}
+                    value={draft.baseUrl}
                     onChange={(e) =>
-                      onEditDraft(current.vendor, { apiKey: e.target.value })
+                      onEditDraft(current.vendor, { baseUrl: e.target.value })
                     }
-                    style={{ flex: 1 }}
                   />
-                  <button
-                    className="btn btn--default btn--sm"
-                    disabled={vendorBusy === "verifying"}
-                    onClick={() => void onVerify(current.vendor, "api")}
-                  >
-                    {vendorBusy === "verifying" ? "Verifying…" : "Verify"}
-                  </button>
                 </div>
-              </div>
-            </>
-          )}
-
-          <div
-            className="t-ui-sm"
-            data-testid="agentic-status"
-            style={{ marginBottom: 18, color: toneColor(status.tone) }}
-          >
-            {status.text}
-          </div>
-
-          {/* AII-FR-23: the same filterable selector the API level renders
-              (AII-FR-36), so nothing about choosing a model is learned twice. */}
-          <div className="picker-field" style={{ marginBottom: 4 }}>
-            <label className="picker-field__label">Model</label>
-            <FilterableSelect
-              label="Model"
-              testId="agentic-model"
-              value={current.selectedModel ?? ""}
-              options={agenticModelOptions}
-              onChange={(id) => void onSelectModel(current.vendor, null, id || null)}
-            />
-          </div>
-          <div
-            className="t-ui-xs t-muted"
-            data-testid="agentic-models-origin"
-            style={{ marginBottom: 4 }}
-          >
-            {modelsOriginLabel(
-              current.modelsOrigin,
-              current.kind === "cli" ? "the installed CLI" : "the endpoint",
+                <div className="picker-field" style={{ marginBottom: 4 }}>
+                  <label
+                    className="picker-field__label"
+                    htmlFor={`agentic-key-${current.vendor}`}
+                  >
+                    API key
+                  </label>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      id={`agentic-key-${current.vendor}`}
+                      type="password"
+                      className="input input--mono"
+                      spellCheck={false}
+                      autoComplete="off"
+                      placeholder={
+                        current.maskedHint
+                          ? `•••• ${current.maskedHint}`
+                          : current.keyRequired
+                            ? "required"
+                            : "optional"
+                      }
+                      value={draft.apiKey}
+                      onChange={(e) =>
+                        onEditDraft(current.vendor, { apiKey: e.target.value })
+                      }
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      className="btn btn--default btn--sm"
+                      disabled={vendorBusy === "verifying"}
+                      onClick={() => void onVerify(current.vendor, "api")}
+                    >
+                      {vendorBusy === "verifying" ? "Verifying…" : "Verify"}
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
-          </div>
 
-          {/* AII-FR-24: a vendor that declares no effort levels renders no
-              effort selector at all. */}
-          {current.reasoningEfforts.length > 0 && (
-            <div className="picker-field" style={{ marginBottom: 4 }}>
-              <label
-                className="picker-field__label"
-                htmlFor={`agentic-effort-${current.vendor}`}
-              >
-                Reasoning effort
-              </label>
-              <select
-                id={`agentic-effort-${current.vendor}`}
-                className="select"
-                value={current.selectedEffort ?? ""}
-                onChange={(e) =>
-                  void onSelectEffort(current.vendor, null, e.target.value || null)
-                }
-              >
-                <option value="">{BACKEND_DEFAULT_LABEL}</option>
-                {current.reasoningEfforts.map((eff) => (
-                  <option key={eff.id} value={eff.id}>
-                    {eff.label}
-                  </option>
-                ))}
-              </select>
+            <div
+              className="t-ui-sm"
+              data-testid="agentic-status"
+              style={{ marginBottom: 18, color: toneColor(status.tone) }}
+            >
+              {status.text}
             </div>
-          )}
 
-          {/* AII-FR-QDLW: one section below both defaults, holding one row per
-              kind of work a run hands to this backend. Every agentic tab
-              renders it, whichever vendor the tab is for; a vendor that
-              declares no effort levels simply has no effort column in it. */}
-          <div style={{ marginBottom: 18 }}>
-            <PerTaskSection
-              // A record written before any kind was distinguished carries no
-              // map at all, which reads back as one that follows the default
-              // everywhere rather than as a tab that cannot render.
-              modelOverrides={current.modelOverrides ?? {}}
-              effortOverrides={current.effortOverrides ?? {}}
-              hasEffortColumn={current.reasoningEfforts.length > 0}
-              renderModel={(kind) => (
-                <FilterableSelect
-                  // The accessible name carries the row's own label and the
-                  // dimension it selects: two comboboxes named "Review" in one
-                  // panel would be one control to anybody who cannot see which
-                  // column they are standing in.
-                  label={`${kind.label} model`}
-                  testId={`agentic-model-${kind.id}`}
-                  value={(current.modelOverrides ?? {})[kind.id] ?? ""}
-                  options={agenticTaskModelOptions}
-                  onChange={(id) =>
-                    void onSelectModel(current.vendor, kind.id, id || null)
-                  }
-                />
+            {/* AII-FR-23: the same filterable selector the API level renders
+                (AII-FR-36), so nothing about choosing a model is learned twice. */}
+            <div className="picker-field" style={{ marginBottom: 4 }}>
+              <label className="picker-field__label">Model</label>
+              <FilterableSelect
+                label="Model"
+                testId="agentic-model"
+                value={current.selectedModel ?? ""}
+                options={agenticModelOptions}
+                onChange={(id) => void onSelectModel(current.vendor, null, id || null)}
+              />
+            </div>
+            <div
+              className="t-ui-xs t-muted"
+              data-testid="agentic-models-origin"
+              style={{ marginBottom: 4 }}
+            >
+              {modelsOriginLabel(
+                current.modelsOrigin,
+                current.kind === "cli" ? "the installed CLI" : "the endpoint",
               )}
-              renderEffort={(kind) => (
+            </div>
+
+            {/* AII-FR-24: a vendor that declares no effort levels renders no
+                effort selector at all. */}
+            {current.reasoningEfforts.length > 0 && (
+              <div className="picker-field" style={{ marginBottom: 4 }}>
+                <label
+                  className="picker-field__label"
+                  htmlFor={`agentic-effort-${current.vendor}`}
+                >
+                  Reasoning effort
+                </label>
                 <select
-                  id={`agentic-effort-${current.vendor}-${kind.id}`}
+                  id={`agentic-effort-${current.vendor}`}
                   className="select"
-                  aria-label={`${kind.label} effort`}
-                  value={(current.effortOverrides ?? {})[kind.id] ?? ""}
+                  value={current.selectedEffort ?? ""}
                   onChange={(e) =>
-                    void onSelectEffort(
-                      current.vendor,
-                      kind.id,
-                      e.target.value || null,
-                    )
+                    void onSelectEffort(current.vendor, null, e.target.value || null)
                   }
                 >
-                  <option value="">{SAME_AS_DEFAULT_LABEL}</option>
+                  <option value="">{BACKEND_DEFAULT_LABEL}</option>
                   {current.reasoningEfforts.map((eff) => (
                     <option key={eff.id} value={eff.id}>
                       {eff.label}
                     </option>
                   ))}
                 </select>
-              )}
-            />
-          </div>
-
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {!current.active && (
-              <button
-                className="btn btn--primary btn--sm"
-                // Only the integration's own state gates this. The level stays
-                // interactive while a verification is in flight.
-                disabled={current.state !== "verified"}
-                onClick={() => void onActivate(current.vendor)}
-              >
-                Use this integration
-              </button>
+              </div>
             )}
-            {/* Offered whenever there is anything to clear — which includes a
-                keychain entry the registry has no record of. Gating on `state`
-                alone would hide the only control that can purge a stored
-                credential from a tab that reads `unconfigured`, leaving the
-                author no way to reach it short of the OS keychain. */}
-            {(current.state !== "unconfigured" ||
-              current.keyState !== "unset" ||
-              (current.gatewayKeyState ?? "unset") !== "unset") && (
-              <button
-                className="btn btn--ghost btn--sm"
-                onClick={() => void onClear(current.vendor)}
-              >
-                Clear
-              </button>
-            )}
-          </div>
 
-          {actionErrors[current.vendor] && (
-            <span
-              className="picker-error"
-              style={{ display: "block", marginTop: 10 }}
-              data-testid="agentic-action-error"
-            >
-              ✗ {actionErrors[current.vendor]}
-            </span>
-          )}
-
-          {current.state === "unconfigured" && (
-            <div
-              className="t-ui-sm t-muted"
-              data-testid="agentic-empty"
-              style={{ marginTop: 14 }}
-            >
-              {current.displayName} is not set up yet.{" "}
-              {current.kind === "cli"
-                ? hasTokenField
-                  ? "Point Synthesis at its binary, give it an OAuth token or a gateway, and verify to use this integration."
-                  : "Point Synthesis at its binary and verify it to use this integration."
-                : "Give Synthesis its endpoint and verify it to use this integration."}
+            {/* AII-FR-QDLW: one section below both defaults, holding one row per
+                kind of work a run hands to this backend. Every agentic tab
+                renders it, whichever vendor the tab is for; a vendor that
+                declares no effort levels simply has no effort column in it. */}
+            <div style={{ marginBottom: 18 }}>
+              <PerTaskSection
+                // A record written before any kind was distinguished carries no
+                // map at all, which reads back as one that follows the default
+                // everywhere rather than as a tab that cannot render.
+                modelOverrides={current.modelOverrides ?? {}}
+                effortOverrides={current.effortOverrides ?? {}}
+                hasEffortColumn={current.reasoningEfforts.length > 0}
+                renderModel={(kind) => (
+                  <FilterableSelect
+                    // The accessible name carries the row's own label and the
+                    // dimension it selects: two comboboxes named "Review" in one
+                    // panel would be one control to anybody who cannot see which
+                    // column they are standing in.
+                    label={`${kind.label} model`}
+                    testId={`agentic-model-${kind.id}`}
+                    value={(current.modelOverrides ?? {})[kind.id] ?? ""}
+                    options={agenticTaskModelOptions}
+                    onChange={(id) =>
+                      void onSelectModel(current.vendor, kind.id, id || null)
+                    }
+                  />
+                )}
+                renderEffort={(kind) => (
+                  <select
+                    id={`agentic-effort-${current.vendor}-${kind.id}`}
+                    className="select"
+                    aria-label={`${kind.label} effort`}
+                    value={(current.effortOverrides ?? {})[kind.id] ?? ""}
+                    onChange={(e) =>
+                      void onSelectEffort(
+                        current.vendor,
+                        kind.id,
+                        e.target.value || null,
+                      )
+                    }
+                  >
+                    <option value="">{SAME_AS_DEFAULT_LABEL}</option>
+                    {current.reasoningEfforts.map((eff) => (
+                      <option key={eff.id} value={eff.id}>
+                        {eff.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              />
             </div>
-          )}
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {!current.active && (
+                <button
+                  className="btn btn--primary btn--sm"
+                  // Only the integration's own state gates this. The level stays
+                  // interactive while a verification is in flight.
+                  disabled={current.state !== "verified"}
+                  onClick={() => void onActivate(current.vendor)}
+                >
+                  Use this integration
+                </button>
+              )}
+              {/* Offered whenever there is anything to clear — which includes a
+                  keychain entry the registry has no record of. Gating on `state`
+                  alone would hide the only control that can purge a stored
+                  credential from a tab that reads `unconfigured`, leaving the
+                  author no way to reach it short of the OS keychain. */}
+              {(current.state !== "unconfigured" ||
+                current.keyState !== "unset" ||
+                (current.gatewayKeyState ?? "unset") !== "unset") && (
+                <button
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => void onClear(current.vendor)}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {actionErrors[current.vendor] && (
+              <span
+                className="picker-error"
+                style={{ display: "block", marginTop: 10 }}
+                data-testid="agentic-action-error"
+              >
+                ✗ {actionErrors[current.vendor]}
+              </span>
+            )}
+
+            {current.state === "unconfigured" && currentImplemented && (
+              <div
+                className="t-ui-sm t-muted"
+                data-testid="agentic-empty"
+                style={{ marginTop: 14 }}
+              >
+                {current.displayName} is not set up yet.{" "}
+                {current.kind === "cli"
+                  ? hasTokenField
+                    ? "Point Synthesis at its binary, give it an OAuth token or a gateway, and verify to use this integration."
+                    : "Point Synthesis at its binary and verify it to use this integration."
+                  : "Give Synthesis its endpoint and verify it to use this integration."}
+              </div>
+            )}
+          </fieldset>
         </div>
       )}
     </section>

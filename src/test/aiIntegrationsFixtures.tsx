@@ -276,7 +276,12 @@ export function backendFor(invokeMock: Mock) {
 
 /** The commands invoked so far, in order. */
 export const commandsFor = (invokeMock: Mock) => () =>
-  invokeMock.mock.calls.map((c) => c[0] as string);
+  invokeMock.mock.calls
+    .map((c) => c[0] as string)
+    // The log flush runs in the background on a timer, so whether it lands in
+    // one test depends on how fast the runner is. It is not an operation of
+    // the section.
+    .filter((cmd) => cmd !== "append_log_records");
 
 /** The arguments of the last call to `cmd`. */
 export const argsOfFor = (invokeMock: Mock) => (cmd: string) => {

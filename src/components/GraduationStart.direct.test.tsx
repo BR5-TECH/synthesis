@@ -139,11 +139,12 @@ const chooseDirectly = async () => {
 };
 
 describe("where the run works", () => {
-  it("GSD-FR-BZHW: the destination is one choice of three, resting on an existing stream", async () => {
+  it("GSD-FR-BZHW: the destination is one choice of four, resting on an existing stream", async () => {
     draw();
     await screen.findByTestId("graduation-destination");
     expect(radio("Existing stream")).toBeChecked();
     expect(radio("New stream")).not.toBeChecked();
+    expect(radio("Temporary stream")).not.toBeChecked();
     expect(radio("Work directly")).not.toBeChecked();
     expect(graduate()).toHaveTextContent("Graduate");
   });
@@ -166,17 +167,34 @@ describe("where the run works", () => {
     expect(graduate()).toHaveTextContent("Graduate here");
   });
 
-  it("GSD-FR-BZHW: the choices are operable by keyboard alone", async () => {
+  it("GSD-FR-BZHW, GSD-FR-WMTD: the arrow keys walk all four segments and keep focus in the toggle", async () => {
     draw();
     await screen.findByTestId("graduation-destination");
-    await userEvent.tab();
-    // Every choice is a native radio, so the keyboard reaches and selects each.
-    act(() => radio("New stream").focus());
-    await userEvent.keyboard(" ");
-    expect(radio("New stream")).toBeChecked();
+    act(() => radio("Existing stream").focus());
+    for (const next of ["New stream", "Temporary stream", "Work directly", "Existing stream"]) {
+      await userEvent.keyboard("{ArrowRight}");
+      expect(radio(next)).toBeChecked();
+      // New stream and Temporary stream ask a name, and the arrow keys must
+      // not lose focus to it.
+      expect(radio(next)).toHaveFocus();
+    }
+    // The walk read the branches and the preflight. Let both reads settle.
+    await waitFor(() => expect(calls("preflight_direct_graduation").length).toBeGreaterThan(0));
+    await waitFor(() => expect(calls("list_worktrees_and_branches").length).toBeGreaterThan(0));
+  });
+
+  it("GSD-FR-WMTD, GSD-FR-QGTC: Space on a segment chooses it, and a choice that asks a name moves focus there", async () => {
+    draw();
+    await screen.findByTestId("graduation-destination");
     act(() => radio("Work directly").focus());
     await userEvent.keyboard(" ");
     expect(radio("Work directly")).toBeChecked();
+    expect(radio("Work directly")).toHaveFocus();
+    act(() => radio("New stream").focus());
+    await userEvent.keyboard(" ");
+    expect(radio("New stream")).toBeChecked();
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveFocus();
+    await screen.findByRole("combobox", { name: "Created from" });
   });
 
   it("GSD-FR-LDGM: a project with no stream rests on New stream, and the other two stay offered", async () => {

@@ -425,23 +425,6 @@
 /* What the chosen stream means for when the run starts, under the control it
    is about. */
 .graduation-start__note { margin: 0; }
-/* GSD-FR-BZHW: where the run works is one choice of three, so the three sit on
-   one row and wrap rather than scroll at the dialog's width. They take the
-   ladder's own card (`.graduation__choice`), because they are alternatives to
-   each other in the same way. */
-.graduation-start__destination {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  min-width: 0;
-}
-.graduation-start__destination-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-}
-.graduation-start__destination .graduation__choice { align-items: center; }
-.graduation-start__destination .graduation__choice > input[type="radio"] { margin-top: 0; }
 /* GSD-FR-USOH: the uncommitted paths a dirty worktree is refused for, complete,
    in a box of bounded height that scrolls inside itself. */
 .graduation-start__paths {

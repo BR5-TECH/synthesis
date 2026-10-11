@@ -29,6 +29,8 @@ import { formatSectionAddress } from "../settingsWindow";
 import { pickerStart, projectRelativePath } from "../projectPaths";
 import { PathField } from "./PathField";
 import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
+import { isAgenticVendorImplemented } from "./agenticImplemented";
+import { ToBeImplementedNotice } from "./ToBeImplementedNotice";
 import type {
   AgenticCliVendor,
   ImageBuildOutcome,
@@ -122,14 +124,11 @@ export function buildRefusalMessage(error: unknown): string {
  *
  * An **absent** optional Dockerfile is stated as configuring no build rather
  * than as a problem; a configured one that is **invalid** names the problem and
- * offers the field to correct it. OpenCode states that execution support does
- * not exist yet rather than that its configuration is wrong, because its entry
- * is stored and may be perfectly valid.
+ * offers the field to correct it. A tab whose vendor is not implemented yet
+ * renders no such sentence: it states "To Be Implemented..." instead
+ * (SET-FR-GVED).
  */
 export function configurationSentence(status: ProjectVendorImageStatus): string {
-  if (status.graduationState === "execution_unsupported") {
-    return "Synthesis cannot run OpenCode yet. This image is stored with the project and nothing runs it until execution support exists.";
-  }
   if (status.configuration === "unset") {
     return "Nothing is configured for this agent yet.";
   }
@@ -434,6 +433,8 @@ export function ProjectDockerImages({ contentRoot = "" }: ProjectDockerImagesPro
     vendor: AgenticCliVendor,
     patch: Partial<FieldDraft> = {},
   ): Promise<boolean> => {
+    // SET-FR-GVED: a tab that is not implemented saves and builds nothing.
+    if (!isAgenticVendorImplemented(vendor)) return false;
     const edited = drafts[vendor];
     if (!edited && Object.keys(patch).length === 0) return true;
     const draft: FieldDraft = {
@@ -493,6 +494,8 @@ export function ProjectDockerImages({ contentRoot = "" }: ProjectDockerImagesPro
    * stays as it was. A cancelled picker changes nothing.
    */
   const pickDockerfile = async (vendor: AgenticCliVendor) => {
+    // SET-FR-GVED: a tab that is not implemented saves and builds nothing.
+    if (!isAgenticVendorImplemented(vendor)) return;
     try {
       const picked = await openDialog({
         directory: false,
@@ -524,6 +527,8 @@ export function ProjectDockerImages({ contentRoot = "" }: ProjectDockerImagesPro
    * kept as selected. The backend checks it like a typed path.
    */
   const pickBuildContext = async (vendor: AgenticCliVendor, current: string) => {
+    // SET-FR-GVED: a tab that is not implemented saves and builds nothing.
+    if (!isAgenticVendorImplemented(vendor)) return;
     try {
       const picked = await openDialog({
         directory: true,
@@ -546,6 +551,8 @@ export function ProjectDockerImages({ contentRoot = "" }: ProjectDockerImagesPro
    * retries on its own.
    */
   const build = async (vendor: AgenticCliVendor) => {
+    // SET-FR-GVED: a tab that is not implemented saves and builds nothing.
+    if (!isAgenticVendorImplemented(vendor)) return;
     // A refused save of this entry keeps its message in this tab and starts no
     // build. The result is read once, so a later Build is judged on its own.
     const waiting = pendingSave.current[vendor];
@@ -646,6 +653,8 @@ export function ProjectDockerImages({ contentRoot = "" }: ProjectDockerImagesPro
   const dockerfileProblem = dockerfileProblemMessage(status);
   const contextProblem = buildContextProblemMessage(status);
   const needsThisTab = resolvedVendor === status.vendor;
+  /** SET-FR-GVED: a tab of a vendor that is not implemented yet is read-only. */
+  const implemented = isAgenticVendorImplemented(status.vendor);
   const buildable =
     draft.dockerfile.trim() !== "" &&
     draft.imageName.trim() !== "" &&
@@ -699,7 +708,12 @@ export function ProjectDockerImages({ contentRoot = "" }: ProjectDockerImagesPro
                word, so the strip stays three labels wide and the tab's own
                accessible name stays the vendor's name. */
             data-graduates={resolvedVendor === vendor}
-            style={settingsTabStyle(selected === vendor)}
+            /* SET-FR-GVED: still selectable, with a grayed label. */
+            data-unimplemented={!isAgenticVendorImplemented(vendor)}
+            style={settingsTabStyle(
+              selected === vendor,
+              !isAgenticVendorImplemented(vendor),
+            )}
             onClick={() => setSelected(vendor)}
           >
             {label}
@@ -708,199 +722,214 @@ export function ProjectDockerImages({ contentRoot = "" }: ProjectDockerImagesPro
       </div>
 
       <div role="tabpanel" aria-label={vendorLabel(status.vendor)}>
-        {needsThisTab && (
-          <p className="docker-graduates">
-            {status.imageName.trim() === ""
-              ? "This project graduates through this agent, so graduation cannot start until an image name is filled in here."
-              : "This project graduates through this agent."}
-          </p>
-        )}
+        {/* SET-FR-GVED: the statement comes first. A disabled fieldset then
+            disables every field and control of the tab at once, while the
+            stored entry and the graduation mark still show. */}
+        {!implemented && <ToBeImplementedNotice />}
+        <fieldset
+          disabled={!implemented}
+          className={
+            implemented
+              ? "settings-panel"
+              : "settings-panel settings-panel--unimplemented"
+          }
+        >
+          {needsThisTab && (
+            <p className="docker-graduates">
+              {status.imageName.trim() === ""
+                ? "This project graduates through this agent, so graduation cannot start until an image name is filled in here."
+                : "This project graduates through this agent."}
+            </p>
+          )}
 
-        {/* SET-FR-21: the image reference, written the way Docker writes it.
-            Two fields in one frame separated by the colon that joins them, so
-            the tag reads as part of the reference rather than as a second
-            unrelated setting — and takes the width a tag actually needs. */}
-        <div className="docker-field">
-          <span className="picker-field__label" id="docker-image-label">
-            Image
-          </span>
-          <div
-            className="joined-field"
-            role="group"
-            aria-labelledby="docker-image-label"
-          >
-            <input
-              id="docker-image-name"
-              type="text"
-              aria-label="Image name"
-              className="joined-field__part"
-              spellCheck={false}
-              autoComplete="off"
-              value={draft.imageName}
-              placeholder="registry.example/agent"
-              onChange={(e) =>
-                setDraft(status.vendor, { imageName: e.target.value })
-              }
-              onBlur={() => void persist(status.vendor)}
-            />
-            <span className="joined-field__sep" aria-hidden="true">
-              :
+          {/* SET-FR-21: the image reference, written the way Docker writes it.
+              Two fields in one frame separated by the colon that joins them, so
+              the tag reads as part of the reference rather than as a second
+              unrelated setting — and takes the width a tag actually needs. */}
+          <div className="docker-field">
+            <span className="picker-field__label" id="docker-image-label">
+              Image
             </span>
-            <input
-              id="docker-image-tag"
-              type="text"
-              aria-label="Tag (optional)"
-              className="joined-field__part joined-field__part--tag"
-              spellCheck={false}
-              autoComplete="off"
-              value={draft.tag}
-              placeholder="latest"
-              onChange={(e) => setDraft(status.vendor, { tag: e.target.value })}
+            <div
+              className="joined-field"
+              role="group"
+              aria-labelledby="docker-image-label"
+            >
+              <input
+                id="docker-image-name"
+                type="text"
+                aria-label="Image name"
+                className="joined-field__part"
+                spellCheck={false}
+                autoComplete="off"
+                value={draft.imageName}
+                placeholder="registry.example/agent"
+                onChange={(e) =>
+                  setDraft(status.vendor, { imageName: e.target.value })
+                }
+                onBlur={() => void persist(status.vendor)}
+              />
+              <span className="joined-field__sep" aria-hidden="true">
+                :
+              </span>
+              <input
+                id="docker-image-tag"
+                type="text"
+                aria-label="Tag (optional)"
+                className="joined-field__part joined-field__part--tag"
+                spellCheck={false}
+                autoComplete="off"
+                value={draft.tag}
+                placeholder="latest"
+                onChange={(e) => setDraft(status.vendor, { tag: e.target.value })}
+                onBlur={() => void persist(status.vendor)}
+              />
+            </div>
+          </div>
+
+          {/* SET-FR-23: what this tab's configuration is worth. One line, under
+              the fields it qualifies. */}
+          {implemented && (
+            <p className="docker-state">{configurationSentence(status)}</p>
+          )}
+
+          <div className="docker-field">
+            <label className="picker-field__label" htmlFor="docker-dockerfile">
+              Dockerfile <span className="docker-field__optional">optional</span>
+            </label>
+            <PathField
+              id="docker-dockerfile"
+              label="Dockerfile (optional)"
+              kind="file"
+              pickLabel="Choose a Dockerfile"
+              list="docker-dockerfile-candidates"
+              value={draft.dockerfile}
+              placeholder="docker/agent.Dockerfile"
+              onChange={(value) => setDraft(status.vendor, { dockerfile: value })}
               onBlur={() => void persist(status.vendor)}
+              onPick={() => void pickDockerfile(status.vendor)}
+            />
+            <datalist id="docker-dockerfile-candidates">
+              {candidates.map((path) => (
+                <option key={path} value={path} />
+              ))}
+            </datalist>
+          </div>
+
+          <div className="docker-field">
+            <label className="picker-field__label" htmlFor="docker-build-context">
+              Build context <span className="docker-field__optional">optional</span>
+            </label>
+            <PathField
+              id="docker-build-context"
+              label="Build context (optional)"
+              kind="folder"
+              pickLabel="Choose a build context folder"
+              value={draft.buildContext}
+              placeholder="Project root (default)"
+              onChange={(value) => setDraft(status.vendor, { buildContext: value })}
+              onBlur={() => void persist(status.vendor)}
+              onPick={() => void pickBuildContext(status.vendor, draft.buildContext)}
             />
           </div>
-        </div>
 
-        {/* SET-FR-23: what this tab's configuration is worth. One line, under
-            the fields it qualifies. */}
-        <p className="docker-state">{configurationSentence(status)}</p>
+          {dockerfileProblem && (
+            <p className="docker-alert" role="alert">
+              {dockerfileProblem}
+            </p>
+          )}
+          {contextProblem && (
+            <p className="docker-alert" role="alert">
+              {contextProblem}
+            </p>
+          )}
+          {fieldError?.[status.vendor] && (
+            <p className="docker-alert" role="alert">
+              {fieldError[status.vendor]}
+            </p>
+          )}
 
-        <div className="docker-field">
-          <label className="picker-field__label" htmlFor="docker-dockerfile">
-            Dockerfile <span className="docker-field__optional">optional</span>
-          </label>
-          <PathField
-            id="docker-dockerfile"
-            label="Dockerfile (optional)"
-            kind="file"
-            pickLabel="Choose a Dockerfile"
-            list="docker-dockerfile-candidates"
-            value={draft.dockerfile}
-            placeholder="docker/agent.Dockerfile"
-            onChange={(value) => setDraft(status.vendor, { dockerfile: value })}
-            onBlur={() => void persist(status.vendor)}
-            onPick={() => void pickDockerfile(status.vendor)}
-          />
-          <datalist id="docker-dockerfile-candidates">
-            {candidates.map((path) => (
-              <option key={path} value={path} />
-            ))}
-          </datalist>
-        </div>
-
-        <div className="docker-field">
-          <label className="picker-field__label" htmlFor="docker-build-context">
-            Build context <span className="docker-field__optional">optional</span>
-          </label>
-          <PathField
-            id="docker-build-context"
-            label="Build context (optional)"
-            kind="folder"
-            pickLabel="Choose a build context folder"
-            value={draft.buildContext}
-            placeholder="Project root (default)"
-            onChange={(value) => setDraft(status.vendor, { buildContext: value })}
-            onBlur={() => void persist(status.vendor)}
-            onPick={() => void pickBuildContext(status.vendor, draft.buildContext)}
-          />
-        </div>
-
-        {dockerfileProblem && (
-          <p className="docker-alert" role="alert">
-            {dockerfileProblem}
-          </p>
-        )}
-        {contextProblem && (
-          <p className="docker-alert" role="alert">
-            {contextProblem}
-          </p>
-        )}
-        {fieldError?.[status.vendor] && (
-          <p className="docker-alert" role="alert">
-            {fieldError[status.vendor]}
-          </p>
-        )}
-
-        <div className="docker-actions">
-          <button
-            type="button"
-            className="btn btn--default btn--sm"
-            onClick={() => void build(status.vendor)}
-            disabled={!buildable || aBuildIsRunning}
-          >
-            {report?.outcome === "failed" ? "Retry" : "Build"}
-          </button>
-          {/* PSS-FR-28: a cancellation is explicit. It is offered only once the
-              build has an operation id to name, because the backend cancels by
-              id and there is nothing to ask for before the start has
-              answered. */}
-          {report?.running && report.operationId !== "" && (
+          <div className="docker-actions">
             <button
               type="button"
-              className="btn btn--ghost btn--sm"
-              onClick={() => void cancel(report.operationId)}
+              className="btn btn--default btn--sm"
+              onClick={() => void build(status.vendor)}
+              disabled={!buildable || aBuildIsRunning}
             >
-              Cancel
+              {report?.outcome === "failed" ? "Retry" : "Build"}
             </button>
-          )}
-          {/* SET-FR-25: while it is disabled, the tab states which of the three
-              things it needs is missing. */}
-          {!buildable && (
-            <span className="docker-actions__hint">
-              {draft.dockerfile.trim() === ""
-                ? "Name a Dockerfile to build one."
-                : draft.imageName.trim() === ""
-                  ? "An image name is required: it is what the build produces."
-                  : "Verify the Docker backend in Global settings first."}
-            </span>
-          )}
-        </div>
-
-        {/* SET-FR-26: the build's progress, its output, and its outcome, inline,
-            on the tab that started it. The whole region is the live region, so
-            the terminal result is announced once; the output inside it is not,
-            because a build that announces every layer it pulls is unusable. */}
-        {report && (
-          <div className="docker-build" role="status">
-            {report.running && (
-              <progress
-                className="docker-build__bar"
-                aria-label="Build progress"
-                {...(report.total !== undefined
-                  ? { value: report.completed ?? 0, max: report.total }
-                  : {})}
-              />
-            )}
-            {/* The outcome stands above the output it came out of: once a
-                build has ended, what it did is the answer and the log under it
-                is the evidence. */}
-            {!report.running && (
-              <p className="docker-build__result" data-outcome={report.outcome}>
-                {report.outcome === "succeeded"
-                  ? `Built ${report.imageReference}.`
-                  : report.outcome === "cancelled"
-                    ? "The build was cancelled. Nothing here changed."
-                    : (report.diagnostic ?? "The build failed.")}
-              </p>
-            )}
-            {report.lines.length > 0 && (
-              <div
-                className="docker-build__log"
-                ref={logRef}
-                role="log"
-                aria-live="off"
-                aria-label="Build output"
-                tabIndex={0}
+            {/* PSS-FR-28: a cancellation is explicit. It is offered only once the
+                build has an operation id to name, because the backend cancels by
+                id and there is nothing to ask for before the start has
+                answered. */}
+            {report?.running && report.operationId !== "" && (
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() => void cancel(report.operationId)}
               >
-                {report.lines.map((line, index) => (
-                  <div className="docker-build__line" key={index}>
-                    {line}
-                  </div>
-                ))}
-              </div>
+                Cancel
+              </button>
+            )}
+            {/* SET-FR-25: while it is disabled, the tab states which of the three
+                things it needs is missing. */}
+            {!buildable && (
+              <span className="docker-actions__hint">
+                {draft.dockerfile.trim() === ""
+                  ? "Name a Dockerfile to build one."
+                  : draft.imageName.trim() === ""
+                    ? "An image name is required: it is what the build produces."
+                    : "Verify the Docker backend in Global settings first."}
+              </span>
             )}
           </div>
-        )}
+
+          {/* SET-FR-26: the build's progress, its output, and its outcome, inline,
+              on the tab that started it. The whole region is the live region, so
+              the terminal result is announced once; the output inside it is not,
+              because a build that announces every layer it pulls is unusable. */}
+          {report && (
+            <div className="docker-build" role="status">
+              {report.running && (
+                <progress
+                  className="docker-build__bar"
+                  aria-label="Build progress"
+                  {...(report.total !== undefined
+                    ? { value: report.completed ?? 0, max: report.total }
+                    : {})}
+                />
+              )}
+              {/* The outcome stands above the output it came out of: once a
+                  build has ended, what it did is the answer and the log under it
+                  is the evidence. */}
+              {!report.running && (
+                <p className="docker-build__result" data-outcome={report.outcome}>
+                  {report.outcome === "succeeded"
+                    ? `Built ${report.imageReference}.`
+                    : report.outcome === "cancelled"
+                      ? "The build was cancelled. Nothing here changed."
+                      : (report.diagnostic ?? "The build failed.")}
+                </p>
+              )}
+              {report.lines.length > 0 && (
+                <div
+                  className="docker-build__log"
+                  ref={logRef}
+                  role="log"
+                  aria-live="off"
+                  aria-label="Build output"
+                  tabIndex={0}
+                >
+                  {report.lines.map((line, index) => (
+                    <div className="docker-build__line" key={index}>
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </fieldset>
       </div>
     </div>
   );

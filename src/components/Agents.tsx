@@ -380,6 +380,7 @@ export function AgentsChromeControl({
           role="dialog"
           aria-label="Agents"
           data-testid="agents-roster"
+          data-floating-overlay=""
           style={{
             position: "absolute",
             top: "calc(100% + 6px)",

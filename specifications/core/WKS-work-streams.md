@@ -3,7 +3,7 @@
 **Spec code:** `WKS`
 
 ## Intent
-A work stream is a named branch and working copy that the application owns and that lives longer than one graduation run. Runs execute in the stream's working copy and commit onto its branch, so each run starts from the commit the run before it made. This is what removes reconciliation from between runs: the runs of one stream share a base and cannot diverge from each other. The author reads a stream through the ordinary change surfaces, updates it from its base branch while the work continues, merges it into that branch when the work is complete, and removes it. A base branch moves outside the application, so a stream is brought up to it on the author's request, in the direction opposite to a merge. A merge is an operation the author starts: Git merges first, and a clean merge completes with no run and no record. A merge Git cannot resolve becomes a **merge run**, a Graduation Run named `Merge <stream name>` that is the one durable record of that merge. An update runs for minutes and may stop to ask the author a question, so each stream holds a durable record of what its last update did, and the author drives it to rest. A direct run that targets a stream's working copy (per `GRD-graduation.md` GRD-FR-ZVNO) is a run of that stream for its queue, its busy state and its deletion. Out of scope: what a run does, which is `GRD-graduation.md`'s; the reconciliation a merge and an update perform, which is `GRB-graduation-rebase.md`'s; and the author's own worktrees, which are `WTC-worktree-context.md`'s.
+A work stream is a named branch and working copy that the application owns and that lives longer than one graduation run. Runs execute in the stream's working copy and commit onto its branch, so each run starts from the commit the run before it made. This is what removes reconciliation from between runs: the runs of one stream share a base and cannot diverge from each other. The author reads a stream through the ordinary change surfaces, updates it from its base branch while the work continues, merges it into that branch when the work is complete, and removes it. A base branch moves outside the application, so a stream is brought up to it on the author's request, in the direction opposite to a merge. A merge is an operation the author starts: Git merges first, and a clean merge completes with no run and no record. A merge Git cannot resolve becomes a **merge run**, a Graduation Run named `Merge <stream name>` that is the one durable record of that merge. An update runs for minutes and may stop to ask the author a question, so each stream holds a durable record of what its last update did, and the author drives it to rest. A direct run that targets a stream's working copy (per `GRD-graduation.md` GRD-FR-ZVNO) is a run of that stream for its queue, its busy state and its deletion. A stream may be **temporary**: the record says so, and the author's surface merges it and deletes it when its work is done. Out of scope: what a run does, which is `GRD-graduation.md`'s; the reconciliation a merge and an update perform, which is `GRB-graduation-rebase.md`'s; and the author's own worktrees, which are `WTC-worktree-context.md`'s.
 
 ## Functional requirements
 1. **WKS-FR-QMTV** A work stream holds a stable id, an author-given name, the branch it owns, the absolute path of its working copy, the branch it was created from, and the revision of that branch at creation.
@@ -78,13 +78,16 @@ A work stream is a named branch and working copy that the application owns and t
 62. **WKS-FR-GQSU** `get_work_stream_uncommitted_paths(stream_id)` returns the complete uncommitted path set of the stream's working copy on the terms of WKS-FR-JVLM, and an empty set where the working copy is missing. An unknown stream returns `unknown_stream`. It writes nothing, and it is the read a deletion confirmation names the discarded paths from.
 63. **WKS-FR-HLYM** A branch deletion by `GTC-git.md` `delete_branch` never removes a stream's branch (per GTC-FR-JOWX). `delete_work_stream` is the only route that removes one, so every refusal of WKS-FR-EIBC, WKS-FR-OVLQ and WKS-FR-DBXN binds the Git panel and the Streams overlay alike.
 64. **WKS-FR-SPVK** A `create_work_stream` or `delete_work_stream` that returns success or `stream_cleanup_failed` emits `"branches changed"` once (per `WTC-worktree-context.md` WTC-FR-25). A refusal emits nothing.
+65. **WKS-FR-KCTR** `create_work_stream(name, base_branch, temporary)` records `temporary` in the stream record, true or false. A request that omits `temporary` makes a stream that is not temporary. The flag never changes after creation, and it survives a window reload and a relaunch of the application.
+66. **WKS-FR-VBDH** A temporary stream follows every rule of this module like any other stream: its queue, its busy state, its merge, its update and its deletion. The module deletes no stream by itself. A deletion of a temporary stream is `delete_work_stream` under WKS-FR-EIBC, WKS-FR-OVLQ and WKS-FR-DBXN, and its refusals are the same.
+67. **WKS-FR-ZMSE** `list_work_streams` and `get_work_stream` report `temporary` for each stream. A record written before the flag existed reads as not temporary.
 
 ## Contract surface
 
 ### Tauri commands
 Names match `../ui/WSS-work-stream-selector.md` byte-for-byte:
 
-- `"create work stream (name, base branch)"` → `create_work_stream(name, base_branch?)` → `WorkStream`. Side effects: a branch, a working copy, and a stream record, and one `"branches changed"` (WKS-FR-SPVK).
+- `"create work stream (name, base branch, temporary)"` → `create_work_stream(name, base_branch?, temporary?)` → `WorkStream`. Side effects: a branch, a working copy, and a stream record, and one `"branches changed"` (WKS-FR-SPVK).
 - `"list work streams"` → `list_work_streams()` → `[WorkStreamSummary]`. No side effect.
 - `"get work stream (id)"` → `get_work_stream(stream_id)` → `WorkStream`. No side effect.
 - `"merge work stream (id, publication)"` → `merge_work_stream(stream_id, publication)` → `StreamMergeResult`. Async. Side effects: the base branch advances where a clean merge lands; where Git cannot resolve a path, a merge snapshot ref, a merge worktree and a merge run in the state `queued` are created, and no branch moves.
@@ -112,7 +115,8 @@ WorkStream {
   base_revision,            // that branch's revision at creation
   created_at,               // RFC 3339 UTC
   busy_run_id,              // the run holding it, or null
-  is_missing                // its directory is gone (WKS-FR-AXRD)
+  is_missing,               // its directory is gone (WKS-FR-AXRD)
+  temporary                 // true for a temporary stream (WKS-FR-KCTR)
 }
 
 WorkStreamSummary {

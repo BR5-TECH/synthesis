@@ -33,6 +33,7 @@ import type {
   WorkStreamSummary,
 } from "../types";
 import { STREAM_ERRORS } from "../types";
+import { temporaryMergeMessage } from "../state/graduation";
 import { Icon } from "./icons";
 
 export interface WorkStreamSelectorProps {
@@ -58,11 +59,13 @@ export interface WorkStreamSelectorProps {
    * WSS-FR-TQBN / CMW-FR-KRVP: the author chose to commit the merge, so the
    * commit-message window opens with this stream. The shell owns that window,
    * which answers with **the message alone** and closes at once; the merge is
-   * this surface's to start, to show and to report (WSS-FR-HGWL).
+   * this surface's to start, to show and to report (WSS-FR-HGWL). The default
+   * message of a temporary stream travels with the request (WSS-FR-GQXN).
    */
   onRequestMergeCommit: (
     streamId: string,
     streamName: string,
+    defaultMessage?: string,
   ) => Promise<string | null>;
   /** WSS-FR-OMAP: route to the Changes panel, where uncommitted work is settled. */
   onOpenChanges?: () => void;
@@ -84,6 +87,8 @@ import { StreamUpdateResolution, updateSubject } from "./StreamUpdateResolution"
 import { refusalText, splitRefusal } from "./WorkStreamSelector/refusals";
 import { NewStreamDialog } from "./WorkStreamSelector/NewStreamDialog";
 import { StreamRow } from "./WorkStreamSelector/StreamRow";
+import { MergePrompt } from "./WorkStreamSelector/MergePrompt";
+import { useTemporaryStreams } from "./WorkStreamSelector/temporary";
 import type { PullRequestSource } from "./CreatePullRequest/types";
 import type {
   MergeOutcome,
@@ -244,6 +249,47 @@ export function WorkStreamSelector({
     };
   }, []);
 
+  /**
+   * WSS-FR-TCSB: a refusal of an automatic deletion, kept per stream. It stays
+   * on the row until the author starts another act on that stream, and it
+   * outlives the dropdown it would have been shown in.
+   */
+  const [deleteRefusals, setDeleteRefusals] = useState<Record<string, string>>({});
+
+  /**
+   * WSS-FR-KFSA / WSS-FR-NZRB / WSS-FR-TCSB: delete a temporary stream after its
+   * merge. The backend applies the rules of **Delete stream**, so a refusal
+   * deletes nothing and is shown on the stream's row.
+   */
+  const deleteTemporary = useCallback(
+    (summary: WorkStreamSummary, force: boolean) => {
+      const { id } = summary.stream;
+      logInfo(["frontend"], "a temporary stream is deleted after its merge", {
+        streamId: id,
+        force,
+      });
+      api
+        .deleteWorkStream(id, force, false)
+        .then(() => {
+          if (mounted.current) reload();
+        })
+        .catch((reason) => {
+          const text = String(reason instanceof Error ? reason.message : reason);
+          logWarn(["frontend"], "a temporary stream could not be deleted after its merge", {
+            streamId: id,
+            reason: splitRefusal(text)[0] || "unknown",
+          });
+          if (!mounted.current) return;
+          setDeleteRefusals((held) => ({ ...held, [id]: refusalText(text) }));
+          reload();
+        });
+    },
+    [reload],
+  );
+
+  /** WSS-FR-PRVK / WSS-FR-YHCT / WSS-FR-NZRB: the life of a temporary stream. */
+  const temporary = useTemporaryStreams(streams, deleteTemporary);
+
   // WSS-FR-XZRD: a click outside closes the dropdown, and so does Escape.
   useEffect(() => {
     if (!open) return;
@@ -333,6 +379,7 @@ export function WorkStreamSelector({
     setSurface({ kind: "none" });
     setRowError(null);
     setDirtyRefusal(null);
+    setDeleteRefusals((held) => withoutKey(held, id));
     setOutcomes((held) => withoutKey(held, id));
     setMerging((live) => ({
       ...live,
@@ -348,6 +395,9 @@ export function WorkStreamSelector({
         if (!mounted.current) return;
         settleMerge(id);
         acceptMergeResult(id, result);
+        if (summary.stream.temporary) {
+          afterTemporaryMerge(summary, result, publication);
+        }
       })
       .catch((reason) => {
         if (!mounted.current) return;
@@ -377,6 +427,41 @@ export function WorkStreamSelector({
   };
 
   /**
+   * WSS-FR-KFSA / WSS-FR-NZRB: what a merge of a temporary stream answered.
+   *
+   * A merge Git settled, and a stream that held nothing, delete the stream now.
+   * The base branch holds no commit of the stream where the author left the
+   * result uncommitted, so that deletion is forced. A conflict became a merge
+   * run, and the stream is deleted when that run completes.
+   */
+  const afterTemporaryMerge = (
+    summary: WorkStreamSummary,
+    result: StreamMergeResult,
+    publication: StreamMergePublication,
+  ) => {
+    if (result.kind === "conflicted") {
+      temporary.followMergeRun(result.runId);
+      return;
+    }
+    temporary.remove(summary, result.kind === "merged" && publication.kind === "uncommitted");
+  };
+
+  /**
+   * WSS-FR-LWZB: **Yes** on the merge prompt opens the dropdown on the merge
+   * confirmation of the stream. The prompt shows only while no other overlay is
+   * open, so opening the dropdown closes none.
+   */
+  const confirmTemporaryMerge = (summary: WorkStreamSummary) => {
+    temporary.answerPrompt(summary.stream.id);
+    onOpen?.();
+    reload();
+    setRowError(null);
+    setDirtyRefusal(null);
+    setSurface({ kind: "merge", streamId: summary.stream.id });
+    setOpen(true);
+  };
+
+  /**
    * WSS-FR-TQBN / SNV-FR-56: take the message, then start the merge.
    *
    * The dropdown closes first. The commit message window is a modal overlay of
@@ -387,12 +472,37 @@ export function WorkStreamSelector({
   const startMergeWithMessage = (summary: WorkStreamSummary) => {
     const { id, name } = summary.stream;
     close();
-    void onRequestMergeCommit(id, name).then((message) => {
-      // CMW-FR-09: a dismissed window starts nothing.
-      if (!mounted.current || message === null) return;
-      startMerge(summary, { kind: "commit", message });
-    });
+    // WSS-FR-GQXN: a temporary stream proposes a message that lists its runs.
+    const proposal = summary.stream.temporary
+      ? defaultMergeMessage(summary)
+      : Promise.resolve(undefined);
+    void proposal
+      .then((defaultMessage) => onRequestMergeCommit(id, name, defaultMessage))
+      .then((message) => {
+        // CMW-FR-09: a dismissed window starts nothing.
+        if (!mounted.current || message === null) return;
+        startMerge(summary, { kind: "commit", message });
+      });
   };
+
+  /**
+   * WSS-FR-GQXN: the default message of a temporary stream's merge, read from
+   * the project's runs when the window is asked for. A read that fails leaves
+   * the message empty, and the author writes it.
+   */
+  const defaultMergeMessage = (
+    summary: WorkStreamSummary,
+  ): Promise<string | undefined> =>
+    api
+      .listGraduationQueue()
+      .then((queue) => temporaryMergeMessage(queue.runs, summary.stream))
+      .catch((reason) => {
+        logWarn(["frontend"], "the runs of a temporary stream could not be read for its merge message", {
+          streamId: summary.stream.id,
+          reason: splitRefusal(String(reason))[0] || "unknown",
+        });
+        return undefined;
+      });
 
   const settleMerge = (streamId: string) => {
     // A merge outlives the surface that started it, so an answer arriving after
@@ -623,7 +733,9 @@ export function WorkStreamSelector({
                 surface={surface}
                 busy={busyRow === summary.stream.id}
                 error={
-                  rowError?.id === summary.stream.id ? rowError.text : null
+                  rowError?.id === summary.stream.id
+                    ? rowError.text
+                    : (deleteRefusals[summary.stream.id] ?? null)
                 }
                 busyDraftName={
                   draftNames[summary.stream.busyRunId ?? ""] ?? null
@@ -649,6 +761,7 @@ export function WorkStreamSelector({
                 onActivate={() => void activate(summary)}
                 onOpenSurface={(next) => {
                   setRowError(null);
+                  setDeleteRefusals((held) => withoutKey(held, summary.stream.id));
                   setDirtyRefusal(null);
                   setUpdateDirty(null);
                   setUpdateStale(null);
@@ -758,6 +871,15 @@ export function WorkStreamSelector({
           }}
           onError={setResolveError}
           error={resolveError}
+        />
+      )}
+
+      {/* WSS-FR-YHCT / WSS-FR-LWZB: the merge prompt of a temporary stream. */}
+      {temporary.prompt && (
+        <MergePrompt
+          summary={temporary.prompt}
+          onYes={() => confirmTemporaryMerge(temporary.prompt!)}
+          onNo={() => temporary.answerPrompt(temporary.prompt!.stream.id)}
         />
       )}
 

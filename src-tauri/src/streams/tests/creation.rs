@@ -221,7 +221,7 @@ fn every_operation_refuses_a_project_that_is_not_a_repository() {
     // outside Git is told that, whichever operation it asked for and whatever
     // stream id it named.
     assert_eq!(
-        create_work_stream(handle.clone(), "x".into(), None).expect_err("refused"),
+        create_work_stream(handle.clone(), "x".into(), None, None).expect_err("refused"),
         ERR_NOT_A_GIT_REPOSITORY
     );
     assert_eq!(
@@ -341,4 +341,44 @@ fn a_creation_writes_nothing_into_the_project() {
     opts.include_untracked(true);
     let statuses = repo.statuses(Some(&mut opts)).expect("status");
     assert_eq!(statuses.len(), 0, "the project's worktree stayed clean");
+}
+
+// WKS-FR-KCTR, WKS-FR-ZMSE: a request that omits the flag makes a stream that
+// is not temporary.
+#[test]
+fn a_stream_created_without_the_flag_is_not_temporary() {
+    let fx = Fixture::new();
+    let stream = fx.create("plain", None).expect("created");
+    assert!(!stream.temporary);
+    let read = get_work_stream(fx.app.clone(), stream.id).expect("read");
+    assert!(!read.temporary);
+}
+
+// WKS-FR-KCTR, WKS-FR-ZMSE, WKS-FR-VBDH: the flag is recorded, read back from
+// disk and reported by the listing.
+#[test]
+fn a_temporary_stream_records_the_flag_and_the_listing_reports_it() {
+    let fx = Fixture::new();
+    let stream = create_work_stream(
+        fx.app.clone(),
+        "scratch".to_string(),
+        None,
+        Some(true),
+    )
+    .expect("created");
+    assert!(stream.temporary);
+    let read = get_work_stream(fx.app.clone(), stream.id.clone()).expect("read");
+    assert!(read.temporary);
+    let listed = list_work_streams(fx.app.clone()).expect("listed");
+    assert!(listed
+        .iter()
+        .any(|summary| summary.stream.id == stream.id && summary.stream.temporary));
+}
+
+// WKS-FR-ZMSE: a record written before the flag existed reads as not temporary.
+#[test]
+fn a_record_without_the_flag_reads_as_not_temporary() {
+    let json = r#"{"id":"s1","name":"old","branch":"b","worktreePath":"/w","baseBranch":"main","baseRevision":"abc","createdAt":"2025-01-01T00:00:00Z"}"#;
+    let stream: WorkStream = serde_json::from_str(json).expect("parsed");
+    assert!(!stream.temporary);
 }

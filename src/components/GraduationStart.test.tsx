@@ -222,6 +222,7 @@ describe("the window a graduation starts in", () => {
       "new",
       "standing-work-message-graduation-start",
       "stream",
+      "temporary",
     ]);
   });
 
@@ -231,7 +232,13 @@ describe("the window a graduation starts in", () => {
     const answered = Array.from(
       dialog().querySelectorAll<HTMLElement>("input, select, textarea"),
     ).map((control) => control.id || control.getAttribute("value"));
-    expect(answered).toEqual(["stream", "new", "direct", "graduation-stream"]);
+    expect(answered).toEqual([
+      "stream",
+      "new",
+      "temporary",
+      "direct",
+      "graduation-stream",
+    ]);
   });
 });
 

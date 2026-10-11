@@ -74,6 +74,7 @@ interface TopChromeProps {
   onRequestMergeCommit: (
     streamId: string,
     streamName: string,
+    defaultMessage?: string,
   ) => Promise<string | null>;
   // WSS-FR-KHGP: open the Create a PR window for a work stream.
   onCreatePullRequest?: (source: PullRequestSource) => void;

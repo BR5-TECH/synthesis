@@ -74,7 +74,7 @@ impl Fixture {
     }
 
     fn create(&self, name: &str, base: Option<&str>) -> Result<WorkStream, String> {
-        create_work_stream(self.app.clone(), name.to_string(), base.map(str::to_string))
+        create_work_stream(self.app.clone(), name.to_string(), base.map(str::to_string), None)
     }
 }
 

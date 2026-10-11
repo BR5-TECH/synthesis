@@ -23,3 +23,4 @@ export * from "./coalesce";
 export * from "./pathTree";
 export * from "./pathsWidth";
 export * from "./slotWait";
+export * from "./temporaryStream";

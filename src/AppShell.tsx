@@ -751,6 +751,7 @@ export function AppShell(props: AppShellProps) {
           streamMerge={{
             streamId: streamMergeWindow.streamId,
             streamName: streamMergeWindow.streamName,
+            defaultMessage: streamMergeWindow.defaultMessage,
           }}
           onClose={() => settleStreamMergeWindow(null)}
           onCommitted={() => settleStreamMergeWindow(null)}

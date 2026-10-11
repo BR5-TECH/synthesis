@@ -8014,6 +8014,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         createdAt: new Date().toISOString(),
         busyRunId: null,
         isMissing: false,
+        temporary: Boolean(a.temporary),
       };
       workStreams.push(created);
       return { ...created };

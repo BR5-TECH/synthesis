@@ -225,7 +225,7 @@ impl Fixture {
 
     /// A work stream on the production path.
     fn stream(&self, name: &str) -> crate::streams::WorkStream {
-        crate::streams::create_work_stream(self.app.clone(), name.to_string(), None)
+        crate::streams::create_work_stream(self.app.clone(), name.to_string(), None, None)
             .expect("a stream")
     }
 

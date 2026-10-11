@@ -292,6 +292,7 @@ function InFlightOverlay({
     <div
       className="status-bar__overlay"
       data-testid="in-flight-overlay"
+      data-floating-overlay=""
       role="dialog"
       aria-label="In-flight operations"
     >

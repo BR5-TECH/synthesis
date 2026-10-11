@@ -155,6 +155,10 @@ pub struct WorkStream {
     /// WKS-FR-AXRD: Git lists it but its directory has gone.
     #[serde(default, skip_deserializing)]
     pub is_missing: bool,
+    /// WKS-FR-KCTR: the stream is temporary. Set at creation, never changed,
+    /// and a record written before the flag existed reads as false.
+    #[serde(default)]
+    pub temporary: bool,
 }
 
 /// WKS-FR-SGCM: one stream as a listing reports it.

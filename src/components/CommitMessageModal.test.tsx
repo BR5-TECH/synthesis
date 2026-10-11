@@ -720,6 +720,29 @@ describe("the work-stream merge route (CMW-FR-KRVP / CMW-FR-ZDMT / CMW-FR-BZHM)"
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
+  it("CMW-FR-KQLV: it opens with the default message it was handed, editable, and confirms it as it stands", async () => {
+    invokeMock.mockImplementation(async () => undefined);
+    const { onMergeMessage } = renderMergeWindow({
+      streamMerge: {
+        streamId: "w1",
+        streamName: "editor work",
+        defaultMessage: "- Fix tab order\n- Add run logs",
+      },
+    });
+
+    const field = screen.getByLabelText("Commit message");
+    expect(field).toHaveValue("- Fix tab order\n- Add run logs");
+    await userEvent.click(screen.getByRole("button", { name: /Merge/ }));
+    expect(onMergeMessage).toHaveBeenCalledWith("- Fix tab order\n- Add run logs");
+  });
+
+  it("CMW-FR-KQLV: it opens empty where no default message was handed, and the confirm is disabled", () => {
+    invokeMock.mockImplementation(async () => undefined);
+    renderMergeWindow();
+    expect(screen.getByLabelText("Commit message")).toHaveValue("");
+    expect(screen.getByRole("button", { name: /Merge/ })).toBeDisabled();
+  });
+
   it("CMW-FR-ZDMT: it names the stream and reports no count of files", () => {
     invokeMock.mockImplementation(async () => undefined);
     renderMergeWindow();

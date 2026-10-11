@@ -503,6 +503,19 @@ fn wait_for_agent_operation(h: &Harness) -> crate::progress::Operation {
     panic!("no agent operation was reported");
 }
 
+/// Wait until no agent operation is in flight. A turn leaves the registry
+/// before `finish` releases its operation, so an empty registry does not yet
+/// mean an empty operation set.
+fn wait_for_no_agent_operation(h: &Harness) {
+    for _ in 0..500 {
+        if agent_operations(h).is_empty() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    panic!("an agent operation was still reported: {:?}", agent_operations(h));
+}
+
 #[test]
 fn a_running_turn_is_reported_as_an_agent_operation_and_leaves_the_set_when_it_ends() {
     // PRG-FR-02, PRG-FR-08 / AGC-FR-24, PRG-FR-KXQW.
@@ -604,7 +617,7 @@ fn a_turn_cancelled_while_it_waits_for_a_slot_never_registers_an_operation() {
 
     // The slot frees and the cancelled turn wakes: it still registers nothing.
     h.settle();
-    assert!(agent_operations(&h).is_empty());
+    wait_for_no_agent_operation(&h);
     let events = seen.lock().unwrap();
     assert!(
         !events.iter().any(|payload| payload.contains("@sec")),

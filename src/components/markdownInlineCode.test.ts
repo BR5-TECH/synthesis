@@ -392,11 +392,11 @@ describe("text typed between two literal backticks becomes code (EDT-FR-EKEZ)", 
     ["two backticks on the right", "a `|`` b"],
     ["no backtick on the right", "a `| b"],
   ])("EDT-FR-EKEZ: no code with %s", (_name, layout) => {
-    const text = layout.replace("|", "");
-    const ed = mount(text.replace(/`/g, "\\`"));
+    const text = layout.replace(/\|/g, "");
+    const ed = mount(text.replace(/[\\`]/g, "\\$&"));
     ed.commands.setTextSelection(1 + layout.indexOf("|"));
     typeText(ed, "q");
     expect(codeMarkedText(ed)).toBe("");
-    expect(ed.state.doc.textContent).toBe(layout.replace("|", "q"));
+    expect(ed.state.doc.textContent).toBe(layout.replace(/\|/g, "q"));
   });
 });

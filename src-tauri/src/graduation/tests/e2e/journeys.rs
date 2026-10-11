@@ -305,7 +305,7 @@ fn an_agent_reported_failure_the_review_passes_still_completes_the_run() {
         .review_turn(Script::answers_ready("The work answers the prompt."))
         .run()
         .expect_state(GraduationRunState::Completed)
-        .expect_agent_account_contains("The formatter would not run")
+        .expect_agent_report_contains("The formatter would not run")
         .expect_commits(1)
         .expect_stream_released();
 }

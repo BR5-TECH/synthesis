@@ -308,7 +308,7 @@ impl Outcome {
     }
 
     /// GRL-FR-DNKA: the work turn's own account of what it did and did not do.
-    pub(crate) fn expect_agent_account_contains(self, fragment: &str) -> Self {
+    pub(crate) fn expect_agent_report_contains(self, fragment: &str) -> Self {
         let held = self.run.checkpoint.agent_account.clone().unwrap_or_default();
         assert!(
             held.contains(fragment),

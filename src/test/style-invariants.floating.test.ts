@@ -172,7 +172,7 @@ function floatingSurfaces(all: Rule[], tokens: Tokens): Set<string> {
  */
 function stateOf(selector: string): string | null {
   const m = selector.match(
-    /^(\.[A-Za-z0-9_-]+)((?::[A-Za-z-]+(?:\([^()]*(?:\([^()]*\))?[^()]*\))?|\[[^\]]*\])+)$/,
+    /^(\.[A-Za-z0-9_-]+)((?::[A-Za-z-]+(?:\([^()]*(?:\([^()]*\)[^()]*)?\))?|\[[^\]]*\])+)$/,
   );
   return m ? m[1] : null;
 }

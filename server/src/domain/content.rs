@@ -74,9 +74,7 @@ pub struct Conversation {
 impl Conversation {
     /// The sequence number the next message takes (SAS-FR-NUZG).
     pub fn next_sequence(&self) -> u64 {
-        self.messages
-            .last()
-            .map_or(1, |message| message.sequence + 1)
+        self.messages.last().map_or(1, |message| message.sequence + 1)
     }
 
     /// Appends one message (SAS-FR-CQVE, SAS-FR-PYSU).

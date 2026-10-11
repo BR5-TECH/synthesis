@@ -46,36 +46,35 @@ use crate::notes::{new_note_id, now_rfc3339};
 use crate::project::ProjectState;
 use crate::scanning;
 
+mod attachment_store;
+mod commands;
 mod constants;
-mod paths;
 mod fold;
 mod listing;
-mod scope;
-mod attachment_store;
 mod locate;
-mod opening;
+mod model;
 mod mutating;
+mod opening;
+mod paths;
 mod question_sets;
 mod question_submit;
 mod rename;
-mod model;
-mod commands;
+mod scope;
 
+pub use attachment_store::*;
+pub use commands::*;
 pub use constants::*;
-pub use paths::*;
 pub use fold::*;
 pub use listing::*;
-pub use scope::*;
-pub use attachment_store::*;
 pub use locate::*;
-pub use opening::*;
+pub use model::*;
 pub use mutating::*;
+pub use opening::*;
+pub use paths::*;
 pub use question_sets::*;
 pub use question_submit::*;
 pub use rename::*;
-pub use model::*;
-pub use commands::*;
-
+pub use scope::*;
 
 #[cfg(test)]
 mod tests;

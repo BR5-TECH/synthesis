@@ -19,18 +19,9 @@ fn modes_and_scopes_decode_from_the_wire_strings_the_frontend_sends() {
         serde_json::from_str::<SearchMode>("\"smart_case\"").unwrap(),
         SearchMode::SmartCase
     );
-    assert_eq!(
-        serde_json::from_str::<SearchMode>("\"regex\"").unwrap(),
-        SearchMode::Regex
-    );
-    assert_eq!(
-        serde_json::from_str::<SearchScope>("\"capped\"").unwrap(),
-        SearchScope::Capped
-    );
-    assert_eq!(
-        serde_json::from_str::<SearchScope>("\"full\"").unwrap(),
-        SearchScope::Full
-    );
+    assert_eq!(serde_json::from_str::<SearchMode>("\"regex\"").unwrap(), SearchMode::Regex);
+    assert_eq!(serde_json::from_str::<SearchScope>("\"capped\"").unwrap(), SearchScope::Capped);
+    assert_eq!(serde_json::from_str::<SearchScope>("\"full\"").unwrap(), SearchScope::Full);
     assert!(serde_json::from_str::<SearchMode>("\"fuzzy\"").is_err());
     assert!(serde_json::from_str::<SearchScope>("\"all\"").is_err());
 }
@@ -126,10 +117,7 @@ fn a_search_stopped_while_the_queue_is_full_still_terminates() {
     let total = 100_000;
     let candidates = Arc::new(
         (0..total)
-            .map(|n| Candidate {
-                ordinal: n as u64,
-                ..files[n % on_disk].clone()
-            })
+            .map(|n| Candidate { ordinal: n as u64, ..files[n % on_disk].clone() })
             .collect::<Vec<_>>(),
     );
     assert!(
@@ -143,11 +131,13 @@ fn a_search_stopped_while_the_queue_is_full_still_terminates() {
     let reason = run_search(
         &sink,
         root,
-        candidates,
-        Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
-        SearchScope::Capped,
+        SearchJob {
+            search_id: "s",
+            candidates,
+            matcher: Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
+            scope: SearchScope::Capped,
+        },
         &Stop::new(),
-        "s",
         &{
             let read = Arc::clone(&read);
             move |consumed| read.store(consumed, Ordering::SeqCst)
@@ -180,11 +170,13 @@ fn a_superseded_search_ends_with_that_reason_and_streams_nothing_after() {
     let reason = run_search(
         &sink,
         root,
-        candidates,
-        Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
-        SearchScope::Full,
+        SearchJob {
+            search_id: "superseded-search",
+            candidates,
+            matcher: Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
+            scope: SearchScope::Full,
+        },
         &stop,
-        "superseded-search",
         &|_| {},
     );
 
@@ -204,19 +196,10 @@ fn every_end_reason_maps_to_the_right_terminal_operation_state() {
     // SCC-FR-18: the search's PRG operation terminates whatever the reason,
     // and *how* it terminates is what the status bar renders. A cancelled
     // search reported as `finished` would claim work completed that did not.
-    assert_eq!(
-        EndReason::Completed.operation_state(),
-        OperationState::Finished
-    );
+    assert_eq!(EndReason::Completed.operation_state(), OperationState::Finished);
     assert_eq!(EndReason::Capped.operation_state(), OperationState::Finished);
-    assert_eq!(
-        EndReason::Cancelled.operation_state(),
-        OperationState::Cancelled
-    );
-    assert_eq!(
-        EndReason::Superseded.operation_state(),
-        OperationState::Cancelled
-    );
+    assert_eq!(EndReason::Cancelled.operation_state(), OperationState::Cancelled);
+    assert_eq!(EndReason::Superseded.operation_state(), OperationState::Cancelled);
     assert_eq!(EndReason::Failed.operation_state(), OperationState::Failed);
 }
 
@@ -257,12 +240,8 @@ fn a_symlink_is_not_a_candidate_at_all() {
         // oversized or non-UTF-8 candidate stays findable by path (SCC-FR-15)
         // because it is a real file that merely cannot be read, whereas a
         // symlink is not surfaced as a file at all.
-        let (by_name, _) = search(
-            root,
-            "link-to-secret",
-            SearchMode::LiteralInsensitive,
-            SearchScope::Full,
-        );
+        let (by_name, _) =
+            search(root, "link-to-secret", SearchMode::LiteralInsensitive, SearchScope::Full);
         assert!(
             by_name.hits().is_empty(),
             "a symlink must not be findable by name either: {:?}",

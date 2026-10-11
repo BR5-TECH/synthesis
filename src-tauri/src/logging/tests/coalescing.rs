@@ -17,10 +17,7 @@ fn a_burst_collapses_to_one_event_and_the_trailing_flush_is_owed() {
     let sink = Recorder::default();
     let base = t0();
 
-    let first = buffer.append_at(
-        vec![input(LogLevel::Info, &[Domain::Backend], "1")],
-        base,
-    );
+    let first = buffer.append_at(vec![input(LogLevel::Info, &[Domain::Backend], "1")], base);
     assert!(first.emit_now, "the leading edge is delivered");
     sink.publish(&first.state);
 
@@ -43,9 +40,7 @@ fn a_burst_collapses_to_one_event_and_the_trailing_flush_is_owed() {
     assert_eq!(sink.last().highest_sequence, Some(999));
 
     // The debt is owed once.
-    assert!(buffer
-        .take_pending_flush(base + COALESCE_WINDOW * 4)
-        .is_none());
+    assert!(buffer.take_pending_flush(base + COALESCE_WINDOW * 4).is_none());
 }
 
 #[test]
@@ -83,9 +78,8 @@ fn a_debt_incurred_after_a_leading_edge_emit_is_never_stranded() {
         "D's state is still owed; a thread that exited here would strand it"
     );
     // And one window later it is settled, carrying every record.
-    let flushed = buffer
-        .take_pending_flush(after(base, 110))
-        .expect("the debt must eventually be payable");
+    let flushed =
+        buffer.take_pending_flush(after(base, 110)).expect("the debt must eventually be payable");
     assert_eq!(flushed.buffer_total, 4);
     assert!(!buffer.is_flush_pending());
 }
@@ -105,10 +99,7 @@ fn a_clear_restarts_the_coalescing_window() {
         vec![input(LogLevel::Info, &[Domain::Backend], "content root changed")],
         after(base, 1),
     );
-    assert!(
-        outcome.emit_now,
-        "the first record after a clear is delivered, not coalesced"
-    );
+    assert!(outcome.emit_now, "the first record after a clear is delivered, not coalesced");
     assert_eq!(outcome.state.generation, 1);
     assert_eq!(outcome.state.buffer_total, 1);
 }
@@ -117,9 +108,7 @@ fn a_clear_restarts_the_coalescing_window() {
 fn an_append_past_the_window_is_delivered_immediately() {
     let buffer = LogBuffer::new();
     let base = t0();
-    assert!(buffer
-        .append_at(vec![input(LogLevel::Info, &[Domain::Backend], "a")], base)
-        .emit_now);
+    assert!(buffer.append_at(vec![input(LogLevel::Info, &[Domain::Backend], "a")], base).emit_now);
     assert!(buffer
         .append_at(
             vec![input(LogLevel::Info, &[Domain::Backend], "b")],
@@ -138,10 +127,7 @@ fn a_clear_is_never_coalesced_away() {
     let base = t0();
     buffer.append_at(vec![input(LogLevel::Info, &[Domain::Backend], "a")], base);
     // An append inside the window, so a flush is pending.
-    buffer.append_at(
-        vec![input(LogLevel::Info, &[Domain::Backend], "b")],
-        after(base, 1),
-    );
+    buffer.append_at(vec![input(LogLevel::Info, &[Domain::Backend], "b")], after(base, 1));
 
     clear_and_publish(&sink, &buffer);
     assert_eq!(sink.len(), 1);

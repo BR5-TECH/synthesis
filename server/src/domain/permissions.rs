@@ -92,9 +92,7 @@ impl Permission {
         Permission::ALL
             .into_iter()
             .find(|permission| permission.as_str() == text)
-            .ok_or_else(|| DomainError::InvalidPermission {
-                permission: text.to_string(),
-            })
+            .ok_or_else(|| DomainError::InvalidPermission { permission: text.to_string() })
     }
 }
 
@@ -138,9 +136,7 @@ impl ProjectRole {
         ProjectRole::ALL
             .into_iter()
             .find(|role| role.as_str() == text)
-            .ok_or_else(|| DomainError::InvalidRole {
-                role: text.to_string(),
-            })
+            .ok_or_else(|| DomainError::InvalidRole { role: text.to_string() })
     }
 
     /// The permissions the role bundles (SAS-FR-HXAP).
@@ -148,11 +144,8 @@ impl ProjectRole {
     /// The bundles are nested: a contributor holds every viewer permission, and
     /// an administrator holds every contributor permission.
     pub fn permissions(self) -> Vec<Permission> {
-        const VIEWER: [Permission; 3] = [
-            Permission::ProjectRead,
-            Permission::DraftRead,
-            Permission::ConversationRead,
-        ];
+        const VIEWER: [Permission; 3] =
+            [Permission::ProjectRead, Permission::DraftRead, Permission::ConversationRead];
         const CONTRIBUTOR: [Permission; 7] = [
             Permission::DraftCreate,
             Permission::DraftUpdate,
@@ -172,11 +165,9 @@ impl ProjectRole {
 
         let mut permissions: Vec<Permission> = match self {
             ProjectRole::Owner => Permission::ALL.to_vec(),
-            ProjectRole::Administrator => VIEWER
-                .into_iter()
-                .chain(CONTRIBUTOR)
-                .chain(ADMINISTRATOR)
-                .collect(),
+            ProjectRole::Administrator => {
+                VIEWER.into_iter().chain(CONTRIBUTOR).chain(ADMINISTRATOR).collect()
+            }
             ProjectRole::Contributor => VIEWER.into_iter().chain(CONTRIBUTOR).collect(),
             ProjectRole::Viewer => VIEWER.to_vec(),
         };
@@ -204,12 +195,8 @@ pub enum MemberRole {
 
 impl MemberRole {
     /// Every membership role.
-    pub const ALL: [MemberRole; 4] = [
-        MemberRole::Owner,
-        MemberRole::Administrator,
-        MemberRole::Member,
-        MemberRole::Viewer,
-    ];
+    pub const ALL: [MemberRole; 4] =
+        [MemberRole::Owner, MemberRole::Administrator, MemberRole::Member, MemberRole::Viewer];
 
     /// The name the API uses.
     pub fn as_str(self) -> &'static str {
@@ -226,9 +213,7 @@ impl MemberRole {
         MemberRole::ALL
             .into_iter()
             .find(|role| role.as_str() == text)
-            .ok_or_else(|| DomainError::InvalidRole {
-                role: text.to_string(),
-            })
+            .ok_or_else(|| DomainError::InvalidRole { role: text.to_string() })
     }
 }
 
@@ -277,11 +262,8 @@ mod tests {
     fn the_role_bundles_match_the_published_mapping() {
         assert_eq!(ProjectRole::Owner.permissions().len(), 15);
         assert_eq!(ProjectRole::Viewer.permissions(), {
-            let mut expected = vec![
-                Permission::ProjectRead,
-                Permission::DraftRead,
-                Permission::ConversationRead,
-            ];
+            let mut expected =
+                vec![Permission::ProjectRead, Permission::DraftRead, Permission::ConversationRead];
             expected.sort();
             expected
         });
@@ -292,36 +274,22 @@ mod tests {
             assert!(ProjectRole::Contributor.permissions().contains(&permission));
         }
         for permission in ProjectRole::Contributor.permissions() {
-            assert!(ProjectRole::Administrator
-                .permissions()
-                .contains(&permission));
+            assert!(ProjectRole::Administrator.permissions().contains(&permission));
         }
     }
 
     // SAS-FR-HXAP, SAS-FR-EPXN: an unknown role is refused rather than ignored.
     #[test]
     fn an_unknown_role_is_refused() {
-        assert!(matches!(
-            ProjectRole::parse("editor"),
-            Err(DomainError::InvalidRole { .. })
-        ));
-        assert!(matches!(
-            MemberRole::parse("editor"),
-            Err(DomainError::InvalidRole { .. })
-        ));
-        assert_eq!(
-            MemberRole::parse("member").expect("a known role"),
-            MemberRole::Member
-        );
+        assert!(matches!(ProjectRole::parse("editor"), Err(DomainError::InvalidRole { .. })));
+        assert!(matches!(MemberRole::parse("editor"), Err(DomainError::InvalidRole { .. })));
+        assert_eq!(MemberRole::parse("member").expect("a known role"), MemberRole::Member);
     }
 
     // The administrator project role differs from the owner role by nothing but
     // its protection: SAS-FR-MWOD guards the owner grant, not its permissions.
     #[test]
     fn the_owner_and_the_administrator_hold_the_same_permissions() {
-        assert_eq!(
-            ProjectRole::Owner.permissions(),
-            ProjectRole::Administrator.permissions()
-        );
+        assert_eq!(ProjectRole::Owner.permissions(), ProjectRole::Administrator.permissions());
     }
 }

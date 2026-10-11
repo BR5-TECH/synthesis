@@ -48,30 +48,19 @@ where
     fn insert(&self, id: K, value: V) -> Result<V, DomainError> {
         let mut records = self.records.lock().expect("the store is not poisoned");
         if records.contains_key(&id) {
-            return Err(DomainError::DuplicateId {
-                resource: self.resource,
-            });
+            return Err(DomainError::DuplicateId { resource: self.resource });
         }
         records.insert(id, value.clone());
-        self.order
-            .lock()
-            .expect("the order is not poisoned")
-            .push(id);
+        self.order.lock().expect("the order is not poisoned").push(id);
         Ok(value)
     }
 
     fn find(&self, id: K) -> Option<V> {
-        self.records
-            .lock()
-            .expect("the store is not poisoned")
-            .get(&id)
-            .cloned()
+        self.records.lock().expect("the store is not poisoned").get(&id).cloned()
     }
 
     fn get(&self, id: K) -> Result<V, DomainError> {
-        self.find(id).ok_or(DomainError::NotFound {
-            resource: self.resource,
-        })
+        self.find(id).ok_or(DomainError::NotFound { resource: self.resource })
     }
 
     fn update(
@@ -80,9 +69,8 @@ where
         change: &mut dyn FnMut(&mut V) -> Result<(), DomainError>,
     ) -> Result<V, DomainError> {
         let mut records = self.records.lock().expect("the store is not poisoned");
-        let record = records.get_mut(&id).ok_or(DomainError::NotFound {
-            resource: self.resource,
-        })?;
+        let record =
+            records.get_mut(&id).ok_or(DomainError::NotFound { resource: self.resource })?;
 
         // The change is applied to a copy. A closure that refuses leaves the
         // stored record untouched (SAS-FR-XUFA).
@@ -98,13 +86,8 @@ where
             .lock()
             .expect("the store is not poisoned")
             .remove(&id)
-            .ok_or(DomainError::NotFound {
-                resource: self.resource,
-            })?;
-        self.order
-            .lock()
-            .expect("the order is not poisoned")
-            .retain(|held| *held != id);
+            .ok_or(DomainError::NotFound { resource: self.resource })?;
+        self.order.lock().expect("the order is not poisoned").retain(|held| *held != id);
         Ok(removed)
     }
 
@@ -150,12 +133,8 @@ mod tests {
     #[test]
     fn a_duplicate_identifier_is_refused_and_changes_nothing() {
         let store = store();
-        store
-            .insert(1, "first".to_string())
-            .expect("the first write");
-        let error = store
-            .insert(1, "second".to_string())
-            .expect_err("the second write is refused");
+        store.insert(1, "first".to_string()).expect("the first write");
+        let error = store.insert(1, "second".to_string()).expect_err("the second write is refused");
         assert_eq!(error.code(), "duplicate_id");
         assert_eq!(store.get(1).expect("the record stands"), "first");
     }
@@ -184,10 +163,7 @@ mod tests {
         assert_eq!(store.list(), vec!["c", "a", "b"]);
         store.remove(1).expect("the removal");
         assert_eq!(store.list(), vec!["c", "b"]);
-        assert_eq!(
-            store.remove(1).expect_err("a second removal").code(),
-            "not_found"
-        );
+        assert_eq!(store.remove(1).expect_err("a second removal").code(), "not_found");
     }
 
     // SAS-FR-HEIV: concurrent updates are serialized, so a counter never repeats.

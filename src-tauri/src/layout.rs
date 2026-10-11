@@ -96,15 +96,11 @@ pub struct LayoutPreferences {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum VerticalPanelSide {
+    #[default]
     Left,
     Right,
-}
-
-impl Default for VerticalPanelSide {
-    fn default() -> Self {
-        VerticalPanelSide::Left
-    }
 }
 
 /// The bottom panel's active surface (SNV-FR-44 / SNV-FR-46).
@@ -113,16 +109,12 @@ impl Default for VerticalPanelSide {
 /// two sides exchange the same three tokens.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum BottomSurface {
+    #[default]
     Runs,
     Git,
     History,
-}
-
-impl Default for BottomSurface {
-    fn default() -> Self {
-        BottomSurface::Runs
-    }
 }
 
 /// PSS-FR-06: the open project's layout, read from the user-global per-project
@@ -270,14 +262,8 @@ mod tests {
 
     #[test]
     fn vertical_panel_side_serializes_lowercase() {
-        assert_eq!(
-            serde_json::to_string(&VerticalPanelSide::Left).unwrap(),
-            "\"left\""
-        );
-        assert_eq!(
-            serde_json::to_string(&VerticalPanelSide::Right).unwrap(),
-            "\"right\""
-        );
+        assert_eq!(serde_json::to_string(&VerticalPanelSide::Left).unwrap(), "\"left\"");
+        assert_eq!(serde_json::to_string(&VerticalPanelSide::Right).unwrap(), "\"right\"");
     }
 
     #[test]
@@ -287,18 +273,9 @@ mod tests {
 
     #[test]
     fn bottom_surface_serializes_lowercase() {
-        assert_eq!(
-            serde_json::to_string(&BottomSurface::Runs).unwrap(),
-            "\"runs\""
-        );
-        assert_eq!(
-            serde_json::to_string(&BottomSurface::Git).unwrap(),
-            "\"git\""
-        );
-        assert_eq!(
-            serde_json::to_string(&BottomSurface::History).unwrap(),
-            "\"history\""
-        );
+        assert_eq!(serde_json::to_string(&BottomSurface::Runs).unwrap(), "\"runs\"");
+        assert_eq!(serde_json::to_string(&BottomSurface::Git).unwrap(), "\"git\"");
+        assert_eq!(serde_json::to_string(&BottomSurface::History).unwrap(), "\"history\"");
     }
 
     #[test]
@@ -351,9 +328,7 @@ mod tests {
     #[test]
     fn store_save_overwrites_previous() {
         let store = GlobalSettingsStore::in_memory();
-        store
-            .save_project_layout("/p", LayoutPreferences::default())
-            .unwrap();
+        store.save_project_layout("/p", LayoutPreferences::default()).unwrap();
         let updated = sample_prefs();
         store.save_project_layout("/p", updated.clone()).unwrap();
         assert_eq!(store.load_project_layout("/p").unwrap(), Some(updated));
@@ -364,10 +339,12 @@ mod tests {
         // Regression guard for the SNV-FR-08 extension: the new main-window
         // fields must survive save/load round-trip.
         let store = GlobalSettingsStore::in_memory();
-        let mut prefs = LayoutPreferences::default();
-        prefs.main_window_outer_width = 1366.0;
-        prefs.main_window_outer_height = 768.0;
-        prefs.main_window_maximized = true;
+        let prefs = LayoutPreferences {
+            main_window_outer_width: 1366.0,
+            main_window_outer_height: 768.0,
+            main_window_maximized: true,
+            ..LayoutPreferences::default()
+        };
         store.save_project_layout("/p", prefs).unwrap();
         let got = store.load_project_layout("/p").unwrap().unwrap();
         assert_eq!(got.main_window_outer_width, 1366.0);

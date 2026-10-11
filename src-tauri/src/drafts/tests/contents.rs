@@ -48,7 +48,7 @@ fn a_save_converts_to_the_projects_line_ending_convention() {
         project_settings::ProjectConfig {
             line_endings: project_settings::LineEndings::Crlf,
             draft_template: None,
-                        ..Default::default()
+            ..Default::default()
         },
     )
     .unwrap();
@@ -56,10 +56,8 @@ fn a_save_converts_to_the_projects_line_ending_convention() {
 
     let saved = save_draft_file_impl(root, &id, FIRST_FILE, "one\ntwo\n").unwrap();
 
-    let on_disk = std::fs::read(
-        draft_dir(root, &id).unwrap().join(FILES_DIR).join(FIRST_FILE),
-    )
-    .unwrap();
+    let on_disk =
+        std::fs::read(draft_dir(root, &id).unwrap().join(FILES_DIR).join(FIRST_FILE)).unwrap();
     assert_eq!(on_disk, b"one\r\ntwo\r\n");
     assert_eq!(saved.checksum, fs::sha256_bytes(&on_disk));
     assert_ne!(saved.checksum, fs::sha256_bytes(b"one\ntwo\n"));

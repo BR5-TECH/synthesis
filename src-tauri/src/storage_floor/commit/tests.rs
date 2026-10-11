@@ -75,30 +75,15 @@ impl Fixture {
 
 fn commit_all(repo: &git2::Repository, message: &str) {
     let mut index = repo.index().expect("index");
-    index
-        .add_all(["*"], git2::IndexAddOption::DEFAULT, None)
-        .expect("add");
+    index.add_all(["*"], git2::IndexAddOption::DEFAULT, None).expect("add");
     index.write().expect("write");
-    let tree = repo
-        .find_tree(index.write_tree().expect("tree"))
-        .expect("tree");
+    let tree = repo.find_tree(index.write_tree().expect("tree")).expect("tree");
     let signature = repo.signature().expect("signature");
-    let parents: Vec<git2::Commit> = repo
-        .head()
-        .ok()
-        .and_then(|head| head.peel_to_commit().ok())
-        .into_iter()
-        .collect();
+    let parents: Vec<git2::Commit> =
+        repo.head().ok().and_then(|head| head.peel_to_commit().ok()).into_iter().collect();
     let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
-    repo.commit(
-        Some("HEAD"),
-        &signature,
-        &signature,
-        message,
-        &tree,
-        &parent_refs,
-    )
-    .expect("commit");
+    repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &parent_refs)
+        .expect("commit");
 }
 
 // PST-FR-DQZT / PST-FR-TYNC / PST-FR-YWXF / DRS-FR-VECL: one event is one
@@ -138,12 +123,7 @@ fn one_event_commits_its_draft_and_leaves_the_author_staged() {
         vec!["src/main.rs".to_string()],
         "the draft is clean and the author's work is still uncommitted"
     );
-    let staged = f
-        .repo()
-        .index()
-        .expect("index")
-        .get_path(Path::new("src/main.rs"), 0)
-        .is_some();
+    let staged = f.repo().index().expect("index").get_path(Path::new("src/main.rs"), 0).is_some();
     assert!(staged, "and it is still staged");
 }
 
@@ -178,8 +158,13 @@ fn pst_ts_zmbx_a_repository_that_is_not_ready_is_a_silent_no_op() {
     // A content root in no Git repository.
     let plain = TempDir::new().expect("tempdir");
     let root = RootFs::for_root(plain.path());
-    std::fs::create_dir_all(plain.path().join(".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef")).expect("the folder");
-    std::fs::write(plain.path().join(".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef/draft.toml"), "id = \"a\"\n").expect("a draft");
+    std::fs::create_dir_all(plain.path().join(".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef"))
+        .expect("the folder");
+    std::fs::write(
+        plain.path().join(".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef/draft.toml"),
+        "id = \"a\"\n",
+    )
+    .expect("a draft");
     assert_eq!(commit_once(&root, ID, DraftEvent::Created), Some(Skip::NotARepository.reason()));
 
     // A repository with no commit yet: this must not become the project's
@@ -190,8 +175,13 @@ fn pst_ts_zmbx_a_repository_that_is_not_ready_is_a_silent_no_op() {
     config.set_str("user.name", "An Author").expect("name");
     config.set_str("user.email", "author@example.com").expect("email");
     let root = RootFs::for_root(unborn.path());
-    std::fs::create_dir_all(unborn.path().join(".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef")).expect("the folder");
-    std::fs::write(unborn.path().join(".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef/draft.toml"), "id = \"a\"\n").expect("a draft");
+    std::fs::create_dir_all(unborn.path().join(".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef"))
+        .expect("the folder");
+    std::fs::write(
+        unborn.path().join(".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef/draft.toml"),
+        "id = \"a\"\n",
+    )
+    .expect("a draft");
     assert_eq!(commit_once(&root, ID, DraftEvent::Created), Some(Skip::NoCommitYet.reason()));
     assert!(repo.head().is_err(), "and the repository is still unborn");
 
@@ -260,11 +250,7 @@ fn pst_ts_zmbx_a_repository_that_is_not_ready_is_a_silent_no_op() {
 fn a_detached_head_is_committed_to_and_no_branch_moves() {
     let f = Fixture::new();
     let repo = f.repo();
-    let head = repo
-        .head()
-        .and_then(|h| h.peel_to_commit())
-        .expect("a head")
-        .id();
+    let head = repo.head().and_then(|h| h.peel_to_commit()).expect("a head").id();
     let branch_before = repo
         .find_branch("master", git2::BranchType::Local)
         .or_else(|_| repo.find_branch("main", git2::BranchType::Local))
@@ -276,7 +262,11 @@ fn a_detached_head_is_committed_to_and_no_branch_moves() {
     repo.set_head_detached(head).expect("detach");
 
     f.write(".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef/draft.toml", "id = \"one\"\n");
-    assert_eq!(commit_once(&f.root, ID, DraftEvent::Created), None, "a detached head is committed to");
+    assert_eq!(
+        commit_once(&f.root, ID, DraftEvent::Created),
+        None,
+        "a detached head is committed to"
+    );
 
     let repo = f.repo();
     assert!(repo.head_detached().expect("detached"), "and stays detached");
@@ -298,7 +288,10 @@ fn a_detached_head_is_committed_to_and_no_branch_moves() {
 fn the_commit_names_its_draft_and_nothing_else() {
     let f = Fixture::new();
     f.write(".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef/draft.toml", "id = \"one\"\n");
-    f.write(".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef/proposals/p.toml", "state = \"pending\"\n");
+    f.write(
+        ".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef/proposals/p.toml",
+        "state = \"pending\"\n",
+    );
     f.write(".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef/history/h.snapshot", "a version\n");
     f.write(".synthesis/drafts/1a2b3c4d5e6-0001-deadbeef/publication.toml", "[attempt]\n");
     f.write(".synthesis/drafts/1a2b3c4d5e6-0002-cafebabe/draft.toml", "id = \"two\"\n");
@@ -376,21 +369,13 @@ fn a_failure_reason_carries_no_path_and_no_draft_identity() {
     for message in leaky {
         let reason = failure_reason(message);
         assert!(
-            !reason.contains(".jsonl")
-                && !reason.contains('/')
-                && !reason.contains("1a0"),
+            !reason.contains(".jsonl") && !reason.contains('/') && !reason.contains("1a0"),
             "{reason} still carries the path from {message}"
         );
     }
-    assert_eq!(
-        failure_reason(leaky[0]), "stage_failed",
-        "and it still says which stage failed"
-    );
+    assert_eq!(failure_reason(leaky[0]), "stage_failed", "and it still says which stage failed");
     assert_eq!(failure_reason(leaky[1]), "deletion_failed");
-    assert_eq!(
-        failure_reason(crate::git::ERR_NOTHING_TO_COMMIT),
-        "nothing_to_commit"
-    );
+    assert_eq!(failure_reason(crate::git::ERR_NOTHING_TO_COMMIT), "nothing_to_commit");
     assert_eq!(
         failure_reason("something nobody anticipated: /Users/someone/secret"),
         "commit_failed",
@@ -426,12 +411,7 @@ fn a_skip_reason_is_a_fixed_token() {
 #[test]
 fn events_are_committed_one_at_a_time_in_order() {
     let f = Fixture::new();
-    let before = f
-        .repo()
-        .head()
-        .and_then(|h| h.peel_to_commit())
-        .expect("a head")
-        .id();
+    let before = f.repo().head().and_then(|h| h.peel_to_commit()).expect("a head").id();
     let second = "1a2b3c4d5e6-0002-cafebabe";
     f.write(&format!(".synthesis/drafts/{ID}/draft.toml"), "id = \"one\"\n");
     draft_event(&f.root, ID, "First", DraftEvent::Created);
@@ -442,10 +422,7 @@ fn events_are_committed_one_at_a_time_in_order() {
     wait_for_committer(&f.root);
 
     let repo = f.repo();
-    let head = repo
-        .head()
-        .and_then(|h| h.peel_to_commit())
-        .expect("a head");
+    let head = repo.head().and_then(|h| h.peel_to_commit()).expect("a head");
     assert_eq!(head.message().unwrap_or_default(), "draft: graduate \"Second\"");
     let parent = head.parent(0).expect("a parent");
     assert_eq!(parent.message().unwrap_or_default(), "draft: create \"First\"");
@@ -483,7 +460,11 @@ fn a_moved_draft_is_committed_at_its_new_location_and_removed_from_the_old() {
     )
     .expect("the move");
 
-    assert_eq!(commit_once(&f.root, ID, DraftEvent::GraduationStarted), None, "the commit is taken");
+    assert_eq!(
+        commit_once(&f.root, ID, DraftEvent::GraduationStarted),
+        None,
+        "the commit is taken"
+    );
     for gone in [
         format!(".synthesis/drafts/A/{ID}/draft.toml"),
         format!(".synthesis/drafts/A/{ID}/files/Prompt.md"),
@@ -511,7 +492,10 @@ fn a_deletion_is_not_paired_with_another_draft() {
     commit_all(&f.repo(), "draft A");
     std::fs::remove_dir_all(f.root.path().join(format!(".synthesis/drafts/{ID}"))).unwrap();
     f.write(&format!(".synthesis/drafts/{other}/draft.toml"), "id = \"x\"\nname = \"Untitled\"\n");
-    f.write(&format!(".synthesis/drafts/{other}/files/Untitled.md"), "## Intent\n\n## Requirements\n");
+    f.write(
+        &format!(".synthesis/drafts/{other}/files/Untitled.md"),
+        "## Intent\n\n## Requirements\n",
+    );
 
     assert_eq!(commit_once(&f.root, ID, DraftEvent::Deleted), None, "the deletion is committed");
     assert!(!f.head_holds(&format!(".synthesis/drafts/{ID}/draft.toml")));
@@ -545,4 +529,3 @@ fn a_creation_records_no_deletion_it_is_paired_with() {
     assert!(f.head_holds("docs/plan.md"), "the author's deletion is theirs to commit");
     assert!(f.dirty().contains(&"docs/plan.md".to_string()), "and it still stands uncommitted");
 }
-

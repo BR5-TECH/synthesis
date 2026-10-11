@@ -59,15 +59,11 @@ fn the_publication_is_read_from_its_kind_and_has_no_default() {
             json!({ "kind": "commit", "message": "Merge it" })
         )
         .unwrap(),
-        StreamMergePublication::Commit {
-            message: "Merge it".into()
-        }
+        StreamMergePublication::Commit { message: "Merge it".into() }
     );
     assert!(serde_json::from_value::<StreamMergePublication>(json!({})).is_err());
     assert!(serde_json::from_value::<StreamMergePublication>(json!({ "kind": "commit" })).is_err());
-    assert!(
-        serde_json::from_value::<StreamMergePublication>(json!({ "kind": "squash" })).is_err()
-    );
+    assert!(serde_json::from_value::<StreamMergePublication>(json!({ "kind": "squash" })).is_err());
 }
 
 // WKS-FR-KHJS, WKS-FR-SGCM: a summary carries the link to the merge run as
@@ -91,7 +87,14 @@ fn a_summary_serializes_the_merge_run_link_and_no_merge_record() {
         json!({ "runId": "g42", "name": "Merge shaped", "state": "awaiting_author" })
     );
     assert!(json.get("merge").is_none());
-    for key in ["stream", "queuedRunCount", "aheadOfBase", "behindBase", "baseTipRevision", "missingCommits"] {
+    for key in [
+        "stream",
+        "queuedRunCount",
+        "aheadOfBase",
+        "behindBase",
+        "baseTipRevision",
+        "missingCommits",
+    ] {
         assert!(json.get(key).is_some(), "{key} is in {json}");
     }
 }

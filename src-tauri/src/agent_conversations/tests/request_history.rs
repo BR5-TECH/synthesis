@@ -31,28 +31,21 @@ fn the_artifact_builder_gathers_the_artifact_the_history_and_the_current_comment
             body.into(),
             vec![],
             vec![],
-            &human("ada"),
-            at,
+            crate::comments::Stamp { by: &human("ada"), at },
         )
         .expect("comment");
     }
     let threads = h.threads("spec.md");
     let trigger = threads[0].comments[1].id.clone();
 
-    let sections = build_input(Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        &trigger,
-    );
+    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &trigger);
     assert_eq!(tags_of(&sections), INPUT_TAGS.map(str::to_string).to_vec());
 
     // The whole Markdown source, named by its path.
     let artifact = section_of(&sections, TAG_ARTIFACT);
     assert_eq!(artifact.body, SOURCE);
     assert!(!artifact.truncated);
-    assert_eq!(
-        artifact.attributes,
-        vec![("path".to_string(), "spec.md".to_string())],
-    );
+    assert_eq!(artifact.attributes, vec![("path".to_string(), "spec.md".to_string())],);
 
     // The anchor opens the history — a thread is anchored rather than a comment
     // is — and carries its offsets *and* its quoted passage. Then the comments
@@ -92,11 +85,7 @@ fn an_attribute_value_cannot_close_its_own_tag() {
     // body, so they are the one place an escape would put a participant's text
     // where the frame belongs.
     assert_eq!(escape_attribute(r#"a&b"c"#), "a&amp;b&quot;c");
-    assert_eq!(
-        escape_attribute("&quot;"),
-        "&amp;quot;",
-        "an escape is not itself re-escaped",
-    );
+    assert_eq!(escape_attribute("&quot;"), "&amp;quot;", "an escape is not itself re-escaped",);
 
     let rendered = render_input(&AgentRequest {
         instructions: String::new(),
@@ -147,17 +136,13 @@ fn the_history_names_every_author_by_handle() {
         "@arch so which is it?".into(),
         vec![],
         vec![],
-        &human("ada"),
-        "2026-01-01T00:00:02Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:02Z" },
     )
     .expect("third comment");
 
     let threads = h.threads("spec.md");
     let last = threads[0].comments.last().unwrap().id.clone();
-    let sections = build_input(Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        &last,
-    );
+    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &last);
     let history = section_of(&sections, TAG_DISCUSSION_HISTORY);
     let ada = history.body.find("@ada:").expect("the human's login");
     let scribe = history.body.find("@scribe:").expect("the agent's nickname");
@@ -165,9 +150,7 @@ fn the_history_names_every_author_by_handle() {
     // Asserted as positions rather than presence, because a history that
     // reversed its comments or trailed its anchor would hold all three strings.
     assert!(
-        history
-            .body
-            .starts_with("This conversation is anchored to characters"),
+        history.body.starts_with("This conversation is anchored to characters"),
         "the anchor opens the history:\n{}",
         history.body,
     );
@@ -198,12 +181,7 @@ fn a_quote_reaches_the_agent_attributed_to_whoever_wrote_the_passage() {
     )
     .expect("the comment that will be quoted");
 
-    let quoted_id = h.threads("spec.md")[0]
-        .comments
-        .last()
-        .expect("the agent's line")
-        .id
-        .clone();
+    let quoted_id = h.threads("spec.md")[0].comments.last().expect("the agent's line").id.clone();
 
     // The reply that quotes it, and a third line so the reply sits in the
     // history rather than being the current comment.
@@ -217,8 +195,7 @@ fn a_quote_reaches_the_agent_attributed_to_whoever_wrote_the_passage() {
             excerpt: "the rail's floor is wrong".into(),
         }],
         vec![],
-        &human("sam"),
-        "2026-01-01T00:00:02Z",
+        crate::comments::Stamp { by: &human("sam"), at: "2026-01-01T00:00:02Z" },
     )
     .expect("the quoting comment");
     crate::comments::add_comment_in(
@@ -228,25 +205,19 @@ fn a_quote_reaches_the_agent_attributed_to_whoever_wrote_the_passage() {
         "@arch so which is it?".into(),
         vec![],
         vec![],
-        &human("ada"),
-        "2026-01-01T00:00:03Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:03Z" },
     )
     .expect("the trigger");
 
     let threads = h.threads("spec.md");
     let trigger = threads[0].comments.last().unwrap().id.clone();
-    let sections = build_input(Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        &trigger,
-    );
+    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &trigger);
     let history = section_of(&sections, TAG_DISCUSSION_HISTORY);
 
     // The pointer, attributed to whoever wrote the passage rather than to
     // whoever is quoting it.
     assert!(
-        history
-            .body
-            .contains("[quoting @arch: the rail's floor is wrong]"),
+        history.body.contains("[quoting @arch: the rail's floor is wrong]"),
         "the quote names its author and carries the excerpt:\n{}",
         history.body,
     );
@@ -264,9 +235,7 @@ fn a_quote_reaches_the_agent_attributed_to_whoever_wrote_the_passage() {
     // The quoted comment is still in the history in its own place: the excerpt
     // points into material the agent already has rather than replacing it.
     assert!(
-        history
-            .body
-            .contains("@arch:\nthe rail's floor is wrong on a narrow tab"),
+        history.body.contains("@arch:\nthe rail's floor is wrong on a narrow tab"),
         "the quoted comment still stands in its own place:\n{}",
         history.body,
     );
@@ -364,12 +333,7 @@ fn several_quotes_render_in_the_order_the_comment_holds_them() {
         "2026-01-01T00:00:01Z",
     )
     .expect("a second quotable comment");
-    let second = h.threads("spec.md")[0]
-        .comments
-        .last()
-        .expect("the agent's line")
-        .id
-        .clone();
+    let second = h.threads("spec.md")[0].comments.last().expect("the agent's line").id.clone();
 
     crate::comments::add_comment_in(
         &h.root(),
@@ -377,33 +341,20 @@ fn several_quotes_render_in_the_order_the_comment_holds_them() {
         &thread.id,
         "Both, then.".into(),
         vec![
-            crate::comments::CommentQuote {
-                comment_id: opener,
-                excerpt: "FIRST-EXCERPT".into(),
-            },
-            crate::comments::CommentQuote {
-                comment_id: second,
-                excerpt: "SECOND-EXCERPT".into(),
-            },
+            crate::comments::CommentQuote { comment_id: opener, excerpt: "FIRST-EXCERPT".into() },
+            crate::comments::CommentQuote { comment_id: second, excerpt: "SECOND-EXCERPT".into() },
         ],
         vec![],
-        &human("ada"),
-        "2026-01-01T00:00:02Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:02Z" },
     )
     .expect("a comment quoting two passages");
 
     let threads = h.threads("spec.md");
     let trigger = threads[0].comments.last().unwrap().id.clone();
-    let sections = build_input(Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        &trigger,
-    );
+    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &trigger);
     let current = section_of(&sections, TAG_CURRENT_COMMENT);
     let first = current.body.find("FIRST-EXCERPT").expect("the first quote");
-    let second_at = current
-        .body
-        .find("SECOND-EXCERPT")
-        .expect("the second quote");
+    let second_at = current.body.find("SECOND-EXCERPT").expect("the second quote");
     let body = current.body.find("Both, then.").expect("the comment's words");
     assert!(
         first < second_at && second_at < body,
@@ -435,17 +386,13 @@ fn the_comment_that_addressed_the_agent_carries_its_quotes_too() {
             excerpt: "the passage in question".into(),
         }],
         vec![],
-        &human("ada"),
-        "2026-01-01T00:00:02Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:02Z" },
     )
     .expect("the trigger, carrying a quote");
 
     let threads = h.threads("spec.md");
     let trigger = threads[0].comments.last().unwrap().id.clone();
-    let sections = build_input(Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        &trigger,
-    );
+    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &trigger);
     let current = section_of(&sections, TAG_CURRENT_COMMENT);
     assert!(
         current.body.contains("[quoting @"),
@@ -480,10 +427,8 @@ fn a_trigger_the_thread_does_not_hold_leaves_the_current_comment_empty() {
     // than an empty section.
     let h = Harness::new(vec![]);
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
-    let sections = build_input(Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        "no-such-comment",
-    );
+    let sections =
+        build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), "no-such-comment");
     assert_eq!(tags_of(&sections), INPUT_TAGS.map(str::to_string).to_vec());
     assert!(section_of(&sections, TAG_CURRENT_COMMENT).body.is_empty());
     // Nothing is lost: with no trigger to stop at, the history holds the whole
@@ -532,17 +477,13 @@ fn attachments_are_named_without_being_carried() {
                 label: Some("spec v2".into()),
             },
         ],
-        &human("ada"),
-        "2026-01-01T00:00:02Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:02Z" },
     )
     .expect("comment with attachments");
 
     let threads = h.threads("spec.md");
     let last = threads[0].comments.last().unwrap().id.clone();
-    let sections = build_input(Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        &last,
-    );
+    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &last);
     // AGC-FR-09: rendered into the section holding the comment — this one
     // addressed the agent, so its attachments are named in `current_comment`.
     let current = section_of(&sections, TAG_CURRENT_COMMENT);
@@ -552,10 +493,7 @@ fn attachments_are_named_without_being_carried() {
     let url_at = current.body.find("spec v2").expect("link named by label");
     assert!(blob_at < url_at, "named in the order the comment carries them");
     assert!(current.body.contains("(image/png)"));
-    assert!(
-        current.body.contains("not shown"),
-        "the agent is told it cannot see the attachment",
-    );
+    assert!(current.body.contains("not shown"), "the agent is told it cannot see the attachment",);
 
     // Never carried into the text a text-only endpoint is sent: not the
     // payload, not the digest, not the address. Asserted over the request as it
@@ -569,15 +507,10 @@ fn attachments_are_named_without_being_carried() {
         stable_head_sections: 0,
     };
     let rendered = render_input(&request);
-    for forbidden in [
-        encoded.as_str(),
-        &crate::fs::sha256_bytes(png),
-        "https://example.test/spec-v2.png",
-    ] {
-        assert!(
-            !rendered.contains(forbidden),
-            "{forbidden:?} reached the rendered request",
-        );
+    for forbidden in
+        [encoded.as_str(), &crate::fs::sha256_bytes(png), "https://example.test/spec-v2.png"]
+    {
+        assert!(!rendered.contains(forbidden), "{forbidden:?} reached the rendered request",);
         for s in &sections {
             assert!(
                 !s.body.contains(forbidden),
@@ -597,11 +530,7 @@ fn attachments_are_named_without_being_carried() {
     // and they are in the image part rather than anywhere in the prose — which
     // is the distinction the loop above would otherwise not be testing.
     assert_eq!(
-        current
-            .parts
-            .iter()
-            .filter(|p| matches!(p, InputPart::Image(_)))
-            .count(),
+        current.parts.iter().filter(|p| matches!(p, InputPart::Image(_))).count(),
         1,
         "the stored image is one part of its own",
     );
@@ -619,17 +548,14 @@ fn attachments_are_named_without_being_carried() {
             media_type: "image/png".into(),
             label: None,
         }],
-        &human("ada"),
-        "2026-01-01T00:00:03Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:03Z" },
     )
     .expect("unlabelled link");
 
     let threads = h.threads("spec.md");
     let newest = threads[0].comments.last().unwrap().id.clone();
-    let with_bare_link = build_input(Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        &newest,
-    );
+    let with_bare_link =
+        build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &newest);
     assert!(
         section_of(&with_bare_link, TAG_CURRENT_COMMENT)
             .body
@@ -653,8 +579,7 @@ fn the_draft_builder_names_attachments_on_the_same_terms() {
     let encoded = base64::engine::general_purpose::STANDARD.encode(png);
 
     let h = Harness::new(vec![]);
-    let created =
-        crate::drafts::create_draft_at_root(&h.root(), Some("Review me")).expect("draft");
+    let created = crate::drafts::create_draft_at_root(&h.root(), Some("Review me")).expect("draft");
     let draft_id = created.draft.id.clone();
     let file_rel = created.file.clone();
     let thread = seed_draft_thread(&h, &draft_id, &file_rel);
@@ -681,10 +606,7 @@ fn the_draft_builder_names_attachments_on_the_same_terms() {
     )
     .expect("draft comment with an attachment");
 
-    let sections = build_input(Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        "c-draft",
-    );
+    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), "c-draft");
     let current = section_of(&sections, TAG_CURRENT_COMMENT);
     assert!(current.body.contains("mock.png"));
     assert!(current.body.contains("not shown"));
@@ -714,8 +636,7 @@ fn a_delivered_agent_comment_carries_no_attachment() {
             filename: "shot.png".into(),
             data: base64::engine::general_purpose::STANDARD.encode(b"bytes"),
         }],
-        &human("ada"),
-        "2026-01-01T00:00:02Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:02Z" },
     )
     .expect("author's attachment");
 
@@ -741,10 +662,7 @@ fn a_delivered_agent_comment_carries_no_attachment() {
         matches!(agent_comment.author, Participant::Agent { .. }),
         "the last comment is the agent's",
     );
-    assert!(
-        agent_comment.attachments.is_empty(),
-        "an agent contributes prose and never a file",
-    );
+    assert!(agent_comment.attachments.is_empty(), "an agent contributes prose and never a file",);
     let total: usize = folded.comments.iter().map(|c| c.attachments.len()).sum();
     assert_eq!(total, 1, "the only attachment is the one the author attached");
 }
@@ -763,19 +681,14 @@ fn the_history_ends_at_the_comment_that_addressed_the_agent() {
         "A later comment nobody asked about.".into(),
         vec![],
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:02Z")
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:02Z" },
+    )
     .expect("later comment");
 
-    let sections = build_input(Roots::same(&h.root()),
-        &ConversationOrigin::of(&thread),
-        &trigger,
-    );
+    let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &trigger);
     // The trigger is the thread's first comment, so the history holds the anchor
     // and no comment at all — and the later one is in neither section.
-    assert!(section_of(&sections, TAG_CURRENT_COMMENT)
-        .body
-        .contains("what do you think?"));
+    assert!(section_of(&sections, TAG_CURRENT_COMMENT).body.contains("what do you think?"));
     for tag in INPUT_TAGS {
         assert!(
             !section_of(&sections, tag).body.contains("A later comment"),
@@ -795,7 +708,8 @@ fn a_section_past_its_bound_says_that_it_is_partial() {
     let h = Harness::new(vec![]);
     let big = "日".repeat(SECTION_MAX_CHARS + 100);
     let thread = h.seed_artifact_thread("big.md", &big);
-    let sections = build_input(Roots::same(&h.root()),
+    let sections = build_input(
+        Roots::same(&h.root()),
         &ConversationOrigin::of(&thread),
         &thread.comments[0].id,
     );
@@ -808,10 +722,8 @@ fn a_section_past_its_bound_says_that_it_is_partial() {
     assert!(source.body.starts_with(&"日".repeat(100)));
 
     let small = h.seed_artifact_thread("small.md", "Short enough for one section.");
-    let sections = build_input(Roots::same(&h.root()),
-        &ConversationOrigin::of(&small),
-        &small.comments[0].id,
-    );
+    let sections =
+        build_input(Roots::same(&h.root()), &ConversationOrigin::of(&small), &small.comments[0].id);
     assert!(!section_of(&sections, TAG_ARTIFACT).truncated);
 
     // The bound itself: exactly at it is whole, one past it is partial.
@@ -827,7 +739,8 @@ fn an_unreadable_artifact_costs_its_section_alone_and_no_material_at_all_fails_t
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     std::fs::remove_file(h.root().join("spec.md")).expect("remove");
 
-    let sections = build_input(Roots::same(&h.root()),
+    let sections = build_input(
+        Roots::same(&h.root()),
         &ConversationOrigin::of(&thread),
         &thread.comments[0].id,
     );
@@ -837,18 +750,15 @@ fn an_unreadable_artifact_costs_its_section_alone_and_no_material_at_all_fails_t
         "the rest is still assembled",
     );
 
-    assert!(build_input(Roots::same(&h.root()),
+    assert!(build_input(
+        Roots::same(&h.root()),
         &ConversationOrigin::stub_artifact("no-such-thread", "a.md", true),
         "x",
     )
     .is_empty());
 
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::stub_artifact("no-such-thread", "a.md", true),
-            "x",
-        )
+        .dispatch("arch", ConversationOrigin::stub_artifact("no-such-thread", "a.md", true), "x")
         .expect("dispatch registers");
     let failure = wait_for_terminal(&h, &turn.id);
     assert_eq!(failure.state, AgentTurnState::Failed);

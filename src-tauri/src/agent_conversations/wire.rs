@@ -130,20 +130,30 @@ impl ConversationOrigin {
 /// Test-only constructors for an origin whose discussion need not exist in a store.
 #[cfg(test)]
 impl ConversationOrigin {
-    pub(crate) fn stub_artifact(discussion_id: impl Into<String>, artifact_id: impl Into<String>, fragment: bool) -> Self {
+    pub(crate) fn stub_artifact(
+        discussion_id: impl Into<String>,
+        artifact_id: impl Into<String>,
+        fragment: bool,
+    ) -> Self {
         let artifact_id = artifact_id.into();
         Self {
             discussion_id: discussion_id.into(),
-            fragment_target: fragment.then(|| comments::FragmentTarget::in_artifact(&artifact_id, 0, 1, "x")),
+            fragment_target: fragment
+                .then(|| comments::FragmentTarget::in_artifact(&artifact_id, 0, 1, "x")),
             target: DiscussionTarget::Artifact { artifact_id },
         }
     }
 
-    pub(crate) fn stub_draft(discussion_id: impl Into<String>, draft_id: impl Into<String>, fragment: bool) -> Self {
+    pub(crate) fn stub_draft(
+        discussion_id: impl Into<String>,
+        draft_id: impl Into<String>,
+        fragment: bool,
+    ) -> Self {
         let draft_id = draft_id.into();
         Self {
             discussion_id: discussion_id.into(),
-            fragment_target: fragment.then(|| comments::FragmentTarget::in_draft(&draft_id, "a.md", 0, 1, "x")),
+            fragment_target: fragment
+                .then(|| comments::FragmentTarget::in_draft(&draft_id, "a.md", 0, 1, "x")),
             target: DiscussionTarget::Draft { draft_id },
         }
     }
@@ -205,6 +215,15 @@ impl AgentTurnState {
     }
 }
 
+/// AGC-FR-RWPT: why the provider's certificate was refused. The host has no port,
+/// path, or user information, and nothing else of the request is in it.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentTlsFailure {
+    pub host: String,
+    pub cause: String,
+}
+
 /// One agent, answering one message, in one conversation (AGC-FR-01).
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -219,6 +238,9 @@ pub struct AgentTurn {
     pub trigger_comment_id: String,
     pub state: AgentTurnState,
     pub failure: Option<String>,
+    /// AGC-FR-RWPT: the host and the cause of a refused certificate. Present
+    /// only when `failure` is `tls_untrusted`.
+    pub tls_failure: Option<AgentTlsFailure>,
     /// AGC-FR-31: true only while this turn is its conversation's **current**
     /// recoverable failure.
     ///
@@ -301,11 +323,8 @@ pub const TAG_NOTE_CONTEXT: &str = "note_context";
 pub const INPUT_TAGS: [&str; 3] = [TAG_ARTIFACT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT];
 
 /// The tag vocabulary of a note turn, in presentation order (AGC-FR-06).
-pub const NOTE_INPUT_TAGS: [&str; 3] = [
-    TAG_NOTE_CONTEXT,
-    TAG_DISCUSSION_HISTORY,
-    TAG_CURRENT_COMMENT,
-];
+pub const NOTE_INPUT_TAGS: [&str; 3] =
+    [TAG_NOTE_CONTEXT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT];
 
 /// CVL-FR-06: the tags a turn of this origin kind emits, in order.
 ///

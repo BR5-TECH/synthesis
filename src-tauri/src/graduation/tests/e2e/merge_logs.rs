@@ -9,7 +9,10 @@ use super::scenario::TurnScript as Script;
 use crate::graduation::{GraduationLogStream, GraduationRunState, ReviewSeverity};
 
 /// Every record of one log stream of the run in focus, read from the run store.
-fn records(outcome: &super::outcome::Outcome, stream: GraduationLogStream) -> Vec<serde_json::Value> {
+fn records(
+    outcome: &super::outcome::Outcome,
+    stream: GraduationLogStream,
+) -> Vec<serde_json::Value> {
     super::super::lines_of(outcome.fixture(), outcome.run_id(), stream)
 }
 
@@ -51,7 +54,7 @@ fn the_turns_of_a_merge_run_are_attributed_as_work_and_review_turns() {
         ])
         .expect_state(GraduationRunState::Completed);
 
-    for stream in [GraduationLogStream::Structured, GraduationLogStream::Source] {
+    for stream in [GraduationLogStream::Structured, GraduationLogStream::Activity] {
         let records = records(&outcome, stream);
         assert!(!records.is_empty(), "the run's {stream:?} stream holds records");
         for record in &records {
@@ -69,31 +72,38 @@ fn the_turns_of_a_merge_run_are_attributed_as_work_and_review_turns() {
                 "no producer is named for a merge: {producer}"
             );
             match producer {
-                "work_turn" => assert_eq!(text(record, "phase_id"), "working", "a merge_work turn works"),
-                "review_turn" => assert_eq!(text(record, "phase_id"), "review", "a merge_review turn reviews"),
+                "work_turn" => {
+                    assert_eq!(text(record, "phase_id"), "working", "a merge_work turn works")
+                }
+                "review_turn" => {
+                    assert_eq!(text(record, "phase_id"), "review", "a merge_review turn reviews")
+                }
                 "queue_wait" => assert!(record["pass"].is_null(), "a queue wait carries no pass"),
                 _ => {}
             }
         }
-        assert_eq!(passes(&records, "work_turn"), vec![1, 2, 3], "work turn passes ascend across a Continue");
-        assert_eq!(passes(&records, "review_turn"), vec![1, 2, 3], "review turn passes ascend across a Continue");
+        assert_eq!(
+            passes(&records, "work_turn"),
+            vec![1, 2, 3],
+            "work turn passes ascend across a Continue"
+        );
+        assert_eq!(
+            passes(&records, "review_turn"),
+            vec![1, 2, 3],
+            "review turn passes ascend across a Continue"
+        );
     }
 
     let structured = records(&outcome, GraduationLogStream::Structured);
-    let applied: Vec<&serde_json::Value> = structured
-        .iter()
-        .filter(|record| text(record, "event") == "merge_applied")
-        .collect();
+    let applied: Vec<&serde_json::Value> =
+        structured.iter().filter(|record| text(record, "event") == "merge_applied").collect();
     assert_eq!(applied.len(), 1, "the apply writes one record");
     let record = applied[0];
     assert_eq!(text(record, "producer"), "commit");
     assert_eq!(text(record, "phase_id"), "done");
     assert!(record["pass"].is_null(), "the apply carries no pass");
     assert_eq!(text(record, "origin"), "application");
-    assert!(
-        !record.to_string().contains("secret"),
-        "the apply record holds no file content"
-    );
+    assert!(!record.to_string().contains("secret"), "the apply record holds no file content");
     outcome.expect_base_holds_the_merge_commit("Merge the feature stream");
 }
 
@@ -112,7 +122,8 @@ fn a_blocked_apply_writes_no_apply_record_and_the_retry_writes_one() {
         .with_merge(as_one_commit())
         .merge_work_turn(Script::reports_success().writes("README.md", "both sides\n"))
         .merge_review_turn(
-            Script::answers_ready("Both intents stand.").dirtying_the_base_meanwhile("scratch.txt", "mine\n"),
+            Script::answers_ready("Both intents stand.")
+                .dirtying_the_base_meanwhile("scratch.txt", "mine\n"),
         )
         .run()
         .expect_state(GraduationRunState::Blocked);

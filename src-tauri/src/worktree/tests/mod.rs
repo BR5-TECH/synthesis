@@ -65,9 +65,7 @@ impl Fixture {
     fn commit(&self, message: &str) {
         let repo = self.repo();
         let mut index = repo.index().unwrap();
-        index
-            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-            .unwrap();
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
         index.update_all(["*"].iter(), None).unwrap();
         index.write().unwrap();
         let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
@@ -78,8 +76,7 @@ impl Fixture {
                 None => vec![],
             };
         let refs: Vec<&git2::Commit> = parents.iter().collect();
-        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &refs)
-            .unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &refs).unwrap();
     }
 
     fn current_branch(&self) -> String {
@@ -103,13 +100,7 @@ impl Fixture {
     fn remote_ref(&self, name: &str) {
         let repo = self.repo();
         let head = repo.head().unwrap().peel_to_commit().unwrap();
-        repo.reference(
-            &format!("refs/remotes/{name}"),
-            head.id(),
-            true,
-            "test remote",
-        )
-        .unwrap();
+        repo.reference(&format!("refs/remotes/{name}"), head.id(), true, "test remote").unwrap();
     }
 }
 
@@ -178,11 +169,7 @@ fn own_buffer() -> &'static crate::logging::LogBuffer {
 
 fn messages_in(buffer: &'static crate::logging::LogBuffer) -> Vec<String> {
     buffer
-        .query(
-            &crate::logging::LogFilter::default(),
-            None,
-            crate::logging::BUFFER_CAPACITY,
-        )
+        .query(&crate::logging::LogFilter::default(), None, crate::logging::BUFFER_CAPACITY)
         .expect("the buffer answers a default filter")
         .records
         .into_iter()
@@ -190,7 +177,10 @@ fn messages_in(buffer: &'static crate::logging::LogBuffer) -> Vec<String> {
         .collect()
 }
 
-fn mark(app: &tauri::AppHandle<tauri::test::MockRuntime>, buffer: &'static crate::logging::LogBuffer) {
+fn mark(
+    app: &tauri::AppHandle<tauri::test::MockRuntime>,
+    buffer: &'static crate::logging::LogBuffer,
+) {
     crate::logging::log(
         app,
         buffer,

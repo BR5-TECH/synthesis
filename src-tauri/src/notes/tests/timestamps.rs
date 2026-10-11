@@ -28,10 +28,7 @@ fn rfc3339_millis_rendering_is_utc_and_fixed_width() {
     assert_eq!(format_rfc3339_millis_utc(1), "1970-01-01T00:00:00.001Z");
     assert_eq!(format_rfc3339_millis_utc(999), "1970-01-01T00:00:00.999Z");
     assert_eq!(format_rfc3339_millis_utc(1_000), "1970-01-01T00:00:01.000Z");
-    assert_eq!(
-        format_rfc3339_millis_utc(1_800_000_000_902),
-        "2027-01-15T08:00:00.902Z"
-    );
+    assert_eq!(format_rfc3339_millis_utc(1_800_000_000_902), "2027-01-15T08:00:00.902Z");
     // Before the epoch: the fraction stays in [0, 999] rather than going
     // negative, so the second borrows exactly as `div_euclid` intends.
     assert_eq!(format_rfc3339_millis_utc(-1), "1969-12-31T23:59:59.999Z");

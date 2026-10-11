@@ -684,7 +684,7 @@ describe("CTA-FR-YOGW: an agent comment's title line", () => {
 // ---------------------------------------------------------------------------
 
 function projectAgent(nickname: string, id: string): ProjectAgent {
-  return {
+  return { scope: "project" as const,
     availability: "ready",
     agent: {
       id,

@@ -77,9 +77,12 @@ function clippingAncestor(el: HTMLElement | null): HTMLElement | null {
  */
 export function matchingAgents(agents: ProjectAgent[], query: string): ProjectAgent[] {
   const needle = query.trim().toLowerCase();
+  // AGT-FR-RWHL: a Personal agent that a Project agent shadows is addressed by
+  // no tag here, so the picker does not offer it.
+  const offered = agents.filter((a) => a.availability !== "shadowed");
   const shown = needle
-    ? agents.filter((a) => a.agent.nickname.toLowerCase().startsWith(needle))
-    : [...agents];
+    ? offered.filter((a) => a.agent.nickname.toLowerCase().startsWith(needle))
+    : [...offered];
   return shown.sort((a, b) =>
     a.agent.nickname.toLowerCase().localeCompare(b.agent.nickname.toLowerCase()),
   );

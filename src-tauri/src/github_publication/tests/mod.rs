@@ -17,6 +17,7 @@ use super::*;
 mod attempts;
 mod client_rules;
 mod eligibility;
+mod enterprise_hosts;
 mod github_shadow;
 mod publication_choice;
 mod publication_commands;
@@ -237,10 +238,9 @@ impl GithubIssues for FakeGithub {
         _owner: &str,
         _repo: &str,
         number: u64,
-        title: &str,
-        body: &str,
-        fields: &client::IssueFields,
+        edit: &client::IssueEdit<'_>,
     ) -> Result<IssueRef, String> {
+        let client::IssueEdit { title, body, fields } = *edit;
         self.record(Call::Update(number));
         self.fields.lock().unwrap().push(fields.clone());
         let milestones = self.milestones.lock().unwrap().clone().unwrap_or_default();
@@ -305,11 +305,7 @@ impl GithubIssues for FakeGithub {
         _repo: &str,
     ) -> Result<Vec<PublicationMilestone>, String> {
         self.record(Call::ListMilestones);
-        self.milestones
-            .lock()
-            .unwrap()
-            .clone()
-            .ok_or_else(|| ERR_MILESTONES_UNREADABLE.to_string())
+        self.milestones.lock().unwrap().clone().ok_or_else(|| ERR_MILESTONES_UNREADABLE.to_string())
     }
 
     fn link_sub_issue(
@@ -359,6 +355,7 @@ impl GithubIssues for FakeGithub {
 /// The one eligible GitHub remote most tests publish to.
 pub(super) fn origin() -> PublicationRemote {
     PublicationRemote {
+        repository_host: Some("github.com".to_string()),
         name: "origin".to_string(),
         url: "github.com/acme/widgets".to_string(),
         kind: RemoteKind::Github,
@@ -366,6 +363,7 @@ pub(super) fn origin() -> PublicationRemote {
         repository_name: Some("widgets".to_string()),
         eligibility: RemoteEligibility::Eligible,
         reason: None,
+        tls_failure: None,
     }
 }
 

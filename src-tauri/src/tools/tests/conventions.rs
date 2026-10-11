@@ -84,10 +84,7 @@ fn no_tool_is_reachable_from_the_frontend() {
             !code.contains("#[tauri::command]"),
             "{name} registers no Tauri command (TLC-FR-01)",
         );
-        assert!(
-            !code.contains(".emit("),
-            "{name} emits no Tauri event of its own (TLC-FR-01)",
-        );
+        assert!(!code.contains(".emit("), "{name} emits no Tauri event of its own (TLC-FR-01)",);
     }
 }
 
@@ -97,7 +94,7 @@ fn no_tool_is_reachable_from_the_frontend() {
 
 #[test]
 fn every_tool_name_is_snake_case_unique_and_matches_its_definition() {
-    let names: Vec<String> = definitions().into_iter().map(|d| d.name).collect();
+    let names: Vec<String> = definitions().into_iter().map(|d| d.name.to_string()).collect();
 
     // The `NAME` constant and what a provider receives are the same string.
     assert_eq!(
@@ -134,19 +131,13 @@ fn every_tool_name_is_snake_case_unique_and_matches_its_definition() {
     for name in &names {
         assert!(
             !name.is_empty()
-                && name
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c == '_' || c.is_ascii_digit()),
+                && name.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c.is_ascii_digit()),
             "TLC-FR-02: {name} must be lowercase snake_case",
         );
     }
 
     let unique: std::collections::BTreeSet<&String> = names.iter().collect();
-    assert_eq!(
-        unique.len(),
-        names.len(),
-        "TLC-FR-02: no two tools may share a name",
-    );
+    assert_eq!(unique.len(), names.len(), "TLC-FR-02: no two tools may share a name",);
 }
 
 // ---------------------------------------------------------------------------
@@ -235,9 +226,7 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             n if n == document_search::NAME => "Nothing that is found is changed",
             // GDT-FR-GNCR: the boundary is which files it reaches — only a
             // selected document, never a path a model composed.
-            n if n == document_get::NAME => {
-                "cannot read any file that is not a selected document"
-            }
+            n if n == document_get::NAME => "cannot read any file that is not a selected document",
             n if n == ask_user_comment::NAME => "it changes nothing in the project",
             // PDC-FR-04: the boundary this one has to draw is what `content`
             // must be, because that is the one mistake it cannot detect.
@@ -266,9 +255,7 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             // is — a model that reached for it with nothing to propose would
             // be refused, and one that reached for the other with three open
             // points would spend three turns.
-            n if n == ask_discussion_questions::NAME => {
-                "use `ask_user_comment` instead"
-            }
+            n if n == ask_discussion_questions::NAME => "use `ask_user_comment` instead",
             other => panic!("no boundary phrase declared for {other} (TLC-FR-03)"),
         };
         assert!(
@@ -322,9 +309,8 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
         // substring scan flags those and says the description named a Rust
         // keyword, which is the opposite of true and trains the next author to
         // work around the test rather than to write a better description.
-        let words: std::collections::HashSet<&str> = text
-            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-            .collect();
+        let words: std::collections::HashSet<&str> =
+            text.split(|c: char| !c.is_ascii_alphanumeric() && c != '_').collect();
         for forbidden in [
             "rig",
             "Rust",
@@ -343,9 +329,7 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             );
         }
         // A specification identifier is not a word, so these stay substrings.
-        for forbidden in [
-            "TLC-FR", "SST-FR", "SLT-FR", "LSK-FR", "DSL-FR", "BMI-FR", ".md`",
-        ] {
+        for forbidden in ["TLC-FR", "SST-FR", "SLT-FR", "LSK-FR", "DSL-FR", "BMI-FR", ".md`"] {
             assert!(
                 !text.contains(forbidden),
                 "{name}: the description must not name {forbidden:?} (TLC-FR-04)",
@@ -358,15 +342,13 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
 #[test]
 fn the_forbidden_word_scan_catches_a_real_implementation_leak() {
     let leaky = "Search the skills. Returns a PortableTool result you can invoke.";
-    let words: std::collections::HashSet<&str> = leaky
-        .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-        .collect();
+    let words: std::collections::HashSet<&str> =
+        leaky.split(|c: char| !c.is_ascii_alphanumeric() && c != '_').collect();
     assert!(words.contains("PortableTool") && words.contains("invoke"));
     // ...and does not fire on the English that made it word-aware.
     let clean = "Read one skill's full instructions and follow the original steps.";
-    let words: std::collections::HashSet<&str> = clean
-        .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-        .collect();
+    let words: std::collections::HashSet<&str> =
+        clean.split(|c: char| !c.is_ascii_alphanumeric() && c != '_').collect();
     assert!(!words.contains("struct") && !words.contains("rig"));
 }
 
@@ -379,11 +361,10 @@ fn definitions_are_identical_across_instances_and_project_states() {
     let open = demo_project();
     let closed = closed_project();
 
-    let a = rig::tool::portable_tool_definition(&skill_search::SkillSearchTool::new(open.handle()));
-    let b = rig::tool::portable_tool_definition(&skill_search::SkillSearchTool::new(open.handle()));
-    let c = rig::tool::portable_tool_definition(&skill_search::SkillSearchTool::new(
-        closed.handle().clone(),
-    ));
+    let a = rig::tool::tool_definition(&skill_search::SkillSearchTool::new(open.handle()));
+    let b = rig::tool::tool_definition(&skill_search::SkillSearchTool::new(open.handle()));
+    let c =
+        rig::tool::tool_definition(&skill_search::SkillSearchTool::new(closed.handle().clone()));
 
     assert_eq!(a.description, b.description);
     assert_eq!(a.description, c.description);
@@ -392,17 +373,17 @@ fn definitions_are_identical_across_instances_and_project_states() {
         a.parameters, c.parameters,
         "TLC-FR-05: a definition is compiled-in data, not derived from project state",
     );
+    // Byte-identical as well as equal: two equal JSON objects can hold their
+    // fields in different orders, and a provider sees the bytes.
+    assert_eq!(a.parameters.to_string(), c.parameters.to_string());
 
-    let l1 = rig::tool::portable_tool_definition(&skill_list::SkillListTool::new(open.handle()));
-    let l2 = rig::tool::portable_tool_definition(&skill_list::SkillListTool::new(
-        closed.handle().clone(),
-    ));
+    let l1 = rig::tool::tool_definition(&skill_list::SkillListTool::new(open.handle()));
+    let l2 = rig::tool::tool_definition(&skill_list::SkillListTool::new(closed.handle().clone()));
     assert_eq!(l1.description, l2.description);
     assert_eq!(l1.parameters, l2.parameters);
 
-    let k1 = rig::tool::portable_tool_definition(&skill_load::SkillLoadTool::new(open.handle()));
-    let k2 =
-        rig::tool::portable_tool_definition(&skill_load::SkillLoadTool::new(closed.handle().clone()));
+    let k1 = rig::tool::tool_definition(&skill_load::SkillLoadTool::new(open.handle()));
+    let k2 = rig::tool::tool_definition(&skill_load::SkillLoadTool::new(closed.handle().clone()));
     assert_eq!(k1.description, k2.description);
     assert_eq!(k1.parameters, k2.parameters);
 }
@@ -436,10 +417,8 @@ fn every_parameter_schema_is_a_documented_json_schema_object() {
             .collect();
 
         for (parameter, declared) in properties {
-            let description = declared
-                .get("description")
-                .and_then(|d| d.as_str())
-                .unwrap_or_default();
+            let description =
+                declared.get("description").and_then(|d| d.as_str()).unwrap_or_default();
             assert!(
                 !description.is_empty(),
                 "{name}.{parameter}: every parameter carries its own description (TLC-FR-06)",
@@ -551,10 +530,7 @@ fn every_output_is_an_object_carrying_its_collection_under_a_named_field() {
     let handle = fixture.handle();
 
     let search = block_on(skill_search::SkillSearchTool::new(handle.clone()).call(
-        skill_search::SkillSearchArgs {
-            query: "review a specification".to_string(),
-            limit: None,
-        },
+        skill_search::SkillSearchArgs { query: "review a specification".to_string(), limit: None },
     ))
     .unwrap();
     let value = serde_json::to_value(&search).unwrap();
@@ -585,10 +561,8 @@ fn a_document_shaped_output_is_one_unwrapped_text_block() {
     // output type is ever changed to a struct.
     let fixture = collision_project();
     let text = block_on(
-        skill_load::SkillLoadTool::new(fixture.handle()).call(skill_load::LoadSkillArgs {
-            name: "analyst".to_string(),
-            ecosystem: None,
-        }),
+        skill_load::SkillLoadTool::new(fixture.handle())
+            .call(skill_load::LoadSkillArgs { name: "analyst".to_string(), ecosystem: None }),
     )
     .unwrap();
 
@@ -621,32 +595,23 @@ fn a_document_shaped_output_is_one_unwrapped_text_block() {
 fn the_one_data_with_document_output_is_a_json_object_carrying_its_document() {
     let dir = TempDir::new().unwrap();
     let fixture = mounted(dir);
-    let root = fixture
-        .app
-        .state::<crate::bm25_index::Bm25Indexer>()
-        .root()
-        .expect("mounted");
+    let root = fixture.app.state::<crate::bm25_index::Bm25Indexer>().root().expect("mounted");
     let session = agent_session(&fixture.app, &root, "data-with-document");
     let root_fs = crate::fs::RootFs::for_root(&root);
-    let created =
-        crate::drafts::create_draft_at_root(&root_fs, Some("shaped")).expect("creates");
+    let created = crate::drafts::create_draft_at_root(&root_fs, Some("shaped")).expect("creates");
     let body = "# Plan\n\nA prompt whose line breaks must survive.\n";
     crate::drafts::save_draft_file_impl(&root_fs, &created.draft.id, "shaped.md", body)
         .expect("writes");
 
     let result = block_on(
-        draft_read::DraftReadTool::new(fixture.handle(), session).call(
-            draft_read::ReadDraftArgs {
-                draft_id: created.draft.id.clone(),
-            },
-        ),
+        draft_read::DraftReadTool::new(fixture.handle(), session)
+            .call(draft_read::ReadDraftArgs { draft_id: created.draft.id.clone() }),
     )
     .expect("reads");
 
     let output = rig::tool::IntoToolOutput::into_tool_output(result.clone()).unwrap();
-    let json = output
-        .as_json()
-        .expect("TLC-FR-08: the declared exception returns data, not a text block");
+    let json =
+        output.as_json().expect("TLC-FR-08: the declared exception returns data, not a text block");
     assert!(
         output.as_text().is_none(),
         "TLC-FR-08: this one is data rather than an unwrapped document",
@@ -657,7 +622,6 @@ fn the_one_data_with_document_output_is_a_json_object_carrying_its_document() {
     assert_eq!(json["draft_id"], serde_json::json!(created.draft.id));
     assert!(json.get("name").is_some() && json.get("status").is_some());
 }
-
 
 // ---------------------------------------------------------------------------
 // TLC-FR-14 — the shape of arguments that did not decode, and never a value
@@ -694,8 +658,8 @@ fn shape_of(value: serde_json::Value) -> String {
 // not declare is the mark and never the name — `line` here is the mistake, and
 // that it was made is the whole of what a reader needs.
 //
-// A JSON object holds its fields by name, so the fields read back in that order
-// rather than in the order they were written.
+// The fields are read by name, whatever order the object holds them in, so
+// they read back in that order rather than in the order they were written.
 #[test]
 fn an_argument_shape_names_the_fields_and_the_kinds_and_no_value() {
     let shape = shape_of(serde_json::json!({
@@ -758,10 +722,7 @@ fn a_key_the_schema_does_not_declare_is_never_repeated() {
 // no more than it repeats either.
 #[test]
 fn two_keys_the_schema_does_not_declare_are_both_marks() {
-    assert_eq!(
-        shape_of(serde_json::json!({ "aaa": 1, "bbb": 2 })),
-        "{?:number,?:number}",
-    );
+    assert_eq!(shape_of(serde_json::json!({ "aaa": 1, "bbb": 2 })), "{?:number,?:number}",);
 }
 
 // TLC-FR-14 / LGC-FR-08: the shape is bounded in length, so a record keeps the
@@ -772,15 +733,11 @@ fn an_argument_shape_is_bounded_in_length() {
     // Names the schema declares, so nothing is collapsed to a mark and the
     // bound is what stops the string rather than the mark being shorter.
     let names: Vec<String> = (0..40).map(|i| format!("field{i:0>34}")).collect();
-    let properties: serde_json::Map<String, serde_json::Value> = names
-        .iter()
-        .map(|n| (n.clone(), serde_json::json!({ "type": "string" })))
-        .collect();
+    let properties: serde_json::Map<String, serde_json::Value> =
+        names.iter().map(|n| (n.clone(), serde_json::json!({ "type": "string" }))).collect();
     let schema = serde_json::json!({ "properties": properties });
-    let arguments: serde_json::Map<String, serde_json::Value> = names
-        .iter()
-        .map(|n| (n.clone(), serde_json::json!("x")))
-        .collect();
+    let arguments: serde_json::Map<String, serde_json::Value> =
+        names.iter().map(|n| (n.clone(), serde_json::json!("x"))).collect();
     let shape = crate::tools::argument_shape(&serde_json::Value::Object(arguments), &schema);
     let counted = shape.chars().count();
     assert_eq!(counted, 301, "the bound did not stop it: {counted} chars");
@@ -798,10 +755,7 @@ fn an_argument_shape_stops_at_a_fixed_depth() {
     );
     // An array spends a level as an object does, which is the shape a change
     // list filled wrongly actually takes.
-    assert_eq!(
-        shape_of(serde_json::json!({ "hunks": [[[["x"]]]] })),
-        "{hunks:[[[…](1)](1)](1)}",
-    );
+    assert_eq!(shape_of(serde_json::json!({ "hunks": [[[["x"]]]] })), "{hunks:[[[…](1)](1)](1)}",);
     // And the cap holds however far past it the argument set is nested, which
     // is what stops the walk rather than the shape of any one entry.
     let mut deep = serde_json::json!("x");
@@ -832,4 +786,25 @@ fn a_list_is_reported_by_its_length_and_its_first_entry() {
         shape_of(serde_json::json!({ "hunks": [1, "A SECRET", { "kind": "add" }] })),
         "{hunks:[number](3)}",
     );
+}
+
+// TLC-FR-14: the fields are read by name, whatever order the object holds them
+// in, so an argument set wider than the bound is reported by its first fields
+// by name rather than by the fields the model wrote first.
+#[test]
+fn a_wide_argument_set_is_reported_by_its_first_fields_by_name() {
+    let names: Vec<String> = (0..14).map(|index| format!("f{index:02}")).collect();
+    let mut properties = serde_json::Map::new();
+    for name in &names {
+        properties.insert(name.clone(), serde_json::json!({ "type": "string" }));
+    }
+    let schema = serde_json::json!({ "type": "object", "properties": properties });
+    let mut sent = serde_json::Map::new();
+    for name in names.iter().rev() {
+        sent.insert(name.clone(), serde_json::json!("x"));
+    }
+    let shape = crate::tools::argument_shape(&serde_json::Value::Object(sent), &schema);
+    let expected =
+        names[..12].iter().map(|name| format!("{name}:string")).collect::<Vec<_>>().join(",");
+    assert_eq!(shape, format!("{{{expected},…}}"));
 }

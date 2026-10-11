@@ -55,10 +55,7 @@ fn activating_an_existing_worktree_resolves_to_its_canonical_path() {
     let f = Fixture::new();
     f.branch("alpha");
     let a = f.add_worktree("wt-alpha", "alpha");
-    assert_eq!(
-        validate_activation_target(&f.root(), &a.to_string_lossy()).unwrap(),
-        a
-    );
+    assert_eq!(validate_activation_target(&f.root(), &a.to_string_lossy()).unwrap(), a);
 }
 
 // -- WTC-FR-13: the proposed path ---------------------------------------
@@ -70,17 +67,13 @@ fn the_proposed_path_is_named_after_the_branchs_final_segment() {
     let f = Fixture::new();
     let base = project::basename(&f.root().to_string_lossy());
 
-    let proposed =
-        propose_path_for(&f.root(), "feature/PROJ-12345/editor-scroll").unwrap();
+    let proposed = propose_path_for(&f.root(), "feature/PROJ-12345/editor-scroll").unwrap();
     assert_eq!(
         proposed,
         to_string_path(&f.sibling(&format!("{base}-editor-scroll"))),
         "the namespace is dropped, not folded in"
     );
-    assert!(
-        !Path::new(&proposed).exists(),
-        "proposing a path must create nothing"
-    );
+    assert!(!Path::new(&proposed).exists(), "proposing a path must create nothing");
 
     // A branch with no separator is its own leaf.
     assert_eq!(

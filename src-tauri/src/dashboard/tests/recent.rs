@@ -13,12 +13,7 @@ fn recently_edited_orders_by_modification_time_and_caps_at_five() {
     // PST-FR-31: eight artifacts in, exactly five out, most-recent first.
     let readings: Vec<_> = (0..8)
         .map(|i| {
-            (
-                format!("a{i}.md"),
-                format!("a{i}.md"),
-                ArtifactKind::Markdown,
-                at(1_000 + i as u64),
-            )
+            (format!("a{i}.md"), format!("a{i}.md"), ArtifactKind::Markdown, at(1_000 + i as u64))
         })
         .collect();
     let items = recently_edited_from(readings);

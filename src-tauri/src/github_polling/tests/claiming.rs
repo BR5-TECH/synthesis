@@ -70,7 +70,8 @@ fn a_task_that_is_no_longer_ready_is_refused_and_nothing_changes() {
     fake.hold_issue(2, "Ready", Some("Bug"), "OPEN");
     fake.hold_issue(3, "Ready", Some("Task"), "CLOSED");
     for number in [1, 2, 3, 99] {
-        let failure = claims::claim(&context(&root, &repository), &fake, number, NOW, &[]).unwrap_err();
+        let failure =
+            claims::claim(&context(&root, &repository), &fake, number, NOW, &[]).unwrap_err();
         assert_eq!(failure.code, ERR_TASK_NOT_READY, "issue {number}");
     }
     assert!(set_status_calls(&fake).is_empty());
@@ -183,7 +184,8 @@ fn a_claim_reuses_an_existing_shadow_draft() {
     let dir = project();
     let root = root_of(&dir);
     let repository = repo();
-    let existing = crate::drafts::create_github_shadow_draft(&root, "Old title", "old", link(4)).unwrap();
+    let existing =
+        crate::drafts::create_github_shadow_draft(&root, "Old title", "old", link(4)).unwrap();
     let fake = FakeProjects::new();
     fake.hold_issue(4, "Ready", Some("Task"), "OPEN");
     let outcome = claims::claim(&context(&root, &repository), &fake, 4, NOW, &[]).unwrap();
@@ -208,14 +210,17 @@ fn claims_of_one_issue_do_not_overlap() {
     assert!(fake.calls().is_empty());
 
     let guards = ClaimGuards::default();
-    let held = guards.acquire(IssueKey::new("acme", "widgets", 4)).unwrap();
+    let held = guards.acquire(IssueKey::new("github.com", "acme", "widgets", 4)).unwrap();
     assert_eq!(
-        guards.acquire(IssueKey::new("ACME", "Widgets", 4)).err(),
+        guards.acquire(IssueKey::new("github.com", "ACME", "Widgets", 4)).err(),
         Some(ERR_CLAIM_IN_PROGRESS.to_string())
     );
-    assert!(guards.acquire(IssueKey::new("acme", "widgets", 5)).is_ok(), "another issue runs");
+    assert!(
+        guards.acquire(IssueKey::new("github.com", "acme", "widgets", 5)).is_ok(),
+        "another issue runs"
+    );
     drop(held);
-    assert!(guards.acquire(IssueKey::new("acme", "widgets", 4)).is_ok(), "released");
+    assert!(guards.acquire(IssueKey::new("github.com", "acme", "widgets", 4)).is_ok(), "released");
 }
 
 /// GPP-FR-BSLI / GPP-FR-IGER: a pending claim survives a reload of the store
@@ -261,7 +266,11 @@ fn a_claim_starts_no_graduation_and_the_draft_stays_available() {
     assert!(crate::graduation::draft_graduation(&queue, &outcome.result.draft_id).is_none());
     // A cancelled dialog changes nothing: the draft still reads github_shadow.
     assert_eq!(
-        crate::drafts::resolved_shadow_status_for_test(&queue, &outcome.result.draft_id, DraftStatus::GithubShadow),
+        crate::drafts::resolved_shadow_status_for_test(
+            &queue,
+            &outcome.result.draft_id,
+            DraftStatus::GithubShadow
+        ),
         DraftStatus::GithubShadow
     );
     assert!(crate::drafts::read_draft_prompt(&root, &outcome.result.draft_id).is_ok());
@@ -288,7 +297,9 @@ fn no_operation_closes_or_edits_an_issue() {
     claims::acknowledge(&root, &repository, 4).unwrap();
     let writes = set_status_calls(&fake);
     assert_eq!(writes.len(), 1);
-    assert!(writes.iter().all(|c| matches!(c, Call::SetStatus { option, .. } if option == "OPT_progress")));
+    assert!(writes
+        .iter()
+        .all(|c| matches!(c, Call::SetStatus { option, .. } if option == "OPT_progress")));
     // The trait offers no other write: every other recorded call is a read.
     assert!(fake.calls().iter().all(|c| matches!(
         c,

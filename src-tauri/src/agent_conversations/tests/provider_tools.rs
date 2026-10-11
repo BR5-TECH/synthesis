@@ -9,9 +9,6 @@ use super::*;
 // CVL-FR-34, CVL-FR-12 / CVL-FR-13, CVL-FR-20 — what the provider ran for itself (CVL-FR-31)
 // ---------------------------------------------------------------------------
 
-
-
-
 #[test]
 fn the_helpers_that_look_for_provider_traffic_find_it_when_it_is_there() {
     // Five tests below assert only that these two helpers find *nothing*. An
@@ -22,15 +19,19 @@ fn the_helpers_that_look_for_provider_traffic_find_it_when_it_is_there() {
     use rig::completion::message::AssistantContent;
     let exchange = vec![
         rig::completion::Message::user("the input"),
-        rig::completion::Message::Assistant {
-            id: None,
-            content: rig::OneOrMany::one(AssistantContent::tool_call(
-                "call_abc".to_string(),
-                "openrouter:web_search".to_string(),
+        rig::completion::Message::Assistant(rig::completion::message::AssistantMessage::new(vec![
+            AssistantContent::tool_call(
+                "call_abc",
+                rig::completion::message::ToolName::new("openrouter:web_search")
+                    .expect("a tool name"),
                 serde_json::json!({ "query": "a" }),
-            )),
-        },
-        rig::completion::Message::tool_result("call_abc".to_string(), "A result".to_string()),
+            ),
+        ])),
+        rig::completion::Message::tool_result(
+            rig::completion::message::CallId::from_wire("call_abc"),
+            rig::completion::message::ToolName::new("openrouter:web_search").expect("a tool name"),
+            "A result".to_string(),
+        ),
     ];
 
     let (calls, results) = native_traffic(&exchange);
@@ -83,10 +84,8 @@ fn a_provider_run_search_and_fetch_are_finished_before_the_reply_that_reports_th
     // Nothing of this application's ran for either: the provider had already
     // carried them out (CVL-FR-31).
     assert!(
-        !all_records()
-            .into_iter()
-            .any(|record| field(&record, "turnId") == terminal.id
-                && record.message == "agent tool call completed"),
+        !all_records().into_iter().any(|record| field(&record, "turnId") == terminal.id
+            && record.message == "agent tool call completed"),
         "no tool of this application was dispatched for provider traffic",
     );
 
@@ -94,10 +93,7 @@ fn a_provider_run_search_and_fetch_are_finished_before_the_reply_that_reports_th
     // provider reported them.
     let records = provider_tool_records(&terminal.id);
     assert_eq!(
-        records
-            .iter()
-            .map(|record| field(record, "tool"))
-            .collect::<Vec<_>>(),
+        records.iter().map(|record| field(record, "tool")).collect::<Vec<_>>(),
         vec!["openrouter:web_search", "openrouter:web_fetch"],
     );
     assert_eq!(require(&records[0], "callIndex"), "0");
@@ -141,11 +137,8 @@ fn several_provider_run_calls_in_one_reply_cost_the_turn_no_round_of_its_own() {
         );
     }
     for url in ["d", "e", "f"] {
-        reply = reply.and_native(
-            "openrouter:web_fetch",
-            &format!("{{\"url\":\"{url}\"}}"),
-            "A page",
-        );
+        reply =
+            reply.and_native("openrouter:web_fetch", &format!("{{\"url\":\"{url}\"}}"), "A page");
     }
     let h = Harness::scripted(vec![Ok(reply.counting(Some(6), Some(6), Some(3)))]);
     h.mount();
@@ -159,9 +152,7 @@ fn several_provider_run_calls_in_one_reply_cost_the_turn_no_round_of_its_own() {
     // CVL-FR-34: the provider's own counts, beside the calls it reported.
     let answered = all_records()
         .into_iter()
-        .find(|record| {
-            record.message == "model answered" && field(record, "turnId") == terminal.id
-        })
+        .find(|record| record.message == "model answered" && field(record, "turnId") == terminal.id)
         .expect("the round that answered is recorded");
     assert_eq!(require(&answered, "nativeToolCalls"), "6");
     assert_eq!(require(&answered, "nativeToolCallsRequested"), "6");
@@ -231,8 +222,11 @@ fn a_call_the_provider_counted_and_never_ran_is_recorded_with_no_call_to_report(
     // and executed none, so it reported no call at all. Nothing else in the turn
     // says a search was ever attempted — a record keyed on there being a call to
     // report would be silent here, which is the one place it must not be.
-    let h = Harness::scripted(vec![Ok(ScriptedReply::answer("Answered from memory.")
-        .counting(Some(2), Some(0), Some(2)))]);
+    let h = Harness::scripted(vec![Ok(ScriptedReply::answer("Answered from memory.").counting(
+        Some(2),
+        Some(0),
+        Some(2),
+    ))]);
     h.mount();
     h.create_agent("arch", "");
     let (terminal, _) = run_one(&h, "arch");
@@ -356,9 +350,7 @@ fn a_provider_that_counts_nothing_names_no_count_rather_than_zero() {
     // And the round's own record says "not reported" rather than zero.
     let answered = all_records()
         .into_iter()
-        .find(|record| {
-            record.message == "model answered" && field(record, "turnId") == terminal.id
-        })
+        .find(|record| record.message == "model answered" && field(record, "turnId") == terminal.id)
         .expect("the round that answered is recorded");
     assert_eq!(require(&answered, "nativeToolCalls"), "1");
     assert_eq!(require(&answered, "nativeToolCallsRequested"), "null");
@@ -404,11 +396,9 @@ fn derived_call_ids_stay_distinct_across_the_rounds_of_one_turn() {
     // tell apart. A provider that names none of them is the case that tests it:
     // every id here is derived.
     let h = Harness::scripted(vec![
-        Ok(
-            ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))
-                .and_native("openrouter:web_search", "{}", "A")
-                .and_native("openrouter:web_fetch", "{}", "B"),
-        ),
+        Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))
+            .and_native("openrouter:web_search", "{}", "A")
+            .and_native("openrouter:web_fetch", "{}", "B")),
         Ok(ScriptedReply::answer("Four of them.")
             .and_native("openrouter:web_search", "{}", "C")
             .and_native("openrouter:web_fetch", "{}", "D")),
@@ -421,23 +411,13 @@ fn derived_call_ids_stay_distinct_across_the_rounds_of_one_turn() {
     let records = provider_tool_records(&terminal.id);
     assert_eq!(records.len(), 4, "two rounds of two");
     assert_eq!(
-        records
-            .iter()
-            .map(|record| require(record, "modelCall"))
-            .collect::<Vec<_>>(),
+        records.iter().map(|record| require(record, "modelCall")).collect::<Vec<_>>(),
         vec!["1", "1", "2", "2"],
         "each record names the round it belongs to",
     );
-    let ids: Vec<String> = records
-        .iter()
-        .map(|record| require(record, "callId"))
-        .collect();
+    let ids: Vec<String> = records.iter().map(|record| require(record, "callId")).collect();
     let unique: std::collections::HashSet<&String> = ids.iter().collect();
-    assert_eq!(
-        unique.len(),
-        ids.len(),
-        "no two calls of one turn share a derived id: {ids:?}",
-    );
+    assert_eq!(unique.len(), ids.len(), "no two calls of one turn share a derived id: {ids:?}",);
 }
 
 #[test]
@@ -449,12 +429,9 @@ fn a_reply_at_the_model_call_bound_still_records_what_the_provider_ran() {
     let mut replies: Vec<_> = (0..7)
         .map(|_| Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))))
         .collect();
-    replies.push(Ok(ScriptedReply::calls(
-        "read_file",
-        serde_json::json!({ "path": "spec.md" }),
-    )
-    .with_text("What I had concluded.")
-    .and_native("openrouter:web_search", "{}", "A")));
+    replies.push(Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))
+        .with_text("What I had concluded.")
+        .and_native("openrouter:web_search", "{}", "A")));
     let h = Harness::scripted(replies);
     h.mount();
     h.create_agent("arch", "");
@@ -478,20 +455,12 @@ fn provider_counts_are_reported_only_where_the_provider_reported_something() {
     assert_eq!(NativeToolUsage::reported(None, None, None), None);
     assert_eq!(
         NativeToolUsage::reported(None, None, Some(1)),
-        Some(NativeToolUsage {
-            requested: None,
-            executed: None,
-            web_searches: Some(1),
-        }),
+        Some(NativeToolUsage { requested: None, executed: None, web_searches: Some(1) }),
         "one count reported is a report, and the other two stay unreported",
     );
     assert_eq!(
         NativeToolUsage::reported(Some(0), Some(0), Some(0)),
-        Some(NativeToolUsage {
-            requested: Some(0),
-            executed: Some(0),
-            web_searches: Some(0),
-        }),
+        Some(NativeToolUsage { requested: Some(0), executed: Some(0), web_searches: Some(0) }),
         "a reported zero is not the same as nothing reported",
     );
 
@@ -501,9 +470,7 @@ fn provider_counts_are_reported_only_where_the_provider_reported_something() {
     // under `server_tool_use_details`, which is what a live chat completion
     // returns, and declares no alias — so this test is what will say so on the
     // day either of them moves.
-    fn details(
-        usage: &str,
-    ) -> Option<openrouter_rs::types::completion::ServerToolUseDetails> {
+    fn details(usage: &str) -> Option<openrouter_rs::types::completion::ServerToolUseDetails> {
         serde_json::from_str::<openrouter_rs::types::completion::ResponseUsage>(usage)
             .expect("a usage blob parses")
             .server_tool_use_details
@@ -521,10 +488,7 @@ fn provider_counts_are_reported_only_where_the_provider_reported_something() {
     // belongs to the Messages API rather than to this one. The SDK does not
     // accept it, and a chat completion does not send it.
     assert!(
-        details(&format!(
-            "{{{base},\"server_tool_use\":{{\"web_search_requests\":2}}}}"
-        ))
-        .is_none(),
+        details(&format!("{{{base},\"server_tool_use\":{{\"web_search_requests\":2}}}}")).is_none(),
         "the SDK declares no alias for this spelling",
     );
 }
@@ -577,7 +541,7 @@ fn a_structured_provider_refusal_keeps_the_code_the_id_and_the_reason() {
     assert_eq!(refused.failure, FAIL_UNREACHABLE);
     assert_eq!(refused.class, class::HTTP_STATUS);
     assert_eq!(refused.status, Some(400));
-    assert_eq!(refused.provider_code, Some(400));
+    assert_eq!(refused.provider_code.as_deref(), Some("400"));
     assert_eq!(refused.provider_request_id.as_deref(), Some("req_abc123"));
     assert_eq!(
         refused.provider_message.as_deref(),
@@ -619,8 +583,9 @@ fn a_search_the_provider_named_no_call_for_is_still_reported_as_activity() {
     // only thing that says a search happened. Reporting nothing there leaves a
     // conversation blank while its agent searches, which is the whole of what
     // this reporting is for.
-    let h = Harness::scripted(vec![Ok(ScriptedReply::answer("Rust 1.97.1, per the blog.")
-        .counting(None, None, Some(2)))]);
+    let h = Harness::scripted(vec![Ok(
+        ScriptedReply::answer("Rust 1.97.1, per the blog.").counting(None, None, Some(2))
+    )]);
     h.mount();
     h.create_agent("arch", "");
     let (terminal, _) = run_one(&h, "arch");
@@ -630,13 +595,7 @@ fn a_search_the_provider_named_no_call_for_is_still_reported_as_activity() {
     let active: Vec<Vec<&str>> = events
         .iter()
         .filter(|event| event.id == terminal.id)
-        .map(|event| {
-            event
-                .active_tool_calls
-                .iter()
-                .map(|call| call.tool.as_str())
-                .collect()
-        })
+        .map(|event| event.active_tool_calls.iter().map(|call| call.tool.as_str()).collect())
         .collect();
     assert_eq!(
         active,
@@ -704,8 +663,11 @@ fn a_provider_that_named_its_calls_is_not_also_reported_from_its_counts() {
 fn a_count_beyond_what_the_provider_could_have_run_is_capped() {
     // CVL-FR-33: the number of events a turn emits is this application's to
     // decide. A provider's count is a field, and a field is not a promise.
-    let h = Harness::scripted(vec![Ok(ScriptedReply::answer("Answered.")
-        .counting(None, None, Some(MAX_COUNTED_NATIVE_REPORTS + 500)))]);
+    let h = Harness::scripted(vec![Ok(ScriptedReply::answer("Answered.").counting(
+        None,
+        None,
+        Some(MAX_COUNTED_NATIVE_REPORTS + 500),
+    ))]);
     h.mount();
     h.create_agent("arch", "");
     let (terminal, _) = run_one(&h, "arch");
@@ -746,9 +708,11 @@ fn a_refusal_naming_a_server_tool_narrows_the_entries_and_a_plain_400_does_not()
         failure: FAIL_UNREACHABLE,
         class: class::HTTP_STATUS,
         status: Some(400),
-        provider_code: Some(400),
+        provider_code: Some("400".into()),
         provider_request_id: Some("req_1".into()),
         provider_message: Some(message.into()),
+        tls: None,
+        reply_repairs: Default::default(),
     };
     assert!(refuses_a_server_tool(&refusal("Server tool request failed")));
     assert!(
@@ -778,13 +742,12 @@ fn a_local_tool_and_provider_traffic_travel_one_reply() {
     // provider had already searched by the time the model asked this
     // application for a file. The file is dispatched and its result travels; the
     // search is already answered and nothing of it travels.
-    let h = Harness::scripted(vec![
-        Ok(
-            ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))
-                .and_native("openrouter:web_search", "{\"query\":\"a\"}", "A"),
-        ),
-        Ok(ScriptedReply::answer("Both read.")),
-    ]);
+    let h =
+        Harness::scripted(vec![
+            Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))
+                .and_native("openrouter:web_search", "{\"query\":\"a\"}", "A")),
+            Ok(ScriptedReply::answer("Both read.")),
+        ]);
     h.mount();
     h.create_agent("arch", "");
     let (terminal, _) = run_one(&h, "arch");
@@ -809,14 +772,16 @@ fn a_local_tool_and_provider_traffic_travel_one_reply() {
     // And the local tool ran as it always does, its result in the exchange.
     let local_results = exchanges[1]
         .iter()
-        .filter(|message| matches!(
-            message,
-            rig::completion::Message::User { content }
-                if content.iter().any(|part| matches!(
-                    part,
-                    rig::completion::message::UserContent::ToolResult(_)
-                ))
-        ))
+        .filter(|message| {
+            matches!(
+                message,
+                rig::completion::Message::User { content }
+                    if content.iter().any(|part| matches!(
+                        part,
+                        rig::completion::message::UserContent::ToolResult(_)
+                    ))
+            )
+        })
         .count();
     assert_eq!(local_results, 1, "the file the model asked this application for");
 }

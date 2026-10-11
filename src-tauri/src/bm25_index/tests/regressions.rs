@@ -17,10 +17,7 @@ fn a_crlf_heading_less_file_still_splits_at_blank_lines() {
     // JSON, any non-Markdown text — was not.
     let paragraph = "lorem ipsum dolor sit amet ".repeat(40);
     let paragraph = paragraph.trim();
-    let lf = std::iter::repeat(paragraph)
-        .take(12)
-        .collect::<Vec<_>>()
-        .join("\n\n");
+    let lf = std::iter::repeat_n(paragraph, 12).collect::<Vec<_>>().join("\n\n");
     let crlf = lf.replace('\n', "\r\n");
     assert!(lf.chars().count() > MAX_CHUNK_CHARS * 2);
 
@@ -64,11 +61,8 @@ fn a_symlinked_artifact_is_refused_rather_than_indexed_through() {
     let link = root.join("specifications/leak.md");
     std::os::unix::fs::symlink(&outside, &link).unwrap();
 
-    let reason = read_bounded(&crate::fs::RootFs::for_root(&root), &link).unwrap_err();
-    assert!(
-        reason.contains("symlink"),
-        "a symlinked candidate is refused: {reason}"
-    );
+    let reason = read_bounded(&crate::fs::RootFs::for_root(root), &link).unwrap_err();
+    assert!(reason.contains("symlink"), "a symlinked candidate is refused: {reason}");
     assert!(
         !reason.contains("SUPERSECRET"),
         "and the refusal names the shape, not the target's content: {reason}"
@@ -76,12 +70,14 @@ fn a_symlinked_artifact_is_refused_rather_than_indexed_through() {
 
     // A directory in a candidate's place is likewise not read as text.
     std::fs::create_dir_all(root.join("specifications/adir")).unwrap();
-    assert!(read_bounded(&crate::fs::RootFs::for_root(&root), &root.join("specifications/adir")).is_err());
+    assert!(read_bounded(&crate::fs::RootFs::for_root(root), &root.join("specifications/adir"))
+        .is_err());
 
     // An ordinary file beside them still reads.
     std::fs::write(root.join("specifications/real.md"), "teardown\n").unwrap();
     assert_eq!(
-        read_bounded(&crate::fs::RootFs::for_root(&root), &root.join("specifications/real.md")).unwrap(),
+        read_bounded(&crate::fs::RootFs::for_root(root), &root.join("specifications/real.md"))
+            .unwrap(),
         "teardown\n"
     );
 }
@@ -209,10 +205,7 @@ fn one_index_holding_two_languages_answers_each_from_its_own_shard() {
         PassScope::ALL,
     );
     assert_eq!(set.language_of(IndexId::Spec, "de.md"), Some(Language::German));
-    assert_eq!(
-        set.language_of(IndexId::Spec, "en.md"),
-        Some(Language::English)
-    );
+    assert_eq!(set.language_of(IndexId::Spec, "en.md"), Some(Language::English));
 
     // Each query reaches only the shard whose stemming can answer it, and both
     // come back from the one index.
@@ -231,11 +224,8 @@ fn a_file_whose_language_changes_leaves_no_chunk_in_its_old_shard() {
     // The removal is located by the language stored on the file's entry, not by
     // the language of the text now on disk — get that wrong and the old shard
     // keeps every chunk forever.
-    let german = pass(
-        &IndexSet::default(),
-        vec![artifact(IndexId::Spec, "a.md", GERMAN)],
-        PassScope::ALL,
-    );
+    let german =
+        pass(&IndexSet::default(), vec![artifact(IndexId::Spec, "a.md", GERMAN)], PassScope::ALL);
     assert!(!search_snapshot(&german, &[], "Verzeichnis", 10).is_empty());
 
     let rewritten = pass(
@@ -248,10 +238,7 @@ fn a_file_whose_language_changes_leaves_no_chunk_in_its_old_shard() {
         )],
         PassScope::ARTIFACTS,
     );
-    assert_eq!(
-        rewritten.language_of(IndexId::Spec, "a.md"),
-        Some(Language::English)
-    );
+    assert_eq!(rewritten.language_of(IndexId::Spec, "a.md"), Some(Language::English));
     assert!(
         search_snapshot(&rewritten, &[], "Verzeichnis", 10).is_empty(),
         "no chunk may survive in the shard the file has left"
@@ -259,4 +246,3 @@ fn a_file_whose_language_changes_leaves_no_chunk_in_its_old_shard() {
     assert!(!search_snapshot(&rewritten, &[], "teardown", 10).is_empty());
     assert_eq!(rewritten.file_count(IndexId::Spec), 1);
 }
-

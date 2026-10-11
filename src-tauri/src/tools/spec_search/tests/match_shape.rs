@@ -35,11 +35,7 @@ fn a_matchs_path_is_accepted_by_the_read_tool_unchanged() {
     let output = query(&fixture, "teardown", Some(1));
     let path = &output.specifications[0].path;
 
-    let root = fixture
-        .app
-        .state::<Bm25Indexer>()
-        .root()
-        .expect("mounted");
+    let root = fixture.app.state::<Bm25Indexer>().root().expect("mounted");
     let session = crate::tools::tests::agent_session(&fixture.app, &root, "sps-reader");
     let access = fixture
         .app
@@ -49,11 +45,7 @@ fn a_matchs_path_is_accepted_by_the_read_tool_unchanged() {
     let text = crate::tools::file_read::read(
         &access,
         &root,
-        &crate::tools::file_read::ReadFileArgs {
-            path: path.clone(),
-            offset: None,
-            limit: None,
-        },
+        &crate::tools::file_read::ReadFileArgs { path: path.clone(), offset: None, limit: None },
     )
     .expect("the path a match reported is one read_file accepts (SPS-FR-11)");
 
@@ -100,4 +92,3 @@ fn the_excerpt_is_a_section_of_the_file_verbatim() {
         "an excerpt is one section rather than the whole file (SPS-FR-12)",
     );
 }
-

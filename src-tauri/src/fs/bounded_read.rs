@@ -21,10 +21,7 @@ fn open_regular(path: &Path) -> io::Result<fs::File> {
     // `O_NONBLOCK` makes the open of a FIFO return at once. `O_NOFOLLOW` makes
     // the open of a link fail, so a path swapped for a link after a check
     // reaches nothing.
-    fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW)
-        .open(path)
+    fs::OpenOptions::new().read(true).custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW).open(path)
 }
 
 #[cfg(not(unix))]
@@ -42,29 +39,20 @@ pub(super) fn read_regular_at(path: &Path, max_bytes: u64) -> FsResult<Vec<u8>> 
     let mut file = match open_regular(path) {
         Ok(file) => file,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return Err(FsError::NotFound {
-                path: path.to_path_buf(),
-            })
+            return Err(FsError::NotFound { path: path.to_path_buf() })
         }
         // `ELOOP` is what `O_NOFOLLOW` answers for a link.
         Err(e) if is_link_refusal(&e) => {
-            return Err(FsError::SymlinkRefused {
-                path: path.to_path_buf(),
-            })
+            return Err(FsError::SymlinkRefused { path: path.to_path_buf() })
         }
         Err(e) => return Err(FsError::Io(e)),
     };
     let meta = file.metadata().map_err(FsError::Io)?;
     if !meta.is_file() {
-        return Err(FsError::NotRegular {
-            path: path.to_path_buf(),
-        });
+        return Err(FsError::NotRegular { path: path.to_path_buf() });
     }
     if meta.len() > max_bytes {
-        return Err(FsError::TooLarge {
-            path: path.to_path_buf(),
-            limit: max_bytes,
-        });
+        return Err(FsError::TooLarge { path: path.to_path_buf(), limit: max_bytes });
     }
     // The size above can be out of date, so the read itself is capped too.
     let mut out = Vec::with_capacity(meta.len() as usize);
@@ -77,10 +65,7 @@ pub(super) fn read_regular_at(path: &Path, max_bytes: u64) -> FsResult<Vec<u8>> 
             Err(e) => return Err(FsError::Io(e)),
         };
         if out.len() as u64 + read as u64 > max_bytes {
-            return Err(FsError::TooLarge {
-                path: path.to_path_buf(),
-                limit: max_bytes,
-            });
+            return Err(FsError::TooLarge { path: path.to_path_buf(), limit: max_bytes });
         }
         out.extend_from_slice(&chunk[..read]);
     }

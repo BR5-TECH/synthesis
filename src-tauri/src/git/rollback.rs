@@ -126,14 +126,8 @@ pub(crate) fn plan_rollback(
     let mut plan_of: std::collections::HashMap<String, RollbackPlan> =
         std::collections::HashMap::new();
     for delta in diff.deltas() {
-        let new_path = delta
-            .new_file()
-            .path()
-            .map(|p| p.to_string_lossy().into_owned());
-        let old_path = delta
-            .old_file()
-            .path()
-            .map(|p| p.to_string_lossy().into_owned());
+        let new_path = delta.new_file().path().map(|p| p.to_string_lossy().into_owned());
+        let old_path = delta.old_file().path().map(|p| p.to_string_lossy().into_owned());
         let named = new_path.clone().or_else(|| old_path.clone());
         let Some(named) = named else { continue };
         let Some(status) = changes::map_status(delta.status()) else {
@@ -144,9 +138,9 @@ pub(crate) fn plan_rollback(
             // file ceasing to exist (GTC-FR-23).
             changes::ChangeStatus::Untracked | changes::ChangeStatus::Added => RollbackPlan::Remove,
             changes::ChangeStatus::Renamed => match (&old_path, &new_path) {
-                (Some(old), Some(new)) if old != new => RollbackPlan::Rename {
-                    previous: old.clone(),
-                },
+                (Some(old), Some(new)) if old != new => {
+                    RollbackPlan::Rename { previous: old.clone() }
+                }
                 // Rename detection paired it, then reported one path; treat it
                 // as the ordinary modification it now looks like rather than
                 // inventing a second identity.
@@ -178,12 +172,9 @@ pub(crate) fn head_blob(repo: &Repository, spec: &str) -> Result<Option<(Vec<u8>
         Ok(entry) => entry,
         Err(_) => return Ok(None),
     };
-    let object = entry
-        .to_object(repo)
-        .map_err(|e| format!("failed to read {spec} from HEAD: {e}"))?;
-    let blob = object
-        .as_blob()
-        .ok_or_else(|| format!("{spec} is not a file in HEAD"))?;
+    let object =
+        entry.to_object(repo).map_err(|e| format!("failed to read {spec} from HEAD: {e}"))?;
+    let blob = object.as_blob().ok_or_else(|| format!("{spec} is not a file in HEAD"))?;
     Ok(Some((blob.content().to_vec(), entry.filemode() as u32)))
 }
 
@@ -249,9 +240,7 @@ pub fn rollback_named_paths(
     }
 
     let plans = plan_rollback(&repo, &prefix, &specs)?;
-    let mut index = repo
-        .index()
-        .map_err(|e| format!("failed to open the index: {e}"))?;
+    let mut index = repo.index().map_err(|e| format!("failed to open the index: {e}"))?;
     let mut index_dirty = false;
     let mut entries = Vec::with_capacity(paths.len());
 
@@ -268,10 +257,9 @@ pub fn rollback_named_paths(
             failures: Vec::new(),
         };
         if escaped[i] {
-            entry.failures.push(PathFailure {
-                path: path.clone(),
-                kind: ROLLBACK_OUTSIDE_ROOT.to_string(),
-            });
+            entry
+                .failures
+                .push(PathFailure { path: path.clone(), kind: ROLLBACK_OUTSIDE_ROOT.to_string() });
             entries.push(entry.settle());
             continue;
         }
@@ -346,10 +334,9 @@ pub fn rollback_named_paths(
                             path: reported,
                             kind: ROLLBACK_NOT_FOUND.to_string(),
                         }),
-                        Err(kind) => entry.failures.push(PathFailure {
-                            path: reported,
-                            kind: kind.to_string(),
-                        }),
+                        Err(kind) => entry
+                            .failures
+                            .push(PathFailure { path: reported, kind: kind.to_string() }),
                     }
                 }
                 RollbackStep::Remove => match remove_one(root, &workdir, step_spec, &mut index) {
@@ -357,10 +344,9 @@ pub fn rollback_named_paths(
                         index_dirty = true;
                         entry.removed_paths.push(reported);
                     }
-                    Err(kind) => entry.failures.push(PathFailure {
-                        path: reported,
-                        kind: kind.to_string(),
-                    }),
+                    Err(kind) => {
+                        entry.failures.push(PathFailure { path: reported, kind: kind.to_string() })
+                    }
                 },
             }
         }
@@ -381,11 +367,7 @@ pub fn rollback_named_paths(
     // So the outcome stands and the flush failure is reported as its own thing.
     // The consequence of a failed flush is cosmetic by comparison: the working
     // tree is correct, and the paths read as staged until the next index write.
-    let index_error = if index_dirty {
-        index.write().err().map(|e| e.to_string())
-    } else {
-        None
-    };
+    let index_error = if index_dirty { index.write().err().map(|e| e.to_string()) } else { None };
     Ok((RollbackOutcome { entries }, index_error))
 }
 
@@ -410,14 +392,11 @@ pub(crate) fn restore_one(
         return Ok(false);
     };
     let absolute = workdir.join(spec);
-    root.write_bytes_atomic(&absolute, &content)
-        .map_err(|e| failure_kind(&e))?;
+    root.write_bytes_atomic(&absolute, &content).map_err(|e| failure_kind(&e))?;
     // Staging `HEAD`'s own content is what discards a *staged* edit: the index
     // entry, the working tree, and `HEAD` all agree afterwards, so the path
     // reads clean rather than staged-and-reverted.
-    index
-        .add_path(Path::new(spec))
-        .map_err(|_| ROLLBACK_WRITE_FAILED)?;
+    index.add_path(Path::new(spec)).map_err(|_| ROLLBACK_WRITE_FAILED)?;
     Ok(true)
 }
 
@@ -435,7 +414,7 @@ pub(crate) fn remove_one(
     match root.access().delete_path(&absolute, false) {
         Ok(()) => {}
         // Already gone is the outcome the caller asked for.
-        Err(e) if matches!(e, crate::fs::FsError::NotFound { .. }) => {}
+        Err(crate::fs::FsError::NotFound { .. }) => {}
         Err(e) => return Err(failure_kind(&e)),
     }
     // A staged addition is also unstaged, or the path would still be in the

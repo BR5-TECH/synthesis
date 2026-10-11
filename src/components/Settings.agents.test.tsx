@@ -2,12 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { Settings } from "./Settings";
+import { Settings } from "../test/settingsHarness";
+import { resetAgentRegistry } from "../state/agentRegistry";
 import type { Agent, ProjectAgent } from "../types";
 
-// SET-FR-15: the Project settings Agents section — where a project decides who
-// it can talk to. The personas themselves are described in Global settings
-// (AGT-FR-22), so nothing here authors one.
+// SET-FR-15: the Project Agents section — where a project describes the agents
+// it shares with every contributor. The author's Personal agents are described
+// in Global settings (AGT-FR-09), so none of them is listed or authored here.
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
@@ -20,30 +21,39 @@ function agent(id: string, nickname: string): Agent {
     title: "",
     modelId: "m",
     instructions: "",
-    createdAt: "2026-01-01T00:00:00Z",
-    updatedAt: "2026-01-01T00:00:00Z",
+    createdAt: "",
+    updatedAt: "",
     reasoning: null,
   };
 }
 
-const enrolled = (a: Agent): ProjectAgent => ({ agent: a, availability: "ready" });
+const entry = (a: Agent, scope: ProjectAgent["scope"] = "project"): ProjectAgent => ({
+  scope,
+  agent: a,
+  availability: "ready",
+});
 
-function backend(all: Agent[], mine: ProjectAgent[]) {
-  const calls: string[] = [];
-  let current = mine;
+function backend(roster: ProjectAgent[]) {
+  const calls: { cmd: string; args?: Record<string, unknown> }[] = [];
+  let current = roster;
   invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
-    calls.push(cmd);
+    calls.push({ cmd, args });
     switch (cmd) {
-      case "list_agents":
-        return all;
       case "list_project_agents":
         return current;
-      case "enrol_project_agent":
-        current = [...current, enrolled(all.find((a) => a.id === args?.agentId)!)];
-        return current;
-      case "remove_project_agent":
-        current = current.filter((p) => p.agent.id !== args?.agentId);
-        return current;
+      case "get_active_ai_api_catalog":
+        return {
+          resolution: "inherited",
+          catalog: {
+            provider: "openrouter",
+            displayName: "OpenRouter",
+            state: "verified",
+            models: [{ id: "m", label: "M" }],
+          },
+        };
+      case "delete_agent":
+        current = current.filter((p) => p.agent.id !== args?.id);
+        return current.filter((p) => p.scope === "project");
       default:
         return undefined;
     }
@@ -51,55 +61,68 @@ function backend(all: Agent[], mine: ProjectAgent[]) {
   return calls;
 }
 
-beforeEach(() => invokeMock.mockReset());
+beforeEach(() => {
+  invokeMock.mockReset();
+  resetAgentRegistry();
+});
 afterEach(cleanup);
 
 async function openAgents() {
-  await userEvent.click(screen.getByText("Agents"));
+  await userEvent.click(screen.getByText("Project Agents"));
 }
 
-describe("Project settings — Agents (SET-FR-15)", () => {
-  it("SET-FR-03, SET-FR-15, SET-FR-08 is one of the tab's sections, enrols at once, and holds no dirty state", async () => {
-    // SET-FR-15 / AGT-FR-22, FR-23. Enrolment and removal apply immediately
-    // through their own operations, so the section never participates in the
-    // tab's dirty state (SET-FR-08) — asserted as the absence of any save
-    // control in it, since this tab reports dirtiness by rendering one.
-    const calls = backend(
-      [agent("a1", "arch"), agent("a2", "sec")],
-      [enrolled(agent("a1", "arch"))],
-    );
+describe("Project settings — Project Agents (SET-FR-15)", () => {
+  it("SET-FR-03, SET-FR-15, SET-FR-08: is one of the group's sections, writes at once, and holds no dirty state", async () => {
+    // Every action applies immediately through its own operation, so the section
+    // never participates in the group's dirty state (SET-FR-08) — asserted as
+    // the absence of any save control in it, since the group reports dirtiness
+    // by rendering one.
+    const calls = backend([
+      entry(agent("a1", "arch")),
+      entry(agent("a2", "mine"), "personal"),
+    ]);
     render(<Settings contentRoot="/p#0" lineEndings="lf" onSelectLineEndings={vi.fn()} />);
     await openAgents();
 
-    const section = await screen.findByTestId("project-agents-section");
+    const section = await screen.findByTestId("agents-section");
     await waitFor(() =>
-      expect(within(section).getAllByTestId("project-agent-row")).toHaveLength(1),
+      expect(within(section).getAllByTestId("agent-row")).toHaveLength(1),
     );
-    expect(calls).toContain("list_project_agents");
+    expect(calls.map((c) => c.cmd)).toContain("list_project_agents");
     expect(within(section).queryByRole("button", { name: /save/i })).toBeNull();
 
-    await userEvent.click(within(section).getByTestId("project-agent-add"));
-    await userEvent.click(
-      (await screen.findAllByTestId("project-agent-option"))[0],
-    );
-    await waitFor(() => expect(calls).toContain("enrol_project_agent"));
+    await userEvent.click(within(section).getByTestId("agent-delete"));
+    await userEvent.click(await screen.findByTestId("agent-delete-confirm-ok"));
     await waitFor(() =>
-      expect(screen.getAllByTestId("project-agent-row")).toHaveLength(2),
+      expect(calls.find((c) => c.cmd === "delete_agent")?.args).toEqual({
+        scope: "project",
+        id: "a1",
+      }),
     );
-
-    await userEvent.click(screen.getAllByTestId("project-agent-remove")[0]);
-    await waitFor(() => expect(calls).toContain("remove_project_agent"));
   });
 
-  it("names where a persona is described and offers no editor of its own", async () => {
-    // AGT-FR-22: this section decides only who is in this project.
-    backend([agent("a1", "arch")], [enrolled(agent("a1", "arch"))]);
+  it("AGT-FR-22: offers an editor of its own for a Project agent", async () => {
+    backend([entry(agent("a1", "arch"))]);
     render(<Settings contentRoot="/p#0" lineEndings="lf" onSelectLineEndings={vi.fn()} />);
     await openAgents();
 
-    const section = await screen.findByTestId("project-agents-section");
-    expect(section).toHaveTextContent(/Global settings/);
-    expect(within(section).queryByTestId("agent-edit")).toBeNull();
-    expect(within(section).queryByTestId("agent-create")).toBeNull();
+    const section = await screen.findByTestId("agents-section");
+    expect(await within(section).findByTestId("agent-edit")).toBeInTheDocument();
+    expect(within(section).getByTestId("agent-create")).toBeInTheDocument();
+    expect(section).toHaveTextContent(/\.synthesis/);
+  });
+
+  it("AGT-FR-06: opens on the editor of the Project agent a request names", async () => {
+    backend([entry(agent("a1", "arch"))]);
+    render(
+      <Settings
+        contentRoot="/p#0"
+        lineEndings="lf"
+        onSelectLineEndings={vi.fn()}
+        agentEditorRequest={{ agentId: "a1", nonce: 1 }}
+      />,
+    );
+    const editor = await screen.findByTestId("agent-editor");
+    expect(within(editor).getByTestId("agent-nickname")).toHaveValue("arch");
   });
 });

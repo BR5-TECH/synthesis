@@ -1,5 +1,5 @@
 //! The item set, the labels, the accelerators, and the id-to-action routing
-//! (SNV-FR-14, SNV-FR-19, SNV-FR-23..31, SWN-FR-02, SWN-FR-14, SWN-FR-16, PPK-FR-15).
+//! (SNV-FR-14, SNV-FR-19, SNV-FR-23..31, SWN-FR-02, SWN-FR-14, SWN-FR-15, PPK-FR-15).
 
 use super::*;
 
@@ -33,7 +33,7 @@ fn file_menu_items_are_the_three_creation_items_then_save_save_all_settings_clos
     // cluster leads — New File, New Artifact, New Folder, matching the
     // Library folder context menu's order (LCM-FR-01) — then Save and Save
     // All carrying the two save accelerators (SNV-FR-28 / SNV-FR-30), then
-    // the two settings entries, then Close Project.
+    // the settings entry, then Close Project.
     assert_eq!(
         file_menu_order(false),
         vec![
@@ -42,18 +42,16 @@ fn file_menu_items_are_the_three_creation_items_then_save_save_all_settings_clos
             (MENU_NEW_FOLDER, "New Folder", None),
             (MENU_SAVE, "Save", Some("CmdOrCtrl+S")),
             (MENU_SAVE_ALL, "Save All", Some("CmdOrCtrl+Shift+S")),
-            (MENU_GLOBAL_SETTINGS, "Global settings", None),
-            (MENU_PROJECT_SETTINGS, "Project settings", None),
+            (MENU_SETTINGS, "Settings", None),
             (MENU_CLOSE_PROJECT, "Close Project", None),
         ]
     );
 }
 
 // SWN-FR-14 / SNV-FR-23: on macOS the File menu holds the same items
-// WITHOUT the two settings entries, which are in the app-name menu instead,
-// Global settings first.
+// WITHOUT the settings entry, which is in the app-name menu instead.
 #[test]
-fn on_macos_the_settings_entries_are_in_the_app_name_menu_and_not_the_file_menu() {
+fn on_macos_the_settings_entry_is_in_the_app_name_menu_and_not_the_file_menu() {
     let file: Vec<&str> = file_menu_order(true).iter().map(|(id, ..)| *id).collect();
     assert_eq!(
         file,
@@ -67,18 +65,9 @@ fn on_macos_the_settings_entries_are_in_the_app_name_menu_and_not_the_file_menu(
         ]
     );
     let app: Vec<&str> = app_menu_order(true).iter().map(|(id, ..)| *id).collect();
-    assert_eq!(
-        app,
-        [
-            MENU_GLOBAL_SETTINGS,
-            MENU_PROJECT_SETTINGS,
-            MENU_ABOUT,
-            MENU_QUIT
-        ]
-    );
+    assert_eq!(app, [MENU_SETTINGS, MENU_ABOUT, MENU_QUIT]);
     // And on every other platform the app-name menu carries Quit alone.
-    let app_elsewhere: Vec<&str> =
-        app_menu_order(false).iter().map(|(id, ..)| *id).collect();
+    let app_elsewhere: Vec<&str> = app_menu_order(false).iter().map(|(id, ..)| *id).collect();
     assert_eq!(app_elsewhere, [MENU_QUIT]);
 }
 
@@ -101,8 +90,7 @@ fn about_sits_immediately_before_the_quit_item_of_the_platform_menu() {
     let app: Vec<&str> = app_menu_order(true).iter().map(|(id, ..)| *id).collect();
     assert_eq!(&app[app.len() - 2..], [MENU_ABOUT, MENU_QUIT]);
 
-    let app_elsewhere: Vec<&str> =
-        app_menu_order(false).iter().map(|(id, ..)| *id).collect();
+    let app_elsewhere: Vec<&str> = app_menu_order(false).iter().map(|(id, ..)| *id).collect();
     assert!(!app_elsewhere.contains(&MENU_ABOUT));
 }
 
@@ -116,54 +104,12 @@ fn the_about_entry_relays_an_event_and_is_blocked_by_a_settings_window() {
     assert!(!MenuAction::About.reaches_past_a_settings_window());
 }
 
-// SWN-FR-16 / PPK-FR-15: the entry is offered only while a project is open,
-// and the presence claim is what makes each transition happen exactly once.
-// A double insert would put two Project settings entries in the menu, and a
-// double remove would throw away the handle's place in it.
-#[test]
-fn the_project_settings_entry_changes_presence_at_most_once_per_state() {
-    let items = SettingsMenuItems::<tauri::test::MockRuntime>::default();
-    // Built present, because the menu is constructed with the entry in it.
-    assert!(!items.claim(true), "already present");
-    // The application starts on the Project picker, which takes it out.
-    assert!(items.claim(false), "taken out");
-    assert!(!items.claim(false), "and not taken out twice");
-    // Opening a project puts it back, once.
-    assert!(items.claim(true), "put back");
-    assert!(!items.claim(true), "and not inserted twice");
-}
-
-// SWN-FR-16: the entry is taken out of, and put back into, the position the
-// order table gives it — so an item added before it cannot leave it landing
-// somewhere else in the menu when a project reopens.
-#[test]
-fn the_project_settings_entry_returns_to_the_index_its_menu_gives_it() {
-    assert_eq!(
-        project_settings_index(false),
-        file_menu_order(false)
-            .iter()
-            .position(|(id, ..)| *id == MENU_PROJECT_SETTINGS)
-            .unwrap()
-    );
-    assert_eq!(
-        project_settings_index(true),
-        app_menu_order(true)
-            .iter()
-            .position(|(id, ..)| *id == MENU_PROJECT_SETTINGS)
-            .unwrap()
-    );
-}
-
 // SWN-FR-02: while a settings window is open the parent takes no
-// menu interaction — but the two settings entries and the quit are not the
+// menu interaction — but the settings entry and the quit are not the
 // parent's, so they still reach through.
 #[test]
-fn only_the_settings_entries_and_the_quit_reach_past_an_open_settings_window() {
-    for action in [
-        MenuAction::GlobalSettings,
-        MenuAction::ProjectSettings,
-        MenuAction::Exit,
-    ] {
+fn only_the_settings_entry_and_the_quit_reach_past_an_open_settings_window() {
+    for action in [MenuAction::Settings, MenuAction::Exit] {
         assert!(action.reaches_past_a_settings_window(), "{action:?}");
     }
     for action in [
@@ -241,17 +187,7 @@ fn every_menu_label_reads_with_each_word_capitalised() {
     // capital — and consistently so across every menu, present and future.
     // "Save All" and "New Folder" are the shape; a lowercase "New folder"
     // still builds and still routes, so only this catches the drift.
-    //
-    // The two settings entries are the stated exception: SWN-FR-14 names
-    // them "Global settings" and "Project settings" in sentence case, which
-    // is also how every surface in the application refers to the two
-    // windows. Spelling them differently in the menu alone would be the
-    // drift this test exists to catch, in the other direction.
-    let sentence_case = [MENU_GLOBAL_SETTINGS, MENU_PROJECT_SETTINGS];
     for (id, label, _) in all_menu_item_specs() {
-        if sentence_case.contains(&id) {
-            continue;
-        }
         for word in rendered(label).split_whitespace() {
             let Some(first) = word.chars().next() else {
                 continue;
@@ -269,17 +205,11 @@ fn every_menu_label_reads_with_each_word_capitalised() {
     }
 }
 
-// SWN-FR-14: the two entries read exactly as the spec names them, and in
-// that order — Global settings first.
+// SWN-FR-14: the menu carries exactly one settings entry, and it reads as the
+// spec names it.
 #[test]
-fn the_settings_entries_read_as_the_spec_names_them() {
-    assert_eq!(
-        SETTINGS_MENU_ITEMS,
-        &[
-            (MENU_GLOBAL_SETTINGS, "Global settings", None),
-            (MENU_PROJECT_SETTINGS, "Project settings", None),
-        ]
-    );
+fn the_settings_entry_reads_as_the_spec_names_it() {
+    assert_eq!(SETTINGS_MENU_ITEMS, &[(MENU_SETTINGS, "Settings", None)]);
 }
 
 #[test]
@@ -300,10 +230,7 @@ fn each_find_accelerator_is_bound_exactly_once() {
     // SNV-FR-43: ⌘F and ⌘R are each bound, and to one item. An unbound chord
     // is a shortcut that does nothing; a doubly-bound one is undefined
     // behaviour in the native menu.
-    for (chord, expected) in [
-        ("CmdOrCtrl+F", MENU_FIND),
-        ("CmdOrCtrl+R", MENU_FIND_REPLACE),
-    ] {
+    for (chord, expected) in [("CmdOrCtrl+F", MENU_FIND), ("CmdOrCtrl+R", MENU_FIND_REPLACE)] {
         let bound: Vec<&str> = all_menu_item_specs()
             .iter()
             .filter(|(.., accel)| *accel == Some(chord))
@@ -322,10 +249,7 @@ fn the_find_items_the_enablement_handles_need_are_declared_in_the_menu() {
     // forever with no error anywhere.
     let ids: Vec<&str> = EDIT_MENU_ITEMS.iter().map(|(id, ..)| *id).collect();
     assert!(ids.contains(&MENU_FIND), "Find must be an Edit-menu item");
-    assert!(
-        ids.contains(&MENU_FIND_REPLACE),
-        "Find & Replace must be an Edit-menu item"
-    );
+    assert!(ids.contains(&MENU_FIND_REPLACE), "Find & Replace must be an Edit-menu item");
 }
 
 #[test]
@@ -369,10 +293,7 @@ fn activating_find_and_find_replace_emits_their_own_channel() {
         handle_menu_event(&app.handle().clone(), activated);
 
         assert!(hit.load(Ordering::SeqCst), "{activated} must emit {expected}");
-        assert!(
-            !wrong.load(Ordering::SeqCst),
-            "{activated} must not emit {other}"
-        );
+        assert!(!wrong.load(Ordering::SeqCst), "{activated} must not emit {other}");
     }
 }
 
@@ -421,15 +342,10 @@ fn the_save_items_the_enablement_handles_need_are_declared_in_the_menu() {
     // of that list the capture would silently yield `None`, the menu would
     // still build, and `set_save_menu_state` would go inert — Save would be
     // stuck greyed out forever with no error anywhere.
-    let ids: Vec<&str> = file_menu_order(cfg!(target_os = "macos"))
-        .iter()
-        .map(|(id, ..)| *id)
-        .collect();
+    let ids: Vec<&str> =
+        file_menu_order(cfg!(target_os = "macos")).iter().map(|(id, ..)| *id).collect();
     assert!(ids.contains(&MENU_SAVE), "Save must be a File-menu item");
-    assert!(
-        ids.contains(&MENU_SAVE_ALL),
-        "Save All must be a File-menu item"
-    );
+    assert!(ids.contains(&MENU_SAVE_ALL), "Save All must be a File-menu item");
 }
 
 #[test]
@@ -504,16 +420,10 @@ fn exactly_one_menu_item_carries_the_quit_accelerator() {
 fn menu_event_action_maps_each_file_item() {
     // NFI-FR-06, NFW-FR-06, NTA-FR-07, SNV-FR-24 / OVW-FR-02, PST-FR-14, ASC-FR-14, SNV-FR-25: each owned id resolves to its action.
     assert_eq!(menu_event_action(MENU_NEW_FOLDER), Some(MenuAction::NewFolder));
-    assert_eq!(
-        menu_event_action(MENU_NEW_ARTIFACT),
-        Some(MenuAction::NewArtifact)
-    );
+    assert_eq!(menu_event_action(MENU_NEW_ARTIFACT), Some(MenuAction::NewArtifact));
     assert_eq!(menu_event_action(MENU_SAVE), Some(MenuAction::Save));
     assert_eq!(menu_event_action(MENU_SAVE_ALL), Some(MenuAction::SaveAll));
-    assert_eq!(
-        menu_event_action(MENU_CLOSE_PROJECT),
-        Some(MenuAction::CloseProject)
-    );
+    assert_eq!(menu_event_action(MENU_CLOSE_PROJECT), Some(MenuAction::CloseProject));
 }
 
 #[test]
@@ -549,10 +459,9 @@ fn activating_save_and_save_all_emits_their_own_channel() {
     let dir = tempfile::TempDir::new().unwrap();
     let app = mock_app_with_window(dir.path());
 
-    for (activated, expected, other) in [
-        (MENU_SAVE, MENU_SAVE, MENU_SAVE_ALL),
-        (MENU_SAVE_ALL, MENU_SAVE_ALL, MENU_SAVE),
-    ] {
+    for (activated, expected, other) in
+        [(MENU_SAVE, MENU_SAVE, MENU_SAVE_ALL), (MENU_SAVE_ALL, MENU_SAVE_ALL, MENU_SAVE)]
+    {
         let hit = Arc::new(AtomicBool::new(false));
         let wrong = Arc::new(AtomicBool::new(false));
         let (h, w) = (hit.clone(), wrong.clone());
@@ -562,10 +471,7 @@ fn activating_save_and_save_all_emits_their_own_channel() {
         handle_menu_event(&app.handle().clone(), activated);
 
         assert!(hit.load(Ordering::SeqCst), "{activated} must emit {expected}");
-        assert!(
-            !wrong.load(Ordering::SeqCst),
-            "{activated} must not emit {other}"
-        );
+        assert!(!wrong.load(Ordering::SeqCst), "{activated} must not emit {other}");
     }
 }
 
@@ -589,4 +495,3 @@ fn menu_event_action_ignores_unowned_ids() {
         assert_eq!(menu_event_action(id), None, "id {id:?} must be unowned");
     }
 }
-

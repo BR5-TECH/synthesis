@@ -24,7 +24,7 @@ fn an_unconfigured_project_reports_lf_and_a_change_round_trips_in_project_toml()
         ProjectConfig {
             line_endings: LineEndings::Crlf,
             draft_template: None,
-                        ..Default::default()
+            ..Default::default()
         },
     )
     .unwrap();
@@ -49,7 +49,8 @@ fn project_toml_is_not_gitignored_the_way_local_toml_is() {
     // that ignore rule is `local.toml`-specific and lives in `.gitignore`
     // only because the local store put it there.
     let dir = TempDir::new().unwrap();
-    save_project_config_to(&crate::fs::RootFs::for_root(dir.path()), ProjectConfig::default()).unwrap();
+    save_project_config_to(&crate::fs::RootFs::for_root(dir.path()), ProjectConfig::default())
+        .unwrap();
     assert!(
         !dir.path().join(".synthesis/.gitignore").exists(),
         "a public write must not create the local store's ignore file"
@@ -77,27 +78,17 @@ fn saving_the_convention_preserves_every_other_project_public_section() {
 
     save_project_config_to(
         &crate::fs::RootFs::for_root(dir.path()),
-        ProjectConfig {
-            line_endings: LineEndings::Lf,
-            draft_template: None,
-                        ..Default::default()
-        },
+        ProjectConfig { line_endings: LineEndings::Lf, draft_template: None, ..Default::default() },
     )
     .unwrap();
 
     let table = load_public(&crate::fs::RootFs::for_root(dir.path())).unwrap();
     assert_eq!(
-        table
-            .get("mcpServers")
-            .and_then(|v| v.as_array())
-            .map(|a| a.len()),
+        table.get("mcpServers").and_then(|v| v.as_array()).map(|a| a.len()),
         Some(2),
         "both MCP connections survive the write"
     );
-    assert!(
-        table.get("plugins").is_some(),
-        "and so does every other section"
-    );
+    assert!(table.get("plugins").is_some(), "and so does every other section");
     assert_eq!(
         load_project_config_from(&crate::fs::RootFs::for_root(dir.path())).unwrap().line_endings,
         LineEndings::Lf,
@@ -127,11 +118,7 @@ fn an_unknown_line_ending_value_falls_back_to_the_default() {
     // bar: the file parses, so it is not damaged — only this key is unknown.
     let dir = TempDir::new().unwrap();
     std::fs::create_dir_all(dir.path().join(".synthesis")).unwrap();
-    std::fs::write(
-        dir.path().join(".synthesis/project.toml"),
-        "lineEndings = \"cr\"\n",
-    )
-    .unwrap();
+    std::fs::write(dir.path().join(".synthesis/project.toml"), "lineEndings = \"cr\"\n").unwrap();
     assert_eq!(
         load_project_config_from(&crate::fs::RootFs::for_root(dir.path())).unwrap().line_endings,
         LineEndings::Lf
@@ -170,8 +157,7 @@ fn project_config_serialises_camel_case_with_lowercase_conventions() {
     // PSS-FR-ZLCF: an **absent** shared bound says nothing about the stored
     // one, and a `null` clears it. The two must not collapse into one value.
     assert_eq!(parsed.execution_timeout_ms, None, "absent says nothing");
-    let cleared: ProjectConfig =
-        serde_json::from_str(r#"{"executionTimeoutMs":null}"#).unwrap();
+    let cleared: ProjectConfig = serde_json::from_str(r#"{"executionTimeoutMs":null}"#).unwrap();
     assert_eq!(cleared.execution_timeout_ms, Some(None), "null clears it");
     let empty: ProjectConfig = serde_json::from_str("{}").unwrap();
     assert_eq!(empty, ProjectConfig::default());

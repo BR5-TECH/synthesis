@@ -28,10 +28,7 @@ fn app_preferences_default_to_system_theme_and_not_fullscreen() {
     // GSS-FR-04, GSS-FR-19, GSS-FR-21, GSS-FR-24, GSS-FR-25, GSS-FR-29, GSS-FR-32, GSS-FR-33, GSS-FR-34: an unwritten record reads back as both defaults.
     let p = AppPreferences::default();
     assert_eq!(p.theme, Theme::System);
-    assert!(
-        !p.main_window_fullscreen,
-        "GSS-FR-19: the flag defaults to false when unset"
-    );
+    assert!(!p.main_window_fullscreen, "GSS-FR-19: the flag defaults to false when unset");
     assert_eq!(
         p.search_query_mode,
         SearchQueryMode::LiteralInsensitive,
@@ -56,10 +53,7 @@ fn app_preferences_wire_shape_carries_the_fullscreen_flag() {
     })
     .unwrap();
     assert_eq!(json.get("theme").unwrap(), "dark");
-    assert_eq!(
-        json.get("mainWindowFullscreen").and_then(|v| v.as_bool()),
-        Some(true)
-    );
+    assert_eq!(json.get("mainWindowFullscreen").and_then(|v| v.as_bool()), Some(true));
 
     let decoded: AppPreferences =
         serde_json::from_str(r#"{"theme":"light","mainWindowFullscreen":true}"#).unwrap();
@@ -130,19 +124,11 @@ fn fullscreen_flag_survives_a_relaunch_and_is_not_per_project() {
     // The per-project slots differ in layout but say nothing about
     // full-screen — one user-global answer serves both projects.
     assert_eq!(
-        reloaded
-            .load_project_layout("/dev/acme")
-            .unwrap()
-            .unwrap()
-            .vertical_panel_fraction,
+        reloaded.load_project_layout("/dev/acme").unwrap().unwrap().vertical_panel_fraction,
         0.2,
     );
     assert_eq!(
-        reloaded
-            .load_project_layout("/dev/other")
-            .unwrap()
-            .unwrap()
-            .vertical_panel_fraction,
+        reloaded.load_project_layout("/dev/other").unwrap().unwrap().vertical_panel_fraction,
         0.4,
     );
 }
@@ -207,11 +193,7 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
     store.save_app_preferences(editing).unwrap();
     let after_fullscreen = store.load_app_preferences().unwrap();
     assert!(!after_fullscreen.main_window_fullscreen);
-    assert_eq!(
-        after_fullscreen.theme,
-        Theme::Dark,
-        "a full-screen write must not reset the theme"
-    );
+    assert_eq!(after_fullscreen.theme, Theme::Dark, "a full-screen write must not reset the theme");
     // GSS-FR-20 / GSS-FR-21: neither write may disturb the query mode.
     assert_eq!(
         after_fullscreen.search_query_mode,
@@ -229,10 +211,7 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
     assert!(!after_mode.main_window_fullscreen);
     // GSS-FR-20 / GSS-FR-24: and none of those three writes disturbed the
     // two modes a Diff tab owns.
-    assert_eq!(
-        after_mode.diff_visualization_mode,
-        DiffVisualizationMode::SideBySide
-    );
+    assert_eq!(after_mode.diff_visualization_mode, DiffVisualizationMode::SideBySide);
     assert_eq!(after_mode.diff_rendering_mode, DiffRenderingMode::Rich);
 
     // A Diff tab's own write leaves everything else alone in turn.
@@ -240,10 +219,7 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
     editing.diff_visualization_mode = DiffVisualizationMode::Final;
     store.save_app_preferences(editing).unwrap();
     let after_diff = store.load_app_preferences().unwrap();
-    assert_eq!(
-        after_diff.diff_visualization_mode,
-        DiffVisualizationMode::Final
-    );
+    assert_eq!(after_diff.diff_visualization_mode, DiffVisualizationMode::Final);
     assert_eq!(after_diff.theme, Theme::Dark);
     assert_eq!(after_diff.search_query_mode, SearchQueryMode::SmartCase);
     assert!(!after_diff.main_window_fullscreen);
@@ -298,15 +274,9 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
     assert!(after_switch.notifications_enabled);
     assert_eq!(after_switch.theme, Theme::Dark);
     assert_eq!(after_switch.search_query_mode, SearchQueryMode::SmartCase);
-    assert_eq!(
-        after_switch.diff_visualization_mode,
-        DiffVisualizationMode::Final
-    );
+    assert_eq!(after_switch.diff_visualization_mode, DiffVisualizationMode::Final);
     assert_eq!(after_switch.diff_rendering_mode, DiffRenderingMode::Rich);
-    assert_eq!(
-        after_switch.changes_commit_action,
-        ChangesCommitAction::CommitAndPush
-    );
+    assert_eq!(after_switch.changes_commit_action, ChangesCommitAction::CommitAndPush);
     assert_eq!(after_switch.fonts.rich.family.as_deref(), Some("Georgia"));
     assert!(
         !after_switch.selection_follows_tab,
@@ -322,15 +292,9 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
     assert!(after_follow.selection_follows_tab);
     assert_eq!(after_follow.theme, Theme::Dark);
     assert_eq!(after_follow.search_query_mode, SearchQueryMode::SmartCase);
-    assert_eq!(
-        after_follow.diff_visualization_mode,
-        DiffVisualizationMode::Final
-    );
+    assert_eq!(after_follow.diff_visualization_mode, DiffVisualizationMode::Final);
     assert_eq!(after_follow.diff_rendering_mode, DiffRenderingMode::Rich);
-    assert_eq!(
-        after_follow.changes_commit_action,
-        ChangesCommitAction::CommitAndPush
-    );
+    assert_eq!(after_follow.changes_commit_action, ChangesCommitAction::CommitAndPush);
     assert!(after_follow.notifications_enabled);
     assert_eq!(after_follow.fonts.rich.family.as_deref(), Some("Georgia"));
     assert_eq!(after_follow.graduation_rail_width_fraction, 0.28);
@@ -347,15 +311,9 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
     assert_eq!(after_rail.graduation_paths_width_fraction, 0.44);
     assert_eq!(after_rail.theme, Theme::Dark);
     assert_eq!(after_rail.search_query_mode, SearchQueryMode::SmartCase);
-    assert_eq!(
-        after_rail.diff_visualization_mode,
-        DiffVisualizationMode::Final
-    );
+    assert_eq!(after_rail.diff_visualization_mode, DiffVisualizationMode::Final);
     assert_eq!(after_rail.diff_rendering_mode, DiffRenderingMode::Rich);
-    assert_eq!(
-        after_rail.changes_commit_action,
-        ChangesCommitAction::CommitAndPush
-    );
+    assert_eq!(after_rail.changes_commit_action, ChangesCommitAction::CommitAndPush);
     assert!(after_rail.notifications_enabled);
     assert!(after_rail.selection_follows_tab);
     assert_eq!(after_rail.fonts.rich.family.as_deref(), Some("Georgia"));
@@ -373,10 +331,7 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
     let after_paths = store.load_app_preferences().unwrap();
     assert_eq!(
         after_paths,
-        AppPreferences {
-            graduation_paths_width_fraction: 0.52,
-            ..after_rail.clone()
-        },
+        AppPreferences { graduation_paths_width_fraction: 0.52, ..after_rail.clone() },
         "a paths-width write must disturb none of the record's other editors"
     );
 
@@ -387,10 +342,7 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
     store.save_app_preferences(editing).unwrap();
     assert_eq!(
         store.load_app_preferences().unwrap(),
-        AppPreferences {
-            git_files_width_fraction: 0.61,
-            ..after_paths.clone()
-        },
+        AppPreferences { git_files_width_fraction: 0.61, ..after_paths.clone() },
         "a files-width write must disturb none of the record's other editors"
     );
 }

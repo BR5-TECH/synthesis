@@ -15,6 +15,11 @@ export interface NewStreamFieldsProps {
   nameError: string | null;
   disabled: boolean;
   nameRef: React.RefObject<HTMLInputElement | null>;
+  /**
+   * GSD-FR-WJHN / GSD-FR-XNPD: set for a temporary stream. The placeholder is
+   * the name an empty field takes.
+   */
+  temporary?: { placeholder: string } | null;
 }
 
 export function NewStreamFields({
@@ -26,6 +31,7 @@ export function NewStreamFields({
   nameError,
   disabled,
   nameRef,
+  temporary = null,
 }: NewStreamFieldsProps) {
   return (
     <div data-testid="graduation-new-stream">
@@ -35,6 +41,7 @@ export function NewStreamFields({
           className="input"
           ref={nameRef}
           value={name}
+          placeholder={temporary?.placeholder}
           disabled={disabled}
           aria-invalid={nameError ? true : undefined}
           aria-describedby={nameError ? "graduation-new-stream-error" : undefined}
@@ -69,6 +76,14 @@ export function NewStreamFields({
       <p className="t-ui-xs graduation-start__note">
         The stream is free, so the run starts at once.
       </p>
+      {/* GSD-FR-XNPD */}
+      {temporary && (
+        <p className="t-ui-xs graduation-start__note" data-testid="graduation-temporary-note">
+          This stream is temporary. When all its work is done, you are asked to
+          merge it into {branch || "the branch it is created from"}, and it is
+          deleted after the merge.
+        </p>
+      )}
     </div>
   );
 }

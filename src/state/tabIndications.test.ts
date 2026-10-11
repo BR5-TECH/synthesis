@@ -100,6 +100,9 @@ function openStrip(tabs: Tab[], active: string, worktree = WORKTREE) {
     // Focused, so the post policy is doing real work rather than waving
     // everything through — the indication must hold up beside it.
     focused: true,
+    // Only a settings window holds focus, so a raise goes to the OS channel
+    // (NTF-FR-WMBD) and these tests can count its posts.
+    mainFocused: false,
     projectKey: PROJECT,
     worktree,
     activeTarget: targetForTab(tabs.find((t) => t.id === active) ?? tabs[0]),
@@ -107,7 +110,7 @@ function openStrip(tabs: Tab[], active: string, worktree = WORKTREE) {
     visibleBottomSurface: null,
     visibleRun: null,
     // SWN-FR-05 / NTF-FR-08: no settings child window is open.
-    openSettingsWindow: null,
+    settingsWindowOpen: false,
   };
   configureNotifications({
     snapshot: () => snapshot,
@@ -124,6 +127,7 @@ function openStrip(tabs: Tab[], active: string, worktree = WORKTREE) {
 
 const raise = (key: string, address: string): Raise => ({
   key,
+  level: "Info",
   title: "Something happened",
   body: "in a tab you are not reading",
   address,
@@ -307,8 +311,8 @@ describe("what is eligible for an indication (NTF-FR-26 / NTF-FR-27 / NTF-FR-28)
     // anywhere and is reached through its notification alone, a settings
     // surface being a native child window rather than a tab of this strip
     // (SWN-FR-01). No tab can stand in for one, whatever the strip holds.
-    expect(at({ kind: "settings", which: "global" })).toBeNull();
-    expect(at({ kind: "settings", which: "project" })).toBeNull();
+    expect(at({ kind: "settings", scope: "global", section: null })).toBeNull();
+    expect(at({ kind: "settings", scope: "project", section: null })).toBeNull();
   });
 
   /**
@@ -432,6 +436,7 @@ describe("the enable switch governs the posting alone (NTF-FR-29)", () => {
     configureNotifications({
       snapshot: () => ({
         focused: false,
+        mainFocused: false,
         projectKey: PROJECT,
         worktree: WORKTREE,
         activeTarget: null,
@@ -439,7 +444,7 @@ describe("the enable switch governs the posting alone (NTF-FR-29)", () => {
         visibleBottomSurface: null,
     visibleRun: null,
     // SWN-FR-05 / NTF-FR-08: no settings child window is open.
-    openSettingsWindow: null,
+    settingsWindowOpen: false,
       }),
       resolveTab: () => {
         throw new Error("strip is mid-teardown");
@@ -836,6 +841,7 @@ describe("the Runs toggle carries a run's attention (NTF-FR-39 / SNV-FR-70)", ()
     configureNotifications({
       snapshot: () => ({
         focused: true,
+        mainFocused: true,
         projectKey: PROJECT,
         worktree: WORKTREE,
         activeTarget: null,
@@ -845,19 +851,21 @@ describe("the Runs toggle carries a run's attention (NTF-FR-39 / SNV-FR-70)", ()
         visibleBottomSurface: "runs",
         visibleRun: "graduation-flow",
         // SWN-FR-05 / NTF-FR-08: no settings child window is open.
-        openSettingsWindow: null,
+        settingsWindowOpen: false,
       }),
       resolveTab: () => null,
     });
 
     await raiseNotification({
       key: "run:artifact-window",
+      level: "Warn",
       title: "Graduation · Waiting on you",
       body: "It has a question.",
       address: runAddress("artifact-window"),
     });
     await raiseNotification({
       key: "run:notes-cleanup",
+      level: "Warn",
       title: "Graduation · Ready to review",
       body: "It finished.",
       address: runAddress("notes-cleanup"),
@@ -891,6 +899,7 @@ describe("the Runs toggle carries a run's attention (NTF-FR-39 / SNV-FR-70)", ()
     configureNotifications({
       snapshot: () => ({
         focused: true,
+        mainFocused: true,
         projectKey: PROJECT,
         worktree: WORKTREE,
         activeTarget: null,
@@ -898,12 +907,13 @@ describe("the Runs toggle carries a run's attention (NTF-FR-39 / SNV-FR-70)", ()
         visibleBottomSurface: "runs",
         visibleRun: "artifact-window",
         // SWN-FR-05 / NTF-FR-08: no settings child window is open.
-        openSettingsWindow: null,
+        settingsWindowOpen: false,
       }),
       resolveTab: () => null,
     });
     await raiseNotification({
       key: "run:artifact-window",
+      level: "Info",
       title: "t",
       body: "b",
       address: runAddress("artifact-window"),
@@ -960,8 +970,8 @@ describe("what a tab is a view onto (NTF-FR-27)", () => {
     expect(sameTarget(null, { kind: "dashboard" })).toBe(false);
     expect(
       sameTarget(
-        { kind: "settings", which: "global" },
-        { kind: "settings", which: "project" },
+        { kind: "settings", scope: "global", section: null },
+        { kind: "settings", scope: "project", section: null },
       ),
     ).toBe(false);
   });

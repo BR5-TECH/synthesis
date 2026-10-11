@@ -8,11 +8,11 @@
 //! here is reached from `drive` alone.
 
 use super::drive::Step;
+use super::stops::{self, Stop};
 use super::*;
 use crate::graduation::commit;
-use super::stops::{self, Stop};
 use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// What a completed turn means for the run.
 pub(super) fn settle_turn<R: tauri::Runtime>(
@@ -59,7 +59,7 @@ pub(super) fn settle_turn<R: tauri::Runtime>(
 pub(super) fn settle_execution<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &mut GraduationRun,
-    worktree: &PathBuf,
+    worktree: &Path,
     outcome: Result<AgentExecution, AgentExecutionError>,
     origin: GraduationEscalationOrigin,
     limit_ms: u64,
@@ -103,8 +103,11 @@ pub(super) fn settle_execution<R: tauri::Runtime>(
                                 .collect(),
                         })
                         .collect::<Vec<_>>();
-                    if crate::graduation::validate_escalation_request(&escalation.reason, &questions)
-                        .is_ok()
+                    if crate::graduation::validate_escalation_request(
+                        &escalation.reason,
+                        &questions,
+                    )
+                    .is_ok()
                     {
                         // GXD-FR-XPUR: a review's answers go into a fresh review
                         // turn, so its session is not kept and the run resumes
@@ -182,8 +185,9 @@ pub(super) fn settle_execution<R: tauri::Runtime>(
                     Some(reason) => {
                         Stop::of_reason_with(reason, stops::facts_of(&execution, limit_ms))
                     }
-                    None => stops::stop_of_execution(&execution, limit_ms)
-                        .unwrap_or_else(|| Stop::of_reason(GraduationInterruptionReason::RetryableFailure)),
+                    None => stops::stop_of_execution(&execution, limit_ms).unwrap_or_else(|| {
+                        Stop::of_reason(GraduationInterruptionReason::RetryableFailure)
+                    }),
                 };
                 logging::log_warn(
                     app,
@@ -203,6 +207,30 @@ pub(super) fn settle_execution<R: tauri::Runtime>(
                 None
             }
         },
+        // GLG-FR-UCRL / GXD-FR-MMFM: the executor stopped the turn because the
+        // run's activity could not be kept. The run rests on
+        // `log_persistence_failed` and names the failure, whatever outcome the
+        // stopped container reported.
+        Err(AgentExecutionError::DurableOutputFailed(failure)) => {
+            logging::log_error(
+                app,
+                &crate::logging::BUFFER,
+                &[Domain::Ai, Domain::Backend],
+                "graduation stopped a turn because its activity could not be kept",
+                log_fields! {
+                    "run_id" => run.id.clone(),
+                    "code" => failure.code.clone(),
+                },
+            );
+            logs::note_durable_failure(app, run, &failure);
+            abandon(
+                app,
+                run,
+                worktree,
+                Stop::of_reason(GraduationInterruptionReason::LogPersistenceFailed),
+            );
+            None
+        }
         Err(error) => {
             // GXD-FR-XEUX: the seam ends no run. Every pre-launch error rests
             // it instead, so a machine that could not start a container leaves
@@ -234,7 +262,7 @@ pub(super) fn settle_execution<R: tauri::Runtime>(
 pub(super) fn finish<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &mut GraduationRun,
-    worktree: &PathBuf,
+    worktree: &Path,
 ) {
     // GRD-FR-VAUE: a direct run commits only on the branch it pinned, in the
     // worktree it pinned. Anything else commits nothing and rests the run.
@@ -262,7 +290,9 @@ pub(super) fn finish<R: tauri::Runtime>(
             // that head is this run's own abandoned turn, the run completes by
             // giving that commit its graduation message.
             let retitled = match run.commits.last() {
-                Some(last) => commit::retitle_head_commit(worktree, last, ABANDONED_TITLE, &message),
+                Some(last) => {
+                    commit::retitle_head_commit(worktree, last, ABANDONED_TITLE, &message)
+                }
                 None => Ok(None),
             };
             match retitled {
@@ -329,7 +359,7 @@ pub(super) const ABANDONED_TITLE: &str = "Abandoned graduation turn";
 pub(super) fn abandon<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &mut GraduationRun,
-    worktree: &PathBuf,
+    worktree: &Path,
     stop: Stop,
 ) {
     let reason = stop.reason;
@@ -359,11 +389,7 @@ pub(super) fn abandon<R: tauri::Runtime>(
     let mut committed = None;
     // A merge run commits nothing at all: what its turn wrote stays in the merge
     // worktree the run owns, and Continue resumes from it (GRD-FR-KZPT).
-    if let Some(base) = run
-        .base_commit
-        .clone()
-        .filter(|_| pinned && !run.is_merge())
-    {
+    if let Some(base) = run.base_commit.clone().filter(|_| pinned && !run.is_merge()) {
         let message = format!(
             "{ABANDONED_TITLE}\n\nThis turn of \"{}\" stopped before it was reviewed.",
             run.input.draft_name
@@ -384,10 +410,7 @@ pub(super) fn abandon<R: tauri::Runtime>(
             ),
         }
     }
-    let stop = Stop {
-        detail: stops::settled_detail(&stop, committed),
-        ..stop
-    };
+    let stop = Stop { detail: stops::settled_detail(&stop, committed), ..stop };
     // GLG-FR-RLQZ: the stop is in the run's own log before the run rests. A
     // record that could not be stored has already rested the run on
     // `log_persistence_failed`, which is the stop the author must see first.
@@ -410,14 +433,17 @@ pub(super) fn cancellation_reason<R: tauri::Runtime>(
     if !cancellation.is_cancelled() {
         return None;
     }
-    Some(cancellation_reason_of(app, run_id).unwrap_or(GraduationInterruptionReason::RetryableFailure))
+    Some(
+        cancellation_reason_of(app, run_id)
+            .unwrap_or(GraduationInterruptionReason::RetryableFailure),
+    )
 }
 
 /// What the run's own record says stopped it, whatever the token says.
 ///
 /// GRD-FR-MDQZ / GRD-FR-TWMA: a pause, a shutdown and a project change each
-/// interrupt the run before its turn returns, and that interruption releases
-/// the stream and the in-memory reason with it. The stored interruption is then
+/// interrupt the run before its turn returns, and that interruption ends the
+/// loop's claim and the in-memory reason with it. The stored interruption is then
 /// the only record of who stopped the turn.
 pub(super) fn cancellation_reason_of<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
@@ -441,12 +467,9 @@ fn stored_stop_reason<R: tauri::Runtime>(
     if stored.state != GraduationRunState::Interrupted {
         return None;
     }
-    stored
-        .interruption
-        .map(|interruption| interruption.reason)
-        .filter(|reason| {
-            stops_in_place(*reason) || *reason == GraduationInterruptionReason::ExecutionAbandoned
-        })
+    stored.interruption.map(|interruption| interruption.reason).filter(|reason| {
+        stops_in_place(*reason) || *reason == GraduationInterruptionReason::ExecutionAbandoned
+    })
 }
 
 /// GXD-FR-TJRV: the stops after which a run resumes at the phase it stood in.
@@ -464,8 +487,8 @@ fn stops_in_place(reason: GraduationInterruptionReason) -> bool {
 /// The store answers, not the copy in hand: the discard is written from
 /// another thread while the turn runs.
 fn discarded_meanwhile<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &GraduationRun) -> bool {
-    let ended = crate::graduation::load_run(app, &run.id)
-        .is_ok_and(|stored| stored.state.is_terminal());
+    let ended =
+        crate::graduation::load_run(app, &run.id).is_ok_and(|stored| stored.state.is_terminal());
     if ended {
         logging::log_info(
             app,
@@ -483,7 +506,11 @@ fn discarded_meanwhile<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &Gradu
 ///
 /// A log failure here writes nothing further: the run is already resting on one,
 /// and a second attempt would report the same thing twice.
-pub(super) fn note_blocked<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &mut GraduationRun, code: &str) {
+pub(super) fn note_blocked<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &mut GraduationRun,
+    code: &str,
+) {
     let stage = run.observability.current_stage;
     let event = StructuredEvent::new(GraduationLogProducer::StageTransition, "run blocked")
         .at_level(GraduationLogLevel::Error)
@@ -494,7 +521,10 @@ pub(super) fn note_blocked<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &m
 
 /// GRL-FR-ARPX: a second review that still asks for revision stops the run for
 /// the author rather than starting a third pass.
-pub(super) fn rest_for_author<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &mut GraduationRun) {
+pub(super) fn rest_for_author<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &mut GraduationRun,
+) {
     if transitions::transition(app, run, GraduationRunState::AwaitingAuthor).is_err() {
         // A rest the record did not take is not one to write a line about.
         return;
@@ -516,10 +546,7 @@ pub(super) fn rest_for_author<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run:
         .with("reason", REST_PASS_BUDGET_EXHAUSTED)
         .with("pass", run.pass())
         .with("pass_budget", run.pass_budget())
-        .with(
-            "passes_made",
-            run.pass().saturating_sub(run.pass_floor()).saturating_add(1),
-        ),
+        .with("passes_made", run.pass().saturating_sub(run.pass_floor()).saturating_add(1)),
     );
 }
 
@@ -543,10 +570,7 @@ pub(super) fn establish_base<R: tauri::Runtime>(
         Some(revision) => revision,
         None => {
             let repo = git2::Repository::open(worktree).map_err(|e| e.to_string())?;
-            let head = repo
-                .head()
-                .and_then(|h| h.peel_to_commit())
-                .map_err(|e| e.to_string())?;
+            let head = repo.head().and_then(|h| h.peel_to_commit()).map_err(|e| e.to_string())?;
             head.id().to_string()
         }
     });
@@ -652,9 +676,7 @@ pub(super) fn changed_paths(worktree: &PathBuf, run: &GraduationRun) -> Vec<Stri
         return Vec::new();
     };
     let mut opts = git2::DiffOptions::new();
-    opts.include_untracked(true)
-        .recurse_untracked_dirs(true)
-        .include_ignored(false);
+    opts.include_untracked(true).recurse_untracked_dirs(true).include_ignored(false);
     let Ok(diff) = repo.diff_tree_to_workdir_with_index(Some(&tree), Some(&mut opts)) else {
         return Vec::new();
     };
@@ -748,12 +770,8 @@ pub(super) fn graduation_message(run: &GraduationRun) -> String {
     const FALLBACK: &str = "Graduation run";
     if run.is_direct() {
         // A control character, a line break above all, would open a body.
-        let name: String = run
-            .input
-            .draft_name
-            .chars()
-            .map(|c| if c.is_control() { ' ' } else { c })
-            .collect();
+        let name: String =
+            run.input.draft_name.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
         let name = name.trim();
         return if name.is_empty() { FALLBACK } else { name }.to_string();
     }

@@ -22,10 +22,7 @@ fn min_level_is_a_floor_and_domains_intersect() {
         ],
     );
 
-    let warn_up = LogFilter {
-        min_level: LogLevel::Warn,
-        ..Default::default()
-    };
+    let warn_up = LogFilter { min_level: LogLevel::Warn, ..Default::default() };
     let page = buffer.query(&warn_up, None, 100).unwrap();
     assert_eq!(
         page.records.iter().map(|r| r.message.as_str()).collect::<Vec<_>>(),
@@ -36,10 +33,7 @@ fn min_level_is_a_floor_and_domains_intersect() {
     assert_eq!(page.buffer_total, 4, "the buffer total ignores the filter");
 
     // A record carrying {ai, backend} matches a filter naming only `ai`.
-    let ai_only = LogFilter {
-        domains: vec![Domain::Ai],
-        ..Default::default()
-    };
+    let ai_only = LogFilter { domains: vec![Domain::Ai], ..Default::default() };
     let page = buffer.query(&ai_only, None, 100).unwrap();
     assert_eq!(page.records.len(), 1);
     assert_eq!(page.records[0].message, "w");
@@ -70,11 +64,7 @@ fn the_query_matches_the_message_and_the_fields_case_insensitively() {
     let hits = |q: &str, rx: bool| -> Vec<String> {
         buffer
             .query(
-                &LogFilter {
-                    query: Some(q.to_string()),
-                    query_is_regex: rx,
-                    ..Default::default()
-                },
+                &LogFilter { query: Some(q.to_string()), query_is_regex: rx, ..Default::default() },
                 None,
                 100,
             )
@@ -98,11 +88,8 @@ fn the_query_matches_the_message_and_the_fields_case_insensitively() {
 fn an_uncompilable_regex_is_the_typed_invalid_query() {
     let buffer = LogBuffer::new();
     append(&buffer, vec![input(LogLevel::Info, &[Domain::Backend], "x")]);
-    let bad = LogFilter {
-        query: Some("(".to_string()),
-        query_is_regex: true,
-        ..Default::default()
-    };
+    let bad =
+        LogFilter { query: Some("(".to_string()), query_is_regex: true, ..Default::default() };
     assert_eq!(buffer.query(&bad, None, 10), Err(INVALID_QUERY.to_string()));
     assert_eq!(
         buffer.export_text(&bad),
@@ -110,10 +97,7 @@ fn an_uncompilable_regex_is_the_typed_invalid_query() {
         "the export path rejects on the same terms, before writing"
     );
     // The same pattern as a literal is a plain substring, not an error.
-    let literal = LogFilter {
-        query: Some("(".to_string()),
-        ..Default::default()
-    };
+    let literal = LogFilter { query: Some("(".to_string()), ..Default::default() };
     assert!(buffer.query(&literal, None, 10).is_ok());
 }
 
@@ -127,22 +111,14 @@ fn the_event_payload_carries_no_record_content() {
     // what makes "all filtering happens on the backend" structural rather
     // than merely intended.
     let buffer = LogBuffer::new();
-    append(
-        &buffer,
-        vec![input(LogLevel::Error, &[Domain::Backend], "a secret-ish message")],
-    );
+    append(&buffer, vec![input(LogLevel::Error, &[Domain::Backend], "a secret-ish message")]);
     let json = serde_json::to_value(buffer.state()).unwrap();
     let object = json.as_object().unwrap();
     let mut keys: Vec<&str> = object.keys().map(|k| k.as_str()).collect();
     keys.sort_unstable();
     assert_eq!(
         keys,
-        vec![
-            "bufferTotal",
-            "droppedTotal",
-            "generation",
-            "highestSequence"
-        ],
+        vec!["bufferTotal", "droppedTotal", "generation", "highestSequence"],
         "the event carries the buffer's shape and nothing of its contents"
     );
     assert!(!json.to_string().contains("secret-ish"));
@@ -162,10 +138,7 @@ fn no_filter_is_retained_between_calls() {
             input(LogLevel::Error, &[Domain::Backend], "e"),
         ],
     );
-    let strict = LogFilter {
-        min_level: LogLevel::Error,
-        ..Default::default()
-    };
+    let strict = LogFilter { min_level: LogLevel::Error, ..Default::default() };
     assert_eq!(buffer.query(&strict, None, 10).unwrap().records.len(), 1);
     assert_eq!(
         buffer.query(&LogFilter::default(), None, 10).unwrap().records.len(),

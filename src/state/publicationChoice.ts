@@ -6,7 +6,12 @@
  * One function, so the band of a standing attempt and a record of Draft
  * Information say the same thing about the same choice.
  */
-import type { PublicationChoice, PublicationMismatch } from "../types";
+import { tlsErrorMessage } from "../tlsError";
+import {
+  GITHUB_HOST_MISMATCH_MESSAGE,
+  type PublicationChoice,
+  type PublicationMismatch,
+} from "../types";
 
 /**
  * A choice in words: root or sub-issue, then the Type and the milestone where
@@ -63,6 +68,7 @@ export function describeMismatches(mismatches: PublicationMismatch[]): string {
  * always has.
  */
 const PUBLICATION_ERROR_TEXT: Record<string, string> = {
+  github_host_mismatch: GITHUB_HOST_MISMATCH_MESSAGE,
   parent_issue_unavailable:
     "The parent issue is missing, closed, or no longer usable. Abandon any standing attempt and publish again with another parent.",
   issue_type_unavailable: "GitHub does not offer the selected issue Type.",
@@ -79,6 +85,9 @@ const PUBLICATION_ERROR_TEXT: Record<string, string> = {
 };
 
 export function publicationErrorText(raw: string): string {
+  // AAP-FR-LRTC: a refused certificate names its host and its cause.
+  const tls = tlsErrorMessage(raw);
+  if (tls) return tls;
   const text = raw.startsWith("Error: ") ? raw.slice(7) : raw;
   const known = PUBLICATION_ERROR_TEXT[text.trim()];
   return known ? `${known} (${text.trim()})` : raw;

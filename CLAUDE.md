@@ -29,9 +29,12 @@ Package manager: **pnpm** (v10+). Install with `pnpm install`.
 - `pnpm tauri build` — produce a bundled native app (runs `pnpm build` first via `beforeBuildCommand`).
 - `cd src-tauri && cargo check` — quick Rust-side validation without launching the app.
 - `cd src-tauri && cargo test` — run the Rust unit tests (colocated under `#[cfg(test)] mod tests`).
+- `cd src-tauri && cargo fmt --check` — check the Rust format against the root `rustfmt.toml`. Run `cargo fmt` to apply it.
+- `cd src-tauri && cargo clippy --all-targets -- -D warnings` — Clippy with every warning denied. A finding that the code cannot avoid gets `#[allow(clippy::<lint>)]` on the smallest item, with a comment that gives the reason; never a crate-level allow.
+- `task lint` — format check and Clippy for all three Rust crates (`src-tauri/`, `tools/agentic-cli-mock/`, `server/`).
 - `cd src-tauri && cargo build` — compile the Rust binary alone.
 
-Definition-of-done for any frontend change: `pnpm test` green, `pnpm build` green, AND `pnpm exec tsc -p tsconfig.test.json --noEmit` clean. For any backend change: `cargo test` green and `cargo check` clean.
+Definition-of-done for any frontend change: `pnpm test` green, `pnpm build` green, AND `pnpm exec tsc -p tsconfig.test.json --noEmit` clean. For any backend change: `cargo fmt --check` clean, `cargo clippy --all-targets -- -D warnings` clean, `cargo check` clean, and `cargo test` green.
 
 ## Tests must not depend on timing
 
@@ -73,5 +76,6 @@ Instrument new code with the logging helpers — `src/logging.ts` (`logDebug`/`l
 
 ## Toolchain
 
-- Rust pinned via `src-tauri/rust-toolchain.toml` (channel `1.88`). The dep tree (notably `time-macros`, `idna_adapter`) requires edition 2024 / rustc ≥ 1.88; older toolchains will fail to download crates.
+- Rust pinned via `src-tauri/rust-toolchain.toml` (channel `1.95`). The dep tree requires rustc ≥ 1.95 (`rig-core` 0.44 declares it; `time-macros` and `idna_adapter` need edition 2024); older toolchains fail to build it.
+- Native libraries on macOS: every `-sys` dependency must compile its library into the executable (`vendored`/`static` feature in the `cfg(target_os = "macos")` table of `src-tauri/Cargo.toml`). The bundle is signed with the hardened runtime, so a Homebrew or other host dylib makes the app crash at launch. `task build:macos` fails on such a link (`tools/macos-linkage/check-linkage.sh`). See `specifications/infra/NLL-native-library-linkage.md`.
 - Node/pnpm: pnpm 10+ uses `pnpm-workspace.yaml` as the install-script allowlist (`allowBuilds`). Adding a new dep with a postinstall script may require allowlisting it there.

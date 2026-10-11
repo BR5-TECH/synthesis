@@ -23,9 +23,7 @@ fn permissions(
         .projects
         .effective_permissions(&admin, project, Some(actor.user_id))
         .expect("the permissions are read");
-    held.into_iter()
-        .map(|permission| permission.as_str().to_string())
-        .collect()
+    held.into_iter().map(|permission| permission.as_str().to_string()).collect()
 }
 
 // SAS-FR-HXAP: a direct user grant supplies the permissions of its role and no
@@ -39,25 +37,14 @@ fn a_user_grant_supplies_the_permissions_of_its_role() {
     let owner = make_user(&application, &admin, "The owner");
     let member = make_user(&application, &admin, "The member");
     let project = make_project(&application, &admin, owner, "A project");
-    make_grant(
-        &application,
-        &admin,
-        project.id,
-        "user",
-        &member.to_string(),
-        "viewer",
-    );
+    make_grant(&application, &admin, project.id, "user", &member.to_string(), "viewer");
 
     let actor = Principal::member(member);
     let mut held = permissions(&api, &actor, project.id);
     held.sort();
     assert_eq!(
         held,
-        vec![
-            "conversation.read".to_string(),
-            "draft.read".to_string(),
-            "project.read".to_string(),
-        ]
+        vec!["conversation.read".to_string(), "draft.read".to_string(), "project.read".to_string(),]
     );
 }
 
@@ -95,14 +82,7 @@ fn a_team_grant_reaches_an_active_member_alone() {
             },
         )
         .expect("the membership is written");
-    make_grant(
-        &application,
-        &admin,
-        project.id,
-        "team",
-        &team.id.to_string(),
-        "contributor",
-    );
+    make_grant(&application, &admin, project.id, "team", &team.id.to_string(), "contributor");
 
     let actor = Principal::member(member);
     assert!(permissions(&api, &actor, project.id).contains(&"draft.create".to_string()));
@@ -112,10 +92,7 @@ fn a_team_grant_reaches_an_active_member_alone() {
         .update_membership(
             &admin,
             membership.id,
-            UpdateMembership {
-                status: Some("suspended".to_string()),
-                ..Default::default()
-            },
+            UpdateMembership { status: Some("suspended".to_string()), ..Default::default() },
         )
         .expect("the membership is suspended");
     assert!(permissions(&api, &actor, project.id).is_empty());
@@ -218,22 +195,9 @@ fn grants_are_additive_and_removal_keeps_what_another_supplies() {
         )
         .expect("the membership is written");
 
-    let direct = make_grant(
-        &application,
-        &admin,
-        project.id,
-        "user",
-        &member.to_string(),
-        "viewer",
-    );
-    make_grant(
-        &application,
-        &admin,
-        project.id,
-        "team",
-        &team.id.to_string(),
-        "contributor",
-    );
+    let direct =
+        make_grant(&application, &admin, project.id, "user", &member.to_string(), "viewer");
+    make_grant(&application, &admin, project.id, "team", &team.id.to_string(), "contributor");
 
     let actor = Principal::member(member);
     let held = permissions(&api, &actor, project.id);
@@ -261,14 +225,7 @@ fn a_duplicate_grant_is_refused_and_a_replacement_updates_one_record() {
     let owner = make_user(&application, &admin, "The owner");
     let member = make_user(&application, &admin, "The member");
     let project = make_project(&application, &admin, owner, "A project");
-    let grant = make_grant(
-        &application,
-        &admin,
-        project.id,
-        "user",
-        &member.to_string(),
-        "viewer",
-    );
+    let grant = make_grant(&application, &admin, project.id, "user", &member.to_string(), "viewer");
 
     let refused = application
         .projects
@@ -287,14 +244,7 @@ fn a_duplicate_grant_is_refused_and_a_replacement_updates_one_record() {
 
     let replaced = application
         .projects
-        .update_grant(
-            &admin,
-            project.id,
-            grant.id,
-            UpdateGrant {
-                role: "contributor".to_string(),
-            },
-        )
+        .update_grant(&admin, project.id, grant.id, UpdateGrant { role: "contributor".to_string() })
         .expect("the grant is replaced");
     assert_eq!(replaced.id, grant.id);
     assert_eq!(replaced.role, ProjectRole::Contributor);
@@ -319,14 +269,8 @@ fn a_revoked_grant_is_ineffective_and_readable() {
     let owner = make_user(&application, &admin, "The owner");
     let member = make_user(&application, &admin, "The member");
     let project = make_project(&application, &admin, owner, "A project");
-    let grant = make_grant(
-        &application,
-        &admin,
-        project.id,
-        "user",
-        &member.to_string(),
-        "contributor",
-    );
+    let grant =
+        make_grant(&application, &admin, project.id, "user", &member.to_string(), "contributor");
 
     let actor = Principal::member(member);
     assert!(!permissions(&api, &actor, project.id).is_empty());
@@ -369,30 +313,19 @@ fn the_owner_grant_is_protected() {
         .expect("the project holds the owner grant");
 
     for error in [
-        application
-            .projects
-            .delete_grant(&admin, project.id, owner_grant.id)
-            .err(),
-        application
-            .projects
-            .revoke_grant(&admin, project.id, owner_grant.id)
-            .err(),
+        application.projects.delete_grant(&admin, project.id, owner_grant.id).err(),
+        application.projects.revoke_grant(&admin, project.id, owner_grant.id).err(),
         application
             .projects
             .update_grant(
                 &admin,
                 project.id,
                 owner_grant.id,
-                UpdateGrant {
-                    role: "viewer".to_string(),
-                },
+                UpdateGrant { role: "viewer".to_string() },
             )
             .err(),
     ] {
-        assert_eq!(
-            error.expect("the owner grant is protected").code(),
-            "owner_protected"
-        );
+        assert_eq!(error.expect("the owner grant is protected").code(), "owner_protected");
     }
 
     let refused = application
@@ -412,10 +345,7 @@ fn the_owner_grant_is_protected() {
 
     // The owner holds every permission at all times.
     let actor = Principal::member(owner);
-    assert_eq!(
-        permissions(&api, &actor, project.id).len(),
-        Permission::ALL.len()
-    );
+    assert_eq!(permissions(&api, &actor, project.id).len(), Permission::ALL.len());
 }
 
 // SAS-FR-RAKX: a transfer moves the ownership and the owner grant, and the
@@ -435,9 +365,7 @@ fn ownership_moves_with_its_grant() {
         .transfer_ownership(
             &admin,
             project.id,
-            TransferOwnership {
-                new_owner_id: successor.to_string(),
-            },
+            TransferOwnership { new_owner_id: successor.to_string() },
         )
         .expect("the ownership moves");
     assert_eq!(moved.owner_id, successor);
@@ -469,14 +397,7 @@ fn the_refusal_hides_a_project_and_names_a_missing_permission() {
     let stranger = make_user(&application, &admin, "A stranger");
     let viewer = make_user(&application, &admin, "A viewer");
     let project = make_project(&application, &admin, owner, "A project");
-    make_grant(
-        &application,
-        &admin,
-        project.id,
-        "user",
-        &viewer.to_string(),
-        "viewer",
-    );
+    make_grant(&application, &admin, project.id, "user", &viewer.to_string(), "viewer");
 
     let hidden = application
         .projects
@@ -489,10 +410,7 @@ fn the_refusal_hides_a_project_and_names_a_missing_permission() {
         .create_draft(
             &Principal::member(viewer),
             project.id,
-            CreateDraft {
-                title: "A draft".to_string(),
-                ..Default::default()
-            },
+            CreateDraft { title: "A draft".to_string(), ..Default::default() },
         )
         .expect_err("a viewer creates no draft");
     assert_eq!(refused.code(), "forbidden");
@@ -518,16 +436,10 @@ fn the_administrator_bypasses_every_check() {
         .create_draft(
             &admin,
             project.id,
-            CreateDraft {
-                title: "A draft".to_string(),
-                ..Default::default()
-            },
+            CreateDraft { title: "A draft".to_string(), ..Default::default() },
         )
         .expect("the administrator writes a draft");
-    application
-        .content
-        .delete_draft(&admin, draft.id)
-        .expect("the administrator deletes it again");
+    application.content.delete_draft(&admin, draft.id).expect("the administrator deletes it again");
 }
 
 // SAS-FR-GBWS, SAS-FR-XONP: each operation needs the permission the contract
@@ -541,14 +453,7 @@ fn each_operation_needs_its_own_permission() {
     let owner = make_user(&application, &admin, "The owner");
     let contributor = make_user(&application, &admin, "A contributor");
     let project = make_project(&application, &admin, owner, "A project");
-    make_grant(
-        &application,
-        &admin,
-        project.id,
-        "user",
-        &contributor.to_string(),
-        "contributor",
-    );
+    make_grant(&application, &admin, project.id, "user", &contributor.to_string(), "contributor");
     let actor = Principal::member(contributor);
 
     let draft = application
@@ -556,10 +461,7 @@ fn each_operation_needs_its_own_permission() {
         .create_draft(
             &actor,
             project.id,
-            CreateDraft {
-                title: "A draft".to_string(),
-                ..Default::default()
-            },
+            CreateDraft { title: "A draft".to_string(), ..Default::default() },
         )
         .expect("a contributor holds draft.create");
 

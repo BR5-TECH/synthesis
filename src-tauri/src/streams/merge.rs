@@ -79,10 +79,7 @@ pub(super) fn prepare(main: &git2::Repository, stream: &WorkStream) -> Result<Pr
     // Nothing the base does not already hold is not a merge of nothing: it is
     // a distinct outcome, and the caller's next act is the one act that needs
     // no merge reported.
-    let ahead = main
-        .graph_ahead_behind(stream_oid, base_oid)
-        .map(|(ahead, _)| ahead)
-        .unwrap_or(0);
+    let ahead = main.graph_ahead_behind(stream_oid, base_oid).map(|(ahead, _)| ahead).unwrap_or(0);
     if ahead == 0 {
         return Ok(Prepared {
             index: main.index().map_err(|e| e.to_string())?,
@@ -109,9 +106,8 @@ pub(super) fn prepare_between(
 ) -> Result<Prepared, String> {
     let stream_commit = main.find_commit(stream_oid).map_err(|e| e.to_string())?;
     let base_commit = main.find_commit(base_oid).map_err(|e| e.to_string())?;
-    let index = main
-        .merge_commits(&base_commit, &stream_commit, None)
-        .map_err(|e| e.to_string())?;
+    let index =
+        main.merge_commits(&base_commit, &stream_commit, None).map_err(|e| e.to_string())?;
 
     let mut conflicted_paths: Vec<String> = Vec::new();
     if index.has_conflicts() {
@@ -235,8 +231,7 @@ pub(super) fn apply_tree(
             // a staged change when the request asked for an unstaged one.
             let mut opts = git2::build::CheckoutBuilder::new();
             opts.force().remove_untracked(false).update_index(false);
-            base.checkout_tree(tree.as_object(), Some(&mut opts))
-                .map_err(|e| e.to_string())?;
+            base.checkout_tree(tree.as_object(), Some(&mut opts)).map_err(|e| e.to_string())?;
             Ok(None)
         }
         StreamMergePublication::Commit { message } => {
@@ -266,8 +261,7 @@ pub(super) fn apply_tree(
                 let tree = base.find_tree(merged_tree_oid).map_err(|e| e.to_string())?;
                 let mut opts = git2::build::CheckoutBuilder::new();
                 opts.force().update_index(true);
-                base.checkout_tree(tree.as_object(), Some(&mut opts))
-                    .map_err(|e| e.to_string())?;
+                base.checkout_tree(tree.as_object(), Some(&mut opts)).map_err(|e| e.to_string())?;
             }
             let reference = format!("refs/heads/{base_branch}");
             let oid = main

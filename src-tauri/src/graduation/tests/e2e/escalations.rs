@@ -74,17 +74,15 @@ fn an_answered_review_escalation_asks_a_fresh_review_turn() {
     Scenario::named("review escalation answered")
         .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
         .review_turn(
-            Script::escalates(&["Is the panel's own test suite the one to run?"]).leaves_a_session(),
+            Script::escalates(&["Is the panel's own test suite the one to run?"])
+                .leaves_a_session(),
         )
         .run()
         .expect_state(GraduationRunState::AwaitingAuthor)
         .expect_escalation_origin(GraduationEscalationOrigin::Review)
-        .expect_stream_released()
+        .expect_stream_held()
         .expect_commits(0)
-        .answered(
-            &["Yes."],
-            vec![Script::answers_ready("The panel's suite passes.")],
-        )
+        .answered(&["Yes."], vec![Script::answers_ready("The panel's suite passes.")])
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_order(&["review"])
         .expect_turns(1, 2)
@@ -148,8 +146,7 @@ fn a_review_escalation_answered_into_an_unreadable_verdict_keeps_the_answers() {
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_order(&["review", "review"])
         .expect_dispatch(1, |d| {
-            d.escalation_answers(&["Yes."])
-                .field_contains("correction", "could not be read")
+            d.escalation_answers(&["Yes."]).field_contains("correction", "could not be read")
         })
         .expect_commits(1);
 }
@@ -192,10 +189,7 @@ fn an_escalation_outside_the_rules_is_not_recorded() {
 fn an_escalation_on_the_second_pass_keeps_the_pass_and_the_findings() {
     Scenario::named("escalation on pass two")
         .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
-        .review_turn(Script::answers_revise(
-            ReviewSeverity::Major,
-            "The empty state is not there.",
-        ))
+        .review_turn(Script::answers_revise(ReviewSeverity::Major, "The empty state is not there."))
         .work_turn(Script::escalates(&["Which empty state is meant?"]))
         .run()
         .expect_state(GraduationRunState::AwaitingAuthor)
@@ -230,10 +224,7 @@ fn a_pause_during_the_answered_review_keeps_the_answers_for_the_resumed_review()
         .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
         .review_turn(Script::escalates(&["Is the panel's own test suite the one to run?"]))
         .run()
-        .answered(
-            &["Yes."],
-            vec![Script::answers_ready("The suite passes.").pausing_the_run()],
-        )
+        .answered(&["Yes."], vec![Script::answers_ready("The suite passes.").pausing_the_run()])
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("author_pause")
         .expect_resume_phase("review")

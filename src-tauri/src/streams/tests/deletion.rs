@@ -18,10 +18,7 @@ fn deleting_a_merged_stream_removes_its_branch_and_its_working_copy() {
     assert!(!branch_names(&repo).contains(&stream.branch));
     assert!(worktree_names(&repo).is_empty());
     assert!(!Path::new(&path).exists());
-    assert_eq!(
-        get_work_stream(fx.app.clone(), stream.id).expect_err("gone"),
-        ERR_UNKNOWN_STREAM
-    );
+    assert_eq!(get_work_stream(fx.app.clone(), stream.id).expect_err("gone"), ERR_UNKNOWN_STREAM);
 }
 
 // WKS-FR-EIBC: a stream carrying commits its base does not hold is refused
@@ -66,11 +63,7 @@ fn deleting_a_busy_stream_is_refused() {
     let fx = Fixture::new();
     let mut stream = fx.create("held", None).expect("created");
     stream.busy_run_id = Some("g1".into());
-    let fs = fx
-        .app
-        .state::<crate::fs::FsAccessState>()
-        .get()
-        .expect("instance");
+    let fs = fx.app.state::<crate::fs::FsAccessState>().get().expect("instance");
     let store = StreamStore::new(canonical(fx.store.path()));
     store::write_stream(&fs, &store, &stream).expect("written");
 
@@ -93,10 +86,7 @@ fn deleting_a_stream_whose_working_copy_is_locked_removes_it() {
     let stream = fx.create("locked", None).expect("created");
     let repo = fx.repo();
     for name in worktree_names(&repo) {
-        repo.find_worktree(&name)
-            .unwrap()
-            .lock(Some("claude agent agent-x (pid 1)"))
-            .unwrap();
+        repo.find_worktree(&name).unwrap().lock(Some("claude agent agent-x (pid 1)")).unwrap();
     }
 
     delete_work_stream(fx.app.clone(), stream.id.clone(), false, false).expect("deleted");

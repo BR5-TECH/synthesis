@@ -10,6 +10,7 @@ import type {
   GraduationRun,
 } from "../../types/graduation";
 import { interruptionCause, isFailureStop } from "./stages";
+import type { NotificationLevel } from "../toasts";
 
 /** The questions this run is waiting on, or none. */
 export function questionsOf(run: GraduationRun) {
@@ -66,6 +67,24 @@ export function raisesForRun(run: GraduationRun): boolean {
     run.state === "discarded" ||
     run.state === "failed"
   );
+}
+
+/**
+ * GRU-FR-BLSS: the level a run's raise carries. A run that waits on the author
+ * or whose publication stopped is Warn. A run that failed, or that stopped on a
+ * failure reason, is Error. A completed or discarded run is Info.
+ */
+export function raiseLevel(run: GraduationRun): NotificationLevel {
+  switch (run.state) {
+    case "awaiting_author":
+    case "blocked":
+      return "Warn";
+    case "failed":
+    case "interrupted":
+      return "Error";
+    default:
+      return "Info";
+  }
 }
 
 /** A stable key for the raise a run currently carries. */

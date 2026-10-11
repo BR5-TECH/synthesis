@@ -27,6 +27,7 @@ import {
   cliVerified,
   commandsFor,
 } from "../test/aiIntegrationsFixtures";
+import { implementAllAgenticVendorsForTest } from "./agenticImplemented";
 
 // The section reaches the backend only through `invoke`; mock the bridge so
 // jsdom never needs the Tauri runtime — and so no test can spawn a real CLI or
@@ -85,6 +86,9 @@ describe("the project AI integration controls", () => {
   });
 
   it("offers only its own level's verified integrations, and overrides one alone (AII-FR-32)", async () => {
+    // AII-FR-OTQY / SET-FR-GVED: this test uses a vendor that the settings UI
+    // does not implement yet, so it opens the vendor gate.
+    implementAllAgenticVendorsForTest();
     // AII-FR-32: the two controls are independent.
     backend(
       {

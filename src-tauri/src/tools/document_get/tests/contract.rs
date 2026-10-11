@@ -8,8 +8,7 @@ use super::*;
 #[test]
 fn the_definition_is_the_documented_one() {
     let fixture = DocFixture::new();
-    let definition =
-        rig::tool::portable_tool_definition(&GetDocumentTool::new(fixture.fixture.handle()));
+    let definition = rig::tool::tool_definition(&GetDocumentTool::new(fixture.fixture.handle()));
     assert_eq!(definition.name, "get_document");
     assert_eq!(NAME, "get_document");
     assert_eq!(definition.description, DESCRIPTION);
@@ -24,7 +23,10 @@ fn the_definition_is_the_documented_one() {
         assert_eq!(property["type"], if name == "id" { "string" } else { "integer" });
         assert!(!property["description"].as_str().unwrap().is_empty());
     }
-    assert!(properties["id"]["description"].as_str().unwrap().contains("A path cannot be used here."));
+    assert!(properties["id"]["description"]
+        .as_str()
+        .unwrap()
+        .contains("A path cannot be used here."));
 }
 
 // GDT-FR-IPJG: a blank id is the retryable `InvalidArgs` refusal.

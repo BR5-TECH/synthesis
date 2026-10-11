@@ -26,18 +26,21 @@ use tauri::State;
 
 use crate::project::ProjectState;
 
+pub mod build_seam;
 pub mod concurrency;
 pub mod github_polling;
 pub mod image_builder;
 pub mod images;
+use build_seam::AppBuildEvents;
+pub use build_seam::ImageBuilderSeam;
 pub mod loop_settings;
 pub mod public_store;
 pub mod publication_settings;
 pub use concurrency::GraduationConcurrency;
-pub use public_store::*;
 pub use github_polling::*;
-pub use publication_settings::*;
+pub use public_store::*;
 use public_store::{load_public, save_public};
+pub use publication_settings::*;
 
 // ---------------------------------------------------------------------------
 // Wire + on-disk shapes
@@ -239,6 +242,7 @@ impl LineEndings {
 /// [`save_project_config_to`] merges rather than replaces — see its note.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
+#[derive(Default)]
 pub struct ProjectConfig {
     pub line_endings: LineEndings,
     /// PSS-FR-21: the project's optional Markdown **draft template** — the text
@@ -313,20 +317,6 @@ where
     Option::<T>::deserialize(deserializer).map(Some)
 }
 
-
-impl Default for ProjectConfig {
-    fn default() -> Self {
-        Self {
-            line_endings: LineEndings::default(),
-            draft_template: None,
-            graduation_concurrency_limit: None,
-            execution_timeout_ms: None,
-            provider_call_deadline_ms: None,
-            retry_budget: None,
-        }
-    }
-}
-
 /// PSS-FR-10: a project-public file that exists but cannot be parsed is a typed
 /// error (it implies a damaged or wrong-versioned project), which
 /// `../ui/SET-project-settings.md` surfaces inline.
@@ -368,7 +358,6 @@ pub(crate) const GRADUATION_CONCURRENCY_KEY: &str = "graduationConcurrencyLimit"
 /// is read where the current key is absent, and removed by a save that names a
 /// limit.
 pub(crate) const LEGACY_STREAM_CONCURRENCY_KEY: &str = "streamConcurrencyLimit";
-
 
 /// `<project_root>/.synthesis`.
 fn synthesis_dir(root: &Path) -> PathBuf {
@@ -529,6 +518,7 @@ pub fn save_project_vendor_image(
             crate::log_fields! {
                 "vendor" => vendor.as_str(),
                 "has_dockerfile" => status.dockerfile.is_some(),
+                "has_build_context" => status.build_context.is_some(),
                 "graduation_state" => format!("{:?}", status.graduation_state)
             },
         ),
@@ -541,35 +531,6 @@ pub fn save_project_vendor_image(
         ),
     }
     result
-}
-
-/// The builder a build is performed through, held in state so a test swaps the
-/// production one without touching a call site.
-pub struct ImageBuilderSeam(pub std::sync::Arc<dyn images::ImageBuilder>);
-
-impl Default for ImageBuilderSeam {
-    fn default() -> Self {
-        ImageBuilderSeam(std::sync::Arc::new(image_builder::RealImageBuilder))
-    }
-}
-
-/// PSS-FR-27 / PSS-FR-28: the two events, emitted through the Tauri bus.
-///
-/// An emit that cannot be delivered is dropped rather than propagated, for the
-/// same reason `ProgressSink` drops one: reporting must never block or fail the
-/// build it is reporting on.
-struct AppBuildEvents<R: tauri::Runtime>(tauri::AppHandle<R>);
-
-impl<R: tauri::Runtime> images::BuildEvents for AppBuildEvents<R> {
-    fn progress(&self, payload: images::ImageBuildProgress) {
-        use tauri::Emitter;
-        let _ = self.0.emit(images::PROJECT_IMAGE_BUILD_PROGRESS, payload);
-    }
-
-    fn finished(&self, payload: images::ImageBuildFinished) {
-        use tauri::Emitter;
-        let _ = self.0.emit(images::PROJECT_IMAGE_BUILD_FINISHED, payload);
-    }
 }
 
 /// PSS-FR-26 / PSS-FR-29: start a local build of this vendor's Dockerfile.
@@ -595,10 +556,18 @@ pub fn build_project_vendor_image(
     let sequence = NEXT_BUILD.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let operation_id = format!("image-build-{vendor}-{sequence}");
 
+    // PSS-FR-26 / PSS-FR-BCTX: the root is the active worktree root now, and
+    // the context is the folder the entry names, or that root by default.
+    let project_root = root.path().to_path_buf();
+    let context_root = match entries.get(&vendor).and_then(|entry| entry.build_context.as_deref()) {
+        Some(context) => images::validate_build_context(&root, context),
+        None => Ok(project_root.clone()),
+    };
     let prepared = images::prepare_build(
         entries.get(&vendor),
         crate::docker::resolve_docker_backend(&store),
-        root.path().to_path_buf(),
+        project_root,
+        context_root,
         &vendor,
         &operation_id,
         &registry,
@@ -622,16 +591,19 @@ pub fn build_project_vendor_image(
             "vendor" => vendor.as_str(),
             "operation_id" => operation_id.as_str(),
             "backend" => format!("{:?}", prepared.backend.mode()),
-            "dockerfile" => prepared.request.dockerfile.as_str()
+            "dockerfile" => prepared.request.dockerfile.as_str(),
+            "custom_context" => entries
+                .get(&vendor)
+                .is_some_and(|entry| entry.build_context.is_some()),
+            "dockerfile_outside_context" =>
+                prepared.request.placement == images::DockerfilePlacement::Outside
         },
     );
 
     // The build runs on its own thread: it is minutes long, it streams, and the
     // command that started it must return the operation id at once so the
     // section can render against it.
-    let started = images::StartedImageBuild {
-        operation_id: operation_id.clone(),
-    };
+    let started = images::StartedImageBuild { operation_id: operation_id.clone() };
     let scope = root.path().to_path_buf();
     std::thread::spawn(move || {
         use tauri::Manager;
@@ -723,7 +695,10 @@ pub fn load_changes_panel_state_from(root: &crate::fs::RootFs) -> ChangesPanelSt
 
 /// PSS-FR-15: persist the panel's mode and target branch to project-local scope,
 /// leaving every other section of `local.toml` exactly as it was.
-pub fn save_changes_panel_state_to(root: &crate::fs::RootFs, state: ChangesPanelState) -> Result<(), String> {
+pub fn save_changes_panel_state_to(
+    root: &crate::fs::RootFs,
+    state: ChangesPanelState,
+) -> Result<(), String> {
     let mut config = load_local(root);
     let value = toml::Value::try_from(state)
         .map_err(|e| format!("failed to encode changes panel state: {e}"))?;
@@ -788,7 +763,10 @@ pub fn load_library_panel_state_from(root: &crate::fs::RootFs) -> LibraryPanelSt
 /// The record is written whole — the caller supplies all three values — so a
 /// change to the lens carries the expanded set and text filter through unchanged
 /// (`../ui/LIB-library.md` LIB-FR-17).
-pub fn save_library_panel_state_to(root: &crate::fs::RootFs, state: LibraryPanelState) -> Result<(), String> {
+pub fn save_library_panel_state_to(
+    root: &crate::fs::RootFs,
+    state: LibraryPanelState,
+) -> Result<(), String> {
     let mut config = load_local(root);
     let value = toml::Value::try_from(state)
         .map_err(|e| format!("failed to encode library panel state: {e}"))?;
@@ -846,7 +824,10 @@ pub fn load_notes_panel_state_from(root: &crate::fs::RootFs) -> NotesPanelState 
 /// every other section of `local.toml` exactly as it was. The record is written
 /// whole, so persisting a new position carries the filter text through unchanged
 /// (`../ui/NTS-notes.md` NTS-FR-09 / NTS-FR-13).
-pub fn save_notes_panel_state_to(root: &crate::fs::RootFs, state: NotesPanelState) -> Result<(), String> {
+pub fn save_notes_panel_state_to(
+    root: &crate::fs::RootFs,
+    state: NotesPanelState,
+) -> Result<(), String> {
     let mut config = load_local(root);
     let value = toml::Value::try_from(state)
         .map_err(|e| format!("failed to encode notes panel state: {e}"))?;
@@ -855,9 +836,7 @@ pub fn save_notes_panel_state_to(root: &crate::fs::RootFs, state: NotesPanelStat
 }
 
 #[tauri::command]
-pub fn load_notes_panel_state(
-    project: State<'_, ProjectState>,
-) -> Result<NotesPanelState, String> {
+pub fn load_notes_panel_state(project: State<'_, ProjectState>) -> Result<NotesPanelState, String> {
     // No project open -> the defaults, exactly as a worktree with no persisted
     // state; the panel has nothing to restore either way.
     match project.require_root() {

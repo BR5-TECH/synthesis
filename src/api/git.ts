@@ -22,7 +22,9 @@ import type {
   BranchInformation,
   CommitFile,
   CommitHistory,
+  CreatedPullRequest,
   PullRequestDetail,
+  PullRequestHeadState,
   PullRequestListState,
   PullRequestSummary,
   PullRequestTimeline,
@@ -153,6 +155,32 @@ export const getPullRequestDetail = (id: number) =>
 /** GTC-FR-CKTM: one pull request's full conversation and activity, oldest first. */
 export const listPullRequestTimeline = (id: number) =>
   invoke<PullRequestTimeline>("list_pull_request_timeline", { id });
+
+/**
+ * GTC-FR-MMFM: open a pull request from `head` into `base`. Pushes and commits
+ * nothing.
+ */
+export const createPullRequest = (
+  title: string,
+  body: string,
+  base: string,
+  head: string,
+  draft: boolean,
+) =>
+  invoke<CreatedPullRequest>("create_pull_request", {
+    title,
+    body,
+    base,
+    head,
+    draft,
+  });
+
+/**
+ * GTC-FR-NEIW: what stands between a local branch and a pull request for it.
+ * A null `base` is the repository's default branch.
+ */
+export const getPullRequestHeadState = (head: string, base: string | null) =>
+  invoke<PullRequestHeadState>("get_pull_request_head_state", { head, base });
 
 // --- Commit and push (git.rs) ---------------------------------------------
 

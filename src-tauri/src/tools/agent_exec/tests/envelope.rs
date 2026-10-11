@@ -41,11 +41,7 @@ fn an_escalation_reaches_the_caller_in_the_order_it_was_written() {
     let runtime = RecordingRuntime::replying(&claude_stdout(&document.to_string()));
     let outcome = run(&harness, runtime, task("go")).expect("ran");
     assert_eq!(outcome.process_outcome, ProcessOutcome::Completed);
-    let escalation = outcome
-        .response
-        .expect("envelope")
-        .escalation
-        .expect("the escalation");
+    let escalation = outcome.response.expect("envelope").escalation.expect("the escalation");
     assert_eq!(escalation.questions.len(), 8);
     for (index, count) in counts.iter().enumerate() {
         assert_eq!(escalation.questions[index].question, format!("question {index}?"));
@@ -55,13 +51,9 @@ fn an_escalation_reaches_the_caller_in_the_order_it_was_written() {
             // response suits" without having to tell absence from emptiness.
             assert!(escalation.questions[index].options.is_empty());
         } else {
+            assert_eq!(escalation.questions[index].options[0].answer, format!("answer-{index}-0"),);
             assert_eq!(
-                escalation.questions[index].options[0].answer,
-                format!("answer-{index}-0"),
-            );
-            assert_eq!(
-                escalation.questions[index].options[0].summary,
-                "Choice 0",
+                escalation.questions[index].options[0].summary, "Choice 0",
                 "and every option's label, not only its value",
             );
             assert_eq!(
@@ -182,10 +174,7 @@ fn every_escalation_byte_bound_refuses_the_envelope() {
             "summary": "stopped to ask",
             "escalation": escalation,
         });
-        assert_eq!(
-            decode_envelope(&document.to_string()).unwrap_err(),
-            EnvelopeInvalid::TooLarge,
-        );
+        assert_eq!(decode_envelope(&document.to_string()).unwrap_err(), EnvelopeInvalid::TooLarge,);
     }
 }
 
@@ -240,18 +229,12 @@ fn a_value_exactly_at_its_limit_is_accepted() {
     assert_eq!(escalation.questions.len(), MAX_ESCALATION_QUESTIONS);
     assert_eq!(escalation.questions[0].options.len(), MAX_QUESTION_OPTIONS);
     assert_eq!(escalation.reason.len(), LIMIT_ESCALATION_REASON);
-    assert_eq!(
-        word_count(&escalation.questions[0].options[0].summary),
-        MAX_SUMMARY_WORDS,
-    );
+    assert_eq!(word_count(&escalation.questions[0].options[0].summary), MAX_SUMMARY_WORDS,);
     assert_eq!(
         sentence_count(&escalation.questions[0].options[0].description),
         MAX_DESCRIPTION_SENTENCES,
     );
-    assert_eq!(
-        word_count(&escalation.questions[0].options[0].description),
-        MAX_DESCRIPTION_WORDS,
-    );
+    assert_eq!(word_count(&escalation.questions[0].options[0].description), MAX_DESCRIPTION_WORDS,);
 }
 
 /// The two readable shapes, exercised where they are defined rather than only
@@ -334,18 +317,13 @@ fn unparseable_output_is_invalid_and_the_bytes_are_preserved() {
     // Prose where a JSON document was required.
     let prose = RecordingRuntime::replying("I have finished the task.\n");
     let outcome = run(&harness, prose, task("go")).expect("ran");
-    assert_eq!(
-        outcome.process_outcome,
-        ProcessOutcome::InvalidStructuredOutput
-    );
+    assert_eq!(outcome.process_outcome, ProcessOutcome::InvalidStructuredOutput);
     assert_eq!(outcome.stdout.bytes, b"I have finished the task.\n");
 
     // A truncated document.
     let partial = RecordingRuntime::replying(&claude_stdout(&valid[..valid.len() / 2]));
     assert_eq!(
-        run(&harness, partial, task("go"))
-            .expect("ran")
-            .process_outcome,
+        run(&harness, partial, task("go")).expect("ran").process_outcome,
         ProcessOutcome::InvalidStructuredOutput
     );
 
@@ -353,18 +331,13 @@ fn unparseable_output_is_invalid_and_the_bytes_are_preserved() {
     // picking either would be a guess.
     let doubled = RecordingRuntime::replying(&claude_stdout(&format!("{valid}{valid}")));
     assert_eq!(
-        run(&harness, doubled, task("go"))
-            .expect("ran")
-            .process_outcome,
+        run(&harness, doubled, task("go")).expect("ran").process_outcome,
         ProcessOutcome::InvalidStructuredOutput
     );
 
     // Bytes that are not valid UTF-8 where JSON was required.
     let raw = Arc::new(RecordingRuntime {
-        script: Script::ReplyRaw {
-            stdout: vec![0xff, 0xfe, 0x00],
-            exit_code: 0,
-        },
+        script: Script::ReplyRaw { stdout: vec![0xff, 0xfe, 0x00], exit_code: 0 },
         available: true,
         image_available: true,
         launch_error: None,
@@ -429,10 +402,7 @@ fn metadata_admits_nothing_in_v1() {
                 "{vendor} rejected the turn over {metadata}"
             );
             let response = execution.response.expect("envelope");
-            assert!(
-                response.metadata.is_none(),
-                "{vendor} kept an unreviewed key from {metadata}"
-            );
+            assert!(response.metadata.is_none(), "{vendor} kept an unreviewed key from {metadata}");
             // Everything else the agent reported survives the removal — the
             // field is dropped, not the envelope around it.
             assert_eq!(response.outcome, AgentOutcome::Success);
@@ -511,10 +481,7 @@ fn metadata_large_enough_to_burst_the_envelope_bound_still_refuses() {
         "protocol_version": 1, "outcome": "success", "summary": "s",
         "metadata": {"transcript": "x".repeat(LIMIT_ENVELOPE)}
     });
-    assert_eq!(
-        decode_envelope(&envelope.to_string()).unwrap_err(),
-        EnvelopeInvalid::TooLarge
-    );
+    assert_eq!(decode_envelope(&envelope.to_string()).unwrap_err(), EnvelopeInvalid::TooLarge);
 }
 
 /// EAC-FR-32, EAC-FR-20 / CCP-FR-07 — the schema the CLI validates against states the
@@ -528,10 +495,7 @@ fn the_vendor_schema_states_the_empty_metadata_allowlist() {
     // Still nullable, and that matters: `null` is the overwhelmingly common
     // answer, and a tightening that made it invalid would refuse almost every
     // turn at the CLI instead of almost none.
-    assert_eq!(
-        schema["properties"]["metadata"]["type"],
-        json!(["object", "null"])
-    );
+    assert_eq!(schema["properties"]["metadata"]["type"], json!(["object", "null"]));
 }
 
 /// CCP-FR-07 — the schema closes every field set the decoder closes.
@@ -567,20 +531,14 @@ fn the_vendor_schema_closes_every_field_set_the_decoder_closes() {
     // makes the CLI re-prompt an agent that had already answered correctly.
     // Each list below is the set of fields on the matching struct that carry no
     // `#[serde(default)]`.
-    assert_eq!(
-        schema["required"],
-        json!(["protocol_version", "outcome", "summary"])
-    );
+    assert_eq!(schema["required"], json!(["protocol_version", "outcome", "summary"]));
     assert_eq!(
         schema["properties"]["failure"]["required"],
         json!(["code", "message", "retryable"])
     );
     // EAC-FR-18: `options` is defaulted by `AgentEscalationQuestion` and
     // optional by `../tools/ESU-escalate-to-user-tool.md` ESU-FR-10.
-    assert_eq!(
-        schema["properties"]["escalation"]["required"],
-        json!(["reason", "questions"])
-    );
+    assert_eq!(schema["properties"]["escalation"]["required"], json!(["reason", "questions"]));
     assert_eq!(
         schema["properties"]["escalation"]["properties"]["questions"]["items"]["required"],
         json!(["question"])
@@ -641,9 +599,7 @@ fn a_discarded_metadata_key_reaches_no_caller_and_no_boundary_record() {
             )
     }) {
         assert!(
-            !serde_json::to_string(&record.fields)
-                .unwrap_or_default()
-                .contains(MARKER),
+            !serde_json::to_string(&record.fields).unwrap_or_default().contains(MARKER),
             "a boundary record carried the discarded key: {}",
             record.message
         );

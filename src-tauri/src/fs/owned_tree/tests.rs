@@ -22,11 +22,7 @@ fn rooted() -> (TempDir, TempDir, FsAccess, PathBuf, PathBuf) {
     let plain_tmp = TempDir::new().unwrap();
     let owned = fs::canonicalize(owned_tmp.path()).unwrap();
     let plain = fs::canonicalize(plain_tmp.path()).unwrap();
-    let access = FsAccess::builder()
-        .owned_root(&owned)
-        .allow_root(&plain)
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().owned_root(&owned).allow_root(&plain).build().unwrap();
     (owned_tmp, plain_tmp, access, owned, plain)
 }
 
@@ -100,10 +96,7 @@ fn a_link_at_the_leaf_is_unlinked_rather_than_followed() {
 
     access.delete_owned_tree(&link).unwrap();
 
-    assert!(
-        fs::symlink_metadata(&link).is_err(),
-        "the link itself is still there"
-    );
+    assert!(fs::symlink_metadata(&link).is_err(), "the link itself is still there");
     assert!(target.join("keep.txt").exists(), "the target was removed");
 }
 
@@ -230,10 +223,7 @@ fn a_link_among_the_components_on_the_way_to_the_target_is_refused() {
 
     let err = access.delete_owned_tree(owned.join("g").join("rv")).unwrap_err();
 
-    assert!(
-        matches!(err, FsError::SymlinkRefused { .. }),
-        "expected SymlinkRefused, got {err:?}"
-    );
+    assert!(matches!(err, FsError::SymlinkRefused { .. }), "expected SymlinkRefused, got {err:?}");
     assert!(real.join("keep.txt").exists(), "the refusal took something");
 }
 
@@ -276,11 +266,7 @@ fn an_owned_root_reached_through_a_link_accepts_both_spellings() {
 fn the_session_temp_directory_is_not_an_owned_root() {
     let tmp = TempDir::new().unwrap();
     let owned = fs::canonicalize(tmp.path()).unwrap();
-    let access = FsAccess::builder()
-        .owned_root(&owned)
-        .session_temp(true)
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().owned_root(&owned).session_temp(true).build().unwrap();
     let scratch = access.session_temp_dir().expect("a scratch directory").to_path_buf();
     write_raw(&scratch.join("work/a.txt"), "a");
 
@@ -326,8 +312,5 @@ fn a_dangling_link_is_unlinked_at_the_leaf_and_inside_the_tree() {
     let leaf = owned.join("dangling");
     symlink(owned.join("also-gone"), &leaf).unwrap();
     access.delete_owned_tree(&leaf).unwrap();
-    assert!(
-        fs::symlink_metadata(&leaf).is_err(),
-        "the dangling link is still there"
-    );
+    assert!(fs::symlink_metadata(&leaf).is_err(), "the dangling link is still there");
 }

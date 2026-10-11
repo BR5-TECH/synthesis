@@ -30,20 +30,11 @@ impl DocFixture {
 
     pub(crate) fn with_extractor(extractor: crate::documents::manager::Extractor) -> DocFixture {
         let fixture = empty_project();
-        fixture
-            .app
-            .manage(DocumentsCollection::with_extractor(extractor));
-        fixture
-            .app
-            .state::<DocumentsCollection>()
-            .open("project-key", Ok(Vec::new()));
+        fixture.app.manage(DocumentsCollection::with_extractor(extractor));
+        fixture.app.state::<DocumentsCollection>().open("project-key", Ok(Vec::new()));
         let docs = TempDir::new().unwrap();
         let root = std::fs::canonicalize(docs.path()).unwrap();
-        DocFixture {
-            fixture,
-            _docs: docs,
-            root,
-        }
+        DocFixture { fixture, _docs: docs, root }
     }
 
     pub(crate) fn collection(&self) -> tauri::State<'_, DocumentsCollection> {
@@ -58,13 +49,9 @@ impl DocFixture {
     }
 
     pub(crate) fn select(&self, kind: SourceKind, relative: &str) {
-        let source = StoredSource {
-            kind,
-            path: self.root.join(relative).to_string_lossy().into_owned(),
-        };
-        self.collection()
-            .add_sources(&[source], &|_, _| Ok(()))
-            .expect("the source is added");
+        let source =
+            StoredSource { kind, path: self.root.join(relative).to_string_lossy().into_owned() };
+        self.collection().add_sources(&[source], &|_, _| Ok(())).expect("the source is added");
         self.sync();
     }
 
@@ -72,8 +59,7 @@ impl DocFixture {
     /// after a change.
     pub(crate) fn sync(&self) {
         let fs = self.fixture.app.state::<crate::fs::FsAccessState>();
-        self.collection()
-            .refresh(&fs, &self.fixture.handle(), &|_| {});
+        self.collection().refresh(&fs, &self.fixture.handle(), &|_| {});
         self.fixture.reindex();
     }
 

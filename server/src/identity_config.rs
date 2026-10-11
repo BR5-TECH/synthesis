@@ -79,10 +79,7 @@ pub enum IdentityConfigError {
     /// The variable is absent, or holds nothing but white space.
     Missing { variable: &'static str },
     /// The variable holds a value the service cannot use.
-    Invalid {
-        variable: &'static str,
-        accepted: &'static str,
-    },
+    Invalid { variable: &'static str, accepted: &'static str },
 }
 
 impl fmt::Display for IdentityConfigError {
@@ -127,10 +124,7 @@ where
         });
     }
 
-    Ok(IdentityConfig {
-        administrator_id,
-        token: StaticToken::new(token),
-    })
+    Ok(IdentityConfig { administrator_id, token: StaticToken::new(token) })
 }
 
 /// Reads one variable as text. White space around the value is removed, and a
@@ -140,12 +134,10 @@ where
     F: Fn(&str) -> Option<OsString>,
 {
     let value = variable(name).ok_or(IdentityConfigError::Missing { variable: name })?;
-    let value = value
-        .into_string()
-        .map_err(|_| IdentityConfigError::Invalid {
-            variable: name,
-            accepted: "a value that is valid Unicode",
-        })?;
+    let value = value.into_string().map_err(|_| IdentityConfigError::Invalid {
+        variable: name,
+        accepted: "a value that is valid Unicode",
+    })?;
     let value = value.trim().to_string();
     if value.is_empty() {
         return Err(IdentityConfigError::Missing { variable: name });
@@ -161,26 +153,18 @@ mod tests {
     const TOKEN: &str = "0123456789abcdef0123";
 
     fn environment(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<OsString> + use<> {
-        let pairs: Vec<(String, String)> = pairs
-            .iter()
-            .map(|(name, value)| ((*name).to_string(), (*value).to_string()))
-            .collect();
+        let pairs: Vec<(String, String)> =
+            pairs.iter().map(|(name, value)| ((*name).to_string(), (*value).to_string())).collect();
         move |name: &str| {
-            pairs
-                .iter()
-                .find(|(held, _)| held == name)
-                .map(|(_, value)| OsString::from(value))
+            pairs.iter().find(|(held, _)| held == name).map(|(_, value)| OsString::from(value))
         }
     }
 
     // SAS-FR-QJWD: both settings are read from the environment.
     #[test]
     fn both_settings_are_read() {
-        let config = resolve(environment(&[
-            (ADMIN_ID_VARIABLE, ADMIN),
-            (TOKEN_VARIABLE, TOKEN),
-        ]))
-        .expect("the settings are read");
+        let config = resolve(environment(&[(ADMIN_ID_VARIABLE, ADMIN), (TOKEN_VARIABLE, TOKEN)]))
+            .expect("the settings are read");
         assert_eq!(config.administrator_id.to_string(), ADMIN);
         assert!(config.token.matches(TOKEN));
     }
@@ -196,60 +180,35 @@ mod tests {
             vec![(ADMIN_ID_VARIABLE, "  "), (TOKEN_VARIABLE, TOKEN)],
         ] {
             let error = resolve(environment(&present)).expect_err("the settings are refused");
-            assert!(
-                matches!(error, IdentityConfigError::Missing { .. }),
-                "{error:?}"
-            );
+            assert!(matches!(error, IdentityConfigError::Missing { .. }), "{error:?}");
         }
     }
 
     // SAS-FR-HGZL: the identifier is a UUID and the token is long enough.
     #[test]
     fn a_malformed_value_is_refused() {
-        let error = resolve(environment(&[
-            (ADMIN_ID_VARIABLE, "administrator"),
-            (TOKEN_VARIABLE, TOKEN),
-        ]))
-        .expect_err("a malformed identifier is refused");
-        assert!(matches!(
-            error,
-            IdentityConfigError::Invalid {
-                variable: ADMIN_ID_VARIABLE,
-                ..
-            }
-        ));
+        let error =
+            resolve(environment(&[(ADMIN_ID_VARIABLE, "administrator"), (TOKEN_VARIABLE, TOKEN)]))
+                .expect_err("a malformed identifier is refused");
+        assert!(matches!(error, IdentityConfigError::Invalid { variable: ADMIN_ID_VARIABLE, .. }));
 
-        let error = resolve(environment(&[
-            (ADMIN_ID_VARIABLE, ADMIN),
-            (TOKEN_VARIABLE, "short"),
-        ]))
-        .expect_err("a short token is refused");
-        assert!(matches!(
-            error,
-            IdentityConfigError::Invalid {
-                variable: TOKEN_VARIABLE,
-                ..
-            }
-        ));
+        let error = resolve(environment(&[(ADMIN_ID_VARIABLE, ADMIN), (TOKEN_VARIABLE, "short")]))
+            .expect_err("a short token is refused");
+        assert!(matches!(error, IdentityConfigError::Invalid { variable: TOKEN_VARIABLE, .. }));
     }
 
     // SAS-FR-PMRB: no diagnostic and no debug output holds the token.
     #[test]
     fn no_diagnostic_holds_the_token() {
-        let error = resolve(environment(&[
-            (ADMIN_ID_VARIABLE, ADMIN),
-            (TOKEN_VARIABLE, "short-secret"),
-        ]))
-        .expect_err("a short token is refused");
+        let error =
+            resolve(environment(&[(ADMIN_ID_VARIABLE, ADMIN), (TOKEN_VARIABLE, "short-secret")]))
+                .expect_err("a short token is refused");
         let message = error.to_string();
         assert!(!message.contains("short-secret"), "{message}");
         assert!(!format!("{error:?}").contains("short-secret"));
 
-        let config = resolve(environment(&[
-            (ADMIN_ID_VARIABLE, ADMIN),
-            (TOKEN_VARIABLE, TOKEN),
-        ]))
-        .expect("the settings are read");
+        let config = resolve(environment(&[(ADMIN_ID_VARIABLE, ADMIN), (TOKEN_VARIABLE, TOKEN)]))
+            .expect("the settings are read");
         assert!(!format!("{config:?}").contains(TOKEN));
         assert!(
             !format!("{:?}", config.token).contains(TOKEN),

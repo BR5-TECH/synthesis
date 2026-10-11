@@ -33,21 +33,14 @@ impl Stop {
     /// A stop with no executor facts: a pause, a shutdown, a project change, or
     /// a cancellation whose cause was not recorded.
     pub fn of_reason(reason: GraduationInterruptionReason) -> Self {
-        Self {
-            reason,
-            detail: detail_of(reason).to_string(),
-            facts: StopFacts::default(),
-        }
+        Self { reason, detail: detail_of(reason).to_string(), facts: StopFacts::default() }
     }
 
     /// GLG-FR-RLQZ: a recorded stop that won over a turn which did return. The
     /// reason and the detail are the recorded stop's, and the log keeps the
     /// facts the executor reported about the turn.
     pub fn of_reason_with(reason: GraduationInterruptionReason, facts: StopFacts) -> Self {
-        Self {
-            facts,
-            ..Self::of_reason(reason)
-        }
+        Self { facts, ..Self::of_reason(reason) }
     }
 }
 
@@ -144,6 +137,9 @@ pub(super) fn stop_of_launch_error(error: &AgentExecutionError, limit_ms: u64) -
         AgentExecutionError::RepositoryMaskingUnavailable(_) => {
             "The repository metadata could not be hidden from the agent."
         }
+        AgentExecutionError::DurableOutputFailed(_) => {
+            "The run's log could not be written, so the turn was stopped."
+        }
     };
     Stop {
         reason: GraduationInterruptionReason::LaunchFailed,
@@ -174,6 +170,7 @@ pub(super) fn launch_error_kind(error: &AgentExecutionError) -> &'static str {
         AgentExecutionError::SessionStateUnavailable(_) => "session_state_unavailable",
         AgentExecutionError::SupplementaryMountInvalid(_) => "supplementary_mount_invalid",
         AgentExecutionError::RepositoryMaskingUnavailable(_) => "repository_masking_unavailable",
+        AgentExecutionError::DurableOutputFailed(_) => "durable_output_failed",
     }
 }
 
@@ -198,6 +195,9 @@ pub(super) fn detail_of(reason: GraduationInterruptionReason) -> &'static str {
         }
         GraduationInterruptionReason::ProjectChanged => {
             "The project changed while this run was working."
+        }
+        GraduationInterruptionReason::LogPersistenceFailed => {
+            "The run's log could not be written, so the turn was stopped."
         }
         _ => "The run was stopped before the turn finished.",
     }
@@ -232,11 +232,8 @@ pub(super) fn note_interrupted<R: tauri::Runtime>(
     run: &mut GraduationRun,
     stop: &Stop,
 ) -> bool {
-    let level = if stop.reason.is_failure() {
-        GraduationLogLevel::Error
-    } else {
-        GraduationLogLevel::Info
-    };
+    let level =
+        if stop.reason.is_failure() { GraduationLogLevel::Error } else { GraduationLogLevel::Info };
     let mut event = StructuredEvent::new(GraduationLogProducer::StageTransition, "run interrupted")
         .at_level(level)
         .leaving(run.observability.current_stage)
@@ -261,7 +258,11 @@ mod tests {
     use super::*;
     use crate::tools::agent_exec::runtime::CapturedStream;
 
-    fn execution(outcome: ProcessOutcome, exit_code: Option<i32>, duration_ms: u64) -> AgentExecution {
+    fn execution(
+        outcome: ProcessOutcome,
+        exit_code: Option<i32>,
+        duration_ms: u64,
+    ) -> AgentExecution {
         AgentExecution {
             process_outcome: outcome,
             exit_code,
@@ -300,8 +301,9 @@ mod tests {
     // GXD-FR-UZHX / GXD-FR-WJOW: a non-zero exit names its exit code.
     #[test]
     fn a_non_zero_exit_names_the_exit_code() {
-        let stop = stop_of_execution(&execution(ProcessOutcome::NonZeroExit, Some(137), 5_000), TWO_HOURS)
-            .expect("an exit is a stop");
+        let stop =
+            stop_of_execution(&execution(ProcessOutcome::NonZeroExit, Some(137), 5_000), TWO_HOURS)
+                .expect("an exit is a stop");
         assert_eq!(stop.reason, GraduationInterruptionReason::AgentExited);
         assert!(stop.detail.contains("exit code 137"), "{}", stop.detail);
         assert_eq!(stop.facts.exit_code, Some(137));
@@ -311,8 +313,9 @@ mod tests {
     // GXD-FR-UZHX: an exit with no code still names the cause.
     #[test]
     fn a_non_zero_exit_without_a_code_still_says_the_process_stopped() {
-        let stop = stop_of_execution(&execution(ProcessOutcome::NonZeroExit, None, 5_000), TWO_HOURS)
-            .expect("an exit is a stop");
+        let stop =
+            stop_of_execution(&execution(ProcessOutcome::NonZeroExit, None, 5_000), TWO_HOURS)
+                .expect("an exit is a stop");
         assert_eq!(stop.reason, GraduationInterruptionReason::AgentExited);
         assert_eq!(stop.detail, "The agent process stopped before it gave an answer.");
     }
@@ -320,8 +323,9 @@ mod tests {
     // GXD-FR-UZHX: termination and an unreadable answer each have their own reason.
     #[test]
     fn termination_and_an_unreadable_answer_have_their_own_reasons() {
-        let terminated = stop_of_execution(&execution(ProcessOutcome::Terminated, None, 90_000), TWO_HOURS)
-            .expect("a termination is a stop");
+        let terminated =
+            stop_of_execution(&execution(ProcessOutcome::Terminated, None, 90_000), TWO_HOURS)
+                .expect("a termination is a stop");
         assert_eq!(terminated.reason, GraduationInterruptionReason::AgentTerminated);
         assert!(terminated.detail.contains("after 1 min 30 s"), "{}", terminated.detail);
         let unreadable = stop_of_execution(
@@ -336,10 +340,15 @@ mod tests {
     // stays `retryable_failure`; a completed turn is no stop at all.
     #[test]
     fn a_cancellation_without_a_cause_stays_retryable_and_a_completion_is_no_stop() {
-        let cancelled = stop_of_execution(&execution(ProcessOutcome::Cancelled, None, 1_000), TWO_HOURS)
-            .expect("a cancellation is a stop");
+        let cancelled =
+            stop_of_execution(&execution(ProcessOutcome::Cancelled, None, 1_000), TWO_HOURS)
+                .expect("a cancellation is a stop");
         assert_eq!(cancelled.reason, GraduationInterruptionReason::RetryableFailure);
-        assert!(stop_of_execution(&execution(ProcessOutcome::Completed, Some(0), 1_000), TWO_HOURS).is_none());
+        assert!(stop_of_execution(
+            &execution(ProcessOutcome::Completed, Some(0), 1_000),
+            TWO_HOURS
+        )
+        .is_none());
     }
 
     // GXD-FR-WJOW: a launch error gives one sentence for its kind and none of
@@ -363,13 +372,14 @@ mod tests {
     #[test]
     fn every_reason_round_trips_under_its_stored_name() {
         use GraduationInterruptionReason::*;
-        let stored: crate::graduation::GraduationInterruption = serde_json::from_value(serde_json::json!({
-            "reason": "retryable_failure",
-            "at": "2026-10-03T22:02:36Z",
-            "detail": "The run was stopped before the turn finished.",
-            "streamReleased": true
-        }))
-        .expect("a stored record with the legacy reason loads");
+        let stored: crate::graduation::GraduationInterruption =
+            serde_json::from_value(serde_json::json!({
+                "reason": "retryable_failure",
+                "at": "2026-10-03T22:02:36Z",
+                "detail": "The run was stopped before the turn finished.",
+                "streamReleased": true
+            }))
+            .expect("a stored record with the legacy reason loads");
         assert_eq!(stored.reason, RetryableFailure);
         for reason in [
             AuthorPause,

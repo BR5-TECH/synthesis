@@ -73,11 +73,7 @@ impl OperationState {
 /// `kind` or `label` (PRG-FR-TBZN), and a producer with no defined destination
 /// registers its operation without one.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(
-    tag = "type",
-    rename_all = "snake_case",
-    rename_all_fields = "camelCase"
-)]
+#[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum Activation {
     /// A graduation run, by its run id (GRD-FR-ZHNV).
     GraduationRun { run_id: String },
@@ -142,10 +138,7 @@ impl<R: tauri::Runtime> ProgressSink for tauri::AppHandle<R> {
         // the status bar's in-flight set (STB-FR-06), which leaves an
         // indeterminate progress bar animating forever on an idle window.
         if let Err(e) = self.emit(OPERATION_PROGRESS, operation) {
-            eprintln!(
-                "synthesis: failed to emit {OPERATION_PROGRESS} for {}: {e}",
-                operation.id
-            );
+            eprintln!("synthesis: failed to emit {OPERATION_PROGRESS} for {}: {e}", operation.id);
         }
     }
 }
@@ -252,11 +245,7 @@ impl ProgressRegistry {
         };
         inner.tracked.insert(
             sequence,
-            Tracked {
-                operation: operation.clone(),
-                last_emit: now,
-                pending_update: false,
-            },
+            Tracked { operation: operation.clone(), last_emit: now, pending_update: false },
         );
         (OperationId(sequence), operation)
     }
@@ -349,12 +338,7 @@ impl ProgressRegistry {
     /// descending `sequence` so the first element is the most recently started.
     /// Empty when none is in flight; never an error.
     pub fn in_flight(&self) -> Vec<Operation> {
-        self.lock()
-            .tracked
-            .values()
-            .rev()
-            .map(|t| t.operation.clone())
-            .collect()
+        self.lock().tracked.values().rev().map(|t| t.operation.clone()).collect()
     }
 
     /// PRG-FR-13: terminate every operation scoped to `root`, returning the
@@ -371,17 +355,13 @@ impl ProgressRegistry {
                 .map(|t| OperationId(t.operation.sequence))
                 .collect()
         };
-        ids.into_iter()
-            .flat_map(|id| self.terminate(id, OperationState::Cancelled))
-            .collect()
+        ids.into_iter().flat_map(|id| self.terminate(id, OperationState::Cancelled)).collect()
     }
 
     /// A poisoned registry must not take the application down with it: progress
     /// is peripheral to every operation it reports on (PRG-FR-14).
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
-        self.inner
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -420,14 +400,8 @@ pub fn attribute_with_activation<T, E>(
     activation: Option<Activation>,
     work: impl FnOnce() -> Result<T, E>,
 ) -> Result<T, E> {
-    let (id, registration) = registry.register_with_activation_at(
-        kind,
-        label,
-        scope,
-        None,
-        activation,
-        Instant::now(),
-    );
+    let (id, registration) =
+        registry.register_with_activation_at(kind, label, scope, None, activation, Instant::now());
     sink.publish(&registration);
     // A panic in attributed work — git2 hitting a repository race, a scan
     // tripping an unwrap — must terminate the operation too, or it is stranded
@@ -479,14 +453,8 @@ pub fn register_and_publish_with_activation(
     total: Option<u64>,
     activation: Option<Activation>,
 ) -> OperationId {
-    let (id, registration) = registry.register_with_activation_at(
-        kind,
-        label,
-        scope,
-        total,
-        activation,
-        Instant::now(),
-    );
+    let (id, registration) =
+        registry.register_with_activation_at(kind, label, scope, total, activation, Instant::now());
     sink.publish(&registration);
     id
 }

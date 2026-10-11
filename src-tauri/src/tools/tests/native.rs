@@ -40,10 +40,7 @@ fn a_provider_native_tool_is_a_definition_entry_and_nothing_else() {
     const CLIENT_SOURCES: [(&str, &str); 3] = [
         ("web_search.rs", include_str!("../web_search.rs")),
         ("web_fetch.rs", include_str!("../web_fetch.rs")),
-        (
-            "agent_conversations.rs",
-            include_str!("../../agent_conversations.rs"),
-        ),
+        ("agent_conversations.rs", include_str!("../../agent_conversations.rs")),
     ];
     for (name, source) in CLIENT_SOURCES {
         let code: String = source
@@ -69,15 +66,9 @@ fn a_provider_native_tool_is_a_definition_entry_and_nothing_else() {
         .split_once("])")
         .expect("end of generate_handler!")
         .0;
-    for entry in [
-        crate::tools::web_search::ENTRY_TYPE,
-        crate::tools::web_fetch::ENTRY_TYPE,
-    ] {
+    for entry in [crate::tools::web_search::ENTRY_TYPE, crate::tools::web_fetch::ENTRY_TYPE] {
         let bare = entry.split(':').next_back().expect("a qualified type");
-        assert!(
-            !handler.contains(bare),
-            "{entry} is registered as no Tauri command (TLC-FR-21)",
-        );
+        assert!(!handler.contains(bare), "{entry} is registered as no Tauri command (TLC-FR-21)",);
     }
 
     // Nor is either of them among the definitions a provider receives as tools
@@ -104,21 +95,14 @@ fn a_provider_native_entry_is_fixed_text_carrying_its_type_and_nothing_else() {
         (crate::tools::web_fetch::entry(), "openrouter:web_fetch"),
     ] {
         let value = serde_json::to_value(&entry).expect("an entry serialises");
-        assert_eq!(
-            value,
-            serde_json::json!({ "type": expected }),
-            "the entry is exactly its type",
-        );
+        assert_eq!(value, serde_json::json!({ "type": expected }), "the entry is exactly its type",);
         let object = value.as_object().expect("an entry is an object");
         assert_eq!(object.len(), 1, "no field beside `type` (TLC-FR-22)");
     }
 
     // Constructed twice, and from two callers, it is the same text: fixed at
     // build time rather than assembled per call (TLC-FR-22).
-    assert_eq!(
-        crate::tools::web_search::entry(),
-        crate::tools::web_search::entry(),
-    );
+    assert_eq!(crate::tools::web_search::entry(), crate::tools::web_search::entry(),);
     assert_ne!(
         crate::tools::web_search::entry(),
         crate::tools::web_fetch::entry(),
@@ -147,12 +131,8 @@ fn no_configuration_surface_carries_a_provider_native_field() {
         models: Vec::new(),
     };
     let stored = serde_json::to_value(&record).expect("a record serialises");
-    let mut keys: Vec<&str> = stored
-        .as_object()
-        .expect("a record is an object")
-        .keys()
-        .map(|key| key.as_str())
-        .collect();
+    let mut keys: Vec<&str> =
+        stored.as_object().expect("a record is an object").keys().map(|key| key.as_str()).collect();
     keys.sort_unstable();
     assert_eq!(
         keys,
@@ -178,12 +158,7 @@ fn no_configuration_surface_carries_a_provider_native_field() {
             .filter(|line| !line.trim_start().starts_with("//"))
             .collect::<Vec<_>>()
             .join("\n");
-        for forbidden in [
-            "web_search",
-            "web_fetch",
-            "web_engine",
-            "ProviderNativeTool",
-        ] {
+        for forbidden in ["web_search", "web_fetch", "web_engine", "ProviderNativeTool"] {
             assert!(
                 !code.contains(forbidden),
                 "{name} carries no web-tool configuration, found {forbidden:?} (TLC-FR-22)",

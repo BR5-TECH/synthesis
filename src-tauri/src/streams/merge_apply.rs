@@ -111,10 +111,9 @@ pub fn apply_merge_run<R: tauri::Runtime>(
     if tips_moved(&main, data) {
         return Err(refuse(MergeApplyFailure::BranchMoved, "branch_moved"));
     }
-    let (Ok(base_oid), Ok(stream_oid)) = (
-        git2::Oid::from_str(&data.base_tip),
-        git2::Oid::from_str(&data.stream_tip),
-    ) else {
+    let (Ok(base_oid), Ok(stream_oid)) =
+        (git2::Oid::from_str(&data.base_tip), git2::Oid::from_str(&data.stream_tip))
+    else {
         return Err(refuse(MergeApplyFailure::BranchMoved, "unreadable_tip"));
     };
 
@@ -123,16 +122,12 @@ pub fn apply_merge_run<R: tauri::Runtime>(
     // branch.
     let leftover = markers_in(&main, tree, &data.unresolved_paths);
     if !leftover.is_empty() {
-        return Err(refuse(
-            MergeApplyFailure::MarkersRemaining(leftover),
-            "markers_remaining",
-        ));
+        return Err(refuse(MergeApplyFailure::MarkersRemaining(leftover), "markers_remaining"));
     }
 
     let base_repo = git::worktree_holding(&main, &data.base_branch);
-    let base_worktree = base_repo
-        .as_ref()
-        .and_then(|repo| repo.workdir().map(std::path::PathBuf::from));
+    let base_worktree =
+        base_repo.as_ref().and_then(|repo| repo.workdir().map(std::path::PathBuf::from));
     // WKS-FR-UZHT: the base worktree is the author's own, and a forced checkout
     // over work they did while the run reconciled would lose it.
     if let Err(reason) = merge::refuse_dirty(&stream.worktree(), base_worktree.as_deref()) {
@@ -161,10 +156,7 @@ pub fn apply_merge_run<R: tauri::Runtime>(
             "committed" => commit.is_some(),
         },
     );
-    Ok(MergeApplied {
-        merged_paths,
-        commit,
-    })
+    Ok(MergeApplied { merged_paths, commit })
 }
 
 /// The paths of `paths` that hold a conflict marker in `tree`.

@@ -39,10 +39,7 @@ pub struct Answer {
 impl Answer {
     /// The error code the body reports (SAS-FR-ZMPC).
     pub fn code(&self) -> String {
-        self.body["error"]["code"]
-            .as_str()
-            .unwrap_or("")
-            .to_string()
+        self.body["error"]["code"].as_str().unwrap_or("").to_string()
     }
 
     /// A member of the body.
@@ -52,10 +49,7 @@ impl Answer {
 
     /// The identifier the answer reports.
     pub fn id(&self) -> String {
-        self.body["id"]
-            .as_str()
-            .expect("the answer names an id")
-            .to_string()
+        self.body["id"].as_str().expect("the answer names an id").to_string()
     }
 }
 
@@ -87,8 +81,7 @@ impl Api {
 
     /// One request that carries the configured token.
     pub async fn call(&self, method: Method, path: &str, body: Option<Value>) -> Answer {
-        self.call_with(method, path, body, Some(&Api::bearer()))
-            .await
+        self.call_with(method, path, body, Some(&Api::bearer())).await
     }
 
     /// One request, with the credential the test names.
@@ -105,24 +98,16 @@ impl Api {
         }
         let request = match body {
             None => builder.body(Body::empty()),
-            Some(value) => builder
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(value.to_string())),
+            Some(value) => {
+                builder.header(CONTENT_TYPE, "application/json").body(Body::from(value.to_string()))
+            }
         }
         .expect("the request is well formed");
 
-        let response = self
-            .router()
-            .oneshot(request)
-            .await
-            .expect("the router answers every request");
+        let response =
+            self.router().oneshot(request).await.expect("the router answers every request");
         let status = response.status();
-        let bytes = response
-            .into_body()
-            .collect()
-            .await
-            .expect("the body is readable")
-            .to_bytes();
+        let bytes = response.into_body().collect().await.expect("the body is readable").to_bytes();
         let body = if bytes.is_empty() {
             Value::Null
         } else {
@@ -159,10 +144,7 @@ pub fn make_user(application: &Application, principal: &Principal, name: &str) -
         .identity
         .create_user(
             principal,
-            CreateUser {
-                display_name: name.to_string(),
-                ..CreateUser::default()
-            },
+            CreateUser { display_name: name.to_string(), ..CreateUser::default() },
         )
         .expect("the user is written")
         .id

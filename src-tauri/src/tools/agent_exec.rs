@@ -35,7 +35,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::agentic::{
-    self, AgenticIntegrations, AgenticInvocation, AgentLaunchCredential, SecretString,
+    self, AgentLaunchCredential, AgenticIntegrations, AgenticInvocation, SecretString,
 };
 use crate::fs::{EntryKind, FsAccess};
 use crate::global_settings::GlobalSettingsStore;
@@ -56,15 +56,15 @@ mod repository;
 use observer::{bounded_payload, directory_problem, merge_session, LaunchObserver};
 pub(crate) use repository::{repository_access, RepositoryAccess};
 use repository::{
-    repository_metadata_paths, validate_supplementary_mount, RepositoryMask,
-    GIT_COMMON_DIR_TARGET, REPOSITORY_COMMONDIR_FILENAME, REPOSITORY_MASK_DIRNAME,
-    REPOSITORY_MASK_FILENAME, REPOSITORY_POINTER_FILENAME,
+    repository_metadata_paths, validate_supplementary_mount, RepositoryMask, GIT_COMMON_DIR_TARGET,
+    REPOSITORY_COMMONDIR_FILENAME, REPOSITORY_MASK_DIRNAME, REPOSITORY_MASK_FILENAME,
+    REPOSITORY_POINTER_FILENAME,
 };
 
 #[cfg(test)]
 use repository::repository_metadata_paths_within;
 
-use descriptor::{BindMount, CLAUDE_TOKEN_ENV, WORKSPACE_TARGET};
+use descriptor::{BindMount, WORKSPACE_TARGET};
 use protocol::{AgentResponseEnvelope, AgentTaskRequest, EnvelopeInvalid, LimitName, TaskInvalid};
 use runtime::{
     CancellationToken, CapturedStream, DockerRuntime, HostDockerCli, RunEnd, RunRequest,
@@ -111,6 +111,65 @@ pub trait AgentActivitySink: Send + Sync {
     fn activity(&self, event: AgentActivityEvent);
 }
 
+/// One safe activity a durable sink must keep (EAC-FR-VSNM, EAC-FR-DWGS).
+///
+/// It has **no payload field**: the verbatim event, the serialized task, the
+/// generated invocation, and every full tool argument and result stay out of
+/// it by shape (EAC-FR-IRKZ). Every text in it has been through
+/// [`protocol::mask_secrets`] (EAC-FR-FKCN).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DurableActivity {
+    /// Assigned once by the executor (EAC-FR-VSNM).
+    pub record_id: String,
+    /// RFC 3339 UTC, taken when the activity arrived.
+    pub at: String,
+    pub channel: &'static str,
+    /// One of the safe kinds of [`is_safe_kind`].
+    pub kind: &'static str,
+    /// One masked line, bounded by [`descriptor::LIMIT_SUMMARY_LINE`].
+    pub summary: String,
+}
+
+/// EAC-FR-ZVRP: why a durable sink could not keep an activity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DurableOutputFailure {
+    pub code: String,
+    /// One sentence. It names the act that clears the failure and carries no
+    /// activity text.
+    pub message: String,
+}
+
+/// Who must keep a run (EAC-FR-VSNM).
+///
+/// The sink answers each activity once it is durable. The executor waits for
+/// the answer, which is the bounded backpressure of EAC-FR-CXUE, and it ends
+/// the run's delivery at the first failure (EAC-FR-DUTR).
+pub trait DurableOutputSink: Send + Sync {
+    fn record(&self, activity: DurableActivity) -> Result<(), DurableOutputFailure>;
+}
+
+/// EAC-FR-DWGS / EAC-FR-IRKZ: the kinds a durable sink may receive.
+///
+/// `invocation`, `task`, `reasoning`, and `unrecognized` are excluded. They
+/// carry task input, invocation contents, internal reasoning, or an unread raw
+/// protocol line.
+pub fn is_safe_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "started"
+            | "message"
+            | "tool_call"
+            | "tool_result"
+            | "command"
+            | "file_change"
+            | "retry"
+            | "usage"
+            | "finished"
+            | "error"
+            | "diagnostic"
+    )
+}
+
 /// The executor's own channel, for the two events it writes itself.
 const CHANNEL_EXECUTOR: &str = "executor";
 
@@ -132,6 +191,10 @@ pub struct AgentExecutionRequest {
     /// EAC-FR-32: who is watching this run, if anyone. Still not a way to
     /// influence the launch — a sink receives and cannot supply.
     pub activity: Option<Arc<dyn AgentActivitySink>>,
+    /// EAC-FR-VSNM: who must keep this run, if anyone. Like the activity sink it
+    /// receives and cannot supply, and it may only answer whether it stored
+    /// what it was given (EAC-FR-CXUE).
+    pub durable_output: Option<Arc<dyn DurableOutputSink>>,
     /// EAC-FR-40: at most one typed supplementary mount, of one kind, for one
     /// run.
     ///
@@ -319,6 +382,10 @@ pub enum AgentExecutionError {
     /// EAC-FR-41: repository metadata inside the execution directory could not
     /// be masked. There is no launch-anyway path.
     RepositoryMaskingUnavailable(String),
+    /// EAC-FR-ZVRP: the durable sink could not keep an activity. Unlike every
+    /// other member this one is returned **after** the container is gone: the
+    /// run was cancelled for it (EAC-FR-DUTR).
+    DurableOutputFailed(DurableOutputFailure),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -361,6 +428,7 @@ impl AgentExecutionError {
             AgentExecutionError::RepositoryMaskingUnavailable(_) => {
                 "repository_masking_unavailable"
             }
+            AgentExecutionError::DurableOutputFailed(_) => "durable_output_failed",
         }
     }
 }
@@ -438,21 +506,20 @@ pub struct AgentCliExecutor {
     session_state_root: Option<PathBuf>,
 }
 
+/// EAC-FR-FNFV: what [`AgentCliExecutor::repository_mounts`] grants one launch:
+/// the read-only bind mounts, the Git environment as `(name, value)` pairs, and
+/// whether the repository is a linked worktree.
+type RepositoryMounts = (Vec<BindMount>, Vec<(String, String)>, bool);
+
 impl Default for AgentCliExecutor {
     fn default() -> Self {
-        AgentCliExecutor {
-            runtime: RuntimeBinding::FromVerifiedBackend,
-            session_state_root: None,
-        }
+        AgentCliExecutor { runtime: RuntimeBinding::FromVerifiedBackend, session_state_root: None }
     }
 }
 
 impl AgentCliExecutor {
     pub fn new(runtime: Arc<dyn DockerRuntime>) -> Self {
-        AgentCliExecutor {
-            runtime: RuntimeBinding::Fixed(runtime),
-            session_state_root: None,
-        }
+        AgentCliExecutor { runtime: RuntimeBinding::Fixed(runtime), session_state_root: None }
     }
 
     /// EAC-FR-39: the runtime this launch goes through — the Docker backend the
@@ -554,7 +621,7 @@ impl AgentCliExecutor {
         directory: &Path,
         workspace: &str,
         aligned: bool,
-    ) -> Option<(Vec<BindMount>, Vec<(String, String)>, bool)> {
+    ) -> Option<RepositoryMounts> {
         let access = repository_access(directory)?;
         let mask = self.empty_mask_dir(fs).ok()?;
         // What the generated files below are named by. They are one execution's
@@ -579,20 +646,18 @@ impl AgentCliExecutor {
                 None,
             ),
             RepositoryAccess::Linked { .. } => {
-                let pointer = mask
-                    .dir
-                    .with_file_name(format!("{REPOSITORY_POINTER_FILENAME}-{slug}"));
+                let pointer =
+                    mask.dir.with_file_name(format!("{REPOSITORY_POINTER_FILENAME}-{slug}"));
                 fs.write_text_atomic(&pointer, &access.pointer_text()?).ok()?;
-                let commondir = mask
-                    .dir
-                    .with_file_name(format!("{REPOSITORY_COMMONDIR_FILENAME}-{slug}"));
-                fs.write_text_atomic(&commondir, &access.commondir_text()?)
-                    .ok()?;
+                let commondir =
+                    mask.dir.with_file_name(format!("{REPOSITORY_COMMONDIR_FILENAME}-{slug}"));
+                fs.write_text_atomic(&commondir, &access.commondir_text()?).ok()?;
                 (GIT_COMMON_DIR_TARGET.to_string(), pointer, Some(commondir))
             }
         };
         let mut out: Vec<BindMount> = Vec::new();
-        for (source, target) in access.mounts(workspace, &store, &pin, record.as_deref(), &mask.file)
+        for (source, target) in
+            access.mounts(workspace, &store, &pin, record.as_deref(), &mask.file)
         {
             out.push(BindMount {
                 source: descriptor::mount_source(&source)?,
@@ -603,11 +668,7 @@ impl AgentCliExecutor {
                 read_only: true,
             });
         }
-        let env = access
-            .env()
-            .into_iter()
-            .map(|(name, value)| (name.to_string(), value))
-            .collect();
+        let env = access.env().into_iter().map(|(name, value)| (name.to_string(), value)).collect();
         Some((out, env, access.linked()))
     }
 
@@ -646,9 +707,7 @@ impl AgentCliExecutor {
         // Truncating, so a file left from an earlier launch is empty again
         // rather than trusted to still be: what this mounts must hold nothing.
         if let Err(err) = fs.create_file(&file, crate::fs::CreateMode::Truncate) {
-            return Err(AgentExecutionError::RepositoryMaskingUnavailable(
-                err.to_string(),
-            ));
+            return Err(AgentExecutionError::RepositoryMaskingUnavailable(err.to_string()));
         }
         Ok(RepositoryMask { dir, file })
     }
@@ -670,7 +729,9 @@ impl AgentCliExecutor {
             Some(root) => root.clone(),
             None => crate::fs::app_data_dir()
                 .map_err(|_| {
-                    AgentExecutionError::SessionStateUnavailable(SessionStateProblem::RootUnresolved)
+                    AgentExecutionError::SessionStateUnavailable(
+                        SessionStateProblem::RootUnresolved,
+                    )
                 })?
                 .join(SESSION_STATE_DIRNAME),
         };

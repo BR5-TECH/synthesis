@@ -44,19 +44,15 @@ fn the_snapshot_is_a_commit_of_both_tips_with_markers_where_git_stopped() {
     assert!(gone.contains("(this path was deleted on this side)"), "{gone}");
     assert!(gone.contains("changed by the stream"), "{gone}");
     // The paths Git merged cleanly hold their merged content and no marker.
-    assert_eq!(
-        blob_text(&repo, snapshot.commit, "stream-only.txt").as_deref(),
-        Some("kept\n")
-    );
+    assert_eq!(blob_text(&repo, snapshot.commit, "stream-only.txt").as_deref(), Some("kept\n"));
     assert_eq!(
         blob_text(&repo, snapshot.commit, "base-only.txt").as_deref(),
         Some("from the base\n")
     );
 
     // The private ref keeps the commit reachable.
-    let reference = repo
-        .find_reference(&merge_snapshot::snapshot_ref(RUN))
-        .expect("the private ref");
+    let reference =
+        repo.find_reference(&merge_snapshot::snapshot_ref(RUN)).expect("the private ref");
     assert_eq!(reference.name().ok(), Some("refs/synthesis/merge/gsnapshot1"));
     assert_eq!(reference.target(), Some(snapshot.commit));
 }
@@ -69,20 +65,13 @@ fn the_snapshot_names_the_merge_base_the_changed_paths_and_the_conflicts() {
     let fx = Fixture::new();
     let stream = stream_with_three_conflicts(&fx);
     let repo = fx.repo();
-    let expected_base = repo
-        .merge_base(
-            tip_of(&repo, &stream.base_branch),
-            tip_of(&repo, &stream.branch),
-        )
-        .unwrap();
+    let expected_base =
+        repo.merge_base(tip_of(&repo, &stream.base_branch), tip_of(&repo, &stream.branch)).unwrap();
 
     let snapshot = capture_snapshot(&fx, &stream, RUN);
 
     assert_eq!(snapshot.merge_base, expected_base);
-    assert_eq!(
-        snapshot.unresolved_paths,
-        vec!["README.md", "both-new.txt", "gone.txt"]
-    );
+    assert_eq!(snapshot.unresolved_paths, vec!["README.md", "both-new.txt", "gone.txt"]);
     assert_eq!(
         snapshot.changed_paths,
         vec!["README.md", "both-new.txt", "gone.txt", "stream-only.txt"],
@@ -162,9 +151,7 @@ fn a_binary_conflict_keeps_the_base_content_and_stays_unresolved() {
     assert_eq!(snapshot.unresolved_paths, vec!["image.bin"]);
     let repo = fx.repo();
     let tree = repo.find_commit(snapshot.commit).unwrap().tree().unwrap();
-    let blob = repo
-        .find_blob(tree.get_path(Path::new("image.bin")).unwrap().id())
-        .unwrap();
+    let blob = repo.find_blob(tree.get_path(Path::new("image.bin")).unwrap().id()).unwrap();
     assert_eq!(blob.content(), &[0u8, 7, 7, 7]);
 }
 

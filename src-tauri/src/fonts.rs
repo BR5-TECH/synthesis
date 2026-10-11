@@ -51,7 +51,8 @@ pub fn enumerate(faces: impl IntoIterator<Item = (String, bool)>) -> Vec<FontFam
     // Keyed by the case-folded name so `Arial` and `arial` are one family, but
     // the value keeps the first spelling seen so the name a user reads is the
     // one the platform registered.
-    let mut by_key: std::collections::HashMap<String, FontFamily> = std::collections::HashMap::new();
+    let mut by_key: std::collections::HashMap<String, FontFamily> =
+        std::collections::HashMap::new();
     for (family, monospace) in faces {
         let family = family.trim().to_string();
         if family.is_empty() {
@@ -69,10 +70,7 @@ pub fn enumerate(faces: impl IntoIterator<Item = (String, bool)>) -> Vec<FontFam
     // ties so the order is total and stable rather than dependent on the hash
     // map's iteration order.
     out.sort_by(|a, b| {
-        a.family
-            .to_lowercase()
-            .cmp(&b.family.to_lowercase())
-            .then_with(|| a.family.cmp(&b.family))
+        a.family.to_lowercase().cmp(&b.family.to_lowercase()).then_with(|| a.family.cmp(&b.family))
     });
     out
 }
@@ -92,11 +90,8 @@ pub fn system_font_families() -> Vec<FontFamily> {
     db.load_system_fonts();
 
     enumerate(db.faces().map(|face| {
-        let family = face
-            .families
-            .first()
-            .map(|(name, _language)| name.clone())
-            .unwrap_or_default();
+        let family =
+            face.families.first().map(|(name, _language)| name.clone()).unwrap_or_default();
         (family, face.monospaced)
     }))
 }
@@ -137,11 +132,9 @@ mod tests {
             );
         }
         // The wire shape is what the Appearance section consumes.
-        let json = serde_json::to_string(&FontFamily {
-            family: "JetBrains Mono".into(),
-            monospace: true,
-        })
-        .unwrap();
+        let json =
+            serde_json::to_string(&FontFamily { family: "JetBrains Mono".into(), monospace: true })
+                .unwrap();
         assert_eq!(json, r#"{"family":"JetBrains Mono","monospace":true}"#);
     }
 
@@ -154,13 +147,7 @@ mod tests {
             ("Inter".to_string(), false),
             ("Inter".to_string(), false),
         ]);
-        assert_eq!(
-            families,
-            vec![FontFamily {
-                family: "Inter".into(),
-                monospace: false
-            }]
-        );
+        assert_eq!(families, vec![FontFamily { family: "Inter".into(), monospace: false }]);
     }
 
     #[test]
@@ -184,21 +171,13 @@ mod tests {
         // FNT-FR-02, FNT-FR-04: `monospace` describes the family; both kinds are present
         // in the single returned list, because the flag never restricts which
         // role a family may be chosen for (FNT-FR-04).
-        let families = enumerate([
-            ("JetBrains Mono".to_string(), true),
-            ("Inter".to_string(), false),
-        ]);
+        let families =
+            enumerate([("JetBrains Mono".to_string(), true), ("Inter".to_string(), false)]);
         assert_eq!(
             families,
             vec![
-                FontFamily {
-                    family: "Inter".into(),
-                    monospace: false
-                },
-                FontFamily {
-                    family: "JetBrains Mono".into(),
-                    monospace: true
-                },
+                FontFamily { family: "Inter".into(), monospace: false },
+                FontFamily { family: "JetBrains Mono".into(), monospace: true },
             ]
         );
     }
@@ -211,17 +190,8 @@ mod tests {
         // across its faces rather than whichever face happened to be read
         // first — an order-dependent answer would make the Source code role's
         // grouping (GLS-FR-18) flicker between runs.
-        let families = enumerate([
-            ("Iosevka".to_string(), false),
-            ("Iosevka".to_string(), true),
-        ]);
-        assert_eq!(
-            families,
-            vec![FontFamily {
-                family: "Iosevka".into(),
-                monospace: true
-            }]
-        );
+        let families = enumerate([("Iosevka".to_string(), false), ("Iosevka".to_string(), true)]);
+        assert_eq!(families, vec![FontFamily { family: "Iosevka".into(), monospace: true }]);
     }
 
     #[test]
@@ -299,10 +269,7 @@ mod tests {
         // which would say nothing about what the Appearance section is handed.
         assert_eq!(
             enumerate([("Inter".to_string(), false)]),
-            vec![FontFamily {
-                family: "Inter".into(),
-                monospace: false
-            }],
+            vec![FontFamily { family: "Inter".into(), monospace: false }],
             "the result is exactly the installed families — a family that was \
              uninstalled is absent because it is not in the input, not because \
              anything here reasoned about it"

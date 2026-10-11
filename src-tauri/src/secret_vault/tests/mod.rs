@@ -34,10 +34,7 @@ fn p(segments: &[&str]) -> SecretPath {
 }
 
 fn set(vault: &Vault, segments: &[&str], secret: &str) -> Result<(), VaultError> {
-    vault.apply_secret_mutations(&[Mutation::Set {
-        path: p(segments),
-        secret: secret.to_string(),
-    }])
+    vault.apply_secret_mutations(&[Mutation::Set { path: p(segments), secret: secret.to_string() }])
 }
 
 fn candidate(service: &str, account: &str, segments: &[&str]) -> Candidate {
@@ -53,6 +50,7 @@ const AI_API_LEGACY: &str = "com.synthesis.ai-api-provider";
 const AGENTIC_LEGACY: &str = "com.synthesis.agentic-integration";
 
 mod adapter;
+mod cache;
 mod entry;
 mod migration;
 mod retention;

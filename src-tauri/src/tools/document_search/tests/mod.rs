@@ -19,19 +19,13 @@ mod records;
 
 fn search(fixture: &DocFixture, query: &str, limit: Option<i64>) -> Vec<DocumentMatch> {
     let tool = SearchDocumentsTool::new(fixture.fixture.handle());
-    block_on(tool.call(SearchDocumentsArgs {
-        query: query.to_string(),
-        limit,
-    }))
-    .expect("the call succeeds")
-    .documents
+    block_on(tool.call(SearchDocumentsArgs { query: query.to_string(), limit }))
+        .expect("the call succeeds")
+        .documents
 }
 
 fn refusal(fixture: &DocFixture, query: &str) -> ToolRefusal {
     let tool = SearchDocumentsTool::new(fixture.fixture.handle());
-    block_on(tool.call(SearchDocumentsArgs {
-        query: query.to_string(),
-        limit: None,
-    }))
-    .expect_err("the call refuses")
+    block_on(tool.call(SearchDocumentsArgs { query: query.to_string(), limit: None }))
+        .expect_err("the call refuses")
 }

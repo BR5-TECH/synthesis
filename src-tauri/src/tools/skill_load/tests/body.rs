@@ -12,14 +12,8 @@ fn the_result_carries_no_wrapper_field_or_sentence_of_the_tools_own() {
     let body = call(&fixture, "analyst", None).unwrap();
 
     // The tool adds nothing before or after what the author wrote.
-    assert!(
-        body.starts_with("\n# Analyst"),
-        "no prefix of the tool's own: {body:?}",
-    );
-    assert!(
-        body.ends_with("Second paragraph.\n"),
-        "no suffix of the tool's own: {body:?}",
-    );
+    assert!(body.starts_with("\n# Analyst"), "no prefix of the tool's own: {body:?}",);
+    assert!(body.ends_with("Second paragraph.\n"), "no suffix of the tool's own: {body:?}",);
     for wrapper in ["\"content\"", "\"instructions\"", "\"skills\"", "{\"", "name\":"] {
         assert!(!body.contains(wrapper), "no JSON wrapper: {wrapper:?}");
     }
@@ -47,16 +41,10 @@ fn the_body_begins_after_the_closing_delimiter_and_is_returned_byte_for_byte() {
     );
 
     // CRLF, as an editor on Windows writes it.
-    assert_eq!(
-        strip_frontmatter("---\r\nname: a\r\n---\r\nBody\r\n"),
-        "Body\r\n",
-    );
+    assert_eq!(strip_frontmatter("---\r\nname: a\r\n---\r\nBody\r\n"), "Body\r\n",);
     // A leading BOM is tolerated exactly as the registry tolerates it, so a
     // skill admitted despite one is not then returned with its header intact.
-    assert_eq!(
-        strip_frontmatter("\u{feff}---\nname: a\n---\nBody\n"),
-        "Body\n",
-    );
+    assert_eq!(strip_frontmatter("\u{feff}---\nname: a\n---\nBody\n"), "Body\n",);
     // An indented `---` is not a closing delimiter, by space or by tab.
     assert_eq!(strip_frontmatter("---\nname: a\n  ---\n---\nBody\n"), "Body\n");
     assert_eq!(strip_frontmatter("---\nname: a\n\t---\n---\nBody\n"), "Body\n");
@@ -83,10 +71,7 @@ fn multi_byte_text_survives_stripping_byte_for_byte() {
     let header = "---\nname: анализ\ndescription: Обзор спецификации — на русском.\n---\n";
     let body = "# Заголовок\n\nШаг первый — не пропускайте его. 日本語も。\n\nこれで終わり。\n";
     let file = format!("{header}{body}");
-    assert!(
-        file.len() > file.chars().count(),
-        "the fixture must actually be multi-byte",
-    );
+    assert!(file.len() > file.chars().count(), "the fixture must actually be multi-byte",);
     assert_eq!(strip_frontmatter(&file), body);
 
     // And end to end, through a real registry and a real read.
@@ -106,10 +91,7 @@ fn a_repeated_leading_bom_is_tolerated_exactly_as_the_registry_tolerates_it() {
     // leave the second in front of the `---`, the header would go unrecognised,
     // and the model would be handed the frontmatter LSK-FR-13 promised to
     // remove — with no test failing, because the call still succeeds.
-    assert_eq!(
-        strip_frontmatter("\u{feff}\u{feff}---\nname: a\n---\nBody\n"),
-        "Body\n",
-    );
+    assert_eq!(strip_frontmatter("\u{feff}\u{feff}---\nname: a\n---\nBody\n"), "Body\n",);
 
     let dir = tempfile::TempDir::new().unwrap();
     let skill = dir.path().join(".claude/skills/bommed");
@@ -121,13 +103,10 @@ fn a_repeated_leading_bom_is_tolerated_exactly_as_the_registry_tolerates_it() {
     .unwrap();
     let fixture = mounted(dir);
 
-    let loaded = call(&fixture, "bommed", None)
-        .expect("the registry admits it, so this tool must too");
+    let loaded =
+        call(&fixture, "bommed", None).expect("the registry admits it, so this tool must too");
     assert_eq!(loaded, "# Body\n");
-    assert!(
-        !loaded.contains("description:"),
-        "LSK-FR-13: the header is gone whatever preceded it",
-    );
+    assert!(!loaded.contains("description:"), "LSK-FR-13: the header is gone whatever preceded it",);
 }
 
 #[test]
@@ -177,4 +156,3 @@ fn a_large_body_is_returned_whole_with_no_marker_of_truncation() {
         assert!(!loaded.contains(marker), "LSK-FR-14: no marker of truncation");
     }
 }
-

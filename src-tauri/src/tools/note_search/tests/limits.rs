@@ -35,10 +35,7 @@ fn a_result_names_each_note_once_and_never_widens_its_one_call() {
     // engine hands back is its own business, so an assertion about *which* five
     // came out would be an assertion about the engine.
     for i in 0..10 {
-        fixture.note(&format!(
-            "{} note {i} about the panel",
-            "teardown ".repeat(i + 1),
-        ));
+        fixture.note(&format!("{} note {i} about the panel", "teardown ".repeat(i + 1),));
     }
     fixture.reindex();
 
@@ -51,13 +48,13 @@ fn a_result_names_each_note_once_and_never_widens_its_one_call() {
     // notes match and five were asked for, so a tool that overfetched — as
     // `search_drafts` legitimately does — or that repeated the call to fill the
     // result would return a different five from the index's own top five.
-    let indexer = fixture.fixture.app.state::<crate::bm25_index::Bm25Indexer>();
-    let top_five: Vec<Option<String>> =
+    let top_five: Vec<Option<String>> = {
+        let indexer = fixture.fixture.app.state::<crate::bm25_index::Bm25Indexer>();
         crate::bm25_index::search(&indexer, &[IndexId::Notes], "teardown", 5)
             .into_iter()
             .map(|h| h.note_id)
-            .collect();
-    drop(indexer);
+            .collect()
+    };
     assert!(
         matches.windows(2).all(|p| p[0].score > p[1].score),
         "precondition: the fixture's scores strictly differ, so the top five are \
@@ -72,11 +69,8 @@ fn a_result_names_each_note_once_and_never_widens_its_one_call() {
 
     // NST-FR-08: one call for the applied limit and nothing more, so a repeated
     // id in the hit stream is dropped rather than making the tool ask again.
-    let duplicated = vec![
-        hit(&matches[0].id, 3.0),
-        hit(&matches[0].id, 2.0),
-        hit(&matches[1].id, 1.0),
-    ];
+    let duplicated =
+        vec![hit(&matches[0].id, 3.0), hit(&matches[0].id, 2.0), hit(&matches[1].id, 1.0)];
     let resolved = resolve_matches(duplicated, &fixture.root(), 5);
     assert_eq!(
         resolved.iter().map(|m| m.id.clone()).collect::<Vec<_>>(),

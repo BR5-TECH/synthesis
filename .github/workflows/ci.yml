@@ -88,7 +88,7 @@ jobs:
       - name: Typecheck test files
         run: pnpm exec tsc -p tsconfig.test.json --noEmit
 
-  # Verifies src-tauri/** — cargo check then cargo test.
+  # Verifies src-tauri/** — format check, Clippy, cargo check, then cargo test.
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -138,13 +138,25 @@ jobs:
       # No global Git identity is configured here, deliberately. The suite's
       # fixtures set repository-local user.name/user.email, so a bare runner is
       # what proves no test leans on a developer's ambient Git config.
+      #
+      # The format and lint steps run first, so that a format or lint fault is
+      # reported without a wait for the test suite (CIP-FR-12, CIP-FR-TGQF).
+      # rustfmt reads the root rustfmt.toml, and the pinned toolchain carries
+      # both components.
+      - name: Cargo fmt
+        run: cargo fmt --check
+
+      - name: Cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+
       - name: Cargo check
         run: cargo check
 
       - name: Cargo test
         run: cargo test
 
-  # Verifies tools/agentic-cli-mock/** — cargo check then cargo test.
+  # Verifies tools/agentic-cli-mock/** — format check, Clippy, cargo check,
+  # then cargo test.
   mock:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -197,6 +209,14 @@ jobs:
       # --locked: the committed Cargo.lock is the sole source of dependency
       # versions, so a lock that disagrees with Cargo.toml fails the lane rather
       # than being silently regenerated on the runner.
+      #
+      # The format and lint steps run first (CIP-FR-19, CIP-FR-TGQF).
+      - name: Cargo fmt
+        run: cargo fmt --check
+
+      - name: Cargo clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
       - name: Cargo check
         run: cargo check --locked
 
@@ -204,7 +224,8 @@ jobs:
         run: cargo test --locked
 
 
-  # Verifies server/** — cargo build then cargo test, both with --locked.
+  # Verifies server/** — format check, Clippy, cargo build, then cargo test,
+  # the cargo commands with --locked.
   server:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -259,6 +280,14 @@ jobs:
       # than being silently regenerated on the runner. `build` rather than
       # `check`, because the process-level tests start the binary this step
       # produces.
+      #
+      # The format and lint steps run first (CIP-FR-21, CIP-FR-TGQF).
+      - name: Cargo fmt
+        run: cargo fmt --check
+
+      - name: Cargo clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
       - name: Cargo build
         run: cargo build --locked
 

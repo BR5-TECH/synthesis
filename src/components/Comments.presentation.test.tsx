@@ -332,6 +332,7 @@ describe("AGT-FR-28, AGT-FR-38 / AGT-FR-29: tags in a panel row", () => {
   ) =>
     publishProjectAgents(
       nicknames.map((nickname, i) => ({
+        scope: "project" as const,
         agent: {
           id: `a${i}`,
           nickname,

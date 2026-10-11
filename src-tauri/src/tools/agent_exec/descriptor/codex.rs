@@ -53,9 +53,7 @@ fn config_override(key: &str, value: &str) -> [String; 2] {
 /// "a bad effort id is refused" and "a bad effort id silently rewrites the
 /// sandbox policy", and it costs one comparison.
 fn is_safe_override_value(value: &str) -> bool {
-    !value
-        .chars()
-        .any(|c| c == '"' || c == '\\' || c == '\n' || c == '\r' || c.is_control())
+    !value.chars().any(|c| c == '"' || c == '\\' || c == '\n' || c == '\r' || c.is_control())
 }
 
 fn model_and_effort(model_id: Option<&str>, effort_id: Option<&str>) -> Vec<String> {
@@ -113,12 +111,8 @@ pub fn resume_argv(
     effort_id: Option<&str>,
     resume_session_id: &str,
 ) -> Vec<String> {
-    let mut args: Vec<String> = vec![
-        "exec".into(),
-        "resume".into(),
-        "--json".into(),
-        "--skip-git-repo-check".into(),
-    ];
+    let mut args: Vec<String> =
+        vec!["exec".into(), "resume".into(), "--json".into(), "--skip-git-repo-check".into()];
     args.extend(config_override(SANDBOX_KEY, SANDBOX_VALUE));
     args.extend(model_and_effort(model_id, effort_id));
     args.push(resume_session_id.to_string());
@@ -187,10 +181,8 @@ pub fn extract(context: &ExtractContext<'_>) -> Result<Extracted, EnvelopeInvali
                 // Skipping it would promote an earlier narration to "the
                 // conclusion" and answer the caller with the wrong message —
                 // a wrong answer, where this is a missing one.
-                last_agent_message = item
-                    .get(KEY_ITEM_TEXT)
-                    .and_then(Value::as_str)
-                    .map(str::to_string);
+                last_agent_message =
+                    item.get(KEY_ITEM_TEXT).and_then(Value::as_str).map(str::to_string);
             }
             // CDX-FR-15: a top-level `error` event is not by itself fatal — the
             // CLI emits transient reconnect notices under that type while
@@ -211,10 +203,7 @@ pub fn extract(context: &ExtractContext<'_>) -> Result<Extracted, EnvelopeInvali
     let text = last_agent_message.ok_or(EnvelopeInvalid::NotFound)?;
     let envelope = decode_envelope(&text)?;
 
-    Ok(Extracted {
-        envelope,
-        session_id,
-    })
+    Ok(Extracted { envelope, session_id })
 }
 
 // ---------------------------------------------------------------------------
@@ -247,14 +236,12 @@ pub fn activity(line: &str) -> VendorActivity {
     };
 
     match event_type {
-        EVENT_THREAD_STARTED => VendorActivity {
-            kind: ActivityKind::Started,
-            summary: "thread started".to_string(),
-        },
-        EVENT_TURN_STARTED => VendorActivity {
-            kind: ActivityKind::Started,
-            summary: "turn started".to_string(),
-        },
+        EVENT_THREAD_STARTED => {
+            VendorActivity { kind: ActivityKind::Started, summary: "thread started".to_string() }
+        }
+        EVENT_TURN_STARTED => {
+            VendorActivity { kind: ActivityKind::Started, summary: "turn started".to_string() }
+        }
         EVENT_TURN_COMPLETED => VendorActivity {
             kind: ActivityKind::Finished,
             summary: format!("turn completed{}", usage_suffix(&event)),
@@ -292,14 +279,8 @@ fn item_activity(event: &Map<String, Value>, event_type: &str) -> VendorActivity
     let text = |key: &str| item.get(key).and_then(Value::as_str).map(one_line);
 
     let (kind, body) = match item_type {
-        ITEM_AGENT_MESSAGE => (
-            ActivityKind::Message,
-            text(KEY_ITEM_TEXT).unwrap_or_default(),
-        ),
-        ITEM_REASONING => (
-            ActivityKind::Reasoning,
-            text(KEY_ITEM_TEXT).unwrap_or_default(),
-        ),
+        ITEM_AGENT_MESSAGE => (ActivityKind::Message, text(KEY_ITEM_TEXT).unwrap_or_default()),
+        ITEM_REASONING => (ActivityKind::Reasoning, text(KEY_ITEM_TEXT).unwrap_or_default()),
         ITEM_COMMAND_EXECUTION => {
             let command = text("command").unwrap_or_default();
             let status = item.get("status").and_then(Value::as_str).unwrap_or("");
@@ -314,11 +295,7 @@ fn item_activity(event: &Map<String, Value>, event_type: &str) -> VendorActivity
             (ActivityKind::Command, body)
         }
         ITEM_FILE_CHANGE => {
-            let changes = item
-                .get("changes")
-                .and_then(Value::as_array)
-                .map(Vec::len)
-                .unwrap_or(0);
+            let changes = item.get("changes").and_then(Value::as_array).map(Vec::len).unwrap_or(0);
             let status = item.get("status").and_then(Value::as_str).unwrap_or("");
             (
                 ActivityKind::FileChange,
@@ -334,29 +311,18 @@ fn item_activity(event: &Map<String, Value>, event_type: &str) -> VendorActivity
                 format!("{server}.{tool}"),
             )
         }
-        ITEM_WEB_SEARCH => (
-            ActivityKind::ToolCall,
-            format!("web search · {}", text("query").unwrap_or_default()),
-        ),
+        ITEM_WEB_SEARCH => {
+            (ActivityKind::ToolCall, format!("web search · {}", text("query").unwrap_or_default()))
+        }
         ITEM_TODO_LIST => {
-            let items = item
-                .get("items")
-                .and_then(Value::as_array)
-                .map(Vec::len)
-                .unwrap_or(0);
+            let items = item.get("items").and_then(Value::as_array).map(Vec::len).unwrap_or(0);
             (ActivityKind::ToolResult, format!("todo list · {items} items"))
         }
-        ITEM_ERROR => (
-            ActivityKind::Error,
-            text("message").unwrap_or_default(),
-        ),
+        ITEM_ERROR => (ActivityKind::Error, text("message").unwrap_or_default()),
         other => (ActivityKind::Unrecognized, other.to_string()),
     };
 
-    VendorActivity {
-        kind,
-        summary: format!("{body}{stage}"),
-    }
+    VendorActivity { kind, summary: format!("{body}{stage}") }
 }
 
 /// CDX's own usage accounting, where the event carries it.
@@ -391,10 +357,7 @@ fn error_message(event: &Map<String, Value>) -> String {
 }
 
 fn unrecognized(line: &str) -> VendorActivity {
-    VendorActivity {
-        kind: ActivityKind::Unrecognized,
-        summary: one_line(line),
-    }
+    VendorActivity { kind: ActivityKind::Unrecognized, summary: one_line(line) }
 }
 
 use super::summary_line as one_line;

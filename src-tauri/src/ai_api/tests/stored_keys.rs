@@ -49,22 +49,15 @@ fn a_record_never_carries_a_hint_without_the_key_behind_it() {
     assert!(!agree("for a refused keyless verification"));
 
     // A key supplied: both exist.
-    verify_integration_impl(
-        &h.store,
-        &h.ai,
-        "custom",
-        "http://localhost:1234",
-        Some("sk-old1234"),
-    )
-    .unwrap();
+    verify_integration_impl(&h.store, &h.ai, "custom", "http://localhost:1234", Some("sk-old1234"))
+        .unwrap();
     assert!(agree("once a key is supplied"));
 
     // AAP-FR-32: re-verified with the field empty, the stored key is
     // re-presented rather than dropped — so both still exist, and an author
     // checking a working endpoint cannot lose their credential by leaving
     // the field alone.
-    verify_integration_impl(&h.store, &h.ai, "custom", "http://localhost:1234", None)
-        .unwrap();
+    verify_integration_impl(&h.store, &h.ai, "custom", "http://localhost:1234", None).unwrap();
     assert!(agree("after a re-verification with an empty field"));
     assert_eq!(h.keys.get_raw("custom").as_deref(), Some("sk-old1234"));
 
@@ -88,20 +81,13 @@ fn aap_ts32_an_empty_key_field_re_presents_the_stored_key() {
         Some("sk-stored1234"),
     )
     .unwrap();
-    let before = find(&list_integrations_impl(&h.store, &h.ai).unwrap(), "openai")
-        .masked_hint
-        .clone();
+    let before =
+        find(&list_integrations_impl(&h.store, &h.ai).unwrap(), "openai").masked_hint.clone();
 
     // The whole point: no key typed, and it verifies anyway.
     let calls_before = prober.calls.lock().unwrap().len();
-    let rec = verify_integration_impl(
-        &h.store,
-        &h.ai,
-        "openai",
-        "https://api.openai.com/v1",
-        None,
-    )
-    .unwrap();
+    let rec = verify_integration_impl(&h.store, &h.ai, "openai", "https://api.openai.com/v1", None)
+        .unwrap();
     assert_eq!(rec.state, IntegrationState::Verified);
     assert_eq!(rec.masked_hint, before, "the hint is unchanged");
     assert_eq!(
@@ -134,14 +120,8 @@ fn aap_ts32_an_empty_key_field_re_presents_the_stored_key() {
     h.keys.wipe("openai");
     let calls_before = prober.calls.lock().unwrap().len();
     assert_eq!(
-        verify_integration_impl(
-            &h.store,
-            &h.ai,
-            "openai",
-            "https://api.openai.com/v1",
-            None
-        )
-        .unwrap_err(),
+        verify_integration_impl(&h.store, &h.ai, "openai", "https://api.openai.com/v1", None)
+            .unwrap_err(),
         ERR_KEY_MISSING
     );
     assert_eq!(
@@ -164,7 +144,7 @@ fn no_debug_output_of_the_call_shape_contains_the_key() {
         model_id: Some("gpt-5".into()),
         reasoning: None,
         accepts_image_input: false,
-                    model_mode: None,
+        model_mode: None,
     };
     let rendered = format!("{call:?}");
     assert!(!rendered.contains("supersecret"), "leaked via Debug: {rendered}");
@@ -173,10 +153,7 @@ fn no_debug_output_of_the_call_shape_contains_the_key() {
     assert!(rendered.contains("openai"));
     assert!(rendered.contains("gpt-5"));
 
-    let keyless = AiApiCall {
-        api_key: None,
-        ..call
-    };
+    let keyless = AiApiCall { api_key: None, ..call };
     assert!(format!("{keyless:?}").contains("api_key: \"None\""));
 }
 
@@ -208,14 +185,9 @@ fn a_key_required_provider_with_no_key_is_never_verified() {
         Some("https://api.openai.com/v1"),
         "the row is kept so the author can re-verify it"
     );
+    assert_eq!(set_active_impl(&h.store, &h.ai, "openai").unwrap_err(), ERR_NOT_VERIFIED);
     assert_eq!(
-        set_active_impl(&h.store, &h.ai, "openai").unwrap_err(),
-        ERR_NOT_VERIFIED
-    );
-    assert_eq!(
-        get_project_impl(&h.store, &h.ai, "/dev/acme")
-            .unwrap()
-            .resolution,
+        get_project_impl(&h.store, &h.ai, "/dev/acme").unwrap().resolution,
         ProjectResolution::NoneSelected,
         "configured but unusable is not the same as nothing configured"
     );
@@ -277,10 +249,7 @@ fn an_explicit_choice_that_degrades_resolves_to_nothing_rather_than_falling_back
     let resolved = get_project_impl(&h.store, &h.ai, "/dev/acme").unwrap();
     assert_eq!(resolved.resolution, ProjectResolution::NoneSelected);
     assert_eq!(resolved.provider, None);
-    assert_eq!(
-        resolve_ai_api_call(&h.store, &h.ai, "/dev/acme").unwrap_err(),
-        ERR_NONE_SELECTED
-    );
+    assert_eq!(resolve_ai_api_call(&h.store, &h.ai, "/dev/acme").unwrap_err(), ERR_NONE_SELECTED);
 }
 
 #[test]
@@ -343,4 +312,3 @@ fn a_url_carrying_a_credential_is_refused_and_never_persisted() {
     let as_text = serde_json::to_string(&records).unwrap();
     assert!(!as_text.contains("supersecret"));
 }
-

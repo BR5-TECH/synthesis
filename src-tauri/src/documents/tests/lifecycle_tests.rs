@@ -37,12 +37,7 @@ impl App {
         app.manage(crate::progress::ProgressRegistry::default());
         app.manage(crate::scanning::CandidateStore::default());
         let root = std::fs::canonicalize(docs.path()).unwrap();
-        App {
-            app,
-            _store_dir: store_dir,
-            _docs: docs,
-            root,
-        }
+        App { app, _store_dir: store_dir, _docs: docs, root }
     }
 
     fn handle(&self) -> tauri::AppHandle<tauri::test::MockRuntime> {
@@ -69,10 +64,7 @@ impl App {
 
     /// Open the collection as a project open does, and refresh on this thread.
     fn open_with(&self, sources: Vec<StoredSource>) {
-        self.app
-            .state::<GlobalSettingsStore>()
-            .save_document_sources(KEY, sources)
-            .unwrap();
+        self.app.state::<GlobalSettingsStore>().save_document_sources(KEY, sources).unwrap();
         lifecycle::on_content_root_mounted(&self.handle(), KEY);
         lifecycle::run_refresh(&self.handle());
     }
@@ -161,10 +153,7 @@ fn a_worktree_change_keeps_the_sources() {
     t.open_with(vec![t.folder_source("refs")]);
     // The store changes behind the collection's back. A worktree change must not
     // pick that up, because it is the same project.
-    t.app
-        .state::<GlobalSettingsStore>()
-        .save_document_sources(KEY, Vec::new())
-        .unwrap();
+    t.app.state::<GlobalSettingsStore>().save_document_sources(KEY, Vec::new()).unwrap();
     lifecycle::on_content_root_mounted(&t.handle(), KEY);
     lifecycle::run_refresh(&t.handle());
     assert_eq!(t.collection().stored_sources().len(), 1);
@@ -185,12 +174,7 @@ fn a_cancelled_picker_adds_nothing() {
     assert!(result.cancelled);
     assert_eq!(result.ignored_count, 0);
     assert!(result.snapshot.sources.is_empty());
-    assert!(t
-        .app
-        .state::<GlobalSettingsStore>()
-        .load_document_sources(KEY)
-        .unwrap()
-        .is_empty());
+    assert!(t.app.state::<GlobalSettingsStore>().load_document_sources(KEY).unwrap().is_empty());
 }
 
 // DCL-FR-VXXI, DCL-FR-FGGU: the Files picker adds each supported file and counts
@@ -249,22 +233,13 @@ fn removing_a_source_closes_its_reach_before_the_command_returns() {
     let fs = t.app.state::<FsAccessState>();
     assert!(t.collection().read_document(&fs, &id).is_ok());
 
-    let snapshot =
-        lifecycle::remove_source(&t.handle(), &t.folder_source("refs").path).unwrap();
+    let snapshot = lifecycle::remove_source(&t.handle(), &t.folder_source("refs").path).unwrap();
     assert!(snapshot.sources.is_empty());
     assert!(snapshot.documents.is_empty());
-    assert_eq!(
-        t.collection().read_document(&fs, &id).unwrap_err().code(),
-        "unknown_document"
-    );
+    assert_eq!(t.collection().read_document(&fs, &id).unwrap_err().code(), "unknown_document");
     assert!(fs.documents().is_none());
     assert_eq!(std::fs::read_to_string(a).unwrap(), "alpha");
-    assert!(t
-        .app
-        .state::<GlobalSettingsStore>()
-        .load_document_sources(KEY)
-        .unwrap()
-        .is_empty());
+    assert!(t.app.state::<GlobalSettingsStore>().load_document_sources(KEY).unwrap().is_empty());
 }
 
 // DCL-FR-XHSJ: closing the project stops the watch, discards the snapshot and the
@@ -283,16 +258,11 @@ fn closing_the_project_discards_the_collection() {
     assert!(!t.app.state::<DocumentsWatcher>().is_armed());
     assert!(t.app.state::<FsAccessState>().documents().is_none());
     assert_eq!(
-        lifecycle::add_sources(&t.handle(), &[t.folder_source("refs")])
-            .unwrap_err()
-            .code(),
+        lifecycle::add_sources(&t.handle(), &[t.folder_source("refs")]).unwrap_err().code(),
         "no_project_open"
     );
     // The references are still stored: a close discards memory, not the list.
-    assert_eq!(
-        t.app.state::<GlobalSettingsStore>().load_document_sources(KEY).unwrap().len(),
-        1
-    );
+    assert_eq!(t.app.state::<GlobalSettingsStore>().load_document_sources(KEY).unwrap().len(), 1);
 }
 
 // BMI-FR-WBKZ, BMI-FR-FGGU: the `documents` index holds the text of each
@@ -301,7 +271,10 @@ fn closing_the_project_discards_the_collection() {
 #[test]
 fn the_documents_index_holds_document_text_under_document_ids() {
     let t = App::new();
-    t.write("refs/guide.md", "# Alpha section\n\nzebrafish habitat\n\n# Beta section\n\nquokka diet");
+    t.write(
+        "refs/guide.md",
+        "# Alpha section\n\nzebrafish habitat\n\n# Beta section\n\nquokka diet",
+    );
     t.write("refs/notes.txt", "# not a heading\n\nplatypus venom");
     t.write("refs/paper.pdf", "narwhal tusk anatomy");
     t.write("refs/scan.pdf", "   ");
@@ -313,11 +286,9 @@ fn the_documents_index_holds_document_text_under_document_ids() {
     assert_eq!(snapshot.file_count(IndexId::Documents), 3, "the scan with no text adds none");
     let docs = t.collection().snapshot().unwrap().documents;
     let id_of = |name: &str| docs.iter().find(|d| d.name == name).unwrap().id.clone();
-    for (query, name) in [
-        ("zebrafish", "guide.md"),
-        ("platypus", "notes.txt"),
-        ("narwhal", "paper.pdf"),
-    ] {
+    for (query, name) in
+        [("zebrafish", "guide.md"), ("platypus", "notes.txt"), ("narwhal", "paper.pdf")]
+    {
         let hits = t.hits(query);
         assert_eq!(hits.len(), 1, "{query}");
         assert_eq!(hits[0].document_id.as_deref(), Some(id_of(name).as_str()));
@@ -368,7 +339,7 @@ fn the_documents_index_outlives_a_worktree_change_and_goes_with_a_close() {
     assert_eq!(t.hits("capybara").len(), 1);
 
     let indexer = t.app.state::<Bm25Indexer>();
-    indexer.mount(&crate::fs::RootFs::for_root(&std::fs::canonicalize(second.path()).unwrap()));
+    indexer.mount(&crate::fs::RootFs::for_root(std::fs::canonicalize(second.path()).unwrap()));
     assert_eq!(indexer.snapshot().file_count(IndexId::Documents), 1);
     assert_eq!(t.hits("capybara").len(), 1, "kept across the worktree change");
 

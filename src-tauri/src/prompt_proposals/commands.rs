@@ -59,8 +59,11 @@ pub(super) fn announce<R: tauri::Runtime>(
 }
 
 /// PCP-FR-28: one `WARN` naming what refused and why.
-pub(super) fn log_refusal<R: tauri::Runtime>(app: &tauri::AppHandle<R>, operation: &'static str, reason: &str)
-where
+pub(super) fn log_refusal<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    operation: &'static str,
+    reason: &str,
+) where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
     logging::log_warn(
@@ -111,9 +114,7 @@ pub(super) fn require_store(project: &ProjectState) -> Result<fs::RootFs, String
 }
 
 pub(super) fn require_root(project: &ProjectState) -> Result<fs::RootFs, String> {
-    project
-        .require_root()
-        .map_err(|_| ERR_NO_PROJECT_OPEN.to_string())
+    project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())
 }
 
 /// PCP-FR-10 / PCP-FR-14: every proposal the artifact holds, after any
@@ -211,20 +212,15 @@ pub fn save_candidate_impl(
     // PCP-FR-24: checked before anything is written, so a stale save leaves the
     // candidate byte-for-byte as it was and the caller resolves the divergence
     // explicitly rather than discovering it after an overwrite.
-    let current = root
-        .sha256_file(&path)
-        .map_err(|_| ERR_PROPOSAL_NOT_FOUND.to_string())?;
+    let current = root.sha256_file(&path).map_err(|_| ERR_PROPOSAL_NOT_FOUND.to_string())?;
     if current != baseline_checksum {
         return Err(ERR_CANDIDATE_STALE.to_string());
     }
 
     // PCP-FR-09: written atomically and verbatim. A candidate is never
     // re-indented, normalised, re-encoded, or trimmed.
-    root.write_text_atomic(&path, content)
-        .map_err(|_| ERR_WRITE_FAILED.to_string())?;
-    let checksum = root
-        .sha256_file(&path)
-        .map_err(|_| ERR_WRITE_FAILED.to_string())?;
+    root.write_text_atomic(&path, content).map_err(|_| ERR_WRITE_FAILED.to_string())?;
+    let checksum = root.sha256_file(&path).map_err(|_| ERR_WRITE_FAILED.to_string())?;
 
     // PCP-FR-22: the flag describes the *text*, so an edit that restores the
     // agent's own bytes exactly clears it again.
@@ -259,17 +255,14 @@ where
     // CMS-FR-12 / PCP-FR-16: resolved before anything is written, so a decision
     // that cannot be attributed changes neither the file nor the record.
     let by = comments::acting_participant(&store, &project)?;
-    decide(
-        &app,
-        &root,
-        &repo_store,
-        &proposal_id,
-        Decision::Accept,
-        feedback.as_deref(),
-        &by,
-        &tracker,
-    )
-    .inspect_err(|e| log_refusal(&app, "apply", e))
+    let request = DecisionRequest {
+        proposal_id: &proposal_id,
+        decision: Decision::Accept,
+        feedback: feedback.as_deref(),
+        by: &by,
+    };
+    decide(&app, &root, &repo_store, request, &tracker)
+        .inspect_err(|e| log_refusal(&app, "apply", e))
 }
 
 #[tauri::command]
@@ -287,17 +280,14 @@ where
     let root = require_root(&project)?;
     let repo_store = require_store(&project)?;
     let by = comments::acting_participant(&store, &project)?;
-    decide(
-        &app,
-        &root,
-        &repo_store,
-        &proposal_id,
-        Decision::Decline,
-        feedback.as_deref(),
-        &by,
-        &tracker,
-    )
-    .inspect_err(|e| log_refusal(&app, "decline", e))
+    let request = DecisionRequest {
+        proposal_id: &proposal_id,
+        decision: Decision::Decline,
+        feedback: feedback.as_deref(),
+        by: &by,
+    };
+    decide(&app, &root, &repo_store, request, &tracker)
+        .inspect_err(|e| log_refusal(&app, "decline", e))
 }
 
 /// PCP-FR-14: finish an acceptance whose decision comment is still owed.
@@ -325,10 +315,11 @@ where
     let record = read_proposal(&root, &proposal_id)?;
     let (_, discussion) = locate_thread(&root, &repo_store, &record.thread_id)?;
     let comment_id = match &reconciled {
-        Reconciliation::Settled {
-            proposal_id: completed,
-            comment_id,
-        } if completed == &proposal_id => comment_id.clone(),
+        Reconciliation::Settled { proposal_id: completed, comment_id }
+            if completed == &proposal_id =>
+        {
+            comment_id.clone()
+        }
         _ => None,
     };
     Ok(PromptDecisionOutcome {

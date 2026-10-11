@@ -211,11 +211,7 @@ fn parse_expected(map: &Map<String, Value>) -> Result<Expected, MismatchType> {
         Some(value) => StdinExpectation::Exact(parse_payload(value)?),
     };
 
-    Ok(Expected {
-        args,
-        required_args,
-        stdin,
-    })
+    Ok(Expected { args, required_args, stdin })
 }
 
 fn parse_response(map: &Map<String, Value>) -> Result<Response, MismatchType> {
@@ -246,12 +242,7 @@ fn parse_response(map: &Map<String, Value>) -> Result<Response, MismatchType> {
         },
     };
 
-    Ok(Response {
-        stdout,
-        stderr,
-        exit_code,
-        delay_ms,
-    })
+    Ok(Response { stdout, stderr, exit_code, delay_ms })
 }
 
 /// ACM-FR-09: a bare string, or an object naming one of the two encodings. The
@@ -262,14 +253,9 @@ fn parse_payload(value: &Value) -> Result<Vec<u8>, MismatchType> {
         Value::String(text) => Ok(text.as_bytes().to_vec()),
         Value::Object(map) => {
             deny_unknown(map, &["encoding", "value"])?;
-            let encoding = map
-                .get("encoding")
-                .and_then(Value::as_str)
-                .ok_or(MismatchType::BadEncoding)?;
-            let text = map
-                .get("value")
-                .and_then(Value::as_str)
-                .ok_or(MismatchType::BadType)?;
+            let encoding =
+                map.get("encoding").and_then(Value::as_str).ok_or(MismatchType::BadEncoding)?;
+            let text = map.get("value").and_then(Value::as_str).ok_or(MismatchType::BadType)?;
 
             match encoding {
                 "utf8" => Ok(text.as_bytes().to_vec()),
@@ -306,10 +292,7 @@ mod tests {
     }"#;
 
     fn with_response(body: &str) -> String {
-        format!(
-            r#"{{"version":1,"expected":{{}},"response":{}}}"#,
-            body
-        )
+        format!(r#"{{"version":1,"expected":{{}},"response":{}}}"#, body)
     }
 
     fn with_expected(body: &str) -> String {
@@ -452,10 +435,8 @@ mod tests {
 
     #[test]
     fn a_bare_string_is_the_utf8_object_form() {
-        let bare = parse(&with_response(
-            r#"{"stdout":"héllo\n","stderr":"","exit_code":0}"#,
-        ))
-        .unwrap();
+        let bare =
+            parse(&with_response(r#"{"stdout":"héllo\n","stderr":"","exit_code":0}"#)).unwrap();
         let object = parse(&with_response(
             r#"{"stdout":{"encoding":"utf8","value":"héllo\n"},"stderr":"","exit_code":0}"#,
         ))
@@ -492,11 +473,7 @@ mod tests {
             r#"{"stdout":{"encoding":"base64","value":"!!!!"},"stderr":"","exit_code":0}"#,
             r#"{"stdout":{"value":"x"},"stderr":"","exit_code":0}"#,
         ] {
-            assert_eq!(
-                parse(&with_response(body)),
-                Err(MismatchType::BadEncoding),
-                "for {body}"
-            );
+            assert_eq!(parse(&with_response(body)), Err(MismatchType::BadEncoding), "for {body}");
         }
     }
 
@@ -507,11 +484,7 @@ mod tests {
             r#"{"stdout":["a"],"stderr":"","exit_code":0}"#,
             r#"{"stdout":null,"stderr":"","exit_code":0}"#,
         ] {
-            assert_eq!(
-                parse(&with_response(body)),
-                Err(MismatchType::BadType),
-                "for {body}"
-            );
+            assert_eq!(parse(&with_response(body)), Err(MismatchType::BadType), "for {body}");
         }
     }
 
@@ -532,9 +505,7 @@ mod tests {
     #[test]
     fn exit_code_accepts_the_whole_portable_range_but_the_reserved_codes() {
         for code in [0u16, 1, 42, 63, 66, 254, 255] {
-            let text = with_response(&format!(
-                r#"{{"stdout":"","stderr":"","exit_code":{code}}}"#
-            ));
+            let text = with_response(&format!(r#"{{"stdout":"","stderr":"","exit_code":{code}}}"#));
             assert_eq!(parse(&text).unwrap().response.exit_code, code as u8);
         }
     }
@@ -595,30 +566,21 @@ mod tests {
     #[test]
     fn args_rejects_a_non_list_or_a_non_string_element() {
         for body in [r#"{"args":"-p"}"#, r#"{"args":[1]}"#, r#"{"args":[null]}"#] {
-            assert_eq!(
-                parse(&with_expected(body)),
-                Err(MismatchType::BadType),
-                "for {body}"
-            );
+            assert_eq!(parse(&with_expected(body)), Err(MismatchType::BadType), "for {body}");
         }
     }
 
     #[test]
     fn required_args_accepts_both_forms_and_an_empty_list() {
-        let scenario =
-            parse(&with_expected(r#"{"required_args":[{"value":"-p"},{"name":"prompt","value":"hi"}]}"#))
-                .unwrap();
+        let scenario = parse(&with_expected(
+            r#"{"required_args":[{"value":"-p"},{"name":"prompt","value":"hi"}]}"#,
+        ))
+        .unwrap();
         assert_eq!(
             scenario.expected.required_args,
             Some(vec![
-                Requirement {
-                    name: None,
-                    value: "-p".into()
-                },
-                Requirement {
-                    name: Some("prompt".into()),
-                    value: "hi".into()
-                },
+                Requirement { name: None, value: "-p".into() },
+                Requirement { name: Some("prompt".into()), value: "hi".into() },
             ])
         );
 
@@ -635,11 +597,7 @@ mod tests {
             r#"{"required_args":[{"value":"a","name":2}]}"#,
             r#"{"required_args":["a"]}"#,
         ] {
-            assert_eq!(
-                parse(&with_expected(body)),
-                Err(MismatchType::BadType),
-                "for {body}"
-            );
+            assert_eq!(parse(&with_expected(body)), Err(MismatchType::BadType), "for {body}");
         }
     }
 
@@ -663,10 +621,7 @@ mod tests {
     fn stdin_accepts_base64_bytes() {
         let scenario =
             parse(&with_expected(r#"{"stdin":{"encoding":"base64","value":"AAE="}}"#)).unwrap();
-        assert_eq!(
-            scenario.expected.stdin,
-            StdinExpectation::Exact(vec![0x00, 0x01])
-        );
+        assert_eq!(scenario.expected.stdin, StdinExpectation::Exact(vec![0x00, 0x01]));
     }
 
     // --- structural -------------------------------------------------------

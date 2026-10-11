@@ -7,6 +7,7 @@ use crate::drafts::DraftStatus;
 
 fn link(number: u64) -> crate::drafts::GithubIssueLink {
     crate::drafts::GithubIssueLink {
+        repository_host: "github.com".into(),
         repository_owner: "acme".into(),
         repository_name: "widgets".into(),
         issue_number: number,
@@ -83,15 +84,13 @@ fn the_publication_repository_resolves_without_a_draft() {
     assert_eq!(
         resolved,
         PublicationRepository {
+            repository_host: "github.com".into(),
             remote_name: "origin".into(),
             repository_owner: "acme".into(),
             repository_name: "ydan-widgets".into(),
         }
     );
-    assert!(fake
-        .calls()
-        .iter()
-        .all(|c| matches!(c, Call::Probe(_))), "only the read-only probe");
+    assert!(fake.calls().iter().all(|c| matches!(c, Call::Probe(_))), "only the read-only probe");
 
     assert_eq!(
         flow::resolve_repository_from(&root, &[], Some("secret"), &fake),
@@ -116,7 +115,11 @@ fn the_publication_repository_resolves_without_a_draft() {
 
 /// A mock application with the project open and `fake` behind the issues
 /// seam, for the command bodies.
-fn mock_app_for(dir: &tempfile::TempDir, store: &tempfile::TempDir, fake: std::sync::Arc<FakeGithub>) -> tauri::App<tauri::test::MockRuntime> {
+fn mock_app_for(
+    dir: &tempfile::TempDir,
+    store: &tempfile::TempDir,
+    fake: std::sync::Arc<FakeGithub>,
+) -> tauri::App<tauri::test::MockRuntime> {
     use tauri::Manager;
     let root = std::fs::canonicalize(dir.path()).unwrap();
     let store_root = std::fs::canonicalize(store.path()).unwrap();
@@ -128,7 +131,10 @@ fn mock_app_for(dir: &tempfile::TempDir, store: &tempfile::TempDir, fake: std::s
     app.manage(crate::global_settings::GlobalSettingsStore::in_memory());
     app.manage(crate::github_tokens::GithubTokens::default());
     let handle = app.handle().clone();
-    handle.state::<crate::fs::FsAccessState>().install_for_worktree_and(&root, &store_root).unwrap();
+    handle
+        .state::<crate::fs::FsAccessState>()
+        .install_for_worktree_and(&root, &store_root)
+        .unwrap();
     let access = handle.state::<crate::fs::FsAccessState>().get().unwrap();
     let project = handle.state::<crate::project::ProjectState>();
     project.set_root_with_access(root.clone(), Some(access));
@@ -152,10 +158,20 @@ fn every_publication_command_refuses_a_shadow_draft() {
     let refusal = Err("draft_github_shadow".to_string());
 
     assert_eq!(
-        crate::github_publication::publish_draft_to_github_impl(&handle, id.clone(), "origin".into(), true, Default::default()).map(|_| ()),
+        crate::github_publication::publish_draft_to_github_impl(
+            &handle,
+            id.clone(),
+            "origin".into(),
+            true,
+            Default::default()
+        )
+        .map(|_| ()),
         refusal
     );
-    assert_eq!(crate::github_publication::retry_draft_publication_impl(&handle, id.clone()).map(|_| ()), refusal);
+    assert_eq!(
+        crate::github_publication::retry_draft_publication_impl(&handle, id.clone()).map(|_| ()),
+        refusal
+    );
     assert_eq!(
         crate::github_publication::resolve_draft_publication_conflict_impl(
             &handle,
@@ -165,8 +181,14 @@ fn every_publication_command_refuses_a_shadow_draft() {
         .map(|_| ()),
         refusal
     );
-    assert_eq!(crate::github_publication::cancel_draft_publication_conflict_impl(&handle, id.clone()), refusal);
-    assert_eq!(crate::github_publication::cancel_draft_publication_attempt_impl(&handle, id.clone()), refusal);
+    assert_eq!(
+        crate::github_publication::cancel_draft_publication_conflict_impl(&handle, id.clone()),
+        refusal
+    );
+    assert_eq!(
+        crate::github_publication::cancel_draft_publication_attempt_impl(&handle, id.clone()),
+        refusal
+    );
     assert_eq!(
         crate::github_publication::list_publication_remotes_impl(&handle, id.clone()).map(|_| ()),
         refusal
@@ -193,7 +215,10 @@ fn a_shadow_link_that_is_not_a_github_issue_is_refused() {
     ] {
         let mut hostile = link(4);
         hostile.issue_url = url.into();
-        let id = crate::drafts::create_github_shadow_draft(&root, "Task", "b", hostile).unwrap().draft.id;
+        let id = crate::drafts::create_github_shadow_draft(&root, "Task", "b", hostile)
+            .unwrap()
+            .draft
+            .id;
         assert_eq!(flow::is_recorded_issue_url(&root, &id, url), Ok(false), "{url}");
     }
 }

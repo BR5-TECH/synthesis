@@ -22,10 +22,10 @@ fn the_state_the_application_manages_may_dispatch_a_run() {
     assert_eq!(dispatch.turns_taken(), 2);
 }
 
-/// GRD-FR-BNTC: a run resting `blocked` still holds its stream, so the run
+/// GRD-FR-BNTC: a run resting `blocked` still holds its queue, so the run
 /// behind it does not start on top of the work it left standing.
 #[test]
-fn a_blocked_run_keeps_its_stream() {
+fn a_blocked_run_keeps_its_queue() {
     let fx = Fixture::new();
     let stream = fx.stream("editor");
     // A captured prompt of nothing is refused before any container exists
@@ -35,30 +35,26 @@ fn a_blocked_run_keeps_its_stream() {
 
     let blocked = fx.drive(&blocked, ScriptedDispatch::new(Vec::new()));
     assert_eq!(blocked.state, GraduationRunState::Blocked);
-    assert!(blocked.holds_stream());
+    assert!(blocked.holds_queue());
 
-    let held = fx
-        .app
-        .state::<GraduationState>()
-        .holder_of(&stream.id)
-        .expect("the stream is still held");
-    assert_eq!(held, blocked.id);
+    assert!(
+        fx.app.state::<GraduationState>().holder_of(&stream.id).is_none(),
+        "the loop that drove the run holds no claim once it has ended"
+    );
     let record = crate::streams::stream_of(&fx.app, &stream.id).expect("the stream");
     assert_eq!(record.busy_run_id.as_deref(), Some(blocked.id.as_str()));
 
     let second = ScriptedDispatch::new(vec![Turn::work(), Turn::ready()]);
-    assert!(
-        !fx.try_drive(&behind, second.clone()),
-        "the run behind a blocked one waits"
-    );
+    assert!(!fx.try_drive(&behind, second.clone()), "the run behind a blocked one waits");
     assert_eq!(second.turns_taken(), 0);
     assert_eq!(fx.reload(&behind.id).state, GraduationRunState::Queued);
 }
 
-/// GRD-FR-CYIB: clearing the condition gives the stream back, and the queue
-/// then advances.
+/// GRD-FR-CYIB, GRD-FR-BNTC: clearing the condition takes no new claim. The run
+/// goes back to `queued` still holding its queue and its slot, so the run behind
+/// it stays behind it.
 #[test]
-fn continuing_a_blocked_run_gives_the_stream_back() {
+fn continuing_a_blocked_run_keeps_its_queue() {
     let fx = Fixture::new();
     let stream = fx.stream("editor");
     let blocked = fx.enqueue(&stream, "   ");
@@ -69,20 +65,22 @@ fn continuing_a_blocked_run_gives_the_stream_back() {
     // The dispatch the command starts is not this test's subject, so the loop
     // is turned off for the one call that would start it.
     fx.app.state::<GraduationState>().set_loop_enabled(false);
-    let continued =
-        crate::graduation::continue_graduation_run(fx.app.clone(), blocked.id.clone())
-            .expect("the run is continued");
+    let continued = crate::graduation::continue_graduation_run(fx.app.clone(), blocked.id.clone())
+        .expect("the run is continued");
     fx.app.state::<GraduationState>().set_loop_enabled(true);
 
     assert_eq!(continued.state, GraduationRunState::Queued);
     assert!(continued.blocker.is_none());
-    assert!(fx.app.state::<GraduationState>().holder_of(&stream.id).is_none());
+    assert!(
+        continued.holds_queue() && continued.holds_slot(),
+        "a continued run still holds its queue and its slot"
+    );
     let record = crate::streams::stream_of(&fx.app, &stream.id).expect("the stream");
-    assert_eq!(record.busy_run_id, None, "the durable mark is cleared too");
+    assert_eq!(record.busy_run_id.as_deref(), Some(blocked.id.as_str()), "the durable mark stays");
 }
 
-/// GRD-FR-BNTC: a run that came to rest holding nothing releases its stream,
-/// and the run behind it starts from what it committed.
+/// GRD-FR-BNTC: a run that is completed releases its stream, and the run behind
+/// it starts from what it committed.
 #[test]
 fn a_completed_run_frees_its_stream_and_the_next_run_stacks_on_it() {
     let fx = Fixture::new();
@@ -91,10 +89,7 @@ fn a_completed_run_frees_its_stream_and_the_next_run_stacks_on_it() {
 
     let first = fx.drive(
         &first,
-        ScriptedDispatch::new(vec![
-            Turn::work().writing("src/panel.ts", "1\n"),
-            Turn::ready(),
-        ]),
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]),
     );
     assert_eq!(first.state, GraduationRunState::Completed);
     assert!(fx.app.state::<GraduationState>().holder_of(&stream.id).is_none());
@@ -102,10 +97,8 @@ fn a_completed_run_frees_its_stream_and_the_next_run_stacks_on_it() {
     assert_eq!(record.busy_run_id, None);
 
     let second = fx.enqueue(&stream, "Write the header.");
-    let dispatch = ScriptedDispatch::new(vec![
-        Turn::work().writing("src/header.ts", "1\n"),
-        Turn::ready(),
-    ]);
+    let dispatch =
+        ScriptedDispatch::new(vec![Turn::work().writing("src/header.ts", "1\n"), Turn::ready()]);
     let second = fx.drive(&second, dispatch.clone());
 
     assert_eq!(second.state, GraduationRunState::Completed);
@@ -121,8 +114,8 @@ fn a_completed_run_frees_its_stream_and_the_next_run_stacks_on_it() {
     assert!(review.tree.contains_key("src/panel.ts"));
 }
 
-/// GRD-FR-XVUD: a relaunch marks a `working` run abandoned and frees its
-/// stream, and leaves a `blocked` run exactly as the author must find it.
+/// GRD-FR-XVUD: a relaunch marks a `working` run abandoned and keeps its hold,
+/// and leaves a `blocked` run exactly as the author must find it.
 #[test]
 fn a_relaunch_sweeps_a_working_run_and_leaves_a_blocked_one() {
     let fx = Fixture::new();
@@ -152,12 +145,9 @@ fn a_relaunch_sweeps_a_working_run_and_leaves_a_blocked_one() {
         Some(GraduationInterruptionReason::ExecutionAbandoned),
         "and the author is told why"
     );
-    assert_eq!(
-        crate::streams::stream_of(&fx.app, &other.id)
-            .expect("the stream")
-            .busy_run_id,
-        None,
-        "and the stream it held is released"
+    assert!(
+        swept.holds_queue() && swept.holds_slot(),
+        "and it keeps the queue and the slot it held (GRD-FR-BSWV)"
     );
     assert_eq!(
         fx.reload(&blocked.id).state,
@@ -186,15 +176,18 @@ fn a_cancelled_turn_is_not_called_an_author_pause() {
     let run = fx.drive(&run, dispatch);
 
     let interruption = run.interruption.expect("an interruption");
+    assert_eq!(interruption.reason, GraduationInterruptionReason::ApplicationShutdown);
+    assert!(fx.reload(&run.id).holds_queue(), "GRD-FR-BNTC: an interrupted run holds its queue");
+    let record = crate::streams::stream_of(&fx.app, &stream.id).expect("the stream");
     assert_eq!(
-        interruption.reason,
-        GraduationInterruptionReason::ApplicationShutdown
+        record.busy_run_id.as_deref(),
+        Some(run.id.as_str()),
+        "the stream stays marked busy by the run at rest"
     );
     assert!(
-        interruption.stream_released,
-        "an interrupted run holds no stream, so the slot is reported as given back"
+        fx.app.state::<GraduationState>().holder_of(&stream.id).is_none(),
+        "the loop that drove the run holds no claim once it has ended"
     );
-    assert!(fx.app.state::<GraduationState>().holder_of(&stream.id).is_none());
 }
 
 /// GRD-FR-MDQZ: the author's own pause is reported as one.
@@ -212,10 +205,7 @@ fn the_authors_own_pause_is_reported_as_one() {
     })]);
     let run = fx.drive(&run, dispatch);
 
-    assert_eq!(
-        run.interruption.map(|i| i.reason),
-        Some(GraduationInterruptionReason::AuthorPause)
-    );
+    assert_eq!(run.interruption.map(|i| i.reason), Some(GraduationInterruptionReason::AuthorPause));
 }
 
 /// GRL-FR-ISIL, GXD-FR-GMDI, GXD-FR-PWYD: a run that stopped and was continued goes on with
@@ -274,7 +264,7 @@ fn an_answered_escalation_continues_its_pass() {
     let run = fx.drive(
         &run,
         ScriptedDispatch::new(vec![Turn::answering(Answer::Escalate(vec![
-            "Which limit stands?".to_string(),
+            "Which limit stands?".to_string()
         ]))]),
     );
     assert_eq!(run.state, GraduationRunState::AwaitingAuthor);
@@ -315,11 +305,7 @@ fn an_answered_escalation_continues_its_pass() {
     // session, and it reports the purpose it actually has.
     assert_eq!(work[1].purpose, "revise");
     assert_eq!(work[1].pass, 2);
-    assert_eq!(
-        work[1].list_len("escalation_answers"),
-        0,
-        "the answers are not sent a second time"
-    );
+    assert_eq!(work[1].list_len("escalation_answers"), 0, "the answers are not sent a second time");
     assert!(run.checkpoint.pending_escalation_answers.is_empty());
     assert!(run.checkpoint.resume.is_none());
 }

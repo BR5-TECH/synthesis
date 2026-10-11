@@ -24,10 +24,7 @@ fn opening_a_thread_writes_the_pair_and_returns_it_folded() {
 
     assert_eq!(thread.comments.len(), 1);
     assert_eq!(thread.comments[0].body, "needs tightening");
-    assert!(matches!(
-        thread.comments[0].author,
-        Participant::Human { .. }
-    ));
+    assert!(matches!(thread.comments[0].author, Participant::Human { .. }));
     assert_eq!(thread.created_at, thread.updated_at);
     assert!(!thread.locked);
     assert!(!thread.resolved);
@@ -87,20 +84,11 @@ fn the_same_artifact_path_resolves_to_the_same_log_filename_everywhere() {
 fn an_append_writes_into_the_store_and_leaves_no_git_artifact() {
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
-    open(
-        root,
-        "specs/a.md",
-        anchor(0, 3, "abc"),
-        "hi",
-        "2026-01-01T00:00:00Z",
-    );
+    open(root, "specs/a.md", anchor(0, 3, "abc"), "hi", "2026-01-01T00:00:00Z");
 
     // CMS-FR-01: `comments/<log-id>.jsonl` inside the store, with no
     // `.synthesis/` anywhere in the path.
-    let log = dir
-        .path()
-        .join(COMMENTS_REL)
-        .join(format!("{}.jsonl", log_id("specs/a.md")));
+    let log = dir.path().join(COMMENTS_REL).join(format!("{}.jsonl", log_id("specs/a.md")));
     assert!(log.is_file(), "the log is written into the store");
     assert!(!dir.path().join(".synthesis").exists(), "no project folder");
 
@@ -121,13 +109,7 @@ fn a_log_whose_every_line_was_duplicated_folds_to_the_same_state() {
     // idempotent over it or every conversation doubles (RMS-FR-SUAK).
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
-    let thread = open(
-        root,
-        "specs/a.md",
-        anchor(0, 3, "abc"),
-        "first",
-        "2026-01-01T00:00:00Z",
-    );
+    let thread = open(root, "specs/a.md", anchor(0, 3, "abc"), "first", "2026-01-01T00:00:00Z");
     add_comment_in(
         root,
         "specs/a.md",
@@ -135,8 +117,8 @@ fn a_log_whose_every_line_was_duplicated_folds_to_the_same_state() {
         "second".into(),
         vec![],
         Vec::new(),
-        &human("octocat"),
-        "2026-01-02T00:00:00Z")
+        Stamp { by: &human("octocat"), at: "2026-01-02T00:00:00Z" },
+    )
     .unwrap();
 
     let before = list_fragment_discussions_in(root, "specs/a.md");
@@ -157,13 +139,7 @@ fn damaged_and_future_lines_are_skipped_and_left_on_disk() {
     // CMS-FR-07 / CMS-FR-08.
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
-    let thread = open(
-        root,
-        "specs/a.md",
-        anchor(0, 3, "abc"),
-        "first",
-        "2026-01-01T00:00:00Z",
-    );
+    let thread = open(root, "specs/a.md", anchor(0, 3, "abc"), "first", "2026-01-01T00:00:00Z");
     add_comment_in(
         root,
         "specs/a.md",
@@ -171,8 +147,8 @@ fn damaged_and_future_lines_are_skipped_and_left_on_disk() {
         "second".into(),
         vec![],
         Vec::new(),
-        &human("raver119"),
-        "2026-01-02T00:00:00Z")
+        Stamp { by: &human("raver119"), at: "2026-01-02T00:00:00Z" },
+    )
     .unwrap();
 
     let path = log_path(root, "specs/a.md").unwrap();
@@ -421,7 +397,11 @@ fn a_second_opening_for_one_thread_id_cannot_rewrite_its_anchor() {
     };
     let folded = fold_events("specs/a.md", vec![first, second, comment]);
     assert_eq!(folded.len(), 1);
-    assert_eq!(folded[0].fragment_target, Some(FragmentTarget::in_artifact("specs/a.md", 0, 3, "abc")), "the first opening wins");
+    assert_eq!(
+        folded[0].fragment_target,
+        Some(FragmentTarget::in_artifact("specs/a.md", 0, 3, "abc")),
+        "the first opening wins"
+    );
 }
 
 #[test]
@@ -478,14 +458,8 @@ fn an_id_that_would_escape_its_own_folder_is_refused_having_written_nothing() {
     let before = std::fs::read_dir(dir.path()).map(|e| e.count()).unwrap_or(0);
 
     for crafted in ["..", "../..", "a/b", ""] {
-        assert!(
-            draft_comments_dir(root, crafted).is_err(),
-            "{crafted} named a draft's folder",
-        );
-        assert!(
-            note_comments_dir(root, crafted).is_err(),
-            "{crafted} named a note's folder",
-        );
+        assert!(draft_comments_dir(root, crafted).is_err(), "{crafted} named a draft's folder",);
+        assert!(note_comments_dir(root, crafted).is_err(), "{crafted} named a note's folder",);
     }
     assert_eq!(
         std::fs::read_dir(dir.path()).map(|e| e.count()).unwrap_or(0),
@@ -502,13 +476,7 @@ fn an_id_that_would_escape_its_own_folder_is_refused_having_written_nothing() {
 fn concurrent_appends_all_land_and_a_duplicated_line_folds_once() {
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
-    let thread = open(
-        root,
-        "specs/a.md",
-        anchor(0, 3, "abc"),
-        "first",
-        "2026-01-01T00:00:00Z",
-    );
+    let thread = open(root, "specs/a.md", anchor(0, 3, "abc"), "first", "2026-01-01T00:00:00Z");
 
     // Ten appends from ten threads into one log, as two application processes
     // holding one store would make them.
@@ -523,8 +491,7 @@ fn concurrent_appends_all_land_and_a_duplicated_line_folds_once() {
                     format!("reply {n}"),
                     Vec::new(),
                     Vec::new(),
-                    &human("raver119"),
-                    "2026-01-01T00:00:01Z",
+                    Stamp { by: &human("raver119"), at: "2026-01-01T00:00:01Z" },
                 )
                 .expect("append");
             });
@@ -568,9 +535,6 @@ fn no_write_of_this_module_arms_the_debounced_commit() {
         include_str!("../fold.rs"),
         include_str!("../constants.rs"),
     ] {
-        assert!(
-            !source.contains("storage_floor::commit"),
-            "a conversation reaches the committer",
-        );
+        assert!(!source.contains("storage_floor::commit"), "a conversation reaches the committer",);
     }
 }

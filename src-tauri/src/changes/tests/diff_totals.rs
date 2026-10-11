@@ -82,14 +82,8 @@ fn a_clean_working_tree_totals_to_zero() {
 
 #[test]
 fn diff_totals_serialise_camel_case() {
-    let json = serde_json::to_value(DiffTotals {
-        added_lines: 412,
-        removed_lines: 87,
-        file_count: 5,
-    })
-    .unwrap();
-    assert_eq!(
-        json,
-        serde_json::json!({ "addedLines": 412, "removedLines": 87, "fileCount": 5 })
-    );
+    let json =
+        serde_json::to_value(DiffTotals { added_lines: 412, removed_lines: 87, file_count: 5 })
+            .unwrap();
+    assert_eq!(json, serde_json::json!({ "addedLines": 412, "removedLines": 87, "fileCount": 5 }));
 }

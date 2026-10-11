@@ -20,10 +20,14 @@ import { GITHUB_TOKEN_ERRORS } from "../types";
  */
 
 // Vitest runs with the project root as cwd.
-const RUST_SOURCE = readFileSync(
-  resolve(process.cwd(), "src-tauri/src/github_tokens.rs"),
-  "utf8",
-);
+const RUST_SOURCE = [
+  "src-tauri/src/github_tokens.rs",
+  // The host errors (`invalid_host`, `github_host_mismatch`) live beside the
+  // host rules.
+  "src-tauri/src/github_tokens/host.rs",
+]
+  .map((path) => readFileSync(resolve(process.cwd(), path), "utf8"))
+  .join("\n");
 
 /** Every `pub const ERR_NAME: &str = "value";` declared by the Rust module. */
 function rustErrorConstants(): Map<string, string> {

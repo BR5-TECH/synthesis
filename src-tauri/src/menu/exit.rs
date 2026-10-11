@@ -26,10 +26,7 @@ impl ExitGate {
     /// prevents the exit and waits for `finish_exit`), `false` to let it quit.
     /// Takes the clock so the policy is unit-testable.
     pub(super) fn claim_at(&self, now: Instant, grace: Duration) -> bool {
-        let mut slot = self
-            .held_since
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut slot = self.held_since.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         match *slot {
             // A hold is outstanding: keep holding while the frontend still has
             // time to answer, and let the quit through once it has run out.
@@ -44,10 +41,7 @@ impl ExitGate {
     /// Release the hold, so a later quit is held (and flushed) again. Called
     /// whichever way the frontend answered.
     pub fn release(&self) {
-        *self
-            .held_since
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+        *self.held_since.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
     }
 }
 

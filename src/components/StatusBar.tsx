@@ -23,11 +23,10 @@ export const OVERLAY_VISIBLE_ROWS = 5;
  * Three regions, each anchored independently to its own edge or to the strip's
  * centre (STB-FR-03), so an empty centre never lets the trailing controls drift:
  *
- *  - **leading** — the Global settings and Project settings buttons. Each opens
- *    its native settings **child window** (per `SWN-settings-windows.md`
- *    SWN-FR-01) and creates no tab; together with the application menu's two
- *    entries they are how either window is opened from the shell (STB-FR-04,
- *    SWN-FR-13).
+ *  - **leading** — the Settings button. It opens the native Settings **child
+ *    window** (per `SWN-settings-windows.md` SWN-FR-01) and creates no tab;
+ *    together with the application menu's entry it is how the window is opened
+ *    from the shell (STB-FR-04, SWN-FR-13).
  *  - **centre** — the most recently started in-flight operation, or nothing at
  *    all when none is running (STB-FR-05–STB-FR-09).
  *  - **trailing** — the project's line-ending convention, the active artifact's
@@ -38,10 +37,11 @@ export const OVERLAY_VISIBLE_ROWS = 5;
  * about it is persisted (STB-FR-02 / SNV-FR-42).
  */
 export interface StatusBarProps {
-  /** STB-FR-04: opens, or focuses, the Global settings child window. */
-  onGlobalSettings: () => void;
-  /** STB-FR-04: opens, or focuses, the Project settings child window. */
-  onSettings: () => void;
+  /**
+   * STB-FR-04: opens, or focuses, the Settings child window. Handed the button,
+   * so focus can return to it when the window closes (SWN-FR-FCRT).
+   */
+  onSettings: (invoker: HTMLElement) => void;
 
   // --- progress (STB-FR-05–STB-FR-15) ---
   operations: Operation[];
@@ -72,7 +72,6 @@ export interface StatusBarProps {
 }
 
 export function StatusBar({
-  onGlobalSettings,
   onSettings,
   operations,
   overlayOpen,
@@ -88,25 +87,16 @@ export function StatusBar({
   return (
     <div className="status-bar" data-testid="status-bar">
       <div className="status-bar__leading">
-        {/* STB-FR-04: graphical icon controls. Each opens its settings child
-            window, focuses that window when it is already open, and closes the
-            other one first when that one is (SWN-FR-05 … SWN-FR-07) — all of
-            which is the backend's single decision, so these only ask. Neither
-            creates a tab, and the activity bar carries no settings control
-            (SNV-FR-03). */}
+        {/* STB-FR-04: a graphical icon control. It opens the Settings child
+            window, or focuses it when it is already open (SWN-FR-05,
+            SWN-FR-06) — which is the backend's single decision, so this only
+            asks. It creates no tab, and the activity bar carries no settings
+            control (SNV-FR-03). */}
         <button
           className="status-bar__btn"
-          onClick={onGlobalSettings}
-          title="Global settings"
-          aria-label="Global settings"
-        >
-          <Icon.Boxes size={14} />
-        </button>
-        <button
-          className="status-bar__btn"
-          onClick={onSettings}
-          title="Project settings"
-          aria-label="Project settings"
+          onClick={(event) => onSettings(event.currentTarget)}
+          title="Settings"
+          aria-label="Settings"
         >
           <Icon.Settings size={14} />
         </button>
@@ -302,6 +292,7 @@ function InFlightOverlay({
     <div
       className="status-bar__overlay"
       data-testid="in-flight-overlay"
+      data-floating-overlay=""
       role="dialog"
       aria-label="In-flight operations"
     >

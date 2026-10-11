@@ -11,9 +11,7 @@ use super::*;
 /// here: the values mapped are `crate::ai_api`'s typed refusals, never a payload.
 pub(super) fn classify_endpoint_error(err: &str) -> &'static str {
     match err {
-        ai_api::ERR_KEYCHAIN_UNAVAILABLE | ai_api::ERR_KEY_UNAVAILABLE => {
-            FAIL_KEYCHAIN_UNAVAILABLE
-        }
+        ai_api::ERR_KEYCHAIN_UNAVAILABLE | ai_api::ERR_KEY_UNAVAILABLE => FAIL_KEYCHAIN_UNAVAILABLE,
         _ => FAIL_AGENT_UNAVAILABLE,
     }
 }
@@ -65,6 +63,9 @@ pub(super) fn log_turn_ended<R: tauri::Runtime>(
             // One of AGC-FR-15's own values, never a provider's message.
             "failure" => turn.failure.as_deref().unwrap_or("none"),
             "retryPermitted" => turn.retry_permitted,
+            // AGC-FR-RWPT: the host and the cause of a refused certificate.
+            "tlsHost" => turn.tls_failure.as_ref().map(|t| t.host.as_str()),
+            "tlsCause" => turn.tls_failure.as_ref().map(|t| t.cause.as_str()),
             "originKind" => turn.origin.kind().as_str(),
             "discussionId" => turn.origin.discussion_id(),
             // CVL-FR-28: the two counts separately, because a turn that made
@@ -83,23 +84,10 @@ pub(super) fn log_turn_ended<R: tauri::Runtime>(
     // than claiming a confident zero. Counts alone — nothing drawn from the
     // exchange and nothing of any key (CVL-FR-26, AGC-FR-26).
     if let Some(tokens) = counts.input_tokens {
-        fields.insert(
-            "cachedInputTokens".to_string(),
-            serde_json::json!(tokens.cached),
-        );
-        fields.insert(
-            "uncachedInputTokens".to_string(),
-            serde_json::json!(tokens.uncached),
-        );
+        fields.insert("cachedInputTokens".to_string(), serde_json::json!(tokens.cached));
+        fields.insert("uncachedInputTokens".to_string(), serde_json::json!(tokens.uncached));
     }
-    logging::log(
-        app,
-        buffer,
-        level,
-        &[Domain::Ai, Domain::Backend],
-        "agent turn ended",
-        fields,
-    );
+    logging::log(app, buffer, level, &[Domain::Ai, Domain::Backend], "agent turn ended", fields);
 }
 
 /// CVL-FR-28: what the terminal record reports about a turn's cost.
@@ -213,6 +201,20 @@ pub(super) fn record_refinement_lifecycle<R: tauri::Runtime>(
     );
 }
 
+/// How a turn ended: the terminal state that [`finish`] stamps, and what the
+/// path that ended the turn knows about it.
+#[derive(Clone, Copy)]
+pub(super) struct TurnEnding {
+    pub(super) state: AgentTurnState,
+    pub(super) failure: Option<&'static str>,
+    /// AGC-FR-31: whether this failure is one the author may ask again. Passed
+    /// rather than derived from `failure`, because `timed_out` names both the
+    /// retryable per-call deadline and the whole-turn one that is not
+    /// (CVL-FR-17, CVL-FR-18) — only the path that terminated the turn knows
+    /// which it was.
+    pub(super) recoverable: bool,
+}
+
 /// The one exit every path takes: stamp the terminal state, publish it exactly
 /// once, and release the progress operation (AGC-FR-21, AGC-FR-24).
 pub(super) fn finish<R: tauri::Runtime>(
@@ -220,16 +222,10 @@ pub(super) fn finish<R: tauri::Runtime>(
     turns: &TurnRegistry,
     progress_registry: &ProgressRegistry,
     turn_id: &str,
-    state: AgentTurnState,
-    failure: Option<&'static str>,
+    ending: TurnEnding,
     counts: TurnCounts,
-    // AGC-FR-31: whether this failure is one the author may ask again. Passed
-    // rather than derived from `failure`, because `timed_out` names both the
-    // retryable per-call deadline and the whole-turn one that is not
-    // (CVL-FR-17, CVL-FR-18) — only the path that terminated the turn knows
-    // which it was.
-    recoverable: bool,
 ) {
+    let TurnEnding { state, failure, recoverable } = ending;
     let Some((mut turn, operation, project_key, reached_model)) =
         turns.terminate(turn_id, state, failure)
     else {

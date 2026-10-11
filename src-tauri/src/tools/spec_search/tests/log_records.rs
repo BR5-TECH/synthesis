@@ -13,10 +13,9 @@ fn a_call_logs_what_was_asked_and_what_came_back_but_no_result_text() {
     let fixture = spec_project();
     let tool = SpecSearchTool::with_buffer(fixture.handle(), &SPS_BUFFER);
 
-    let output = block_on(tool.call(SpecificationSearchArgs {
-        query: "teardown".to_string(),
-        limit: Some(2),
-    }))
+    let output = block_on(
+        tool.call(SpecificationSearchArgs { query: "teardown".to_string(), limit: Some(2) }),
+    )
     .expect("succeeds");
     let _ = block_on(tool.call(SpecificationSearchArgs {
         // Untrimmed, so the blank behind the refusal is visible as the blank it
@@ -40,15 +39,9 @@ fn a_call_logs_what_was_asked_and_what_came_back_but_no_result_text() {
         let records = records_of(&SPS_BUFFER, domain);
         assert_eq!(records.len(), 2, "one INFO and one WARN under {domain:?}");
 
-        let info = records
-            .iter()
-            .find(|r| r.level == LogLevel::Info)
-            .expect("the success");
+        let info = records.iter().find(|r| r.level == LogLevel::Info).expect("the success");
         assert_eq!(info.fields["tool"], serde_json::json!(NAME));
-        assert_eq!(
-            info.fields["matches"],
-            serde_json::json!(output.specifications.len()),
-        );
+        assert_eq!(info.fields["matches"], serde_json::json!(output.specifications.len()),);
         assert_eq!(
             info.fields["query"],
             serde_json::json!("teardown"),
@@ -65,10 +58,7 @@ fn a_call_logs_what_was_asked_and_what_came_back_but_no_result_text() {
             "and what SPS-FR-06 made of it",
         );
 
-        let warn = records
-            .iter()
-            .find(|r| r.level == LogLevel::Warn)
-            .expect("the refusal");
+        let warn = records.iter().find(|r| r.level == LogLevel::Warn).expect("the refusal");
         assert_eq!(warn.fields["tool"], serde_json::json!(NAME));
         assert_eq!(warn.fields["reason"], serde_json::json!("invalid_arguments"));
         assert_eq!(
@@ -116,10 +106,7 @@ fn a_call_logs_what_was_asked_and_what_came_back_but_no_result_text() {
         "## Section 0",
         &output.specifications[0].path.clone(),
     ] {
-        assert!(
-            !rendered.contains(leak),
-            "a log record carried {leak:?} (SPS-FR-19)",
-        );
+        assert!(!rendered.contains(leak), "a log record carried {leak:?} (SPS-FR-19)",);
     }
 }
 
@@ -130,10 +117,9 @@ fn a_refusal_raised_before_the_search_still_names_what_was_asked() {
     let app = closed_project();
     let tool = SpecSearchTool::with_buffer(app.handle().clone(), &SPS_CLOSED_BUFFER);
 
-    let refusal = block_on(tool.call(SpecificationSearchArgs {
-        query: "teardown".to_string(),
-        limit: Some(1000),
-    }))
+    let refusal = block_on(
+        tool.call(SpecificationSearchArgs { query: "teardown".to_string(), limit: Some(1000) }),
+    )
     .expect_err("no project is open");
     assert_eq!(refusal, ToolRefusal::NoProjectOpen);
 
@@ -174,11 +160,9 @@ fn a_pathological_query_is_recorded_bounded_and_costs_the_record_nothing_else() 
         huge.len() > crate::logging::MAX_RECORD_BYTES,
         "the premise: unbounded, this argument alone oversizes the record",
     );
-    let output = block_on(tool.call(SpecificationSearchArgs {
-        query: huge.clone(),
-        limit: Some(1000),
-    }))
-    .expect("succeeds");
+    let output =
+        block_on(tool.call(SpecificationSearchArgs { query: huge.clone(), limit: Some(1000) }))
+            .expect("succeeds");
     assert!(
         !output.specifications.is_empty(),
         "the fixture matches, so the count below is a real number",
@@ -207,11 +191,7 @@ fn a_pathological_query_is_recorded_bounded_and_costs_the_record_nothing_else() 
         "and still names the count (SPS-FR-19)",
     );
     let logged = info.fields["query"].as_str().expect("a string");
-    assert_eq!(
-        logged.chars().count(),
-        513,
-        "512 characters and one ellipsis (SPS-FR-19)",
-    );
+    assert_eq!(logged.chars().count(), 513, "512 characters and one ellipsis (SPS-FR-19)",);
     assert_eq!(
         logged,
         format!("{}…", huge.chars().take(512).collect::<String>()),

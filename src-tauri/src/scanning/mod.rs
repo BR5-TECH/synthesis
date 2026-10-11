@@ -214,13 +214,7 @@ pub fn assign(
     // must stay within the project so a future resolver cannot be tricked.
     fsa::resolve_under(root, &rel)?;
     let mut current = load_assignments(root);
-    current.assignments.insert(
-        rel,
-        Assignment {
-            artifact_type,
-            scope,
-        },
-    );
+    current.assignments.insert(rel, Assignment { artifact_type, scope });
     save_assignments(root, &current)
 }
 
@@ -306,10 +300,7 @@ pub fn infer_from_path(rel: &str) -> Option<ArtifactType> {
     // the suffix; a JS project committing one is not describing a workflow, and
     // opening it on the Flow canvas would only fail to parse (FLO-FR-05). A bare
     // `.flow` with no stem is a tool's dotfile on the same reasoning.
-    if base_lower.ends_with(".flow")
-        && base_lower != ".flow"
-        && !base_lower.ends_with(".js.flow")
-    {
+    if base_lower.ends_with(".flow") && base_lower != ".flow" && !base_lower.ends_with(".js.flow") {
         return Some(ArtifactType::Flow);
     }
     if base_lower.ends_with(".scenario.md") {
@@ -371,9 +362,7 @@ pub fn read_content_facts(text: &str) -> ContentFacts {
         if line.starts_with([' ', '\t']) {
             continue; // nested under some other key, not the file's own
         }
-        if let Some(rest) = trimmed
-            .strip_prefix("type:")
-            .or_else(|| trimmed.strip_prefix("kind:"))
+        if let Some(rest) = trimmed.strip_prefix("type:").or_else(|| trimmed.strip_prefix("kind:"))
         {
             // Strip surrounding quotes a YAML author might add.
             let value = rest.trim().trim_matches(|c| c == '"' || c == '\'');
@@ -406,10 +395,7 @@ pub fn infer_from_content(text: &str) -> Option<ArtifactType> {
 /// problem.
 fn names_itself(rel: &str, artifact_type: Option<ArtifactType>) -> bool {
     artifact_type == Some(ArtifactType::Skill)
-        && rel
-            .rsplit('/')
-            .next()
-            .is_some_and(|base| base.eq_ignore_ascii_case("SKILL.md"))
+        && rel.rsplit('/').next().is_some_and(|base| base.eq_ignore_ascii_case("SKILL.md"))
 }
 
 /// Resolve a file's `(artifact_type, type_source)` by the fixed precedence
@@ -667,11 +653,7 @@ pub fn scan(root: &crate::fs::RootFs) -> TreeNode {
 /// by `comments::list_all_threads_in` to invert `comments::log_id` by
 /// enumeration (CMS-FR-33).
 pub fn file_rel_paths(root: &Path) -> Vec<String> {
-    walk_entries(root)
-        .into_iter()
-        .filter(|e| !e.is_dir)
-        .map(|e| e.rel)
-        .collect()
+    walk_entries(root).into_iter().filter(|e| !e.is_dir).map(|e| e.rel).collect()
 }
 
 /// Walk `root` into the flat entry list the pure builder consumes, applying the
@@ -757,9 +739,7 @@ fn is_pruned_dir(rel: &str) -> bool {
         ".synthesis/comments",
         ".synthesis/statistics",
     ];
-    PRUNED
-        .iter()
-        .any(|p| rel == *p || rel.starts_with(&format!("{p}/")))
+    PRUNED.iter().any(|p| rel == *p || rel.starts_with(&format!("{p}/")))
 }
 
 /// Forward-slash, root-relative rendering of a path.
@@ -878,10 +858,7 @@ impl CandidateStore {
         // so the last writer simply wins.
         let files = Arc::new(candidate_files(&scan(root)));
         if let Ok(mut guard) = self.inner.lock() {
-            *guard = Some(Mounted {
-                root: root.path().to_path_buf(),
-                files: Arc::clone(&files),
-            });
+            *guard = Some(Mounted { root: root.path().to_path_buf(), files: Arc::clone(&files) });
         }
         files
     }
@@ -904,10 +881,7 @@ impl CandidateStore {
     /// Whether a list is currently mounted. Test-facing: the teardown and
     /// invalidation claims of ASC-FR-17 have no other observable.
     pub fn is_mounted(&self) -> bool {
-        self.inner
-            .lock()
-            .map(|guard| guard.is_some())
-            .unwrap_or(false)
+        self.inner.lock().map(|guard| guard.is_some()).unwrap_or(false)
     }
 }
 
@@ -1016,11 +990,7 @@ pub struct TreeChangedPayload {
 /// a tab or a tree node for a path that never outlived one debounce window — so
 /// the state that would fix it buys no observable behaviour.
 pub fn removed_rel_paths(changed: &[String], root: &crate::fs::RootFs) -> Vec<String> {
-    changed
-        .iter()
-        .filter(|rel| root.file_info(rel).is_err())
-        .cloned()
-        .collect()
+    changed.iter().filter(|rel| root.file_info(rel).is_err()).cloned().collect()
 }
 
 /// True for the atomic-write temp files of `FSA-filesystem-access.md`

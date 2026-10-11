@@ -28,11 +28,7 @@ pub(super) fn collect_sources<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     root: &crate::fs::RootFs,
     scope: PassScope,
-) -> (
-    Vec<SourceFile>,
-    Vec<crate::skills::SkillDescriptor>,
-    BTreeMap<String, &'static str>,
-) {
+) -> (Vec<SourceFile>, Vec<crate::skills::SkillDescriptor>, BTreeMap<String, &'static str>) {
     let mut sources = Vec::new();
     if scope.artifacts {
         let candidates = app.state::<CandidateStore>().candidates(root);
@@ -81,10 +77,8 @@ pub(super) fn collect_sources<R: tauri::Runtime>(
             plain_text: false,
         });
     }
-    let exclusions: BTreeMap<String, &'static str> = excluded
-        .into_iter()
-        .map(|e| (e.path, e.reason))
-        .collect();
+    let exclusions: BTreeMap<String, &'static str> =
+        excluded.into_iter().map(|e| (e.path, e.reason)).collect();
     (sources, skills, exclusions)
 }
 
@@ -118,7 +112,11 @@ pub(super) fn log_skill_exclusions<R: tauri::Runtime>(
     }
 }
 
-pub(super) fn read_artifact(root: &crate::fs::RootFs, candidate: &Candidate, artifact_type: ArtifactType) -> SourceFile {
+pub(super) fn read_artifact(
+    root: &crate::fs::RootFs,
+    candidate: &Candidate,
+    artifact_type: ArtifactType,
+) -> SourceFile {
     let index = IndexId::for_artifact_type(artifact_type);
     let file = FileRef::artifact(candidate.path.clone());
     // BMI-FR-26: resolved through the `FSA-filesystem-access.md` gate rather
@@ -130,12 +128,7 @@ pub(super) fn read_artifact(root: &crate::fs::RootFs, candidate: &Candidate, art
         Ok(abs) => read_bounded(root, &abs),
         Err(e) => Err(format!("refused: {e}")),
     };
-    SourceFile {
-        index,
-        file,
-        text,
-        plain_text: false,
-    }
+    SourceFile { index, file, text, plain_text: false }
 }
 
 /// BMI-FR-28: the `notes` index's documents — one per persisted note, each the
@@ -156,10 +149,7 @@ pub(super) fn collect_notes(root: &crate::fs::RootFs) -> Vec<SourceFile> {
             index: IndexId::Notes,
             file: FileRef::note(document.note_id),
             text: if document.body.len() > crate::notes::MAX_NOTE_BODY_BYTES {
-                Err(format!(
-                    "exceeds the {}-byte note ceiling",
-                    crate::notes::MAX_NOTE_BODY_BYTES
-                ))
+                Err(format!("exceeds the {}-byte note ceiling", crate::notes::MAX_NOTE_BODY_BYTES))
             } else {
                 Ok(document.body)
             },
@@ -181,12 +171,7 @@ pub(super) fn read_draft_file(root: &crate::fs::RootFs, draft_id: &str, path: &s
         Ok(abs) => read_bounded(root, &abs),
         Err(e) => Err(e),
     };
-    SourceFile {
-        index: IndexId::Drafts,
-        file,
-        text,
-        plain_text: false,
-    }
+    SourceFile { index: IndexId::Drafts, file, text, plain_text: false }
 }
 
 /// BMI-FR-09: a file above the size ceiling, or one that does not decode as

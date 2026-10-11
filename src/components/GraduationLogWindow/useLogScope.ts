@@ -15,7 +15,8 @@ import { readGraduationLogs } from "../../api";
 import { onGraduationLogRecordsAppended } from "../../events";
 import { logDebug, logWarn } from "../../logging";
 import { scopeKey, scopeOf, type LogScopeEntry } from "../../state/graduation/logScopes";
-import { acceptPage, type PageScope } from "./pages";
+import { ACTIVITY_STREAM, acceptPage, type PageScope } from "./pages";
+import { sequenceOf } from "./records";
 import type {
   GraduationLogCursor,
   GraduationLogFailure,
@@ -23,7 +24,6 @@ import type {
   GraduationLogPageEntry,
   GraduationLogReadStatus,
   GraduationLogSearchResult,
-  GraduationLogStream,
 } from "../../types";
 
 /** GLW-FR-ZPUH: one page, never a whole scope. */
@@ -72,8 +72,6 @@ export function merge(
   held: GraduationLogPageEntry[],
   arriving: GraduationLogPageEntry[],
 ): GraduationLogPageEntry[] {
-  const sequenceOf = (entry: GraduationLogPageEntry) =>
-    typeof entry.record.sequence === "number" ? entry.record.sequence : 0;
   const bySequence = new Map<number, GraduationLogPageEntry>();
   for (const entry of held) bySequence.set(sequenceOf(entry), entry);
   for (const entry of arriving) bySequence.set(sequenceOf(entry), entry);
@@ -112,17 +110,14 @@ function describe(
 
 function newestSequence(entries: GraduationLogPageEntry[]): number {
   const last = entries[entries.length - 1];
-  return last && typeof last.record.sequence === "number"
-    ? last.record.sequence
-    : 0;
+  return last ? sequenceOf(last) : 0;
 }
 
 export interface LogScopeRequest {
   runId: string;
   phaseId: string;
   entry: LogScopeEntry | null;
-  stream: GraduationLogStream;
-  /** GLW-FR-IMKM: applied to the selected stream and scope alone. */
+  /** GLW-FR-IMKM: applied to the selected scope alone. */
   query: string;
 }
 
@@ -135,9 +130,10 @@ export interface LogScope {
 }
 
 export function useLogScope(request: LogScopeRequest): LogScope {
-  const { runId, phaseId, entry, stream, query } = request;
+  const { runId, phaseId, entry, query } = request;
+  const stream = ACTIVITY_STREAM;
   const [state, setState] = useState<LogScopeState>(EMPTY);
-  const key = `${scopeKey(runId, phaseId, entry, stream)} ${query}`;
+  const key = `${scopeKey(runId, phaseId, entry)} ${query}`;
   const keyRef = useRef(key);
   keyRef.current = key;
   // The entry's **key** is what a scope change is decided from, never the
@@ -147,8 +143,8 @@ export function useLogScope(request: LogScopeRequest): LogScope {
   const entryRef = useRef(entry);
   entryRef.current = entry;
   const entryKey = entry?.key ?? null;
-  const scopeRef = useRef<PageScope>({ runId, phaseId, entry, stream });
-  scopeRef.current = { runId, phaseId, entry, stream };
+  const scopeRef = useRef<PageScope>({ runId, phaseId, entry });
+  scopeRef.current = { runId, phaseId, entry };
   // GLW-FR-GZWN: the newest page is in flight, and an append that arrived in
   // the meantime waits for it, so no record falls between the two reads.
   const firstInFlight = useRef(false);
@@ -222,7 +218,7 @@ export function useLogScope(request: LogScopeRequest): LogScope {
             setState({
               ...EMPTY,
               loading: false,
-              readError: "The log answered for another run, stage, or stream.",
+              readError: "The log answered for another run, phase, or scope.",
             });
           }
           return;

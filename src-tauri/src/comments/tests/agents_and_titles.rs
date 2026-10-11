@@ -36,10 +36,7 @@ fn an_agent_posts_through_the_same_writer_and_folds_the_same_way() {
 
     let threads = list_fragment_discussions_in(root, "specs/a.md");
     assert_eq!(threads[0].comments.len(), 2);
-    assert!(matches!(
-        threads[0].comments[0].author,
-        Participant::Human { .. }
-    ));
+    assert!(matches!(threads[0].comments[0].author, Participant::Human { .. }));
     match &threads[0].comments[1].author {
         Participant::Agent { agent_id, handle, .. } => {
             assert_eq!(agent_id, "claude_code");
@@ -90,29 +87,12 @@ fn a_title_snapshot_is_what_the_line_recorded_rather_than_what_the_agent_is_now(
     // nothing resolves an agent record while folding.
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
-    let t = open(
-        root,
-        "specs/a.md",
-        anchor(0, 3, "abc"),
-        "two specs or one?",
-        "2026-01-01T00:00:00Z",
-    );
+    let t =
+        open(root, "specs/a.md", anchor(0, 3, "abc"), "two specs or one?", "2026-01-01T00:00:00Z");
 
-    add_as(
-        root,
-        &t.id,
-        &titled_agent("a1", "arch", "Developer"),
-        "c1",
-        "2026-01-02T00:00:00Z",
-    );
+    add_as(root, &t.id, &titled_agent("a1", "arch", "Developer"), "c1", "2026-01-02T00:00:00Z");
     // The same agent, later, under a different title.
-    add_as(
-        root,
-        &t.id,
-        &titled_agent("a1", "arch", "Architect"),
-        "c2",
-        "2026-01-03T00:00:00Z",
-    );
+    add_as(root, &t.id, &titled_agent("a1", "arch", "Architect"), "c2", "2026-01-03T00:00:00Z");
 
     let title_of = |c: &Comment| match &c.author {
         Participant::Agent { title, .. } => title.clone(),
@@ -145,40 +125,20 @@ fn an_older_line_folds_to_no_title_and_an_empty_one_folds_to_empty() {
     // existed carries none, and folding it must not invent one.
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
-    let t = open(
-        root,
-        "specs/a.md",
-        anchor(0, 3, "abc"),
-        "two specs or one?",
-        "2026-01-01T00:00:00Z",
-    );
+    let t =
+        open(root, "specs/a.md", anchor(0, 3, "abc"), "two specs or one?", "2026-01-01T00:00:00Z");
 
     // The older shape: an agent participant with no `title` key at all.
-    add_as(
-        root,
-        &t.id,
-        &agent("a0", "scribe"),
-        "c0",
-        "2026-01-02T00:00:00Z",
-    );
+    add_as(root, &t.id, &agent("a0", "scribe"), "c0", "2026-01-02T00:00:00Z");
     // An agent that carries no title today: the empty string, recorded.
-    add_as(
-        root,
-        &t.id,
-        &titled_agent("a1", "arch", ""),
-        "c1",
-        "2026-01-03T00:00:00Z",
-    );
+    add_as(root, &t.id, &titled_agent("a1", "arch", ""), "c1", "2026-01-03T00:00:00Z");
 
     let title_of = |c: &Comment| match &c.author {
         Participant::Agent { title, .. } => title.clone(),
         other => panic!("expected an agent author, got {other:?}"),
     };
-    let comments = list_fragment_discussions_in(root, "specs/a.md")
-        .into_iter()
-        .next()
-        .unwrap()
-        .comments;
+    let comments =
+        list_fragment_discussions_in(root, "specs/a.md").into_iter().next().unwrap().comments;
     // The distinction survives the round trip in both directions.
     assert_eq!(title_of(&comments[1]), None, "an older line carries none");
     assert_eq!(

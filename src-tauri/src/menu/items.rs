@@ -26,12 +26,10 @@ pub(super) const MENU_QUIT: &str = "menu:quit";
 pub(super) const MENU_FIND: &str = "menu:find";
 /// Menu-item id AND outgoing event name for Edit -> Find & Replace (SNV-FR-43).
 pub(super) const MENU_FIND_REPLACE: &str = "menu:find-replace";
-/// Menu-item id for the Global settings entry (SWN-FR-14). Not an event name:
-/// the entry opens a native child window from this side rather than relaying
+/// Menu-item id for the Settings entry (SWN-FR-14). Not an event name: the
+/// entry opens a native child window from this side rather than relaying
 /// anything to the frontend (`SWN-settings-windows.md`).
-pub(super) const MENU_GLOBAL_SETTINGS: &str = "menu:global-settings";
-/// Menu-item id for the Project settings entry (SWN-FR-14, SWN-FR-16).
-pub(super) const MENU_PROJECT_SETTINGS: &str = "menu:project-settings";
+pub(super) const MENU_SETTINGS: &str = "menu:settings";
 /// Menu-item id AND outgoing event name for the About entry (SNV-FR-23,
 /// ABT-FR-KMVD). The panel it opens is drawn by the frontend, so the entry
 /// relays an event rather than opening a window from this side.
@@ -58,29 +56,24 @@ pub(super) const FILE_MENU_ITEMS_BEFORE_SETTINGS: &[MenuItemSpec] = &[
     (MENU_SAVE_ALL, "Save All", Some("CmdOrCtrl+Shift+S")),
 ];
 
-/// The File menu's items *after* the pair of settings entries (SNV-FR-23).
+/// The File menu's items *after* the settings entry (SNV-FR-23).
 pub(super) const FILE_MENU_ITEMS_AFTER_SETTINGS: &[MenuItemSpec] =
     &[(MENU_CLOSE_PROJECT, "Close Project", None)];
 
-/// The two settings entries, in render order (SWN-FR-14): Global settings
-/// first, because everything it holds belongs to the user and the machine and
-/// is offered whether or not a project is open (SWN-FR-15), where Project
-/// settings names something that may not exist (SWN-FR-16).
+/// The one settings entry (SWN-FR-14). It is offered whether or not a project is
+/// open (SWN-FR-15).
 ///
-/// They sit in the **app-name menu** on macOS and in the **File menu**, between
+/// It sits in the **app-name menu** on macOS and in the **File menu**, between
 /// Save All and Close Project, on every other platform — which is what
 /// `settings_menu_owner` decides and `file_menu_order` reflects.
-pub(super) const SETTINGS_MENU_ITEMS: &[MenuItemSpec] = &[
-    (MENU_GLOBAL_SETTINGS, "Global settings", None),
-    (MENU_PROJECT_SETTINGS, "Project settings", None),
-];
+pub(super) const SETTINGS_MENU_ITEMS: &[MenuItemSpec] = &[(MENU_SETTINGS, "Settings", None)];
 
 /// The About entry (SNV-FR-23, ABT-FR-KMVD). It sits in the same submenu as the
-/// settings entries: the app-name menu on macOS, the File menu elsewhere. A
+/// settings entry: the app-name menu on macOS, the File menu elsewhere. A
 /// separator precedes it and it sits immediately before the quit item.
 pub(super) const ABOUT_ITEM: MenuItemSpec = (MENU_ABOUT, "About", None);
 
-/// Which submenu carries the two settings entries on this platform (SWN-FR-14).
+/// Which submenu carries the settings entry on this platform (SWN-FR-14).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SettingsMenuOwner {
     /// macOS: the app-name menu, where a platform user looks for them.
@@ -124,7 +117,7 @@ pub(super) fn file_menu_tail(macos: bool) -> Vec<MenuItemSpec> {
 }
 
 /// The app-name menu's custom items in render order. On macOS it leads with the
-/// two settings entries (SWN-FR-14), then About behind a separator (SNV-FR-23);
+/// settings entry (SWN-FR-14), then About behind a separator (SNV-FR-23);
 /// everywhere else it carries Quit alone.
 pub(super) fn app_menu_order(macos: bool) -> Vec<MenuItemSpec> {
     let mut items: Vec<MenuItemSpec> = Vec::new();
@@ -134,23 +127,6 @@ pub(super) fn app_menu_order(macos: bool) -> Vec<MenuItemSpec> {
     }
     items.push(APP_QUIT_ITEM);
     items
-}
-
-/// Where the Project settings entry sits in the submenu that owns it, so
-/// SWN-FR-16 can put it back at the same place it was removed from.
-///
-/// Derived from the same order tables the menu is built out of, so an item
-/// added before it cannot silently move the insertion point.
-pub(super) fn project_settings_index(macos: bool) -> usize {
-    let order = if settings_menu_owner(macos) == SettingsMenuOwner::AppMenu {
-        app_menu_order(macos)
-    } else {
-        file_menu_order(macos)
-    };
-    order
-        .iter()
-        .position(|(id, _, _)| *id == MENU_PROJECT_SETTINGS)
-        .unwrap_or(0)
 }
 
 /// The Edit menu's custom items, appended after the predefined roles behind a

@@ -97,7 +97,8 @@ pub const MAX_ATTACHMENT_BYTES: usize = 10 * 1024 * 1024;
 /// nothing and is what keeps a filename a filename. See `attachment_path` for
 /// why a name that is merely *inside the root* is not good enough.
 pub fn is_storage_digest(candidate: &str) -> bool {
-    candidate.len() == 64 && candidate.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    candidate.len() == 64
+        && candidate.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 /// CMS-FR-47: what a comment may carry — what a reviewer points at, rather than
@@ -106,12 +107,7 @@ pub fn is_storage_digest(candidate: &str) -> bool {
 /// Matched on the media type's base, so a parameterised `text/plain; charset=utf-8`
 /// is the same type as a bare `text/plain`.
 pub fn media_type_accepted(media_type: &str) -> bool {
-    let base = media_type
-        .split(';')
-        .next()
-        .unwrap_or("")
-        .trim()
-        .to_ascii_lowercase();
+    let base = media_type.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
     base.starts_with("image/") || base == "application/pdf" || base == "text/plain"
 }
 /// CMS-FR-01: the conversation folder, relative to the repository machine store.
@@ -196,9 +192,6 @@ mod store_error_tests {
     /// CMS-FR-YQND: one spelling, whichever module a caller reaches it through.
     #[test]
     fn the_store_refusal_is_the_one_the_store_module_defines() {
-        assert_eq!(
-            super::ERR_STORE_UNAVAILABLE,
-            crate::repository_store::ERR_STORE_UNAVAILABLE,
-        );
+        assert_eq!(super::ERR_STORE_UNAVAILABLE, crate::repository_store::ERR_STORE_UNAVAILABLE,);
     }
 }

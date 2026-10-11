@@ -34,10 +34,7 @@ impl Selection {
 #[test]
 fn a_folder_grant_reaches_its_subtree_and_nothing_else() {
     let s = Selection::new();
-    let access = FsAccess::builder()
-        .read_only_folder(s.root.join("picked"))
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().read_only_folder(s.root.join("picked")).build().unwrap();
     assert_eq!(access.read_text(s.root.join("picked/inside.md")).unwrap(), "inside");
     assert_eq!(access.read_text(s.root.join("picked/deep/deeper.txt")).unwrap(), "deeper");
     assert_eq!(access.list_dir(s.root.join("picked")).unwrap().len(), 2);
@@ -48,20 +45,15 @@ fn a_folder_grant_reaches_its_subtree_and_nothing_else() {
             "{outside} is outside the grant: {result:?}"
         );
     }
-    assert!(matches!(
-        access.list_dir(&s.root),
-        Err(FsError::EscapesAllowedRoots { .. })
-    ));
+    assert!(matches!(access.list_dir(&s.root), Err(FsError::EscapesAllowedRoots { .. })));
 }
 
 // FSA-FR-DMKC, FSA-FR-GHBN: a file grant is that file and nothing beside or below it.
 #[test]
 fn a_file_grant_contains_its_exact_file_and_nothing_else() {
     let s = Selection::new();
-    let access = FsAccess::builder()
-        .read_only_file(s.root.join("picked/inside.md"))
-        .build()
-        .unwrap();
+    let access =
+        FsAccess::builder().read_only_file(s.root.join("picked/inside.md")).build().unwrap();
     assert_eq!(access.read_text(s.root.join("picked/inside.md")).unwrap(), "inside");
     for other in ["picked/deep/deeper.txt", "secret.txt", "other/outside.md"] {
         assert!(
@@ -83,15 +75,9 @@ fn a_file_grant_contains_its_exact_file_and_nothing_else() {
 #[test]
 fn a_path_that_climbs_out_of_a_grant_is_refused() {
     let s = Selection::new();
-    let access = FsAccess::builder()
-        .read_only_folder(s.root.join("picked"))
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().read_only_folder(s.root.join("picked")).build().unwrap();
     let sneaky = s.root.join("picked/../secret.txt");
-    assert!(matches!(
-        access.read_bytes(sneaky),
-        Err(FsError::EscapesAllowedRoots { .. })
-    ));
+    assert!(matches!(access.read_bytes(sneaky), Err(FsError::EscapesAllowedRoots { .. })));
     // A path that climbs out and back in is judged by where it ends.
     let back_in = s.root.join("picked/deep/../inside.md");
     assert_eq!(access.read_text(back_in).unwrap(), "inside");
@@ -102,10 +88,7 @@ fn a_path_that_climbs_out_of_a_grant_is_refused() {
 #[test]
 fn a_read_only_instance_refuses_every_write_and_changes_nothing() {
     let s = Selection::new();
-    let access = FsAccess::builder()
-        .read_only_folder(s.root.join("picked"))
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().read_only_folder(s.root.join("picked")).build().unwrap();
     assert!(access.is_read_only());
     let file = s.root.join("picked/inside.md");
     let new_file = s.root.join("picked/new.md");
@@ -142,15 +125,11 @@ fn a_read_only_instance_refuses_every_write_and_changes_nothing() {
 #[test]
 fn a_read_only_grant_and_a_read_write_root_never_share_an_instance() {
     let s = Selection::new();
-    let mixed = FsAccess::builder()
-        .allow_root(&s.root)
-        .read_only_folder(s.root.join("picked"))
-        .build();
+    let mixed =
+        FsAccess::builder().allow_root(&s.root).read_only_folder(s.root.join("picked")).build();
     assert!(matches!(mixed, Err(FsAccessBuildError::MixedProfile)));
-    let with_temp = FsAccess::builder()
-        .session_temp(true)
-        .read_only_file(s.root.join("picked.md"))
-        .build();
+    let with_temp =
+        FsAccess::builder().session_temp(true).read_only_file(s.root.join("picked.md")).build();
     assert!(matches!(with_temp, Err(FsAccessBuildError::MixedProfile)));
 }
 
@@ -168,11 +147,7 @@ fn a_grant_that_cannot_be_established_is_refused_with_its_reason() {
         GrantRefusal::Missing
     );
     assert_eq!(
-        refusal(
-            FsAccess::builder()
-                .read_only_folder(s.root.join("nowhere/at/all"))
-                .build()
-        ),
+        refusal(FsAccess::builder().read_only_folder(s.root.join("nowhere/at/all")).build()),
         GrantRefusal::Missing
     );
     assert_eq!(
@@ -180,11 +155,7 @@ fn a_grant_that_cannot_be_established_is_refused_with_its_reason() {
         GrantRefusal::Unreadable
     );
     assert_eq!(
-        refusal(
-            FsAccess::builder()
-                .read_only_folder(s.root.join("picked.md"))
-                .build()
-        ),
+        refusal(FsAccess::builder().read_only_folder(s.root.join("picked.md")).build()),
         GrantRefusal::Unreadable
     );
 }
@@ -202,16 +173,10 @@ fn a_link_cannot_carry_a_read_out_of_a_grant() {
     // The granted path is itself a link.
     assert!(matches!(
         FsAccess::builder().read_only_file(s.root.join("linked.md")).build(),
-        Err(FsAccessBuildError::GrantRefused {
-            reason: GrantRefusal::Link,
-            ..
-        })
+        Err(FsAccessBuildError::GrantRefused { reason: GrantRefusal::Link, .. })
     ));
 
-    let access = FsAccess::builder()
-        .read_only_folder(s.root.join("picked"))
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().read_only_folder(s.root.join("picked")).build().unwrap();
     assert!(matches!(
         access.read_bytes(s.root.join("picked/escape.txt")),
         Err(FsError::SymlinkRefused { .. })
@@ -234,10 +199,7 @@ fn a_grant_reached_through_a_linked_ancestor_still_reaches_its_files() {
     let s = Selection::new();
     symlink(s.root.join("picked"), s.root.join("alias")).unwrap();
     let through_alias = s.root.join("alias/inside.md");
-    let access = FsAccess::builder()
-        .read_only_file(&through_alias)
-        .build()
-        .unwrap();
+    let access = FsAccess::builder().read_only_file(&through_alias).build().unwrap();
     assert_eq!(access.read_text(&through_alias).unwrap(), "inside");
     assert_eq!(access.read_text(s.root.join("picked/inside.md")).unwrap(), "inside");
 }
@@ -267,15 +229,9 @@ fn a_selected_path_widens_no_other_instance() {
     ));
     // The IDE instance and the agent instance gain no selected path.
     let ide = state.get().expect("the IDE instance");
-    assert!(matches!(
-        ide.read_bytes(&external),
-        Err(FsError::EscapesAllowedRoots { .. })
-    ));
+    assert!(matches!(ide.read_bytes(&external), Err(FsError::EscapesAllowedRoots { .. })));
     let agent = state.agent_session("one").expect("the agent instance");
-    assert!(matches!(
-        agent.read_bytes(&external),
-        Err(FsError::EscapesAllowedRoots { .. })
-    ));
+    assert!(matches!(agent.read_bytes(&external), Err(FsError::EscapesAllowedRoots { .. })));
     assert_eq!(agent.read_text(project_root.join("readme.md")).unwrap(), "project");
 }
 

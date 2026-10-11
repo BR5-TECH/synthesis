@@ -77,10 +77,7 @@ pub fn create_github_shadow_draft(
     };
     let starting = project_settings::line_endings_for(root).normalize(prompt);
     scaffold_draft(root, &parent, &record, &primary, &starting)?;
-    Ok(DraftCreated {
-        draft: record,
-        file: primary,
-    })
+    Ok(DraftCreated { draft: record, file: primary })
 }
 
 /// The draft name a GitHub title gives, trimmed and cut on a character
@@ -103,26 +100,20 @@ fn shadow_name(title: &str) -> Option<String> {
 /// DRS-FR-XDWS: every GitHub-shadow draft of the worktree, whatever its
 /// status, from one walk of the drafts root.
 pub fn github_shadow_drafts(root: &fs::RootFs) -> Vec<DraftSummary> {
-    list_drafts_impl(root)
-        .drafts
-        .into_iter()
-        .filter(|draft| draft.github_issue.is_some())
-        .collect()
+    list_drafts_impl(root).drafts.into_iter().filter(|draft| draft.github_issue.is_some()).collect()
 }
 
-/// GPP-FR-XPUO: the shadow draft that names issue `number` of `owner/name`,
-/// if one exists.
+/// GPP-FR-XPUO: the shadow draft that names issue `number` of `owner/name` on
+/// `host`, if one exists.
 pub fn find_github_shadow(
     root: &fs::RootFs,
+    host: &str,
     owner: &str,
     name: &str,
     number: u64,
 ) -> Option<DraftSummary> {
     github_shadow_drafts(root).into_iter().find(|draft| {
-        draft
-            .github_issue
-            .as_ref()
-            .is_some_and(|link| link.names(owner, name, number))
+        draft.github_issue.as_ref().is_some_and(|link| link.names(host, owner, name, number))
     })
 }
 

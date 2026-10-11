@@ -69,44 +69,28 @@ impl CaptureSink {
 
     /// Every record the sink has taken, in the order it took them.
     pub fn records(&self) -> Vec<Value> {
-        self.records
-            .lock()
-            .expect("the capture sink is not poisoned")
-            .clone()
+        self.records.lock().expect("the capture sink is not poisoned").clone()
     }
 
     /// Every record of one event, in the order the sink took them.
     pub fn records_of(&self, event: &str) -> Vec<Value> {
-        self.records()
-            .into_iter()
-            .filter(|record| record["event"] == event)
-            .collect()
+        self.records().into_iter().filter(|record| record["event"] == event).collect()
     }
 
     /// The records as one text, which is what a leak test reads.
     pub fn text(&self) -> String {
-        self.records()
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join("\n")
+        self.records().iter().map(ToString::to_string).collect::<Vec<_>>().join("\n")
     }
 
     /// Drops every record the sink holds.
     pub fn clear(&self) {
-        self.records
-            .lock()
-            .expect("the capture sink is not poisoned")
-            .clear();
+        self.records.lock().expect("the capture sink is not poisoned").clear();
     }
 }
 
 impl LogSink for CaptureSink {
     fn write(&self, record: Value) {
-        self.records
-            .lock()
-            .expect("the capture sink is not poisoned")
-            .push(record);
+        self.records.lock().expect("the capture sink is not poisoned").push(record);
     }
 }
 

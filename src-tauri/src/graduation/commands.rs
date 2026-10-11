@@ -34,14 +34,13 @@ pub fn start_graduation<R: tauri::Runtime>(
         .try_state::<ProjectState>()
         .and_then(|state| state.require_root().ok())
         .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
-    let record = crate::drafts::read_draft_prompt(&root, &draft_id)
-        .map_err(|reason| {
-            if reason == crate::drafts::ERR_NOT_SINGLE_FILE {
-                ERR_DRAFT_NOT_SINGLE_FILE.to_string()
-            } else {
-                ERR_DRAFT_NOT_FOUND.to_string()
-            }
-        })?;
+    let record = crate::drafts::read_draft_prompt(&root, &draft_id).map_err(|reason| {
+        if reason == crate::drafts::ERR_NOT_SINGLE_FILE {
+            ERR_DRAFT_NOT_SINGLE_FILE.to_string()
+        } else {
+            ERR_DRAFT_NOT_FOUND.to_string()
+        }
+    })?;
     let input = CapturedGraduationInput {
         draft_id: draft_id.clone(),
         draft_name: record.draft.name.clone(),
@@ -53,13 +52,7 @@ pub fn start_graduation<R: tauri::Runtime>(
     // GSU-FR-MLEJ: the author's choice travels with the run, and the run
     // applies it when its turn comes. The start reads no working copy: what
     // stands in the stream now is not what stands there at the dispatch.
-    let mut run = new_run(
-        &project_key,
-        &stream,
-        input,
-        standing_work,
-        standing_work_message,
-    );
+    let mut run = new_run(&project_key, &stream, input, standing_work, standing_work_message);
     // GRS-FR-KDOY: both streams are created in the write that creates the run,
     // so a run that has emitted nothing still has two readable ones.
     crate::graduation::logs::initialize(&app, &mut run);
@@ -68,7 +61,7 @@ pub fn start_graduation<R: tauri::Runtime>(
     // asked for now and never for a refused start. Nothing waits for it.
     commit_graduation_start(&app, &root, &draft_id, &record.draft.name);
     events::announce_queue(&app, &run);
-    let _ = crate::drafts::announce(&app, crate::drafts::DraftChange::to(&draft_id, Vec::new()));
+    crate::drafts::announce(&app, crate::drafts::DraftChange::to(&draft_id, Vec::new()));
     dispatch_pending(&app);
     Ok(run)
 }
@@ -235,10 +228,7 @@ pub fn pause_graduation_run<R: tauri::Runtime>(
     let _write = state.as_ref().map(|state| state.write_guard());
 
     let mut run = runs::load_run(&app, &run_id)?;
-    if !matches!(
-        run.state,
-        GraduationRunState::Working | GraduationRunState::Reviewing
-    ) {
+    if !matches!(run.state, GraduationRunState::Working | GraduationRunState::Reviewing) {
         return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: {}", run.state.as_str()));
     }
     // GRL-FR-ZDKP: the turn is stopped through the one cancellation path, and
@@ -377,11 +367,12 @@ pub fn revert_graduation_run<R: tauri::Runtime>(
     if run.is_merge() {
         return Err(ERR_RUN_NOT_REVERTABLE.to_string());
     }
-    // A run still doing agent work holds its stream, and its working copy holds
-    // uncommitted work. Reverting under it would rewrite the tree a turn is
-    // writing into. A queued run is refused too: the queue may start it on the
-    // reverted branch at any moment (GRD-FR-BLCR).
-    if run.holds_stream() || run.state == GraduationRunState::Queued {
+    // A run still doing agent work has a working copy that holds uncommitted
+    // work. Reverting under it would rewrite the tree a turn is writing into. A
+    // queued run is refused too: the queue may start it on the reverted branch
+    // at any moment (GRD-FR-BLCR). A run at rest holds its queue, so nothing
+    // starts on the reverted branch while it waits for the author.
+    if run.state.is_agent_work() || run.state == GraduationRunState::Queued {
         return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: {}", run.state.as_str()));
     }
     if run.commits.is_empty() {
@@ -411,10 +402,7 @@ pub fn revert_graduation_run<R: tauri::Runtime>(
     if run.state.is_terminal() {
         runs::save_run(&app, &mut run)?;
     } else {
-        transitions::transition(&app, &mut run, GraduationRunState::Discarded)?;
-        // GRD-FR-NYSH: a run that rested `blocked` held a slot and has no loop
-        // behind it to offer the slot on, so the revert offers it.
-        dispatch_pending(&app);
+        end_discarded(&app, &mut run)?;
     }
     Ok(run)
 }
@@ -429,19 +417,54 @@ pub fn discard_graduation_run<R: tauri::Runtime>(
     let _write = state.as_ref().map(|state| state.write_guard());
 
     let mut run = runs::load_run(&app, &run_id)?;
-    if run.state.is_terminal() {
+    // GRD-FR-RKWQ: a `failed` run is discarded like any other; it is the only
+    // way its queue is released.
+    if matches!(run.state, GraduationRunState::Completed | GraduationRunState::Discarded) {
         return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: {}", run.state.as_str()));
     }
     if let Some(state) = app.try_state::<GraduationState>() {
         state.cancel_run(&run_id, GraduationInterruptionReason::AuthorPause);
     }
-    transitions::transition(&app, &mut run, GraduationRunState::Discarded)?;
-    // GRD-FR-NYSH: a run that rested `blocked` held a slot and has no loop
-    // behind it to offer the slot on, so the discard offers it. A discarded
-    // working run offers it again from its loop's end, which a pass answers
-    // with no start.
-    dispatch_pending(&app);
+    end_discarded(&app, &mut run)?;
     Ok(run)
+}
+
+/// GRD-FR-EWTN, GRD-FR-QCZF: move a run to `discarded`, and remove the runs
+/// queued behind it where it held its queue.
+///
+/// The caller holds the store hold (GRD-FR-WSXA), and this holds the dispatch
+/// pass as well, so the removal and the discard are one step to every other
+/// operation and to the loop of the run that is ending: no pass can dispatch a
+/// run that the removal is about to delete.
+///
+/// The runs behind are removed first, then the run is written as `discarded`,
+/// and only then are the readers told (GRD-FR-WSXA: write, and only then emit).
+/// A removal that fails changes nothing, and the author repeats the discard. A
+/// discard that fails after the removal leaves the run in its held state with
+/// the runs behind it already gone. The author repeats the discard, which then
+/// finds no run behind it. The readers are told in this case too, because the
+/// removal is durable.
+fn end_discarded<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &mut GraduationRun,
+) -> Result<(), String> {
+    let state = app.try_state::<GraduationState>();
+    let _pass = state.as_ref().map(|state| state.dispatch_guard());
+    // Read before the move: the move takes the run out of the state that says it
+    // held its queue.
+    let held = run.holds_queue();
+    let removed = cascade::remove_behind_discarded(app, run, held)?;
+    let ended = transitions::transition(app, run, GraduationRunState::Discarded);
+    if !removed.is_empty() {
+        cascade::announce_removed(app, run, &removed);
+    }
+    ended?;
+    drop(_pass);
+    // GRD-FR-NYSH: a run at rest held a slot and has no loop behind it to offer
+    // the slot on, so the discard offers it. A discarded working run offers it
+    // again from its loop's end, which a pass answers with no start.
+    dispatch_pending(app);
+    Ok(())
 }
 
 /// GRD-FR-ZAMI: a new run over a discarded run's captured prompt.
@@ -459,15 +482,10 @@ pub fn restart_graduation_run<R: tauri::Runtime>(
     let discarded = runs::load_run(&app, &run_id)?;
     // GRD-FR-YTCR: a merge run has no captured draft input to run again.
     if discarded.is_merge() {
-        return Err(format!(
-            "{ERR_RUN_STATE_NOT_PERMITTED}: a merge run is not restarted"
-        ));
+        return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: a merge run is not restarted"));
     }
     if discarded.state != GraduationRunState::Discarded {
-        return Err(format!(
-            "{ERR_RUN_STATE_NOT_PERMITTED}: {}",
-            discarded.state.as_str()
-        ));
+        return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: {}", discarded.state.as_str()));
     }
     queue::require_unlocked_draft(&app, &discarded.input.draft_id)?;
     // GSU-FR-NPFB / GRD-FR-PNMU: a discarded direct run restarts on the worktree
@@ -572,11 +590,7 @@ fn refuse_moved_tips<R: tauri::Runtime>(
                 "graduation checked the pinned tips of a merge run"
             },
             boundary: "tip_check",
-            outcome: if moved {
-                crate::streams::ERR_MERGE_BRANCH_MOVED
-            } else {
-                "ok"
-            },
+            outcome: if moved { crate::streams::ERR_MERGE_BRANCH_MOVED } else { "ok" },
             pass: Some(run.pass()),
             paths: None,
             extra: log_fields! {
@@ -666,6 +680,7 @@ pub(crate) fn build_run(
         commits: Vec::new(),
         // GRD-FR-TKUR: every run entering the queue starts eligible.
         auto_start: true,
+        dispatched: false,
         archived: false,
         archived_at: None,
         work_turns: 0,
@@ -737,6 +752,8 @@ fn mut_app<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::AppHandle<R> 
 ///
 /// Read-only. It writes nothing to either stream, and the only thing it may
 /// change about the run is the record of a damaged file (GRS-FR-EYNU).
+// Reason: the flat named parameters are the IPC contract with the frontend `invoke()`.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn read_graduation_logs<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -772,7 +789,7 @@ pub fn read_graduation_logs<R: tauri::Runtime>(
         return Err(format!("{}: {phase_id}", logs::read::ERR_UNKNOWN_PHASE));
     }
     let selected = match stream.as_str() {
-        "source" => GraduationLogStream::Source,
+        "activity" => GraduationLogStream::Activity,
         "structured" => GraduationLogStream::Structured,
         _ => {
             refuse(ERR_UNKNOWN_STREAM);
@@ -797,20 +814,22 @@ pub fn read_graduation_logs<R: tauri::Runtime>(
         &fs,
         &paths,
         &run.logs,
-        &run_id,
-        &phase_id,
-        &scope,
-        selected,
-        cursor,
-        limit,
-        query,
+        logs::read::PageRequest {
+            run_id: &run_id,
+            phase_id: &phase_id,
+            scope: &scope,
+            stream: selected,
+            cursor,
+            limit,
+            query,
+        },
     )
     .inspect_err(|reason| {
         refuse(reason);
     })?;
 
-    // The shape of the answer, and no part of what it holds: no decoded output,
-    // no structured field, and no query text reaches a diagnostic record.
+    // The shape of the answer, and no part of what it holds: no summary, no
+    // structured field, and no query text reaches a diagnostic record.
     logging::log_debug(
         &app,
         &BUFFER,
@@ -830,10 +849,7 @@ pub fn read_graduation_logs<R: tauri::Runtime>(
     // GRS-FR-EYNU / GRS-FR-MRKO: a damaged file is recorded on the run and
     // leaves the persistence status alone. It interrupts no run, cancels no
     // agent action, and moves no run state.
-    let met = page
-        .failure
-        .clone()
-        .filter(|_| page.status == logs::read::STATUS_UNAVAILABLE);
+    let met = page.failure.clone().filter(|_| page.status == logs::read::STATUS_UNAVAILABLE);
     if let Some(failure) = met.as_ref() {
         logging::log_warn(
             &app,

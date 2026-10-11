@@ -53,10 +53,7 @@ pub struct StreamState {
 impl StreamState {
     /// A state whose store stands under a root the caller names.
     pub fn rooted_at(root: PathBuf) -> Self {
-        Self {
-            root: Mutex::new(Some(root)),
-            ..Default::default()
-        }
+        Self { root: Mutex::new(Some(root)), ..Default::default() }
     }
 
     /// The store root this state reads and writes under.
@@ -105,10 +102,7 @@ impl StreamState {
 
     /// The run holding a stream right now, if one does.
     pub fn holder_of(&self, stream_id: &str) -> Option<String> {
-        self.holders
-            .lock()
-            .ok()
-            .and_then(|holders| holders.get(stream_id).cloned())
+        self.holders.lock().ok().and_then(|holders| holders.get(stream_id).cloned())
     }
 
     /// How many streams are working.
@@ -137,10 +131,7 @@ impl StreamState {
             kind,
             cancellation: cancellation.clone(),
         });
-        Ok(RepositoryUpdateHold {
-            state: self,
-            cancellation,
-        })
+        Ok(RepositoryUpdateHold { state: self, cancellation })
     }
 
     /// GRB-FR-TXVL / WKS-FR-WEJK: stop the update of one stream.
@@ -164,10 +155,7 @@ impl StreamState {
     /// What the reclaim of a stranded attempt must not touch: an attempt with a
     /// live turn behind it is the one attempt that is not stranded.
     pub fn attempts_running(&self) -> Vec<String> {
-        self.attempts
-            .lock()
-            .map(|attempts| attempts.iter().cloned().collect())
-            .unwrap_or_default()
+        self.attempts.lock().map(|attempts| attempts.iter().cloned().collect()).unwrap_or_default()
     }
 
     /// Record that this process is running `attempt_id` for an update.
@@ -223,18 +211,12 @@ impl StreamState {
     /// from before the `running` record is written until after the outcome is
     /// written, so a sweep never calls a live update stranded.
     pub fn claim_update_job(&self, stream_id: &str) -> bool {
-        self.update_jobs
-            .lock()
-            .map(|mut jobs| jobs.insert(stream_id.to_string()))
-            .unwrap_or(false)
+        self.update_jobs.lock().map(|mut jobs| jobs.insert(stream_id.to_string())).unwrap_or(false)
     }
 
     /// Whether this process has an update job behind the named stream.
     pub fn has_update_job(&self, stream_id: &str) -> bool {
-        self.update_jobs
-            .lock()
-            .map(|jobs| jobs.contains(stream_id))
-            .unwrap_or(false)
+        self.update_jobs.lock().map(|jobs| jobs.contains(stream_id)).unwrap_or(false)
     }
 
     /// WKS-FR-QFTH: release an update job's claim.

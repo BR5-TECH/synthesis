@@ -143,7 +143,6 @@ impl TurnContext {
             .unwrap_or_else(|reason| panic!("the update cancellation was refused: {reason}"));
     }
 
-
     /// GTC-FR-19: Git's own lock on the stream's index, as a concurrent `git`
     /// process holds it.
     pub(crate) fn hold_index(&self) {
@@ -217,19 +216,15 @@ pub(crate) fn without_loop<T>(app: &tauri::AppHandle<Runtime>, act: impl FnOnce(
 /// Where Git's own index lock of a working copy stands, and the git directory
 /// that holds it.
 pub(crate) fn index_lock_of(worktree: &Path) -> (PathBuf, PathBuf) {
-    let git_dir = git2::Repository::open(worktree)
-        .expect("the stream's repository")
-        .path()
-        .to_path_buf();
+    let git_dir =
+        git2::Repository::open(worktree).expect("the stream's repository").path().to_path_buf();
     let lock = git_dir.join("index.lock");
     (git_dir, lock)
 }
 
 pub(crate) fn hold_index_of(worktree: &Path) {
     let (git_dir, lock) = index_lock_of(worktree);
-    guard(&git_dir)
-        .write_text_atomic(&lock, "")
-        .expect("the index lock is writable");
+    guard(&git_dir).write_text_atomic(&lock, "").expect("the index lock is writable");
 }
 
 /// The file one log stream of a run is written to.
@@ -238,7 +233,5 @@ pub(crate) fn log_path(
     run_id: &str,
     stream: GraduationLogStream,
 ) -> PathBuf {
-    crate::graduation::logs::paths_for(app, run_id)
-        .expect("the run's log paths")
-        .stream(stream)
+    crate::graduation::logs::paths_for(app, run_id).expect("the run's log paths").stream(stream)
 }

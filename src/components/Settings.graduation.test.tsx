@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { Settings } from "./Settings";
+import { Settings } from "../test/settingsHarness";
 import { timeLimitToCommit } from "./GraduationSettingsSection";
 
 // SET-FR-DHFS / SET-FR-YMRV: the Project settings Graduation section — the one
@@ -76,9 +76,9 @@ describe("Project settings — Graduation", () => {
     expect(field.placeholder).toBe("120");
   });
 
-  it("SET-FR-DHFS, GRU-FR-QLRQ, SWN-FR-13: a request naming the section opens on it", async () => {
+  it("SET-FR-DHFS, GRU-FR-QLRQ, SWN-FR-HZWD: a request naming the section opens on it", async () => {
     backend(null);
-    const field = await openGraduation("graduation");
+    const field = await openGraduation("project/graduation");
     expect(field).toBeInTheDocument();
   });
 

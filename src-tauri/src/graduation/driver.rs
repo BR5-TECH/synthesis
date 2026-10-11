@@ -18,8 +18,7 @@ use tauri::Manager;
 use crate::log_fields;
 use crate::logging::{self, Domain};
 use crate::tools::agent_exec::protocol::{
-    AgentTaskRequest, Cancellation, ExecutionControls, ResultContract, SessionRef,
-    PROTOCOL_VERSION,
+    AgentTaskRequest, Cancellation, ExecutionControls, ResultContract, SessionRef, PROTOCOL_VERSION,
 };
 use crate::tools::agent_exec::runtime::CancellationToken;
 use crate::tools::agent_exec::{
@@ -28,10 +27,10 @@ use crate::tools::agent_exec::{
 };
 
 use super::{
-    observability, GraduationQueue, transitions, GraduationEscalationAnswer, GraduationEscalationOrigin,
-    GraduationEscalationQuestion,
-    GraduationInterruptionReason, GraduationProposedResponse, GraduationResumeRef, GraduationRun,
-    GraduationRunState, GraduationState, ReviewOutcome, ReviewSeverity, ReviewVerdict,
+    observability, transitions, GraduationEscalationAnswer, GraduationEscalationOrigin,
+    GraduationEscalationQuestion, GraduationInterruptionReason, GraduationProposedResponse,
+    GraduationQueue, GraduationResumeRef, GraduationRun, GraduationRunState, GraduationState,
+    ReviewOutcome, ReviewSeverity, ReviewVerdict,
 };
 
 pub mod drive;
@@ -46,9 +45,9 @@ pub mod stops;
 pub mod task_input;
 pub mod turns;
 
-pub use drive::{spawn, spawn_with};
 #[cfg(test)]
 pub(crate) use drive::drive_for_test;
+pub use drive::{spawn, spawn_with};
 pub use phases::*;
 pub use prompts::*;
 pub use seams::{AgentCliDispatch, DispatchFuture, GraduationDispatch};

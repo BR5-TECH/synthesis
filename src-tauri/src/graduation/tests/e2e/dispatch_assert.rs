@@ -36,11 +36,7 @@ impl DispatchAssert {
     }
 
     pub(crate) fn pass(self, pass: u32) -> Self {
-        assert_eq!(
-            self.seen.pass, pass,
-            "[{}] dispatch {} pass",
-            self.scenario, self.index
-        );
+        assert_eq!(self.seen.pass, pass, "[{}] dispatch {} pass", self.scenario, self.index);
         self
     }
 
@@ -128,7 +124,9 @@ impl DispatchAssert {
             .and_then(|v| v.as_array())
             .map(|list| {
                 list.iter()
-                    .filter_map(|entry| entry.get("answer").and_then(|v| v.as_str()).map(str::to_string))
+                    .filter_map(|entry| {
+                        entry.get("answer").and_then(|v| v.as_str()).map(str::to_string)
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -136,7 +134,8 @@ impl DispatchAssert {
             held,
             answers.iter().map(|a| a.to_string()).collect::<Vec<_>>(),
             "[{}] dispatch {} carries the author's decisions in order",
-            self.scenario, self.index
+            self.scenario,
+            self.index
         );
         self
     }
@@ -147,7 +146,8 @@ impl DispatchAssert {
             self.seen.list_len(key),
             count,
             "[{}] dispatch {} carries {count} entries in {key}",
-            self.scenario, self.index
+            self.scenario,
+            self.index
         );
         self
     }
@@ -162,10 +162,7 @@ impl DispatchAssert {
             .map(|list| {
                 list.iter()
                     .filter_map(|entry| {
-                        entry
-                            .get("answer")
-                            .and_then(|v| v.as_str())
-                            .map(str::to_string)
+                        entry.get("answer").and_then(|v| v.as_str()).map(str::to_string)
                     })
                     .collect()
             })
@@ -196,7 +193,8 @@ impl DispatchAssert {
             self.seen.resume_session.as_deref(),
             Some(session_id),
             "[{}] dispatch {} resumes the session",
-            self.scenario, self.index
+            self.scenario,
+            self.index
         );
         self
     }
@@ -217,11 +215,7 @@ impl DispatchAssert {
         held.sort();
         let mut expected: Vec<String> = paths.iter().map(|p| p.to_string()).collect();
         expected.sort();
-        assert_eq!(
-            held, expected,
-            "[{}] dispatch {} hidden paths",
-            self.scenario, self.index
-        );
+        assert_eq!(held, expected, "[{}] dispatch {} hidden paths", self.scenario, self.index);
         self
     }
 
@@ -231,7 +225,8 @@ impl DispatchAssert {
             self.seen.turn_kind,
             TurnKind::SemanticRebase,
             "[{}] dispatch {} is a semantic turn",
-            self.scenario, self.index
+            self.scenario,
+            self.index
         );
         assert!(
             self.seen.semantic_mount,
@@ -248,11 +243,7 @@ impl DispatchAssert {
         held.sort();
         let mut expected: Vec<String> = paths.iter().map(|p| p.to_string()).collect();
         expected.sort();
-        assert_eq!(
-            held, expected,
-            "[{}] dispatch {} changed paths",
-            self.scenario, self.index
-        );
+        assert_eq!(held, expected, "[{}] dispatch {} changed paths", self.scenario, self.index);
         self
     }
 
@@ -296,18 +287,13 @@ impl DispatchAssert {
 
     /// GRL-FR-TXEB: what each side did to one unresolved path.
     pub(crate) fn merge_conflict(self, path: &str, base_change: &str, stream_change: &str) -> Self {
-        let held = self
-            .merge_value("conflicts")
-            .and_then(|v| v.as_array().cloned())
-            .unwrap_or_default();
+        let held =
+            self.merge_value("conflicts").and_then(|v| v.as_array().cloned()).unwrap_or_default();
         let found = held
             .iter()
             .find(|entry| entry.get("path").and_then(|v| v.as_str()) == Some(path))
             .unwrap_or_else(|| {
-                panic!(
-                    "[{}] dispatch {} carries a conflict for {path}",
-                    self.scenario, self.index
-                )
+                panic!("[{}] dispatch {} carries a conflict for {path}", self.scenario, self.index)
             });
         assert_eq!(
             (
@@ -365,7 +351,8 @@ impl DispatchAssert {
             "[{}] dispatch {} instruction",
             self.scenario, self.index
         );
-        for other in [p::WORK_PROMPT.as_str(), p::REVIEW_PROMPT.as_str(), p::REBASE_PROMPT.as_str()] {
+        for other in [p::WORK_PROMPT.as_str(), p::REVIEW_PROMPT.as_str(), p::REBASE_PROMPT.as_str()]
+        {
             assert_ne!(
                 self.seen.instruction, other,
                 "[{}] dispatch {} carries an instruction a merge run never compiles",

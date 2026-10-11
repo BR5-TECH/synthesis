@@ -30,13 +30,23 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::global_settings::{now_iso8601, GlobalSettingsStore};
+use crate::log_fields;
+use crate::logging::{log_info, log_warn, Domain, BUFFER};
 use crate::project::ProjectState;
 
 mod discussion_identity;
-pub use discussion_identity::{
-    resolve_github_identity_if_stored, GITHUB_TOKENS_CHANGED,
-};
+pub mod host;
+mod verifier;
 use discussion_identity::emit_tokens_changed;
+pub use discussion_identity::{resolve_github_identity_if_stored, GITHUB_TOKENS_CHANGED};
+pub use host::{
+    default_host, github_api_base, github_api_host, github_graphql_url, github_web_base,
+    normalize_host, token_creation_url, DEFAULT_HOST, ERR_HOST_MISMATCH, ERR_INVALID_HOST,
+};
+pub use verifier::{
+    account_from_user_payload, login_from_user_payload, parse_scopes, verify_failure_for_status,
+    GithubIdentity, GithubVerifier, HttpGithubVerifier, VerifiedIdentity, VerifyError,
+};
 
 // ---------------------------------------------------------------------------
 // Typed errors (GTS-FR-04 / GTS-FR-10 / GTS-FR-14)
@@ -84,18 +94,6 @@ pub const LEGACY_KEYCHAIN_SERVICE: &str = "com.synthesis.github-token";
 /// at `["github", "tokens", <id>]` and nowhere else.
 pub const VAULT_NAMESPACE: &[&str] = &["github", "tokens"];
 
-/// GTS-FR-12: GitHub's token-creation page with the scopes this application's
-/// operations require already selected.
-///
-/// `repo` covers pull-request work and HTTPS push/pull; `workflow` is needed
-/// because a project's artifacts may include workflow definitions, and a push
-/// that touches `.github/workflows/**` is refused without it.
-pub const TOKEN_CREATION_URL: &str =
-    "https://github.com/settings/tokens/new?scopes=repo,workflow&description=Synthesis";
-
-/// The API endpoint a verification asks "who is this token, and what may it do?".
-const GITHUB_USER_API: &str = "https://api.github.com/user";
-
 // ---------------------------------------------------------------------------
 // Wire types (GTS-FR-02)
 // ---------------------------------------------------------------------------
@@ -124,7 +122,7 @@ pub enum TokenState {
 /// existed must still load rather than sending the whole store through
 /// GSS-FR-13's repair-to-defaults, which would wipe recents and both
 /// registries.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct GithubTokenRecord {
     /// Stable and opaque. Also the keychain entry's account name, which is why
@@ -132,6 +130,10 @@ pub struct GithubTokenRecord {
     pub id: String,
     /// Author-chosen and unique across the registry (GTS-FR-05).
     pub label: String,
+    /// The normalized host the token belongs to (GTS-FR-BJCN). A record stored
+    /// without one reads as `github.com` (GTS-FR-VRYL), which is why the default
+    /// is not the empty string.
+    pub host: String,
     /// Resolved by verification; `None` until one succeeds.
     pub account_login: Option<String>,
     /// The account's display name, resolved by the same verification that
@@ -150,6 +152,13 @@ pub struct GithubTokenRecord {
     pub added_at: String,
     pub last_verified_at: Option<String>,
     pub state: TokenState,
+}
+
+impl GithubTokenRecord {
+    /// The host of this record, `github.com` where none is stored (GTS-FR-VRYL).
+    pub fn effective_host(&self) -> String {
+        host::stored_host(&self.host)
+    }
 }
 
 /// How `get_project_github_token_binding` resolved the open project's token —
@@ -219,164 +228,6 @@ pub trait SecretStore: Send + Sync {
     }
 }
 
-/// Who a token authenticates as, and what it may do.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct VerifiedIdentity {
-    pub login: String,
-    /// The account's display name, when GitHub reports one (GTS-FR-16). Absent
-    /// rather than substituted for an account that has set none.
-    pub display_name: Option<String>,
-    /// The account's email, when GitHub reports one (GTS-FR-16). A private email
-    /// comes back `null` from `GET /user`, which is absence, not failure.
-    pub email: Option<String>,
-    pub scopes: Vec<String>,
-}
-
-/// The account a comment is attributed to (GTS-FR-16).
-///
-/// Distinct from `GithubTokenRecord`: this describes a *person*, carries nothing
-/// token-derived (not even `masked_hint`), and is what
-/// `CMS-comments-storage.md` stamps into an event's `by`.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct GithubIdentity {
-    pub login: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub display_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
-}
-
-/// The two outcomes a caller must tell apart (GTS-FR-04): GitHub answered and
-/// refused the token, versus GitHub never answered.
-#[derive(Debug)]
-pub enum VerifyError {
-    Rejected,
-    Unreachable(String),
-}
-
-pub trait GithubVerifier: Send + Sync {
-    fn verify(&self, secret: &str) -> Result<VerifiedIdentity, VerifyError>;
-}
-
-/// Production verifier: one `GET https://api.github.com/user`.
-///
-/// This is the only outbound network call this module makes. The global timeout
-/// is what keeps a hung network from wedging the add dialog indefinitely — the
-/// UI has no way to cancel an in-flight `invoke`.
-pub struct HttpGithubVerifier;
-
-impl GithubVerifier for HttpGithubVerifier {
-    fn verify(&self, secret: &str) -> Result<VerifiedIdentity, VerifyError> {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .timeout_global(Some(std::time::Duration::from_secs(15)))
-            .build()
-            .into();
-
-        let response = agent
-            .get(GITHUB_USER_API)
-            .header("Authorization", &format!("Bearer {secret}"))
-            .header("Accept", "application/vnd.github+json")
-            .header("X-GitHub-Api-Version", "2022-11-28")
-            // GitHub rejects an API request with no User-Agent outright, which
-            // would otherwise read as "the token is bad".
-            .header("User-Agent", "synthesis")
-            .call();
-
-        let mut response = match response {
-            Ok(r) => r,
-            // A 4xx/5xx arrives here as a status error rather than an `Ok`.
-            Err(ureq::Error::StatusCode(code)) => return Err(verify_failure_for_status(code)),
-            Err(e) => return Err(VerifyError::Unreachable(e.to_string())),
-        };
-
-        // The granted scopes ride on a response header. A fine-grained token
-        // carries no such header at all, which is an empty scope list rather
-        // than a failure.
-        let scopes = response
-            .headers()
-            .get("x-oauth-scopes")
-            .and_then(|v| v.to_str().ok())
-            .map(parse_scopes)
-            .unwrap_or_default();
-
-        let body = response
-            .body_mut()
-            .read_to_string()
-            .map_err(|e| VerifyError::Unreachable(e.to_string()))?;
-        let account = account_from_user_payload(&body).ok_or_else(|| {
-            VerifyError::Unreachable("GitHub returned an unrecognised response".into())
-        })?;
-
-        Ok(VerifiedIdentity {
-            login: account.login,
-            display_name: account.display_name,
-            email: account.email,
-            scopes,
-        })
-    }
-}
-
-/// GTS-FR-04: which HTTP statuses mean "GitHub refused this token" and which
-/// mean "GitHub did not answer usefully".
-///
-/// Pure so the distinction the whole add flow rests on is testable without a
-/// network: only 401 and 403 are evidence *about the token*. Anything else —
-/// a 404, a 500, a captive-portal redirect — says something about the request
-/// or the network, and calling it `Rejected` would tell the author their good
-/// token is bad.
-pub fn verify_failure_for_status(code: u16) -> VerifyError {
-    match code {
-        401 | 403 => VerifyError::Rejected,
-        _ => VerifyError::Unreachable(format!("GitHub answered {code}")),
-    }
-}
-
-/// Extract the account login from a `GET /user` payload. `None` for anything
-/// that is not the JSON object this module expects.
-pub fn login_from_user_payload(body: &str) -> Option<String> {
-    account_from_user_payload(body).map(|a| a.login)
-}
-
-/// GTS-FR-16: extract the whole describable account — login, display name, email
-/// — from a `GET /user` payload.
-///
-/// Only `login` is load-bearing: GitHub always returns it for an authenticated
-/// user, and a payload without one is not a response this module understands.
-/// `name` and `email` are both nullable and both commonly null (an account that
-/// set no name; an account keeping its email private), so each maps to `None`
-/// rather than making the parse fail. An empty string is normalised to `None`
-/// too — a blank display name is absence wearing a different shape, and letting
-/// it through would render a comment attributed to nobody.
-pub fn account_from_user_payload(body: &str) -> Option<GithubIdentity> {
-    let value: serde_json::Value = serde_json::from_str(body).ok()?;
-    let login = value.get("login")?.as_str()?.to_string();
-    let field = |key: &str| -> Option<String> {
-        value
-            .get(key)
-            .and_then(|v| v.as_str())
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_string())
-    };
-    Some(GithubIdentity {
-        login,
-        display_name: field("name"),
-        email: field("email"),
-    })
-}
-
-/// Split the `x-oauth-scopes` header into its scope list, dropping the empty
-/// entries a trailing comma or an empty header would otherwise produce.
-pub fn parse_scopes(header: &str) -> Vec<String> {
-    header
-        .split(',')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .collect()
-}
-
 // ---------------------------------------------------------------------------
 // Managed state
 // ---------------------------------------------------------------------------
@@ -411,11 +262,7 @@ impl Default for GithubTokens {
 
 impl GithubTokens {
     pub fn new(secrets: Box<dyn SecretStore>, verifier: Box<dyn GithubVerifier>) -> Self {
-        Self {
-            secrets,
-            verifier,
-            write_lock: Mutex::new(()),
-        }
+        Self { secrets, verifier, write_lock: Mutex::new(()) }
     }
 }
 
@@ -457,10 +304,7 @@ pub fn redact(text: &str, secret: &str) -> String {
 /// between a set of one.
 pub fn resolve_binding(records: &[GithubTokenRecord], bound: Option<&str>) -> ProjectTokenBinding {
     if records.is_empty() {
-        return ProjectTokenBinding {
-            token_id: None,
-            resolution: BindingResolution::NoneStored,
-        };
+        return ProjectTokenBinding { token_id: None, resolution: BindingResolution::NoneStored };
     }
     if let Some(id) = bound {
         if records.iter().any(|r| r.id == id) {
@@ -476,10 +320,7 @@ pub fn resolve_binding(records: &[GithubTokenRecord], bound: Option<&str>) -> Pr
             resolution: BindingResolution::Implicit,
         };
     }
-    ProjectTokenBinding {
-        token_id: None,
-        resolution: BindingResolution::SelectionRequired,
-    }
+    ProjectTokenBinding { token_id: None, resolution: BindingResolution::SelectionRequired }
 }
 
 /// Two labels an author could not tell apart are the same label (GTS-FR-05).
@@ -514,10 +355,8 @@ pub fn derive_label_from_login(records: &[GithubTokenRecord], login: &str) -> St
 /// reuse would hand a new record the previous one's secret.
 fn new_token_id() -> String {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0);
+    let nanos =
+        SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0);
     let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("ght-{nanos:x}-{seq:x}")
 }
@@ -563,17 +402,18 @@ pub fn add_token_impl(
     tokens: &GithubTokens,
     label: &str,
     secret: &str,
+    host: &str,
 ) -> Result<GithubTokenRecord, String> {
     let label = label.trim();
     let secret = secret.trim();
+    // GTS-FR-BJCN: refused before any lock, request, or write.
+    let host = normalize_host(host)?;
     if secret.is_empty() {
         return Err("token is empty".into());
     }
 
-    let _guard = tokens
-        .write_lock
-        .lock()
-        .map_err(|e| format!("github token store poisoned: {e}"))?;
+    let _guard =
+        tokens.write_lock.lock().map_err(|e| format!("github token store poisoned: {e}"))?;
 
     let mut records = store.load_github_token_registry()?;
     // A label the author *chose* is checked before the network call, so a
@@ -582,10 +422,11 @@ pub fn add_token_impl(
         return Err(ERR_DUPLICATE_LABEL.into());
     }
 
-    let identity = match tokens.verifier.verify(secret) {
+    let identity = match tokens.verifier.verify(&host, secret) {
         Ok(identity) => identity,
         Err(VerifyError::Rejected) => return Err(ERR_INVALID_TOKEN.into()),
         Err(VerifyError::Unreachable(_)) => return Err(ERR_GITHUB_UNREACHABLE.into()),
+        Err(VerifyError::TlsUntrusted(failure)) => return Err(failure.wire()),
     };
 
     // GTS-FR-05: an omitted label is derived from the account now that
@@ -597,15 +438,13 @@ pub fn add_token_impl(
     };
 
     let id = new_token_id();
-    tokens
-        .secrets
-        .set(&id, secret)
-        .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
+    tokens.secrets.set(&id, secret).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
 
     let now = now_iso8601();
     let record = GithubTokenRecord {
         id: id.clone(),
         label,
+        host,
         account_login: Some(identity.login),
         account_display_name: identity.display_name,
         account_email: identity.email,
@@ -635,16 +474,11 @@ pub fn validate_token_impl(
     tokens: &GithubTokens,
     id: &str,
 ) -> Result<GithubTokenRecord, String> {
-    let _guard = tokens
-        .write_lock
-        .lock()
-        .map_err(|e| format!("github token store poisoned: {e}"))?;
+    let _guard =
+        tokens.write_lock.lock().map_err(|e| format!("github token store poisoned: {e}"))?;
 
     let mut records = store.load_github_token_registry()?;
-    let index = records
-        .iter()
-        .position(|r| r.id == id)
-        .ok_or(ERR_UNKNOWN_TOKEN)?;
+    let index = records.iter().position(|r| r.id == id).ok_or(ERR_UNKNOWN_TOKEN)?;
 
     let secret = match tokens.secrets.get(id) {
         Ok(Some(secret)) => secret,
@@ -660,7 +494,7 @@ pub fn validate_token_impl(
         Err(_) => return Err(ERR_KEYCHAIN_UNAVAILABLE.into()),
     };
 
-    match tokens.verifier.verify(&secret) {
+    match tokens.verifier.verify(&records[index].effective_host(), &secret) {
         Ok(identity) => {
             let record = &mut records[index];
             record.state = TokenState::Valid;
@@ -682,6 +516,7 @@ pub fn validate_token_impl(
         // Leaving the record untouched is what keeps a flaky network from
         // relabelling a good token as bad.
         Err(VerifyError::Unreachable(_)) => return Err(ERR_GITHUB_UNREACHABLE.into()),
+        Err(VerifyError::TlsUntrusted(failure)) => return Err(failure.wire()),
     }
 
     let record = records[index].clone();
@@ -701,20 +536,12 @@ pub fn rename_token_impl(
         return Err("label is empty".into());
     }
 
-    let _guard = tokens
-        .write_lock
-        .lock()
-        .map_err(|e| format!("github token store poisoned: {e}"))?;
+    let _guard =
+        tokens.write_lock.lock().map_err(|e| format!("github token store poisoned: {e}"))?;
 
     let mut records = store.load_github_token_registry()?;
-    let index = records
-        .iter()
-        .position(|r| r.id == id)
-        .ok_or(ERR_UNKNOWN_TOKEN)?;
-    if records
-        .iter()
-        .any(|r| r.id != id && label_conflicts(&r.label, label))
-    {
+    let index = records.iter().position(|r| r.id == id).ok_or(ERR_UNKNOWN_TOKEN)?;
+    if records.iter().any(|r| r.id != id && label_conflicts(&r.label, label)) {
         return Err(ERR_DUPLICATE_LABEL.into());
     }
     records[index].label = label.to_string();
@@ -730,17 +557,12 @@ pub fn remove_token_impl(
     tokens: &GithubTokens,
     id: &str,
 ) -> Result<(), String> {
-    let _guard = tokens
-        .write_lock
-        .lock()
-        .map_err(|e| format!("github token store poisoned: {e}"))?;
+    let _guard =
+        tokens.write_lock.lock().map_err(|e| format!("github token store poisoned: {e}"))?;
 
     // Order matters: drop the secret first. A registry write that succeeded
     // while the delete failed would leave a secret nothing names.
-    tokens
-        .secrets
-        .delete(id)
-        .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
+    tokens.secrets.delete(id).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
     let mut records = store.load_github_token_registry()?;
     records.retain(|r| r.id != id);
     store.save_github_token_registry(records)
@@ -773,11 +595,8 @@ pub fn get_binding_impl(
     // An empty key is "no project open" (`ProjectState::slot_key`), whose slot
     // is the shared default one — a binding read from there would belong to no
     // project in particular.
-    let bound = if project_key.is_empty() {
-        None
-    } else {
-        store.load_github_token_binding(project_key)?
-    };
+    let bound =
+        if project_key.is_empty() { None } else { store.load_github_token_binding(project_key)? };
     Ok(resolve_binding(&records, bound.as_deref()))
 }
 
@@ -798,35 +617,119 @@ pub fn set_binding_impl(
     Ok(resolve_binding(&records, Some(token_id)))
 }
 
-/// GTS-FR-13: the single read path for a secret in the application.
+/// GTS-FR-13 / GTS-FR-OBAS: the single read path for a secret in the application.
 ///
 /// Deliberately **not** a `#[tauri::command]`: it is not registered in
 /// `generate_handler!`, so no frontend `invoke` can reach it. `GTC-git.md`
-/// GTC-FR-09 calls this when performing an authenticated GitHub operation, and
-/// nothing else does.
+/// GTC-FR-09, `GHP-github-publication.md`, and `GPP-github-polling.md` call this
+/// when performing an authenticated GitHub operation, and nothing else does.
 ///
 /// The refusals it returns are the same distinction `get_binding_impl` reports,
 /// so a caller can route a selection-required failure to the picker
-/// (`GIT-git.md` GHA-FR-16) and a missing-token failure to Global settings.
+/// (`GIT-git.md` GHA-FR-16) and a missing-token failure to Global settings. A
+/// token that belongs to another host than `remote_host` is refused with
+/// `github_host_mismatch` **before** the vault is asked for anything.
 pub fn resolve_github_token_secret(
     store: &GlobalSettingsStore,
     tokens: &GithubTokens,
     project_key: &str,
+    remote_host: &str,
 ) -> Result<String, String> {
-    let binding = get_binding_impl(store, project_key)?;
+    let (id, token_host) = resolve_project_token_id(store, project_key)?;
+    if token_host != host::stored_host(remote_host) {
+        return Err(ERR_HOST_MISMATCH.into());
+    }
+    read_secret(tokens, &id)
+}
+
+/// A token the open project resolves to, with the host it belongs to.
+///
+/// The secret is held for the length of one operation and never returned across
+/// the IPC boundary.
+pub struct ProjectToken {
+    pub secret: String,
+    pub host: String,
+}
+
+/// GTS-FR-13: the token the open project resolves to and its host, for an
+/// operation that learns the host of its repository only after it has the token
+/// (publication, polling). The caller compares the host with the host of its
+/// remote before it sends the secret anywhere (GTS-FR-OBAS).
+pub fn resolve_project_token(
+    store: &GlobalSettingsStore,
+    tokens: &GithubTokens,
+    project_key: &str,
+) -> Result<ProjectToken, String> {
+    let (id, host) = resolve_project_token_id(store, project_key)?;
+    let secret = read_secret(tokens, &id)?;
+    Ok(ProjectToken { secret, host })
+}
+
+/// GTS-FR-10: the id and the host of the token the project resolves to, or the
+/// typed refusal.
+fn resolve_project_token_id(
+    store: &GlobalSettingsStore,
+    project_key: &str,
+) -> Result<(String, String), String> {
+    let records = store.load_github_token_registry()?;
+    let bound =
+        if project_key.is_empty() { None } else { store.load_github_token_binding(project_key)? };
+    let binding = resolve_binding(&records, bound.as_deref());
     let id = match binding.resolution {
-        BindingResolution::Bound | BindingResolution::Implicit => binding
-            .token_id
-            .ok_or_else(|| ERR_SELECTION_REQUIRED.to_string())?,
+        BindingResolution::Bound | BindingResolution::Implicit => {
+            binding.token_id.ok_or_else(|| ERR_SELECTION_REQUIRED.to_string())?
+        }
         BindingResolution::SelectionRequired => return Err(ERR_SELECTION_REQUIRED.into()),
         BindingResolution::NoneStored => return Err(ERR_TOKEN_MISSING.into()),
     };
-    match tokens.secrets.get(&id) {
+    let record = records.iter().find(|r| r.id == id).ok_or(ERR_UNKNOWN_TOKEN)?;
+    Ok((id, record.effective_host()))
+}
+
+fn read_secret(tokens: &GithubTokens, id: &str) -> Result<String, String> {
+    match tokens.secrets.get(id) {
         Ok(Some(secret)) => Ok(secret),
         // The record exists but its secret does not: the token is unusable, and
         // saying so beats presenting an empty credential to GitHub.
         Ok(None) | Err(_) => Err(ERR_KEYCHAIN_UNAVAILABLE.into()),
     }
+}
+
+/// The hosts of every stored token, for deciding whether a remote host is a
+/// GitHub host (GTC-FR-FSLC).
+pub fn known_github_hosts(store: &GlobalSettingsStore) -> Vec<String> {
+    store
+        .load_github_token_registry()
+        .map(|records| records.iter().map(GithubTokenRecord::effective_host).collect())
+        .unwrap_or_default()
+}
+
+/// GTC-FR-FSLC: whether `host` is a GitHub host — `github.com`, a `*.ghe.com`
+/// host, or one of the `known` hosts of stored tokens.
+pub fn is_github_host(host: &str, known: &[String]) -> bool {
+    host::is_github_family_host(host) || known.iter().any(|k| k == host)
+}
+
+/// GTC-FR-09 / GTC-FR-FSLC: the secret for a Git remote URL, or `None` when the
+/// remote is not one GitHub tokens apply to.
+///
+/// Only an HTTPS remote on a GitHub host takes a token: `github.com`, a
+/// `*.ghe.com` host, or the host of any stored token. A remote on another
+/// provider authenticates as it otherwise would. For a GitHub remote the token
+/// must belong to the host of the remote (GTS-FR-OBAS).
+pub fn resolve_remote_token(
+    store: &GlobalSettingsStore,
+    tokens: &GithubTokens,
+    project_key: &str,
+    url: &str,
+) -> Result<Option<String>, String> {
+    let Some(remote_host) = host::https_remote_host(url) else {
+        return Ok(None);
+    };
+    if !is_github_host(&remote_host, &known_github_hosts(store)) {
+        return Ok(None);
+    }
+    resolve_github_token_secret(store, tokens, project_key, &remote_host).map(Some)
 }
 
 /// GTS-FR-16: who this machine writes as, for the token the open project
@@ -847,23 +750,17 @@ pub fn resolve_github_identity(
     project_key: &str,
 ) -> Result<GithubIdentity, String> {
     let records = store.load_github_token_registry()?;
-    let bound = if project_key.is_empty() {
-        None
-    } else {
-        store.load_github_token_binding(project_key)?
-    };
+    let bound =
+        if project_key.is_empty() { None } else { store.load_github_token_binding(project_key)? };
     let binding = resolve_binding(&records, bound.as_deref());
     let id = match binding.resolution {
-        BindingResolution::Bound | BindingResolution::Implicit => binding
-            .token_id
-            .ok_or_else(|| ERR_SELECTION_REQUIRED.to_string())?,
+        BindingResolution::Bound | BindingResolution::Implicit => {
+            binding.token_id.ok_or_else(|| ERR_SELECTION_REQUIRED.to_string())?
+        }
         BindingResolution::SelectionRequired => return Err(ERR_SELECTION_REQUIRED.into()),
         BindingResolution::NoneStored => return Err(ERR_TOKEN_MISSING.into()),
     };
-    let record = records
-        .iter()
-        .find(|r| r.id == id)
-        .ok_or(ERR_UNKNOWN_TOKEN)?;
+    let record = records.iter().find(|r| r.id == id).ok_or(ERR_UNKNOWN_TOKEN)?;
     // `add_token_impl` verifies before it stores (GTS-FR-04), so a stored record
     // always carries a login. One that does not was hand-edited or predates the
     // field, and there is no honest identity to stamp — say so distinctly rather
@@ -896,11 +793,20 @@ pub fn list_github_tokens(
 pub fn add_github_token(
     label: String,
     secret: String,
+    host: Option<String>,
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
     tokens: State<'_, GithubTokens>,
 ) -> Result<GithubTokenRecord, String> {
-    let record = add_token_impl(&store, &tokens, &label, &secret)?;
+    let record = add_token_impl(&store, &tokens, &label, &secret, host.as_deref().unwrap_or(""))
+        .inspect_err(|code| log_refusal(&app, "github token add refused", code))?;
+    log_info(
+        &app,
+        &BUFFER,
+        &[Domain::Backend, Domain::Remote],
+        "github token added",
+        log_fields! { "token_id" => &record.id, "host" => &record.host },
+    );
     emit_tokens_changed(&app);
     Ok(record)
 }
@@ -912,7 +818,8 @@ pub fn validate_github_token(
     store: State<'_, GlobalSettingsStore>,
     tokens: State<'_, GithubTokens>,
 ) -> Result<GithubTokenRecord, String> {
-    let record = validate_token_impl(&store, &tokens, &id)?;
+    let record = validate_token_impl(&store, &tokens, &id)
+        .inspect_err(|code| log_refusal(&app, "github token verification failed", code))?;
     emit_tokens_changed(&app);
     Ok(record)
 }
@@ -942,14 +849,33 @@ pub fn remove_github_token(
     Ok(())
 }
 
-/// GTS-FR-12: hand the OS the token-creation URL and return. Transmits nothing,
-/// receives nothing — the token comes back only by the author pasting it.
+/// GTS-FR-12: hand the OS the token-creation URL of the host and return.
+/// Transmits nothing, receives nothing — the token comes back only by the author
+/// pasting it.
 #[tauri::command]
-pub fn open_github_token_creation_page(app: tauri::AppHandle) -> Result<(), String> {
+pub fn open_github_token_creation_page(
+    host: Option<String>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
-    app.opener()
-        .open_url(TOKEN_CREATION_URL, None::<&str>)
-        .map_err(|e| format!("could not open the browser: {e}"))
+    let host = normalize_host(host.as_deref().unwrap_or(""))
+        .inspect_err(|code| log_refusal(&app, "github token page refused", code))?;
+    app.opener().open_url(token_creation_url(&host), None::<&str>).map_err(|e| {
+        log_refusal(&app, "github token page not opened", "browser_unavailable");
+        format!("could not open the browser: {e}")
+    })
+}
+
+/// A refusal of a token command. Only the typed code is logged: the secret, the
+/// label, and the host as typed stay out of the record.
+fn log_refusal(app: &tauri::AppHandle, message: &str, code: &str) {
+    log_warn(
+        app,
+        &BUFFER,
+        &[Domain::Backend, Domain::Remote],
+        message,
+        log_fields! { "error" => code },
+    );
 }
 
 #[tauri::command]

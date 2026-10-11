@@ -134,13 +134,7 @@ fn the_dependency_graph_holds_neither_the_application_nor_tauri() {
     let names = locked_package_names();
     assert!(!names.is_empty(), "the lock file declares no package");
 
-    for forbidden in [
-        "tauri",
-        "tauri-build",
-        "synthesis",
-        "synthesis_lib",
-        "synthesis-lib",
-    ] {
+    for forbidden in ["tauri", "tauri-build", "synthesis", "synthesis_lib", "synthesis-lib"] {
         assert!(
             !names.iter().any(|name| name == forbidden),
             "the lock file resolves `{forbidden}`, which BMS-FR-02 forbids"
@@ -170,17 +164,11 @@ fn resolved_features(package: &str) -> Vec<String> {
     let metadata: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("cargo metadata prints JSON");
 
-    let nodes = metadata["resolve"]["nodes"]
-        .as_array()
-        .expect("the resolve graph holds nodes");
+    let nodes = metadata["resolve"]["nodes"].as_array().expect("the resolve graph holds nodes");
 
     let node = nodes
         .iter()
-        .find(|node| {
-            node["id"]
-                .as_str()
-                .is_some_and(|id| id.contains(&format!("#{package}@")))
-        })
+        .find(|node| node["id"].as_str().is_some_and(|id| id.contains(&format!("#{package}@"))))
         .unwrap_or_else(|| panic!("the graph holds no package named {package}"));
 
     node["features"]
@@ -244,10 +232,7 @@ fn the_source_holds_no_capability_beyond_the_foundation() {
     for (name, source) in service_sources() {
         let code = code_of(&source);
         for pattern in FORBIDDEN_IN_SOURCE {
-            assert!(
-                !code.contains(pattern),
-                "{name} holds `{pattern}`, which BMS-FR-27 forbids"
-            );
+            assert!(!code.contains(pattern), "{name} holds `{pattern}`, which BMS-FR-27 forbids");
         }
     }
 }
@@ -257,10 +242,8 @@ fn the_source_holds_no_capability_beyond_the_foundation() {
 // module of `WSK-websocket.md` and nowhere else.
 #[test]
 fn upgrade_handling_lives_in_the_websocket_transport_alone() {
-    let transport = format!(
-        "adapters{}relay{}ws{}",
-        MAIN_SEPARATOR, MAIN_SEPARATOR, MAIN_SEPARATOR
-    );
+    let transport =
+        format!("adapters{}relay{}ws{}", MAIN_SEPARATOR, MAIN_SEPARATOR, MAIN_SEPARATOR);
     let mut holders = 0;
 
     for (name, source) in service_sources() {
@@ -309,13 +292,8 @@ fn no_source_writes_a_credential_into_a_record() {
 /// constructor, so it is not on the list. Nesting, a service route, and a
 /// fallback each answer a path that no route declares, which is what the
 /// `404` of BMS-FR-13 is for.
-const ROUTE_COMBINATORS: [&str; 5] = [
-    ".nest(",
-    ".nest_service(",
-    ".route_service(",
-    ".fallback(",
-    ".method_not_allowed_fallback(",
-];
+const ROUTE_COMBINATORS: [&str; 5] =
+    [".nest(", ".nest_service(", ".route_service(", ".fallback(", ".method_not_allowed_fallback("];
 
 // BMS-FR-13: the health route is the one route the foundation declares. Every
 // other path reaches the router through the merge of the application routes,
@@ -351,12 +329,8 @@ fn the_router_declares_the_health_route_alone_and_gains_no_path_another_way() {
 // principal, so no route of it is served without a credential.
 #[test]
 fn every_application_route_module_reads_the_principal() {
-    let modules = [
-        "identity_routes.rs",
-        "membership_routes.rs",
-        "project_routes.rs",
-        "content_routes.rs",
-    ];
+    let modules =
+        ["identity_routes.rs", "membership_routes.rs", "project_routes.rs", "content_routes.rs"];
     for module in modules {
         let source = service_sources()
             .into_iter()
@@ -377,10 +351,8 @@ fn every_application_route_module_reads_the_principal() {
 // than by a tag alone.
 #[test]
 fn every_image_base_is_pinned_by_digest() {
-    let bases: Vec<&str> = dockerfile_directives()
-        .into_iter()
-        .filter(|line| line.starts_with("FROM "))
-        .collect();
+    let bases: Vec<&str> =
+        dockerfile_directives().into_iter().filter(|line| line.starts_with("FROM ")).collect();
 
     assert_eq!(bases.len(), 2, "the image is built in two stages");
 
@@ -396,10 +368,7 @@ fn every_image_base_is_pinned_by_digest() {
         final_stage.contains("distroless"),
         "the final stage must be a distroless base: {final_stage}"
     );
-    assert!(
-        !final_stage.contains(" AS "),
-        "the final stage is the last one: {final_stage}"
-    );
+    assert!(!final_stage.contains(" AS "), "the final stage is the last one: {final_stage}");
 }
 
 // BMS-FR-18, as far as a file can show it: the final stage adds nothing but the
@@ -416,10 +385,7 @@ fn the_final_stage_adds_nothing_but_the_binary() {
         );
     }
 
-    let copies: Vec<&&str> = final_stage
-        .iter()
-        .filter(|line| line.starts_with("COPY "))
-        .collect();
+    let copies: Vec<&&str> = final_stage.iter().filter(|line| line.starts_with("COPY ")).collect();
     assert_eq!(copies.len(), 1, "the final stage copies one file");
     assert!(
         copies[0].contains("/usr/local/bin/synthesis-server"),
@@ -441,10 +407,8 @@ fn the_final_stage_adds_nothing_but_the_binary() {
 fn the_image_declares_the_entrypoint_the_port_the_user_and_no_volume() {
     let final_stage = final_stage_directives();
 
-    let entrypoints: Vec<&&str> = final_stage
-        .iter()
-        .filter(|line| line.starts_with("ENTRYPOINT"))
-        .collect();
+    let entrypoints: Vec<&&str> =
+        final_stage.iter().filter(|line| line.starts_with("ENTRYPOINT")).collect();
     assert_eq!(entrypoints.len(), 1, "the image declares one entrypoint");
     assert_eq!(
         *entrypoints[0], "ENTRYPOINT [\"/usr/local/bin/synthesis-server\"]",
@@ -464,10 +428,7 @@ fn the_image_declares_the_entrypoint_the_port_the_user_and_no_volume() {
         "no CMD may add arguments the container was not started with"
     );
 
-    let users: Vec<&&str> = final_stage
-        .iter()
-        .filter(|line| line.starts_with("USER "))
-        .collect();
+    let users: Vec<&&str> = final_stage.iter().filter(|line| line.starts_with("USER ")).collect();
     assert_eq!(users.len(), 1, "the final stage declares one user");
     assert_eq!(*users[0], "USER 65532:65532", "the base's non-root user");
 }
@@ -478,10 +439,8 @@ fn the_image_declares_the_entrypoint_the_port_the_user_and_no_volume() {
 // and the second is refused outright in the stage that ships.
 #[test]
 fn the_image_definition_can_carry_no_credential_into_a_layer() {
-    let build_arguments: Vec<&str> = dockerfile_directives()
-        .into_iter()
-        .filter(|line| line.starts_with("ARG "))
-        .collect();
+    let build_arguments: Vec<&str> =
+        dockerfile_directives().into_iter().filter(|line| line.starts_with("ARG ")).collect();
     assert_eq!(
         build_arguments,
         vec!["ARG SYNTHESIS_BUILD_VERSION"],
@@ -500,10 +459,7 @@ fn the_image_definition_can_carry_no_credential_into_a_layer() {
     // directives so that a comment explaining the requirement cannot fail it.
     for directive in dockerfile_directives() {
         for pattern in ["-----BEGIN", ".pem", ".key", "docker/config.json", ".netrc"] {
-            assert!(
-                !directive.contains(pattern),
-                "the directive `{directive}` names `{pattern}`"
-            );
+            assert!(!directive.contains(pattern), "the directive `{directive}` names `{pattern}`");
         }
     }
 }
@@ -513,10 +469,7 @@ fn the_image_definition_can_carry_no_credential_into_a_layer() {
 #[test]
 fn the_manifest_declares_the_package_the_specification_names() {
     assert!(MANIFEST.contains("name = \"synthesis-server\""));
-    assert!(
-        MANIFEST.contains("[[bin]]"),
-        "the crate builds one named binary"
-    );
+    assert!(MANIFEST.contains("[[bin]]"), "the crate builds one named binary");
     assert!(
         !crate_dir().join("../Cargo.toml").exists(),
         "the repository root must hold no Cargo manifest (BMS-FR-01)"
@@ -556,10 +509,7 @@ fn the_readme_agrees_with_the_configuration_the_code_holds() {
         format!("| Bind address | `{HOST_OPTION}` | `{HOST_VARIABLE}` | `{DEFAULT_HOST}` |"),
         format!("| Port | `{PORT_OPTION}` | `{PORT_VARIABLE}` | `{DEFAULT_PORT}` |"),
     ] {
-        assert!(
-            README.contains(&row),
-            "server/README.md must hold the row {row}"
-        );
+        assert!(README.contains(&row), "server/README.md must hold the row {row}");
     }
 
     // BMS-FR-13: both methods the route accepts are documented. Checked against
@@ -665,9 +615,7 @@ fn the_readme_documents_both_pipelines() {
         "the README must state that the release tag is the only tag pushed"
     );
     assert!(
-        README
-            .to_lowercase()
-            .contains("no check of the publishing workflow is required")
+        README.to_lowercase().contains("no check of the publishing workflow is required")
             || README.contains("required by any branch-protection"),
         "the README must state that no check of the publishing workflow is required"
     );
@@ -690,9 +638,8 @@ fn every_path_parameter_of_the_surface_is_an_identifier() {
                 continue;
             }
             for segment in literal.split('/') {
-                if let Some(parameter) = segment
-                    .strip_prefix('{')
-                    .and_then(|rest| rest.strip_suffix('}'))
+                if let Some(parameter) =
+                    segment.strip_prefix('{').and_then(|rest| rest.strip_suffix('}'))
                 {
                     parameters.push((name.clone(), parameter.to_string()));
                 }

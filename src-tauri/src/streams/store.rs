@@ -94,8 +94,7 @@ pub(super) fn write_stream(
     stream: &WorkStream,
 ) -> Result<(), String> {
     ensure_dir(fs, &store.streams_root())?;
-    fs.write_toml_atomic(store.record(&stream.id), stream)
-        .map_err(|e| e.to_string())
+    fs.write_toml_atomic(store.record(&stream.id), stream).map_err(|e| e.to_string())
 }
 
 /// Remove one stream's record and its working copy.
@@ -134,9 +133,7 @@ pub(super) fn list_streams(
         .iter()
         .filter_map(|e| {
             let name = e.name.as_str();
-            name.strip_suffix(RECORD_SUFFIX)
-                .filter(|id| is_stream_id(id))
-                .map(str::to_string)
+            name.strip_suffix(RECORD_SUFFIX).filter(|id| is_stream_id(id)).map(str::to_string)
         })
         .collect();
     ids.sort();

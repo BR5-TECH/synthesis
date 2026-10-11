@@ -106,10 +106,9 @@ impl RepositoryAccess {
             // The Git directory is inside the store and is not the store
             // itself, both of which `repository_access` established, so there
             // is always at least one level to climb.
-            Self::Linked { git_dir_within, .. } => Some(format!(
-                "{}\n",
-                vec![".."; git_dir_within.components().count()].join("/"),
-            )),
+            Self::Linked { git_dir_within, .. } => {
+                Some(format!("{}\n", vec![".."; git_dir_within.components().count()].join("/"),))
+            }
         }
     }
 
@@ -133,15 +132,9 @@ impl RepositoryAccess {
                 // Its store is inside the working tree, so it goes wherever the
                 // execution directory is mounted.
                 (git_dir.clone(), format!("{workspace}/.git")),
-                (
-                    empty.to_path_buf(),
-                    format!("{workspace}/.git/{GIT_MASKED_ENTRY}"),
-                ),
+                (empty.to_path_buf(), format!("{workspace}/.git/{GIT_MASKED_ENTRY}")),
             ],
-            Self::Linked {
-                git_dir_within,
-                common_dir,
-            } => {
+            Self::Linked { git_dir_within, common_dir } => {
                 let mut out = vec![
                     (common_dir.clone(), store.to_string()),
                     (empty.to_path_buf(), format!("{store}/{GIT_MASKED_ENTRY}")),
@@ -295,10 +288,7 @@ pub(super) fn validate_supplementary_mount(
 ) -> Result<(), AgentExecutionError> {
     let refuse = |reason: &str| AgentExecutionError::SupplementaryMountInvalid(reason.to_string());
 
-    if host
-        .components()
-        .any(|c| matches!(c, std::path::Component::ParentDir))
-    {
+    if host.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
         return Err(refuse("path contains a parent segment"));
     }
 
@@ -307,15 +297,11 @@ pub(super) fn validate_supplementary_mount(
     // the canonical form is what closes the symbolic-link escape: a link inside
     // one of those roots pointing out of it resolves to a path that fails this,
     // and a link that leaves one root without entering another fails it too.
-    let roots: Vec<PathBuf> = data_roots
-        .iter()
-        .map(|root| crate::changes::canonicalize_lenient(root))
-        .collect();
+    let roots: Vec<PathBuf> =
+        data_roots.iter().map(|root| crate::changes::canonicalize_lenient(root)).collect();
     let canonical = crate::changes::canonicalize_lenient(host);
     if !roots.iter().any(|root| canonical.starts_with(root)) {
-        return Err(refuse(
-            "bundle is outside the application's data directory",
-        ));
+        return Err(refuse("bundle is outside the application's data directory"));
     }
 
     let info = fs.file_info(&canonical).map_err(|err| match err {
@@ -342,9 +328,7 @@ pub(super) fn validate_supplementary_mount(
     }
     if let Some(session_state) = session_state_source {
         if overlaps(&session_state.to_string_lossy()) {
-            return Err(refuse(
-                "bundle overlaps the vendor's session-state directory",
-            ));
+            return Err(refuse("bundle overlaps the vendor's session-state directory"));
         }
     }
     for path in credential_paths {
@@ -358,9 +342,7 @@ pub(super) fn validate_supplementary_mount(
     // not one a total could refuse without refusing what nobody reads at once.
     let mut stack = vec![canonical];
     while let Some(dir) = stack.pop() {
-        let entries = fs
-            .list_dir(&dir)
-            .map_err(|_| refuse("bundle cannot be read"))?;
+        let entries = fs.list_dir(&dir).map_err(|_| refuse("bundle cannot be read"))?;
         for entry in entries {
             let path = dir.join(&entry.name);
             match entry.kind {
@@ -409,9 +391,9 @@ pub(super) fn repository_metadata_paths_within(
     let mut stack = vec![execution_directory.to_path_buf()];
     let mut visited: usize = 0;
     while let Some(dir) = stack.pop() {
-        let entries = fs.list_dir(&dir).map_err(|err| {
-            AgentExecutionError::RepositoryMaskingUnavailable(err.to_string())
-        })?;
+        let entries = fs
+            .list_dir(&dir)
+            .map_err(|err| AgentExecutionError::RepositoryMaskingUnavailable(err.to_string()))?;
         for entry in entries {
             let path = dir.join(&entry.name);
             if entry.name == ".git" {

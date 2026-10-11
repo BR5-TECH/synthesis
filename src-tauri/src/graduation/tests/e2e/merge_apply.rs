@@ -25,7 +25,9 @@ fn a_commit_publication_makes_one_merge_commit_with_both_pinned_tips_as_parents(
     conflicted_merge("apply, commit")
         .with_merge(as_one_commit())
         .merge_work_turn(settling().checking_the_live_trees_stand())
-        .merge_review_turn(Script::answers_ready("Both intents stand.").checking_the_live_trees_stand())
+        .merge_review_turn(
+            Script::answers_ready("Both intents stand.").checking_the_live_trees_stand(),
+        )
         .run()
         .expect_state(GraduationRunState::Completed)
         .expect_commits(1)
@@ -74,7 +76,8 @@ fn a_dirty_base_blocks_the_apply_and_continue_retries_it_alone() {
         .with_merge(as_one_commit())
         .merge_work_turn(settling())
         .merge_review_turn(
-            Script::answers_ready("Both intents stand.").dirtying_the_base_meanwhile("scratch.txt", "mine\n"),
+            Script::answers_ready("Both intents stand.")
+                .dirtying_the_base_meanwhile("scratch.txt", "mine\n"),
         )
         .run()
         .expect_state(GraduationRunState::Blocked)
@@ -113,7 +116,8 @@ fn a_dirty_stream_blocks_the_apply_and_continue_retries_it() {
         .with_merge(StreamMergePublication::Uncommitted)
         .merge_work_turn(settling())
         .merge_review_turn(
-            Script::answers_ready("Both intents stand.").dirtying_the_stream_meanwhile("scratch.txt", "mine\n"),
+            Script::answers_ready("Both intents stand.")
+                .dirtying_the_stream_meanwhile("scratch.txt", "mine\n"),
         )
         .run()
         .expect_state(GraduationRunState::Blocked)

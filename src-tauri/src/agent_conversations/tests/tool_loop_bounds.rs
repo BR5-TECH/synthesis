@@ -9,10 +9,7 @@ use super::*;
 fn a_turn_runs_inside_an_agent_session_that_ends_with_it() {
     // CVL-FR-24, per FSA-FR-29 and RFT-FR-05.
     let h = Harness::scripted(vec![
-        Ok(ScriptedReply::calls(
-            "read_file",
-            serde_json::json!({ "path": "spec.md" }),
-        )),
+        Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))),
         Ok(ScriptedReply::answer("Read it.")),
     ]);
     h.mount();
@@ -31,10 +28,14 @@ fn a_turn_runs_inside_an_agent_session_that_ends_with_it() {
             _ => Vec::new(),
         })
         .find_map(|part| match part {
-            rig::completion::message::UserContent::ToolResult(result) => match result.content.first() {
-                rig::completion::message::ToolResultContent::Text(text) => Some(text.text.clone()),
-                _ => None,
-            },
+            rig::completion::message::UserContent::ToolResult(result) => {
+                match result.content.first() {
+                    Some(rig::completion::message::ToolResultContent::Text(text)) => {
+                        Some(text.text.clone())
+                    }
+                    _ => None,
+                }
+            }
             _ => None,
         })
         .expect("a result came back");
@@ -44,11 +45,7 @@ fn a_turn_runs_inside_an_agent_session_that_ends_with_it() {
     );
 
     // CVL-FR-24: the session ended with the turn, taking its temp directory.
-    assert_eq!(
-        h.agent_sessions(),
-        0,
-        "the session was closed when the turn terminated",
-    );
+    assert_eq!(h.agent_sessions(), 0, "the session was closed when the turn terminated",);
 }
 
 #[test]
@@ -63,11 +60,7 @@ fn cancelling_mid_loop_discards_the_tool_result_and_appends_nothing() {
     h.create_agent("arch", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
 
     // The tool ran, so the loop is past its first round and inside the second
@@ -84,11 +77,7 @@ fn cancelling_mid_loop_discards_the_tool_result_and_appends_nothing() {
 
     let terminal = wait_for_terminal(&h, &turn.id);
     assert_eq!(terminal.state, AgentTurnState::Cancelled);
-    assert_eq!(
-        h.threads("spec.md")[0].comments.len(),
-        1,
-        "a cancelled turn appends nothing",
-    );
+    assert_eq!(h.threads("spec.md")[0].comments.len(), 1, "a cancelled turn appends nothing",);
     // Polled rather than read once: `cancel_impl` removes the turn from the live
     // set and publishes the terminal event itself, so both `settle` and
     // `wait_for_terminal` return before the turn's own thread has finished
@@ -207,11 +196,11 @@ fn every_prompt_tells_the_agent_it_may_gather_without_naming_a_tool() {
         // prompts tell an agent it may offer a rewrite, so they are the ones with
         // any reason to name a tool — and leaving them out of this loop would
         // exempt the very files the check exists for.
-        for tool in EXPECTED_TOOLS
-            .iter()
-            .copied()
-            .chain([DRAFT_ONLY_TOOL, ARTIFACT_ONLY_TOOL, DISCUSSION_ONLY_TOOL])
-        {
+        for tool in EXPECTED_TOOLS.iter().copied().chain([
+            DRAFT_ONLY_TOOL,
+            ARTIFACT_ONLY_TOOL,
+            DISCUSSION_ONLY_TOOL,
+        ]) {
             assert!(!lower.contains(tool), "{name} names the tool {tool}");
         }
         for parameter in [
@@ -226,10 +215,7 @@ fn every_prompt_tells_the_agent_it_may_gather_without_naming_a_tool() {
             "`content`",
             "`rationale`",
         ] {
-            assert!(
-                !lower.contains(parameter),
-                "{name} describes the parameter {parameter}",
-            );
+            assert!(!lower.contains(parameter), "{name} describes the parameter {parameter}",);
         }
     }
     // CVL-FR-MZTK: the draft discussion prompt states the working method the
@@ -263,10 +249,7 @@ fn every_prompt_tells_the_agent_it_may_gather_without_naming_a_tool() {
         // The first of the three decision cases, which is the one that ends a pass.
         ("offer no changes", "that a decision is not a request for more changes"),
     ] {
-        assert!(
-            draft.contains(rule),
-            "discuss-draft.md does not tell the agent {missing}",
-        );
+        assert!(draft.contains(rule), "discuss-draft.md does not tell the agent {missing}",);
     }
     // And the trigger it replaces: an unbounded invitation to improve the text
     // is true of any document for ever, so a prompt carrying both says nothing.
@@ -351,9 +334,7 @@ fn every_prompt_tells_the_agent_it_may_gather_without_naming_a_tool() {
     // is filed against has to say so, or an agent reads the scope attributes as
     // an offer of the file and answers a question nobody asked.
     assert!(
-        DISCUSS_NOTE_PROMPT_TEMPLATE
-            .to_lowercase()
-            .contains("is **not** given to you"),
+        DISCUSS_NOTE_PROMPT_TEMPLATE.to_lowercase().contains("is **not** given to you"),
         "discuss-note.md does not say the file its note is filed against is withheld",
     );
 }
@@ -362,10 +343,7 @@ fn every_prompt_tells_the_agent_it_may_gather_without_naming_a_tool() {
 fn a_turn_reports_how_many_model_calls_it_made_and_no_part_of_its_exchange() {
     // AGC-FR-26, CVL-FR-26 / CVL-FR-28.
     let h = Harness::scripted(vec![
-        Ok(ScriptedReply::calls(
-            "read_file",
-            serde_json::json!({ "path": "spec.md" }),
-        )),
+        Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))),
         Ok(ScriptedReply::answer("A distinctive answer nobody should log.")),
     ]);
     h.mount();
@@ -394,10 +372,7 @@ fn a_turn_reports_how_many_model_calls_it_made_and_no_part_of_its_exchange() {
         "@arch what do you think?",
         "spec.md",
     ] {
-        assert!(
-            !haystack.contains(leak),
-            "a record carries {leak:?}:\n{haystack}",
-        );
+        assert!(!haystack.contains(leak), "a record carries {leak:?}:\n{haystack}",);
     }
 }
 
@@ -455,10 +430,7 @@ fn each_answered_call_names_the_upstream_that_carried_it_and_what_it_presented()
         .collect::<Vec<_>>()
         .join("\n");
     for leak in ["Settled.", "Some artifact source here."] {
-        assert!(
-            !haystack.contains(leak),
-            "a record carried {leak:?}: {haystack}",
-        );
+        assert!(!haystack.contains(leak), "a record carried {leak:?}: {haystack}",);
     }
 }
 
@@ -493,10 +465,7 @@ fn a_turn_reports_what_its_input_cost_split_by_what_the_cache_served() {
         .collect::<Vec<_>>()
         .join("\n");
     for leak in ["Settled.", "Some artifact source here."] {
-        assert!(
-            !haystack.contains(leak),
-            "a record carries {leak:?}:\n{haystack}",
-        );
+        assert!(!haystack.contains(leak), "a record carries {leak:?}:\n{haystack}",);
     }
 }
 
@@ -518,11 +487,7 @@ fn a_provider_that_reports_no_split_leaves_the_record_naming_none() {
         "a provider that said nothing is not recorded as having cached nothing: {:?}",
         ended.fields,
     );
-    assert!(
-        !ended.fields.contains_key("uncachedInputTokens"),
-        "{:?}",
-        ended.fields,
-    );
+    assert!(!ended.fields.contains_key("uncachedInputTokens"), "{:?}", ended.fields,);
     // The turn is otherwise unaffected: the answer still landed.
     assert_eq!(require(&ended, "state"), "delivered");
 }
@@ -596,43 +561,57 @@ fn a_failed_turn_reports_the_split_like_any_other() {
     assert_eq!(require(&ended, "uncachedInputTokens"), "3000");
 }
 
+// CVL-FR-WQZD
 #[test]
-fn a_zero_valued_usage_report_reads_as_no_report_at_all() {
-    // CVL-FR-28. `rig` reduces a missing usage report to a zero-valued `Usage`
-    // rather than an absent one, so the mapping has to read all-zero as "would
-    // not say" — a call that genuinely consumed no input tokens does not exist,
-    // every call carrying at least the compiled prompt.
-    let mut silent = rig::completion::Usage::new();
-    silent.input_tokens = 0;
-    silent.cached_input_tokens = 0;
-    assert_eq!(rig_seam::input_tokens_of(&silent), None);
-
-    let mut reported = rig::completion::Usage::new();
-    reported.input_tokens = 120;
-    reported.cached_input_tokens = 4_000;
+fn input_tokens_split_the_reported_input_total_into_cache_reads_and_the_rest() {
+    // The input total counts every prompt token, cache reads and cache writes
+    // included, on every provider. The cached part is the cache reads, and the
+    // uncached part is the total less the cache reads and the cache writes.
+    let reported = rig::completion::Usage::new()
+        .input_tokens(5_000)
+        .cached_input_tokens(4_000)
+        .cache_creation_input_tokens(300);
     assert_eq!(
         rig_seam::input_tokens_of(&reported),
-        Some(InputTokens {
-            cached: 4_000,
-            uncached: 120,
-        }),
+        Some(InputTokens { cached: 4_000, uncached: 700 }),
     );
 
+    // A provider that reports no cache counter at all billed the whole input
+    // at the full rate.
+    let uncached = rig::completion::Usage::new().input_tokens(1_200);
+    assert_eq!(
+        rig_seam::input_tokens_of(&uncached),
+        Some(InputTokens { cached: 0, uncached: 1_200 }),
+    );
+
+    // Cache reads and writes above the input total leave nothing uncached,
+    // never a negative count.
+    let over = rig::completion::Usage::new()
+        .input_tokens(100)
+        .cached_input_tokens(80)
+        .cache_creation_input_tokens(50);
+    assert_eq!(rig_seam::input_tokens_of(&over), Some(InputTokens { cached: 80, uncached: 0 }),);
+
     // A call that read everything from the cache still reported something.
-    let mut all_cached = rig::completion::Usage::new();
-    all_cached.cached_input_tokens = 4_000;
+    let all_cached = rig::completion::Usage::new().input_tokens(4_000).cached_input_tokens(4_000);
     assert_eq!(
         rig_seam::input_tokens_of(&all_cached),
-        Some(InputTokens {
-            cached: 4_000,
-            uncached: 0,
-        }),
+        Some(InputTokens { cached: 4_000, uncached: 0 }),
     );
 }
 
-
-
-
+// CVL-FR-WQZD
+#[test]
+fn an_absent_input_total_reads_as_no_report_rather_than_as_zero() {
+    // A direction the provider declined to report is absent, never zero —
+    // also when it reported a cache counter beside it.
+    assert_eq!(rig_seam::input_tokens_of(&rig::completion::Usage::new()), None);
+    let cache_alone = rig::completion::Usage::new().cached_input_tokens(4_000);
+    assert_eq!(rig_seam::input_tokens_of(&cache_alone), None);
+    // A reported zero is a report.
+    let zero = rig::completion::Usage::new().input_tokens(0);
+    assert_eq!(rig_seam::input_tokens_of(&zero), Some(InputTokens { cached: 0, uncached: 0 }),);
+}
 
 #[test]
 fn the_deadline_spans_the_whole_turn_rather_than_each_call_within_it() {
@@ -685,10 +664,6 @@ fn the_deadline_spans_the_whole_turn_rather_than_each_call_within_it() {
         "the deadline stopped the loop before the bound did: {} calls",
         h.seam.call_count(),
     );
-    assert_eq!(
-        h.threads("spec.md")[0].comments.len(),
-        1,
-        "a timed-out turn appends nothing",
-    );
+    assert_eq!(h.threads("spec.md")[0].comments.len(), 1, "a timed-out turn appends nothing",);
     assert_eq!(h.agent_sessions(), 0, "its session ended with it");
 }

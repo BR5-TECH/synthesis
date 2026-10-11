@@ -55,8 +55,7 @@ pub const ERR_BRANCH_ALREADY_CHECKED_OUT: &str = "branch already checked out";
 pub const ERR_CHECKOUT_BLOCKED: &str = "checkout blocked by local changes";
 /// The active worktree is a linked one, and a branch is checked out only in the
 /// repository's primary worktree (WTC-FR-21).
-pub const ERR_CHECKOUT_NOT_IN_LINKED_WORKTREE: &str =
-    "checkout not allowed in a linked worktree";
+pub const ERR_CHECKOUT_NOT_IN_LINKED_WORKTREE: &str = "checkout not allowed in a linked worktree";
 pub const ERR_WORKTREE_PATH_EXISTS: &str = "worktree path exists";
 
 /// The `"worktree context changed"` channel (WTC-FR-16), as a wire name.
@@ -249,7 +248,7 @@ fn to_string_path(path: &Path) -> String {
 /// `None` for a bare repository, which has no working directory at all.
 pub fn primary_worktree_root(repo: &Repository) -> Option<PathBuf> {
     if !repo.is_worktree() {
-        return repo.workdir().map(|p| canonicalize_lenient(p));
+        return repo.workdir().map(canonicalize_lenient);
     }
     let common = repo.commondir();
     // `commondir` may carry a trailing separator; `parent()` on `<root>/.git/`
@@ -354,12 +353,9 @@ pub(crate) fn normalize_worktree_commondir(main: &Repository, name: &str) -> Res
         return Err(format!("a worktree name is one path segment, not {name:?}"));
     }
     let admin = linked_admin_dir(main, name);
-    let fs = crate::fs::FsAccess::builder()
-        .allow_root(&admin)
-        .build()
-        .map_err(|e| e.to_string())?;
-    fs.write_text_atomic(admin.join("commondir"), "../..\n")
-        .map_err(|e| e.to_string())
+    let fs =
+        crate::fs::FsAccess::builder().allow_root(&admin).build().map_err(|e| e.to_string())?;
+    fs.write_text_atomic(admin.join("commondir"), "../..\n").map_err(|e| e.to_string())
 }
 
 /// Branch name recorded in a `HEAD` file (`ref: refs/heads/<branch>`), or
@@ -376,9 +372,7 @@ pub(crate) fn normalize_worktree_commondir(main: &Repository, name: &str) -> Res
 fn branch_from_head_file(admin_dir: &Path) -> Option<String> {
     let head = std::fs::read_to_string(admin_dir.join("HEAD")).ok()?;
     let refname = head.trim().strip_prefix("ref:")?.trim();
-    refname
-        .strip_prefix("refs/heads/")
-        .map(|branch| branch.to_string())
+    refname.strip_prefix("refs/heads/").map(|branch| branch.to_string())
 }
 
 /// Resolve a present worktree's `HEAD` into `(branch, short hash, detached)`.
@@ -391,16 +385,13 @@ pub(crate) fn head_of(path: &Path) -> (Option<String>, String, bool) {
         // resolvable reference, but the symbolic target still names the branch
         // the first commit will create, so the row can label itself with it
         // rather than falling back to the directory's basename.
-        let branch = repo
-            .find_reference("HEAD")
-            .ok()
-            .and_then(|r| {
-                r.symbolic_target()
-                    .ok()
-                    .flatten()
-                    .and_then(|t| t.strip_prefix("refs/heads/"))
-                    .map(|b| b.to_string())
-            });
+        let branch = repo.find_reference("HEAD").ok().and_then(|r| {
+            r.symbolic_target()
+                .ok()
+                .flatten()
+                .and_then(|t| t.strip_prefix("refs/heads/"))
+                .map(|b| b.to_string())
+        });
         return (branch, String::new(), false);
     };
     let short = head
@@ -420,11 +411,8 @@ pub(crate) fn head_of(path: &Path) -> (Option<String>, String, bool) {
 
 fn entry_for(path: &Path, is_primary: bool, missing_branch: Option<String>) -> WorktreeEntry {
     let is_missing = !path.is_dir();
-    let (branch, head_short_hash, is_detached) = if is_missing {
-        (missing_branch, String::new(), false)
-    } else {
-        head_of(path)
-    };
+    let (branch, head_short_hash, is_detached) =
+        if is_missing { (missing_branch, String::new(), false) } else { head_of(path) };
     WorktreeEntry {
         path: to_string_path(path),
         name: project::basename(&path.to_string_lossy()),
@@ -453,9 +441,7 @@ fn worktree_entries(repo: &Repository) -> Result<Vec<WorktreeEntry>, String> {
         entries.push(entry_for(&primary, true, None));
     }
     let mut linked: Vec<WorktreeEntry> = Vec::new();
-    let names = repo
-        .worktrees()
-        .map_err(|e| format!("failed to list worktrees: {e}"))?;
+    let names = repo.worktrees().map_err(|e| format!("failed to list worktrees: {e}"))?;
     for name in names.iter().filter_map(|r| r.ok().flatten()) {
         let Ok(worktree) = repo.find_worktree(name) else {
             continue;
@@ -483,17 +469,17 @@ fn short_hash_of(oid: git2::Oid) -> String {
 /// being checked out in a worktree WTC-FR-04 excludes — mistaken for a free one
 /// (per `../core/GRD-graduation.md` WKS-FR-MFDW). The name is what settles it, so
 /// the exclusion holds whether or not the run's checkout is in `worktrees`.
-fn branch_entries(repo: &Repository, worktrees: &[WorktreeEntry]) -> Result<Vec<BranchEntry>, String> {
-    let checked_out: BTreeSet<&str> = worktrees
-        .iter()
-        .filter_map(|w| w.branch.as_deref())
-        .collect();
+fn branch_entries(
+    repo: &Repository,
+    worktrees: &[WorktreeEntry],
+) -> Result<Vec<BranchEntry>, String> {
+    let checked_out: BTreeSet<&str> =
+        worktrees.iter().filter_map(|w| w.branch.as_deref()).collect();
 
     let mut locals: Vec<BranchEntry> = Vec::new();
     let mut local_names: BTreeSet<String> = BTreeSet::new();
-    let branches = repo
-        .branches(Some(BranchType::Local))
-        .map_err(|_| ERR_NOT_A_REPO.to_string())?;
+    let branches =
+        repo.branches(Some(BranchType::Local)).map_err(|_| ERR_NOT_A_REPO.to_string())?;
     for item in branches {
         let Ok((branch, _)) = item else { continue };
         let Ok(Some(name)) = branch.name() else {
@@ -504,16 +490,10 @@ fn branch_entries(repo: &Repository, worktrees: &[WorktreeEntry]) -> Result<Vec<
         if checked_out.contains(name.as_str()) {
             continue;
         }
-        let upstream = branch
-            .upstream()
-            .ok()
-            .and_then(|u| u.name().ok().flatten().map(|s| s.to_string()));
-        let head_short_hash = branch
-            .get()
-            .peel_to_commit()
-            .ok()
-            .map(|c| short_hash_of(c.id()))
-            .unwrap_or_default();
+        let upstream =
+            branch.upstream().ok().and_then(|u| u.name().ok().flatten().map(|s| s.to_string()));
+        let head_short_hash =
+            branch.get().peel_to_commit().ok().map(|c| short_hash_of(c.id())).unwrap_or_default();
         locals.push(BranchEntry {
             name,
             kind: BRANCH_KIND_LOCAL.to_string(),
@@ -524,9 +504,8 @@ fn branch_entries(repo: &Repository, worktrees: &[WorktreeEntry]) -> Result<Vec<
     locals.sort_by(|a, b| a.name.cmp(&b.name));
 
     let mut remotes: Vec<BranchEntry> = Vec::new();
-    let branches = repo
-        .branches(Some(BranchType::Remote))
-        .map_err(|_| ERR_NOT_A_REPO.to_string())?;
+    let branches =
+        repo.branches(Some(BranchType::Remote)).map_err(|_| ERR_NOT_A_REPO.to_string())?;
     for item in branches {
         let Ok((branch, _)) = item else { continue };
         let Ok(Some(name)) = branch.name() else {
@@ -542,12 +521,8 @@ fn branch_entries(repo: &Repository, worktrees: &[WorktreeEntry]) -> Result<Vec<
         if local_names.contains(short) {
             continue;
         }
-        let head_short_hash = branch
-            .get()
-            .peel_to_commit()
-            .ok()
-            .map(|c| short_hash_of(c.id()))
-            .unwrap_or_default();
+        let head_short_hash =
+            branch.get().peel_to_commit().ok().map(|c| short_hash_of(c.id())).unwrap_or_default();
         remotes.push(BranchEntry {
             name: name.to_string(),
             kind: BRANCH_KIND_REMOTE.to_string(),
@@ -576,11 +551,8 @@ pub fn context_for(active_root: &Path) -> Result<WorktreeContext, String> {
     // WTC-FR-06: `branches` is what could be checked out — and from a linked
     // worktree nothing can (WTC-FR-21), so reporting candidates the caller
     // cannot act on would misrepresent what is on offer.
-    let branches = if active == repository_root {
-        branch_entries(&repo, &worktrees)?
-    } else {
-        Vec::new()
-    };
+    let branches =
+        if active == repository_root { branch_entries(&repo, &worktrees)? } else { Vec::new() };
     Ok(WorktreeContext {
         repository_root: to_string_path(&repository_root),
         active_worktree_path: to_string_path(&active),
@@ -620,11 +592,7 @@ pub fn refresh_outcome_for(
     // `list_worktrees_and_branches`, so a refreshed listing and the dropdown's
     // own listing cannot disagree about the same repository.
     let context = context_for(root)?;
-    Ok(RefreshOutcome {
-        context,
-        remote_state: remote_state.to_string(),
-        remote_error,
-    })
+    Ok(RefreshOutcome { context, remote_state: remote_state.to_string(), remote_error })
 }
 
 /// WTC-FR-07: the active worktree's entry alone, without walking the
@@ -662,9 +630,9 @@ pub fn is_in_primary_worktree(active_root: &Path) -> Result<bool, String> {
 pub fn branch_checked_out_elsewhere(active_root: &Path, branch: &str) -> Result<bool, String> {
     let repo = open_repo(active_root)?;
     let active = canonicalize_lenient(active_root);
-    Ok(worktree_entries(&repo)?.iter().any(|w| {
-        w.branch.as_deref() == Some(branch) && Path::new(&w.path) != active.as_path()
-    }))
+    Ok(worktree_entries(&repo)?
+        .iter()
+        .any(|w| w.branch.as_deref() == Some(branch) && Path::new(&w.path) != active.as_path()))
 }
 
 /// WTC-FR-09: `path` must be one of the repository's worktrees, and its
@@ -725,11 +693,7 @@ fn reroot_with<R: tauri::Runtime>(
         // The *worktree* is what is remembered, not the content root — a
         // co-located project's subdirectory is re-derived on resume from where
         // the project was opened (WTC-FR-17 / GSS-FR-16).
-        remember(
-            store,
-            Path::new(&anchor),
-            Path::new(&context.active_worktree_path),
-        );
+        remember(store, Path::new(&anchor), Path::new(&context.active_worktree_path));
     }
     // WTC-FR-16: exactly one event per successful switch, carrying the new
     // active worktree's path, branch, and detached state.
@@ -818,13 +782,7 @@ pub(crate) fn activate_worktree_at<R: tauri::Runtime>(
     // A co-located project lands in the corresponding subdirectory of the new
     // checkout rather than being relocated to that checkout's root.
     let offset = root_offset(&open_repo(&root)?, &root);
-    reroot(
-        app,
-        project,
-        watcher,
-        store,
-        &content_root_in(&target, &offset),
-    )
+    reroot(app, project, watcher, store, &content_root_in(&target, &offset))
 }
 
 #[tauri::command]
@@ -835,14 +793,7 @@ pub fn check_out_branch_in_active_worktree(
     watcher: State<'_, ProjectWatcher>,
     store: State<'_, GlobalSettingsStore>,
 ) -> Result<WorktreeContext, String> {
-    check_out_branch_at(
-        &app,
-        &crate::logging::BUFFER,
-        &project,
-        &watcher,
-        &store,
-        &branch,
-    )
+    check_out_branch_at(&app, &crate::logging::BUFFER, &project, &watcher, &store, &branch)
 }
 
 /// WTC-FR-10: the checkout, and the re-rooting it makes necessary.
@@ -882,15 +833,7 @@ pub(crate) fn check_out_branch_at<R: tauri::Runtime>(
     // are based on, so the same directory is re-rooted onto — with
     // `AlreadyDiscarded`, since a second clear would discard the records the
     // checkout just wrote.
-    reroot_with(
-        app,
-        project,
-        watcher,
-        store,
-        &root,
-        buffer,
-        project::Diagnostics::AlreadyDiscarded,
-    )
+    reroot_with(app, project, watcher, store, &root, buffer, project::Diagnostics::AlreadyDiscarded)
 }
 
 /// WTC-FR-22 .. WTC-FR-25: refresh, then announce that the branch set may have
@@ -916,9 +859,8 @@ fn refresh_and_announce<R: tauri::Runtime>(
     // refreshed, was skipped, or failed — a branch created or deleted locally
     // since the last enumeration changes the set just as a fetch does. A refresh
     // refused above returns early and emits nothing.
-    let payload = BranchesChangedPayload {
-        repository_root: outcome.context.repository_root.clone(),
-    };
+    let payload =
+        BranchesChangedPayload { repository_root: outcome.context.repository_root.clone() };
     if let Err(e) = app.emit(BRANCHES_CHANGED, payload) {
         // The refresh itself has already happened; an undelivered announcement
         // must not undo it. Logged rather than swallowed, because a silent
@@ -1004,13 +946,7 @@ pub(crate) fn create_worktree_in<R: tauri::Runtime>(
     crate::graduation::require_no_dispatched_direct_run(app)?;
     let offset = root_offset(&open_repo(&root)?, &root);
     let created = create_worktree_at(&root, branch, path)?;
-    reroot(
-        app,
-        project,
-        watcher,
-        store,
-        &content_root_in(&created, &offset),
-    )
+    reroot(app, project, watcher, store, &content_root_in(&created, &offset))
 }
 
 mod creation;

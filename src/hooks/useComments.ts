@@ -38,6 +38,7 @@ import {
 import { addressesEveryone, agentRoster } from "../components/agentTags";
 import { logDebug, logWarn } from "../logging";
 import { hasTurnEnded } from "../state/discussionSession";
+import { useAgentRegistryRevision } from "../state/agentRegistry";
 import { loggableTurnFailure } from "../components/CommentRail/messages";
 import { publishThread, publishThreads } from "../state/conversationThreads";
 import { originArtifactId, originFor, originKind } from "../state/discussionOrigin";
@@ -208,9 +209,11 @@ export function useComments(
     };
   }, [artifactId, enabled, applyThreads]);
 
-  // CTA-FR-VQFJ: read the project's enrolled agents when the rail comes up. A
-  // project enrolling none simply offers no picker — not an error, and not a
-  // reason to withhold the composer.
+  // CTA-FR-VQFJ: read the project's roster when the rail comes up, and again
+  // whenever an agent is created, edited, or deleted (AGT-FR-NJXP). A project
+  // with no agent simply offers no picker — not an error, and not a reason to
+  // withhold the composer.
+  const agentsRevision = useAgentRegistryRevision();
   useEffect(() => {
     if (!enabled) {
       setAgents([]);
@@ -227,7 +230,7 @@ export function useComments(
     return () => {
       cancelled = true;
     };
-  }, [enabled]);
+  }, [enabled, agentsRevision]);
 
   /**
    * CTA-FR-ZOLW: what is still coming, from `"list agent turns"` when the artifact

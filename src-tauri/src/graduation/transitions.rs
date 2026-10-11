@@ -15,28 +15,43 @@ pub fn transition<R: tauri::Runtime>(
     // A run that has ended has ended: nothing moves it again. The **store** is
     // what answers that, not the copy in hand: a turn is driven from a thread of
     // its own, so a run the author discarded while it ran is terminal on disk
-    // and still `working` here (GRD-FR-EWTN).
-    if run.state.is_terminal() {
+    // and still `working` here (GRD-FR-EWTN). A `failed` run alone moves once
+    // more, to `discarded`, because it holds its queue until the author discards
+    // it (GRD-FR-RKWQ).
+    if has_ended(run.state, next) {
         return Ok(());
     }
-    if runs::load_run(app, &run.id).is_ok_and(|stored| stored.state.is_terminal()) {
+    if runs::load_run(app, &run.id).is_ok_and(|stored| has_ended(stored.state, next)) {
         return Ok(());
     }
-    let held_stream = run.holds_stream();
+    let held_queue = run.holds_queue();
     let paused = matches!(
         run.interruption.as_ref().map(|i| i.reason),
         Some(GraduationInterruptionReason::AuthorPause)
     );
 
     run.state = next;
+    // GRD-FR-BNTC: the run was dispatched, so it holds its queue from here until
+    // it is completed or discarded, also while it waits in `queued` again.
+    if next.holds_queue() {
+        run.dispatched = true;
+    }
     // GOB-FR-HXUZ: the stage and the condition are persisted in the same
     // durable write as the change that set them.
     run.observability.apply_state(next, paused);
 
-    // GRD-FR-BNTC: a run that has stopped holding its stream releases it, and
-    // the stream's record is cleared with it (WKS-FR-JQJA).
-    if held_stream && !run.holds_stream() {
+    // GRD-FR-BNTC: a run that has stopped holding its queue releases it, and
+    // the stream's record is cleared with it (WKS-FR-JQJA). A run that rests
+    // keeps both: only `completed` and `discarded` free a queue.
+    if held_queue && !run.holds_queue() {
         release_stream(app, run);
+    } else if !next.is_agent_work() {
+        // The loop that drove the run is ending. Its claim is not the hold, which
+        // the stored run carries (GRD-FR-BSWV), so a Continue that follows finds
+        // no stale claim in its way.
+        if let Some(state) = app.try_state::<GraduationState>() {
+            state.release_run(&run.queue_key(), &run.id);
+        }
     }
     // GRD-FR-GMTX: a run reaching a terminal state reclaims nothing of the
     // stream. No branch is deleted, no working copy removed, no commit undone.
@@ -49,7 +64,10 @@ pub fn transition<R: tauri::Runtime>(
     // DRS-FR-KQTW: the draft's status follows the runs, so a run that ends
     // releases the lock it held. A merge run holds no draft.
     if next.is_terminal() && !run.input.draft_id.is_empty() {
-        let _ = crate::drafts::announce(app, crate::drafts::DraftChange::to(&run.input.draft_id, Vec::new()));
+        crate::drafts::announce(
+            app,
+            crate::drafts::DraftChange::to(&run.input.draft_id, Vec::new()),
+        );
     }
     // WKS-FR-WULF: a stream's row names its merge run and that run's state, so a
     // change of the run is a change of the listing.
@@ -64,6 +82,18 @@ pub fn transition<R: tauri::Runtime>(
     Ok(())
 }
 
+/// Whether a run in `state` can no longer move to `next`.
+///
+/// `completed` and `discarded` end a run for good. `failed` ends it too, except
+/// that the author's discard of it is accepted (GRD-FR-RKWQ).
+fn has_ended(state: GraduationRunState, next: GraduationRunState) -> bool {
+    match state {
+        GraduationRunState::Completed | GraduationRunState::Discarded => true,
+        GraduationRunState::Failed => next != GraduationRunState::Discarded,
+        _ => false,
+    }
+}
+
 /// GOB-FR-VVNI: move the run to a stage and record why.
 pub fn enter_stage<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
@@ -72,8 +102,7 @@ pub fn enter_stage<R: tauri::Runtime>(
     reason: observability::StageReason,
 ) -> Result<(), String> {
     let pass = run.pass();
-    run.observability
-        .note_stage(stage, pass, crate::notes::now_rfc3339(), reason);
+    run.observability.note_stage(stage, pass, crate::notes::now_rfc3339(), reason);
     runs::save_run(app, run)
 }
 
@@ -81,7 +110,7 @@ pub fn enter_stage<R: tauri::Runtime>(
 /// memory and on the stream's own record.
 pub(super) fn release_stream<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &GraduationRun) {
     if let Some(state) = app.try_state::<GraduationState>() {
-        state.release(&run.queue_key());
+        state.release_run(&run.queue_key(), &run.id);
     }
     // An ordinary worktree has no stream record to clear (GRD-FR-ZVNO).
     let released = if run.stream_id.is_empty() {
@@ -111,14 +140,12 @@ pub fn interrupt<R: tauri::Runtime>(
     reason: GraduationInterruptionReason,
     detail: impl Into<String>,
 ) -> Result<(), String> {
-    // GRD-FR-BNTC: `interrupted` holds no stream, whatever stopped the run, so
-    // every interruption gives the queue slot back.
-    let released = true;
+    // GRD-FR-BNTC: `interrupted` holds the queue and the project slot, whatever
+    // stopped the run, so no interruption gives either back.
     run.interruption = Some(GraduationInterruption {
         reason,
         at: crate::notes::now_rfc3339(),
         detail: detail.into(),
-        stream_released: released,
         resume_requested_at: None,
     });
     transition(app, run, GraduationRunState::Interrupted)
@@ -127,11 +154,11 @@ pub fn interrupt<R: tauri::Runtime>(
 /// Rest a run on a condition the author clears (GRD-FR-QJHM).
 ///
 /// GRL-FR-QZFB: the same condition twice in a row is not a condition Continue
-/// clears. The first one rests the run `blocked`, which holds the stream so the
-/// author clears it against the work standing in the working copy. A second one
-/// carrying the same code rests the run `awaiting_author` instead, which
-/// releases the stream — the queue behind a fault that repeats waits for
-/// nothing, and the author decides rather than continuing into it again.
+/// clears. The first one rests the run `blocked`, so the author clears it
+/// against the work standing in the working copy. A second one carrying the
+/// same code rests the run `awaiting_author` instead, and the author decides
+/// rather than continuing into it again. Both states hold the queue and the
+/// project slot (GRD-FR-BNTC).
 ///
 /// `resume_part` is recorded either way, so whichever state the run rests in it
 /// resumes at the phase it stopped in (GXD-FR-TJRV).

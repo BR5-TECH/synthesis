@@ -1,7 +1,9 @@
 //! The text of a question and of its answer as comments (ADQ-FR-MRSK).
 
+use super::question_sets::{
+    answer_body_of, answer_for, asking_agent, option_at, set_for, set_path,
+};
 use super::*;
-use super::question_sets::{answer_body_of, answer_for, asking_agent, option_at, set_for, set_path};
 
 /// numbered list, and nothing else.
 #[test]
@@ -26,19 +28,13 @@ fn the_question_body_is_the_text_and_its_numbered_options() {
 /// the note carries something.
 #[test]
 fn the_answer_body_carries_the_note_only_when_one_was_written() {
-    assert_eq!(
-        answer_body_of("paired specs", None),
-        "**Selected option:** paired specs",
-    );
+    assert_eq!(answer_body_of("paired specs", None), "**Selected option:** paired specs",);
     assert_eq!(
         answer_body_of("paired specs", Some("keep the diagram in the ui one")),
         "**Selected option:** paired specs\n\n**Note:** keep the diagram in the ui one",
     );
     // A note of nothing but whitespace is no note.
-    assert_eq!(
-        answer_body_of("paired specs", Some("   ")),
-        "**Selected option:** paired specs",
-    );
+    assert_eq!(answer_body_of("paired specs", Some("   ")), "**Selected option:** paired specs",);
 }
 
 /// ADQ-FR-NUEB: a value's text is **unchanged** by the escaping.
@@ -82,22 +78,13 @@ fn escaping_leaves_a_plain_value_byte_for_byte() {
 #[test]
 fn escaping_protects_only_what_the_renderer_reads() {
     let body = answer_body_of("use *bold* and `code` and _under_", None);
-    assert_eq!(
-        body,
-        "**Selected option:** use \\*bold\\* and \\`code\\` and \\_under\\_",
-    );
+    assert_eq!(body, "**Selected option:** use \\*bold\\* and \\`code\\` and \\_under\\_",);
     // A value already carrying a backslash has it escaped too, rather than
     // leaving it to be read as the escape of whatever follows. The renderer
     // takes the added one back out, so `C:\Users` reads as it was written.
-    assert_eq!(
-        answer_body_of("C:\\Users\\demo", None),
-        "**Selected option:** C:\\\\Users\\\\demo",
-    );
+    assert_eq!(answer_body_of("C:\\Users\\demo", None), "**Selected option:** C:\\\\Users\\\\demo",);
     // And a link's brackets, which the renderer also reads.
-    assert_eq!(
-        answer_body_of("[not a link](x)", None),
-        "**Selected option:** \\[not a link\\](x)",
-    );
+    assert_eq!(answer_body_of("[not a link](x)", None), "**Selected option:** \\[not a link\\](x)",);
 }
 
 /// ADQ-FR-NUEB: neither body carries a routing tag, an identifier, or any marker
@@ -134,12 +121,7 @@ fn the_event_identities_are_derived_from_the_set_and_the_position() {
 #[test]
 fn the_identities_sort_into_the_recorded_question_order() {
     let mut identities: Vec<String> = (1..=10)
-        .flat_map(|position| {
-            [
-                question_identity("s1", position),
-                answer_identity("s1", position),
-            ]
-        })
+        .flat_map(|position| [question_identity("s1", position), answer_identity("s1", position)])
         .collect();
     let expected = identities.clone();
     identities.sort();
@@ -162,20 +144,14 @@ fn a_ten_question_set_folds_with_each_answer_beside_its_question() {
     let set = set_for(&thread.id, "s1", &refs);
     reserve_question_set_record(&root, &root, &thread.id, &set).unwrap();
 
-    let answers: Vec<QuestionAnswer> = (1..=10)
-        .map(|position| answer_for(position, 1, "one", None))
-        .collect();
+    let answers: Vec<QuestionAnswer> =
+        (1..=10).map(|position| answer_for(position, 1, "one", None)).collect();
     let outcome =
-        commit_question_answers(&root, &root, &thread.id, "s1", &answers, &human("raver119")).unwrap();
+        commit_question_answers(&root, &root, &thread.id, "s1", &answers, &human("raver119"))
+            .unwrap();
 
-    let ids: Vec<&str> = outcome
-        .submitted
-        .discussion
-        .comments
-        .iter()
-        .skip(1)
-        .map(|c| c.id.as_str())
-        .collect();
+    let ids: Vec<&str> =
+        outcome.submitted.discussion.comments.iter().skip(1).map(|c| c.id.as_str()).collect();
     assert_eq!(ids.len(), 20);
     for position in 1..=10usize {
         let at = (position - 1) * 2;
@@ -284,41 +260,22 @@ fn a_submission_appends_paired_comments_in_the_recorded_order() {
     let set = set_for(&thread.id, "s1", &["first?", "second?"]);
     reserve_question_set_record(&root, &root, &thread.id, &set).unwrap();
 
-    let answers = vec![
-        answer_for(1, 2, "two", Some("a note")),
-        answer_for(2, 1, "one", None),
-    ];
+    let answers = vec![answer_for(1, 2, "two", Some("a note")), answer_for(2, 1, "one", None)];
     let outcome =
-        commit_question_answers(&root, &root, &thread.id, "s1", &answers, &human("raver119")).unwrap();
+        commit_question_answers(&root, &root, &thread.id, "s1", &answers, &human("raver119"))
+            .unwrap();
 
     // The opening comment, then question/answer, question/answer.
-    let ids: Vec<&str> = outcome
-        .submitted
-        .discussion
-        .comments
-        .iter()
-        .map(|c| c.id.as_str())
-        .collect();
+    let ids: Vec<&str> =
+        outcome.submitted.discussion.comments.iter().map(|c| c.id.as_str()).collect();
     assert_eq!(&ids[1..], &["s1:01-1q", "s1:01-2a", "s1:02-1q", "s1:02-2a"]);
 
-    let by: Vec<&Participant> = outcome
-        .submitted
-        .discussion
-        .comments
-        .iter()
-        .skip(1)
-        .map(|c| &c.author)
-        .collect();
+    let by: Vec<&Participant> =
+        outcome.submitted.discussion.comments.iter().skip(1).map(|c| &c.author).collect();
     assert_eq!(by, vec![&asking_agent(), &human("raver119"), &asking_agent(), &human("raver119")]);
 
-    let bodies: Vec<&str> = outcome
-        .submitted
-        .discussion
-        .comments
-        .iter()
-        .skip(1)
-        .map(|c| c.body.as_str())
-        .collect();
+    let bodies: Vec<&str> =
+        outcome.submitted.discussion.comments.iter().skip(1).map(|c| c.body.as_str()).collect();
     assert_eq!(bodies[0], "first?\n\n1. one\n2. two");
     assert_eq!(bodies[1], "**Selected option:** two\n\n**Note:** a note");
     assert_eq!(bodies[3], "**Selected option:** one");
@@ -366,17 +323,16 @@ fn a_retry_after_the_set_is_gone_appends_nothing_and_returns_the_same_result() {
     reserve_question_set_record(&root, &root, &thread.id, &set).unwrap();
     let answers = vec![answer_for(1, 1, "one", None), answer_for(2, 2, "two", None)];
     let first =
-        commit_question_answers(&root, &root, &thread.id, "s1", &answers, &human("raver119")).unwrap();
+        commit_question_answers(&root, &root, &thread.id, "s1", &answers, &human("raver119"))
+            .unwrap();
 
     let retry =
-        commit_question_answers(&root, &root, &thread.id, "s1", &answers, &human("raver119")).unwrap();
+        commit_question_answers(&root, &root, &thread.id, "s1", &answers, &human("raver119"))
+            .unwrap();
 
     assert!(retry.already_committed);
     assert_eq!(retry.appended_questions, 0);
-    assert_eq!(
-        retry.submitted.final_answer_comment_id,
-        first.submitted.final_answer_comment_id,
-    );
+    assert_eq!(retry.submitted.final_answer_comment_id, first.submitted.final_answer_comment_id,);
     assert_eq!(
         retry.submitted.discussion.comments.len(),
         first.submitted.discussion.comments.len(),
@@ -540,10 +496,7 @@ fn a_retry_with_the_set_still_standing_appends_no_duplicate() {
         .questions
         .iter()
         .flat_map(|question| {
-            let answer = answers
-                .iter()
-                .find(|a| a.question_position == question.position)
-                .unwrap();
+            let answer = answers.iter().find(|a| a.question_position == question.position).unwrap();
             [
                 (
                     thread.id.clone(),
@@ -615,16 +568,11 @@ fn answers_sent_out_of_order_append_in_the_recorded_order() {
     // Sent second-then-first.
     let answers = vec![answer_for(2, 1, "one", None), answer_for(1, 2, "two", None)];
     let outcome =
-        commit_question_answers(&root, &root, &thread.id, "s1", &answers, &human("raver119")).unwrap();
+        commit_question_answers(&root, &root, &thread.id, "s1", &answers, &human("raver119"))
+            .unwrap();
 
-    let bodies: Vec<&str> = outcome
-        .submitted
-        .discussion
-        .comments
-        .iter()
-        .skip(1)
-        .map(|c| c.body.as_str())
-        .collect();
+    let bodies: Vec<&str> =
+        outcome.submitted.discussion.comments.iter().skip(1).map(|c| c.body.as_str()).collect();
     assert_eq!(bodies[0], "first?\n\n1. one\n2. two");
     assert_eq!(bodies[1], "**Selected option:** two");
     assert_eq!(bodies[2], "second?\n\n1. one\n2. two");

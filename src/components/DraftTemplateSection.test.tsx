@@ -10,7 +10,7 @@ import userEvent from "@testing-library/user-event";
 
 import { DraftTemplateSection } from "./DraftTemplateSection";
 import { flushDraftTemplate } from "../state/draftTemplate";
-import { Settings } from "./Settings";
+import { Settings } from "../test/settingsHarness";
 import { letWriteLand } from "../test/autosave";
 import type { ProjectConfig } from "../types";
 
@@ -121,8 +121,8 @@ describe("Draft template section (SET-FR-16 … SET-FR-20)", () => {
     expect(screen.queryByText(/stubbed in this UI kit/)).toBeNull();
   });
 
-  // SET-FR-17, SET-FR-08, SET-FR-09, DRP-FR-06: a burst of typing is one write, reported as saving then saved.
-  it("SET-FR-17, SET-FR-08, SET-FR-09, DRP-FR-06: one write follows a rest, reported saving then saved", async () => {
+  // SET-FR-17, SET-FR-08, SWN-FR-10, DRP-FR-06: a burst of typing is one write, reported as saving then saved.
+  it("SET-FR-17, SET-FR-08, SWN-FR-10, DRP-FR-06: one write follows a rest, reported saving then saved", async () => {
     const state = backend(config(null));
     render(<DraftTemplateSection contentRoot="/a#0" />);
     const area = await source();
@@ -143,13 +143,13 @@ describe("Draft template section (SET-FR-16 … SET-FR-20)", () => {
   });
 
   /**
-   * SET-FR-17, DRP-FR-06 tail / SET-FR-08 / SET-FR-09: the section takes no part in the
+   * SET-FR-17, DRP-FR-06 tail / SET-FR-08 / SWN-FR-10: the section takes no part in the
    * tab's per-section dirty state and raises no discard-unsaved-changes
    * confirmation — there is nothing to discard, because what the author typed
    * is already on its way to disk. And SET-FR-17's other immediate write:
    * navigating away from the section WITHIN the tab.
    */
-  it("SET-FR-17, SET-FR-08, SET-FR-09, DRP-FR-06: navigating away writes at once, with no dirty state and no discard prompt", async () => {
+  it("SET-FR-17, SET-FR-08, SWN-FR-10, DRP-FR-06: navigating away writes at once, with no dirty state and no discard prompt", async () => {
     const state = backend(config(null));
     render(
       <Settings

@@ -68,12 +68,9 @@ fn a_co_located_project_resumes_into_the_remembered_worktrees_subdirectory() {
     f.branch("alpha");
     let alpha = f.add_worktree("wt-alpha", "alpha");
     let store = GlobalSettingsStore::in_memory();
-    store
-        .save_active_worktree(&to_string_path(&f.root()), &to_string_path(&alpha))
-        .unwrap();
+    store.save_active_worktree(&to_string_path(&f.root()), &to_string_path(&alpha)).unwrap();
 
-    let (resumed, fell_back) =
-        resume_active_worktree(&store, &f.root(), &f.root().join("docs"));
+    let (resumed, fell_back) = resume_active_worktree(&store, &f.root(), &f.root().join("docs"));
     assert_eq!(resumed, alpha.join("docs"));
     assert!(!fell_back);
 }

@@ -25,15 +25,10 @@ fn sequences_never_reset_across_a_clear() {
 
     append(&buffer, vec![input(LogLevel::Info, &[Domain::Backend], "c")]);
     let fresh = all(&buffer).records[0].sequence;
-    assert!(
-        fresh > pre_clear,
-        "sequence {fresh} must exceed the pre-clear {pre_clear}"
-    );
+    assert!(fresh > pre_clear, "sequence {fresh} must exceed the pre-clear {pre_clear}");
 
     // And the stale cursor selects only post-clear records.
-    let page = buffer
-        .query(&LogFilter::default(), Some(Cursor::After(pre_clear)), 100)
-        .unwrap();
+    let page = buffer.query(&LogFilter::default(), Some(Cursor::After(pre_clear)), 100).unwrap();
     assert_eq!(page.records.len(), 1);
     assert_eq!(page.records[0].message, "c");
     assert_eq!(page.generation, 1);
@@ -49,9 +44,8 @@ fn a_batch_keeps_its_submitted_order_and_each_records_own_ts() {
     // instant it was emitted; ordering follows append order regardless.
     let buffer = LogBuffer::new();
     let mut batch = Vec::new();
-    for (n, ts) in ["...T00:00:03.000Z", "...T00:00:01.000Z", "...T00:00:02.000Z"]
-        .into_iter()
-        .enumerate()
+    for (n, ts) in
+        ["...T00:00:03.000Z", "...T00:00:01.000Z", "...T00:00:02.000Z"].into_iter().enumerate()
     {
         let mut i = input(LogLevel::Info, &[Domain::Frontend], &format!("m{n}"));
         i.ts = ts.to_string();
@@ -100,14 +94,10 @@ fn find_answers_with_the_oldest_match_and_none_where_there_is_none() {
         append(&buffer, vec![i]);
     }
     // A record the predicate below must not answer with, appended last.
-    append(
-        &buffer,
-        vec![input(LogLevel::Info, &[Domain::Frontend], "model answered")],
-    );
+    append(&buffer, vec![input(LogLevel::Info, &[Domain::Frontend], "model answered")]);
 
-    let hit = buffer
-        .find(|r| r.message == "calling model")
-        .expect("four records carry that message");
+    let hit =
+        buffer.find(|r| r.message == "calling model").expect("four records carry that message");
     assert_eq!(
         hit.fields.get("turnId").and_then(|v| v.as_str()),
         Some("turn-0"),

@@ -3,7 +3,6 @@
 
 use std::time::Instant;
 
-
 use crate::changes::{ERR_NOT_A_REPO, ERR_NO_MERGE_BASE, ERR_UNKNOWN_BRANCH};
 use crate::github_tokens::{self};
 use crate::log_fields;
@@ -114,11 +113,7 @@ pub(crate) fn log_failure<S: LogSink + Clone + Send + 'static>(
     mut fields: Fields,
 ) {
     fields.insert("error".to_string(), serde_json::json!(error));
-    let level = if is_refusal(error) {
-        LogLevel::Warn
-    } else {
-        LogLevel::Error
-    };
+    let level = if is_refusal(error) { LogLevel::Warn } else { LogLevel::Error };
     logging::log(sink, buffer, level, domains, message, fields);
 }
 
@@ -128,21 +123,13 @@ pub(crate) fn log_failure<S: LogSink + Clone + Send + 'static>(
 /// the file's *content* appears in no record this module writes.
 pub(crate) fn scope_fields(scope: &DiffScope) -> Fields {
     let (kind, path, previous, target) = match scope {
-        DiffScope::Path {
-            path,
-            previous_path,
-        } => ("path", Some(path), previous_path.as_deref(), None),
+        DiffScope::Path { path, previous_path } => {
+            ("path", Some(path), previous_path.as_deref(), None)
+        }
         DiffScope::Staged => ("staged", None, None, None),
-        DiffScope::Branch {
-            path,
-            target_branch,
-            previous_path,
-        } => (
-            "branch",
-            Some(path),
-            previous_path.as_deref(),
-            Some(target_branch),
-        ),
+        DiffScope::Branch { path, target_branch, previous_path } => {
+            ("branch", Some(path), previous_path.as_deref(), Some(target_branch))
+        }
     };
     let mut fields = log_fields! { "scope" => kind };
     if let Some(path) = path {

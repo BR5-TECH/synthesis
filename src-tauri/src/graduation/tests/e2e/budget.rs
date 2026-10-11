@@ -22,10 +22,7 @@ fn a_spent_pass_budget_rests_the_run_and_continue_resets_only_that_budget() {
     Scenario::named("budget exhausted")
         .with_setting(Setting::PassBudget, 1)
         .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
-        .review_turn(Script::answers_revise(
-            ReviewSeverity::Major,
-            "The empty state is not there.",
-        ))
+        .review_turn(Script::answers_revise(ReviewSeverity::Major, "The empty state is not there."))
         .run()
         // One pass is the whole budget, so the first `revise` verdict is
         // already the last one this window allows.
@@ -39,7 +36,7 @@ fn a_spent_pass_budget_rests_the_run_and_continue_resets_only_that_budget() {
         // GRL-FR-XBUE: the run says why it rested and what it spent, so the
         // author reads a bound rather than a run that stopped for no reason.
         .expect_rest_reason("pass_budget_exhausted", 1)
-        .expect_stream_released()
+        .expect_stream_held()
         .expect_commits(0)
         // GRD-FR-CYIB: Continue grants a whole budget again, from the pass
         // after the one already made.
@@ -84,7 +81,7 @@ fn a_wider_pass_budget_grants_more_passes_before_the_run_rests() {
         .expect_pass_window(1, 3)
         .expect_turns(3, 3)
         .expect_dispatch_count(6)
-        .expect_stream_released();
+        .expect_stream_held();
 }
 
 // GTE-FR-VNOU / GRL-FR-KWNP: the settings are read before **every** dispatch,
@@ -159,9 +156,7 @@ fn a_stored_bound_outside_its_range_leaves_the_loop_at_its_own_default() {
         .expect_state(GraduationRunState::AwaitingAuthor)
         .expect_pass_window(1, 2)
         .expect_dispatch(0, |d| {
-            d.execution_timeout_ms(
-                crate::graduation::driver::phases::DEFAULT_EXECUTION_TIMEOUT_MS,
-            )
+            d.execution_timeout_ms(crate::graduation::driver::phases::DEFAULT_EXECUTION_TIMEOUT_MS)
         });
 }
 
@@ -204,7 +199,7 @@ fn a_budget_lowered_while_a_turn_runs_rests_the_run_at_the_next_dispatch() {
         // GRL-FR-XBUE: it rests rather than blocking, so the author reads a
         // budget they lowered rather than an internal task fault.
         .expect_blocker_absent()
-        .expect_stream_released();
+        .expect_stream_held();
 }
 
 // GTE-FR-KAZX / GRL-FR-KWNP, GRL-FR-XBUE: the same lowering, landing between a
@@ -227,7 +222,7 @@ fn a_budget_lowered_before_the_review_rests_the_run_rather_than_blocking_it() {
         .expect_state(GraduationRunState::AwaitingAuthor)
         .expect_pass_window(1, 1)
         .expect_blocker_absent()
-        .expect_stream_released();
+        .expect_stream_held();
 }
 
 // GTE-FR-GBLI / GRD-FR-CYIB, GRL-FR-XBUE: a run resumed under a budget smaller than the one
@@ -253,7 +248,7 @@ fn a_run_resumed_under_a_smaller_budget_rests_again() {
         .expect_pass_window(1, 1)
         // No turn is dispatched at all: the run rests before it composes one.
         .expect_dispatch_count(0)
-        .expect_stream_released();
+        .expect_stream_held();
 }
 
 // GTE-FR-TCUW / GRD-FR-CYIB, GRL-FR-XBUE: Continue resets the budget for a spent

@@ -19,16 +19,9 @@ fn note(note_id: &str, body: &str) -> SourceFile {
 /// Write a note into `root` through the storage module's own create, which is
 /// what decides what the index may hold (NTC-FR-24).
 fn seed_note(root: &crate::fs::RootFs, scope: crate::notes::NoteScope, body: &str) -> String {
-    crate::notes::create_note_in(
-        root,
-        scope,
-        body.to_string(),
-        None,
-        None,
-        "2026-01-01T00:00:00Z",
-    )
-    .expect("the note writes")
-    .id
+    crate::notes::create_note_in(root, scope, body.to_string(), None, None, "2026-01-01T00:00:00Z")
+        .expect("the note writes")
+        .id
 }
 
 fn entity_scope(entity_id: &str) -> crate::notes::NoteScope {
@@ -46,12 +39,7 @@ fn repass(app: &tauri::App<tauri::test::MockRuntime>) {
     let indexer = app.state::<Bm25Indexer>();
     let root = indexer.root().expect("mounted");
     let generation = indexer.generation();
-    indexer.run_pass(
-        &handle,
-        &crate::fs::RootFs::for_root(&root),
-        PassScope::ALL,
-        generation,
-    );
+    indexer.run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ALL, generation);
 }
 
 fn note_ids(hits: &[ChunkHit]) -> Vec<String> {
@@ -72,7 +60,8 @@ fn a_note_is_one_whole_document_and_every_persisted_note_is_one() {
     std::fs::write(root.join("specifications/live.md"), "# Live\n\nnothing\n").unwrap();
 
     let project = seed_note(&root, crate::notes::NoteScope::Project, "the teardown is unhandled");
-    let attached = seed_note(&root, entity_scope("specifications/live.md"), "teardown of the panel");
+    let attached =
+        seed_note(&root, entity_scope("specifications/live.md"), "teardown of the panel");
     let orphaned = seed_note(&root, entity_scope("specifications/gone.md"), "teardown never runs");
     let revised = crate::notes::create_note_in(
         &root,
@@ -89,12 +78,7 @@ fn a_note_is_one_whole_document_and_every_persisted_note_is_one() {
     let indexer = app.state::<Bm25Indexer>();
     let hits = search(&indexer, &[IndexId::Notes], "teardown", 10);
 
-    let mut expected = vec![
-        project.clone(),
-        attached.clone(),
-        orphaned.clone(),
-        revised.clone(),
-    ];
+    let mut expected = vec![project.clone(), attached.clone(), orphaned.clone(), revised.clone()];
     expected.sort();
     assert_eq!(note_ids(&hits), expected, "all four notes are searchable");
     for hit in &hits {
@@ -176,9 +160,7 @@ fn a_note_change_is_recorded_on_the_internal_channel_and_dirties_the_notes_scope
     let app = mounted_app();
     let handle = app.handle().clone();
 
-    let change = crate::notes::NoteChange {
-        note_id: "n1".to_string(),
-    };
+    let change = crate::notes::NoteChange { note_id: "n1".to_string() };
     note_notes_change(&handle, &change);
 
     let indexer = app.state::<Bm25Indexer>();
@@ -220,11 +202,7 @@ fn a_note_change_reaching_a_mounted_indexer_leaves_the_pending_scope_at_notes() 
 
     let indexer = app.state::<Bm25Indexer>();
     let pending = indexer.schedule().pending;
-    assert_eq!(
-        pending,
-        PassScope::NOTES,
-        "the notes part alone was dirtied: {pending:?}",
-    );
+    assert_eq!(pending, PassScope::NOTES, "the notes part alone was dirtied: {pending:?}",);
     // `request_pass` spawned a thread that wakes in 250ms. Unmounting now is
     // what makes it return instead of running a pass against a `TempDir` this
     // test is about to remove.
@@ -246,7 +224,8 @@ fn a_pass_covering_one_part_leaves_the_other_two_alone() {
     );
     assert_eq!(both.file_count(IndexId::Notes), 1);
 
-    let artifacts_only = pass(&both, vec![artifact(IndexId::Spec, "a.md", "alpha")], PassScope::ARTIFACTS);
+    let artifacts_only =
+        pass(&both, vec![artifact(IndexId::Spec, "a.md", "alpha")], PassScope::ARTIFACTS);
     assert_eq!(
         artifacts_only.file_count(IndexId::Notes),
         1,
@@ -276,9 +255,10 @@ fn a_note_body_rewrite_replaces_its_document_whole_and_a_deletion_removes_it() {
     let removed = seed_note(&root, crate::notes::NoteScope::Project, "charlie doomed");
 
     let app = indexed(&root_path);
-    let indexer = app.state::<Bm25Indexer>();
-    assert_eq!(search(&indexer, &[IndexId::Notes], "alpha", 10).len(), 1);
-    drop(indexer);
+    {
+        let indexer = app.state::<Bm25Indexer>();
+        assert_eq!(search(&indexer, &[IndexId::Notes], "alpha", 10).len(), 1);
+    }
 
     crate::notes::update_note_in(
         &root,
@@ -349,19 +329,13 @@ fn a_change_that_leaves_the_body_alone_costs_the_notes_index_nothing() {
         "2026-03-03T00:00:00Z",
     )
     .expect("the move lands");
-    std::fs::rename(
-        root.join("specifications/old.md"),
-        root.join("specifications/new.md"),
-    )
-    .unwrap();
+    std::fs::rename(root.join("specifications/old.md"), root.join("specifications/new.md"))
+        .unwrap();
     crate::notes::follow_rename(&root, "specifications/old.md", "specifications/new.md");
     crate::notes::update_note_in(
         &root,
         &id,
-        crate::notes::NoteFields {
-            reminder: Some(None),
-            ..Default::default()
-        },
+        crate::notes::NoteFields { reminder: Some(None), ..Default::default() },
         "2026-03-04T00:00:00Z",
     )
     .expect("the reminder clears");
@@ -370,10 +344,7 @@ fn a_change_that_leaves_the_body_alone_costs_the_notes_index_nothing() {
     let indexer = app.state::<Bm25Indexer>();
     let after = search(&indexer, &[IndexId::Notes], "foxtrot", 10);
     assert_eq!(note_ids(&after), vec![id], "the note is still found");
-    assert_eq!(
-        after[0].text, before[0].text,
-        "and its document is what it was",
-    );
+    assert_eq!(after[0].text, before[0].text, "and its document is what it was",);
 }
 
 #[test]
@@ -409,12 +380,7 @@ fn changing_the_active_worktree_discards_the_notes_index_with_the_others() {
         "the outgoing root's notes go the moment the new root is mounted",
     );
     let generation = indexer.generation();
-    indexer.run_pass(
-        &handle,
-        &crate::fs::RootFs::for_root(&b_path),
-        PassScope::ALL,
-        generation,
-    );
+    indexer.run_pass(&handle, &crate::fs::RootFs::for_root(&b_path), PassScope::ALL, generation);
     assert!(search(&indexer, &[IndexId::Notes], "golf", 10).is_empty());
     assert_eq!(search(&indexer, &[IndexId::Notes], "hotel", 10).len(), 1);
 }
@@ -444,11 +410,8 @@ fn an_oversized_or_unreadable_note_contributes_no_document_and_is_warned_about()
         "india ".repeat(350),
     );
     std::fs::write(root.join(format!(".synthesis/notes/{OVERSIZED}.toml")), oversized).unwrap();
-    std::fs::write(
-        root.join(format!(".synthesis/notes/{BROKEN}.toml")),
-        "this is not = = toml",
-    )
-    .unwrap();
+    std::fs::write(root.join(format!(".synthesis/notes/{BROKEN}.toml")), "this is not = = toml")
+        .unwrap();
     // NTC-FR-14's other two shapes, which reach this index on the same terms:
     // a file whose stem disagrees with the id inside it, and one whose scope is
     // no scope this application serves.
@@ -471,11 +434,7 @@ fn an_oversized_or_unreadable_note_contributes_no_document_and_is_warned_about()
     let indexer = app.state::<Bm25Indexer>();
 
     let hits = search(&indexer, &[IndexId::Notes], "india", 10);
-    assert_eq!(
-        note_ids(&hits),
-        vec![good],
-        "only the well-formed note contributes a document",
-    );
+    assert_eq!(note_ids(&hits), vec![good], "only the well-formed note contributes a document",);
     assert_eq!(
         hits[0].text, "india is well formed",
         "and it is that note's whole body — nothing was truncated into a document",
@@ -527,11 +486,7 @@ fn an_oversized_or_unreadable_note_contributes_no_document_and_is_warned_about()
             "{id} is named as a note the pass could not take up: {reasons:?}",
         );
     }
-    assert_eq!(
-        reasons.len(),
-        4,
-        "each of the four is reported exactly once: {reasons:?}",
-    );
+    assert_eq!(reasons.len(), 4, "each of the four is reported exactly once: {reasons:?}",);
     // Nothing downstream redacts anything, so the emit site is the only place
     // this can be enforced: no word of a skipped note's text is in a record.
     for record in skipped {

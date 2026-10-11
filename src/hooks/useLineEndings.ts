@@ -55,7 +55,7 @@ export function useLineEndings(
       })
       .catch(() => {
         // PSS-FR-10: a damaged `project.toml` is a typed error. The Project
-        // settings window is where that gets surfaced (SET-FR-09); the status bar
+        // settings window is where that gets surfaced (SWN-FR-10); the status bar
         // is a strip of ambient facts, so it simply shows no convention rather
         // than an error message.
         if (!cancelled) setLineEndings(null);

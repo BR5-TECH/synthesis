@@ -20,7 +20,7 @@
 # The compiler, the toolchain, the source tree, and the build cache stay here.
 # No layer of this stage reaches the final image (BMS-FR-17).
 # ---------------------------------------------------------------------------
-FROM rust:1.88-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0 AS build
+FROM rust:1.95-bookworm@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1 AS build
 
 # BMS-FR-14: the release tag the image is built from. The build script reads it
 # and compiles the value into the binary. When it is not supplied, and the

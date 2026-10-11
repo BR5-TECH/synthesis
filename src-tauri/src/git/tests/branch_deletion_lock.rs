@@ -138,7 +138,10 @@ fn records_name_the_lock_as_a_boolean_and_never_the_reason() {
     fx.delete("feature", false, false).unwrap();
 
     let locked = Some(&serde_json::json!(true));
-    assert_eq!(record_for(fx.buffer, "branch deletion inspected").fields.get("worktreeLocked"), locked);
+    assert_eq!(
+        record_for(fx.buffer, "branch deletion inspected").fields.get("worktreeLocked"),
+        locked
+    );
     assert_eq!(record_for(fx.buffer, "branch deleted").fields.get("worktreeLocked"), locked);
     let text = buffer_text(fx.buffer);
     assert!(!text.contains("pid 89346"), "no lock reason in a record: {text}");
@@ -154,7 +157,10 @@ fn records_of_an_unlocked_worktree_say_it_is_not_locked() {
     fx.delete("feature", false, false).unwrap();
 
     let unlocked = Some(&serde_json::json!(false));
-    assert_eq!(record_for(fx.buffer, "branch deletion inspected").fields.get("worktreeLocked"), unlocked);
+    assert_eq!(
+        record_for(fx.buffer, "branch deletion inspected").fields.get("worktreeLocked"),
+        unlocked
+    );
     assert_eq!(record_for(fx.buffer, "branch deleted").fields.get("worktreeLocked"), unlocked);
 }
 
@@ -231,7 +237,8 @@ fn a_lock_is_read_and_removed_while_the_project_is_rooted_in_another_linked_work
 #[test]
 fn the_plan_of_a_stream_branch_carries_the_lock_of_its_working_copy() {
     let fx = DeletionFixture::new();
-    let stream = crate::streams::create_work_stream(fx.app.clone(), "Editor".into(), None).unwrap();
+    let stream =
+        crate::streams::create_work_stream(fx.app.clone(), "Editor".into(), None, None).unwrap();
     lock(&fx, std::path::Path::new(&stream.worktree_path), Some(REASON));
 
     let plan = fx.inspect(&stream.branch).unwrap();

@@ -330,10 +330,7 @@ describe("the settings buttons moved out of the activity bar (SNV-FR-03 / STB-FR
     const activityBar = document.querySelector(".activity-bar") as HTMLElement;
     expect(activityBar).toBeTruthy();
     expect(
-      within(activityBar).queryByLabelText("Global settings"),
-    ).not.toBeInTheDocument();
-    expect(
-      within(activityBar).queryByLabelText("Project settings"),
+      within(activityBar).queryByLabelText("Settings"),
     ).not.toBeInTheDocument();
     // SNV-FR-44: the panel toggles are all that remain — the vertical-panel
     // cluster and the bottom-panel one.
@@ -344,11 +341,11 @@ describe("the settings buttons moved out of the activity bar (SNV-FR-03 / STB-FR
     }
   });
 
-  it("STB-FR-04, SWN-FR-01, SWN-FR-02, SNV-FR-03: opens each settings child window and creates no tab", async () => {
-    // STB-FR-04 / GLS-FR-01, GLS-FR-02, SWN-FR-06 / SET-FR-01, SET-FR-02: the status bar's two buttons and the
-    // application menu's two entries are how either window is opened from the
-    // shell. Neither button creates a tab in the main viewport (SWN-FR-01,
-    // SWN-FR-18) and neither draws a settings surface inside this window.
+  it("STB-FR-04, SWN-FR-01, SWN-FR-02, SWN-FR-MRNB, SNV-FR-03: opens the Settings child window and creates no tab", async () => {
+    // STB-FR-04, SWN-FR-06: the status bar's button and the application menu's
+    // entry are how the window is opened from the shell. The button creates no
+    // tab in the main viewport (SWN-FR-01, SWN-FR-18) and draws no settings
+    // surface inside this window.
     render(<App />);
     await enterIde();
     const bar = screen.getByTestId("status-bar");
@@ -357,7 +354,7 @@ describe("the settings buttons moved out of the activity bar (SNV-FR-03 / STB-FR
     ).map((el) => el.textContent);
 
     await userEvent.click(
-      within(bar).getByRole("button", { name: "Global settings" }),
+      within(bar).getByRole("button", { name: "Settings" }),
     );
     await waitFor(() =>
       expect(
@@ -366,19 +363,7 @@ describe("the settings buttons moved out of the activity bar (SNV-FR-03 / STB-FR
     );
     expect(
       invokeMock.mock.calls.find((c) => c[0] === "open_settings_window")![1],
-    ).toEqual({ kind: "global", section: null });
-
-    await userEvent.click(
-      within(bar).getByRole("button", { name: "Project settings" }),
-    );
-    await waitFor(() =>
-      expect(
-        invokeMock.mock.calls.filter((c) => c[0] === "open_settings_window"),
-      ).toHaveLength(2),
-    );
-    expect(
-      invokeMock.mock.calls.filter((c) => c[0] === "open_settings_window")[1][1],
-    ).toEqual({ kind: "project", section: null });
+    ).toEqual({ section: null });
 
     // Nothing was added to the strip, and no settings surface is in this window.
     expect(
@@ -576,7 +561,7 @@ describe("the diff summary (STB-FR-25 / STB-FR-27 / STB-FR-29)", () => {
     expect(screen.queryByText(/not a git repository/i)).not.toBeInTheDocument();
     const bar = screen.getByTestId("status-bar");
     expect(
-      within(bar).getByRole("button", { name: "Global settings" }),
+      within(bar).getByRole("button", { name: "Settings" }),
     ).toBeInTheDocument();
     expect(await screen.findByTestId("line-ending-select")).toBeInTheDocument();
   });

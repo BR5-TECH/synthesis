@@ -14,7 +14,8 @@ fn an_unborn_head_reports_the_whole_working_tree_as_new() {
     let f = Fixture::new();
     f.write("first.md", "one\ntwo\n");
 
-    let set = uncommitted_change_set(&crate::fs::RootFs::for_root(f.root())).expect("no commits is not an error");
+    let set = uncommitted_change_set(&crate::fs::RootFs::for_root(f.root()))
+        .expect("no commits is not an error");
     let e = entry(&set, "first.md");
     assert_eq!(e.change_status, ChangeStatus::Untracked);
     assert_eq!((e.added_lines, e.removed_lines), (Some(2), Some(0)));
@@ -58,10 +59,7 @@ fn a_detached_head_flags_no_branch_as_current() {
 
     let options = comparison_branches(&f.root()).unwrap();
     assert!(!options.is_empty(), "the branches are still offered");
-    assert!(
-        options.iter().all(|b| !b.is_current),
-        "a detached HEAD is on no branch: {options:?}"
-    );
+    assert!(options.iter().all(|b| !b.is_current), "a detached HEAD is on no branch: {options:?}");
     assert!(
         options.iter().any(|b| b.name == "main" && b.is_default),
         "and the default is still flagged: {options:?}"

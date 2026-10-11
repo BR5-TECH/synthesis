@@ -207,7 +207,7 @@ describe("the window a graduation starts in", () => {
     // Every control that takes an answer, so a question added without a
     // requirement behind it fails here.
     const answered = Array.from(
-      dialog().querySelectorAll<HTMLElement>("input, select, textarea"),
+      dialog().querySelectorAll<HTMLElement>('input, select, textarea, [role="radio"]'),
     )
       .map((control) => control.id || control.getAttribute("value"))
       .sort();
@@ -222,6 +222,7 @@ describe("the window a graduation starts in", () => {
       "new",
       "standing-work-message-graduation-start",
       "stream",
+      "temporary",
     ]);
   });
 
@@ -229,9 +230,15 @@ describe("the window a graduation starts in", () => {
     draw();
     await waitFor(() => expect(picker()).toBeInTheDocument());
     const answered = Array.from(
-      dialog().querySelectorAll<HTMLElement>("input, select, textarea"),
+      dialog().querySelectorAll<HTMLElement>('input, select, textarea, [role="radio"]'),
     ).map((control) => control.id || control.getAttribute("value"));
-    expect(answered).toEqual(["stream", "new", "direct", "graduation-stream"]);
+    expect(answered).toEqual([
+      "stream",
+      "new",
+      "temporary",
+      "direct",
+      "graduation-stream",
+    ]);
   });
 });
 
@@ -269,7 +276,7 @@ describe("which stream the run belongs to", () => {
     const { onStarted } = draw();
     await waitFor(() => expect(picker()).toBeInTheDocument());
     expect(screen.getByTestId("graduation-start-busy")).toHaveTextContent(
-      /A run is working in .editor-work. now\. This one waits behind it\./,
+      /A run holds .editor-work. now, working or at rest\. This one waits behind it until that run is completed or discarded\./,
     );
     // Offered like any other: the busy stream is the one chosen, and starting
     // is available.
@@ -452,6 +459,10 @@ describe("a start in flight", () => {
     expect(picker()).toBeDisabled();
     expect(position("keep")).toBeDisabled();
     expect(messageField()).toBeDisabled();
+    // GSD-FR-BZHW: every segment of the destination toggle.
+    const segments = within(screen.getByTestId("graduation-destination")).getAllByRole("radio");
+    expect(segments).toHaveLength(4);
+    for (const segment of segments) expect(segment).toBeDisabled();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
     await userEvent.click(graduate());

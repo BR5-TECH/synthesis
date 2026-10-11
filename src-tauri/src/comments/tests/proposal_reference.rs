@@ -70,8 +70,7 @@ fn a_proposal_reference_folds_holds_no_content_and_is_served_by_nothing() {
             draft_id: "d1".into(),
             path: "ui/spec.md".into(),
         }],
-        &agent("a1", "arch"),
-        "2026-01-01T00:01:00Z",
+        Stamp { by: &agent("a1", "arch"), at: "2026-01-01T00:01:00Z" },
     )
     .expect("appended");
 
@@ -97,10 +96,7 @@ fn a_proposal_reference_folds_holds_no_content_and_is_served_by_nothing() {
     );
     assert!(
         !attachments_dir(dir.path()).exists()
-            || std::fs::read_dir(attachments_dir(dir.path()))
-                .unwrap()
-                .next()
-                .is_none(),
+            || std::fs::read_dir(attachments_dir(dir.path())).unwrap().next().is_none(),
         "a reference stores nothing (CMS-FR-49)",
     );
 
@@ -148,8 +144,7 @@ fn a_prompt_proposal_reference_folds_holds_no_content_and_is_never_validated() {
             artifact_id: "prompts/review.md".into(),
             path: "prompts/review.md".into(),
         }],
-        &agent("a1", "arch"),
-        "2026-01-01T00:01:00Z",
+        Stamp { by: &agent("a1", "arch"), at: "2026-01-01T00:01:00Z" },
     )
     .expect("appended");
 
@@ -182,10 +177,7 @@ fn a_prompt_proposal_reference_folds_holds_no_content_and_is_never_validated() {
     );
     assert!(
         !attachments_dir(dir.path()).exists()
-            || std::fs::read_dir(attachments_dir(dir.path()))
-                .unwrap()
-                .next()
-                .is_none(),
+            || std::fs::read_dir(attachments_dir(dir.path())).unwrap().next().is_none(),
         "a reference stores nothing (CMS-FR-49)",
     );
 
@@ -268,14 +260,11 @@ fn a_drafts_review_is_addressed_by_its_stable_id_and_a_move_leaves_it_there() {
     let discussion = open_discussion_in(
         root,
         root,
-        &DiscussionTarget::Draft {
-            draft_id: draft.clone(),
-        },
+        &DiscussionTarget::Draft { draft_id: draft.clone() },
         None,
         "rework the graduation part".into(),
         vec![inline_png("shot.png", b"discussion-bytes")],
-        &human("raver119"),
-        "2026-02-01T00:00:01Z",
+        Stamp { by: &human("raver119"), at: "2026-02-01T00:00:01Z" },
     )
     .unwrap();
 
@@ -285,10 +274,7 @@ fn a_drafts_review_is_addressed_by_its_stable_id_and_a_move_leaves_it_there() {
     let review = root.join("drafts").join(&draft).join("comments");
     assert!(review.join(DISCUSSION_LOG_NAME).is_file());
     assert!(review.join(format!("{}.jsonl", log_id(file_rel))).is_file());
-    assert!(
-        !filed.join("comments").exists(),
-        "nothing was written inside the draft's own folder",
-    );
+    assert!(!filed.join("comments").exists(), "nothing was written inside the draft's own folder",);
     assert!(
         !root.join(COMMENTS_REL).join("attachments").exists(),
         "and nothing in the artifact scope's own folder",
@@ -310,10 +296,7 @@ fn a_drafts_review_is_addressed_by_its_stable_id_and_a_move_leaves_it_there() {
 
     let moved_comments = draft_comments_dir(root, &draft).unwrap();
     assert_eq!(moved_comments, review, "the review did not move with it");
-    for digest in [
-        fsa::sha256_bytes(b"anchored-bytes"),
-        fsa::sha256_bytes(b"discussion-bytes"),
-    ] {
+    for digest in [fsa::sha256_bytes(b"anchored-bytes"), fsa::sha256_bytes(b"discussion-bytes")] {
         assert!(
             moved_comments.join(ATTACHMENTS_SUBDIR).join(&digest).is_file(),
             "the blob stayed where it was",
@@ -363,10 +346,7 @@ fn a_drafts_review_is_addressed_by_its_stable_id_and_a_move_leaves_it_there() {
         !root.join(".synthesis/drafts/backend").join(&draft).exists(),
         "nothing anywhere under the drafts root names that draft",
     );
-    assert!(
-        !review.exists(),
-        "and the store holds nothing for it either (CMS-FR-39)",
-    );
+    assert!(!review.exists(), "and the store holds nothing for it either (CMS-FR-39)",);
 }
 
 /// CMS-FR-61, CMS-FR-30, CMS-FR-40, CMS-FR-25, CMS-FR-52: one thread by its id alone, whatever kind and whichever scope
@@ -375,8 +355,7 @@ fn a_drafts_review_is_addressed_by_its_stable_id_and_a_move_leaves_it_there() {
 fn a_thread_is_read_by_its_id_alone_in_either_scope() {
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
-    root.write_text_atomic(&root.join("onboarding.md"), "the first session\n")
-        .unwrap();
+    root.write_text_atomic(root.join("onboarding.md"), "the first session\n").unwrap();
 
     let anchored = open(
         root,
@@ -428,12 +407,7 @@ fn a_thread_is_read_by_its_id_alone_in_either_scope() {
         .next()
         .expect("the draft's anchored thread");
 
-    for expected in [
-        &anchored,
-        &artifact_discussion,
-        &draft_discussion,
-        &draft_anchored,
-    ] {
+    for expected in [&anchored, &artifact_discussion, &draft_discussion, &draft_anchored] {
         let found = read_discussion_by_id(root, root, &expected.id)
             .unwrap_or_else(|| panic!("thread {} is readable by id", expected.id));
         assert_eq!(found.id, expected.id);
@@ -468,10 +442,7 @@ fn a_thread_is_read_by_its_id_alone_in_either_scope() {
 
     // CMS-FR-52: reading appends nothing anywhere — the draft's own logs
     // included, which one artifact log being byte-identical would not show.
-    assert_eq!(
-        std::fs::read_to_string(log_path(root, "onboarding.md").unwrap()).unwrap(),
-        before,
-    );
+    assert_eq!(std::fs::read_to_string(log_path(root, "onboarding.md").unwrap()).unwrap(), before,);
     assert_eq!(
         discussion_log_lines(root, &draft).len(),
         2,

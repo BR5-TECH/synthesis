@@ -224,9 +224,7 @@ pub fn stderr_excerpt(stderr: &[u8], truncated: bool, secrets: &[&str]) -> Optio
     // A cut lands mid-character on a multi-byte sequence. Advancing to the next
     // boundary drops at most three bytes and keeps the excerpt from opening on
     // half a character.
-    let start = (cut..text.len())
-        .find(|i| text.is_char_boundary(*i))
-        .unwrap_or(text.len());
+    let start = (cut..text.len()).find(|i| text.is_char_boundary(*i)).unwrap_or(text.len());
     // Said rather than implied: an excerpt that begins mid-sentence is not the
     // whole of what the agent wrote, and a reader deciding whether they have the
     // cause needs to know which they are looking at.
@@ -316,10 +314,7 @@ impl SessionRef {
     /// believes it continued.
     pub fn sanitized(mut self) -> Self {
         for field in [&mut self.session_id, &mut self.continuation_token] {
-            if field
-                .as_ref()
-                .is_some_and(|v| v.is_empty() || v.len() > LIMIT_SESSION_FIELD)
-            {
+            if field.as_ref().is_some_and(|v| v.is_empty() || v.len() > LIMIT_SESSION_FIELD) {
                 *field = None;
             }
         }
@@ -690,9 +685,7 @@ pub struct AgentFailure {
 /// stray punctuation between words is not itself a word and a trailing full stop
 /// does not make a five-word label six.
 pub fn word_count(text: &str) -> usize {
-    text.split_whitespace()
-        .filter(|piece| piece.chars().any(char::is_alphanumeric))
-        .count()
+    text.split_whitespace().filter(|piece| piece.chars().any(char::is_alphanumeric)).count()
 }
 
 /// The sentences of `text`, counted by terminal punctuation.
@@ -720,10 +713,7 @@ pub fn sentence_count(text: &str) -> usize {
     }
     // Text after the last ending is a sentence of its own; text ending on one is
     // already counted.
-    let ends_on_mark = trimmed
-        .chars()
-        .last()
-        .is_some_and(|ch| matches!(ch, '.' | '!' | '?' | '…'));
+    let ends_on_mark = trimmed.chars().last().is_some_and(|ch| matches!(ch, '.' | '!' | '?' | '…'));
     if endings == 0 {
         1
     } else if ends_on_mark {
@@ -999,7 +989,8 @@ impl AgentResponseEnvelope {
         if self.summary.len() > LIMIT_SUMMARY {
             return Err(EnvelopeInvalid::TooLarge);
         }
-        let serialized = |v: &Map<String, Value>| serde_json::to_vec(v).map_or(usize::MAX, |b| b.len());
+        let serialized =
+            |v: &Map<String, Value>| serde_json::to_vec(v).map_or(usize::MAX, |b| b.len());
         if self.result.as_ref().is_some_and(|r| serialized(r) > LIMIT_RESULT) {
             return Err(EnvelopeInvalid::TooLarge);
         }
@@ -1010,11 +1001,7 @@ impl AgentResponseEnvelope {
         // is the day this becomes the only thing standing between that key and
         // an unbounded payload — and a limit re-added later is a limit somebody
         // has to remember.
-        if self
-            .metadata
-            .as_ref()
-            .is_some_and(|m| serialized(m) > LIMIT_METADATA)
-        {
+        if self.metadata.as_ref().is_some_and(|m| serialized(m) > LIMIT_METADATA) {
             return Err(EnvelopeInvalid::TooLarge);
         }
         if let Some(session) = &self.session {
@@ -1042,8 +1029,7 @@ pub fn decode_envelope(text: &str) -> Result<AgentResponseEnvelope, EnvelopeInva
         return Err(EnvelopeInvalid::TooLarge);
     }
 
-    let mut stream =
-        serde_json::Deserializer::from_str(text).into_iter::<AgentResponseEnvelope>();
+    let mut stream = serde_json::Deserializer::from_str(text).into_iter::<AgentResponseEnvelope>();
 
     let mut first = match stream.next() {
         Some(Ok(envelope)) => envelope,

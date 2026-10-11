@@ -19,7 +19,7 @@ import {
 } from "../state/agentRegistry";
 import {
   AgentsChromeControl,
-  GlobalAgents,
+  PersonalAgents,
   MentionComposer,
   ProjectAgents,
   agentErrorMessage,
@@ -75,8 +75,12 @@ function agent(over: Partial<Agent> & { id: string; nickname: string }): Agent {
   };
 }
 
-function enrolled(a: Agent, availability: ProjectAgent["availability"] = "ready") {
-  return { agent: a, availability };
+function enrolled(
+  a: Agent,
+  availability: ProjectAgent["availability"] = "ready",
+  scope: ProjectAgent["scope"] = "project",
+): ProjectAgent {
+  return { agent: a, scope, availability };
 }
 
 // The keychain-free shape these surfaces actually read: no `keyState`, no
@@ -135,8 +139,8 @@ function wire(b: Backend) {
     switch (cmd) {
       case "list_project_agents":
         return b.projectAgents;
-      case "list_agents":
-        return b.agents;
+      case "list_personal_agents":
+        return b.agents.map((a) => enrolled(a, "ready", "personal"));
       case "get_active_ai_api_catalog": {
         // The provider active for the open project: the first verified record.
         const catalog = b.integrations.find((i) => i.state === "verified") ?? null;
@@ -157,20 +161,13 @@ function wire(b: Backend) {
         return agent({ ...draft, id });
       }
       case "delete_agent": {
-        const { id } = args as { id: string };
-        b.agents = b.agents.filter((a) => a.id !== id);
-        return b.agents;
-      }
-      case "enrol_project_agent": {
-        const { agentId } = args as { agentId: string };
-        const found = b.agents.find((a) => a.id === agentId)!;
-        b.projectAgents = [...b.projectAgents, enrolled(found)];
-        return b.projectAgents;
-      }
-      case "remove_project_agent": {
-        const { agentId } = args as { agentId: string };
-        b.projectAgents = b.projectAgents.filter((p) => p.agent.id !== agentId);
-        return b.projectAgents;
+        const { scope, id } = args as { scope: "project" | "personal"; id: string };
+        if (scope === "personal") {
+          b.agents = b.agents.filter((a) => a.id !== id);
+          return b.agents.map((a) => enrolled(a, "ready", "personal"));
+        }
+        b.projectAgents = b.projectAgents.filter((p) => p.agent.id !== id);
+        return b.projectAgents.filter((p) => p.scope === "project");
       }
       default:
         throw new Error(`unexpected invoke ${cmd}`);
@@ -274,6 +271,19 @@ describe("AGT-FR-25 … AGT-FR-27: the mention picker", () => {
     await userEvent.click(screen.getAllByTestId("mention-picker-option")[0]);
     await waitFor(() => expect(composer).toHaveValue("@scribe "));
     expect(screen.queryByTestId("mention-picker")).not.toBeInTheDocument();
+  });
+
+  it("AGT-FR-RWHL: offers a Project agent and never the Personal agent it shadows", async () => {
+    expect(
+      matchingAgents(
+        [
+          enrolled(agent({ id: "a1", nickname: "arch" })),
+          enrolled(agent({ id: "a2", nickname: "arch" }), "shadowed", "personal"),
+          enrolled(agent({ id: "a3", nickname: "sec" }), "ready", "personal"),
+        ],
+        "",
+      ).map((p) => p.agent.id),
+    ).toEqual(["a1", "a3"]);
   });
 
   it("offers a degraded agent with its reason, and refuses to select it", async () => {

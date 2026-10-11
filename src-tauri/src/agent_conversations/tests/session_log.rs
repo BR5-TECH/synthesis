@@ -24,13 +24,6 @@ use super::*;
 
 use crate::logging::{self, LogLevel, LogRecord};
 
-
-
-
-
-
-
-
 #[test]
 fn a_delivered_turn_reports_every_stage_it_passed_through() {
     // Dispatch, context, endpoint, call, answer, end — the sequence a reader
@@ -41,11 +34,7 @@ fn a_delivered_turn_reports_every_stage_it_passed_through() {
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
 
     let turn = h
-        .dispatch(
-            "scribe",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("scribe", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     h.settle();
     wait_for_terminal(&h, &turn.id);
@@ -108,10 +97,7 @@ fn a_delivered_turn_reports_every_stage_it_passed_through() {
         sequence_of("model answered"),
         ended.sequence,
     ];
-    assert!(
-        ordered.windows(2).all(|w| w[0] < w[1]),
-        "the stages are out of order: {ordered:?}",
-    );
+    assert!(ordered.windows(2).all(|w| w[0] < w[1]), "the stages are out of order: {ordered:?}",);
 
     // AGC-FR-21 has one terminal event per turn, and a reader counting outcomes
     // needs one terminal record to match. Two emit sites can produce it —
@@ -148,11 +134,7 @@ fn no_record_a_turn_produces_carries_a_key_or_a_word_of_the_conversation() {
     );
 
     let turn = h
-        .dispatch(
-            "scribe",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("scribe", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     h.settle();
     wait_for_terminal(&h, &turn.id);
@@ -162,10 +144,7 @@ fn no_record_a_turn_produces_carries_a_key_or_a_word_of_the_conversation() {
     // clears it (LGC-FR-15) and other tests in this binary reach that path, so
     // an emptied buffer would otherwise pass this test while proving nothing.
     let snapshot = all_records();
-    let mine: Vec<&LogRecord> = snapshot
-        .iter()
-        .filter(|r| field(r, "turnId") == turn.id)
-        .collect();
+    let mine: Vec<&LogRecord> = snapshot.iter().filter(|r| field(r, "turnId") == turn.id).collect();
     assert!(
         mine.len() >= 4,
         "the turn's records are missing; nothing below would be evidence: {:?}",
@@ -190,10 +169,7 @@ fn no_record_a_turn_produces_carries_a_key_or_a_word_of_the_conversation() {
         "Instructions the author configured",
         "The model's own words",
     ] {
-        assert!(
-            !text.contains(content),
-            "the log carries conversation content: {content:?}",
-        );
+        assert!(!text.contains(content), "the log carries conversation content: {content:?}",);
     }
 }
 
@@ -207,11 +183,7 @@ fn a_failed_call_records_the_typed_failure_at_error() {
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
 
     let turn = h
-        .dispatch(
-            "scribe",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("scribe", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     h.settle();
     wait_for_terminal(&h, &turn.id);
@@ -235,11 +207,7 @@ fn a_dispatch_refused_before_registration_is_still_recorded() {
     let h = Harness::new(vec![]);
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
 
-    let refused = h.dispatch(
-        "nobody",
-        ConversationOrigin::of(&thread),
-        &thread.comments[0].id,
-    );
+    let refused = h.dispatch("nobody", ConversationOrigin::of(&thread), &thread.comments[0].id);
     assert_eq!(refused.unwrap_err(), FAIL_AGENT_NOT_FOUND);
 
     let record = find(&records_where("discussionId", &thread.id), "agent turn refused");
@@ -262,12 +230,7 @@ fn a_dispatch_refused_before_registration_is_still_recorded() {
     )
     .expect("lock");
     assert_eq!(
-        h.dispatch(
-            "scribe",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
-        .unwrap_err(),
+        h.dispatch("scribe", ConversationOrigin::of(&thread), &thread.comments[0].id,).unwrap_err(),
         FAIL_THREAD_LOCKED,
     );
     let locked = find(&records_where("discussionId", &thread.id), "agent turn refused");
@@ -284,12 +247,7 @@ fn a_dispatch_refused_before_registration_is_still_recorded() {
     .expect("unlock");
     h.store().save_ai_api_registry(vec![], None).expect("clear");
     assert_eq!(
-        h.dispatch(
-            "scribe",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
-        .unwrap_err(),
+        h.dispatch("scribe", ConversationOrigin::of(&thread), &thread.comments[0].id,).unwrap_err(),
         FAIL_AGENT_UNAVAILABLE,
     );
     let unavailable = find(&records_where("discussionId", &thread.id), "agent turn refused");
@@ -308,11 +266,7 @@ fn a_cancelled_turn_ends_at_info_rather_than_error() {
     h.create_agent("scribe", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            "scribe",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("scribe", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
 
     // Cancel while the model call is actually in flight, rather than while the
@@ -327,8 +281,7 @@ fn a_cancelled_turn_ends_at_info_rather_than_error() {
         std::thread::sleep(Duration::from_millis(5));
     }
     assert_eq!(h.seam.requests().len(), 1, "the model call never started");
-    cancel_impl(&h.app.handle().clone(), &h.turns(), &h.progress(), &turn.id)
-        .expect("cancel");
+    cancel_impl(&h.app.handle().clone(), &h.turns(), &h.progress(), &turn.id).expect("cancel");
 
     let ended = find(&records_where("turnId", &turn.id), "agent turn ended");
     assert_eq!(require(&ended, "state"), "cancelled");
@@ -368,11 +321,7 @@ fn an_answer_that_cannot_be_appended_says_so_at_error() {
     h.create_agent("scribe", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            "scribe",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("scribe", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     // Locked while the model is still thinking, so the answer arrives at a
     // thread that will not take it (AGC-FR-19).
@@ -412,11 +361,7 @@ fn an_endpoint_that_will_not_resolve_names_what_the_author_has_to_correct() {
     h.create_agent("scribe", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            "scribe",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("scribe", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("a locked keychain does not stop a dispatch (AAP-FR-33)");
     let terminal = wait_for_terminal(&h, &turn.id);
     assert_eq!(terminal.failure.as_deref(), Some(FAIL_KEYCHAIN_UNAVAILABLE));

@@ -35,10 +35,12 @@ pub(super) fn concurrency_limit<R: tauri::Runtime>(
 /// whole project.
 ///
 /// The pass walks the project's run order once. A run is started when its queue
-/// is free and the project has a free slot. A direct run whose pinned worktree
-/// is not on its pinned branch is passed over and records why (GRD-FR-XRDY), so
-/// the run behind it may start. The pass ends as soon as no slot is free, which
-/// is how a limit lowered below the slots held starts nothing (GRD-FR-IJKV).
+/// is free and the project has a free slot. A run that holds its queue already
+/// holds its slot (GRD-FR-KKKN), so it starts at once and takes no new claim on
+/// the limit. A direct run whose pinned worktree is not on its pinned branch is
+/// passed over and records why (GRD-FR-XRDY), so the run behind it may start. A
+/// run that needs a slot starts nothing while no slot is free, which is how a
+/// limit lowered below the slots held starts nothing (GRD-FR-IJKV).
 pub(super) fn dispatch_pending<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     dispatch_with(app, |run_id, key| driver::spawn(app, run_id, key));
 }
@@ -62,17 +64,23 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
         return;
     };
     let limit = concurrency_limit(app);
+    let mut holders = queue::slot_holders(&queue);
     let mut passed_over: BTreeSet<String> = BTreeSet::new();
+    let mut said_full = false;
     for run in queue::dispatch_candidates(&queue) {
-        if !limit.permits(state.working_count()) {
-            logging::log_debug(
-                app,
-                &BUFFER,
-                &[Domain::Backend],
-                "graduation found no free project slot",
-                log_fields! { "in_use" => state.working_count() as i64 },
-            );
-            return;
+        let in_use = state.slots_in_use(&holders);
+        if !run.holds_slot() && !limit.permits(in_use) {
+            if !said_full {
+                said_full = true;
+                logging::log_debug(
+                    app,
+                    &BUFFER,
+                    &[Domain::Backend],
+                    "graduation found no free project slot",
+                    log_fields! { "in_use" => in_use as i64 },
+                );
+            }
+            continue;
         }
         let key = run.queue_key();
         if passed_over.contains(&key) || state.holder_of(&key).is_some() {
@@ -87,6 +95,7 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
             }
         }
         if start(&run.id, &key) {
+            holders.insert(run.id.clone());
             logging::log_info(
                 app,
                 &BUFFER,
@@ -94,7 +103,7 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
                 "graduation started a queued run",
                 log_fields! {
                     "run_id" => run.id.clone(),
-                    "in_use" => state.working_count() as i64,
+                    "in_use" => state.slots_in_use(&holders) as i64,
                 },
             );
         }
@@ -111,13 +120,15 @@ pub(super) fn dispatch_with<R: tauri::Runtime>(
 /// its branch is not eligible (GRD-FR-XRDY) and is never listed.
 pub fn graduation_capacity_of<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> GraduationCapacity {
     let limit = concurrency_limit(app);
+    let queue = queue::project_queue(app);
+    let holders = queue.as_ref().map(queue::slot_holders).unwrap_or_default();
     let in_use = app
         .try_state::<GraduationState>()
-        .map(|state| state.working_count())
-        .unwrap_or(0);
+        .map(|state| state.slots_in_use(&holders))
+        .unwrap_or(holders.len());
     let mut waiting_for_slot = Vec::new();
     if limit.is_full(in_use) {
-        if let Some(queue) = queue::project_queue(app) {
+        if let Some(queue) = queue {
             let mut seen: BTreeSet<String> = BTreeSet::new();
             for run in queue::dispatch_candidates(&queue) {
                 // GRD-FR-XRDY: read from the worktree now, because the hold a
@@ -131,18 +142,14 @@ pub fn graduation_capacity_of<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> G
                 let claimed = app
                     .try_state::<GraduationState>()
                     .is_some_and(|state| state.holder_of(&run.queue_key()).is_some());
-                if held || claimed || !seen.insert(run.queue_key()) {
+                if held || claimed || run.holds_queue() || !seen.insert(run.queue_key()) {
                     continue;
                 }
                 waiting_for_slot.push(run.id.clone());
             }
         }
     }
-    GraduationCapacity {
-        limit,
-        in_use: in_use as u32,
-        waiting_for_slot,
-    }
+    GraduationCapacity { limit, in_use: in_use as u32, waiting_for_slot }
 }
 
 /// GRD-FR-GRHC: what the project's slots hold now, and which queued runs wait

@@ -16,13 +16,7 @@ fn aic_ts01_a_fresh_machine_lists_five_records_of_both_kinds() {
     assert_eq!(list.len(), 5);
     assert_eq!(
         list.iter().map(|i| i.vendor.as_str()).collect::<Vec<_>>(),
-        vec![
-            "claude_code",
-            "codex",
-            "opencode",
-            "claude_agent_api",
-            "custom_agent_api"
-        ],
+        vec!["claude_code", "codex", "opencode", "claude_agent_api", "custom_agent_api"],
         "a stable order, CLIs first"
     );
     for i in &list {

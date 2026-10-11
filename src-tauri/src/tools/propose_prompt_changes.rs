@@ -155,9 +155,7 @@ fn is_project_relative(path: &str) -> bool {
     if trimmed.len() >= 2 && trimmed.as_bytes()[1] == b':' {
         return false;
     }
-    !trimmed
-        .split(['/', '\\'])
-        .any(|segment| segment == ".." || segment == ".")
+    !trimmed.split(['/', '\\']).any(|segment| segment == ".." || segment == ".")
 }
 
 /// `crate::prompt_proposals`' refusals in this tool's terms (PPC-FR-06,
@@ -201,14 +199,7 @@ impl<R: tauri::Runtime> ProposePromptChangesTool<R> {
         author: Participant,
         proposed: Arc<AtomicBool>,
     ) -> Self {
-        ProposePromptChangesTool {
-            app,
-            roots,
-            origin,
-            author,
-            proposed,
-            buffer: &BUFFER,
-        }
+        ProposePromptChangesTool { app, roots, origin, author, proposed, buffer: &BUFFER }
     }
 
     /// The same tool, reporting into `buffer`.
@@ -257,9 +248,7 @@ impl<R: tauri::Runtime> ProposePromptChangesTool<R> {
         // any other, and it meets the no-change refusal on the one term every
         // candidate meets it on.
         if args.rationale.trim().is_empty() {
-            return Err(ToolRefusal::InvalidArguments(
-                PROMPT_PROPOSAL_RATIONALE_BLANK,
-            ));
+            return Err(ToolRefusal::InvalidArguments(PROMPT_PROPOSAL_RATIONALE_BLANK));
         }
         // PPC-FR-05: a path that is not a project-relative path names no file
         // this tool will act on, which is the same answer as a path naming
@@ -289,10 +278,7 @@ impl<R: tauri::Runtime> ProposePromptChangesTool<R> {
         // refused one. Set only after the record and its comment have both
         // landed, so a turn is never ended awaiting a decision on nothing.
         self.proposed.store(true, Ordering::SeqCst);
-        Ok(ProposePromptChangesOutput {
-            proposed: true,
-            proposal_id: recorded.id,
-        })
+        Ok(ProposePromptChangesOutput { proposed: true, proposal_id: recorded.id })
     }
 }
 

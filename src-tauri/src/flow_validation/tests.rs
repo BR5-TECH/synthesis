@@ -143,13 +143,7 @@ fn self_edge_and_duplicate_pair_are_reported_but_the_reverse_pair_is_not() {
             {"id":"e4","from":"n3","to":"n2"}
         ]}"#;
     let report = validate(body);
-    let by_code = |c: &str| {
-        report
-            .violations
-            .iter()
-            .filter(|v| v.code == c)
-            .collect::<Vec<_>>()
-    };
+    let by_code = |c: &str| report.violations.iter().filter(|v| v.code == c).collect::<Vec<_>>();
     assert_eq!(by_code("self_edge").len(), 1);
     let dup = by_code("duplicate_edge");
     assert_eq!(dup.len(), 1);
@@ -185,11 +179,8 @@ fn containment_cycle_and_dangling_parent_are_reported() {
             {"id":"l2","name":"b","parentId":"l1","position":{"x":0,"y":0},"size":{"width":1,"height":1}}
         ],"nodes":[],"edges":[]}"#;
     let report = validate(cyclic);
-    let cycles: Vec<_> = report
-        .violations
-        .iter()
-        .filter(|v| v.code == "containment_cycle")
-        .collect();
+    let cycles: Vec<_> =
+        report.violations.iter().filter(|v| v.code == "containment_cycle").collect();
     assert_eq!(cycles.len(), 2, "one per loop in the chain");
 
     let node_parent = r#"{"version":1,"name":"x","nodes":[
@@ -260,10 +251,7 @@ fn reports_every_violation_in_a_stable_order() {
     assert!(got.contains(&"dangling_edge_endpoint"));
     // Document-level first, edge-level last.
     assert_eq!(got.first(), Some(&"unknown_field"));
-    assert!(report
-        .violations
-        .last()
-        .is_some_and(|v| v.edge_id.is_some()));
+    assert!(report.violations.last().is_some_and(|v| v.edge_id.is_some()));
     // Stable across runs.
     assert_eq!(validate(body), report);
 }
@@ -314,11 +302,7 @@ fn a_duplicate_edge_id_is_reported_against_the_edge() {
             {"id":"e1","from":"n2","to":"n3"}
         ]}"#;
     let report = validate(body);
-    let v = report
-        .violations
-        .iter()
-        .find(|v| v.code == "duplicate_id")
-        .expect("duplicate edge id");
+    let v = report.violations.iter().find(|v| v.code == "duplicate_id").expect("duplicate edge id");
     assert_eq!(v.edge_id.as_deref(), Some("e1"));
     assert_eq!(v.element_id, None);
 }
@@ -433,9 +417,7 @@ fn the_report_serializes_in_the_shape_the_frontend_reads() {
 /// this test calls valid is one the editor would actually write.
 #[test]
 fn every_committed_flow_validates() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("repo root");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("repo root");
     for dir_name in ["resources/flows", "fixtures/flows"] {
         let dir = root.join(dir_name);
         let entries = std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("{dir_name}: {e}"));
@@ -447,12 +429,7 @@ fn every_committed_flow_validates() {
             }
             let body = std::fs::read_to_string(&path).unwrap();
             let report = validate(&body);
-            assert!(
-                report.valid,
-                "{} does not validate: {:?}",
-                path.display(),
-                report.violations
-            );
+            assert!(report.valid, "{} does not validate: {:?}", path.display(), report.violations);
             checked += 1;
         }
         // A sweep over an empty directory passes silently, which would make

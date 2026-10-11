@@ -20,18 +20,11 @@ pub(super) fn wait_for_sessions(h: &Harness, expected: usize) {
         }
         std::thread::sleep(Duration::from_millis(10));
     }
-    panic!(
-        "agent sessions settled at {} rather than {expected}",
-        h.agent_sessions(),
-    );
+    panic!("agent sessions settled at {} rather than {expected}", h.agent_sessions(),);
 }
 
 pub(super) fn human(login: &str) -> Participant {
-    Participant::Human {
-        login: login.into(),
-        display_name: None,
-        email: None,
-    }
+    Participant::Human { login: login.into(), display_name: None, email: None }
 }
 
 /// A prober that panics if a probe is attempted. Nothing in this module probes
@@ -132,7 +125,6 @@ pub(super) fn wait_for_terminal(h: &Harness, turn_id: &str) -> AgentTurn {
     );
 }
 
-
 /// A draft holding its one prompt, and a discussion on it carrying `earlier`
 /// before the comment that addresses the agent.
 pub(super) fn seed_discussion(h: &Harness, earlier: &[&str]) -> (String, Discussion) {
@@ -145,18 +137,11 @@ pub(super) fn seed_discussion(h: &Harness, earlier: &[&str]) -> (String, Discuss
     let mut thread = crate::comments::open_discussion_in(
         &h.root(),
         &h.root(),
-        &crate::comments::DiscussionTarget::Draft {
-            draft_id: draft_id.clone(),
-        },
+        &crate::comments::DiscussionTarget::Draft { draft_id: draft_id.clone() },
         None,
-        earlier
-            .first()
-            .copied()
-            .unwrap_or("@arch what now?")
-            .to_string(),
+        earlier.first().copied().unwrap_or("@arch what now?").to_string(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:00:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
     for (i, body) in earlier.iter().skip(1).enumerate() {
@@ -167,14 +152,15 @@ pub(super) fn seed_discussion(h: &Harness, earlier: &[&str]) -> (String, Discuss
             (*body).to_string(),
             Vec::new(),
             Vec::new(),
-            &human("ada"),
-            &format!("2026-01-01T00:0{}:00Z", i + 1),
+            crate::comments::Stamp {
+                by: &human("ada"),
+                at: &format!("2026-01-01T00:0{}:00Z", i + 1),
+            },
         )
         .expect("reply");
     }
     (draft_id, thread)
 }
-
 
 /// The section a tag names, or a failure naming the tag that was missing.
 pub(super) fn section_of<'a>(sections: &'a [InputSection], tag: &str) -> &'a InputSection {
@@ -184,21 +170,15 @@ pub(super) fn section_of<'a>(sections: &'a [InputSection], tag: &str) -> &'a Inp
         .unwrap_or_else(|| panic!("no <{tag}> section among {:?}", tags_of(sections)))
 }
 
-
 /// Dispatch one turn against a seeded artifact thread and wait for it to end.
 pub(super) fn run_one(h: &Harness, nickname: &str) -> (AgentTurn, Discussion) {
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            nickname,
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch(nickname, ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     let terminal = wait_for_terminal(h, &turn.id);
     (terminal, thread)
 }
-
 
 /// The thread as it now stands on disk.
 pub(super) fn folded(h: &Harness, artifact_id: &str, thread_id: &str) -> Discussion {
@@ -208,14 +188,12 @@ pub(super) fn folded(h: &Harness, artifact_id: &str, thread_id: &str) -> Discuss
         .expect("thread")
 }
 
-
 pub(super) fn all_records() -> Vec<LogRecord> {
     TEST_BUFFER
         .query(&LogFilter::default(), None, logging::BUFFER_CAPACITY)
         .expect("the buffer answers a default filter")
         .records
 }
-
 
 /// An endpoint to assemble a completion request against. Which provider it
 /// names is irrelevant to the preamble, which is the point of CVL-FR-10.
@@ -228,15 +206,13 @@ pub(super) fn any_endpoint() -> AiApiCall {
         model_id: Some("m".into()),
         reasoning: None,
         accepts_image_input: false,
-                    model_mode: None,
+        model_mode: None,
     }
 }
-
 
 /// CVL-FR-08: the tenth on an artifact origin, and never offered beside the one
 /// above.
 pub(super) const ARTIFACT_ONLY_TOOL: &str = "propose_prompt_changes";
-
 
 /// A reply that asks the author something.
 pub(super) fn asks(question: &str) -> ScriptedReply {
@@ -246,7 +222,6 @@ pub(super) fn asks(question: &str) -> ScriptedReply {
     )
 }
 
-
 /// CVL-FR-08: the tenth on a draft origin.
 ///
 /// `search_drafts`, `read_draft`, and `search_notes` are deliberately *not*
@@ -254,13 +229,11 @@ pub(super) fn asks(question: &str) -> ScriptedReply {
 /// moves every origin has, and only offering a rewrite is bound to one.
 pub(super) const DRAFT_ONLY_TOOL: &str = "propose_draft_changes";
 
-
-/// The nine every turn gets, in the order `conversation_tools` names them.
-///
-/// `search_notes` is among them on every origin kind, which is
-/// `../../specifications/tools/NST-note-search-tool.md` NST-FR-01, CVL-FR-08's claim as
-/// well as CVL-FR-30, CVL-FR-08's: every test below that sweeps the five kinds sweeps it.
-
+// The nine every turn gets, in the order `conversation_tools` names them.
+//
+// `search_notes` is among them on every origin kind, which is
+// `../../specifications/tools/NST-note-search-tool.md` NST-FR-01, CVL-FR-08's claim as
+// well as CVL-FR-30, CVL-FR-08's: every test below that sweeps the five kinds sweeps it.
 
 /// One field as text, or empty where the record does not carry it.
 ///
@@ -276,37 +249,31 @@ pub(super) fn field(record: &LogRecord, key: &str) -> String {
     }
 }
 
-
 /// The newest record carrying `message`, cloned so a caller can filter and read
 /// in one expression.
 ///
 /// Newest rather than first: a test that provokes the same message twice — three
 /// refusals on one thread, say — means the one it just caused.
 pub(super) fn find(records: &[LogRecord], message: &str) -> LogRecord {
-    records
-        .iter()
-        .rev()
-        .find(|r| r.message == message)
-        .cloned()
-        .unwrap_or_else(|| {
-            panic!(
-                "no record reads {message:?}; the set holds {:?}",
-                records.iter().map(|r| r.message.as_str()).collect::<Vec<_>>()
-            )
-        })
+    records.iter().rev().find(|r| r.message == message).cloned().unwrap_or_else(|| {
+        panic!(
+            "no record reads {message:?}; the set holds {:?}",
+            records.iter().map(|r| r.message.as_str()).collect::<Vec<_>>()
+        )
+    })
 }
-
 
 /// Every message of an exchange that carries a provider-native entry type
 /// anywhere in it, however it was shaped.
 pub(super) fn mentions_a_provider_entry(exchange: &[rig::completion::Message]) -> bool {
     exchange.iter().any(|message| {
-        serde_json::to_string(message)
-            .expect("serialisable")
-            .contains("openrouter:web_")
+        serde_json::to_string(message).expect("serialisable").contains("openrouter:web_")
     })
 }
 
+/// The calls and the results that [`native_traffic`] finds: `(name, arguments)`
+/// for each call and `(id, result)` for each result.
+pub(super) type NativeTraffic = (Vec<(String, String)>, Vec<(String, String)>);
 
 /// Every provider-run call and result an exchange holds, in order — as
 /// `(name, arguments)` for a call and `(id, result)` for a result.
@@ -317,19 +284,21 @@ pub(super) fn mentions_a_provider_entry(exchange: &[rig::completion::Message]) -
 /// exists to assert exactly that, and it looks for the shape the loop used to
 /// build — a function call named for a provider entry type — because that is the
 /// shape a provider refuses.
-pub(super) fn native_traffic(
-    exchange: &[rig::completion::Message],
-) -> (Vec<(String, String)>, Vec<(String, String)>) {
+pub(super) fn native_traffic(exchange: &[rig::completion::Message]) -> NativeTraffic {
     use rig::completion::message::{AssistantContent, ToolResultContent, UserContent};
     let mut calls = Vec::new();
     let mut results = Vec::new();
     let mut native_ids: Vec<String> = Vec::new();
     for message in exchange {
-        if let rig::completion::Message::Assistant { content, .. } = message {
+        if let rig::completion::Message::Assistant(rig::completion::message::AssistantMessage {
+            content,
+            ..
+        }) = message
+        {
             for part in content.iter() {
                 if let AssistantContent::ToolCall(call) = part {
                     if call.function.name.starts_with("openrouter:") {
-                        native_ids.push(call.id.clone());
+                        native_ids.push(call.id.to_string());
                     }
                 }
             }
@@ -337,13 +306,16 @@ pub(super) fn native_traffic(
     }
     for message in exchange {
         match message {
-            rig::completion::Message::Assistant { content, .. } => {
+            rig::completion::Message::Assistant(rig::completion::message::AssistantMessage {
+                content,
+                ..
+            }) => {
                 for part in content.iter() {
                     if let AssistantContent::ToolCall(call) = part {
                         if call.function.name.starts_with("openrouter:") {
                             calls.push((
-                                call.function.name.clone(),
-                                call.function.arguments.to_string(),
+                                call.function.name.to_string(),
+                                call.function.arguments_value().to_string(),
                             ));
                         }
                     }
@@ -352,7 +324,7 @@ pub(super) fn native_traffic(
             rig::completion::Message::User { content } => {
                 for part in content.iter() {
                     if let UserContent::ToolResult(result) = part {
-                        if native_ids.contains(&result.id) {
+                        if native_ids.contains(&result.call.to_string()) {
                             let text: String = result
                                 .content
                                 .iter()
@@ -361,7 +333,7 @@ pub(super) fn native_traffic(
                                     _ => None,
                                 })
                                 .collect();
-                            results.push((result.id.clone(), text));
+                            results.push((result.call.to_string(), text));
                         }
                     }
                 }
@@ -371,7 +343,6 @@ pub(super) fn native_traffic(
     }
     (calls, results)
 }
-
 
 /// A seam that panics, so the guard around the turn's body can be exercised.
 pub(super) struct PanickingCompletion;
@@ -388,7 +359,6 @@ impl CompletionSeam for PanickingCompletion {
     }
 }
 
-
 /// The records naming one tool the provider ran, for one turn, in order.
 pub(super) fn provider_tool_records(turn_id: &str) -> Vec<logging::LogRecord> {
     all_records()
@@ -401,14 +371,9 @@ pub(super) fn provider_tool_records(turn_id: &str) -> Vec<logging::LogRecord> {
         .collect()
 }
 
-
 pub(super) fn records_where(key: &str, value: &str) -> Vec<LogRecord> {
-    all_records()
-        .into_iter()
-        .filter(|r| field(r, key) == value)
-        .collect()
+    all_records().into_iter().filter(|r| field(r, key) == value).collect()
 }
-
 
 /// One field a record must carry, as text.
 pub(super) fn require(record: &LogRecord, key: &str) -> String {
@@ -421,21 +386,51 @@ pub(super) fn require(record: &LogRecord, key: &str) -> String {
     field(record, key)
 }
 
+/// A request a wire test carries: a compiled prompt and one input section.
+/// The framework refuses a request whose only message holds no text, and a
+/// real turn always carries its input.
+pub(super) fn wire_request() -> AgentRequest {
+    AgentRequest {
+        instructions: compile_prompt(OriginKind::ArtifactComment, "Argue.", ""),
+        input: vec![InputSection {
+            tag: TAG_CURRENT_COMMENT.into(),
+            attributes: Vec::new(),
+            body: "What do you think?".into(),
+            truncated: false,
+            parts: Vec::new(),
+        }],
+        tools: Vec::new(),
+        native_tools: Vec::new(),
+        stable_head_sections: 0,
+    }
+}
+
+/// A tool result answering the call `id` to the tool `name`.
+pub(super) fn tool_result_message(
+    id: &str,
+    name: &str,
+    text: impl Into<String>,
+) -> rig::completion::Message {
+    rig::completion::Message::tool_result(
+        rig::completion::message::CallId::from_wire(id),
+        rig::completion::message::ToolName::new(name).expect("a tool name"),
+        text,
+    )
+}
 
 pub(super) fn rig_tool_call(
     id: &str,
     name: &str,
     arguments: serde_json::Value,
 ) -> rig::completion::message::ToolCall {
-    rig::completion::message::ToolCall::new(
-        id.to_string(),
-        rig::completion::message::ToolFunction {
-            name: name.into(),
+    rig::completion::message::ToolCall::from_wire(
+        id,
+        rig::completion::message::ToolFunction::new(
+            rig::completion::message::ToolName::new(name).expect("a tool name"),
             arguments,
-        },
+        ),
     )
 }
-
 
 /// Write a `draft`-scoped log by hand.
 ///
@@ -468,7 +463,6 @@ pub(super) fn seed_draft_thread(h: &Harness, draft_id: &str, file_rel: &str) -> 
         .expect("draft thread")
 }
 
-
 /// A note and its discussion, returned as the origin a turn would carry.
 pub(super) fn seed_note_discussion(
     h: &Harness,
@@ -477,15 +471,9 @@ pub(super) fn seed_note_discussion(
     opening: &str,
 ) -> (String, ConversationOrigin) {
     let root = h.root();
-    let note = crate::notes::create_note_in(
-        &root,
-        scope,
-        body.into(),
-        None,
-        None,
-        "2026-01-01T00:00:00Z",
-    )
-    .expect("note");
+    let note =
+        crate::notes::create_note_in(&root, scope, body.into(), None, None, "2026-01-01T00:00:00Z")
+            .expect("note");
     let (thread, _) = crate::comments::get_or_create_note_discussion_in(
         &root,
         &root,
@@ -496,17 +484,12 @@ pub(super) fn seed_note_discussion(
         "2026-01-01T00:01:00Z",
     )
     .expect("discussion");
-    (
-        note.id.clone(),
-        ConversationOrigin::of(&thread),
-    )
+    (note.id.clone(), ConversationOrigin::of(&thread))
 }
-
 
 pub(super) fn tags_of(sections: &[InputSection]) -> Vec<String> {
     sections.iter().map(|s| s.tag.clone()).collect()
 }
-
 
 /// The text of every tool result in an exchange, in order.
 pub(super) fn tool_results(exchange: &[rig::completion::Message]) -> Vec<String> {
@@ -518,7 +501,7 @@ pub(super) fn tool_results(exchange: &[rig::completion::Message]) -> Vec<String>
         })
         .filter_map(|part| match part {
             rig::completion::message::UserContent::ToolResult(result) => {
-                match result.content.first() {
+                match result.content.first()? {
                     rig::completion::message::ToolResultContent::Text(text) => {
                         Some(text.text.clone())
                     }
@@ -529,7 +512,6 @@ pub(super) fn tool_results(exchange: &[rig::completion::Message]) -> Vec<String>
         })
         .collect()
 }
-
 
 /// Every file under `root`, by relative path, with its bytes.
 pub(super) fn tree_snapshot(root: &Path) -> std::collections::BTreeMap<String, Vec<u8>> {
@@ -542,11 +524,7 @@ pub(super) fn tree_snapshot(root: &Path) -> std::collections::BTreeMap<String, V
             if path.is_dir() {
                 walk(&path, root, out);
             } else if let Ok(bytes) = std::fs::read(&path) {
-                let key = path
-                    .strip_prefix(root)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .into_owned();
+                let key = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().into_owned();
                 out.insert(key, bytes);
             }
         }
@@ -555,7 +533,6 @@ pub(super) fn tree_snapshot(root: &Path) -> std::collections::BTreeMap<String, V
     walk(root, root, &mut out);
     out
 }
-
 
 /// Wait for one record about `turn_id` to appear, for the assertions that have
 /// to observe a *thread's* progress rather than a command's return.
@@ -580,8 +557,7 @@ pub(super) fn wait_for_record(turn_id: &str, message: &str) -> LogRecord {
             // so `json!` always makes one a JSON string. An emit site that ever
             // passed a number would stop matching here — and would wait out the
             // whole budget rather than fail — so keep them strings.
-            r.message == message
-                && r.fields.get("turnId").and_then(|v| v.as_str()) == Some(turn_id)
+            r.message == message && r.fields.get("turnId").and_then(|v| v.as_str()) == Some(turn_id)
         }) {
             return record;
         }
@@ -594,13 +570,9 @@ pub(super) fn wait_for_record(turn_id: &str, message: &str) -> LogRecord {
         "no record reading {message:?} for {turn_id}; messages recorded for it: {:?}",
         // Through `records_where` deliberately: this is the failure path, where
         // one expensive read costs nothing and the loop above is already over.
-        records_where("turnId", turn_id)
-            .into_iter()
-            .map(|r| r.message)
-            .collect::<Vec<_>>(),
+        records_where("turnId", turn_id).into_iter().map(|r| r.message).collect::<Vec<_>>(),
     );
 }
-
 
 /// A provider that never answers, reached through the production timeout path.
 /// [`NeverAnswers`] that counts what it was asked, so a test can see how many
@@ -621,10 +593,7 @@ impl CompletionSeam for CountingNeverAnswers {
         timeout: Duration,
     ) -> Result<ModelReply, CallFailure> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        self.deadlines
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push(timeout);
+        self.deadlines.lock().unwrap_or_else(|e| e.into_inner()).push(timeout);
         block_on_with_timeout(
             async {
                 std::future::pending::<()>().await;
@@ -634,7 +603,6 @@ impl CompletionSeam for CountingNeverAnswers {
         )
     }
 }
-
 
 /// A seam whose first call asks for a tool and whose next blocks until released.
 ///
@@ -660,20 +628,16 @@ impl CompletionSeam for ToolThenGated {
         if exchange.len() == 1 {
             return Ok(ModelReply {
                 text: String::new(),
-                tool_calls: vec![rig::completion::message::ToolCall::new(
-                    "call-0".to_string(),
-                    rig::completion::message::ToolFunction {
-                        name: "list_skills".into(),
-                        arguments: serde_json::json!({}),
-                    },
-                )],
+                tool_calls: vec![rig_tool_call("call-0", "list_skills", serde_json::json!({}))],
                 native_calls: Vec::new(),
                 native_usage: None,
-            native_entries_dropped: 0,
-            served_by: None,
-            prompt_tokens: None,
-            output_tokens: None,
+                native_entries_dropped: 0,
+                reply_repairs: Default::default(),
+                served_by: None,
+                prompt_tokens: None,
+                output_tokens: None,
                 input_tokens: None,
+                ..Default::default()
             });
         }
         let (lock, cvar) = &*self.gate;
@@ -687,10 +651,12 @@ impl CompletionSeam for ToolThenGated {
             native_calls: Vec::new(),
             native_usage: None,
             native_entries_dropped: 0,
+            reply_repairs: Default::default(),
             served_by: None,
             prompt_tokens: None,
             output_tokens: None,
             input_tokens: None,
+            ..Default::default()
         })
     }
 }

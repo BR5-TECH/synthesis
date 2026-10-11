@@ -88,6 +88,9 @@ pub const ERR_BASE_URL_INVALID: &str = "base_url_invalid";
 pub const ERR_KEY_MISSING: &str = "key_missing";
 /// The host could not be reached (AIC-FR-22).
 pub const ERR_UNREACHABLE: &str = "unreachable";
+/// The TLS check refused the host's certificate. The error text is
+/// `tls_untrusted:<cause>:<host>` (AIC-FR-22, AAP-FR-HZTB).
+pub const ERR_TLS_UNTRUSTED: &str = "tls_untrusted";
 /// The endpoint answered and refused the credentials (AIC-FR-22).
 pub const ERR_REJECTED: &str = "rejected";
 /// The URL answered, but not as an agent-execution endpoint (AIC-FR-22).
@@ -122,6 +125,13 @@ pub const ERR_NONE_CONFIGURED: &str = "none_configured";
 /// `resolve_agentic_invocation` was asked when integrations exist but none is
 /// chosen (AIC-FR-19).
 pub const ERR_NONE_SELECTED: &str = "none_selected";
+
+/// A variable name that the Docker client process or the executor owns (AIC-FR-XTEZ).
+pub const ERR_ENV_VAR_RESERVED: &str = "env_var_reserved";
+/// An `env_vars` entry is not `NAME=value` (AIC-FR-XTEZ).
+pub const ERR_ENV_VAR_INVALID: &str = "env_var_invalid";
+/// The token variable name is not usable (AIC-FR-CVPW).
+pub const ERR_TOKEN_VAR_INVALID: &str = "token_var_invalid";
 
 /// AIC-FR-04: how long a version probe may take before the child is killed.
 /// Generous enough for a cold start of a Node-based CLI, short enough that a
@@ -164,9 +174,7 @@ pub fn is_valid_oauth_token(token: &str) -> bool {
         // `[A-Za-z0-9_-]+` — one or more, so a bare prefix does not pass.
         Some(rest) => {
             !rest.is_empty()
-                && rest
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         }
         None => false,
     }
@@ -174,6 +182,7 @@ pub fn is_valid_oauth_token(token: &str) -> bool {
 
 mod catalog;
 mod commands;
+mod gateway;
 mod launch;
 mod logs;
 mod operations;
@@ -183,6 +192,7 @@ mod runner;
 
 pub use catalog::*;
 pub use commands::*;
+pub use gateway::*;
 pub use launch::*;
 use logs::*;
 pub use operations::*;
@@ -236,14 +246,7 @@ impl AgenticIntegrations {
         prober: Box<dyn EndpointProber>,
         secrets: Box<dyn SecretStore>,
     ) -> Self {
-        Self {
-            probe,
-            runner,
-            prober,
-            secrets,
-            home: dirs::home_dir(),
-            write_lock: Mutex::new(()),
-        }
+        Self { probe, runner, prober, secrets, home: dirs::home_dir(), write_lock: Mutex::new(()) }
     }
 
     /// The same collaborators with the user home pointed somewhere else, so a
@@ -254,7 +257,6 @@ impl AgenticIntegrations {
         self
     }
 }
-
 
 #[cfg(test)]
 mod tests;

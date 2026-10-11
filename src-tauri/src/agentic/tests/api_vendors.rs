@@ -5,6 +5,29 @@ use super::*;
 
 // -- AIC-FR-22, AIC-FR-26: API verification failures -----------------------------
 
+// AIC-FR-22, AAP-FR-HZTB
+#[test]
+fn a_refused_certificate_fails_api_verification_with_host_and_cause() {
+    let failure =
+        crate::tls::TlsFailure::new("agents.corp", crate::tls::TlsCause::HostnameMismatch);
+    let h = harness(
+        FakeFs::with_executable(&[]),
+        Arc::new(FakeRunner::default()),
+        FakeProber::failing(ProbeError::TlsUntrusted(failure)),
+        FakeKeychain::new(),
+    );
+    let error = verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "claude_agent_api",
+        &api_config("https://agents.corp/v1", Some("k")),
+    )
+    .unwrap_err();
+    assert_eq!(error, "tls_untrusted:hostname_mismatch:agents.corp");
+    assert_ne!(error, ERR_UNREACHABLE);
+    assert!(h.store.load_agentic_registry().unwrap().0.is_empty());
+}
+
 #[test]
 fn aic_ts24_each_api_failure_is_distinguishable() {
     let cases: Vec<(ProbeError, &str)> = vec![
@@ -44,13 +67,8 @@ fn aic_ts24_each_api_failure_is_distinguishable() {
         FakeKeychain::new(),
     );
     assert_eq!(
-        verify_integration_impl(
-            &h.store,
-            &h.ai,
-            "claude_agent_api",
-            &api_config("", Some("k"))
-        )
-        .unwrap_err(),
+        verify_integration_impl(&h.store, &h.ai, "claude_agent_api", &api_config("", Some("k")))
+            .unwrap_err(),
         ERR_BASE_URL_EMPTY
     );
     assert_eq!(
@@ -139,12 +157,7 @@ fn aic_ts25_only_the_named_api_vendor_ships_a_default_url() {
         &api_config("https://gateway.internal/anthropic/v1", Some("k-1234")),
     )
     .unwrap();
-    assert_eq!(
-        rec.base_url.as_deref(),
-        Some("https://gateway.internal/anthropic/v1")
-    );
+    assert_eq!(rec.base_url.as_deref(), Some("https://gateway.internal/anthropic/v1"));
     let calls = prober.calls.lock().unwrap();
-    assert!(calls
-        .iter()
-        .any(|(url, _, _)| url == "https://gateway.internal/anthropic/v1/models"));
+    assert!(calls.iter().any(|(url, _, _)| url == "https://gateway.internal/anthropic/v1/models"));
 }

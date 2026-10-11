@@ -150,19 +150,13 @@ pub(crate) fn summarize(commit: &Commit<'_>, tips: &HashMap<Oid, Vec<String>>) -
 /// `from`, newest first by commit time.
 pub(crate) fn commits_from(repo: &Repository, from: Oid) -> Result<Vec<CommitSummary>, String> {
     let tips = ref_tips(repo);
-    let mut walk = repo
-        .revwalk()
-        .map_err(|e| format!("failed to walk the history: {e}"))?;
-    walk.set_sorting(Sort::TIME)
-        .map_err(|e| format!("failed to walk the history: {e}"))?;
-    walk.push(from)
-        .map_err(|e| format!("failed to walk the history: {e}"))?;
+    let mut walk = repo.revwalk().map_err(|e| format!("failed to walk the history: {e}"))?;
+    walk.set_sorting(Sort::TIME).map_err(|e| format!("failed to walk the history: {e}"))?;
+    walk.push(from).map_err(|e| format!("failed to walk the history: {e}"))?;
     let mut commits = Vec::new();
     for id in walk.take(COMMIT_LIMIT) {
         let id = id.map_err(|e| format!("failed to walk the history: {e}"))?;
-        let commit = repo
-            .find_commit(id)
-            .map_err(|e| format!("failed to read a commit: {e}"))?;
+        let commit = repo.find_commit(id).map_err(|e| format!("failed to read a commit: {e}"))?;
         commits.push(summarize(&commit, &tips));
     }
     Ok(commits)
@@ -192,12 +186,7 @@ pub fn commit_history_for(root: &Path) -> Result<CommitHistory, String> {
     };
     let head = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
     let Some(head) = head else {
-        return Ok(CommitHistory {
-            branch,
-            is_detached,
-            head_id: None,
-            commits: Vec::new(),
-        });
+        return Ok(CommitHistory { branch, is_detached, head_id: None, commits: Vec::new() });
     };
     Ok(CommitHistory {
         branch,
@@ -227,15 +216,11 @@ fn commit_diff<'r>(
     prefix: &str,
     pathspecs: &[String],
 ) -> Result<git2::Diff<'r>, String> {
-    let tree = commit
-        .tree()
-        .map_err(|e| format!("failed to read the commit tree: {e}"))?;
+    let tree = commit.tree().map_err(|e| format!("failed to read the commit tree: {e}"))?;
     let parent_tree = match commit.parent(0) {
-        Ok(parent) => Some(
-            parent
-                .tree()
-                .map_err(|e| format!("failed to read the parent tree: {e}"))?,
-        ),
+        Ok(parent) => {
+            Some(parent.tree().map_err(|e| format!("failed to read the parent tree: {e}"))?)
+        }
         Err(_) => None,
     };
     tree_diff(repo, parent_tree.as_ref(), &tree, prefix, pathspecs)
@@ -277,9 +262,7 @@ fn project_relative(prefix: &str, path: &str) -> Option<String> {
     if prefix.is_empty() {
         return Some(path.to_string());
     }
-    path.strip_prefix(prefix)
-        .and_then(|rest| rest.strip_prefix('/'))
-        .map(str::to_string)
+    path.strip_prefix(prefix).and_then(|rest| rest.strip_prefix('/')).map(str::to_string)
 }
 
 fn status_of(delta: Delta) -> Option<CommitFileStatus> {
@@ -295,7 +278,7 @@ fn status_of(delta: Delta) -> Option<CommitFileStatus> {
 }
 
 fn path_text(file: git2::DiffFile<'_>) -> Option<String> {
-    file.path().map(|p| changes::to_forward(p))
+    file.path().map(changes::to_forward)
 }
 
 /// GTC-FR-YCEV: the paths the commit changed against its first parent.
@@ -335,12 +318,7 @@ pub(crate) fn files_of(diff: &git2::Diff<'_>, prefix: &str) -> Vec<CommitFile> {
             .flatten()
             .map(|patch| patch.delta().flags().is_binary())
             .unwrap_or_else(|| delta.flags().is_binary());
-        files.push(CommitFile {
-            path: new_path,
-            previous_path,
-            status,
-            is_binary,
-        });
+        files.push(CommitFile { path: new_path, previous_path, status, is_binary });
     }
     files.sort_by(|a, b| a.path.cmp(&b.path));
     files
@@ -535,11 +513,5 @@ pub fn get_commit_file_diff(
     app: tauri::AppHandle,
     project: State<'_, ProjectState>,
 ) -> Result<DiffPayload, String> {
-    commit_file_diff_reported(
-        &app,
-        &logging::BUFFER,
-        &project.require_root()?,
-        &commit_id,
-        &path,
-    )
+    commit_file_diff_reported(&app, &logging::BUFFER, &project.require_root()?, &commit_id, &path)
 }

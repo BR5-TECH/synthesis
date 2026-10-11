@@ -88,9 +88,9 @@ fn lenient_limit<'de, D: serde::Deserializer<'de>>(
 ) -> Result<Option<i64>, D::Error> {
     let value = serde_json::Value::deserialize(deserializer)?;
     Ok(match value {
-        serde_json::Value::Number(number) => number
-            .as_i64()
-            .or_else(|| number.as_f64().map(|f| f.trunc() as i64)),
+        serde_json::Value::Number(number) => {
+            number.as_i64().or_else(|| number.as_f64().map(|f| f.trunc() as i64))
+        }
         serde_json::Value::String(text) => text
             .trim()
             .parse::<i64>()
@@ -157,7 +157,10 @@ pub fn normalize_limit(limit: Option<i64>) -> usize {
 ///
 /// Reads no file, enumerates no folder, holds no registry, consults no index
 /// directly, and applies no ranking of its own.
-pub fn search(indexer: &Bm25Indexer, args: &SkillSearchArgs) -> Result<SkillSearchOutput, ToolRefusal> {
+pub fn search(
+    indexer: &Bm25Indexer,
+    args: &SkillSearchArgs,
+) -> Result<SkillSearchOutput, ToolRefusal> {
     if args.query.trim().is_empty() {
         return Err(ToolRefusal::InvalidArguments(EMPTY_QUERY));
     }
@@ -206,10 +209,7 @@ impl<R: tauri::Runtime> SkillSearchTool<R> {
     /// TLC-FR-19: this tool's own constructor. A caller attaches it by name;
     /// there is no registry that would attach it on anyone's behalf.
     pub fn new(app: tauri::AppHandle<R>) -> Self {
-        SkillSearchTool {
-            app,
-            buffer: &BUFFER,
-        }
+        SkillSearchTool { app, buffer: &BUFFER }
     }
 
     /// The same tool, reporting into `buffer`.

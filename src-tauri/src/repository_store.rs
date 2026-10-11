@@ -91,9 +91,7 @@ pub fn store_dirname(identity: &str) -> String {
 /// RMS-FR-ZXHM: the full store path for an identity, given the application data
 /// root.
 pub fn store_dir_in(app_data: &Path, identity: &str) -> PathBuf {
-    app_data
-        .join(REPOSITORIES_DIRNAME)
-        .join(store_dirname(identity))
+    app_data.join(REPOSITORIES_DIRNAME).join(store_dirname(identity))
 }
 
 fn digest_of(identity: &str) -> String {
@@ -114,13 +112,7 @@ fn slug_of(identity: &str) -> String {
     let reduced: String = last
         .to_ascii_lowercase()
         .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else {
-                '-'
-            }
-        })
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
         .take(SLUG_CHARS)
         .collect();
     // A reduction that is only separators reads as nothing, so it is treated as
@@ -179,11 +171,8 @@ pub fn ensure_store_in(
     // and rewriting it would be the one thing this clause forbids.
     let marker = dir.join(IDENTITY_FILE);
     if matches!(root.file_info(&marker), Err(fsa::FsError::NotFound { .. })) {
-        let record = IdentityRecord {
-            identity: identity.to_string(),
-        };
-        root.write_toml_atomic(&marker, &record)
-            .map_err(|_| ERR_STORE_UNAVAILABLE.to_string())?;
+        let record = IdentityRecord { identity: identity.to_string() };
+        root.write_toml_atomic(&marker, &record).map_err(|_| ERR_STORE_UNAVAILABLE.to_string())?;
     }
     Ok(dir)
 }
@@ -251,10 +240,7 @@ mod tests {
         // digest rather than by the slug.
         let c = "/elsewhere/acme";
         assert_ne!(store_dirname(a), store_dirname(c));
-        assert_eq!(
-            store_dirname(a).split('-').next(),
-            store_dirname(c).split('-').next()
-        );
+        assert_eq!(store_dirname(a).split('-').next(), store_dirname(c).split('-').next());
     }
 
     /// RMS-FR-KRYP: the store and its identity record are created once and then
@@ -263,10 +249,7 @@ mod tests {
     fn rms_a_store_is_created_once_and_preserved() {
         let dir = tempfile::TempDir::new().expect("tempdir");
         let access = std::sync::Arc::new(
-            fsa::FsAccess::builder()
-                .allow_root(dir.path())
-                .build()
-                .expect("access"),
+            fsa::FsAccess::builder().allow_root(dir.path()).build().expect("access"),
         );
         let identity = "/home/raver/code/acme";
         let store = ensure_store_in(dir.path(), identity, &access).expect("store");
@@ -310,10 +293,7 @@ mod tests {
     fn rms_a_store_holds_the_named_folders_and_the_identity_record() {
         let dir = tempfile::TempDir::new().expect("tempdir");
         let access = std::sync::Arc::new(
-            fsa::FsAccess::builder()
-                .allow_root(dir.path())
-                .build()
-                .expect("access"),
+            fsa::FsAccess::builder().allow_root(dir.path()).build().expect("access"),
         );
         let store = ensure_store_in(dir.path(), "/home/raver/code/acme", &access).expect("store");
         assert!(store.join(IDENTITY_FILE).is_file());
@@ -348,18 +328,12 @@ mod tests {
         let allowed = tempfile::TempDir::new().expect("tempdir");
         let out_of_reach = tempfile::TempDir::new().expect("tempdir");
         let access = std::sync::Arc::new(
-            fsa::FsAccess::builder()
-                .allow_root(allowed.path())
-                .build()
-                .expect("access"),
+            fsa::FsAccess::builder().allow_root(allowed.path()).build().expect("access"),
         );
         let err = ensure_store_in(out_of_reach.path(), "/home/raver/code/acme", &access)
             .expect_err("refused");
         assert_eq!(err, ERR_STORE_UNAVAILABLE);
-        assert!(
-            !out_of_reach.path().join(REPOSITORIES_DIRNAME).exists(),
-            "nothing was created",
-        );
+        assert!(!out_of_reach.path().join(REPOSITORIES_DIRNAME).exists(), "nothing was created",);
     }
 
     /// RMS-FR-HDNZ: the store stands under the application data root and inside

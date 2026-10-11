@@ -14,10 +14,7 @@ fn the_proposed_text_is_stored_and_applied_byte_for_byte() {
     let awkward = "# Spec   \n\n\t  indented oddly\n\nno trailing newline";
     let proposal = f.propose(FILE, awkward).expect("recorded");
 
-    assert_eq!(
-        load_content_impl(&f.root, &proposal.id).expect("content").content,
-        awkward,
-    );
+    assert_eq!(load_content_impl(&f.root, &proposal.id).expect("content").content, awkward,);
     f.accept(&proposal.id).expect("accepted");
     assert_eq!(f.file_body(), awkward, "what was read is what landed");
 }
@@ -39,14 +36,8 @@ fn proposals_list_most_recently_created_first_whatever_their_state() {
     // actually orders them — which is the point: the order is total either way.
     let ids: Vec<&str> = listed.iter().map(|p| p.id.as_str()).collect();
     assert!(ids.contains(&first.id.as_str()) && ids.contains(&second.id.as_str()));
-    assert_eq!(
-        listed.iter().filter(|p| p.state == ProposalState::Pending).count(),
-        1,
-    );
-    assert_eq!(
-        list_proposals_impl(&f.root, "no-such-draft").unwrap_err(),
-        ERR_DRAFT_NOT_FOUND,
-    );
+    assert_eq!(listed.iter().filter(|p| p.state == ProposalState::Pending).count(), 1,);
+    assert_eq!(list_proposals_impl(&f.root, "no-such-draft").unwrap_err(), ERR_DRAFT_NOT_FOUND,);
 }
 
 // ---------------------------------------------------------------------------
@@ -56,7 +47,8 @@ fn proposals_list_most_recently_created_first_whatever_their_state() {
 #[test]
 fn accepting_writes_the_file_and_moves_the_record() {
     let f = Fixture::new();
-    let before = drafts::list_drafts_impl(&f.root).drafts
+    let before = drafts::list_drafts_impl(&f.root)
+        .drafts
         .into_iter()
         .find(|d| d.id == f.draft_id)
         .expect("draft")
@@ -68,7 +60,8 @@ fn accepting_writes_the_file_and_moves_the_record() {
     assert_eq!(decided.state, ProposalState::Accepted);
     assert!(decided.decided_at.is_some());
 
-    let after = drafts::list_drafts_impl(&f.root).drafts
+    let after = drafts::list_drafts_impl(&f.root)
+        .drafts
         .into_iter()
         .find(|d| d.id == f.draft_id)
         .expect("draft");
@@ -77,10 +70,7 @@ fn accepting_writes_the_file_and_moves_the_record() {
         "the write went through the draft's save path, so it restamped the draft \
          (DCP-FR-11)",
     );
-    assert!(
-        !after.inconsistent,
-        "a proposal replaces the prompt and adds no file (DCP-FR-11)",
-    );
+    assert!(!after.inconsistent, "a proposal replaces the prompt and adds no file (DCP-FR-11)",);
 }
 
 // ---------------------------------------------------------------------------
@@ -174,10 +164,7 @@ fn declining_leaves_the_file_alone_keeps_the_candidate_and_records_the_feedback(
     let last = thread.comments.last().expect("decision comment");
     assert!(last.body.contains("Declined"), "body: {:?}", last.body);
     assert!(last.body.contains(FILE));
-    assert!(
-        last.body.contains("Too terse"),
-        "the feedback rides with it (DCP-FR-15)",
-    );
+    assert!(last.body.contains("Too terse"), "the feedback rides with it (DCP-FR-15)",);
     assert!(last.attachments.is_empty(), "a decision carries none");
     match &last.author {
         Participant::Human { login, .. } => assert_eq!(login, "raver119"),
@@ -221,15 +208,8 @@ fn a_decided_proposal_refuses_a_second_decision_either_way() {
     let comments_after = f.discussion().comments.len();
 
     assert_eq!(f.accept(&proposal.id).unwrap_err(), ERR_ALREADY_DECIDED);
-    assert_eq!(
-        f.decline_with(&proposal.id, None).unwrap_err(),
-        ERR_ALREADY_DECIDED,
-    );
-    assert_eq!(
-        f.discussion().comments.len(),
-        comments_after,
-        "a refused decision appends nothing",
-    );
+    assert_eq!(f.decline_with(&proposal.id, None).unwrap_err(), ERR_ALREADY_DECIDED,);
+    assert_eq!(f.discussion().comments.len(), comments_after, "a refused decision appends nothing",);
 
     // And the same holds for one that was declined.
     let second = f.propose(FILE, "another").expect("second");
@@ -284,10 +264,7 @@ fn a_proposal_whose_acceptance_never_committed_reads_pending_again() {
     assert_eq!(after[0].state, ProposalState::Pending);
     assert_eq!(f.file_body(), before, "the prompt holds its prior bytes");
     assert!(
-        crate::draft_history::list_impl(&f.root, &f.draft_id)
-            .expect("history")
-            .entries
-            .is_empty(),
+        crate::draft_history::list_impl(&f.root, &f.draft_id).expect("history").entries.is_empty(),
         "the draft's history holds no entry for it",
     );
     assert_eq!(f.discussion().comments.len(), 2, "the conversation gained no line");
@@ -359,18 +336,12 @@ fn a_draft_whose_history_cannot_be_reconciled_answers_nothing_about_its_proposal
         f.accept(&proposal.id).err(),
         f.decline_with(&proposal.id, None).err(),
     ] {
-        assert_eq!(
-            refusal.as_deref(),
-            Some(crate::draft_history::ERR_HISTORY_RECOVERY_FAILED),
-        );
+        assert_eq!(refusal.as_deref(), Some(crate::draft_history::ERR_HISTORY_RECOVERY_FAILED),);
     }
 
     assert_eq!(f.file_body(), before, "no write landed");
     assert_eq!(f.discussion().comments.len(), comments_before, "nothing appended");
-    assert!(
-        hist.join("journal.toml").is_file(),
-        "the journal stands so the next run tries again",
-    );
+    assert!(hist.join("journal.toml").is_file(), "the journal stands so the next run tries again",);
 }
 
 // ---------------------------------------------------------------------------
@@ -395,10 +366,10 @@ fn two_windows_deciding_one_proposal_land_exactly_one_decision() {
     let root = &f.root;
     let id = proposal.id.as_str();
     let (accepted, declined) = std::thread::scope(|scope| {
-        let accept =
-            scope.spawn(|| decide(&app, root, root, id, Decision::Accept, None, None, &human()));
-        let decline =
-            scope.spawn(|| decide(&app, root, root, id, Decision::Decline, None, None, &human()));
+        let accept = scope
+            .spawn(|| decide(&app, root, root, id, Verdict::whole(Decision::Accept), &human()));
+        let decline = scope
+            .spawn(|| decide(&app, root, root, id, Verdict::whole(Decision::Decline), &human()));
         (accept.join().expect("accept thread"), decline.join().expect("decline thread"))
     });
 
@@ -417,9 +388,7 @@ fn two_windows_deciding_one_proposal_land_exactly_one_decision() {
 
     // And the record, the prompt and the history all say the same thing.
     let record = find_proposal(&f.root, &proposal.id).expect("still there").1;
-    let entries = crate::draft_history::list_impl(&f.root, &f.draft_id)
-        .expect("history")
-        .entries;
+    let entries = crate::draft_history::list_impl(&f.root, &f.draft_id).expect("history").entries;
     if accepted.is_ok() {
         assert_eq!(record.state, ProposalState::Accepted);
         assert_eq!(f.file_body(), PROPOSED);
@@ -518,7 +487,6 @@ fn a_reader_cannot_roll_back_an_acceptance_that_is_still_running() {
     );
 }
 
-
 // ---------------------------------------------------------------------------
 // DRS-FR-QPSC — a GitHub-shadow draft takes no accepted change
 // ---------------------------------------------------------------------------
@@ -534,6 +502,7 @@ fn a_shadow_draft_refuses_an_accepted_change() {
         &f.root,
         &f.draft_id,
         drafts::GithubIssueLink {
+            repository_host: "github.com".into(),
             repository_owner: "acme".into(),
             repository_name: "widgets".into(),
             issue_number: 4,

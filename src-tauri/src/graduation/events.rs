@@ -47,11 +47,7 @@ pub(super) fn announce_log_records<R: tauri::Runtime>(
 ) {
     let _ = app.emit(
         GRADUATION_LOG_RECORDS_APPENDED,
-        LogRecordsAppendedPayload {
-            run_id: run_id.to_string(),
-            stream,
-            latest_sequence,
-        },
+        LogRecordsAppendedPayload { run_id: run_id.to_string(), stream, latest_sequence },
     );
 }
 
@@ -75,9 +71,6 @@ pub(super) fn announce_queue<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: 
 pub(super) fn announce_run<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &GraduationRun) {
     let _ = app.emit(
         GRADUATION_RUN_CHANGED,
-        RunChangedPayload {
-            run_id: run.id.clone(),
-            state: run.state,
-        },
+        RunChangedPayload { run_id: run.id.clone(), state: run.state },
     );
 }

@@ -79,10 +79,7 @@ pub struct OwnedRoots {
 
 impl OwnedRoots {
     pub fn borrowed(&self) -> Roots<'_> {
-        Roots {
-            worktree: &self.worktree,
-            store: &self.store,
-        }
+        Roots { worktree: &self.worktree, store: &self.store }
     }
 }
 
@@ -91,17 +88,11 @@ impl<'a> Roots<'a> {
     /// both the worktree and the store.
     #[cfg(test)]
     pub fn same(root: &'a crate::fs::RootFs) -> Roots<'a> {
-        Roots {
-            worktree: root,
-            store: root,
-        }
+        Roots { worktree: root, store: root }
     }
 
     pub fn owned(&self) -> OwnedRoots {
-        OwnedRoots {
-            worktree: self.worktree.clone(),
-            store: self.store.clone(),
-        }
+        OwnedRoots { worktree: self.worktree.clone(), store: self.store.clone() }
     }
 }
 use crate::global_settings::GlobalSettingsStore;
@@ -140,6 +131,7 @@ mod prose_tool_calls;
 mod provider_memory;
 mod registry;
 mod reporting;
+mod responses_repair;
 mod retries;
 mod rig_bridge;
 mod rig_messages;
@@ -333,26 +325,15 @@ pub fn compile_prompt(origin_kind: OriginKind, instructions: &str, title: &str) 
 /// four today. Handed a template that does, this is the path that has to get
 /// the order right.
 pub(crate) fn compile_from_template(template: &str, instructions: &str, title: &str) -> String {
-    let instructions = if instructions.trim().is_empty() {
-        ""
-    } else {
-        instructions
-    };
+    let instructions = if instructions.trim().is_empty() { "" } else { instructions };
     let title = title.trim();
-    let title = if title.is_empty() {
-        AGENT_TITLE_UNDEFINED
-    } else {
-        title
-    };
+    let title = if title.is_empty() { AGENT_TITLE_UNDEFINED } else { title };
     substitute_once(
         // CVL-FR-29: the template's instruction text rather than the file, and
         // taken **before** the substitution rather than after it, so a comment
         // can never contribute a placeholder or a substituted value.
         &crate::prompts::instruction_text(template),
-        &[
-            (AGENT_TITLE_PLACEHOLDER, title),
-            (AGENT_INSTRUCTIONS_PLACEHOLDER, instructions),
-        ],
+        &[(AGENT_TITLE_PLACEHOLDER, title), (AGENT_INSTRUCTIONS_PLACEHOLDER, instructions)],
     )
 }
 
@@ -461,37 +442,20 @@ fn conversation_tools<R: tauri::Runtime>(
     roots: Roots<'_>,
     origin: &ConversationOrigin,
     author: &Participant,
-    asked: &Arc<AtomicBool>,
-    asked_questions: &Arc<AtomicBool>,
-    proposed: &Arc<AtomicBool>,
-) -> Vec<rig::tool::PortableDynamicTool> {
+    flags: ContributionFlags<'_>,
+) -> Vec<rig::tool::DynamicTool> {
+    let ContributionFlags { asked, asked_questions, proposed } = flags;
     let mut tools = vec![
         erase_tool(crate::tools::spec_search::SpecSearchTool::new(app.clone())),
-        erase_tool(crate::tools::file_read::FileReadTool::new(
-            app.clone(),
-            session,
-        )),
-        erase_tool(crate::tools::draft_search::DraftSearchTool::new(
-            app.clone(),
-            session,
-        )),
-        erase_tool(crate::tools::draft_read::DraftReadTool::new(
-            app.clone(),
-            session,
-        )),
-        erase_tool(crate::tools::note_search::NoteSearchTool::new(
-            app.clone(),
-            session,
-        )),
+        erase_tool(crate::tools::file_read::FileReadTool::new(app.clone(), session)),
+        erase_tool(crate::tools::draft_search::DraftSearchTool::new(app.clone(), session)),
+        erase_tool(crate::tools::draft_read::DraftReadTool::new(app.clone(), session)),
+        erase_tool(crate::tools::note_search::NoteSearchTool::new(app.clone(), session)),
         // CVL-FR-08: the two that reach the user's reference documents. Neither
         // takes the agent session: they read through the Documents collection's
         // own read-only instance and never through the session's (GDT-FR-HCYY).
-        erase_tool(crate::tools::document_search::SearchDocumentsTool::new(
-            app.clone(),
-        )),
-        erase_tool(crate::tools::document_get::GetDocumentTool::new(
-            app.clone(),
-        )),
+        erase_tool(crate::tools::document_search::SearchDocumentsTool::new(app.clone())),
+        erase_tool(crate::tools::document_get::GetDocumentTool::new(app.clone())),
         erase_tool(crate::tools::skill_search::SkillSearchTool::new(app.clone())),
         erase_tool(crate::tools::skill_list::SkillListTool::new(app.clone())),
         erase_tool(crate::tools::skill_load::SkillLoadTool::new(app.clone())),
@@ -532,15 +496,13 @@ fn conversation_tools<R: tauri::Runtime>(
     // `ask_user_comment` is (PDC-FR-03, PPC-FR-03): the model chooses what to
     // propose and never what to propose it into.
     if origin.is_draft() {
-        tools.push(erase_tool(
-            crate::tools::propose_draft_changes::ProposeDraftChangesTool::new(
-                app.clone(),
-                roots.owned(),
-                origin.clone(),
-                author.clone(),
-                Arc::clone(proposed),
-            ),
-        ));
+        tools.push(erase_tool(crate::tools::propose_draft_changes::ProposeDraftChangesTool::new(
+            app.clone(),
+            roots.owned(),
+            origin.clone(),
+            author.clone(),
+            Arc::clone(proposed),
+        )));
     } else if origin.is_artifact() {
         tools.push(erase_tool(
             crate::tools::propose_prompt_changes::ProposePromptChangesTool::new(
@@ -555,6 +517,16 @@ fn conversation_tools<R: tauri::Runtime>(
     tools
 }
 
+/// The three signals that the turn-ending tools set when a contribution goes
+/// out (CVL-FR-15): a question, a set of discussion questions, or a proposal.
+/// [`conversation_tools`] gives each one to the tool that sets it.
+#[derive(Clone, Copy)]
+struct ContributionFlags<'a> {
+    asked: &'a Arc<AtomicBool>,
+    asked_questions: &'a Arc<AtomicBool>,
+    proposed: &'a Arc<AtomicBool>,
+}
+
 // ---------------------------------------------------------------------------
 // Tauri commands (AGC contract surface)
 // ---------------------------------------------------------------------------
@@ -567,22 +539,15 @@ pub fn dispatch_agent_turn<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     project: State<'_, ProjectState>,
 ) -> Result<AgentTurn, String> {
-    let key = project
-        .anchor()
-        .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
-    let root = project
-        .require_root()
-        .map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
+    let key = project.anchor().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
+    let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
     // RMS-FR-HAJC: the store's own refusal, passed through rather than rewritten
     // as "no project open" — a project *is* open, and the two are different
     // things for the surface to say.
     let store = project.require_store()?;
     dispatch_impl(
         &app,
-        Roots {
-            worktree: &root,
-            store: &store,
-        },
+        Roots { worktree: &root, store: &store },
         &key,
         &nickname,
         origin,
@@ -673,25 +638,13 @@ pub fn retry_agent_turn<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     project: State<'_, ProjectState>,
 ) -> Result<AgentTurn, String> {
-    let key = project
-        .anchor()
-        .ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
-    let root = project
-        .require_root()
-        .map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
+    let key = project.anchor().ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
+    let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
     // RMS-FR-HAJC: the store's own refusal, passed through rather than rewritten
     // as "no project open" — a project *is* open, and the two are different
     // things for the surface to say.
     let store = project.require_store()?;
-    retry_impl(
-        &app,
-        Roots {
-            worktree: &root,
-            store: &store,
-        },
-        &key,
-        &turn_id,
-    )
+    retry_impl(&app, Roots { worktree: &root, store: &store }, &key, &turn_id)
 }
 
 /// AGC-FR-32's whole behaviour, reachable without the Tauri runtime.
@@ -736,11 +689,9 @@ pub fn retry_impl<R: tauri::Runtime>(
         },
     );
 
-    // Dropped before dispatching: `dispatch_impl` reads the registry off the app
-    // handle itself and would otherwise contend with a `State` still borrowed
-    // here for the whole of this call.
-    drop(turns);
-
+    // `dispatch_impl` reads the registry off the app handle itself. The `State`
+    // here is only a shared reference and holds no lock, so the two do not
+    // contend.
     dispatch_impl(
         app,
         roots,

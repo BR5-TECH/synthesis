@@ -75,12 +75,7 @@ fn pick(app: &tauri::AppHandle, mode: PickMode) -> Option<Vec<PathBuf>> {
             .file()
             .add_filter("Documents", &["pdf", "txt", "md", "markdown"])
             .blocking_pick_files()
-            .map(|files| {
-                files
-                    .into_iter()
-                    .filter_map(|file| file.into_path().ok())
-                    .collect()
-            }),
+            .map(|files| files.into_iter().filter_map(|file| file.into_path().ok()).collect()),
         PickMode::Folder => app
             .dialog()
             .file()

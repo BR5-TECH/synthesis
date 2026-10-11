@@ -36,11 +36,7 @@ fn registrations_at(
 ) -> Vec<git2::Worktree> {
     let names: Vec<String> = main
         .worktrees()
-        .map(|list| {
-            list.iter()
-                .filter_map(|n| n.ok().flatten().map(str::to_string))
-                .collect()
-        })
+        .map(|list| list.iter().filter_map(|n| n.ok().flatten().map(str::to_string)).collect())
         .unwrap_or_default();
     let wanted = canonicalize_lenient(path);
     names
@@ -100,9 +96,7 @@ pub(crate) fn worktree_lock_at<R: tauri::Runtime>(
             }
         };
         let reason = String::from_utf8_lossy(&bytes).trim().to_string();
-        Some(WorktreeLock {
-            reason: (!reason.is_empty()).then_some(reason),
-        })
+        Some(WorktreeLock { reason: (!reason.is_empty()).then_some(reason) })
     })
 }
 
@@ -202,14 +196,10 @@ fn remove_checked<R: tauri::Runtime>(
 }
 
 fn remove_directory(target: &Path) -> Result<(), String> {
-    let parent = target
-        .parent()
-        .ok_or_else(|| ERR_NOT_A_WORKTREE.to_string())?;
+    let parent = target.parent().ok_or_else(|| ERR_NOT_A_WORKTREE.to_string())?;
     let access = crate::fs::FsAccess::builder()
         .author_root(parent)
         .build()
         .map_err(|e| format!("failed to remove the worktree: {e}"))?;
-    access
-        .delete_author_tree(target)
-        .map_err(|e| format!("failed to remove the worktree: {e}"))
+    access.delete_author_tree(target).map_err(|e| format!("failed to remove the worktree: {e}"))
 }

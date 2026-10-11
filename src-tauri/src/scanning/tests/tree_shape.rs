@@ -14,23 +14,15 @@ fn a_flow_appears_at_its_natural_location_not_a_flows_group() {
     let tmp = project_with_synthesis();
     let root = &crate::fs::RootFs::for_root(tmp.path());
     fs::create_dir_all(root.join("workflows")).unwrap();
-    fs::write(
-        root.join("workflows/review.flow"),
-        "{\"version\":1,\"nodes\":[],\"edges\":[]}\n",
-    )
-    .unwrap();
+    fs::write(root.join("workflows/review.flow"), "{\"version\":1,\"nodes\":[],\"edges\":[]}\n")
+        .unwrap();
 
     let tree = scan(root);
     let flow = find(&tree, "workflows/review.flow").expect("flow node present");
     assert_eq!(flow.artifact_type, Some(ArtifactType::Flow));
     // It is a child of its real parent folder, not of any top-level group.
     let parent = find(&tree, "workflows").unwrap();
-    assert!(parent
-        .children
-        .as_ref()
-        .unwrap()
-        .iter()
-        .any(|c| c.path == "workflows/review.flow"));
+    assert!(parent.children.as_ref().unwrap().iter().any(|c| c.path == "workflows/review.flow"));
     // No synthetic flows grouping at any level.
     assert!(find(&tree, "flows").is_none());
     assert!(find(&tree, "Flows").is_none());
@@ -50,10 +42,7 @@ fn content_tiebreak_does_not_override_a_path_classified_file() {
     // A content closure that WOULD say "spec" — it must never be consulted
     // because the path already classifies the file as a skill.
     let content = |_rel: &str| -> ContentFacts {
-        ContentFacts {
-            artifact_type: Some(ArtifactType::Spec),
-            declared_name: None,
-        }
+        ContentFacts { artifact_type: Some(ArtifactType::Spec), declared_name: None }
     };
     let tree = build_tree("p", &entries, &LibraryAssignments::default(), &content);
     let x = find(&tree, ".claude/skills/x.md").unwrap();
@@ -75,19 +64,13 @@ fn ts9_empty_folder_has_no_artifacts_until_assigned() {
     let assignments = LibraryAssignments {
         assignments: BTreeMap::from([(
             "misc".to_string(),
-            Assignment {
-                artifact_type: ArtifactType::Prompt,
-                scope: Scope::Folder,
-            },
+            Assignment { artifact_type: ArtifactType::Prompt, scope: Scope::Folder },
         )]),
     };
     let tree = build_tree("p", &entries, &assignments, &no_content);
     assert_eq!(find(&tree, "misc").unwrap().has_artifacts, Some(true));
     // And the file inside now inherits the type.
-    assert_eq!(
-        find(&tree, "misc/readme.txt").unwrap().type_source,
-        Some(TypeSource::Inherited)
-    );
+    assert_eq!(find(&tree, "misc/readme.txt").unwrap().type_source, Some(TypeSource::Inherited));
 }
 
 #[test]
@@ -125,10 +108,7 @@ fn ts20_a_folder_reports_its_own_assignment_and_nothing_else() {
     let assignments = LibraryAssignments {
         assignments: BTreeMap::from([(
             "specifications".to_string(),
-            Assignment {
-                artifact_type: ArtifactType::Spec,
-                scope: Scope::Folder,
-            },
+            Assignment { artifact_type: ArtifactType::Spec, scope: Scope::Folder },
         )]),
     };
     let tree = build_tree("p", &entries, &assignments, &no_content);
@@ -140,10 +120,7 @@ fn ts20_a_folder_reports_its_own_assignment_and_nothing_else() {
     // `src/` holds an `agent`-classified file but carries no assignment of
     // its own, so it reports neither field: no inheritance travels upward
     // into a directory (ASC-FR-18).
-    assert_eq!(
-        find(&tree, "src/AGENTS.md").unwrap().artifact_type,
-        Some(ArtifactType::Agent)
-    );
+    assert_eq!(find(&tree, "src/AGENTS.md").unwrap().artifact_type, Some(ArtifactType::Agent));
     let src = find(&tree, "src").unwrap();
     assert_eq!(src.artifact_type, None);
     assert_eq!(src.type_source, None);
@@ -170,31 +147,19 @@ fn ts20_a_subfolder_does_not_wear_its_ancestors_assignment() {
     // `curated/` rather than `specifications/`: the latter is a path-inference
     // recognizer, which would make the file below `inferred` and hide the
     // inheritance this pins.
-    let entries = [
-        entry("curated", true),
-        entry("curated/inner", true),
-        entry("curated/inner/x.txt", false),
-    ];
+    let entries =
+        [entry("curated", true), entry("curated/inner", true), entry("curated/inner/x.txt", false)];
     let assignments = LibraryAssignments {
         assignments: BTreeMap::from([(
             "curated".to_string(),
-            Assignment {
-                artifact_type: ArtifactType::Spec,
-                scope: Scope::Folder,
-            },
+            Assignment { artifact_type: ArtifactType::Spec, scope: Scope::Folder },
         )]),
     };
     let tree = build_tree("p", &entries, &assignments, &no_content);
 
-    assert_eq!(
-        find(&tree, "curated").unwrap().artifact_type,
-        Some(ArtifactType::Spec)
-    );
+    assert_eq!(find(&tree, "curated").unwrap().artifact_type, Some(ArtifactType::Spec));
     let inner = find(&tree, "curated/inner").unwrap();
-    assert_eq!(
-        inner.artifact_type, None,
-        "a subfolder carries no type of its own"
-    );
+    assert_eq!(inner.artifact_type, None, "a subfolder carries no type of its own");
     assert_eq!(inner.type_source, None);
     // Its *files* do inherit, which is the ASC-FR-06 rule this must not be
     // confused with.
@@ -214,10 +179,7 @@ fn inherited_folder_type_resolves_the_nearest_ancestor_assignment() {
     assign(root, "f", ArtifactType::Agent, Scope::File).unwrap();
 
     // Nearest wins over the more distant ancestor.
-    assert_eq!(
-        inherited_folder_type(root, "a/b/new"),
-        Some(ArtifactType::Spec)
-    );
+    assert_eq!(inherited_folder_type(root, "a/b/new"), Some(ArtifactType::Spec));
     assert_eq!(inherited_folder_type(root, "a/new"), Some(ArtifactType::Prompt));
     // A folder's own assignment is not "inherited" by itself — the walk starts
     // at the parent.
@@ -237,10 +199,7 @@ fn ts20_a_file_scope_assignment_on_a_folder_path_does_not_type_the_folder() {
     let assignments = LibraryAssignments {
         assignments: BTreeMap::from([(
             "misc".to_string(),
-            Assignment {
-                artifact_type: ArtifactType::Prompt,
-                scope: Scope::File,
-            },
+            Assignment { artifact_type: ArtifactType::Prompt, scope: Scope::File },
         )]),
     };
     let tree = build_tree("p", &entries, &assignments, &no_content);

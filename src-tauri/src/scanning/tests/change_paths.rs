@@ -83,16 +83,13 @@ fn scan_skips_symlinks_and_never_descends_them() {
 fn changed_rel_paths_relativizes_dedups_and_skips_noise() {
     use notify_debouncer_mini::{DebouncedEvent, DebouncedEventKind};
     let root = Path::new("/p");
-    let ev = |p: &str| DebouncedEvent {
-        path: PathBuf::from(p),
-        kind: DebouncedEventKind::Any,
-    };
+    let ev = |p: &str| DebouncedEvent { path: PathBuf::from(p), kind: DebouncedEventKind::Any };
     let batch = Ok(vec![
         ev("/p/a.md"),
-        ev("/p/a.md"),                    // duplicate -> coalesced
+        ev("/p/a.md"), // duplicate -> coalesced
         ev("/p/sub/b.md"),
-        ev("/p/.git/objects/x"),          // pruned (ASC-FR-09)
-        ev("/p/.synthesis/cache/c"),      // pruned
+        ev("/p/.git/objects/x"),     // pruned (ASC-FR-09)
+        ev("/p/.synthesis/cache/c"), // pruned
         // NTC-FR-16: a note write must not reach the tree channel, or every
         // save in the Notes panel would reload the Library.
         ev("/p/.synthesis/notes/n1.toml"),
@@ -117,10 +114,7 @@ fn the_raw_path_channel_reports_gitignored_paths_and_prunes_only_git() {
     // which is why the guarantee is pinned here rather than assumed.
     use notify_debouncer_mini::{DebouncedEvent, DebouncedEventKind};
     let root = Path::new("/p");
-    let ev = |p: &str| DebouncedEvent {
-        path: PathBuf::from(p),
-        kind: DebouncedEventKind::Any,
-    };
+    let ev = |p: &str| DebouncedEvent { path: PathBuf::from(p), kind: DebouncedEventKind::Any };
     let batch = Ok(vec![
         // A skill under a folder a project may well gitignore entirely.
         ev("/p/.claude/skills/local/SKILL.md"),
@@ -211,10 +205,7 @@ fn a_symlinked_attribution_file_records_no_baseline() {
 
     let baseline = AttributionBaseline::default();
     baseline.record_from_disk(&root);
-    assert!(
-        baseline.current().is_none(),
-        "a symlinked attribution file is refused, not followed"
-    );
+    assert!(baseline.current().is_none(), "a symlinked attribution file is refused, not followed");
 }
 
 #[test]
@@ -233,8 +224,7 @@ fn the_attribution_baseline_records_nothing_when_the_file_is_absent() {
 fn changed_rel_paths_empty_and_errored_batches_yield_nothing() {
     let root = Path::new("/p");
     assert!(changed_rel_paths(&Ok(Vec::new()), root).is_empty());
-    let errored: DebounceEventResult =
-        Err(notify_debouncer_mini::notify::Error::generic("boom"));
+    let errored: DebounceEventResult = Err(notify_debouncer_mini::notify::Error::generic("boom"));
     assert!(changed_rel_paths(&errored, root).is_empty());
 }
 

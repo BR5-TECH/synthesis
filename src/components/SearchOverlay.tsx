@@ -54,7 +54,7 @@ export function SearchOverlay({
   }, [onClose, inputRef]);
 
   return (
-    <div className="search-overlay">
+    <div className="search-overlay" data-floating-overlay="">
       <div style={{ flex: 1, overflow: "auto" }}>
         <SearchResultList
           hits={hits}

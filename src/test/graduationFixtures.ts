@@ -14,6 +14,7 @@ import type {
   GraduationLogIndexes,
   GraduationLogPage,
   GraduationLogPageEntry,
+  GraduationLogStream,
   GraduationMergeData,
   GraduationQueue,
   GraduationRun,
@@ -28,7 +29,7 @@ export const PROJECT_KEY = "/Users/demo/dev/acme";
 
 /** GRS-FR-CGSP: a run's log index, healthy and empty. */
 function logs() {
-  const stream = (name: "source" | "structured") => ({
+  const stream = (name: GraduationLogStream) => ({
     stream: name,
     latestSequence: 0,
     recordCount: 0,
@@ -38,7 +39,7 @@ function logs() {
   });
   return {
     logStorageVersion: 1,
-    source: stream("source"),
+    activity: stream("activity"),
     structured: stream("structured"),
     persistence: {
       status: "healthy" as const,
@@ -66,12 +67,12 @@ export interface SegmentSeed {
  * (GLW-FR-RVKT).
  */
 export function makeLogs(over: {
-  source?: SegmentSeed[];
+  activity?: SegmentSeed[];
   structured?: SegmentSeed[];
   persistence?: Partial<GraduationLogIndexes["persistence"]>;
   logStorageVersion?: number;
 } = {}): GraduationLogIndexes {
-  const index = (name: "source" | "structured", seeds: SegmentSeed[] = []) => ({
+  const index = (name: GraduationLogStream, seeds: SegmentSeed[] = []) => ({
     stream: name,
     latestSequence: seeds.length,
     recordCount: seeds.length,
@@ -87,7 +88,7 @@ export function makeLogs(over: {
   });
   return {
     logStorageVersion: over.logStorageVersion ?? 1,
-    source: index("source", over.source),
+    activity: index("activity", over.activity),
     structured: index("structured", over.structured),
     persistence: {
       status: "healthy",
@@ -104,7 +105,7 @@ export function makeLogPage(
 ): GraduationLogPage {
   return {
     runId: "r1",
-    stream: "source",
+    stream: "activity",
     phaseId: "working",
     scope: { kind: "pass", pass: 1 },
     entries: [],
@@ -155,10 +156,16 @@ export function pageForRead(
   };
 }
 
-/** GRS-FR-JAPO: one source chunk, as a page entry holds it. */
-export function makeSourceEntry(
+/**
+ * GRS-FR-JAPO: one persisted activity record, as a page entry holds it.
+ *
+ * The record carries the twelve persisted fields. A test can add any further
+ * field through `over`, to show that the window reads four of them only
+ * (GLW-FR-HGXL).
+ */
+export function makeActivityEntry(
   sequence: number,
-  text: string,
+  summary: string,
   over: Record<string, unknown> = {},
 ): GraduationLogPageEntry {
   const pass = "pass" in over ? (over.pass as number | null) : 1;
@@ -173,39 +180,9 @@ export function makeSourceEntry(
       pass,
       origin: "executor",
       producer: "work_turn",
-      agent: null,
-      container: null,
-      source: "stdout",
-      encoding: "base64",
-      data_base64: btoa(text),
-      byte_length: text.length,
-      ...over,
-    },
-    presentation: { runLevel: pass === null },
-  };
-}
-
-/** GRS-FR-NPIB: one structured record, as a page entry holds it. */
-export function makeStructuredEntry(
-  sequence: number,
-  event: string,
-  over: Record<string, unknown> = {},
-): GraduationLogPageEntry {
-  const pass = "pass" in over ? (over.pass as number | null) : 1;
-  return {
-    record: {
-      schema_version: 1,
-      record_id: `rec-${sequence}`,
-      sequence,
-      at: "2026-09-06T09:04:31Z",
-      run_id: "r1",
-      phase_id: "working",
-      pass,
-      origin: "application",
-      producer: "work_turn",
-      level: "info",
-      event,
-      fields: {},
+      channel: "stdout",
+      kind: "message",
+      summary,
       ...over,
     },
     presentation: { runLevel: pass === null },

@@ -14,7 +14,10 @@ use super::*;
 /// the multimodal message of CVL-FR-10, false builds the text-and-metadata one
 /// of AGC-FR-37. No request is ever built with some of its images and not
 /// others.
-pub(super) fn opening_exchange(request: &AgentRequest, with_images: bool) -> Vec<rig::completion::Message> {
+pub(super) fn opening_exchange(
+    request: &AgentRequest,
+    with_images: bool,
+) -> Vec<rig::completion::Message> {
     if with_images {
         if let Some(message) = multimodal_user_message(request) {
             return vec![message];
@@ -103,10 +106,7 @@ pub(super) fn stable_head_of(input: &[InputSection]) -> usize {
 /// no image sends the request a text-only turn always produced, and omits
 /// nothing whatever the endpoint takes (CVL-FR-38).
 pub fn input_has_images(input: &[InputSection]) -> bool {
-    input
-        .iter()
-        .flat_map(|section| &section.parts)
-        .any(|part| matches!(part, InputPart::Image(_)))
+    input.iter().flat_map(|section| &section.parts).any(|part| matches!(part, InputPart::Image(_)))
 }
 
 /// CVL-FR-10 / CVL-FR-37: the first user message as `rig`'s own **ordered
@@ -138,7 +138,6 @@ fn multimodal_user_message(request: &AgentRequest) -> Option<rig::completion::Me
 /// stands apart from [`render_input`].
 fn multimodal_message_of(sections: &[InputSection]) -> Option<rig::completion::Message> {
     use rig::completion::message::UserContent;
-    use rig::OneOrMany;
 
     if !input_has_images(sections) {
         return None;
@@ -196,8 +195,7 @@ fn multimodal_message_of(sections: &[InputSection]) -> Option<rig::completion::M
     // — falling through to the text rendering — would send metadata for a turn
     // that had already recorded `images_omitted` false, and AGC-FR-37 makes
     // that combination a lie about what the model was shown.
-    let content = OneOrMany::many(contents).ok()?;
-    Some(rig::completion::Message::User { content })
+    (!contents.is_empty()).then_some(rig::completion::Message::User { content: contents })
 }
 
 /// The framework's own name for an image media type, or `None` where it has

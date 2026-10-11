@@ -34,16 +34,15 @@ mod update_progress;
 mod update_record;
 mod updating;
 
-
 pub use artifact::MergeConflict;
-pub use conflict_types::{StreamMergeConflict, StreamMergeDecision};
-#[cfg(test)]
-pub(crate) use semantic_turn::merge_input_field_names;
 pub use commands::*;
+pub use conflict_types::{StreamMergeConflict, StreamMergeDecision};
 pub use lookup::{stream_at_path, stream_on_branch};
 pub use merge_apply::{apply_merge_run, merge_tips_moved, MergeApplied, MergeApplyFailure};
 pub use merge_handoff::*;
 pub(crate) use merge_snapshot::{has_ref as has_snapshot_ref, release_ref as release_snapshot_ref};
+#[cfg(test)]
+pub(crate) use semantic_turn::merge_input_field_names;
 pub use state::{Reconciliation, StreamState};
 pub use store::StreamStore;
 pub use update_commands::*;
@@ -155,6 +154,10 @@ pub struct WorkStream {
     /// WKS-FR-AXRD: Git lists it but its directory has gone.
     #[serde(default, skip_deserializing)]
     pub is_missing: bool,
+    /// WKS-FR-KCTR: the stream is temporary. Set at creation, never changed,
+    /// and a record written before the flag existed reads as false.
+    #[serde(default)]
+    pub temporary: bool,
 }
 
 /// WKS-FR-SGCM: one stream as a listing reports it.
@@ -448,9 +451,7 @@ pub fn uncommitted_paths_of(worktree: &Path) -> Vec<String> {
 /// that its base branch does not, counted as the deletion counts them. 0 when
 /// the repository or either branch cannot be read.
 pub fn ahead_of_base_of(root: &Path, stream: &WorkStream) -> u32 {
-    git::primary_repo(root)
-        .map(|main| git::ahead_of_base(&main, stream))
-        .unwrap_or(0)
+    git::primary_repo(root).map(|main| git::ahead_of_base(&main, stream)).unwrap_or(0)
 }
 
 /// The repository a worktree belongs to, opened at its primary worktree.
@@ -482,11 +483,7 @@ pub(crate) fn reclaim_linked_worktree(
 /// Whether the primary repository still registers a linked worktree by name.
 pub(crate) fn registers_worktree(main: &git2::Repository, name: &str) -> bool {
     main.worktrees()
-        .map(|list| {
-            list.iter()
-                .filter_map(|entry| entry.ok().flatten())
-                .any(|entry| entry == name)
-        })
+        .map(|list| list.iter().filter_map(|entry| entry.ok().flatten()).any(|entry| entry == name))
         .unwrap_or(false)
 }
 
@@ -502,8 +499,7 @@ fn access_for<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Option<std::sync::Arc<fsa::FsAccess>> {
     use tauri::Manager;
-    app.try_state::<fsa::FsAccessState>()
-        .and_then(|state| state.get())
+    app.try_state::<fsa::FsAccessState>().and_then(|state| state.get())
 }
 
 fn project_key_of<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> String {

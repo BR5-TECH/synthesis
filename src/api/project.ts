@@ -5,10 +5,7 @@
  * `./index.ts` carries the whole rule these files are written under.
  */
 import { invoke } from "@tauri-apps/api/core";
-import type {
-  SettingsWindowContext,
-  SettingsWindowKind,
-} from "../settingsWindow";
+import type { SettingsWindowContext } from "../settingsWindow";
 import type {
   AppPreferences,
   BrowseResult,
@@ -124,41 +121,41 @@ export const saveLayoutPreferences = (preferences: LayoutPreferences) =>
 
 export const centerPicker = () => invoke<void>("center_picker");
 
-// --- Settings child windows (settings_window.rs / SWN-settings-windows.md) --
+// --- Settings child window (settings_window.rs / SWN-settings-windows.md) --
 
 /**
- * SWN-FR-13: open a settings window, focus it when it is the one already open
- * (SWN-FR-06), or switch to it when the other one is (SWN-FR-05, SWN-FR-07).
+ * SWN-FR-13: open the Settings window, or focus it when it is already open
+ * (SWN-FR-05, SWN-FR-06).
  *
- * `section` names a section within the window — the Agents section the chrome
- * roster routes to, the GitHub section a failed Git operation offers, the
- * section a notification's address carries. Omit it to open the window on the
- * section it presents by default.
+ * `section` is a section address naming a scope and a section within it
+ * (SWN-FR-HZWD) — the Agents section the chrome roster routes to, the GitHub
+ * section a failed Git operation offers, the section a notification's address
+ * carries. Omit it to open the window on Appearance (SWN-FR-MRNB).
  */
-export const openSettingsWindow = (
-  kind: SettingsWindowKind,
-  section: string | null = null,
-) => invoke<void>("open_settings_window", { kind, section });
+export const openSettingsWindow = (section: string | null = null) =>
+  invoke<void>("open_settings_window", { section });
 
 /**
- * SWN-FR-08 through SWN-FR-12: a settings window's answer to the save sweep it
+ * SWN-FR-08 through SWN-FR-12: the Settings window's answer to the save sweep it
  * was asked to run before closing.
  *
  * `ok` is true once every pending change in every section has been written;
- * `section` names the one that failed, so the window can present it (SWN-FR-11).
+ * `section` is the address of the one that failed, so the window can present it
+ * (SWN-FR-11).
  */
 export const finishSettingsClose = (ok: boolean, section: string | null = null) =>
   invoke<void>("finish_settings_close", { ok, section });
 
 /**
- * The open project behind a settings window (SWN-FR-02).
+ * The open project behind the Settings window (SWN-FR-02).
  *
- * A settings window is a webview of its own and shares no state with the main
+ * The window is a webview of its own and shares no state with the main
  * window, so this is how it learns which project it is configuring. Every field
  * is fixed for the window's life — the parent is blocked, so neither the project
  * nor its active worktree can change while one is open (SET-FR-20) — and every
- * field is empty while no project is open, which is a state Global settings is
- * reachable in (SWN-FR-15).
+ * field is empty while no project is open, which is a state the window is
+ * reachable in (SWN-FR-15) and in which it shows its Global group alone
+ * (SWN-FR-16).
  */
 export const getSettingsWindowContext = () =>
   invoke<SettingsWindowContext>("get_settings_window_context");

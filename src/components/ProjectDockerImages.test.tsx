@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { resetLogBufferForTest } from "../logging";
+import { implementAllAgenticVendorsForTest } from "./agenticImplemented";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -45,6 +47,8 @@ function unset(vendor: AgenticCliVendor): ProjectVendorImageStatus {
     dockerfile: null,
     dockerfileState: "absent",
     dockerfileProblem: null,
+    buildContext: null,
+    buildContextState: "absent",
     graduationState:
       vendor === "opencode" ? "execution_unsupported" : "image_name_missing",
   };
@@ -144,6 +148,7 @@ const buildButton = () =>
 beforeEach(() => {
   invokeMock.mockReset();
   listeners.clear();
+  resetLogBufferForTest();
 });
 afterEach(cleanup);
 
@@ -163,6 +168,12 @@ describe("Project settings → Docker (SET-FR-21..SET-FR-27)", () => {
     expect(screen.getByLabelText("Tag (optional)")).toHaveValue("");
     expect(screen.getByLabelText("Dockerfile (optional)")).toHaveValue("");
     expect(buildButton()).toBeDisabled();
+    // SET-FR-21: the name and the tag are one joined frame, the tag second.
+    const frame = screen.getByRole("group", { name: "Image" });
+    expect(frame).toHaveClass("joined-field");
+    expect(frame).toContainElement(screen.getByLabelText("Image name"));
+    expect(frame).toContainElement(screen.getByLabelText("Tag (optional)"));
+    expect(screen.getByLabelText("Tag (optional)")).toHaveClass("joined-field__part--tag");
   });
 
   it("SET-FR-22, SET-FR-24, SET-FR-08: fields persist at once, and a refused path renders inline", async () => {
@@ -207,7 +218,10 @@ describe("Project settings → Docker (SET-FR-21..SET-FR-27)", () => {
     );
   });
 
-  it("SET-FR-23: an absent Dockerfile, an invalid one, and OpenCode read differently", async () => {
+  it("SET-FR-23: an absent Dockerfile and an invalid one read differently", async () => {
+    // AII-FR-OTQY / SET-FR-GVED: this test uses a vendor that the settings UI
+    // does not implement yet, so it opens the vendor gate.
+    implementAllAgenticVendorsForTest();
     const user = userEvent.setup();
     backend({
       statuses: [
@@ -234,13 +248,11 @@ describe("Project settings → Docker (SET-FR-21..SET-FR-27)", () => {
     expect(screen.queryByRole("alert")).toBeNull();
 
     await user.click(tab("OpenCode"));
-    const panel = screen.getByRole("tabpanel");
-    // SET-FR-23: OpenCode states that execution support is missing rather than
-    // that its configuration is wrong…
-    expect(panel).toHaveTextContent(/cannot run OpenCode yet/);
-    expect(panel).not.toHaveTextContent(/still needs an image name/);
-    // …and the invalid Dockerfile is still named, which is the other half of
-    // the distinction.
+    // SET-FR-23: a configured Dockerfile that is invalid names the problem,
+    // which is the other half of the distinction.
+    expect(screen.getByRole("tabpanel")).toHaveTextContent(
+      /its Dockerfile cannot be used here/,
+    );
     expect(screen.getByRole("alert")).toHaveTextContent(
       /does not name a file in this project/,
     );
@@ -422,6 +434,9 @@ describe("Project settings → Docker (SET-FR-21..SET-FR-27)", () => {
   });
 
   it("SET-FR-25, SET-FR-26 / SET-FR-27, SET-FR-24: a build started earlier is still rendered against its tab on re-entry", async () => {
+    // AII-FR-OTQY / SET-FR-GVED: this test uses a vendor that the settings UI
+    // does not implement yet, so it opens the vendor gate.
+    implementAllAgenticVendorsForTest();
     const user = userEvent.setup();
     backend({
       statuses: [
@@ -579,8 +594,7 @@ describe("Project settings → Docker (SET-FR-21..SET-FR-27)", () => {
     );
     await waitFor(() => expect(calls("open_settings_window")).toHaveLength(1));
     expect(calls("open_settings_window")[0][1]).toEqual({
-      kind: "global",
-      section: "docker",
+      section: "global/docker",
     });
   });
 
@@ -636,5 +650,81 @@ describe("Project settings → Docker (SET-FR-21..SET-FR-27)", () => {
     expect(screen.getByLabelText("Image name")).toHaveValue("acme/agent");
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
     expect(buildButton()).toBeEnabled();
+  });
+});
+
+describe("Project settings → Docker, a vendor that is not implemented (SET-FR-GVED)", () => {
+  it("SET-FR-GVED, SET-FR-23, SET-FR-24: a gated tab states it, keeps its entry and mark, and is read-only", async () => {
+    const user = userEvent.setup();
+    backend({
+      statuses: [
+        unset("claude_code"),
+        configured("codex", { dockerfile: "docker/agent.Dockerfile", dockerfileState: "valid" }),
+        unset("opencode"),
+      ],
+      resolved: "codex",
+      save: () => configured("codex"),
+      build: () => ({ operationId: "op-1" }),
+    });
+    render(<ProjectDockerImages />);
+    // Wait for the resolution and the backend state, so the mark and the Build
+    // control below do not depend on how fast the reads land.
+    await waitFor(() =>
+      expect(tab("Codex")).toHaveAttribute("data-graduates", "true"),
+    );
+    await screen.findByText("Docker backend verified");
+
+    // Still selectable, with a grayed label. The graduation mark stays.
+    await user.click(tab("Codex"));
+    expect(tab("Codex")).toHaveAttribute("aria-selected", "true");
+    expect(tab("Codex")).toHaveAttribute("data-unimplemented", "true");
+    expect(tab("Codex")).toHaveAttribute("data-graduates", "true");
+    expect(tab("Claude Code")).toHaveAttribute("data-unimplemented", "false");
+
+    const panel = screen.getByRole("tabpanel");
+    const notice = screen.getByTestId("to-be-implemented");
+    expect(notice).toHaveTextContent("To Be Implemented...");
+    expect(panel.firstElementChild).toBe(notice);
+    expect(panel).toHaveTextContent(/graduates through this agent/);
+    // SET-FR-23: the configuration sentence gives way to the statement.
+    expect(panel).not.toHaveTextContent(/Configured in this project as/);
+
+    // The stored entry shows, and nothing can change it.
+    expect(screen.getByLabelText("Image name")).toHaveValue("acme/agent");
+    const controls = Array.from(
+      panel.querySelectorAll<HTMLElement>("input, select, textarea, button"),
+    );
+    expect(controls.length).toBeGreaterThan(0);
+    for (const control of controls) expect(control).toBeDisabled();
+
+    // Even an event that reaches the handler saves and builds nothing. Only the
+    // fieldset disables Build here: the tab itself is buildable.
+    expect(buildButton()).not.toHaveAttribute("disabled");
+    fireEvent.click(buildButton());
+    const imageName = screen.getByLabelText("Image name");
+    fireEvent.change(imageName, { target: { value: "acme/other" } });
+    fireEvent.blur(imageName);
+    expect(calls("build_project_vendor_image")).toHaveLength(0);
+    expect(calls("save_project_vendor_image")).toHaveLength(0);
+  });
+
+  it("SET-FR-GVED, SET-FR-23: an unset OpenCode tab shows the statement and no configuration sentence; Claude Code shows no statement", async () => {
+    const user = userEvent.setup();
+    backend({});
+    render(<ProjectDockerImages />);
+    await waitFor(() => expect(tab("OpenCode")).toBeInTheDocument());
+
+    expect(screen.queryByTestId("to-be-implemented")).toBeNull();
+    expect(screen.getByRole("tabpanel")).toHaveTextContent(
+      /Nothing is configured for this agent yet/,
+    );
+    expect(screen.getByLabelText("Image name")).toBeEnabled();
+
+    await user.click(tab("OpenCode"));
+    expect(screen.getByTestId("to-be-implemented")).toBeInTheDocument();
+    expect(screen.getByRole("tabpanel")).not.toHaveTextContent(
+      /Nothing is configured for this agent yet/,
+    );
+    expect(screen.getByLabelText("Image name")).toBeDisabled();
   });
 });

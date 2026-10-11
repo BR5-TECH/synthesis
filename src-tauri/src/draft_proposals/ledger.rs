@@ -39,8 +39,7 @@ pub(crate) fn set_decided(
     let mut record = read_proposal(root, draft_id, proposal_id)?;
     record.state = state;
     record.decided_at = Some(now_rfc3339());
-    root.write_toml_atomic(record_path(&dir, proposal_id), &record)
-        .map_err(|e| e.to_string())?;
+    root.write_toml_atomic(record_path(&dir, proposal_id), &record).map_err(|e| e.to_string())?;
     // DRS-FR-WYIN / DRS-FR-JDRY: a proposal is private draft storage. The
     // ignore file keeps it out of Git, and no commit names it.
     drafts::git_storage::ensure_private_ignored(root);
@@ -79,11 +78,7 @@ pub fn revise_hunk_impl(
             .unwrap_or_default();
         backfill_legacy_ledger(root, &dir, &mut record, &prompt);
     }
-    let row = record
-        .ledger
-        .iter()
-        .find(|row| row.id == hunk_id)
-        .ok_or(ERR_HUNK_NOT_FOUND)?;
+    let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
     if !row.state.is_undecided() {
         return Err(ERR_HUNK_ALREADY_DECIDED.to_string());
     }
@@ -125,8 +120,7 @@ pub fn revise_hunk_impl(
     }
     record.candidate_edited = record.ledger.iter().any(|row| row.edited);
     resettle(&mut record);
-    root.write_toml_atomic(record_path(&dir, proposal_id), &record)
-        .map_err(|e| e.to_string())?;
+    root.write_toml_atomic(record_path(&dir, proposal_id), &record).map_err(|e| e.to_string())?;
     Ok(record)
 }
 
@@ -165,11 +159,7 @@ pub(crate) fn set_hunk_state(
     // build wrote — is given the row its one change is named by. The write
     // below is what persists it, which is the decision's own write.
     backfill_legacy_ledger(root, &dir, &mut record, &prompt_of(root, draft_id));
-    let row = record
-        .ledger
-        .iter_mut()
-        .find(|row| row.id == hunk_id)
-        .ok_or(ERR_HUNK_NOT_FOUND)?;
+    let row = record.ledger.iter_mut().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
     // DCP-FR-PWSF: a decision is made once. Forcing a settled change back to an
     // undecided state would put the whole proposal back to `pending` — with its
     // acceptance already written into the prompt and already recorded as a
@@ -180,10 +170,9 @@ pub(crate) fn set_hunk_state(
         return Err(ERR_HUNK_ALREADY_DECIDED.to_string());
     }
     row.state = state;
-    row.decided_at = state.is_undecided().then(|| None).unwrap_or_else(|| Some(now_rfc3339()));
+    row.decided_at = if state.is_undecided() { None } else { Some(now_rfc3339()) };
     resettle(&mut record);
-    root.write_toml_atomic(record_path(&dir, proposal_id), &record)
-        .map_err(|e| e.to_string())?;
+    root.write_toml_atomic(record_path(&dir, proposal_id), &record).map_err(|e| e.to_string())?;
     // DRS-FR-WYIN / DRS-FR-JDRY: a proposal is private draft storage. The
     // ignore file keeps it out of Git, and no commit names it.
     drafts::git_storage::ensure_private_ignored(root);
@@ -215,8 +204,7 @@ pub(crate) fn set_hunk_pending(
     row.state = hunks::HunkState::Pending;
     row.decided_at = None;
     resettle(&mut record);
-    root.write_toml_atomic(record_path(&dir, proposal_id), &record)
-        .map_err(|e| e.to_string())?;
+    root.write_toml_atomic(record_path(&dir, proposal_id), &record).map_err(|e| e.to_string())?;
     // DRS-FR-WYIN / DRS-FR-JDRY: a proposal is private draft storage. The
     // ignore file keeps it out of Git, and no commit names it.
     drafts::git_storage::ensure_private_ignored(root);
@@ -237,11 +225,9 @@ pub(crate) fn set_pending(
     let mut record = read_proposal(root, draft_id, proposal_id)?;
     record.state = ProposalState::Pending;
     record.decided_at = None;
-    root.write_toml_atomic(record_path(&dir, proposal_id), &record)
-        .map_err(|e| e.to_string())?;
+    root.write_toml_atomic(record_path(&dir, proposal_id), &record).map_err(|e| e.to_string())?;
     // DRS-FR-WYIN / DRS-FR-JDRY: a proposal is private draft storage. The
     // ignore file keeps it out of Git, and no commit names it.
     drafts::git_storage::ensure_private_ignored(root);
     Ok(())
 }
-

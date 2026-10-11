@@ -28,17 +28,12 @@ pub fn set_turn_timeout_impl(
             return Err(ERR_TURN_TIMEOUT_OUT_OF_RANGE.into());
         }
     }
-    let _guard = ai
-        .write_lock
-        .lock()
-        .map_err(|e| format!("ai api registry poisoned: {e}"))?;
+    let _guard = ai.write_lock.lock().map_err(|e| format!("ai api registry poisoned: {e}"))?;
     let (mut records, active) = store.load_ai_api_registry()?;
     match records.iter_mut().find(|r| r.provider == provider) {
         Some(record) => record.turn_timeout_ms = timeout_ms,
-        None => records.push(AiApiRecord {
-            turn_timeout_ms: timeout_ms,
-            ..AiApiRecord::empty(provider)
-        }),
+        None => records
+            .push(AiApiRecord { turn_timeout_ms: timeout_ms, ..AiApiRecord::empty(provider) }),
     }
     store.save_ai_api_registry(records.clone(), active.clone())?;
     let present = provider_presence(&*ai.secrets, &records);

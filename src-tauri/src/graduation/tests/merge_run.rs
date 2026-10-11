@@ -9,15 +9,12 @@ fn commit_file(repo: &git2::Repository, path: &str, content: &str, message: &str
     let workdir = repo.workdir().expect("a working copy").to_path_buf();
     std::fs::write(workdir.join(path), content).unwrap();
     let mut index = repo.index().expect("index");
-    index
-        .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-        .expect("add");
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).expect("add");
     index.write().expect("write");
     let tree = repo.find_tree(index.write_tree().expect("tree")).expect("tree");
     let signature = repo.signature().expect("signature");
     let head = repo.head().unwrap().peel_to_commit().unwrap();
-    repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[&head])
-        .expect("commit")
+    repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[&head]).expect("commit")
 }
 
 /// A stream whose branch and whose base branch both changed `README.md`.
@@ -68,10 +65,7 @@ fn a_conflict_merge_becomes_a_queued_run_and_writes_nothing() {
     assert_eq!(run.input.draft_id, "");
     let repo = fx.repo();
     assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().id(), base_before);
-    assert_eq!(
-        std::fs::read_to_string(fx.root().join("README.md")).unwrap(),
-        "base side\n"
-    );
+    assert_eq!(std::fs::read_to_string(fx.root().join("README.md")).unwrap(), "base side\n");
 }
 
 // GRD-FR-AQNW, GXD-FR-XQJR, GXD-FR-KXXB: a `ready` merge review applies the merge
@@ -84,9 +78,7 @@ fn a_ready_merge_review_applies_the_merge_as_one_commit() {
     let run_id = hand_off(
         &fx,
         &stream,
-        StreamMergePublication::Commit {
-            message: "Merge feature".to_string(),
-        },
+        StreamMergePublication::Commit { message: "Merge feature".to_string() },
     );
     let run = fx.reload(&run_id);
     let dispatch = ScriptedDispatch::new(vec![
@@ -105,10 +97,7 @@ fn a_ready_merge_review_applies_the_merge_as_one_commit() {
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     assert_eq!(head.parent_count(), 2);
     assert_eq!(head.message().unwrap(), "Merge feature");
-    assert_eq!(
-        std::fs::read_to_string(fx.root().join("README.md")).unwrap(),
-        "both sides\n"
-    );
+    assert_eq!(std::fs::read_to_string(fx.root().join("README.md")).unwrap(), "both sides\n");
     assert_eq!(done.commits.len(), 1);
     assert!(done.merge.as_ref().unwrap().result.is_some());
 }

@@ -23,13 +23,7 @@ fn a_dispatch_returns_running_at_once_and_publishes_its_registration() {
         let _ = tx.send(event.payload().to_string());
     });
 
-    let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &trigger,
-        )
-        .expect("dispatch");
+    let turn = h.dispatch("arch", ConversationOrigin::of(&thread), &trigger).expect("dispatch");
 
     // "dispatch must not wait for the model" is carried by these two lines: the
     // turn is still running and has not ended, so dispatch returned while the
@@ -45,9 +39,7 @@ fn a_dispatch_returns_running_at_once_and_publishes_its_registration() {
     // length.
     assert_eq!(turn.state, AgentTurnState::Running);
     assert!(turn.ended_at.is_none());
-    let first = rx
-        .recv_timeout(Duration::from_secs(2))
-        .expect("registration event");
+    let first = rx.recv_timeout(Duration::from_secs(2)).expect("registration event");
     assert!(first.contains("\"running\""));
     h.settle();
 }
@@ -122,32 +114,20 @@ fn the_call_carries_the_agents_own_model_and_reasoning_not_the_providers() {
     let h = Harness::new(vec![Ok("ok".into())]);
     h.create_agent("arch", "");
     // The project overrides to Anthropic, which must not redirect the agent.
-    h.store()
-        .save_ai_api_override(PROJECT_KEY, "anthropic")
-        .expect("override");
+    h.store().save_ai_api_override(PROJECT_KEY, "anthropic").expect("override");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
-    h.dispatch(
-        "arch",
-        ConversationOrigin::of(&thread),
-        &thread.comments[0].id,
-    )
-    .expect("dispatch");
+    h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id).expect("dispatch");
     h.settle();
 
     let (_, endpoint) = h.seam.requests().into_iter().next().expect("one call");
     assert_eq!(endpoint.provider, "openrouter");
     assert_eq!(endpoint.model_id.as_deref(), Some("m"));
-    assert_eq!(
-        endpoint.reasoning,
-        Some(ReasoningChoice::Effort {
-            effort: "high".into()
-        }),
-    );
+    assert_eq!(endpoint.reasoning, Some(ReasoningChoice::Effort { effort: "high".into() }),);
 }
 
 #[test]
 fn the_assembled_request_is_the_same_shape_whichever_client_would_carry_it() {
-    // CVL-FR-10. Which client carries the call is
+    // CVL-FR-10, CVL-FR-HBNW, CVL-FR-KXTQ. Which client carries the call is
     // `RigCompletion::complete`'s match on the provider; asserted here is the
     // claim that makes that match safe — the request `rig` assembles is
     // identical whichever provider it was assembled for.
@@ -157,69 +137,72 @@ fn the_assembled_request_is_the_same_shape_whichever_client_would_carry_it() {
     // nothing the request presents. A build where it did would show up here as
     // two shapes rather than one.
     for stable_head_sections in [0usize, 1] {
-    let request = AgentRequest {
-        instructions: compile_prompt(OriginKind::ArtifactComment, "Argue about structure.", ""),
-        input: vec![
-            InputSection {
-                tag: TAG_ARTIFACT.into(),
-                attributes: vec![("path".into(), "spec.md".into())],
-                body: "Body.".into(),
-                truncated: false,
-                parts: Vec::new(),
-            },
-            InputSection {
-                tag: TAG_CURRENT_COMMENT.into(),
-                attributes: Vec::new(),
-                body: "What do you think?".into(),
-                truncated: false,
-                parts: Vec::new(),
-            },
-        ],
-        tools: Vec::new(),
-        native_tools: Vec::new(),
-        stable_head_sections,
-    };
-    let shapes: Vec<_> = ["openrouter", "anthropic", "openai", "custom"]
-        .iter()
-        .map(|provider| {
-            build_completion_request(
-                &request,
-                &opening_exchange(&request, false),
-                &AiApiCall {
-                    turn_timeout_ms: None,
-                    provider: (*provider).into(),
-                    base_url: "https://example/v1".into(),
-                    api_key: Some("k".into()),
-                    model_id: Some("m".into()),
-                    reasoning: Some(ReasoningChoice::Effort {
-                        effort: "high".into(),
-                    }),
-                    accepts_image_input: false,
-                    model_mode: None,
+        let request = AgentRequest {
+            instructions: compile_prompt(OriginKind::ArtifactComment, "Argue about structure.", ""),
+            input: vec![
+                InputSection {
+                    tag: TAG_ARTIFACT.into(),
+                    attributes: vec![("path".into(), "spec.md".into())],
+                    body: "Body.".into(),
+                    truncated: false,
+                    parts: Vec::new(),
                 },
-            )
-        })
-        .collect();
-    // The prompt occupies the instruction position and the input the single user
-    // message, for every provider alike (CVL-FR-10).
-    for built in &shapes {
-        assert_eq!(built.preamble.as_deref(), Some(request.instructions.as_str()));
-        assert_eq!(built.model.as_deref(), Some("m"));
-        assert_eq!(built.chat_history.len(), 1, "one user message, never more");
-        assert_eq!(built.chat_history.len(), shapes[0].chat_history.len());
-        assert!(built.tools.is_empty(), "an agent here answers, never acts");
-        assert_eq!(
-            built.additional_params,
-            Some(serde_json::json!({ "reasoning": { "effort": "high" } })),
-        );
-    }
-    // CVL-FR-01, CVL-FR-37, CVL-FR-39: and the whole assembled request is the same one whichever head
-    // was named, so the split reaches nothing the request presents.
-    let text: Vec<String> = shapes
-        .iter()
-        .map(|built| render_input(&request) + &format!("{:?}", built.chat_history))
-        .collect();
-    assert!(text.windows(2).all(|pair| pair[0] == pair[1]));
+                InputSection {
+                    tag: TAG_CURRENT_COMMENT.into(),
+                    attributes: Vec::new(),
+                    body: "What do you think?".into(),
+                    truncated: false,
+                    parts: Vec::new(),
+                },
+            ],
+            tools: Vec::new(),
+            native_tools: Vec::new(),
+            stable_head_sections,
+        };
+        let shapes: Vec<_> = ["openrouter", "anthropic", "openai", "custom"]
+            .iter()
+            .map(|provider| {
+                build_completion_request(
+                    &request,
+                    &opening_exchange(&request, false),
+                    &AiApiCall {
+                        turn_timeout_ms: None,
+                        provider: (*provider).into(),
+                        base_url: "https://example/v1".into(),
+                        api_key: Some("k".into()),
+                        model_id: Some("m".into()),
+                        reasoning: Some(ReasoningChoice::Effort { effort: "high".into() }),
+                        accepts_image_input: false,
+                        model_mode: None,
+                    },
+                )
+            })
+            .collect();
+        // The prompt occupies the instruction position and the input the single user
+        // message, for every provider alike (CVL-FR-10).
+        for (provider, built) in ["openrouter", "anthropic", "openai", "custom"].iter().zip(&shapes)
+        {
+            assert_eq!(built.system_instructions(), Some(request.instructions.as_str()));
+            assert_eq!(built.model.as_deref(), Some("m"));
+            assert_eq!(built.chat_history.len(), 2, "the prompt and one user message, never more");
+            assert_eq!(built.chat_history.len(), shapes[0].chat_history.len());
+            assert!(built.tools.is_empty(), "an agent here answers, never acts");
+            // CVL-FR-HBNW: the reasoning object is not a parameter of the Anthropic
+            // Messages API, so only that provider receives none.
+            let expected = (*provider != "anthropic")
+                .then(|| serde_json::json!({ "reasoning": { "effort": "high" } }));
+            assert_eq!(built.additional_params, expected, "{provider}");
+            // CVL-FR-KXTQ: the Anthropic limit is set on that provider's model, so
+            // the shared request carries no limit for any provider.
+            assert_eq!(built.max_tokens, None, "{provider}");
+        }
+        // CVL-FR-01, CVL-FR-37, CVL-FR-39: and the whole assembled request is the same one whichever head
+        // was named, so the split reaches nothing the request presents.
+        let text: Vec<String> = shapes
+            .iter()
+            .map(|built| render_input(&request) + &format!("{:?}", built.chat_history))
+            .collect();
+        assert!(text.windows(2).all(|pair| pair[0] == pair[1]));
     }
 }
 
@@ -244,11 +227,7 @@ fn every_scripted_failure_terminates_its_turn_and_appends_nothing() {
         h.create_agent("arch", "");
         let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
         let turn = h
-            .dispatch(
-                "arch",
-                ConversationOrigin::of(&thread),
-                &thread.comments[0].id,
-            )
+            .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
             .expect("dispatch");
         let terminal = wait_for_terminal(&h, &turn.id);
         assert_eq!(terminal.state, AgentTurnState::Failed);
@@ -286,14 +265,8 @@ fn an_unresolvable_nickname_an_unavailable_agent_and_a_locked_thread_refuse_befo
     let origin = ConversationOrigin::of(&thread);
     let trigger = thread.comments[0].id.clone();
 
-    assert_eq!(
-        h.dispatch("nobody", origin.clone(), &trigger).unwrap_err(),
-        FAIL_AGENT_NOT_FOUND,
-    );
-    assert!(
-        h.turns().in_flight(None).is_empty(),
-        "nothing was registered",
-    );
+    assert_eq!(h.dispatch("nobody", origin.clone(), &trigger).unwrap_err(), FAIL_AGENT_NOT_FOUND,);
+    assert!(h.turns().in_flight(None).is_empty(), "nothing was registered",);
 
     crate::comments::set_lock_in(
         &h.root(),
@@ -304,10 +277,7 @@ fn an_unresolvable_nickname_an_unavailable_agent_and_a_locked_thread_refuse_befo
         "2026-01-01T00:00:03Z",
     )
     .expect("lock");
-    assert_eq!(
-        h.dispatch("arch", origin.clone(), &trigger).unwrap_err(),
-        FAIL_THREAD_LOCKED,
-    );
+    assert_eq!(h.dispatch("arch", origin.clone(), &trigger).unwrap_err(), FAIL_THREAD_LOCKED,);
     crate::comments::set_lock_in(
         &h.root(),
         "spec.md",
@@ -320,10 +290,7 @@ fn an_unresolvable_nickname_an_unavailable_agent_and_a_locked_thread_refuse_befo
 
     // An agent whose provider has been cleared.
     h.store().save_ai_api_registry(vec![], None).expect("clear");
-    assert_eq!(
-        h.dispatch("arch", origin, &trigger).unwrap_err(),
-        FAIL_AGENT_UNAVAILABLE,
-    );
+    assert_eq!(h.dispatch("arch", origin, &trigger).unwrap_err(), FAIL_AGENT_UNAVAILABLE,);
 }
 
 #[test]
@@ -333,11 +300,7 @@ fn a_thread_locked_while_the_turn_was_in_flight_fails_the_turn_and_appends_nothi
     h.create_agent("arch", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     crate::comments::set_lock_in(
         &h.root(),
@@ -370,11 +333,7 @@ fn a_delivered_turn_appends_an_ordinary_comment_authored_by_the_agent() {
     let agent = h.create_agent("arch", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     let terminal = wait_for_terminal(&h, &turn.id);
     assert_eq!(terminal.state, AgentTurnState::Delivered);
@@ -385,12 +344,7 @@ fn a_delivered_turn_appends_an_ordinary_comment_authored_by_the_agent() {
     assert_eq!(comments.len(), 2);
     assert_eq!(comments[1].body, "Two specs, I think.");
     match &comments[1].author {
-        Participant::Agent {
-            agent_id,
-            handle,
-            model,
-            ..
-        } => {
+        Participant::Agent { agent_id, handle, model, .. } => {
             assert_eq!(agent_id, &agent.id);
             assert_eq!(handle, "arch");
             assert_eq!(model.as_deref(), Some("m"));
@@ -414,9 +368,7 @@ fn a_delivered_comment_carries_the_title_the_agent_answered_under() {
     let origin = ConversationOrigin::of(&thread);
 
     let answer = |h: &Harness| {
-        let turn = h
-            .dispatch("arch", origin.clone(), &thread.comments[0].id)
-            .expect("dispatch");
+        let turn = h.dispatch("arch", origin.clone(), &thread.comments[0].id).expect("dispatch");
         assert_eq!(wait_for_terminal(h, &turn.id).state, AgentTurnState::Delivered);
     };
     let titles = |h: &Harness| -> Vec<Option<String>> {
@@ -439,26 +391,36 @@ fn a_delivered_comment_carries_the_title_the_agent_answered_under() {
         title: "Architect".into(),
         model_id: "m".into(),
         instructions: String::new(),
-        reasoning: Some(ReasoningChoice::Effort {
-            effort: "high".into(),
-        }),
+        reasoning: Some(ReasoningChoice::Effort { effort: "high".into() }),
     };
-    agents::update_agent_impl(&h.store(), "", &agent.id, &retitled).expect("retitle");
+    agents::update_agent_impl(
+        &h.store(),
+        "",
+        None,
+        agents::AgentScope::Personal,
+        &agent.id,
+        &retitled,
+    )
+    .expect("retitle");
     answer(&h);
 
     // Cleared: the snapshot is the empty string that was stored, and never the
     // `Not defined` a *prompt* would have carried for the same agent.
     retitled.title = String::new();
-    agents::update_agent_impl(&h.store(), "", &agent.id, &retitled).expect("clear the title");
+    agents::update_agent_impl(
+        &h.store(),
+        "",
+        None,
+        agents::AgentScope::Personal,
+        &agent.id,
+        &retitled,
+    )
+    .expect("clear the title");
     answer(&h);
 
     assert_eq!(
         titles(&h),
-        vec![
-            Some("Developer".to_string()),
-            Some("Architect".to_string()),
-            Some(String::new()),
-        ],
+        vec![Some("Developer".to_string()), Some("Architect".to_string()), Some(String::new()),],
     );
 }
 
@@ -479,11 +441,7 @@ fn exactly_two_events_are_delivered_per_turn_and_the_listing_agrees_with_them() 
     });
 
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
     // `settle()` is not enough to start draining: `terminate` empties the
     // in-flight set **before** the terminal event is published, so settling
@@ -497,10 +455,8 @@ fn exactly_two_events_are_delivered_per_turn_and_the_listing_agrees_with_them() 
     while let Ok(payload) = rx.recv_timeout(Duration::from_millis(300)) {
         payloads.push(payload);
     }
-    let mine: Vec<&String> = payloads
-        .iter()
-        .filter(|p| p.contains(&format!("\"{}\"", turn.id)))
-        .collect();
+    let mine: Vec<&String> =
+        payloads.iter().filter(|p| p.contains(&format!("\"{}\"", turn.id))).collect();
     assert_eq!(mine.len(), 2, "one registration and one terminal event");
     assert!(mine[0].contains("\"running\""));
     assert!(mine[1].contains("\"delivered\""));
@@ -510,20 +466,14 @@ fn exactly_two_events_are_delivered_per_turn_and_the_listing_agrees_with_them() 
 #[test]
 fn a_null_origin_returns_every_turn_in_flight_and_a_named_one_returns_only_its_own() {
     // AGC-FR-22.
-    let h = Harness::with(
-        vec![Ok("a".into()), Ok("b".into())],
-        Duration::from_millis(400),
-        4,
-    );
+    let h = Harness::with(vec![Ok("a".into()), Ok("b".into())], Duration::from_millis(400), 4);
     h.create_agent("arch", "");
     let one = h.seed_artifact_thread("one.md", "First artifact source.");
     let two = h.seed_artifact_thread("two.md", "Second artifact source.");
     let origin_one = ConversationOrigin::of(&one);
     let origin_two = ConversationOrigin::of(&two);
-    h.dispatch("arch", origin_one.clone(), &one.comments[0].id)
-        .expect("one");
-    h.dispatch("arch", origin_two.clone(), &two.comments[0].id)
-        .expect("two");
+    h.dispatch("arch", origin_one.clone(), &one.comments[0].id).expect("one");
+    h.dispatch("arch", origin_two.clone(), &two.comments[0].id).expect("two");
 
     assert_eq!(h.turns().in_flight(None).len(), 2);
     assert_eq!(h.turns().in_flight(Some(&origin_one)).len(), 1);
@@ -538,11 +488,7 @@ fn a_null_origin_returns_every_turn_in_flight_and_a_named_one_returns_only_its_o
 
 /// The agent operations in flight now.
 fn agent_operations(h: &Harness) -> Vec<crate::progress::Operation> {
-    h.progress()
-        .in_flight()
-        .into_iter()
-        .filter(|op| op.kind == "agent")
-        .collect()
+    h.progress().in_flight().into_iter().filter(|op| op.kind == "agent").collect()
 }
 
 /// Wait for an agent operation to be in flight. A turn registers it on its own
@@ -564,11 +510,7 @@ fn a_running_turn_is_reported_as_an_agent_operation_and_leaves_the_set_when_it_e
     h.create_agent("arch", "");
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let turn = h
-        .dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
 
     let mine = wait_for_agent_operation(&h);
@@ -577,9 +519,7 @@ fn a_running_turn_is_reported_as_an_agent_operation_and_leaves_the_set_when_it_e
     // AGC-FR-24, PRG-FR-KXQW: the destination holds the discussion id.
     assert_eq!(
         mine.activation,
-        Some(crate::progress::Activation::Discussion {
-            discussion_id: thread.id.clone()
-        })
+        Some(crate::progress::Activation::Discussion { discussion_id: thread.id.clone() })
     );
 
     wait_for_terminal(&h, &turn.id);
@@ -597,19 +537,13 @@ fn a_turn_waiting_for_a_call_slot_is_not_reported_until_it_holds_one() {
     // AGC-FR-24, AGC-FR-25: queued work is not in-flight progress. With one
     // slot, two turns are both `running` as turns, and only the one holding the
     // slot is an operation; the other appears when the slot frees.
-    let h = Harness::with(
-        vec![Ok("1".into()), Ok("2".into())],
-        Duration::from_millis(400),
-        1,
-    );
+    let h = Harness::with(vec![Ok("1".into()), Ok("2".into())], Duration::from_millis(400), 1);
     h.create_agent("arch", "");
     let one = h.seed_artifact_thread("one.md", "First artifact source.");
     let two = h.seed_artifact_thread("two.md", "Second artifact source.");
-    h.dispatch("arch", ConversationOrigin::of(&one), &one.comments[0].id)
-        .expect("one");
+    h.dispatch("arch", ConversationOrigin::of(&one), &one.comments[0].id).expect("one");
     let first = wait_for_agent_operation(&h);
-    h.dispatch("arch", ConversationOrigin::of(&two), &two.comments[0].id)
-        .expect("two");
+    h.dispatch("arch", ConversationOrigin::of(&two), &two.comments[0].id).expect("two");
 
     assert_eq!(h.turns().in_flight(None).len(), 2, "both turns are registered");
     let reported = agent_operations(&h);
@@ -637,13 +571,41 @@ fn a_turn_waiting_for_a_call_slot_is_not_reported_until_it_holds_one() {
     panic!("the second turn was never reported");
 }
 
+/// A seam that tells the test when a call reached the model, and then holds the
+/// call until the test opens the gate. The turn that makes the call holds its
+/// slot for as long as the gate is shut, so a test orders the turns by events
+/// and never by a delay.
+struct HeldCompletion {
+    entered: Mutex<std::sync::mpsc::Sender<()>>,
+    gate: Arc<(Mutex<bool>, Condvar)>,
+}
+
+impl CompletionSeam for HeldCompletion {
+    fn complete(
+        &self,
+        _request: &AgentRequest,
+        _exchange: &[rig::completion::Message],
+        _endpoint: &AiApiCall,
+        _timeout: Duration,
+    ) -> Result<ModelReply, CallFailure> {
+        let _ = self.entered.lock().unwrap_or_else(|e| e.into_inner()).send(());
+        let (lock, cvar) = &*self.gate;
+        let mut open = lock.lock().unwrap_or_else(|e| e.into_inner());
+        while !*open {
+            open = cvar.wait(open).unwrap_or_else(|e| e.into_inner());
+        }
+        Ok(ModelReply { text: "1".into(), ..Default::default() })
+    }
+}
+
 #[test]
 fn a_turn_cancelled_while_it_waits_for_a_slot_never_registers_an_operation() {
     // AGC-FR-24: a turn that ends before it holds a slot registers no operation,
     // and the turn holding the slot is unaffected.
-    let h = Harness::with(
-        vec![Ok("1".into()), Ok("2".into())],
-        Duration::from_millis(300),
+    let (entered, reached_model) = std::sync::mpsc::channel();
+    let gate = Arc::new((Mutex::new(false), Condvar::new()));
+    let h = Harness::with_seam(
+        Box::new(HeldCompletion { entered: Mutex::new(entered), gate: gate.clone() }),
         1,
     );
     let arch = h.create_agent("arch", "");
@@ -659,8 +621,12 @@ fn a_turn_cancelled_while_it_waits_for_a_slot_never_registers_an_operation() {
         });
     }
 
+    // The first turn reaches the model, so it holds the only slot and its
+    // operation is registered. The shut gate keeps it there.
     h.dispatch("arch", origin.clone(), &trigger).expect("arch");
-    wait_for_agent_operation(&h);
+    // The bound only turns a hang into a failure. A correct run never comes
+    // near it, so it decides no result.
+    reached_model.recv_timeout(Duration::from_secs(60)).expect("the first turn reached the model");
     h.dispatch("sec", origin, &trigger).expect("sec");
     assert_eq!(h.turns().in_flight(None).len(), 2);
 
@@ -673,7 +639,10 @@ fn a_turn_cancelled_while_it_waits_for_a_slot_never_registers_an_operation() {
     assert!(agent_operations(&h)[0].label.contains("@arch"));
 
     // The slot frees and the cancelled turn wakes: it still registers nothing.
-    h.settle();
+    // Both threads are joined, so each turn has done all of its work.
+    *gate.0.lock().unwrap() = true;
+    gate.1.notify_all();
+    h.join_turns();
     assert!(agent_operations(&h).is_empty());
     let events = seen.lock().unwrap();
     assert!(
@@ -692,10 +661,7 @@ fn a_progress_label_names_the_agent_and_the_draft_name_the_artifact_path_or_noth
     let created = crate::drafts::create_draft_at_root(&root, Some("Push button")).expect("draft");
 
     let draft = ConversationOrigin::stub_draft("d1", created.draft.id.clone(), false);
-    assert_eq!(
-        progress_label_of(roots, &draft, "Helga"),
-        "@Helga is thinking about Push button…"
-    );
+    assert_eq!(progress_label_of(roots, &draft, "Helga"), "@Helga is thinking about Push button…");
     // A remark about a fragment of the draft names the draft as well.
     let draft_comment = ConversationOrigin::stub_draft("d1", created.draft.id.clone(), true);
     assert_eq!(
@@ -704,10 +670,7 @@ fn a_progress_label_names_the_agent_and_the_draft_name_the_artifact_path_or_noth
     );
     // A draft whose record cannot be read is named by its id.
     let missing = ConversationOrigin::stub_draft("d2", "draft-gone", false);
-    assert_eq!(
-        progress_label_of(roots, &missing, "Helga"),
-        "@Helga is thinking about draft-gone…"
-    );
+    assert_eq!(progress_label_of(roots, &missing, "Helga"), "@Helga is thinking about draft-gone…");
     let artifact = ConversationOrigin::stub_artifact("d3", "docs/spec.md", false);
     assert_eq!(
         progress_label_of(roots, &artifact, "Helga"),
@@ -721,12 +684,7 @@ fn a_progress_label_names_the_agent_and_the_draft_name_the_artifact_path_or_noth
 fn more_turns_than_the_bound_are_all_registered_and_none_is_refused() {
     // AGC-FR-25, AGC-FR-03.
     let h = Harness::with(
-        vec![
-            Ok("1".into()),
-            Ok("2".into()),
-            Ok("3".into()),
-            Ok("4".into()),
-        ],
+        vec![Ok("1".into()), Ok("2".into()), Ok("3".into()), Ok("4".into())],
         Duration::from_millis(120),
         1,
     );
@@ -736,9 +694,7 @@ fn more_turns_than_the_bound_are_all_registered_and_none_is_refused() {
     let trigger = thread.comments[0].id.clone();
 
     for _ in 0..4 {
-        let turn = h
-            .dispatch("arch", origin.clone(), &trigger)
-            .expect("never refused for load");
+        let turn = h.dispatch("arch", origin.clone(), &trigger).expect("never refused for load");
         assert_eq!(turn.state, AgentTurnState::Running);
     }
     assert_eq!(h.turns().in_flight(None).len(), 4, "all registered at once");
@@ -752,4 +708,34 @@ fn more_turns_than_the_bound_are_all_registered_and_none_is_refused() {
         1,
         "no more calls were in flight at once than the bound permits",
     );
+}
+
+#[test]
+fn a_turn_resolves_the_project_agent_before_a_personal_agent_of_the_same_nickname() {
+    // AGC-FR-04, AGR-FR-18, AGR-FR-HTKX: the nickname reaches a Project agent of
+    // the worktree at once, and that agent wins over a Personal agent of the
+    // same nickname.
+    let h = Harness::new(vec![Ok("From the project.".into())]);
+    let personal = h.create_agent("arch", "Personal instructions.");
+    let project = agents::create_agent_impl(
+        &h.store(),
+        "",
+        Some(&h.root()),
+        agents::AgentScope::Project,
+        &AgentDraft {
+            nickname: "arch".into(),
+            title: String::new(),
+            model_id: "m".into(),
+            instructions: "Project instructions.".into(),
+            reasoning: Some(ReasoningChoice::Effort { effort: "high".into() }),
+        },
+    )
+    .expect("project agent");
+    let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
+    let trigger = thread.comments[0].id.clone();
+
+    let turn = h.dispatch("arch", ConversationOrigin::of(&thread), &trigger).expect("dispatch");
+    assert_eq!(turn.agent_id, project.id);
+    assert_ne!(turn.agent_id, personal.id);
+    h.settle();
 }

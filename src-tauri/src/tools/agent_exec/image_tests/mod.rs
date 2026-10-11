@@ -48,10 +48,7 @@ const README: &str = include_str!("../../../../../docker/agent-images/README.md"
 const VERIFY_SH: &str = include_str!("../../../../../docker/agent-images/verify.sh");
 
 fn dockerfiles() -> [(&'static str, &'static str); 2] {
-    [
-        ("claude-code", CLAUDE_DOCKERFILE),
-        ("codex", CODEX_DOCKERFILE),
-    ]
+    [("claude-code", CLAUDE_DOCKERFILE), ("codex", CODEX_DOCKERFILE)]
 }
 
 /// Directives only. A Dockerfile's comments legitimately discuss `latest`,
@@ -83,11 +80,8 @@ fn env_assignments(dockerfile: &str) -> Vec<String> {
         } else {
             continue;
         };
-        assignments.extend(
-            body.split_whitespace()
-                .filter(|word| word.contains('='))
-                .map(str::to_string),
-        );
+        assignments
+            .extend(body.split_whitespace().filter(|word| word.contains('=')).map(str::to_string));
         inside = continues;
     }
     assignments

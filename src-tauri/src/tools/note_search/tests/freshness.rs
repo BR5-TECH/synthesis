@@ -15,11 +15,9 @@ fn a_call_made_before_the_first_build_finishes_returns_immediately() {
     fixture.note("a note nobody has indexed yet");
     // Deliberately no `reindex()`: the note is on disk and the index does not
     // know about it, which is the state a call during the first build sees.
-    let output = block_on(fixture.tool().call(NoteSearchArgs {
-        query: "indexed".into(),
-        limit: None,
-    }))
-    .expect("it answers from what has been indexed so far");
+    let output =
+        block_on(fixture.tool().call(NoteSearchArgs { query: "indexed".into(), limit: None }))
+            .expect("it answers from what has been indexed so far");
     assert!(output.notes.is_empty());
 
     fixture.reindex();
@@ -46,7 +44,8 @@ fn a_note_change_reaches_this_tool_on_the_next_pass() {
     )
     .expect("the rewrite lands");
     let created = fixture.note("echo the newcomer");
-    crate::notes::delete_note_in(&fixture.root(), &fixture.root(), &removed).expect("the deletion lands");
+    crate::notes::delete_note_in(&fixture.root(), &fixture.root(), &removed)
+        .expect("the deletion lands");
     fixture.reindex();
 
     assert!(
@@ -84,21 +83,19 @@ fn changing_the_active_worktree_replaces_what_is_searchable() {
     )
     .expect("the note writes");
 
-    let indexer = a.fixture.app.state::<crate::bm25_index::Bm25Indexer>();
-    indexer.mount(&crate::fs::RootFs::for_root(&b_root));
-    drop(indexer);
+    a.fixture
+        .app
+        .state::<crate::bm25_index::Bm25Indexer>()
+        .mount(&crate::fs::RootFs::for_root(&b_root));
     // The session's reach follows the worktree it governs (FSA-FR-29).
     let session = agent_session(&a.fixture.app, &b_root, "note-search-b");
     let tool = NoteSearchTool::new(a.fixture.handle(), session);
 
     assert!(
-        block_on(tool.call(NoteSearchArgs {
-            query: "golf".into(),
-            limit: None,
-        }))
-        .expect("the call succeeds")
-        .notes
-        .is_empty(),
+        block_on(tool.call(NoteSearchArgs { query: "golf".into(), limit: None }))
+            .expect("the call succeeds")
+            .notes
+            .is_empty(),
         "no note of A is returned once B is active",
     );
 }
@@ -125,7 +122,7 @@ fn searching_leaves_every_note_and_the_worktree_exactly_as_they_were() {
     .expect("a discussion opens");
     fixture.reindex();
 
-    let before = tree_fingerprint(&fixture.root().to_path_buf());
+    let before = tree_fingerprint(&fixture.root());
     assert!(before.len() >= 3, "precondition: the fixture has content");
 
     for (query, limit) in [
@@ -140,15 +137,13 @@ fn searching_leaves_every_note_and_the_worktree_exactly_as_they_were() {
     let _ = fixture.refusal("", None);
 
     assert_eq!(
-        tree_fingerprint(&fixture.root().to_path_buf()),
+        tree_fingerprint(&fixture.root()),
         before,
         "every note file, every discussion, and everything else is byte-identical",
     );
     // And no note was resolved or marked: `updated_at` is untouched.
     assert_eq!(
-        crate::notes::note_record(&fixture.root(), &discussed)
-            .unwrap()
-            .updated_at,
+        crate::notes::note_record(&fixture.root(), &discussed).unwrap().updated_at,
         "2026-01-01T00:00:00Z",
     );
 }
@@ -165,10 +160,7 @@ fn tree_fingerprint(root: &std::path::Path) -> Vec<(String, String)> {
                 walk(&path, base, out);
             } else if let Ok(bytes) = std::fs::read(&path) {
                 let rel = path.strip_prefix(base).unwrap_or(&path);
-                out.push((
-                    rel.to_string_lossy().into_owned(),
-                    crate::fs::sha256_bytes(&bytes),
-                ));
+                out.push((rel.to_string_lossy().into_owned(), crate::fs::sha256_bytes(&bytes)));
             }
         }
     }

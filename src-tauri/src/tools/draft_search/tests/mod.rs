@@ -21,7 +21,6 @@ mod refusals;
 mod resolving;
 mod searched;
 
-
 // ---------------------------------------------------------------------------
 // Fixture
 // ---------------------------------------------------------------------------
@@ -47,20 +46,16 @@ impl DraftFixture {
     }
 
     fn root(&self) -> crate::fs::RootFs {
-        let root = self
-            .fixture
-            .app
-            .state::<crate::bm25_index::Bm25Indexer>()
-            .root()
-            .expect("mounted");
+        let root =
+            self.fixture.app.state::<crate::bm25_index::Bm25Indexer>().root().expect("mounted");
         crate::fs::RootFs::for_root(&root)
     }
 
     /// Create a draft holding `body`, and return its id.
     fn draft(&self, name: &str, body: &str) -> String {
         let root = self.root();
-        let created = crate::drafts::create_draft_at_root(&root, Some(name))
-            .expect("the scaffold completes");
+        let created =
+            crate::drafts::create_draft_at_root(&root, Some(name)).expect("the scaffold completes");
         let id = created.draft.id.clone();
         let prompt = created.draft.prompt_path.clone().expect("a created draft holds its prompt");
         crate::drafts::save_draft_file_impl(&root, &id, &prompt, body).expect("the prompt writes");
@@ -85,12 +80,9 @@ impl DraftFixture {
     }
 
     fn search(&self, query: &str, limit: Option<i64>) -> Vec<DraftSearchMatch> {
-        block_on(self.tool().call(DraftSearchArgs {
-            query: query.into(),
-            limit,
-        }))
-        .expect("the call succeeds")
-        .drafts
+        block_on(self.tool().call(DraftSearchArgs { query: query.into(), limit }))
+            .expect("the call succeeds")
+            .drafts
     }
 }
 

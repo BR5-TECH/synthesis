@@ -29,6 +29,14 @@ pub(super) struct LaunchObserver<'a, S: LogSink + Clone + Send + Sync + 'static>
     /// split across a delivery boundary is never emitted as a fragment.
     pub(super) carry_len: usize,
     pub(super) sink: Option<&'a Arc<dyn AgentActivitySink>>,
+    /// EAC-FR-VSNM: who must keep the run, if anyone.
+    pub(super) durable: Option<&'a Arc<dyn DurableOutputSink>>,
+    /// EAC-FR-CPEP: linked to the caller's token. A durable failure cancels
+    /// this one and never the caller's own.
+    pub(super) cancel: runtime::CancellationToken,
+    /// EAC-FR-DUTR: the first failure the durable sink answered, which ends
+    /// delivery.
+    pub(super) durable_failure: std::sync::Mutex<Option<DurableOutputFailure>>,
     pub(super) log: S,
     /// EAC-FR-42: whether this execution may write `DEBUG` records into the
     /// session buffer at all.
@@ -57,25 +65,82 @@ impl<'a, S: LogSink + Clone + Send + Sync + 'static> LaunchObserver<'a, S> {
         // such record at all (EAC-FR-42).
         if self.logs_activity {
             logging::log_debug(
-            &self.log,
-            &BUFFER,
-            &[Domain::Ai, Domain::Backend],
-            "agent activity",
-            log_fields! {
-                "vendor" => self.vendor.as_str(),
-                "container" => self.container.as_str(),
-                "channel" => event.channel,
-                "kind" => event.kind,
-                "summary" => event.summary.as_str(),
-                // The whole event, so a reader who exports or copies a record
-                // has what the panel showed rather than a shortened form of it.
-                "event" => event.payload.as_str(),
-                "event_truncated" => event.payload_truncated,
-            },
+                &self.log,
+                &BUFFER,
+                &[Domain::Ai, Domain::Backend],
+                "agent activity",
+                log_fields! {
+                    "vendor" => self.vendor.as_str(),
+                    "container" => self.container.as_str(),
+                    "channel" => event.channel,
+                    "kind" => event.kind,
+                    "summary" => event.summary.as_str(),
+                    // The whole event, so a reader who exports or copies a record
+                    // has what the panel showed rather than a shortened form of it.
+                    "event" => event.payload.as_str(),
+                    "event_truncated" => event.payload_truncated,
+                },
             );
         }
         if let Some(sink) = self.sink {
-            sink.activity(event);
+            sink.activity(event.clone());
+        }
+        if let Some(durable) = self.durable {
+            self.deliver_durable(durable, &event);
+        }
+    }
+
+    /// EAC-FR-DWGS / EAC-FR-IRKZ / EAC-FR-CXUE: hand one safe activity to the
+    /// durable sink and wait for its answer.
+    ///
+    /// An excluded kind goes no further than this check, and what is built
+    /// here has no payload field. The first failure cancels the run through the
+    /// linked token and ends delivery (EAC-FR-DUTR, EAC-FR-CPEP).
+    fn deliver_durable(&self, durable: &Arc<dyn DurableOutputSink>, event: &AgentActivityEvent) {
+        if !is_safe_kind(event.kind) {
+            return;
+        }
+        {
+            let failed = match self.durable_failure.lock() {
+                Ok(held) => held.is_some(),
+                Err(poisoned) => poisoned.into_inner().is_some(),
+            };
+            if failed {
+                return;
+            }
+        }
+        let activity = DurableActivity {
+            record_id: crate::notes::new_note_id(),
+            at: event.at.clone(),
+            channel: event.channel,
+            kind: event.kind,
+            summary: descriptor::summary_line(&event.summary),
+        };
+        if let Err(failure) = durable.record(activity) {
+            logging::log_error(
+                &self.log,
+                &BUFFER,
+                &[Domain::Ai, Domain::Backend],
+                "agent run output could not be kept",
+                log_fields! {
+                    "vendor" => self.vendor.as_str(),
+                    "container" => self.container.as_str(),
+                    "code" => failure.code.as_str(),
+                },
+            );
+            match self.durable_failure.lock() {
+                Ok(mut held) => held.get_or_insert(failure),
+                Err(poisoned) => poisoned.into_inner().get_or_insert(failure),
+            };
+            self.cancel.cancel();
+        }
+    }
+
+    /// EAC-FR-ZVRP: the failure the durable sink answered, if it answered one.
+    pub(super) fn take_durable_failure(&self) -> Option<DurableOutputFailure> {
+        match self.durable_failure.lock() {
+            Ok(mut held) => held.take(),
+            Err(poisoned) => poisoned.into_inner().take(),
         }
     }
 
@@ -117,7 +182,9 @@ impl<'a, S: LogSink + Clone + Send + Sync + 'static> LaunchObserver<'a, S> {
     }
 }
 
-impl<'a, S: LogSink + Clone + Send + Sync + 'static> runtime::StreamObserver for LaunchObserver<'a, S> {
+impl<'a, S: LogSink + Clone + Send + Sync + 'static> runtime::StreamObserver
+    for LaunchObserver<'a, S>
+{
     fn line(&self, channel: runtime::StreamChannel, bytes: &[u8], whole: bool) {
         let mut held = match self.carry.lock() {
             Ok(held) => held,
@@ -139,11 +206,8 @@ impl<'a, S: LogSink + Clone + Send + Sync + 'static> runtime::StreamObserver for
         // ending may have been cut through a credential. Holding back the last
         // `carry_len` bytes means the two halves are rejoined before anything
         // is masked, so no fragment of a secret is ever emitted (EAC-FR-29).
-        let emit_upto = if whole {
-            piece.len()
-        } else {
-            piece.len().saturating_sub(self.carry_len)
-        };
+        let emit_upto =
+            if whole { piece.len() } else { piece.len().saturating_sub(self.carry_len) };
         if !whole {
             carry.extend_from_slice(&piece[emit_upto..]);
         }
@@ -166,10 +230,8 @@ pub(super) fn bounded_payload(text: &str) -> (String, bool) {
     if text.len() <= protocol::LIMIT_ACTIVITY_EVENT {
         return (text.to_string(), false);
     }
-    let end = (0..=protocol::LIMIT_ACTIVITY_EVENT)
-        .rev()
-        .find(|i| text.is_char_boundary(*i))
-        .unwrap_or(0);
+    let end =
+        (0..=protocol::LIMIT_ACTIVITY_EVENT).rev().find(|i| text.is_char_boundary(*i)).unwrap_or(0);
     (text[..end].to_string(), true)
 }
 

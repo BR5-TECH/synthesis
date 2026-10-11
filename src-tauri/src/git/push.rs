@@ -95,6 +95,16 @@ pub fn redact_credentials(line: &str) -> String {
     out
 }
 
+/// The checkout that an operation works in, and where the project's GitHub
+/// token is resolved from (GTC-FR-09, GTC-FR-10).
+#[derive(Clone, Copy)]
+pub struct GithubAccess<'a> {
+    pub root: &'a Path,
+    pub store: &'a GlobalSettingsStore,
+    pub tokens: &'a GithubTokens,
+    pub project_key: &'a str,
+}
+
 /// The refspec that publishes `branch`, and the ref it lands on.
 pub(crate) fn push_refspec(branch: &str) -> String {
     format!("refs/heads/{branch}:refs/heads/{branch}")
@@ -114,15 +124,12 @@ pub fn push_branch_at<S>(
     buffer: &'static LogBuffer,
     emit: &impl Fn(&str, serde_json::Value),
     registry: &ProgressRegistry,
-    root: &Path,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
-    project_key: &str,
+    access: GithubAccess<'_>,
 ) -> Result<(), String>
 where
     S: ProgressSink + LogSink + Clone + Send + 'static,
 {
-    let outcome = push_inner(sink, buffer, emit, registry, root, store, tokens, project_key);
+    let outcome = push_inner(sink, buffer, emit, registry, access);
     // GTC-FR-04: exactly one terminal event, whatever the outcome.
     emit(
         GIT_OPERATION_FINISHED,
@@ -141,14 +148,12 @@ pub(crate) fn push_inner<S>(
     buffer: &'static LogBuffer,
     emit: &impl Fn(&str, serde_json::Value),
     registry: &ProgressRegistry,
-    root: &Path,
-    store: &GlobalSettingsStore,
-    tokens: &GithubTokens,
-    project_key: &str,
+    access: GithubAccess<'_>,
 ) -> Result<(), String>
 where
     S: ProgressSink + LogSink + Clone + Send + 'static,
 {
+    let GithubAccess { root, store, tokens, project_key } = access;
     // Every failure below is reported before it is returned, so a push that
     // never reached the wire is as visible in the panel as one the remote
     // refused — the two look identical to an author whose branch did not move.
@@ -188,24 +193,17 @@ where
     // GTC-FR-09 / GTC-FR-10: the credential is resolved BEFORE any transport is
     // opened, so a project that resolves no token makes no network request and
     // the typed refusal reaches the caller unchanged.
-    let token = if is_github_https_remote(&url) {
-        Some(
-            github_tokens::resolve_github_token_secret(store, tokens, project_key).inspect_err(
-                |e| {
-                    log_failure(
-                        sink,
-                        buffer,
-                        TRANSFER,
-                        MSG_PUSH_FAILED,
-                        e,
-                        log_fields! { "remote" => &remote_name, "branch" => &branch },
-                    )
-                },
-            )?,
-        )
-    } else {
-        None
-    };
+    let token =
+        github_tokens::resolve_remote_token(store, tokens, project_key, &url).inspect_err(|e| {
+            log_failure(
+                sink,
+                buffer,
+                TRANSFER,
+                MSG_PUSH_FAILED,
+                e,
+                log_fields! { "remote" => &remote_name, "branch" => &branch },
+            )
+        })?;
 
     let line = |text: String| {
         emit(
@@ -240,13 +238,10 @@ where
         PUSH_LABEL,
         Some(root.to_path_buf()),
         // PRG-FR-KXQW / GTC-FR-22: the Git panel selects this branch.
-        Some(progress::Activation::GitPush {
-            branch: branch.clone(),
-        }),
+        Some(progress::Activation::GitPush { branch: branch.clone() }),
         || {
-            let mut remote = repo
-                .find_remote(&remote_name)
-                .map_err(|_| ERR_NO_REMOTE_CONFIGURED.to_string())?;
+            let mut remote =
+                repo.find_remote(&remote_name).map_err(|_| ERR_NO_REMOTE_CONFIGURED.to_string())?;
             // The remote's per-ref verdict, declared ahead of the callbacks that
             // borrow it so it outlives them.
             //
@@ -295,9 +290,8 @@ where
             // never pushed.
             if let Ok(mut local) = repo.find_branch(&branch, BranchType::Local) {
                 if local.upstream().is_err() {
-                    upstream_set = local
-                        .set_upstream(Some(&format!("{remote_name}/{branch}")))
-                        .is_ok();
+                    upstream_set =
+                        local.set_upstream(Some(&format!("{remote_name}/{branch}"))).is_ok();
                 }
             }
             line("Done".to_string());
@@ -316,10 +310,7 @@ where
             // Whether the push published a branch that had never been published
             // before — the state change behind a Changes panel that stops
             // offering "publish" and starts offering "push" (CHG-FR-37).
-            fields.insert(
-                "upstreamSet".to_string(),
-                serde_json::json!(upstream_set),
-            );
+            fields.insert("upstreamSet".to_string(), serde_json::json!(upstream_set));
             log_ok(sink, buffer, LogLevel::Info, TRANSFER, "branch pushed", fields);
         }
         // Either one of `classify_transfer_error`'s two constants or the

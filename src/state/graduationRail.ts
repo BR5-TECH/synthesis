@@ -7,7 +7,7 @@
  * already made.
  */
 
-import { conditionOf, holdsStream, isTerminalRun } from "./graduation";
+import { conditionOf, holdsQueue, isTerminalRun } from "./graduation";
 import type { GraduationRun } from "../types";
 
 /** GRH-FR-WIMY: the four exclusive positions of the view selector. */
@@ -49,11 +49,12 @@ export function isArchived(run: GraduationRun): boolean {
  *
  * A filed-away run that holds one stays in **In-flight** as well as in
  * **Archived**: a stream nothing else will release must never be held by a run
- * the author cannot see. An author-paused run holds nothing — it gave its
- * stream back and the run behind it started (GRD-FR-MDQZ).
+ * the author cannot see. A run holds its queue from its first dispatch until it
+ * is completed or discarded, so a run at rest holds it as a run at work does
+ * (GRD-FR-BNTC).
  */
 export function holdsAStream(run: GraduationRun): boolean {
-  return holdsStream(run.state);
+  return holdsQueue(run.state) || (run.state === "queued" && Boolean(run.dispatched));
 }
 
 /**

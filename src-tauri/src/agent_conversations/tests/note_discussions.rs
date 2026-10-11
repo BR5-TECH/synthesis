@@ -11,19 +11,11 @@ use super::*;
 
 /// The value of one attribute of a section, or a failure naming what was there.
 fn attr_of(section: &InputSection, key: &str) -> Option<String> {
-    section
-        .attributes
-        .iter()
-        .find(|(k, _)| k == key)
-        .map(|(_, v)| v.clone())
+    section.attributes.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
 }
 
-
 fn entity_scope(entity_id: &str) -> crate::notes::NoteScope {
-    crate::notes::NoteScope::Entity {
-        entity_id: entity_id.into(),
-        entity_path: entity_id.into(),
-    }
+    crate::notes::NoteScope::Entity { entity_id: entity_id.into(), entity_path: entity_id.into() }
 }
 
 /// AGC-FR-05, AGC-FR-06, AGC-FR-07: the note builder emits exactly `note_context`,
@@ -50,10 +42,9 @@ fn the_note_builder_gathers_the_note_the_history_and_the_current_comment() {
     let note_id = origin.note_id().expect("a note origin").to_string();
     // Two earlier comments, then the trigger.
     let target = crate::comments::ThreadRef::note_discussion(&note_id);
-    for (body, at) in [
-        ("worth checking", "2026-01-01T00:02:00Z"),
-        ("I think so", "2026-01-01T00:03:00Z"),
-    ] {
+    for (body, at) in
+        [("worth checking", "2026-01-01T00:02:00Z"), ("I think so", "2026-01-01T00:03:00Z")]
+    {
         crate::comments::add_comment_to(
             &root,
             target,
@@ -61,8 +52,7 @@ fn the_note_builder_gathers_the_note_the_history_and_the_current_comment() {
             body.into(),
             Vec::new(),
             Vec::new(),
-            &human("ada"),
-            at,
+            crate::comments::Stamp { by: &human("ada"), at },
         )
         .unwrap();
     }
@@ -73,8 +63,7 @@ fn the_note_builder_gathers_the_note_the_history_and_the_current_comment() {
         "@arch so what should I do?".into(),
         Vec::new(),
         Vec::new(),
-        &human("ada"),
-        "2026-01-01T00:04:00Z",
+        crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:04:00Z" },
     )
     .unwrap()
     .comments
@@ -100,10 +89,7 @@ fn the_note_builder_gathers_the_note_the_history_and_the_current_comment() {
     assert_eq!(attr_of(note_ctx, "note_id"), Some(note_id));
     assert_eq!(attr_of(note_ctx, "scope_kind"), Some("entity".into()));
     assert_eq!(attr_of(note_ctx, "entity_name"), Some("EDT-editor.md".into()));
-    assert_eq!(
-        attr_of(note_ctx, "entity_path"),
-        Some("specifications/ui/EDT-editor.md".into()),
-    );
+    assert_eq!(attr_of(note_ctx, "entity_path"), Some("specifications/ui/EDT-editor.md".into()),);
     assert_eq!(attr_of(note_ctx, "last_known_entity_path"), None);
 
     // The attached file's *text* reaches nothing.
@@ -117,13 +103,8 @@ fn the_note_builder_gathers_the_note_the_history_and_the_current_comment() {
     assert!(history.body.contains("@arch is this real?"));
     assert!(history.body.contains("worth checking"));
     assert!(history.body.contains("I think so"));
-    assert!(
-        !history.body.contains("so what should I do?"),
-        "the trigger is not in the history",
-    );
-    assert!(section_of(&sections, TAG_CURRENT_COMMENT)
-        .body
-        .contains("@arch so what should I do?"));
+    assert!(!history.body.contains("so what should I do?"), "the trigger is not in the history",);
+    assert!(section_of(&sections, TAG_CURRENT_COMMENT).body.contains("@arch so what should I do?"));
 }
 
 /// AGC-FR-07, AGC-FR-12: the scope attributes across the three shapes a note takes.
@@ -148,16 +129,10 @@ fn the_note_context_names_the_scope_without_making_it_the_subject() {
     let sections = build_input(Roots::same(&root), &gone_origin, "no-trigger");
     let ctx = section_of(&sections, TAG_NOTE_CONTEXT);
     assert_eq!(attr_of(ctx, "scope_kind"), Some("entity".into()));
-    assert_eq!(
-        attr_of(ctx, "last_known_entity_path"),
-        Some("specs/gone.md".into()),
-    );
+    assert_eq!(attr_of(ctx, "last_known_entity_path"), Some("specs/gone.md".into()),);
     assert_eq!(attr_of(ctx, "entity_name"), None);
     assert_eq!(attr_of(ctx, "entity_path"), None);
-    assert!(
-        has_material(&sections),
-        "an unresolved entity does not stop the turn",
-    );
+    assert!(has_material(&sections), "an unresolved entity does not stop the turn",);
 
     // AGC-FR-07, AGC-FR-12: an empty note body emits the section carrying an empty body
     // rather than omitting it — the note is the material, and a note the author
@@ -193,15 +168,8 @@ fn the_note_context_names_the_scope_without_making_it_the_subject() {
         "2026-01-01T00:01:00Z",
     )
     .unwrap();
-    let sections = build_input(
-        Roots::same(&root),
-        &ConversationOrigin::of(&thread),
-        "no-trigger",
-    );
-    assert_eq!(
-        attr_of(section_of(&sections, TAG_NOTE_CONTEXT), "revision"),
-        Some("abc123".into()),
-    );
+    let sections = build_input(Roots::same(&root), &ConversationOrigin::of(&thread), "no-trigger");
+    assert_eq!(attr_of(section_of(&sections, TAG_NOTE_CONTEXT), "revision"), Some("abc123".into()),);
 }
 
 /// AGC-FR-07, AGC-FR-13: the body is read at dispatch, so an edited note is discussed as
@@ -254,19 +222,16 @@ fn a_note_turn_carries_the_note_prompt_and_cannot_propose() {
 
     assert_eq!(note, compile_prompt(OriginKind::NoteDiscussion, "Argue about structure.", ""));
     assert!(note.contains("Argue about structure."));
-    for other in [
-        OriginKind::ArtifactDiscussion,
-        OriginKind::DraftDiscussion,
-        OriginKind::ArtifactComment,
-    ] {
+    for other in
+        [OriginKind::ArtifactDiscussion, OriginKind::DraftDiscussion, OriginKind::ArtifactComment]
+    {
         assert_ne!(note, compiled(other), "each origin kind has its own prompt");
     }
     assert_eq!(prompt_template(OriginKind::NoteDiscussion), DISCUSS_NOTE_PROMPT_TEMPLATE);
 
     // CVL-FR-08: a note is not a draft, so no seventh tool and nothing in the
     // instruction telling the agent it may offer a rewrite.
-    assert!(!ConversationOrigin::stub_note("t", "n")
-    .is_draft());
+    assert!(!ConversationOrigin::stub_note("t", "n").is_draft());
     let lowered = DISCUSS_NOTE_PROMPT_TEMPLATE.to_lowercase();
     assert!(!lowered.contains("propose"), "the note prompt offers no rewrite");
 }
@@ -291,14 +256,13 @@ fn every_prompt_names_exactly_the_tags_its_builder_emits() {
         let mut named: Vec<&str> = Vec::new();
         let mut cursor = 0usize;
         while cursor < prompt.len() {
-            let next = [TAG_ARTIFACT, TAG_NOTE_CONTEXT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT]
-                .into_iter()
-                .filter_map(|tag| {
-                    prompt[cursor..]
-                        .find(&format!("<{tag}>"))
-                        .map(|at| (cursor + at, tag))
-                })
-                .min();
+            let next =
+                [TAG_ARTIFACT, TAG_NOTE_CONTEXT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT]
+                    .into_iter()
+                    .filter_map(|tag| {
+                        prompt[cursor..].find(&format!("<{tag}>")).map(|at| (cursor + at, tag))
+                    })
+                    .min();
             match next {
                 Some((at, tag)) => {
                     if !named.contains(&tag) {
@@ -326,12 +290,8 @@ fn every_prompt_names_exactly_the_tags_its_builder_emits() {
 fn a_deleted_note_leaves_a_turn_no_material() {
     let h = Harness::new(vec![]);
     let root = h.root();
-    let (note_id, origin) = seed_note_discussion(
-        &h,
-        crate::notes::NoteScope::Project,
-        "about to go",
-        "opening",
-    );
+    let (note_id, origin) =
+        seed_note_discussion(&h, crate::notes::NoteScope::Project, "about to go", "opening");
     assert!(has_material(&build_input(Roots::same(&root), &origin, "no-trigger")));
 
     crate::notes::delete_note_in(&root, &root, &note_id).unwrap();
@@ -340,7 +300,6 @@ fn a_deleted_note_leaves_a_turn_no_material() {
     assert!(sections.is_empty(), "the conversation went with the note");
     assert!(!has_material(&sections));
 }
-
 
 /// CVL-FR-30 / CVL-FR-03, CVL-FR-04 / CVL-FR-08: a note turn end to end.
 ///
@@ -360,11 +319,8 @@ fn a_note_turn_is_offered_the_nine_and_delivers_into_the_note_s_conversation() {
         "@arch is this real?",
     );
     let thread_id = origin.discussion_id().to_string();
-    let trigger = crate::comments::note_discussion_of(&h.root(), &note_id)
-        .unwrap()
-        .comments[0]
-        .id
-        .clone();
+    let trigger =
+        crate::comments::note_discussion_of(&h.root(), &note_id).unwrap().comments[0].id.clone();
 
     let turn = h.dispatch("arch", origin.clone(), &trigger).expect("dispatch");
     let settled = wait_for_terminal(&h, &turn.id);
@@ -378,22 +334,12 @@ fn a_note_turn_is_offered_the_nine_and_delivers_into_the_note_s_conversation() {
     let (request, _) = h.seam.requests().into_iter().next().expect("one request");
     let mut expected: Vec<&str> = EXPECTED_TOOLS.to_vec();
     expected.push(DISCUSSION_ONLY_TOOL);
-    assert_eq!(
-        request
-            .tools
-            .iter()
-            .map(|t| t.name.as_str())
-            .collect::<Vec<_>>(),
-        expected,
-    );
+    assert_eq!(request.tools.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), expected,);
     assert!(
         !request.tools.iter().any(|t| t.name == DRAFT_ONLY_TOOL),
         "a note is not a draft, so there is nothing to propose against",
     );
-    assert!(
-        !request.tools.iter().any(|t| t.name == ARTIFACT_ONLY_TOOL),
-        "nor is it an artifact",
-    );
+    assert!(!request.tools.iter().any(|t| t.name == ARTIFACT_ONLY_TOOL), "nor is it an artifact",);
     // CVL-FR-30, CVL-FR-08 / NST-FR-01: the definitions are byte-identical to the ones an
     // artifact turn is offered, so "the same nine everywhere" spans all five
     // origin kinds rather than the four the sweeping test above compares.
@@ -403,21 +349,10 @@ fn a_note_turn_is_offered_the_nine_and_delivers_into_the_note_s_conversation() {
         other.create_agent("arch", "");
         let thread = other.seed_artifact_thread("spec.md", "Some artifact source here.");
         let t = other
-            .dispatch(
-                "arch",
-                ConversationOrigin::of(&thread),
-                &thread.comments[0].id,
-            )
+            .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
             .expect("dispatch");
         wait_for_terminal(&other, &t.id);
-        other
-            .seam
-            .requests()
-            .into_iter()
-            .next()
-            .expect("one request")
-            .0
-            .tools
+        other.seam.requests().into_iter().next().expect("one request").0.tools
     };
     assert_eq!(
         &request.tools[..EXPECTED_TOOLS.len()],
@@ -451,17 +386,10 @@ fn a_locked_note_discussion_refuses_a_dispatch() {
     h.mount();
     h.create_agent("arch", "");
 
-    let (note_id, origin) = seed_note_discussion(
-        &h,
-        crate::notes::NoteScope::Project,
-        "a note",
-        "@arch thoughts?",
-    );
-    let trigger = crate::comments::note_discussion_of(&h.root(), &note_id)
-        .unwrap()
-        .comments[0]
-        .id
-        .clone();
+    let (note_id, origin) =
+        seed_note_discussion(&h, crate::notes::NoteScope::Project, "a note", "@arch thoughts?");
+    let trigger =
+        crate::comments::note_discussion_of(&h.root(), &note_id).unwrap().comments[0].id.clone();
     crate::comments::set_lock_to(
         &h.root(),
         crate::comments::ThreadRef::note_discussion(&note_id),
@@ -476,10 +404,7 @@ fn a_locked_note_discussion_refuses_a_dispatch() {
     assert_eq!(err, FAIL_THREAD_LOCKED);
     assert!(h.seam.requests().is_empty(), "no model call was made");
     assert_eq!(
-        crate::comments::note_discussion_of(&h.root(), &note_id)
-            .unwrap()
-            .comments
-            .len(),
+        crate::comments::note_discussion_of(&h.root(), &note_id).unwrap().comments.len(),
         1,
         "the conversation gained no line",
     );
@@ -499,11 +424,8 @@ fn a_dispatch_for_a_deleted_note_is_refused_before_registration() {
         "about to go",
         "@arch thoughts?",
     );
-    let trigger = crate::comments::note_discussion_of(&h.root(), &note_id)
-        .unwrap()
-        .comments[0]
-        .id
-        .clone();
+    let trigger =
+        crate::comments::note_discussion_of(&h.root(), &note_id).unwrap().comments[0].id.clone();
 
     crate::notes::delete_note_in(&h.root(), &h.root(), &note_id).unwrap();
 
@@ -511,12 +433,8 @@ fn a_dispatch_for_a_deleted_note_is_refused_before_registration() {
     assert_eq!(err, FAIL_CONTEXT_UNAVAILABLE);
     assert!(h.seam.requests().is_empty(), "no model call was made");
     // No turn was registered, so none is outstanding and none was published.
-    assert!(
-        h.turns().in_flight(None).is_empty(),
-        "no turn record exists for a deleted note",
-    );
+    assert!(h.turns().in_flight(None).is_empty(), "no turn record exists for a deleted note",);
 }
-
 
 /// AGC-FR-12 for a note: the `note_context` section is omitted when the note
 /// cannot be read, and the remaining sections are still assembled.
@@ -528,12 +446,8 @@ fn a_dispatch_for_a_deleted_note_is_refused_before_registration() {
 fn an_unreadable_note_omits_its_section_and_the_turn_proceeds() {
     let h = Harness::new(vec![]);
     let root = h.root();
-    let (note_id, origin) = seed_note_discussion(
-        &h,
-        crate::notes::NoteScope::Project,
-        "readable for now",
-        "opening",
-    );
+    let (note_id, origin) =
+        seed_note_discussion(&h, crate::notes::NoteScope::Project, "readable for now", "opening");
     assert!(has_material(&build_input(Roots::same(&root), &origin, "no-trigger")));
 
     // Malform the note's own file, leaving its conversation untouched.
@@ -546,16 +460,10 @@ fn an_unreadable_note_omits_its_section_and_the_turn_proceeds() {
     let sections = build_input(Roots::same(&root), &origin, "no-trigger");
     assert_eq!(
         tags_of(&sections),
-        vec![
-            TAG_DISCUSSION_HISTORY.to_string(),
-            TAG_CURRENT_COMMENT.to_string(),
-        ],
+        vec![TAG_DISCUSSION_HISTORY.to_string(), TAG_CURRENT_COMMENT.to_string(),],
         "the note section is omitted and the rest are still assembled",
     );
-    assert!(
-        has_material(&sections),
-        "the turn proceeds on its history alone",
-    );
+    assert!(has_material(&sections), "the turn proceeds on its history alone",);
 }
 
 /// AGC-FR-06: a thread id that is not this note's discussion yields nothing,
@@ -564,12 +472,8 @@ fn an_unreadable_note_omits_its_section_and_the_turn_proceeds() {
 fn a_note_origin_naming_another_thread_yields_no_material() {
     let h = Harness::new(vec![]);
     let root = h.root();
-    let (note_id, _) = seed_note_discussion(
-        &h,
-        crate::notes::NoteScope::Project,
-        "a note",
-        "opening",
-    );
+    let (note_id, _) =
+        seed_note_discussion(&h, crate::notes::NoteScope::Project, "a note", "opening");
     let sections = build_input(
         Roots::same(&root),
         &ConversationOrigin::stub_note("not-this-note's-thread", note_id),

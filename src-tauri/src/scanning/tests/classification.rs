@@ -66,10 +66,7 @@ fn ts3_agent_inferred_across_ecosystems() {
         find(&tree, ".claude/agents/a.md").unwrap().artifact_type,
         Some(ArtifactType::Agent)
     );
-    assert_eq!(
-        find(&tree, "AGENTS.md").unwrap().artifact_type,
-        Some(ArtifactType::Agent)
-    );
+    assert_eq!(find(&tree, "AGENTS.md").unwrap().artifact_type, Some(ArtifactType::Agent));
 }
 
 #[test]
@@ -80,10 +77,7 @@ fn path_recognizers_cover_representative_ecosystems() {
         infer_from_path(".github/copilot-instructions.md"),
         Some(ArtifactType::Instructions)
     );
-    assert_eq!(
-        infer_from_path("docs/setup.instructions.md"),
-        Some(ArtifactType::Instructions)
-    );
+    assert_eq!(infer_from_path("docs/setup.instructions.md"), Some(ArtifactType::Instructions));
     assert_eq!(infer_from_path("specifications/ui/LIB.md"), Some(ArtifactType::Spec));
     assert_eq!(infer_from_path("CLAUDE.md"), Some(ArtifactType::Instructions));
     assert_eq!(infer_from_path("notes/random.md"), None);
@@ -94,19 +88,10 @@ fn the_flow_document_convention_classifies_at_any_depth() {
     // ASC-FR-03: `**/*.flow` -> flow. Path inference is the only route
     // that reaches a Flow without an explicit assignment, since the content
     // tiebreak reads Markdown frontmatter and a Flow document is JSON.
-    assert_eq!(
-        infer_from_path("onboarding-review.flow"),
-        Some(ArtifactType::Flow)
-    );
-    assert_eq!(
-        infer_from_path("workflows/nested/deep.flow"),
-        Some(ArtifactType::Flow)
-    );
+    assert_eq!(infer_from_path("onboarding-review.flow"), Some(ArtifactType::Flow));
+    assert_eq!(infer_from_path("workflows/nested/deep.flow"), Some(ArtifactType::Flow));
     // Case-insensitively, like every other filename recognizer here.
-    assert_eq!(
-        infer_from_path("workflows/Review.FLOW"),
-        Some(ArtifactType::Flow)
-    );
+    assert_eq!(infer_from_path("workflows/Review.FLOW"), Some(ArtifactType::Flow));
     // A Flow's contents are JSON but its name is not: `.json` is not the
     // convention, and neither is a file merely named "flow". A file that
     // spells both out is a JSON file, and reaches `flow` only through an
@@ -119,10 +104,7 @@ fn the_flow_document_convention_classifies_at_any_depth() {
     assert_eq!(infer_from_path("src/index.js.flow"), None);
     assert_eq!(infer_from_path(".flow"), None);
 
-    let entries = [
-        entry("workflows", true),
-        entry("workflows/review.flow", false),
-    ];
+    let entries = [entry("workflows", true), entry("workflows/review.flow", false)];
     let tree = build_tree("p", &entries, &LibraryAssignments::default(), &no_content);
     let node = find(&tree, "workflows/review.flow").unwrap();
     assert_eq!(node.artifact_type, Some(ArtifactType::Flow));
@@ -143,17 +125,11 @@ fn ts6_per_file_assignment_overrides_path_inference() {
     let mut assignments = LibraryAssignments::default();
     assignments.assignments.insert(
         "workflows/review.flow".to_string(),
-        Assignment {
-            artifact_type: ArtifactType::Spec,
-            scope: Scope::File,
-        },
+        Assignment { artifact_type: ArtifactType::Spec, scope: Scope::File },
     );
     assignments.assignments.insert(
         "workflows/pipeline".to_string(),
-        Assignment {
-            artifact_type: ArtifactType::Flow,
-            scope: Scope::File,
-        },
+        Assignment { artifact_type: ArtifactType::Flow, scope: Scope::File },
     );
 
     let tree = build_tree("p", &entries, &assignments, &no_content);
@@ -186,10 +162,7 @@ fn ts6_assignment_overrides_the_extension_on_disk() {
         find(&tree, "workflows/review.flow").unwrap().artifact_type,
         Some(ArtifactType::Spec),
     );
-    assert_eq!(
-        find(&tree, "workflows/pipeline").unwrap().artifact_type,
-        Some(ArtifactType::Flow),
-    );
+    assert_eq!(find(&tree, "workflows/pipeline").unwrap().artifact_type, Some(ArtifactType::Flow),);
 
     // ASC-FR-07: clearing the override hands the file back to the extension.
     clear(root, "workflows/review.flow").unwrap();
@@ -222,16 +195,10 @@ fn ts4_content_tiebreak_classifies_when_path_ambiguous() {
 
 #[test]
 fn content_tiebreak_accepts_flow_alias_and_quotes() {
-    assert_eq!(
-        infer_from_content("---\ntype: \"flow\"\n---\n"),
-        Some(ArtifactType::Flow)
-    );
+    assert_eq!(infer_from_content("---\ntype: \"flow\"\n---\n"), Some(ArtifactType::Flow));
     // The legacy spelling still parses, so a project carrying it keeps its
     // classification (see the `harness` serde alias on `ArtifactType`).
-    assert_eq!(
-        infer_from_content("---\ntype: harness\n---\n"),
-        Some(ArtifactType::Flow)
-    );
+    assert_eq!(infer_from_content("---\ntype: harness\n---\n"), Some(ArtifactType::Flow));
     assert_eq!(infer_from_content("---\nkind: agent\n---\n"), Some(ArtifactType::Agent));
     // No frontmatter -> no match.
     assert_eq!(infer_from_content("# just a heading\ntype: spec\n"), None);

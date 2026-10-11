@@ -169,7 +169,9 @@ impl GraduationLogPersistence {
 pub struct GraduationLogIndexes {
     /// A reader that does not recognise a version renders none of it.
     pub log_storage_version: u32,
-    pub source: GraduationStreamIndex,
+    #[serde(default = "default_activity_index")]
+    pub activity: GraduationStreamIndex,
+    #[serde(default = "default_structured_index")]
     pub structured: GraduationStreamIndex,
     pub persistence: GraduationLogPersistence,
     /// GRS-FR-EYNU: retained from the most recent read that met corruption. It
@@ -178,11 +180,19 @@ pub struct GraduationLogIndexes {
     pub last_read_failure: Option<GraduationLogFailure>,
 }
 
+fn default_activity_index() -> GraduationStreamIndex {
+    GraduationStreamIndex::new(GraduationLogStream::Activity)
+}
+
+fn default_structured_index() -> GraduationStreamIndex {
+    GraduationStreamIndex::new(GraduationLogStream::Structured)
+}
+
 impl Default for GraduationLogIndexes {
     fn default() -> Self {
         Self {
             log_storage_version: 1,
-            source: GraduationStreamIndex::new(GraduationLogStream::Source),
+            activity: default_activity_index(),
             structured: GraduationStreamIndex::new(GraduationLogStream::Structured),
             persistence: GraduationLogPersistence::default(),
             last_read_failure: None,
@@ -193,14 +203,14 @@ impl Default for GraduationLogIndexes {
 impl GraduationLogIndexes {
     pub fn stream(&self, stream: GraduationLogStream) -> &GraduationStreamIndex {
         match stream {
-            GraduationLogStream::Source => &self.source,
+            GraduationLogStream::Activity => &self.activity,
             GraduationLogStream::Structured => &self.structured,
         }
     }
 
     pub fn stream_mut(&mut self, stream: GraduationLogStream) -> &mut GraduationStreamIndex {
         match stream {
-            GraduationLogStream::Source => &mut self.source,
+            GraduationLogStream::Activity => &mut self.activity,
             GraduationLogStream::Structured => &mut self.structured,
         }
     }

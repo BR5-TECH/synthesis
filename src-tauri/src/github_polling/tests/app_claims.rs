@@ -109,10 +109,7 @@ fn a_claim_the_disk_refuses_is_held_in_memory() {
     let retried = retry_impl(&h.handle(), 4).unwrap();
     assert_eq!(*changed.lock().unwrap(), 1, "drafts changed was announced");
     assert_eq!(draft_count(&h), 1);
-    assert_eq!(
-        h.view().pending_claims[0].draft_id.as_deref(),
-        Some(retried.draft_id.as_str())
-    );
+    assert_eq!(h.view().pending_claims[0].draft_id.as_deref(), Some(retried.draft_id.as_str()));
 
     // Once the disk takes it, the claim moves to disk.
     std::fs::remove_file(&local).unwrap();

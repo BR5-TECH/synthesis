@@ -35,6 +35,7 @@ fn a_kept_row_carries_everything_the_panel_renders() {
     assert_eq!(
         rows,
         vec![GithubReadyTask {
+            repository_host: "github.com".into(),
             repository_owner: "acme".into(),
             repository_name: "widgets".into(),
             issue_number: 12,
@@ -51,7 +52,11 @@ fn a_kept_row_carries_everything_the_panel_renders() {
 fn a_poll_validates_then_reads_and_keeps_eligible_issues() {
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
-    let fake = FakeProjects::with_items(vec![ready(1), ready(2), item(3, Some("Todo"), "OPEN", Some("Task"), "acme", "widgets")]);
+    let fake = FakeProjects::with_items(vec![
+        ready(1),
+        ready(2),
+        item(3, Some("Todo"), "OPEN", Some("Task"), "acme", "widgets"),
+    ]);
     let found = poll_once(&root, &fake, SECRET, &repo(), PROJECT).expect("a poll");
     assert_eq!(found.project_title, "Roadmap");
     assert_eq!(found.tasks.iter().map(|t| t.issue_number).collect::<Vec<_>>(), vec![1, 2]);
@@ -122,6 +127,7 @@ fn an_issue_a_shadow_draft_or_a_pending_claim_names_is_excluded() {
 
     // The same issue number in another repository is not excluded.
     let other = vec![GithubReadyTask {
+        repository_host: "github.com".into(),
         repository_owner: "other".into(),
         repository_name: "widgets".into(),
         issue_number: 1,
@@ -182,13 +188,24 @@ fn the_project_listing_has_no_duplicates() {
     let mut all = client::projects_of(Some(&viewer));
     all.extend(client::projects_of(Some(&owner)));
     let listed = client::dedupe_projects(all);
-    assert_eq!(listed.iter().map(|p| p.node_id.as_str()).collect::<Vec<_>>(), vec!["P1", "P2", "P3"]);
+    assert_eq!(
+        listed.iter().map(|p| p.node_id.as_str()).collect::<Vec<_>>(),
+        vec!["P1", "P2", "P3"]
+    );
     assert_eq!(
         listed[2],
-        GithubProjectOption { node_id: "P3".into(), title: "Ops".into(), owner_login: "acme".into(), number: 7 }
+        GithubProjectOption {
+            node_id: "P3".into(),
+            title: "Ops".into(),
+            owner_login: "acme".into(),
+            number: 7
+        }
     );
     let json = serde_json::to_value(&listed[0]).unwrap();
-    assert_eq!(json, serde_json::json!({ "nodeId": "P1", "title": "Roadmap", "ownerLogin": "acme", "number": 1 }));
+    assert_eq!(
+        json,
+        serde_json::json!({ "nodeId": "P1", "title": "Roadmap", "ownerLogin": "acme", "number": 1 })
+    );
 }
 
 /// GPP-FR-UBDE: every shadow draft is a row, whatever its status, with its
@@ -287,7 +304,9 @@ fn the_error_vocabulary_is_exact() {
         assert!(!error_text(constant).is_empty());
     }
     // The GHP remote refusals pass through with their own text.
-    for code in ["no_remote_configured", "no_github_remote", "token_unavailable", "issues_inaccessible"] {
+    for code in
+        ["no_remote_configured", "no_github_remote", "token_unavailable", "issues_inaccessible"]
+    {
         assert_ne!(error_text(code), "Publication is not available.", "{code}");
     }
 }

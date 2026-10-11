@@ -11,9 +11,8 @@ use super::*;
 #[test]
 fn cursors_page_backwards_and_forwards_and_always_ascend() {
     let buffer = LogBuffer::new();
-    let batch: Vec<LogInput> = (0..300)
-        .map(|n| input(LogLevel::Info, &[Domain::Backend], &format!("m{n}")))
-        .collect();
+    let batch: Vec<LogInput> =
+        (0..300).map(|n| input(LogLevel::Info, &[Domain::Backend], &format!("m{n}"))).collect();
     append(&buffer, batch);
 
     // No cursor: the NEWEST page, so a panel opening on a full buffer starts
@@ -25,9 +24,8 @@ fn cursors_page_backwards_and_forwards_and_always_ascend() {
 
     // `before`: the page preceding it, still ascending.
     let oldest_shown = newest.records[0].sequence;
-    let previous = buffer
-        .query(&LogFilter::default(), Some(Cursor::Before(oldest_shown)), 100)
-        .unwrap();
+    let previous =
+        buffer.query(&LogFilter::default(), Some(Cursor::Before(oldest_shown)), 100).unwrap();
     assert_eq!(previous.records.len(), 100);
     assert_eq!(previous.records[0].message, "m100");
     assert_eq!(previous.records.last().unwrap().message, "m199");
@@ -36,29 +34,21 @@ fn cursors_page_backwards_and_forwards_and_always_ascend() {
     let newest_shown = newest.records.last().unwrap().sequence;
     append(
         &buffer,
-        (0..5)
-            .map(|n| input(LogLevel::Info, &[Domain::Backend], &format!("new{n}")))
-            .collect(),
+        (0..5).map(|n| input(LogLevel::Info, &[Domain::Backend], &format!("new{n}"))).collect(),
     );
-    let delta = buffer
-        .query(&LogFilter::default(), Some(Cursor::After(newest_shown)), 100)
-        .unwrap();
+    let delta =
+        buffer.query(&LogFilter::default(), Some(Cursor::After(newest_shown)), 100).unwrap();
     assert_eq!(delta.records.len(), 5);
     assert_eq!(delta.records[0].message, "new0");
 
     // An evicted sequence is positional, not an error.
-    let stale = buffer
-        .query(&LogFilter::default(), Some(Cursor::After(0)), 10)
-        .unwrap();
+    let stale = buffer.query(&LogFilter::default(), Some(Cursor::After(0)), 10).unwrap();
     assert_eq!(stale.records.len(), 10);
 
     // The cursor composes with the filter rather than bypassing it.
     let filtered = buffer
         .query(
-            &LogFilter {
-                query: Some("new".to_string()),
-                ..Default::default()
-            },
+            &LogFilter { query: Some("new".to_string()), ..Default::default() },
             Some(Cursor::After(newest_shown)),
             100,
         )
@@ -107,11 +97,11 @@ fn the_publishing_path_settles_every_debt_a_burst_leaves() {
     let sink = Recorder::default();
 
     for n in 0..500u64 {
-        append_and_publish(&sink, buffer, vec![input(
-            LogLevel::Info,
-            &[Domain::Backend],
-            &format!("m{n}"),
-        )]);
+        append_and_publish(
+            &sink,
+            buffer,
+            vec![input(LogLevel::Info, &[Domain::Backend], &format!("m{n}"))],
+        );
     }
     // The burst returns promptly: no emit waits out a coalescing window.
     assert_eq!(buffer.state().buffer_total, 500);
@@ -124,20 +114,13 @@ fn the_publishing_path_settles_every_debt_a_burst_leaves() {
         std::thread::sleep(COALESCE_WINDOW);
     }
 
-    assert!(
-        !buffer.is_flush_pending(),
-        "a debt was left outstanding with no thread to settle it"
-    );
+    assert!(!buffer.is_flush_pending(), "a debt was left outstanding with no thread to settle it");
     assert_eq!(
         sink.last().buffer_total,
         500,
         "the last delivered state must describe the whole burst"
     );
-    assert!(
-        sink.len() < 500,
-        "500 appends must not become 500 events, got {}",
-        sink.len()
-    );
+    assert!(sink.len() < 500, "500 appends must not become 500 events, got {}", sink.len());
 }
 
 #[test]
@@ -156,10 +139,7 @@ fn a_single_batch_larger_than_the_cap_evicts_within_itself() {
     assert_eq!(state.dropped_total, 5);
     let records = all(&buffer).records;
     assert_eq!(records[0].message, "m5");
-    assert_eq!(
-        records.last().unwrap().message,
-        format!("m{}", BUFFER_CAPACITY + 4)
-    );
+    assert_eq!(records.last().unwrap().message, format!("m{}", BUFFER_CAPACITY + 4));
 }
 
 #[test]
@@ -171,14 +151,10 @@ fn a_before_cursor_naming_an_evicted_sequence_is_positional() {
     let buffer = LogBuffer::new();
     append(
         &buffer,
-        (0..10)
-            .map(|n| input(LogLevel::Info, &[Domain::Backend], &format!("m{n}")))
-            .collect(),
+        (0..10).map(|n| input(LogLevel::Info, &[Domain::Backend], &format!("m{n}"))).collect(),
     );
     let oldest = all(&buffer).records[0].sequence;
-    let page = buffer
-        .query(&LogFilter::default(), Some(Cursor::Before(oldest)), 100)
-        .unwrap();
+    let page = buffer.query(&LogFilter::default(), Some(Cursor::Before(oldest)), 100).unwrap();
     assert!(page.records.is_empty(), "nothing precedes the oldest record");
     assert_eq!(page.matched_total, 10, "the match set is still described");
 }
@@ -230,10 +206,7 @@ fn the_internal_emit_api_is_the_one_lgc_fr_01_documents() {
 
     let page = buffer.query(&LogFilter::default(), None, 100).unwrap();
     assert_eq!(
-        page.records
-            .iter()
-            .map(|r| (r.level, r.message.as_str()))
-            .collect::<Vec<_>>(),
+        page.records.iter().map(|r| (r.level, r.message.as_str())).collect::<Vec<_>>(),
         vec![
             (LogLevel::Debug, "d"),
             (LogLevel::Info, "i"),
@@ -246,5 +219,5 @@ fn the_internal_emit_api_is_the_one_lgc_fr_01_documents() {
     // leaving it to the caller, which is what makes them usable from a
     // module that has no clock of its own.
     assert!(page.records.iter().all(|r| r.ts.ends_with('Z') && r.ts.len() == 24));
-    assert!(page.records.iter().all(|r| r.fields.get("k").is_some()));
+    assert!(page.records.iter().all(|r| r.fields.contains_key("k")));
 }

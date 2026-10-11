@@ -37,9 +37,8 @@ impl FromRequestParts<HttpState> for Principal {
             .and_then(|value| value.to_str().ok())
             .ok_or(ApiError(DomainError::Unauthenticated))?;
 
-        let presented = header
-            .strip_prefix(SCHEME)
-            .ok_or(ApiError(DomainError::Unauthenticated))?;
+        let presented =
+            header.strip_prefix(SCHEME).ok_or(ApiError(DomainError::Unauthenticated))?;
 
         // SAS-FR-BZUK: the comparison is constant time over the two values.
         if !state.identity.token.matches(presented.trim()) {
@@ -65,10 +64,9 @@ where
     async fn from_request(request: Request, state: &S) -> Result<Self, Self::Rejection> {
         match Json::<T>::from_request(request, state).await {
             Ok(Json(value)) => Ok(Payload(value)),
-            Err(rejection) => Err(ApiError(DomainError::invalid_field(
-                "body",
-                &rejection.body_text(),
-            ))),
+            Err(rejection) => {
+                Err(ApiError(DomainError::invalid_field("body", &rejection.body_text())))
+            }
         }
     }
 }
@@ -87,10 +85,9 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         match Query::<T>::from_request_parts(parts, state).await {
             Ok(Query(value)) => Ok(Params(value)),
-            Err(rejection) => Err(ApiError(DomainError::invalid_field(
-                "query",
-                &rejection.body_text(),
-            ))),
+            Err(rejection) => {
+                Err(ApiError(DomainError::invalid_field("query", &rejection.body_text())))
+            }
         }
     }
 }
@@ -102,10 +99,5 @@ where
 {
     uuid::Uuid::parse_str(text.trim())
         .map(T::from)
-        .map_err(|_| {
-            ApiError(DomainError::invalid_field(
-                "path",
-                "the value is not a UUID",
-            ))
-        })
+        .map_err(|_| ApiError(DomainError::invalid_field("path", "the value is not a UUID")))
 }

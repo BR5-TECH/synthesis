@@ -22,5 +22,6 @@ pub fn opens_other_worktree(project: &ProjectState, anchor: &str, active_worktre
     let Ok(current) = active_entry_for(&root) else {
         return false;
     };
-    canonicalize_lenient(Path::new(&current.path)) != canonicalize_lenient(Path::new(active_worktree))
+    canonicalize_lenient(Path::new(&current.path))
+        != canonicalize_lenient(Path::new(active_worktree))
 }

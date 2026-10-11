@@ -56,28 +56,11 @@ mod tests {
     #[test]
     fn a_page_holds_the_window_the_request_asked_for() {
         let items: Vec<u32> = (0..10).collect();
+        assert_eq!(paginate(items.clone(), Page::default()).expect("a page"), items);
         assert_eq!(
-            paginate(items.clone(), Page::default()).expect("a page"),
-            items
-        );
-        assert_eq!(
-            paginate(
-                items.clone(),
-                Page {
-                    limit: Some(3),
-                    offset: Some(2)
-                }
-            )
-            .expect("a page"),
+            paginate(items.clone(), Page { limit: Some(3), offset: Some(2) }).expect("a page"),
             vec![2, 3, 4]
         );
-        assert!(paginate(
-            items,
-            Page {
-                limit: Some(10_000),
-                offset: None
-            }
-        )
-        .is_err());
+        assert!(paginate(items, Page { limit: Some(10_000), offset: None }).is_err());
     }
 }

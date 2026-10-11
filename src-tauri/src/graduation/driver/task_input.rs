@@ -123,15 +123,10 @@ impl GraduationTaskInput {
         }
         // GRL-FR-TXEB: the merge context travels with the merge parts and with
         // no other.
-        let merge_part = matches!(
-            self.part.as_str(),
-            phases::PART_MERGE_WORK | phases::PART_MERGE_REVIEW
-        );
+        let merge_part =
+            matches!(self.part.as_str(), phases::PART_MERGE_WORK | phases::PART_MERGE_REVIEW);
         if merge_part != self.merge.is_some() {
-            return Err(format!(
-                "the merge context does not match the part {:?}",
-                self.part
-            ));
+            return Err(format!("the merge context does not match the part {:?}", self.part));
         }
         if !matches!(
             self.purpose.as_str(),

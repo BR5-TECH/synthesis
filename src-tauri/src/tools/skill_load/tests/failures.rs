@@ -73,10 +73,10 @@ fn a_skill_that_became_a_symlink_is_refused_rather_than_followed() {
 #[test]
 fn no_project_open_is_the_shared_refusal_and_not_the_unknown_skill_one() {
     let app = closed_project();
-    let refusal = block_on(SkillLoadTool::new(app.handle().clone()).call(LoadSkillArgs {
-        name: "analyst".to_string(),
-        ecosystem: None,
-    }))
+    let refusal = block_on(
+        SkillLoadTool::new(app.handle().clone())
+            .call(LoadSkillArgs { name: "analyst".to_string(), ecosystem: None }),
+    )
     .unwrap_err();
 
     assert_eq!(refusal, ToolRefusal::NoProjectOpen);
@@ -91,4 +91,3 @@ fn no_project_open_is_the_shared_refusal_and_not_the_unknown_skill_one() {
     assert_eq!(error.kind(), ToolErrorKind::NotFound);
     assert_eq!(error.retryable(), Some(false));
 }
-

@@ -6,20 +6,14 @@
 use super::*;
 
 fn root(key: &str) -> RootIdentity {
-    RootIdentity {
-        project_key: key.to_string(),
-        worktree: key.to_string(),
-    }
+    RootIdentity { project_key: key.to_string(), worktree: key.to_string() }
 }
 
 #[test]
 fn a_fresh_result_for_the_open_root_emits_its_widgets_refresh_event() {
     // PST-FR-37: applied, and its event emitted, when the sequence is the
     // newest for the widget and the identity is still the open one.
-    assert_eq!(
-        settlement(true, &root("/p/a"), &root("/p/a"), Ok(())),
-        Settlement::Changed,
-    );
+    assert_eq!(settlement(true, &root("/p/a"), &root("/p/a"), Ok(())), Settlement::Changed,);
 }
 
 #[test]
@@ -36,10 +30,7 @@ fn a_failed_refresh_reaches_the_user_rather_than_only_the_log() {
 fn an_overtaken_result_is_discarded_whatever_it_carries() {
     // PST-FR-37: a slow refresh returning after a fresher one emits neither
     // its refresh event nor a failure event.
-    assert_eq!(
-        settlement(false, &root("/p/a"), &root("/p/a"), Ok(())),
-        Settlement::Discarded,
-    );
+    assert_eq!(settlement(false, &root("/p/a"), &root("/p/a"), Ok(())), Settlement::Discarded,);
     assert_eq!(
         settlement(false, &root("/p/a"), &root("/p/a"), Err("boom".into())),
         Settlement::Discarded,
@@ -57,10 +48,7 @@ fn a_result_for_a_root_no_longer_open_is_discarded() {
         Settlement::Discarded,
         "a project switch"
     );
-    let worktree_b = RootIdentity {
-        project_key: "/p/a".into(),
-        worktree: "/p/a-wt".into(),
-    };
+    let worktree_b = RootIdentity { project_key: "/p/a".into(), worktree: "/p/a-wt".into() };
     assert_eq!(
         settlement(true, &worktree_b, &root("/p/a"), Ok(())),
         Settlement::Discarded,

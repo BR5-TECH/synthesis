@@ -22,7 +22,7 @@
 //!   worker, and driving a nested runtime from there panics at runtime — a
 //!   failure that no test without the full Tauri runtime would catch.
 
-use openrouter_rs::api::models::{list_models, Model};
+use openrouter_rs::api::models::Model;
 
 use crate::ai_shared::{
     EndpointProber, ModelOption, ModelReasoning, ProbeError, ProbeRequest, PROBE_TIMEOUT,
@@ -42,11 +42,7 @@ fn effort_id(effort: &openrouter_rs::types::Effort) -> Option<String> {
 
 /// Map one SDK model onto a `ModelOption`, carrying its reasoning descriptor.
 fn model_option(model: &Model) -> ModelOption {
-    let label = if model.name.trim().is_empty() {
-        model.id.clone()
-    } else {
-        model.name.clone()
-    };
+    let label = if model.name.trim().is_empty() { model.id.clone() } else { model.name.clone() };
     let reasoning = model.reasoning.as_ref().map(|r| {
         let supported: Option<Vec<String>> = r
             .supported_efforts
@@ -63,9 +59,8 @@ fn model_option(model: &Model) -> ModelOption {
             // of `supported_efforts`. It is enforced rather than assumed: a
             // default outside the ladder would be a choice the author can see
             // but never re-select.
-            default_effort: default_effort.filter(|d| {
-                supported.as_ref().is_some_and(|l| l.iter().any(|e| e == d))
-            }),
+            default_effort: default_effort
+                .filter(|d| supported.as_ref().is_some_and(|l| l.iter().any(|e| e == d))),
             supported_efforts: supported,
         }
     });
@@ -73,12 +68,9 @@ fn model_option(model: &Model) -> ModelOption {
     // architecture block. What it declares settles the capability; a model whose
     // block carries no modality list at all leaves the question to the shipped
     // catalog, and a model neither declares anything about takes no image.
-    let images = crate::ai_shared::image_input_declared(
-        model.architecture.input_modalities.as_deref(),
-    );
-    ModelOption::new(&model.id, &label)
-        .with_reasoning(reasoning)
-        .with_declared_image_input(images)
+    let images =
+        crate::ai_shared::image_input_declared(model.architecture.input_modalities.as_deref());
+    ModelOption::new(&model.id, &label).with_reasoning(reasoning).with_declared_image_input(images)
 }
 
 /// Map an SDK failure onto the shared probe vocabulary.
@@ -101,9 +93,7 @@ fn probe_error_for(e: &openrouter_rs::error::OpenRouterError) -> ProbeError {
         // A key the SDK refuses to send at all never reaches the endpoint, but
         // it is a credential problem and reads as one.
         OpenRouterError::KeyNotConfigured => ProbeError::Rejected,
-        OpenRouterError::HttpRequest(inner) => {
-            ProbeError::Unreachable(inner.message().to_string())
-        }
+        OpenRouterError::HttpRequest(inner) => ProbeError::Unreachable(inner.message().to_string()),
         other => ProbeError::Unreachable(other.to_string()),
     }
 }
@@ -127,28 +117,45 @@ impl EndpointProber for OpenRouterProber {
                     .enable_all()
                     .build()
                     .map_err(|e| ProbeError::Unreachable(e.to_string()))?;
+                // AAP-FR-WMCX: the SDK's own free functions build a client with
+                // the default trust setup, so the client is built here from the
+                // shared roots and handed over.
+                let (http_client, tls_record) =
+                    crate::tls::openrouter_http_client().map_err(|_| {
+                        ProbeError::Unreachable("the HTTP client could not be built".into())
+                    })?;
+                let client = openrouter_rs::OpenRouterClient::builder()
+                    .base_url(base_url.clone())
+                    .api_key(api_key.clone())
+                    .http_client(http_client)
+                    .build()
+                    .map_err(|e| ProbeError::Unreachable(e.to_string()))?;
                 runtime.block_on(async {
                     // The SDK applies no deadline of its own, so the same bound
                     // every other probe honours is imposed here. Without it an
                     // endpoint that never answers would hold the settings
                     // surface's Verify action open indefinitely.
-                    match tokio::time::timeout(
-                        PROBE_TIMEOUT,
-                        list_models(&base_url, &api_key, None, None),
-                    )
-                    .await
-                    {
+                    match tokio::time::timeout(PROBE_TIMEOUT, client.models().list()).await {
                         Err(_elapsed) => Err(ProbeError::TimedOut),
-                        Ok(Err(e)) => Err(probe_error_for(&e)),
+                        // AAP-FR-HZTB: the SDK flattens a TLS error into text,
+                        // so the refused certificate is read from the shared
+                        // verifier's record.
+                        Ok(Err(e)) => Err(match (&e, tls_record.take()) {
+                            // A structured answer had a good handshake.
+                            (openrouter_rs::error::OpenRouterError::Api(_), _) | (_, None) => {
+                                probe_error_for(&e)
+                            }
+                            (_, Some(failure)) => ProbeError::TlsUntrusted(failure),
+                        }),
                         Ok(Ok(models)) => Ok(models.iter().map(model_option).collect()),
                     }
                 })
             });
             match handle.join() {
                 Ok(result) => result,
-                Err(_) => Err(ProbeError::Unreachable(
-                    "the OpenRouter client panicked".to_string(),
-                )),
+                Err(_) => {
+                    Err(ProbeError::Unreachable("the OpenRouter client panicked".to_string()))
+                }
             }
         })
     }
@@ -229,10 +236,7 @@ mod tests {
         // AAP-FR-26: the model's ladder is authoritative. The SDK models an
         // unknown level as `Effort::Other`, and it must survive the crossing
         // rather than being dropped as unrecognised.
-        assert_eq!(
-            effort_id(&Effort::Other("ludicrous".into())).as_deref(),
-            Some("ludicrous")
-        );
+        assert_eq!(effort_id(&Effort::Other("ludicrous".into())).as_deref(), Some("ludicrous"));
         assert_eq!(effort_id(&Effort::High).as_deref(), Some("high"));
 
         let model = model_from(&model_json(
@@ -351,17 +355,11 @@ mod live {
 
         let with_ladder = models
             .iter()
-            .filter(|m| {
-                m.reasoning
-                    .as_ref()
-                    .is_some_and(|r| r.supported_efforts.is_some())
-            })
+            .filter(|m| m.reasoning.as_ref().is_some_and(|r| r.supported_efforts.is_some()))
             .count();
         let with_any = models.iter().filter(|m| m.reasoning.is_some()).count();
-        let mandatory = models
-            .iter()
-            .filter(|m| m.reasoning.as_ref().is_some_and(|r| r.mandatory))
-            .count();
+        let mandatory =
+            models.iter().filter(|m| m.reasoning.as_ref().is_some_and(|r| r.mandatory)).count();
         let labelled = models.iter().filter(|m| m.label != m.id).count();
 
         println!(
@@ -381,9 +379,6 @@ mod live {
 
         assert!(with_ladder > 0, "no model reported an effort ladder");
         assert!(mandatory > 0, "no model reported mandatory reasoning");
-        assert!(
-            labelled > 0,
-            "labels came back equal to ids — the SDK's `name` was not used"
-        );
+        assert!(labelled > 0, "labels came back equal to ids — the SDK's `name` was not used");
     }
 }

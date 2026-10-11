@@ -42,17 +42,8 @@ impl StubRunner {
 }
 
 impl CliRunner for StubRunner {
-    fn run(
-        &self,
-        _path: &Path,
-        args: &[&str],
-        _timeout: Duration,
-    ) -> Result<CliOutput, RunError> {
-        let source = if args == CLI_IDENTITY_ARGS {
-            &self.identity
-        } else {
-            &self.daemon
-        };
+    fn run(&self, _path: &Path, args: &[&str], _timeout: Duration) -> Result<CliOutput, RunError> {
+        let source = if args == CLI_IDENTITY_ARGS { &self.identity } else { &self.daemon };
         match source {
             Ok(output) => Ok(output.clone()),
             Err(RunError::NotFound) => Err(RunError::NotFound),
@@ -88,11 +79,7 @@ fn cli_config(path: &str) -> DockerBackendConfig {
 }
 
 fn engine_config(endpoint: DockerEndpoint) -> DockerBackendConfig {
-    DockerBackendConfig {
-        mode: DockerBackendMode::Bollard,
-        endpoint,
-        cli_path: None,
-    }
+    DockerBackendConfig { mode: DockerBackendMode::Bollard, endpoint, cli_path: None }
 }
 
 /// GSS-FR-37 (GSS-FR-35, GSS-FR-36): a machine that has configured nothing
@@ -127,10 +114,7 @@ fn cli_verification_distinguishes_the_executable_from_the_daemon() {
         ERR_CLI_NOT_FOUND
     );
     // There, but not runnable.
-    let probe = StubProbe {
-        existing: vec![PathBuf::from("/bin/docker")],
-        executable: vec![],
-    };
+    let probe = StubProbe { existing: vec![PathBuf::from("/bin/docker")], executable: vec![] };
     assert_eq!(
         verify_backend(&cli_config("/bin/docker"), &probe, &runner, &engine, VERIFY_TIMEOUT)
             .unwrap_err(),
@@ -276,15 +260,15 @@ fn engine_verification_distinguishes_the_endpoint_from_the_daemon() {
 fn the_four_endpoint_forms_validate_on_their_own_terms() {
     assert!(validate_endpoint(&DockerEndpoint::Automatic).is_ok());
     assert!(validate_endpoint(&DockerEndpoint::UnixSocket("/var/run/docker.sock".into())).is_ok());
-    assert!(
-        validate_endpoint(&DockerEndpoint::UnixSocket("unix:///var/run/docker.sock".into()))
-            .is_ok()
-    );
+    assert!(validate_endpoint(&DockerEndpoint::UnixSocket("unix:///var/run/docker.sock".into()))
+        .is_ok());
     assert_eq!(
         validate_endpoint(&DockerEndpoint::UnixSocket("var/run/docker.sock".into())).unwrap_err(),
         ERR_ENDPOINT_INVALID
     );
-    assert!(validate_endpoint(&DockerEndpoint::WindowsPipe("//./pipe/docker_engine".into())).is_ok());
+    assert!(
+        validate_endpoint(&DockerEndpoint::WindowsPipe("//./pipe/docker_engine".into())).is_ok()
+    );
     assert!(
         validate_endpoint(&DockerEndpoint::WindowsPipe(r"\\.\pipe\docker_engine".into())).is_ok()
     );
@@ -305,13 +289,16 @@ fn the_four_endpoint_forms_validate_on_their_own_terms() {
 #[test]
 fn changing_the_endpoint_invalidates_the_success_and_going_back_does_not_restore_it() {
     let mut record = DockerBackendRecord::default();
-    record.record_success(&engine_config(DockerEndpoint::Automatic), "27.1.1", "2026-01-01T00:00:00Z");
+    record.record_success(
+        &engine_config(DockerEndpoint::Automatic),
+        "27.1.1",
+        "2026-01-01T00:00:00Z",
+    );
     // A relaunch reads the same record, and a stopped daemon changes
     // nothing about it: reachability is not what the state describes.
     assert_eq!(record.outbound().state, DockerBackendState::Verified);
     assert_eq!(record.outbound().server_version.as_deref(), Some("27.1.1"));
-    let reloaded: DockerBackendRecord =
-        toml::from_str(&toml::to_string(&record).unwrap()).unwrap();
+    let reloaded: DockerBackendRecord = toml::from_str(&toml::to_string(&record).unwrap()).unwrap();
     assert_eq!(reloaded.outbound().state, DockerBackendState::Verified);
 
     // The endpoint changes.
@@ -362,10 +349,7 @@ fn a_success_carried_onto_another_selection_is_not_read_as_one() {
     // Only the selected value is edited, as a hand-editor would.
     record.cli_path = Some("/somewhere/else/docker".to_string());
     assert_eq!(record.outbound().state, DockerBackendState::Unverified);
-    assert_eq!(
-        resolve_from_record(&record).unwrap_err(),
-        ERR_DOCKER_BACKEND_UNVERIFIED
-    );
+    assert_eq!(resolve_from_record(&record).unwrap_err(), ERR_DOCKER_BACKEND_UNVERIFIED);
 }
 
 /// GSS-FR-40 (GSS-FR-40): resolution reads the record and asks the daemon
@@ -373,10 +357,7 @@ fn a_success_carried_onto_another_selection_is_not_read_as_one() {
 #[test]
 fn resolution_returns_the_verified_backend_or_refuses() {
     let unverified = DockerBackendRecord::default();
-    assert_eq!(
-        resolve_from_record(&unverified).unwrap_err(),
-        ERR_DOCKER_BACKEND_UNVERIFIED
-    );
+    assert_eq!(resolve_from_record(&unverified).unwrap_err(), ERR_DOCKER_BACKEND_UNVERIFIED);
 
     let mut engine = DockerBackendRecord::default();
     engine.record_success(
@@ -395,9 +376,7 @@ fn resolution_returns_the_verified_backend_or_refuses() {
     cli.record_success(&cli_config("/bin/docker"), "27.1.1", "2026-01-01T00:00:00Z");
     assert_eq!(
         resolve_from_record(&cli).unwrap(),
-        ResolvedDockerBackend::Cli {
-            path: "/bin/docker".to_string()
-        }
+        ResolvedDockerBackend::Cli { path: "/bin/docker".to_string() }
     );
 
     // And no frontend call can reach it: the read path for an actual Docker
@@ -443,9 +422,7 @@ fn detection_finds_the_first_docker_on_the_search_path() {
     let empty = tempfile::tempdir().unwrap();
     let elsewhere = detect_docker_cli(Some(empty.path().to_str().unwrap()), None, &probe);
     assert!(
-        !elsewhere
-            .as_deref()
-            .is_some_and(|p| p.starts_with(empty.path().to_str().unwrap())),
+        !elsewhere.as_deref().is_some_and(|p| p.starts_with(empty.path().to_str().unwrap())),
         "detection reported a binary in a directory that holds none"
     );
     // And it committed nothing either way.
@@ -457,22 +434,13 @@ fn detection_finds_the_first_docker_on_the_search_path() {
 #[test]
 fn the_record_round_trips_through_toml() {
     let mut record = DockerBackendRecord::default();
-    record.record_success(
-        &cli_config("/usr/local/bin/docker"),
-        "27.1.1",
-        "2026-01-01T00:00:00Z",
-    );
+    record.record_success(&cli_config("/usr/local/bin/docker"), "27.1.1", "2026-01-01T00:00:00Z");
     let text = toml::to_string(&record).unwrap();
     let parsed: DockerBackendRecord = toml::from_str(&text).unwrap();
     assert_eq!(parsed, record);
     assert_eq!(parsed.outbound().state, DockerBackendState::Verified);
     // Every Docker field the user-global store holds is in the text.
-    for value in [
-        "docker_cli",
-        "/usr/local/bin/docker",
-        "27.1.1",
-        "2026-01-01T00:00:00Z",
-    ] {
+    for value in ["docker_cli", "/usr/local/bin/docker", "27.1.1", "2026-01-01T00:00:00Z"] {
         assert!(text.contains(value), "{value} is missing from {text}");
     }
     // GSS-FR-35: and none of it is a project-scoped value, so nothing here
@@ -485,16 +453,11 @@ fn the_record_round_trips_through_toml() {
 /// the contract defines.
 #[test]
 fn the_endpoint_serialises_as_the_contract_spells_it() {
+    assert_eq!(serde_json::to_string(&DockerEndpoint::Automatic).unwrap(), "\"automatic\"");
     assert_eq!(
-        serde_json::to_string(&DockerEndpoint::Automatic).unwrap(),
-        "\"automatic\""
-    );
-    assert_eq!(
-        serde_json::to_string(&DockerEndpoint::UnixSocket("/var/run/docker.sock".into()))
-            .unwrap(),
+        serde_json::to_string(&DockerEndpoint::UnixSocket("/var/run/docker.sock".into())).unwrap(),
         "{\"unix_socket\":\"/var/run/docker.sock\"}"
     );
-    let parsed: DockerEndpoint =
-        serde_json::from_str("{\"tcp\":\"tcp://host:2375\"}").unwrap();
+    let parsed: DockerEndpoint = serde_json::from_str("{\"tcp\":\"tcp://host:2375\"}").unwrap();
     assert_eq!(parsed, DockerEndpoint::Tcp("tcp://host:2375".into()));
 }

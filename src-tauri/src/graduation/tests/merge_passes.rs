@@ -49,7 +49,12 @@ fn a_merge_pass_is_a_work_turn_then_a_fresh_review_in_its_own_checkout() {
     let kinds: Vec<TurnKind> = seen.iter().map(|s| s.turn_kind).collect();
     assert_eq!(
         kinds,
-        vec![TurnKind::MergeWork, TurnKind::MergeReview, TurnKind::MergeWork, TurnKind::MergeReview]
+        vec![
+            TurnKind::MergeWork,
+            TurnKind::MergeReview,
+            TurnKind::MergeWork,
+            TurnKind::MergeReview
+        ]
     );
     let passes: Vec<u32> = seen.iter().map(|s| s.pass).collect();
     assert_eq!(passes, vec![1, 1, 2, 2]);
@@ -98,7 +103,7 @@ fn a_merge_pass_is_a_work_turn_then_a_fresh_review_in_its_own_checkout() {
 // GRB-FR-TGAZ, GRL-FR-CZBT, GXD-FR-BQLN, GRB-FR-JQFO: a merge run takes two passes.
 // (That the project's own budget does not reach it is pinned in `merge_input`.) When the budget is spent and the review still
 // says `revise` the run rests in `awaiting_author` with the reason
-// `pass_budget_exhausted`, releases its stream, and keeps its worktree and its
+// `pass_budget_exhausted`, keeps its stream, and keeps its worktree and its
 // snapshot ref. Continue adds two passes and resumes in the same worktree.
 #[test]
 fn a_spent_budget_rests_the_run_and_continue_adds_two_passes() {
@@ -124,15 +129,19 @@ fn a_spent_budget_rests_the_run_and_continue_adds_two_passes() {
     assert_eq!(rest["fields"]["reason"], "pass_budget_exhausted");
     assert_eq!(rest["fields"]["pass_budget"], 2);
     assert_eq!(rest["fields"]["passes_made"], 2);
-    assert!(
+    assert_eq!(
         crate::streams::get_work_stream(fx.app.clone(), stream.id.clone())
             .unwrap()
             .busy_run_id
-            .is_none(),
-        "the stream is released"
+            .as_deref(),
+        Some(run.id.as_str()),
+        "the run keeps the stream (GRD-FR-BNTC)"
     );
     let worktree = merge_worktree_of(&fx, &run.id);
-    assert!(worktree.exists() && snapshot_ref_stands(&fx, &run.id), "worktree and snapshot are kept");
+    assert!(
+        worktree.exists() && snapshot_ref_stands(&fx, &run.id),
+        "worktree and snapshot are kept"
+    );
     let first_files = tree_under(&worktree);
 
     let continued = fx.continue_run(&spent);
@@ -146,7 +155,11 @@ fn a_spent_budget_rests_the_run_and_continue_adds_two_passes() {
     let work = dispatch.of_part("merge_work");
     assert_eq!(work[0].pass, 3, "the next number, not a restart");
     assert_eq!(work[0].directory, worktree, "the same merge worktree resumes");
-    assert_eq!(work[0].tree.get("README.md"), first_files.get("README.md"), "the saved work stands");
+    assert_eq!(
+        work[0].tree.get("README.md"),
+        first_files.get("README.md"),
+        "the saved work stands"
+    );
 }
 
 // GRB-FR-VNKX, GRD-FR-XHSE, GXD-FR-BJYT: Continue against a merge run whose pinned
@@ -193,7 +206,7 @@ fn an_escalating_merge_turn_pauses_the_run_and_an_answer_over_a_moved_tip_is_ref
     let paused = fx.drive(
         &run,
         ScriptedDispatch::new(vec![Turn::answering(Answer::Escalate(vec![
-            "Which limit stands?".to_string(),
+            "Which limit stands?".to_string()
         ]))]),
     );
     assert_eq!(paused.state, GraduationRunState::AwaitingAuthor);
@@ -231,7 +244,7 @@ fn an_answer_goes_into_the_merge_work_turn_that_asked_and_the_pass_does_not_adva
     let paused = fx.drive(
         &run,
         ScriptedDispatch::new(vec![Turn::answering(Answer::Escalate(vec![
-            "Which limit stands?".to_string(),
+            "Which limit stands?".to_string()
         ]))]),
     );
     assert_eq!(paused.state, GraduationRunState::AwaitingAuthor);

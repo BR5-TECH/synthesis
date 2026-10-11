@@ -9,22 +9,14 @@ use crate::fs::FsError;
 #[test]
 fn an_external_document_is_read_without_widening_an_agent_session() {
     let (fixture, id) = with_document("outside the project");
-    let project = fixture
-        .fixture
-        .app
-        .state::<crate::bm25_index::Bm25Indexer>()
-        .root()
-        .unwrap();
+    let project = fixture.fixture.app.state::<crate::bm25_index::Bm25Indexer>().root().unwrap();
     let session = crate::tools::tests::agent_session(&fixture.fixture.app, &project, "get-doc");
     assert_eq!(get(&fixture, args(&id)).unwrap(), "outside the project");
 
     let state = fixture.fixture.app.state::<crate::fs::FsAccessState>();
     let agent = state.agent_session(&session).unwrap();
     let external = fixture.root.join("refs/doc.md");
-    assert!(matches!(
-        agent.read_bytes(&external),
-        Err(FsError::EscapesAllowedRoots { .. })
-    ));
+    assert!(matches!(agent.read_bytes(&external), Err(FsError::EscapesAllowedRoots { .. })));
     let reader = crate::tools::file_read::FileReadTool::new(fixture.fixture.handle(), session);
     let refused = block_on(reader.call(crate::tools::file_read::ReadFileArgs {
         path: external.to_string_lossy().into_owned(),

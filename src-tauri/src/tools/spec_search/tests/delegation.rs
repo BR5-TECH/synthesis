@@ -39,14 +39,7 @@ fn the_module_reads_no_file_and_enumerates_no_folder() {
     const SOURCE: &str = include_str!("../../spec_search.rs");
     // The suite lives in its own file, so SOURCE is the module and nothing else.
     let body = SOURCE;
-    for forbidden in [
-        "read_text",
-        "read_bytes",
-        "read_dir",
-        "list_dir",
-        "File::open",
-        "WalkDir",
-    ] {
+    for forbidden in ["read_text", "read_bytes", "read_dir", "list_dir", "File::open", "WalkDir"] {
         assert!(
             !body.contains(forbidden),
             "`{forbidden}` means this tool reached past the index (SPS-FR-03)",
@@ -116,11 +109,7 @@ scope = "file"
     let fixture = mounted(dir);
 
     let output = query(&fixture, "teardown", Some(20));
-    let paths: Vec<&str> = output
-        .specifications
-        .iter()
-        .map(|m| m.path.as_str())
-        .collect();
+    let paths: Vec<&str> = output.specifications.iter().map(|m| m.path.as_str()).collect();
 
     assert!(
         paths.contains(&"specifications/core/a.md"),
@@ -158,4 +147,3 @@ scope = "file"
         );
     }
 }
-

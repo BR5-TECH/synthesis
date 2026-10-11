@@ -13,8 +13,13 @@ fn aic_ts11_selections_persist_and_an_unknown_id_is_refused() {
         Arc::new(FakeProber::default()),
         FakeKeychain::new(),
     );
-    verify_integration_impl(&h.store, &h.ai, "claude_code", &cli_config_for("claude_code", "/usr/bin/claude"))
-        .unwrap();
+    verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "claude_code",
+        &cli_config_for("claude_code", "/usr/bin/claude"),
+    )
+    .unwrap();
 
     let rec = set_model_impl(&h.store, &h.ai, "claude_code", None, Some("opus")).unwrap();
     assert_eq!(rec.selected_model.as_deref(), Some("opus"));
@@ -112,10 +117,7 @@ fn aic_ts_kqvw_a_model_is_held_per_turn_kind_over_one_default() {
     let with_override =
         set_model_impl(&h.store, &h.ai, "claude_code", Some("review"), Some("sonnet")).unwrap();
     assert_eq!(with_override.selected_model.as_deref(), Some("opus"));
-    assert_eq!(
-        with_override.model_overrides.get("review").map(String::as_str),
-        Some("sonnet"),
-    );
+    assert_eq!(with_override.model_overrides.get("review").map(String::as_str), Some("sonnet"),);
     assert_eq!(resolve("review").as_deref(), Some("sonnet"));
     for kind in ["work", "semantic_rebase"] {
         assert_eq!(resolve(kind).as_deref(), Some("opus"), "untouched: {kind}");
@@ -126,10 +128,7 @@ fn aic_ts_kqvw_a_model_is_held_per_turn_kind_over_one_default() {
     let relaunched = list_integrations_impl(&h.store, &h.ai).unwrap();
     let record = find(&relaunched, "claude_code");
     assert_eq!(record.selected_model.as_deref(), Some("opus"));
-    assert_eq!(
-        record.model_overrides.get("review").map(String::as_str),
-        Some("sonnet"),
-    );
+    assert_eq!(record.model_overrides.get("review").map(String::as_str), Some("sonnet"),);
 
     // A null model against a named kind **clears** rather than stores a
     // null, so the kind returns to the default.
@@ -148,8 +147,7 @@ fn aic_ts_zbrf_a_rejected_model_update_changes_nothing_the_record_holds() {
     set_model_impl(&h.store, &h.ai, "claude_code", None, Some("opus")).unwrap();
     set_model_impl(&h.store, &h.ai, "claude_code", Some("review"), Some("sonnet")).unwrap();
     set_effort_impl(&h.store, &h.ai, "claude_code", None, Some("high")).unwrap();
-    set_effort_impl(&h.store, &h.ai, "claude_code", Some("work"), Some("low"))
-        .unwrap();
+    set_effort_impl(&h.store, &h.ai, "claude_code", Some("work"), Some("low")).unwrap();
 
     // The default moves; the two maps and the effort default stand still.
     let moved = set_model_impl(&h.store, &h.ai, "claude_code", None, Some("haiku")).unwrap();
@@ -160,10 +158,7 @@ fn aic_ts_zbrf_a_rejected_model_update_changes_nothing_the_record_holds() {
         "setting the default touches neither map",
     );
     assert_eq!(moved.selected_effort.as_deref(), Some("high"));
-    assert_eq!(
-        moved.effort_overrides.get("work").map(String::as_str),
-        Some("low"),
-    );
+    assert_eq!(moved.effort_overrides.get("work").map(String::as_str), Some("low"),);
 
     // Every shape of rejection, each read back against the same four values.
     let before = moved.clone();
@@ -215,15 +210,10 @@ fn aic_ts_pnxd_the_model_and_the_effort_of_one_kind_move_independently() {
 
     set_model_impl(&h.store, &h.ai, "claude_code", None, Some("opus")).unwrap();
     set_effort_impl(&h.store, &h.ai, "claude_code", None, Some("high")).unwrap();
-    set_model_impl(&h.store, &h.ai, "claude_code", Some("work"), Some("sonnet"))
-        .unwrap();
-    set_effort_impl(&h.store, &h.ai, "claude_code", Some("work"), Some("medium"))
-        .unwrap();
+    set_model_impl(&h.store, &h.ai, "claude_code", Some("work"), Some("sonnet")).unwrap();
+    set_effort_impl(&h.store, &h.ai, "claude_code", Some("work"), Some("medium")).unwrap();
 
-    assert_eq!(
-        resolve("work"),
-        (Some("sonnet".into()), Some("medium".into())),
-    );
+    assert_eq!(resolve("work"), (Some("sonnet".into()), Some("medium".into())),);
     for kind in ["review", "semantic_rebase"] {
         assert_eq!(
             resolve(kind),
@@ -235,10 +225,7 @@ fn aic_ts_pnxd_the_model_and_the_effort_of_one_kind_move_independently() {
     // The model override alone is cleared: that kind reasons at its own
     // level still, on the record's default model.
     set_model_impl(&h.store, &h.ai, "claude_code", Some("work"), None).unwrap();
-    assert_eq!(
-        resolve("work"),
-        (Some("opus".into()), Some("medium".into())),
-    );
+    assert_eq!(resolve("work"), (Some("opus".into()), Some("medium".into())),);
     for kind in ["review", "semantic_rebase"] {
         assert_eq!(
             resolve(kind),
@@ -267,21 +254,13 @@ fn aic_ts_gvwt_a_project_override_carries_no_selections_of_its_own() {
     set_model_impl(&h.store, &h.ai, "claude_code", None, Some("opus")).unwrap();
     set_effort_impl(&h.store, &h.ai, "claude_code", None, Some("high")).unwrap();
     set_model_impl(&h.store, &h.ai, "codex", None, Some("gpt-5")).unwrap();
-    set_model_impl(&h.store, &h.ai, "codex", Some("work"), Some("gpt-5.1"))
-        .unwrap();
+    set_model_impl(&h.store, &h.ai, "codex", Some("work"), Some("gpt-5.1")).unwrap();
     set_effort_impl(&h.store, &h.ai, "codex", None, Some("low")).unwrap();
 
-    let resolve = || match resolve_agentic_invocation(
-        &h.store,
-        &h.ai,
-        "/dev/acme",
-        Some("work"),
-    )
-    .unwrap()
+    let resolve = || match resolve_agentic_invocation(&h.store, &h.ai, "/dev/acme", Some("work"))
+        .unwrap()
     {
-        AgenticInvocation::Cli { vendor, model_id, effort_id, .. } => {
-            (vendor, model_id, effort_id)
-        }
+        AgenticInvocation::Cli { vendor, model_id, effort_id, .. } => (vendor, model_id, effort_id),
         other => panic!("a CLI vendor resolved to {other:?}"),
     };
 
@@ -293,16 +272,10 @@ fn aic_ts_gvwt_a_project_override_carries_no_selections_of_its_own() {
     );
 
     set_project_impl(&h.store, &h.ai, "/dev/acme", None).unwrap();
-    assert_eq!(
-        resolve(),
-        ("claude_code".to_string(), Some("opus".into()), Some("high".into())),
-    );
+    assert_eq!(resolve(), ("claude_code".to_string(), Some("opus".into()), Some("high".into())),);
 
     set_project_impl(&h.store, &h.ai, "/dev/acme", Some("codex")).unwrap();
-    assert_eq!(
-        resolve(),
-        ("codex".to_string(), Some("gpt-5.1".into()), Some("low".into())),
-    );
+    assert_eq!(resolve(), ("codex".to_string(), Some("gpt-5.1".into()), Some("low".into())),);
     // Neither record was written by the moving of the project between them.
     let list = list_integrations_impl(&h.store, &h.ai).unwrap();
     let claude = find(&list, "claude_code");
@@ -311,10 +284,7 @@ fn aic_ts_gvwt_a_project_override_carries_no_selections_of_its_own() {
     assert_eq!(claude.selected_effort.as_deref(), Some("high"));
     let codex = find(&list, "codex");
     assert_eq!(codex.selected_model.as_deref(), Some("gpt-5"));
-    assert_eq!(
-        codex.model_overrides.get("work").map(String::as_str),
-        Some("gpt-5.1"),
-    );
+    assert_eq!(codex.model_overrides.get("work").map(String::as_str), Some("gpt-5.1"),);
     assert_eq!(codex.selected_effort.as_deref(), Some("low"));
 }
 
@@ -344,29 +314,22 @@ fn aic_ts_dcpe_every_level_the_cli_accepts_and_nothing_outside_the_sets() {
     // The two that were unreachable are selectable, and per kind.
     for level in ["xhigh", "max"] {
         let updated =
-            set_effort_impl(&h.store, &h.ai, "claude_code", Some("work"), Some(level))
-                .unwrap();
-        assert_eq!(
-            updated.effort_overrides.get("work").map(String::as_str),
-            Some(level),
-        );
+            set_effort_impl(&h.store, &h.ai, "claude_code", Some("work"), Some(level)).unwrap();
+        assert_eq!(updated.effort_overrides.get("work").map(String::as_str), Some(level),);
     }
     assert_eq!(
-        set_effort_impl(&h.store, &h.ai, "claude_code", Some("review"), Some("nope"))
-            .unwrap_err(),
+        set_effort_impl(&h.store, &h.ai, "claude_code", Some("review"), Some("nope")).unwrap_err(),
         ERR_UNKNOWN_EFFORT,
     );
     assert_eq!(
-        set_effort_impl(&h.store, &h.ai, "claude_code", Some("nope"), Some("low"))
-            .unwrap_err(),
+        set_effort_impl(&h.store, &h.ai, "claude_code", Some("nope"), Some("low")).unwrap_err(),
         ERR_UNKNOWN_TURN_KIND,
     );
     // Both wrong at once, on the same terms the model setter is held to:
     // the kind is checked first, so a caller that named neither set
     // correctly is told about the kind rather than about the effort.
     assert_eq!(
-        set_effort_impl(&h.store, &h.ai, "claude_code", Some("nope"), Some("nope"))
-            .unwrap_err(),
+        set_effort_impl(&h.store, &h.ai, "claude_code", Some("nope"), Some("nope")).unwrap_err(),
         ERR_UNKNOWN_TURN_KIND,
     );
     // No refusal stored anything.
@@ -388,14 +351,14 @@ fn aic_ts12_a_selection_the_refreshed_list_drops_falls_back_to_the_default() {
             success: true,
         },
     );
-    let h = harness(
-        fs,
-        runner.clone(),
-        Arc::new(FakeProber::default()),
-        FakeKeychain::new(),
-    );
-    verify_integration_impl(&h.store, &h.ai, "opencode", &cli_config_for("opencode", "/usr/bin/opencode"))
-        .unwrap();
+    let h = harness(fs, runner.clone(), Arc::new(FakeProber::default()), FakeKeychain::new());
+    verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "opencode",
+        &cli_config_for("opencode", "/usr/bin/opencode"),
+    )
+    .unwrap();
     set_model_impl(&h.store, &h.ai, "opencode", None, Some("model-a")).unwrap();
     set_effort_impl(&h.store, &h.ai, "opencode", None, None).unwrap();
 
@@ -442,23 +405,9 @@ fn aic_ts12_a_refresh_prunes_the_default_and_every_override_it_dropped() {
 
     set_model_impl(&h.store, &h.ai, "claude_agent_api", None, Some("m")).unwrap();
     set_model_impl(&h.store, &h.ai, "claude_agent_api", Some("review"), Some("m")).unwrap();
-    set_model_impl(
-        &h.store,
-        &h.ai,
-        "claude_agent_api",
-        Some("work"),
-        Some("n"),
-    )
-    .unwrap();
+    set_model_impl(&h.store, &h.ai, "claude_agent_api", Some("work"), Some("n")).unwrap();
     set_effort_impl(&h.store, &h.ai, "claude_agent_api", None, Some("high")).unwrap();
-    set_effort_impl(
-        &h.store,
-        &h.ai,
-        "claude_agent_api",
-        Some("review"),
-        Some("low"),
-    )
-    .unwrap();
+    set_effort_impl(&h.store, &h.ai, "claude_agent_api", Some("review"), Some("low")).unwrap();
 
     // The deployment is upgraded: it still offers `n`, and no longer `m`.
     *prober.models.lock().unwrap() = vec![ModelOption::new("n", "N")];
@@ -481,8 +430,5 @@ fn aic_ts12_a_refresh_prunes_the_default_and_every_override_it_dropped() {
     // AIC-FR-11: effort levels come from the descriptor, so a refreshed model
     // list moves neither the default effort nor any effort override.
     assert_eq!(rec.selected_effort.as_deref(), Some("high"));
-    assert_eq!(
-        rec.effort_overrides.get("review").map(String::as_str),
-        Some("low"),
-    );
+    assert_eq!(rec.effort_overrides.get("review").map(String::as_str), Some("low"),);
 }

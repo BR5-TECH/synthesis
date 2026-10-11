@@ -29,10 +29,7 @@ pub(super) fn behind_base(
     let Some(base) = branch_tip(main, &stream.base_branch) else {
         return (0, String::new(), Vec::new());
     };
-    let behind = main
-        .graph_ahead_behind(head, base)
-        .map(|(_, behind)| behind as u32)
-        .unwrap_or(0);
+    let behind = main.graph_ahead_behind(head, base).map(|(_, behind)| behind as u32).unwrap_or(0);
     (behind, base.to_string(), missing_commits(main, head, base))
 }
 
@@ -236,11 +233,8 @@ fn resolve_conflicts(
     let mut conflicting: Vec<String> = Vec::new();
     if let Ok(conflicts) = index.conflicts() {
         for conflict in conflicts.flatten() {
-            let entry = conflict
-                .our
-                .as_ref()
-                .or(conflict.their.as_ref())
-                .or(conflict.ancestor.as_ref());
+            let entry =
+                conflict.our.as_ref().or(conflict.their.as_ref()).or(conflict.ancestor.as_ref());
             let Some(entry) = entry else { continue };
             conflicting.push(String::from_utf8_lossy(&entry.path).into_owned());
         }
@@ -307,10 +301,7 @@ fn resolutions_from(
         // The mode travels with the content: a settled path that is executable
         // or a symbolic link is not a plain file, and a rebase that rewrote it
         // as one would break the tree it landed.
-        into.insert(
-            path.clone(),
-            entry.map(|entry| (entry.id(), entry.filemode() as u32)),
-        );
+        into.insert(path.clone(), entry.map(|entry| (entry.id(), entry.filemode() as u32)));
     }
 }
 
@@ -378,10 +369,7 @@ pub(super) fn commit_merge_into_stream(
     pinned: git2::Oid,
     tree_oid: git2::Oid,
 ) -> Result<(), String> {
-    let message = format!(
-        "Merge {} into {}",
-        stream.base_branch, stream.branch
-    );
+    let message = format!("Merge {} into {}", stream.base_branch, stream.branch);
     let parents = [head, pinned];
     write_stream_tip(main, stream, tree_oid, &parents, &message)
 }
@@ -421,10 +409,8 @@ pub(super) fn apply_replay(
     let parents: Vec<git2::Oid> = tip_commit.parent_ids().collect();
     let message = tip_commit.message().unwrap_or_default().to_string();
     let tree = main.find_tree(tree_oid).map_err(|e| e.to_string())?;
-    let parent_commits: Vec<git2::Commit> = parents
-        .iter()
-        .filter_map(|oid| main.find_commit(*oid).ok())
-        .collect();
+    let parent_commits: Vec<git2::Commit> =
+        parents.iter().filter_map(|oid| main.find_commit(*oid).ok()).collect();
     // A parent this repository cannot open would silently make a commit with
     // less history than the replay built, so it is a refusal rather than a
     // truncation.
@@ -488,10 +474,8 @@ fn write_stream_tip(
     let stream_repo = open_stream_worktree(main, stream)?;
     let tree = main.find_tree(tree_oid).map_err(|e| e.to_string())?;
     let signature = main.signature().map_err(|e| e.to_string())?;
-    let parent_commits: Vec<git2::Commit> = parents
-        .iter()
-        .filter_map(|oid| main.find_commit(*oid).ok())
-        .collect();
+    let parent_commits: Vec<git2::Commit> =
+        parents.iter().filter_map(|oid| main.find_commit(*oid).ok()).collect();
     if parent_commits.len() != parents.len() {
         return Err(ERR_UNKNOWN_STREAM.to_string());
     }
@@ -522,9 +506,7 @@ fn checkout_and_move(
     // along, so the result reads back as the committed state it is rather than
     // as an uncommitted change of the author's own.
     opts.force().update_index(true);
-    stream_repo
-        .checkout_tree(tree.as_object(), Some(&mut opts))
-        .map_err(|e| e.to_string())?;
+    stream_repo.checkout_tree(tree.as_object(), Some(&mut opts)).map_err(|e| e.to_string())?;
     let reference = format!("refs/heads/{}", stream.branch);
     main.reference(&reference, new_tip, true, "synthesis: work stream update")
         .map_err(|e| e.to_string())?;
@@ -542,9 +524,8 @@ pub(super) fn content_differences(
     right: git2::Oid,
 ) -> Vec<String> {
     let mut paths: Vec<String> = Vec::new();
-    let trees = main
-        .find_tree(left)
-        .and_then(|left| main.find_tree(right).map(|right| (left, right)));
+    let trees =
+        main.find_tree(left).and_then(|left| main.find_tree(right).map(|right| (left, right)));
     let Ok((left, right)) = trees else {
         return vec![String::new()];
     };

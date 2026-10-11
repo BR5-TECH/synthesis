@@ -14,12 +14,7 @@ fn ts_declared_name_rides_on_a_skill_node() {
         ".claude/skills/code-review/SKILL.md",
         "---\nname: Code review\ndescription: d\n---\n\n# Body\n",
     );
-    let tree = build_tree(
-        "p",
-        &skill_entries(),
-        &LibraryAssignments::default(),
-        &content,
-    );
+    let tree = build_tree("p", &skill_entries(), &LibraryAssignments::default(), &content);
 
     let skill = find(&tree, ".claude/skills/code-review/SKILL.md").unwrap();
     assert_eq!(skill.artifact_type, Some(ArtifactType::Skill));
@@ -39,12 +34,7 @@ fn ts_a_skill_declaring_no_usable_name_carries_none() {
         "",
     ] {
         let content = facts_for(".claude/skills/code-review/SKILL.md", body);
-        let tree = build_tree(
-            "p",
-            &skill_entries(),
-            &LibraryAssignments::default(),
-            &content,
-        );
+        let tree = build_tree("p", &skill_entries(), &LibraryAssignments::default(), &content);
         let skill = find(&tree, ".claude/skills/code-review/SKILL.md").unwrap();
         assert_eq!(skill.display_name, None, "for body {body:?}");
     }
@@ -68,19 +58,11 @@ fn ts_declared_name_reads_only_the_files_that_name_themselves() {
 
     let reads = asked.lock().unwrap().clone();
     // The skill's own file is read once, for its name.
-    assert_eq!(
-        reads
-            .iter()
-            .filter(|r| *r == ".claude/skills/code-review/SKILL.md")
-            .count(),
-        1,
-    );
+    assert_eq!(reads.iter().filter(|r| *r == ".claude/skills/code-review/SKILL.md").count(), 1,);
     // The file beside it is path-classified, so neither the tiebreak nor the
     // name lookup opens it. (`prompts/gather.md` is read by the ASC-FR-04
     // tiebreak, which is what that closure has always been for.)
-    assert!(!reads
-        .iter()
-        .any(|r| r == ".claude/skills/code-review/references/rules.md"));
+    assert!(!reads.iter().any(|r| r == ".claude/skills/code-review/references/rules.md"));
 }
 
 #[test]

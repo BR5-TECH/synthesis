@@ -17,9 +17,7 @@ pub fn stream_on_branch<R: tauri::Runtime>(
     let store = store_for(app)?;
     let fs = access_for(app)?;
     let key = project_key_of(app);
-    store::list_streams(&fs, &store, &key)
-        .into_iter()
-        .find(|stream| stream.branch == branch)
+    store::list_streams(&fs, &store, &key).into_iter().find(|stream| stream.branch == branch)
 }
 
 /// WTC-FR-RDVK: the stream whose working copy is the directory at `path`, if

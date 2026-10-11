@@ -40,9 +40,7 @@ impl FsAccessBuilder {
 /// Both spellings are carried for the reason the allowlist carries them. Every
 /// owned path is in the builder's `roots` as well, so the allowlist's own loop
 /// has already established that each one exists and is a directory.
-pub(super) fn canonicalize_owned(
-    owned: &[PathBuf],
-) -> Result<Vec<PathBuf>, FsAccessBuildError> {
+pub(super) fn canonicalize_owned(owned: &[PathBuf]) -> Result<Vec<PathBuf>, FsAccessBuildError> {
     let mut out = Vec::with_capacity(owned.len() + 1);
     for raw in owned {
         let canonical = super::access::canonicalize_root(raw)?;
@@ -85,13 +83,8 @@ impl FsAccess {
     /// is what keeps these operations off an agent session (FSA-FR-29).
     pub(super) fn tree_target(&self, path: &Path, roots: &[PathBuf]) -> FsResult<PathBuf> {
         let contained = self.contain(path)?;
-        let escapes = || FsError::EscapesAllowedRoots {
-            path: contained.clone(),
-        };
-        let root = roots
-            .iter()
-            .find(|root| contained.starts_with(root))
-            .ok_or_else(escapes)?;
+        let escapes = || FsError::EscapesAllowedRoots { path: contained.clone() };
+        let root = roots.iter().find(|root| contained.starts_with(root)).ok_or_else(escapes)?;
         // Under a root, never the root. Removing the root would take the
         // instance's own allowlisted directory with it.
         if contained == *root {
@@ -113,9 +106,7 @@ pub(super) fn remove_unlinking(target: &Path) -> FsResult<()> {
     let meta = match fs::symlink_metadata(target) {
         Ok(m) => m,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return Err(FsError::NotFound {
-                path: target.to_path_buf(),
-            })
+            return Err(FsError::NotFound { path: target.to_path_buf() })
         }
         Err(e) => return Err(FsError::Io(e)),
     };

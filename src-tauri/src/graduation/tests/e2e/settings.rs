@@ -48,11 +48,8 @@ pub(crate) fn write_raw_setting(fx: &Fixture, setting: Setting, value: i64) {
 fn write_raw_setting_at(root: &Path, setting: Setting, value: Option<i64>) {
     let fs = guard(root);
     let path = root.join(".synthesis").join("project.toml");
-    let mut table: toml::Table = fs
-        .read_text(&path)
-        .ok()
-        .and_then(|text| toml::from_str(&text).ok())
-        .unwrap_or_default();
+    let mut table: toml::Table =
+        fs.read_text(&path).ok().and_then(|text| toml::from_str(&text).ok()).unwrap_or_default();
     match value {
         Some(value) => {
             table.insert(key_of(setting).to_string(), toml::Value::Integer(value));
@@ -72,10 +69,7 @@ fn write_raw_setting_at(root: &Path, setting: Setting, value: Option<i64>) {
 /// terms FSA-FR-19 binds the backend to.
 pub(crate) fn guard(root: &Path) -> crate::fs::FsAccess {
     let root: PathBuf = root.to_path_buf();
-    crate::fs::FsAccess::builder()
-        .allow_root(&root)
-        .build()
-        .expect("a real directory")
+    crate::fs::FsAccess::builder().allow_root(&root).build().expect("a real directory")
 }
 
 /// The revision a working copy stands at.

@@ -5,7 +5,10 @@ use super::*;
 /// CMS-FR-23 / CMS-FR-31: every thread in the artifact's log as it stands on disk
 /// right now. No thread is withheld — which of them the rail renders where is its
 /// decision (CMT-FR-17, CMT-FR-19).
-pub fn list_fragment_discussions_in(root: &crate::fs::RootFs, artifact_id: &str) -> Vec<Discussion> {
+pub fn list_fragment_discussions_in(
+    root: &crate::fs::RootFs,
+    artifact_id: &str,
+) -> Vec<Discussion> {
     fold_events(artifact_id, read_events(root, artifact_id))
 }
 
@@ -37,10 +40,9 @@ pub struct DiscussionListItem {
 pub(super) fn recorded_artifact_path(events: &[Event], owner_is_draft: bool) -> Option<&str> {
     events.iter().find_map(|e| match &e.body {
         EventBody::ThreadOpened { artifact_path, .. } => Some(artifact_path.as_str()),
-        EventBody::DiscussionOpened {
-            fragment_target: Some(fragment),
-            ..
-        } if owner_is_draft == matches!(fragment.owner, DiscussionTarget::Draft { .. }) => {
+        EventBody::DiscussionOpened { fragment_target: Some(fragment), .. }
+            if owner_is_draft == matches!(fragment.owner, DiscussionTarget::Draft { .. }) =>
+        {
             Some(fragment.path.as_str())
         }
         EventBody::DiscussionOpened {
@@ -126,10 +128,7 @@ pub fn list_all_artifact_discussions_in(
     }
 
     let index: HashMap<String, String> = if needs_path_index(&logs) {
-        scanning::file_rel_paths(worktree)
-            .into_iter()
-            .map(|rel| (log_id(&rel), rel))
-            .collect()
+        scanning::file_rel_paths(worktree).into_iter().map(|rel| (log_id(&rel), rel)).collect()
     } else {
         HashMap::new()
     };
@@ -163,10 +162,7 @@ pub fn list_all_artifact_discussions_in(
             fold_events(artifact_id, events.clone())
         };
         for thread in threads {
-            out.push(DiscussionListItem {
-                discussion: thread,
-                owner_unavailable: unresolved,
-            });
+            out.push(DiscussionListItem { discussion: thread, owner_unavailable: unresolved });
         }
     }
 
@@ -200,31 +196,37 @@ pub(super) fn sort_items(items: &mut [DiscussionListItem]) {
 /// caller: a `draft_id` of `..` composes a path that normalises to somewhere
 /// still inside the store, so the escape gate alone would admit it, and one of
 /// the operations below is a recursive delete.
-pub(super) fn draft_comments_dir(root: &crate::fs::RootFs, draft_id: &str) -> Result<PathBuf, String> {
+pub(super) fn draft_comments_dir(
+    root: &crate::fs::RootFs,
+    draft_id: &str,
+) -> Result<PathBuf, String> {
     if !is_storage_id(draft_id) {
         return Err(ERR_DRAFT_NOT_FOUND.to_string());
     }
-    fsa::resolve_under(
-        root,
-        format!("{DRAFT_COMMENTS_ROOT}/{draft_id}/{DRAFT_COMMENTS_SUBDIR}"),
-    )
-    .map_err(|e| e.to_string())
+    fsa::resolve_under(root, format!("{DRAFT_COMMENTS_ROOT}/{draft_id}/{DRAFT_COMMENTS_SUBDIR}"))
+        .map_err(|e| e.to_string())
 }
 
 /// CMS-FR-39: the whole of one draft's conversation storage, which
 /// `delete_draft_comments` removes in one recursive step.
-pub(super) fn draft_storage_dir(root: &crate::fs::RootFs, draft_id: &str) -> Result<PathBuf, String> {
+pub(super) fn draft_storage_dir(
+    root: &crate::fs::RootFs,
+    draft_id: &str,
+) -> Result<PathBuf, String> {
     if !is_storage_id(draft_id) {
         return Err(ERR_DRAFT_NOT_FOUND.to_string());
     }
-    fsa::resolve_under(root, format!("{DRAFT_COMMENTS_ROOT}/{draft_id}"))
-        .map_err(|e| e.to_string())
+    fsa::resolve_under(root, format!("{DRAFT_COMMENTS_ROOT}/{draft_id}")).map_err(|e| e.to_string())
 }
 
 /// The threads of one draft file, folded from its `draft`-scoped log
 /// (CMS-FR-36 / CMS-FR-38). The filename derivation is the same one-way
 /// derivation an artifact's uses, applied to the **draft-relative** path.
-pub fn list_draft_fragment_discussions_in(root: &crate::fs::RootFs, draft_id: &str, file_rel: &str) -> Vec<Discussion> {
+pub fn list_draft_fragment_discussions_in(
+    root: &crate::fs::RootFs,
+    draft_id: &str,
+    file_rel: &str,
+) -> Vec<Discussion> {
     let Ok(dir) = draft_comments_dir(root, draft_id) else {
         // The draft is gone, or was never there: no threads rather than an
         // enumeration of somewhere else (DRS-FR-36).
@@ -236,20 +238,14 @@ pub fn list_draft_fragment_discussions_in(root: &crate::fs::RootFs, draft_id: &s
     let Ok(text) = root.read_text(&path) else {
         return Vec::new();
     };
-    fold_events_for(
-        FoldTarget::DraftFile { draft_id, file_rel },
-        parse_events(&text),
-    )
+    fold_events_for(FoldTarget::DraftFile { draft_id, file_rel }, parse_events(&text))
 }
 
 /// CMS-FR-55: where an artifact's reserved discussion log lives — beside the
 /// anchored log its passages' threads append to, under the same committed folder,
 /// told apart by the reserved marker alone.
 pub(super) fn artifact_discussion_log_rel(artifact_id: &str) -> String {
-    format!(
-        "{COMMENTS_REL}/{}{DISCUSSION_LOG_MARKER}.jsonl",
-        log_id(artifact_id)
-    )
+    format!("{COMMENTS_REL}/{}{DISCUSSION_LOG_MARKER}.jsonl", log_id(artifact_id))
 }
 
 /// CMS-FR-55 / CMS-FR-58: every discussion about one artifact, folded from its
@@ -262,10 +258,7 @@ pub fn fold_artifact_discussion(root: &crate::fs::RootFs, artifact_id: &str) -> 
         // No log yet is simply no discussions; the first append creates it.
         return Vec::new();
     };
-    fold_events_for(
-        FoldTarget::ArtifactDiscussion { artifact_id },
-        parse_events(&text),
-    )
+    fold_events_for(FoldTarget::ArtifactDiscussion { artifact_id }, parse_events(&text))
 }
 
 /// CMS-FR-37: the folder holding one note's conversation — its log and its
@@ -310,9 +303,7 @@ pub(super) fn is_note_id(note_id: &str) -> bool {
 pub(super) fn is_storage_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
-        && id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 /// The absolute path of a note's conversation folder, behind the FSA-FR-10
@@ -321,7 +312,10 @@ pub(super) fn is_storage_id(id: &str) -> bool {
 /// The gate is load-bearing here rather than belt-and-braces: unlike a
 /// `<log-id>`, a note id reaches this from the frontend as caller-supplied text,
 /// so a `..` segment would otherwise name any directory the project holds.
-pub(super) fn note_comments_dir(root: &crate::fs::RootFs, note_id: &str) -> Result<PathBuf, String> {
+pub(super) fn note_comments_dir(
+    root: &crate::fs::RootFs,
+    note_id: &str,
+) -> Result<PathBuf, String> {
     if !is_note_id(note_id) {
         return Err(ERR_NOTE_NOT_FOUND.to_string());
     }
@@ -329,7 +323,10 @@ pub(super) fn note_comments_dir(root: &crate::fs::RootFs, note_id: &str) -> Resu
 }
 
 /// CMS-FR-55: the absolute path of a note's one reserved discussion log.
-pub(super) fn note_discussion_log_path(root: &crate::fs::RootFs, note_id: &str) -> Result<PathBuf, String> {
+pub(super) fn note_discussion_log_path(
+    root: &crate::fs::RootFs,
+    note_id: &str,
+) -> Result<PathBuf, String> {
     fsa::resolve_under(note_comments_dir(root, note_id)?, DISCUSSION_LOG_NAME)
         .map_err(|e| e.to_string())
 }
@@ -361,7 +358,10 @@ pub fn note_discussion_of(root: &crate::fs::RootFs, note_id: &str) -> Option<Dis
 
 /// CMS-FR-55: the absolute path of a draft's one reserved discussion log,
 /// inside that draft's own comments folder wherever it is filed (CMS-FR-37).
-pub(super) fn discussion_log_path(root: &crate::fs::RootFs, draft_id: &str) -> Result<PathBuf, String> {
+pub(super) fn discussion_log_path(
+    root: &crate::fs::RootFs,
+    draft_id: &str,
+) -> Result<PathBuf, String> {
     fsa::resolve_under(draft_comments_dir(root, draft_id)?, DISCUSSION_LOG_NAME)
         .map_err(|e| e.to_string())
 }
@@ -387,7 +387,10 @@ pub fn fold_discussion(root: &crate::fs::RootFs, draft_id: &str) -> Vec<Discussi
 /// A draft's log directory is small and holds one draft's logs alone, so this
 /// walks it rather than deriving a filename per file: the derivation is one-way
 /// (CMS-FR-02), and the caller here may hold a discussion id rather than a path.
-pub fn list_all_draft_fragment_discussions_in(root: &crate::fs::RootFs, draft_id: &str) -> Vec<Discussion> {
+pub fn list_all_draft_fragment_discussions_in(
+    root: &crate::fs::RootFs,
+    draft_id: &str,
+) -> Vec<Discussion> {
     let Ok(dir) = draft_comments_dir(root, draft_id) else {
         return Vec::new();
     };
@@ -416,10 +419,7 @@ pub fn list_all_draft_fragment_discussions_in(root: &crate::fs::RootFs, draft_id
             continue;
         };
         out.extend(fold_events_for(
-            FoldTarget::DraftFile {
-                draft_id,
-                file_rel: &recorded,
-            },
+            FoldTarget::DraftFile { draft_id, file_rel: &recorded },
             events.clone(),
         ));
     }
@@ -472,11 +472,8 @@ fn stored_draft_ids(root: &crate::fs::RootFs) -> Vec<String> {
     let Ok(entries) = root.list_dir(&dir) else {
         return Vec::new();
     };
-    let mut ids: Vec<String> = entries
-        .into_iter()
-        .filter(|e| is_storage_id(&e.name))
-        .map(|e| e.name)
-        .collect();
+    let mut ids: Vec<String> =
+        entries.into_iter().filter(|e| is_storage_id(&e.name)).map(|e| e.name).collect();
     ids.sort();
     ids
 }
@@ -494,14 +491,9 @@ pub fn list_all_discussions_in(
     let mut out = list_all_artifact_discussions_in(root, worktree);
     for draft_id in stored_draft_ids(root) {
         let owner_unavailable = crate::drafts::read_draft_record(worktree, &draft_id).is_err();
-        let target = DiscussionTarget::Draft {
-            draft_id: draft_id.clone(),
-        };
+        let target = DiscussionTarget::Draft { draft_id: draft_id.clone() };
         for discussion in list_discussions_in(root, &target) {
-            out.push(DiscussionListItem {
-                discussion,
-                owner_unavailable,
-            });
+            out.push(DiscussionListItem { discussion, owner_unavailable });
         }
     }
     let notes_dir = fsa::resolve_under(root, format!("{COMMENTS_REL}/{NOTES_SUBDIR}")).ok();

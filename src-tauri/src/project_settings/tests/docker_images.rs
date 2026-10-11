@@ -19,9 +19,7 @@ fn every_vendor_has_a_status_and_a_saved_entry_is_committed() {
         statuses.iter().map(|s| s.vendor.as_str()).collect::<Vec<_>>(),
         vec!["claude_code", "codex", "opencode"]
     );
-    assert!(statuses
-        .iter()
-        .all(|s| s.configuration == images::VendorImageConfiguration::Unset));
+    assert!(statuses.iter().all(|s| s.configuration == images::VendorImageConfiguration::Unset));
 
     save_project_vendor_image_to(
         &root,
@@ -30,6 +28,7 @@ fn every_vendor_has_a_status_and_a_saved_entry_is_committed() {
             image_name: "acme/agent".into(),
             tag: Some("2.1".into()),
             dockerfile: None,
+            build_context: None,
         },
     )
     .unwrap();
@@ -58,6 +57,7 @@ fn a_refused_docker_entry_leaves_the_store_untouched() {
             image_name: "acme/agent".into(),
             tag: None,
             dockerfile: Some("docker/agent.Dockerfile".into()),
+            build_context: None,
         },
     )
     .unwrap();
@@ -65,10 +65,7 @@ fn a_refused_docker_entry_leaves_the_store_untouched() {
 
     for (dockerfile, expected) in [
         ("/etc/Dockerfile", images::ERR_DOCKERFILE_ABSOLUTE),
-        (
-            "../outside/Dockerfile",
-            images::ERR_DOCKERFILE_ESCAPES_PROJECT_ROOT,
-        ),
+        ("../outside/Dockerfile", images::ERR_DOCKERFILE_ESCAPES_PROJECT_ROOT),
         ("docker", images::ERR_DOCKERFILE_NOT_A_REGULAR_FILE),
     ] {
         assert_eq!(
@@ -79,6 +76,7 @@ fn a_refused_docker_entry_leaves_the_store_untouched() {
                     image_name: "acme/agent".into(),
                     tag: None,
                     dockerfile: Some(dockerfile.into()),
+                    build_context: None,
                 },
             )
             .unwrap_err(),
@@ -93,6 +91,7 @@ fn a_refused_docker_entry_leaves_the_store_untouched() {
                 image_name: "   ".into(),
                 tag: None,
                 dockerfile: None,
+                build_context: None,
             },
         )
         .unwrap_err(),
@@ -118,6 +117,7 @@ fn a_deleted_dockerfile_is_reported_rather_than_rewritten() {
             image_name: "acme/agent".into(),
             tag: None,
             dockerfile: Some("docker/agent.Dockerfile".into()),
+            build_context: None,
         },
     )
     .unwrap();
@@ -129,15 +129,9 @@ fn a_deleted_dockerfile_is_reported_rather_than_rewritten() {
     std::fs::remove_file(dir.path().join("docker/agent.Dockerfile")).unwrap();
     let status = &load_project_docker_images_from(&root).unwrap()[1];
     assert_eq!(status.dockerfile_state, images::DockerfileState::Invalid);
-    assert_eq!(
-        status.dockerfile_problem,
-        Some(images::DockerfileProblem::NotARegularFile)
-    );
+    assert_eq!(status.dockerfile_problem, Some(images::DockerfileProblem::NotARegularFile));
     assert_eq!(status.dockerfile.as_deref(), Some("docker/agent.Dockerfile"));
-    assert_eq!(
-        status.graduation_state,
-        images::VendorGraduationState::DockerfileInvalid
-    );
+    assert_eq!(status.graduation_state, images::VendorGraduationState::DockerfileInvalid);
 }
 
 /// PSS-FR-23 (PSS-FR-22, PSS-FR-17): an image entry and every other
@@ -150,7 +144,7 @@ fn an_image_entry_and_the_rest_of_the_store_carry_each_other_through() {
         ProjectConfig {
             line_endings: LineEndings::Crlf,
             draft_template: Some("# Context\n".to_string()),
-                        ..Default::default()
+            ..Default::default()
         },
     )
     .unwrap();
@@ -161,6 +155,7 @@ fn an_image_entry_and_the_rest_of_the_store_carry_each_other_through() {
             image_name: "acme/agent".into(),
             tag: None,
             dockerfile: None,
+            build_context: None,
         },
     )
     .unwrap();
@@ -173,17 +168,11 @@ fn an_image_entry_and_the_rest_of_the_store_carry_each_other_through() {
     // entry through unchanged.
     save_project_config_to(
         &root,
-        ProjectConfig {
-            line_endings: LineEndings::Lf,
-            draft_template: None,
-                        ..Default::default()
-        },
+        ProjectConfig { line_endings: LineEndings::Lf, draft_template: None, ..Default::default() },
     )
     .unwrap();
     assert_eq!(
-        load_project_docker_images_from(&root).unwrap()[0]
-            .image_reference
-            .as_deref(),
+        load_project_docker_images_from(&root).unwrap()[0].image_reference.as_deref(),
         Some("acme/agent")
     );
 }
@@ -204,13 +193,11 @@ fn an_execution_resolves_only_what_the_project_commits() {
             image_name: "acme/agent".into(),
             tag: Some("2.1".into()),
             dockerfile: None,
+            build_context: None,
         },
     )
     .unwrap();
-    assert_eq!(
-        resolve_project_vendor_image(&root, "claude_code").unwrap(),
-        "acme/agent:2.1"
-    );
+    assert_eq!(resolve_project_vendor_image(&root, "claude_code").unwrap(), "acme/agent:2.1");
     // No fallback to any shipped image: another vendor still resolves
     // nothing.
     assert_eq!(
@@ -233,6 +220,7 @@ fn image_entries_resolve_per_worktree_and_a_damaged_store_is_typed() {
             image_name: "acme/agent".into(),
             tag: Some("2.1".into()),
             dockerfile: None,
+            build_context: None,
         },
     )
     .unwrap();
@@ -244,10 +232,7 @@ fn image_entries_resolve_per_worktree_and_a_damaged_store_is_typed() {
 
     std::fs::create_dir_all(b_dir.path().join(".synthesis")).unwrap();
     std::fs::write(b_dir.path().join(".synthesis/project.toml"), "not = = toml").unwrap();
-    assert_eq!(
-        load_project_docker_images_from(&b).unwrap_err(),
-        ERR_MALFORMED_PROJECT_CONFIG
-    );
+    assert_eq!(load_project_docker_images_from(&b).unwrap_err(), ERR_MALFORMED_PROJECT_CONFIG);
     assert_eq!(
         resolve_project_vendor_image(&b, "codex").unwrap_err(),
         ERR_MALFORMED_PROJECT_CONFIG
@@ -268,10 +253,48 @@ fn an_unknown_vendor_is_refused() {
                 image_name: "acme/agent".into(),
                 tag: None,
                 dockerfile: None,
+                build_context: None,
             },
         )
         .unwrap_err(),
         images::ERR_UNKNOWN_VENDOR
     );
     assert!(!dir.path().join(".synthesis/project.toml").exists());
+}
+
+// PSS-FR-22, PSS-FR-BCTX: a saved context is committed with the entry, a
+// refused one writes nothing, and a folder outside the project is accepted as
+// given.
+#[test]
+fn a_build_context_is_committed_with_the_entry_and_a_bad_one_writes_nothing() {
+    let (dir, root) = docker_root();
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join("ctx")).unwrap();
+    let entry = |context: &str| images::ProjectVendorImage {
+        image_name: "acme/agent".into(),
+        tag: None,
+        dockerfile: None,
+        build_context: Some(context.to_string()),
+    };
+
+    let saved = save_project_vendor_image_to(&root, "claude_code", &entry("ctx")).unwrap();
+    assert_eq!(saved.build_context.as_deref(), Some("ctx"));
+    assert_eq!(saved.build_context_state, images::BuildContextState::Valid);
+    let public = std::fs::read_to_string(dir.path().join(".synthesis/project.toml")).unwrap();
+    assert!(public.contains("buildContext = \"ctx\""), "{public}");
+
+    let before = public.clone();
+    assert_eq!(
+        save_project_vendor_image_to(&root, "claude_code", &entry("nope")).unwrap_err(),
+        images::ERR_BUILD_CONTEXT_NOT_A_DIRECTORY
+    );
+    let after = std::fs::read_to_string(dir.path().join(".synthesis/project.toml")).unwrap();
+    assert_eq!(before, after, "a refused save writes nothing");
+
+    let absolute = outside.path().to_str().unwrap();
+    let saved = save_project_vendor_image_to(&root, "codex", &entry(absolute)).unwrap();
+    assert_eq!(saved.build_context.as_deref(), Some(absolute));
+    let statuses = load_project_docker_images_from(&root).unwrap();
+    assert_eq!(statuses[0].build_context.as_deref(), Some("ctx"));
+    assert_eq!(statuses[1].build_context.as_deref(), Some(absolute));
 }

@@ -87,10 +87,7 @@ pub(super) fn walk_drafts_root(
         if !is_valid_folder_name(&entry.name) {
             continue;
         }
-        folders.push(DraftFolder {
-            path: child_rel.clone(),
-            parent: rel.to_string(),
-        });
+        folders.push(DraftFolder { path: child_rel.clone(), parent: rel.to_string() });
         if depth + 1 < MAX_FOLDER_DEPTH {
             walk_drafts_root(root, &child, &child_rel, depth + 1, folders, drafts);
         }
@@ -175,9 +172,9 @@ pub(super) fn holds_only_draft_storage(root: &fs::RootFs, dir: &Path) -> bool {
         return false;
     };
     !entries.is_empty()
-        && entries.iter().all(|e| {
-            e.kind == fs::EntryKind::Dir && HUSK_STORAGE_DIRS.contains(&e.name.as_str())
-        })
+        && entries
+            .iter()
+            .all(|e| e.kind == fs::EntryKind::Dir && HUSK_STORAGE_DIRS.contains(&e.name.as_str()))
 }
 
 /// DRS-FR-37: the folders a husk may hold and still be a draft's storage.
@@ -229,7 +226,12 @@ pub(super) fn merge_draft_storage(root: &fs::RootFs, husk_rel: &str, dest_rel: &
 /// over a directory tree some other tool left there would overflow the stack and
 /// abort the process, from a path that runs every time the panel lists. Returns
 /// whether anything on disk moved.
-pub(super) fn merge_dir_into(root: &fs::RootFs, from_rel: &str, to_rel: &str, depth: usize) -> bool {
+pub(super) fn merge_dir_into(
+    root: &fs::RootFs,
+    from_rel: &str,
+    to_rel: &str,
+    depth: usize,
+) -> bool {
     if depth >= MAX_FOLDER_DEPTH {
         return false;
     }
@@ -259,11 +261,8 @@ pub(super) fn merge_dir_into(root: &fs::RootFs, from_rel: &str, to_rel: &str, de
             let Ok(text) = root.read_text(base.join(&src_rel)) else {
                 continue;
             };
-            let lines: Vec<String> = text
-                .lines()
-                .filter(|l| !l.trim().is_empty())
-                .map(str::to_string)
-                .collect();
+            let lines: Vec<String> =
+                text.lines().filter(|l| !l.trim().is_empty()).map(str::to_string).collect();
             if lines.is_empty() || root.append_lines(base.join(&dst_rel), &lines).is_ok() {
                 moved |= root.delete_under(&base, &src_rel, false).is_ok();
             }
@@ -272,10 +271,9 @@ pub(super) fn merge_dir_into(root: &fs::RootFs, from_rel: &str, to_rel: &str, de
         // Content-addressed, so the same name is the same bytes — verified
         // rather than assumed, because dropping a file on a naming convention
         // alone is how a repair becomes a loss.
-        if let (Ok(a), Ok(b)) = (
-            root.read_bytes(base.join(&src_rel)),
-            root.read_bytes(base.join(&dst_rel)),
-        ) {
+        if let (Ok(a), Ok(b)) =
+            (root.read_bytes(base.join(&src_rel)), root.read_bytes(base.join(&dst_rel)))
+        {
             if a == b {
                 moved |= root.delete_under(&base, &src_rel, false).is_ok();
             }
@@ -291,10 +289,7 @@ pub(super) fn find_draft(root: &fs::RootFs, id: &str) -> Result<DraftAt, String>
         return Err(format!("invalid draft id: {id:?}"));
     }
     let (_, drafts) = scan_drafts_root(root);
-    drafts
-        .into_iter()
-        .find(|d| d.id == id)
-        .ok_or_else(|| format!("draft not found: {id}"))
+    drafts.into_iter().find(|d| d.id == id).ok_or_else(|| format!("draft not found: {id}"))
 }
 
 /// The directory a draft filed in `folder` would sit at, through the escape
@@ -471,7 +466,11 @@ pub(super) fn name_taken(root: &fs::RootFs, dir: &Path, name: &str) -> bool {
 }
 
 /// Absolute on-disk path of a draft file, through the escape gate (DRS-FR-16).
-pub(super) fn draft_file_path(root: &crate::fs::RootFs, id: &str, path: &str) -> Result<PathBuf, String> {
+pub(super) fn draft_file_path(
+    root: &crate::fs::RootFs,
+    id: &str,
+    path: &str,
+) -> Result<PathBuf, String> {
     draft_file_path_in(root, &draft_dir(root, id)?, path)
 }
 
@@ -488,7 +487,11 @@ pub(super) fn draft_file_path(root: &crate::fs::RootFs, id: &str, path: &str) ->
 /// level up redirects everything beneath it just as effectively. A component
 /// that does not exist yet is not a link and is skipped, which is what lets a
 /// creation resolve its own target.
-pub(super) fn reject_symlinked_components(root: &fs::RootFs, files_dir: &Path, path: &str) -> Result<(), String> {
+pub(super) fn reject_symlinked_components(
+    root: &fs::RootFs,
+    files_dir: &Path,
+    path: &str,
+) -> Result<(), String> {
     let mut current = files_dir.to_path_buf();
     for segment in path.split('/') {
         current.push(segment);
@@ -504,4 +507,3 @@ pub(super) fn reject_symlinked_components(root: &fs::RootFs, files_dir: &Path, p
 // ---------------------------------------------------------------------------
 // Record I/O
 // ---------------------------------------------------------------------------
-

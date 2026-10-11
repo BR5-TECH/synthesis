@@ -36,9 +36,7 @@ impl Authority {
         if principal.is_administrator || allowed {
             Ok(())
         } else {
-            Err(DomainError::Forbidden {
-                permission: action.to_string(),
-            })
+            Err(DomainError::Forbidden { permission: action.to_string() })
         }
     }
 
@@ -72,9 +70,7 @@ impl Authority {
     /// Whether the user owns the target or holds any active membership of it.
     pub fn belongs(&self, user_id: UserId, target_type: TargetType, target_id: uuid::Uuid) -> bool {
         self.owns(user_id, target_type, target_id)
-            || self
-                .membership_role(user_id, target_type, target_id)
-                .is_some()
+            || self.membership_role(user_id, target_type, target_id).is_some()
     }
 
     /// The role of the user's active membership of the target, when it holds one.

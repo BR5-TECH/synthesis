@@ -52,7 +52,10 @@ fn an_attempt_moves_between_its_two_non_terminal_states() {
     let id = draft(&root, "widget");
     flow::open_attempt(&root, &id, &origin(), "pub-1".into()).unwrap();
     flow::set_attempt_state(&root, &id, AttemptState::AwaitingChoice).unwrap();
-    assert_eq!(store::read_store(&root, &id).unwrap().attempt.unwrap().state, AttemptState::AwaitingChoice);
+    assert_eq!(
+        store::read_store(&root, &id).unwrap().attempt.unwrap().state,
+        AttemptState::AwaitingChoice
+    );
     flow::set_attempt_state(&root, &id, AttemptState::Open).unwrap();
     let store = store::read_store(&root, &id).unwrap();
     assert_eq!(store.attempt.unwrap().state, AttemptState::Open);
@@ -87,8 +90,7 @@ fn completing_an_attempt_appends_one_record_and_clears_it() {
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "widget");
     for (index, number) in [11u64, 12, 13].iter().enumerate() {
-        let attempt =
-            flow::open_attempt(&root, &id, &origin(), format!("pub-{index}")).unwrap();
+        let attempt = flow::open_attempt(&root, &id, &origin(), format!("pub-{index}")).unwrap();
         let issue = IssueRef {
             number: *number,
             url: format!("https://github.com/acme/widgets/issues/{number}"),
@@ -157,7 +159,10 @@ fn the_issue_body_is_the_prompt_plus_one_marker_line() {
 
     let content = flow::issue_content(&root, &id, &first).unwrap();
     assert_eq!(content.title, "Widget window");
-    assert_eq!(content.body, format!("# Widget\n\nDo the thing.\n\n<!-- synthesis-publication-marker: {first} -->"));
+    assert_eq!(
+        content.body,
+        format!("# Widget\n\nDo the thing.\n\n<!-- synthesis-publication-marker: {first} -->")
+    );
     // The marker never reaches the prompt itself.
     let prompt = crate::drafts::read_draft_prompt(&root, &id).unwrap();
     assert!(!prompt.content.contains(&first));
@@ -170,11 +175,10 @@ fn the_issue_body_is_the_prompt_plus_one_marker_line() {
 /// its own evidence that a URL is safe to open.
 #[test]
 fn only_a_github_issue_address_may_be_opened() {
-    for safe in [
-        "https://github.com/acme/widgets/issues/1",
-        "https://GitHub.com/acme/widgets/issues/4181",
-    ] {
-        assert!(flow::is_openable_issue_url(safe), "{safe}");
+    for safe in
+        ["https://github.com/acme/widgets/issues/1", "https://GitHub.com/acme/widgets/issues/4181"]
+    {
+        assert!(flow::is_openable_issue_url(safe, "github.com"), "{safe}");
     }
     for unsafe_url in [
         "file:///etc/passwd",
@@ -185,7 +189,7 @@ fn only_a_github_issue_address_may_be_opened() {
         "javascript:alert(1)",
         "https://github.com",
     ] {
-        assert!(!flow::is_openable_issue_url(unsafe_url), "{unsafe_url}");
+        assert!(!flow::is_openable_issue_url(unsafe_url, "github.com"), "{unsafe_url}");
     }
 }
 
@@ -217,4 +221,3 @@ fn a_completion_refuses_to_clear_somebody_elses_attempt() {
     assert!(store.publication.is_empty());
     assert_eq!(store.attempt.unwrap().marker, "pub-theirs");
 }
-

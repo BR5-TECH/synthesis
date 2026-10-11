@@ -18,12 +18,10 @@ fn calling_the_tools_changes_nothing_on_disk() {
 
     let handle = fixture.handle();
     for query in ["review a specification", "deploy", "nothing at all matches"] {
-        let _ = block_on(skill_search::SkillSearchTool::new(handle.clone()).call(
-            skill_search::SkillSearchArgs {
-                query: query.to_string(),
-                limit: None,
-            },
-        ));
+        let _ = block_on(
+            skill_search::SkillSearchTool::new(handle.clone())
+                .call(skill_search::SkillSearchArgs { query: query.to_string(), limit: None }),
+        );
     }
     for _ in 0..5 {
         let _ = block_on(
@@ -34,12 +32,10 @@ fn calling_the_tools_changes_nothing_on_disk() {
     // LSK-FR-18: the one tool that opens a file opens it for reading alone —
     // no mtime change, no truncation, nothing created beside it.
     for name in ["analyst", "deployer", "no such skill", ""] {
-        let _ = block_on(skill_load::SkillLoadTool::new(handle.clone()).call(
-            skill_load::LoadSkillArgs {
-                name: name.to_string(),
-                ecosystem: None,
-            },
-        ));
+        let _ = block_on(
+            skill_load::SkillLoadTool::new(handle.clone())
+                .call(skill_load::LoadSkillArgs { name: name.to_string(), ecosystem: None }),
+        );
     }
 
     assert_eq!(
@@ -98,10 +94,7 @@ fn the_loop_facing_tool_is_unreachable_by_any_model() {
     const LOOP_FACING: [(&str, &str); 4] = [
         ("agent_exec.rs", include_str!("../agent_exec.rs")),
         ("agent_exec/protocol.rs", include_str!("../agent_exec/protocol.rs")),
-        (
-            "agent_exec/descriptor.rs",
-            include_str!("../agent_exec/descriptor.rs"),
-        ),
+        ("agent_exec/descriptor.rs", include_str!("../agent_exec/descriptor.rs")),
         ("agent_exec/runtime.rs", include_str!("../agent_exec/runtime.rs")),
     ];
     for (name, source) in LOOP_FACING {
@@ -114,9 +107,7 @@ fn the_loop_facing_tool_is_unreachable_by_any_model() {
             "#[tauri::command]",
         ] {
             assert!(
-                !source
-                    .lines()
-                    .any(|line| line.trim_start().starts_with(declaration)),
+                !source.lines().any(|line| line.trim_start().starts_with(declaration)),
                 "{name} declares {declaration}, which would make it model-facing (TLC-FR-20)",
             );
         }
@@ -193,4 +184,3 @@ fn the_group_publishes_no_registry() {
         }
     }
 }
-

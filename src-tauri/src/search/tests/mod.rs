@@ -30,16 +30,10 @@ struct Recorder {
 
 impl SearchSink for Recorder {
     fn results(&self, payload: &SearchResultsPayload) {
-        self.log
-            .lock()
-            .unwrap()
-            .push(Recorded::Batch(payload.clone()));
+        self.log.lock().unwrap().push(Recorded::Batch(payload.clone()));
     }
     fn ended(&self, payload: &SearchEndedPayload) {
-        self.log
-            .lock()
-            .unwrap()
-            .push(Recorded::Ended(payload.clone()));
+        self.log.lock().unwrap().push(Recorded::Ended(payload.clone()));
     }
 }
 
@@ -98,12 +92,7 @@ impl Recorder {
     }
 
     fn batch_count(&self) -> usize {
-        self.log
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|e| matches!(e, Recorded::Batch(_)))
-            .count()
+        self.log.lock().unwrap().iter().filter(|e| matches!(e, Recorded::Batch(_))).count()
     }
 }
 
@@ -121,11 +110,8 @@ fn search(
     let reason = run_search(
         &recorder,
         root,
-        candidates,
-        matcher,
-        scope,
+        SearchJob { search_id: "search-test", candidates, matcher, scope },
         &Stop::new(),
-        "search-test",
         &|_| {},
     );
     (recorder, reason)
@@ -139,17 +125,17 @@ fn write(root: &Path, rel: &str, body: &str) {
     std::fs::write(path, body).unwrap();
 }
 
-mod contract;
-mod candidates;
-mod modes;
-mod hits;
-mod grouping;
-mod ordering_and_cap;
 mod cancellation;
+mod candidate_list;
+mod candidates;
+mod command_level;
 mod content_limits;
+mod contract;
+mod grouping;
+mod hits;
+mod modes;
+mod ordering_and_cap;
 mod read_only;
 mod responsiveness;
 mod snippets;
-mod candidate_list;
 mod wire_and_bounds;
-mod command_level;

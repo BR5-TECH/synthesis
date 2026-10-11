@@ -35,16 +35,7 @@ fn no_other_index_is_reachable_through_this_tool() {
     let fixture = mounted(dir);
 
     let output = query(&fixture, "sarcophagus", Some(20));
-    let paths: Vec<&str> = output
-        .specifications
-        .iter()
-        .map(|m| m.path.as_str())
-        .collect();
+    let paths: Vec<&str> = output.specifications.iter().map(|m| m.path.as_str()).collect();
 
-    assert_eq!(
-        paths,
-        vec!["specifications/core/a.md"],
-        "only the spec index answers (SPS-FR-05)",
-    );
+    assert_eq!(paths, vec!["specifications/core/a.md"], "only the spec index answers (SPS-FR-05)",);
 }
-

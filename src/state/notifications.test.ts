@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   configureNotifications,
   decideIndicate,
-  decidePost,
+  decideDelivery,
   isAlreadyVisible,
   notifyArrived,
   postedAddresses,
   notificationGate,
+  projectSubtitle,
   raiseNotification,
+  readNotificationPermission,
   resetNotifications,
   retractNotification,
   setNotificationPermissionGranted,
@@ -18,6 +20,7 @@ import {
   type WindowSnapshot,
 } from "./notifications";
 import { mintAddress, parseAddress } from "./notificationAddress";
+import { resetLogBufferForTest } from "../logging";
 import {
   hasRunIndication,
   indicatedAddresses,
@@ -47,6 +50,7 @@ const withdrawals = () =>
 /** A window with nothing open and no focus — every raise posts from here. */
 const backgrounded: WindowSnapshot = {
   focused: false,
+  mainFocused: false,
   projectKey: PROJECT,
   worktree: WORKTREE,
   activeTarget: null,
@@ -54,11 +58,12 @@ const backgrounded: WindowSnapshot = {
   visibleBottomSurface: null,
   visibleRun: null,
   // SWN-FR-05 / NTF-FR-08: no settings child window is open.
-  openSettingsWindow: null,
+  settingsWindowOpen: false,
 };
 
 const raiseFor = (address: string): Raise => ({
   key: "run:abc",
+  level: "Info",
   title: "A run finished",
   body: "It took an hour.",
   address,
@@ -72,6 +77,9 @@ const fileAddress = mintAddress(PROJECT, WORKTREE, {
 
 let postCounter = 0;
 beforeEach(() => {
+  // A successful raise logs, and the log flush timer must not reach the next
+  // test.
+  resetLogBufferForTest();
   invokeMock.mockReset();
   postCounter = 0;
   invokeMock.mockImplementation(async (cmd: string) => {
@@ -87,16 +95,16 @@ describe("the post policy (NTF-FR-08 through NTF-FR-11)", () => {
   it("posts whenever the window does not hold focus", () => {
     // NTF-FR-01, NTF-FR-08, NTF-FR-06. Even when the address names the tab that happens to be active
     // — an unfocused window has shown the author nothing.
-    expect(decidePost(raiseFor(dashboard), backgrounded, granted)).toEqual({
-      post: true,
+    expect(decideDelivery(raiseFor(dashboard), backgrounded, granted)).toEqual({
+      channel: "os",
     });
     expect(
-      decidePost(
+      decideDelivery(
         raiseFor(dashboard),
         { ...backgrounded, activeTarget: { kind: "dashboard" } },
         granted,
       ),
-    ).toEqual({ post: true });
+    ).toEqual({ channel: "os" });
   });
 
   it("suppresses only what the author is already looking at", () => {
@@ -104,10 +112,11 @@ describe("the post policy (NTF-FR-08 through NTF-FR-11)", () => {
     const focusedOnFile: WindowSnapshot = {
       ...backgrounded,
       focused: true,
+      mainFocused: true,
       activeTarget: { kind: "file", path: "a.md" },
     };
-    expect(decidePost(raiseFor(fileAddress), focusedOnFile, granted)).toEqual({
-      post: false,
+    expect(decideDelivery(raiseFor(fileAddress), focusedOnFile, granted)).toEqual({
+      channel: "none",
       reason: "already-looking",
     });
 
@@ -116,18 +125,18 @@ describe("the post policy (NTF-FR-08 through NTF-FR-11)", () => {
       kind: "file",
       path: "b.md",
     });
-    expect(decidePost(raiseFor(other), focusedOnFile, granted)).toEqual({
-      post: true,
+    expect(decideDelivery(raiseFor(other), focusedOnFile, granted)).toEqual({
+      channel: "toast",
     });
 
     // And the same address once the author moves to another tab.
     expect(
-      decidePost(
+      decideDelivery(
         raiseFor(fileAddress),
         { ...focusedOnFile, activeTarget: { kind: "dashboard" } },
         granted,
       ),
-    ).toEqual({ post: true });
+    ).toEqual({ channel: "toast" });
   });
 
   it("counts a panel surface as visible only while its panel is showing", () => {
@@ -140,19 +149,20 @@ describe("the post policy (NTF-FR-08 through NTF-FR-11)", () => {
     const showing: WindowSnapshot = {
       ...backgrounded,
       focused: true,
+      mainFocused: true,
       visibleBottomSurface: "runs",
     };
-    expect(decidePost(raiseFor(runs), showing, granted)).toEqual({
-      post: false,
+    expect(decideDelivery(raiseFor(runs), showing, granted)).toEqual({
+      channel: "none",
       reason: "already-looking",
     });
     expect(
-      decidePost(
+      decideDelivery(
         raiseFor(runs),
         { ...showing, visibleBottomSurface: null },
         granted,
       ),
-    ).toEqual({ post: true });
+    ).toEqual({ channel: "toast" });
     // A vertical-panel address is judged against the vertical panel, not the
     // bottom one — the two surfaces share names in neither direction, but the
     // lookup must not cross zones.
@@ -161,30 +171,31 @@ describe("the post policy (NTF-FR-08 through NTF-FR-11)", () => {
       surface: "comments",
     });
     expect(
-      decidePost(
+      decideDelivery(
         raiseFor(comments),
         { ...showing, visiblePanelSurface: "comments" },
         granted,
       ),
-    ).toEqual({ post: false, reason: "already-looking" });
+    ).toEqual({ channel: "none", reason: "already-looking" });
     // And the negative direction, which is where the App wiring was wrong:
     // `s.panelSurface` keeps naming the SELECTED surface while the panel is
     // hidden, so feeding it in unconditionally suppressed every raise about
     // whichever panel happened to be selected — silently (NTF-FR-10).
     expect(
-      decidePost(
+      decideDelivery(
         raiseFor(comments),
         { ...showing, visiblePanelSurface: null },
         granted,
       ),
-    ).toEqual({ post: true });
+    ).toEqual({ channel: "toast" });
   });
 
-  it("posts a raise made while no project is open (NTF-FR-09)", () => {
+  it("shows a toast for a raise made while no project is open (NTF-FR-09)", () => {
     // NTF-FR-09: the picker is never where a target lives, so nothing there can
     // be "already visible" — even with the window focused.
     const picker: WindowSnapshot = {
       focused: true,
+      mainFocused: true,
       projectKey: null,
       worktree: null,
       activeTarget: null,
@@ -192,31 +203,31 @@ describe("the post policy (NTF-FR-08 through NTF-FR-11)", () => {
       visibleBottomSurface: null,
     visibleRun: null,
     // SWN-FR-05 / NTF-FR-08: no settings child window is open.
-    openSettingsWindow: null,
+    settingsWindowOpen: false,
     };
-    expect(decidePost(raiseFor(dashboard), picker, granted)).toEqual({
-      post: true,
+    expect(decideDelivery(raiseFor(dashboard), picker, granted)).toEqual({
+      channel: "toast",
     });
   });
 
   it("posts nothing at all while the switch is off (NTF-FR-11)", () => {
     // NTF-FR-11, NTF-FR-12: absolute, so being in the background does not override it.
     expect(
-      decidePost(raiseFor(dashboard), backgrounded, {
+      decideDelivery(raiseFor(dashboard), backgrounded, {
         enabled: false,
         permissionGranted: true,
       }),
-    ).toEqual({ post: false, reason: "disabled" });
+    ).toEqual({ channel: "none", reason: "disabled" });
   });
 
   it("posts nothing while the OS has not granted permission (NTF-FR-11)", () => {
     // NTF-FR-11, NTF-FR-13: likewise absolute, and checked without asking for anything.
     expect(
-      decidePost(raiseFor(dashboard), backgrounded, {
+      decideDelivery(raiseFor(dashboard), backgrounded, {
         enabled: true,
         permissionGranted: false,
       }),
-    ).toEqual({ post: false, reason: "permission" });
+    ).toEqual({ channel: "none", reason: "permission" });
   });
 
   it("checks the switch before the permission, and both before focus", () => {
@@ -224,17 +235,17 @@ describe("the post policy (NTF-FR-08 through NTF-FR-11)", () => {
     // an author who turned notifications off should be told that, not that the
     // OS refused.
     expect(
-      decidePost(raiseFor(dashboard), backgrounded, {
+      decideDelivery(raiseFor(dashboard), backgrounded, {
         enabled: false,
         permissionGranted: false,
       }),
-    ).toEqual({ post: false, reason: "disabled" });
+    ).toEqual({ channel: "none", reason: "disabled" });
   });
 
   it("declines to interrupt for an address nobody could be routed from", () => {
     expect(
-      decidePost(raiseFor("not an address"), backgrounded, granted),
-    ).toEqual({ post: false, reason: "unparseable-address" });
+      decideDelivery(raiseFor("not an address"), backgrounded, granted),
+    ).toEqual({ channel: "none", reason: "unparseable-address" });
   });
 
   it("treats an address in another root as never already-visible", () => {
@@ -247,6 +258,7 @@ describe("the post policy (NTF-FR-08 through NTF-FR-11)", () => {
       isAlreadyVisible(inOther, {
         ...backgrounded,
         focused: true,
+        mainFocused: true,
         activeTarget: { kind: "file", path: "a.md" },
       }),
     ).toBe(false);
@@ -258,32 +270,33 @@ describe("a settings address is judged against the window (NTF-FR-08, SWN-FR-05)
   const inGlobalSettings: WindowSnapshot = {
     ...backgrounded,
     focused: true,
-    openSettingsWindow: "global",
+    mainFocused: true,
+    settingsWindowOpen: true,
   };
-  const settingsAddress = (which: "global" | "project") =>
-    mintAddress(PROJECT, WORKTREE, { kind: "settings", which });
+  const settingsAddress = (scope: "global" | "project") =>
+    mintAddress(PROJECT, WORKTREE, { kind: "settings", scope, section: null });
 
-  it("NTF-FR-25, NTF-FR-08: suppresses a raise naming the settings window that is open", () => {
+  it("NTF-FR-25, NTF-FR-08: suppresses a raise naming the Settings window while it is open", () => {
     // The author has already been told by the thing itself. A settings surface
     // is a window rather than a tab (SWN-FR-01), so this is answered from the
     // window snapshot — the active TAB says nothing about it.
     expect(
-      decidePost(raiseFor(settingsAddress("global")), inGlobalSettings, {
+      decideDelivery(raiseFor(settingsAddress("global")), inGlobalSettings, {
         enabled: true,
         permissionGranted: true,
       }),
-    ).toEqual({ post: false, reason: "already-looking" });
+    ).toEqual({ channel: "none", reason: "already-looking" });
   });
 
-  it("posts a raise naming the OTHER settings window", () => {
-    // At most one is ever open (SWN-FR-05), so the one that is not open is
-    // somewhere the author is not.
+  it("NTF-FR-08, SWN-FR-05: suppresses a raise naming either scope of the one open Settings window", () => {
+    // There is one Settings window, so a raise naming either of its scopes names
+    // the thing the author is already looking at.
     expect(
-      decidePost(raiseFor(settingsAddress("project")), inGlobalSettings, {
+      decideDelivery(raiseFor(settingsAddress("project")), inGlobalSettings, {
         enabled: true,
         permissionGranted: true,
       }),
-    ).toEqual({ post: true });
+    ).toEqual({ channel: "none", reason: "already-looking" });
   });
 
   it("posts when no settings window is open, whatever the active tab claims", () => {
@@ -293,27 +306,27 @@ describe("a settings address is judged against the window (NTF-FR-08, SWN-FR-05)
     // window is what decides, and none is open.
     const noWindow: WindowSnapshot = {
       ...inGlobalSettings,
-      openSettingsWindow: null,
-      activeTarget: { kind: "settings", which: "global" },
+      settingsWindowOpen: false,
+      activeTarget: { kind: "settings", scope: "global", section: null },
     };
     expect(
-      decidePost(raiseFor(settingsAddress("global")), noWindow, {
+      decideDelivery(raiseFor(settingsAddress("global")), noWindow, {
         enabled: true,
         permissionGranted: true,
       }),
-    ).toEqual({ post: true });
+    ).toEqual({ channel: "toast" });
   });
 
   it("posts while no window of the application holds focus", () => {
     // NTF-FR-08: an unfocused application always posts, even for the window
     // that happens to be open behind it.
     expect(
-      decidePost(
+      decideDelivery(
         raiseFor(settingsAddress("global")),
-        { ...inGlobalSettings, focused: false },
+        { ...inGlobalSettings, focused: false, mainFocused: false },
         { enabled: true, permissionGranted: true },
       ),
-    ).toEqual({ post: true });
+    ).toEqual({ channel: "os" });
   });
 
   it("NTF-FR-27 / NTF-FR-28: marks nothing anywhere, whatever the strip holds", () => {
@@ -336,6 +349,7 @@ describe("a run address is judged one step finer (NTF-FR-08, NTF-FR-39)", () => 
   const looking: WindowSnapshot = {
     ...backgrounded,
     focused: true,
+    mainFocused: true,
     visibleBottomSurface: "runs",
     visibleRun: "artifact-window",
   };
@@ -343,34 +357,34 @@ describe("a run address is judged one step finer (NTF-FR-08, NTF-FR-39)", () => 
   it("suppresses only where Runs is showing that very run", () => {
     // NTF-FR-39, NTF-FR-26, NTF-FR-28, NTF-FR-31, NTF-FR-14, GRU-FR-BLSS (NTF-FR-08): a queue the author is reading is not the run that
     // has stopped.
-    expect(decidePost(raiseFor(runAddress), looking, granted)).toEqual({
-      post: false,
+    expect(decideDelivery(raiseFor(runAddress), looking, granted)).toEqual({
+      channel: "none",
       reason: "already-looking",
     });
     // The panel hidden altogether.
     expect(
-      decidePost(
+      decideDelivery(
         raiseFor(runAddress),
         { ...looking, visibleBottomSurface: null, visibleRun: null },
         granted,
       ),
-    ).toEqual({ post: true });
+    ).toEqual({ channel: "toast" });
     // Another bottom surface active.
     expect(
-      decidePost(
+      decideDelivery(
         raiseFor(runAddress),
         { ...looking, visibleBottomSurface: "logs", visibleRun: null },
         granted,
       ),
-    ).toEqual({ post: true });
+    ).toEqual({ channel: "toast" });
     // Runs active on a different run.
     expect(
-      decidePost(
+      decideDelivery(
         raiseFor(runAddress),
         { ...looking, visibleRun: "graduation-flow" },
         granted,
       ),
-    ).toEqual({ post: true });
+    ).toEqual({ channel: "toast" });
   });
 
   it("marks the Runs toggle rather than any tab, whenever the author is not on it", () => {
@@ -403,6 +417,7 @@ describe("a run address is judged one step finer (NTF-FR-08, NTF-FR-39)", () => 
       snapshot: () => ({
         ...backgrounded,
         focused: true,
+        mainFocused: true,
         visibleBottomSurface: "logs",
       }),
       resolveTab: () => null,
@@ -472,6 +487,8 @@ describe("raising (NTF-FR-01 / NTF-FR-02 / NTF-FR-23)", () => {
       {
         key: "run:abc",
         title: "A run finished",
+        // NTF-FR-QGSV: the facility adds the project's name.
+        subtitle: "acme",
         body: "It took an hour.",
         payload: dashboard,
       },
@@ -484,6 +501,7 @@ describe("raising (NTF-FR-01 / NTF-FR-02 / NTF-FR-23)", () => {
     configure({
       ...backgrounded,
       focused: true,
+      mainFocused: true,
       activeTarget: { kind: "dashboard" },
     });
     await expect(raiseNotification(raiseFor(dashboard))).resolves.toBe(false);
@@ -772,5 +790,118 @@ describe("the gate is live, not a snapshot (NTF-FR-12)", () => {
     setNotificationPermissionGranted(true);
     await expect(raiseNotification(raiseFor(dashboard))).resolves.toBe(true);
     expect(posts()).toHaveLength(1);
+  });
+});
+
+describe("the subtitle names the project (NTF-FR-QGSV)", () => {
+  beforeEach(() => {
+    resetNotifications();
+    resetTabIndications();
+    configureNotifications({
+      snapshot: () => backgrounded,
+      resolveTab: () => null,
+    });
+    setNotificationPermissionGranted(true);
+  });
+
+  it("NTF-FR-QGSV: names the project by the last segment of its key", async () => {
+    expect(await raiseNotification(raiseFor(dashboard))).toBe(true);
+    expect(posts()[0].subtitle).toBe("acme");
+    // The raise's own words reach the backend unchanged beside it.
+    expect(posts()[0].title).toBe("A run finished");
+    expect(posts()[0].body).toBe("It took an hour.");
+  });
+
+  it("NTF-FR-QGSV: names the project the address names, not the open one", async () => {
+    const elsewhere = mintAddress("/dev/other-project", "/dev/other-project", {
+      kind: "dashboard",
+    });
+    await raiseNotification({ ...raiseFor(elsewhere), key: "elsewhere" });
+    expect(posts()[0].subtitle).toBe("other-project");
+  });
+
+  it("NTF-FR-QGSV: every surface's raise gets the same subtitle for one project", async () => {
+    await raiseNotification({ ...raiseFor(dashboard), key: "a" });
+    await raiseNotification({ ...raiseFor(fileAddress), key: "b" });
+    await raiseNotification({
+      ...raiseFor(mintAddress(PROJECT, WORKTREE, { kind: "run", runId: "r1" })),
+      key: "c",
+    });
+    expect(posts().map((p) => p.subtitle)).toEqual(["acme", "acme", "acme"]);
+  });
+
+  it("NTF-FR-QGSV: a subtitle a surface tries to send is ignored", async () => {
+    const raise = { ...raiseFor(dashboard), subtitle: "something else" } as Raise;
+    await raiseNotification(raise);
+    expect(posts()[0].subtitle).toBe("acme");
+  });
+
+  it.each([
+    ["/dev/acme", "acme"],
+    ["/dev/acme/", "acme"],
+    ["/dev/acme//", "acme"],
+    ["C:\\dev\\acme", "acme"],
+    ["C:\\dev\\acme\\", "acme"],
+    ["C:\\dev/acme", "acme"],
+    ["~/dev/acme", "acme"],
+    ["/dev/проект", "проект"],
+    ["acme", "acme"],
+    ["/", ""],
+  ])("NTF-FR-QGSV: the key %s gives the name %s", (projectKey, name) => {
+    const address = parseAddress(mintAddress(projectKey, projectKey, { kind: "dashboard" }));
+    expect(address).not.toBeNull();
+    expect(projectSubtitle(address!)).toBe(name);
+  });
+});
+
+describe("reading the permission (NTF-FR-13, NTF-FR-WUUY)", () => {
+  type Answer = { resolve: (state: string) => void; reject: (e: unknown) => void };
+
+  /** Each permission read waits for the test to answer it. */
+  const deferReads = () => {
+    const answers: Answer[] = [];
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "get_notification_permission") {
+        return new Promise((resolve, reject) => answers.push({ resolve, reject }));
+      }
+      return Promise.resolve(undefined);
+    });
+    return answers;
+  };
+
+  beforeEach(() => {
+    resetNotifications();
+  });
+
+  it("NTF-FR-WUUY: the read started last decides, whatever order the answers come in", async () => {
+    const answers = deferReads();
+    const startup = readNotificationPermission("startup");
+    const focus = readNotificationPermission("window focus");
+    answers[1].resolve("denied");
+    await focus;
+    answers[0].resolve("granted");
+    await startup;
+    expect(notificationGate().permissionGranted).toBe(false);
+    expect(invokeMock.mock.calls.some((c) => c[0] === "request_notification_permission")).toBe(
+      false,
+    );
+  });
+
+  it("NTF-FR-WUUY: a read that fails closes the gate", async () => {
+    setNotificationPermissionGranted(true);
+    const answers = deferReads();
+    const read = readNotificationPermission("window focus");
+    answers[0].reject(new Error("no backend"));
+    await read;
+    expect(notificationGate().permissionGranted).toBe(false);
+  });
+
+  it("NTF-FR-13: a read still in flight at a reset does not apply", async () => {
+    const answers = deferReads();
+    const read = readNotificationPermission("startup");
+    resetNotifications();
+    answers[0].resolve("granted");
+    await read;
+    expect(notificationGate().permissionGranted).toBe(false);
   });
 });

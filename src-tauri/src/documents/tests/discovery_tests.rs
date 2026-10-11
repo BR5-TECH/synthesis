@@ -80,7 +80,11 @@ fn overlapping_sources_list_a_file_once_and_keep_it_while_any_source_includes_it
 
     docs.remove("refs");
     docs.refresh();
-    assert_eq!(docs.names(), ["a.md", "b.md"], "b stays through its other sources, and a through its file source");
+    assert_eq!(
+        docs.names(),
+        ["a.md", "b.md"],
+        "b stays through its other sources, and a through its file source"
+    );
 
     docs.remove("refs/a.md");
     docs.refresh();
@@ -164,10 +168,7 @@ fn a_file_that_is_not_utf8_is_unavailable() {
     let bad = snapshot.documents.iter().find(|d| d.name == "bad.txt").unwrap();
     assert_eq!(bad.status, Availability::Unavailable);
     assert_eq!(bad.revision, None);
-    assert_eq!(
-        docs.collection.read_document(&docs.fs, &bad.id).unwrap_err().code(),
-        "unavailable"
-    );
+    assert_eq!(docs.collection.read_document(&docs.fs, &bad.id).unwrap_err().code(), "unavailable");
 }
 
 // DCL-FR-EWPO, DCL-FR-KMHY: a link is not followed and is not listed, and a source
@@ -195,11 +196,7 @@ fn links_are_neither_followed_nor_listed() {
     assert_eq!(alias.status, Availability::Unavailable);
     assert!(!snapshot.documents.iter().any(|d| d.name == "secret.md" || d.name == "link.md"));
     for relative in ["alias.md", "refs-alias"] {
-        let source = snapshot
-            .sources
-            .iter()
-            .find(|s| s.path.ends_with(relative))
-            .unwrap();
+        let source = snapshot.sources.iter().find(|s| s.path.ends_with(relative)).unwrap();
         assert_eq!(source.status, Availability::Unavailable, "{relative}");
         assert_eq!(source.reason, Some(SourceReason::Link), "{relative}");
     }

@@ -3,7 +3,8 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
-import { GlobalSettings, resolveTheme } from "./GlobalSettings";
+import { resolveTheme } from "./GlobalSettings";
+import { GlobalSettings } from "../test/settingsHarness";
 import { resetAppPreferencesCache } from "../state/appPreferences";
 import {
   resetSettingsSections,

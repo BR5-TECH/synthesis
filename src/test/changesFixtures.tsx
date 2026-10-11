@@ -16,8 +16,10 @@ import type {
   CommitOutcome,
   DiffTarget,
   PanelRevealRequest,
+  PullRequestHeadState,
   UpstreamSyncState,
 } from "../types";
+import type { PullRequestSource } from "../components/CreatePullRequest/types";
 import { pickSelector } from "./selectors";
 
 // ---------------------------------------------------------------------------
@@ -82,7 +84,24 @@ export interface Backend {
   prefs?: Record<string, unknown>;
   /** Command name -> error message, for the inline-state tests. */
   fail?: Record<string, string>;
+  /** CHG-FR-UCRL: the active worktree's branch and its head state. */
+  pullRequest?: {
+    branch?: string | null;
+    streamName?: string;
+    headState?: Partial<PullRequestHeadState>;
+  };
 }
+
+/** CHG-FR-UCRL: a branch holding two commits its base lacks, all pushed. */
+export const HEAD_STATE: PullRequestHeadState = {
+  head: "feature/x",
+  base: "main",
+  hasRemote: true,
+  remoteBranchExists: true,
+  unpushed: 0,
+  uncommittedPaths: [],
+  aheadOfBase: 2,
+};
 
 export function makeBackend(invokeMock: Mock) {
   return function backend(config: Backend = {}) {
@@ -122,6 +141,43 @@ export function makeBackend(invokeMock: Mock) {
           return undefined;
         case "push_current_branch":
           return undefined;
+        case "list_worktrees_and_branches": {
+          const branch =
+            config.pullRequest?.branch === undefined
+              ? "feature/x"
+              : config.pullRequest.branch;
+          return {
+            repositoryRoot: "/repo",
+            activeWorktreePath: "/repo",
+            worktrees: [
+              {
+                path: "/repo",
+                name: "repo",
+                ...(branch ? { branch } : {}),
+                headShortHash: "abc1234",
+                isDetached: branch === null,
+                isActive: true,
+                isPrimary: true,
+                isMissing: false,
+                ...(config.pullRequest?.streamName
+                  ? {
+                      stream: {
+                        streamId: "w1",
+                        streamName: config.pullRequest.streamName,
+                      },
+                    }
+                  : {}),
+              },
+            ],
+            branches: [],
+          };
+        }
+        case "get_pull_request_head_state":
+          return {
+            ...HEAD_STATE,
+            head: String(args?.head ?? HEAD_STATE.head),
+            ...(config.pullRequest?.headState ?? {}),
+          };
         case "list_branch_changes":
           return typeof config.branchChanges === "function"
             ? config.branchChanges()
@@ -152,6 +208,7 @@ export let onRequestRollback: Mock<
 >;
 export let onRequestGithubToken: Mock<() => Promise<boolean>>;
 export let onOpenGlobalSettings: Mock<() => void>;
+export let onCreatePullRequest: Mock<(source: PullRequestSource) => void>;
 
 /** Fresh handler mocks, as each test begins with (CHG-FR-39 / CHG-FR-59). */
 export function resetHandlers() {
@@ -162,6 +219,7 @@ export function resetHandlers() {
   onRequestRollback = vi.fn(async () => null);
   onRequestGithubToken = vi.fn(async () => true);
   onOpenGlobalSettings = vi.fn();
+  onCreatePullRequest = vi.fn();
 }
 
 export function renderPanel() {
@@ -175,6 +233,7 @@ export function renderPanel() {
       onRequestRollback={onRequestRollback}
       onRequestGithubToken={onRequestGithubToken}
       onOpenGlobalSettings={onOpenGlobalSettings}
+      onCreatePullRequest={onCreatePullRequest}
     />
   );
   const view = render(tree());

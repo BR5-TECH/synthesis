@@ -99,12 +99,7 @@ pub(super) const IMAGE_KINDS: &[ImageKind] = &[
 /// A media type's base, lower-cased — so a parameterised `image/png; foo=bar`
 /// is the same type as a bare `image/png`.
 pub(super) fn media_base(media_type: &str) -> String {
-    media_type
-        .split(';')
-        .next()
-        .unwrap_or("")
-        .trim()
-        .to_ascii_lowercase()
+    media_type.split(';').next().unwrap_or("").trim().to_ascii_lowercase()
 }
 
 /// DAS-FR-03: whether this is an image media type at all.
@@ -179,9 +174,7 @@ pub(super) fn ftyp_brand_is(bytes: &[u8], brands: &[&str]) -> bool {
     // hostile or merely damaged file — and this runs both on a store the author
     // asked for and inside the housekeeping worker, where a panic would take
     // the pass down mid-sweep.
-    bytes
-        .get(16..)
-        .is_some_and(|tail| tail.chunks_exact(4).any(matches))
+    bytes.get(16..).is_some_and(|tail| tail.chunks_exact(4).any(matches))
 }
 
 /// Whether the leading bytes read as an XML document naming an `<svg>` element.

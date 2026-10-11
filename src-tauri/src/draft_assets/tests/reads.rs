@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 // ---------------------------------------------------------------------------
 // DAS-FR-15, DAS-FR-20 / DAS-FR-23, GSU-FR-IJEE — an abandoned pass reports nothing completed
 // ---------------------------------------------------------------------------
@@ -50,10 +49,9 @@ fn das_ts17_read_prompt_images_returns_the_bytes_in_order_with_their_context() {
 
     let images = read_prompt_images(&root, &id);
     assert_eq!(images.len(), 2);
-    for (image, stored, alt) in [
-        (&images[0], &first, "flow diagram"),
-        (&images[1], &second, "the second"),
-    ] {
+    for (image, stored, alt) in
+        [(&images[0], &first, "flow diagram"), (&images[1], &second, "the second")]
+    {
         assert!(image.resolved);
         assert_eq!(image.asset_path.as_deref(), Some(stored.path.as_str()));
         assert_eq!(image.media_type.as_deref(), Some("image/png"));
@@ -111,11 +109,7 @@ fn das_ts17_one_unreadable_asset_costs_the_caller_nothing_but_that_image() {
     let id = draft(&root, "spec");
     let good = store_png(&root, &id, "good.png", "good");
     let bad = store_png(&root, &id, "bad.png", "bad");
-    save_prompt(
-        &root,
-        &id,
-        &format!("![good]({})\n\n![bad]({})\n", good.reference, bad.reference),
-    );
+    save_prompt(&root, &id, &format!("![good]({})\n\n![bad]({})\n", good.reference, bad.reference));
     // Replaced by a directory of the same name: the entry is there and its bytes
     // cannot be read.
     let bad_name = bad.path.strip_prefix("assets/").unwrap();
@@ -166,10 +160,8 @@ fn das_ts19_moving_a_draft_carries_its_assets_and_deleting_it_takes_them() {
     drafts::create_drafts_folder_impl(&root, "", "UI").unwrap();
     drafts::create_drafts_folder_impl(&root, "UI", "Components").unwrap();
     drafts::create_drafts_folder_impl(&root, "", "backend").unwrap();
-    let id = drafts::create_draft_impl(&root, Some("filed"), Some("UI/Components"))
-        .unwrap()
-        .draft
-        .id;
+    let id =
+        drafts::create_draft_impl(&root, Some("filed"), Some("UI/Components")).unwrap().draft.id;
     let one = store_png(&root, &id, "one.png", "one");
     let two = store_png(&root, &id, "two.png", "two");
 
@@ -210,7 +202,8 @@ fn das_ts22_every_typed_error_is_safe_and_leaves_the_draft_as_it_was() {
     let before = tree_bytes(dir.path());
 
     let provoked = [
-        store_image_impl(&root, "no-such-draft", "image/png", None, &b64(&png("x")), &no_hold()).unwrap_err(),
+        store_image_impl(&root, "no-such-draft", "image/png", None, &b64(&png("x")), &no_hold())
+            .unwrap_err(),
         store_image_impl(&root, &id, "text/plain", None, &b64(b"hello"), &no_hold()).unwrap_err(),
         store_image_impl(
             &root,
@@ -250,4 +243,3 @@ fn das_ts22_every_typed_error_is_safe_and_leaves_the_draft_as_it_was() {
     let after = tree_bytes(dir.path());
     assert_eq!(before.len(), after.len() + 1);
 }
-

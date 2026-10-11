@@ -72,8 +72,7 @@ impl Scenario {
         let fx = Fixture::new();
         // GTE-FR-YAEB: the production queue's dispatch is intercepted, and an
         // attempt fails the scenario unless it names one it expected.
-        fx.app
-            .manage(crate::graduation::driver::drive::SpawnTripwire::default());
+        fx.app.manage(crate::graduation::driver::drive::SpawnTripwire::default());
         Self {
             name,
             fx,
@@ -156,9 +155,13 @@ impl Scenario {
 
     /// GTE-FR-YAEB: a second run, enqueued on the named stream after the
     /// scenario's own with auto-start off, so only the scenario drives it.
-    pub(crate) fn with_run_on_stream(mut self, label: &'static str, stream: &str, prompt: &str) -> Self {
-        self.others
-            .push((label, stream.to_string(), prompt.to_string()));
+    pub(crate) fn with_run_on_stream(
+        mut self,
+        label: &'static str,
+        stream: &str,
+        prompt: &str,
+    ) -> Self {
+        self.others.push((label, stream.to_string(), prompt.to_string()));
         self
     }
 
@@ -290,7 +293,11 @@ impl Scenario {
                 .clone();
             let queued = fx.enqueue_for(&other, other_prompt, &format!("d-{label}"));
             without_loop(&fx.app, || {
-                crate::graduation::set_graduation_auto_start(fx.app.clone(), queued.id.clone(), false)
+                crate::graduation::set_graduation_auto_start(
+                    fx.app.clone(),
+                    queued.id.clone(),
+                    false,
+                )
             })
             .unwrap_or_else(|reason| panic!("[{name}] auto-start is settable: {reason}"));
             others.insert(
@@ -307,14 +314,12 @@ impl Scenario {
 
         {
             let primary = fx.repo();
-            let head = primary
-                .head()
-                .and_then(|h| h.peel_to_commit())
-                .expect("the project's revision");
+            let head =
+                primary.head().and_then(|h| h.peel_to_commit()).expect("the project's revision");
             for branch in &branches {
-                primary
-                    .branch(branch, &head, false)
-                    .unwrap_or_else(|reason| panic!("[{name}] the branch {branch} exists: {reason}"));
+                primary.branch(branch, &head, false).unwrap_or_else(|reason| {
+                    panic!("[{name}] the branch {branch} exists: {reason}")
+                });
             }
         }
         if index_held {
@@ -331,10 +336,7 @@ impl Scenario {
             guard: Default::default(),
         };
         for holder in &slot_holders {
-            let held = streams
-                .entry(holder.clone())
-                .or_insert_with(|| fx.stream(holder))
-                .clone();
+            let held = streams.entry(holder.clone()).or_insert_with(|| fx.stream(holder)).clone();
             fx.hold_stream(&held.id);
         }
         let merging = merge.is_some() || no_draft_run;
@@ -385,11 +387,7 @@ pub(crate) fn bind(ctx: &TurnContext, scripts: Vec<TurnScript>) -> Arc<ScriptedD
     let turns: Vec<Turn> = scripts
         .into_iter()
         .map(|script| {
-            let TurnScript {
-                mut inner,
-                changes_setting,
-                hooks,
-            } = script;
+            let TurnScript { mut inner, changes_setting, hooks } = script;
             if changes_setting.is_some() || !hooks.is_empty() {
                 let root = ctx.project_root.clone();
                 let hook_ctx = ctx.clone();

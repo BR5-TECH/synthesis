@@ -59,22 +59,20 @@ pub(super) fn stage(
     prepared: &mut merge::Prepared,
     artifact: &MergeArtifact,
 ) -> Result<Staged, String> {
-    let merge_base = main
-        .merge_base(prepared.base_oid, prepared.stream_oid)
-        .map_err(|e| e.to_string())?;
+    let merge_base =
+        main.merge_base(prepared.base_oid, prepared.stream_oid).map_err(|e| e.to_string())?;
 
     store::ensure_dir(fs, &artifact.root)?;
     let base_commit = main.find_commit(prepared.base_oid).map_err(|e| e.to_string())?;
     let branch = scratch_branch(&artifact.attempt_id);
-    main.branch(&branch, &base_commit, true)
-        .map_err(|e| e.to_string())?;
+    main.branch(&branch, &base_commit, true).map_err(|e| e.to_string())?;
     let reference = main
         .find_branch(&branch, git2::BranchType::Local)
         .map_err(|e| e.to_string())?
         .into_reference();
     let mut opts = git2::WorktreeAddOptions::new();
     opts.reference(Some(&reference));
-    main.worktree(&artifact.attempt_id, &artifact.checkout, Some(&mut opts))
+    main.worktree(&artifact.attempt_id, &artifact.checkout, Some(&opts))
         .map_err(|e| e.to_string())?;
     crate::worktree::normalize_worktree_commondir(main, &artifact.attempt_id)
         .map_err(|e| e.to_string())?;
@@ -84,15 +82,9 @@ pub(super) fn stage(
     // the same deterministic merge: what it costs is two tree walks beside a
     // turn that costs a container.
     let checkout = git2::Repository::open(&artifact.checkout).map_err(|e| e.to_string())?;
-    let ours = checkout
-        .find_commit(prepared.base_oid)
-        .map_err(|e| e.to_string())?;
-    let theirs = checkout
-        .find_commit(prepared.stream_oid)
-        .map_err(|e| e.to_string())?;
-    let mut merged = checkout
-        .merge_commits(&ours, &theirs, None)
-        .map_err(|e| e.to_string())?;
+    let ours = checkout.find_commit(prepared.base_oid).map_err(|e| e.to_string())?;
+    let theirs = checkout.find_commit(prepared.stream_oid).map_err(|e| e.to_string())?;
+    let mut merged = checkout.merge_commits(&ours, &theirs, None).map_err(|e| e.to_string())?;
     // A path libgit2 could not merge is written with conflict markers, so the
     // content both sides started from stands inside the file the turn corrects.
     // The labels are the two branches by role rather than by name: the
@@ -105,9 +97,7 @@ pub(super) fn stage(
         .our_label(MARKER_BASE)
         .their_label(MARKER_STREAM)
         .ancestor_label(MARKER_ANCESTOR);
-    checkout
-        .checkout_index(Some(&mut merged), Some(&mut builder))
-        .map_err(|e| e.to_string())?;
+    checkout.checkout_index(Some(&mut merged), Some(&mut builder)).map_err(|e| e.to_string())?;
 
     let sides = conflict_sides(&merged);
     // GRB-FR-SRVN: a deletion on one side of a path the other side changed is a
@@ -245,9 +235,7 @@ fn merged_without_conflicts(
         .unwrap_or_default();
     for path in paths {
         let path = String::from_utf8_lossy(&path).into_owned();
-        merged
-            .remove_path(std::path::Path::new(&path))
-            .map_err(|e| e.to_string())?;
+        merged.remove_path(std::path::Path::new(&path)).map_err(|e| e.to_string())?;
     }
     merged.write_tree_to(checkout).map_err(|e| e.to_string())
 }

@@ -14,10 +14,7 @@ fn a_recording_writes_two_files_beside_the_project_and_touches_no_artifact() {
 
     assert_eq!(
         f.folder_files(),
-        vec![
-            format!("{}.content", proposal.id),
-            format!("{}.toml", proposal.id),
-        ],
+        vec![format!("{}.content", proposal.id), format!("{}.toml", proposal.id),],
         "a proposal at rest is a record and a document, and nothing else",
     );
     assert_eq!(
@@ -60,16 +57,8 @@ fn an_artifact_carries_one_pending_proposal_at_a_time() {
         f.propose("# Review\n\nAnother version entirely.\n"),
         Err(RecordRefusal::ProposalPending),
     );
-    assert_eq!(
-        f.folder_files().len(),
-        2,
-        "no second candidate was written",
-    );
-    assert_eq!(
-        f.discussion().comments.len(),
-        before,
-        "the conversation gained no line",
-    );
+    assert_eq!(f.folder_files().len(), 2, "no second candidate was written",);
+    assert_eq!(f.discussion().comments.len(), before, "the conversation gained no line",);
 
     f.decline(&first.id).expect("declined");
     f.propose("# Review\n\nAnother version entirely.\n")
@@ -78,12 +67,8 @@ fn an_artifact_carries_one_pending_proposal_at_a_time() {
     // …and the rule is per artifact.
     let other = "prompts/other.md";
     write_file(&f.root, other, "# Other\n");
-    assign(
-        &f.root,
-        &[(PROMPT, ArtifactType::Prompt), (other, ArtifactType::Prompt)],
-    );
-    f.propose_against(other, "# Other\n\nBetter.\n")
-        .expect("a second artifact has its own slot");
+    assign(&f.root, &[(PROMPT, ArtifactType::Prompt), (other, ArtifactType::Prompt)]);
+    f.propose_against(other, "# Other\n\nBetter.\n").expect("a second artifact has its own slot");
 }
 
 #[test]
@@ -134,11 +119,7 @@ fn a_recording_posts_one_comment_carrying_one_prompt_proposal_attachment() {
     );
     assert_eq!(posted.attachments.len(), 1);
     match &posted.attachments[0] {
-        comments::Attachment::PromptProposal {
-            proposal_id,
-            artifact_id,
-            path,
-        } => {
+        comments::Attachment::PromptProposal { proposal_id, artifact_id, path } => {
             assert_eq!(proposal_id, &proposal.id);
             assert_eq!(artifact_id, PROMPT);
             assert_eq!(path, PROMPT);
@@ -156,10 +137,7 @@ fn a_recording_whose_append_fails_leaves_nothing_behind() {
     f.lock();
     let before = f.discussion().comments.len();
     assert_eq!(f.propose(PROPOSED), Err(RecordRefusal::ThreadLocked));
-    assert!(
-        f.folder_files().is_empty(),
-        "neither the record nor the candidate remains",
-    );
+    assert!(f.folder_files().is_empty(), "neither the record nor the candidate remains",);
     assert_eq!(f.discussion().comments.len(), before);
 }
 
@@ -227,9 +205,7 @@ fn two_recordings_racing_one_artifact_leave_exactly_one_proposal() {
         outcomes.iter().filter_map(|o| o.as_ref().ok()).collect();
     assert_eq!(recorded.len(), 1, "exactly one was recorded: {outcomes:?}");
     assert!(
-        outcomes
-            .iter()
-            .any(|o| o == &Err(RecordRefusal::ProposalPending)),
+        outcomes.iter().any(|o| o == &Err(RecordRefusal::ProposalPending)),
         "and the other found the slot taken: {outcomes:?}",
     );
     assert_eq!(
@@ -237,11 +213,7 @@ fn two_recordings_racing_one_artifact_leave_exactly_one_proposal() {
         1,
         "so the artifact holds one proposal and not two",
     );
-    assert_eq!(
-        f.discussion().comments.len(),
-        2,
-        "and the conversation gained one line",
-    );
+    assert_eq!(f.discussion().comments.len(), 2, "and the conversation gained one line",);
 }
 
 #[test]
@@ -252,10 +224,7 @@ fn a_recording_refuses_a_target_that_is_missing_or_not_a_prompt() {
     write_file(&f.root, "notes/plain.md", "just text\n");
     assign(
         &f.root,
-        &[
-            (PROMPT, ArtifactType::Prompt),
-            ("specifications/ui/EDT-editor.md", ArtifactType::Spec),
-        ],
+        &[(PROMPT, ArtifactType::Prompt), ("specifications/ui/EDT-editor.md", ArtifactType::Spec)],
     );
 
     assert_eq!(
@@ -301,10 +270,7 @@ fn an_empty_candidate_is_a_change_like_any_other() {
 
     f.accept(&proposal.id).expect("accepted");
     assert_eq!(f.artifact_body(), "", "the file is emptied");
-    assert!(
-        f.root.path().join(PROMPT).is_file(),
-        "and still exists as a file of the project",
-    );
+    assert!(f.root.path().join(PROMPT).is_file(), "and still exists as a file of the project",);
 
     // …and an empty candidate against an already-empty prompt is the ordinary
     // no-change refusal rather than a rule of its own.
@@ -326,7 +292,7 @@ fn a_candidate_is_kept_verbatim_and_the_write_settles_the_line_endings() {
         crate::project_settings::ProjectConfig {
             line_endings: crate::project_settings::LineEndings::Crlf,
             draft_template: None,
-                    ..Default::default()
+            ..Default::default()
         },
     )
     .expect("convention");
@@ -375,8 +341,5 @@ fn a_list_returns_every_proposal_most_recently_created_first() {
         .split("\n}")
         .next()
         .expect("its body");
-    assert!(
-        !list_body.contains("CONTENT_EXT"),
-        "a list reads no candidate: {list_body}",
-    );
+    assert!(!list_body.contains("CONTENT_EXT"), "a list reads no candidate: {list_body}",);
 }

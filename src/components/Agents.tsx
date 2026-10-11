@@ -5,10 +5,9 @@
  *
  * - the top-chrome control and its **roster** (AGT-FR-02 … AGT-FR-08), which
  *   reports who this project can talk to and who is answering right now;
- * - the Global settings **Agents** section and its persona editor
- *   (AGT-FR-09 … AGT-FR-21), the only place a persona is authored;
- * - the Project settings **Agents** section (AGT-FR-22, AGT-FR-23), which
- *   decides only who is in this project.
+ * - the **Personal Agents** section of the Global group and the **Project
+ *   Agents** section of the Project group, with their one persona editor
+ *   (AGT-FR-09 … AGT-FR-23), the only place a persona is authored.
  *
  * The `@nickname` syntax and the mention picker live here too, because the tag
  * and the roster are the same fact seen from two places.
@@ -27,6 +26,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../api";
 import { onAgentTurnStateChanged } from "../events";
+import { useAgentsChanged } from "../hooks/useAgentsChanged";
 import {
   publishProjectAgents,
   useAgentRegistryRevision,
@@ -41,6 +41,7 @@ import { AGENT_ERRORS } from "../types";
 import type {
   Agent,
   AgentAvailability,
+  AgentScope,
   ActiveAiApiCatalog,
   AgentTurn,
   AiApiCatalog,
@@ -66,6 +67,8 @@ export function availabilityNote(availability: AgentAvailability): string {
       return "No AI API provider is active for this project. Verify and activate one in Global settings → AI API.";
     case "model_unavailable":
       return "The active AI API provider does not offer this model. Choose another model in the editor.";
+    case "shadowed":
+      return "A Project agent with the same nickname wins in this project, so this agent is not available here.";
     default:
       return "";
   }
@@ -80,6 +83,8 @@ export function availabilityShort(availability: AgentAvailability): string {
       return "provider not verified";
     case "model_unavailable":
       return "model unavailable";
+    case "shadowed":
+      return "shadowed";
     default:
       return "";
   }
@@ -207,11 +212,12 @@ export interface AgentsChromeControlProps {
   onOverlayOpening: () => void;
   /**
    * AGT-FR-06 / AGT-FR-07: where a row and the add action send the author — the
-   * Global settings window, on its Agents section, with an editor open. `null`
-   * opens a fresh one.
+   * Settings window, on the Project Agents or the Personal Agents section of the
+   * agent's scope, with an editor open. `null` opens a fresh one, and a fresh
+   * one is always a Project agent's.
    */
-  onOpenAgentInSettings: (agentId: string | null) => void;
-  /** AGT-FR-08: where the empty state names agents as being enrolled. */
+  onOpenAgentInSettings: (agentId: string | null, scope: AgentScope) => void;
+  /** AGT-FR-08: where the empty state names agents as being described. */
   onOpenProjectSettings: () => void;
   /**
    * SNV-FR-56: the roster's open state, owned by the shell.
@@ -234,18 +240,22 @@ export function AgentsChromeControl({
 }: AgentsChromeControlProps) {
   const setOpen = onOpenChange;
   const [agents, setAgents] = useState<ProjectAgent[] | null>(null);
-  // AGT-FR-08's empty state says "enrol one", which is advice — and advice is
-  // wrong when the roster could not be read at all. Kept apart from `agents` so
-  // a read that failed cannot be mistaken for a project that enrolled nobody.
+  // AGT-FR-08's empty state says where to describe one, which is advice — and
+  // advice is wrong when the roster could not be read at all. Kept apart from
+  // `agents` so a read that failed cannot be mistaken for a project with no
+  // agent.
   const [error, setError] = useState("");
   const rootRef = useRef<HTMLDivElement | null>(null);
   const turns = useAgentTurns(open);
   const active = useActiveAiApiCatalog(open);
   // AGT-FR-02: the count is a fact about the open project, and it changes from
-  // surfaces this control cannot see — the Project settings section enrols, the
-  // Global settings section deletes. A control that read only on mount would go
-  // on reporting a number that is no longer true.
+  // surfaces this control cannot see — the Settings window creates, edits, and
+  // deletes agents in a webview of its own. A control that read only on mount
+  // would go on reporting a number that is no longer true.
   const revision = useAgentRegistryRevision();
+  // AGT-FR-NJXP / AGR-FR-ZRJD: a write made in any window reaches this one as an
+  // event, which bumps the revision every surface reads again on.
+  useAgentsChanged();
   /**
    * Whether this mount has published anything yet.
    *
@@ -329,8 +339,8 @@ export function AgentsChromeControl({
       // order matters — the shell's handler is what closes the rest, and it
       // must not be able to close this one on the way in.
       onOverlayOpening();
-      // AGT-FR-02: re-read on opening, so a persona enrolled in another tab is
-      // present. Once per opening, not per render.
+      // AGT-FR-02: re-read on opening, so a persona changed in another window
+      // is present. Once per opening, not per render.
       api
         .listProjectAgents()
         .then((list) => {
@@ -370,6 +380,7 @@ export function AgentsChromeControl({
           role="dialog"
           aria-label="Agents"
           data-testid="agents-roster"
+          data-floating-overlay=""
           style={{
             position: "absolute",
             top: "calc(100% + 6px)",
@@ -401,7 +412,7 @@ export function AgentsChromeControl({
                 style={{ padding: "16px 10px", color: "var(--fg-3)" }}
                 className="t-ui-sm"
               >
-                This project has no agents yet. Enrol one in{" "}
+                This project has no agents yet. Describe one in{" "}
                 <button
                   className="btn btn--ghost btn--sm"
                   style={{ padding: 0, textDecoration: "underline" }}
@@ -410,9 +421,9 @@ export function AgentsChromeControl({
                     onOpenProjectSettings();
                   }}
                 >
-                  Project settings → Agents
+                  Project settings → Project Agents
                 </button>
-                .
+                , or describe your own in Global settings → Personal Agents.
               </div>
             )}
 
@@ -428,7 +439,7 @@ export function AgentsChromeControl({
                   // looked at or changed; it performs no edit itself.
                   onClick={() => {
                     setOpen(false);
-                    onOpenAgentInSettings(entry.agent.id);
+                    onOpenAgentInSettings(entry.agent.id, entry.scope);
                   }}
                   style={{
                     display: "flex",
@@ -454,6 +465,14 @@ export function AgentsChromeControl({
                     <span className="u-ellipsis" style={{ fontWeight: 600 }}>
                     @{entry.agent.nickname}
                   </span>
+                    {/* AGT-FR-04: the scope of every row. */}
+                    <span
+                      className="t-ui-sm t-muted"
+                      data-testid="agents-roster-scope"
+                      style={{ marginLeft: "auto" }}
+                    >
+                      {entry.scope === "project" ? "Project" : "Personal"}
+                    </span>
                     {busy && (
                       <span
                         className="t-ui-sm"
@@ -485,7 +504,7 @@ export function AgentsChromeControl({
               style={{ width: "100%", justifyContent: "flex-start" }}
               onClick={() => {
                 setOpen(false);
-                onOpenAgentInSettings(null);
+                onOpenAgentInSettings(null, "project");
               }}
             >
               <Icon.Plus size={12} /> Add an agent
@@ -518,9 +537,9 @@ export function agentErrorMessage(e: unknown): string {
     case AGENT_ERRORS.nicknameInvalid:
       return "A nickname cannot contain spaces or @.";
     case AGENT_ERRORS.nicknameReserved:
-      return `“@${ALL_HANDLE}” addresses every agent the project has enrolled.`;
+      return `“@${ALL_HANDLE}” addresses every agent on the project's roster.`;
     case AGENT_ERRORS.nicknameTaken:
-      return "Another agent already answers to that nickname.";
+      return "Another agent of this kind already answers to that nickname.";
     case AGENT_ERRORS.providerUnconfigured:
       return "No AI API provider is configured. Configure one in Global settings → AI API.";
     case AGENT_ERRORS.providerNotVerified:
@@ -546,7 +565,7 @@ export function nicknameProblem(nickname: string): string {
   // AGT-FR-13 has the field say *why* the name is unavailable, so an author
   // reads that `all` is already spoken for rather than only that it is rejected.
   if (nickname.toLowerCase() === ALL_HANDLE) {
-    return `“@${ALL_HANDLE}” addresses every agent the project has enrolled.`;
+    return `“@${ALL_HANDLE}” addresses every agent on the project's roster.`;
   }
   // Mirrors `NICKNAME_MAX` in `src-tauri/src/agents.rs`. Without it the confirm
   // action would make a call the backend refuses, which is exactly what

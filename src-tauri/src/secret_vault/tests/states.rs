@@ -12,14 +12,9 @@ fn asv_ts_10_refused_read_is_unavailable_not_empty() {
     let (vault, keyring) = vault();
     keyring.state().refuse_read = true;
 
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])), Err(VaultError::Unavailable));
     assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])),
-        Err(VaultError::Unavailable)
-    );
-    assert_eq!(
-        vault
-            .secret_presence(&[p(&["github", "tokens", "a"])])
-            .unwrap_err(),
+        vault.secret_presence(&[p(&["github", "tokens", "a"])]).unwrap_err(),
         VaultError::Unavailable
     );
     assert_eq!(VaultError::Unavailable.code(), "vault_unavailable");
@@ -32,15 +27,9 @@ fn asv_ts_11_absent_entry_reads_empty_and_is_created() {
     let (vault, keyring) = vault();
     assert_eq!(keyring.entry(), None);
 
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        None
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), None);
     let presence = vault
-        .secret_presence(&[
-            p(&["github", "tokens", "a"]),
-            p(&["ai_api", "providers", "x"]),
-        ])
+        .secret_presence(&[p(&["github", "tokens", "a"]), p(&["ai_api", "providers", "x"])])
         .unwrap();
     assert!(presence.values().all(|v| !v));
 
@@ -48,10 +37,7 @@ fn asv_ts_11_absent_entry_reads_empty_and_is_created() {
 
     let object = keyring.object();
     assert_eq!(object.get("version").and_then(Value::as_u64), Some(1));
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        Some("A".into())
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), Some("A".into()));
 }
 
 /// ASV-FR-17, ASV-FR-18, ASV-FR-01: an undecodable value quarantines the entry — reads refuse, the
@@ -63,14 +49,9 @@ fn asv_ts_12_malformed_value_is_quarantined_by_the_next_mutation() {
     let garbage = "not json at all";
     keyring.set_entry(garbage);
 
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])), Err(VaultError::Malformed));
     assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])),
-        Err(VaultError::Malformed)
-    );
-    assert_eq!(
-        vault
-            .secret_presence(&[p(&["github", "tokens", "a"])])
-            .unwrap_err(),
+        vault.secret_presence(&[p(&["github", "tokens", "a"])]).unwrap_err(),
         VaultError::Malformed
     );
     // Nothing was written and nothing was deleted.
@@ -81,14 +62,8 @@ fn asv_ts_12_malformed_value_is_quarantined_by_the_next_mutation() {
     set(&vault, &["github", "tokens", "a"], "A").unwrap();
 
     let object = keyring.object();
-    assert_eq!(
-        object.get("quarantine").and_then(Value::as_str),
-        Some(garbage)
-    );
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        Some("A".into())
-    );
+    assert_eq!(object.get("quarantine").and_then(Value::as_str), Some(garbage));
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(), Some("A".into()));
 }
 
 /// ASV-FR-17, ASV-FR-12, ASV-FR-01: a quarantined entry plus a refused write leaves the undecodable
@@ -121,15 +96,10 @@ fn asv_ts_14_quarantine_is_carried_and_never_addressable() {
 
     set(&vault, &["ai_api", "providers", "openai"], "K").unwrap();
     vault
-        .apply_secret_mutations(&[Mutation::Remove {
-            path: p(&["github", "tokens", "a"]),
-        }])
+        .apply_secret_mutations(&[Mutation::Remove { path: p(&["github", "tokens", "a"]) }])
         .unwrap();
 
-    assert_eq!(
-        keyring.object().get("quarantine").and_then(Value::as_str),
-        Some(garbage)
-    );
+    assert_eq!(keyring.object().get("quarantine").and_then(Value::as_str), Some(garbage));
     // ASV-FR-18: no `SecretPath` resolves the reserved field, whatever shape it
     // is asked for.
     assert_eq!(vault.read_secret(&p(&["quarantine"])).unwrap(), None);
@@ -138,10 +108,7 @@ fn asv_ts_14_quarantine_is_carried_and_never_addressable() {
     assert_eq!(presence.get(&p(&["quarantine"])), Some(&false));
     // Nor can a mutation write to it or remove it.
     assert!(set(&vault, &["quarantine"], "overwritten").is_err());
-    assert_eq!(
-        keyring.object().get("quarantine").and_then(Value::as_str),
-        Some(garbage)
-    );
+    assert_eq!(keyring.object().get("quarantine").and_then(Value::as_str), Some(garbage));
 }
 
 /// ASV-FR-18, ASV-FR-28, ASV-FR-29 (second half): a value quarantined a second time is carried whole
@@ -154,17 +121,17 @@ fn asv_ts_14_second_quarantine_does_not_accumulate() {
     let first_object = keyring.entry().unwrap();
 
     // The whole prior value — quarantine field and all — becomes garbage again.
+    // A second process, because the first one holds the entry in its cache.
     keyring.set_entry(&format!("corrupted: {first_object}"));
+    let vault = Vault::new(Box::new(keyring.clone()));
+    vault.mark_migrated();
     set(&vault, &["github", "tokens", "b"], "B").unwrap();
 
     let object = keyring.object();
     let quarantined = object.get("quarantine").and_then(Value::as_str).unwrap();
     assert!(quarantined.starts_with("corrupted: "));
     // Exactly one such field, holding the prior value whole.
-    assert_eq!(
-        object.keys().filter(|k| k.contains("quarantine")).count(),
-        1
-    );
+    assert_eq!(object.keys().filter(|k| k.contains("quarantine")).count(), 1);
 }
 
 /// ASV-FR-19: an object from a newer build is never overwritten and never
@@ -184,9 +151,7 @@ fn asv_ts_15_unsupported_version_refuses_everything() {
         VaultError::UnsupportedVersion
     );
     assert_eq!(
-        vault
-            .secret_presence(&[p(&["github", "tokens", "a"])])
-            .unwrap_err(),
+        vault.secret_presence(&[p(&["github", "tokens", "a"])]).unwrap_err(),
         VaultError::UnsupportedVersion
     );
 
@@ -194,4 +159,3 @@ fn asv_ts_15_unsupported_version_refuses_everything() {
     assert_eq!(keyring.count(&Call::Write), 0);
     assert_eq!(keyring.count(&Call::Delete), 0);
 }
-

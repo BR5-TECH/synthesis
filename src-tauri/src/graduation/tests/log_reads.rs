@@ -5,8 +5,8 @@
 use super::*;
 
 use crate::graduation::logs::read::{
-    GraduationLogCursor, GraduationLogPassScope, DIRECTION_AFTER, DIRECTION_BEFORE,
-    SEARCH_MATCHED, SEARCH_NOT_REQUESTED, SEARCH_NO_MATCH, STATUS_AVAILABLE, STATUS_EMPTY,
+    GraduationLogCursor, GraduationLogPassScope, DIRECTION_AFTER, DIRECTION_BEFORE, SEARCH_MATCHED,
+    SEARCH_NOT_REQUESTED, SEARCH_NO_MATCH, STATUS_AVAILABLE, STATUS_EMPTY,
     STATUS_PERSISTENCE_FAILED, STATUS_UNAVAILABLE,
 };
 use crate::graduation::logs::{self, GraduationLogPage, GraduationLogStream};
@@ -27,29 +27,33 @@ pub(super) fn driven(fx: &Fixture) -> GraduationRun {
     )
 }
 
-fn read(
-    fx: &Fixture,
-    run: &GraduationRun,
-    phase_id: &str,
+/// What one read of a test asks for. The run is given apart.
+struct Ask<'a> {
+    phase_id: &'a str,
     scope: GraduationLogPassScope,
     stream: GraduationLogStream,
     cursor: Option<GraduationLogCursor>,
     limit: Option<u32>,
-    query: Option<&str>,
-) -> GraduationLogPage {
+    query: Option<&'a str>,
+}
+
+fn read(fx: &Fixture, run: &GraduationRun, ask: Ask<'_>) -> GraduationLogPage {
+    let Ask { phase_id, scope, stream, cursor, limit, query } = ask;
     let fs = crate::graduation::store_fs(&fx.app).expect("the store");
     let paths = logs::paths_for(&fx.app, &run.id).expect("the paths");
     logs::read::read_page(
         &fs,
         &paths,
         &run.logs,
-        &run.id,
-        phase_id,
-        &scope,
-        stream,
-        cursor,
-        limit,
-        query.map(str::to_string),
+        logs::read::PageRequest {
+            run_id: &run.id,
+            phase_id,
+            scope: &scope,
+            stream,
+            cursor,
+            limit,
+            query: query.map(str::to_string),
+        },
     )
     .expect("a page")
 }
@@ -57,13 +61,7 @@ fn read(
 fn sequences(page: &GraduationLogPage) -> Vec<u64> {
     page.entries
         .iter()
-        .map(|entry| {
-            entry
-                .record
-                .get("sequence")
-                .and_then(|v| v.as_u64())
-                .unwrap_or_default()
-        })
+        .map(|entry| entry.record.get("sequence").and_then(|v| v.as_u64()).unwrap_or_default())
         .collect()
 }
 
@@ -77,12 +75,14 @@ fn a_pass_scope_returns_that_pass_and_no_run_level_record() {
     let page = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Pass { pass: 1 },
-        GraduationLogStream::Structured,
-        None,
-        None,
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Pass { pass: 1 },
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: None,
+            query: None,
+        },
     );
     assert_eq!(page.status, STATUS_AVAILABLE);
     assert!(!page.entries.is_empty(), "pass 1 of working wrote something");
@@ -104,12 +104,14 @@ fn a_run_level_scope_returns_the_records_whose_pass_is_null_alone() {
     let page = read(
         &fx,
         &run,
-        "queued",
-        GraduationLogPassScope::RunLevel,
-        GraduationLogStream::Structured,
-        None,
-        None,
-        None,
+        Ask {
+            phase_id: "queued",
+            scope: GraduationLogPassScope::RunLevel,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: None,
+            query: None,
+        },
     );
     assert_eq!(page.status, STATUS_AVAILABLE);
     assert!(!page.entries.is_empty(), "the queue wait wrote something");
@@ -123,12 +125,14 @@ fn a_run_level_scope_returns_the_records_whose_pass_is_null_alone() {
     let as_pass = read(
         &fx,
         &run,
-        "queued",
-        GraduationLogPassScope::Pass { pass: 1 },
-        GraduationLogStream::Structured,
-        None,
-        None,
-        None,
+        Ask {
+            phase_id: "queued",
+            scope: GraduationLogPassScope::Pass { pass: 1 },
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: None,
+            query: None,
+        },
     );
     assert!(as_pass.entries.is_empty());
     assert_eq!(as_pass.status, STATUS_EMPTY);
@@ -146,12 +150,14 @@ fn a_phase_scope_returns_everything_the_phase_holds_in_one_order() {
         let whole = read(
             &fx,
             &run,
-            phase_id,
-            GraduationLogPassScope::Phase,
-            GraduationLogStream::Structured,
-            None,
-            Some(1000),
-            None,
+            Ask {
+                phase_id,
+                scope: GraduationLogPassScope::Phase,
+                stream: GraduationLogStream::Structured,
+                cursor: None,
+                limit: Some(1000),
+                query: None,
+            },
         );
         let read_sequences = sequences(&whole);
         let mut sorted = read_sequences.clone();
@@ -161,30 +167,31 @@ fn a_phase_scope_returns_everything_the_phase_holds_in_one_order() {
         let mut parts: Vec<u64> = sequences(&read(
             &fx,
             &run,
-            phase_id,
-            GraduationLogPassScope::RunLevel,
-            GraduationLogStream::Structured,
-            None,
-            Some(1000),
-            None,
+            Ask {
+                phase_id,
+                scope: GraduationLogPassScope::RunLevel,
+                stream: GraduationLogStream::Structured,
+                cursor: None,
+                limit: Some(1000),
+                query: None,
+            },
         ));
         for pass in 1..=2 {
             parts.extend(sequences(&read(
                 &fx,
                 &run,
-                phase_id,
-                GraduationLogPassScope::Pass { pass },
-                GraduationLogStream::Structured,
-                None,
-                Some(1000),
-                None,
+                Ask {
+                    phase_id,
+                    scope: GraduationLogPassScope::Pass { pass },
+                    stream: GraduationLogStream::Structured,
+                    cursor: None,
+                    limit: Some(1000),
+                    query: None,
+                },
             )));
         }
         parts.sort_unstable();
-        assert_eq!(
-            parts, read_sequences,
-            "{phase_id} holds nothing outside its own scopes"
-        );
+        assert_eq!(parts, read_sequences, "{phase_id} holds nothing outside its own scopes");
     }
 
     // The run-level records stand in the phase that wrote them and are marked
@@ -192,23 +199,27 @@ fn a_phase_scope_returns_everything_the_phase_holds_in_one_order() {
     let queued = read(
         &fx,
         &run,
-        "queued",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        Some(1000),
-        None,
+        Ask {
+            phase_id: "queued",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(1000),
+            query: None,
+        },
     );
     assert!(queued.entries.iter().all(|e| e.presentation.run_level));
     let working = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        Some(1000),
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(1000),
+            query: None,
+        },
     );
     assert!(working.entries.iter().any(|e| !e.presentation.run_level));
 }
@@ -223,22 +234,26 @@ fn a_record_reads_back_identically_through_two_scopes() {
     let by_pass = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Pass { pass: 1 },
-        GraduationLogStream::Structured,
-        None,
-        Some(1000),
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Pass { pass: 1 },
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(1000),
+            query: None,
+        },
     );
     let by_phase = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        Some(1000),
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(1000),
+            query: None,
+        },
     );
     let first = &by_pass.entries[0].record;
     let same = by_phase
@@ -259,12 +274,14 @@ fn paging_walks_backwards_without_returning_a_record_twice() {
     let newest = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        Some(2),
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(2),
+            query: None,
+        },
     );
     assert_eq!(newest.entries.len(), 2);
     assert!(!newest.oldest_reached, "more history stands behind it");
@@ -274,19 +291,18 @@ fn paging_walks_backwards_without_returning_a_record_twice() {
     let older = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        Some(older_cursor),
-        Some(2),
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: Some(older_cursor),
+            limit: Some(2),
+            query: None,
+        },
     );
     let head: Vec<u64> = sequences(&older);
     let tail: Vec<u64> = sequences(&newest);
-    assert!(
-        head.iter().all(|s| !tail.contains(s)),
-        "the two pages are disjoint"
-    );
+    assert!(head.iter().all(|s| !tail.contains(s)), "the two pages are disjoint");
     assert!(head.iter().max() < tail.iter().min(), "older is older");
     assert_eq!(newest.matched_total, older.matched_total);
 }
@@ -301,28 +317,32 @@ fn an_after_cursor_returns_only_what_came_later() {
     let all = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        Some(1000),
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(1000),
+            query: None,
+        },
     );
     let first = sequences(&all)[0];
     let after = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        Some(GraduationLogCursor {
-            run_id: run.id.clone(),
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
             stream: GraduationLogStream::Structured,
-            direction: DIRECTION_AFTER.to_string(),
-            sequence: first,
-        }),
-        Some(1000),
-        None,
+            cursor: Some(GraduationLogCursor {
+                run_id: run.id.clone(),
+                stream: GraduationLogStream::Structured,
+                direction: DIRECTION_AFTER.to_string(),
+                sequence: first,
+            }),
+            limit: Some(1000),
+            query: None,
+        },
     );
     assert!(sequences(&after).iter().all(|s| *s > first));
 }
@@ -340,23 +360,22 @@ fn a_cursor_of_another_scope_is_refused() {
         &fs,
         &paths,
         &run.logs,
-        &run.id,
-        "working",
-        &GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        Some(GraduationLogCursor {
-            run_id: "another-run".to_string(),
+        logs::read::PageRequest {
+            run_id: &run.id,
+            phase_id: "working",
+            scope: &GraduationLogPassScope::Phase,
             stream: GraduationLogStream::Structured,
-            direction: DIRECTION_AFTER.to_string(),
-            sequence: 1,
-        }),
-        None,
-        None,
+            cursor: Some(GraduationLogCursor {
+                run_id: "another-run".to_string(),
+                stream: GraduationLogStream::Structured,
+                direction: DIRECTION_AFTER.to_string(),
+                sequence: 1,
+            }),
+            limit: None,
+            query: None,
+        },
     );
-    assert_eq!(
-        refused.unwrap_err(),
-        logs::read::ERR_CURSOR_NOT_FOR_THIS_SCOPE
-    );
+    assert_eq!(refused.unwrap_err(), logs::read::ERR_CURSOR_NOT_FOR_THIS_SCOPE);
 }
 
 /// GRS-FR-OYIC, GRS-FR-NSGX: search is case-insensitive substring over what the
@@ -369,28 +388,29 @@ fn search_matches_what_is_displayed_and_never_empties_the_scope() {
     let plain = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        Some(1000),
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(1000),
+            query: None,
+        },
     );
     assert_eq!(plain.search, SEARCH_NOT_REQUESTED);
 
-    let event = plain.entries[0].record["event"]
-        .as_str()
-        .expect("an event")
-        .to_string();
+    let event = plain.entries[0].record["event"].as_str().expect("an event").to_string();
     let matched = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        Some(1000),
-        Some(&event.to_uppercase()),
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(1000),
+            query: Some(&event.to_uppercase()),
+        },
     );
     assert_eq!(matched.search, SEARCH_MATCHED);
     assert!(matched.matched_total >= 1);
@@ -398,37 +418,38 @@ fn search_matches_what_is_displayed_and_never_empties_the_scope() {
     let missing = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        Some(1000),
-        Some("no-record-carries-this-text"),
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(1000),
+            query: Some("no-record-carries-this-text"),
+        },
     );
     assert_eq!(missing.search, SEARCH_NO_MATCH);
     assert_eq!(missing.matched_total, 0);
-    assert_eq!(
-        missing.status, STATUS_AVAILABLE,
-        "the scope's own records settle the status"
-    );
+    assert_eq!(missing.status, STATUS_AVAILABLE, "the scope's own records settle the status");
 }
 
-/// GRS-FR-OYIC, GRS-FR-QVTA: a source search matches the decoded output, so a
-/// reader searches what is on screen.
+/// GRS-FR-OYIC: an activity search matches the summary a row shows, whatever
+/// the case.
 #[test]
-fn a_source_search_matches_the_decoded_output() {
+fn an_activity_search_matches_the_summary_a_row_shows() {
     let fx = Fixture::new();
     let run = driven(&fx);
 
     let page = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
-        None,
-        Some(1000),
-        Some("THE SCRIPTED TURN"),
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Activity,
+            cursor: None,
+            limit: Some(1000),
+            query: Some("THE SCRIPTED TURN"),
+        },
     );
     assert_eq!(page.search, SEARCH_MATCHED);
     assert!(page.matched_total >= 1);
@@ -444,12 +465,14 @@ fn a_run_level_record_is_matched_by_the_marker_it_is_shown_with() {
     let page = read(
         &fx,
         &run,
-        "queued",
-        GraduationLogPassScope::RunLevel,
-        GraduationLogStream::Structured,
-        None,
-        Some(1000),
-        Some("Run-Level"),
+        Ask {
+            phase_id: "queued",
+            scope: GraduationLogPassScope::RunLevel,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(1000),
+            query: Some("Run-Level"),
+        },
     );
     assert_eq!(page.search, SEARCH_MATCHED);
     assert!(page.matched_total >= 1);
@@ -465,12 +488,14 @@ fn a_scope_that_holds_nothing_is_empty_rather_than_failed() {
     let page = read(
         &fx,
         &run,
-        "queued",
-        GraduationLogPassScope::Pass { pass: 7 },
-        GraduationLogStream::Source,
-        None,
-        None,
-        None,
+        Ask {
+            phase_id: "queued",
+            scope: GraduationLogPassScope::Pass { pass: 7 },
+            stream: GraduationLogStream::Activity,
+            cursor: None,
+            limit: None,
+            query: None,
+        },
     );
     assert_eq!(page.status, STATUS_EMPTY);
     assert!(page.entries.is_empty());
@@ -497,12 +522,14 @@ fn a_damaged_line_reads_as_a_typed_read_failure() {
     let page = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        None,
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: None,
+            query: None,
+        },
     );
     assert_eq!(page.status, STATUS_UNAVAILABLE);
     let failure = page.failure.expect("a typed read failure");
@@ -533,12 +560,14 @@ fn a_failed_write_of_this_stream_reads_as_a_persistence_failure() {
     let page = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        None,
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: None,
+            query: None,
+        },
     );
     assert_eq!(page.status, STATUS_PERSISTENCE_FAILED);
     let failure = page.failure.expect("a typed write failure");
@@ -550,12 +579,14 @@ fn a_failed_write_of_this_stream_reads_as_a_persistence_failure() {
     let other = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
-        None,
-        None,
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Activity,
+            cursor: None,
+            limit: None,
+            query: None,
+        },
     );
     assert_ne!(other.status, STATUS_PERSISTENCE_FAILED);
 }
@@ -571,12 +602,14 @@ fn an_unrecognised_storage_version_renders_no_log() {
     let page = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        None,
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: None,
+            query: None,
+        },
     );
     assert_eq!(page.status, STATUS_EMPTY);
     assert!(page.failure.is_none());
@@ -592,12 +625,14 @@ fn a_page_is_bounded_and_still_counts_the_whole_scope() {
     let page = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        Some(1),
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(1),
+            query: None,
+        },
     );
     assert_eq!(page.entries.len(), 1);
     assert!(page.matched_total > 1, "the scope holds more than the page");
@@ -621,12 +656,14 @@ fn a_partial_final_line_is_a_tail_rather_than_corruption() {
     let page = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        Some(1000),
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(1000),
+            query: None,
+        },
     );
     assert_eq!(page.status, STATUS_AVAILABLE);
     assert!(page.failure.is_none(), "a tail is not a read failure");
@@ -643,12 +680,14 @@ fn the_backward_walk_reaches_the_beginning_and_covers_the_whole_scope() {
     let whole = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        Some(1000),
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(1000),
+            query: None,
+        },
     );
     let every = sequences(&whole);
     assert!(every.len() > 2, "the scope is worth paging");
@@ -656,12 +695,14 @@ fn the_backward_walk_reaches_the_beginning_and_covers_the_whole_scope() {
     let newest = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        Some(1),
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(1),
+            query: None,
+        },
     );
     assert_eq!(
         sequences(&newest),
@@ -676,18 +717,17 @@ fn the_backward_walk_reaches_the_beginning_and_covers_the_whole_scope() {
         page = read(
             &fx,
             &run,
-            "working",
-            GraduationLogPassScope::Phase,
-            GraduationLogStream::Structured,
-            Some(cursor),
-            Some(1),
-            None,
+            Ask {
+                phase_id: "working",
+                scope: GraduationLogPassScope::Phase,
+                stream: GraduationLogStream::Structured,
+                cursor: Some(cursor),
+                limit: Some(1),
+                query: None,
+            },
         );
         let older = sequences(&page);
-        assert!(
-            older.iter().all(|s| !walked.contains(s)),
-            "the pages are disjoint"
-        );
+        assert!(older.iter().all(|s| !walked.contains(s)), "the pages are disjoint");
         walked.extend(older);
     }
     assert!(page.older_cursor.is_none(), "null exactly at the beginning");
@@ -709,20 +749,22 @@ fn a_cursor_of_the_other_stream_or_of_no_direction_is_refused() {
             &fs,
             &paths,
             &run.logs,
-            &run.id,
-            "working",
-            &GraduationLogPassScope::Phase,
-            GraduationLogStream::Structured,
-            Some(cursor),
-            None,
-            None,
+            logs::read::PageRequest {
+                run_id: &run.id,
+                phase_id: "working",
+                scope: &GraduationLogPassScope::Phase,
+                stream: GraduationLogStream::Structured,
+                cursor: Some(cursor),
+                limit: None,
+                query: None,
+            },
         )
         .unwrap_err()
     };
     assert_eq!(
         refuse(GraduationLogCursor {
             run_id: run.id.clone(),
-            stream: GraduationLogStream::Source,
+            stream: GraduationLogStream::Activity,
             direction: DIRECTION_AFTER.to_string(),
             sequence: 1,
         }),
@@ -739,46 +781,47 @@ fn a_cursor_of_the_other_stream_or_of_no_direction_is_refused() {
     );
 }
 
-/// GRS-FR-OYIC: every displayed source field is searchable, so nothing a reader
-/// can see is unmatchable.
+/// GRS-FR-OYIC: an activity search matches the kind and the summary and no
+/// other field, so it never matches a text the window does not show.
 #[test]
-fn every_displayed_source_field_is_searchable() {
+fn an_activity_search_matches_the_kind_and_the_summary_alone() {
     let fx = Fixture::new();
     let run = driven(&fx);
-
-    let page = read(
-        &fx,
-        &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
-        None,
-        Some(1000),
-        None,
-    );
-    let chunk = page.entries[0].record.clone();
-    let sequence = chunk["sequence"].as_u64().expect("a sequence");
-    for needle in [
-        chunk["run_id"].as_str().unwrap().to_string(),
-        chunk["phase_id"].as_str().unwrap().to_string(),
-        chunk["origin"].as_str().unwrap().to_string(),
-        chunk["producer"].as_str().unwrap().to_string(),
-        chunk["source"].as_str().unwrap().to_string(),
-        chunk["at"].as_str().unwrap().to_string(),
-        sequence.to_string(),
-        chunk["pass"].as_u64().unwrap().to_string(),
-    ] {
-        let found = read(
+    let search = |needle: &str| {
+        read(
             &fx,
             &run,
-            "working",
-            GraduationLogPassScope::Phase,
-            GraduationLogStream::Source,
-            None,
-            Some(1000),
-            Some(&needle),
+            Ask {
+                phase_id: "working",
+                scope: GraduationLogPassScope::Phase,
+                stream: GraduationLogStream::Activity,
+                cursor: None,
+                limit: Some(1000),
+                query: Some(needle),
+            },
+        )
+    };
+
+    let page = search("");
+    let record = page.entries[0].record.clone();
+    for needle in [
+        record["kind"].as_str().unwrap().to_string(),
+        record["summary"].as_str().unwrap().to_string(),
+    ] {
+        assert_eq!(search(&needle).search, SEARCH_MATCHED, "“{needle}” is searchable");
+    }
+    for hidden in [
+        record["run_id"].as_str().unwrap().to_string(),
+        record["producer"].as_str().unwrap().to_string(),
+        record["at"].as_str().unwrap().to_string(),
+        record["channel"].as_str().unwrap().to_string(),
+        "RAW PAYLOAD".to_string(),
+    ] {
+        assert_eq!(
+            search(&hidden).search,
+            SEARCH_NO_MATCH,
+            "“{hidden}” is not displayed, so it is not matched"
         );
-        assert_eq!(found.search, SEARCH_MATCHED, "“{needle}” is searchable");
     }
 }
 
@@ -792,21 +835,19 @@ fn a_structured_search_matches_the_fields_the_surface_renders() {
     let page = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Structured,
-        None,
-        Some(1000),
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Structured,
+            cursor: None,
+            limit: Some(1000),
+            query: None,
+        },
     );
     let with_fields = page
         .entries
         .iter()
-        .find(|entry| {
-            entry.record["fields"]
-                .as_object()
-                .is_some_and(|fields| !fields.is_empty())
-        })
+        .find(|entry| entry.record["fields"].as_object().is_some_and(|fields| !fields.is_empty()))
         .expect("a record carrying fields");
     let fields = with_fields.record["fields"].as_object().unwrap();
     let (key, value) = fields.iter().next().unwrap();
@@ -814,65 +855,17 @@ fn a_structured_search_matches_the_fields_the_surface_renders() {
         let found = read(
             &fx,
             &run,
-            "working",
-            GraduationLogPassScope::Phase,
-            GraduationLogStream::Structured,
-            None,
-            Some(1000),
-            Some(&needle),
+            Ask {
+                phase_id: "working",
+                scope: GraduationLogPassScope::Phase,
+                stream: GraduationLogStream::Structured,
+                cursor: None,
+                limit: Some(1000),
+                query: Some(&needle),
+            },
         );
         assert_eq!(found.search, SEARCH_MATCHED, "“{needle}” is searchable");
     }
-}
-
-/// GRS-FR-QVTA: decoding for display is UTF-8 with replacement characters, and
-/// the stored base64 is unchanged by a read.
-#[test]
-fn an_invalid_byte_sequence_is_searched_with_replacement_characters() {
-    use base64::Engine as _;
-    let fx = Fixture::new();
-    let run = driven(&fx);
-    let path = logs::paths_for(&fx.app, &run.id)
-        .expect("the paths")
-        .stream(GraduationLogStream::Source);
-    let text = std::fs::read_to_string(&path).expect("the stream");
-    let mut first: serde_json::Value =
-        serde_json::from_str(text.lines().next().unwrap()).expect("a chunk");
-    // `0xFF` is no part of any UTF-8 sequence, wrapped in text either side.
-    let bytes = [b"before".as_slice(), &[0xFF], b"after".as_slice()].concat();
-    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    first["data_base64"] = serde_json::Value::String(encoded.clone());
-    let phase = first["phase_id"].as_str().expect("a phase").to_string();
-    let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
-    lines[0] = first.to_string();
-    std::fs::write(&path, format!("{}\n", lines.join("\n"))).expect("the damaged chunk");
-
-    let page = read(
-        &fx,
-        &run,
-        &phase,
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
-        None,
-        Some(1000),
-        Some("before"),
-    );
-    assert_eq!(page.search, SEARCH_MATCHED, "the decoded text is searchable");
-    let after = read(
-        &fx,
-        &run,
-        &phase,
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
-        None,
-        Some(1000),
-        None,
-    );
-    assert_eq!(
-        after.entries[0].record["data_base64"].as_str(),
-        Some(encoded.as_str()),
-        "the stored base64 is returned unchanged"
-    );
 }
 
 /// GRS-FR-DYPS: `limit` bounds one page, whatever the caller asks for.
@@ -884,12 +877,14 @@ fn a_limit_is_bounded_at_both_ends() {
         read(
             &fx,
             &run,
-            "working",
-            GraduationLogPassScope::Phase,
-            GraduationLogStream::Structured,
-            None,
-            limit,
-            None,
+            Ask {
+                phase_id: "working",
+                scope: GraduationLogPassScope::Phase,
+                stream: GraduationLogStream::Structured,
+                cursor: None,
+                limit,
+                query: None,
+            },
         )
     };
     assert_eq!(of(Some(0)).entries.len(), 1, "a limit of none is one record");
@@ -921,12 +916,14 @@ fn a_failed_write_of_one_stream_leaves_the_other_readable() {
     let other = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
-        None,
-        Some(1000),
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Activity,
+            cursor: None,
+            limit: Some(1000),
+            query: None,
+        },
     );
     assert_eq!(other.status, STATUS_AVAILABLE);
     assert!(!other.entries.is_empty());
@@ -939,9 +936,8 @@ fn a_failed_write_of_one_stream_leaves_the_other_readable() {
 fn a_stream_that_cannot_be_read_at_all_is_unavailable() {
     let fx = Fixture::new();
     let run = driven(&fx);
-    let path = logs::paths_for(&fx.app, &run.id)
-        .expect("the paths")
-        .stream(GraduationLogStream::Source);
+    let path =
+        logs::paths_for(&fx.app, &run.id).expect("the paths").stream(GraduationLogStream::Activity);
     // A directory where the stream should be: it exists, and it is no file.
     std::fs::remove_file(&path).expect("the stream");
     std::fs::create_dir(&path).expect("something unreadable in its place");
@@ -949,12 +945,14 @@ fn a_stream_that_cannot_be_read_at_all_is_unavailable() {
     let page = read(
         &fx,
         &run,
-        "working",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
-        None,
-        None,
-        None,
+        Ask {
+            phase_id: "working",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Activity,
+            cursor: None,
+            limit: None,
+            query: None,
+        },
     );
     assert_eq!(page.status, STATUS_UNAVAILABLE);
     let failure = page.failure.expect("a typed read failure");
@@ -977,12 +975,14 @@ fn a_run_with_no_storage_reads_back_empty() {
     let page = read(
         &fx,
         &run,
-        "queued",
-        GraduationLogPassScope::Phase,
-        GraduationLogStream::Source,
-        None,
-        None,
-        None,
+        Ask {
+            phase_id: "queued",
+            scope: GraduationLogPassScope::Phase,
+            stream: GraduationLogStream::Activity,
+            cursor: None,
+            limit: None,
+            query: None,
+        },
     );
     assert_eq!(page.status, STATUS_EMPTY);
     assert!(page.failure.is_none());

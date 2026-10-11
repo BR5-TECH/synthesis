@@ -157,4 +157,26 @@ describe("GIT-FR-NQTZ: refusal text", () => {
     expect(githubPollingErrorMessage("status_update_failed")).toMatch(/In Progress/);
     expect(githubPollingErrorMessage("something_new")).toContain("something_new");
   });
+
+  it("GHA-FR-LBLM: a host mismatch is stated, and no remote text does not claim github.com only", () => {
+    expect(githubPollingErrorMessage("github_host_mismatch")).toBe(
+      "The project token belongs to another GitHub host than this remote. Pick or add a token for the host of the remote.",
+    );
+    expect(githubPollingErrorMessage("no_github_remote")).not.toContain("github.com");
+  });
+
+  it("AAP-FR-LRTC: a refused certificate names the host and the cause", () => {
+    const wire = "tls_untrusted:unknown_issuer:api.github.com";
+    for (const rejection of [wire, `Error: ${wire}`, new Error(wire)]) {
+      const text = githubPollingErrorMessage(rejection);
+      expect(text).toContain("api.github.com");
+      expect(text).toMatch(/issuer.*unknown/);
+    }
+  });
+
+  it("AAP-FR-LRTC: the bare code has no sentence of its own, so no host-less text is shown for it", () => {
+    expect(githubPollingErrorMessage("tls_untrusted")).toBe(
+      "The GitHub operation failed (tls_untrusted).",
+    );
+  });
 });

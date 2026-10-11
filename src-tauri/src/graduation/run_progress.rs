@@ -29,10 +29,7 @@ pub(super) fn label_of(run: &GraduationRun) -> String {
 
 /// GRD-FR-ZHNV: whether a state is one the run is executing in.
 fn is_executing(state: GraduationRunState) -> bool {
-    matches!(
-        state,
-        GraduationRunState::Working | GraduationRunState::Reviewing
-    )
+    matches!(state, GraduationRunState::Working | GraduationRunState::Reviewing)
 }
 
 /// GRD-FR-ZHNV: how an operation ends for the state the run entered.
@@ -48,10 +45,9 @@ fn end_state_of(state: GraduationRunState) -> OperationState {
 /// ended in every other state. A run that enters `working` and then `reviewing`
 /// keeps the one operation.
 pub(super) fn sync<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &GraduationRun) {
-    let (Some(state), Some(registry)) = (
-        app.try_state::<GraduationState>(),
-        app.try_state::<ProgressRegistry>(),
-    ) else {
+    let (Some(state), Some(registry)) =
+        (app.try_state::<GraduationState>(), app.try_state::<ProgressRegistry>())
+    else {
         return;
     };
     if !is_executing(run.state) {
@@ -81,9 +77,7 @@ pub(super) fn sync<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &Graduatio
             &label_of(run),
             None,
             None,
-            Some(Activation::GraduationRun {
-                run_id: run.id.clone(),
-            }),
+            Some(Activation::GraduationRun { run_id: run.id.clone() }),
         ))
     });
     if registered {
@@ -100,10 +94,9 @@ pub(super) fn sync<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &Graduatio
 /// GRD-FR-ZHNV: the loop of a run has returned, so no operation of the run
 /// outlives it.
 pub fn end_with_loop<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run_id: &str) {
-    let (Some(state), Some(registry)) = (
-        app.try_state::<GraduationState>(),
-        app.try_state::<ProgressRegistry>(),
-    ) else {
+    let (Some(state), Some(registry)) =
+        (app.try_state::<GraduationState>(), app.try_state::<ProgressRegistry>())
+    else {
         return;
     };
     if let Some(operation) = state.take_operation(run_id) {

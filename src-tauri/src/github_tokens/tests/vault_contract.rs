@@ -27,7 +27,7 @@ fn gts_ts18_legacy_secrets_are_adopted_on_the_first_read() {
     );
     store.save_github_token_binding("proj", "a").unwrap();
 
-    let secret = resolve_github_token_secret(&store, &tokens, "proj").unwrap();
+    let secret = resolve_github_token_secret(&store, &tokens, "proj", "github.com").unwrap();
 
     assert_eq!(secret, "ghp_secret_a");
     assert!(keyring.legacy(LEGACY_KEYCHAIN_SERVICE, "a").is_none());
@@ -50,8 +50,7 @@ fn gts_ts18_legacy_secrets_are_adopted_on_the_first_read() {
 /// vault already holds its secret — the vault decides what is adopted.
 #[test]
 fn gts_fr17_a_candidate_is_supplied_for_every_record() {
-    let candidates =
-        migration_candidates(&[record("a", "work"), record("b", "personal")]);
+    let candidates = migration_candidates(&[record("a", "work"), record("b", "personal")]);
     assert_eq!(candidates.len(), 2);
     for (candidate, id) in candidates.iter().zip(["a", "b"]) {
         assert_eq!(candidate.legacy_service, "com.synthesis.github-token");
@@ -63,29 +62,17 @@ fn gts_fr17_a_candidate_is_supplied_for_every_record() {
     }
 }
 
+/// One named vault failure and the switch that provokes it.
+type VaultProvocation = (&'static str, Box<dyn Fn(&FakeKeyring)>);
+
 /// The five typed vault failures, each with the switch that provokes it.
-fn vault_provocations() -> Vec<(&'static str, Box<dyn Fn(&FakeKeyring)>)> {
+fn vault_provocations() -> Vec<VaultProvocation> {
     vec![
-        (
-            "vault_unavailable",
-            Box::new(|k: &FakeKeyring| k.state().refuse_read = true),
-        ),
-        (
-            "vault_write_failed",
-            Box::new(|k: &FakeKeyring| k.state().refuse_write = true),
-        ),
-        (
-            "vault_verify_failed",
-            Box::new(|k: &FakeKeyring| k.state().mangle_next_writes = 1),
-        ),
-        (
-            "vault_malformed",
-            Box::new(|k: &FakeKeyring| k.set_entry("not an AppSecrets object")),
-        ),
-        (
-            "vault_unsupported_version",
-            Box::new(|k: &FakeKeyring| k.set_entry(r#"{"version":99}"#)),
-        ),
+        ("vault_unavailable", Box::new(|k: &FakeKeyring| k.state().refuse_read = true)),
+        ("vault_write_failed", Box::new(|k: &FakeKeyring| k.state().refuse_write = true)),
+        ("vault_verify_failed", Box::new(|k: &FakeKeyring| k.state().mangle_next_writes = 1)),
+        ("vault_malformed", Box::new(|k: &FakeKeyring| k.set_entry("not an AppSecrets object"))),
+        ("vault_unsupported_version", Box::new(|k: &FakeKeyring| k.set_entry(r#"{"version":99}"#))),
     ]
 }
 
@@ -111,7 +98,7 @@ fn gts_ts15_every_vault_write_failure_is_one_keychain_unavailable() {
             FakeVerifier::accepting("ghp_new_secret", "raver119", &["repo"]),
         );
 
-        let err = match add_token_impl(&store, &tokens, "second", "ghp_new_secret") {
+        let err = match add_token_impl(&store, &tokens, "second", "ghp_new_secret", "") {
             Err(err) => err,
             Ok(record) => panic!("provoked {name} but the add succeeded: {}", record.id),
         };
@@ -125,30 +112,24 @@ fn gts_ts15_every_vault_write_failure_is_one_keychain_unavailable() {
     }
 }
 
-/// GTS-FR-03 read with `ASV-application-secret-vault.md` ASV-FR-30: a
-/// listing costs **one** vault access, and that stays true as the number of
-/// records grows.
+/// GTS-FR-03 read with `ASV-application-secret-vault.md` ASV-FR-30 and
+/// ASV-FR-DQHY: a listing makes no keyring access once the vault cache is
+/// initialized, and that stays true as the number of records grows.
 ///
 /// This is the module where the count actually varies — AAP and AIC each
-/// list a fixed descriptor table — so it is the one where "one access" and
-/// "one access per record" can be told apart at all. Before the
-/// consolidation each record cost its own keyring entry; now twenty records
-/// cost the same single read as one, which on a platform that prompts per
-/// access is the difference between one authentication and twenty.
+/// list a fixed descriptor table — so it is the one where "no access" and
+/// "one access per record" can be told apart at all.
 #[test]
-fn gts_fr03_a_listing_costs_one_vault_access_however_many_records() {
+fn gts_fr03_a_listing_costs_no_keyring_access_however_many_records() {
     use crate::secret_vault::test_support::Call;
 
     let mut reads_for = Vec::new();
     for count in [1usize, 20] {
         let keyring = FakeKeyring::default();
-        let registry: Vec<GithubTokenRecord> = (0..count)
-            .map(|i| record(&format!("t{i}"), &format!("label {i}")))
-            .collect();
-        let (store, tokens) =
-            vault_harness(&keyring, registry, FakeVerifier::rejecting());
-        // Let migration run first; it is the one sequence allowed to read
-        // more than once.
+        let registry: Vec<GithubTokenRecord> =
+            (0..count).map(|i| record(&format!("t{i}"), &format!("label {i}"))).collect();
+        let (store, tokens) = vault_harness(&keyring, registry, FakeVerifier::rejecting());
+        // The first listing initializes the vault cache.
         let _ = list_tokens_impl(&store, &tokens).unwrap();
         let before = keyring.count(&Call::Read);
 
@@ -157,7 +138,7 @@ fn gts_fr03_a_listing_costs_one_vault_access_however_many_records() {
         assert_eq!(listed.len(), count);
         reads_for.push(keyring.count(&Call::Read) - before);
     }
-    assert_eq!(reads_for, vec![1, 1], "one read for one record and for twenty");
+    assert_eq!(reads_for, vec![0, 0], "no read for one record and for twenty");
 }
 
 /// ASV-FR-08: a project-scoped secret and a project's token binding are
@@ -183,7 +164,7 @@ fn asv_ts05_the_binding_is_in_the_file_and_the_secret_is_in_the_vault() {
 
     // A stored token, a binding for the project, and a project-scoped
     // secret written straight at its own vault path.
-    let added = add_token_impl(&store, &tokens, "work", "ghp_supersecret1234").unwrap();
+    let added = add_token_impl(&store, &tokens, "work", "ghp_supersecret1234", "").unwrap();
     set_binding_impl(&store, "acme", &added.id).unwrap();
     vault
         .apply_secret_mutations(&[Mutation::Set {
@@ -225,15 +206,12 @@ fn gts_ts15_every_vault_failure_refuses_a_read_the_same_way() {
     for (name, provoke) in vault_provocations() {
         let keyring = FakeKeyring::default();
         provoke(&keyring);
-        let (store, tokens) = vault_harness(
-            &keyring,
-            vec![record("a", "work")],
-            FakeVerifier::rejecting(),
-        );
+        let (store, tokens) =
+            vault_harness(&keyring, vec![record("a", "work")], FakeVerifier::rejecting());
         store.save_github_token_binding("proj", "a").unwrap();
 
         assert_eq!(
-            resolve_github_token_secret(&store, &tokens, "proj"),
+            resolve_github_token_secret(&store, &tokens, "proj", "github.com"),
             Err(ERR_KEYCHAIN_UNAVAILABLE.to_string()),
             "provoked {name}"
         );
@@ -262,9 +240,9 @@ fn no_vault_error_code_reaches_the_ipc_boundary() {
         store.save_github_token_binding("proj", "a").unwrap();
 
         let errors = [
-            add_token_impl(&store, &tokens, "second", "ghp_new_secret").err(),
+            add_token_impl(&store, &tokens, "second", "ghp_new_secret", "").err(),
             remove_token_impl(&store, &tokens, "a").err(),
-            resolve_github_token_secret(&store, &tokens, "proj").err(),
+            resolve_github_token_secret(&store, &tokens, "proj", "github.com").err(),
             validate_token_impl(&store, &tokens, "a").err(),
         ];
         for error in errors.into_iter().flatten() {
@@ -301,16 +279,13 @@ fn a_malformed_vault_value_does_not_refuse_an_add() {
         FakeVerifier::accepting("ghp_new_secret", "raver119", &["repo"]),
     );
 
-    let added = add_token_impl(&store, &tokens, "work", "ghp_new_secret").unwrap();
+    let added = add_token_impl(&store, &tokens, "work", "ghp_new_secret", "").unwrap();
 
     assert_eq!(added.label, "work");
     let object = keyring.object();
+    assert_eq!(object.get("quarantine").and_then(|v| v.as_str()), Some("not an AppSecrets object"));
     assert_eq!(
-        object.get("quarantine").and_then(|v| v.as_str()),
-        Some("not an AppSecrets object")
-    );
-    assert_eq!(
-        resolve_github_token_secret(&store, &tokens, "proj").unwrap(),
+        resolve_github_token_secret(&store, &tokens, "proj", "github.com").unwrap(),
         "ghp_new_secret"
     );
 }

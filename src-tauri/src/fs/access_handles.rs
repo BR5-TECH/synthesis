@@ -61,10 +61,7 @@ impl FileHandle<'_> {
     /// call rather than only at open.
     pub fn read(&mut self, buf: &mut [u8]) -> FsResult<usize> {
         if !self.mode.can_read() {
-            return Err(FsError::WrongMode {
-                mode: self.mode.label(),
-                attempted: "read",
-            });
+            return Err(FsError::WrongMode { mode: self.mode.label(), attempted: "read" });
         }
         self.file.read(buf).map_err(FsError::Io)
     }
@@ -72,10 +69,7 @@ impl FileHandle<'_> {
     /// Read the rest of the file into `buf`.
     pub fn read_to_end(&mut self, buf: &mut Vec<u8>) -> FsResult<usize> {
         if !self.mode.can_read() {
-            return Err(FsError::WrongMode {
-                mode: self.mode.label(),
-                attempted: "read",
-            });
+            return Err(FsError::WrongMode { mode: self.mode.label(), attempted: "read" });
         }
         self.file.read_to_end(buf).map_err(FsError::Io)
     }
@@ -84,20 +78,15 @@ impl FileHandle<'_> {
     pub fn read_to_string(&mut self) -> FsResult<String> {
         let mut bytes = Vec::new();
         self.read_to_end(&mut bytes)?;
-        String::from_utf8(bytes).map_err(|e| FsError::Utf8 {
-            path: PathBuf::new(),
-            source: e.utf8_error(),
-        })
+        String::from_utf8(bytes)
+            .map_err(|e| FsError::Utf8 { path: PathBuf::new(), source: e.utf8_error() })
     }
 
     /// Write `buf`. A write through a `ReadOnly` handle is a typed `WrongMode`
     /// and leaves the file byte-for-byte unchanged.
     pub fn write_all(&mut self, buf: &[u8]) -> FsResult<()> {
         if !self.mode.can_write() {
-            return Err(FsError::WrongMode {
-                mode: self.mode.label(),
-                attempted: "write",
-            });
+            return Err(FsError::WrongMode { mode: self.mode.label(), attempted: "write" });
         }
         self.file.write_all(buf).map_err(FsError::Io)
     }
@@ -204,10 +193,7 @@ impl RootFs {
             .allow_root(&raw)
             .build()
             .expect("a test root must be a real directory");
-        RootFs {
-            root: raw,
-            access: std::sync::Arc::new(access),
-        }
+        RootFs { root: raw, access: std::sync::Arc::new(access) }
     }
 
     /// The root itself, for the callers that want it named rather than deref'd.

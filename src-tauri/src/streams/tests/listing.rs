@@ -56,11 +56,7 @@ fn the_missing_flag_is_recomputed_rather_than_read_from_disk() {
     // there. Reading it must answer the disk rather than the record — which a
     // stored flag could not do.
     stream.is_missing = true;
-    let fs = fx
-        .app
-        .state::<crate::fs::FsAccessState>()
-        .get()
-        .expect("instance");
+    let fs = fx.app.state::<crate::fs::FsAccessState>().get().expect("instance");
     let store = StreamStore::new(canonical(fx.store.path()));
     store::write_stream(&fs, &store, &stream).expect("written");
     let raw = std::fs::read_to_string(store.record(&stream.id)).expect("record");

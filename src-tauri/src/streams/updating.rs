@@ -65,16 +65,8 @@ pub(super) async fn run<R: tauri::Runtime>(
     dispatch: Arc<dyn GraduationDispatch<R>>,
 ) -> UpdateReport {
     let mut conflicts: Vec<StreamMergeConflict> = Vec::new();
-    let outcome = drive(
-        app,
-        stream_id,
-        strategy,
-        &base_revision,
-        &decisions,
-        dispatch,
-        &mut conflicts,
-    )
-    .await;
+    let outcome =
+        drive(app, stream_id, strategy, &base_revision, &decisions, dispatch, &mut conflicts).await;
     UpdateReport { outcome, conflicts }
 }
 
@@ -96,7 +88,12 @@ async fn drive<R: tauri::Runtime>(
     let stream = store::read_stream(&fs, &store, stream_id)
         .filter(|stream| stream.project_key == key)
         .ok_or_else(|| {
-            commands::refuse(app, "work stream not found", stream_id, ERR_UNKNOWN_STREAM.to_string())
+            commands::refuse(
+                app,
+                "work stream not found",
+                stream_id,
+                ERR_UNKNOWN_STREAM.to_string(),
+            )
         })?;
 
     // WKS-FR-HLGN / WKS-FR-TSOA: the repository update guard, held across the
@@ -108,20 +105,12 @@ async fn drive<R: tauri::Runtime>(
         Some(state) => match state.begin_repository_update(stream_id, Reconciliation::Update) {
             Ok(hold) => Some(hold),
             Err(reason) => {
-                return Err(commands::refuse(
-                    app,
-                    "work stream update refused",
-                    stream_id,
-                    reason,
-                ))
+                return Err(commands::refuse(app, "work stream update refused", stream_id, reason))
             }
         },
         None => None,
     };
-    let cancellation = hold
-        .as_ref()
-        .map(|hold| hold.cancellation())
-        .unwrap_or_default();
+    let cancellation = hold.as_ref().map(|hold| hold.cancellation()).unwrap_or_default();
 
     // WKS-FR-NRQT: refused while a run holds the stream. Read again under the
     // guard: a run may have claimed the stream between the record being loaded
@@ -138,8 +127,14 @@ async fn drive<R: tauri::Runtime>(
         ));
     }
 
-    let pinned = git2::Oid::from_str(base_revision)
-        .map_err(|_| commands::refuse(app, "work stream update refused", stream_id, ERR_STALE_BASE_REVISION.to_string()))?;
+    let pinned = git2::Oid::from_str(base_revision).map_err(|_| {
+        commands::refuse(
+            app,
+            "work stream update refused",
+            stream_id,
+            ERR_STALE_BASE_REVISION.to_string(),
+        )
+    })?;
 
     // GRB-FR-CLRO: from here the update really runs, so it becomes visible.
     let progress = UpdateProgress::begin(app, &key, stream_id, &stream.name, strategy);
@@ -156,10 +151,7 @@ async fn drive<R: tauri::Runtime>(
         last_attempt = attempt_id.clone();
         let _attempt = state.as_ref().map(|state| {
             state.begin_attempt(&attempt_id);
-            AttemptMark {
-                state,
-                attempt_id: attempt_id.clone(),
-            }
+            AttemptMark { state, attempt_id: attempt_id.clone() }
         });
 
         let planned = match plan(app, &fs, &stream, strategy, pinned, &artifact) {
@@ -259,13 +251,8 @@ async fn drive<R: tauri::Runtime>(
                     cleanup(app, &fs, &stream, &artifact);
                     return Err(cancelled(app, stream_id));
                 }
-                let staged = StagedAt {
-                    base_oid,
-                    stream_oid,
-                    merged_tree,
-                    replay,
-                };
-                match settle(app, &fs, &stream, strategy, &artifact, &conflicts, &staged, outcome) {
+                let staged = StagedAt { base_oid, stream_oid, merged_tree, replay, conflicts };
+                match settle(app, &fs, &stream, strategy, &artifact, &staged, outcome) {
                     Settled::Updated(updated_paths) => {
                         cleanup(app, &fs, &stream, &artifact);
                         logging::log_info(
@@ -334,10 +321,7 @@ async fn drive<R: tauri::Runtime>(
             conflicted_paths: conflicted,
         });
     }
-    Err(format!(
-        "{ERR_UPDATE_ATTEMPTS_EXHAUSTED}: {}",
-        conflicted.join(", ")
-    ))
+    Err(format!("{ERR_UPDATE_ATTEMPTS_EXHAUSTED}: {}", conflicted.join(", ")))
 }
 
 /// GRB-FR-TXVL: the author stopped the update. Neither branch moved.
@@ -376,10 +360,7 @@ fn plan<R: tauri::Runtime>(
     let head = update_git::branch_tip(&main, &stream.branch)
         .ok_or_else(|| ERR_UNKNOWN_STREAM.to_string())?;
     // GRB-FR-NFEB: a stream that already holds the pinned revision.
-    let behind = main
-        .graph_ahead_behind(head, pinned)
-        .map(|(_, behind)| behind)
-        .unwrap_or(0);
+    let behind = main.graph_ahead_behind(head, pinned).map(|(_, behind)| behind).unwrap_or(0);
     if behind == 0 {
         return Ok(Plan::NothingToUpdate);
     }
@@ -423,14 +404,19 @@ fn plan<R: tauri::Runtime>(
                         // comparison's own tree.
                         let landed_paths = update_git::written_paths(&main, head, landed.tree);
                         update_git::apply_replay(&main, stream, pinned, landed.tip, landed.tree)?;
-                        return Ok(Plan::Updated {
-                            updated_paths: landed_paths,
-                        });
+                        return Ok(Plan::Updated { updated_paths: landed_paths });
                     }
                     // A replay the tip comparison could not answer is a question
                     // for an agent rather than a failure of the request.
                     Err(reason) if reason == update_git::REPLAY_UNSETTLED => {
-                        return stage_turn(fs, &main, stream, &mut prepared, artifact, Some(replay));
+                        return stage_turn(
+                            fs,
+                            &main,
+                            stream,
+                            &mut prepared,
+                            artifact,
+                            Some(replay),
+                        );
                     }
                     Err(reason) => return Err(reason),
                 }
@@ -470,8 +456,8 @@ fn stage_turn(
     })
 }
 
-/// The two revisions one attempt's checkout was built from, and the chain a
-/// rebase would land.
+/// The two revisions one attempt's checkout was built from, the chain a rebase
+/// would land, and the conflicts the checkout holds.
 struct StagedAt {
     base_oid: git2::Oid,
     stream_oid: git2::Oid,
@@ -479,15 +465,14 @@ struct StagedAt {
     /// The replayed chain and the paths its steps could not settle, where the
     /// strategy is a rebase.
     replay: Option<(git2::Oid, Vec<String>)>,
+    /// The conflicts the semantic turn was asked to settle.
+    conflicts: Vec<MergeConflict>,
 }
 
 /// What one settled turn left.
 enum Settled {
     Updated(Vec<String>),
-    Escalated {
-        reason: String,
-        questions: Vec<crate::graduation::GraduationEscalationQuestion>,
-    },
+    Escalated { reason: String, questions: Vec<crate::graduation::GraduationEscalationQuestion> },
     Unsettled(Vec<String>),
 }
 
@@ -498,10 +483,10 @@ fn settle<R: tauri::Runtime>(
     stream: &WorkStream,
     strategy: StreamUpdateStrategy,
     artifact: &MergeArtifact,
-    conflicts: &[MergeConflict],
     staged: &StagedAt,
     outcome: Result<AgentExecution, AgentExecutionError>,
 ) -> Settled {
+    let conflicts = staged.conflicts.as_slice();
     let unsettled: Vec<String> = conflicts.iter().map(|c| c.path.clone()).collect();
     let execution = match outcome {
         Ok(execution) => execution,

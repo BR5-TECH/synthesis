@@ -7,8 +7,8 @@
 
 use rig::tool::{PortableTool, ToolErrorKind};
 
-use tempfile::TempDir;
 use tauri::Manager;
+use tempfile::TempDir;
 
 pub(crate) mod document_fixture;
 
@@ -16,8 +16,8 @@ use super::*;
 use crate::logging::{LogBuffer, LogFilter, LogLevel};
 use crate::tools::spec_search::SpecSearchTool;
 use crate::tools::{
-    document_get, document_search, draft_read, draft_search, escalate_to_user, file_read, note_search, read_graduation_file,
-    skill_list, skill_load, skill_search, spec_search,
+    document_get, document_search, draft_read, draft_search, escalate_to_user, file_read,
+    note_search, read_graduation_file, skill_list, skill_load, skill_search, spec_search,
 };
 
 /// Install an agent session over `root` and return its id (FSA-FR-29).
@@ -30,9 +30,7 @@ pub(crate) fn agent_session(
     id: &str,
 ) -> String {
     let state = app.state::<crate::fs::FsAccessState>();
-    state
-        .install_for_worktree(root)
-        .expect("a test root is a real directory");
+    state.install_for_worktree(root).expect("a test root is a real directory");
     state.open_agent_session(id).expect("a project is open");
     id.to_string()
 }
@@ -45,35 +43,27 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
     let handle2 = handle.clone();
     let handle3 = handle.clone();
     vec![
-        rig::tool::portable_tool_definition(&skill_search::SkillSearchTool::new(handle.clone())),
-        rig::tool::portable_tool_definition(&skill_list::SkillListTool::new(handle.clone())),
-        rig::tool::portable_tool_definition(&skill_load::SkillLoadTool::new(handle.clone())),
-        rig::tool::portable_tool_definition(&spec_search::SpecSearchTool::new(handle.clone())),
-        rig::tool::portable_tool_definition(&file_read::FileReadTool::new(
+        rig::tool::tool_definition(&skill_search::SkillSearchTool::new(handle.clone())),
+        rig::tool::tool_definition(&skill_list::SkillListTool::new(handle.clone())),
+        rig::tool::tool_definition(&skill_load::SkillLoadTool::new(handle.clone())),
+        rig::tool::tool_definition(&spec_search::SpecSearchTool::new(handle.clone())),
+        rig::tool::tool_definition(&file_read::FileReadTool::new(handle.clone(), "definitions")),
+        rig::tool::tool_definition(&draft_search::DraftSearchTool::new(
             handle.clone(),
             "definitions",
         )),
-        rig::tool::portable_tool_definition(&draft_search::DraftSearchTool::new(
+        rig::tool::tool_definition(&draft_read::DraftReadTool::new(handle.clone(), "definitions")),
+        rig::tool::tool_definition(&note_search::NoteSearchTool::new(
             handle.clone(),
             "definitions",
         )),
-        rig::tool::portable_tool_definition(&draft_read::DraftReadTool::new(
-            handle.clone(),
-            "definitions",
-        )),
-        rig::tool::portable_tool_definition(&note_search::NoteSearchTool::new(
-            handle.clone(),
-            "definitions",
-        )),
-        rig::tool::portable_tool_definition(&document_search::SearchDocumentsTool::new(
-            handle.clone(),
-        )),
-        rig::tool::portable_tool_definition(&document_get::GetDocumentTool::new(handle.clone())),
+        rig::tool::tool_definition(&document_search::SearchDocumentsTool::new(handle.clone())),
+        rig::tool::tool_definition(&document_get::GetDocumentTool::new(handle.clone())),
         // RGF-FR-02 / ESU-FR-19: both are constructed against one graduation
         // run, so this one needs a run id and an execution directory to exist
         // at all. Neither reaches the schema — two instances built for two runs
         // return byte-identical definitions.
-        rig::tool::portable_tool_definition(
+        rig::tool::tool_definition(
             &read_graduation_file::ReadGraduationFileTool::new(
                 handle.clone(),
                 "run-definitions",
@@ -84,10 +74,17 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
         // AUC-FR-02: constructed per turn, so this one needs a conversation to
         // be bound to. Its *definition* is fixed application data all the same,
         // which is what every test over this list checks.
-        rig::tool::portable_tool_definition(&ask_user_comment::AskUserCommentTool::new(
+        rig::tool::tool_definition(&ask_user_comment::AskUserCommentTool::new(
             handle,
-            crate::agent_conversations::OwnedRoots { worktree: crate::fs::RootFs::for_root(&std::env::temp_dir()), store: crate::fs::RootFs::for_root(&std::env::temp_dir()) },
-            crate::agent_conversations::ConversationOrigin::stub_artifact("definitions", "a.md", true),
+            crate::agent_conversations::OwnedRoots {
+                worktree: crate::fs::RootFs::for_root(std::env::temp_dir()),
+                store: crate::fs::RootFs::for_root(std::env::temp_dir()),
+            },
+            crate::agent_conversations::ConversationOrigin::stub_artifact(
+                "definitions",
+                "a.md",
+                true,
+            ),
             crate::comments::Participant::Agent {
                 agent_id: "definitions".into(),
                 handle: "definitions".into(),
@@ -100,10 +97,17 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
         // fixed on exactly the same terms. Bound to a draft origin because that
         // is the only kind it is ever attached to (CVL-FR-08) — the binding does
         // not reach the definition, which is what this list is about.
-        rig::tool::portable_tool_definition(&propose_draft_changes::ProposeDraftChangesTool::new(
+        rig::tool::tool_definition(&propose_draft_changes::ProposeDraftChangesTool::new(
             handle2,
-            crate::agent_conversations::OwnedRoots { worktree: crate::fs::RootFs::for_root(&std::env::temp_dir()), store: crate::fs::RootFs::for_root(&std::env::temp_dir()) },
-            crate::agent_conversations::ConversationOrigin::stub_draft("definitions", "definitions", false),
+            crate::agent_conversations::OwnedRoots {
+                worktree: crate::fs::RootFs::for_root(std::env::temp_dir()),
+                store: crate::fs::RootFs::for_root(std::env::temp_dir()),
+            },
+            crate::agent_conversations::ConversationOrigin::stub_draft(
+                "definitions",
+                "definitions",
+                false,
+            ),
             crate::comments::Participant::Agent {
                 agent_id: "definitions".into(),
                 handle: "definitions".into(),
@@ -116,20 +120,25 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
         // every convention this list checks. Bound to a discussion origin
         // because that is the only kind it is ever attached to (CVL-FR-08,
         // ADQ-FR-LFDX) — the binding does not reach the definition.
-        rig::tool::portable_tool_definition(
-            &ask_discussion_questions::AskDiscussionQuestionsTool::new(
-                handle3,
-                crate::agent_conversations::OwnedRoots { worktree: crate::fs::RootFs::for_root(&std::env::temp_dir()), store: crate::fs::RootFs::for_root(&std::env::temp_dir()) },
-                crate::agent_conversations::ConversationOrigin::stub_draft("definitions", "definitions", false),
-                crate::comments::Participant::Agent {
-                    agent_id: "definitions".into(),
-                    handle: "definitions".into(),
-                    model: None,
-                    title: None,
-                },
-                std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        rig::tool::tool_definition(&ask_discussion_questions::AskDiscussionQuestionsTool::new(
+            handle3,
+            crate::agent_conversations::OwnedRoots {
+                worktree: crate::fs::RootFs::for_root(std::env::temp_dir()),
+                store: crate::fs::RootFs::for_root(std::env::temp_dir()),
+            },
+            crate::agent_conversations::ConversationOrigin::stub_draft(
+                "definitions",
+                "definitions",
+                false,
             ),
-        ),
+            crate::comments::Participant::Agent {
+                agent_id: "definitions".into(),
+                handle: "definitions".into(),
+                model: None,
+                title: None,
+            },
+            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        )),
     ]
 }
 
@@ -152,14 +161,8 @@ const GROUP_SOURCES: [(&str, &str); 16] = [
     // ADQ-FR-JAQE, ADQ-FR-UIYD: swept with the rest of the group, so the claims
     // that it reaches no network, holds no credential, and publishes no
     // registry are checked rather than asserted.
-    (
-        "ask_discussion_questions.rs",
-        include_str!("../ask_discussion_questions.rs"),
-    ),
-    (
-        "propose_draft_changes.rs",
-        include_str!("../propose_draft_changes.rs"),
-    ),
+    ("ask_discussion_questions.rs", include_str!("../ask_discussion_questions.rs")),
+    ("propose_draft_changes.rs", include_str!("../propose_draft_changes.rs")),
     ("web_search.rs", include_str!("../web_search.rs")),
     ("web_fetch.rs", include_str!("../web_fetch.rs")),
 ];
@@ -187,7 +190,6 @@ pub fn block_on<F: std::future::Future>(future: F) -> F::Output {
         std::task::Poll::Pending => panic!("a tool must not block (TLC-FR-16)"),
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // Fixtures shared by every suite in this group
@@ -220,14 +222,16 @@ pub(crate) fn mock_app() -> tauri::App<tauri::test::MockRuntime> {
 
 /// Write `<root>/<folder>/<name>/SKILL.md` with `front` as its frontmatter and
 /// `body` beneath it.
-pub(crate) fn write_skill(root: &std::path::Path, folder: &str, name: &str, front: &str, body: &str) {
+pub(crate) fn write_skill(
+    root: &std::path::Path,
+    folder: &str,
+    name: &str,
+    front: &str,
+    body: &str,
+) {
     let dir = root.join(folder).join(name);
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(
-        dir.join("SKILL.md"),
-        format!("---\n{front}\n---\n\n{body}\n"),
-    )
-    .unwrap();
+    std::fs::write(dir.join("SKILL.md"), format!("---\n{front}\n---\n\n{body}\n")).unwrap();
 }
 
 /// A mounted, fully indexed project.
@@ -258,12 +262,7 @@ impl Fixture {
         let indexer = self.app.state::<Bm25Indexer>();
         let root = indexer.root().expect("mounted");
         let generation = indexer.generation();
-        indexer.run_pass(
-            &handle,
-            &crate::fs::RootFs::for_root(&root),
-            PassScope::ALL,
-            generation,
-        );
+        indexer.run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ALL, generation);
     }
 }
 
@@ -277,12 +276,7 @@ pub(crate) fn mounted(dir: TempDir) -> Fixture {
         indexer.mount(&crate::fs::RootFs::for_root(&root));
         let generation = indexer.generation();
         indexer
-            .run_pass(
-                &handle,
-                &crate::fs::RootFs::for_root(&root),
-                PassScope::ALL,
-                generation,
-            )
+            .run_pass(&handle, &crate::fs::RootFs::for_root(&root), PassScope::ALL, generation)
             .expect("the pass publishes");
     }
     Fixture { app, _dir: dir }

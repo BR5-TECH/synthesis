@@ -143,7 +143,7 @@ pub fn start_direct_graduation<R: tauri::Runtime>(
         },
     );
     events::announce_queue(&app, &run);
-    let _ = crate::drafts::announce(&app, crate::drafts::DraftChange::to(&draft_id, Vec::new()));
+    crate::drafts::announce(&app, crate::drafts::DraftChange::to(&draft_id, Vec::new()));
     scheduler::dispatch_pending(&app);
     Ok(run)
 }
@@ -172,10 +172,7 @@ pub(super) fn check_preflight(
         return Err(ERR_DIRECT_BRANCH_CHANGED.to_string());
     }
     if !preflight.dirty_paths.is_empty() {
-        return Err(format!(
-            "{ERR_DIRECT_WORKTREE_DIRTY}: {}",
-            preflight.dirty_paths.join(", ")
-        ));
+        return Err(format!("{ERR_DIRECT_WORKTREE_DIRTY}: {}", preflight.dirty_paths.join(", ")));
     }
     Ok(())
 }
@@ -315,9 +312,7 @@ pub fn target_worktree<R: tauri::Runtime>(
 pub fn require_no_dispatched_direct_run<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<(), String> {
-    let claimed = app
-        .try_state::<GraduationState>()
-        .and_then(|state| state.direct_claim());
+    let claimed = app.try_state::<GraduationState>().and_then(|state| state.direct_claim());
     match claimed.or_else(|| queue::dispatched_direct_run(app)) {
         Some(run_id) => {
             logging::log_warn(
@@ -344,9 +339,5 @@ pub fn advance_all_queues<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 
 /// The typed code at the head of a refusal, which carries no path or content.
 fn typed_code(reason: &str) -> String {
-    reason
-        .split(|c| c == ':' || c == ' ')
-        .next()
-        .unwrap_or_default()
-        .to_string()
+    reason.split([':', ' ']).next().unwrap_or_default().to_string()
 }

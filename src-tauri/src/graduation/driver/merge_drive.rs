@@ -22,10 +22,11 @@ use crate::logging::LogLevel;
 use crate::streams::{MergeApplyFailure, StreamMergePublication, ERR_MERGE_BRANCH_MOVED};
 
 /// GRD-FR-XHSE: whether either pinned tip of a merge run has left its branch.
-pub(super) fn tips_moved<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run: &GraduationRun) -> bool {
-    run.merge
-        .as_ref()
-        .is_some_and(|data| crate::streams::merge_tips_moved(app, data))
+pub(super) fn tips_moved<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &GraduationRun,
+) -> bool {
+    run.merge.as_ref().is_some_and(|data| crate::streams::merge_tips_moved(app, data))
 }
 
 /// GRD-FR-XHSE: the check before a dispatch.
@@ -125,11 +126,8 @@ pub(super) fn prepare<R: tauri::Runtime>(
         Err(reason) => {
             // GXD-FR-TJRV: the phase the run stopped in stays the phase it
             // resumes at.
-            let resume_part = run
-                .checkpoint
-                .resume_part
-                .clone()
-                .unwrap_or_else(|| phases::PART_WORK.to_string());
+            let resume_part =
+                run.checkpoint.resume_part.clone().unwrap_or_else(|| phases::PART_WORK.to_string());
             log_merge_boundary(
                 app,
                 run,
@@ -261,9 +259,10 @@ pub(super) fn finish_merge<R: tauri::Runtime>(
             );
             // GRS-FR-WNRC: a record that cannot be written leaves the run as the
             // state machine already has it, which is completed.
-            let applied_record = StructuredEvent::new(GraduationLogProducer::Commit, "merge_applied")
-                .with("paths", applied.merged_paths.len() as u64)
-                .with("committed", applied.commit.is_some());
+            let applied_record =
+                StructuredEvent::new(GraduationLogProducer::Commit, "merge_applied")
+                    .with("paths", applied.merged_paths.len() as u64)
+                    .with("committed", applied.commit.is_some());
             let _ = logs::emit(app, run, applied_record);
             Step::Stop
         }
@@ -326,11 +325,7 @@ fn block_apply<R: tauri::Runtime>(
         app,
         run,
         MergeBoundary {
-            level: if code == "merge_apply_failed" {
-                LogLevel::Error
-            } else {
-                LogLevel::Warn
-            },
+            level: if code == "merge_apply_failed" { LogLevel::Error } else { LogLevel::Warn },
             domains: &[Domain::Ai, Domain::Backend],
             message: "graduation could not apply a merge run",
             boundary: "apply",
@@ -344,7 +339,9 @@ fn block_apply<R: tauri::Runtime>(
         "merge_dirty_side" => {
             "Commit or discard the uncommitted work in the named worktree, then continue the merge."
         }
-        "merge_guard_held" => "Wait for the update or merge that is running, then continue the merge.",
+        "merge_guard_held" => {
+            "Wait for the update or merge that is running, then continue the merge."
+        }
         _ => "Resolve what stopped the apply, then continue the merge.",
     };
     let _ = transitions::block(app, run, code, reason, clears_by, phases::PART_APPLY);
@@ -359,9 +356,7 @@ fn derived_tree(worktree: &PathBuf, snapshot_commit: &str) -> Result<git2::Oid, 
         None => {
             let repo = git2::Repository::open(worktree).map_err(|e| e.to_string())?;
             let oid = git2::Oid::from_str(snapshot_commit).map_err(|e| e.to_string())?;
-            repo.find_commit(oid)
-                .map(|commit| commit.tree_id())
-                .map_err(|e| e.to_string())
+            repo.find_commit(oid).map(|commit| commit.tree_id()).map_err(|e| e.to_string())
         }
     }
 }

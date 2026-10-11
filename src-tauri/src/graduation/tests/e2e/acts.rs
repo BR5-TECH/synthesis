@@ -4,7 +4,6 @@
 //! Each act that drives the run again rebinds the scripted seam, so the
 //! dispatch assertions after it read the turns of that act alone.
 
-
 use super::super::{Runtime, ScriptedDispatch};
 use super::hooks::{drive_on, index_lock_of, log_path, without_loop};
 use super::outcome::Outcome;
@@ -67,12 +66,7 @@ impl Outcome {
     /// GXD-FR-BJYT: the author answers every question, and the run is driven
     /// again under a script of its own.
     pub(crate) fn answered(mut self, answers: &[&str], scripts: Vec<TurnScript>) -> Self {
-        let questions = self
-            .run
-            .escalation
-            .as_ref()
-            .map(|e| e.questions.len())
-            .unwrap_or_default();
+        let questions = self.run.escalation.as_ref().map(|e| e.questions.len()).unwrap_or_default();
         assert_eq!(
             questions,
             answers.len(),
@@ -182,6 +176,19 @@ impl Outcome {
         self
     }
 
+    /// GRD-FR-QCZF: the author discards a run the scenario enqueued beside its
+    /// own, while the run in focus stays as it is.
+    pub(crate) fn discarding(self, label: &'static str) -> Self {
+        let other = self.ctx.others.get(label);
+        without_loop(&self.fx.app, || {
+            crate::graduation::discard_graduation_run(self.fx.app.clone(), other.run_id.clone())
+        })
+        .unwrap_or_else(|reason| {
+            panic!("[{}] the discard of the run labelled {label} was refused: {reason}", self.name)
+        });
+        self
+    }
+
     /// GRD-FR-BLCR: the author reverts what the run committed.
     pub(crate) fn reverted(mut self) -> Self {
         self.dispatch = ScriptedDispatch::new(Vec::new());
@@ -209,7 +216,9 @@ impl Outcome {
             .repo()
             .find_branch(name, git2::BranchType::Local)
             .and_then(|mut branch| branch.delete())
-            .unwrap_or_else(|reason| panic!("[{}] the branch {name} was deletable: {reason}", self.name));
+            .unwrap_or_else(|reason| {
+                panic!("[{}] the branch {name} was deletable: {reason}", self.name)
+            });
         self
     }
 
@@ -226,7 +235,9 @@ impl Outcome {
     pub(crate) fn removing_the_working_copy(self) -> Self {
         guard(self.worktree.parent().expect("the working copy's parent"))
             .delete_path(&self.worktree, true)
-            .unwrap_or_else(|reason| panic!("[{}] the working copy was removable: {reason}", self.name));
+            .unwrap_or_else(|reason| {
+                panic!("[{}] the working copy was removable: {reason}", self.name)
+            });
         self
     }
 
@@ -294,12 +305,7 @@ impl Outcome {
                 self.name
             ),
         }
-        assert_eq!(
-            self.snapshot(),
-            before,
-            "[{}] the refused {what} changed nothing",
-            self.name
-        );
+        assert_eq!(self.snapshot(), before, "[{}] the refused {what} changed nothing", self.name);
         self.run = self.fx.reload(&self.run.id);
         self
     }

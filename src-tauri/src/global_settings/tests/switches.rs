@@ -31,10 +31,7 @@ fn selection_follows_tab_defaults_to_on_including_for_a_record_written_before_th
         "an upgrade must not silently opt an existing author out"
     );
     assert_eq!(decoded.theme, Theme::Dark, "and the rest still decodes");
-    assert!(
-        !decoded.notifications_enabled,
-        "including a field the record did carry"
-    );
+    assert!(!decoded.notifications_enabled, "including a field the record did carry");
 }
 
 #[test]
@@ -81,16 +78,10 @@ fn the_selection_follows_tab_switch_is_read_by_every_project() {
         store.save_app_preferences(prefs).unwrap();
         // Two projects opened, each getting a per-project slot of its own.
         store
-            .save_project_layout(
-                "/dev/acme",
-                crate::layout::LayoutPreferences::default(),
-            )
+            .save_project_layout("/dev/acme", crate::layout::LayoutPreferences::default())
             .unwrap();
         store
-            .save_project_layout(
-                "/dev/beta",
-                crate::layout::LayoutPreferences::default(),
-            )
+            .save_project_layout("/dev/beta", crate::layout::LayoutPreferences::default())
             .unwrap();
     }
 
@@ -130,10 +121,7 @@ fn notifications_default_to_on_including_for_a_record_written_before_the_field()
         searchQueryMode = "regex"
     "#;
     let decoded: AppPreferences = toml::from_str(legacy).unwrap();
-    assert!(
-        decoded.notifications_enabled,
-        "an upgrade must not silently turn notifications off"
-    );
+    assert!(decoded.notifications_enabled, "an upgrade must not silently turn notifications off");
     assert_eq!(decoded.theme, Theme::Dark, "and the rest still decodes");
 }
 
@@ -155,10 +143,7 @@ fn the_notifications_switch_round_trips_through_the_store() {
 #[test]
 fn the_commit_action_defaults_to_commit_and_survives_every_other_write() {
     // GSS-FR-25, GSS-FR-20 / GSS-FR-04, GSS-FR-19, GSS-FR-21, GSS-FR-24, GSS-FR-29, GSS-FR-32, GSS-FR-33, GSS-FR-34.
-    assert_eq!(
-        AppPreferences::default().changes_commit_action,
-        ChangesCommitAction::Commit
-    );
+    assert_eq!(AppPreferences::default().changes_commit_action, ChangesCommitAction::Commit);
 
     let store = GlobalSettingsStore::in_memory();
     assert_eq!(
@@ -182,10 +167,7 @@ fn the_commit_action_defaults_to_commit_and_survives_every_other_write() {
     store.save_app_preferences(editing).unwrap();
     let after = store.load_app_preferences().unwrap();
     assert_eq!(after.diff_visualization_mode, DiffVisualizationMode::Final);
-    assert_eq!(
-        after.changes_commit_action,
-        ChangesCommitAction::CommitAndPush
-    );
+    assert_eq!(after.changes_commit_action, ChangesCommitAction::CommitAndPush);
 
     // GSS-FR-25: a stored `push` is persisted unchanged; this module does
     // not interpret whether the action is currently available.

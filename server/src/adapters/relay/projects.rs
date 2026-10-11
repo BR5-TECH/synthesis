@@ -108,10 +108,8 @@ async fn read_projects(
 
     // RSN-FR-TFJU, RSN-FR-ZDPA: a handle no route holds — including every
     // handle after a restart — is answered as absent.
-    let client = state
-        .relay
-        .client(&handle)
-        .map_err(|_| SessionRefusal(ReasonCode::HandleNotFound))?;
+    let client =
+        state.relay.client(&handle).map_err(|_| SessionRefusal(ReasonCode::HandleNotFound))?;
     if let Some(refusal) = client.state.refusal() {
         return Err(SessionRefusal(refusal));
     }
@@ -121,10 +119,8 @@ async fn read_projects(
         return Err(SessionRefusal(ReasonCode::HandleNotFound));
     }
 
-    let route = state
-        .relay
-        .worker(&instance_id)
-        .map_err(|_| SessionRefusal(ReasonCode::WorkerNotFound))?;
+    let route =
+        state.relay.worker(&instance_id).map_err(|_| SessionRefusal(ReasonCode::WorkerNotFound))?;
 
     // RSN-FR-GXWB: the answer is the announcement the route holds now. The
     // relay caches nothing beyond it, so it is never served from a store.

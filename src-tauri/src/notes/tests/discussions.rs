@@ -35,19 +35,13 @@ fn list_items_carry_the_note_s_discussion() {
     assert_eq!(find(list_project_notes_in(root, root), &b.id), Some(None));
 
     // NTC-FR-19: nothing about the association is written into a note file.
-    assert_eq!(
-        std::fs::read_to_string(note_path(dir.path(), &b.id).unwrap()).unwrap(),
-        before,
-    );
+    assert_eq!(std::fs::read_to_string(note_path(dir.path(), &b.id).unwrap()).unwrap(), before,);
     let a_file = std::fs::read_to_string(note_path(dir.path(), &a.id).unwrap()).unwrap();
     assert_eq!(
         a_file, before_a,
         "opening a discussion rewrites no byte of the note — updated_at included",
     );
-    assert!(
-        !a_file.contains(&thread),
-        "the thread id is nowhere in the note's own file",
-    );
+    assert!(!a_file.contains(&thread), "the thread id is nowhere in the note's own file",);
 
     // And it appears for b the moment b is discussed.
     let b_thread = discuss(root, &b.id, "about b");
@@ -71,9 +65,7 @@ fn a_note_s_discussion_survives_edits_moves_and_an_unresolved_entity() {
             .and_then(|i| i.discussion_id)
     };
     let comments = |root: &crate::fs::RootFs, id: &str| {
-        crate::comments::note_discussion_of(root, id)
-            .map(|t| t.comments.len())
-            .unwrap_or(0)
+        crate::comments::note_discussion_of(root, id).map(|t| t.comments.len()).unwrap_or(0)
     };
 
     for fields in [
@@ -101,10 +93,7 @@ fn a_note_s_discussion_survives_edits_moves_and_an_unresolved_entity() {
     assert_eq!(assoc(&note.id), Some(thread.clone()));
 
     std::fs::remove_file(dir.path().join("specs/c.md")).unwrap();
-    let item = list_all_notes_in(root, root)
-        .into_iter()
-        .find(|i| i.note.id == note.id)
-        .unwrap();
+    let item = list_all_notes_in(root, root).into_iter().find(|i| i.note.id == note.id).unwrap();
     assert!(item.unresolved, "the entity is gone");
     assert_eq!(item.discussion_id, Some(thread), "the conversation is not");
     assert_eq!(comments(root, &note.id), 1);
@@ -124,10 +113,7 @@ fn deleting_a_note_removes_its_discussion_with_it() {
     delete_note_in(root, root, &doomed.id).unwrap();
 
     assert!(!note_path(dir.path(), &doomed.id).unwrap().is_file());
-    assert!(!dir
-        .path()
-        .join(format!("comments/notes/{}", doomed.id))
-        .exists());
+    assert!(!dir.path().join(format!("comments/notes/{}", doomed.id)).exists());
     assert!(crate::comments::read_discussion_by_id(root, root, &doomed_thread).is_none());
     assert!(!crate::comments::note_discussion_index(root).contains_key(&doomed.id));
 
@@ -150,10 +136,7 @@ fn the_deletion_transaction_is_ordered_and_recoverable() {
     // the note still there. A retry completes it.
     crate::comments::delete_note_discussion_in(root, &note.id).unwrap();
     assert!(note_path(dir.path(), &note.id).unwrap().is_file());
-    let item = list_all_notes_in(root, root)
-        .into_iter()
-        .find(|i| i.note.id == note.id)
-        .unwrap();
+    let item = list_all_notes_in(root, root).into_iter().find(|i| i.note.id == note.id).unwrap();
     assert_eq!(
         item.discussion_id, None,
         "the row reports no conversation, so Discuss begins a fresh one",
@@ -208,10 +191,7 @@ fn nothing_can_be_created_for_a_deleted_note() {
         .unwrap_err(),
         crate::comments::ERR_NOTE_NOT_FOUND,
     );
-    assert!(!dir
-        .path()
-        .join(format!("comments/notes/{}", note.id))
-        .exists());
+    assert!(!dir.path().join(format!("comments/notes/{}", note.id)).exists());
     assert!(list_all_notes_in(root, root).iter().all(|i| i.note.id != note.id));
 }
 /// NTC-FR-21: a cleanup that fails leaves **both** whole and reports the

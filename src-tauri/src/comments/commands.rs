@@ -192,8 +192,7 @@ pub fn open_discussion<R: tauri::Runtime>(
         fragment_target,
         body,
         attachments,
-        &by,
-        &now_rfc3339(),
+        Stamp { by: &by, at: &now_rfc3339() },
     )
     .inspect_err(|err| {
         crate::logging::log_warn(
@@ -239,8 +238,7 @@ pub fn add_comment<R: tauri::Runtime>(
         body,
         quotes,
         attachments,
-        &by,
-        &now_rfc3339(),
+        Stamp { by: &by, at: &now_rfc3339() },
     )?;
     // AGC-FR-31 / CTA-FR-RUVS: a later **human** comment retires this
     // conversation's offer to retry a failed turn. Here rather than in the agent
@@ -302,9 +300,7 @@ pub(super) fn locate_discussion_for_attachment(
     draft_id: Option<&str>,
 ) -> Option<Discussion> {
     if let Some(draft_id) = draft_id {
-        let target = DiscussionTarget::Draft {
-            draft_id: draft_id.to_string(),
-        };
+        let target = DiscussionTarget::Draft { draft_id: draft_id.to_string() };
         if let Some(found) = locate_discussion_of(root, &target, discussion_id) {
             return Some(found);
         }
@@ -324,14 +320,8 @@ pub fn set_discussion_lock<R: tauri::Runtime>(
     let worktree = project.require_root()?;
     let by = acting_participant(&store, &project)?;
     let current = discussion_for_write(&root, &worktree, &discussion_id)?;
-    let (discussion, appended) = set_lock_to(
-        &root,
-        current.log_ref(),
-        &discussion_id,
-        locked,
-        &by,
-        &now_rfc3339(),
-    )?;
+    let (discussion, appended) =
+        set_lock_to(&root, current.log_ref(), &discussion_id, locked, &by, &now_rfc3339())?;
     // CMS-FR-52: silent when the discussion already held the state asked for.
     if appended {
         emit_discussion_changed(&app, &discussion);
@@ -351,14 +341,8 @@ pub fn set_discussion_resolution<R: tauri::Runtime>(
     let worktree = project.require_root()?;
     let by = acting_participant(&store, &project)?;
     let current = discussion_for_write(&root, &worktree, &discussion_id)?;
-    let (discussion, appended) = set_resolution_to(
-        &root,
-        current.log_ref(),
-        &discussion_id,
-        resolved,
-        &by,
-        &now_rfc3339(),
-    )?;
+    let (discussion, appended) =
+        set_resolution_to(&root, current.log_ref(), &discussion_id, resolved, &by, &now_rfc3339())?;
     // CMS-FR-52: silent when the discussion already held the state asked for.
     if appended {
         emit_discussion_changed(&app, &discussion);

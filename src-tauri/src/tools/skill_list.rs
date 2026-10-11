@@ -134,10 +134,7 @@ impl<R: tauri::Runtime> SkillListTool<R> {
     /// TLC-FR-19: this tool's own constructor. A caller attaches it by name;
     /// there is no registry that would attach it on anyone's behalf.
     pub fn new(app: tauri::AppHandle<R>) -> Self {
-        SkillListTool {
-            app,
-            buffer: &BUFFER,
-        }
+        SkillListTool { app, buffer: &BUFFER }
     }
 
     /// The same tool, reporting into `buffer`.

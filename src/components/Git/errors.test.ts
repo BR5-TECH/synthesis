@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseRejection, rejectionMessage, rejectionPaths } from "./errors";
+import { isTokenMissing, isTokenSelectionRequired, parseRejection, rejectionMessage, rejectionPaths } from "./errors";
 
 describe("the typed rejections of the Git panel (GIT-FR-UDKY, GIT-FR-GAMV, GIT-FR-TFAU)", () => {
   it("GIT-FR-UDKY: parses a code, a detail, an Error and a bare code", () => {
@@ -39,7 +39,8 @@ describe("the typed rejections of the Git panel (GIT-FR-UDKY, GIT-FR-GAMV, GIT-F
     ["branch_in_active_worktree", { branch: "b" }, "Branch b is checked out in the active worktree."],
     ["branch_belongs_to_work_stream: s1", { branch: "b" }, "Branch b belongs to a work stream."],
     ["no remote configured", {}, "This repository has no remote configured."],
-    ["not_a_github_remote", {}, "not on github.com"],
+    ["not_a_github_remote", {}, "not on a GitHub host"],
+    ["github_host_mismatch", {}, "The project token belongs to another GitHub host than this remote. Pick or add a token for the host of the remote."],
     ["github_token_rejected", {}, "GitHub rejected the token"],
     ["github_unreachable", {}, "Could not reach GitHub."],
     ["github_token_missing", {}, "Add one in Global settings → GitHub."],
@@ -51,10 +52,28 @@ describe("the typed rejections of the Git panel (GIT-FR-UDKY, GIT-FR-GAMV, GIT-F
     expect(rejectionMessage(raw, subject)).toContain(sentence);
   });
 
+  it("GHA-FR-LBLM, GIT-FR-UDKY: a host mismatch is not a token selection or a missing token", () => {
+    expect(isTokenSelectionRequired("github_host_mismatch")).toBe(false);
+    expect(isTokenMissing("github_host_mismatch")).toBe(false);
+    expect(rejectionMessage("github_host_mismatch")).toBe(
+      "The project token belongs to another GitHub host than this remote. Pick or add a token for the host of the remote.",
+    );
+  });
+
   it("GIT-FR-TFAU: a code the panel has no words for is shown whole", () => {
     expect(rejectionMessage("odd_code: with detail: and more")).toBe(
       "odd_code: with detail: and more",
     );
     expect(rejectionMessage("")).toBe("The operation failed.");
+  });
+
+  it("AAP-FR-LRTC: a refused certificate names the host and the cause, and is not cut at its first colon", () => {
+    const wire = "tls_untrusted:unknown_issuer:api.github.com";
+    expect(parseRejection(wire)).toEqual({ code: wire, detail: null });
+    for (const rejection of [wire, `Error: ${wire}`, new Error(wire)]) {
+      const text = rejectionMessage(rejection, { branch: "feature" });
+      expect(text).toContain("api.github.com");
+      expect(text).toMatch(/issuer.*unknown/);
+    }
   });
 });

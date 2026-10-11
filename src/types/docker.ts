@@ -58,6 +58,11 @@ export interface ProjectVendorImage {
   tag?: string | null;
   /** PSS-FR-24: optional, and project-relative. */
   dockerfile?: string | null;
+  /**
+   * PSS-FR-BCTX: optional. Absent means the project root. Project-relative or
+   * absolute, and it may lie outside the project.
+   */
+  buildContext?: string | null;
 }
 
 /** PSS-FR-25: whether the committed project holds an entry for this vendor. */
@@ -68,6 +73,9 @@ export type VendorImageConfiguration = "unset" | "configured";
  * that is **invalid** for this project.
  */
 export type DockerfileState = "absent" | "valid" | "invalid";
+
+/** PSS-FR-25: an absent build context, one naming an existing folder, or one that no longer does. */
+export type BuildContextState = "absent" | "valid" | "invalid";
 
 /** PSS-FR-25: which of PSS-FR-24's three refusals a configured Dockerfile fails. */
 export type DockerfileProblem =
@@ -92,6 +100,8 @@ export interface ProjectVendorImageStatus {
   dockerfile: string | null;
   dockerfileState: DockerfileState;
   dockerfileProblem: DockerfileProblem | null;
+  buildContext: string | null;
+  buildContextState: BuildContextState;
   graduationState: VendorGraduationState;
 }
 

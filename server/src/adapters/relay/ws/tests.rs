@@ -138,9 +138,7 @@ fn an_opaque_payload_is_unpadded_base64url() {
         let text = worker_frame(&format!(r#"{{"payload":{value}}}"#));
         let frame = envelope::parse(&text, Protocol::Worker).expect("the envelope is well formed");
         assert_eq!(
-            frame
-                .payload("payload")
-                .expect_err("the payload is refused"),
+            frame.payload("payload").expect_err("the payload is refused"),
             ReasonCode::InvalidFrameShape,
             "value {value}"
         );
@@ -242,12 +240,8 @@ fn an_outbound_frame_carries_the_destination_protocol() {
     assert_eq!(value["body"]["payload"], "abc");
 
     // A notification carries no request identifier at all (WSK-FR-WJIC).
-    let notification = envelope::frame(
-        Protocol::Worker,
-        "registration_start",
-        None,
-        serde_json::json!({}),
-    );
+    let notification =
+        envelope::frame(Protocol::Worker, "registration_start", None, serde_json::json!({}));
     let value: serde_json::Value = serde_json::from_str(&notification).expect("the frame is JSON");
     assert!(value.get("request_id").is_none());
 }

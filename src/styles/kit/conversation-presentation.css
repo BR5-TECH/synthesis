@@ -242,6 +242,12 @@
 /* WSS-FR-SOAS: a row's actions sit on the row and are reachable without a
    hover, so nothing is discoverable only by pointing at it. */
 .stream-select__row-actions { display: flex; gap: 4px; margin-top: 2px; }
+/* WSS-FR-TKMB: an idle row's three actions are compact and centered in the
+   dropdown's width. */
+.stream-select__row-actions--idle { justify-content: center; }
+.stream-select__row-actions--idle .stream-select__act {
+  height: var(--ctl-h-xs); padding: 0 var(--sp-2); font-size: var(--fs-ui-xs);
+}
 .stream-select__confirm {
   display: flex; flex-direction: column; gap: 6px;
   margin-top: 4px; padding: 6px;

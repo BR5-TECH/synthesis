@@ -23,10 +23,7 @@ fn material_fetched_during_the_loop_never_reaches_the_instruction_position() {
             "read_file",
             serde_json::json!({ "path": "specifications/poison.md" }),
         )),
-        Ok(ScriptedReply::calls(
-            "load_skill",
-            serde_json::json!({ "name": "poison" }),
-        )),
+        Ok(ScriptedReply::calls("load_skill", serde_json::json!({ "name": "poison" }))),
         Ok(ScriptedReply::answer("I read them and carried on.")),
     ]);
     std::fs::create_dir_all(h.root().path().join("specifications")).expect("specs dir");
@@ -80,10 +77,7 @@ fn arguments_the_model_composed_wrongly_are_a_result_rather_than_a_turn_failure(
     // is something the model can correct on its next call.
     let secret = "THE WHOLE OF THE AUTHORS DOCUMENT";
     let h = Harness::scripted(vec![
-        Ok(ScriptedReply::calls(
-            "read_file",
-            serde_json::json!({ "path": { "name": secret } }),
-        )),
+        Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": { "name": secret } }))),
         Ok(ScriptedReply::answer("Corrected myself.")),
     ]);
     h.mount();
@@ -101,11 +95,7 @@ fn arguments_the_model_composed_wrongly_are_a_result_rather_than_a_turn_failure(
     );
     // TLC-FR-09: nothing a model cannot act on.
     for noise in ["serde", "ReadFileArgs", "invalid type", "src/"] {
-        assert!(
-            !results[0].contains(noise),
-            "the message carries {noise:?}: {}",
-            results[0],
-        );
+        assert!(!results[0].contains(noise), "the message carries {noise:?}: {}", results[0],);
     }
 
     // TLC-FR-14: and the call is **recorded** as a refusal, which is the only
@@ -119,15 +109,8 @@ fn arguments_the_model_composed_wrongly_are_a_result_rather_than_a_turn_failure(
         .into_iter()
         .filter(|r| r.fields.get("turnId") == Some(&serde_json::json!(terminal.id)))
         .collect();
-    let refusals: Vec<_> = mine
-        .iter()
-        .filter(|r| r.message == "tool call refused")
-        .collect();
-    assert_eq!(
-        refusals.len(),
-        1,
-        "one refusal, recorded once: {refusals:?}",
-    );
+    let refusals: Vec<_> = mine.iter().filter(|r| r.message == "tool call refused").collect();
+    assert_eq!(refusals.len(), 1, "one refusal, recorded once: {refusals:?}",);
     let record = refusals[0];
     assert_eq!(record.level, LogLevel::Warn);
     // TLC-FR-14: the two domains together, a tool call being work the backend
@@ -141,10 +124,7 @@ fn arguments_the_model_composed_wrongly_are_a_result_rather_than_a_turn_failure(
     // A code of its own: every refusal a tool authors arrives under the same
     // kind, and this is a shape the model composed wrongly rather than a value
     // it chose wrongly.
-    assert_eq!(
-        record.fields["reason"],
-        serde_json::json!(crate::tools::ARGUMENTS_UNDECODABLE),
-    );
+    assert_eq!(record.fields["reason"], serde_json::json!(crate::tools::ARGUMENTS_UNDECODABLE),);
     // The field names and the kinds, which is what names the mistake…
     assert_eq!(
         record.fields["argShape"],
@@ -154,13 +134,9 @@ fn arguments_the_model_composed_wrongly_are_a_result_rather_than_a_turn_failure(
     // …and never a value, this one being the author's own document. Read
     // across **every** record of the turn and not only this one, because the
     // dispatch record beside it is exactly where a value would come back.
-    let rendered = serde_json::to_string(
-        &mine
-            .iter()
-            .map(|r| (&r.message, &r.fields))
-            .collect::<Vec<_>>(),
-    )
-    .expect("records render");
+    let rendered =
+        serde_json::to_string(&mine.iter().map(|r| (&r.message, &r.fields)).collect::<Vec<_>>())
+            .expect("records render");
     assert!(!rendered.contains(secret), "a record carried the document");
 }
 
@@ -194,10 +170,7 @@ fn a_refusal_the_tool_itself_authored_is_not_recorded_twice() {
     // The dispatch record stands, which is what says the call was made at all…
     assert!(mine.iter().any(|r| r.message == "agent tool call refused"));
     // …and the boundary added no refusal of its own beside the tool's.
-    let added: Vec<_> = mine
-        .iter()
-        .filter(|r| r.message == "tool call refused")
-        .collect();
+    let added: Vec<_> = mine.iter().filter(|r| r.message == "tool call refused").collect();
     assert!(added.is_empty(), "the boundary recorded it twice: {added:?}");
 }
 
@@ -270,12 +243,8 @@ fn the_call_slot_is_held_across_the_whole_loop_rather_than_per_round() {
 
     let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let dispatch = |h: &Harness| {
-        h.dispatch(
-            "arch",
-            ConversationOrigin::of(&thread),
-            &thread.comments[0].id,
-        )
-        .expect("dispatch")
+        h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
+            .expect("dispatch")
     };
     let first = dispatch(&h);
     // Dispatched once the first turn is known to hold the slot, so the second
@@ -329,14 +298,10 @@ fn a_tool_heavy_turn_reports_each_call_begun_and_finished_and_nothing_else() {
     let (terminal, _) = run_one(&h, "arch");
     assert_eq!(terminal.state, AgentTurnState::Delivered);
 
-    let raw: Vec<serde_json::Value> = rx
-        .try_iter()
-        .filter(|p| p["id"] == serde_json::json!(terminal.id))
-        .collect();
-    let payloads: Vec<AgentTurn> = raw
-        .iter()
-        .map(|p| serde_json::from_value(p.clone()).expect("an AgentTurn"))
-        .collect();
+    let raw: Vec<serde_json::Value> =
+        rx.try_iter().filter(|p| p["id"] == serde_json::json!(terminal.id)).collect();
+    let payloads: Vec<AgentTurn> =
+        raw.iter().map(|p| serde_json::from_value(p.clone()).expect("an AgentTurn")).collect();
     // Two for the turn itself, and one further event per call begun and per
     // call finished (CVL-FR-33).
     assert_eq!(
@@ -346,14 +311,9 @@ fn a_tool_heavy_turn_reports_each_call_begun_and_finished_and_nothing_else() {
         payloads.iter().map(|t| t.state).collect::<Vec<_>>(),
     );
     assert!(payloads[0].ended_at.is_none(), "the first is the registration");
+    assert!(payloads[payloads.len() - 1].ended_at.is_some(), "the last is the terminal one",);
     assert!(
-        payloads[payloads.len() - 1].ended_at.is_some(),
-        "the last is the terminal one",
-    );
-    assert!(
-        payloads[..payloads.len() - 1]
-            .iter()
-            .all(|t| t.state == AgentTurnState::Running),
+        payloads[..payloads.len() - 1].iter().all(|t| t.state == AgentTurnState::Running),
         "an activity event is never terminal (AGC-FR-34)",
     );
     // Each call is active from the event announcing it to the one announcing it
@@ -361,11 +321,7 @@ fn a_tool_heavy_turn_reports_each_call_begun_and_finished_and_nothing_else() {
     assert_eq!(
         payloads
             .iter()
-            .map(|t| t
-                .active_tool_calls
-                .iter()
-                .map(|c| c.tool.as_str())
-                .collect::<Vec<_>>())
+            .map(|t| t.active_tool_calls.iter().map(|c| c.tool.as_str()).collect::<Vec<_>>())
             .collect::<Vec<_>>(),
         vec![
             Vec::<&str>::new(),
@@ -388,12 +344,8 @@ fn a_tool_heavy_turn_reports_each_call_begun_and_finished_and_nothing_else() {
     // CVL-FR-26 / CVL-FR-27: the name and the order and nothing else — no
     // argument, no result, no part of the exchange.
     for payload in &raw {
-        let mut keys: Vec<&str> = payload
-            .as_object()
-            .expect("an object")
-            .keys()
-            .map(String::as_str)
-            .collect();
+        let mut keys: Vec<&str> =
+            payload.as_object().expect("an object").keys().map(String::as_str).collect();
         keys.sort_unstable();
         assert_eq!(
             keys,
@@ -412,16 +364,14 @@ fn a_tool_heavy_turn_reports_each_call_begun_and_finished_and_nothing_else() {
                 "retryPermitted",
                 "startedAt",
                 "state",
+                // AGC-FR-RWPT: null except on a refused certificate.
+                "tlsFailure",
                 "triggerCommentId",
             ],
         );
         for call in payload["activeToolCalls"].as_array().expect("a list") {
-            let mut call_keys: Vec<&str> = call
-                .as_object()
-                .expect("an object")
-                .keys()
-                .map(String::as_str)
-                .collect();
+            let mut call_keys: Vec<&str> =
+                call.as_object().expect("an object").keys().map(String::as_str).collect();
             call_keys.sort_unstable();
             assert_eq!(call_keys, vec!["activationSeq", "id", "tool"]);
         }
@@ -438,10 +388,8 @@ fn every_call_of_one_reply_is_begun_before_any_of_their_results_is_appended() {
     // of their own rather than arriving as a set, so a card reads the status of
     // the one the agent turned to last.
     let h = Harness::scripted(vec![
-        Ok(
-            ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))
-                .and_calls("search_skills", serde_json::json!({ "query": "a" })),
-        ),
+        Ok(ScriptedReply::calls("read_file", serde_json::json!({ "path": "spec.md" }))
+            .and_calls("search_skills", serde_json::json!({ "query": "a" }))),
         Ok(ScriptedReply::answer("Done.")),
     ]);
     h.mount();
@@ -460,12 +408,7 @@ fn every_call_of_one_reply_is_begun_before_any_of_their_results_is_appended() {
     let payloads: Vec<AgentTurn> = rx.try_iter().filter(|t| t.id == terminal.id).collect();
     let active: Vec<Vec<&str>> = payloads
         .iter()
-        .map(|t| {
-            t.active_tool_calls
-                .iter()
-                .map(|c| c.tool.as_str())
-                .collect()
-        })
+        .map(|t| t.active_tool_calls.iter().map(|c| c.tool.as_str()).collect())
         .collect();
     assert_eq!(
         active,
@@ -484,11 +427,7 @@ fn every_call_of_one_reply_is_begun_before_any_of_their_results_is_appended() {
         ],
         "the turn held both as active between those moments",
     );
-    let seqs: Vec<u64> = payloads[2]
-        .active_tool_calls
-        .iter()
-        .map(|c| c.activation_seq)
-        .collect();
+    let seqs: Vec<u64> = payloads[2].active_tool_calls.iter().map(|c| c.activation_seq).collect();
     assert_eq!(seqs, vec![1, 2], "ascending in the order the reply asked");
 
     // CVL-FR-33: begun **before any of their results is appended**, which the
@@ -560,11 +499,7 @@ fn a_provider_native_call_is_reported_begun_and_finished_within_the_call_that_ra
     assert_eq!(
         payloads
             .iter()
-            .map(|t| t
-                .active_tool_calls
-                .iter()
-                .map(|c| c.tool.as_str())
-                .collect::<Vec<_>>())
+            .map(|t| t.active_tool_calls.iter().map(|c| c.tool.as_str()).collect::<Vec<_>>())
             .collect::<Vec<_>>(),
         vec![
             Vec::<&str>::new(),
@@ -578,11 +513,7 @@ fn a_provider_native_call_is_reported_begun_and_finished_within_the_call_that_ra
 /// The activation sequences a turn currently holds, for the tests that assert
 /// AGC-FR-33's ordering rather than the shape of an id.
 fn payload_seqs(turns: &TurnRegistry, turn_id: &str) -> Vec<u64> {
-    turns
-        .active_tool_calls(turn_id)
-        .iter()
-        .map(|call| call.activation_seq)
-        .collect()
+    turns.active_tool_calls(turn_id).iter().map(|call| call.activation_seq).collect()
 }
 
 #[test]
@@ -609,25 +540,18 @@ fn active_calls_are_ordered_by_activation_and_emptied_when_the_turn_ends() {
     let reading = h.turns().in_flight(Some(&origin));
     assert_eq!(reading[0].active_tool_calls.len(), 1, "one after the first");
 
-    let second = report_tool_begun(&handle, &h.turns(), &turn.id, "openrouter:web_search")
-        .expect("begun");
+    let second =
+        report_tool_begun(&handle, &h.turns(), &turn.id, "openrouter:web_search").expect("begun");
     let reading = h.turns().in_flight(Some(&origin));
     assert_eq!(reading[0].active_tool_calls.len(), 2, "two after the second");
-    let seqs: Vec<u64> = reading[0]
-        .active_tool_calls
-        .iter()
-        .map(|c| c.activation_seq)
-        .collect();
+    let seqs: Vec<u64> = reading[0].active_tool_calls.iter().map(|c| c.activation_seq).collect();
     assert_eq!(seqs, vec![1, 2], "ascending in activation order and unique");
 
     // The second finishes, and then the first: the list empties in that order
     // and the turn is still running.
     report_tool_finished(&handle, &h.turns(), &turn.id, &second);
     assert_eq!(
-        h.turns().active_tool_calls(&turn.id)
-            .iter()
-            .map(|c| c.tool.clone())
-            .collect::<Vec<_>>(),
+        h.turns().active_tool_calls(&turn.id).iter().map(|c| c.tool.clone()).collect::<Vec<_>>(),
         vec!["read_file".to_string()],
     );
     report_tool_finished(&handle, &h.turns(), &turn.id, &first);
@@ -647,20 +571,14 @@ fn active_calls_are_ordered_by_activation_and_emptied_when_the_turn_ends() {
         "AGC-FR-33: the sequence ascends past the two that finished — unique \
          within the turn, and never reused",
     );
-    let (ended, _, _, _) = h
-        .turns()
-        .terminate(&turn.id, AgentTurnState::Delivered, None)
-        .expect("terminate");
-    assert!(
-        ended.active_tool_calls.is_empty(),
-        "a terminating turn leaves none behind",
-    );
+    let (ended, _, _, _) =
+        h.turns().terminate(&turn.id, AgentTurnState::Delivered, None).expect("terminate");
+    assert!(ended.active_tool_calls.is_empty(), "a terminating turn leaves none behind",);
 
     let payloads: Vec<AgentTurn> = rx.try_iter().filter(|t| t.id == turn.id).collect();
     assert_eq!(payloads.len(), 5, "one per activation and one per finish");
     assert!(
-        payloads.iter().all(|t| t.state == AgentTurnState::Running
-            && t.ended_at.is_none()),
+        payloads.iter().all(|t| t.state == AgentTurnState::Running && t.ended_at.is_none()),
         "each carries the whole turn, still running, and is not terminal",
     );
 }
@@ -690,11 +608,7 @@ fn two_provider_native_calls_of_one_reply_are_active_together() {
     assert_eq!(
         payloads
             .iter()
-            .map(|t| t
-                .active_tool_calls
-                .iter()
-                .map(|c| c.tool.as_str())
-                .collect::<Vec<_>>())
+            .map(|t| t.active_tool_calls.iter().map(|c| c.tool.as_str()).collect::<Vec<_>>())
             .collect::<Vec<_>>(),
         vec![
             Vec::<&str>::new(),
@@ -707,11 +621,7 @@ fn two_provider_native_calls_of_one_reply_are_active_together() {
         "both active together, in the order the provider reported them",
     );
     assert_eq!(
-        payloads[2]
-            .active_tool_calls
-            .iter()
-            .map(|c| c.activation_seq)
-            .collect::<Vec<_>>(),
+        payloads[2].active_tool_calls.iter().map(|c| c.activation_seq).collect::<Vec<_>>(),
         vec![1, 2],
     );
     // CVL-FR-26 / CVL-FR-32: neither the address nor the page nor the query is
@@ -806,10 +716,8 @@ fn prose_carried_alongside_a_tool_call_below_the_bound_is_not_delivered() {
     // ordinary; only a reply that asks for nothing ends the turn, so the
     // narration must not become the comment.
     let h = Harness::scripted(vec![
-        Ok(
-            ScriptedReply::calls("list_skills", serde_json::json!({}))
-                .with_text("Let me check the skills first."),
-        ),
+        Ok(ScriptedReply::calls("list_skills", serde_json::json!({}))
+            .with_text("Let me check the skills first.")),
         Ok(ScriptedReply::answer("The answer.")),
     ]);
     h.mount();

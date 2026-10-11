@@ -11,10 +11,7 @@ pub enum Reconciliation {
     RolledBack,
     /// A committed acceptance was settled; the comment carried where one was
     /// appended by this run or was already there.
-    Settled {
-        proposal_id: String,
-        comment_id: Option<String>,
-    },
+    Settled { proposal_id: String, comment_id: Option<String> },
 }
 
 /// PCP-FR-14: settle an interrupted transaction, reading the artifact's own
@@ -58,9 +55,8 @@ where
     // A journal that will not parse is an error rather than an absence: acting
     // as though no operation stood would let a second acceptance run over an
     // artifact whose first one may have written half of itself.
-    let journal = root
-        .read_toml::<Journal>(&journal_path)
-        .map_err(|_| ERR_WRITE_FAILED.to_string())?;
+    let journal =
+        root.read_toml::<Journal>(&journal_path).map_err(|_| ERR_WRITE_FAILED.to_string())?;
     let record = read_proposal(root, proposal_id)?;
 
     // What to do is read from the artifact's own bytes.
@@ -113,10 +109,7 @@ where
         finish(root, &dir, proposal_id);
         log_recovery(app, "roll_forward", &settled, "commit point passed");
         announce(app, &BUFFER, &settled);
-        return Ok(Reconciliation::Settled {
-            proposal_id: proposal_id.to_string(),
-            comment_id,
-        });
+        return Ok(Reconciliation::Settled { proposal_id: proposal_id.to_string(), comment_id });
     }
 
     if current.as_deref() != Some(journal.prior_sha256.as_str()) {
@@ -152,8 +145,7 @@ pub fn on_content_root_mounted<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     root: &fs::RootFs,
     store: &fs::RootFs,
-)
-where
+) where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
     let Ok(dir) = proposals_dir(root) else {
@@ -219,20 +211,27 @@ pub fn sweep_on_content_root_mounted<R: tauri::Runtime>(
     }
 }
 
+/// What the author decided about one proposal (PCP-FR-12, PCP-FR-16): the
+/// proposal, the direction, the feedback the author wrote, and who decided.
+pub(super) struct DecisionRequest<'a> {
+    pub(super) proposal_id: &'a str,
+    pub(super) decision: Decision,
+    pub(super) feedback: Option<&'a str>,
+    pub(super) by: &'a Participant,
+}
+
 /// One decision, whichever way it went (PCP-FR-12, PCP-FR-15, PCP-FR-16).
 pub(super) fn decide<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     root: &fs::RootFs,
     store: &fs::RootFs,
-    proposal_id: &str,
-    decision: Decision,
-    feedback: Option<&str>,
-    by: &Participant,
+    request: DecisionRequest<'_>,
     tracker: &ContentTracker,
 ) -> Result<PromptDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
+    let DecisionRequest { proposal_id, decision, feedback, by } = request;
     let held = read_proposal(root, proposal_id)?;
     // PCP-FR-14: checked before the artifact lock is taken, so a decision made
     // while another acceptance of this proposal is in flight is refused rather
@@ -277,12 +276,8 @@ where
     // PCP-FR-16: the two conditions that would make the append impossible are
     // checked **before anything is written**. The identity has already been
     // resolved by the command; the lock is this.
-    if comments::thread_at(
-        store,
-        thread_ref(&thread_artifact, discussion),
-        &record.thread_id,
-    )?
-    .locked
+    if comments::thread_at(store, thread_ref(&thread_artifact, discussion), &record.thread_id)?
+        .locked
     {
         return Err(comments::ERR_DISCUSSION_LOCKED.to_string());
     }
@@ -293,10 +288,7 @@ where
             root,
             store,
             &record,
-            &thread_artifact,
-            discussion,
-            feedback,
-            by,
+            Acceptance { thread_artifact: &thread_artifact, discussion, feedback, by },
             tracker,
         );
     }

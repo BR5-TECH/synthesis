@@ -45,7 +45,11 @@ import {
 import { Icon } from "./icons";
 import { StandingWorkChoice } from "./StandingWorkChoice";
 import { CapacityUnread, SlotWait, useGraduationCapacity } from "./GraduationStart/capacity";
-import { DestinationChoice, type Destination } from "./GraduationStart/destination";
+import {
+  DestinationChoice,
+  type Destination,
+  type DestinationInput,
+} from "./GraduationStart/destination";
 import { DirectChoice, directBlocker } from "./GraduationStart/direct";
 import { NewStreamFields } from "./GraduationStart/newStream";
 import { useGraduationQueueRuns } from "./GraduationStart/queue";
@@ -85,6 +89,10 @@ export function GraduationStart({
   const [preflight, setPreflight] = useState<DirectGraduationPreflight | null>(null);
   const [preflightError, setPreflightError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
+  // GSD-FR-WMTD: the name field takes focus when the dialog opens on a choice
+  // that asks it and when such a choice is clicked, but not while the arrow
+  // keys walk the destination toggle, which would take focus out of it.
+  const nameTakesFocus = useRef(true);
   const [standingWork, setStandingWork] =
     useState<StandingWork>(DEFAULT_STANDING_WORK);
   const [message, setMessage] = useState("");
@@ -95,6 +103,8 @@ export function GraduationStart({
   const messageEdited = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** GSD-FR-QGTC: both New stream and Temporary stream make a stream here. */
+  const makesStream = destination === "new" || destination === "temporary";
   /** GSD-FR-CXVA: whether the streams listing itself could not be read. */
   const [unreadable, setUnreadable] = useState(false);
   const pickerRef = useRef<HTMLSelectElement>(null);
@@ -205,8 +215,8 @@ export function GraduationStart({
   // GSD-FR-QGTC: the branches a new stream may be created from, read when New
   // stream is chosen. The branch checked out in the active worktree rests first.
   useEffect(() => {
-    if (destination !== "new") return;
-    nameRef.current?.focus();
+    if (!makesStream) return;
+    if (nameTakesFocus.current) nameRef.current?.focus();
     let live = true;
     api
       .listWorktreesAndBranches()
@@ -230,7 +240,7 @@ export function GraduationStart({
     return () => {
       live = false;
     };
-  }, [destination]);
+  }, [makesStream]);
 
   // GSD-FR-HVDN: the message of the first selected stream is prefilled once
   // the runs are read, unless the author typed before they arrived. New stream
@@ -263,13 +273,15 @@ export function GraduationStart({
    * other destination held is cleared. A return to Existing stream applies the
    * selected stream's default again.
    */
-  const selectDestination = (value: Destination) => {
+  const selectDestination = (value: Destination, via: DestinationInput) => {
     setError(null);
-    if (value === "new" && destination !== "new") {
+    nameTakesFocus.current = via === "click";
+    const makes = value === "new" || value === "temporary";
+    if (makes && !makesStream) {
       messageEdited.current = false;
       defaultedFor.current = null;
       setMessage("");
-    } else if (value === "stream" && destination === "new") {
+    } else if (value === "stream" && makesStream) {
       selectStream(streamId);
     }
     setDestination(value);
@@ -296,8 +308,14 @@ export function GraduationStart({
     // GSD-FR-BFOU: one start at a time.
     if (busy) return;
     if (destination === "stream" && !streamId) return;
+    // GSD-FR-WJHN: a temporary stream takes the draft's name where none is typed.
     if (destination === "new" && !newName.trim()) return;
-    if (destination === "direct" && (!preflight || directBlocker(preflight))) return;
+    if (
+      destination === "direct" &&
+      (!preflight || directBlocker(preflight, temporaryStreamIds))
+    ) {
+      return;
+    }
     setBusy(true);
     setError(null);
     setNameError(null);
@@ -312,10 +330,15 @@ export function GraduationStart({
           preflight.worktreePath,
           preflight.branch ?? "",
         );
-      } else if (destination === "new") {
+      } else if (makesStream) {
         // GSD-FR-QGTC: the stream is made first, free, and the run starts on it.
+        // GSD-FR-XNPD: a temporary stream is made with the flag set.
         try {
-          const created = await api.createWorkStream(newName.trim(), newBranch || undefined);
+          const created = await api.createWorkStream(
+            newName.trim() || (destination === "temporary" ? draftName : ""),
+            newBranch || undefined,
+            destination === "temporary",
+          );
           createdStream = created.id;
         } catch (reason) {
           // A name refusal renders against the name field; the dialog stays.
@@ -386,13 +409,19 @@ export function GraduationStart({
   // full. A new stream is free, so only the limit makes it wait (GSD-FR-QGTC).
   const streamWaits = occupied || limitFull;
   const newWaits = limitFull;
+  /** GSD-FR-RLFC: the temporary streams, which take no direct run. */
+  const temporaryStreamIds = new Set(
+    (streams ?? []).filter((s) => s.stream.temporary).map((s) => s.stream.id),
+  );
   const canStart =
     !busy &&
     (destination === "stream"
       ? Boolean(streamId)
       : destination === "new"
         ? newName.trim() !== ""
-        : Boolean(preflight) && !directBlocker(preflight));
+        : destination === "temporary"
+          ? true
+          : Boolean(preflight) && !directBlocker(preflight, temporaryStreamIds));
 
   return (
     <div
@@ -493,6 +522,7 @@ export function GraduationStart({
                   {streams.map(({ stream, queuedRunCount }) => (
                     <option key={stream.id} value={stream.id}>
                       {stream.name}
+                      {stream.temporary ? " · temporary" : ""}
                       {queuedRunCount > 0 ? ` · ${queuedRunCount} queued` : ""}
                     </option>
                   ))}
@@ -505,8 +535,9 @@ export function GraduationStart({
                     className="t-ui-xs graduation-start__note"
                     data-testid="graduation-start-busy"
                   >
-                    A run is working in “{chosen.stream.name}” now. This one
-                    waits behind it.
+                    A run holds “{chosen.stream.name}” now, working or at rest.
+                    This one waits behind it until that run is completed or
+                    discarded.
                   </p>
                 )}
                 {/* GSD-FR-LHQY / GSD-FR-KDBU: the limit is a reason of its own,
@@ -547,8 +578,11 @@ export function GraduationStart({
 
           {/* GSD-FR-QGTC: a stream made here is free, so it asks the
               standing-work choice only where the limit is full. */}
-          {streams !== null && destination === "new" && (
+          {streams !== null && makesStream && (
             <NewStreamFields
+              temporary={
+                destination === "temporary" ? { placeholder: draftName } : null
+              }
               name={newName}
               onName={(value) => {
                 setNewName(value);
@@ -563,7 +597,7 @@ export function GraduationStart({
             />
           )}
 
-          {streams !== null && destination === "new" && newWaits && fullLimit !== null && (
+          {streams !== null && makesStream && newWaits && fullLimit !== null && (
             <>
               <SlotWait limit={fullLimit} target={{ kind: "new" }} />
               <StandingWorkChoice
@@ -581,7 +615,11 @@ export function GraduationStart({
           {/* GSD-FR-FQQP: the worktree the run will write in. It asks no
               standing-work choice and no commit message. */}
           {streams !== null && destination === "direct" && (
-            <DirectChoice preflight={preflight} unreadable={preflightError} />
+            <DirectChoice
+              preflight={preflight}
+              unreadable={preflightError}
+              temporaryStreamIds={temporaryStreamIds}
+            />
           )}
 
           {error && (
@@ -616,7 +654,9 @@ export function GraduationStart({
               ? "Starting…"
               : destination === "new"
                 ? "Create stream and graduate"
-                : destination === "direct"
+                : destination === "temporary"
+                  ? "Create temporary stream and graduate"
+                  : destination === "direct"
                   ? "Graduate here"
                   : "Graduate"}
           </button>

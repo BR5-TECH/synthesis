@@ -89,20 +89,20 @@ where
     // **without a position** — naming a change would name the first one
     // whatever failed, which is the very thing a caller cannot act on and the
     // reason the places are carried at all.
-    let composed =
-        hunks::apply_all(&current.body, &document).ok_or(RecordRefusal::NotRecorded)?;
+    let composed = hunks::apply_all(&current.body, &document).ok_or(RecordRefusal::NotRecorded)?;
     if current.body == drafts::normalise_for_write(root, &composed) {
         return Err(RecordRefusal::NoChange);
     }
 
-    let dir = drafts::draft_proposals_dir(root, new.draft_id).map_err(|_| RecordRefusal::NotRecorded)?;
+    let dir =
+        drafts::draft_proposals_dir(root, new.draft_id).map_err(|_| RecordRefusal::NotRecorded)?;
     let id = new_note_id();
     let now = now_rfc3339();
 
     // DCP-FR-08: the hunk bodies exactly as the agent composed them. The bodies
     // live beside the record rather than in it, because listing reads records and
     // never a document (DCP-FR-09).
-    root.write_text_atomic(&hunks_path(&dir, &id), &document.to_toml())
+    root.write_text_atomic(hunks_path(&dir, &id), &document.to_toml())
         .map_err(|_| RecordRefusal::NotRecorded)?;
     // DCP-FR-25: the agent's own text, so `edited` describes the hunk rather than
     // the history of getting to it — an author who rewrites a hunk and then puts
@@ -145,7 +145,7 @@ where
         let _ = root.delete_under(&dir, format!("{id}.{RECORD_EXT}"), false);
     };
 
-    if root.write_toml_atomic(&record_path(&dir, &id), &record).is_err() {
+    if root.write_toml_atomic(record_path(&dir, &id), &record).is_err() {
         cleanup();
         return Err(RecordRefusal::NotRecorded);
     }
@@ -165,8 +165,7 @@ where
         comment_id,
         new.rationale.to_string(),
         vec![attachment],
-        new.agent,
-        &now,
+        comments::Stamp { by: new.agent, at: &now },
     ) {
         Ok(thread) => thread,
         Err(error) => {
@@ -236,9 +235,7 @@ pub(crate) fn draft_lock(draft_id: &str) -> std::sync::MutexGuard<'static, ()> {
     let locks = LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
     let mutex = {
         let mut guard = locks.lock().unwrap_or_else(|e| e.into_inner());
-        *guard
-            .entry(draft_id.to_string())
-            .or_insert_with(|| Box::leak(Box::new(Mutex::new(()))))
+        *guard.entry(draft_id.to_string()).or_insert_with(|| Box::leak(Box::new(Mutex::new(()))))
     };
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -246,5 +243,3 @@ pub(crate) fn draft_lock(draft_id: &str) -> std::sync::MutexGuard<'static, ()> {
 // ---------------------------------------------------------------------------
 // Deciding (DCP-FR-11 through DCP-FR-15)
 // ---------------------------------------------------------------------------
-
-

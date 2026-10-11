@@ -80,7 +80,7 @@ export function addressedConversation(): Discussion {
 }
 
 export function agent(nickname: string, id: string): ProjectAgent {
-  return {
+  return { scope: "project" as const,
     agent: {
       id,
       nickname,

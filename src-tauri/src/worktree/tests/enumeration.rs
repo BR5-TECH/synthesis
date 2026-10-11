@@ -13,18 +13,12 @@ fn a_non_repository_is_the_typed_error_for_every_read() {
     let dir = TempDir::new().unwrap();
     assert_eq!(context_for(dir.path()).unwrap_err(), ERR_NOT_A_REPO);
     assert_eq!(active_entry_for(dir.path()).unwrap_err(), ERR_NOT_A_REPO);
-    assert_eq!(
-        propose_path_for(dir.path(), "x").unwrap_err(),
-        ERR_NOT_A_REPO
-    );
+    assert_eq!(propose_path_for(dir.path(), "x").unwrap_err(), ERR_NOT_A_REPO);
     assert_eq!(
         validate_activation_target(dir.path(), "/tmp/anything").unwrap_err(),
         ERR_NOT_A_REPO
     );
-    assert_eq!(
-        create_worktree_at(dir.path(), "x", "/tmp/anything").unwrap_err(),
-        ERR_NOT_A_REPO
-    );
+    assert_eq!(create_worktree_at(dir.path(), "x", "/tmp/anything").unwrap_err(), ERR_NOT_A_REPO);
 }
 
 // -- WTC-FR-04 / WTC-FR-05: worktree enumeration ------------------------
@@ -59,10 +53,7 @@ fn the_primary_comes_first_and_exactly_one_entry_is_active_and_primary() {
     assert_eq!(ctx.worktrees[0].path, to_string_path(&f.root()));
     assert_eq!(ctx.worktrees.iter().filter(|w| w.is_primary).count(), 1);
     assert_eq!(ctx.worktrees.iter().filter(|w| w.is_active).count(), 1);
-    assert_eq!(
-        ctx.worktrees.iter().find(|w| w.is_active).unwrap().path,
-        to_string_path(&a)
-    );
+    assert_eq!(ctx.worktrees.iter().find(|w| w.is_active).unwrap().path, to_string_path(&a));
     // Linked worktrees follow, ordered by path.
     let linked: Vec<String> = ctx.worktrees[1..].iter().map(|w| w.path.clone()).collect();
     let mut sorted = linked.clone();
@@ -88,11 +79,7 @@ fn a_detached_worktree_carries_no_branch_and_a_deleted_one_is_reported_missing()
     fs::remove_dir_all(&gone).unwrap();
 
     let ctx = context_for(&f.root()).unwrap();
-    let d = ctx
-        .worktrees
-        .iter()
-        .find(|w| w.path == to_string_path(&detached))
-        .unwrap();
+    let d = ctx.worktrees.iter().find(|w| w.path == to_string_path(&detached)).unwrap();
     assert!(d.is_detached);
     assert_eq!(d.branch, None);
     assert_eq!(d.head_short_hash.len(), 7);
@@ -143,11 +130,7 @@ fn branches_lists_only_the_ones_with_no_worktree() {
         !listed.contains(&format!("origin/{main}")),
         "a remote whose local counterpart exists is excluded: {listed:?}"
     );
-    let remote = ctx
-        .branches
-        .iter()
-        .find(|b| b.name == "origin/experiment")
-        .unwrap();
+    let remote = ctx.branches.iter().find(|b| b.name == "origin/experiment").unwrap();
     assert_eq!(remote.kind, BRANCH_KIND_REMOTE);
     let local = ctx.branches.iter().find(|b| b.name == "chore-deps").unwrap();
     assert_eq!(local.kind, BRANCH_KIND_LOCAL);
@@ -226,11 +209,7 @@ fn every_expression_of_primary_agrees_with_every_other() {
         let entry = active_entry_for(&root).unwrap();
         let ctx = context_for(&root).unwrap();
         assert_eq!(helper, entry.is_primary, "helper vs active entry at {root:?}");
-        assert_eq!(
-            helper,
-            !ctx.branches.is_empty(),
-            "helper vs the branch gate at {root:?}"
-        );
+        assert_eq!(helper, !ctx.branches.is_empty(), "helper vs the branch gate at {root:?}");
         assert_eq!(
             helper,
             ctx.active_worktree_path == ctx.repository_root,
@@ -269,28 +248,18 @@ fn a_linked_worktree_may_still_be_left_and_may_still_create_another() {
     let alpha = f.add_worktree("wt-alpha", "alpha");
 
     // Leaving it for another worktree.
-    assert_eq!(
-        validate_activation_target(&alpha, &f.root().to_string_lossy()).unwrap(),
-        f.root()
-    );
+    assert_eq!(validate_activation_target(&alpha, &f.root().to_string_lossy()).unwrap(), f.root());
     // And creating one from it — including proposing where it should go.
     let proposed = propose_path_for(&alpha, "spike").unwrap();
     assert!(!proposed.is_empty());
     let created =
-        create_worktree_at(&alpha, "beta", &f.sibling("wt-beta").to_string_lossy())
-            .unwrap();
+        create_worktree_at(&alpha, "beta", &f.sibling("wt-beta").to_string_lossy()).unwrap();
     assert!(created.is_dir());
-    assert_eq!(
-        Repository::open(&created).unwrap().head().unwrap().shorthand().unwrap(),
-        "beta"
-    );
+    assert_eq!(Repository::open(&created).unwrap().head().unwrap().shorthand().unwrap(), "beta");
 }
 
 #[test]
 fn is_in_primary_worktree_on_a_non_repository_is_the_typed_error() {
     let dir = TempDir::new().unwrap();
-    assert_eq!(
-        is_in_primary_worktree(dir.path()).unwrap_err(),
-        ERR_NOT_A_REPO
-    );
+    assert_eq!(is_in_primary_worktree(dir.path()).unwrap_err(), ERR_NOT_A_REPO);
 }

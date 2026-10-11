@@ -57,11 +57,8 @@ pub fn instruction_text(raw: &str) -> String {
         // The spans this line meets, in order. A comment may open on one line
         // and close on a later one, so a span can cover part of a line, the
         // whole of it, or straddle its edges.
-        let touching: Vec<(usize, usize)> = spans
-            .iter()
-            .copied()
-            .filter(|(from, to)| *from < end && *to > start)
-            .collect();
+        let touching: Vec<(usize, usize)> =
+            spans.iter().copied().filter(|(from, to)| *from < end && *to > start).collect();
         if touching.is_empty() {
             out.push_str(line);
             continue;
@@ -173,10 +170,7 @@ mod tests {
     /// Prose sharing a line with a comment stays where it was.
     #[test]
     fn prose_beside_a_comment_survives() {
-        assert_eq!(
-            instruction_text("Keep <!-- drop --> this.\n"),
-            "Keep  this.\n"
-        );
+        assert_eq!(instruction_text("Keep <!-- drop --> this.\n"), "Keep  this.\n");
     }
 
     /// Several comments in one file all go.
@@ -229,31 +223,19 @@ mod tests {
     /// part of the outer note — its trailing delimiter included — is sent.
     #[test]
     fn a_nested_comment_does_not_leak_its_tail() {
-        assert_eq!(
-            instruction_text("<!-- outer <!-- inner --> tail -->\nBody\n"),
-            "Body\n",
-        );
-        assert_eq!(
-            instruction_text("a <!-- x <!-- y --> z --> b\n"),
-            "a  b\n",
-        );
+        assert_eq!(instruction_text("<!-- outer <!-- inner --> tail -->\nBody\n"), "Body\n",);
+        assert_eq!(instruction_text("a <!-- x <!-- y --> z --> b\n"), "a  b\n",);
     }
 
     /// CRLF is the ending people break, and the one nothing else here covers.
     #[test]
     fn crlf_endings_are_closed_up_like_any_other() {
-        assert_eq!(
-            instruction_text("<!-- note -->\r\nBody.\r\n"),
-            "Body.\r\n",
-        );
+        assert_eq!(instruction_text("<!-- note -->\r\nBody.\r\n"), "Body.\r\n",);
         assert_eq!(
             instruction_text("Do it.\r\n<!--\r\n  a note\r\n-->\r\n\r\nBody.\r\n"),
             "Do it.\r\n\r\nBody.\r\n",
         );
-        assert_eq!(
-            instruction_text("Keep <!-- drop --> this.\r\n"),
-            "Keep  this.\r\n",
-        );
+        assert_eq!(instruction_text("Keep <!-- drop --> this.\r\n"), "Keep  this.\r\n",);
     }
 
     /// The shapes a file actually takes at its edges.
@@ -265,10 +247,7 @@ mod tests {
         assert_eq!(instruction_text("<!-- all of it -->\n"), "");
         // A comment between two paragraphs keeps the blank lines the file holds
         // around it rather than welding the paragraphs together.
-        assert_eq!(
-            instruction_text("One.\n\n<!-- aside -->\n\nTwo.\n"),
-            "One.\n\n\nTwo.\n",
-        );
+        assert_eq!(instruction_text("One.\n\n<!-- aside -->\n\nTwo.\n"), "One.\n\n\nTwo.\n",);
     }
 
     /// A NUL in the source is left alone. This file's own repository uses
@@ -277,10 +256,7 @@ mod tests {
     /// no character outside them is touched.
     #[test]
     fn a_nul_in_the_source_survives() {
-        assert_eq!(
-            instruction_text("before\u{0}after\n<!-- note -->\n"),
-            "before\u{0}after\n",
-        );
+        assert_eq!(instruction_text("before\u{0}after\n<!-- note -->\n"), "before\u{0}after\n",);
     }
 
     /// A comment inside a fenced code block is removed like any other, which is

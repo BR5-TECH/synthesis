@@ -160,13 +160,7 @@ pub fn parameters() -> serde_json::Value {
 /// truncating would cost the author a choice over a matter of taste.
 fn usable_options(options: Option<&Vec<String>>) -> Vec<&str> {
     options
-        .map(|items| {
-            items
-                .iter()
-                .map(|item| item.trim())
-                .filter(|item| !item.is_empty())
-                .collect()
-        })
+        .map(|items| items.iter().map(|item| item.trim()).filter(|item| !item.is_empty()).collect())
         .unwrap_or_default()
 }
 
@@ -268,14 +262,7 @@ impl<R: tauri::Runtime> AskUserCommentTool<R> {
         author: Participant,
         asked: Arc<AtomicBool>,
     ) -> Self {
-        AskUserCommentTool {
-            app,
-            roots,
-            origin,
-            author,
-            asked,
-            buffer: &BUFFER,
-        }
+        AskUserCommentTool { app, roots, origin, author, asked, buffer: &BUFFER }
     }
 
     /// The same tool, reporting into `buffer`.

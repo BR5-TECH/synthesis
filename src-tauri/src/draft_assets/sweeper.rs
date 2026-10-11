@@ -77,18 +77,11 @@ impl DraftAssetSweeper {
     /// together are coalesced into one.
     pub(super) fn claim(&self, draft_id: &str) -> (DraftAssetSweepScheduled, bool) {
         let Ok(mut passes) = self.passes.lock() else {
-            return (
-                DraftAssetSweepScheduled { scheduled: false, coalesced: false },
-                false,
-            );
+            return (DraftAssetSweepScheduled { scheduled: false, coalesced: false }, false);
         };
-        let busy =
-            passes.pending.contains(draft_id) || passes.running.contains(draft_id);
+        let busy = passes.pending.contains(draft_id) || passes.running.contains(draft_id);
         passes.pending.insert(draft_id.to_string());
-        (
-            DraftAssetSweepScheduled { scheduled: true, coalesced: busy },
-            !busy,
-        )
+        (DraftAssetSweepScheduled { scheduled: true, coalesced: busy }, !busy)
     }
 
     /// Take the pending claim for `draft_id`, marking it running. `false` means

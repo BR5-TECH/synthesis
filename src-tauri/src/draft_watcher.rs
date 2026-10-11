@@ -162,9 +162,8 @@ pub fn start_watching<R: tauri::Runtime>(
     // `file_info`, not a `Path` predicate: every disk read in this crate goes
     // through `FsAccess`, so a drafts root outside the allowlist is refused here
     // rather than watched.
-    let is_dir = root
-        .file_info(&drafts_root)
-        .is_ok_and(|info| info.kind == crate::fs::EntryKind::Dir);
+    let is_dir =
+        root.file_info(&drafts_root).is_ok_and(|info| info.kind == crate::fs::EntryKind::Dir);
     if !is_dir {
         // A handle whose project has not been scaffolded yet (a not-yet-cloned
         // git URL, say). Leave any prior watch torn down rather than watching a
@@ -240,10 +239,8 @@ pub fn start_watching<R: tauri::Runtime>(
                 );
                 continue;
             };
-            let news = activity
-                .lock()
-                .map(|mut guard| guard.observe(&draft_id, &at))
-                .unwrap_or(false);
+            let news =
+                activity.lock().map(|mut guard| guard.observe(&draft_id, &at)).unwrap_or(false);
             if !news {
                 // A rename or a move: the path under `files/` changed and the
                 // prompt's bytes did not (DRS-FR-42). `"drafts changed"` reports
@@ -262,10 +259,7 @@ pub fn start_watching<R: tauri::Runtime>(
             );
             let _ = app_handle.emit(
                 DRAFT_PROMPT_CHANGED,
-                DraftPromptChangedPayload {
-                    draft_id: draft_id.clone(),
-                    prompt_activity_at: at,
-                },
+                DraftPromptChangedPayload { draft_id: draft_id.clone(), prompt_activity_at: at },
             );
             // PST-FR-35: what moves the Dashboard's Active workstreams ordering.
             crate::dashboard::note_active_drafts_changed(&app_handle);
@@ -284,10 +278,7 @@ pub fn start_watching<R: tauri::Runtime>(
             return;
         }
     };
-    if let Err(e) = debouncer
-        .watcher()
-        .watch(&drafts_root, RecursiveMode::Recursive)
-    {
+    if let Err(e) = debouncer.watcher().watch(&drafts_root, RecursiveMode::Recursive) {
         crate::logging::log_warn(
             app,
             &crate::logging::BUFFER,
@@ -359,10 +350,7 @@ mod tests {
             !activity.observe("d-1", "2026-01-01T00:00:00.000Z"),
             "the same instant again is the same bytes: a rename or a move"
         );
-        assert!(
-            activity.observe("d-1", "2026-01-01T00:05:00.000Z"),
-            "a new instant is a write"
-        );
+        assert!(activity.observe("d-1", "2026-01-01T00:05:00.000Z"), "a new instant is a write");
     }
 
     #[test]
@@ -536,11 +524,7 @@ mod tests {
         crate::drafts::save_draft_file_impl(&root, &one.draft.id, &one.file, "# after close\n")
             .unwrap();
         std::thread::sleep(Duration::from_millis(500));
-        assert_eq!(
-            ids_seen(&seen).len(),
-            quiet,
-            "a closed project emits nothing"
-        );
+        assert_eq!(ids_seen(&seen).len(), quiet, "a closed project emits nothing");
     }
 
     #[test]

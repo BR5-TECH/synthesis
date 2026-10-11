@@ -114,18 +114,18 @@ fn project_with_filed_draft() -> (TempDir, String) {
     (dir, id)
 }
 
-mod resolution;
-mod registry;
-mod creation;
-mod status_rename;
-mod prompt;
 mod contents;
-mod search;
+mod creation;
 mod deletion;
-mod validation;
-mod statistics_log;
-mod template;
-mod root_organisation;
-mod storage;
-mod prompt_activity;
 mod github_shadow;
+mod prompt;
+mod prompt_activity;
+mod registry;
+mod resolution;
+mod root_organisation;
+mod search;
+mod statistics_log;
+mod status_rename;
+mod storage;
+mod template;
+mod validation;

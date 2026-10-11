@@ -38,10 +38,7 @@ fn a_run_with_merge_data_round_trips_through_the_toml_store() {
     for run in [bare_merge_run(), applied_run(&fx)] {
         let back = read_back(&fx, &run);
 
-        assert_eq!(
-            serde_json::to_value(&back).unwrap(),
-            serde_json::to_value(&run).unwrap()
-        );
+        assert_eq!(serde_json::to_value(&back).unwrap(), serde_json::to_value(&run).unwrap());
         assert_eq!(back.merge, run.merge);
         assert!(back.is_merge());
     }
@@ -105,15 +102,15 @@ fn a_run_without_merge_data_is_stored_and_read_unchanged() {
 
     let back = read_back(&fx, &run);
 
-    assert_eq!(
-        serde_json::to_value(&back).unwrap(),
-        serde_json::to_value(&run).unwrap()
-    );
+    assert_eq!(serde_json::to_value(&back).unwrap(), serde_json::to_value(&run).unwrap());
     assert!(back.merge.is_none());
     assert!(!back.is_merge());
     let base = crate::graduation::store_base(&fx.app).unwrap();
     let text = std::fs::read_to_string(base.record(&run.id)).unwrap();
-    assert!(!text.contains("[merge") && !text.contains("merge."), "no merge table in the record:\n{text}");
+    assert!(
+        !text.contains("[merge") && !text.contains("merge."),
+        "no merge table in the record:\n{text}"
+    );
     assert!(serde_json::to_value(&run).unwrap().get("merge").is_none());
 }
 
@@ -127,7 +124,8 @@ fn a_merge_run_is_listed_and_read_with_its_merge_data() {
     run.project_key = fx.project_key();
     crate::graduation::save_run(&fx.app, &mut run).expect("saved");
 
-    let read = crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("a run");
+    let read =
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("a run");
     assert_eq!(read.merge.as_ref().map(|m| m.name.as_str()), Some("Merge feature"));
     assert!(read.merge.as_ref().unwrap().result.is_none());
     let queue = crate::graduation::list_graduation_queue(fx.app.clone()).expect("a queue");
@@ -138,7 +136,8 @@ fn a_merge_run_is_listed_and_read_with_its_merge_data() {
     let mut done = applied_run(&fx);
     done.id = run.id.clone();
     crate::graduation::save_run(&fx.app, &mut done).expect("saved");
-    let read = crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("a run");
+    let read =
+        crate::graduation::get_graduation_run(fx.app.clone(), run.id.clone()).expect("a run");
     assert_eq!(read.state, GraduationRunState::Completed);
     assert_eq!(
         read.merge.unwrap().result.unwrap().merged_paths,

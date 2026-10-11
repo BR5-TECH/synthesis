@@ -19,12 +19,14 @@ import { readStylesheet } from "../../test/readStylesheet";
  */
 
 const CSS = readStylesheet("components.css");
+/** The Agent Output row's own rules, which the window's rows take. */
+const KIT = readStylesheet("kit.css");
 
 /** The declarations of one rule, by selector. */
-function rule(selector: string): string {
-  const at = CSS.indexOf(`\n${selector} {`);
+function rule(selector: string, sheet: string = CSS): string {
+  const at = sheet.indexOf(`\n${selector} {`);
   if (at < 0) throw new Error(`no rule for ${selector}`);
-  const body = CSS.slice(at + selector.length + 3);
+  const body = sheet.slice(at + selector.length + 3);
   return body.slice(0, body.indexOf("}"));
 }
 
@@ -35,10 +37,17 @@ describe("the log window's layout (GLW-FR-SNDH)", () => {
     expect(viewport).toMatch(/overflow-x:\s*hidden/);
   });
 
-  it("GLW-FR-SNDH: a long line wraps rather than widening the region", () => {
-    const text = rule(".glw__text");
+  it("GLW-FR-SNDH, GLW-FR-KHGP: a long summary wraps rather than widening the region", () => {
+    // A row is the Agent Output row, so its summary takes that row's own rule.
+    const text = rule(".runs-line__msg", KIT);
     expect(text).toMatch(/white-space:\s*pre-wrap/);
     expect(text).toMatch(/word-break:\s*break-word/);
+  });
+
+  it("GLW-FR-FPUX: the stylesheet holds no rule of a stream toggle or of the old row parts", () => {
+    expect(CSS).not.toContain(".glw__streams");
+    expect(CSS).not.toContain(".glw__meta");
+    expect(CSS).not.toContain(".glw__text");
   });
 
   it("GLW-FR-SNDH: the window is legible at the smallest supported window size", () => {

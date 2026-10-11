@@ -101,7 +101,8 @@ pub fn ensure_private_ignored(root: &fsa::RootFs) {
 /// Append each missing entry to one file beneath the drafts root, leaving the
 /// rest of it exactly as it was.
 fn ensure_entries(root: &fsa::RootFs, rel: &str, entries: &[String]) -> Result<(), String> {
-    let path = fsa::resolve_under(root, format!("{DRAFTS_REL}/{rel}")).map_err(|e| e.to_string())?;
+    let path =
+        fsa::resolve_under(root, format!("{DRAFTS_REL}/{rel}")).map_err(|e| e.to_string())?;
     let existing = match root.read_text(&path) {
         Ok(text) => text,
         Err(fsa::FsError::NotFound { .. }) => String::new(),

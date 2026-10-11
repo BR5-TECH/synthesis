@@ -6,27 +6,6 @@ use super::*;
 // ASV-FR-27 … ASV-FR-33 — retention, disclosure, reach, and the budget
 // ---------------------------------------------------------------------------
 
-/// ASV-FR-27: nothing is retained between operations — a second read of the
-/// same path reads the keyring again.
-#[test]
-fn asv_ts_22_nothing_is_cached_between_operations() {
-    let (vault, keyring) = vault();
-    set(&vault, &["github", "tokens", "a"], "A").unwrap();
-
-    let reads_before = keyring.count(&Call::Read);
-    vault.read_secret(&p(&["github", "tokens", "a"])).unwrap();
-    assert_eq!(keyring.count(&Call::Read) - reads_before, 1);
-    vault.read_secret(&p(&["github", "tokens", "a"])).unwrap();
-    assert_eq!(keyring.count(&Call::Read) - reads_before, 2);
-
-    // And the answer follows the entry rather than a retained copy.
-    keyring.set_entry(r#"{"version":1}"#);
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "a"])).unwrap(),
-        None
-    );
-}
-
 /// ASV-FR-31, ASV-FR-28 (renderings): no `Debug` rendering the module produces carries a
 /// secret, a path, or an id.
 #[test]
@@ -40,17 +19,11 @@ fn asv_ts_23_debug_renderings_disclose_nothing() {
     assert!(!rendered.contains("token-id-42"));
     assert!(!rendered.contains("github"));
 
-    let removal = Mutation::Remove {
-        path: p(&["ai_api", "providers", "openai"]),
-    };
+    let removal = Mutation::Remove { path: p(&["ai_api", "providers", "openai"]) };
     let rendered = format!("{removal:?}");
     assert!(!rendered.contains("openai"));
 
-    let candidate = candidate(
-        GITHUB_LEGACY,
-        "token-id-42",
-        &["github", "tokens", "token-id-42"],
-    );
+    let candidate = candidate(GITHUB_LEGACY, "token-id-42", &["github", "tokens", "token-id-42"]);
     let rendered = format!("{candidate:?}");
     assert!(!rendered.contains("token-id-42"));
 
@@ -87,23 +60,15 @@ fn asv_ts_23_no_log_record_carries_a_secret_a_path_or_an_id() {
     let (vault, keyring) = unmigrated_vault();
     keyring.set_legacy(AI_API_LEGACY, PROVIDER_ID, LEGACY_SECRET);
     vault.set_candidate_source(Box::new(|| {
-        vec![candidate(
-            AI_API_LEGACY,
-            PROVIDER_ID,
-            &["ai_api", "providers", PROVIDER_ID],
-        )]
+        vec![candidate(AI_API_LEGACY, PROVIDER_ID, &["ai_api", "providers", PROVIDER_ID])]
     }));
 
     // A whole session: migrate, write, read, presence, remove.
     let token_path = p(&["github", "tokens", TOKEN_ID]);
     set(&vault, &["github", "tokens", TOKEN_ID], SECRET).unwrap();
     vault.read_secret(&token_path).unwrap();
-    vault.secret_presence(&[token_path.clone()]).unwrap();
-    vault
-        .apply_secret_mutations(&[Mutation::Remove {
-            path: token_path.clone(),
-        }])
-        .unwrap();
+    vault.secret_presence(std::slice::from_ref(&token_path)).unwrap();
+    vault.apply_secret_mutations(&[Mutation::Remove { path: token_path.clone() }]).unwrap();
 
     // And every typed failure in turn.
     keyring.state().refuse_read = true;
@@ -176,15 +141,13 @@ fn asv_ts_23_no_log_record_carries_a_secret_a_path_or_an_id() {
         "secret vault migration found nothing to adopt",
         "secret vault could not adopt a legacy secret",
         "secret vault write could not be verified",
+        "secret vault cache initialized",
     ] {
         assert!(messages.contains(site), "the session never reached {site:?}");
     }
     assert_eq!(
         messages.len(),
-        include_str!("../../secret_vault.rs")
-            .matches("            \"secret vault")
-            .count()
-            .max(6),
+        include_str!("../../secret_vault.rs").matches("            \"secret vault").count().max(6),
         "every emit site in the module is covered by this sweep"
     );
     let forbidden = [
@@ -203,10 +166,7 @@ fn asv_ts_23_no_log_record_carries_a_secret_a_path_or_an_id() {
     for (message, fields) in &records {
         let rendered = format!("{message} {}", serde_json::json!(fields));
         for needle in forbidden {
-            assert!(
-                !rendered.contains(needle),
-                "a log record disclosed {needle:?}: {rendered}"
-            );
+            assert!(!rendered.contains(needle), "a log record disclosed {needle:?}: {rendered}");
         }
     }
 }
@@ -250,9 +210,14 @@ fn asv_ts_25_presence_is_one_read_for_twenty_paths() {
         paths.push(path(&segments));
     }
 
+    // A second process, so the first presence request initializes the cache.
+    let vault = Vault::new(Box::new(keyring.clone()));
+    vault.mark_migrated();
     let reads_before = keyring.count(&Call::Read);
     let answers = vault.secret_presence(&paths).unwrap();
 
+    assert_eq!(keyring.count(&Call::Read) - reads_before, 1);
+    vault.secret_presence(&paths).unwrap();
     assert_eq!(keyring.count(&Call::Read) - reads_before, 1);
     assert_eq!(answers.len(), 20);
     assert!(answers.values().all(|v| *v));
@@ -316,9 +281,7 @@ fn asv_ts_27_migration_touches_exactly_the_candidates_it_was_given() {
         )])
         .unwrap();
     set(&vault, &["ai_api", "providers", "openai"], "K").unwrap();
-    vault
-        .read_secret(&p(&["agentic", "vendors", "claude_code"]))
-        .unwrap();
+    vault.read_secret(&p(&["agentic", "vendors", "claude_code"])).unwrap();
 
     // Exactly the one candidate, and nothing else, was ever named to the
     // keyring — which is what makes the planted entries a control rather than
@@ -327,14 +290,8 @@ fn asv_ts_27_migration_touches_exactly_the_candidates_it_was_given() {
         keyring.legacy_entries_touched(),
         vec![(AGENTIC_LEGACY.to_string(), "claude_code".to_string())]
     );
-    assert_eq!(
-        keyring.legacy(AGENTIC_LEGACY, "codex").as_deref(),
-        Some("not ours to touch")
-    );
-    assert_eq!(
-        keyring.legacy(AGENTIC_LEGACY, "opencode").as_deref(),
-        Some("nor this")
-    );
+    assert_eq!(keyring.legacy(AGENTIC_LEGACY, "codex").as_deref(), Some("not ours to touch"));
+    assert_eq!(keyring.legacy(AGENTIC_LEGACY, "opencode").as_deref(), Some("nor this"));
     let object = keyring.object();
     let vendors = object
         .get("agentic")
@@ -373,14 +330,10 @@ fn asv_ts_28_every_operation_answers_in_its_documented_shape() {
     let read: Option<String> = vault.read_secret(&p(&["github", "tokens", "a"])).unwrap();
     assert_eq!(read, Some("A".into()));
     // Not the secret at a path the caller did not name.
-    assert_eq!(
-        vault.read_secret(&p(&["github", "tokens", "b"])).unwrap(),
-        None
-    );
+    assert_eq!(vault.read_secret(&p(&["github", "tokens", "b"])).unwrap(), None);
 
-    let presence: HashMap<SecretPath, bool> = vault
-        .secret_presence(&[p(&["github", "tokens", "a"])])
-        .unwrap();
+    let presence: HashMap<SecretPath, bool> =
+        vault.secret_presence(&[p(&["github", "tokens", "a"])]).unwrap();
     assert_eq!(presence.get(&p(&["github", "tokens", "a"])), Some(&true));
 
     // The whole-object write and its verification both happened.
@@ -389,4 +342,3 @@ fn asv_ts_28_every_operation_answers_in_its_documented_shape() {
     let last_write = calls.iter().rposition(|c| *c == Call::Write).unwrap();
     assert!(calls[last_write + 1..].contains(&Call::Read));
 }
-

@@ -448,10 +448,7 @@ fn bollard_server_version(
 ) -> Result<String, EngineError> {
     let endpoint = endpoint.clone();
     let handle = std::thread::spawn(move || {
-        let runtime = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
+        let runtime = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
             Ok(runtime) => runtime,
             Err(e) => return Err(EngineError::Unreachable(e.to_string())),
         };
@@ -692,18 +689,14 @@ fn verify_cli(
         return Err(ERR_CLI_NOT_EXECUTABLE.to_string());
     }
 
-    let identity = runner
-        .run(path, CLI_IDENTITY_ARGS, timeout)
-        .map_err(run_error_to_refusal)?;
+    let identity = runner.run(path, CLI_IDENTITY_ARGS, timeout).map_err(run_error_to_refusal)?;
     if !identifies_as_docker(&identity) {
         return Err(ERR_NOT_THE_DOCKER_CLI.to_string());
     }
 
     // The daemon, separately. A CLI that answers `--version` proves only that
     // the client is installed; GSS-FR-38 refuses to call that a success.
-    let daemon = runner
-        .run(path, CLI_DAEMON_ARGS, timeout)
-        .map_err(run_error_to_refusal)?;
+    let daemon = runner.run(path, CLI_DAEMON_ARGS, timeout).map_err(run_error_to_refusal)?;
     if !daemon.success {
         return Err(ERR_DAEMON_UNREACHABLE.to_string());
     }
@@ -749,8 +742,8 @@ impl Default for DockerBackendSeams {
 // ---------------------------------------------------------------------------
 
 use crate::global_settings::GlobalSettingsStore;
-use crate::logging::{self, Domain, LogBuffer, LogSink, BUFFER};
 use crate::log_fields;
+use crate::logging::{self, Domain, LogBuffer, LogSink, BUFFER};
 use tauri::State;
 
 const DOMAINS: [Domain; 1] = [Domain::Backend];
@@ -758,9 +751,7 @@ const DOMAINS: [Domain; 1] = [Domain::Backend];
 /// GSS-FR-35: the stored record. Reads the store, runs no executable, and
 /// reaches no daemon, so the Docker section renders offline and instantly.
 #[tauri::command]
-pub fn load_docker_backend(
-    store: State<'_, GlobalSettingsStore>,
-) -> Result<DockerBackend, String> {
+pub fn load_docker_backend(store: State<'_, GlobalSettingsStore>) -> Result<DockerBackend, String> {
     Ok(store.load_docker_backend()?.outbound())
 }
 

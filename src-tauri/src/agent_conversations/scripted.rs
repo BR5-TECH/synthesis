@@ -10,6 +10,9 @@ use super::*;
 // The scripted seam (CVL-FR-11)
 // ---------------------------------------------------------------------------
 
+/// The host a scripted `tls_untrusted` failure names.
+pub const SCRIPTED_TLS_HOST: &str = "provider.test";
+
 /// A [`CompletionSeam`] backed by `rig`'s own `MockCompletionModel`.
 ///
 /// Compiled into test builds only. It drives the scripted model through
@@ -48,6 +51,10 @@ pub struct ScriptedReply {
     pub served_by: Option<String>,
     /// CVL-FR-28: what this call presented, as a provider that counts it says.
     pub prompt_tokens: Option<u64>,
+    /// CVL-FR-EKHH: where set, each tool call gets the id of this prefix and
+    /// its position, as a Responses provider gives one as its `call_id`.
+    /// `None` gives each call the id `call-{position}`.
+    pub call_id_prefix: Option<String>,
 }
 
 /// CVL-FR-31: one tool a scripted provider ran for itself.
@@ -76,6 +83,7 @@ impl ScriptedReply {
             native_usage: None,
             served_by: None,
             prompt_tokens: None,
+            call_id_prefix: None,
         }
     }
 
@@ -89,6 +97,7 @@ impl ScriptedReply {
             native_usage: None,
             served_by: None,
             prompt_tokens: None,
+            call_id_prefix: None,
         }
     }
 
@@ -167,6 +176,14 @@ impl ScriptedReply {
         self.tools.push((name.to_string(), arguments));
         self
     }
+
+    /// CVL-FR-EKHH: give each tool call of this reply the id the Responses
+    /// route gives as its `call_id`. The call at position `n` gets the id
+    /// `{prefix}{n}`.
+    pub fn with_call_ids(mut self, prefix: &str) -> Self {
+        self.call_id_prefix = Some(prefix.to_string());
+        self
+    }
 }
 
 #[cfg(test)]
@@ -188,12 +205,7 @@ pub struct ScriptedCompletion {
 impl ScriptedCompletion {
     /// The common case: a script of plain text answers, each ending its turn.
     pub fn new(replies: Vec<Result<String, &'static str>>) -> Self {
-        Self::scripted(
-            replies
-                .into_iter()
-                .map(|reply| reply.map(ScriptedReply::answer))
-                .collect(),
-        )
+        Self::scripted(replies.into_iter().map(|reply| reply.map(ScriptedReply::answer)).collect())
     }
 
     /// A script that can ask for tools (CVL-FR-12).
@@ -209,10 +221,7 @@ impl ScriptedCompletion {
 
     /// Every exchange the seam was handed, in call order.
     pub fn exchanges(&self) -> Vec<Vec<rig::completion::Message>> {
-        self.exchanges
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.exchanges.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// How many times the seam was called — the loop's rounds (CVL-FR-13).
@@ -364,11 +373,7 @@ impl CompletionSeam for ScriptedCompletion {
         // nine or the nine followed by one proposal tool and never anything
         // else — which is what stops a tool being added to a turn without
         // anybody deciding it should be.
-        let offered: Vec<&str> = request
-            .tools
-            .iter()
-            .map(|tool| tool.name.as_str())
-            .collect();
+        let offered: Vec<&str> = request.tools.iter().map(|tool| tool.name.as_str()).collect();
         // CVL-FR-08: the eleven every origin kind gets, in the order
         // `conversation_tools` names them.
         let common = vec![
@@ -404,18 +409,15 @@ impl CompletionSeam for ScriptedCompletion {
             })
             .collect();
         assert!(
-            permitted.iter().any(|shape| *shape == offered),
+            permitted.contains(&offered),
             "every request offers the eleven, then `ask_discussion_questions` on a discussion, then at most one proposal tool, and nothing else: {offered:?}",
         );
         // CVL-FR-30: asserted on every dispatch the suite makes rather than in
         // one test, so a request that lost the entries on some path, gained them
         // on a provider that does not serve them, or was offered one of the two
         // alone cannot land green.
-        let native: Vec<&str> = request
-            .native_tools
-            .iter()
-            .map(|tool| tool.tool_type.as_str())
-            .collect();
+        let native: Vec<&str> =
+            request.native_tools.iter().map(|tool| tool.tool_type.as_str()).collect();
         // CVL-FR-30: the search alone on OpenRouter, and nothing anywhere else.
         // `web_fetch` is withheld (WFT-FR-16), so a request that carried it
         // would be one nobody decided to send.
@@ -432,10 +434,7 @@ impl CompletionSeam for ScriptedCompletion {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push((request.clone(), endpoint.clone()));
-        self.exchanges
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push(exchange.to_vec());
+        self.exchanges.lock().unwrap_or_else(|e| e.into_inner()).push(exchange.to_vec());
         {
             let mut guard = self.concurrency.lock().unwrap_or_else(|e| e.into_inner());
             guard.0 += 1;
@@ -503,15 +502,26 @@ impl CompletionSeam for ScriptedCompletion {
                         parts.push(rig::completion::message::AssistantContent::text(&reply.text));
                     }
                     for (index, (name, arguments)) in reply.tools.iter().enumerate() {
-                        parts.push(rig::completion::message::AssistantContent::tool_call(
-                            format!("call-{index}"),
-                            name,
-                            arguments.clone(),
-                        ));
+                        // CVL-FR-EKHH: a call has one id. A script that names
+                        // a prefix gives the call at position `n` the id
+                        // `{prefix}{n}`, as the Responses route gives its
+                        // `call_id`.
+                        let id = match &reply.call_id_prefix {
+                            Some(prefix) => format!("{prefix}{index}"),
+                            None => format!("call-{index}"),
+                        };
+                        let call = rig::completion::message::ToolCall::from_wire(
+                            id,
+                            rig::completion::message::ToolFunction::new(
+                                rig::completion::message::ToolName::new(name.clone())
+                                    .expect("a scripted tool has a name"),
+                                arguments.clone(),
+                            ),
+                        );
+                        parts.push(rig::completion::message::AssistantContent::ToolCall(call));
                     }
                     rig::test_utils::MockCompletionModel::from_turns([
-                        rig::test_utils::MockTurn::from_contents(parts)
-                            .expect("a scripted reply names a tool"),
+                        rig::test_utils::MockTurn::from_contents(parts),
                     ])
                 };
                 block_on_with_timeout(
@@ -536,6 +546,10 @@ impl CompletionSeam for ScriptedCompletion {
             // A script names the failure it wants; the class follows from the
             // value, which is what keeps every existing script unchanged while
             // the seam carries CVL-FR-21's finer classification in production.
+            // AGC-FR-RWPT: a scripted TLS refusal names a fixed host and cause.
+            Err(FAIL_TLS_UNTRUSTED) => Err(CallFailure::tls_untrusted(
+                crate::tls::TlsFailure::new(SCRIPTED_TLS_HOST, crate::tls::TlsCause::UnknownIssuer),
+            )),
             Err(failure) => Err(CallFailure::from(failure)),
         }
     }

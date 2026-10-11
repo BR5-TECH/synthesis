@@ -48,16 +48,10 @@ impl FakeFs {
 
 impl FileProbe for Arc<FakeFs> {
     fn exists(&self, path: &Path) -> bool {
-        self.files
-            .lock()
-            .unwrap()
-            .contains(&path.to_string_lossy().to_string())
+        self.files.lock().unwrap().contains(&path.to_string_lossy().to_string())
     }
     fn is_executable(&self, path: &Path) -> bool {
-        self.executable
-            .lock()
-            .unwrap()
-            .contains(&path.to_string_lossy().to_string())
+        self.executable.lock().unwrap().contains(&path.to_string_lossy().to_string())
     }
 }
 
@@ -74,11 +68,7 @@ impl FakeRunner {
         let r = Arc::new(Self::default());
         r.responses.lock().unwrap().insert(
             path.to_string(),
-            CliOutput {
-                stdout: banner.to_string(),
-                stderr: String::new(),
-                success: true,
-            },
+            CliOutput { stdout: banner.to_string(), stderr: String::new(), success: true },
         );
         r
     }
@@ -89,11 +79,7 @@ impl FakeRunner {
         for (path, banner) in banners {
             r.responses.lock().unwrap().insert(
                 path.to_string(),
-                CliOutput {
-                    stdout: banner.to_string(),
-                    stderr: String::new(),
-                    success: true,
-                },
+                CliOutput { stdout: banner.to_string(), stderr: String::new(), success: true },
             );
         }
         r
@@ -106,12 +92,7 @@ impl FakeRunner {
 }
 
 impl CliRunner for Arc<FakeRunner> {
-    fn run(
-        &self,
-        path: &Path,
-        args: &[&str],
-        _timeout: Duration,
-    ) -> Result<CliOutput, RunError> {
+    fn run(&self, path: &Path, args: &[&str], _timeout: Duration) -> Result<CliOutput, RunError> {
         self.calls.lock().unwrap().push((
             path.to_string_lossy().to_string(),
             args.iter().map(|s| s.to_string()).collect(),
@@ -143,10 +124,8 @@ struct FakeProber {
 impl FakeProber {
     fn returning(models: &[(&str, &str)]) -> Arc<Self> {
         let p = Arc::new(Self::default());
-        *p.models.lock().unwrap() = models
-            .iter()
-            .map(|(id, label)| ModelOption::new(id, label))
-            .collect();
+        *p.models.lock().unwrap() =
+            models.iter().map(|(id, label)| ModelOption::new(id, label)).collect();
         p
     }
     fn failing(e: ProbeError) -> Arc<Self> {
@@ -218,10 +197,7 @@ impl SecretStore for Arc<FakeKeychain> {
         if *self.locked.lock().unwrap() {
             return Err(SecretUnavailable("locked".into()));
         }
-        self.entries
-            .lock()
-            .unwrap()
-            .insert(id.to_string(), secret.to_string());
+        self.entries.lock().unwrap().insert(id.to_string(), secret.to_string());
         Ok(())
     }
     fn get(&self, id: &str) -> Result<Option<String>, SecretUnavailable> {
@@ -274,10 +250,7 @@ fn harness(
 }
 
 fn cli_config(path: &str) -> VerifyConfig {
-    VerifyConfig {
-        path: Some(path.to_string()),
-        ..Default::default()
-    }
+    VerifyConfig { path: Some(path.to_string()), ..Default::default() }
 }
 
 /// A well-formed OAuth token (AIC-FR-27). It is a fake value, not a real credential.
@@ -353,17 +326,19 @@ fn claude_config(oauth_token: Option<&str>) -> VerifyConfig {
     }
 }
 
-mod listing_detection;
-mod cli_verification;
-mod models_and_efforts;
-mod selections;
 mod active_choice;
+mod api_vendors;
+mod cli_verification;
+mod gateway;
+mod gateway_bedrock;
+mod invocation;
+mod keychain;
+mod launch_handoff;
+mod listing_detection;
+mod models_and_efforts;
+mod oauth_token;
 mod project_override;
 mod real_runner;
-mod invocation;
-mod api_vendors;
-mod vault;
-mod keychain;
 mod record_shape;
-mod oauth_token;
-mod launch_handoff;
+mod selections;
+mod vault;

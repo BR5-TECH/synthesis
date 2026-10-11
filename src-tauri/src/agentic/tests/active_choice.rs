@@ -14,14 +14,16 @@ fn aic_ts13_one_active_choice_spans_both_kinds() {
         FakeProber::returning(&[("claude-opus-5", "Claude Opus 5")]),
         FakeKeychain::new(),
     );
-    verify_integration_impl(&h.store, &h.ai, "claude_code", &cli_config_for("claude_code", "/usr/bin/claude"))
-        .unwrap();
+    verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "claude_code",
+        &cli_config_for("claude_code", "/usr/bin/claude"),
+    )
+    .unwrap();
 
     // Not verified yet, so it cannot be activated.
-    assert_eq!(
-        set_active_impl(&h.store, &h.ai, "claude_agent_api").unwrap_err(),
-        ERR_NOT_VERIFIED
-    );
+    assert_eq!(set_active_impl(&h.store, &h.ai, "claude_agent_api").unwrap_err(), ERR_NOT_VERIFIED);
 
     let list = set_active_impl(&h.store, &h.ai, "claude_code").unwrap();
     assert!(find(&list, "claude_code").active);
@@ -50,29 +52,21 @@ fn aic_ts14_a_sole_verified_backend_is_active_without_being_activated() {
     let runner = Arc::new(FakeRunner::default());
     runner.responses.lock().unwrap().insert(
         "/usr/bin/claude".into(),
-        CliOutput {
-            stdout: "claude 2.1.4".into(),
-            stderr: String::new(),
-            success: true,
-        },
+        CliOutput { stdout: "claude 2.1.4".into(), stderr: String::new(), success: true },
     );
     runner.responses.lock().unwrap().insert(
         "/usr/bin/codex".into(),
-        CliOutput {
-            stdout: "codex 0.4.0".into(),
-            stderr: String::new(),
-            success: true,
-        },
+        CliOutput { stdout: "codex 0.4.0".into(), stderr: String::new(), success: true },
     );
-    let h = harness(
-        fs,
-        runner,
-        Arc::new(FakeProber::default()),
-        FakeKeychain::new(),
-    );
+    let h = harness(fs, runner, Arc::new(FakeProber::default()), FakeKeychain::new());
 
-    verify_integration_impl(&h.store, &h.ai, "claude_code", &cli_config_for("claude_code", "/usr/bin/claude"))
-        .unwrap();
+    verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "claude_code",
+        &cli_config_for("claude_code", "/usr/bin/claude"),
+    )
+    .unwrap();
     let resolved = get_project_impl(&h.store, &h.ai, "/dev/acme").unwrap();
     assert_eq!(resolved.resolution, ProjectResolution::Inherited);
     assert_eq!(resolved.vendor.as_deref(), Some("claude_code"));
@@ -81,7 +75,8 @@ fn aic_ts14_a_sole_verified_backend_is_active_without_being_activated() {
 
     // A second verified backend makes the set larger than one, so the
     // implicit resolution stops applying.
-    verify_integration_impl(&h.store, &h.ai, "codex", &cli_config_for("codex", "/usr/bin/codex")).unwrap();
+    verify_integration_impl(&h.store, &h.ai, "codex", &cli_config_for("codex", "/usr/bin/codex"))
+        .unwrap();
     let resolved = get_project_impl(&h.store, &h.ai, "/dev/acme").unwrap();
     assert_eq!(resolved.resolution, ProjectResolution::NoneSelected);
     assert_eq!(resolved.vendor, None);
@@ -142,8 +137,13 @@ fn aic_ts16_each_kind_degrades_in_its_own_way_and_keeps_its_configuration() {
         FakeProber::returning(&[("claude-opus-5", "Claude Opus 5")]),
         FakeKeychain::new(),
     );
-    verify_integration_impl(&h.store, &h.ai, "claude_code", &cli_config_for("claude_code", "/usr/bin/claude"))
-        .unwrap();
+    verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "claude_code",
+        &cli_config_for("claude_code", "/usr/bin/claude"),
+    )
+    .unwrap();
     verify_integration_impl(
         &h.store,
         &h.ai,
@@ -172,12 +172,6 @@ fn aic_ts16_each_kind_degrades_in_its_own_way_and_keeps_its_configuration() {
     );
 
     // Neither can be activated while degraded.
-    assert_eq!(
-        set_active_impl(&h.store, &h.ai, "claude_code").unwrap_err(),
-        ERR_NOT_VERIFIED
-    );
-    assert_eq!(
-        set_active_impl(&h.store, &h.ai, "claude_agent_api").unwrap_err(),
-        ERR_NOT_VERIFIED
-    );
+    assert_eq!(set_active_impl(&h.store, &h.ai, "claude_code").unwrap_err(), ERR_NOT_VERIFIED);
+    assert_eq!(set_active_impl(&h.store, &h.ai, "claude_agent_api").unwrap_err(), ERR_NOT_VERIFIED);
 }

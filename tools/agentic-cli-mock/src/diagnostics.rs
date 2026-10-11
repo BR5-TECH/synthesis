@@ -218,8 +218,6 @@ mod tests {
             "codex",
             Mismatch::new(Check::Adapter, MismatchType::MissingHeadlessArgument),
         );
-        assert!(record
-            .to_line()
-            .contains("\"mismatch_type\":\"missing_headless_argument\""));
+        assert!(record.to_line().contains("\"mismatch_type\":\"missing_headless_argument\""));
     }
 }

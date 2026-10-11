@@ -12,12 +12,7 @@ use super::settings::guard;
 
 impl Outcome {
     pub(crate) fn expect_commits(self, count: usize) -> Self {
-        assert_eq!(
-            self.run.commits.len(),
-            count,
-            "[{}] the commits this run created",
-            self.name
-        );
+        assert_eq!(self.run.commits.len(), count, "[{}] the commits this run created", self.name);
         self
     }
 
@@ -70,10 +65,7 @@ impl Outcome {
 
     /// The message of the commit the stream branch stands at.
     pub(crate) fn expect_branch_head_message_contains(self, fragment: &str) -> Self {
-        let message = self
-            .branch_tip()
-            .map(|tip| self.message_of(&tip))
-            .unwrap_or_default();
+        let message = self.branch_tip().map(|tip| self.message_of(&tip)).unwrap_or_default();
         assert!(
             message.contains(fragment),
             "[{}] the branch head says {fragment:?}, but it says {message:?}",
@@ -127,46 +119,64 @@ impl Outcome {
     }
 
     /// GRD-FR-BNTC / WKS-FR-JQJA: whether the stream is free once the run has
-    /// come to rest, in memory and on the stream's own durable record.
+    /// ended, in memory, on the stored run and on the stream's own durable
+    /// record. A run that is `completed` or `discarded` leaves it free.
     pub(crate) fn expect_stream_released(self) -> Self {
         let (holder, busy) = self.stream_holders();
-        assert_eq!(
-            holder, None,
-            "[{}] the stream is free once the run rests",
-            self.name
-        );
-        assert_eq!(
-            busy, None,
-            "[{}] the stream's durable busy mark is cleared",
+        assert_eq!(holder, None, "[{}] the stream is free once the run has ended", self.name);
+        assert_eq!(busy, None, "[{}] the stream's durable busy mark is cleared", self.name);
+        // A run that was never stored holds nothing, as a clean merge's none does.
+        let stored = crate::graduation::load_run(&self.fx.app, &self.run.id).ok();
+        assert!(
+            !stored.is_some_and(|run| run.holds_queue()),
+            "[{}] the stored run no longer holds its queue",
             self.name
         );
         self
     }
 
+    /// GRD-FR-BNTC / GRD-FR-BSWV: a run at rest still holds its queue. The hold
+    /// is the stored run's and the stream's durable busy mark, because the loop
+    /// that drove the run has ended and holds nothing in memory.
     pub(crate) fn expect_stream_held(self) -> Self {
-        let (holder, busy) = self.stream_holders();
-        assert_eq!(
-            holder.as_deref(),
-            Some(self.run.id.as_str()),
-            "[{}] the run still holds its stream",
+        let (_, busy) = self.stream_holders();
+        assert!(
+            self.stored_run().holds_queue(),
+            "[{}] the stored run still holds its queue",
             self.name
         );
+        if !crate::graduation::is_worktree_queue_key(&self.stream_id) {
+            assert_eq!(
+                busy.as_deref(),
+                Some(self.run.id.as_str()),
+                "[{}] the stream's durable busy mark names the run",
+                self.name
+            );
+        }
+        self
+    }
+
+    /// GRD-FR-KKKN: whether the run holds one project slot, read from the
+    /// stored run order.
+    pub(crate) fn expect_slot_held(self, held: bool) -> Self {
         assert_eq!(
-            busy.as_deref(),
-            Some(self.run.id.as_str()),
-            "[{}] the stream's durable busy mark names the run",
+            self.stored_run().holds_slot(),
+            held,
+            "[{}] whether the run holds a project slot",
             self.name
         );
         self
+    }
+
+    /// The run as the store holds it now.
+    pub(super) fn stored_run(&self) -> crate::graduation::GraduationRun {
+        crate::graduation::load_run(&self.fx.app, &self.run.id).expect("the run is stored")
     }
 
     /// Who holds the stream in memory, and whom its durable record names.
     pub(super) fn stream_holders(&self) -> (Option<String>, Option<String>) {
-        let holder = self
-            .fx
-            .app
-            .state::<crate::graduation::GraduationState>()
-            .holder_of(&self.stream_id);
+        let holder =
+            self.fx.app.state::<crate::graduation::GraduationState>().holder_of(&self.stream_id);
         let busy = crate::streams::stream_of(&self.fx.app, &self.stream_id)
             .and_then(|stream| stream.busy_run_id);
         (holder, busy)
@@ -178,22 +188,14 @@ impl Outcome {
     /// Read through the guarded handle rather than through `std::fs`, on the
     /// terms FSA-FR-19 binds every other read in the backend.
     pub(crate) fn worktree_holds(self, path: &str, content: &str) -> Self {
-        let found = guard(&self.worktree)
-            .read_text(self.worktree.join(path))
-            .unwrap_or_default();
-        assert_eq!(
-            found, content,
-            "[{}] what the working copy holds at {path}",
-            self.name
-        );
+        let found = guard(&self.worktree).read_text(self.worktree.join(path)).unwrap_or_default();
+        assert_eq!(found, content, "[{}] what the working copy holds at {path}", self.name);
         self
     }
 
     pub(crate) fn expect_worktree_lacks(self, path: &str) -> Self {
         assert!(
-            guard(&self.worktree)
-                .read_text(self.worktree.join(path))
-                .is_err(),
+            guard(&self.worktree).read_text(self.worktree.join(path)).is_err(),
             "[{}] the working copy holds nothing at {path}",
             self.name
         );
@@ -207,11 +209,7 @@ impl Outcome {
             "[{}] the stream's working copy is still there",
             self.name
         );
-        assert!(
-            self.branch_tip().is_some(),
-            "[{}] the stream's branch is still there",
-            self.name
-        );
+        assert!(self.branch_tip().is_some(), "[{}] the stream's branch is still there", self.name);
         self
     }
 
@@ -225,11 +223,8 @@ impl Outcome {
             self.name
         );
         assert!(
-            repo.find_branch(
-                &format!("synthesis/review/{}", self.run.id),
-                git2::BranchType::Local
-            )
-            .is_err(),
+            repo.find_branch(&format!("synthesis/review/{}", self.run.id), git2::BranchType::Local)
+                .is_err(),
             "[{}] no review scratch branch is left",
             self.name
         );
@@ -251,9 +246,7 @@ impl Outcome {
     /// The revision the stream branch stands at now.
     pub(super) fn branch_tip(&self) -> Option<String> {
         let repo = self.fx.repo();
-        let branch = repo
-            .find_branch(&self.branch, git2::BranchType::Local)
-            .ok()?;
+        let branch = repo.find_branch(&self.branch, git2::BranchType::Local).ok()?;
         let tip = branch.get().peel_to_commit().ok()?;
         Some(tip.id().to_string())
     }
@@ -266,25 +259,18 @@ impl Outcome {
         };
         let repo = self.fx.repo();
         let mut walk = repo.revwalk().expect("a history walk");
-        walk.push(git2::Oid::from_str(&tip).expect("a revision"))
-            .expect("the tip");
+        walk.push(git2::Oid::from_str(&tip).expect("a revision")).expect("the tip");
         if let Some(until) = until {
-            walk.hide(git2::Oid::from_str(until).expect("a revision"))
-                .expect("the base");
+            walk.hide(git2::Oid::from_str(until).expect("a revision")).expect("the base");
         }
-        walk.filter_map(|oid| oid.ok().map(|oid| oid.to_string()))
-            .collect()
+        walk.filter_map(|oid| oid.ok().map(|oid| oid.to_string())).collect()
     }
 
     fn message_of(&self, revision: &str) -> String {
         let repo = self.fx.repo();
         let oid = git2::Oid::from_str(revision).expect("a revision");
-        let message = repo
-            .find_commit(oid)
-            .expect("a commit")
-            .message()
-            .unwrap_or_default()
-            .to_string();
+        let message =
+            repo.find_commit(oid).expect("a commit").message().unwrap_or_default().to_string();
         message
     }
 
@@ -297,9 +283,7 @@ impl Outcome {
                 .expect("a tree")
         };
         let (from, to) = (tree_of(from), tree_of(to));
-        let diff = repo
-            .diff_tree_to_tree(Some(&from), Some(&to), None)
-            .expect("a diff");
+        let diff = repo.diff_tree_to_tree(Some(&from), Some(&to), None).expect("a diff");
         let mut paths: Vec<String> = Vec::new();
         for delta in diff.deltas() {
             for file in [delta.new_file(), delta.old_file()] {

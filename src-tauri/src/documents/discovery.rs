@@ -14,8 +14,7 @@ use crate::logging::LogLevel;
 
 use super::log::DocLog;
 use super::model::{
-    format_of, normalise_path, Availability, DocumentFormat, SourceKind, SourceReason,
-    StoredSource,
+    format_of, normalise_path, Availability, DocumentFormat, SourceKind, SourceReason, StoredSource,
 };
 
 /// What discovery found out about one source.

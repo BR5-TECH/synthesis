@@ -20,6 +20,7 @@
  * address — and would then fail to match the open project for reasons nothing
  * in the UI could explain.
  */
+import { isSectionOf, type SettingsScope } from "../settingsWindow";
 import type { Tab } from "../types";
 
 /** The vertical-panel surfaces an address can name (NTF-FR-03, SNV-FR-44). */
@@ -37,9 +38,8 @@ export type PanelTarget = (typeof PANEL_TARGETS)[number];
 export const BOTTOM_TARGETS = ["runs", "logs", "git", "history"] as const;
 export type BottomTarget = (typeof BOTTOM_TARGETS)[number];
 
-/** The two settings windows an address can name (NTF-FR-03). */
-export const SETTINGS_TARGETS = ["global", "project"] as const;
-export type SettingsTarget = (typeof SETTINGS_TARGETS)[number];
+/** The two scopes of the Settings window an address can name (NTF-FR-03). */
+export type SettingsTarget = SettingsScope;
 
 /**
  * What an address points at.
@@ -62,7 +62,11 @@ export type NotificationTarget =
   | { kind: "run"; runId: string }
   | { kind: "panel"; surface: PanelTarget }
   | { kind: "bottom"; surface: BottomTarget }
-  | { kind: "settings"; which: SettingsTarget };
+  /**
+   * NTF-FR-03: the Settings window, by scope and optionally by section
+   * (SWN-FR-HZWD). No section means the first section of the scope.
+   */
+  | { kind: "settings"; scope: SettingsTarget; section: string | null };
 
 /** A parsed address: which content root, and what within it. */
 export interface NotificationAddress {
@@ -121,7 +125,9 @@ export function mintAddress(
     case "bottom":
       return `${head}/bottom/${target.surface}`;
     case "settings":
-      return `${head}/settings/${target.which}`;
+      return target.section === null
+        ? `${head}/settings/${target.scope}`
+        : `${head}/settings/${target.scope}/${encodeSegment(target.section)}`;
   }
 }
 
@@ -206,9 +212,17 @@ export function parseAddress(raw: string): NotificationAddress | null {
         : null;
     }
     case "settings": {
-      if (tail.length !== 1) return null;
-      return isOneOf(SETTINGS_TARGETS, tail[0])
-        ? address({ kind: "settings", which: tail[0] })
+      if (tail.length < 1 || tail.length > 2) return null;
+      const scope = tail[0];
+      if (scope !== "global" && scope !== "project") return null;
+      if (tail.length === 1) {
+        return address({ kind: "settings", scope, section: null });
+      }
+      // A section this scope does not have names nothing, so the address is
+      // not one rather than a lenient match.
+      const section = decodeSegment(tail[1]);
+      return section !== null && isSectionOf(scope, section)
+        ? address({ kind: "settings", scope, section })
         : null;
     }
     default:
@@ -233,11 +247,11 @@ export function parseAddress(raw: string): NotificationAddress | null {
  * the one marked: activation lands on the editing tab, so that is the tab the
  * indication belongs to (per `TAB-tabs.md` TAB-FR-06).
  *
- * A `settings` address has no tab either, and no branch here: the two settings
- * surfaces are native child windows rather than tabs of the main viewport
+ * A `settings` address has no tab either, and no branch here: the Settings
+ * window is a native child window rather than a tab of the main viewport
  * (per `SWN-settings-windows.md` SWN-FR-01), so such an address marks nothing
  * anywhere and is reached through its notification alone (NTF-FR-27,
- * NTF-FR-28). Whether the author is already looking at one is a question about
+ * NTF-FR-28). Whether the author is already looking at it is a question about
  * a window, and `notifications.ts` answers it from the window snapshot.
  */
 export function targetForTab(tab: Tab): NotificationTarget | null {
@@ -269,7 +283,10 @@ export function sameTarget(
     case "bottom":
       return a.surface === (b as { surface: string }).surface;
     case "settings":
-      return a.which === (b as { which: string }).which;
+      return (
+        a.scope === (b as typeof a).scope &&
+        a.section === (b as typeof a).section
+      );
   }
 }
 
@@ -325,7 +342,7 @@ export function sameRoot(
 }
 
 /**
- * A short, author-facing name for what an address points at, for the statement
+ * A short, author-facing name for what an address points at, for the unreachable-address toast
  * of NTF-FR-20 to say what could not be reached.
  *
  * Deliberately not the whole address: an author reads "that artifact is no
@@ -349,6 +366,6 @@ export function describeTarget(target: NotificationTarget): string {
     case "bottom":
       return `the ${target.surface} panel`;
     case "settings":
-      return target.which === "global" ? "Global settings" : "Project settings";
+      return target.scope === "global" ? "Global settings" : "Project settings";
   }
 }

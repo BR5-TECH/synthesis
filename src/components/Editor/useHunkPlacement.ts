@@ -13,17 +13,21 @@
  * Its own module because it is a lookup in text and has nothing to do with the
  * editing surface it runs inside.
  */
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Editor as TiptapEditor } from "@tiptap/react";
 
 import { docText } from "../findHighlight";
-import { placeHunk, reduce } from "./hunkMatch";
+import { placeHunk, reduce, type RenderedNeedles } from "./hunkMatch";
+import { leadTail, renderedText } from "./hunkNeedle";
 import {
   hunkDecorationKey,
   HUNK_ATTR,
   type DecoratedHunk,
 } from "../DraftDiscussion";
 import type { EditorReview } from "./props";
+
+/** DCR-FR-LGHZ: the rendered texts kept before the cache starts again. */
+const RENDERED_CACHE_LIMIT = 256;
 
 export function useHunkPlacement(
   editor: TiptapEditor | null,
@@ -55,6 +59,15 @@ export function useHunkPlacement(
    * finding it here.
    */
   const [placedHunks, setPlacedHunks] = useState<DecoratedHunk[]>([]);
+  /**
+   * DCR-FR-LGHZ: rendered texts by their Markdown, for the editor they were
+   * rendered in. A change's text does not change while the author types, so a
+   * keystroke repeats the search and not the parse.
+   */
+  const rendering = useRef<{
+    editor: TiptapEditor | null;
+    texts: Map<string, string | null>;
+  }>({ editor: null, texts: new Map() });
   useLayoutEffect(() => {
     if (!editor || editor.isDestroyed || !review) {
       setPlacedHunks((prev) => (prev.length === 0 ? prev : []));
@@ -67,6 +80,20 @@ export function useHunkPlacement(
     // Reduced once per recompute rather than per change, both sides meeting on
     // the words they share (`./hunkMatch`).
     const reducedDoc = reduce(index.text);
+    // A new editor has its own parser.
+    if (rendering.current.editor !== editor) {
+      rendering.current = { editor, texts: new Map() };
+    }
+    const texts = rendering.current.texts;
+    const render = (markdown: string | null): string | null => {
+      if (markdown === null) return null;
+      if (!texts.has(markdown)) {
+        // A long session must not keep the text of every change it placed.
+        if (texts.size >= RENDERED_CACHE_LIMIT) texts.clear();
+        texts.set(markdown, renderedText(editor, markdown));
+      }
+      return texts.get(markdown) ?? null;
+    };
     const placed: DecoratedHunk[] = [];
     for (const hunk of review.hunks) {
       if (hunk.state === "accepted" || hunk.state === "rejected") continue;
@@ -75,7 +102,12 @@ export function useHunkPlacement(
       // DCR-FR-31: a change this surface cannot place stays in the review,
       // counted and decidable, and the review bar says it is not drawn
       // (`onPlaced` below).
-      const range = placeHunk(index, reducedDoc, hunk);
+      const needles: RenderedNeedles = {
+        before: render(hunk.before),
+        lead: render(hunk.lead),
+        leadTail: render(leadTail(hunk.lead)),
+      };
+      const range = placeHunk(index, reducedDoc, hunk, needles);
       if (range === null) continue;
       placed.push({
         id: hunk.id,

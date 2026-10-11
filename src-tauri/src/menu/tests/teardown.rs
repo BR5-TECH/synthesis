@@ -93,24 +93,13 @@ fn a_programmatic_exit_is_never_held() {
     // authorised, so a coded request always passes through — and must not
     // consume the gate either.
     let gate = ExitGate::default();
-    assert!(!begin_exit_decision(
-        Some(0),
-        &gate,
-        Instant::now(),
-        EXIT_FLUSH_GRACE
-    ));
+    assert!(!begin_exit_decision(Some(0), &gate, Instant::now(), EXIT_FLUSH_GRACE));
     assert!(
         gate.claim_at(Instant::now(), EXIT_FLUSH_GRACE),
         "a programmatic exit must leave the gate untouched"
     );
-    assert!(begin_exit_decision(
-        None,
-        &ExitGate::default(),
-        Instant::now(),
-        EXIT_FLUSH_GRACE
-    ));
+    assert!(begin_exit_decision(None, &ExitGate::default(), Instant::now(), EXIT_FLUSH_GRACE));
 }
-
 
 #[test]
 fn close_project_menu_item_leaves_the_project_open_for_the_frontend_to_flush() {
@@ -125,7 +114,7 @@ fn close_project_menu_item_leaves_the_project_open_for_the_frontend_to_flush() {
     let dir = tempfile::TempDir::new().unwrap();
     let app = mock_app_with_project(dir.path());
 
-    handle_menu_event(&app.handle(), MENU_CLOSE_PROJECT);
+    handle_menu_event(app.handle(), MENU_CLOSE_PROJECT);
 
     assert!(
         app.state::<ProjectState>().require_root().is_ok(),
@@ -154,10 +143,7 @@ fn close_project_command_performs_the_teardown() {
         app.state::<crate::agent_conversations::TurnRegistry>(),
     );
 
-    assert_eq!(
-        app.state::<ProjectState>().require_root().unwrap_err(),
-        "no project open"
-    );
+    assert_eq!(app.state::<ProjectState>().require_root().unwrap_err(), "no project open");
 }
 
 #[test]
@@ -181,13 +167,8 @@ fn close_project_terminates_the_projects_in_flight_operations() {
         None,
         std::time::Instant::now(),
     );
-    let (_, unscoped) = registry.register_at(
-        "install",
-        "Installing…",
-        None,
-        None,
-        std::time::Instant::now(),
-    );
+    let (_, unscoped) =
+        registry.register_at("install", "Installing…", None, None, std::time::Instant::now());
 
     crate::project::close_project(
         app.handle().clone(),
@@ -235,8 +216,7 @@ fn a_quit_is_never_held_once_the_last_window_is_gone() {
     // A grace period later, so this distinguishes an untouched gate from one
     // that was just claimed (which would still be inside its grace).
     assert!(
-        app.state::<ExitGate>()
-            .claim_at(Instant::now() + EXIT_FLUSH_GRACE, EXIT_FLUSH_GRACE),
+        app.state::<ExitGate>().claim_at(Instant::now() + EXIT_FLUSH_GRACE, EXIT_FLUSH_GRACE),
         "refusing to hold must not consume the gate either"
     );
 }
@@ -260,8 +240,7 @@ fn finish_exit_releases_the_hold_and_only_quits_when_told_to() {
     finish_exit(false, app.handle().clone(), app.state::<ExitGate>());
 
     assert!(
-        app.state::<ExitGate>()
-            .claim_at(t0 + Duration::from_secs(1), EXIT_FLUSH_GRACE),
+        app.state::<ExitGate>().claim_at(t0 + Duration::from_secs(1), EXIT_FLUSH_GRACE),
         "a cancelled quit must release the hold"
     );
 }
@@ -326,12 +305,7 @@ fn only_a_close_request_holds_the_application_open() {
     use tauri::Manager;
     let dir = tempfile::TempDir::new().unwrap();
     let app = mock_app_with_window(dir.path());
-    let window = app
-        .webview_windows()
-        .remove("main")
-        .expect("mock window")
-        .as_ref()
-        .window();
+    let window = app.webview_windows().remove("main").expect("mock window").as_ref().window();
 
     for event in [
         tauri::WindowEvent::Destroyed,
@@ -346,8 +320,7 @@ fn only_a_close_request_holds_the_application_open() {
     // refuse this. (`claim_at(now)` cannot tell the two apart — it answers
     // "keep holding" in both cases.)
     assert!(
-        app.state::<ExitGate>()
-            .claim_at(Instant::now() + EXIT_FLUSH_GRACE, EXIT_FLUSH_GRACE),
+        app.state::<ExitGate>().claim_at(Instant::now() + EXIT_FLUSH_GRACE, EXIT_FLUSH_GRACE),
         "no window event other than a close request may hold a quit"
     );
 }
@@ -395,8 +368,7 @@ fn quitting_from_the_menu_asks_the_frontend_to_flush_first() {
     handle_menu_event(&app.handle().clone(), MENU_EXIT);
 
     assert!(
-        !app.state::<ExitGate>()
-            .claim_at(Instant::now() + EXIT_FLUSH_GRACE, EXIT_FLUSH_GRACE),
+        !app.state::<ExitGate>().claim_at(Instant::now() + EXIT_FLUSH_GRACE, EXIT_FLUSH_GRACE),
         "Exit must leave a hold outstanding for the frontend to answer"
     );
 }
@@ -443,8 +415,7 @@ fn file_menu_full_order_is_the_ten_items_the_spec_names() {
             "New Folder",
             "Save",
             "Save All",
-            "Global settings",
-            "Project settings",
+            "Settings",
             "Close Project",
             "About",
             "Exit"

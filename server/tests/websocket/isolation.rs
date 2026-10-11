@@ -62,18 +62,9 @@ async fn a_worker_reaches_no_handle_of_another_worker() {
 
     // The client is still unauthenticated, so its application messages are
     // refused rather than routed to the worker that never authenticated it.
-    send(
-        &mut client,
-        "client",
-        "application_message",
-        None,
-        json!({"payload": "c211Z2dsZWQ"}),
-    )
-    .await;
-    assert_eq!(
-        expect(&mut client).await["body"]["reason"],
-        "invalid_frame_shape"
-    );
+    send(&mut client, "client", "application_message", None, json!({"payload": "c211Z2dsZWQ"}))
+        .await;
+    assert_eq!(expect(&mut client).await["body"]["reason"], "invalid_frame_shape");
 
     // The intruder tries to revoke and to fail a handle it does not own.
     let mut again = relay.open("/v1/client").await;
@@ -89,14 +80,8 @@ async fn a_worker_reaches_no_handle_of_another_worker() {
     assert_eq!(expect(&mut owner).await["type"], "client_attach");
 
     for (frame_type, body) in [
-        (
-            "handle_invalidated",
-            json!({"handle": handle, "reason": "handle_revoked"}),
-        ),
-        (
-            "delivery_failed",
-            json!({"handle": handle, "reason": "delivery_failed"}),
-        ),
+        ("handle_invalidated", json!({"handle": handle, "reason": "handle_revoked"})),
+        ("delivery_failed", json!({"handle": handle, "reason": "delivery_failed"})),
     ] {
         send(&mut intruder, "worker", frame_type, Some("x-2"), body).await;
         assert_eq!(
@@ -116,10 +101,7 @@ async fn a_worker_reaches_no_handle_of_another_worker() {
         json!({"handle": handle, "status": "accepted"}),
     )
     .await;
-    assert_eq!(
-        expect(&mut again).await["type"],
-        "client_authentication_result"
-    );
+    assert_eq!(expect(&mut again).await["type"], "client_authentication_result");
 }
 
 // RSN-FR-UDCM, RSN-FR-GPLZ: a worker never resolves another worker's
@@ -140,10 +122,7 @@ async fn a_worker_resolves_no_registration_of_another_worker() {
     )
     .await;
     let bound = expect(&mut registration).await;
-    let handle = bound["body"]["handle"]
-        .as_str()
-        .expect("a handle")
-        .to_string();
+    let handle = bound["body"]["handle"].as_str().expect("a handle").to_string();
     assert_eq!(expect(&mut owner).await["type"], "registration_start");
 
     send(
@@ -154,10 +133,7 @@ async fn a_worker_resolves_no_registration_of_another_worker() {
         json!({"registration_id": "reg-1", "status": "accepted"}),
     )
     .await;
-    assert_eq!(
-        expect(&mut intruder).await["body"]["reason"],
-        "delivery_failed"
-    );
+    assert_eq!(expect(&mut intruder).await["body"]["reason"], "delivery_failed");
 
     // The handle is still pending, so it attaches to nothing.
     let mut client = relay.open("/v1/client").await;
@@ -169,10 +145,7 @@ async fn a_worker_resolves_no_registration_of_another_worker() {
         json!({"handle": handle, "instance_id": "instance-a"}),
     )
     .await;
-    assert_eq!(
-        expect(&mut client).await["body"]["reason"],
-        "handle_not_found"
-    );
+    assert_eq!(expect(&mut client).await["body"]["reason"], "handle_not_found");
 
     // Its own worker resolves it, and only then is it a session.
     send(
@@ -183,10 +156,7 @@ async fn a_worker_resolves_no_registration_of_another_worker() {
         json!({"registration_id": "reg-1", "status": "accepted"}),
     )
     .await;
-    assert_eq!(
-        expect(&mut registration).await["body"]["status"],
-        "accepted"
-    );
+    assert_eq!(expect(&mut registration).await["body"]["status"], "accepted");
 }
 
 // RSN-FR-EHUT: a worker connection a replacement took the route from stops
@@ -233,10 +203,7 @@ async fn a_replaced_worker_connection_changes_nothing() {
     let mut reported = Value::Null;
     for _ in 0..50 {
         let (status, body) = relay
-            .get(
-                "/v1/relay/projects",
-                &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")],
-            )
+            .get("/v1/relay/projects", &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")])
             .await;
         if status == StatusCode::OK && body["selected_project_id"] == "p2" {
             reported = body;
@@ -280,14 +247,8 @@ async fn a_second_live_registration_may_not_take_an_identifier_in_use() {
         json!({"registration_id": "reg-1", "instance_id": "instance-a", "payload": "cXI"}),
     )
     .await;
-    let handle = expect(&mut first).await["body"]["handle"]
-        .as_str()
-        .expect("a handle")
-        .to_string();
-    assert_eq!(
-        expect(&mut worker_socket).await["type"],
-        "registration_start"
-    );
+    let handle = expect(&mut first).await["body"]["handle"].as_str().expect("a handle").to_string();
+    assert_eq!(expect(&mut worker_socket).await["type"], "registration_start");
 
     let mut replay = relay.open("/v1/registration").await;
     send(
@@ -301,10 +262,7 @@ async fn a_second_live_registration_may_not_take_an_identifier_in_use() {
     let failure = expect(&mut replay).await;
     assert_eq!(failure["type"], "registration_failed");
     assert_eq!(failure["body"]["reason"], "invalid_frame_shape");
-    assert_eq!(
-        expect_close(&mut replay).await.reason,
-        "invalid_frame_shape"
-    );
+    assert_eq!(expect_close(&mut replay).await.reason, "invalid_frame_shape");
 
     // The terminal result reaches the exchange that opened the identifier.
     send(
@@ -347,14 +305,9 @@ async fn an_abandoned_registration_leaves_no_handle() {
         json!({"registration_id": "reg-1", "instance_id": "instance-a", "payload": "cXI"}),
     )
     .await;
-    let handle = expect(&mut registration).await["body"]["handle"]
-        .as_str()
-        .expect("a handle")
-        .to_string();
-    assert_eq!(
-        expect(&mut worker_socket).await["type"],
-        "registration_start"
-    );
+    let handle =
+        expect(&mut registration).await["body"]["handle"].as_str().expect("a handle").to_string();
+    assert_eq!(expect(&mut worker_socket).await["type"], "registration_start");
 
     registration.close(None).await.expect("the socket closes");
     for _ in 0..50 {

@@ -128,12 +128,7 @@ pub enum Attachment {
         label: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
-    Blob {
-        digest: String,
-        media_type: String,
-        filename: String,
-        bytes: u64,
-    },
+    Blob { digest: String, media_type: String, filename: String, bytes: u64 },
     /// CMS-FR-60: a reference to a change an agent proposed to a draft file
     /// (`DCP-draft-change-proposals.md` DCP-FR-05).
     ///
@@ -235,9 +230,7 @@ impl FragmentTarget {
     /// A fragment of an artifact's source, with the path the artifact's own.
     pub fn in_artifact(artifact_id: &str, start: usize, end: usize, quote: &str) -> Self {
         Self {
-            owner: DiscussionTarget::Artifact {
-                artifact_id: artifact_id.to_string(),
-            },
+            owner: DiscussionTarget::Artifact { artifact_id: artifact_id.to_string() },
             path: artifact_id.to_string(),
             start,
             end,
@@ -248,9 +241,7 @@ impl FragmentTarget {
     /// A fragment of one file of a draft, with the draft-relative path of that file.
     pub fn in_draft(draft_id: &str, path: &str, start: usize, end: usize, quote: &str) -> Self {
         Self {
-            owner: DiscussionTarget::Draft {
-                draft_id: draft_id.to_string(),
-            },
+            owner: DiscussionTarget::Draft { draft_id: draft_id.to_string() },
             path: path.to_string(),
             start,
             end,
@@ -384,9 +375,13 @@ pub enum EventBody {
     ThreadReopened,
     /// Legacy. Read as a `fragment_moved`.
     #[serde(rename_all = "camelCase")]
-    ThreadReanchored { anchor: LegacyAnchor },
+    ThreadReanchored {
+        anchor: LegacyAnchor,
+    },
     #[serde(rename_all = "camelCase")]
-    FragmentMoved { fragment_target: FragmentTarget },
+    FragmentMoved {
+        fragment_target: FragmentTarget,
+    },
 }
 
 /// One line of a log (CMS-FR-04).
@@ -402,3 +397,10 @@ pub struct Event {
     pub body: EventBody,
 }
 
+/// Who appends to a conversation, and when: the `by` and the `at` that each
+/// [`Event`] of the append records.
+#[derive(Clone, Copy, Debug)]
+pub struct Stamp<'a> {
+    pub by: &'a Participant,
+    pub at: &'a str,
+}

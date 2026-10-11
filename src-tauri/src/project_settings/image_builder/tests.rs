@@ -2,11 +2,16 @@
 //! receives, and how a build ends.
 
 use super::*;
+use crate::project_settings::images::DockerfilePlacement;
 use std::sync::Mutex;
+
+/// One progress update a sink received: the phase, the completed and total
+/// counts, and the message.
+type ProgressUpdate = (String, Option<u64>, Option<u64>, String);
 
 #[derive(Default)]
 struct RecordingSink {
-    updates: Mutex<Vec<(String, Option<u64>, Option<u64>, String)>>,
+    updates: Mutex<Vec<ProgressUpdate>>,
 }
 
 impl ImageBuildSink for RecordingSink {
@@ -59,10 +64,7 @@ fn a_failure_diagnostic_is_the_builds_own_tail() {
     assert!(!text.contains("line 0"));
 
     // A build that said nothing still says something.
-    assert_eq!(
-        diagnostic_from(&[], Some(125)),
-        "the build failed with exit status 125"
-    );
+    assert_eq!(diagnostic_from(&[], Some(125)), "the build failed with exit status 125");
 }
 
 /// PSS-FR-26 (PSS-FR-26): a CLI build runs the verified executable and
@@ -85,13 +87,12 @@ fn a_cli_build_reports_what_the_executable_did() {
         operation_id: "op-1".into(),
         image_reference: "acme/agent:1".into(),
         dockerfile: "Dockerfile".into(),
+        project_root: dir.path().to_path_buf(),
         context_root: dir.path().to_path_buf(),
+        placement: DockerfilePlacement::InContext("Dockerfile".into()),
     };
     let sink = RecordingSink::default();
-    assert_eq!(
-        build_with_cli(fake.to_str().unwrap(), &request, &sink),
-        BuildTerminal::Succeeded
-    );
+    assert_eq!(build_with_cli(fake.to_str().unwrap(), &request, &sink), BuildTerminal::Succeeded);
     let updates = sink.updates.lock().unwrap().clone();
     assert!(updates.iter().any(|u| u.3.contains("Step 1/2")));
     assert_eq!(updates.last().unwrap().2, Some(2));
@@ -130,7 +131,9 @@ fn a_cancelled_cli_build_reports_cancelled() {
         operation_id: "op-2".into(),
         image_reference: "acme/agent".into(),
         dockerfile: "Dockerfile".into(),
+        project_root: dir.path().to_path_buf(),
         context_root: dir.path().to_path_buf(),
+        placement: DockerfilePlacement::InContext("Dockerfile".into()),
     };
     assert_eq!(
         build_with_cli(slow.to_str().unwrap(), &request, &AlwaysCancelled),
@@ -203,10 +206,7 @@ fn dockerignore_entries_are_excluded() {
     assert!(names.contains(&"src/app.ts"), "{names:?}");
     // The ignore file itself is sent, exactly as Docker sends it.
     assert!(names.contains(&".dockerignore"), "{names:?}");
-    assert!(
-        !names.iter().any(|p| p.starts_with("node_modules")),
-        "{names:?}"
-    );
+    assert!(!names.iter().any(|p| p.starts_with("node_modules")), "{names:?}");
     assert!(!names.iter().any(|p| p.starts_with("target")), "{names:?}");
     assert!(!names.contains(&"build.log"), "{names:?}");
     // A `!` rule re-includes what the rule above it excluded.
@@ -302,10 +302,7 @@ fn the_repository_dockerignore_keeps_build_output_out_of_the_context() {
         "dist/index.html",
         "tsconfig.test.tsbuildinfo",
     ] {
-        assert!(
-            ignore.excludes(Path::new(excluded)),
-            "{excluded} belongs to no build context"
-        );
+        assert!(ignore.excludes(Path::new(excluded)), "{excluded} belongs to no build context");
     }
 
     // A Dockerfile named inside the context is what the Engine backend
@@ -385,10 +382,7 @@ fn the_repository_dockerignore_packs_only_authored_work() {
         assert!(packed.iter().any(|p| p == kept), "{kept} is missing: {packed:?}");
     }
     for gone in ["target", "node_modules", "dist/", "tsbuildinfo"] {
-        assert!(
-            !packed.iter().any(|p| p.contains(gone)),
-            "{gone} was packed: {packed:?}"
-        );
+        assert!(!packed.iter().any(|p| p.contains(gone)), "{gone} was packed: {packed:?}");
     }
 }
 
@@ -565,4 +559,145 @@ fn a_dropped_reader_ends_the_packer() {
     drop(rx);
     let mut writer = ChannelWriter::new(tx);
     writer.write_all(&vec![0u8; CONTEXT_CHUNK]).unwrap_err();
+}
+
+// -- the Dockerfile and the context (PSS-FR-BDFX, PSS-FR-DIGN) ---------
+
+fn packed_with(root: &Path, extra: Option<&[u8]>) -> Vec<(String, Vec<u8>)> {
+    use std::io::Read;
+    let mut buffer: Vec<u8> = Vec::new();
+    pack_context_with(root, &mut buffer, extra).expect("the context packs");
+    let mut archive = tar::Archive::new(std::io::Cursor::new(buffer));
+    archive
+        .entries()
+        .expect("entries")
+        .map(|entry| {
+            let mut entry = entry.expect("an entry");
+            let path = entry.path().expect("a path").to_string_lossy().into_owned();
+            let mut body = Vec::new();
+            entry.read_to_end(&mut body).expect("a body");
+            (path, body)
+        })
+        .collect()
+}
+
+// PSS-FR-BDFX: a Dockerfile inside the context adds no file, and one outside
+// is added under the unique name with its bytes unchanged.
+#[test]
+fn a_dockerfile_outside_the_context_is_added_under_the_unique_name() {
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), "certs/ca.pem", "pem\n");
+
+    let without = packed_with(dir.path(), None);
+    assert!(without.iter().all(|(name, _)| name != PSS_DOCKERFILE_NAME));
+
+    let bytes = b"# syntax=docker/dockerfile:1\r\nFROM scratch\nCOPY <<EOF /x\nhi\nEOF\n";
+    let with = packed_with(dir.path(), Some(bytes));
+    let added: Vec<_> = with.iter().filter(|(name, _)| name == PSS_DOCKERFILE_NAME).collect();
+    assert_eq!(added.len(), 1);
+    assert_eq!(added[0].1, bytes.to_vec(), "the bytes are unchanged");
+    assert!(with.iter().any(|(name, _)| name == "certs/ca.pem"));
+}
+
+// PSS-FR-BDFX: the unique name is reserved at the context root, so the archive
+// never holds two entries of it.
+#[test]
+fn the_unique_dockerfile_name_is_never_duplicated() {
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), PSS_DOCKERFILE_NAME, "from the context\n");
+    let with = packed_with(dir.path(), Some(b"FROM scratch\n"));
+    let added: Vec<_> = with.iter().filter(|(name, _)| name == PSS_DOCKERFILE_NAME).collect();
+    assert_eq!(added.len(), 1);
+    assert_eq!(added[0].1, b"FROM scratch\n".to_vec());
+}
+
+// PSS-FR-BDFX: a Dockerfile inside the context that carries the unique name
+// stays in the archive, because the build adds no other file.
+#[test]
+fn a_dockerfile_inside_the_context_keeps_its_own_name() {
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), PSS_DOCKERFILE_NAME, "FROM scratch\n");
+    let names: Vec<String> = packed_with(dir.path(), None).into_iter().map(|(n, _)| n).collect();
+    assert_eq!(names, vec![PSS_DOCKERFILE_NAME.to_string()]);
+}
+
+// PSS-FR-DIGN: a Dockerfile-specific ignore file takes no part in the pack.
+#[test]
+fn a_dockerfile_specific_ignore_file_is_not_read() {
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), "Dockerfile", "FROM scratch\n");
+    write(dir.path(), "Dockerfile.dockerignore", "secret.txt\n");
+    write(dir.path(), "secret.txt", "kept\n");
+    let names: Vec<String> = packed_with(dir.path(), None).into_iter().map(|(n, _)| n).collect();
+    assert!(names.contains(&"secret.txt".to_string()), "{names:?}");
+}
+
+// PSS-FR-DIGN: the `.dockerignore` read is the one at the root of the context,
+// and one in the project root outside the context takes no part.
+#[test]
+fn only_the_dockerignore_at_the_context_root_applies() {
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), ".dockerignore", "secret.txt\n");
+    write(dir.path(), "ctx/secret.txt", "kept\n");
+    write(dir.path(), "ctx/other.txt", "kept\n");
+    let names: Vec<String> =
+        packed_with(&dir.path().join("ctx"), None).into_iter().map(|(name, _)| name).collect();
+    assert!(names.contains(&"secret.txt".to_string()), "{names:?}");
+
+    write(dir.path(), "ctx/.dockerignore", "secret.txt\n");
+    let names: Vec<String> =
+        packed_with(&dir.path().join("ctx"), None).into_iter().map(|(name, _)| name).collect();
+    assert!(!names.contains(&"secret.txt".to_string()), "{names:?}");
+}
+
+// PSS-FR-26: the Dockerfile for an outside placement is read from the project
+// root through a grant limited to it.
+#[test]
+fn the_outside_dockerfile_is_read_from_the_project() {
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), "docker/agent.Dockerfile", "FROM scratch\n");
+    assert_eq!(
+        read_project_file(dir.path(), "docker/agent.Dockerfile").unwrap(),
+        b"FROM scratch\n".to_vec()
+    );
+    assert!(read_project_file(dir.path(), "docker/missing").is_err());
+}
+
+// PSS-FR-26: in Docker CLI mode the executable runs from the project root, with
+// the project-relative Dockerfile and the context as the last argument.
+#[cfg(unix)]
+#[test]
+fn a_cli_build_runs_from_the_project_root_with_the_context_argument() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("project");
+    let certs = dir.path().join("certs");
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::create_dir_all(&certs).unwrap();
+    let fake = dir.path().join("fake-docker");
+    std::fs::write(&fake, "#!/bin/sh\necho \"cwd=$(pwd -P)\"\necho \"args=$*\"\nexit 0\n").unwrap();
+    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let request = ImageBuildRequest {
+        vendor: "claude_code".into(),
+        operation_id: "op-ctx".into(),
+        image_reference: "acme/agent:1".into(),
+        dockerfile: "docker/agent.Dockerfile".into(),
+        project_root: project.clone(),
+        context_root: certs.clone(),
+        placement: DockerfilePlacement::Outside,
+    };
+    let sink = RecordingSink::default();
+    assert_eq!(build_with_cli(fake.to_str().unwrap(), &request, &sink), BuildTerminal::Succeeded);
+    let lines: Vec<String> = sink.updates.lock().unwrap().iter().map(|u| u.3.clone()).collect();
+    let cwd = lines.iter().find(|l| l.starts_with("cwd=")).unwrap();
+    assert_eq!(cwd, &format!("cwd={}", project.canonicalize().unwrap().display()));
+    let args = lines.iter().find(|l| l.starts_with("args=")).unwrap();
+    assert_eq!(
+        args,
+        &format!(
+            "args=build --file docker/agent.Dockerfile --tag acme/agent:1 {}",
+            certs.display()
+        )
+    );
 }

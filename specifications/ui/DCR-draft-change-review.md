@@ -25,7 +25,7 @@ The surface on which an author decides what to do with the changes an agent has 
 15. **DCR-FR-15** After the decision that **resolves** the proposal, the surface dispatches `"dispatch agent turn"` once for each distinct agent of the conversation's active set, and not at all where that set is empty (per `CTA-comment-agent-turns.md` CTA-FR-LCFU, CTA-FR-QUXJ). An unresolving decision dispatches nothing.
 16. **DCR-FR-16** A decision the backend refuses renders its typed error beside the hunk it names, leaves the prompt byte-for-byte what it was, and leaves every hunk state unchanged. The decision is retried without retyping anything.
 17. **DCR-FR-17** A resolved proposal leaves the document undecorated and the review bar gone. What was decided is read in the conversation, where the offer and the answer stand in sequence (per `../core/DCP-draft-change-proposals.md` DCP-FR-15).
-18. **DCR-FR-18** This surface mounts a subscriber to `"draft change proposals changed"` at the **shell** rather than in the tab, and raises through `NTF-notifications.md` (NTF-FR-01) when a proposal is recorded. The raise carries the `draft/<draft-id>` address of NTF-FR-03. Nothing is raised when a proposal is decided.
+18. **DCR-FR-18** This surface mounts a subscriber to `"draft change proposals changed"` at the **shell** rather than in the tab, and raises through `NTF-notifications.md` (NTF-FR-01) when a proposal is recorded. The raise carries the level Info and the `draft/<draft-id>` address of NTF-FR-03. Nothing is raised when a proposal is decided.
     - *Why:* A tab-scoped listener hears nothing for a draft whose tab is closed, which is the case the author most needs telling about.
 19. **DCR-FR-19** Whether the raise becomes a notification is `NTF-notifications.md`'s policy (NTF-FR-02, NTF-FR-08). Activating it opens or focuses that draft's tab and scrolls the document to the first undecided hunk.
 20. **DCR-FR-20** Acceptance is **per hunk**. Accepting one hunk leaves every other hunk undecided, and the author accepts some hunks of a proposal and rejects others.
@@ -51,6 +51,10 @@ The surface on which an author decides what to do with the changes an agent has 
 38. **DCR-FR-CXZG** **Accept all** invokes `"accept draft change hunk"` once for each undecided hunk, in order, and stops at the first refusal, leaving the hunks after it undecided. **Reject all** invokes `"decline draft change proposal"` once.
     - *Why:* Each acceptance is its own transaction, so a partial run must leave the author looking at exactly what did and did not land.
 39. **DCR-FR-KDSV** A proposal the backend reports as **legacy** renders as one hunk covering the whole prompt and accepts no edit to that hunk. It is accepted and rejected on the ordinary terms.
+40. **DCR-FR-LGHZ** A hunk's `before` and `lead` are Markdown source. The surface finds a hunk in the document by the text that this Markdown renders to with the Editor's own parser. A hunk that quotes a link, an escape, an entity, an autolink, a rule, a table, a task item, a hard break, or an image is drawn like any other hunk.
+    - *Why:* The document holds rendered text only, so a search with the Markdown source fails for each construct that renders differently.
+41. **DCR-FR-TSNW** An insertion is drawn at the end of its `lead`, and only that end must match the document. When the full `lead` is not found, the surface removes words from its start, one at a time, until the remainder is found. A remainder keeps at least three words. The occurrence nearest the hint wins.
+    - *Why:* The backend cuts a `lead` at a fixed length, so its start can stop inside a link or a code span.
 
 ## User stories
 - As an author, I want to read a proposed change in the passage it changes, so that accepting is a judgement rather than a hope.

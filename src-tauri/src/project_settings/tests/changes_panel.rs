@@ -21,7 +21,8 @@ fn the_panel_state_round_trips_across_a_relaunch() {
     // "Relaunch" is a fresh read of the same project root — nothing is held
     // in memory between the write and the read.
     let dir = TempDir::new().unwrap();
-    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop")).unwrap();
+    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop"))
+        .unwrap();
     let restored = load_changes_panel_state_from(&crate::fs::RootFs::for_root(dir.path()));
     assert_eq!(restored, branch_state("develop"));
 }
@@ -31,7 +32,8 @@ fn the_panel_state_is_written_to_local_toml_and_not_project_toml() {
     // PSS-FR-15: project-local scope, so each machine keeps its
     // own target branch rather than committing it to the repository.
     let dir = TempDir::new().unwrap();
-    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop")).unwrap();
+    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop"))
+        .unwrap();
 
     let local = dir.path().join(".synthesis/local.toml");
     assert!(local.is_file(), "the state lands in .synthesis/local.toml");
@@ -47,7 +49,8 @@ fn the_panel_state_is_written_to_local_toml_and_not_project_toml() {
 fn saving_ensures_the_synthesis_dir_is_gitignored() {
     // PSS-FR-03: `local.toml` is per-machine and must not reach the repo.
     let dir = TempDir::new().unwrap();
-    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop")).unwrap();
+    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop"))
+        .unwrap();
     let ignore = dir.path().join(".synthesis/.gitignore");
     assert!(ignore.is_file(), "an ignore file is written alongside it");
 }
@@ -55,13 +58,11 @@ fn saving_ensures_the_synthesis_dir_is_gitignored() {
 #[test]
 fn a_later_save_replaces_the_previous_state() {
     let dir = TempDir::new().unwrap();
-    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop")).unwrap();
+    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop"))
+        .unwrap();
     save_changes_panel_state_to(
         &crate::fs::RootFs::for_root(dir.path()),
-        ChangesPanelState {
-            mode: ChangesMode::Uncommitted,
-            target_branch: Some("main".into()),
-        },
+        ChangesPanelState { mode: ChangesMode::Uncommitted, target_branch: Some("main".into()) },
     )
     .unwrap();
     let restored = load_changes_panel_state_from(&crate::fs::RootFs::for_root(dir.path()));
@@ -85,9 +86,15 @@ fn a_stale_branch_is_returned_verbatim_without_validation() {
     // PSS-FR-15: this store never checks that the branch still exists; the
     // UI surfaces it per CHG-FR-27.
     let dir = TempDir::new().unwrap();
-    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("feature/old")).unwrap();
+    save_changes_panel_state_to(
+        &crate::fs::RootFs::for_root(dir.path()),
+        branch_state("feature/old"),
+    )
+    .unwrap();
     assert_eq!(
-        load_changes_panel_state_from(&crate::fs::RootFs::for_root(dir.path())).target_branch.as_deref(),
+        load_changes_panel_state_from(&crate::fs::RootFs::for_root(dir.path()))
+            .target_branch
+            .as_deref(),
         Some("feature/old")
     );
 }
@@ -106,7 +113,8 @@ fn saving_preserves_other_project_local_sections() {
     )
     .unwrap();
 
-    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop")).unwrap();
+    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop"))
+        .unwrap();
 
     let config = load_local(&crate::fs::RootFs::for_root(dir.path()));
     assert_eq!(
@@ -115,17 +123,11 @@ fn saving_preserves_other_project_local_sections() {
         "a top-level scalar another writer owns must survive"
     );
     assert_eq!(
-        config
-            .get("layout")
-            .and_then(|v| v.get("verticalPanelWidth"))
-            .and_then(|v| v.as_integer()),
+        config.get("layout").and_then(|v| v.get("verticalPanelWidth")).and_then(|v| v.as_integer()),
         Some(280),
         "another consumer's table must survive"
     );
-    assert!(
-        config.get("recentlyEdited").is_some(),
-        "and so must every other one"
-    );
+    assert!(config.get("recentlyEdited").is_some(), "and so must every other one");
     // And this module's own section landed.
     assert_eq!(
         load_changes_panel_state_from(&crate::fs::RootFs::for_root(dir.path())),
@@ -139,17 +141,15 @@ fn a_local_file_whose_changes_panel_section_is_the_wrong_shape_falls_back() {
     // written by an older or newer build must not break the panel.
     let dir = TempDir::new().unwrap();
     std::fs::create_dir_all(dir.path().join(".synthesis")).unwrap();
-    std::fs::write(
-        dir.path().join(".synthesis/local.toml"),
-        "changes_panel = \"not-a-table\"\n",
-    )
-    .unwrap();
+    std::fs::write(dir.path().join(".synthesis/local.toml"), "changes_panel = \"not-a-table\"\n")
+        .unwrap();
     assert_eq!(
         load_changes_panel_state_from(&crate::fs::RootFs::for_root(dir.path())),
         ChangesPanelState::default()
     );
     // And a save over it repairs the section rather than failing.
-    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop")).unwrap();
+    save_changes_panel_state_to(&crate::fs::RootFs::for_root(dir.path()), branch_state("develop"))
+        .unwrap();
     assert_eq!(
         load_changes_panel_state_from(&crate::fs::RootFs::for_root(dir.path())),
         branch_state("develop")
@@ -163,10 +163,7 @@ fn a_local_file_whose_changes_panel_section_is_the_wrong_shape_falls_back() {
 #[test]
 fn state_serialises_camel_case_with_lowercase_modes() {
     let json = serde_json::to_value(branch_state("develop")).unwrap();
-    assert_eq!(
-        json,
-        serde_json::json!({ "mode": "branch", "targetBranch": "develop" })
-    );
+    assert_eq!(json, serde_json::json!({ "mode": "branch", "targetBranch": "develop" }));
     let default = serde_json::to_value(ChangesPanelState::default()).unwrap();
     assert_eq!(
         default,

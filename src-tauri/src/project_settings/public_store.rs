@@ -14,10 +14,9 @@
 use tauri::State;
 
 use super::{
-    loop_settings, project_toml_path, DRAFT_TEMPLATE_KEY, ERR_MALFORMED_PROJECT_CONFIG,
-    GRADUATION_CONCURRENCY_KEY, GraduationConcurrency, LEGACY_STREAM_CONCURRENCY_KEY,
-    LINE_ENDINGS_KEY, LineEndings,
-    ProjectConfig, ProjectState,
+    loop_settings, project_toml_path, GraduationConcurrency, LineEndings, ProjectConfig,
+    ProjectState, DRAFT_TEMPLATE_KEY, ERR_MALFORMED_PROJECT_CONFIG, GRADUATION_CONCURRENCY_KEY,
+    LEGACY_STREAM_CONCURRENCY_KEY, LINE_ENDINGS_KEY,
 };
 
 // ---------------------------------------------------------------------------
@@ -64,19 +63,14 @@ pub fn load_project_config_from(root: &crate::fs::RootFs) -> Result<ProjectConfi
     // is not a string reads as unset for the same reason the convention above
     // falls back: a malformed *file* is the typed error of PSS-FR-10, and one
     // odd value is not a damaged store.
-    let draft_template = table
-        .get(DRAFT_TEMPLATE_KEY)
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
+    let draft_template = table.get(DRAFT_TEMPLATE_KEY).and_then(|v| v.as_str()).map(str::to_string);
     // PSS-FR-KMBT: a value below one, or one that is neither an integer nor
     // `unlimited`, is repaired to one on read. A limit of zero would stop every
     // run from ever starting, which no author can have meant.
     // PSS-FR-LGKY: the earlier stream key stands in only where the project-wide
     // key is absent.
     let graduation_concurrency_limit = Some(GraduationConcurrency::from_stored(
-        table
-            .get(GRADUATION_CONCURRENCY_KEY)
-            .or_else(|| table.get(LEGACY_STREAM_CONCURRENCY_KEY)),
+        table.get(GRADUATION_CONCURRENCY_KEY).or_else(|| table.get(LEGACY_STREAM_CONCURRENCY_KEY)),
     ));
     Ok(ProjectConfig {
         line_endings,
@@ -92,7 +86,6 @@ pub fn load_project_config_from(root: &crate::fs::RootFs) -> Result<ProjectConfi
     })
 }
 
-
 /// PSS-FR-17: persist the project-public config.
 ///
 /// The write **merges** the keys this payload declares into the file rather than
@@ -103,7 +96,10 @@ pub fn load_project_config_from(root: &crate::fs::RootFs) -> Result<ProjectConfi
 /// file). Serialising the struct over the file would silently delete every one
 /// of those sections, which is precisely what PSS-FR-17's "carries every other
 /// project-public section through unchanged" forbids.
-pub fn save_project_config_to(root: &crate::fs::RootFs, config: ProjectConfig) -> Result<(), String> {
+pub fn save_project_config_to(
+    root: &crate::fs::RootFs,
+    config: ProjectConfig,
+) -> Result<(), String> {
     let mut table = load_public(root)?;
     let value = toml::Value::try_from(config.line_endings)
         .map_err(|e| format!("failed to encode line endings: {e}"))?;
@@ -144,9 +140,7 @@ pub fn save_project_config_to(root: &crate::fs::RootFs, config: ProjectConfig) -
 /// `load_project_config` where the user can act on it, but it must never make a
 /// *save* fail and cost the user their edit, so the default stands in here.
 pub fn line_endings_for(root: &crate::fs::RootFs) -> LineEndings {
-    load_project_config_from(root)
-        .map(|c| c.line_endings)
-        .unwrap_or_default()
+    load_project_config_from(root).map(|c| c.line_endings).unwrap_or_default()
 }
 
 #[tauri::command]
@@ -162,9 +156,8 @@ pub fn save_project_config<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
     let root = project.require_root()?;
-    let before = load_project_config_from(&root)
-        .ok()
-        .and_then(|stored| stored.graduation_concurrency_limit);
+    let before =
+        load_project_config_from(&root).ok().and_then(|stored| stored.graduation_concurrency_limit);
     let named = config.graduation_concurrency_limit;
     save_project_config_to(&root, config)?;
     // PSS-FR-ZVSD, GRD-FR-IJKV: a limit that grew frees slots at once, so every

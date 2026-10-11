@@ -38,14 +38,8 @@ fn a_body_above_one_kib_is_refused_and_nothing_is_written() {
         "2026-01-02T00:00:00Z",
     )
     .expect_err("1025 bytes is over the bound");
-    assert!(
-        err.starts_with(ERR_NOTE_BODY_TOO_LARGE),
-        "the typed error names itself: {err:?}",
-    );
-    assert!(
-        err.contains(&MAX_NOTE_BODY_BYTES.to_string()),
-        "and names the bound: {err:?}",
-    );
+    assert!(err.starts_with(ERR_NOTE_BODY_TOO_LARGE), "the typed error names itself: {err:?}",);
+    assert!(err.contains(&MAX_NOTE_BODY_BYTES.to_string()), "and names the bound: {err:?}",);
     assert_eq!(
         list_all_notes_in(root, root).len(),
         before,
@@ -72,10 +66,7 @@ fn an_update_above_the_bound_leaves_the_note_exactly_as_it_was() {
     let err = update_note_in(
         root,
         &note.id,
-        NoteFields {
-            body: Some("a".repeat(MAX_NOTE_BODY_BYTES + 1)),
-            ..Default::default()
-        },
+        NoteFields { body: Some("a".repeat(MAX_NOTE_BODY_BYTES + 1)), ..Default::default() },
         "2026-06-06T00:00:00Z",
     )
     .expect_err("over the bound");
@@ -89,10 +80,7 @@ fn an_update_above_the_bound_leaves_the_note_exactly_as_it_was() {
     let cleared = update_note_in(
         root,
         &note.id,
-        NoteFields {
-            reminder: Some(None),
-            ..Default::default()
-        },
+        NoteFields { reminder: Some(None), ..Default::default() },
         "2026-06-06T00:00:00Z",
     )
     .expect("the reminder clears");
@@ -110,18 +98,8 @@ fn the_bound_counts_utf8_bytes_rather_than_characters() {
     assert!(body.chars().count() < MAX_NOTE_BODY_BYTES);
     assert!(body.len() > MAX_NOTE_BODY_BYTES);
 
-    let err = create_note_in(
-        root,
-        NoteScope::Project,
-        body,
-        None,
-        None,
-        "2026-01-01T00:00:00Z",
-    )
-    .expect_err("over the bound in bytes");
+    let err = create_note_in(root, NoteScope::Project, body, None, None, "2026-01-01T00:00:00Z")
+        .expect_err("over the bound in bytes");
     assert!(err.starts_with(ERR_NOTE_BODY_TOO_LARGE));
-    assert!(
-        list_all_notes_in(root, root).is_empty(),
-        "nothing was truncated to fit",
-    );
+    assert!(list_all_notes_in(root, root).is_empty(), "nothing was truncated to fit",);
 }

@@ -132,9 +132,7 @@ pub fn resolve_project_vendor<R: tauri::Runtime>(
     use tauri::Manager;
     let store = app.try_state::<GlobalSettingsStore>()?;
     let ai = app.try_state::<AgenticIntegrations>()?;
-    get_project_impl(&store, &ai, project_key)
-        .ok()
-        .and_then(|resolved| resolved.vendor)
+    get_project_impl(&store, &ai, project_key).ok().and_then(|resolved| resolved.vendor)
 }
 
 #[tauri::command]
@@ -155,4 +153,3 @@ pub fn set_project_agentic_integration(
 ) -> Result<ProjectAgenticIntegration, String> {
     set_project_impl(&store, &ai, &project.slot_key(), vendor.as_deref())
 }
-

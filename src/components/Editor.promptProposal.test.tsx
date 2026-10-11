@@ -64,7 +64,7 @@ function wire() {
       case "list_discussions":
       case "list_agent_turns":
       case "list_recoverable_agent_turn_failures":
-      case "list_agents":
+      case "list_personal_agents":
         return [];
       case "load_app_preferences":
         return {};

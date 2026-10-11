@@ -29,12 +29,10 @@ macro_rules! identifier {
 
             /// Reads the identifier from text (SAS-FR-NKBC).
             pub fn parse(text: &str) -> Result<Self, DomainError> {
-                Uuid::parse_str(text.trim())
-                    .map(Self)
-                    .map_err(|_| DomainError::InvalidField {
-                        field: $label.to_string(),
-                        reason: "the value is not a UUID".to_string(),
-                    })
+                Uuid::parse_str(text.trim()).map(Self).map_err(|_| DomainError::InvalidField {
+                    field: $label.to_string(),
+                    reason: "the value is not a UUID".to_string(),
+                })
             }
 
             /// The identifier as a plain UUID, which is how a grant addresses a
@@ -96,14 +94,8 @@ mod tests {
     #[test]
     fn an_identifier_reads_a_uuid_and_refuses_anything_else() {
         let text = "3f0b5b1e-2b8e-4a1a-9f0a-6a2c1c9a5b77";
-        assert_eq!(
-            UserId::parse(text).expect("a UUID is read").to_string(),
-            text
-        );
-        assert!(matches!(
-            UserId::parse("not-a-uuid"),
-            Err(DomainError::InvalidField { .. })
-        ));
+        assert_eq!(UserId::parse(text).expect("a UUID is read").to_string(), text);
+        assert!(matches!(UserId::parse("not-a-uuid"), Err(DomainError::InvalidField { .. })));
     }
 
     // SAS-FR-OZET: the generated identifier is a UUID version 4.

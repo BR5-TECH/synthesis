@@ -11,9 +11,7 @@ use crate::graduation::GraduationRunState;
 use crate::streams::StreamMergePublication;
 
 fn as_one_commit() -> StreamMergePublication {
-    StreamMergePublication::Commit {
-        message: "Merge the editor stream".to_string(),
-    }
+    StreamMergePublication::Commit { message: "Merge the editor stream".to_string() }
 }
 
 // GTE-FR-TNZF, GTE-FR-QVHM, GTE-FR-MDVQ / WKS-FR-GKPX, WKS-FR-TVBM, WKS-FR-PZKD,

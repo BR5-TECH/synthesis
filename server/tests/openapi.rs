@@ -12,10 +12,7 @@ const DOCUMENT: &str = include_str!("../../api/openapi.yaml");
 /// Every source that declares a route.
 fn route_sources() -> Vec<String> {
     let mut sources = Vec::new();
-    collect(
-        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src"),
-        &mut sources,
-    );
+    collect(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src"), &mut sources);
     sources
 }
 
@@ -96,24 +93,15 @@ fn paths_of_the_document() -> BTreeMap<String, BTreeSet<String>> {
         if !in_paths {
             continue;
         }
-        if let Some(path) = line
-            .strip_prefix("  /")
-            .and_then(|rest| rest.strip_suffix(':'))
-        {
+        if let Some(path) = line.strip_prefix("  /").and_then(|rest| rest.strip_suffix(':')) {
             current = Some(format!("/{path}"));
             paths.entry(format!("/{path}")).or_default();
             continue;
         }
-        if let Some(method) = line
-            .strip_prefix("    ")
-            .and_then(|rest| rest.strip_suffix(':'))
-        {
+        if let Some(method) = line.strip_prefix("    ").and_then(|rest| rest.strip_suffix(':')) {
             if ["get", "post", "patch", "delete"].contains(&method) {
                 if let Some(path) = current.as_ref() {
-                    paths
-                        .entry(path.clone())
-                        .or_default()
-                        .insert(method.to_string());
+                    paths.entry(path.clone()).or_default().insert(method.to_string());
                 }
             }
         }
@@ -180,10 +168,7 @@ fn every_error_code_is_described() {
         "invitation_not_pending",
         "internal",
     ] {
-        assert!(
-            DOCUMENT.contains(&format!("- {code}")),
-            "the document describes no {code} code"
-        );
+        assert!(DOCUMENT.contains(&format!("- {code}")), "the document describes no {code} code");
     }
 }
 

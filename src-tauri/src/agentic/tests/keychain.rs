@@ -91,9 +91,13 @@ fn verifying_a_credential_free_cli_never_touches_the_credential_store() {
     );
     keys.lock_it();
 
-    let rec =
-        verify_integration_impl(&h.store, &h.ai, "codex", &cli_config_for("codex", "/usr/bin/codex"))
-            .unwrap();
+    let rec = verify_integration_impl(
+        &h.store,
+        &h.ai,
+        "codex",
+        &cli_config_for("codex", "/usr/bin/codex"),
+    )
+    .unwrap();
     assert_eq!(
         rec.state,
         IntegrationState::Verified,

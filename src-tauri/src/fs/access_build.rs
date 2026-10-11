@@ -1,8 +1,8 @@
 //! Construction of an `FsAccess` instance (FSA-FR-18) and the session
 //! scratch directory an instance owns (FSA-FR-20).
 
-use std::io;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -95,11 +95,7 @@ impl FsAccessBuilder {
         let owned_roots = super::owned_tree::canonicalize_owned(&self.owned)?;
         let author_roots = super::owned_tree::canonicalize_owned(&self.author)?;
 
-        let session_temp = if self.session_temp {
-            Some(SessionTemp::create()?)
-        } else {
-            None
-        };
+        let session_temp = if self.session_temp { Some(SessionTemp::create()?) } else { None };
         if let Some(t) = &session_temp {
             roots.push(t.path.clone());
         }
@@ -126,14 +122,9 @@ impl FsAccessBuilder {
 pub(super) fn canonicalize_root(raw: &Path) -> Result<PathBuf, FsAccessBuildError> {
     fs::canonicalize(raw).map_err(|source| {
         if source.kind() == io::ErrorKind::NotFound {
-            FsAccessBuildError::RootNotADirectory {
-                path: raw.to_path_buf(),
-            }
+            FsAccessBuildError::RootNotADirectory { path: raw.to_path_buf() }
         } else {
-            FsAccessBuildError::RootNotCanonical {
-                path: raw.to_path_buf(),
-                source,
-            }
+            FsAccessBuildError::RootNotCanonical { path: raw.to_path_buf(), source }
         }
     })
 }
@@ -161,20 +152,16 @@ impl SessionTemp {
                 .map(|d| d.as_nanos())
                 .unwrap_or(0);
             let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-            let candidate = base.join(format!(
-                "synthesis-session-{}-{}-{}",
-                std::process::id(),
-                n,
-                nanos
-            ));
+            let candidate =
+                base.join(format!("synthesis-session-{}-{}-{}", std::process::id(), n, nanos));
             match fs::create_dir(&candidate) {
                 Ok(()) => {
                     // Canonicalise for the same reason the roots are: on macOS
                     // `std::env::temp_dir()` is under `/var`, itself a link to
                     // `/private/var`, so the un-canonicalised path would contain
                     // nothing that later resolves beneath it.
-                    let path = fs::canonicalize(&candidate)
-                        .map_err(FsAccessBuildError::SessionTemp)?;
+                    let path =
+                        fs::canonicalize(&candidate).map_err(FsAccessBuildError::SessionTemp)?;
                     return Ok(SessionTemp { path });
                 }
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,

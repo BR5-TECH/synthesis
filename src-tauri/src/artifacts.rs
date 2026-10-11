@@ -75,6 +75,11 @@ impl ContentTracker {
     pub fn len(&self) -> usize {
         self.inner.lock().map(|g| g.len()).unwrap_or(0)
     }
+
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 /// Wire shape of `load_artifact_contents_by_id` (PST-FR-15): body + baseline.
@@ -445,11 +450,8 @@ mod tests {
 
     #[test]
     fn artifact_contents_wire_shapes_are_camelcase() {
-        let c = serde_json::to_value(ArtifactContents {
-            body: "b".into(),
-            checksum: "c".into(),
-        })
-        .unwrap();
+        let c = serde_json::to_value(ArtifactContents { body: "b".into(), checksum: "c".into() })
+            .unwrap();
         assert!(c.get("body").is_some() && c.get("checksum").is_some());
         let s = serde_json::to_value(SaveResult { checksum: "c".into() }).unwrap();
         assert!(s.get("checksum").is_some());
@@ -491,16 +493,12 @@ mod tests {
         let before = std::fs::read(&local).unwrap();
 
         let tracker = ContentTracker::default();
-        for (id, body) in [
-            ("a.spec.md", "ONE"),
-            ("b.spec.md", "TWO"),
-            ("a.spec.md", "ONE AGAIN"),
-        ] {
+        for (id, body) in [("a.spec.md", "ONE"), ("b.spec.md", "TWO"), ("a.spec.md", "ONE AGAIN")] {
             save_validated_artifact(root, id, body, &tracker).unwrap();
         }
 
-        assert_eq!(root.read_text(&root.join("a.spec.md")).unwrap(), "ONE AGAIN");
-        assert_eq!(root.read_text(&root.join("b.spec.md")).unwrap(), "TWO");
+        assert_eq!(root.read_text(root.join("a.spec.md")).unwrap(), "ONE AGAIN");
+        assert_eq!(root.read_text(root.join("b.spec.md")).unwrap(), "TWO");
         assert_eq!(
             std::fs::read(&local).unwrap(),
             before,
@@ -538,7 +536,7 @@ mod tests {
             "the fixture must actually classify as a Flow or the gate is untested"
         );
         save_validated_artifact(root, "flows/a.flow", body, &tracker).unwrap();
-        assert_eq!(root.read_text(&root.join("flows/a.flow")).unwrap(), body);
+        assert_eq!(root.read_text(root.join("flows/a.flow")).unwrap(), body);
     }
 
     /// PST-FR-31, FGV-FR-12 / PST-FR-28: an invalid Flow is refused before the write. The
@@ -580,7 +578,7 @@ mod tests {
         let root = &crate::fs::RootFs::for_root(dir.path());
         let tracker = ContentTracker::default();
         save_validated_artifact(root, "a.spec.md", "{ not json", &tracker).unwrap();
-        assert_eq!(root.read_text(&root.join("a.spec.md")).unwrap(), "{ not json");
+        assert_eq!(root.read_text(root.join("a.spec.md")).unwrap(), "{ not json");
     }
 
     #[test]
@@ -606,7 +604,9 @@ mod tests {
         // leave a phantom baseline behind.
         let dir = tempfile::TempDir::new().unwrap();
         let tracker = ContentTracker::default();
-        let err = load_artifact_contents_impl(&fs::RootFs::for_root(dir.path()), "nope.md", &tracker).unwrap_err();
+        let err =
+            load_artifact_contents_impl(&fs::RootFs::for_root(dir.path()), "nope.md", &tracker)
+                .unwrap_err();
         assert!(!err.is_empty());
         assert!(tracker.current("nope.md").is_none());
     }
@@ -622,7 +622,7 @@ mod tests {
             project_settings::ProjectConfig {
                 line_endings: endings,
                 draft_template: None,
-                            ..Default::default()
+                ..Default::default()
             },
         )
         .unwrap();
@@ -679,10 +679,7 @@ mod tests {
         let root = &crate::fs::RootFs::for_root(dir.path());
         let tracker = ContentTracker::default();
         save_artifact_contents_impl(root, "a.md", "one\r\ntwo\r\n", &tracker).unwrap();
-        assert_eq!(
-            std::fs::read_to_string(root.join("a.md")).unwrap(),
-            "one\ntwo\n"
-        );
+        assert_eq!(std::fs::read_to_string(root.join("a.md")).unwrap(), "one\ntwo\n");
     }
 
     #[test]
@@ -711,10 +708,7 @@ mod tests {
         set_convention(root, project_settings::LineEndings::Crlf);
         let tracker = ContentTracker::default();
         save_artifact_contents_impl(root, "a.md", "just one line", &tracker).unwrap();
-        assert_eq!(
-            std::fs::read_to_string(root.join("a.md")).unwrap(),
-            "just one line"
-        );
+        assert_eq!(std::fs::read_to_string(root.join("a.md")).unwrap(), "just one line");
     }
 
     #[test]
@@ -726,10 +720,7 @@ mod tests {
         set_convention(root, project_settings::LineEndings::Lf);
         let tracker = ContentTracker::default();
         save_artifact_contents_impl(root, "a.md", "one\rtwo\r\nthree\n", &tracker).unwrap();
-        assert_eq!(
-            std::fs::read_to_string(root.join("a.md")).unwrap(),
-            "one\ntwo\nthree\n"
-        );
+        assert_eq!(std::fs::read_to_string(root.join("a.md")).unwrap(), "one\ntwo\nthree\n");
     }
 
     #[test]
@@ -776,17 +767,15 @@ mod tests {
         let opened = open_artifact_by_id_impl(root, "src/main.rs").unwrap();
         assert_eq!(opened.key, "src/main.rs");
         assert_eq!(opened.kind, ArtifactKind::Text);
-        assert_eq!(
-            serde_json::to_value(&opened).unwrap().get("kind").unwrap(),
-            "text"
-        );
+        assert_eq!(serde_json::to_value(&opened).unwrap().get("kind").unwrap(), "text");
 
         // And it loads and saves with the same checksum semantics as an artifact.
         let tracker = ContentTracker::default();
         let loaded = load_artifact_contents_impl(root, "src/main.rs", &tracker).unwrap();
         assert_eq!(loaded.body, "fn main() {}\n");
-        let saved = save_validated_artifact(root, "src/main.rs", "fn main() { /* edited */ }\n", &tracker)
-            .unwrap();
+        let saved =
+            save_validated_artifact(root, "src/main.rs", "fn main() { /* edited */ }\n", &tracker)
+                .unwrap();
         assert_eq!(
             saved.checksum,
             root.sha256_file("src/main.rs").unwrap(),
@@ -807,15 +796,10 @@ mod tests {
 
         let tracker = ContentTracker::default();
         save_validated_artifact(root, ".claude/skills/foo.md", "edited\n", &tracker).unwrap();
-        assert_eq!(
-            root.read_text(&root.join(".claude/skills/foo.md")).unwrap(),
-            "edited\n"
-        );
+        assert_eq!(root.read_text(root.join(".claude/skills/foo.md")).unwrap(), "edited\n");
 
         assert_eq!(
-            open_artifact_by_id_impl(root, ".claude/skills/foo.md")
-                .unwrap()
-                .kind,
+            open_artifact_by_id_impl(root, ".claude/skills/foo.md").unwrap().kind,
             ArtifactKind::Markdown
         );
     }
@@ -829,10 +813,7 @@ mod tests {
         // ASC-FR-03: the `.flow` path convention, with no frontmatter to
         // fall back on — the only route by which a Flow document classifies.
         std::fs::write(root.join("review.flow"), b"{\"version\":1}").unwrap();
-        assert_eq!(
-            open_artifact_by_id_impl(root, "review.flow").unwrap().kind,
-            ArtifactKind::Flow
-        );
+        assert_eq!(open_artifact_by_id_impl(root, "review.flow").unwrap().kind, ArtifactKind::Flow);
     }
 
     // The ordinary product path: New Artifact records a per-file assignment for
@@ -846,28 +827,15 @@ mod tests {
         // What New Artifact leaves behind for `Type: Flow, name: pipeline`: the
         // file, plus the per-file assignment `create_artifact` records (PST-FR-21).
         std::fs::write(root.join("pipeline"), b"{}").unwrap();
-        scanning::assign(
-            root,
-            "pipeline",
-            scanning::ArtifactType::Flow,
-            scanning::Scope::File,
-        )
-        .unwrap();
+        scanning::assign(root, "pipeline", scanning::ArtifactType::Flow, scanning::Scope::File)
+            .unwrap();
 
-        assert_eq!(
-            open_artifact_by_id_impl(root, "pipeline").unwrap().kind,
-            ArtifactKind::Flow
-        );
+        assert_eq!(open_artifact_by_id_impl(root, "pipeline").unwrap().kind, ArtifactKind::Flow);
 
         // …and the converse: a `.flow` file assigned another type is not a Flow.
         std::fs::write(root.join("review.flow"), b"{}").unwrap();
-        scanning::assign(
-            root,
-            "review.flow",
-            scanning::ArtifactType::Spec,
-            scanning::Scope::File,
-        )
-        .unwrap();
+        scanning::assign(root, "review.flow", scanning::ArtifactType::Spec, scanning::Scope::File)
+            .unwrap();
         assert_eq!(
             open_artifact_by_id_impl(root, "review.flow").unwrap().kind,
             ArtifactKind::Markdown

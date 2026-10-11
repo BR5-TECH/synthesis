@@ -79,12 +79,8 @@ fn same_second_opens_keep_most_recent_first() {
     ]);
     store.record_recent_project("third", "~/dev/third").unwrap();
     // "third" front-inserted with a fresh (>= ts) timestamp -> first.
-    let names: Vec<String> = store
-        .list_recent_projects()
-        .unwrap()
-        .into_iter()
-        .map(|e| e.name)
-        .collect();
+    let names: Vec<String> =
+        store.list_recent_projects().unwrap().into_iter().map(|e| e.name).collect();
     assert_eq!(names[0], "third", "newest open is first even on a timestamp tie");
 }
 
@@ -95,12 +91,8 @@ fn remove_recent_project_drops_only_that_entry() {
     store.record_recent_project("acme", "~/dev/acme").unwrap();
     store.record_recent_project("design", "~/dev/design").unwrap();
     store.remove_recent_project("~/dev/design").unwrap();
-    let names: Vec<String> = store
-        .list_recent_projects()
-        .unwrap()
-        .into_iter()
-        .map(|e| e.name)
-        .collect();
+    let names: Vec<String> =
+        store.list_recent_projects().unwrap().into_iter().map(|e| e.name).collect();
     assert!(!names.contains(&"design".to_string()));
     assert!(names.contains(&"acme".to_string()));
 }
@@ -145,12 +137,8 @@ fn prune_and_cap_applied_through_store_listing() {
         entry("present", "2026-05-01T00:00:00Z", false, false),
         entry("ghost", "2026-05-02T00:00:00Z", false, true),
     ]);
-    let names: Vec<String> = store
-        .list_recent_projects()
-        .unwrap()
-        .into_iter()
-        .map(|e| e.name)
-        .collect();
+    let names: Vec<String> =
+        store.list_recent_projects().unwrap().into_iter().map(|e| e.name).collect();
     assert_eq!(names, vec!["present".to_string()]);
 }
 

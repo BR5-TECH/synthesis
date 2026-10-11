@@ -6,7 +6,9 @@ use std::sync::Arc;
 use bm25::{Document, Language, SearchEngineBuilder};
 
 use super::chunking::{chunk_text, detect_file_language, language_key};
-use super::{documents, ChunkKey, FileEntry, FileRef, IndexId, IndexSet, PassScope, PassStats, SourceFile};
+use super::{
+    documents, ChunkKey, FileEntry, FileRef, IndexId, IndexSet, PassScope, PassStats, SourceFile,
+};
 
 /// Reconcile `previous` against the files that ought to be indexed, returning
 /// the next snapshot.
@@ -83,9 +85,7 @@ pub fn reconcile(
         if !chunks.is_empty() {
             let shard = working_shard(&next, &mut working, source.index, &language);
             for (ordinal, chunk) in chunks.iter().enumerate() {
-                shard
-                    .documents
-                    .insert(source.file.chunk(ordinal as u32), chunk.clone());
+                shard.documents.insert(source.file.chunk(ordinal as u32), chunk.clone());
             }
             stats.files_indexed += 1;
         }
@@ -93,14 +93,7 @@ pub fn reconcile(
         // nothing but whitespace. Without the record its checksum could never
         // match, so it would be re-read, re-hashed and re-chunked on every pass
         // for the life of the session.
-        next.files.insert(
-            key,
-            FileEntry {
-                checksum,
-                language,
-                chunk_count: chunks.len() as u32,
-            },
-        );
+        next.files.insert(key, FileEntry { checksum, language, chunk_count: chunks.len() as u32 });
     }
 
     // BMI-FR-15 / BMI-FR-17: anything the pass did not see in an index it
@@ -170,10 +163,7 @@ fn drop_file(
 /// documents it now holds. A shard left holding nothing is dropped rather than
 /// kept empty — an empty corpus has no meaningful average document length, and
 /// a query against one would divide by zero.
-fn rebuild_shards(
-    set: &mut IndexSet,
-    working: BTreeMap<(IndexId, &'static str), WorkingShard>,
-) {
+fn rebuild_shards(set: &mut IndexSet, working: BTreeMap<(IndexId, &'static str), WorkingShard>) {
     for (shard_key, shard) in working {
         if shard.documents.is_empty() {
             set.shards.remove(&shard_key);
@@ -181,11 +171,8 @@ fn rebuild_shards(
         }
         // Ordered by `ChunkKey`, so the corpus a rebuild is fitted to is the
         // same sequence however the pass arrived at it (BMI-FR-27).
-        let docs: Vec<Document<ChunkKey>> = shard
-            .documents
-            .into_iter()
-            .map(|(id, contents)| Document::new(id, contents))
-            .collect();
+        let docs: Vec<Document<ChunkKey>> =
+            shard.documents.into_iter().map(|(id, contents)| Document::new(id, contents)).collect();
         let engine = SearchEngineBuilder::<ChunkKey>::with_documents(shard.language, docs).build();
         set.shards.insert(shard_key, Arc::new(engine));
     }

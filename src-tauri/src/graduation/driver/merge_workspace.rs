@@ -45,10 +45,7 @@ pub(crate) fn ensure<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &GraduationRun,
 ) -> Result<PathBuf, String> {
-    let data = run
-        .merge
-        .as_ref()
-        .ok_or_else(|| "the run is not a merge run".to_string())?;
+    let data = run.merge.as_ref().ok_or_else(|| "the run is not a merge run".to_string())?;
     let target = crate::graduation::store_base(app)?.merge_worktree(&run.id);
     let fs = crate::graduation::store_fs(app)?;
     let main = primary(app)?;
@@ -89,8 +86,7 @@ pub(crate) fn ensure<R: tauri::Runtime>(
         .into_reference();
     let mut opts = git2::WorktreeAddOptions::new();
     opts.reference(Some(&reference));
-    main.worktree(&name, &target, Some(&opts))
-        .map_err(|e| e.to_string())?;
+    main.worktree(&name, &target, Some(&opts)).map_err(|e| e.to_string())?;
     crate::worktree::normalize_worktree_commondir(&main, &name).map_err(|e| e.to_string())?;
 
     // Detached: the worktree reads one revision and owns no branch, so nothing a
@@ -99,9 +95,7 @@ pub(crate) fn ensure<R: tauri::Runtime>(
     checkout.set_head_detached(snapshot).map_err(|e| e.to_string())?;
     let mut builder = git2::build::CheckoutBuilder::new();
     builder.force();
-    checkout
-        .checkout_head(Some(&mut builder))
-        .map_err(|e| e.to_string())?;
+    checkout.checkout_head(Some(&mut builder)).map_err(|e| e.to_string())?;
     logging::log_info(
         app,
         &crate::logging::BUFFER,

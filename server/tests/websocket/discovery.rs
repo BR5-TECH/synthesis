@@ -15,10 +15,7 @@ async fn the_discovery_route_reports_one_worker_to_one_client() {
     let handle = accepted_handle(&relay, &mut worker_socket, "reg-1").await;
 
     let (status, body) = relay
-        .get(
-            "/v1/relay/projects",
-            &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")],
-        )
+        .get("/v1/relay/projects", &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")])
         .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["instance_id"], "instance-a");
@@ -31,10 +28,7 @@ async fn the_discovery_route_reports_one_worker_to_one_client() {
     let object = body.as_object().expect("an object");
     let mut names: Vec<&str> = object.keys().map(String::as_str).collect();
     names.sort();
-    assert_eq!(
-        names,
-        vec!["instance_id", "projects", "selected_project_id"]
-    );
+    assert_eq!(names, vec!["instance_id", "projects", "selected_project_id"]);
     assert!(!body.to_string().contains(&handle));
 
     // RSN-FR-GXWB: a later announcement is what the next read reports.
@@ -49,10 +43,7 @@ async fn the_discovery_route_reports_one_worker_to_one_client() {
     let mut reported = Value::Null;
     for _ in 0..50 {
         let (_, body) = relay
-            .get(
-                "/v1/relay/projects",
-                &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")],
-            )
+            .get("/v1/relay/projects", &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")])
             .await;
         if body["selected_project_id"] == "p3" {
             reported = body;
@@ -75,10 +66,7 @@ async fn the_discovery_route_refuses_every_request_that_names_no_session() {
     // No handle at all, and a handle no route holds.
     for headers in [
         vec![(INSTANCE_HEADER, "instance-a")],
-        vec![
-            (HANDLE_HEADER, "no-such-handle"),
-            (INSTANCE_HEADER, "instance-a"),
-        ],
+        vec![(HANDLE_HEADER, "no-such-handle"), (INSTANCE_HEADER, "instance-a")],
     ] {
         let (status, body) = relay.get("/v1/relay/projects", &headers).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
@@ -87,10 +75,7 @@ async fn the_discovery_route_refuses_every_request_that_names_no_session() {
 
     // A handle presented against another worker never reaches that worker.
     let (status, body) = relay
-        .get(
-            "/v1/relay/projects",
-            &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-b")],
-        )
+        .get("/v1/relay/projects", &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-b")])
         .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["error"]["code"], "handle_not_found");
@@ -107,10 +92,7 @@ async fn the_discovery_route_refuses_every_request_that_names_no_session() {
     let mut refused = Value::Null;
     for _ in 0..50 {
         let (status, body) = relay
-            .get(
-                "/v1/relay/projects",
-                &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")],
-            )
+            .get("/v1/relay/projects", &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")])
             .await;
         if status == StatusCode::FORBIDDEN {
             refused = body;
@@ -123,10 +105,7 @@ async fn the_discovery_route_refuses_every_request_that_names_no_session() {
     // RSN-FR-ZDPA: a relay that started fresh holds no handle at all.
     let restarted = Relay::start().await;
     let (status, body) = restarted
-        .get(
-            "/v1/relay/projects",
-            &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")],
-        )
+        .get("/v1/relay/projects", &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")])
         .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["error"]["code"], "handle_not_found");
@@ -163,9 +142,7 @@ async fn a_restarted_relay_reports_no_session_as_active() {
 #[tokio::test]
 async fn no_record_names_a_handle_a_payload_or_the_token() {
     let (state, _ports, logs) = synthesis_server::testing::test_state_with_logs();
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("the listener binds");
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("the listener binds");
     let address = listener.local_addr().expect("an address");
     let router = build_router(state.clone());
     tokio::spawn(async move {
@@ -188,20 +165,11 @@ async fn no_record_names_a_handle_a_payload_or_the_token() {
 
     let text = Arc::clone(&logs).text();
     assert!(!text.contains(&handle), "a record named a handle: {text}");
-    assert!(
-        !text.contains("c2VjcmV0LXBheWxvYWQ"),
-        "a record named a payload"
-    );
+    assert!(!text.contains("c2VjcmV0LXBheWxvYWQ"), "a record named a payload");
     // RSN-FR-WOFT: the device proof and the registration payload reach no
     // record either.
-    assert!(
-        !text.contains("ZGV2aWNlLXByb29m"),
-        "a record named the device proof"
-    );
-    assert!(
-        !text.contains("cXItcGF5bG9hZA"),
-        "a record named the registration payload"
-    );
+    assert!(!text.contains("ZGV2aWNlLXByb29m"), "a record named the device proof");
+    assert!(!text.contains("cXItcGF5bG9hZA"), "a record named the registration payload");
     assert!(!text.contains(TEST_TOKEN), "a record named the token");
 }
 
@@ -215,22 +183,10 @@ async fn the_relay_holds_no_user_or_ownership_data_and_publishes_no_projects() {
     let handle = accepted_handle(&relay, &mut worker_socket, "reg-1").await;
 
     for path in ["/v1/relay/projects", "/v1/relay/workers"] {
-        let (_, body) = relay
-            .get(
-                path,
-                &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")],
-            )
-            .await;
+        let (_, body) =
+            relay.get(path, &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")]).await;
         let text = body.to_string();
-        for absent in [
-            "user",
-            "owner",
-            "member",
-            "permission",
-            "grant",
-            "role",
-            "device",
-        ] {
+        for absent in ["user", "owner", "member", "permission", "grant", "role", "device"] {
             assert!(!text.contains(absent), "{path} named {absent}: {text}");
         }
     }
@@ -256,10 +212,7 @@ async fn the_relay_holds_no_user_or_ownership_data_and_publishes_no_projects() {
 
     // The exposed set is exactly what the worker announced over its own socket.
     let (_, body) = relay
-        .get(
-            "/v1/relay/projects",
-            &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")],
-        )
+        .get("/v1/relay/projects", &[(HANDLE_HEADER, &handle), (INSTANCE_HEADER, "instance-a")])
         .await;
     assert_eq!(body["projects"].as_array().expect("a list").len(), 2);
 }
@@ -275,10 +228,7 @@ async fn every_client_of_one_worker_observes_one_selected_project() {
 
     for handle in [&first, &second] {
         let (status, body) = relay
-            .get(
-                "/v1/relay/projects",
-                &[(HANDLE_HEADER, handle), (INSTANCE_HEADER, "instance-a")],
-            )
+            .get("/v1/relay/projects", &[(HANDLE_HEADER, handle), (INSTANCE_HEADER, "instance-a")])
             .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["selected_project_id"], "p1");
@@ -297,10 +247,7 @@ async fn every_client_of_one_worker_observes_one_selected_project() {
     assert_eq!(expect(&mut other).await["type"], "worker_ready");
 
     let (status, _) = relay
-        .get(
-            "/v1/relay/projects",
-            &[(HANDLE_HEADER, &first), (INSTANCE_HEADER, "instance-b")],
-        )
+        .get("/v1/relay/projects", &[(HANDLE_HEADER, &first), (INSTANCE_HEADER, "instance-b")])
         .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -323,9 +270,7 @@ async fn the_discovery_route_needs_the_bearer_token() {
         }
         let response = tower::ServiceExt::oneshot(
             build_router(relay.state.clone()),
-            request
-                .body(Body::empty())
-                .expect("the request is well formed"),
+            request.body(Body::empty()).expect("the request is well formed"),
         )
         .await
         .expect("the router answers");
@@ -375,10 +320,7 @@ async fn every_refusal_of_the_discovery_route_carries_its_own_reason() {
 async fn poll_refusal(relay: &Relay, handle: &str, expected: StatusCode) -> Value {
     for _ in 0..50 {
         let (status, body) = relay
-            .get(
-                "/v1/relay/projects",
-                &[(HANDLE_HEADER, handle), (INSTANCE_HEADER, "instance-a")],
-            )
+            .get("/v1/relay/projects", &[(HANDLE_HEADER, handle), (INSTANCE_HEADER, "instance-a")])
             .await;
         if status == expected {
             return body;

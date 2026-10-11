@@ -361,8 +361,7 @@ pub fn plan(
                 // insertion keeps no `before` and a deletion no `after`, so
                 // nothing is stored that acceptance cannot use — and the review
                 // cannot draw a side the decision would not take.
-                before: (item.kind != HunkKind::Add && !before.is_empty())
-                    .then(|| before.clone()),
+                before: (item.kind != HunkKind::Add && !before.is_empty()).then(|| before.clone()),
                 after: (item.kind != HunkKind::Del)
                     .then(|| {
                         item.after
@@ -452,7 +451,22 @@ pub fn apply_all(prompt: &str, doc: &HunkDocument) -> Option<String> {
 mod tests {
     use super::*;
 
-    fn hunk(id: &str, kind: HunkKind, before: &str, after: &str, lead: &str, trail: &str, hs: usize, he: usize) -> ProposalHunk {
+    fn anchor(lead: &str, trail: &str, hs: usize, he: usize) -> HunkAnchor {
+        HunkAnchor {
+            lead: lead.to_string(),
+            trail: trail.to_string(),
+            hint_start: hs,
+            hint_end: he,
+        }
+    }
+
+    fn hunk(
+        id: &str,
+        kind: HunkKind,
+        before: &str,
+        after: &str,
+        anchor: HunkAnchor,
+    ) -> ProposalHunk {
         ProposalHunk {
             id: id.to_string(),
             kind,
@@ -460,12 +474,7 @@ mod tests {
             note: None,
             before: (!before.is_empty()).then(|| before.to_string()),
             after: (!after.is_empty()).then(|| after.to_string()),
-            anchor: HunkAnchor {
-                lead: lead.to_string(),
-                trail: trail.to_string(),
-                hint_start: hs,
-                hint_end: he,
-            },
+            anchor,
         }
     }
 
@@ -473,8 +482,8 @@ mod tests {
     #[test]
     fn the_hunk_document_round_trips_through_toml() {
         let doc = HunkDocument::new(vec![
-            hunk("h1", HunkKind::Replace, "BETA", "DELTA", "alpha ", " gamma", 6, 10),
-            hunk("h2", HunkKind::Add, "", "new\n", "one\n", "two\n", 4, 4),
+            hunk("h1", HunkKind::Replace, "BETA", "DELTA", anchor("alpha ", " gamma", 6, 10)),
+            hunk("h2", HunkKind::Add, "", "new\n", anchor("one\n", "two\n", 4, 4)),
         ]);
         let text = doc.to_toml();
         assert!(text.contains("[[hunk]]"));
@@ -534,7 +543,13 @@ mod tests {
     #[test]
     fn applying_one_hunk_leaves_every_other_byte_alone() {
         let prompt = "alpha BETA gamma";
-        let doc = HunkDocument::new(vec![hunk("h1", HunkKind::Replace, "BETA", "DELTA", "alpha ", " gamma", 6, 10)]);
+        let doc = HunkDocument::new(vec![hunk(
+            "h1",
+            HunkKind::Replace,
+            "BETA",
+            "DELTA",
+            anchor("alpha ", " gamma", 6, 10),
+        )]);
         let at = doc.resolve_all(prompt)[0];
         assert_eq!(apply_hunk(prompt, &doc.hunks[0], at).unwrap(), "alpha DELTA gamma");
     }
@@ -543,8 +558,14 @@ mod tests {
     #[test]
     fn hunks_stay_resolvable_after_an_earlier_hunk_is_accepted() {
         let prompt = "one ALPHA two\nthree BETA four\n";
-        let a = hunk("h1", HunkKind::Replace, "ALPHA", "ALPHA-LONGER-NOW", "one ", " two", 4, 9);
-        let b = hunk("h2", HunkKind::Replace, "BETA", "GAMMA", "three ", " four", 20, 24);
+        let a = hunk(
+            "h1",
+            HunkKind::Replace,
+            "ALPHA",
+            "ALPHA-LONGER-NOW",
+            anchor("one ", " two", 4, 9),
+        );
+        let b = hunk("h2", HunkKind::Replace, "BETA", "GAMMA", anchor("three ", " four", 20, 24));
         let doc = HunkDocument::new(vec![a, b]);
 
         let after_first = apply_hunk(prompt, &doc.hunks[0], doc.resolve_all(prompt)[0]).unwrap();
@@ -561,8 +582,8 @@ mod tests {
     #[test]
     fn deciding_in_either_order_reaches_the_same_prompt() {
         let prompt = "one ALPHA two\nthree BETA four\n";
-        let a = hunk("h1", HunkKind::Replace, "ALPHA", "AAA", "one ", " two", 4, 9);
-        let b = hunk("h2", HunkKind::Replace, "BETA", "BBB", "three ", " four", 20, 24);
+        let a = hunk("h1", HunkKind::Replace, "ALPHA", "AAA", anchor("one ", " two", 4, 9));
+        let b = hunk("h2", HunkKind::Replace, "BETA", "BBB", anchor("three ", " four", 20, 24));
         let doc = HunkDocument::new(vec![a, b]);
 
         let forward = {
@@ -580,10 +601,10 @@ mod tests {
     #[test]
     fn a_revision_keeps_the_hunk_id_and_its_position() {
         let mut doc = HunkDocument::new(vec![
-            hunk("h1", HunkKind::Replace, "A", "B", "", "", 0, 1),
-            hunk("h2", HunkKind::Replace, "C", "D", "", "", 2, 3),
+            hunk("h1", HunkKind::Replace, "A", "B", anchor("", "", 0, 1)),
+            hunk("h2", HunkKind::Replace, "C", "D", anchor("", "", 2, 3)),
         ]);
-        let next = hunk("ignored", HunkKind::Replace, "C", "REVISED", "", "", 2, 3);
+        let next = hunk("ignored", HunkKind::Replace, "C", "REVISED", anchor("", "", 2, 3));
         assert!(doc.replace_in_place("h2", next));
         assert_eq!(doc.hunks[1].id, "h2", "the id a reply names is kept");
         assert_eq!(doc.hunks[1].after_text(), "REVISED");
@@ -626,7 +647,13 @@ mod tests {
     // DCP-FR-BMLX: a lost hunk cannot be applied.
     #[test]
     fn a_lost_hunk_applies_to_nothing() {
-        let doc = HunkDocument::new(vec![hunk("h1", HunkKind::Replace, "GONE", "X", "no ", " ctx", 0, 4)]);
+        let doc = HunkDocument::new(vec![hunk(
+            "h1",
+            HunkKind::Replace,
+            "GONE",
+            "X",
+            anchor("no ", " ctx", 0, 4),
+        )]);
         let at = doc.resolve_all("nothing like it here")[0];
         assert!(at.is_lost());
         assert!(apply_hunk("nothing like it here", &doc.hunks[0], at).is_none());
@@ -635,9 +662,12 @@ mod tests {
     // DCP-FR-27: the checksum is the baseline an author's edit is checked against.
     #[test]
     fn the_checksum_changes_only_when_the_document_does() {
-        let doc = HunkDocument::new(vec![hunk("h1", HunkKind::Replace, "A", "B", "", "", 0, 1)]);
-        let same = HunkDocument::new(vec![hunk("h1", HunkKind::Replace, "A", "B", "", "", 0, 1)]);
-        let other = HunkDocument::new(vec![hunk("h1", HunkKind::Replace, "A", "C", "", "", 0, 1)]);
+        let doc =
+            HunkDocument::new(vec![hunk("h1", HunkKind::Replace, "A", "B", anchor("", "", 0, 1))]);
+        let same =
+            HunkDocument::new(vec![hunk("h1", HunkKind::Replace, "A", "B", anchor("", "", 0, 1))]);
+        let other =
+            HunkDocument::new(vec![hunk("h1", HunkKind::Replace, "A", "C", anchor("", "", 0, 1))]);
         assert_eq!(doc.checksum(), same.checksum());
         assert_ne!(doc.checksum(), other.checksum());
     }

@@ -107,6 +107,40 @@ describe("rows (GIT-FR-LUSE, GIT-FR-OZYT, GIT-FR-OLNA)", () => {
     expect(polling.openTaskIssue).toHaveBeenCalledWith(42);
   });
 
+  it("GIT-FR-LUSE: a ready task of a GitHub Enterprise repository links to the host the backend gave", async () => {
+    const polling = controller({
+      view: pollingView({
+        repository: { host: "company.ghe.com", owner: "acme", name: "platform" },
+        tasks: [
+          readyTask({
+            repositoryHost: "company.ghe.com",
+            url: "https://company.ghe.com/acme/platform/issues/42",
+          }),
+        ],
+      }),
+    });
+    show(polling);
+    const row = screen.getByTestId("ready-task-42");
+    expect(row).toHaveTextContent("acme/platform");
+    const link = within(row).getByRole("button", { name: /Open issue #42/ });
+    expect(link).toHaveAttribute("title", "https://company.ghe.com/acme/platform/issues/42");
+    await userEvent.click(link);
+    expect(polling.openTaskIssue).toHaveBeenCalledWith(42);
+  });
+
+  it("GIT-FR-OZYT: a shadow row of a GitHub Enterprise repository opens the issue address the backend gave", async () => {
+    const url = "https://company.ghe.com/acme/platform/issues/9";
+    const polling = controller({
+      view: pollingView({
+        shadows: [shadowRow({ repositoryHost: "company.ghe.com", issueUrl: url })],
+      }),
+    });
+    show(polling);
+    const row = screen.getByTestId("shadow-draft-gh-1");
+    await userEvent.click(within(row).getByRole("button", { name: /Open issue #9/ }));
+    expect(polling.openShadowIssue).toHaveBeenCalledWith("gh-1", url, 9);
+  });
+
   it("GIT-FR-OZYT: a shadow row shows its status in words and links to its issue and draft", async () => {
     const polling = controller({
       view: pollingView({ shadows: [shadowRow()] }),

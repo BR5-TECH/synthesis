@@ -18,10 +18,10 @@ fn aic_ts29_only_a_structurally_valid_token_is_accepted() {
     for bad in [
         "",
         "oat01-abc",
-        "sk-ant-oat01-",                 // the group needs one or more
-        "sk-ant-oat01-abc def",          // nor is a space
-        " sk-ant-oat01-abc",             // unanchored at the front
-        "sk-ant-oat01-abc\n",            // nor at the back
+        "sk-ant-oat01-",        // the group needs one or more
+        "sk-ant-oat01-abc def", // nor is a space
+        " sk-ant-oat01-abc",    // unanchored at the front
+        "sk-ant-oat01-abc\n",   // nor at the back
         "xsk-ant-oat01-abc",
         "sk-ant-oat02-abc",
         "sk-ant-oat01-abc!",
@@ -61,13 +61,9 @@ fn aic_ts27_surrounding_whitespace_is_normalised_before_the_pattern() {
     let padded = format!("  {SAMPLE_TOKEN}\n");
     assert!(!is_valid_oauth_token(&padded), "the pattern itself refuses it");
 
-    let rec = verify_integration_impl(
-        &h.store,
-        &h.ai,
-        "claude_code",
-        &claude_config(Some(&padded)),
-    )
-    .unwrap();
+    let rec =
+        verify_integration_impl(&h.store, &h.ai, "claude_code", &claude_config(Some(&padded)))
+            .unwrap();
     assert_eq!(rec.key_state, KeyState::Set);
     assert_eq!(rec.masked_hint.as_deref(), Some("ygAA"));
     assert_eq!(
@@ -100,13 +96,8 @@ fn aic_ts29_a_malformed_token_is_refused_before_anything_runs() {
         // token — which is precisely the regression worth catching, because
         // it is the case an author actually hits: a working token stored,
         // and a typo in the replacement.
-        verify_integration_impl(
-            &h.store,
-            &h.ai,
-            "claude_code",
-            &claude_config(Some(SAMPLE_TOKEN)),
-        )
-        .unwrap();
+        verify_integration_impl(&h.store, &h.ai, "claude_code", &claude_config(Some(SAMPLE_TOKEN)))
+            .unwrap();
         let (before, _) = h.store.load_agentic_registry().unwrap();
         h.runner.calls.lock().unwrap().clear();
         h.keys.forget_calls();
@@ -119,10 +110,7 @@ fn aic_ts29_a_malformed_token_is_refused_before_anything_runs() {
         );
         // AIC-FR-27: before the binary is run and before the keychain is
         // touched — so a value that is not a token costs neither.
-        assert!(
-            h.runner.calls.lock().unwrap().is_empty(),
-            "{bad:?}: no binary was executed"
-        );
+        assert!(h.runner.calls.lock().unwrap().is_empty(), "{bad:?}: no binary was executed");
         assert!(
             h.keys.calls_for("claude_code").is_empty(),
             "{bad:?}: the keychain was not touched at all"
@@ -211,8 +199,7 @@ fn aic_ts28_a_path_only_payload_needs_a_stored_token() {
     // AIC-FR-26: `{ path }` is valid only where a token is already held.
     let h = claude_harness();
     assert_eq!(
-        verify_integration_impl(&h.store, &h.ai, "claude_code", &claude_config(None))
-            .unwrap_err(),
+        verify_integration_impl(&h.store, &h.ai, "claude_code", &claude_config(None)).unwrap_err(),
         ERR_TOKEN_MISSING
     );
     let list = list_integrations_impl(&h.store, &h.ai).unwrap();
@@ -265,8 +252,7 @@ fn aic_ts30_a_new_token_replaces_the_old_one_only_on_success() {
     assert_eq!(find(&list, "claude_code").masked_hint.as_deref(), Some("ygAA"));
 
     // The same token against a path that verifies.
-    verify_integration_impl(&h.store, &h.ai, "claude_code", &claude_config(Some(NEXT)))
-        .unwrap();
+    verify_integration_impl(&h.store, &h.ai, "claude_code", &claude_config(Some(NEXT))).unwrap();
     assert_eq!(h.keys.get_raw("claude_code").as_deref(), Some(NEXT));
     let list = list_integrations_impl(&h.store, &h.ai).unwrap();
     assert_eq!(find(&list, "claude_code").masked_hint.as_deref(), Some("9f2b"));
@@ -381,8 +367,7 @@ fn aic_ts32_a_locked_keychain_commits_nothing_for_claude_code() {
         ERR_KEYCHAIN_UNAVAILABLE
     );
     assert_eq!(
-        verify_integration_impl(&h.store, &h.ai, "claude_code", &claude_config(None))
-            .unwrap_err(),
+        verify_integration_impl(&h.store, &h.ai, "claude_code", &claude_config(None)).unwrap_err(),
         ERR_KEYCHAIN_UNAVAILABLE,
         "a presence probe that cannot answer is not a missing token"
     );
@@ -427,20 +412,14 @@ fn aic_ts33_claude_code_degrades_by_token_and_by_binary() {
         "a degraded record keeps its configuration"
     );
     assert!(rec.version.is_some());
-    assert_eq!(
-        set_active_impl(&h.store, &h.ai, "claude_code").unwrap_err(),
-        ERR_NOT_VERIFIED
-    );
+    assert_eq!(set_active_impl(&h.store, &h.ai, "claude_code").unwrap_err(), ERR_NOT_VERIFIED);
 
     // And then the binary goes too. AIC-FR-15: `missing` wins, because a
     // path that is not there is the first thing to correct.
     h.fs.remove("/usr/bin/claude");
     let list = list_integrations_impl(&h.store, &h.ai).unwrap();
     assert_eq!(find(&list, "claude_code").state, IntegrationState::Missing);
-    assert_eq!(
-        set_active_impl(&h.store, &h.ai, "claude_code").unwrap_err(),
-        ERR_NOT_VERIFIED
-    );
+    assert_eq!(set_active_impl(&h.store, &h.ai, "claude_code").unwrap_err(), ERR_NOT_VERIFIED);
 }
 
 #[test]
@@ -532,10 +511,7 @@ fn no_log_record_this_module_emits_can_carry_a_credential() {
         // log names a credential rather than describing it.
         "ygAA",
     ] {
-        assert!(
-            !text.contains(forbidden),
-            "a log record carried {forbidden:?}"
-        );
+        assert!(!text.contains(forbidden), "a log record carried {forbidden:?}");
     }
     // And what it *does* carry is enough to debug from: the vendor, whether
     // a new token came with the submission, and the typed failure.

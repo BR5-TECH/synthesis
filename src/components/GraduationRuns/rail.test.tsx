@@ -210,7 +210,6 @@ describe("the controls a row carries", () => {
           interruption: {
             reason: "author_pause",
             detail: "You paused it.",
-            streamReleased: true,
             at: "2026-09-06T09:20:00Z",
           },
         }),
@@ -218,7 +217,6 @@ describe("the controls a row carries", () => {
           interruption: {
             reason: "application_shutdown",
             detail: "The application closed.",
-            streamReleased: true,
             at: "2026-09-06T09:20:00Z",
           },
         }),

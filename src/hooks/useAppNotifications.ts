@@ -36,10 +36,11 @@ import {
   notifyArrived,
   raiseNotification,
   retractNotification,
-  setNotificationPermissionGranted,
+  readNotificationPermission,
   setNotificationsEnabled,
   withdrawForRoot,
 } from "../state/notifications";
+import { clearToasts } from "../state/toasts";
 import { setSelectionFollowsTab } from "../state/selectionFollowsTab";
 import {
   onAppPreferencesChanged,
@@ -52,6 +53,7 @@ import {
 } from "../events";
 import {
   raiseKey,
+  raiseLevel,
   raiseStatement,
   raisesForRun,
   raiseTitle,
@@ -102,6 +104,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
     dismissCommitWindow,
     dismissGraduationOverlays,
     dismissRollbackWindow,
+    dismissPullRequestWindow,
     dismissTabMenu,
     dismissTokenPicker,
     openGraduationRun,
@@ -149,14 +152,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
     });
     // NTF-FR-13: the state is *read* at startup. Nothing here requests it, so a
     // permission prompt never appears because the application started.
-    void api
-      .getNotificationPermission()
-      .then((state) => {
-        if (!cancelled) setNotificationPermissionGranted(state === "granted");
-      })
-      .catch(() => {
-        if (!cancelled) setNotificationPermissionGranted(false);
-      });
+    void readNotificationPermission("startup");
     return () => {
       cancelled = true;
     };
@@ -190,16 +186,17 @@ export function useAppNotifications(deps: AppNotificationDeps) {
         setNotificationsEnabled(prefs.notificationsEnabled ?? true);
         setSelectionFollowsTab(prefs.selectionFollowsTab ?? true);
       });
-      void api
-        .getNotificationPermission()
-        .then((state) => {
-          if (!cancelled) setNotificationPermissionGranted(state === "granted");
-        })
-        .catch(() => {
-          if (!cancelled) setNotificationPermissionGranted(false);
-        });
+      void readNotificationPermission("settings changed");
     };
     void onAppPreferencesChanged(reseed).then(keep);
+    // NTF-FR-WUUY: the author may change the permission in the operating
+    // system's settings while away, so it is read again when the main window
+    // gets focus. Reading is not requesting: no prompt originates here.
+    const rereadPermission = () => {
+      void readNotificationPermission("window focus");
+    };
+    window.addEventListener("focus", rereadPermission);
+    unlisten.push(() => window.removeEventListener("focus", rereadPermission));
     // A settings window opening or closing is the other moment the author may
     // have changed one of these, the permission in particular, which no
     // preferences write announces.
@@ -219,8 +216,12 @@ export function useAppNotifications(deps: AppNotificationDeps) {
         rehearsalTimers.current.delete(timer);
         void raiseNotification({
           key: "notifications:rehearsal",
-          title: "Synthesis",
-          body: "This is what a notification looks like. Click it to come back.",
+          // NTF-FR-24: the rehearsal is Info.
+          level: "Info",
+          // NTF-FR-FPLB: the title says what happened. The operating system
+          // already shows the application's name above it.
+          title: "Test notification",
+          body: "Click it to come back to the Notifications settings.",
           address,
         });
       }, REHEARSAL_DELAY_MS);
@@ -239,18 +240,20 @@ export function useAppNotifications(deps: AppNotificationDeps) {
   // it was when this effect last ran.
   const snapshotRef = useRef({
     focused: true,
+    mainFocused: true,
     projectKey,
     worktree,
     activeTarget,
     visiblePanelSurface: null as string | null,
     visibleBottomSurface: null as string | null,
     visibleRun: null as string | null,
-    openSettingsWindow: null as string | null,
+    settingsWindowOpen: false,
   });
   snapshotRef.current = {
     // Overwritten at raise time by `configureNotifications` above; the value
     // here is only a placeholder for the shape.
     focused: true,
+    mainFocused: true,
     projectKey,
     worktree,
     activeTarget,
@@ -266,7 +269,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
     visibleRun: s.bottomVisible ? runInView : null,
     // Overwritten at raise time like `focused` above, and for the same reason:
     // a settings window opening or closing does not re-render this component.
-    openSettingsWindow: null,
+    settingsWindowOpen: false,
   };
   /**
    * NTF-FR-27: the strip as the facility needs to see it when a raise arrives.
@@ -295,19 +298,24 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       // rendered value would be as stale as the last render — and the stale
       // direction is the harmful one, since a stale `focused: true` suppresses
       // the raise entirely and silently (NTF-FR-10).
-      snapshot: () => ({
-        ...snapshotRef.current,
-        // NTF-FR-08 asks whether ANY window of the application holds focus, and
-        // since SWN-FR-01 there may be a second one: a settings window taking
-        // focus does not put the author somewhere else in the application.
-        focused:
-          (typeof document === "undefined" ? true : document.hasFocus()) ||
-          settingsWindowsRef.current.focused,
-        // NTF-FR-08 / SWN-FR-05: a raise naming the settings window that is at
-        // that moment open is suppressed — the author has already been told by
-        // the thing itself.
-        openSettingsWindow: settingsWindowsRef.current.open,
-      }),
+      snapshot: () => {
+        const mainFocused =
+          typeof document === "undefined" ? true : document.hasFocus();
+        return {
+          ...snapshotRef.current,
+          // NTF-FR-WMBD: a toast shows only while the main window itself holds OS
+          // focus; a settings window holding it sends the raise to the OS.
+          mainFocused,
+          // NTF-FR-08 asks whether ANY window of the application holds focus, and
+          // since SWN-FR-01 there may be a second one: a settings window taking
+          // focus does not put the author somewhere else in the application.
+          focused: mainFocused || settingsWindowsRef.current.focused,
+          // NTF-FR-08 / SWN-FR-05: a raise naming the settings window that is at
+          // that moment open is suppressed — the author has already been told by
+          // the thing itself.
+          settingsWindowOpen: settingsWindowsRef.current.open,
+        };
+      },
       // NTF-FR-27: which open tab this address's own routing would activate.
       // Matched on the target rather than on the tab id, so it finds the tab
       // whatever the strip has named it — and finds the *editing* tab of a file
@@ -438,6 +446,8 @@ export function useAppNotifications(deps: AppNotificationDeps) {
         // and proposes again replaces its own notification rather than stacking
         // a second beside it.
         key: `draft-proposal:${payload.draftId}`,
+        // DCR-FR-18: a proposal waiting for review is Info.
+        level: "Info",
         title: `${proposerHandle(payload.proposal)} proposed a change`,
         body: payload.proposal.path,
         address: mintAddress(key, tree, {
@@ -475,6 +485,8 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       if (!key || !tree) return;
       void raiseNotification({
         key: "github-ready-tasks",
+        // NTF-FR-JLXL: new ready tasks are Info.
+        level: "Info",
         title: newIssuesTitle(issues),
         body: newIssuesBody(issues),
         address: mintAddress(key, tree, { kind: "bottom", surface: "git" }),
@@ -556,6 +568,8 @@ export function useAppNotifications(deps: AppNotificationDeps) {
         // against one artifact never share a key and one proposal's retraction
         // never reaches another's notification.
         key,
+        // PCR-FR-17: a proposal waiting for review is Info.
+        level: "Info",
         // PCR-FR-17: a title naming the agent **and the file**, and a body
         // naming the prompt — so a notification read in a centre beside a dozen
         // others says which file is waiting without being opened.
@@ -609,6 +623,8 @@ export function useAppNotifications(deps: AppNotificationDeps) {
           if (!raisesForRun(run)) return;
           void raiseNotification({
             key: raiseKey(run),
+            // GRU-FR-BLSS: Warn, Info, or Error by the state the run rests in.
+            level: raiseLevel(run),
             title: raiseTitle(run, stateLabelOf(run)),
             body: raiseStatement(run),
             address: mintAddress(key, tree, {
@@ -704,6 +720,10 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       (previous.key !== current?.key || previous.worktree !== current?.worktree)
     ) {
       withdrawForRoot(previous.key, previous.worktree);
+    } else if (!previous && current) {
+      // NTF-FR-15: a toast shown over the Project picker does not survive the
+      // opening of a project.
+      clearToasts();
     }
     previousRoot.current = current;
   }, [projectKey, worktree, s.contentRootEpoch]);
@@ -768,8 +788,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       // graduation section with that run selected — the same navigation the
       // author's own route from a draft performs.
       openRun: (runId) => openGraduationRun(runId),
-      openGlobalSettings: () => s.openGlobalSettings(),
-      openProjectSettings: () => s.openSettings(),
+      openSettings: (address) => s.openSettings(address),
     },
   );
 
@@ -788,6 +807,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       dismissTokenPicker();
       dismissCommitWindow();
       dismissRollbackWindow();
+      dismissPullRequestWindow();
       dismissTabMenu();
       dismissGraduationOverlays();
       // The Location select is fed from the same published folder list the New
@@ -799,6 +819,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       dismissTokenPicker();
       dismissCommitWindow();
       dismissRollbackWindow();
+      dismissPullRequestWindow();
       dismissTabMenu();
       dismissGraduationOverlays();
       // Refresh the parent list only if it may have gone stale since the Library
@@ -816,6 +837,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       dismissTokenPicker();
       dismissCommitWindow();
       dismissRollbackWindow();
+      dismissPullRequestWindow();
       dismissTabMenu();
       dismissGraduationOverlays();
       // The Location select is fed from the same published folder list the New

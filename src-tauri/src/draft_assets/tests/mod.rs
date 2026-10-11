@@ -103,10 +103,7 @@ fn everything_in_assets(root: &crate::fs::RootFs, id: &str) -> Vec<String> {
 /// an asset, so it is excluded here and asserted about on its own terms — a
 /// sweep retains it (DAS-FR-12), and every count below is a count of pictures.
 fn asset_names(root: &crate::fs::RootFs, id: &str) -> Vec<String> {
-    everything_in_assets(root, id)
-        .into_iter()
-        .filter(|name| name != FILENAMES_FILE)
-        .collect()
+    everything_in_assets(root, id).into_iter().filter(|name| name != FILENAMES_FILE).collect()
 }
 
 /// Every file under `dir`, with its bytes — for asserting that nothing at all

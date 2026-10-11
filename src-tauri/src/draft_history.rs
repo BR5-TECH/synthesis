@@ -313,9 +313,7 @@ pub fn is_valid_entry_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
         && id != "journal"
-        && id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 fn manifest_path(dir: &Path, id: &str) -> PathBuf {
@@ -374,9 +372,7 @@ fn read_journal(root: &fs::RootFs, dir: &Path) -> Result<Option<Journal>, String
     if root.file_info(&path).is_err() {
         return Ok(None);
     }
-    root.read_toml::<Journal>(&path)
-        .map(Some)
-        .map_err(|_| ERR_HISTORY_RECOVERY_FAILED.to_string())
+    root.read_toml::<Journal>(&path).map(Some).map_err(|_| ERR_HISTORY_RECOVERY_FAILED.to_string())
 }
 
 /// DHS-FR-12: an entry is exposed unless the standing journal is `prepared` and
@@ -404,10 +400,8 @@ pub fn list_impl(root: &fs::RootFs, draft_id: &str) -> Result<DraftHistoryList, 
     let prompt = drafts::require_prompt(root, draft_id)?;
     let hist = dir.join(drafts::HISTORY_DIR);
     let journal = read_journal(root, &hist)?;
-    let entries: Vec<DraftHistoryEntry> = manifests(root, &hist)
-        .into_iter()
-        .filter(|e| !is_hidden(&journal, &e.id))
-        .collect();
+    let entries: Vec<DraftHistoryEntry> =
+        manifests(root, &hist).into_iter().filter(|e| !is_hidden(&journal, &e.id)).collect();
 
     let prompt_abs = drafts::draft_file_abs_path(root, draft_id, &prompt)?;
     let sha256 = root.sha256_file(&prompt_abs).map_err(|e| e.to_string())?;
@@ -418,12 +412,7 @@ pub fn list_impl(root: &fs::RootFs, draft_id: &str) -> Result<DraftHistoryList, 
     let matches_latest = entries.last().is_none_or(|e| e.sha256 == sha256);
     Ok(DraftHistoryList {
         entries,
-        live: LivePrompt {
-            path: prompt,
-            byte_len,
-            sha256,
-            matches_latest,
-        },
+        live: LivePrompt { path: prompt, byte_len, sha256, matches_latest },
     })
 }
 
@@ -465,19 +454,12 @@ pub fn load_impl(root: &fs::RootFs, entry_id: &str) -> Result<DraftHistoryConten
         return Err(ERR_ENTRY_NOT_FOUND.to_string());
     }
     let payload = snapshot_path(&hist, entry_id);
-    let bytes = root
-        .read_bytes(&payload)
-        .map_err(|_| ERR_SNAPSHOT_CORRUPT.to_string())?;
-    if bytes.len() as u64 != manifest.byte_len
-        || fs::sha256_bytes(&bytes) != manifest.sha256
-    {
+    let bytes = root.read_bytes(&payload).map_err(|_| ERR_SNAPSHOT_CORRUPT.to_string())?;
+    if bytes.len() as u64 != manifest.byte_len || fs::sha256_bytes(&bytes) != manifest.sha256 {
         return Err(ERR_SNAPSHOT_CORRUPT.to_string());
     }
     let content = String::from_utf8(bytes).map_err(|_| ERR_SNAPSHOT_CORRUPT.to_string())?;
-    Ok(DraftHistoryContent {
-        content,
-        sha256: manifest.sha256,
-    })
+    Ok(DraftHistoryContent { content, sha256: manifest.sha256 })
 }
 
 // ---------------------------------------------------------------------------
@@ -514,10 +496,7 @@ pub fn announce_entry<R: tauri::Runtime>(
 {
     let _ = app.emit(
         HISTORY_CHANGED,
-        HistoryChanged {
-            draft_id: draft_id.to_string(),
-            entry: entry.cloned(),
-        },
+        HistoryChanged { draft_id: draft_id.to_string(), entry: entry.cloned() },
     );
     // DHS-FR-ZQNM: an entry that becomes **exposed** contributes exactly one
     // `draft_history_entry` line to the draft's statistics log, appended at the
@@ -535,9 +514,7 @@ pub fn announce_entry<R: tauri::Runtime>(
                 entry_id: entry.id.clone(),
                 seq: entry.seq,
                 source_kind: match entry.source {
-                    DraftHistorySource::Original => {
-                        crate::statistics::HistorySourceKind::Original
-                    }
+                    DraftHistorySource::Original => crate::statistics::HistorySourceKind::Original,
                     DraftHistorySource::ProposalAccepted { .. } => {
                         crate::statistics::HistorySourceKind::ProposalAccepted
                     }
@@ -660,11 +637,7 @@ fn stage_for_test(
     // staging that skipped it would not be the operation a crash interrupts.
     let original_id = held.is_empty().then(new_note_id);
     let base_seq = held.iter().map(|e| e.seq).max().unwrap_or(0);
-    let seq = if original_id.is_some() {
-        base_seq + 2
-    } else {
-        base_seq + 1
-    };
+    let seq = if original_id.is_some() { base_seq + 2 } else { base_seq + 1 };
     let journal = Journal {
         operation_id: new_note_id(),
         draft_id: draft_id.to_string(),
@@ -692,32 +665,35 @@ fn stage_for_test(
         write_entry(
             root,
             &hist,
-            id,
-            draft_id,
-            base_seq + 1,
-            &proposal.path,
-            DraftHistorySource::Original,
+            NewEntry {
+                entry_id: id,
+                draft_id,
+                seq: base_seq + 1,
+                path: &proposal.path,
+                source: DraftHistorySource::Original,
+            },
             prior.as_bytes(),
         )?;
     }
     write_entry(
         root,
         &hist,
-        &entry_id,
-        draft_id,
-        seq,
-        &proposal.path,
-        DraftHistorySource::ProposalAccepted {
-            proposal_id: proposal.id.clone(),
-            hunk_id: None,
-            agent: proposal.agent.clone(),
+        NewEntry {
+            entry_id: &entry_id,
+            draft_id,
+            seq,
+            path: &proposal.path,
+            source: DraftHistorySource::ProposalAccepted {
+                proposal_id: proposal.id.clone(),
+                hunk_id: None,
+                agent: proposal.agent.clone(),
+            },
         },
         normalised.as_bytes(),
     )?;
     drafts::save_prompt_at(root, &dir, draft_id, &proposal.path, &candidate.content)?;
     draft_proposals::set_decided(root, draft_id, &proposal.id, ProposalState::Accepted)?;
-    root.write_toml_atomic(hist.join(JOURNAL_FILE), &journal)
-        .map_err(|e| e.to_string())?;
+    root.write_toml_atomic(hist.join(JOURNAL_FILE), &journal).map_err(|e| e.to_string())?;
     Ok(journal)
 }
 

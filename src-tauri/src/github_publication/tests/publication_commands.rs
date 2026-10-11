@@ -31,7 +31,13 @@ impl Session {
     }
 
     fn publish(&self, choice: PublicationChoiceInput) -> Result<PublicationOutcome, String> {
-        gp::publish_draft_to_github_impl(&self.handle(), self.id.clone(), "origin".into(), false, choice)
+        gp::publish_draft_to_github_impl(
+            &self.handle(),
+            self.id.clone(),
+            "origin".into(),
+            false,
+            choice,
+        )
     }
 
     fn store(&self) -> PublicationStore {
@@ -62,7 +68,10 @@ fn session() -> Session {
     let n = SESSIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     app.manage(gp::TestSecret(format!("secret-{n}")));
     let handle = app.handle().clone();
-    handle.state::<crate::fs::FsAccessState>().install_for_worktree_and(&root, &store_root).unwrap();
+    handle
+        .state::<crate::fs::FsAccessState>()
+        .install_for_worktree_and(&root, &store_root)
+        .unwrap();
     let access = handle.state::<crate::fs::FsAccessState>().get().unwrap();
     let project_state = handle.state::<crate::project::ProjectState>();
     project_state.set_root_with_access(root.clone(), Some(access));
@@ -84,13 +93,20 @@ fn sub_of(parent: u64) -> PublicationChoiceInput {
 fn the_metadata_command_reads_and_mutates_nothing() {
     let s = session();
     let parent = s.fake.seed("Feature", Some((7, "v1.2")));
-    let metadata = gp::load_publication_metadata_impl(&s.handle(), s.id.clone(), "origin".into()).unwrap();
+    let metadata =
+        gp::load_publication_metadata_impl(&s.handle(), s.id.clone(), "origin".into()).unwrap();
 
-    assert_eq!((metadata.repository_owner.as_str(), metadata.repository_name.as_str()), ("acme", "widgets"));
+    assert_eq!(
+        (metadata.repository_owner.as_str(), metadata.repository_name.as_str()),
+        ("acme", "widgets")
+    );
     assert_eq!(metadata.settings, GithubPublicationSettings::default());
     assert_eq!(metadata.parents.items[0].number, parent);
     assert_eq!(metadata.sub_issue_type.resolved.as_deref(), Some("Task"));
-    assert!(s.fake.calls().iter().all(|c| !matches!(c, Call::Create(_) | Call::Update(_) | Call::Link(..) | Call::Unlink(..))));
+    assert!(s.fake.calls().iter().all(|c| !matches!(
+        c,
+        Call::Create(_) | Call::Update(_) | Call::Link(..) | Call::Unlink(..)
+    )));
     assert_eq!(s.store(), PublicationStore::default());
 }
 
@@ -110,7 +126,8 @@ fn the_metadata_command_keeps_the_existing_refusals() {
         Err(ERR_NO_REMOTE.to_string())
     );
     assert_eq!(
-        gp::load_publication_metadata_impl(&s.handle(), "missing".into(), "origin".into()).map(|_| ()),
+        gp::load_publication_metadata_impl(&s.handle(), "missing".into(), "origin".into())
+            .map(|_| ()),
         Err(ERR_DRAFT_NOT_FOUND.to_string())
     );
 }
@@ -123,12 +140,16 @@ fn a_root_publication_survives_every_failed_read() {
     *s.fake.types.lock().unwrap() = None;
     *s.fake.milestones.lock().unwrap() = None;
     *s.fake.parents_fail.lock().unwrap() = true;
-    let metadata = gp::load_publication_metadata_impl(&s.handle(), s.id.clone(), "origin".into()).unwrap();
+    let metadata =
+        gp::load_publication_metadata_impl(&s.handle(), s.id.clone(), "origin".into()).unwrap();
     assert_eq!(metadata.parents.state, MetadataState::Failed);
     assert_eq!(metadata.issue_types.state, MetadataState::Failed);
     assert_eq!(metadata.milestones.state, MetadataState::Failed);
 
-    assert!(matches!(s.publish(PublicationChoiceInput::default()), Ok(PublicationOutcome::Published { .. })));
+    assert!(matches!(
+        s.publish(PublicationChoiceInput::default()),
+        Ok(PublicationOutcome::Published { .. })
+    ));
 }
 
 /// GHP-FR-KVRH / GHP-FR-NQWX / PSS-FR-VCZM: the settings commands default,
@@ -161,8 +182,13 @@ fn the_settings_commands_persist_and_refuse() {
     assert_eq!(polling.interval_minutes, Some(15));
 
     assert_eq!(
-        gp::set_github_publication_settings_impl(&handle, vec![], "Task".into(), MilestonePolicy::default())
-            .map(|_| ()),
+        gp::set_github_publication_settings_impl(
+            &handle,
+            vec![],
+            "Task".into(),
+            MilestonePolicy::default()
+        )
+        .map(|_| ()),
         Err(ERR_INVALID_PUBLICATION_SETTINGS.to_string())
     );
     assert_eq!(get().unwrap(), saved, "a refused write changes nothing");
@@ -183,7 +209,10 @@ fn the_issue_type_command_reads_the_owners_types() {
 
     let bare = session();
     git2::Repository::open(bare.dir.path()).unwrap().remote_delete("origin").unwrap();
-    assert_eq!(gp::list_github_issue_types_impl(&bare.handle()).map(|_| ()), Err(ERR_NO_REMOTE.to_string()));
+    assert_eq!(
+        gp::list_github_issue_types_impl(&bare.handle()).map(|_| ()),
+        Err(ERR_NO_REMOTE.to_string())
+    );
 }
 
 /// GHP-FR-BWNI / GHP-FR-ATCH / GHP-FR-OHGY / GHP-FR-HSCH: a sub-issue goes
@@ -216,7 +245,13 @@ fn a_refused_choice_leaves_nothing_behind() {
     let closed = s.fake.seed("Feature", None);
     s.fake.edit(closed, |i| i.open = false);
     let handle = s.handle();
-    let result = gp::publish_draft_to_github_impl(&handle, s.id.clone(), "origin".into(), true, sub_of(closed));
+    let result = gp::publish_draft_to_github_impl(
+        &handle,
+        s.id.clone(),
+        "origin".into(),
+        true,
+        sub_of(closed),
+    );
 
     assert_eq!(result.map(|_| ()), Err(ERR_PARENT_ISSUE_UNAVAILABLE.to_string()));
     assert_eq!(s.store(), PublicationStore::default());
@@ -247,10 +282,17 @@ fn retry_and_a_new_attempt_keep_the_saved_choice() {
     )
     .unwrap();
     let retried = gp::retry_draft_publication_impl(&s.handle(), s.id.clone()).unwrap();
-    assert!(matches!(retried, PublicationOutcome::RecoveryRequired { ref mismatches, .. } if mismatches == &vec!["parent".to_string()]));
+    assert!(
+        matches!(retried, PublicationOutcome::RecoveryRequired { ref mismatches, .. } if mismatches == &vec!["parent".to_string()])
+    );
     assert_eq!(s.store().attempt.unwrap().choice, Some(saved.clone()));
 
-    let answered = gp::resolve_draft_publication_conflict_impl(&s.handle(), s.id.clone(), RecoveryChoice::PublishNew).unwrap();
+    let answered = gp::resolve_draft_publication_conflict_impl(
+        &s.handle(),
+        s.id.clone(),
+        RecoveryChoice::PublishNew,
+    )
+    .unwrap();
     let PublicationOutcome::Published { record } = answered else { panic!("published") };
     assert_ne!(record.marker, first.marker, "a new marker");
     assert_eq!(record.choice, Some(saved), "the same saved choice");
@@ -300,7 +342,10 @@ fn restart_recovery_retries_with_the_saved_choice() {
         app.manage(crate::github_tokens::GithubTokens::default());
         app.manage(gp::TestSecret("secret".into()));
         let handle = app.handle().clone();
-        handle.state::<crate::fs::FsAccessState>().install_for_worktree_and(&root, &store_root).unwrap();
+        handle
+            .state::<crate::fs::FsAccessState>()
+            .install_for_worktree_and(&root, &store_root)
+            .unwrap();
         let access = handle.state::<crate::fs::FsAccessState>().get().unwrap();
         let state = handle.state::<crate::project::ProjectState>();
         state.set_root_with_access(root.clone(), Some(access));
@@ -312,7 +357,9 @@ fn restart_recovery_retries_with_the_saved_choice() {
     let view = gp::get_draft_publication_impl(&handle, s.id.clone()).unwrap();
     assert_eq!(view.attempt.unwrap().choice.unwrap().parent_issue_number, Some(parent));
 
-    let PublicationOutcome::Published { record } = gp::retry_draft_publication_impl(&handle, s.id.clone()).unwrap() else {
+    let PublicationOutcome::Published { record } =
+        gp::retry_draft_publication_impl(&handle, s.id.clone()).unwrap()
+    else {
         panic!("published")
     };
     assert_eq!(s.fake.issue(record.issue_number).parent.unwrap().number, parent);
@@ -324,7 +371,9 @@ fn restart_recovery_retries_with_the_saved_choice() {
 #[test]
 fn a_default_root_publication_is_unchanged() {
     let s = session();
-    let PublicationOutcome::Published { record } = s.publish(PublicationChoiceInput::default()).unwrap() else {
+    let PublicationOutcome::Published { record } =
+        s.publish(PublicationChoiceInput::default()).unwrap()
+    else {
         panic!("published")
     };
     assert_eq!(record.issue_number, 1);

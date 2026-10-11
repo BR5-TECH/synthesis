@@ -106,11 +106,7 @@ pub fn skip_without_enforcement(test: &str, injection: Injection) -> bool {
     // skip into a failure that says so. Nothing sets it today, so this changes
     // no run — it exists so that a suite which must not lose the coverage can
     // say so in one place rather than in eight.
-    assert!(
-        std::env::var_os(REQUIRE_ENFORCEMENT).is_none(),
-        "{}",
-        skip_message(test, injection),
-    );
+    assert!(std::env::var_os(REQUIRE_ENFORCEMENT).is_none(), "{}", skip_message(test, injection),);
     eprintln!("{}", skip_message(test, injection));
     true
 }
@@ -218,10 +214,9 @@ mod tests {
     /// observable rather than hidden inside a `TempDir` the probe made itself.
     #[test]
     fn each_probe_removes_its_own_scratch_and_answers_the_same_way_twice() {
-        for (name, probe) in [
-            ("write", probe_write as fn(&Path) -> bool),
-            ("read", probe_read as fn(&Path) -> bool),
-        ] {
+        for (name, probe) in
+            [("write", probe_write as fn(&Path) -> bool), ("read", probe_read as fn(&Path) -> bool)]
+        {
             let dir = TempDir::new().unwrap();
             let first = probe(dir.path());
             assert_eq!(

@@ -61,8 +61,7 @@ fn a_refused_deletion_emits_nothing() {
     let stream = stream_ahead(&fx, "kept");
     let count = count_branches_changed(&fx);
 
-    let refusal =
-        delete_work_stream(fx.app.clone(), stream.id, false, false).expect_err("refused");
+    let refusal = delete_work_stream(fx.app.clone(), stream.id, false, false).expect_err("refused");
 
     assert!(refusal.starts_with(ERR_STREAM_UNMERGED), "{refusal}");
     assert_eq!(count.load(Ordering::SeqCst), 0);
@@ -150,4 +149,3 @@ fn the_announcement_names_the_primary_worktree_root() {
         crate::changes::canonicalize_lenient(&fx.root())
     );
 }
-

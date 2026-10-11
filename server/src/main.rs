@@ -66,10 +66,7 @@ fn main() -> ExitCode {
         }
     };
 
-    let runtime = match tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-    {
+    let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
         Ok(runtime) => runtime,
         Err(error) => {
             eprintln!("{PROGRAM}: the asynchronous runtime did not start: {error}");
@@ -321,9 +318,6 @@ mod tests {
     #[test]
     fn the_early_stop_diagnostic_explains_the_cause() {
         let message = stopped_early_message(Ok(Ok(())));
-        assert!(
-            message.contains("stopped accepting connections"),
-            "{message}"
-        );
+        assert!(message.contains("stopped accepting connections"), "{message}");
     }
 }

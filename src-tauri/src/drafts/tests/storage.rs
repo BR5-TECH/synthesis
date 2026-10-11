@@ -17,10 +17,7 @@ fn ts30_a_drafts_storage_is_resolved_wherever_it_is_filed_and_travels_with_it() 
     create_drafts_folder_impl(root, "", "UI").unwrap();
     create_drafts_folder_impl(root, "UI", "Components").unwrap();
     create_drafts_folder_impl(root, "", "backend").unwrap();
-    let id = create_draft_impl(root, Some("spec"), Some("UI/Components"))
-        .unwrap()
-        .draft
-        .id;
+    let id = create_draft_impl(root, Some("spec"), Some("UI/Components")).unwrap().draft.id;
 
     let filed = root.join(".synthesis/drafts/UI/Components").join(&id);
     assert_eq!(draft_dir(root, &id).unwrap(), filed);
@@ -46,8 +43,7 @@ fn ts30_a_drafts_storage_is_resolved_wherever_it_is_filed_and_travels_with_it() 
     let moved = root.join(".synthesis/drafts/backend").join(&id);
     assert_eq!(draft_dir(root, &id).unwrap(), moved);
     assert_eq!(
-        std::fs::read_to_string(draft_proposals_dir(root, &id).unwrap().join("log.jsonl"))
-            .unwrap(),
+        std::fs::read_to_string(draft_proposals_dir(root, &id).unwrap().join("log.jsonl")).unwrap(),
         "{\"a\":1}\n",
         "the review travelled with the draft byte-for-byte",
     );
@@ -76,12 +72,7 @@ fn ts31_misplaced_draft_storage_is_reunited_with_its_draft_by_the_walk() {
     let (dir, id) = project_with_filed_draft();
     let root = &crate::fs::RootFs::for_root(dir.path());
     let before = read_record(root, &id).unwrap();
-    let husk = husk_with_log(
-        root,
-        &id,
-        "p.toml",
-        "{\"e\":1}\n",
-    );
+    let husk = husk_with_log(root, &id, "p.toml", "{\"e\":1}\n");
 
     // Before the repair, the husk and its `comments/` read as the author's —
     // and the plain list is a read that leaves them exactly there.
@@ -98,10 +89,7 @@ fn ts31_misplaced_draft_storage_is_reunited_with_its_draft_by_the_walk() {
     );
     assert!(!husk.exists(), "and gone from disk");
     assert_eq!(
-        std::fs::read_to_string(
-            draft_proposals_dir(root, &id).unwrap().join("p.toml")
-        )
-        .unwrap(),
+        std::fs::read_to_string(draft_proposals_dir(root, &id).unwrap().join("p.toml")).unwrap(),
         "{\"e\":1}\n",
         "the discussion rejoined the draft it belongs to",
     );
@@ -132,11 +120,8 @@ fn ts31_a_log_in_both_places_concatenates_and_a_duplicated_line_folds_once() {
     // is the storage folder a husk written by that build holds.
     let own = draft_dir(root, &id).unwrap().join("comments");
     std::fs::create_dir_all(&own).unwrap();
-    std::fs::write(
-        own.join("discussion.jsonl"),
-        format!("{{\"eventId\":\"a\"}}\n{shared}\n"),
-    )
-    .unwrap();
+    std::fs::write(own.join("discussion.jsonl"), format!("{{\"eventId\":\"a\"}}\n{shared}\n"))
+        .unwrap();
     let husk = root.join(DRAFTS_REL).join(&id);
     std::fs::create_dir_all(husk.join("comments")).unwrap();
     std::fs::write(
@@ -170,25 +155,16 @@ fn ts31_a_legacy_review_husk_is_reunited_so_the_import_pass_can_find_it() {
     let root = &crate::fs::RootFs::for_root(dir.path());
     let husk = root.join(DRAFTS_REL).join(&id);
     std::fs::create_dir_all(husk.join("comments")).unwrap();
-    std::fs::write(
-        husk.join("comments").join("discussion.jsonl"),
-        "{\"eventId\":\"legacy\"}\n",
-    )
-    .unwrap();
+    std::fs::write(husk.join("comments").join("discussion.jsonl"), "{\"eventId\":\"legacy\"}\n")
+        .unwrap();
 
     let (_, repaired) = list_drafts_reporting(root);
 
     assert_eq!(repaired, vec![id.clone()]);
     assert!(!husk.exists(), "the husk is gone from disk");
     // Inside the draft, which is where `draft_locations` takes the import pass.
-    let reunited = draft_dir(root, &id)
-        .unwrap()
-        .join("comments")
-        .join("discussion.jsonl");
-    assert_eq!(
-        std::fs::read_to_string(&reunited).unwrap(),
-        "{\"eventId\":\"legacy\"}\n",
-    );
+    let reunited = draft_dir(root, &id).unwrap().join("comments").join("discussion.jsonl");
+    assert_eq!(std::fs::read_to_string(&reunited).unwrap(), "{\"eventId\":\"legacy\"}\n",);
 }
 
 #[test]
@@ -204,11 +180,8 @@ fn ts31_an_attachment_present_in_both_places_is_one_file_and_the_husks_copy_goes
 
     let husk = root.join(DRAFTS_REL).join(&id);
     std::fs::create_dir_all(husk.join(PROPOSALS_DIR).join("attachments")).unwrap();
-    std::fs::write(
-        husk.join(PROPOSALS_DIR).join("attachments").join("deadbeef"),
-        b"same-bytes",
-    )
-    .unwrap();
+    std::fs::write(husk.join(PROPOSALS_DIR).join("attachments").join("deadbeef"), b"same-bytes")
+        .unwrap();
 
     let (_, repaired) = list_drafts_reporting(root);
 
@@ -299,10 +272,7 @@ fn ts31_a_proposals_husk_is_reunited_like_a_comments_one() {
     assert_eq!(repaired, vec![id.clone()]);
     assert!(!husk.exists());
     let landed = draft_proposals_dir(root, &id).unwrap();
-    assert_eq!(
-        std::fs::read_to_string(landed.join("p1.content")).unwrap(),
-        "proposed\n",
-    );
+    assert_eq!(std::fs::read_to_string(landed.join("p1.content")).unwrap(), "proposed\n",);
     assert!(landed.join("p1.toml").is_file());
 }
 
@@ -313,22 +283,14 @@ fn ts31_a_husk_is_reunited_from_wherever_under_the_root_it_sits() {
     let (dir, id) = project_with_filed_draft();
     let root = &crate::fs::RootFs::for_root(dir.path());
     create_drafts_folder_impl(root, "", "backend").unwrap();
-    let nested = husk_with_log(
-        root,
-        &format!("backend/{id}"),
-        "p.toml",
-        "{\"e\":\"nested\"}\n",
-    );
+    let nested = husk_with_log(root, &format!("backend/{id}"), "p.toml", "{\"e\":\"nested\"}\n");
 
     let (hierarchy, repaired) = list_drafts_reporting(root);
 
     assert_eq!(repaired, vec![id.clone()]);
     assert!(!nested.exists());
     assert_eq!(
-        std::fs::read_to_string(
-            draft_proposals_dir(root, &id).unwrap().join("p.toml")
-        )
-        .unwrap(),
+        std::fs::read_to_string(draft_proposals_dir(root, &id).unwrap().join("p.toml")).unwrap(),
         "{\"e\":\"nested\"}\n",
     );
     assert!(
@@ -365,17 +327,10 @@ fn ts31_a_nested_subtree_in_a_husk_arrives_whole() {
 
     let husk = root.join(DRAFTS_REL).join(&id);
     std::fs::create_dir_all(husk.join(PROPOSALS_DIR).join("attachments")).unwrap();
-    std::fs::write(
-        husk.join(PROPOSALS_DIR).join("attachments").join("incoming"),
-        b"theirs",
-    )
-    .unwrap();
+    std::fs::write(husk.join(PROPOSALS_DIR).join("attachments").join("incoming"), b"theirs")
+        .unwrap();
     std::fs::create_dir_all(husk.join(PROPOSALS_DIR).join("fresh").join("deep")).unwrap();
-    std::fs::write(
-        husk.join(PROPOSALS_DIR).join("fresh").join("deep").join("f"),
-        b"x",
-    )
-    .unwrap();
+    std::fs::write(husk.join(PROPOSALS_DIR).join("fresh").join("deep").join("f"), b"x").unwrap();
 
     list_drafts_reporting(root);
 
@@ -398,12 +353,7 @@ fn ts31_a_husk_rejoins_an_archived_draft_without_touching_its_status() {
     let (dir, id) = project_with_filed_draft();
     let root = &crate::fs::RootFs::for_root(dir.path());
     set_draft_status_impl(root, &id, DraftStatus::Archived).unwrap();
-    let husk = husk_with_log(
-        root,
-        &id,
-        "p.toml",
-        "{\"e\":1}\n",
-    );
+    let husk = husk_with_log(root, &id, "p.toml", "{\"e\":1}\n");
 
     let (hierarchy, repaired) = list_drafts_reporting(root);
 
@@ -420,22 +370,14 @@ fn ts31_a_husk_rejoins_a_draft_whose_record_is_unreadable() {
     let (dir, id) = project_with_filed_draft();
     let root = &crate::fs::RootFs::for_root(dir.path());
     std::fs::write(draft_dir(root, &id).unwrap().join(RECORD_FILE), "not toml {{").unwrap();
-    let husk = husk_with_log(
-        root,
-        &id,
-        "p.toml",
-        "{\"e\":1}\n",
-    );
+    let husk = husk_with_log(root, &id, "p.toml", "{\"e\":1}\n");
 
     let (hierarchy, repaired) = list_drafts_reporting(root);
 
     assert_eq!(repaired, vec![id.clone()]);
     assert!(!husk.exists());
     assert_eq!(hierarchy.drafts.len(), 1, "the damaged draft is still reported");
-    assert!(draft_proposals_dir(root, &id)
-        .unwrap()
-        .join("p.toml")
-        .is_file());
+    assert!(draft_proposals_dir(root, &id).unwrap().join("p.toml").is_file());
 }
 
 #[test]

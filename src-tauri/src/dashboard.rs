@@ -89,10 +89,7 @@ impl DashboardWidget {
     /// events are emitted by the watchers that observe it (PST-FR-35) — a timer
     /// tick reads neither and must dispatch neither.
     fn is_timer_driven(self) -> bool {
-        matches!(
-            self,
-            DashboardWidget::AgentActivity | DashboardWidget::PendingGit
-        )
+        matches!(self, DashboardWidget::AgentActivity | DashboardWidget::PendingGit)
     }
 
     /// The name a log record and the failure payload carry.
@@ -320,6 +317,10 @@ fn recently_edited_impl<R: tauri::Runtime>(
     recently_edited_from(readings)
 }
 
+/// One artifact that answered a stat: its id, its path, its kind, and its
+/// modification time.
+type ArtifactReading = (String, String, ArtifactKind, SystemTime);
+
 /// PST-FR-31 (pure): stat every enumerated artifact, keeping the ones the
 /// filesystem can describe and naming the ones it cannot.
 ///
@@ -328,16 +329,17 @@ fn recently_edited_impl<R: tauri::Runtime>(
 /// cannot describe never fails the widget. The omissions are returned rather
 /// than logged here so that the rule and its reporting are testable without a
 /// filesystem that can be made to refuse a stat on demand.
-#[allow(clippy::type_complexity)]
 fn stat_artifacts(
     nodes: Vec<(String, String, scanning::ArtifactType)>,
     stat: impl Fn(&str) -> Option<SystemTime>,
-) -> (Vec<(String, String, ArtifactKind, SystemTime)>, Vec<String>) {
+) -> (Vec<ArtifactReading>, Vec<String>) {
     let mut readings = Vec::with_capacity(nodes.len());
     let mut omitted = Vec::new();
     for (id, name, artifact_type) in nodes {
         match stat(&id) {
-            Some(modified) => readings.push((id, name, ArtifactKind::from(artifact_type), modified)),
+            Some(modified) => {
+                readings.push((id, name, ArtifactKind::from(artifact_type), modified))
+            }
             None => omitted.push(id),
         }
     }
@@ -393,9 +395,7 @@ fn active_drafts_from(drafts: Vec<DraftSummary>) -> Vec<ActiveDraftItem> {
     // Descending by prompt activity, the draft id ascending as the tie-break, so
     // two prompts written in the same millisecond order the same way every call.
     items.sort_by(|a, b| {
-        b.activity_at
-            .cmp(&a.activity_at)
-            .then_with(|| a.draft_id.cmp(&b.draft_id))
+        b.activity_at.cmp(&a.activity_at).then_with(|| a.draft_id.cmp(&b.draft_id))
     });
     items.truncate(DASHBOARD_ITEM_CAP);
     items
@@ -471,11 +471,7 @@ fn agent_runs_from(
             updated_at: run.updated_at.clone(),
         })
         .collect();
-    items.sort_by(|a, b| {
-        b.updated_at
-            .cmp(&a.updated_at)
-            .then_with(|| a.run_id.cmp(&b.run_id))
-    });
+    items.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then_with(|| a.run_id.cmp(&b.run_id)));
     items.truncate(DASHBOARD_ITEM_CAP);
     items
 }
@@ -503,9 +499,8 @@ fn agent_runs_impl<R: tauri::Runtime>(
             // captured, so a draft renamed since the run started is named as it
             // now stands. A run whose draft no longer resolves keeps its
             // `draft_id` and no name.
-            item.draft_name = crate::drafts::draft_record(&root, &item.draft_id)
-                .ok()
-                .map(|record| record.name);
+            item.draft_name =
+                crate::drafts::draft_record(&root, &item.draft_id).ok().map(|record| record.name);
         }
     }
     Ok(items)
@@ -726,9 +721,7 @@ struct RootIdentity {
 /// `try_state`, not `state`: this runs on a background thread, where a panic
 /// surfaces as a silently dead timer rather than as a failure anyone sees.
 fn current_identity<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> RootIdentity {
-    app.try_state::<ProjectState>()
-        .map(|project| identity_of(&project))
-        .unwrap_or_default()
+    app.try_state::<ProjectState>().map(|project| identity_of(&project)).unwrap_or_default()
 }
 
 impl RootIdentity {
@@ -742,10 +735,7 @@ impl RootIdentity {
 fn identity_of(project: &ProjectState) -> RootIdentity {
     RootIdentity {
         project_key: project.slot_key(),
-        worktree: project
-            .root()
-            .map(|p| p.to_string_lossy().into_owned())
-            .unwrap_or_default(),
+        worktree: project.root().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(),
     }
 }
 
@@ -829,12 +819,9 @@ fn run_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>, widget: DashboardWi
         // process — never refreshed again, with nothing said about it. Catching
         // it here turns that into an ordinary failed refresh: the widget's
         // error state, one ERROR record, and the next tick trying again.
-        let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            read_for(&app, widget)
-        }));
-        let outcome = read.unwrap_or_else(|_| {
-            Err("the widget's reader panicked".to_string())
-        });
+        let read =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| read_for(&app, widget)));
+        let outcome = read.unwrap_or_else(|_| Err("the widget's reader panicked".to_string()));
         settle_refresh(&app, widget, seq, &dispatched_for, outcome);
     });
 }
@@ -844,29 +831,25 @@ fn read_for<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     widget: DashboardWidget,
 ) -> Result<(), String> {
-    #[allow(clippy::let_and_return)]
-    {
-        let outcome: Result<(), String> = match widget {
-            DashboardWidget::AgentActivity => match app.try_state::<ProjectState>() {
-                Some(project) => agent_runs_impl(&app, &project).map(|_| ()),
+    match widget {
+        DashboardWidget::AgentActivity => match app.try_state::<ProjectState>() {
+            Some(project) => agent_runs_impl(app, &project).map(|_| ()),
+            None => Ok(()),
+        },
+        DashboardWidget::PendingGit => {
+            match app.try_state::<ProjectState>().and_then(|p| p.require_root().ok()) {
+                Some(root) => pending_git_impl(&root).map(|_| ()),
+                // The project closed while the refresh was queued. Not a
+                // failure: the result is discarded below on identity.
                 None => Ok(()),
-            },
-            DashboardWidget::PendingGit => {
-                match app.try_state::<ProjectState>().and_then(|p| p.require_root().ok()) {
-                    Some(root) => pending_git_impl(&root).map(|_| ()),
-                    // The project closed while the refresh was queued. Not a
-                    // failure: the result is discarded below on identity.
-                    None => Ok(()),
-                }
             }
-            // Unreachable: `dispatch_refresh` refuses a widget the timer does
-            // not drive, so nothing reaches here without a read to perform.
-            DashboardWidget::RecentlyEdited | DashboardWidget::ActiveDrafts => {
-                debug_assert!(false, "a filesystem-driven widget was dispatched");
-                Err("this widget is refreshed by the filesystem, not by the timer".to_string())
-            }
-        };
-        outcome
+        }
+        // Unreachable: `dispatch_refresh` refuses a widget the timer does
+        // not drive, so nothing reaches here without a read to perform.
+        DashboardWidget::RecentlyEdited | DashboardWidget::ActiveDrafts => {
+            debug_assert!(false, "a filesystem-driven widget was dispatched");
+            Err("this widget is refreshed by the filesystem, not by the timer".to_string())
+        }
     }
 }
 

@@ -183,7 +183,11 @@ fn instant(time: &str) -> Option<i64> {
         sign => {
             let (h, m) = zone[1..].split_once(':')?;
             let seconds = h.parse::<i64>().ok()? * 3600 + m.parse::<i64>().ok()? * 60;
-            if *sign == b'-' { -seconds } else { seconds }
+            if *sign == b'-' {
+                -seconds
+            } else {
+                seconds
+            }
         }
     };
     // Days from the civil date (proleptic Gregorian).

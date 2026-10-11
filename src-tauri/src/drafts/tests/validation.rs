@@ -17,10 +17,7 @@ fn saving_a_file_restamps_the_draft_so_the_panel_orders_by_real_activity() {
 
     save_draft_file_impl(root, &id, FIRST_FILE, "typed").unwrap();
 
-    assert!(
-        read_record(root, &id).unwrap().updated_at > before,
-        "a write must restamp the draft"
-    );
+    assert!(read_record(root, &id).unwrap().updated_at > before, "a write must restamp the draft");
 }
 
 #[test]

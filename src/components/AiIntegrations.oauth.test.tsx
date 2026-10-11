@@ -14,6 +14,8 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { resetLogBufferForTest } from "../logging";
+
 import {
   AgenticAiIntegrations,
   canVerifyAgentic,
@@ -21,6 +23,7 @@ import {
   rendersOauthTokenField,
   type AgenticDraft,
 } from "./AiIntegrations";
+import { emptyDraft } from "./agenticDraft";
 import { type AgenticVendorId, AI_ERRORS, isValidClaudeOauthToken } from "../types";
 import {
   AGENTIC_ALL,
@@ -46,6 +49,9 @@ const argsOf = argsOfFor(invokeMock);
 
 beforeEach(() => {
   invokeMock.mockReset();
+  // AII-FR-OTQY logs when a read-only tab opens. The flush timer must not
+  // go to the next test.
+  resetLogBufferForTest();
 });
 
 afterEach(cleanup);
@@ -407,10 +413,7 @@ describe("the Claude Code OAuth token field", () => {
 
 describe("the OAuth token rules", () => {
   const draft = (over: Partial<AgenticDraft> = {}): AgenticDraft => ({
-    path: "",
-    baseUrl: "",
-    apiKey: "",
-    oauthToken: "",
+    ...emptyDraft(),
     ...over,
   });
 

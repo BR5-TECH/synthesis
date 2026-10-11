@@ -21,10 +21,9 @@ use super::{FileRef, IndexId, SourceFile, MAX_FILE_BYTES};
 /// carries on. An unavailable document, and one that left the collection, is not
 /// listed at all, so a pass removes its chunks (BMI-FR-MWNQ).
 pub(super) fn collect_documents<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Vec<SourceFile> {
-    let (Some(collection), Some(fs)) = (
-        app.try_state::<DocumentsCollection>(),
-        app.try_state::<FsAccessState>(),
-    ) else {
+    let (Some(collection), Some(fs)) =
+        (app.try_state::<DocumentsCollection>(), app.try_state::<FsAccessState>())
+    else {
         return Vec::new();
     };
     // DCL-FR-MSHW: with no project open or an unreadable store the collection
@@ -71,10 +70,7 @@ pub(super) fn chunk_plain_text(text: &str) -> Vec<String> {
     } else {
         text
     };
-    super::bound_to_blocks(text)
-        .into_iter()
-        .filter(|block| !block.trim().is_empty())
-        .collect()
+    super::bound_to_blocks(text).into_iter().filter(|block| !block.trim().is_empty()).collect()
 }
 
 #[cfg(test)]

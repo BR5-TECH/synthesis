@@ -144,10 +144,7 @@ pub fn find_nearest(haystack: &str, needle: &str, hint: usize) -> Option<usize> 
     if needle.is_empty() {
         return None;
     }
-    haystack
-        .match_indices(needle)
-        .map(|(at, _)| at)
-        .min_by_key(|at| at.abs_diff(hint))
+    haystack.match_indices(needle).map(|(at, _)| at).min_by_key(|at| at.abs_diff(hint))
 }
 
 fn abuts_lead(text: &str, start: usize, lead: &str) -> bool {
@@ -292,12 +289,7 @@ mod tests {
     use super::*;
 
     fn anchor(lead: &str, trail: &str, hint_start: usize, hint_end: usize) -> HunkAnchor {
-        HunkAnchor {
-            lead: lead.to_string(),
-            trail: trail.to_string(),
-            hint_start,
-            hint_end,
-        }
+        HunkAnchor { lead: lead.to_string(), trail: trail.to_string(), hint_start, hint_end }
     }
 
     // DCP-FR-VZTK: the hint still holds the text, so one slice answers.
@@ -368,10 +360,7 @@ mod tests {
     fn an_insertion_lands_between_its_context() {
         let text = "one\ntwo\n";
         let a = anchor("one\n", "two\n", 4, 4);
-        assert_eq!(
-            resolve(text, HunkKind::Add, "", &a),
-            Resolution::Resolved { start: 4, end: 4 }
-        );
+        assert_eq!(resolve(text, HunkKind::Add, "", &a), Resolution::Resolved { start: 4, end: 4 });
     }
 
     // DCP-FR-VZTK: an insertion whose trailing context has gone still lands after its lead.
@@ -379,10 +368,7 @@ mod tests {
     fn an_insertion_falls_back_to_its_lead_alone() {
         let text = "one\nrewritten\n";
         let a = anchor("one\n", "two\n", 4, 4);
-        assert_eq!(
-            resolve(text, HunkKind::Add, "", &a),
-            Resolution::Resolved { start: 4, end: 4 }
-        );
+        assert_eq!(resolve(text, HunkKind::Add, "", &a), Resolution::Resolved { start: 4, end: 4 });
     }
 
     // DCP-FR-VZTK: both texts are newline-normalised before anything is compared.

@@ -18,11 +18,8 @@ fn ts10_grouping_splits_artifacts_entities_and_plain_files() {
     write(root, "workflows/review.flow", "{\"needle\":1}\n");
 
     let (sink, _) = search(root, "needle", SearchMode::LiteralInsensitive, SearchScope::Full);
-    let by_path: std::collections::HashMap<String, SearchHit> = sink
-        .hits()
-        .into_iter()
-        .map(|h| (h.path.clone(), h))
-        .collect();
+    let by_path: std::collections::HashMap<String, SearchHit> =
+        sink.hits().into_iter().map(|h| (h.path.clone(), h)).collect();
 
     let skill = &by_path[".claude/skills/foo.md"];
     assert_eq!(skill.group, SearchGroup::Artifact);
@@ -55,10 +52,7 @@ fn ts11_an_entity_directory_outranks_artifact_classification() {
         group_for(".synthesis/workstreams/w.md", Some(ArtifactType::Skill)),
         SearchGroup::Workstream
     );
-    assert_eq!(
-        group_for(".synthesis/roles/r.md", Some(ArtifactType::Agent)),
-        SearchGroup::Role
-    );
+    assert_eq!(group_for(".synthesis/roles/r.md", Some(ArtifactType::Agent)), SearchGroup::Role);
     // A `.synthesis/` path that is NOT one of the three entity directories
     // falls through to ordinary classification.
     assert_eq!(group_for(".synthesis/notes/x.md", None), SearchGroup::File);
@@ -77,9 +71,6 @@ fn ts12_the_run_and_history_groups_are_never_populated() {
     let (sink, _) = search(root, "needle", SearchMode::LiteralInsensitive, SearchScope::Full);
     assert!(!sink.hits().is_empty(), "precondition: something matched");
     for hit in sink.hits() {
-        assert!(
-            !matches!(hit.group, SearchGroup::Run | SearchGroup::History),
-            "{hit:?}"
-        );
+        assert!(!matches!(hit.group, SearchGroup::Run | SearchGroup::History), "{hit:?}");
     }
 }

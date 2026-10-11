@@ -35,12 +35,7 @@ fn native_refusals() -> &'static std::sync::Mutex<std::collections::HashMap<Stri
 }
 
 pub(super) fn native_entries_refused_by(model: &str) -> usize {
-    native_refusals()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get(model)
-        .copied()
-        .unwrap_or(0)
+    native_refusals().lock().unwrap_or_else(|e| e.into_inner()).get(model).copied().unwrap_or(0)
 }
 
 pub(super) fn remember_native_entries_refused(model: &str, dropped: usize) {
@@ -67,11 +62,7 @@ fn upstream_affinity() -> &'static std::sync::Mutex<std::collections::HashMap<St
 /// CVL-FR-40: the upstream to ask for, or `None` before anything is known of
 /// this model.
 pub(super) fn upstream_for(model: &str) -> Option<String> {
-    upstream_affinity()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get(model)
-        .cloned()
+    upstream_affinity().lock().unwrap_or_else(|e| e.into_inner()).get(model).cloned()
 }
 
 /// CVL-FR-40: remember where a call was actually served.
@@ -93,8 +84,5 @@ pub(super) fn remember_upstream(model: &str, upstream: &str) {
 /// the pin of a test that runs at the same time.
 #[cfg(test)]
 pub(crate) fn forget_upstream(model: &str) {
-    upstream_affinity()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .remove(model);
+    upstream_affinity().lock().unwrap_or_else(|e| e.into_inner()).remove(model);
 }

@@ -60,11 +60,8 @@ pub struct Envelope {
 impl Envelope {
     /// A required string member of the body (WSK-FR-QOZF).
     pub fn text(&self, name: &str) -> Result<String, ReasonCode> {
-        let value = self
-            .body
-            .get(name)
-            .and_then(Value::as_str)
-            .ok_or(ReasonCode::InvalidFrameShape)?;
+        let value =
+            self.body.get(name).and_then(Value::as_str).ok_or(ReasonCode::InvalidFrameShape)?;
         if value.is_empty() || value.chars().count() > MAX_FIELD_CHARS {
             return Err(ReasonCode::InvalidFrameShape);
         }
@@ -85,11 +82,8 @@ impl Envelope {
     /// The relay checks the alphabet alone. It does not decode the payload, and
     /// it never reads what the payload holds.
     pub fn payload(&self, name: &str) -> Result<String, ReasonCode> {
-        let value = self
-            .body
-            .get(name)
-            .and_then(Value::as_str)
-            .ok_or(ReasonCode::InvalidFrameShape)?;
+        let value =
+            self.body.get(name).and_then(Value::as_str).ok_or(ReasonCode::InvalidFrameShape)?;
         if !is_unpadded_base64url(value) {
             return Err(ReasonCode::InvalidFrameShape);
         }
@@ -146,35 +140,24 @@ impl Envelope {
         let mut projects: Vec<ExposedProject> = Vec::with_capacity(items.len());
         for item in items {
             let object = item.as_object().ok_or(ReasonCode::InvalidFrameShape)?;
-            if object
-                .keys()
-                .any(|key| key != "project_id" && key != "display_name")
-            {
+            if object.keys().any(|key| key != "project_id" && key != "display_name") {
                 return Err(ReasonCode::InvalidFrameShape);
             }
             let project_id = bounded_text(object.get("project_id"))?;
             let display_name = bounded_text(object.get("display_name"))?;
             // RSN-FR-XNUH: two descriptors with one identifier are refused, and
             // the exposed set does not change.
-            if projects
-                .iter()
-                .any(|project| project.project_id == project_id)
-            {
+            if projects.iter().any(|project| project.project_id == project_id) {
                 return Err(ReasonCode::InvalidFrameShape);
             }
-            projects.push(ExposedProject {
-                project_id,
-                display_name,
-            });
+            projects.push(ExposedProject { project_id, display_name });
         }
         Ok(projects)
     }
 }
 
 fn bounded_text(value: Option<&Value>) -> Result<String, ReasonCode> {
-    let text = value
-        .and_then(Value::as_str)
-        .ok_or(ReasonCode::InvalidFrameShape)?;
+    let text = value.and_then(Value::as_str).ok_or(ReasonCode::InvalidFrameShape)?;
     if text.is_empty() || text.chars().count() > MAX_FIELD_CHARS {
         return Err(ReasonCode::InvalidFrameShape);
     }
@@ -185,9 +168,7 @@ fn bounded_text(value: Option<&Value>) -> Result<String, ReasonCode> {
 fn is_unpadded_base64url(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= MAX_FRAME_BYTES
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
 }
 
 /// Reads one frame of the endpoint's protocol.
@@ -206,19 +187,14 @@ pub fn parse(text: &str, endpoint: Protocol) -> Result<Envelope, ReasonCode> {
     let object = value.as_object().ok_or(ReasonCode::InvalidFrameShape)?;
 
     // WSK-FR-VQPH: a member the envelope does not define is refused.
-    if object
-        .keys()
-        .any(|key| !ENVELOPE_MEMBERS.contains(&key.as_str()))
-    {
+    if object.keys().any(|key| !ENVELOPE_MEMBERS.contains(&key.as_str())) {
         return Err(ReasonCode::InvalidFrameShape);
     }
 
     // WSK-FR-CLYA, WSK-FR-ZWOE: the protocol must equal the endpoint's own, so
     // a frame of one protocol is never read as a frame of another.
-    let protocol = object
-        .get("protocol")
-        .and_then(Value::as_str)
-        .ok_or(ReasonCode::InvalidFrameShape)?;
+    let protocol =
+        object.get("protocol").and_then(Value::as_str).ok_or(ReasonCode::InvalidFrameShape)?;
     if protocol != endpoint.as_str() {
         return Err(ReasonCode::ProtocolMismatch);
     }
@@ -265,12 +241,7 @@ pub fn parse(text: &str, endpoint: Protocol) -> Result<Envelope, ReasonCode> {
         .cloned()
         .ok_or(ReasonCode::InvalidFrameShape)?;
 
-    Ok(Envelope {
-        protocol: endpoint,
-        frame_type,
-        request_id,
-        body,
-    })
+    Ok(Envelope { protocol: endpoint, frame_type, request_id, body })
 }
 
 /// Builds one outbound frame (WSK-FR-SYNB).
@@ -296,15 +267,7 @@ pub fn frame(
 
 /// The failure frame of the worker and the client endpoints (WSK-FR-NQXD).
 pub fn relay_failure(protocol: Protocol, reason: ReasonCode, request_id: Option<&str>) -> String {
-    let frame_type = if protocol == Protocol::Registration {
-        "registration_failed"
-    } else {
-        "relay_failure"
-    };
-    frame(
-        protocol,
-        frame_type,
-        request_id,
-        serde_json::json!({ "reason": reason.as_str() }),
-    )
+    let frame_type =
+        if protocol == Protocol::Registration { "registration_failed" } else { "relay_failure" };
+    frame(protocol, frame_type, request_id, serde_json::json!({ "reason": reason.as_str() }))
 }

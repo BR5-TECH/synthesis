@@ -30,12 +30,7 @@ pub(super) fn sanitize_segment(branch: &str) -> String {
 /// or is only separators, so the caller can fall back rather than propose a
 /// name ending in one.
 pub(super) fn branch_leaf(branch: &str) -> &str {
-    branch
-        .split('/')
-        .map(str::trim)
-        .filter(|segment| !segment.is_empty())
-        .next_back()
-        .unwrap_or("")
+    branch.split('/').map(str::trim).rfind(|segment| !segment.is_empty()).unwrap_or("")
 }
 
 /// WTC-FR-13: an absolute sibling of the repository's primary worktree, named
@@ -46,11 +41,7 @@ pub fn propose_path_for(active_root: &Path, branch: &str) -> Result<String, Stri
     let primary = primary_worktree_root(&repo).ok_or_else(|| ERR_NOT_A_REPO.to_string())?;
     let base = project::basename(&primary.to_string_lossy());
     let suffix = sanitize_segment(branch_leaf(branch));
-    let name = if suffix.is_empty() {
-        base
-    } else {
-        format!("{base}-{suffix}")
-    };
+    let name = if suffix.is_empty() { base } else { format!("{base}-{suffix}") };
     // A primary worktree at the filesystem root has no parent; siblings of
     // `/` are its own children, and the result stays absolute either way.
     let parent = primary.parent().unwrap_or(primary.as_path());
@@ -71,11 +62,7 @@ impl CreateSeam for NoCreateSeam {}
 /// WTC-FR-14 / WTC-FR-15: create a worktree at `path` with `branch` checked
 /// out, creating `branch` from the active worktree's `HEAD` when no branch of
 /// that name exists. Returns the canonical path of the new worktree.
-pub fn create_worktree_at(
-    active_root: &Path,
-    branch: &str,
-    path: &str,
-) -> Result<PathBuf, String> {
+pub fn create_worktree_at(active_root: &Path, branch: &str, path: &str) -> Result<PathBuf, String> {
     create_worktree_seamed(active_root, branch, path, &NoCreateSeam)
 }
 
@@ -95,10 +82,7 @@ pub(super) fn create_worktree_seamed(
         return Err(ERR_WORKTREE_PATH_EXISTS.to_string());
     }
     // A branch that already has a worktree cannot get a second one.
-    if worktree_entries(&repo)?
-        .iter()
-        .any(|w| w.branch.as_deref() == Some(branch))
-    {
+    if worktree_entries(&repo)?.iter().any(|w| w.branch.as_deref() == Some(branch)) {
         return Err(ERR_BRANCH_ALREADY_CHECKED_OUT.to_string());
     }
 
@@ -113,11 +97,9 @@ pub(super) fn create_worktree_seamed(
             .head()
             .and_then(|h| h.peel_to_commit())
             .map_err(|e| format!("failed to resolve HEAD: {e}"))?;
-        let head = main
-            .find_commit(head.id())
-            .map_err(|e| format!("failed to resolve HEAD: {e}"))?;
-        main.branch(branch, &head, false)
-            .map_err(|e| format!("failed to create branch: {e}"))?;
+        let head =
+            main.find_commit(head.id()).map_err(|e| format!("failed to resolve HEAD: {e}"))?;
+        main.branch(branch, &head, false).map_err(|e| format!("failed to create branch: {e}"))?;
         created_branch = true;
     }
 

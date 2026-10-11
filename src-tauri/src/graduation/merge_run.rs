@@ -215,14 +215,7 @@ pub(crate) fn log_merge_boundary<R: tauri::Runtime>(
         fields.insert("paths".to_string(), serde_json::json!(paths as u64));
     }
     fields.extend(record.extra);
-    crate::logging::log(
-        app,
-        &BUFFER,
-        record.level,
-        record.domains,
-        record.message,
-        fields,
-    );
+    crate::logging::log(app, &BUFFER, record.level, record.domains, record.message, fields);
 }
 
 /// GRD-FR-PFMD / GRD-FR-KZPT: remove everything an **ended** merge run owns.
@@ -235,10 +228,7 @@ pub fn reclaim_ended_merge_run<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run
     if run.merge.is_none() || !run.state.is_terminal() {
         return;
     }
-    if app
-        .try_state::<GraduationState>()
-        .is_some_and(|state| state.is_looping(&run.id))
-    {
+    if app.try_state::<GraduationState>().is_some_and(|state| state.is_looping(&run.id)) {
         return;
     }
     // GLG-FR-QNLC: one record for one cleanup. A run that has nothing left

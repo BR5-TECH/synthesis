@@ -154,19 +154,12 @@ impl ProjectApi for ProjectService {
             Some(text) => UserId::parse(text)?,
         };
         self.ports.users.get(owner_id)?;
-        self.authority
-            .require(principal, owner_id == principal.user_id, "project.create")?;
+        self.authority.require(principal, owner_id == principal.user_id, "project.create")?;
 
         let now = self.ports.clock.now();
         let project = self.ports.projects.insert(
             id,
-            Project {
-                id,
-                display_name,
-                owner_id,
-                created_at: now.clone(),
-                updated_at: now,
-            },
+            Project { id, display_name, owner_id, created_at: now.clone(), updated_at: now },
         )?;
 
         // SAS-FR-MWOD: the owner is stored on the project and holds the owner
@@ -176,8 +169,7 @@ impl ProjectApi for ProjectService {
     }
 
     fn read_project(&self, principal: &Principal, id: ProjectId) -> Result<Project, DomainError> {
-        self.access
-            .authorize(principal, id, Permission::ProjectRead)
+        self.access.authorize(principal, id, Permission::ProjectRead)
     }
 
     fn list_projects(
@@ -201,19 +193,16 @@ impl ProjectApi for ProjectService {
         id: ProjectId,
         command: UpdateProject,
     ) -> Result<Project, DomainError> {
-        self.access
-            .authorize(principal, id, Permission::ProjectUpdate)?;
+        self.access.authorize(principal, id, Permission::ProjectUpdate)?;
 
         let now = self.ports.clock.now();
-        self.ports
-            .projects
-            .update(id, &mut |project: &mut Project| {
-                if let Some(display_name) = command.display_name.as_deref() {
-                    project.display_name = validation::name("display_name", display_name)?;
-                }
-                project.updated_at = now.clone();
-                Ok(())
-            })
+        self.ports.projects.update(id, &mut |project: &mut Project| {
+            if let Some(display_name) = command.display_name.as_deref() {
+                project.display_name = validation::name("display_name", display_name)?;
+            }
+            project.updated_at = now.clone();
+            Ok(())
+        })
     }
 
     fn delete_project(
@@ -223,22 +212,15 @@ impl ProjectApi for ProjectService {
         cascade: bool,
     ) -> Result<(), DomainError> {
         // SAS-FR-DHLM: deleting a project is the owner's and the administrator's.
-        let project = self
-            .access
-            .authorize(principal, id, Permission::ProjectRead)?;
+        let project = self.access.authorize(principal, id, Permission::ProjectRead)?;
         self.authority.require(
             principal,
             project.owner_id == principal.user_id,
             "project.delete",
         )?;
 
-        let drafts: Vec<_> = self
-            .ports
-            .drafts
-            .list()
-            .into_iter()
-            .filter(|draft| draft.project_id == id)
-            .collect();
+        let drafts: Vec<_> =
+            self.ports.drafts.list().into_iter().filter(|draft| draft.project_id == id).collect();
         let conversations: Vec<_> = self
             .ports
             .conversations
@@ -275,9 +257,7 @@ impl ProjectApi for ProjectService {
         id: ProjectId,
         command: TransferOwnership,
     ) -> Result<Project, DomainError> {
-        let project = self
-            .access
-            .authorize(principal, id, Permission::ProjectRead)?;
+        let project = self.access.authorize(principal, id, Permission::ProjectRead)?;
         self.authority.require(
             principal,
             project.owner_id == principal.user_id,
@@ -289,14 +269,11 @@ impl ProjectApi for ProjectService {
         let previous_owner = project.owner_id;
 
         let now = self.ports.clock.now();
-        let moved = self
-            .ports
-            .projects
-            .update(id, &mut |project: &mut Project| {
-                project.owner_id = new_owner;
-                project.updated_at = now.clone();
-                Ok(())
-            })?;
+        let moved = self.ports.projects.update(id, &mut |project: &mut Project| {
+            project.owner_id = new_owner;
+            project.updated_at = now.clone();
+            Ok(())
+        })?;
 
         // SAS-FR-RAKX: the owner grant moves with the ownership. The former
         // owner keeps no permission that no other grant supplies.
@@ -308,13 +285,11 @@ impl ProjectApi for ProjectService {
             .find(|grant| grant.project_id == id && grant.is_owner_grant(previous_owner));
         match existing {
             Some(grant) => {
-                self.ports
-                    .grants
-                    .update(grant.id, &mut |grant: &mut Grant| {
-                        grant.target_id = new_owner.raw();
-                        grant.updated_at = now.clone();
-                        Ok(())
-                    })?;
+                self.ports.grants.update(grant.id, &mut |grant: &mut Grant| {
+                    grant.target_id = new_owner.raw();
+                    grant.updated_at = now.clone();
+                    Ok(())
+                })?;
             }
             None => {
                 self.write_owner_grant(&moved)?;
@@ -338,11 +313,7 @@ impl ProjectApi for ProjectService {
         let project = self.access.authorize(principal, id, needed)?;
         self.ports.users.get(subject)?;
 
-        let permissions = if self
-            .ports
-            .users
-            .get(subject)
-            .is_ok_and(|user| user.is_administrator())
+        let permissions = if self.ports.users.get(subject).is_ok_and(|user| user.is_administrator())
         {
             ProjectRole::Owner.permissions()
         } else {
@@ -357,8 +328,7 @@ impl ProjectApi for ProjectService {
         project_id: ProjectId,
         command: CreateGrant,
     ) -> Result<Grant, DomainError> {
-        self.access
-            .authorize(principal, project_id, Permission::ProjectManageAcl)?;
+        self.access.authorize(principal, project_id, Permission::ProjectManageAcl)?;
 
         let id: GrantId = self.ports.resolve_id("id", command.id.as_deref())?;
         let target_type = TargetType::parse(&command.target_type)?;
@@ -406,8 +376,7 @@ impl ProjectApi for ProjectService {
         project_id: ProjectId,
         id: GrantId,
     ) -> Result<Grant, DomainError> {
-        self.access
-            .authorize(principal, project_id, Permission::ProjectManageAcl)?;
+        self.access.authorize(principal, project_id, Permission::ProjectManageAcl)?;
         self.grant_of(project_id, id)
     }
 
@@ -417,8 +386,7 @@ impl ProjectApi for ProjectService {
         project_id: ProjectId,
         page: Page,
     ) -> Result<Vec<Grant>, DomainError> {
-        self.access
-            .authorize(principal, project_id, Permission::ProjectManageAcl)?;
+        self.access.authorize(principal, project_id, Permission::ProjectManageAcl)?;
         let grants = self
             .ports
             .grants
@@ -436,9 +404,7 @@ impl ProjectApi for ProjectService {
         id: GrantId,
         command: UpdateGrant,
     ) -> Result<Grant, DomainError> {
-        let project = self
-            .access
-            .authorize(principal, project_id, Permission::ProjectManageAcl)?;
+        let project = self.access.authorize(principal, project_id, Permission::ProjectManageAcl)?;
         let grant = self.grant_of(project_id, id)?;
         // SAS-FR-MWOD: the owner grant is neither reduced nor raised here.
         if grant.is_owner_grant(project.owner_id) {
@@ -477,9 +443,7 @@ impl ProjectApi for ProjectService {
         project_id: ProjectId,
         id: GrantId,
     ) -> Result<Grant, DomainError> {
-        let project = self
-            .access
-            .authorize(principal, project_id, Permission::ProjectManageAcl)?;
+        let project = self.access.authorize(principal, project_id, Permission::ProjectManageAcl)?;
         let grant = self.grant_of(project_id, id)?;
         if grant.is_owner_grant(project.owner_id) {
             return Err(DomainError::OwnerProtected);
@@ -501,9 +465,7 @@ impl ProjectApi for ProjectService {
         project_id: ProjectId,
         id: GrantId,
     ) -> Result<(), DomainError> {
-        let project = self
-            .access
-            .authorize(principal, project_id, Permission::ProjectManageAcl)?;
+        let project = self.access.authorize(principal, project_id, Permission::ProjectManageAcl)?;
         let grant = self.grant_of(project_id, id)?;
         if grant.is_owner_grant(project.owner_id) {
             return Err(DomainError::OwnerProtected);

@@ -1,7 +1,6 @@
 //! Tests for the `fs` module.
 
 use super::*;
-use serde::Deserialize;
 use tempfile::TempDir;
 
 // -----------------------------------------------------------------
@@ -45,42 +44,8 @@ fn ts2_discover_project_root_returns_not_a_project_when_none_exists() {
     let deeper = tmp.path().join("a").join("b").join("c");
     fs::create_dir_all(&deeper).unwrap();
     let err = discover_project_root(&deeper).unwrap_err();
-    assert!(
-        matches!(err, FsError::NotAProject),
-        "expected NotAProject, got {err:?}"
-    );
+    assert!(matches!(err, FsError::NotAProject), "expected NotAProject, got {err:?}");
 }
-
-// -----------------------------------------------------------------
-// FSA-FR-06: read_toml typed errors.
-// -----------------------------------------------------------------
-#[derive(Debug, Deserialize, serde::Serialize, PartialEq)]
-struct SampleConfig {
-    name: String,
-    count: i64,
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #[test]
 fn merge_gitignore_appends_in_required_order() {
@@ -206,10 +171,7 @@ fn ts12_resolve_under_rejects_escape_with_dotdot() {
     let tmp = TempDir::new().unwrap();
     let root = tmp.path().to_path_buf();
     let err = resolve_under(&root, "../escape.txt").unwrap_err();
-    assert!(
-        matches!(err, FsError::PathEscape { .. }),
-        "expected PathEscape, got {err:?}"
-    );
+    assert!(matches!(err, FsError::PathEscape { .. }), "expected PathEscape, got {err:?}");
 }
 
 #[test]
@@ -292,32 +254,12 @@ fn fr1_browse_result_serializes_cancelled_as_externally_tagged() {
 
 #[test]
 fn fr1_browse_result_serializes_selected_with_path_field() {
-    let r = BrowseResult::Selected {
-        path: "/Users/x/dev/proj".into(),
-    };
+    let r = BrowseResult::Selected { path: "/Users/x/dev/proj".into() };
     let v: serde_json::Value = serde_json::to_value(&r).unwrap();
     // Externally tagged: { "selected": { "path": "..." } }
     let inner = v.get("selected").expect("expected `selected` tag");
-    assert_eq!(
-        inner.get("path").and_then(|p| p.as_str()),
-        Some("/Users/x/dev/proj")
-    );
+    assert_eq!(inner.get("path").and_then(|p| p.as_str()), Some("/Users/x/dev/proj"));
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // PST-FR-26's decision half, testable without a Tauri runtime: which paths
 // the command layer refuses before invoking any primitive, and why. The
@@ -355,11 +297,6 @@ fn resolve_inside_separates_escape_from_symlink_and_admits_ordinary_paths() {
     assert_eq!(resolve_inside(root, "docs/../docs/a.md"), Ok(()));
 }
 
-
-
-
-
-
 #[test]
 fn is_valid_basename_accepts_plain_and_rejects_paths() {
     assert!(is_valid_basename("a.md"));
@@ -373,16 +310,6 @@ fn is_valid_basename_accepts_plain_and_rejects_paths() {
 // FSA-FR-14: create_dir
 // -----------------------------------------------------------------------
 
-
-
-
-
-
 // -----------------------------------------------------------------
 // FSA-FR-15: append_lines.
 // -----------------------------------------------------------------
-
-
-
-
-

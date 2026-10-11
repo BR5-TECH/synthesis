@@ -11,21 +11,12 @@ use super::*;
 
 #[test]
 fn diff_scope_deserialises_from_the_frontend_shape() {
-    let path: DiffScope =
-        serde_json::from_str(r#"{"kind":"path","path":"a/b.md"}"#).unwrap();
-    assert_eq!(
-        path,
-        DiffScope::Path {
-            path: "a/b.md".into(),
-            previous_path: None,
-        }
-    );
+    let path: DiffScope = serde_json::from_str(r#"{"kind":"path","path":"a/b.md"}"#).unwrap();
+    assert_eq!(path, DiffScope::Path { path: "a/b.md".into(), previous_path: None });
     let staged: DiffScope = serde_json::from_str(r#"{"kind":"staged"}"#).unwrap();
     assert_eq!(staged, DiffScope::Staged);
-    let branch: DiffScope = serde_json::from_str(
-        r#"{"kind":"branch","path":"a/b.md","targetBranch":"main"}"#,
-    )
-    .unwrap();
+    let branch: DiffScope =
+        serde_json::from_str(r#"{"kind":"branch","path":"a/b.md","targetBranch":"main"}"#).unwrap();
     assert_eq!(
         branch,
         DiffScope::Branch {

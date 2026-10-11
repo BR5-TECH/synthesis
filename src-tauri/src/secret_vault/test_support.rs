@@ -60,14 +60,28 @@ pub(crate) struct FakeKeyringState {
     /// second thread would reliably interleave with it were the vault not
     /// serialising them (ASV-FR-09, ASV-FR-14).
     pub(crate) read_delay: std::time::Duration,
+    /// While set, a `read` blocks after it is recorded, until
+    /// `FakeKeyring::release_reads` runs. Lets a scenario hold one request
+    /// inside the keyring while others arrive, with no sleep.
+    pub(crate) hold_reads: bool,
 }
 
 #[derive(Clone, Default)]
-pub(crate) struct FakeKeyring(Arc<Mutex<FakeKeyringState>>);
+pub(crate) struct FakeKeyring(Arc<Mutex<FakeKeyringState>>, Arc<std::sync::Condvar>);
 
 impl FakeKeyring {
     pub(crate) fn state(&self) -> std::sync::MutexGuard<'_, FakeKeyringState> {
         self.0.lock().unwrap()
+    }
+
+    /// Make every later `read` block until `release_reads`.
+    pub(crate) fn hold_reads(&self) {
+        self.state().hold_reads = true;
+    }
+
+    pub(crate) fn release_reads(&self) {
+        self.state().hold_reads = false;
+        self.1.notify_all();
     }
 
     pub(crate) fn calls(&self) -> Vec<Call> {
@@ -83,17 +97,11 @@ impl FakeKeyring {
     }
 
     pub(crate) fn set_legacy(&self, service: &str, account: &str, secret: &str) {
-        self.state().legacy.insert(
-            (service.to_string(), account.to_string()),
-            secret.to_string(),
-        );
+        self.state().legacy.insert((service.to_string(), account.to_string()), secret.to_string());
     }
 
     pub(crate) fn legacy(&self, service: &str, account: &str) -> Option<String> {
-        self.state()
-            .legacy
-            .get(&(service.to_string(), account.to_string()))
-            .cloned()
+        self.state().legacy.get(&(service.to_string(), account.to_string())).cloned()
     }
 
     pub(crate) fn legacy_count(&self) -> usize {
@@ -139,6 +147,9 @@ impl VaultBackend for FakeKeyring {
         let (delay, answer) = {
             let mut state = self.state();
             state.calls.push(Call::Read);
+            while state.hold_reads {
+                state = self.1.wait(state).unwrap();
+            }
             if state.refuse_read {
                 return Err("locked".into());
             }
@@ -189,9 +200,7 @@ impl VaultBackend for FakeKeyring {
 
     fn read_legacy(&self, service: &str, account: &str) -> Result<Option<String>, String> {
         let mut state = self.state();
-        state
-            .calls
-            .push(Call::ReadLegacy(service.to_string(), account.to_string()));
+        state.calls.push(Call::ReadLegacy(service.to_string(), account.to_string()));
         let key = (service.to_string(), account.to_string());
         if state.refuse_legacy_read.contains(&key) {
             return Err("locked".into());
@@ -201,9 +210,7 @@ impl VaultBackend for FakeKeyring {
 
     fn delete_legacy(&self, service: &str, account: &str) -> Result<(), String> {
         let mut state = self.state();
-        state
-            .calls
-            .push(Call::DeleteLegacy(service.to_string(), account.to_string()));
+        state.calls.push(Call::DeleteLegacy(service.to_string(), account.to_string()));
         let key = (service.to_string(), account.to_string());
         if state.refuse_legacy_delete.contains(&key) {
             return Err("locked".into());

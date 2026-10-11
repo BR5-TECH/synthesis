@@ -14,7 +14,7 @@ use std::sync::mpsc;
 use crate::agents::{self, AgentDraft};
 use crate::ai_api::{AiApiRecord, ReasoningChoice};
 use crate::ai_shared::{ModelOption, ModelReasoning, ModelsOrigin};
-use crate::comments::{FragmentTarget, Discussion, LogScope};
+use crate::comments::{Discussion, FragmentTarget, LogScope};
 use crate::global_settings::GlobalSettingsStore;
 use crate::logging::{self, LogFilter, LogLevel, LogRecord};
 use crate::progress::ProgressRegistry;
@@ -59,10 +59,7 @@ struct Harness {
 /// only the two base delays shrink, because what nearly every test wants is that
 /// a call was repeated three times and not that it waited 1.5 seconds to do it.
 fn fast_retries() -> RetryPolicy {
-    RetryPolicy {
-        first_base: Duration::from_millis(1),
-        ..RetryPolicy::default()
-    }
+    RetryPolicy { first_base: Duration::from_millis(1), ..RetryPolicy::default() }
 }
 
 /// CVL-FR-19: a jitter source that always returns the same fraction, so a
@@ -166,9 +163,7 @@ impl Harness {
     /// How many agent sessions currently hold a filesystem instance
     /// (CVL-FR-24).
     fn agent_sessions(&self) -> usize {
-        self.app
-            .state::<crate::fs::FsAccessState>()
-            .agent_session_count()
+        self.app.state::<crate::fs::FsAccessState>().agent_session_count()
     }
 
     /// A harness whose keychain refuses to answer, so a turn fails where a real
@@ -192,13 +187,7 @@ impl Harness {
         recorder: Arc<ScriptedCompletion>,
         concurrency: usize,
     ) -> Self {
-        Self::build_with(
-            seam,
-            recorder,
-            concurrency,
-            Box::new(FixedSecrets),
-            SHORT_TIMEOUT,
-        )
+        Self::build_with(seam, recorder, concurrency, Box::new(FixedSecrets), SHORT_TIMEOUT)
     }
 
     /// A harness running under a retry schedule of the test's own, for the
@@ -244,18 +233,9 @@ impl Harness {
         secrets: Box<dyn crate::ai_shared::SecretStore>,
         timeout: Duration,
     ) -> Self {
-        Self::build_full(
-            seam,
-            recorder,
-            concurrency,
-            secrets,
-            timeout,
-            fast_retries(),
-            0.5,
-        )
+        Self::build_full(seam, recorder, concurrency, secrets, timeout, fast_retries(), 0.5)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn build_full(
         seam: Box<dyn CompletionSeam>,
         recorder: Arc<ScriptedCompletion>,
@@ -270,27 +250,24 @@ impl Harness {
         let root = tempfile::tempdir().expect("temp root");
         let app = mock_builder()
             .manage(GlobalSettingsStore::in_memory())
-            .manage(crate::ai_api::AiApiIntegrations::new(
-                Box::new(NoProbe),
-                secrets,
-            ))
+            .manage(crate::ai_api::AiApiIntegrations::new(Box::new(NoProbe), secrets))
             .manage(
                 TurnRegistry::new(seam_for_registry, concurrency, timeout)
-                // Not the session buffer: `close_project` and a worktree change
-                // clear that one (LGC-FR-15), and the tests of those paths run
-                // alongside these — reading it means reading a buffer another
-                // test can empty mid-assertion.
-                .reporting_into(&TEST_BUFFER)
-                // CVL-FR-19: the retry *behaviour* without paying for the
-                // waits. Every path a retry can take is exercised at this
-                // schedule; that the shipped schedule is 500 ms and 1,000 ms
-                // within ±20% and capped at 2 s is
-                // `the_default_retry_schedule_is_the_one_the_spec_states`'s
-                // assertion, made against `RetryPolicy::default()` itself.
-                .with_retry_policy(retry)
-                // A fixed fraction, so a delay is decided rather than drawn and
-                // a test that asserts timing has nothing random in it.
-                .with_jitter(Box::new(FixedJitter(jitter))),
+                    // Not the session buffer: `close_project` and a worktree change
+                    // clear that one (LGC-FR-15), and the tests of those paths run
+                    // alongside these — reading it means reading a buffer another
+                    // test can empty mid-assertion.
+                    .reporting_into(&TEST_BUFFER)
+                    // CVL-FR-19: the retry *behaviour* without paying for the
+                    // waits. Every path a retry can take is exercised at this
+                    // schedule; that the shipped schedule is 500 ms and 1,000 ms
+                    // within ±20% and capped at 2 s is
+                    // `the_default_retry_schedule_is_the_one_the_spec_states`'s
+                    // assertion, made against `RetryPolicy::default()` itself.
+                    .with_retry_policy(retry)
+                    // A fixed fraction, so a delay is decided rather than drawn and
+                    // a test that asserts timing has nothing random in it.
+                    .with_jitter(Box::new(FixedJitter(jitter))),
             )
             .manage(ProgressRegistry::default())
             .manage(ProjectState::default())
@@ -339,13 +316,7 @@ impl Harness {
         ] {
             app.listen(event, |_| {});
         }
-        let harness = Self {
-            app,
-            root,
-            seam,
-            terminal,
-            events,
-        };
+        let harness = Self { app, root, seam, terminal, events };
         harness.seed_verified_provider();
         harness
     }
@@ -381,9 +352,7 @@ impl Harness {
                     verified_at: Some("2026-01-01T00:00:00Z".into()),
                     selected_model: Some("provider-default-model".into()),
                     models_origin: ModelsOrigin::Probed,
-                    selected_reasoning: Some(ReasoningChoice::Effort {
-                        effort: "low".into(),
-                    }),
+                    selected_reasoning: Some(ReasoningChoice::Effort { effort: "low".into() }),
                     models: vec![
                         ModelOption::new("m", "M").with_reasoning(Some(ModelReasoning {
                             mandatory: false,
@@ -418,16 +387,14 @@ impl Harness {
                     selected_model: Some("m".into()),
                     models_origin: ModelsOrigin::Probed,
                     selected_reasoning: None,
-                    models: vec![
-                        ModelOption::new("m", "M")
-                            .with_reasoning(Some(ModelReasoning {
-                                mandatory: false,
-                                supported_efforts: Some(vec!["high".into(), "low".into()]),
-                                default_effort: None,
-                                ..Default::default()
-                            }))
-                            .with_declared_image_input(Some(true)),
-                    ],
+                    models: vec![ModelOption::new("m", "M")
+                        .with_reasoning(Some(ModelReasoning {
+                            mandatory: false,
+                            supported_efforts: Some(vec!["high".into(), "low".into()]),
+                            default_effort: None,
+                            ..Default::default()
+                        }))
+                        .with_declared_image_input(Some(true))],
                 }],
                 None,
             )
@@ -450,9 +417,7 @@ impl Harness {
                         verified_at: Some("2026-01-01T00:00:00Z".into()),
                         selected_model: Some("provider-default-model".into()),
                         models_origin: ModelsOrigin::Probed,
-                        selected_reasoning: Some(ReasoningChoice::Effort {
-                            effort: "low".into(),
-                        }),
+                        selected_reasoning: Some(ReasoningChoice::Effort { effort: "low".into() }),
                         models: vec![
                             ModelOption::new("m", "M").with_reasoning(Some(ModelReasoning {
                                 mandatory: false,
@@ -486,6 +451,8 @@ impl Harness {
         let agent = agents::create_agent_impl(
             &self.store(),
             "",
+            None,
+            agents::AgentScope::Personal,
             &AgentDraft {
                 nickname: nickname.into(),
                 title: String::new(),
@@ -495,7 +462,6 @@ impl Harness {
             },
         )
         .expect("agent");
-        agents::enrol_project_agent_impl(&self.store(), PROJECT_KEY, &agent.id).expect("enrol");
         agent
     }
 
@@ -513,18 +479,17 @@ impl Harness {
         let agent = agents::create_agent_impl(
             &self.store(),
             "",
+            None,
+            agents::AgentScope::Personal,
             &AgentDraft {
                 nickname: nickname.into(),
                 title: title.into(),
                 model_id: "m".into(),
                 instructions: instructions.into(),
-                reasoning: Some(ReasoningChoice::Effort {
-                    effort: "high".into(),
-                }),
+                reasoning: Some(ReasoningChoice::Effort { effort: "high".into() }),
             },
         )
         .expect("agent");
-        agents::enrol_project_agent_impl(&self.store(), PROJECT_KEY, &agent.id).expect("enrol");
         agent
     }
 
@@ -534,11 +499,17 @@ impl Harness {
         crate::comments::open_artifact_fragment_in(
             &self.root(),
             artifact_id,
-            FragmentTarget::in_artifact("", 4, 12, &source.chars().skip(4).take(8).collect::<String>()),
+            FragmentTarget::in_artifact(
+                "",
+                4,
+                12,
+                &source.chars().skip(4).take(8).collect::<String>(),
+            ),
             "@arch what do you think?".into(),
             Vec::new(),
             &human("ada"),
-            "2026-01-01T00:00:00Z")
+            "2026-01-01T00:00:00Z",
+        )
         .expect("thread")
     }
 
@@ -573,14 +544,18 @@ impl Harness {
 
     /// Wait until every turn has left the in-flight set. Turns run on their own
     /// threads, so the alternative is a fixed sleep — flaky in both directions.
+    /// Block until every turn this harness dispatched has fully ended: its
+    /// thread has returned, so its delivery, its terminal state and the release
+    /// of its progress operation are all done. A wait on an event, not on time.
+    fn join_turns(&self) {
+        self.turns().join_turn_threads();
+    }
+
+    /// Block until every dispatched turn has fully ended, then check that no
+    /// turn is left in flight. The wait is on the turn threads, not on time.
     fn settle(&self) {
-        for _ in 0..600 {
-            if self.turns().in_flight(None).is_empty() {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        panic!("turns did not settle");
+        self.join_turns();
+        assert!(self.turns().in_flight(None).is_empty(), "a turn is still in flight");
     }
 
     fn threads(&self, artifact_id: &str) -> Vec<Discussion> {
@@ -595,30 +570,38 @@ mod support;
 // than that.
 use support::*;
 
+mod anthropic_carrier;
 mod asking_author;
-mod question_set_turns;
 mod builders;
 mod cancellation;
 mod citation_markers;
 mod custom_adapter;
 mod deadlines;
-mod prose_replies;
 mod disclosure;
 mod dispatch;
 mod durable_record;
 mod images;
+mod invalid_arguments;
 mod note_discussions;
 mod openrouter;
 mod origin_contract;
 mod project_bounds;
+mod proposal_history;
+mod prose_replies;
 mod provider_failures;
 mod provider_tools;
-mod proposal_history;
+mod question_set_turns;
+mod request_failures;
 mod request_history;
 mod request_shape;
+mod responses_repair;
 mod retries;
+mod rig_replies;
 mod session_log;
+mod tls_carriers;
 mod tool_loop_bounds;
 mod tool_loop_dispatch;
 mod tool_loop_results;
+mod tool_result_call_ids;
 mod unified_association;
+mod wire_replies;

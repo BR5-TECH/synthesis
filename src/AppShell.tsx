@@ -26,7 +26,6 @@ import { Viewport } from "./components/Viewport";
 import { BottomPanel } from "./components/BottomPanel";
 import { StatusBar } from "./components/StatusBar";
 import { Toast } from "./components/Toast";
-import { NotificationStatement } from "./components/NotificationStatement";
 import { NewFileModal } from "./components/NewFileModal";
 import { AboutPanel } from "./components/AboutPanel";
 import { NewFolderModal } from "./components/NewFolderModal";
@@ -52,9 +51,10 @@ import {
   NEW_AGENT_ITEM,
   formatSectionAddress,
 } from "./settingsWindow";
-import { useNotifications } from "./hooks/useNotifications";
 import type { useDiscussionAnnouncement } from "./state/discussionAnnouncer";
 import type { TabAttention } from "./components/TabStrip";
+import { CreatePullRequestWindow } from "./components/CreatePullRequestWindow";
+import { PullRequestNotice } from "./components/PullRequestNotice";
 
 /**
  * SNV-FR-06: which edge the activity bar and vertical panel occupy. The side is
@@ -71,7 +71,6 @@ export interface AppShellProps {
   overlays: ReturnType<typeof useAppOverlays>;
   vpanel: ReturnType<typeof useVerticalPanel>;
   bpanel: ReturnType<typeof useBottomPanel>;
-  notifications: ReturnType<typeof useNotifications>;
   operations: ReturnType<typeof useInFlightOperations>;
   diffTotals: ReturnType<typeof useDiffTotals>;
   projectFolders: ReturnType<typeof useProjectFolders>;
@@ -96,7 +95,6 @@ export function AppShell(props: AppShellProps) {
     overlays,
     vpanel,
     bpanel,
-    notifications,
     operations,
     diffTotals,
     projectFolders,
@@ -142,6 +140,15 @@ export function AppShell(props: AppShellProps) {
     settleRollbackWindow,
     dismissRollbackWindow,
     requestRollback,
+    pullRequestWindow,
+    pullRequestNotice,
+    dismissPullRequestNotice,
+    openPullRequestWindow,
+    closePullRequestWindow,
+    dismissPullRequestWindow,
+    pullRequestSubmittingRef,
+    giveWayToPicker,
+    pullRequestCreated,
     openCommitWindow,
     graduationStart,
     openGraduationStart,
@@ -169,6 +176,7 @@ export function AppShell(props: AppShellProps) {
     dismissTokenPicker();
     dismissCommitWindow();
     dismissRollbackWindow();
+    dismissPullRequestWindow();
     dismissTabMenu();
     dismissGraduationOverlays();
     setAgentsRosterOpen(false);
@@ -230,6 +238,8 @@ export function AppShell(props: AppShellProps) {
           // WSS-FR-JVUF: the work-stream selector follows the worktree
           // selector, a stream being a checkout of the same repository.
           onRequestMergeCommit={requestMergeCommit}
+          // WSS-FR-KHGP: a stream row's Create a PR opens the shared window.
+          onCreatePullRequest={openPullRequestWindow}
           onOpenChanges={() => s.setPanelSurface("changes")}
           // WSS-FR-AWRS: the same route a `run` address takes.
           onOpenRun={(runId) => openGraduationRun(runId)}
@@ -250,6 +260,7 @@ export function AppShell(props: AppShellProps) {
               dismissTokenPicker();
               dismissCommitWindow();
               dismissRollbackWindow();
+              dismissPullRequestWindow();
               dismissTabMenu();
               dismissGraduationOverlays();
               setAgentsRosterOpen(false);
@@ -270,6 +281,7 @@ export function AppShell(props: AppShellProps) {
             dismissTokenPicker();
             dismissCommitWindow();
             dismissRollbackWindow();
+            dismissPullRequestWindow();
             setAgentsRosterOpen(false);
             // TAB-FR-32 / SNV-FR-56: the tab context menu is one of the
             // window's floating overlays, so a dropdown opening takes it down.
@@ -287,24 +299,30 @@ export function AppShell(props: AppShellProps) {
           }
           // WTS-FR-35 / GHA-FR-19: no token stored at all — nothing to choose
           // between, so the note routes to where one is added — the Global
-          // settings window's GitHub section (SWN-FR-13, GIT-FR-10).
+          // Settings window's Global GitHub section (SWN-FR-13, GIT-FR-10).
           onOpenGlobalSettings={() => s.openGlobalSettings("github")}
           // AGT-FR-06 / AGT-FR-07: the roster is how an agent is reached to be
-          // looked at or changed, and how a new one is described. Both open the
-          // Global settings **window** on its Agents section with an editor
-          // already open (SWN-FR-13), focusing that window where it is already
-          // open and closing Project settings first where that one is
-          // (SWN-FR-06, SWN-FR-07). The editor travels as part of the section
-          // address, because the window it opens is a window of its own and
-          // shares no state with this one.
-          onOpenAgentInSettings={(agentId) => {
-            s.openGlobalSettings(
-              formatSectionAddress("agents", agentId ?? NEW_AGENT_ITEM),
+          // looked at or changed, and how a new one is described. A row opens
+          // the Settings **window** on the Project Agents section of its Project
+          // group or the Personal Agents section of its Global group, by the
+          // agent's scope, and the add action opens the Project Agents section
+          // (SWN-FR-13), focusing that window where it is already open
+          // (SWN-FR-06). The editor travels as part of the section address,
+          // because the window it opens is a window of its own and shares no
+          // state with this one.
+          onOpenAgentInSettings={(agentId, agentScope) => {
+            s.openSettings(
+              formatSectionAddress(
+                agentScope === "project" ? "project" : "global",
+                "agents",
+                agentId ?? NEW_AGENT_ITEM,
+              ),
             );
           }}
-          // AGT-FR-08: a project enrolling nothing names where agents are
-          // enrolled, which is the Project settings window's Agents section.
-          onOpenProjectSettings={() => s.openSettings("agents")}
+          // AGT-FR-08: a project with no agent names where agents of the
+          // project are described, which is the Project Agents section of the
+          // Settings window's Project group.
+          onOpenProjectSettings={() => s.openProjectSettings("agents")}
           agentsRosterOpen={agentsRosterOpen}
           setAgentsRosterOpen={setAgentsRosterOpen}
         />
@@ -358,6 +376,7 @@ export function AppShell(props: AppShellProps) {
               dismissTokenPicker();
               dismissCommitWindow();
               dismissRollbackWindow();
+              dismissPullRequestWindow();
               dismissTabMenu();
               dismissGraduationOverlays();
               projectFolders.ensureFresh();
@@ -374,6 +393,7 @@ export function AppShell(props: AppShellProps) {
               dismissTokenPicker();
               dismissCommitWindow();
               dismissRollbackWindow();
+              dismissPullRequestWindow();
               dismissTabMenu();
               dismissGraduationOverlays();
               projectFolders.ensureFresh();
@@ -387,6 +407,7 @@ export function AppShell(props: AppShellProps) {
               dismissTokenPicker();
               dismissCommitWindow();
               dismissRollbackWindow();
+              dismissPullRequestWindow();
               dismissTabMenu();
               dismissGraduationOverlays();
               projectFolders.ensureFresh();
@@ -424,6 +445,8 @@ export function AppShell(props: AppShellProps) {
             // between, so the note routes to where one is added — the Global
             // settings window's GitHub section (SWN-FR-13, GIT-FR-10).
             onOpenGlobalSettings={() => s.openGlobalSettings("github")}
+            // CHG-FR-UPFP: the footer's Create a PR opens the shared window.
+            onCreatePullRequest={openPullRequestWindow}
             // DRP-FR-06 / DRP-FR-09 / DRP-FR-12: the Drafts surface creates,
             // opens, and abandons drafts; the tab strip follows each.
             onOpenDraft={s.openDraft}
@@ -501,6 +524,7 @@ export function AppShell(props: AppShellProps) {
               dismissTokenPicker();
               dismissCommitWindow();
               dismissRollbackWindow();
+              dismissPullRequestWindow();
               dismissTabMenu();
               dismissGraduationOverlays();
               setAgentsRosterOpen(false);
@@ -575,8 +599,8 @@ export function AppShell(props: AppShellProps) {
             // GRU-FR-RZDI: the section routes to a run's source draft.
             onOpenDraft={(draftId) => void s.openDraftById(draftId)}
             // GRU-FR-QLRQ / SWN-FR-13: a run stopped at its time limit routes
-            // to the Project settings section that sets the limit.
-            onOpenSettings={(section) => s.openSettings(section)}
+            // to the Project group's section that sets the limit.
+            onOpenSettings={(address) => s.openSettings(address)}
             // GLW-FR-ALZI / SNV-FR-56: the graduation log window is one of the
             // window's floating overlays, so opening it closes every other.
             onOverlayOpening={() => {
@@ -587,6 +611,7 @@ export function AppShell(props: AppShellProps) {
               dismissTokenPicker();
               dismissCommitWindow();
               dismissRollbackWindow();
+              dismissPullRequestWindow();
               setAgentsRosterOpen(false);
               dismissTabMenu();
             }}
@@ -613,12 +638,15 @@ export function AppShell(props: AppShellProps) {
               // so the picker opens with no preselection of its own.
               new Promise<boolean>((resolve) => openTokenPicker(null, resolve))
             }
+            // GIT-FR-05: the PRs rail's Create PR for current branch opens the
+            // shared window.
+            onCreatePullRequest={openPullRequestWindow}
             // GIT-FR-OGHO: the Ready tasks section renders the window's polling
             // view; GIT-FR-HNGQ routes its configuration states to the GitHub
             // polling section of Project settings.
             readyTasks={{
               polling: githubPolling,
-              onOpenProjectSettings: () => s.openSettings("github-polling"),
+              onOpenProjectSettings: () => s.openProjectSettings("github-polling"),
             }}
           />
         )}
@@ -629,18 +657,18 @@ export function AppShell(props: AppShellProps) {
           other zone — and, being outside the keyed subtree, it is not torn down
           and remounted by a project or worktree switch (STB-FR-02). */}
       <StatusBar
-        // STB-FR-04: each button opens its native settings child window, and
-        // neither creates a tab. Wrapped rather than passed straight through:
-        // the control hands its click event to the handler, and the handler's
-        // first parameter is the section to open on.
-        onGlobalSettings={() => s.openGlobalSettings()}
-        onSettings={() => s.openSettings()}
+        // STB-FR-04: the button opens the native Settings child window on
+        // Appearance, and creates no tab. Wrapped rather than passed straight
+        // through: the handler's first parameter is the section to open on, and
+        // the button is the control focus returns to (SWN-FR-FCRT).
+        onSettings={(invoker) => s.openSettings(null, invoker)}
         operations={operations}
         overlayOpen={s.progressOverlayOpen}
         onOpenOverlay={() => {
           dismissTokenPicker();
           dismissCommitWindow();
           dismissRollbackWindow();
+          dismissPullRequestWindow();
           dismissTabMenu();
           dismissGraduationOverlays();
           s.openProgressOverlay();
@@ -723,6 +751,7 @@ export function AppShell(props: AppShellProps) {
           streamMerge={{
             streamId: streamMergeWindow.streamId,
             streamName: streamMergeWindow.streamName,
+            defaultMessage: streamMergeWindow.defaultMessage,
           }}
           onClose={() => settleStreamMergeWindow(null)}
           onCommitted={() => settleStreamMergeWindow(null)}
@@ -758,6 +787,26 @@ export function AppShell(props: AppShellProps) {
         />
       )}
 
+      {/* CPR-create-pull-request.md: the Create a PR window, mounted only while
+          one is open so it starts from its source each time (CPR-FR-SSQI). It
+          is keyed on the opening, so coming back from the token picker mounts
+          it anew with what the author typed (CPR-FR-VZUZ). */}
+      {pullRequestWindow && (
+        <CreatePullRequestWindow
+          key={pullRequestWindow.nonce}
+          source={pullRequestWindow.source}
+          resume={pullRequestWindow.resume}
+          returnFocus={pullRequestWindow.opener}
+          onClose={closePullRequestWindow}
+          onCreated={pullRequestCreated}
+          onRequestToken={(input) => void giveWayToPicker(input)}
+          onOpenGlobalSettings={() => s.openGlobalSettings("github")}
+          onSubmittingChange={(running) => {
+            pullRequestSubmittingRef.current = running;
+          }}
+        />
+      )}
+
       {/* GHA-github-authentication.md: the token picker, mounted only while a
           choice is outstanding so it opens fresh each time (GHA-FR-15). */}
       {picker && (
@@ -769,13 +818,11 @@ export function AppShell(props: AppShellProps) {
         />
       )}
 
-      {/* NTF-FR-20 / NTF-FR-21: what an activation says when its address
-          cannot be reached. Anchored in the shell rather than in a tab, and
-          outside the single-overlay rule (SNV-FR-56) — it takes no focus and
-          intercepts no pointer event. */}
-      <NotificationStatement
-        message={notifications.statement}
-        onDismiss={notifications.dismissStatement}
+      {/* CPR-FR-ITWJ / CPR-FR-RDJP: what a created pull request leaves. A status
+          of the shell, outside the single-overlay rule (SNV-FR-56). */}
+      <PullRequestNotice
+        notice={pullRequestNotice}
+        onDismiss={dismissPullRequestNotice}
       />
 
       {/* CVP-FR-43: every reveal is announced, so a conversation is followed

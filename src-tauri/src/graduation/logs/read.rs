@@ -29,7 +29,7 @@ use super::index::{
 use super::records::GraduationLogStream;
 use super::writer::LogPaths;
 
-/// GLW-FR-DDXJ: what a record with no pass is shown and searched as.
+/// GLW-FR-DDXJ: what a structured record with no pass is searched as.
 pub const RUN_LEVEL_MARKER: &str = "run-level";
 
 /// GRS-FR-EYNU: the read-failure code a file that could not be read reports.
@@ -186,10 +186,9 @@ fn scope_bounds(
     }) {
         bounds = Some(match bounds {
             None => (segment.first_sequence, segment.last_sequence),
-            Some((first, last)) => (
-                first.min(segment.first_sequence),
-                last.max(segment.last_sequence),
-            ),
+            Some((first, last)) => {
+                (first.min(segment.first_sequence), last.max(segment.last_sequence))
+            }
         });
     }
     bounds
@@ -210,27 +209,16 @@ fn decode(text: &str, bounds: Option<(u64, u64)>) -> (Vec<Line>, Option<Corrupti
         match serde_json::from_str::<serde_json::Value>(trimmed) {
             Ok(value) => {
                 let sequence = value.get("sequence").and_then(|v| v.as_u64()).unwrap_or(0);
-                let phase_id = value
-                    .get("phase_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_string();
-                let pass = value
-                    .get("pass")
-                    .and_then(|v| v.as_u64())
-                    .map(|pass| pass as u32);
+                let phase_id =
+                    value.get("phase_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                let pass = value.get("pass").and_then(|v| v.as_u64()).map(|pass| pass as u32);
                 stopped = sequence;
                 match bounds {
                     // The scope's last record is already held, so the rest of
                     // the file is nothing this read answers for.
                     Some((_, last)) if sequence > last => return (lines, None),
                     Some((first, _)) if sequence < first => {}
-                    _ => lines.push(Line {
-                        sequence,
-                        phase_id,
-                        pass,
-                        value,
-                    }),
+                    _ => lines.push(Line { sequence, phase_id, pass, value }),
                 }
                 offset += byte_length;
             }
@@ -239,13 +227,7 @@ fn decode(text: &str, bounds: Option<(u64, u64)>) -> (Vec<Line>, Option<Corrupti
             // append repairs it, and it is not a damaged file.
             Err(_) if !ends_the_line => return (lines, None),
             Err(_) => {
-                return (
-                    lines,
-                    Some(Corruption {
-                        stopped_sequence: stopped,
-                        byte_offset: offset,
-                    }),
-                )
+                return (lines, Some(Corruption { stopped_sequence: stopped, byte_offset: offset }))
             }
         }
     }
@@ -265,45 +247,37 @@ fn in_scope(line: &Line, phase_id: &str, scope: &GraduationLogPassScope) -> bool
     }
 }
 
-/// GRS-FR-OYIC: what a search matches is exactly what the surface displays.
+/// GRS-FR-OYIC: what a search matches is what the surface displays.
+///
+/// An activity search matches the kind and the summary of a record, which are
+/// the two texts a row shows. It matches no other field.
 fn searchable(value: &serde_json::Value, stream: GraduationLogStream) -> String {
     let mut haystack = String::new();
     let mut push = |text: &str| {
         haystack.push_str(text);
         haystack.push('\n');
     };
-    for key in ["run_id", "phase_id", "origin", "producer", "at"] {
-        if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
-            push(text);
-        }
-    }
-    if let Some(sequence) = value.get("sequence") {
-        push(&sequence.to_string());
-    }
-    match value.get("pass").and_then(|v| v.as_u64()) {
-        Some(pass) => push(&pass.to_string()),
-        // GRS-FR-OYIC: what is searched and what is shown are one set, and a
-        // record with no pass is shown with the run-level marker of
-        // `../../../../specifications/ui/GLW-graduation-log-window.md`
-        // GLW-FR-DDXJ rather than with a number.
-        None => push(RUN_LEVEL_MARKER),
-    }
     match stream {
-        GraduationLogStream::Source => {
-            for key in ["agent", "container", "source"] {
+        GraduationLogStream::Activity => {
+            for key in ["kind", "summary"] {
                 if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
                     push(text);
                 }
             }
-            // GRS-FR-QVTA: what is searched is what is decoded and shown.
-            if let Some(encoded) = value.get("data_base64").and_then(|v| v.as_str()) {
-                use base64::Engine as _;
-                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(encoded) {
-                    push(&String::from_utf8_lossy(&bytes));
-                }
-            }
         }
         GraduationLogStream::Structured => {
+            for key in ["run_id", "phase_id", "origin", "producer", "at"] {
+                if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
+                    push(text);
+                }
+            }
+            if let Some(sequence) = value.get("sequence") {
+                push(&sequence.to_string());
+            }
+            match value.get("pass").and_then(|v| v.as_u64()) {
+                Some(pass) => push(&pass.to_string()),
+                None => push(RUN_LEVEL_MARKER),
+            }
             for key in ["level", "event"] {
                 if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
                     push(text);
@@ -323,6 +297,18 @@ fn searchable(value: &serde_json::Value, stream: GraduationLogStream) -> String 
     haystack.to_lowercase()
 }
 
+/// GRS-FR-RZXA: what one page read asks for: the run, the phase and the pass
+/// scope, the stream, the cursor, the page size, and the search text.
+pub struct PageRequest<'a> {
+    pub run_id: &'a str,
+    pub phase_id: &'a str,
+    pub scope: &'a GraduationLogPassScope,
+    pub stream: GraduationLogStream,
+    pub cursor: Option<GraduationLogCursor>,
+    pub limit: Option<u32>,
+    pub query: Option<String>,
+}
+
 /// GRS-FR-RZXA: one page of one stream for one run, phase, and scope.
 ///
 /// `indexes` is the run record's own, which is what says how far the stream
@@ -331,14 +317,9 @@ pub fn read_page(
     fs: &FsAccess,
     paths: &LogPaths,
     indexes: &GraduationLogIndexes,
-    run_id: &str,
-    phase_id: &str,
-    scope: &GraduationLogPassScope,
-    stream: GraduationLogStream,
-    cursor: Option<GraduationLogCursor>,
-    limit: Option<u32>,
-    query: Option<String>,
+    request: PageRequest<'_>,
 ) -> Result<GraduationLogPage, String> {
+    let PageRequest { run_id, phase_id, scope, stream, cursor, limit, query } = request;
     // GRS-FR-UEIL: a cursor answers for the run and the stream it names.
     if let Some(cursor) = cursor.as_ref() {
         if cursor.run_id != run_id
@@ -367,11 +348,8 @@ pub fn read_page(
     // GRS-FR-THZA: a failed write of this stream is reported as such, so a
     // surface says that output stopped rather than that a run produced none.
     if indexes.persistence.status == STATUS_FAILED {
-        if let Some(failure) = indexes
-            .persistence
-            .failure
-            .as_ref()
-            .filter(|failure| failure.stream == stream)
+        if let Some(failure) =
+            indexes.persistence.failure.as_ref().filter(|failure| failure.stream == stream)
         {
             let mut page = GraduationLogPage::bare(
                 run_id,
@@ -447,22 +425,13 @@ pub fn read_page(
         return Ok(page);
     }
 
-    let scoped: Vec<&Line> = lines
-        .iter()
-        .filter(|line| in_scope(line, phase_id, scope))
-        .collect();
+    let scoped: Vec<&Line> = lines.iter().filter(|line| in_scope(line, phase_id, scope)).collect();
 
     // GRS-FR-NSGX: the scope's own records settle the status, and the query
     // carries its own result beside it.
-    let status = if scoped.is_empty() {
-        STATUS_EMPTY
-    } else {
-        STATUS_AVAILABLE
-    };
+    let status = if scoped.is_empty() { STATUS_EMPTY } else { STATUS_AVAILABLE };
 
-    let needle = query
-        .map(|query| query.trim().to_lowercase())
-        .filter(|query| !query.is_empty());
+    let needle = query.map(|query| query.trim().to_lowercase()).filter(|query| !query.is_empty());
     let matched: Vec<&Line> = match needle.as_ref() {
         None => scoped,
         Some(needle) => scoped
@@ -528,29 +497,23 @@ pub fn read_page(
         // before it begins one past the cursor the caller gave.
         None => cursor.as_ref().map(|cursor| cursor.sequence + 1),
     };
-    let older_cursor = older_sequence
-        .filter(|_| !oldest_reached)
-        .map(|sequence| GraduationLogCursor {
+    let older_cursor =
+        older_sequence.filter(|_| !oldest_reached).map(|sequence| GraduationLogCursor {
             run_id: run_id.to_string(),
             stream,
             direction: DIRECTION_BEFORE.to_string(),
             sequence,
         });
-    let asked_before = cursor
-        .as_ref()
-        .is_some_and(|cursor| cursor.direction == DIRECTION_BEFORE);
+    let asked_before = cursor.as_ref().is_some_and(|cursor| cursor.direction == DIRECTION_BEFORE);
     let next_cursor = if asked_before {
         older_cursor.clone()
     } else {
-        window
-            .last()
-            .filter(|_| !newest_reached)
-            .map(|last| GraduationLogCursor {
-                run_id: run_id.to_string(),
-                stream,
-                direction: DIRECTION_AFTER.to_string(),
-                sequence: last.sequence,
-            })
+        window.last().filter(|_| !newest_reached).map(|last| GraduationLogCursor {
+            run_id: run_id.to_string(),
+            stream,
+            direction: DIRECTION_AFTER.to_string(),
+            sequence: last.sequence,
+        })
     };
 
     Ok(GraduationLogPage {
@@ -562,9 +525,7 @@ pub fn read_page(
             .iter()
             .map(|line| GraduationLogPageEntry {
                 record: line.value.clone(),
-                presentation: GraduationLogPresentation {
-                    run_level: line.pass.is_none(),
-                },
+                presentation: GraduationLogPresentation { run_level: line.pass.is_none() },
             })
             .collect(),
         next_cursor,

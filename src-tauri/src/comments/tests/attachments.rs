@@ -28,12 +28,7 @@ fn an_attachment_is_stored_by_kind_and_deduplicated_by_content() {
     let stored = only_attachments(&thread);
     assert_eq!(stored.len(), 2, "both kinds are carried by the comment");
     let digest = match stored[0] {
-        Attachment::Blob {
-            digest,
-            media_type,
-            filename,
-            bytes,
-        } => {
+        Attachment::Blob { digest, media_type, filename, bytes } => {
             assert_eq!(media_type, "image/png");
             assert_eq!(filename, "diff.png");
             assert_eq!(*bytes, png.len() as u64, "the decoded length, not base64's");
@@ -63,15 +58,10 @@ fn an_attachment_is_stored_by_kind_and_deduplicated_by_content() {
         "same picture".into(),
         vec![],
         vec![inline_png("renamed.png", png)],
-        &human("octocat"),
-        "2026-01-02T00:00:00Z",
+        Stamp { by: &human("octocat"), at: "2026-01-02T00:00:00Z" },
     )
     .unwrap();
-    assert_eq!(
-        stored_files(root),
-        vec![digest.clone()],
-        "byte-identical content is one file",
-    );
+    assert_eq!(stored_files(root), vec![digest.clone()], "byte-identical content is one file",);
     let refreshed = list_fragment_discussions_in(root, "specs/a.md");
     let both = only_attachments(&refreshed[0]);
     let digests: Vec<&String> = both
@@ -93,8 +83,7 @@ fn an_attachment_is_stored_by_kind_and_deduplicated_by_content() {
         "third time".into(),
         vec![],
         vec![inline_png("again.png", png)],
-        &human("octocat"),
-        "2026-01-03T00:00:00Z",
+        Stamp { by: &human("octocat"), at: "2026-01-03T00:00:00Z" },
     )
     .unwrap();
     assert_eq!(
@@ -129,10 +118,7 @@ fn a_url_attachment_is_recorded_without_being_fetched() {
         }
         other => panic!("expected a url, got {other:?}"),
     }
-    assert!(
-        stored_files(root).is_empty(),
-        "a url stores no bytes anywhere",
-    );
+    assert!(stored_files(root).is_empty(), "a url stores no bytes anywhere",);
 }
 
 /// CMS-FR-45: the bytes reach disk before the line naming them.
@@ -176,8 +162,7 @@ fn a_failed_append_leaves_the_bytes_rather_than_a_dangling_reference() {
         "with a picture".into(),
         vec![],
         vec![inline_png("a.png", png)],
-        &human("raver119"),
-        "2026-01-02T00:00:00Z",
+        Stamp { by: &human("raver119"), at: "2026-01-02T00:00:00Z" },
     );
     assert!(err.is_err(), "the append could not be written");
 
@@ -189,11 +174,7 @@ fn a_failed_append_leaves_the_bytes_rather_than_a_dangling_reference() {
     );
 
     // And the conversation is untouched.
-    assert_eq!(
-        std::fs::read_to_string(&log).unwrap(),
-        before,
-        "the log gained no line",
-    );
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), before, "the log gained no line",);
     let folded = list_fragment_discussions_in(root, "specs/a.md");
     assert_eq!(folded[0].comments.len(), 1, "no comment was added");
 }
@@ -241,8 +222,7 @@ fn the_refusal_matrix_covers_urls_filenames_and_the_size_boundary() {
             "try".into(),
             vec![],
             attachments,
-            &by,
-            "2026-01-02T00:00:00Z",
+            Stamp { by: &by, at: "2026-01-02T00:00:00Z" },
         )
     };
 
@@ -304,13 +284,9 @@ fn a_refusal_for_any_reason_leaves_the_attachments_folder_clean() {
             "specs/a.md",
             &thread.id,
             "quoting elsewhere".into(),
-            vec![CommentQuote {
-                comment_id: other.comments[0].id.clone(),
-                excerpt: "y".into(),
-            }],
+            vec![CommentQuote { comment_id: other.comments[0].id.clone(), excerpt: "y".into() }],
             vec![inline_png("never-stored.png", b"never")],
-            &by,
-            "2026-01-02T00:00:00Z",
+            Stamp { by: &by, at: "2026-01-02T00:00:00Z" }
         )
         .unwrap_err(),
         ERR_QUOTED_COMMENT_NOT_IN_DISCUSSION,
@@ -327,8 +303,7 @@ fn a_refusal_for_any_reason_leaves_the_attachments_folder_clean() {
             "into a locked thread".into(),
             vec![],
             vec![inline_png("never-stored.png", b"never")],
-            &by,
-            "2026-01-04T00:00:00Z",
+            Stamp { by: &by, at: "2026-01-04T00:00:00Z" }
         )
         .unwrap_err(),
         ERR_DISCUSSION_LOCKED,
@@ -388,8 +363,7 @@ fn an_unacceptable_attachment_refuses_the_whole_append() {
             vec![],
             // The acceptable one is first, so nothing about ordering saves it.
             vec![inline_png("ok.png", b"fine"), bad],
-            &human("raver119"),
-            "2026-01-02T00:00:00Z",
+            Stamp { by: &human("raver119"), at: "2026-01-02T00:00:00Z" },
         )
         .unwrap_err();
         assert_eq!(err, expected);
@@ -417,10 +391,7 @@ fn reading_an_attachment_serves_its_bytes_or_says_it_is_not_there() {
         "specs/a.md",
         anchor(0, 5, "hello"),
         "x".into(),
-        vec![
-            inline_png("diff.png", png),
-            url_png("https://example.test/a.png", None),
-        ],
+        vec![inline_png("diff.png", png), url_png("https://example.test/a.png", None)],
         &human("raver119"),
         "2026-01-01T00:00:00Z",
     )
@@ -435,9 +406,7 @@ fn reading_an_attachment_serves_its_bytes_or_says_it_is_not_there() {
     assert_eq!(content.filename, "diff.png");
     use base64::Engine as _;
     assert_eq!(
-        base64::engine::general_purpose::STANDARD
-            .decode(content.data.as_bytes())
-            .unwrap(),
+        base64::engine::general_purpose::STANDARD.decode(content.data.as_bytes()).unwrap(),
         png,
     );
 
@@ -447,13 +416,8 @@ fn reading_an_attachment_serves_its_bytes_or_says_it_is_not_there() {
     );
     // A url's address is not a digest: this module holds no content for one.
     assert_eq!(
-        read_attachment_in(
-            root,
-            LogScope::Artifact,
-            &thread,
-            "https://example.test/a.png"
-        )
-        .unwrap_err(),
+        read_attachment_in(root, LogScope::Artifact, &thread, "https://example.test/a.png")
+            .unwrap_err(),
         ERR_ATTACHMENT_NOT_FOUND,
     );
 }
@@ -490,17 +454,11 @@ fn the_scopes_store_identical_content_separately() {
     assert_eq!(draft_digest, digest, "content addressing is scope-blind");
 
     let project_copy = attachments_dir(root).join(&digest);
-    let draft_copy = draft_comments_dir(root, &draft_id)
-        .unwrap()
-        .join(ATTACHMENTS_SUBDIR)
-        .join(&digest);
+    let draft_copy =
+        draft_comments_dir(root, &draft_id).unwrap().join(ATTACHMENTS_SUBDIR).join(&digest);
     assert_eq!(
         draft_copy,
-        root.join("drafts")
-            .join(&draft_id)
-            .join("comments")
-            .join(ATTACHMENTS_SUBDIR)
-            .join(&digest),
+        root.join("drafts").join(&draft_id).join("comments").join(ATTACHMENTS_SUBDIR).join(&digest),
         "in the store, under the draft's stable id (CMS-FR-49)",
     );
     assert!(project_copy.exists() && draft_copy.exists(), "one copy each");
@@ -541,8 +499,7 @@ fn attachments_are_immutable_and_never_collected() {
 
     let by = human("raver119");
     set_lock_in(root, "specs/a.md", &thread.id, true, &by, "2026-01-02T00:00:00Z").unwrap();
-    set_resolution_in(root, "specs/a.md", &thread.id, true, &by, "2026-01-03T00:00:00Z")
-        .unwrap();
+    set_resolution_in(root, "specs/a.md", &thread.id, true, &by, "2026-01-03T00:00:00Z").unwrap();
     reanchor_in(
         root,
         "specs/a.md",
@@ -593,17 +550,11 @@ fn a_crafted_digest_reads_nothing_outside_its_own_thread() {
     .unwrap();
 
     // A traversal out of the attachments folder is refused rather than read.
-    for crafted in [
-        "../../../secret.txt",
-        "../../secret.txt",
-        "..%2F..%2Fsecret.txt",
-        "/etc/passwd",
-    ] {
+    for crafted in
+        ["../../../secret.txt", "../../secret.txt", "..%2F..%2Fsecret.txt", "/etc/passwd"]
+    {
         let err = read_attachment_in(root, LogScope::Artifact, &thread, crafted).unwrap_err();
-        assert_eq!(
-            err, ERR_ATTACHMENT_NOT_FOUND,
-            "{crafted} must not resolve to anything",
-        );
+        assert_eq!(err, ERR_ATTACHMENT_NOT_FOUND, "{crafted} must not resolve to anything",);
     }
 
     // A digest that really is on disk, but belongs to a different thread, is
@@ -644,13 +595,7 @@ fn the_accepted_media_types_are_images_pdf_and_plain_text() {
     ] {
         assert!(media_type_accepted(ok), "{ok} should be accepted");
     }
-    for bad in [
-        "application/zip",
-        "application/octet-stream",
-        "text/html",
-        "video/mp4",
-        "",
-    ] {
+    for bad in ["application/zip", "application/octet-stream", "text/html", "video/mp4", ""] {
         assert!(!media_type_accepted(bad), "{bad} should be refused");
     }
 }
@@ -727,10 +672,7 @@ fn a_crafted_stored_digest_cannot_climb_out_of_the_attachments_folder() {
 
     // The fold serves the line — a damaged *value* is not a damaged line, and
     // CMS-FR-08 keeps the rest of the conversation readable either way.
-    let folded = list_fragment_discussions_in(root, "specs/a.md")
-        .into_iter()
-        .next()
-        .unwrap();
+    let folded = list_fragment_discussions_in(root, "specs/a.md").into_iter().next().unwrap();
     assert_eq!(folded.comments.len(), 2, "the crafted comment is still read");
 
     // But it serves no bytes: the digest is not a digest.
@@ -750,14 +692,9 @@ fn a_crafted_stored_digest_cannot_climb_out_of_the_attachments_folder() {
         &format!("{}x", "a".repeat(63)),
         "",
     ] {
-        assert!(
-            !is_storage_digest(crafted),
-            "{crafted:?} must not pass for a digest",
-        );
+        assert!(!is_storage_digest(crafted), "{crafted:?} must not pass for a digest",);
         assert_eq!(
-            LogScope::Artifact
-                .attachment_path(root, crafted)
-                .unwrap_err(),
+            LogScope::Artifact.attachment_path(root, crafted).unwrap_err(),
             ERR_ATTACHMENT_NOT_FOUND,
             "{crafted:?} must not resolve to a path at all",
         );
@@ -841,10 +778,7 @@ fn every_command_that_appends_announces_it_and_no_command_announces_a_no_op() {
         let at = source
             .match_indices(&needle)
             .find(|(i, _)| {
-                matches!(
-                    source[i + needle.len()..].chars().next(),
-                    Some('<') | Some('(')
-                )
+                matches!(source[i + needle.len()..].chars().next(), Some('<') | Some('('))
             })
             .map(|(i, _)| i)
             .unwrap_or_else(|| panic!("{name} is not a function in this module"));

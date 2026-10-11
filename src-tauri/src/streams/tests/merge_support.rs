@@ -34,12 +34,7 @@ fn status_of(repo: &git2::Repository) -> Vec<(String, u32)> {
         .statuses(Some(&mut options))
         .expect("statuses")
         .iter()
-        .map(|entry| {
-            (
-                entry.path().unwrap_or_default().to_string(),
-                entry.status().bits(),
-            )
-        })
+        .map(|entry| (entry.path().unwrap_or_default().to_string(), entry.status().bits()))
         .collect();
     out.sort();
     out
@@ -119,17 +114,11 @@ pub(super) fn observe(fx: &Fixture, stream: &WorkStream) -> Observed {
 /// A request left no run: the order names none, and the store holds no run
 /// directory.
 pub(super) fn assert_no_run_anywhere(fx: &Fixture) {
-    let fs = fx
-        .app
-        .state::<crate::fs::FsAccessState>()
-        .get()
-        .expect("instance");
+    let fs = fx.app.state::<crate::fs::FsAccessState>().get().expect("instance");
     let base = crate::graduation::StoreBase::new(canonical(fx.store.path()));
     let key = fx.app.state::<crate::project::ProjectState>().slot_key();
     assert!(
-        crate::graduation::read_queue_index(&fs, &base, &key)
-            .runs
-            .is_empty(),
+        crate::graduation::read_queue_index(&fs, &base, &key).runs.is_empty(),
         "the run order holds a run"
     );
     let runs: Vec<String> = names_under(&canonical(fx.store.path()))
@@ -185,6 +174,7 @@ pub(super) fn tip_text(repo: &git2::Repository, branch: &str) -> String {
 /// - `README.md`: both sides changed the same line.
 /// - `gone.txt`: the base deleted it and the stream changed it.
 /// - `both-new.txt`: both sides added it with different content.
+///
 /// The stream also adds `stream-only.txt`, and the base adds `base-only.txt`,
 /// which Git merges without help.
 pub(super) fn stream_with_three_conflicts(fx: &Fixture) -> WorkStream {
@@ -305,6 +295,7 @@ pub(super) fn save_plain_run(
         base_commit: None,
         commits: Vec::new(),
         auto_start: true,
+        dispatched: false,
         archived: false,
         archived_at: None,
         work_turns: 0,
@@ -349,7 +340,12 @@ pub(super) fn commit_symlink(repo: &git2::Repository, path: &str, target: &str, 
 /// Record a submodule entry (a gitlink) at a path, naming `commit`, and commit
 /// it. The directory a submodule stands in is made, empty, so the working copy
 /// stays clean.
-pub(super) fn commit_gitlink(repo: &git2::Repository, path: &str, commit: git2::Oid, message: &str) {
+pub(super) fn commit_gitlink(
+    repo: &git2::Repository,
+    path: &str,
+    commit: git2::Oid,
+    message: &str,
+) {
     let workdir = repo.workdir().expect("a working copy").to_path_buf();
     std::fs::create_dir_all(workdir.join(path)).unwrap();
     let mut index = repo.index().expect("index");
@@ -370,13 +366,10 @@ pub(super) fn commit_gitlink(repo: &git2::Repository, path: &str, commit: git2::
         })
         .expect("the gitlink is staged");
     index.write().expect("write");
-    let tree = repo
-        .find_tree(index.write_tree().expect("tree"))
-        .expect("tree");
+    let tree = repo.find_tree(index.write_tree().expect("tree")).expect("tree");
     let signature = repo.signature().expect("signature");
     let head = repo.head().unwrap().peel_to_commit().unwrap();
-    repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[&head])
-        .expect("commit");
+    repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[&head]).expect("commit");
 }
 
 /// Move a file inside a working copy and commit the move.
@@ -400,7 +393,11 @@ pub(super) fn snapshot_refs(repo: &git2::Repository) -> Vec<String> {
 }
 
 /// The bytes a commit holds at a path.
-pub(super) fn blob_bytes(repo: &git2::Repository, commit: git2::Oid, path: &str) -> Option<Vec<u8>> {
+pub(super) fn blob_bytes(
+    repo: &git2::Repository,
+    commit: git2::Oid,
+    path: &str,
+) -> Option<Vec<u8>> {
     let tree = repo.find_commit(commit).ok()?.tree().ok()?;
     let entry = tree.get_path(Path::new(path)).ok()?;
     Some(repo.find_blob(entry.id()).ok()?.content().to_vec())

@@ -291,23 +291,15 @@ impl LogBuffer {
         // LGC-FR-17: leading-edge emit, then coalesce for the window. The
         // trailing flush is owed by `take_pending_flush` — without it a burst
         // that ends inside the window would leave the panel stale forever.
-        let elapsed = inner
-            .last_emit
-            .map(|last| now.duration_since(last) >= COALESCE_WINDOW)
-            .unwrap_or(true);
+        let elapsed =
+            inner.last_emit.map(|last| now.duration_since(last) >= COALESCE_WINDOW).unwrap_or(true);
         if elapsed {
             inner.last_emit = Some(now);
             inner.pending_emit = false;
-            AppendOutcome {
-                state,
-                emit_now: true,
-            }
+            AppendOutcome { state, emit_now: true }
         } else {
             inner.pending_emit = true;
-            AppendOutcome {
-                state,
-                emit_now: false,
-            }
+            AppendOutcome { state, emit_now: false }
         }
     }
 
@@ -318,10 +310,8 @@ impl LogBuffer {
         if !inner.pending_emit {
             return None;
         }
-        let elapsed = inner
-            .last_emit
-            .map(|last| now.duration_since(last) >= COALESCE_WINDOW)
-            .unwrap_or(true);
+        let elapsed =
+            inner.last_emit.map(|last| now.duration_since(last) >= COALESCE_WINDOW).unwrap_or(true);
         if !elapsed {
             return None;
         }
@@ -379,11 +369,8 @@ impl LogBuffer {
     ) -> Result<LogPage, String> {
         let matcher = Matcher::compile(filter)?;
         let inner = self.lock();
-        let matched: Vec<&LogRecord> = inner
-            .records
-            .iter()
-            .filter(|r| matcher.matches(r))
-            .collect();
+        let matched: Vec<&LogRecord> =
+            inner.records.iter().filter(|r| matcher.matches(r)).collect();
         let matched_total = matched.len();
 
         // LGC-FR-22. The buffer is ascending by construction, so each arm is a
@@ -404,8 +391,7 @@ impl LogBuffer {
                 .collect(),
             // Nearest below `s`: the tail of what precedes it.
             Some(Cursor::Before(s)) => {
-                let below: Vec<&&LogRecord> =
-                    matched.iter().filter(|r| r.sequence < s).collect();
+                let below: Vec<&&LogRecord> = matched.iter().filter(|r| r.sequence < s).collect();
                 below
                     .iter()
                     .skip(below.len().saturating_sub(limit))
@@ -448,9 +434,7 @@ impl LogBuffer {
     /// A poisoned buffer must not take the application down with it: logging is
     /// peripheral to every operation that emits through it.
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
-        self.inner
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// The oldest record `predicate` accepts, cloned, or `None` where the buffer
@@ -505,14 +489,9 @@ fn bound_record(mut record: LogRecord) -> LogRecord {
     if size <= MAX_RECORD_BYTES || record.fields.is_empty() {
         return record;
     }
-    let omitted = serde_json::to_string(&record.fields)
-        .map(|s| s.len())
-        .unwrap_or(0);
+    let omitted = serde_json::to_string(&record.fields).map(|s| s.len()).unwrap_or(0);
     record.fields = Fields::new();
-    record.fields.insert(
-        OMITTED_FIELD.to_string(),
-        serde_json::Value::from(omitted as u64),
-    );
+    record.fields.insert(OMITTED_FIELD.to_string(), serde_json::Value::from(omitted as u64));
     record
 }
 
@@ -545,17 +524,11 @@ impl<'a> Matcher<'a> {
         let query = if raw.is_empty() {
             Query::Any
         } else if filter.query_is_regex {
-            regex::Regex::new(raw)
-                .map(Query::Regex)
-                .map_err(|_| INVALID_QUERY.to_string())?
+            regex::Regex::new(raw).map(Query::Regex).map_err(|_| INVALID_QUERY.to_string())?
         } else {
             Query::Insensitive(raw.to_lowercase())
         };
-        Ok(Matcher {
-            min_level: filter.min_level,
-            domains: &filter.domains,
-            query,
-        })
+        Ok(Matcher { min_level: filter.min_level, domains: &filter.domains, query })
     }
 
     fn matches(&self, record: &LogRecord) -> bool {
@@ -590,10 +563,7 @@ impl<'a> Matcher<'a> {
                 if re.is_match(&record.message) {
                     return true;
                 }
-                record
-                    .fields
-                    .iter()
-                    .any(|(k, v)| re.is_match(k) || re.is_match(&field_text(v)))
+                record.fields.iter().any(|(k, v)| re.is_match(k) || re.is_match(&field_text(v)))
             }
         }
     }
@@ -797,10 +767,7 @@ pub static BUFFER: LogBuffer = LogBuffer::new();
 impl LogBuffer {
     /// `const` so [`BUFFER`] can be a `static` rather than a lazy singleton.
     pub const fn new() -> Self {
-        LogBuffer {
-            inner: Mutex::new(Inner::new()),
-            flush_scheduled: AtomicBool::new(false),
-        }
+        LogBuffer { inner: Mutex::new(Inner::new()), flush_scheduled: AtomicBool::new(false) }
     }
 }
 
@@ -876,7 +843,11 @@ pub fn export_logs(
 /// of its own, so this is the only place the reason survives. The destination is
 /// a path the user picked and the reason is an `FsError`'s own `Display` — a
 /// path and a failure kind, never file content and never a credential.
-fn log_export_failure<R: tauri::Runtime>(app: &tauri::AppHandle<R>, destination: &str, reason: &str) {
+fn log_export_failure<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    destination: &str,
+    reason: &str,
+) {
     log(
         app,
         &BUFFER,
@@ -898,9 +869,7 @@ fn write_export(access: &fs::FsAccess, path: &Path, text: &str) -> Result<(), St
     // whatever the frontend claims, so there is no user choice to honour.
     let chosen = fs::UserChosenPath::from_frontend_response(path)
         .ok_or_else(|| "destination is not an absolute path".to_string())?;
-    access
-        .write_text_at_user_choice(&chosen, text)
-        .map_err(|e| e.to_string())
+    access.write_text_at_user_choice(&chosen, text).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

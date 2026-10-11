@@ -49,10 +49,7 @@ pub fn resume_active_worktree(
     // directory must still be there. A co-located project keeps its position
     // inside the checkout it resumes into.
     match validate_activation_target(opened, &remembered.to_string_lossy()) {
-        Ok(worktree) => (
-            content_root_in(&worktree, &root_offset(&repo, opened)),
-            false,
-        ),
+        Ok(worktree) => (content_root_in(&worktree, &root_offset(&repo, opened)), false),
         Err(_) => (opened.to_path_buf(), true),
     }
 }

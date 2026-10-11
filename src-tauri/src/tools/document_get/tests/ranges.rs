@@ -134,7 +134,11 @@ fn a_line_range_keeps_terminators_and_clamps() {
     let text = "zero\none\r\ntwo\nthree";
     assert_eq!(lines(text, Some(1), Some(2)), "one\r\ntwo\n");
     assert_eq!(lines(text, None, Some(1)), "zero\n");
-    assert_eq!(lines(text, Some(2), None), "two\nthree", "the rest, last line without a terminator");
+    assert_eq!(
+        lines(text, Some(2), None),
+        "two\nthree",
+        "the rest, last line without a terminator"
+    );
     assert_eq!(lines(text, Some(-3), Some(1)), "zero\n", "a negative offset is 0");
     assert_eq!(lines(text, Some(1), Some(0)), "one\r\n", "a limit below 1 is 1");
     assert_eq!(lines(text, Some(2), Some(100)), "two\nthree");

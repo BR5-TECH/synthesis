@@ -2,8 +2,8 @@
 //! (GHP-FR-MZPR, GHP-FR-FQIZ, GHP-FR-PVOA, GHP-FR-DHXK).
 
 use super::super::client::{
-    exact_match, issue_capability, issue_from_json, scopes_from_header, transport_code,
-    urlencode, ProbeOutcome,
+    exact_match, issue_capability, issue_from_json, scopes_from_header, transport_code, urlencode,
+    ProbeOutcome,
 };
 use super::*;
 
@@ -193,8 +193,16 @@ fn an_issue_answer_is_read_for_its_publication_metadata() {
 #[test]
 fn a_parent_address_is_parsed_strictly() {
     let parent = parent_from_url("https://api.github.com/repos/acme/widgets/issues/4").unwrap();
-    assert_eq!((parent.owner.as_str(), parent.repo.as_str(), parent.number), ("acme", "widgets", 4));
-    for bad in ["", "https://api.github.com/repos/acme/widgets/pulls/4", "https://api.github.com/repos/acme", "https://api.github.com/repos/acme/widgets/issues/x"] {
+    assert_eq!(
+        (parent.owner.as_str(), parent.repo.as_str(), parent.number),
+        ("acme", "widgets", 4)
+    );
+    for bad in [
+        "",
+        "https://api.github.com/repos/acme/widgets/pulls/4",
+        "https://api.github.com/repos/acme",
+        "https://api.github.com/repos/acme/widgets/issues/x",
+    ] {
         assert!(parent_from_url(bad).is_none(), "{bad}");
     }
 }
@@ -233,7 +241,9 @@ fn the_type_and_milestone_answers_are_read() {
     assert_eq!(types, vec!["Task".to_string(), "Bug".to_string()]);
     assert!(issue_type_names(&serde_json::json!({ "message": "Not Found" })).is_empty());
 
-    let milestone = milestone_from_json(&serde_json::json!({ "number": 7, "title": "v1.2", "state": "open" })).unwrap();
+    let milestone =
+        milestone_from_json(&serde_json::json!({ "number": 7, "title": "v1.2", "state": "open" }))
+            .unwrap();
     assert_eq!((milestone.number, milestone.title.as_str()), (7, "v1.2"));
     assert!(milestone_from_json(&serde_json::json!({ "title": "x" })).is_none());
 }
@@ -247,7 +257,11 @@ fn the_request_body_names_only_what_the_choice_names() {
         serde_json::json!({ "title": "t", "body": "b" })
     );
     assert_eq!(
-        issue_payload("t", "b", &IssueFields { issue_type: Some("Task".into()), milestone: Some(7) }),
+        issue_payload(
+            "t",
+            "b",
+            &IssueFields { issue_type: Some("Task".into()), milestone: Some(7) }
+        ),
         serde_json::json!({ "title": "t", "body": "b", "type": "Task", "milestone": 7 })
     );
     assert_eq!(urlencode("Feature request"), "Feature%20request");
@@ -257,7 +271,9 @@ fn the_request_body_names_only_what_the_choice_names() {
 /// text that carries no transport detail.
 #[test]
 fn the_metadata_errors_have_fixed_text() {
-    for code in [ERR_PARENT_ISSUES_UNREADABLE, ERR_ISSUE_TYPES_UNREADABLE, ERR_MILESTONES_UNREADABLE] {
+    for code in
+        [ERR_PARENT_ISSUES_UNREADABLE, ERR_ISSUE_TYPES_UNREADABLE, ERR_MILESTONES_UNREADABLE]
+    {
         let list = MetadataList::<u8>::failed(code);
         assert_eq!(list.error_code.as_deref(), Some(code));
         let text = list.error.unwrap();

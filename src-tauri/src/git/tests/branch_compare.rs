@@ -9,18 +9,12 @@ use super::*;
 /// Point `HEAD` at `branch` and make the working tree and index match it.
 fn switch(repo: &Repository, branch: &str) {
     repo.set_head(&format!("refs/heads/{branch}")).unwrap();
-    repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
-        .unwrap();
+    repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force())).unwrap();
 }
 
 /// Create `branch` at the tip of `from`.
 fn cut(repo: &Repository, branch: &str, from: &str) {
-    let tip = repo
-        .find_branch(from, BranchType::Local)
-        .unwrap()
-        .get()
-        .peel_to_commit()
-        .unwrap();
+    let tip = repo.find_branch(from, BranchType::Local).unwrap().get().peel_to_commit().unwrap();
     repo.branch(branch, &tip, false).unwrap();
 }
 
@@ -51,11 +45,7 @@ fn forked() -> (Fixture, Oid) {
         &repo,
         "feature work",
         1_700_000_060,
-        &[
-            ("f.md", Some(b"feature\n")),
-            ("old.md", None),
-            ("new.md", Some(b"keep me as I am\n")),
-        ],
+        &[("f.md", Some(b"feature\n")), ("old.md", None), ("new.md", Some(b"keep me as I am\n"))],
     );
     switch(&repo, "main");
     commit_at(&repo, "main work", 1_700_000_120, &[("m.md", Some(b"main\n"))]);
@@ -197,8 +187,7 @@ fn a_branch_that_shares_no_commit_with_its_base_is_refused() {
     let blob = repo.blob(b"alone\n").unwrap();
     builder.insert("alone.md", blob, 0o100644).unwrap();
     let tree = repo.find_tree(builder.write().unwrap()).unwrap();
-    repo.commit(Some("refs/heads/orphan"), &sig, &sig, "orphan", &tree, &[])
-        .unwrap();
+    repo.commit(Some("refs/heads/orphan"), &sig, &sig, "orphan", &tree, &[]).unwrap();
 
     assert_eq!(
         branch_comparison_for(&f.root(), "orphan", "local", None).unwrap_err(),
@@ -213,11 +202,8 @@ fn the_diff_of_one_path_runs_from_the_merge_base_to_the_branch_tip() {
 
     let added = branch_compare_file_diff_for(&f.root(), "feature", "local", "f.md", None).unwrap();
     assert!(!added.is_binary);
-    let lines: Vec<String> = added
-        .hunks
-        .iter()
-        .flat_map(|h| h.lines.iter().map(|l| l.content.clone()))
-        .collect();
+    let lines: Vec<String> =
+        added.hunks.iter().flat_map(|h| h.lines.iter().map(|l| l.content.clone())).collect();
     assert!(lines.iter().any(|l| l.contains("feature")), "{lines:?}");
 
     // A pure rename is a change of the path, so it answers rather than refuses.
@@ -264,12 +250,7 @@ fn the_comparison_serialises_in_camel_case() {
 
     assert_eq!(json["sameAsBase"], serde_json::json!(false));
     assert!(json["mergeBase"].is_string());
-    let renamed = json["files"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|f| f["path"] == "new.md")
-        .unwrap();
+    let renamed = json["files"].as_array().unwrap().iter().find(|f| f["path"] == "new.md").unwrap();
     assert_eq!(renamed["previousPath"], "old.md");
     assert_eq!(renamed["status"], "renamed");
 }
@@ -327,8 +308,7 @@ fn both_operations_refuse_a_missing_base_and_an_unrelated_branch() {
     let mut builder = repo.treebuilder(None).unwrap();
     builder.insert("alone.md", repo.blob(b"alone\n").unwrap(), 0o100644).unwrap();
     let tree = repo.find_tree(builder.write().unwrap()).unwrap();
-    repo.commit(Some("refs/heads/orphan"), &sig, &sig, "orphan", &tree, &[])
-        .unwrap();
+    repo.commit(Some("refs/heads/orphan"), &sig, &sig, "orphan", &tree, &[]).unwrap();
 
     assert_eq!(
         branch_compare_file_diff_for(&f.root(), "feature", "local", "f.md", Some("missing"))
@@ -361,18 +341,28 @@ fn a_branch_its_base_already_holds_lists_no_path() {
 fn a_stream_branch_is_compared_with_its_base_and_the_reads_are_logged() {
     let fx = super::branch_deletion::DeletionFixture::new();
     let base = fx.f.current();
-    let stream =
-        crate::streams::create_work_stream(fx.app.clone(), "Compare".into(), Some(base.clone()))
-            .unwrap();
+    let stream = crate::streams::create_work_stream(
+        fx.app.clone(),
+        "Compare".into(),
+        Some(base.clone()),
+        None,
+    )
+    .unwrap();
     let worktree = git2::Repository::open(&stream.worktree_path).unwrap();
     commit_at(&worktree, "stream work", 1_700_000_500, &[("s.md", Some(b"secret body\n"))]);
     let log = own_buffer();
 
     let comparison =
         branch_comparison_reported(&fx.app, log, &fx.f.root(), &stream.branch, "local").unwrap();
-    let diff =
-        branch_compare_file_diff_reported(&fx.app, log, &fx.f.root(), &stream.branch, "local", "s.md")
-            .unwrap();
+    let diff = branch_compare_file_diff_reported(
+        &fx.app,
+        log,
+        &fx.f.root(),
+        &stream.branch,
+        "local",
+        "s.md",
+    )
+    .unwrap();
 
     assert_eq!(comparison.base, base);
     assert_eq!(comparison.files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), vec!["s.md"]);
@@ -396,7 +386,8 @@ fn a_refused_comparison_is_logged_as_a_warning_with_its_code() {
     let fx = super::branch_deletion::DeletionFixture::new();
     let log = own_buffer();
 
-    let error = branch_comparison_reported(&fx.app, log, &fx.f.root(), "nope", "local").unwrap_err();
+    let error =
+        branch_comparison_reported(&fx.app, log, &fx.f.root(), "nope", "local").unwrap_err();
     assert_eq!(error, ERR_UNKNOWN_BRANCH);
     let failed = record_for(log, "branch comparison failed");
     assert_eq!(failed.level, crate::logging::LogLevel::Warn);
@@ -411,4 +402,3 @@ fn a_refused_comparison_is_logged_as_a_warning_with_its_code() {
         crate::logging::LogLevel::Warn
     );
 }
-

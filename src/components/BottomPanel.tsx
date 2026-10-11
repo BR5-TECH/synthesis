@@ -8,7 +8,7 @@ import {
 import { logWarn } from "../logging";
 import {
   coalesce,
-  holdsStream,
+  isAgentWork,
   isActive,
   isWorking,
   runTitle,
@@ -25,6 +25,7 @@ import { GraduationRuns } from "./GraduationRuns";
 import { Runs } from "./Runs";
 import { Logs } from "./Logs";
 import { Git } from "./Git";
+import type { PullRequestSource } from "./CreatePullRequest/types";
 import type { ReadyTasksBinding } from "./GitReadyTasks";
 
 interface BottomPanelProps {
@@ -45,10 +46,12 @@ interface BottomPanelProps {
   canCheckOutBranches: boolean;
   /** GHA-FR-16: open the GitHub token picker for a blocked operation. */
   onRequestGithubToken?: () => Promise<boolean>;
+  /** GIT-FR-05: open the Create a PR window for the current branch. */
+  onCreatePullRequest?: (source: PullRequestSource) => void;
   /** GRU-FR-RZDI: open a run's source draft in a New Artifact tab. */
   onOpenDraft?: (draftId: string) => void;
-  /** GRU-FR-QLRQ: open Project settings on a named section. */
-  onOpenSettings?: (section: string) => void;
+  /** GRU-FR-QLRQ: open the Settings window on a named section address. */
+  onOpenSettings?: (address: string) => void;
   /**
    * SNV-FR-56: a surface of this panel is about to mount a floating overlay.
    *
@@ -324,6 +327,7 @@ export function BottomPanel({
   onSwitchWorktree,
   canCheckOutBranches,
   onRequestGithubToken,
+  onCreatePullRequest,
   onOpenDraft,
   onOpenSettings,
   onOverlayOpening,
@@ -436,7 +440,7 @@ export function BottomPanel({
       // once.
       const byRecency = (a: GraduationRun, b: GraduationRun) =>
         a.updatedAt < b.updatedAt ? 1 : -1;
-      const working = queue.runs.filter((entry) => holdsStream(entry.state));
+      const working = queue.runs.filter((entry) => isAgentWork(entry.state));
       // RUN-FR-02 / RUN-FR-LQDT: where no run is working, the most recently
       // updated run that ran a turn stays, so a turn that has just ended — a
       // merge run's included — is still readable.
@@ -572,6 +576,7 @@ export function BottomPanel({
             onSwitchWorktree={onSwitchWorktree}
             canCheckOutBranches={canCheckOutBranches}
             onRequestGithubToken={onRequestGithubToken}
+            onCreatePullRequest={onCreatePullRequest}
             readyTasks={readyTasks}
             onOpenDraft={onOpenDraft}
             selectBranch={selectGitBranch ?? null}

@@ -16,11 +16,7 @@ fn creating_a_draft_settles_no_version_at_all() {
     // word the author typed.
     let f = Fixture::new();
 
-    assert_eq!(
-        f.history_files(),
-        Vec::<String>::new(),
-        "creating a draft wrote into its history",
-    );
+    assert_eq!(f.history_files(), Vec::<String>::new(), "creating a draft wrote into its history",);
     let list = f.list();
     assert!(list.entries.is_empty());
     assert_eq!(list.live.path, FILE);
@@ -80,10 +76,7 @@ fn the_first_acceptance_settles_the_prompt_it_supersedes_as_original() {
     let list = f.list();
     assert_eq!(list.entries.len(), 3);
     assert_eq!(
-        list.entries
-            .iter()
-            .filter(|e| e.source == DraftHistorySource::Original)
-            .count(),
+        list.entries.iter().filter(|e| e.source == DraftHistorySource::Original).count(),
         1,
         "exactly one Original, for the draft's whole life",
     );
@@ -98,11 +91,7 @@ fn a_filed_drafts_history_lands_inside_that_draft_wherever_it_is_filed() {
     let f = Fixture::in_folder("UI/Components");
     f.accept_new("rewritten\n");
 
-    let filed = f
-        .root
-        .join(".synthesis/drafts/UI/Components")
-        .join(&f.draft_id)
-        .join("history");
+    let filed = f.root.join(".synthesis/drafts/UI/Components").join(&f.draft_id).join("history");
     assert_eq!(f.hist(), filed);
     assert_eq!(f.history_files().len(), 4);
     assert!(
@@ -126,10 +115,7 @@ fn the_authors_own_typing_adds_no_version() {
     }
     let list = f.list();
     assert!(list.entries.is_empty(), "typing settles nothing");
-    assert!(
-        list.live.matches_latest,
-        "and there is no version for it to have moved on from",
-    );
+    assert!(list.live.matches_latest, "and there is no version for it to have moved on from",);
     assert!(seen.lock().unwrap_or_else(|e| e.into_inner()).is_empty());
 
     // Once a change has been accepted there IS a version to have moved on from,
@@ -192,9 +178,7 @@ fn a_proposal_recorded_edited_and_declined_adds_no_version() {
     let entry = outcome.entry.expect("an entry");
     assert_eq!(entry.seq, 2);
     assert_eq!(
-        load_impl(&f.root, &outcome.original.expect("an Original").id)
-            .expect("loaded")
-            .content,
+        load_impl(&f.root, &outcome.original.expect("an Original").id).expect("loaded").content,
         ORIGINAL_TEXT,
     );
     match entry.source {
@@ -218,7 +202,7 @@ fn a_snapshot_holds_the_normalised_bytes_rather_than_the_candidates_own() {
         crate::project_settings::ProjectConfig {
             line_endings: crate::project_settings::LineEndings::Crlf,
             draft_template: None,
-                    ..Default::default()
+            ..Default::default()
         },
     )
     .expect("convention");
@@ -229,15 +213,11 @@ fn a_snapshot_holds_the_normalised_bytes_rather_than_the_candidates_own() {
     let entry = outcome.entry.expect("an entry");
 
     let on_disk = std::fs::read(
-        drafts::draft_dir(&f.root, &f.draft_id)
-            .expect("dir")
-            .join("files")
-            .join(FILE),
+        drafts::draft_dir(&f.root, &f.draft_id).expect("dir").join("files").join(FILE),
     )
     .expect("prompt bytes");
     assert_eq!(
-        on_disk,
-        b"# Spec  \r\n\r\nA line   \r\nand the last with no newline",
+        on_disk, b"# Spec  \r\n\r\nA line   \r\nand the last with no newline",
         "CRLF throughout, with the trailing whitespace and the missing final \
          newline intact",
     );
@@ -290,10 +270,7 @@ fn loading_an_entry_verifies_it_and_a_corrupt_payload_is_typed() {
     // text is returned in its place, and the other two still load.
     let victim = &list.entries[1];
     std::fs::write(snapshot_path(&f.hist(), &victim.id), b"tampered").expect("truncate");
-    assert_eq!(
-        load_impl(&f.root, &victim.id).unwrap_err(),
-        ERR_SNAPSHOT_CORRUPT,
-    );
+    assert_eq!(load_impl(&f.root, &victim.id).unwrap_err(), ERR_SNAPSHOT_CORRUPT,);
     assert_eq!(f.prompt(), "second rewrite\n", "the prompt is untouched");
     assert!(load_impl(&f.root, &list.entries[0].id).is_ok());
     assert!(load_impl(&f.root, &list.entries[2].id).is_ok());
@@ -360,12 +337,7 @@ fn an_acceptance_that_changes_no_byte_creates_no_entry() {
         "no history event for an acceptance that created no version",
     );
     assert!(
-        f.discussion()
-            .comments
-            .last()
-            .expect("last")
-            .body
-            .contains("Accepted"),
+        f.discussion().comments.last().expect("last").body.contains("Accepted"),
         "the decision comment was still appended",
     );
 }
@@ -408,13 +380,7 @@ fn a_first_acceptance_that_changes_no_byte_settles_no_original_either() {
     assert!(seen.lock().unwrap_or_else(|e| e.into_inner()).is_empty());
     assert_eq!(outcome.proposal.state, dcp::ProposalState::Accepted);
     assert!(
-        f.discussion()
-            .comments
-            .last()
-            .expect("last")
-            .body
-            .contains("Accepted"),
+        f.discussion().comments.last().expect("last").body.contains("Accepted"),
         "the decision comment was still appended",
     );
 }
-

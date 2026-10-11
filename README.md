@@ -1,5 +1,4 @@
 # Synthesis
-
 Synthesis is an IDE for software engineers working with AI in a spec-driven way.
 
 ### How to use it
@@ -17,7 +16,6 @@ And it’s not a replacement for the IDE where engineer can write everything man
 Synthesis is a Tauri 2 application. The user interface uses React 19 and TypeScript. The backend uses Rust.
 
 You bring your own AI API keys, subscriptions. You bring the intelligence.
-
 ### How it runs
 
 The process is split in two phases:

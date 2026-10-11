@@ -255,17 +255,14 @@ where
     // CMS-FR-12 / PCP-FR-16: resolved before anything is written, so a decision
     // that cannot be attributed changes neither the file nor the record.
     let by = comments::acting_participant(&store, &project)?;
-    decide(
-        &app,
-        &root,
-        &repo_store,
-        &proposal_id,
-        Decision::Accept,
-        feedback.as_deref(),
-        &by,
-        &tracker,
-    )
-    .inspect_err(|e| log_refusal(&app, "apply", e))
+    let request = DecisionRequest {
+        proposal_id: &proposal_id,
+        decision: Decision::Accept,
+        feedback: feedback.as_deref(),
+        by: &by,
+    };
+    decide(&app, &root, &repo_store, request, &tracker)
+        .inspect_err(|e| log_refusal(&app, "apply", e))
 }
 
 #[tauri::command]
@@ -283,17 +280,14 @@ where
     let root = require_root(&project)?;
     let repo_store = require_store(&project)?;
     let by = comments::acting_participant(&store, &project)?;
-    decide(
-        &app,
-        &root,
-        &repo_store,
-        &proposal_id,
-        Decision::Decline,
-        feedback.as_deref(),
-        &by,
-        &tracker,
-    )
-    .inspect_err(|e| log_refusal(&app, "decline", e))
+    let request = DecisionRequest {
+        proposal_id: &proposal_id,
+        decision: Decision::Decline,
+        feedback: feedback.as_deref(),
+        by: &by,
+    };
+    decide(&app, &root, &repo_store, request, &tracker)
+        .inspect_err(|e| log_refusal(&app, "decline", e))
 }
 
 /// PCP-FR-14: finish an acceptance whose decision comment is still owed.

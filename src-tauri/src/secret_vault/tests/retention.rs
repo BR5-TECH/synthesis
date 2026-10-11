@@ -67,7 +67,7 @@ fn asv_ts_23_no_log_record_carries_a_secret_a_path_or_an_id() {
     let token_path = p(&["github", "tokens", TOKEN_ID]);
     set(&vault, &["github", "tokens", TOKEN_ID], SECRET).unwrap();
     vault.read_secret(&token_path).unwrap();
-    vault.secret_presence(&[token_path.clone()]).unwrap();
+    vault.secret_presence(std::slice::from_ref(&token_path)).unwrap();
     vault.apply_secret_mutations(&[Mutation::Remove { path: token_path.clone() }]).unwrap();
 
     // And every typed failure in turn.

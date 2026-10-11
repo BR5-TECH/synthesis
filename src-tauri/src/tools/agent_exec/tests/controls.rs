@@ -256,7 +256,8 @@ fn an_api_kind_integration_is_refused_by_its_own_branch() {
 /// envelope sat comfortably inside stdout's 8 MiB bound and parsed in full.
 #[test]
 fn an_oversized_envelope_is_refused_even_inside_a_bounded_stream() {
-    assert!(LIMIT_ENVELOPE < LIMIT_STDOUT, "otherwise nothing to prove");
+    // Checked at compile time: both limits are constants.
+    const _: () = assert!(LIMIT_ENVELOPE < LIMIT_STDOUT, "otherwise nothing to prove");
 
     let padding = "x".repeat(LIMIT_ENVELOPE);
     let huge = json!({
@@ -548,13 +549,13 @@ fn the_mock_docker_scenario_matches_what_production_generates() {
         serde_json::from_str(SCENARIO).expect("the scenario is valid JSON");
 
     let image = test_image_reference("claude_code");
-    let argv = descriptor::docker_run_args(
-        "synthesis-agent-1-2-3",
-        &image,
-        501,
-        20,
-        descriptor::WORKSPACE_TARGET,
-        &[
+    let argv = descriptor::ContainerSpec {
+        name: "synthesis-agent-1-2-3".into(),
+        image: image.clone(),
+        host_uid: 501,
+        host_gid: 20,
+        workdir: descriptor::WORKSPACE_TARGET.into(),
+        mounts: vec![
             descriptor::BindMount {
                 source: "/host/worktree".into(),
                 target: descriptor::WORKSPACE_TARGET.into(),
@@ -568,13 +569,20 @@ fn the_mock_docker_scenario_matches_what_production_generates() {
                 read_only: false,
             },
         ],
-        &[descriptor::CLAUDE_TOKEN_ENV],
-        &[(
+        env_names: vec![descriptor::CLAUDE_TOKEN_ENV.to_string()],
+        env_literals: vec![(
             descriptor::claude_code::SESSION_STATE_ENV.to_string(),
             descriptor::claude_code::SESSION_STATE_TARGET.to_string(),
         )],
-        &descriptor::CLAUDE_CODE.vendor_args(None, None, SCENARIO_SESSION_ID, None, None),
-    );
+        vendor_args: descriptor::CLAUDE_CODE.vendor_args(
+            None,
+            None,
+            SCENARIO_SESSION_ID,
+            None,
+            None,
+        ),
+    }
+    .docker_run_args();
 
     let required = scenario["expected"]["required_args"].as_array().expect("required_args");
     assert!(!required.is_empty());

@@ -214,15 +214,6 @@ fn a_named_result_contract_reaches_every_vendors_task_document() {
     assert!(error.to_string().contains("result_schema"), "the refusal names the field: {error}",);
 }
 
-/// A draft-07 evaluator for exactly the keywords the result documents of
-/// EAC-FR-44 use, and no others.
-///
-/// It exists so the comparison against the application's own validation is a
-/// comparison of **answers** rather than of vocabulary: a test that merely
-/// asserted the schema mentions `description` would pass over a document that
-/// required it in the wrong branch. An unknown keyword is a failed assertion
-/// rather than a silent pass, so a document that grows one cannot quietly stop
-/// being checked here.
 /// Every keyword [`schema_admits`] reads. `$schema` is an annotation rather than
 /// an assertion, and is the one entry read by being ignored.
 const KNOWN_KEYWORDS: &[&str] = &[
@@ -275,6 +266,14 @@ fn assert_keywords_are_read(schema: &serde_json::Value) {
     }
 }
 
+/// A draft-07 evaluator for exactly the keywords the result documents of
+/// EAC-FR-44 use, and no others.
+///
+/// It exists so the check of a document is a check of **answers** rather than
+/// of vocabulary: a test that merely asserted the schema mentions
+/// `description` would pass over a document that required it in the wrong
+/// branch. An unknown keyword is a failed assertion rather than a silent pass,
+/// so a document that grows one cannot quietly stop being checked here.
 fn schema_admits(schema: &serde_json::Value, value: &serde_json::Value) -> bool {
     assert_keywords_are_read(schema);
     // Draft-07 would AND a sibling keyword with the branch count. No node of
@@ -381,6 +380,142 @@ fn schema_admits(schema: &serde_json::Value, value: &serde_json::Value) -> bool 
         _ => {}
     }
     true
+}
+
+/// EAC-FR-44: each result document admits exactly the answers its contract
+/// names, and refuses each answer the contract does not name.
+///
+/// `review_verdict` admits a `ready` verdict with no finding, a `revise`
+/// verdict with at least one, and an `escalate_to_user` request.
+/// `graduation_verdict` admits the same two verdicts and no request.
+#[test]
+fn each_result_document_admits_exactly_the_answers_of_its_contract() {
+    let review = ResultContract::ReviewVerdict.schema_value();
+    let graduation = ResultContract::GraduationVerdict.schema_value();
+    assert!(review.is_object() && graduation.is_object(), "both documents parse");
+
+    // A finding with the fields of `extra` replaced. A null in `extra` removes
+    // that field, so a null value is written out in full where a case needs it.
+    let finding = |extra: serde_json::Value| {
+        let mut finding = json!({
+            "severity": "major",
+            "description": "the change drops a test",
+            "affected_files": ["src/a.rs"],
+            "correction": "keep the test",
+        });
+        for (key, value) in extra.as_object().expect("an object") {
+            if value.is_null() {
+                finding.as_object_mut().unwrap().remove(key);
+            } else {
+                finding[key] = value.clone();
+            }
+        }
+        finding
+    };
+    let verdict = |name: &str, rationale: &str, findings: Vec<serde_json::Value>| json!({ "verdict": name, "rationale": rationale, "findings": findings });
+
+    let admitted = [
+        ("a ready verdict with no finding", verdict("ready", "done", vec![])),
+        (
+            "a revise verdict with one finding",
+            verdict("revise", "not yet", vec![finding(json!({}))]),
+        ),
+        (
+            "a finding with a null list of affected files",
+            json!({ "verdict": "revise", "rationale": "r", "findings": [
+                { "severity": "minor", "description": "d", "affected_files": null, "correction": "c" }
+            ]}),
+        ),
+        (
+            "a finding with no list of affected files",
+            verdict("revise", "r", vec![finding(json!({ "affected_files": null }))]),
+        ),
+    ];
+    let refused = [
+        ("a ready verdict with a finding", verdict("ready", "r", vec![finding(json!({}))])),
+        ("a revise verdict with no finding", verdict("revise", "r", vec![])),
+        ("a verdict outside the set", verdict("maybe", "r", vec![])),
+        ("an empty rationale", verdict("ready", "", vec![])),
+        ("a blank rationale", verdict("ready", " \n\t", vec![])),
+        ("no list of findings", json!({ "verdict": "ready", "rationale": "r" })),
+        (
+            "a key the verdict does not define",
+            json!({ "verdict": "ready", "rationale": "r", "findings": [], "summary": "s" }),
+        ),
+        (
+            "a key the finding does not define",
+            verdict("revise", "r", vec![finding(json!({ "summary": "s" }))]),
+        ),
+        (
+            "a severity outside the set",
+            verdict("revise", "r", vec![finding(json!({ "severity": "blocker" }))]),
+        ),
+        (
+            "a blank description",
+            verdict("revise", "r", vec![finding(json!({ "description": "  " }))]),
+        ),
+        (
+            "a finding with no correction",
+            verdict("revise", "r", vec![finding(json!({ "correction": null }))]),
+        ),
+        (
+            "an affected file that is not a string",
+            verdict("revise", "r", vec![finding(json!({ "affected_files": ["src/a.rs", 1] }))]),
+        ),
+        (
+            "affected files that are not a list",
+            verdict("revise", "r", vec![finding(json!({ "affected_files": "src/a.rs" }))]),
+        ),
+    ];
+    for (name, schema) in [("review_verdict", review), ("graduation_verdict", graduation)] {
+        for (case, answer) in &admitted {
+            assert!(schema_admits(schema, answer), "{name} admits {case}: {answer}");
+        }
+        for (case, answer) in &refused {
+            assert!(!schema_admits(schema, answer), "{name} refuses {case}: {answer}");
+        }
+    }
+
+    // ESU-FR-19 (GRL-FR-VBCL): only the review document admits a request in
+    // place of a verdict.
+    let question = |options: usize| {
+        let option = json!({ "answer": "a", "summary": "s", "description": "d" });
+        json!({ "question": "which one?", "options": vec![option; options] })
+    };
+    let request = |reason: &str, questions: Vec<serde_json::Value>| json!({ "escalate_to_user": { "reason": reason, "questions": questions } });
+    let asked = request("the spec is silent", vec![question(3)]);
+    assert!(schema_admits(review, &asked), "review_verdict admits a request");
+    assert!(!schema_admits(graduation, &asked), "graduation_verdict refuses a request");
+    assert!(schema_admits(review, &request("r", vec![question(0); 8])), "eight questions");
+    let no_options = json!({ "question": "which one?", "options": null });
+    assert!(schema_admits(review, &request("r", vec![no_options])), "a null list of options");
+
+    // GRL-FR-VBCL: the application reads a request from a result whatever else
+    // the result carries, so the request branch stays open. A verdict that
+    // carries a request, and a request with keys of its own, are admitted.
+    let mut both = verdict("ready", "r", vec![]);
+    both["escalate_to_user"] = asked["escalate_to_user"].clone();
+    assert!(schema_admits(review, &both), "review_verdict admits a verdict with a request");
+    assert!(!schema_admits(graduation, &both), "graduation_verdict refuses it");
+    let mut open = request("r", vec![question(1)]);
+    open["escalate_to_user"]["urgency"] = json!("high");
+    open["escalate_to_user"]["questions"][0]["context"] = json!("c");
+    assert!(schema_admits(review, &open), "the request and its questions stay open");
+
+    let mut no_description = request("r", vec![question(1)]);
+    no_description["escalate_to_user"]["questions"][0]["options"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("description");
+    for (case, answer) in [
+        ("a blank reason", request(" ", vec![question(1)])),
+        ("no question", request("r", vec![])),
+        ("nine questions", request("r", vec![question(0); 9])),
+        ("four proposed responses", request("r", vec![question(4)])),
+        ("a proposed response with no description", no_description),
+    ] {
+        assert!(!schema_admits(review, &answer), "review_verdict refuses {case}: {answer}");
+    }
 }
 
 /// EAC-FR-FNFV, EAC-FR-40 (EAC-FR-41): a masking that **cannot be established** refuses the

@@ -174,6 +174,7 @@ pub(super) fn tip_text(repo: &git2::Repository, branch: &str) -> String {
 /// - `README.md`: both sides changed the same line.
 /// - `gone.txt`: the base deleted it and the stream changed it.
 /// - `both-new.txt`: both sides added it with different content.
+///
 /// The stream also adds `stream-only.txt`, and the base adds `base-only.txt`,
 /// which Git merges without help.
 pub(super) fn stream_with_three_conflicts(fx: &Fixture) -> WorkStream {

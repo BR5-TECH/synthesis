@@ -131,11 +131,13 @@ fn a_search_stopped_while_the_queue_is_full_still_terminates() {
     let reason = run_search(
         &sink,
         root,
-        candidates,
-        Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
-        SearchScope::Capped,
+        SearchJob {
+            search_id: "s",
+            candidates,
+            matcher: Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
+            scope: SearchScope::Capped,
+        },
         &Stop::new(),
-        "s",
         &{
             let read = Arc::clone(&read);
             move |consumed| read.store(consumed, Ordering::SeqCst)
@@ -168,11 +170,13 @@ fn a_superseded_search_ends_with_that_reason_and_streams_nothing_after() {
     let reason = run_search(
         &sink,
         root,
-        candidates,
-        Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
-        SearchScope::Full,
+        SearchJob {
+            search_id: "superseded-search",
+            candidates,
+            matcher: Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
+            scope: SearchScope::Full,
+        },
         &stop,
-        "superseded-search",
         &|_| {},
     );
 

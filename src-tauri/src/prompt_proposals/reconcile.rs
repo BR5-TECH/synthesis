@@ -211,20 +211,27 @@ pub fn sweep_on_content_root_mounted<R: tauri::Runtime>(
     }
 }
 
+/// What the author decided about one proposal (PCP-FR-12, PCP-FR-16): the
+/// proposal, the direction, the feedback the author wrote, and who decided.
+pub(super) struct DecisionRequest<'a> {
+    pub(super) proposal_id: &'a str,
+    pub(super) decision: Decision,
+    pub(super) feedback: Option<&'a str>,
+    pub(super) by: &'a Participant,
+}
+
 /// One decision, whichever way it went (PCP-FR-12, PCP-FR-15, PCP-FR-16).
 pub(super) fn decide<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     root: &fs::RootFs,
     store: &fs::RootFs,
-    proposal_id: &str,
-    decision: Decision,
-    feedback: Option<&str>,
-    by: &Participant,
+    request: DecisionRequest<'_>,
     tracker: &ContentTracker,
 ) -> Result<PromptDecisionOutcome, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
+    let DecisionRequest { proposal_id, decision, feedback, by } = request;
     let held = read_proposal(root, proposal_id)?;
     // PCP-FR-14: checked before the artifact lock is taken, so a decision made
     // while another acceptance of this proposal is in flight is refused rather

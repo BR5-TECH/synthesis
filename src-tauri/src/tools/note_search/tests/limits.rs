@@ -48,13 +48,13 @@ fn a_result_names_each_note_once_and_never_widens_its_one_call() {
     // notes match and five were asked for, so a tool that overfetched — as
     // `search_drafts` legitimately does — or that repeated the call to fill the
     // result would return a different five from the index's own top five.
-    let indexer = fixture.fixture.app.state::<crate::bm25_index::Bm25Indexer>();
-    let top_five: Vec<Option<String>> =
+    let top_five: Vec<Option<String>> = {
+        let indexer = fixture.fixture.app.state::<crate::bm25_index::Bm25Indexer>();
         crate::bm25_index::search(&indexer, &[IndexId::Notes], "teardown", 5)
             .into_iter()
             .map(|h| h.note_id)
-            .collect();
-    drop(indexer);
+            .collect()
+    };
     assert!(
         matches.windows(2).all(|p| p[0].score > p[1].score),
         "precondition: the fixture's scores strictly differ, so the top five are \

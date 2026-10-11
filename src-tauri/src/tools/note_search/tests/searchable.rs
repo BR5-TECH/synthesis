@@ -96,14 +96,14 @@ fn the_result_is_exactly_what_the_notes_index_produced() {
     let b = fixture.note("bravo the teardown twice teardown");
     fixture.reindex();
 
-    let indexer = fixture.fixture.app.state::<crate::bm25_index::Bm25Indexer>();
-    // NST-FR-08: the applied limit and nothing more. Asking the index for
-    // exactly what the tool was asked for is what makes the equality below a
-    // claim about the tool's one call rather than about a coincidence.
-    let hits = crate::bm25_index::search(&indexer, &[IndexId::Notes], "teardown", 5);
-    let from_index: Vec<(Option<String>, f32)> =
-        hits.iter().map(|h| (h.note_id.clone(), h.score)).collect();
-    drop(indexer);
+    let from_index: Vec<(Option<String>, f32)> = {
+        let indexer = fixture.fixture.app.state::<crate::bm25_index::Bm25Indexer>();
+        // NST-FR-08: the applied limit and nothing more. Asking the index for
+        // exactly what the tool was asked for is what makes the equality below a
+        // claim about the tool's one call rather than about a coincidence.
+        let hits = crate::bm25_index::search(&indexer, &[IndexId::Notes], "teardown", 5);
+        hits.iter().map(|h| (h.note_id.clone(), h.score)).collect()
+    };
 
     let matches = fixture.search("teardown", Some(5));
     // NST-FR-09, NST-FR-10: the `score` a match carries **is** the delegated

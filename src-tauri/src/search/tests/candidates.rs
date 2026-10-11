@@ -45,11 +45,13 @@ fn ts4_a_candidate_deleted_after_enumeration_is_skipped_not_fatal() {
     let reason = run_search(
         &sink,
         root,
-        candidates,
-        Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
-        SearchScope::Full,
+        SearchJob {
+            search_id: "s",
+            candidates,
+            matcher: Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
+            scope: SearchScope::Full,
+        },
         &Stop::new(),
-        "s",
         &|_| {},
     );
     assert_eq!(reason, EndReason::Completed, "a missing file is not fatal");

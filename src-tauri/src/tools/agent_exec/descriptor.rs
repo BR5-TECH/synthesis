@@ -582,75 +582,6 @@ impl BindMount {
     }
 }
 
-/// Build the complete `docker run` argument vector (EAC-FR-13).
-///
-/// `env_names` names variables whose *values* the runtime takes from the docker
-/// client's own environment. That indirection is the whole reason Claude's
-/// token never reaches an argument vector (EAC-FR-15): `--env NAME` is a name,
-/// and a name is not a secret.
-///
-/// `env_literals` carry their values in the argv instead, which is correct only
-/// because every one of them is a container path this application chose — a
-/// mount target, never a secret. The two mechanisms are separate so that
-/// "forwarded by name" and "written in the vector" are decisions a reader makes
-/// per variable rather than one the function makes for all of them.
-pub fn docker_run_args(
-    container_name: &str,
-    image: &str,
-    host_uid: u32,
-    host_gid: u32,
-    workdir: &str,
-    mounts: &[BindMount],
-    env_names: &[&str],
-    env_literals: &[(String, String)],
-    vendor_args: &[String],
-) -> Vec<String> {
-    let mut args: Vec<String> = vec![
-        "run".into(),
-        // EAC-FR-26: removed when the agent exits, on every path.
-        "--rm".into(),
-        // EAC-FR-09: the task reaches the agent on the container's stdin and
-        // nowhere else, and `docker run` connects the client's stdin to the
-        // container only when asked. Without this the payload is written to a
-        // stream nothing reads, and both pinned CLIs — each of which takes its
-        // whole prompt from stdin — exit non-zero on an empty one. Not `--tty`:
-        // a terminal would let the CLI print progress decoration into the very
-        // stream EAC-FR-19 parses for an envelope.
-        "--interactive".into(),
-        "--name".into(),
-        container_name.into(),
-        "--network".into(),
-        NETWORK.into(),
-        // EAC-FR-14: the container's non-root user is mapped to the host user,
-        // so a file the agent creates in the mount belongs to whoever launched
-        // it rather than to a uid that exists only inside the container.
-        "--user".into(),
-        format!("{host_uid}:{host_gid}"),
-        "--workdir".into(),
-        workdir.into(),
-    ];
-
-    for option in SECURITY_OPTS {
-        args.push((*option).to_string());
-    }
-    for mount in mounts {
-        args.push("--mount".into());
-        args.push(mount.as_argument());
-    }
-    for name in env_names {
-        args.push("--env".into());
-        args.push((*name).to_string());
-    }
-    for (name, value) in env_literals {
-        args.push("--env".into());
-        args.push(format!("{name}={value}"));
-    }
-
-    args.push(image.to_string());
-    args.extend(vendor_args.iter().cloned());
-    args
-}
-
 /// EAC-FR-10 / EAC-FR-39: one container launch, described whole.
 ///
 /// Every field is a named constant, a field of the vendor's descriptor, or the
@@ -682,20 +613,64 @@ pub struct ContainerSpec {
 }
 
 impl ContainerSpec {
-    /// The Docker CLI backend's rendering of this specification.
+    /// The Docker CLI backend's rendering of this specification: the complete
+    /// `docker run` argument vector (EAC-FR-13).
+    ///
+    /// `env_names` names variables whose *values* the runtime takes from the docker
+    /// client's own environment. That indirection is the whole reason Claude's
+    /// token never reaches an argument vector (EAC-FR-15): `--env NAME` is a name,
+    /// and a name is not a secret.
+    ///
+    /// `env_literals` carry their values in the argv instead, which is correct only
+    /// because every one of them is a container path this application chose — a
+    /// mount target, never a secret. The two mechanisms are separate so that
+    /// "forwarded by name" and "written in the vector" are decisions a reader makes
+    /// per variable rather than one the function makes for all of them.
     pub fn docker_run_args(&self) -> Vec<String> {
-        let names: Vec<&str> = self.env_names.iter().map(String::as_str).collect();
-        docker_run_args(
-            &self.name,
-            &self.image,
-            self.host_uid,
-            self.host_gid,
-            &self.workdir,
-            &self.mounts,
-            &names,
-            &self.env_literals,
-            &self.vendor_args,
-        )
+        let mut args: Vec<String> = vec![
+            "run".into(),
+            // EAC-FR-26: removed when the agent exits, on every path.
+            "--rm".into(),
+            // EAC-FR-09: the task reaches the agent on the container's stdin and
+            // nowhere else, and `docker run` connects the client's stdin to the
+            // container only when asked. Without this the payload is written to a
+            // stream nothing reads, and both pinned CLIs — each of which takes its
+            // whole prompt from stdin — exit non-zero on an empty one. Not `--tty`:
+            // a terminal would let the CLI print progress decoration into the very
+            // stream EAC-FR-19 parses for an envelope.
+            "--interactive".into(),
+            "--name".into(),
+            self.name.clone(),
+            "--network".into(),
+            NETWORK.into(),
+            // EAC-FR-14: the container's non-root user is mapped to the host user,
+            // so a file the agent creates in the mount belongs to whoever launched
+            // it rather than to a uid that exists only inside the container.
+            "--user".into(),
+            self.user(),
+            "--workdir".into(),
+            self.workdir.clone(),
+        ];
+
+        for option in SECURITY_OPTS {
+            args.push((*option).to_string());
+        }
+        for mount in &self.mounts {
+            args.push("--mount".into());
+            args.push(mount.as_argument());
+        }
+        for name in &self.env_names {
+            args.push("--env".into());
+            args.push(name.clone());
+        }
+        for (name, value) in &self.env_literals {
+            args.push("--env".into());
+            args.push(format!("{name}={value}"));
+        }
+
+        args.push(self.image.clone());
+        args.extend(self.vendor_args.iter().cloned());
+        args
     }
 
     /// `--user` as the Engine API expects it, which is the same string the CLI

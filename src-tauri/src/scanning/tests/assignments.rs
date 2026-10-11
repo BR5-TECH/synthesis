@@ -120,7 +120,7 @@ fn ts8_clear_reverts_assignment() {
     assert_eq!(x.artifact_type, None);
     assert_eq!(x.type_source, None);
     // And the stored map no longer holds it.
-    assert!(load_assignments(root).assignments.get("notes/x.md").is_none());
+    assert!(!load_assignments(root).assignments.contains_key("notes/x.md"));
 }
 
 #[test]

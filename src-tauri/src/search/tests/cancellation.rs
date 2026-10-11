@@ -47,11 +47,13 @@ fn ts16_cancellation_ends_the_search_once_and_a_second_cancel_is_a_noop() {
     let reason = run_search(
         &sink,
         root,
-        candidates,
-        Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
-        SearchScope::Full,
+        SearchJob {
+            search_id: "s",
+            candidates,
+            matcher: Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
+            scope: SearchScope::Full,
+        },
         &stop,
-        "s",
         &|_| {},
     );
     assert_eq!(reason, EndReason::Cancelled);
@@ -90,11 +92,13 @@ fn a_search_cancelled_mid_sweep_still_ends_exactly_once() {
     run_search(
         &sink,
         root,
-        candidates,
-        Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
-        SearchScope::Full,
+        SearchJob {
+            search_id: "s",
+            candidates,
+            matcher: Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
+            scope: SearchScope::Full,
+        },
         &stop,
-        "s",
         &|_| {},
     );
     canceller.join().unwrap();

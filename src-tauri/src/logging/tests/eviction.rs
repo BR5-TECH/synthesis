@@ -55,7 +55,7 @@ fn an_oversized_records_fields_collapse_but_the_rest_survives() {
     assert_eq!(r.ts, "2026-08-04T12:00:00.000Z");
     assert_eq!(r.fields.len(), 1);
     assert!(r.fields.contains_key(OMITTED_FIELD), "fields collapse to the marker: {:?}", r.fields);
-    assert!(r.fields.get("blob").is_none());
+    assert!(!r.fields.contains_key("blob"));
 
     // A record inside the ceiling keeps its fields untouched.
     append(

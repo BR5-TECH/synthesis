@@ -506,6 +506,11 @@ pub struct AgentCliExecutor {
     session_state_root: Option<PathBuf>,
 }
 
+/// EAC-FR-FNFV: what [`AgentCliExecutor::repository_mounts`] grants one launch:
+/// the read-only bind mounts, the Git environment as `(name, value)` pairs, and
+/// whether the repository is a linked worktree.
+type RepositoryMounts = (Vec<BindMount>, Vec<(String, String)>, bool);
+
 impl Default for AgentCliExecutor {
     fn default() -> Self {
         AgentCliExecutor { runtime: RuntimeBinding::FromVerifiedBackend, session_state_root: None }
@@ -616,7 +621,7 @@ impl AgentCliExecutor {
         directory: &Path,
         workspace: &str,
         aligned: bool,
-    ) -> Option<(Vec<BindMount>, Vec<(String, String)>, bool)> {
+    ) -> Option<RepositoryMounts> {
         let access = repository_access(directory)?;
         let mask = self.empty_mask_dir(fs).ok()?;
         // What the generated files below are named by. They are one execution's

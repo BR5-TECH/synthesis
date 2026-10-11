@@ -186,7 +186,7 @@ fn logs_omit_an_undecodable_limit_and_an_applied_limit_on_refusal() {
         .records;
     let success = records.first().expect("a record");
     assert!(
-        success.fields.get("limit").is_none(),
+        !success.fields.contains_key("limit"),
         "an undecodable limit is recorded as no limit at all",
     );
     assert_eq!(success.fields["limitApplied"], serde_json::json!(10));
@@ -211,5 +211,5 @@ fn logs_omit_an_undecodable_limit_and_an_applied_limit_on_refusal() {
     assert_eq!(refusal.fields["reason"], serde_json::json!("no_project_open"));
     assert_eq!(refusal.fields["query"], serde_json::json!("teardown"));
     assert_eq!(refusal.fields["limit"], serde_json::json!(3));
-    assert!(refusal.fields.get("limitApplied").is_none(), "no applied limit on a refusal",);
+    assert!(!refusal.fields.contains_key("limitApplied"), "no applied limit on a refusal",);
 }

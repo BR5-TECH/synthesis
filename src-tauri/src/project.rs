@@ -460,11 +460,10 @@ pub fn remount_content_root<R: tauri::Runtime>(
         // Mounted with the guarded root rather than a bare path: an index pass
         // runs on its own thread, and this is what keeps its reads inside the
         // same allowlist the command that scheduled it was bound by.
-        match project.require_root() {
-            Ok(rooted) => indexer.mount(&rooted),
-            // No access installed means no project is usable, and there is
-            // nothing valid for a pass to run against.
-            Err(_) => {}
+        // No access installed means no project is usable, and there is
+        // nothing valid for a pass to run against.
+        if let Ok(rooted) = project.require_root() {
+            indexer.mount(&rooted);
         }
     }
     crate::bm25_index::request_pass(app, crate::bm25_index::PassScope::ALL);
@@ -605,6 +604,8 @@ pub fn deactivate_project(
 /// changes (EDT-FR-33) — a torn-down project has no root, so `save_artifact_contents`
 /// would fail from here on. Writes no file itself, and is idempotent.
 #[tauri::command]
+// Reason: the parameters of a Tauri command are its IPC contract with `invoke()`.
+#[allow(clippy::too_many_arguments)]
 pub fn close_project<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     project: State<'_, ProjectState>,

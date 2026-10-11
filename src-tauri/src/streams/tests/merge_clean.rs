@@ -13,6 +13,10 @@ fn commit_publication(message: &str) -> StreamMergePublication {
     StreamMergePublication::Commit { message: message.to_string() }
 }
 
+/// One case of a table test: the name of the case and the function that makes
+/// the stream for it.
+type StreamCase = (&'static str, Box<dyn Fn(&Fixture) -> WorkStream>);
+
 // WKS-FR-GKPX, WKS-FR-QNHF, WKS-FR-TVBM, WKS-FR-PZKD, GRB-FR-HRTB, GRB-FR-FLIB,
 // GRB-FR-ASWC: a clean merge on the `uncommitted` publication leaves the result
 // unstaged in the base worktree, moves no branch, and creates no run.
@@ -224,7 +228,7 @@ fn watch_operations(fx: &Fixture) -> Arc<Mutex<Vec<serde_json::Value>>> {
 // settles, whatever the outcome.
 #[test]
 fn the_check_is_one_operation_that_is_registered_and_finished() {
-    let cases: Vec<(&str, Box<dyn Fn(&Fixture) -> WorkStream>)> = vec![
+    let cases: Vec<StreamCase> = vec![
         ("merged", Box::new(|fx| stream_ahead(fx, "Reported"))),
         ("nothing to merge", Box::new(|fx| fx.create("Reported", None).expect("created"))),
         (
@@ -284,7 +288,7 @@ fn the_check_is_one_operation_that_is_registered_and_finished() {
 // repository or the stream.
 #[test]
 fn the_guard_is_released_on_every_exit() {
-    let cases: Vec<(&str, Box<dyn Fn(&Fixture) -> WorkStream>)> = vec![
+    let cases: Vec<StreamCase> = vec![
         ("nothing to merge", Box::new(|fx| fx.create("hold", None).expect("created"))),
         ("merged", Box::new(|fx| stream_ahead(fx, "hold"))),
         (

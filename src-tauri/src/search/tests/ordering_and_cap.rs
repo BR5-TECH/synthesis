@@ -82,11 +82,13 @@ fn ts14_capped_stops_at_the_total_cap_without_reading_the_rest_of_the_tree() {
     let reason = run_search(
         &capped,
         root,
-        Arc::clone(&candidates),
-        Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
-        SearchScope::Capped,
+        SearchJob {
+            search_id: "s",
+            candidates: Arc::clone(&candidates),
+            matcher: Arc::new(Matcher::compile("needle", SearchMode::LiteralInsensitive).unwrap()),
+            scope: SearchScope::Capped,
+        },
         &Stop::new(),
-        "s",
         &{
             let read = Arc::clone(&read);
             move |consumed| read.store(consumed, Ordering::SeqCst)

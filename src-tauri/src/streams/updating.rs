@@ -251,8 +251,8 @@ async fn drive<R: tauri::Runtime>(
                     cleanup(app, &fs, &stream, &artifact);
                     return Err(cancelled(app, stream_id));
                 }
-                let staged = StagedAt { base_oid, stream_oid, merged_tree, replay };
-                match settle(app, &fs, &stream, strategy, &artifact, &conflicts, &staged, outcome) {
+                let staged = StagedAt { base_oid, stream_oid, merged_tree, replay, conflicts };
+                match settle(app, &fs, &stream, strategy, &artifact, &staged, outcome) {
                     Settled::Updated(updated_paths) => {
                         cleanup(app, &fs, &stream, &artifact);
                         logging::log_info(
@@ -456,8 +456,8 @@ fn stage_turn(
     })
 }
 
-/// The two revisions one attempt's checkout was built from, and the chain a
-/// rebase would land.
+/// The two revisions one attempt's checkout was built from, the chain a rebase
+/// would land, and the conflicts the checkout holds.
 struct StagedAt {
     base_oid: git2::Oid,
     stream_oid: git2::Oid,
@@ -465,6 +465,8 @@ struct StagedAt {
     /// The replayed chain and the paths its steps could not settle, where the
     /// strategy is a rebase.
     replay: Option<(git2::Oid, Vec<String>)>,
+    /// The conflicts the semantic turn was asked to settle.
+    conflicts: Vec<MergeConflict>,
 }
 
 /// What one settled turn left.
@@ -481,10 +483,10 @@ fn settle<R: tauri::Runtime>(
     stream: &WorkStream,
     strategy: StreamUpdateStrategy,
     artifact: &MergeArtifact,
-    conflicts: &[MergeConflict],
     staged: &StagedAt,
     outcome: Result<AgentExecution, AgentExecutionError>,
 ) -> Settled {
+    let conflicts = staged.conflicts.as_slice();
     let unsettled: Vec<String> = conflicts.iter().map(|c| c.path.clone()).collect();
     let execution = match outcome {
         Ok(execution) => execution,

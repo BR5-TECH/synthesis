@@ -110,11 +110,8 @@ fn search(
     let reason = run_search(
         &recorder,
         root,
-        candidates,
-        matcher,
-        scope,
+        SearchJob { search_id: "search-test", candidates, matcher, scope },
         &Stop::new(),
-        "search-test",
         &|_| {},
     );
     (recorder, reason)

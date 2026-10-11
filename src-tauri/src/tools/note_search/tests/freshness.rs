@@ -83,9 +83,10 @@ fn changing_the_active_worktree_replaces_what_is_searchable() {
     )
     .expect("the note writes");
 
-    let indexer = a.fixture.app.state::<crate::bm25_index::Bm25Indexer>();
-    indexer.mount(&crate::fs::RootFs::for_root(&b_root));
-    drop(indexer);
+    a.fixture
+        .app
+        .state::<crate::bm25_index::Bm25Indexer>()
+        .mount(&crate::fs::RootFs::for_root(&b_root));
     // The session's reach follows the worktree it governs (FSA-FR-29).
     let session = agent_session(&a.fixture.app, &b_root, "note-search-b");
     let tool = NoteSearchTool::new(a.fixture.handle(), session);

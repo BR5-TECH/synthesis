@@ -65,7 +65,7 @@ fn logs_the_named_arguments_and_no_returned_material() {
     assert_eq!(records, of_domain(Domain::Backend), "both domains return the same two records",);
     let success = records
         .iter()
-        .find(|r| r.level == LogLevel::Info && r.fields.get("tool").is_some())
+        .find(|r| r.level == LogLevel::Info && r.fields.contains_key("tool"))
         .expect("an INFO record");
     assert_eq!(success.fields["tool"], serde_json::json!(NAME));
     assert_eq!(success.fields["query"], serde_json::json!("teardown"));
@@ -83,10 +83,10 @@ fn logs_the_named_arguments_and_no_returned_material() {
     assert_eq!(refusal.fields["reason"], serde_json::json!("invalid_arguments"));
     assert_eq!(refusal.fields["query"], serde_json::json!(""));
     assert!(
-        refusal.fields.get("limit").is_none(),
+        !refusal.fields.contains_key("limit"),
         "the model sent none, which is itself the fact worth reading"
     );
-    assert!(refusal.fields.get("limitApplied").is_none(), "no applied limit on a refusal");
+    assert!(!refusal.fields.contains_key("limitApplied"), "no applied limit on a refusal");
 
     // DST-FR-21: nothing the call returned reaches a record.
     for record in &records {

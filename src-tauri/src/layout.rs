@@ -339,10 +339,12 @@ mod tests {
         // Regression guard for the SNV-FR-08 extension: the new main-window
         // fields must survive save/load round-trip.
         let store = GlobalSettingsStore::in_memory();
-        let mut prefs = LayoutPreferences::default();
-        prefs.main_window_outer_width = 1366.0;
-        prefs.main_window_outer_height = 768.0;
-        prefs.main_window_maximized = true;
+        let prefs = LayoutPreferences {
+            main_window_outer_width: 1366.0,
+            main_window_outer_height: 768.0,
+            main_window_maximized: true,
+            ..LayoutPreferences::default()
+        };
         store.save_project_layout("/p", prefs).unwrap();
         let got = store.load_project_layout("/p").unwrap().unwrap();
         assert_eq!(got.main_window_outer_width, 1366.0);

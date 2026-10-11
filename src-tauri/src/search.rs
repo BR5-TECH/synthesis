@@ -542,6 +542,15 @@ fn readable_content(root: &crate::fs::RootFs, candidate: &Candidate) -> Option<S
 // The pipeline (SCC-FR-02) — producer + consumer pool + collector
 // ---------------------------------------------------------------------------
 
+/// What one search sweeps (SCC-FR-02): the id its events carry, the files it
+/// reads, the query it matches, and where it stops (SCC-FR-11).
+pub struct SearchJob<'a> {
+    pub search_id: &'a str,
+    pub candidates: Arc<Vec<Candidate>>,
+    pub matcher: Arc<Matcher>,
+    pub scope: SearchScope,
+}
+
 /// Run one search to its end and return why it ended.
 ///
 /// One producer thread enumerates `candidates` into a bounded queue; a fixed
@@ -556,13 +565,11 @@ fn readable_content(root: &crate::fs::RootFs, candidate: &Candidate) -> Option<S
 pub fn run_search<S: SearchSink + ?Sized>(
     sink: &S,
     root: &crate::fs::RootFs,
-    candidates: Arc<Vec<Candidate>>,
-    matcher: Arc<Matcher>,
-    scope: SearchScope,
+    job: SearchJob<'_>,
     stop: &Stop,
-    search_id: &str,
     on_progress: &(dyn Fn(u64) + Send + Sync),
 ) -> EndReason {
+    let SearchJob { search_id, candidates, matcher, scope } = job;
     let (work_tx, work_rx) = sync_channel::<Candidate>(QUEUE_CAPACITY);
     let (hit_tx, hit_rx) = std::sync::mpsc::channel::<SearchHit>();
     let work_rx = Arc::new(Mutex::new(work_rx));
@@ -900,7 +907,8 @@ fn search_thread_body<R: tauri::Runtime>(
         Some(candidates.len() as u64),
     );
 
-    run_search(app, &root, candidates, matcher, scope, stop, search_id, &|consumed| {
+    let job = SearchJob { search_id, candidates, matcher, scope };
+    run_search(app, &root, job, stop, &|consumed| {
         progress::update_and_publish(app, &progress_registry, operation, Some(consumed), None);
     })
 }

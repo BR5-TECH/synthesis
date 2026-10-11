@@ -219,5 +219,5 @@ fn the_internal_emit_api_is_the_one_lgc_fr_01_documents() {
     // leaving it to the caller, which is what makes them usable from a
     // module that has no clock of its own.
     assert!(page.records.iter().all(|r| r.ts.ends_with('Z') && r.ts.len() == 24));
-    assert!(page.records.iter().all(|r| r.fields.get("k").is_some()));
+    assert!(page.records.iter().all(|r| r.fields.contains_key("k")));
 }

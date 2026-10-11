@@ -124,16 +124,10 @@ impl Fixture {
         id: &str,
         feedback: Option<&str>,
     ) -> Result<PromptDecisionOutcome, String> {
-        decide(
-            &self.handle(),
-            &self.root,
-            &self.root,
-            id,
-            Decision::Accept,
-            feedback,
-            &human(),
-            &self.tracker,
-        )
+        let by = human();
+        let request =
+            DecisionRequest { proposal_id: id, decision: Decision::Accept, feedback, by: &by };
+        decide(&self.handle(), &self.root, &self.root, request, &self.tracker)
     }
 
     fn decline(&self, id: &str) -> Result<PromptDecisionOutcome, String> {
@@ -145,16 +139,10 @@ impl Fixture {
         id: &str,
         feedback: Option<&str>,
     ) -> Result<PromptDecisionOutcome, String> {
-        decide(
-            &self.handle(),
-            &self.root,
-            &self.root,
-            id,
-            Decision::Decline,
-            feedback,
-            &human(),
-            &self.tracker,
-        )
+        let by = human();
+        let request =
+            DecisionRequest { proposal_id: id, decision: Decision::Decline, feedback, by: &by };
+        decide(&self.handle(), &self.root, &self.root, request, &self.tracker)
     }
 
     fn dir(&self) -> std::path::PathBuf {

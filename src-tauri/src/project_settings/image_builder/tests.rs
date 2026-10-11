@@ -5,9 +5,13 @@ use super::*;
 use crate::project_settings::images::DockerfilePlacement;
 use std::sync::Mutex;
 
+/// One progress update a sink received: the phase, the completed and total
+/// counts, and the message.
+type ProgressUpdate = (String, Option<u64>, Option<u64>, String);
+
 #[derive(Default)]
 struct RecordingSink {
-    updates: Mutex<Vec<(String, Option<u64>, Option<u64>, String)>>,
+    updates: Mutex<Vec<ProgressUpdate>>,
 }
 
 impl ImageBuildSink for RecordingSink {

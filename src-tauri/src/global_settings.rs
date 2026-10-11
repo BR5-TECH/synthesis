@@ -140,20 +140,12 @@ pub struct ProjectSlot {
     /// (AAP-FR-16).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ai_api_provider: Option<String>,
-    /// GSS-FR-31: the ids of the conversational agents this project may address,
-    /// empty until one is enrolled.
-    ///
-    /// User-global rather than project-local for two reasons: it names records
-    /// that exist only on this machine, and `.synthesis/project.toml` is
-    /// committed content one clone would carry to everyone. Keyed by project
-    /// (GSS-FR-18), so it is one enrolment for the repository however many
-    /// worktrees it has.
-    ///
-    /// A TOML array of plain strings, which is a *value* rather than a
-    /// sub-table, so it may sit among the scalars above — unlike `layout`
-    /// below, which must stay last.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub enrolled_agents: Vec<String>,
+    /// GSS-FR-31: the earlier per-project enrolment of agents. Read so that a
+    /// store written by an earlier version loads, never written, and cleared by
+    /// the one-time migration of [`GlobalSettingsStore::with_path`]. The slot
+    /// holds no agent data.
+    #[serde(rename = "enrolledAgents", skip_serializing)]
+    legacy_enrolled_agents: Vec<String>,
     /// GSS-FR-CDYK: the reference documents this project selects — an ordered
     /// list of `{ kind, path }`, empty until a source is added. References only:
     /// never a document's content, its extracted text, or an index.
@@ -238,16 +230,17 @@ pub struct PersistedState {
     /// persists the records and interprets none of them: verification, model
     /// probing, and the single-active rule are `crate::ai_api`'s.
     pub ai_api_integrations: Vec<crate::ai_api::AiApiRecord>,
-    /// GSS-FR-30: the conversational agent registry — one record per persona the
-    /// author has described, carrying its id, nickname, AI API provider, model,
-    /// reasoning choice, and instructions (`crate::agents`, AGR-FR-01).
+    /// GSS-FR-30: the Personal agent registry — one record per Personal agent
+    /// the author has described, carrying its id, nickname, title, model,
+    /// reasoning choice, and instructions (`crate::agents`, AGR-FR-01). Project
+    /// agents are not stored here: each is a file of its project.
     ///
-    /// User-global because a persona describes how its author wants to be argued
-    /// with rather than anything about a repository. It holds no secret at all:
-    /// an agent *names* a provider, and that provider's key lives in the OS
-    /// keychain, so this file gains no credential by gaining an agent. Another
-    /// array of tables, so it stays beside the registries above and before the
-    /// two project tables below.
+    /// User-global because a Personal agent describes how its author wants to be
+    /// argued with rather than anything about a repository. It holds no secret
+    /// at all: an agent names no provider, and the key of the active provider
+    /// lives in the OS keychain, so this file gains no credential by gaining an
+    /// agent. Another array of tables, so it stays beside the registries above
+    /// and before the two project tables below.
     pub agents: Vec<crate::agents::Agent>,
     /// GSS-FR-35: the **Docker backend** this machine reaches a container
     /// runtime through — the selected mode, the Docker Engine endpoint, the
@@ -360,16 +353,28 @@ impl GlobalSettingsStore {
                 .ok()
                 .map(|a| crate::fs::RootFs::new(dir.to_path_buf(), std::sync::Arc::new(a)))
         });
-        let state = access
+        let mut state = access
             .as_ref()
             .map(|a| load_or_default(a, &path))
             .unwrap_or_default();
-        Self {
+        // GSS-FR-31: the one-time migration. A slot that still carries the
+        // earlier enrolment loses it and the store is written once without it.
+        // Every agent stays in the registry as a Personal agent, and none is
+        // copied into a project. A store without the key is not written.
+        let migrated = drop_legacy_enrolment(&mut state);
+        let store = Self {
             state: Mutex::new(state),
             open_project_enabled_plugins: Mutex::new(HashSet::new()),
             path: Some(path),
             access,
+        };
+        if migrated {
+            let persisted = store.lock().and_then(|state| store.persist(&state));
+            if let Err(e) = persisted {
+                eprintln!("synthesis: could not write the migrated global settings: {e}");
+            }
         }
+        store
     }
 
     /// Write the current state to disk atomically (GSS-FR-03). No-op for an
@@ -654,40 +659,21 @@ impl GlobalSettingsStore {
         self.persist(&state)
     }
 
-    // -- Conversational agents (GSS-FR-30 / GSS-FR-31) ---------------------
+    // -- Personal agents (GSS-FR-30) ---------------------------------------
 
-    /// GSS-FR-30: the described personas. Descriptions only — no key is part of
+    /// GSS-FR-30: the Personal agents. Descriptions only — no key is part of
     /// this store, so this never touches the keychain.
     pub fn load_agent_registry(&self) -> Result<Vec<crate::agents::Agent>, String> {
         Ok(self.lock()?.agents.clone())
     }
 
-    /// GSS-FR-30 / GSS-FR-31: replace the registry and persist, pruning from
-    /// every project slot any enrolment naming an agent the new registry does
-    /// not hold.
-    ///
-    /// The prune is part of this call rather than a separate one because
-    /// GSS-FR-31 states the invariant as a property of the file, not of a
-    /// sequence: an id naming a record the registry no longer holds is *not
-    /// written*. `crate::agents::delete_agent` (AGR-FR-11) therefore removes a
-    /// definition and every enrolment of it in one operation, and no
-    /// interleaved reader can observe a slot pointing at a deleted agent.
+    /// GSS-FR-30: replace the registry and persist.
     pub fn save_agent_registry(&self, agents: Vec<crate::agents::Agent>) -> Result<(), String> {
         let mut state = self.lock()?;
-        let live: HashSet<&str> = agents.iter().map(|a| a.id.as_str()).collect();
-        for slot in state.projects.values_mut() {
-            slot.enrolled_agents.retain(|id| live.contains(id.as_str()));
-        }
-        state
-            .default_project
-            .enrolled_agents
-            .retain(|id| live.contains(id.as_str()));
         state.agents = agents;
         self.persist(&state)
     }
 
-    /// GSS-FR-31: the agents this project may address. An empty set for a
-    /// project that has enrolled none, which is an ordinary state.
     // -- Docker backend (GSS-FR-35) --------------------------------------
 
     /// GSS-FR-35: the stored Docker backend record. Reads the store; runs no
@@ -784,22 +770,6 @@ impl GlobalSettingsStore {
         let record = state.relay_endpoint.clone();
         self.persist(&state)?;
         Ok(record)
-    }
-
-    pub fn load_project_agent_enrolment(&self, key: &str) -> Result<Vec<String>, String> {
-        let state = self.lock()?;
-        Ok(Self::slot(&state, key).enrolled_agents)
-    }
-
-    /// GSS-FR-31: remember which agents this project may address. Keyed by
-    /// project (GSS-FR-18), so one enrolment serves every worktree of a
-    /// repository and survives a change of active worktree.
-    pub fn save_project_agent_enrolment(
-        &self,
-        key: &str,
-        agent_ids: Vec<String>,
-    ) -> Result<(), String> {
-        self.update_slot(key, |slot| slot.enrolled_agents = agent_ids.clone())
     }
 
     /// GSS-FR-CDYK: the project's document sources in the order they were first
@@ -977,6 +947,24 @@ impl GlobalSettingsStore {
     pub fn replace_recents(&self, entries: Vec<RecentProjectEntry>) {
         self.state.lock().unwrap().recent_projects = entries;
     }
+}
+
+/// GSS-FR-31: clear the earlier agent enrolment from every project slot.
+/// Returns whether anything was cleared, which is what decides if the store is
+/// written.
+fn drop_legacy_enrolment(state: &mut PersistedState) -> bool {
+    let mut found = false;
+    let slots = state
+        .projects
+        .values_mut()
+        .chain(std::iter::once(&mut state.default_project));
+    for slot in slots {
+        if !slot.legacy_enrolled_agents.is_empty() {
+            slot.legacy_enrolled_agents.clear();
+            found = true;
+        }
+    }
+    found
 }
 
 /// Read `synthesis.toml` into a `PersistedState`, or return defaults when the

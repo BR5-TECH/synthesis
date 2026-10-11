@@ -32,6 +32,7 @@ const EVENT_NAMES: &[&str] = &[
     draft_proposals::PROPOSALS_CHANGED,
     prompt_proposals::PROMPT_PROPOSALS_CHANGED,
     agent_conversations::AGENT_TURN_STATE_CHANGED,
+    agents::AGENTS_CHANGED,
     comments::DISCUSSION_CHANGED,
     github_tokens::GITHUB_TOKENS_CHANGED,
     logging::LOG_RECORDS_APPENDED,
@@ -246,8 +247,8 @@ fn no_agent_conversation_internal_is_reachable_from_the_frontend() {
     // - `validate_ai_api_selection` is the rule an agent's stored selection
     //   is checked against, not something a frontend decides (AAP-FR-33).
     // - `resolve_project_agent` resolves a nickname against a project's
-    //   enrolment; registering it would let the frontend enumerate agents a
-    //   project never enrolled (AGR-FR-18).
+    //   roster; registering it would let the frontend probe which nicknames
+    //   a project reaches (AGR-FR-18).
     // - `build_input` reads the material under discussion and assembles
     //   what an agent is shown (AGC-FR-05).
     // - `append_as` / `append_as_scoped` / `append_agent_comment` are the

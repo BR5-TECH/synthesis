@@ -204,29 +204,38 @@ fn every_command_refuses_while_no_project_is_open() {
         ERR_NO_PROJECT_OPEN,
     );
 
-    // AGR-FR-22: the project-scoped registry commands refuse on the same terms,
-    // while the registry commands answer regardless.
+    // AGR-FR-22: the commands of the Project scope refuse on the same terms,
+    // while the Personal commands answer regardless.
     assert_eq!(
-        agents::list_project_agents(store.clone(), project.clone()).unwrap_err(),
+        agents::list_project_agents(h.app.handle().clone(), store.clone(), project.clone())
+            .unwrap_err(),
         agents::ERR_NO_PROJECT_OPEN,
     );
     assert_eq!(
-        agents::enrol_project_agent("a1".into(), store.clone(), project.clone()).unwrap_err(),
+        agents::create_agent(
+            agents::AgentScope::Project,
+            agents::AgentDraft::default(),
+            h.app.handle().clone(),
+            store.clone(),
+            project.clone(),
+        )
+        .unwrap_err(),
         agents::ERR_NO_PROJECT_OPEN,
     );
     assert_eq!(
-        agents::remove_project_agent(
+        agents::delete_agent(
+            agents::AgentScope::Project,
             "a1".into(),
             h.app.handle().clone(),
             store.clone(),
-            project,
+            project.clone(),
             turns,
             progress,
         )
         .unwrap_err(),
         agents::ERR_NO_PROJECT_OPEN,
     );
-    assert!(agents::list_agents(store).is_ok());
+    assert!(agents::list_personal_agents(store, project).is_ok());
 }
 
 #[test]

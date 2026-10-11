@@ -3,7 +3,7 @@ import * as api from "../api";
 import { Icon } from "./icons";
 import { TokenIdentityLine, tokenErrorMessage } from "./GithubTokens";
 import { ProjectAiIntegrations } from "./AiIntegrations";
-import { ProjectAgents } from "./Agents";
+import { ProjectAgents, type AgentEditorRequest } from "./Agents";
 import { DraftTemplateSection } from "./DraftTemplateSection";
 import { GithubPollingSection } from "./GithubPollingSection";
 import { GithubPublicationSettingsGroup } from "./GithubPublicationSettings";
@@ -49,10 +49,9 @@ export const PROJECT_SECTIONS: [ProjectSectionKey, string, string][] = [
   ["adapters", "Agent adapters", "The agent backends available to this project."],
   ["mcp", "MCP servers", "The MCP servers this project exposes artifacts to."],
   ["plugins", "Plugins", "Manage plugins for this project."],
-  // SET-FR-15: the Agents section. It enrols the personas described in Global
-  // settings (AGT-FR-22) and describes none of its own, which is why it names
-  // where they come from rather than offering an editor.
-  ["agents", "Agents", "Who this project can talk to."],
+  // SET-FR-15: the Project Agents section. A Project agent is a file of the
+  // project, committed and shared by every contributor (AGT-FR-22).
+  ["agents", "Project Agents", "The agents every contributor to this project can talk to."],
   // SET-FR-03 / SET-FR-21: the Docker section. It settles which container image
   // each agentic CLI vendor's work runs in for this project, and nothing about
   // how this machine reaches Docker — that belongs to Global settings
@@ -118,6 +117,14 @@ export interface SettingsProps {
     currentTokenId: string | null,
     onConfirmed: () => void,
   ) => void;
+  /**
+   * AGT-FR-06 / AGT-FR-07: the chrome roster asking this group to open an editor
+   * on its Project Agents section — a Project agent's when its row was
+   * activated, a fresh one when **Add an agent** was.
+   */
+  agentEditorRequest?: AgentEditorRequest | null;
+  /** Called once the request has been honoured, so it is not honoured twice. */
+  onAgentEditorRequestHandled?: () => void;
 }
 
 export function Settings({
@@ -127,6 +134,8 @@ export function Settings({
   lineEndings,
   onSelectLineEndings,
   onOpenGithubTokenPicker,
+  agentEditorRequest,
+  onAgentEditorRequestHandled,
 }: SettingsProps) {
   const current = PROJECT_SECTIONS.find((s) => s[0] === section)!;
 
@@ -360,10 +369,15 @@ export function Settings({
           section's dirty state (SET-FR-08). */}
       {section === "project" && <ProjectAiIntegrations />}
 
-      {/* SET-FR-15: enrolment applies at once through its own operation, so
+      {/* SET-FR-15: every action applies at once through its own operation, so
           this section holds no dirty state and never contributes to the tab's
           save-before-close sweep (SET-FR-08, SWN-FR-08). */}
-      {section === "agents" && <ProjectAgents />}
+      {section === "agents" && (
+        <ProjectAgents
+          editorRequest={agentEditorRequest}
+          onEditorRequestHandled={onAgentEditorRequestHandled}
+        />
+      )}
 
       {/* SET-FR-21 through SET-FR-27, SET-FR-KDRP, SET-FR-FPCX, SET-FR-HYTR: the Docker section. Every field in it
           persists at once, so it holds no dirty state and takes no part in

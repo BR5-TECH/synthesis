@@ -9,6 +9,7 @@ import {
   activeMention,
   addressesEveryone,
   addressedNicknames,
+  agentRoster,
   applyMention,
   resolveTags,
   segmentBody,
@@ -337,5 +338,37 @@ describe("the handle's edges", () => {
     expect(addressesEveryone("@all thoughts?", { nicknames: [], ready: [] })).toBe(
       false,
     );
+  });
+});
+
+describe("AGT-FR-RWHL: a shadowed Personal agent", () => {
+  const entry = (
+    id: string,
+    nickname: string,
+    scope: "project" | "personal",
+    availability: "ready" | "shadowed",
+  ) => ({
+    scope,
+    availability,
+    agent: {
+      id,
+      nickname,
+      title: "",
+      modelId: "m",
+      instructions: "",
+      createdAt: "",
+      updatedAt: "",
+      reasoning: null,
+    },
+  });
+
+  it("is addressed by no tag and is left out of @all", () => {
+    const roster = agentRoster([
+      entry("p", "arch", "project", "ready"),
+      entry("q", "arch", "personal", "shadowed"),
+      entry("r", "sec", "personal", "ready"),
+    ]);
+    expect(roster.nicknames).toEqual(["arch", "sec"]);
+    expect(roster.ready).toEqual(["arch", "sec"]);
   });
 });

@@ -26,7 +26,7 @@ function enrolled(
   availability: ProjectAgent["availability"] = "ready",
   id = `id-${nickname}`,
 ): ProjectAgent {
-  return {
+  return { scope: "project" as const,
     agent: {
       id,
       nickname,

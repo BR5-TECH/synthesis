@@ -50,11 +50,17 @@ export function Settings({
   sectionRequest = null,
   ...project
 }: ProjectHarnessProps) {
+  // AGT-FR-06 / AGT-FR-07: an editor request names the Project Agents section.
+  const request: SectionRequest | null =
+    sectionRequest ??
+    (project.agentEditorRequest
+      ? { section: "project/agents", nonce: project.agentEditorRequest.nonce }
+      : null);
   return (
     <div style={{ height: 600 }}>
       <SettingsBody
         scopes={["project"]}
-        sectionRequest={sectionRequest}
+        sectionRequest={request}
         global={{}}
         project={project}
       />

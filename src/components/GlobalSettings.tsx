@@ -22,7 +22,7 @@ import {
   AgenticAiIntegrations,
   AiApiIntegrations,
 } from "./AiIntegrations";
-import { GlobalAgents, type AgentEditorRequest } from "./Agents";
+import { PersonalAgents, type AgentEditorRequest } from "./Agents";
 import { formatRelative } from "./ProjectPicker";
 import type {
   FontFamily,
@@ -86,7 +86,7 @@ export const GLOBAL_SECTIONS: [GlobalSectionKey, string][] = [
   // reasoning selection: this is the only place the model and the reasoning an
   // agent runs on are chosen. Like GitHub and both AI sections above, every
   // action in it applies immediately and it holds no dirty state.
-  ["agents", "Agents"],
+  ["agents", "Personal Agents"],
   // GLS-FR-03 / GLS-FR-29: the Docker section, last because it is about the
   // machine's own plumbing rather than about anything the author writes with —
   // and it is what the two sections above it eventually run inside. Like every
@@ -166,9 +166,9 @@ export interface GlobalSettingsProps {
   /// the same two-way arrangement the theme uses.
   controlledFonts?: FontSettings;
   onFontsChange?: (fonts: FontSettings | undefined) => void;
-  /// AGT-FR-06 / AGT-FR-07: the chrome roster asking this group to open an editor
-  /// on its Agents section — an agent's when a row was activated, a fresh one
-  /// when **Add an agent** was. `null` is every other way this tab is reached.
+  /// AGT-FR-06: the chrome roster asking this group to open an editor on its
+  /// Personal Agents section — a Personal agent's, when its row was activated.
+  /// `null` is every other way this tab is reached.
   agentEditorRequest?: AgentEditorRequest | null;
   /// GLS-FR-27: the project the Notifications section's rehearsal addresses, so
   /// the notification it sends lands on a tab that actually resolves
@@ -753,7 +753,7 @@ export function GlobalSettings({
           save-before-close sweep (GLS-FR-13, SWN-FR-08). */}
       {section === "remote" && <RemoteConnectivitySettings />}
       {section === "agents" && (
-        <GlobalAgents
+        <PersonalAgents
           editorRequest={agentEditorRequest}
           onEditorRequestHandled={onAgentEditorRequestHandled}
         />

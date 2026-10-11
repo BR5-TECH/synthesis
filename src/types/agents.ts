@@ -59,16 +59,26 @@ export interface AgentDraft {
 /**
  * AGR-FR-16: whether an agent can currently be spoken to. Computed at read time
  * from the AI API registry rather than stored, so a key that expired while the
- * application was closed reads as such on the next launch.
+ * application was closed reads as such on the next launch. `shadowed` is a
+ * Personal agent hidden by a Project agent of the same nickname (AGR-FR-15).
  */
 export type AgentAvailability =
   | "ready"
   | "provider_unconfigured"
   | "provider_unverified"
-  | "model_unavailable";
+  | "model_unavailable"
+  | "shadowed";
 
-/** An enrolled agent as a project sees it (AGR-FR-13). */
+/**
+ * AGR-FR-12, AGR-FR-02: where an agent is stored. A Project agent is a file of
+ * the project, committed and shared by every contributor. A Personal agent is
+ * stored on this machine and is available in every project.
+ */
+export type AgentScope = "project" | "personal";
+
+/** An agent as a project sees it, with its scope and availability (AGR-FR-13). */
 export interface ProjectAgent {
   agent: Agent;
+  scope: AgentScope;
   availability: AgentAvailability;
 }

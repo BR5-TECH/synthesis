@@ -66,6 +66,57 @@ fn draft(nickname: &str) -> AgentDraft {
     }
 }
 
+
+// The Personal-scope forms the tests below were written against. They call the
+// scoped functions with the Personal scope and no worktree.
+
+fn list_agents_impl(store: &GlobalSettingsStore) -> Result<Vec<Agent>, String> {
+    list_personal_agents_impl(store, "", None)
+        .map(|listed| listed.into_iter().map(|p| p.agent).collect())
+}
+
+fn create_agent_impl(
+    store: &GlobalSettingsStore,
+    project_key: &str,
+    draft: &AgentDraft,
+) -> Result<Agent, String> {
+    super::create_agent_impl(store, project_key, None, AgentScope::Personal, draft)
+}
+
+fn update_agent_impl(
+    store: &GlobalSettingsStore,
+    project_key: &str,
+    id: &str,
+    draft: &AgentDraft,
+) -> Result<Agent, String> {
+    super::update_agent_impl(store, project_key, None, AgentScope::Personal, id, draft)
+}
+
+fn delete_agent_impl(
+    store: &GlobalSettingsStore,
+    id: &str,
+) -> Result<Vec<ProjectAgent>, String> {
+    super::delete_agent_impl(store, "", None, AgentScope::Personal, id)
+}
+
+/// The roster of a project whose worktree holds no Project agent.
+fn list_project_agents_impl(
+    store: &GlobalSettingsStore,
+    project_key: &str,
+) -> Result<Vec<ProjectAgent>, String> {
+    let dir = tempfile::tempdir().unwrap();
+    super::list_project_agents_impl(store, project_key, &RootFs::for_root(dir.path()))
+}
+
+fn resolve_project_agent(
+    store: &GlobalSettingsStore,
+    project_key: &str,
+    nickname: &str,
+) -> Result<Agent, String> {
+    let dir = tempfile::tempdir().unwrap();
+    super::resolve_project_agent(store, project_key, &RootFs::for_root(dir.path()), nickname)
+}
+
 // -- AGR-FR-02, AGR-FR-22 / AGR-FR-02: the empty machine -------------------------
 
 #[test]
@@ -84,6 +135,10 @@ fn the_project_scoped_reads_answer_with_an_empty_key_and_the_registry_answers_to
     let store = store();
     assert_eq!(list_project_agents_impl(&store, "proj").unwrap(), vec![]);
     assert_eq!(list_agents_impl(&store).unwrap(), vec![]);
+    assert_eq!(
+        list_personal_agents_impl(&store, "proj", None).unwrap(),
+        vec![]
+    );
 }
 
 // -- AGR-FR-01, AGR-FR-02, AGR-FR-03, AGR-FR-09: create round-trips ------------------------------------
@@ -281,7 +336,6 @@ fn switching_the_active_provider_marks_an_agent_whose_model_is_not_served_and_re
     let mut d = draft("arch");
     d.model_id = "claude".into();
     let arch = create_agent_impl(&store, "", &d).unwrap();
-    enrol_project_agent_impl(&store, "A", &arch.id).unwrap();
     assert_eq!(
         list_project_agents_impl(&store, "A").unwrap()[0].availability,
         AgentAvailability::Ready,
@@ -576,40 +630,33 @@ fn update_replaces_every_field_keeps_created_at_and_the_id_and_refuses_a_missing
     );
 }
 
-// -- AGR-FR-11 through AGR-FR-12: enrolment ----------------------------
+// -- AGR-FR-11, AGR-FR-14: the Personal scope ------------------------------------
 
 #[test]
-fn deleting_an_agent_clears_it_from_every_project_and_is_idempotent() {
-    // AGR-FR-11, and GSS-FR-31's prune.
+fn deleting_a_personal_agent_removes_it_from_every_project_and_is_idempotent() {
+    // AGR-FR-11.
     let store = store();
     with_openrouter(&store);
     let arch = create_agent_impl(&store, "", &draft("arch")).unwrap();
-    enrol_project_agent_impl(&store, "A", &arch.id).unwrap();
-    enrol_project_agent_impl(&store, "B", &arch.id).unwrap();
+
+    assert_eq!(list_project_agents_impl(&store, "A").unwrap().len(), 1);
+    assert_eq!(list_project_agents_impl(&store, "B").unwrap().len(), 1);
 
     delete_agent_impl(&store, &arch.id).unwrap();
     assert_eq!(list_agents_impl(&store).unwrap(), vec![]);
     assert_eq!(list_project_agents_impl(&store, "A").unwrap(), vec![]);
     assert_eq!(list_project_agents_impl(&store, "B").unwrap(), vec![]);
-    // The slot itself was rewritten, not merely filtered on read.
-    assert_eq!(store.load_project_agent_enrolment("A").unwrap(), vec![] as Vec<String>);
     assert!(delete_agent_impl(&store, &arch.id).is_ok());
 }
 
 #[test]
-fn a_project_lists_only_its_enrolment_while_the_registry_lists_everything() {
-    // AGR-FR-13 / AGR-FR-12, FR-13. Ordering is by nickname without regard
-    // to case, which `Zed` before `arch` would break if it were byte order.
+fn the_personal_agents_are_listed_by_nickname_without_regard_to_case() {
+    // AGR-FR-14. `Zed` before `arch` would show if the order were byte order.
     let store = store();
     with_openrouter(&store);
-    let arch = create_agent_impl(&store, "", &draft("arch")).unwrap();
+    create_agent_impl(&store, "", &draft("arch")).unwrap();
     create_agent_impl(&store, "", &draft("Zed")).unwrap();
     create_agent_impl(&store, "", &draft("bee")).unwrap();
-    enrol_project_agent_impl(&store, "A", &arch.id).unwrap();
-
-    let project = list_project_agents_impl(&store, "A").unwrap();
-    assert_eq!(project.len(), 1);
-    assert_eq!(project[0].agent.nickname, "arch");
 
     let nicknames: Vec<String> = list_agents_impl(&store)
         .unwrap()
@@ -620,37 +667,17 @@ fn a_project_lists_only_its_enrolment_while_the_registry_lists_everything() {
 }
 
 #[test]
-fn enrolment_and_removal_are_idempotent_and_removal_keeps_the_definition() {
-    // AGR-FR-15 / AGR-FR-14, FR-15.
+fn a_personal_agent_is_on_the_roster_of_every_project_without_a_step() {
+    // AGR-FR-02, AGR-FR-15, AGR-FR-19: the same definition, in every project.
     let store = store();
     with_openrouter(&store);
     let arch = create_agent_impl(&store, "", &draft("arch")).unwrap();
-
-    enrol_project_agent_impl(&store, "A", &arch.id).unwrap();
-    let twice = enrol_project_agent_impl(&store, "A", &arch.id).unwrap();
-    assert_eq!(twice.len(), 1);
-    assert_eq!(store.load_project_agent_enrolment("A").unwrap().len(), 1);
-
-    assert_eq!(
-        enrol_project_agent_impl(&store, "A", "nope").unwrap_err(),
-        ERR_AGENT_NOT_FOUND,
-    );
-
-    remove_project_agent_impl(&store, "A", &arch.id).unwrap();
-    assert!(remove_project_agent_impl(&store, "A", &arch.id).is_ok());
-    assert_eq!(list_agents_impl(&store).unwrap().len(), 1);
-}
-
-#[test]
-fn an_enrolment_is_one_fact_per_project_key_not_per_worktree() {
-    // AGR-FR-12. The key IS the project (GSS-FR-18), so
-    // "changing worktree" is "reading the same key again".
-    let store = store();
-    with_openrouter(&store);
-    let arch = create_agent_impl(&store, "", &draft("arch")).unwrap();
-    enrol_project_agent_impl(&store, "proj", &arch.id).unwrap();
-    assert_eq!(list_project_agents_impl(&store, "proj").unwrap().len(), 1);
-    assert_eq!(list_project_agents_impl(&store, "other").unwrap().len(), 0);
+    for key in ["proj", "other"] {
+        let roster = list_project_agents_impl(&store, key).unwrap();
+        assert_eq!(roster.len(), 1);
+        assert_eq!(roster[0].agent.id, arch.id);
+        assert_eq!(roster[0].scope, AgentScope::Personal);
+    }
 }
 
 // -- AGR-FR-16, AGR-FR-17 / AGR-FR-16: availability -------------------------------
@@ -660,8 +687,7 @@ fn availability_degrades_by_kind_and_the_agent_is_still_returned() {
     // AGR-FR-17 / AGR-FR-16, FR-17.
     let store = store();
     with_openrouter(&store);
-    let arch = create_agent_impl(&store, "", &draft("arch")).unwrap();
-    enrol_project_agent_impl(&store, "A", &arch.id).unwrap();
+    create_agent_impl(&store, "", &draft("arch")).unwrap();
 
     let ready = list_project_agents_impl(&store, "A").unwrap();
     assert_eq!(ready[0].availability, AgentAvailability::Ready);
@@ -710,7 +736,6 @@ fn availability_is_computed_without_a_keychain_or_a_network() {
     let store = store();
     with_openrouter(&store);
     let arch = create_agent_impl(&store, "", &draft("arch")).unwrap();
-    enrol_project_agent_impl(&store, "A", &arch.id).unwrap();
 
     let listed = list_project_agents_impl(&store, "A").unwrap();
     assert_eq!(listed[0].availability, AgentAvailability::Ready);
@@ -720,19 +745,16 @@ fn availability_is_computed_without_a_keychain_or_a_network() {
 // -- AGR-FR-18, AGR-FR-04: resolution ---------------------------------------------
 
 #[test]
-fn a_nickname_resolves_only_against_the_projects_own_enrolment() {
+fn a_nickname_resolves_without_regard_to_case_and_the_reserved_handle_resolves_to_nothing() {
     // AGR-FR-04 / AGR-FR-18.
     let store = store();
     with_openrouter(&store);
     let arch = create_agent_impl(&store, "", &draft("arch")).unwrap();
-    create_agent_impl(&store, "", &draft("sec")).unwrap();
-    enrol_project_agent_impl(&store, "A", &arch.id).unwrap();
 
     assert_eq!(
         resolve_project_agent(&store, "A", "ARCH").unwrap().id,
         arch.id,
     );
-    // Defined on the machine, but not enrolled here.
     assert_eq!(
         resolve_project_agent(&store, "A", "sec").unwrap_err(),
         ERR_AGENT_NOT_FOUND,
@@ -755,13 +777,11 @@ fn a_nickname_resolves_only_against_the_projects_own_enrolment() {
 // -- AGR-FR-19 / AGR-FR-02, AGR-FR-20: one definition, no secret ------------------
 
 #[test]
-fn one_definition_is_shared_by_every_project_that_enrolled_it() {
+fn one_personal_definition_is_shared_by_every_project() {
     // AGR-FR-19: there is no per-project copy to diverge.
     let store = store();
     with_openrouter(&store);
     let arch = create_agent_impl(&store, "", &draft("arch")).unwrap();
-    enrol_project_agent_impl(&store, "A", &arch.id).unwrap();
-    enrol_project_agent_impl(&store, "B", &arch.id).unwrap();
 
     let mut d = draft("arch");
     d.instructions = "edited while A was open".into();
@@ -814,11 +834,9 @@ fn the_registry_commands_are_in_scope() {
     // A rename that is not propagated to `generate_handler!` fails to
     // compile here rather than at runtime, matching the convention every
     // other domain module follows.
-    let _ = list_agents;
-    let _ = create_agent;
-    let _ = update_agent;
+    let _ = list_personal_agents;
+    let _ = list_project_agents::<tauri::test::MockRuntime>;
+    let _ = create_agent::<tauri::test::MockRuntime>;
+    let _ = update_agent::<tauri::test::MockRuntime>;
     let _ = delete_agent::<tauri::test::MockRuntime>;
-    let _ = list_project_agents;
-    let _ = enrol_project_agent;
-    let _ = remove_project_agent::<tauri::test::MockRuntime>;
 }

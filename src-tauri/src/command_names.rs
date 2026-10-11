@@ -352,13 +352,11 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // Conversational agents (AGR-agent-registry.md / AGT-agents.md).
     // `resolve_project_agent` is deliberately absent: it is the read path a
     // dispatch takes and must stay unreachable from the frontend (AGR-FR-18).
-    "list_agents",
+    "list_personal_agents",
+    "list_project_agents",
     "create_agent",
     "update_agent",
     "delete_agent",
-    "list_project_agents",
-    "enrol_project_agent",
-    "remove_project_agent",
     // Agent conversations (AGC-agent-conversations.md / CMT-comments.md).
     // `build_input` and the completion seam are likewise absent: one reads the
     // material under discussion, the other reaches a model with a key

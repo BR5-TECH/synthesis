@@ -111,32 +111,49 @@ export function SettingsWindowApp({
   }, []);
 
   /**
-   * AGT-FR-06 / AGT-FR-07: the persona editor a route asked for.
+   * AGT-FR-06 / AGT-FR-07: the persona editor a route asked for, and the group
+   * whose Agents section it belongs to.
    *
    * Derived from the section address rather than carried beside it, so the
    * chrome roster's two actions travel the same one-string route every other
    * sectioned request does — `agents:new` for a fresh persona, `agents:<id>`
-   * for one that exists, and a bare `agents` for the section alone.
+   * for one that exists, and a bare `agents` for the section alone. The scope
+   * of the address picks the section: `global` is the Personal Agents section
+   * and `project` is the Project Agents section.
    */
   const [honouredEditor, setHonouredEditor] = useState<number | null>(null);
-  const agentEditorRequest = useMemo<AgentEditorRequest | null>(() => {
+  const agentEditor = useMemo<{
+    scope: SettingsScope;
+    request: AgentEditorRequest;
+  } | null>(() => {
     if (!sectionRequest) return null;
     // Honoured once: without this the section would reopen the editor every
     // time its agent list changed underneath it — which is every create, every
     // edit, and every delete the author makes while it is open.
     if (honouredEditor === sectionRequest.nonce) return null;
     const parsed = parseSectionAddress(sectionRequest.section);
-    if (!parsed || parsed.scope !== "global") return null;
+    if (!parsed) return null;
     const { section, item } = parsed;
     if (section !== "agents" || item === null) return null;
     return {
-      agentId: item === NEW_AGENT_ITEM ? null : item,
-      nonce: sectionRequest.nonce,
+      scope: parsed.scope,
+      request: {
+        agentId: item === NEW_AGENT_ITEM ? null : item,
+        nonce: sectionRequest.nonce,
+      },
     };
     // Memoised on the request itself rather than rebuilt per render: the
     // section watches this object's identity, and a fresh one each render would
     // reopen the editor every time anything else in the window changed.
   }, [sectionRequest, honouredEditor]);
+  const agentEditorRequest =
+    agentEditor?.scope === "global" ? agentEditor.request : null;
+  const projectAgentEditorRequest =
+    agentEditor?.scope === "project" ? agentEditor.request : null;
+  const handleAgentEditorRequest = useCallback(
+    () => setHonouredEditor(sectionRequest?.nonce ?? null),
+    [sectionRequest],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -258,8 +275,7 @@ export function SettingsWindowApp({
         autoFocus
         global={{
           agentEditorRequest,
-          onAgentEditorRequestHandled: () =>
-            setHonouredEditor(sectionRequest?.nonce ?? null),
+          onAgentEditorRequestHandled: handleAgentEditorRequest,
           controlledTheme: themePref,
           onThemeChange: setThemePref,
           controlledFonts: fonts,
@@ -284,6 +300,8 @@ export function SettingsWindowApp({
                 // reads once.
                 contentRoot: context?.contentRoot ?? "",
                 lineEndings,
+                agentEditorRequest: projectAgentEditorRequest,
+                onAgentEditorRequestHandled: handleAgentEditorRequest,
                 onSelectLineEndings: selectLineEndings,
                 onOpenGithubTokenPicker: (currentTokenId, onConfirmed) =>
                   setPicker({ currentTokenId, onConfirmed }),

@@ -458,11 +458,11 @@ describe("the Settings window from the shell (SWN-FR-05, SWN-FR-06, SWN-FR-MRNB 
 
   // AGT-FR-06 / AGT-FR-07: the chrome roster is how an agent is
   // reached to be looked at or changed, and how a new one is described. Both
-  // open the Settings WINDOW on the Agents section of its Global group with an
-  // editor open — and since that window shares no state with this one
+  // open the Settings WINDOW on the Project Agents or the Personal Agents section
+  // of the agent's scope with an editor open — and since that window shares no state with this one
   // (SWN-FR-01), the editor has to travel as part of the section address or not
   // at all.
-  it("AGT-FR-06, SWN-FR-HZWD: routes a roster row to the Global Agents section", async () => {
+  it("AGT-FR-06, SWN-FR-HZWD: routes a roster row to the Project Agents section of its scope", async () => {
     render(<App />);
     await enterIde();
 
@@ -472,7 +472,7 @@ describe("the Settings window from the shell (SWN-FR-05, SWN-FR-06, SWN-FR-MRNB 
     await waitFor(() =>
       expect(
         invokeMock.mock.calls.find((c) => c[0] === "open_settings_window")?.[1],
-      ).toEqual({ section: `global/agents:${ROSTER_AGENT_ID}` }),
+      ).toEqual({ section: `project/agents:${ROSTER_AGENT_ID}` }),
     );
     // AGT-FR-06, AGT-FR-07: …and the roster closed behind it.
     await waitFor(() =>
@@ -480,7 +480,7 @@ describe("the Settings window from the shell (SWN-FR-05, SWN-FR-06, SWN-FR-MRNB 
     );
   });
 
-  it("AGT-FR-07, SWN-FR-HZWD: routes Add an agent to the same section with a fresh editor", async () => {
+  it("AGT-FR-07, SWN-FR-HZWD: routes Add an agent to the Project Agents section with a fresh editor", async () => {
     render(<App />);
     await enterIde();
 
@@ -490,7 +490,7 @@ describe("the Settings window from the shell (SWN-FR-05, SWN-FR-06, SWN-FR-MRNB 
     await waitFor(() =>
       expect(
         invokeMock.mock.calls.find((c) => c[0] === "open_settings_window")?.[1],
-      ).toEqual({ section: "global/agents:new" }),
+      ).toEqual({ section: "project/agents:new" }),
     );
   });
 

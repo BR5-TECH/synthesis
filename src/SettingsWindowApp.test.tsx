@@ -141,7 +141,7 @@ function backend() {
         case "list_recent_projects":
         case "list_installed_plugins":
         case "list_agent_adapters":
-        case "list_agents":
+        case "list_personal_agents":
         case "list_project_agents":
         case "list_ai_api_integrations":
         case "list_agentic_integrations":
@@ -226,7 +226,7 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
       "GitHub",
       "AI API",
       "Agentic AI",
-      "Agents",
+      "Personal Agents",
       "Docker",
       "Remote connectivity",
     ]);
@@ -238,7 +238,7 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
       "Agent adapters",
       "MCP servers",
       "Plugins",
-      "Agents",
+      "Project Agents",
       "Docker",
       "Graduation",
     ]);
@@ -264,51 +264,51 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
   });
 
   it("SWN-FR-KBNV: every tab controls one tabpanel that its group and its section name", async () => {
-    renderWindow("project/agents");
+    renderWindow("project/docker");
     await screen.findByTestId("project-settings");
 
     const panel = screen.getByRole("tabpanel");
-    const projectAgents = within(
+    const projectDocker = within(
       screen.getByRole("tablist", { name: "Project" }),
-    ).getByRole("tab", { name: "Agents" });
-    const globalAgents = within(
+    ).getByRole("tab", { name: "Docker" });
+    const globalDocker = within(
       screen.getByRole("tablist", { name: "Global" }),
-    ).getByRole("tab", { name: "Agents" });
+    ).getByRole("tab", { name: "Docker" });
     for (const tab of screen.getAllByRole("tab")) {
       expect(tab.id).not.toBe("");
       expect(tab).toHaveAttribute("aria-controls", panel.id);
     }
-    expect(panel).toHaveAccessibleName("Project Agents");
+    expect(panel).toHaveAccessibleName("Project Docker");
     expect(panel).toContainElement(screen.getByTestId("project-settings"));
 
-    await userEvent.click(globalAgents);
+    await userEvent.click(globalDocker);
     await screen.findByTestId("global-settings");
-    expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Global Agents");
+    expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Global Docker");
     expect(screen.getByRole("tabpanel")).toContainElement(
       screen.getByTestId("global-settings"),
     );
-    expect(projectAgents.id).not.toBe(globalAgents.id);
+    expect(projectDocker.id).not.toBe(globalDocker.id);
   });
 
   it("SWN-FR-QXTV, SWN-FR-KBNV: tells a section that exists in both groups apart by its group", async () => {
-    renderWindow("project/agents");
+    renderWindow("project/docker");
     await screen.findByTestId("project-settings");
 
-    const globalAgents = within(
+    const globalDocker = within(
       screen.getByRole("tablist", { name: "Global" }),
-    ).getByRole("tab", { name: "Agents" });
-    const projectAgents = within(
+    ).getByRole("tab", { name: "Docker" });
+    const projectDocker = within(
       screen.getByRole("tablist", { name: "Project" }),
-    ).getByRole("tab", { name: "Agents" });
-    expect(globalAgents).toHaveAttribute("aria-selected", "false");
-    expect(projectAgents).toHaveAttribute("aria-selected", "true");
+    ).getByRole("tab", { name: "Docker" });
+    expect(globalDocker).toHaveAttribute("aria-selected", "false");
+    expect(projectDocker).toHaveAttribute("aria-selected", "true");
     // The presented section is marked as current (SWN-FR-KBNV).
-    expect(projectAgents).toHaveAttribute("aria-current", "page");
-    expect(globalAgents).not.toHaveAttribute("aria-current");
+    expect(projectDocker).toHaveAttribute("aria-current", "page");
+    expect(globalDocker).not.toHaveAttribute("aria-current");
 
-    await userEvent.click(globalAgents);
-    expect(globalAgents).toHaveAttribute("aria-selected", "true");
-    expect(projectAgents).toHaveAttribute("aria-selected", "false");
+    await userEvent.click(globalDocker);
+    expect(globalDocker).toHaveAttribute("aria-selected", "true");
+    expect(projectDocker).toHaveAttribute("aria-selected", "false");
     expect(await screen.findByTestId("global-settings")).toBeInTheDocument();
     expect(screen.queryByTestId("project-settings")).toBeNull();
   });
@@ -631,18 +631,33 @@ describe("section routing (SWN-FR-06 / SWN-FR-HZWD)", () => {
     expect(calls("get_settings_window_context")).toHaveLength(1);
   });
 
-  it("AGT-FR-06, AGT-FR-07: an agents address opens the Agents section with an editor", async () => {
+  it("AGT-FR-06, AGT-FR-07: an agents address opens the Personal Agents section with an editor", async () => {
     // AGT-FR-06 / AGT-FR-07: the roster's two actions travel as one section
     // address — `agents:new` for a fresh persona, `agents:<id>` for one that
     // exists — because the window they reach is a window of its own and shares
     // no state with the one the roster is in.
     renderGlobal("agents:new");
     expect(
-      await screen.findByRole("heading", { name: "Agents" }),
+      await screen.findByRole("heading", { name: "Personal Agents" }),
     ).toBeInTheDocument();
     await screen.findByTestId("agents-section");
     // The editor is open on a fresh persona rather than on an existing one.
     expect(await screen.findByLabelText(/nickname/i)).toHaveValue("");
+  });
+
+  it("AGT-FR-06, AGT-FR-07: a project agents address opens the Project Agents section with an editor", async () => {
+    // The scope of the address picks the section: `global` is the Personal
+    // Agents section and `project` is the Project Agents section.
+    renderWindow("project/agents:new");
+    expect(
+      await screen.findByRole("heading", { name: "Project Agents" }),
+    ).toBeInTheDocument();
+    const section = await screen.findByTestId("agents-section");
+    expect(section).toHaveAttribute("data-scope", "project");
+    expect(await screen.findByLabelText(/nickname/i)).toHaveValue("");
+    expect(
+      await screen.findByRole("dialog", { name: "New Project agent" }),
+    ).toBeInTheDocument();
   });
 
   it("AGT-FR-06: an honoured editor request is not reopened by the section's own work", async () => {

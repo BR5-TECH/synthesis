@@ -757,7 +757,7 @@ describe("GitHub section (GLS-FR-03 / GLS-FR-15)", () => {
   });
 });
 
-describe("Agents section (GLS-FR-03 / GLS-FR-24)", () => {
+describe("Personal Agents section (GLS-FR-03 / GLS-FR-24)", () => {
   // The agent surfaces read the keychain-free catalogue, not the credential
   // listing, so this is the shape they are given (AGR-FR-16).
   const verifiedOpenRouter = {
@@ -779,6 +779,12 @@ describe("Agents section (GLS-FR-03 / GLS-FR-24)", () => {
     reasoning: null,
   };
 
+  const personal = (a: typeof anAgent) => ({
+    agent: a,
+    scope: "personal" as const,
+    availability: "ready" as const,
+  });
+
   it("GLS-FR-03, GLS-FR-12, GLS-FR-24 is one of the tab's sections and holds no dirty state", async () => {
     // GLS-FR-03 / GLS-FR-24 / AGT-FR-21: every action here applies immediately
     // through its own operation, so creating, editing, or deleting an agent can
@@ -789,7 +795,7 @@ describe("Agents section (GLS-FR-03 / GLS-FR-24)", () => {
     let registry = [anAgent];
     wireBackend({
       overrides: {
-        list_agents: () => registry,
+        list_personal_agents: () => registry.map(personal),
         get_active_ai_api_catalog: () => ({ resolution: "inherited", catalog: verifiedOpenRouter }),
         delete_agent: () => {
           registry = [];
@@ -804,7 +810,7 @@ describe("Agents section (GLS-FR-03 / GLS-FR-24)", () => {
     });
     render(<GlobalSettings />);
 
-    await userEvent.click(screen.getByRole("tab", { name: "Agents" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Personal Agents" }));
     await waitFor(() =>
       expect(screen.getByTestId("agent-row")).toHaveTextContent("@arch"),
     );
@@ -837,12 +843,12 @@ describe("Agents section (GLS-FR-03 / GLS-FR-24)", () => {
     // not open a modal the author did not ask for.
     wireBackend({
       overrides: {
-        list_agents: () => [anAgent],
+        list_personal_agents: () => [personal(anAgent)],
         get_active_ai_api_catalog: () => ({ resolution: "inherited", catalog: verifiedOpenRouter }),
       },
     });
     render(<GlobalSettings />);
-    await userEvent.click(screen.getByRole("tab", { name: "Agents" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Personal Agents" }));
     await waitFor(() => expect(screen.getByTestId("agent-row")).toBeInTheDocument());
     expect(screen.queryByTestId("agent-editor")).not.toBeInTheDocument();
   });
@@ -853,7 +859,7 @@ describe("Agents section (GLS-FR-03 / GLS-FR-24)", () => {
     // already had Global settings open — which is most of the time.
     wireBackend({
       overrides: {
-        list_agents: () => [anAgent],
+        list_personal_agents: () => [personal(anAgent)],
         get_active_ai_api_catalog: () => ({ resolution: "inherited", catalog: verifiedOpenRouter }),
       },
     });
@@ -882,26 +888,26 @@ describe("Agents section (GLS-FR-03 / GLS-FR-24)", () => {
     await userEvent.click(screen.getByRole("button", { name: "roster row" }));
     const editor = await screen.findByTestId("agent-editor");
     expect(within(editor).getByTestId("agent-nickname")).toHaveValue("arch");
-    expect(screen.getByRole("tab", { name: "Agents" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Personal Agents" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
   });
 
-  it("opens on the Agents section when the roster asked for an editor", async () => {
+  it("opens on the Personal Agents section when the roster asked for an editor", async () => {
     // AGT-FR-06 / AGT-FR-07: the roster is how an agent is reached to be looked
     // at, so the tab it opens lands on the right section rather than on
     // Appearance with the section still to be found.
     wireBackend({
       overrides: {
-        list_agents: () => [anAgent],
+        list_personal_agents: () => [personal(anAgent)],
         get_active_ai_api_catalog: () => ({ resolution: "inherited", catalog: verifiedOpenRouter }),
       },
     });
     render(<GlobalSettings agentEditorRequest={{ agentId: "a1", nonce: 1 }} />);
     const editor = await screen.findByTestId("agent-editor");
     expect(within(editor).getByTestId("agent-nickname")).toHaveValue("arch");
-    expect(screen.getByRole("tab", { name: "Agents" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Personal Agents" })).toHaveAttribute(
       "aria-selected",
       "true",
     );

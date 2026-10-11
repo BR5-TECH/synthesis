@@ -319,7 +319,7 @@ fn an_openrouter_conversation_carries_the_search_entry_and_withholds_the_fetch()
             let h = Harness::new(vec![Ok("Answered.".into())]);
             h.mount();
             let agent = h.create_agent(nickname, "");
-            agents::enrol_project_agent_impl(&h.store(), project, &agent.id).expect("enrol");
+            let _ = &agent;
             let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
             let turn = h
                 .dispatch_in(

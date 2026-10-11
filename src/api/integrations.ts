@@ -16,6 +16,7 @@ import type {
   AiApiProviderId,
   Agent,
   AgentDraft,
+  AgentScope,
   AgentTurn,
   ConversationOrigin,
   ProjectAgent,
@@ -304,47 +305,37 @@ export const setProjectAiApiIntegration = (provider: AiApiProviderId | null) =>
 
 // --- Conversational agents (agents.rs / AGR-agent-registry.md) -------------
 
-/** AGR-FR-02: every described persona, ordered by nickname without regard to
- * case. Answers before any project is open — a definition belongs to the
- * machine. */
-export const listAgents = () => invoke<Agent[]>("list_agents");
+/** AGR-FR-14: only the Personal agents, ordered by nickname without regard to
+ * case. Answers before any project is open — a Personal definition belongs to
+ * the machine. While a project is open, an agent a Project agent shadows
+ * reports `shadowed`. */
+export const listPersonalAgents = () =>
+  invoke<ProjectAgent[]>("list_personal_agents");
 
-/**
- * AGR-FR-09: validate the whole draft, then write. A rejected creation leaves
- * the registry byte-for-byte as it was, and every refusal is one of
- * `AGENT_ERRORS`.
- */
-export const createAgent = (draft: AgentDraft) =>
-  invoke<Agent>("create_agent", { draft });
-
-/** AGR-FR-10: replace every field under the validation `createAgent` applies,
- * keeping the id and `createdAt`. */
-export const updateAgent = (id: string, draft: AgentDraft) =>
-  invoke<Agent>("update_agent", { id, draft });
-
-/**
- * AGR-FR-11: remove the definition and every project's enrolment of it in one
- * operation, cancelling any turn it has in flight. Idempotent. Returns the
- * registry as it stands afterwards.
- */
-export const deleteAgent = (id: string) =>
-  invoke<Agent[]>("delete_agent", { id });
-
-/** AGR-FR-13: only the open project's enrolled agents, each carrying its
- * availability. */
+/** AGR-FR-13: the roster of the open project — its Project agents and the
+ * Personal agents together, each with its scope and availability. */
 export const listProjectAgents = () =>
   invoke<ProjectAgent[]>("list_project_agents");
 
-/** AGR-FR-14: add the agent to the open project's enrolment. Idempotent. */
-export const enrolProjectAgent = (agentId: string) =>
-  invoke<ProjectAgent[]>("enrol_project_agent", { agentId });
+/**
+ * AGR-FR-09: validate the whole draft, then write it to the store the scope
+ * names. A rejected creation leaves the store byte-for-byte as it was, and
+ * every refusal is one of `AGENT_ERRORS`.
+ */
+export const createAgent = (scope: AgentScope, draft: AgentDraft) =>
+  invoke<Agent>("create_agent", { scope, draft });
+
+/** AGR-FR-10: replace every field under the validation `createAgent` applies,
+ * keeping the id. */
+export const updateAgent = (scope: AgentScope, id: string, draft: AgentDraft) =>
+  invoke<Agent>("update_agent", { scope, id, draft });
 
 /**
- * AGR-FR-15: withdraw the agent from the open project, leaving its description
- * untouched and cancelling any turn it has in flight *here*. Idempotent.
+ * AGR-FR-11: remove one definition of the scope, cancelling any turn it has in
+ * flight. Idempotent. Returns the agents of that scope as they stand afterwards.
  */
-export const removeProjectAgent = (agentId: string) =>
-  invoke<ProjectAgent[]>("remove_project_agent", { agentId });
+export const deleteAgent = (scope: AgentScope, id: string) =>
+  invoke<ProjectAgent[]>("delete_agent", { scope, id });
 
 // --- Agent conversations (agent_conversations.rs / AGC) -------------------
 

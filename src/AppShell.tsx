@@ -302,20 +302,26 @@ export function AppShell(props: AppShellProps) {
           // Settings window's Global GitHub section (SWN-FR-13, GIT-FR-10).
           onOpenGlobalSettings={() => s.openGlobalSettings("github")}
           // AGT-FR-06 / AGT-FR-07: the roster is how an agent is reached to be
-          // looked at or changed, and how a new one is described. Both open the
-          // Settings **window** on the Agents section of its Global group with
-          // an editor already open (SWN-FR-13), focusing that window where it
-          // is already open (SWN-FR-06). The editor travels as part of the
-          // section address, because the window it opens is a window of its
-          // own and shares no state with this one.
-          onOpenAgentInSettings={(agentId) => {
+          // looked at or changed, and how a new one is described. A row opens
+          // the Settings **window** on the Project Agents section of its Project
+          // group or the Personal Agents section of its Global group, by the
+          // agent's scope, and the add action opens the Project Agents section
+          // (SWN-FR-13), focusing that window where it is already open
+          // (SWN-FR-06). The editor travels as part of the section address,
+          // because the window it opens is a window of its own and shares no
+          // state with this one.
+          onOpenAgentInSettings={(agentId, agentScope) => {
             s.openSettings(
-              formatSectionAddress("global", "agents", agentId ?? NEW_AGENT_ITEM),
+              formatSectionAddress(
+                agentScope === "project" ? "project" : "global",
+                "agents",
+                agentId ?? NEW_AGENT_ITEM,
+              ),
             );
           }}
-          // AGT-FR-08: a project enrolling nothing names where agents are
-          // enrolled, which is the Agents section of the Settings window's
-          // Project group.
+          // AGT-FR-08: a project with no agent names where agents of the
+          // project are described, which is the Project Agents section of the
+          // Settings window's Project group.
           onOpenProjectSettings={() => s.openProjectSettings("agents")}
           agentsRosterOpen={agentsRosterOpen}
           setAgentsRosterOpen={setAgentsRosterOpen}

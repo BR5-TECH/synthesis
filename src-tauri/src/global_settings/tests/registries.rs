@@ -1,5 +1,5 @@
-//! The AI integration registries: the agentic and API records, the agent
-//! roster, per-project enrolment, and the per-project overrides.
+//! The AI integration registries: the agentic and API records, the Personal
+//! agent roster, the enrolment migration, and the per-project overrides.
 //!
 //! One part of `mod.rs`, which holds the imports and the helpers these use.
 
@@ -375,73 +375,51 @@ updatedAt = "2026-07-01T09:00:00Z"
 }
 
 #[test]
-fn gss_ts30_an_enrolment_is_per_project_and_pruned_when_its_agent_goes() {
-    // GSS-FR-31, GSS-FR-18.
-    use crate::agents::Agent;
-
-    let agent = |id: &str, nickname: &str| Agent {
-        id: id.into(),
-        nickname: nickname.into(),
-        title: String::new(),
-        model_id: "m".into(),
-        instructions: String::new(),
-        created_at: "2026-07-01T09:00:00Z".into(),
-        updated_at: "2026-07-01T09:00:00Z".into(),
-        reasoning: None,
-    };
-
+fn gss_fr_31_the_earlier_enrolment_is_dropped_once_and_every_agent_stays_personal() {
+    // GSS-FR-31: the migration clears the per-project enrolment and copies no
+    // agent into any project.
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("synthesis.toml");
+    std::fs::write(
+        &path,
+        r#"
+[[agents]]
+id = "a1"
+nickname = "arch"
+modelId = "m"
 
-    {
-        let store = GlobalSettingsStore::with_path(path.clone());
-        store
-            .save_agent_registry(vec![
-                agent("a1", "arch"),
-                agent("a2", "sec"),
-                agent("a3", "scribe"),
-            ])
-            .unwrap();
-        store
-            .save_project_agent_enrolment("/dev/acme", vec!["a1".into()])
-            .unwrap();
-        store
-            .save_project_agent_enrolment("/dev/other", vec!["a2".into(), "a3".into()])
-            .unwrap();
-    }
+[[agents]]
+id = "a2"
+nickname = "sec"
+modelId = "m"
 
-    let reloaded = GlobalSettingsStore::with_path(path);
-    assert_eq!(
-        reloaded.load_project_agent_enrolment("/dev/acme").unwrap(),
-        vec!["a1".to_string()],
-        "the key is the project, so a change of active worktree keeps it",
-    );
-    assert_eq!(
-        reloaded.load_project_agent_enrolment("/dev/other").unwrap(),
-        vec!["a2".to_string(), "a3".to_string()],
-        "and one project's enrolment never leaks into another",
-    );
-    // A project that has enrolled nothing reads as an empty set rather than
-    // an error.
-    assert!(reloaded
-        .load_project_agent_enrolment("/dev/fresh")
-        .unwrap()
-        .is_empty());
+[projects."/dev/acme"]
+enrolledAgents = ["a1"]
 
-    // GSS-FR-31: an id naming a record the registry no longer holds is not
-    // written. Deleting `a2` clears it from `/dev/other` in the same
-    // operation, leaving `a3` alone.
-    reloaded
-        .save_agent_registry(vec![agent("a1", "arch"), agent("a3", "scribe")])
-        .unwrap();
+[projects."/dev/other"]
+enrolledAgents = ["a2", "a1"]
+"#,
+    )
+    .unwrap();
+
+    let store = GlobalSettingsStore::with_path(path.clone());
     assert_eq!(
-        reloaded.load_project_agent_enrolment("/dev/other").unwrap(),
-        vec!["a3".to_string()],
+        store.load_agent_registry().unwrap().len(),
+        2,
+        "every earlier agent stays in the registry"
     );
-    assert_eq!(
-        reloaded.load_project_agent_enrolment("/dev/acme").unwrap(),
-        vec!["a1".to_string()],
+    let migrated = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        !migrated.contains("enrolledAgents"),
+        "the migration wrote the store without the enrolment"
     );
+    assert!(migrated.contains("arch") && migrated.contains("sec"));
+
+    // A store without the key is not written by the migration.
+    let mtime = std::fs::metadata(&path).unwrap().modified().unwrap();
+    let reloaded = GlobalSettingsStore::with_path(path.clone());
+    assert_eq!(reloaded.load_agent_registry().unwrap().len(), 2);
+    assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), mtime);
 }
 
 #[test]

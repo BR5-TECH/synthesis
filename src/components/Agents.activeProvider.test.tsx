@@ -12,7 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
 import { notifyAgentRegistryChanged, resetAgentRegistry } from "../state/agentRegistry";
-import { AgentsChromeControl, GlobalAgents, ProjectAgents } from "./Agents";
+import { AgentsChromeControl, PersonalAgents, ProjectAgents } from "./Agents";
 import type {
   ActiveAiApiCatalog,
   Agent,
@@ -98,8 +98,12 @@ function backend(over: Partial<Backend> = {}): Backend {
     switch (cmd) {
       case "get_active_ai_api_catalog":
         return b.active;
-      case "list_agents":
-        return b.agents;
+      case "list_personal_agents":
+        return b.agents.map((a) => ({
+          agent: a,
+          scope: "personal" as const,
+          availability: "ready" as const,
+        }));
       case "list_project_agents":
         return b.projectAgents;
       case "list_agent_turns":
@@ -140,7 +144,7 @@ async function optionTexts(editor: HTMLElement, testId = "agent-model") {
 describe("the persona editor against the active provider", () => {
   it("AGT-FR-12, AGT-FR-14, AGT-FR-15: has no provider selector and offers the active catalog's models only", async () => {
     backend();
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     const editor = await screen.findByTestId("agent-editor");
 
@@ -151,7 +155,7 @@ describe("the persona editor against the active provider", () => {
 
   it("AGT-FR-14, AGT-FR-01: sends a draft that carries no provider on create", async () => {
     const b = backend();
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     const editor = await screen.findByTestId("agent-editor");
     await userEvent.type(within(editor).getByTestId("agent-nickname"), "arch");
@@ -167,7 +171,7 @@ describe("the persona editor against the active provider", () => {
 
   it("AGT-FR-17: seeds the model from the agent when the active provider offers it", async () => {
     const b = backend({ agents: [agent({ id: "a1", nickname: "arch", modelId: "claude-thinker" })] });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-edit"));
     const editor = await screen.findByTestId("agent-editor");
 
@@ -180,11 +184,11 @@ describe("the persona editor against the active provider", () => {
     expect(draft).not.toHaveProperty("provider");
   });
 
-  it("AGT-FR-17, AGT-FR-MDQW: shows no model and a note when the stored model is unavailable, and keeps Confirm disabled until one is chosen", async () => {
+  it("AGT-FR-17, AGT-FR-MDQW, AGT-FR-ZCDV: shows no model and a note when the stored model is unavailable, and keeps Confirm disabled until one is chosen", async () => {
     const b = backend({
       agents: [agent({ id: "a1", nickname: "arch", modelId: "retired-model" })],
     });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     // The row stays listed with the reason (AGT-FR-10, AGT-FR-MDQW).
     expect(await screen.findByTestId("agent-row-warning")).toHaveTextContent(
       /does not offer this model/,
@@ -224,7 +228,7 @@ describe("the persona editor against the active provider", () => {
         }),
       ],
     });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-edit"));
     const editor = await screen.findByTestId("agent-editor");
     expect(within(editor).getByTestId("agent-reasoning")).toHaveTextContent("high");
@@ -236,7 +240,7 @@ describe("the persona editor against the active provider", () => {
 
   it("AGT-FR-14: disables Confirm of an existing agent while no provider resolves", async () => {
     const b = backend({ agents: [agent({ id: "a1", nickname: "arch" })] });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-edit"));
     const editor = await screen.findByTestId("agent-editor");
     const confirm = within(editor).getByTestId("agent-editor-confirm");
@@ -252,7 +256,7 @@ describe("the persona editor against the active provider", () => {
 describe("provider-switch refresh (AGT-FR-RFSH, AGT-FR-PRVQ)", () => {
   it("AGT-FR-RFSH, AGT-FR-PRVQ: re-reads the catalog when the registry revision changes and updates rows and the editor", async () => {
     const b = backend({ agents: [agent({ id: "a1", nickname: "arch" })] });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     let editor = await screen.findByTestId("agent-editor");
     expect(await optionTexts(editor)).toEqual(["Claude Opus 5", "Claude Thinker"]);
@@ -282,20 +286,20 @@ describe("provider-switch refresh (AGT-FR-RFSH, AGT-FR-PRVQ)", () => {
 
   it("AGT-FR-RFSH: a re-mounted section reads the new provider's catalog", async () => {
     const b = backend();
-    const first = render(<GlobalAgents />);
+    const first = render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     expect(await optionTexts(await screen.findByTestId("agent-editor"))).toHaveLength(2);
     first.unmount();
 
     b.active = custom();
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     expect(await optionTexts(await screen.findByTestId("agent-editor"))).toHaveLength(4);
   });
 
   it("AGT-FR-PRVQ: marks an agent ready again after the provider switches back to one that offers its model", async () => {
     const b = backend({ active: custom(), agents: [agent({ id: "a1", nickname: "arch" })] });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     expect(await screen.findByTestId("agent-row-warning")).toBeInTheDocument();
 
     b.active = anthropic();
@@ -309,7 +313,7 @@ describe("provider-switch refresh (AGT-FR-RFSH, AGT-FR-PRVQ)", () => {
 describe("the Custom gateway in the editor (AGT-FR-15, AGT-FR-16, AGT-FR-RFSH)", () => {
   it("AGT-FR-15: states that the list came from the Custom gateway and names each model's route", async () => {
     backend({ active: custom() });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     const editor = await screen.findByTestId("agent-editor");
 
@@ -325,7 +329,7 @@ describe("the Custom gateway in the editor (AGT-FR-15, AGT-FR-16, AGT-FR-RFSH)",
 
   it("AGT-FR-15: filters by label or identifier, and commits the identifier", async () => {
     const b = backend({ active: custom() });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     const editor = await screen.findByTestId("agent-editor");
     await userEvent.type(within(editor).getByTestId("agent-nickname"), "gw");
@@ -345,7 +349,7 @@ describe("the Custom gateway in the editor (AGT-FR-15, AGT-FR-16, AGT-FR-RFSH)",
 
   it("AGT-FR-16, AGT-FR-RFSH: renders no reasoning selector for any Custom model", async () => {
     backend({ active: custom() });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     const editor = await screen.findByTestId("agent-editor");
     for (const label of ["Gateway Both", "Gateway Chat", "Gateway Resp"]) {
@@ -357,7 +361,7 @@ describe("the Custom gateway in the editor (AGT-FR-15, AGT-FR-16, AGT-FR-RFSH)",
 
   it("AGT-FR-15: does not state a gateway origin for a provider that is not Custom", async () => {
     backend();
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     const editor = await screen.findByTestId("agent-editor");
     expect(within(editor).queryByTestId("agent-model-origin")).not.toBeInTheDocument();
@@ -367,7 +371,7 @@ describe("the Custom gateway in the editor (AGT-FR-15, AGT-FR-16, AGT-FR-RFSH)",
 describe("the Global settings section without a provider (AGT-FR-14, AGT-FR-PRVQ)", () => {
   it("AGT-FR-14: renders the empty state naming Global settings -> AI API and disables New agent", async () => {
     backend({ active: none("none_configured") });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     expect(await screen.findByTestId("agents-no-provider")).toHaveTextContent(
       "Global settings → AI API",
     );
@@ -376,7 +380,7 @@ describe("the Global settings section without a provider (AGT-FR-14, AGT-FR-PRVQ
 
   it("AGT-FR-14: also renders it when providers exist but none is active", async () => {
     backend({ active: none("none_selected") });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     expect(await screen.findByTestId("agents-no-provider")).toHaveTextContent(
       "Global settings → AI API",
     );
@@ -388,14 +392,14 @@ describe("the Global settings section without a provider (AGT-FR-14, AGT-FR-PRVQ
       active: none("none_configured"),
       agents: [agent({ id: "a1", nickname: "arch" })],
     });
-    const { unmount } = render(<GlobalAgents />);
+    const { unmount } = render(<PersonalAgents />);
     expect(await screen.findByTestId("agent-row-warning")).toHaveTextContent(
       /No AI API provider is configured/,
     );
     unmount();
 
     b.active = none("override_unavailable");
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     expect(await screen.findByTestId("agent-row-warning")).toHaveTextContent(
       /No AI API provider is active for this project/,
     );
@@ -405,7 +409,7 @@ describe("the Global settings section without a provider (AGT-FR-14, AGT-FR-PRVQ
 
   it("AGT-FR-10: presents no provider name in a row", async () => {
     backend({ agents: [agent({ id: "a1", nickname: "arch" })] });
-    render(<GlobalAgents />);
+    render(<PersonalAgents />);
     const row = await screen.findByTestId("agent-row");
     expect(row).toHaveTextContent("@arch");
     expect(row).toHaveTextContent("Claude Opus 5");
@@ -413,12 +417,30 @@ describe("the Global settings section without a provider (AGT-FR-14, AGT-FR-PRVQ
   });
 });
 
+describe("AGT-FR-ZCDV: a Project agent whose model this machine's provider lacks", () => {
+  it("renders as unavailable in the Project Agents section and writes nothing when its editor is opened", async () => {
+    const a = agent({ id: "a1", nickname: "arch", modelId: "retired-model" });
+    const b = backend({
+      projectAgents: [{ scope: "project" as const, agent: a, availability: "ready" }],
+    });
+    render(<ProjectAgents />);
+    expect(await screen.findByTestId("agent-row-warning")).toHaveTextContent(
+      /does not offer this model/,
+    );
+    await userEvent.click(screen.getByTestId("agent-edit"));
+    const editor = await screen.findByTestId("agent-editor");
+    expect(within(editor).getByTestId("agent-model-unavailable")).toBeInTheDocument();
+    await userEvent.click(within(editor).getByRole("button", { name: "Cancel" }));
+    expect(calls(b, "update_agent")).toHaveLength(0);
+  });
+});
+
 describe("the model line of the project section and the roster (AGT-FR-01, AGT-FR-04, AGT-FR-22)", () => {
   it("AGT-FR-22, AGT-FR-01: the project section names the model from the active catalog and no provider", async () => {
     const a = agent({ id: "a1", nickname: "arch", reasoning: { kind: "effort", effort: "high" } });
-    backend({ agents: [a], projectAgents: [{ agent: a, availability: "ready" }] });
+    backend({ agents: [a], projectAgents: [{ scope: "project" as const, agent: a, availability: "ready" }] });
     render(<ProjectAgents />);
-    const row = await screen.findByTestId("project-agent-row");
+    const row = await screen.findByTestId("agent-row");
     await waitFor(() => expect(row).toHaveTextContent("Claude Opus 5 · high"));
     expect(row).not.toHaveTextContent(/anthropic/i);
   });
@@ -427,7 +449,7 @@ describe("the model line of the project section and the roster (AGT-FR-01, AGT-F
     const a = agent({ id: "a1", nickname: "arch", modelId: "gw-chat" });
     const b = backend({
       active: anthropic(),
-      projectAgents: [{ agent: a, availability: "model_unavailable" }],
+      projectAgents: [{ scope: "project" as const, agent: a, availability: "model_unavailable" }],
     });
     function Roster() {
       const [open, setOpen] = useState(false);

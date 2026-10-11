@@ -145,9 +145,10 @@ fn an_agent_carrying_no_instructions_answers_under_the_rest_of_the_prompt() {
     h.settle();
 
     assert_eq!(h.seam.requests()[0].0.instructions, empty);
-    let stored = agents::list_agents_impl(&h.store())
+    let stored = agents::list_personal_agents_impl(&h.store(), "", None)
         .expect("registry")
         .into_iter()
+        .map(|p| p.agent)
         .find(|a| a.id == created.id)
         .expect("the agent");
     assert_eq!(stored.instructions, " \t\n ");
@@ -459,6 +460,8 @@ fn a_dispatched_turn_carries_its_agents_title_in_the_prompt_it_works_under() {
     agents::update_agent_impl(
         &h.store(),
         "",
+        None,
+        agents::AgentScope::Personal,
         &agent.id,
         &AgentDraft {
             nickname: "arch".into(),

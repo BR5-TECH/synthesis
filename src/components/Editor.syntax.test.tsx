@@ -55,7 +55,7 @@ function wireBackend(b: Backend) {
         return { kind: "human", login: "raver119" };
       case "list_discussion_threads_for_target":
         return [];
-      case "list_agents":
+      case "list_personal_agents":
         return [];
       case "append_log_records":
         return undefined;

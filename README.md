@@ -130,7 +130,7 @@ The **Git** panel can also show the tasks with the status "Ready" in a GitHub Pr
 | Artifact | A file with a type: Skill, Agent, Prompt, Spec, Flow, Instructions, Scenario, or Scratchpad. The path of the file sets the type, and you can override it. |
 | Draft | One Markdown prompt that you develop before the work it describes exists. |
 | Discussion | One conversation about a passage, a file, a draft, or a note. You can lock a discussion and resolve it. |
-| Agent persona | An AI agent that you talk to. It has a nickname, a title, a model, and optional instructions. You define it once and enroll it in a project. |
+| Agent persona | An AI agent that you talk to. It has a nickname, a title, a model, and optional instructions. A Project agent is stored in the project and shared with every contributor. A Personal agent is stored on your machine and works in every project. |
 | Proposal | An edit that an agent proposes. You accept or reject it. |
 | Graduation run | The queued job that turns a draft into committed work. |
 | Work stream | A branch and working copy that the application owns and that many runs share. |

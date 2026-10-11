@@ -400,7 +400,7 @@ describe("Typographic roles (OVW-FR-14)", () => {
     expect(rootProp("--font-rich-size")).toBe("18px");
     // Still on the picker: nothing has been clicked.
     expect(
-      screen.queryByRole("button", { name: "Global settings" }),
+      screen.queryByRole("button", { name: "Settings" }),
     ).not.toBeInTheDocument();
 
     // And the same values are in place once the IDE shell mounts.

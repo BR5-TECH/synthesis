@@ -41,7 +41,7 @@ const base: WindowSnapshot = {
   visiblePanelSurface: null,
   visibleBottomSurface: null,
   visibleRun: null,
-  openSettingsWindow: null,
+  settingsWindowOpen: false,
 };
 
 const runAddress = (id: string) =>
@@ -177,12 +177,13 @@ describe("suppression applies to a toast (NTF-FR-08, NTF-FR-10)", () => {
   });
 
   it("NTF-FR-08: shows no toast for the open settings window", async () => {
-    useWindow({ ...base, openSettingsWindow: "global" });
+    useWindow({ ...base, settingsWindowOpen: true });
     await raiseNotification(
       raiseFor("a", {
         address: mintAddress(PROJECT, WORKTREE, {
           kind: "settings",
-          which: "global",
+          scope: "global",
+          section: null,
         }),
       }),
     );

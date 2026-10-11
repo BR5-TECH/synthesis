@@ -50,8 +50,8 @@ interface BottomPanelProps {
   onCreatePullRequest?: (source: PullRequestSource) => void;
   /** GRU-FR-RZDI: open a run's source draft in a New Artifact tab. */
   onOpenDraft?: (draftId: string) => void;
-  /** GRU-FR-QLRQ: open Project settings on a named section. */
-  onOpenSettings?: (section: string) => void;
+  /** GRU-FR-QLRQ: open the Settings window on a named section address. */
+  onOpenSettings?: (address: string) => void;
   /**
    * SNV-FR-56: a surface of this panel is about to mount a floating overlay.
    *

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { Settings } from "./Settings";
+import { Settings } from "../test/settingsHarness";
 import {
   resetSettingsSections,
   runSettingsSaveSweep,
@@ -109,7 +109,7 @@ describe("Project settings — Graduation section", () => {
     await openGraduation();
     await userEvent.selectOptions(await select(), "4");
 
-    expect(settingsSectionsPending()).toEqual(["graduation"]);
+    expect(settingsSectionsPending()).toEqual(["project/graduation"]);
     expect(saves()).toEqual([]);
     expect(screen.getByTestId("graduation-pending")).toHaveTextContent("not saved yet");
   });
@@ -130,7 +130,7 @@ describe("Project settings — Graduation section", () => {
 
     await userEvent.click(screen.getByRole("tab", { name: "Plugins" }));
     expect(settingsSectionsPending(), "leaving the section keeps the change").toEqual([
-      "graduation",
+      "project/graduation",
     ]);
 
     await expect(runSettingsSaveSweep()).resolves.toEqual({ ok: true });
@@ -192,11 +192,11 @@ describe("Project settings — Graduation section", () => {
 
     await expect(runSettingsSaveSweep()).resolves.toEqual({
       ok: false,
-      section: "graduation",
+      section: "project/graduation",
     });
     expect(await screen.findByRole("alert")).toHaveTextContent("disk is full");
     expect(await select()).toHaveValue("4");
-    expect(settingsSectionsPending()).toEqual(["graduation"]);
+    expect(settingsSectionsPending()).toEqual(["project/graduation"]);
   });
 
   it("SET-FR-TFNG: Retry writes the kept selection and clears the pending state", async () => {
@@ -238,7 +238,7 @@ describe("Project settings — Graduation section", () => {
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Saving"));
     expect(await select()).toBeDisabled();
-    expect(settingsSectionsPending(), "a write in flight is pending").toEqual(["graduation"]);
+    expect(settingsSectionsPending(), "a write in flight is pending").toEqual(["project/graduation"]);
 
     release();
     await sweep;

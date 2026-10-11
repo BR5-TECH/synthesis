@@ -127,7 +127,7 @@ pub fn dispatch_impl<R: tauri::Runtime>(
     let origin = normalise_origin(roots, origin);
 
     // AGC-FR-04: a turn names exactly one agent.
-    let agent = agents::resolve_project_agent(&store, project_key, nickname).map_err(|e| {
+    let agent = agents::resolve_project_agent(&store, project_key, roots.worktree, nickname).map_err(|e| {
         let failure = match e.as_str() {
             agents::ERR_AGENT_UNAVAILABLE => FAIL_AGENT_UNAVAILABLE,
             _ => FAIL_AGENT_NOT_FOUND,

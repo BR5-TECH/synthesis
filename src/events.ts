@@ -8,7 +8,6 @@
  * subscribe-once / cancel-flag pattern they used with raw `listen`.
  */
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { SettingsWindowKind } from "./settingsWindow";
 import type {
   ImageBuildFinished,
   ImageBuildProgress,
@@ -158,6 +157,8 @@ export const DISCUSSION_CHANGED = "discussion-changed";
 export const DISCUSSION_QUESTION_SET_CHANGED = "discussion-question-set-changed";
 /** AGC-FR-21: a turn was registered, or reached a terminal state. */
 export const AGENT_TURN_STATE_CHANGED = "agent-turn-state-changed";
+/** AGR-FR-ZRJD: an agent of either scope was created, edited, or deleted. */
+export const AGENTS_CHANGED = "agents-changed";
 /** LGC-FR-17: records were appended to the session buffer, or it was cleared. */
 export const LOG_RECORDS_APPENDED = "log-records-appended";
 /** NTD-FR-09: the author activated a notification this run posted. */
@@ -488,6 +489,13 @@ export const onAgentTurnStateChanged = (
   listen<AgentTurn>(AGENT_TURN_STATE_CHANGED, (ev) => handler(ev.payload));
 
 /**
+ * AGR-FR-ZRJD: an agent was created, edited, or deleted, in either scope and
+ * from any window. The payload is empty; a consumer reads the agents again.
+ */
+export const onAgentsChanged = (handler: () => void): Promise<UnlistenFn> =>
+  listen<null>(AGENTS_CHANGED, () => handler());
+
+/**
  * CMS-FR-51: a thread this application appended to, carrying the whole folded
  * thread as it stands after that write.
  *
@@ -656,8 +664,9 @@ export const SETTINGS_ROUTE = "settings-window:route";
 /** SWN-FR-11: the sweep failed; present the section that could not be written. */
 export const SETTINGS_PRESENT_FAILURE = "settings-window:present-failure";
 /**
- * Which settings window is open, or that none is. The main window needs it for
- * the already-looking-at suppression of NTF-FR-08.
+ * Whether the Settings window is open. The main window needs it for the
+ * already-looking-at suppression of NTF-FR-08, and for returning focus to the
+ * control that invoked the window (SWN-FR-FCRT).
  */
 export const SETTINGS_CHANGED = "settings-window:changed";
 /**
@@ -709,12 +718,12 @@ export const onSettingsPresentFailure = (
     handler(event.payload?.section ?? null),
   );
 
-/** SWN-FR-05: subscribe to which settings window is open. */
+/** SWN-FR-05: subscribe to whether the Settings window is open. */
 export const onSettingsWindowChanged = (
-  handler: (open: SettingsWindowKind | null) => void,
+  handler: (open: boolean) => void,
 ): Promise<UnlistenFn> =>
-  listen<{ open: SettingsWindowKind | null }>(SETTINGS_CHANGED, (event) =>
-    handler(event.payload?.open ?? null),
+  listen<{ open: boolean }>(SETTINGS_CHANGED, (event) =>
+    handler(event.payload?.open === true),
   );
 
 /** NTF-FR-08: subscribe to a settings window taking or losing OS focus. */

@@ -75,8 +75,8 @@ export const loadProjectDockerImages = () =>
  * unchanged.
  *
  * Rejects with `image_name_empty`, `dockerfile_absolute`,
- * `dockerfile_escapes_project_root`, or `dockerfile_not_a_regular_file`, and a
- * refused save writes nothing.
+ * `dockerfile_escapes_project_root`, `dockerfile_not_a_regular_file`, or
+ * `build_context_not_a_directory`, and a refused save writes nothing.
  */
 export const saveProjectVendorImage = (
   vendor: AgenticCliVendor,
@@ -93,8 +93,9 @@ export const saveProjectVendorImage = (
  *
  * It pushes to no registry, and it answers at once with the operation id the
  * two build events carry; the build itself reports through those. Rejects with
- * `dockerfile_unset`, `image_name_empty`, `build_already_running`, or
- * `docker_backend_unverified`, and a refusal starts nothing.
+ * `dockerfile_unset`, `image_name_empty`, `build_already_running`,
+ * `docker_backend_unverified`, or `build_context_not_a_directory`, and a refusal
+ * starts nothing.
  */
 export const buildProjectVendorImage = (vendor: AgenticCliVendor) =>
   invoke<{ operationId: string }>("build_project_vendor_image", { vendor });

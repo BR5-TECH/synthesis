@@ -1,9 +1,9 @@
 /**
- * The save-before-close sweep of a settings window
+ * The save-before-close sweep of the Settings window
  * (`specifications/ui/SWN-settings-windows.md` SWN-FR-08 through SWN-FR-12).
  *
- * A settings window writes **every pending change in every one of its
- * sections** before it goes — not only the section on screen — so leaving one
+ * The Settings window writes **every pending change in every section of both
+ * groups** before it goes — not only the section on screen — so leaving one
  * never asks the author to choose between their edits and their exit
  * (SWN-FR-10). Only the sections know what they are holding, so each publishes
  * itself here while it is mounted and the window's close path spends the
@@ -25,9 +25,10 @@
 /** What one section publishes about the changes it is holding. */
 export interface SettingsSection {
   /**
-   * The section's own key within its window, so a failure can be presented
-   * rather than left behind whichever section the author happens to be on
-   * (SWN-FR-11).
+   * The section's own address — its scope and its section, such as
+   * `project/template` — so a failure can be presented in the right group rather
+   * than left behind whichever section the author happens to be on (SWN-FR-11,
+   * SWN-FR-HZWD). It is also what keeps two sections of one name apart.
    */
   section: string;
   /**

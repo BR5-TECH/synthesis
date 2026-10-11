@@ -8,7 +8,7 @@ The backend that finds project work which is ready to start on GitHub and lets t
 ## Functional requirements
 1. **GPP-FR-WOIM** Every GitHub request of this module goes to the host of the polling repository through the GraphQL URL that `GTS-github-token-storage.md` GTS-FR-PDWB resolves from that host, authenticated with the secret the open project resolves through `GTS-github-token-storage.md` (GTS-FR-13). No secret is stored, copied, or returned in any polling state, view, event, error, log record, draft record, or project-local record.
 2. **GPP-FR-RGNM** The **polling repository** is the remote that `GHP-github-publication.md`'s `resolve_publication_repository()` resolves, with its persisted remote selection (GHP-FR-HVQG). Where it resolves none, a poll fails with that refusal code. This module stores no repository of its own.
-3. **GPP-FR-NLPG** The **polling settings** are one selected GitHub Project, stored as its stable node ID, and one polling interval. Both are project-public and are read and written through `PSS-project-settings-storage.md` (PSS-FR-OPQD). The Project settings window presents them in its **GitHub Project settings** section, beside the publication settings that `GHP-github-publication.md` (GHP-FR-KVRH) owns.
+3. **GPP-FR-NLPG** The **polling settings** are one selected GitHub Project, stored as its stable node ID, and one polling interval. Both are project-public and are read and written through `PSS-project-settings-storage.md` (PSS-FR-OPQD). The Settings window presents them in its **GitHub Project settings** section, beside the publication settings that `GHP-github-publication.md` (GHP-FR-KVRH) owns.
 4. **GPP-FR-HZDD** The interval is unset or one of `1`, `5`, `15`, `30`, and `60` minutes. `set_github_polling_settings` refuses any other value with `invalid_interval` and writes nothing.
 5. **GPP-FR-WYRP** `list_github_projects()` returns every GitHub Project the token can read that belongs to the viewer or to the polling repository's owner, each with its node ID, title, owner login, and number, without duplicates. It changes nothing on GitHub.
 6. **GPP-FR-DEZO** The **configuration** is valid only when the selected Project resolves, the token can read it, and its single-select field named `Status` holds options named exactly `Ready` and `In Progress`. A Project that does not satisfy this carries the typed error naming the cause.
@@ -49,7 +49,7 @@ The backend that finds project work which is ready to start on GitHub and lets t
 41. **GPP-FR-HSTE** The issue URL of a row, a claim, and a shadow draft is the address that GitHub returned for the issue, on the host of the polling repository. A pending claim and a shadow-draft link keep the repository host with the owner and the name, and one stored without a host reads as `github.com`.
 
 ## Contract surface
-Every operation is a Tauri command. The Git bottom panel (`../ui/GIT-git.md`) and the GitHub Project settings section of the Project settings window (`../ui/SET-project-settings.md`) invoke them. The quoted name is the canonical operation name and matches those specs' "Delegated to backend (abstract)" lines byte-for-byte.
+Every operation is a Tauri command. The Git bottom panel (`../ui/GIT-git.md`) and the GitHub Project settings section of the Settings window (`../ui/SET-project-settings.md`) invoke them. The quoted name is the canonical operation name and matches those specs' "Delegated to backend (abstract)" lines byte-for-byte.
 
 ### Record shapes
 ```

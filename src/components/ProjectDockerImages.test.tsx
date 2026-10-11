@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { resetLogBufferForTest } from "../logging";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -45,6 +46,8 @@ function unset(vendor: AgenticCliVendor): ProjectVendorImageStatus {
     dockerfile: null,
     dockerfileState: "absent",
     dockerfileProblem: null,
+    buildContext: null,
+    buildContextState: "absent",
     graduationState:
       vendor === "opencode" ? "execution_unsupported" : "image_name_missing",
   };
@@ -144,6 +147,7 @@ const buildButton = () =>
 beforeEach(() => {
   invokeMock.mockReset();
   listeners.clear();
+  resetLogBufferForTest();
 });
 afterEach(cleanup);
 
@@ -585,8 +589,7 @@ describe("Project settings → Docker (SET-FR-21..SET-FR-27)", () => {
     );
     await waitFor(() => expect(calls("open_settings_window")).toHaveLength(1));
     expect(calls("open_settings_window")[0][1]).toEqual({
-      kind: "global",
-      section: "docker",
+      section: "global/docker",
     });
   });
 

@@ -367,6 +367,7 @@ fn a_refused_preflight_creates_no_run_and_leaves_no_snapshot_ref() {
             image_name: "acme/agent".into(),
             tag: Some("latest".into()),
             dockerfile: None,
+            build_context: None,
         },
     )
     .expect("an image");

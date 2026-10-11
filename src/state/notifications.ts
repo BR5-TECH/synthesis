@@ -91,14 +91,13 @@ export interface WindowSnapshot {
   /** The same for the bottom panel. */
   visibleBottomSurface: string | null;
   /**
-   * NTF-FR-08 / SWN-FR-05: which settings child window is open, or null when
-   * none is.
+   * NTF-FR-08 / SWN-FR-05: whether the Settings child window is open.
    *
-   * A settings surface is a window rather than a tab (SWN-FR-01), so "is the
-   * author already looking at it" cannot be answered from the tab strip. At
-   * most one is ever open, which is why this is one value rather than a set.
+   * The Settings surface is a window rather than a tab (SWN-FR-01), so "is the
+   * author already looking at it" cannot be answered from the tab strip. There
+   * is one such window, which is why this is one flag rather than a set.
    */
-  openSettingsWindow: string | null;
+  settingsWindowOpen: boolean;
   /**
    * NTF-FR-08 / NTF-FR-39: the graduation run the author is looking at, when
    * the Runs surface is the visible active bottom surface and its graduation
@@ -157,12 +156,12 @@ export function isAlreadyVisible(
         snapshot.visibleBottomSurface === "runs" &&
         snapshot.visibleRun === target.runId
       );
-    // NTF-FR-08 / SWN-FR-05: suppressed where the address names the settings
-    // window that is at that moment open — the author has already been told by
-    // the thing itself. A window rather than a tab, so this is answered from
+    // NTF-FR-08 / SWN-FR-05: suppressed where the address names the Settings
+    // window while it is open — the author has already been told by the thing
+    // itself. A window rather than a tab, so this is answered from
     // the window snapshot rather than from the active tab.
     case "settings":
-      return snapshot.openSettingsWindow === target.which;
+      return snapshot.settingsWindowOpen;
     default:
       break;
   }

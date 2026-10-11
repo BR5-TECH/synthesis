@@ -221,7 +221,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
           // NTF-FR-FPLB: the title says what happened. The operating system
           // already shows the application's name above it.
           title: "Test notification",
-          body: "Click it to come back to Global settings.",
+          body: "Click it to come back to the Notifications settings.",
           address,
         });
       }, REHEARSAL_DELAY_MS);
@@ -247,7 +247,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
     visiblePanelSurface: null as string | null,
     visibleBottomSurface: null as string | null,
     visibleRun: null as string | null,
-    openSettingsWindow: null as string | null,
+    settingsWindowOpen: false,
   });
   snapshotRef.current = {
     // Overwritten at raise time by `configureNotifications` above; the value
@@ -269,7 +269,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
     visibleRun: s.bottomVisible ? runInView : null,
     // Overwritten at raise time like `focused` above, and for the same reason:
     // a settings window opening or closing does not re-render this component.
-    openSettingsWindow: null,
+    settingsWindowOpen: false,
   };
   /**
    * NTF-FR-27: the strip as the facility needs to see it when a raise arrives.
@@ -313,7 +313,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
           // NTF-FR-08 / SWN-FR-05: a raise naming the settings window that is at
           // that moment open is suppressed — the author has already been told by
           // the thing itself.
-          openSettingsWindow: settingsWindowsRef.current.open,
+          settingsWindowOpen: settingsWindowsRef.current.open,
         };
       },
       // NTF-FR-27: which open tab this address's own routing would activate.
@@ -788,8 +788,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       // graduation section with that run selected — the same navigation the
       // author's own route from a draft performs.
       openRun: (runId) => openGraduationRun(runId),
-      openGlobalSettings: () => s.openGlobalSettings(),
-      openProjectSettings: () => s.openSettings(),
+      openSettings: (address) => s.openSettings(address),
     },
   );
 

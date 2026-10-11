@@ -922,8 +922,8 @@ fn nothing_an_author_can_reach_varies_the_retry_policy() {
     let _: Result<AgentTurn, String> = retry_impl(&app, Roots::same(&h.root()), PROJECT_KEY, &failed.id);
 
     // An agent's stored definition carries no retry field either.
-    let agents = agents::list_agents_impl(&h.store()).expect("agents");
-    let stored = serde_json::to_value(agents.first().expect("an agent")).expect("serialise");
+    let agents = agents::list_personal_agents_impl(&h.store(), "", None).expect("agents");
+    let stored = serde_json::to_value(&agents.first().expect("an agent").agent).expect("serialise");
     let text = stored.to_string();
     for forbidden in ["retry", "backoff", "attempt", "jitter"] {
         assert!(!text.contains(forbidden), "an agent names {forbidden}");

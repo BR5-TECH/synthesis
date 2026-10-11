@@ -32,8 +32,10 @@ describe("the address grammar (NTF-FR-03)", () => {
       { kind: "draft", draftId: "draft-01H9" },
       ...PANEL_TARGETS.map((surface) => ({ kind: "panel", surface }) as const),
       ...BOTTOM_TARGETS.map((surface) => ({ kind: "bottom", surface }) as const),
-      { kind: "settings", which: "global" },
-      { kind: "settings", which: "project" },
+      { kind: "settings", scope: "global", section: null },
+      { kind: "settings", scope: "project", section: null },
+      { kind: "settings", scope: "global", section: "notifications" },
+      { kind: "settings", scope: "project", section: "graduation" },
     ];
 
     for (const target of targets) {
@@ -43,6 +45,42 @@ describe("the address grammar (NTF-FR-03)", () => {
       expect(parsed!.worktree).toBe(WORKTREE);
       expect(parsed!.target).toEqual(target);
     }
+  });
+
+  it("NTF-FR-03, SWN-FR-HZWD: a settings address names a scope and, optionally, a section of it", () => {
+    expect(
+      mintAddress("acme", "acme", {
+        kind: "settings",
+        scope: "global",
+        section: "notifications",
+      }),
+    ).toBe("synthesis://acme/acme/settings/global/notifications");
+    expect(
+      mintAddress("acme", "acme", {
+        kind: "settings",
+        scope: "project",
+        section: null,
+      }),
+    ).toBe("synthesis://acme/acme/settings/project");
+
+    // A section the scope does not have, an unknown scope, and a tail longer
+    // than a section name each name nothing.
+    for (const bad of [
+      "synthesis://acme/acme/settings/global/graduation",
+      "synthesis://acme/acme/settings/project/appearance",
+      "synthesis://acme/acme/settings/team",
+      "synthesis://acme/acme/settings",
+      "synthesis://acme/acme/settings/global/agents/extra",
+    ]) {
+      expect(parseAddress(bad), bad).toBeNull();
+    }
+    // The same section name in the other scope is a different address.
+    expect(
+      parseAddress("synthesis://acme/acme/settings/global/agents")?.target,
+    ).toEqual({ kind: "settings", scope: "global", section: "agents" });
+    expect(
+      parseAddress("synthesis://acme/acme/settings/project/agents")?.target,
+    ).toEqual({ kind: "settings", scope: "project", section: "agents" });
   });
 
   it("mints the documented shape", () => {
@@ -192,10 +230,10 @@ describe("describeTarget (NTF-FR-20)", () => {
   it("names every other target in prose rather than as a URI", () => {
     expect(describeTarget({ kind: "dashboard" })).toBe("the Dashboard");
     expect(describeTarget({ kind: "draft", draftId: "d1" })).toBe("that draft");
-    expect(describeTarget({ kind: "settings", which: "global" })).toBe(
+    expect(describeTarget({ kind: "settings", scope: "global", section: null })).toBe(
       "Global settings",
     );
-    expect(describeTarget({ kind: "settings", which: "project" })).toBe(
+    expect(describeTarget({ kind: "settings", scope: "project", section: null })).toBe(
       "Project settings",
     );
     // Whatever it says, it never leaks the address itself into the statement.

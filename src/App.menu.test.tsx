@@ -223,7 +223,7 @@ async function enterIde() {
   // The picker is the startup surface; open a recent to reach the IDE shell.
   const recent = await screen.findByText("acme");
   await userEvent.click(recent);
-  await screen.findByRole("button", { name: "Global settings" });
+  await screen.findByRole("button", { name: "Settings" });
 }
 
 // Fire a captured menu event the way the backend's `on_menu_event` -> `emit`
@@ -480,7 +480,7 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
     await enterIde();
     // Precondition: the IDE shell is mounted (the activity bar exists).
     expect(
-      screen.getByRole("button", { name: "Global settings" }),
+      screen.getByRole("button", { name: "Settings" }),
     ).toBeInTheDocument();
 
     await fireMenu("menu:close-project");
@@ -488,7 +488,7 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
     // Back on the picker; the main shell is gone (OVW-FR-02).
     expect(await screen.findByTestId("picker-left")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Global settings" }),
+      screen.queryByRole("button", { name: "Settings" }),
     ).not.toBeInTheDocument();
   });
 
@@ -557,7 +557,7 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
     ).toBe(false);
     // The shell is still mounted — neither handler threw.
     expect(
-      screen.getByRole("button", { name: "Global settings" }),
+      screen.getByRole("button", { name: "Settings" }),
     ).toBeInTheDocument();
   });
 
@@ -670,7 +670,7 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
 
     // Reopen the same project from the picker.
     await userEvent.click(await screen.findByText("acme"));
-    await screen.findByRole("button", { name: "Global settings" });
+    await screen.findByRole("button", { name: "Settings" });
 
     await waitFor(() =>
       expect(setFullscreenMock).toHaveBeenCalledWith(true),

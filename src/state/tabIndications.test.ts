@@ -110,7 +110,7 @@ function openStrip(tabs: Tab[], active: string, worktree = WORKTREE) {
     visibleBottomSurface: null,
     visibleRun: null,
     // SWN-FR-05 / NTF-FR-08: no settings child window is open.
-    openSettingsWindow: null,
+    settingsWindowOpen: false,
   };
   configureNotifications({
     snapshot: () => snapshot,
@@ -311,8 +311,8 @@ describe("what is eligible for an indication (NTF-FR-26 / NTF-FR-27 / NTF-FR-28)
     // anywhere and is reached through its notification alone, a settings
     // surface being a native child window rather than a tab of this strip
     // (SWN-FR-01). No tab can stand in for one, whatever the strip holds.
-    expect(at({ kind: "settings", which: "global" })).toBeNull();
-    expect(at({ kind: "settings", which: "project" })).toBeNull();
+    expect(at({ kind: "settings", scope: "global", section: null })).toBeNull();
+    expect(at({ kind: "settings", scope: "project", section: null })).toBeNull();
   });
 
   /**
@@ -444,7 +444,7 @@ describe("the enable switch governs the posting alone (NTF-FR-29)", () => {
         visibleBottomSurface: null,
     visibleRun: null,
     // SWN-FR-05 / NTF-FR-08: no settings child window is open.
-    openSettingsWindow: null,
+    settingsWindowOpen: false,
       }),
       resolveTab: () => {
         throw new Error("strip is mid-teardown");
@@ -851,7 +851,7 @@ describe("the Runs toggle carries a run's attention (NTF-FR-39 / SNV-FR-70)", ()
         visibleBottomSurface: "runs",
         visibleRun: "graduation-flow",
         // SWN-FR-05 / NTF-FR-08: no settings child window is open.
-        openSettingsWindow: null,
+        settingsWindowOpen: false,
       }),
       resolveTab: () => null,
     });
@@ -907,7 +907,7 @@ describe("the Runs toggle carries a run's attention (NTF-FR-39 / SNV-FR-70)", ()
         visibleBottomSurface: "runs",
         visibleRun: "artifact-window",
         // SWN-FR-05 / NTF-FR-08: no settings child window is open.
-        openSettingsWindow: null,
+        settingsWindowOpen: false,
       }),
       resolveTab: () => null,
     });
@@ -970,8 +970,8 @@ describe("what a tab is a view onto (NTF-FR-27)", () => {
     expect(sameTarget(null, { kind: "dashboard" })).toBe(false);
     expect(
       sameTarget(
-        { kind: "settings", which: "global" },
-        { kind: "settings", which: "project" },
+        { kind: "settings", scope: "global", section: null },
+        { kind: "settings", scope: "project", section: null },
       ),
     ).toBe(false);
   });

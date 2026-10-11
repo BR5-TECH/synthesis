@@ -19,7 +19,7 @@ import type { NotificationPermissionState } from "../types";
 
 /**
  * The Global settings Notifications section (`GLS-global-settings.md`
- * GLS-FR-25 / GLS-FR-26 / GLS-FR-27), covering GLS-FR-03, GLS-FR-10, GLS-FR-13, GLS-FR-11, NTF-FR-29, GLS-FR-26 and
+ * GLS-FR-25 / GLS-FR-26 / GLS-FR-27), covering GLS-FR-03, GLS-FR-10, GLS-FR-13, SWN-FR-15, NTF-FR-29, GLS-FR-26 and
  * GLS-FR-25, GLS-FR-14, GSS-FR-20, GSS-FR-32, plus the rehearsal half of NTF-FR-25, NTF-FR-17, GLS-FR-27 / NTF-FR-08.
  */
 
@@ -93,7 +93,7 @@ const renderSection = (target = TARGET) =>
 
 describe("the switch (GLS-FR-25)", () => {
   it("initialises from the stored record", async () => {
-    // GLS-FR-03, GLS-FR-25, GLS-FR-26, GLS-FR-27, GLS-FR-10, GLS-FR-13, GLS-FR-11, NTF-FR-29.
+    // GLS-FR-03, GLS-FR-25, GLS-FR-26, GLS-FR-27, GLS-FR-10, GLS-FR-13, SWN-FR-15, NTF-FR-29.
     wireBackend({ stored: { notificationsEnabled: false } });
     renderSection();
     const box = await screen.findByRole("checkbox");
@@ -323,8 +323,8 @@ describe("the rehearsal (GLS-FR-27)", () => {
     ).toBeInTheDocument();
   });
 
-  it("asks the main window for the raise, addressing the Global settings window", async () => {
-    // NTF-FR-17, GLS-FR-27 / NTF-FR-25 / SWN-FR-01: the raise goes through the ordinary
+  it("asks the main window for the raise, addressing the Notifications section of the Settings window", async () => {
+    // NTF-FR-17, GLS-FR-27 / NTF-FR-25 / SWN-FR-HZWD: the raise goes through the ordinary
     // facility, so its address must be one that actually resolves — the arrival
     // end of the path has to be reachable every time. The facility lives in the
     // main window, and the delay with it: the whole point of the rehearsal is
@@ -347,7 +347,7 @@ describe("the rehearsal (GLS-FR-27)", () => {
     expect((asks[0][1] as { address: string }).address).toBe(
       `synthesis://${encodeURIComponent(TARGET.projectKey)}/${encodeURIComponent(
         TARGET.worktree,
-      )}/settings/global`,
+      )}/settings/global/notifications`,
     );
 
     await act(async () => {
@@ -389,12 +389,12 @@ describe("the rehearsal (GLS-FR-27)", () => {
         mainFocused: true,
         projectKey: TARGET.projectKey,
         worktree: TARGET.worktree,
-        activeTarget: { kind: "settings", which: "global" },
+        activeTarget: { kind: "settings", scope: "global", section: null },
         visiblePanelSurface: null,
         visibleBottomSurface: null,
     visibleRun: null,
     // SWN-FR-05 / NTF-FR-08: no settings child window is open.
-    openSettingsWindow: null,
+    settingsWindowOpen: false,
       }),
       resolveTab: () => null,
     });

@@ -397,8 +397,8 @@ export function GithubTokens() {
               key={t.id}
               className="card"
               data-testid="github-token-row"
-              // SWN-FR-03: this section lives in a window fixed at 800 px wide,
-              // so the row can never be given more room than it has here. The
+              // SWN-FR-03: this section lives in a window no narrower than 800 px,
+              // so the row can be given little more room than it has here. The
               // identity column asks for a real basis and the actions cluster
               // wraps to its own line when it cannot sit beside one, rather than
               // squeezing the label into a column one word-fragment wide.

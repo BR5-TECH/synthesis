@@ -26,10 +26,13 @@ use tauri::State;
 
 use crate::project::ProjectState;
 
+pub mod build_seam;
 pub mod concurrency;
 pub mod github_polling;
 pub mod image_builder;
 pub mod images;
+pub use build_seam::ImageBuilderSeam;
+use build_seam::AppBuildEvents;
 pub mod loop_settings;
 pub mod public_store;
 pub mod publication_settings;
@@ -529,6 +532,7 @@ pub fn save_project_vendor_image(
             crate::log_fields! {
                 "vendor" => vendor.as_str(),
                 "has_dockerfile" => status.dockerfile.is_some(),
+                "has_build_context" => status.build_context.is_some(),
                 "graduation_state" => format!("{:?}", status.graduation_state)
             },
         ),
@@ -541,35 +545,6 @@ pub fn save_project_vendor_image(
         ),
     }
     result
-}
-
-/// The builder a build is performed through, held in state so a test swaps the
-/// production one without touching a call site.
-pub struct ImageBuilderSeam(pub std::sync::Arc<dyn images::ImageBuilder>);
-
-impl Default for ImageBuilderSeam {
-    fn default() -> Self {
-        ImageBuilderSeam(std::sync::Arc::new(image_builder::RealImageBuilder))
-    }
-}
-
-/// PSS-FR-27 / PSS-FR-28: the two events, emitted through the Tauri bus.
-///
-/// An emit that cannot be delivered is dropped rather than propagated, for the
-/// same reason `ProgressSink` drops one: reporting must never block or fail the
-/// build it is reporting on.
-struct AppBuildEvents<R: tauri::Runtime>(tauri::AppHandle<R>);
-
-impl<R: tauri::Runtime> images::BuildEvents for AppBuildEvents<R> {
-    fn progress(&self, payload: images::ImageBuildProgress) {
-        use tauri::Emitter;
-        let _ = self.0.emit(images::PROJECT_IMAGE_BUILD_PROGRESS, payload);
-    }
-
-    fn finished(&self, payload: images::ImageBuildFinished) {
-        use tauri::Emitter;
-        let _ = self.0.emit(images::PROJECT_IMAGE_BUILD_FINISHED, payload);
-    }
 }
 
 /// PSS-FR-26 / PSS-FR-29: start a local build of this vendor's Dockerfile.
@@ -595,10 +570,21 @@ pub fn build_project_vendor_image(
     let sequence = NEXT_BUILD.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let operation_id = format!("image-build-{vendor}-{sequence}");
 
+    // PSS-FR-26 / PSS-FR-BCTX: the root is the active worktree root now, and
+    // the context is the folder the entry names, or that root by default.
+    let project_root = root.path().to_path_buf();
+    let context_root = match entries
+        .get(&vendor)
+        .and_then(|entry| entry.build_context.as_deref())
+    {
+        Some(context) => images::validate_build_context(&root, context),
+        None => Ok(project_root.clone()),
+    };
     let prepared = images::prepare_build(
         entries.get(&vendor),
         crate::docker::resolve_docker_backend(&store),
-        root.path().to_path_buf(),
+        project_root,
+        context_root,
         &vendor,
         &operation_id,
         &registry,
@@ -622,7 +608,12 @@ pub fn build_project_vendor_image(
             "vendor" => vendor.as_str(),
             "operation_id" => operation_id.as_str(),
             "backend" => format!("{:?}", prepared.backend.mode()),
-            "dockerfile" => prepared.request.dockerfile.as_str()
+            "dockerfile" => prepared.request.dockerfile.as_str(),
+            "custom_context" => entries
+                .get(&vendor)
+                .is_some_and(|entry| entry.build_context.is_some()),
+            "dockerfile_outside_context" =>
+                prepared.request.placement == images::DockerfilePlacement::Outside
         },
     );
 

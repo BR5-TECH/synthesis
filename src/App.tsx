@@ -106,7 +106,7 @@ function App() {
 
   // STB-FR-16..FR-19 / SET-FR-10 / SET-FR-11: one shared project-wide
   // line-ending preference with two equal editors — this status bar and the
-  // Project settings window's Project section. Persisting a change marks the
+  // Settings window's Project section. Persisting a change marks the
   // artifact of every open Editor tab dirty (STB-FR-18 / EDT-FR-41), so the
   // pending conversion is visible and lands when the user saves rather than
   // riding invisibly on some later unrelated edit.

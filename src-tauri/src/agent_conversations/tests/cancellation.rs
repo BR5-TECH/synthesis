@@ -283,7 +283,8 @@ fn deleting_an_agent_cancels_its_turns_and_a_withdrawal_cancels_only_that_projec
     assert_eq!(h.seam.requests().len(), 2, "both model calls never started");
 
     let handle = h.app.handle().clone();
-    agents::delete_agent_impl(&h.store(), &arch.id).expect("delete");
+    agents::delete_agent_impl(&h.store(), "", None, agents::AgentScope::Personal, &arch.id)
+        .expect("delete");
     cancel_turns_for_agent(&handle, &h.turns(), &h.progress(), &arch.id, None);
     let live = h.turns().in_flight(None);
     assert_eq!(live.len(), 1, "only the deleted agent's turn was cancelled");
@@ -458,9 +459,8 @@ fn a_withdrawal_from_one_project_leaves_another_projects_question_owed() {
     ]);
     h.mount();
     let agent = h.create_agent("arch", "");
-    // The same persona, enrolled in a second project — which is the whole point:
-    // a persona is described once and enrolled per project (AGR-FR-15).
-    agents::enrol_project_agent_impl(&h.store(), OTHER_PROJECT, &agent.id).expect("enrol");
+    // The same Personal agent is available in a second project without any
+    // step: a Personal agent is described once for the machine (AGR-FR-19).
 
     let here = h.seed_artifact_thread("spec.md", "Some artifact source here.");
     let there = h.seed_artifact_thread("other.md", "More source.");

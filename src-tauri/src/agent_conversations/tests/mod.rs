@@ -486,6 +486,8 @@ impl Harness {
         let agent = agents::create_agent_impl(
             &self.store(),
             "",
+            None,
+            agents::AgentScope::Personal,
             &AgentDraft {
                 nickname: nickname.into(),
                 title: String::new(),
@@ -495,7 +497,6 @@ impl Harness {
             },
         )
         .expect("agent");
-        agents::enrol_project_agent_impl(&self.store(), PROJECT_KEY, &agent.id).expect("enrol");
         agent
     }
 
@@ -513,6 +514,8 @@ impl Harness {
         let agent = agents::create_agent_impl(
             &self.store(),
             "",
+            None,
+            agents::AgentScope::Personal,
             &AgentDraft {
                 nickname: nickname.into(),
                 title: title.into(),
@@ -524,7 +527,6 @@ impl Harness {
             },
         )
         .expect("agent");
-        agents::enrol_project_agent_impl(&self.store(), PROJECT_KEY, &agent.id).expect("enrol");
         agent
     }
 

@@ -28,6 +28,7 @@ import type { TabAttention } from "./TabStrip";
 import type { RollbackFile } from "./RollbackConfirm";
 import { THEME_CHOICES } from "./GlobalSettings";
 import type {
+  AgentScope,
   BottomSurface,
   CommitOutcome,
   DocumentEntry,
@@ -104,11 +105,11 @@ interface TopChromeProps {
   // WTS-FR-35 / GHA-FR-19: where the note sends the author when no token is
   // stored at all and there is nothing to pick between.
   onOpenGlobalSettings: () => void;
-  // AGT-FR-06 / AGT-FR-07: a roster row, and its add action, open the Global
-  // settings window on its Agents section with an editor open — that agent's, or a
-  // fresh one for `null`.
-  onOpenAgentInSettings: (agentId: string | null) => void;
-  // AGT-FR-08: where the roster's empty state names agents as being enrolled.
+  // AGT-FR-06 / AGT-FR-07: a roster row, and its add action, open the Settings
+  // window on the Project Agents or the Personal Agents section of the agent's
+  // scope, with an editor open — that agent's, or a fresh one for `null`.
+  onOpenAgentInSettings: (agentId: string | null, scope: AgentScope) => void;
+  // AGT-FR-08: where the roster's empty state names agents as being described.
   onOpenProjectSettings: () => void;
   // SNV-FR-56: the roster's open state, owned by the shell like `searchOpen`.
   agentsRosterOpen: boolean;
@@ -366,8 +367,8 @@ export function TopChrome({
         {/* SNV-FR-59: the trailing cluster holds the agents control and then the
             theme selector, in that fixed order — the two things that belong to
             the author rather than to the repository. The control is present
-            whenever a project is open, whether or not that project has enrolled
-            anyone (AGT-FR-02); its count, its roster, and everything the roster
+            whenever a project is open, whether or not that project has any
+            agent (AGT-FR-02); its count, its roster, and everything the roster
             offers are owned by `AGT-agents.md`. */}
         <AgentsChromeControl
           // SNV-FR-56: the roster is a floating overlay of the main window, so

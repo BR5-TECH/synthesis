@@ -447,13 +447,27 @@ fn a_delivered_comment_carries_the_title_the_agent_answered_under() {
             effort: "high".into(),
         }),
     };
-    agents::update_agent_impl(&h.store(), "", &agent.id, &retitled).expect("retitle");
+    agents::update_agent_impl(
+        &h.store(),
+        "",
+        None,
+        agents::AgentScope::Personal,
+        &agent.id,
+        &retitled,
+    ).expect("retitle");
     answer(&h);
 
     // Cleared: the snapshot is the empty string that was stored, and never the
     // `Not defined` a *prompt* would have carried for the same agent.
     retitled.title = String::new();
-    agents::update_agent_impl(&h.store(), "", &agent.id, &retitled).expect("clear the title");
+    agents::update_agent_impl(
+        &h.store(),
+        "",
+        None,
+        agents::AgentScope::Personal,
+        &agent.id,
+        &retitled,
+    ).expect("clear the title");
     answer(&h);
 
     assert_eq!(
@@ -756,4 +770,38 @@ fn more_turns_than_the_bound_are_all_registered_and_none_is_refused() {
         1,
         "no more calls were in flight at once than the bound permits",
     );
+}
+
+#[test]
+fn a_turn_resolves_the_project_agent_before_a_personal_agent_of_the_same_nickname() {
+    // AGC-FR-04, AGR-FR-18, AGR-FR-HTKX: the nickname reaches a Project agent of
+    // the worktree at once, and that agent wins over a Personal agent of the
+    // same nickname.
+    let h = Harness::new(vec![Ok("From the project.".into())]);
+    let personal = h.create_agent("arch", "Personal instructions.");
+    let project = agents::create_agent_impl(
+        &h.store(),
+        "",
+        Some(&h.root()),
+        agents::AgentScope::Project,
+        &AgentDraft {
+            nickname: "arch".into(),
+            title: String::new(),
+            model_id: "m".into(),
+            instructions: "Project instructions.".into(),
+            reasoning: Some(ReasoningChoice::Effort {
+                effort: "high".into(),
+            }),
+        },
+    )
+    .expect("project agent");
+    let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
+    let trigger = thread.comments[0].id.clone();
+
+    let turn = h
+        .dispatch("arch", ConversationOrigin::of(&thread), &trigger)
+        .expect("dispatch");
+    assert_eq!(turn.agent_id, project.id);
+    assert_ne!(turn.agent_id, personal.id);
+    h.settle();
 }

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { Settings } from "./Settings";
+import { Settings } from "../test/settingsHarness";
 import type { GithubBindingResolution, GithubTokenRecord } from "../types";
 
 // SET-FR-12: the Project section names the token this project authenticates

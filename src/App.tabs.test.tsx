@@ -225,7 +225,7 @@ describe("Selection follows tab (SNV-FR-64 / SNV-FR-69)", () => {
 
     // SWN-FR-01 / SNV-FR-64: a settings window is no tab, so opening one is no
     // tab activation and the panel follows nothing.
-    await userEvent.click(screen.getByRole("button", { name: "Global settings" }));
+    await userEvent.click(screen.getByRole("button", { name: "Settings" }));
     await waitFor(() =>
       expect(
         invokeMock.mock.calls.some((c) => c[0] === "open_settings_window"),

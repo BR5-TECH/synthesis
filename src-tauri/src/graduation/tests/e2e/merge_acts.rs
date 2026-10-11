@@ -382,6 +382,7 @@ impl Outcome {
                 image_name: "acme/agent".into(),
                 tag: Some("latest".into()),
                 dockerfile: None,
+                build_context: None,
             },
         )
         .expect("an image");

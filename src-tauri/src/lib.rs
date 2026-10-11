@@ -180,11 +180,8 @@ pub fn run() {
         // SNV-FR-43: handles on the Find / Find & Replace items, whose enabled
         // state the frontend drives from the active tab.
         .manage(menu::FindMenuItems::<tauri::Wry>::default())
-        // SWN-FR-16: the Project settings menu entry, taken out of its menu
-        // while no project is open and put back when one opens.
-        .manage(menu::SettingsMenuItems::<tauri::Wry>::default())
-        // SWN-FR-05 / SWN-FR-12: the save sweep a settings window is running,
-        // and what it is running it for. Held in memory only — a settings
+        // SWN-FR-05 / SWN-FR-12: the save sweep the settings window is running,
+        // and what it is running it for. Held in memory only — the settings
         // window survives nothing (SWN-FR-04 persists not even its position).
         .manage(settings_window::SettingsWindows::default())
         .setup(|app| {
@@ -239,11 +236,6 @@ pub fn run() {
             if let Err(e) = menu::install_app_menu(app) {
                 eprintln!("synthesis: failed to install application menu: {e}");
             }
-            // SWN-FR-16 / PPK-FR-15: the application starts on the Project
-            // picker with no project open, so the Project settings entry is
-            // taken straight back out of the menu it was built into. Opening a
-            // project puts it back (`project::activate_project`).
-            menu::set_project_settings_present(&app.handle(), false);
             // PST-FR-36: the application-wide Dashboard refresh timer. Started
             // here rather than when a project opens, and never stopped until the
             // application quits: it runs whether or not a project is open and
@@ -517,13 +509,11 @@ pub fn run() {
             ai_api::clear_ai_api_integration,
             ai_api::get_project_ai_api_integration,
             ai_api::set_project_ai_api_integration,
-            agents::list_agents,
+            agents::list_personal_agents,
+            agents::list_project_agents,
             agents::create_agent,
             agents::update_agent,
             agents::delete_agent,
-            agents::list_project_agents,
-            agents::enrol_project_agent,
-            agents::remove_project_agent,
             agent_conversations::dispatch_agent_turn,
             agent_conversations::cancel_agent_turn,
             agent_conversations::list_agent_turns,

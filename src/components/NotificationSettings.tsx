@@ -165,7 +165,7 @@ export function NotificationSettings({
     const address = mintAddress(
       rehearsalTarget.projectKey,
       rehearsalTarget.worktree,
-      { kind: "settings", which: "global" },
+      { kind: "settings", scope: "global", section: "notifications" },
     );
     void emitSettingsRehearsalRequested(address);
     logInfo(["frontend"], "notification rehearsal requested", {

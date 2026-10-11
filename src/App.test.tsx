@@ -283,7 +283,8 @@ describe("the notification rehearsal the settings window asks for (GLS-FR-27)", 
   const address = () =>
     mintAddress("~/dev/acme", activeWorktreePath, {
       kind: "settings",
-      which: "global",
+      scope: "global",
+      section: null,
     });
 
   beforeEach(() => {
@@ -313,7 +314,7 @@ describe("the notification rehearsal the settings window asks for (GLS-FR-27)", 
     act(() => {
       fireBusEvent("settings-window:rehearsal-requested", { address: address() });
       // …and the window closes before the delay elapses.
-      fireBusEvent("settings-window:changed", { open: null });
+      fireBusEvent("settings-window:changed", { open: false });
     });
     expect(posts()).toHaveLength(0);
 
@@ -326,7 +327,7 @@ describe("the notification rehearsal the settings window asks for (GLS-FR-27)", 
     expect(posts()[0].payload).toBe(address());
     // NTF-FR-FPLB: the title says what happened, not the application's name.
     expect(posts()[0].title).toBe("Test notification");
-    expect(posts()[0].body).toBe("Click it to come back to Global settings.");
+    expect(posts()[0].body).toBe("Click it to come back to the Notifications settings.");
     // NTF-FR-QGSV: the shell's own name for the open project is the subtitle.
     expect(posts()[0].subtitle).toBe("acme");
   });
@@ -343,7 +344,7 @@ describe("the notification rehearsal the settings window asks for (GLS-FR-27)", 
     vi.useFakeTimers();
 
     act(() => {
-      fireBusEvent("settings-window:changed", { open: "global" });
+      fireBusEvent("settings-window:changed", { open: true });
       fireBusEvent("settings-window:focus", { focused: true });
       fireBusEvent("settings-window:rehearsal-requested", { address: address() });
     });
@@ -355,7 +356,7 @@ describe("the notification rehearsal the settings window asks for (GLS-FR-27)", 
     expect(posts()).toHaveLength(0);
   });
 
-  it("posts when the OTHER settings window is the one open (SWN-FR-05)", async () => {
+  it("NTF-FR-08, SWN-FR-05: posts once the Settings window has closed again before the delay ends", async () => {
     vi.spyOn(document, "hasFocus").mockReturnValue(false);
     render(<App />);
     await enterIde();
@@ -363,9 +364,13 @@ describe("the notification rehearsal the settings window asks for (GLS-FR-27)", 
     vi.useFakeTimers();
 
     act(() => {
-      fireBusEvent("settings-window:changed", { open: "project" });
+      fireBusEvent("settings-window:changed", { open: true });
       fireBusEvent("settings-window:focus", { focused: true });
       fireBusEvent("settings-window:rehearsal-requested", { address: address() });
+    });
+    // The author closes the window and leaves while the rehearsal waits.
+    act(() => {
+      fireBusEvent("settings-window:changed", { open: false });
     });
 
     await act(async () => {
@@ -396,15 +401,13 @@ describe("the notification rehearsal the settings window asks for (GLS-FR-27)", 
   });
 });
 
-describe("the settings windows from the shell (GLS-FR-01, GLS-FR-02, SWN-FR-06 / SET-FR-01, SET-FR-02 / STB-FR-04, SWN-FR-01, SWN-FR-02, SNV-FR-03)", () => {
-  it("opens the Global settings child window and creates no tab", async () => {
+describe("the Settings window from the shell (SWN-FR-05, SWN-FR-06, SWN-FR-MRNB / STB-FR-04, SWN-FR-01, SWN-FR-02, SNV-FR-03)", () => {
+  it("STB-FR-04, SWN-FR-01, SWN-FR-MRNB: opens the Settings child window on no section and creates no tab", async () => {
     render(<App />);
     await enterIde();
     const before = tabLabels();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Global settings" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Settings" }));
 
     // SWN-FR-01 / SWN-FR-18 / TAB-FR-03: a native child window, so nothing is
     // added to the strip and no settings surface is drawn in this window.
@@ -415,32 +418,21 @@ describe("the settings windows from the shell (GLS-FR-01, GLS-FR-02, SWN-FR-06 /
     );
     expect(
       invokeMock.mock.calls.find((c) => c[0] === "open_settings_window")![1],
-    ).toEqual({ kind: "global", section: null });
+    ).toEqual({ section: null });
     expect(tabLabels()).toEqual(before);
     expect(screen.queryByTestId("global-settings")).toBeNull();
   });
 
-  it("opens the Project settings child window and creates no tab either", async () => {
+  it("STB-FR-04: the status bar carries one settings button, not two", async () => {
     render(<App />);
     await enterIde();
-    const before = tabLabels();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Project settings" }),
-    );
-
-    await waitFor(() =>
-      expect(
-        invokeMock.mock.calls.filter((c) => c[0] === "open_settings_window"),
-      ).toHaveLength(1),
-    );
-    expect(
-      invokeMock.mock.calls.find((c) => c[0] === "open_settings_window")![1],
-    ).toEqual({ kind: "project", section: null });
-    expect(tabLabels()).toEqual(before);
+    expect(screen.getAllByRole("button", { name: "Settings" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Global settings" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Project settings" })).toBeNull();
   });
 
-  // SWN-FR-01, SWN-FR-18: opening and closing either window leaves the strip exactly as it
+  // SWN-FR-01, SWN-FR-18: opening and closing the window leaves the strip exactly as it
   // was — no tab focused, none closed, and no settings tab at any moment.
   it("SWN-FR-01, SWN-FR-18: leaves the tab strip untouched", async () => {
     render(<App />);
@@ -455,12 +447,7 @@ describe("the settings windows from the shell (GLS-FR-01, GLS-FR-02, SWN-FR-06 /
       ?.textContent;
     expect(activeBefore).toBe("CHG-changes.md");
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Global settings" }),
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Project settings" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Settings" }));
 
     expect(tabLabels()).toEqual(before);
     expect(
@@ -471,10 +458,11 @@ describe("the settings windows from the shell (GLS-FR-01, GLS-FR-02, SWN-FR-06 /
 
   // AGT-FR-06 / AGT-FR-07: the chrome roster is how an agent is
   // reached to be looked at or changed, and how a new one is described. Both
-  // open the Global settings WINDOW on its Agents section with an editor open —
-  // and since that window shares no state with this one (SWN-FR-01), the editor
-  // has to travel as part of the section address or not at all.
-  it("AGT-FR-06, AGT-FR-07: routes a roster row to the Global settings Agents section", async () => {
+  // open the Settings WINDOW on the Project Agents or the Personal Agents section
+  // of the agent's scope with an editor open — and since that window shares no state with this one
+  // (SWN-FR-01), the editor has to travel as part of the section address or not
+  // at all.
+  it("AGT-FR-06, SWN-FR-HZWD: routes a roster row to the Project Agents section of its scope", async () => {
     render(<App />);
     await enterIde();
 
@@ -484,7 +472,7 @@ describe("the settings windows from the shell (GLS-FR-01, GLS-FR-02, SWN-FR-06 /
     await waitFor(() =>
       expect(
         invokeMock.mock.calls.find((c) => c[0] === "open_settings_window")?.[1],
-      ).toEqual({ kind: "global", section: `agents:${ROSTER_AGENT_ID}` }),
+      ).toEqual({ section: `project/agents:${ROSTER_AGENT_ID}` }),
     );
     // AGT-FR-06, AGT-FR-07: …and the roster closed behind it.
     await waitFor(() =>
@@ -492,7 +480,7 @@ describe("the settings windows from the shell (GLS-FR-01, GLS-FR-02, SWN-FR-06 /
     );
   });
 
-  it("AGT-FR-06, AGT-FR-07: routes Add an agent to the same section with a fresh editor", async () => {
+  it("AGT-FR-07, SWN-FR-HZWD: routes Add an agent to the Project Agents section with a fresh editor", async () => {
     render(<App />);
     await enterIde();
 
@@ -502,23 +490,18 @@ describe("the settings windows from the shell (GLS-FR-01, GLS-FR-02, SWN-FR-06 /
     await waitFor(() =>
       expect(
         invokeMock.mock.calls.find((c) => c[0] === "open_settings_window")?.[1],
-      ).toEqual({ kind: "global", section: "agents:new" }),
+      ).toEqual({ section: "project/agents:new" }),
     );
   });
 
   // SWN-FR-10 / GLS-FR-13: no discard-unsaved-changes prompt exists anywhere in
-  // this window on account of a settings window — there is no settings tab to
+  // this window on account of the Settings window — there is no settings tab to
   // close and nothing here to confirm.
-  it("raises no discard prompt on account of a settings window", async () => {
+  it("SWN-FR-10: raises no discard prompt on account of the Settings window", async () => {
     render(<App />);
     await enterIde();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Global settings" }),
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Project settings" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Settings" }));
 
     expect(confirmMock).not.toHaveBeenCalled();
   });
@@ -618,7 +601,7 @@ describe("In-window project switch (OVW-FR-11 / SNV-FR-19 / SNV-FR-22)", () => {
     // Back on the picker; the main shell is gone.
     expect(await screen.findByTestId("picker-left")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Global settings" }),
+      screen.queryByRole("button", { name: "Settings" }),
     ).not.toBeInTheDocument();
   });
 });

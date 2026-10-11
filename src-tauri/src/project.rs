@@ -503,10 +503,6 @@ fn activate_project<R: tauri::Runtime>(
     handle: &ProjectHandle,
 ) {
     project.set_anchor(handle.path.clone());
-    // SWN-FR-16 / PPK-FR-15: the Project settings menu entry is offered only
-    // while a project is open. Put back here, before the frontend has drawn
-    // anything, so the entry and the project appear together.
-    crate::menu::set_project_settings_present(app, true);
     remount_content_root(
         app,
         project,
@@ -685,10 +681,6 @@ pub fn close_project<R: tauri::Runtime>(
     // alone (PST-FR-14); the close itself completes at its ordinary speed
     // whatever the pass is doing.
     crate::draft_assets::sweep_project_draft_assets(&app);
-    // SWN-FR-16 / PPK-FR-15: the Project settings entry is ABSENT rather than
-    // greyed-out while no project is open, so the menu the picker is left with
-    // offers nothing that names a project that does not exist.
-    crate::menu::set_project_settings_present(&app, false);
     deactivate_project(
         project.inner(),
         watcher.inner(),

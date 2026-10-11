@@ -1,41 +1,44 @@
-//! The two settings child windows (`../../specifications/ui/SWN-settings-windows.md`).
+//! The Settings child window (`../../specifications/ui/SWN-settings-windows.md`).
 //!
-//! Global settings and Project settings are **native child windows** of the
-//! application rather than tabs of the main viewport (SWN-FR-01). This module
-//! owns them as windows: how one is created, where it is placed, what it
-//! blocks, how it is torn down, and the order a switch between the two runs in.
-//! What either window presents inside its frame is the frontend's, and is
-//! specified by `GLS-global-settings.md` and `SET-project-settings.md`.
+//! Global settings and Project settings are the two groups of **one native child
+//! window** of the application, not tabs of the main viewport (SWN-FR-01). This
+//! module owns that window as a window: how it is created, how large it is,
+//! where it is placed, what it blocks, and how it is torn down. What the window
+//! presents inside its frame is the frontend's, and is specified by
+//! `GLS-global-settings.md` and `SET-project-settings.md`.
 //!
 //! Everything the author can ask for goes through one decision — [`decide`] —
-//! whose whole input is the request, which settings window is open, and whether
-//! a save sweep is already running. That keeps the one-window rule (SWN-FR-05),
-//! the focus-instead-of-duplicate rule (SWN-FR-06), the ordered save-close-open
-//! of a switch (SWN-FR-07), and the inertness of a request made mid-sweep
-//! (SWN-FR-12) in a pure function a unit test can state situations against,
-//! rather than spread across the I/O that performs them.
+//! whose whole input is the request, whether the window is open, and whether a
+//! save sweep is already running. That keeps the one-window rule (SWN-FR-05),
+//! the focus-instead-of-duplicate rule (SWN-FR-06), and the inertness of a
+//! request made mid-sweep (SWN-FR-12) in a pure function a unit test can state
+//! situations against, rather than spread across the I/O that performs them.
 //!
-//! **The sweep is the frontend's.** Only the settings window holds its sections'
-//! pending changes, so this side never writes anything: it asks that window to
-//! save what it holds (`settings-window:save-and-close`) and waits for the
-//! answer (`finish_settings_close`). A `true` answer performs the transition the
+//! **The sweep is the frontend's.** Only the window holds its sections' pending
+//! changes, so this side never writes any of them: it asks the window to save
+//! what it holds (`settings-window:save-and-close`) and waits for the answer
+//! (`finish_settings_close`). A `true` answer performs the transition the
 //! request recorded; a `false` answer cancels it and leaves the window exactly
-//! where it was (SWN-FR-11).
+//! where it was (SWN-FR-11). The one thing this side does write is the size the
+//! author gave the window, once the window has closed (SWN-FR-MRBK).
 
 use std::sync::Mutex;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{Emitter, Manager};
 
 use crate::log_fields;
 use crate::logging::{self, Domain, BUFFER};
 
-/// The domains every record here carries. A settings window is a surface of the
-/// application driven from this side, so it is `Backend` alone — nothing about
-/// it is remote and nothing about it is AI.
+mod decision;
+pub use decision::*;
+
+/// The domains every record here carries. The settings window is a surface of
+/// the application driven from this side, so it is `Backend` alone — nothing
+/// about it is remote and nothing about it is AI.
 const DOMAINS: [Domain; 1] = [Domain::Backend];
 
-/// Label of the window both settings windows are children of.
+/// Label of the window the Settings window is a child of.
 ///
 /// One label rather than two, because the application declares exactly one
 /// ordinary window: the Project picker and the main shell are the same window
@@ -43,209 +46,35 @@ const DOMAINS: [Domain; 1] = [Domain::Backend];
 /// it names the main window and the picker as the two possible parents.
 pub const PARENT_WINDOW_LABEL: &str = "main";
 
-/// Label of the Global settings child window.
-pub const GLOBAL_WINDOW_LABEL: &str = "settings-global";
-/// Label of the Project settings child window.
-pub const PROJECT_WINDOW_LABEL: &str = "settings-project";
+/// Label of the Settings child window.
+pub const SETTINGS_WINDOW_LABEL: &str = "settings";
+/// SWN-FR-17: the window's title.
+pub const SETTINGS_WINDOW_TITLE: &str = "Settings";
 
-/// SWN-FR-03: the fixed **outer** size, in logical pixels, both windows open at
-/// every time. Not user-resizable, not maximizable, and not sent to OS
-/// full-screen.
-pub const SETTINGS_WINDOW_SIZE: (u32, u32) = (800, 600);
+/// SWN-FR-03: the outer size, in logical pixels, the window opens at when the
+/// author never resized it.
+pub const DEFAULT_WINDOW_SIZE: (u32, u32) = (800, 600);
+/// SWN-FR-03: the smallest outer size, in logical pixels, the author can give
+/// the window.
+pub const MIN_WINDOW_SIZE: (u32, u32) = (800, 600);
 
-/// Event asking the open settings window to save every pending change in every
-/// one of its sections and report whether it may now go (SWN-FR-08, SWN-FR-09).
+/// Event asking the open window to save every pending change in every one of
+/// its sections and report whether it may now go (SWN-FR-08, SWN-FR-09).
 pub const EVENT_SAVE_AND_CLOSE: &str = "settings-window:save-and-close";
-/// Event routing an already-open settings window to a named section
-/// (SWN-FR-06, SWN-FR-13).
+/// Event routing an already-open window to a named section (SWN-FR-06,
+/// SWN-FR-HZWD).
 pub const EVENT_ROUTE: &str = "settings-window:route";
-/// Event announcing which settings window is open, or that none is. The main
-/// window needs it for the already-looking-at suppression of
-/// `NTF-notifications.md` NTF-FR-08.
+/// Event announcing whether the window is open. The main window needs it for
+/// the already-looking-at suppression of `NTF-notifications.md` NTF-FR-08 and
+/// for returning focus to the control that invoked the window (SWN-FR-FCRT).
 pub const EVENT_CHANGED: &str = "settings-window:changed";
-/// Event announcing that a settings window took or lost OS focus, so the main
-/// window can tell "no window of the application holds focus" from "another one
-/// of ours does" (NTF-FR-08).
+/// Event announcing that the window took or lost OS focus, so the main window
+/// can tell "no window of the application holds focus" from "another one of
+/// ours does" (NTF-FR-08).
 pub const EVENT_FOCUS: &str = "settings-window:focus";
-/// Event telling the failed section's own window to present it (SWN-FR-11).
+/// Event telling the window to present the section whose save failed
+/// (SWN-FR-11).
 pub const EVENT_PRESENT_FAILURE: &str = "settings-window:present-failure";
-
-/// Which settings window a request names.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SettingsWindowKind {
-    Global,
-    Project,
-}
-
-impl SettingsWindowKind {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Global => GLOBAL_WINDOW_LABEL,
-            Self::Project => PROJECT_WINDOW_LABEL,
-        }
-    }
-
-    /// SWN-FR-17: the window's own title, so the two are told apart in the
-    /// platform's window list as well as on screen.
-    pub fn title(self) -> &'static str {
-        match self {
-            Self::Global => "Global settings",
-            Self::Project => "Project settings",
-        }
-    }
-
-    /// The `?settings=` value the webview boots on, which is how one HTML entry
-    /// point renders two different windows.
-    pub fn slug(self) -> &'static str {
-        match self {
-            Self::Global => "global",
-            Self::Project => "project",
-        }
-    }
-
-    pub fn from_label(label: &str) -> Option<Self> {
-        match label {
-            GLOBAL_WINDOW_LABEL => Some(Self::Global),
-            PROJECT_WINDOW_LABEL => Some(Self::Project),
-            _ => None,
-        }
-    }
-}
-
-/// What happens once the open window's save sweep has succeeded.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Transition {
-    /// SWN-FR-08: the author closed the window and nothing follows it.
-    Close,
-    /// SWN-FR-07: the second half of a switch — the requested window opens only
-    /// after the open one has closed.
-    Open {
-        kind: SettingsWindowKind,
-        section: Option<String>,
-    },
-    /// SWN-FR-19: the application is quitting, and the settings window's pending
-    /// changes are written first.
-    Quit,
-}
-
-/// The sweep this side is waiting on, and what it is waiting to do.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PendingSweep {
-    /// The window being swept. Kept so a stale answer from a window that is no
-    /// longer the one under sweep cannot perform someone else's transition.
-    pub label: String,
-    pub next: Transition,
-}
-
-/// What a request should make happen.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Action {
-    /// SWN-FR-12: a sweep is running, so the request starts no further save,
-    /// duplicates no write already in flight, and opens no second window.
-    Inert,
-    /// SWN-FR-06: the window asked for is the one already open — focus it, and
-    /// route it to the named section if the request carried one.
-    Focus {
-        kind: SettingsWindowKind,
-        section: Option<String>,
-    },
-    /// No settings window is open: create the requested one.
-    Create {
-        kind: SettingsWindowKind,
-        section: Option<String>,
-    },
-    /// Ask the open window to save what it holds, then perform `next`.
-    Sweep(PendingSweep),
-}
-
-/// A request made of this module.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Request {
-    /// The author asked for a settings window (SWN-FR-13).
-    Open {
-        kind: SettingsWindowKind,
-        section: Option<String>,
-    },
-    /// The author asked to close the settings window that is open.
-    Close { kind: SettingsWindowKind },
-    /// The application was asked to quit (SWN-FR-19).
-    Quit,
-}
-
-/// SWN-FR-05 through SWN-FR-07 and SWN-FR-12, as one pure decision.
-///
-/// `open` is the settings window currently on screen; `sweeping` is whether a
-/// save sweep is already running. Everything the module does to a window is one
-/// of the four [`Action`]s this returns, so the rules are pinned by unit tests
-/// that state a situation rather than by reading the I/O that follows.
-pub fn decide(request: Request, open: Option<SettingsWindowKind>, sweeping: bool) -> Action {
-    // SWN-FR-12: while a sweep runs, a second close, a request for the same
-    // window, and a request for the other one are each inert. The exception is
-    // a quit, which is not a *further* save but a stronger reason for the one
-    // already running: it upgrades what the sweep in flight will do rather than
-    // starting anything (handled by the caller, which rewrites `next`).
-    if sweeping {
-        return Action::Inert;
-    }
-    match request {
-        Request::Open { kind, section } => match open {
-            Some(current) if current == kind => Action::Focus { kind, section },
-            Some(current) => Action::Sweep(PendingSweep {
-                label: current.label().to_string(),
-                next: Transition::Open { kind, section },
-            }),
-            None => Action::Create { kind, section },
-        },
-        Request::Close { kind } => match open {
-            // A close named for a window that is not the open one is somebody
-            // else's event; nothing to do.
-            Some(current) if current == kind => Action::Sweep(PendingSweep {
-                label: kind.label().to_string(),
-                next: Transition::Close,
-            }),
-            _ => Action::Inert,
-        },
-        Request::Quit => match open {
-            Some(current) => Action::Sweep(PendingSweep {
-                label: current.label().to_string(),
-                next: Transition::Quit,
-            }),
-            // Nothing of ours is open: the quit is the exit path's own.
-            None => Action::Inert,
-        },
-    }
-}
-
-/// SWN-FR-16: whether a request may proceed at all, given whether a project is
-/// open.
-///
-/// While no project is open, **no route anywhere** opens the Project settings
-/// window — the menu entry is absent, but an address a notification carries or
-/// a call from a frontend that has not caught up could still name it. The rule
-/// therefore sits where every route meets rather than only in the menu.
-///
-/// Everything else is allowed in that state: Global settings is reachable
-/// whether or not a project is open (SWN-FR-15), and a close or a quit is about
-/// a window that exists rather than about a project.
-pub fn route_allowed(request: &Request, project_open: bool) -> bool {
-    match request {
-        Request::Open {
-            kind: SettingsWindowKind::Project,
-            ..
-        } => project_open,
-        _ => true,
-    }
-}
-
-/// SWN-FR-11: what a failed sweep leaves behind.
-///
-/// The window stays, the transition does not happen, and — where the failure
-/// arrived on the way to a quit — the held exit is released so the application
-/// does not sit wedged waiting for an answer that is no longer coming.
-pub fn releases_exit_gate(next: &Transition) -> bool {
-    matches!(next, Transition::Quit)
-}
 
 /// Give back the exit hold a quit-sweep claimed, if this transition was one.
 ///
@@ -262,10 +91,15 @@ fn release_exit_hold<R: tauri::Runtime>(app: &tauri::AppHandle<R>, next: &Transi
     }
 }
 
-/// The sweep in flight, if any. Managed state.
+/// The sweep in flight, if any, and the size the window was last placed at.
+/// Managed state.
 #[derive(Default)]
 pub struct SettingsWindows {
     pending: Mutex<Option<PendingSweep>>,
+    /// The outer size, in logical pixels, the window had once it was placed. A
+    /// close compares the window against it to learn whether the author
+    /// resized it (SWN-FR-MRBK).
+    placed: Mutex<Option<(u32, u32)>>,
 }
 
 impl SettingsWindows {
@@ -302,16 +136,19 @@ impl SettingsWindows {
             _ => None,
         }
     }
+
+    fn set_placed(&self, size: Option<(u32, u32)>) {
+        *self.placed.lock().unwrap_or_else(|p| p.into_inner()) = size;
+    }
+
+    fn placed(&self) -> Option<(u32, u32)> {
+        *self.placed.lock().unwrap_or_else(|p| p.into_inner())
+    }
 }
 
-/// Which settings window exists right now, or `None`.
-fn open_kind<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<SettingsWindowKind> {
-    for kind in [SettingsWindowKind::Global, SettingsWindowKind::Project] {
-        if app.get_webview_window(kind.label()).is_some() {
-            return Some(kind);
-        }
-    }
-    None
+/// Whether the window exists right now.
+fn is_open<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
+    app.get_webview_window(SETTINGS_WINDOW_LABEL).is_some()
 }
 
 /// SWN-FR-02: the parent renders normally but takes no interaction while a
@@ -421,185 +258,11 @@ fn set_parent_enabled<R: tauri::Runtime>(app: &tauri::AppHandle<R>, enabled: boo
 /// one of each is ever installed, so nothing can outlive the settings window
 /// that asked for it and leave the parent deaf.
 #[cfg(target_os = "macos")]
-mod macos_modality {
-    use std::cell::{Cell, RefCell};
-    use std::ptr::NonNull;
+mod macos_modality;
 
-    use block2::RcBlock;
-    use objc2::rc::Retained;
-    use objc2::runtime::AnyObject;
-    use objc2::{MainThreadMarker, Message};
-    use objc2_app_kit::{
-        NSAutoresizingMaskOptions, NSEvent, NSEventMask, NSResponder, NSView, NSWindow,
-    };
-
-    /// What a block or a release actually did, for the log record that explains
-    /// it. SWN-FR-02 is invisible when it works, so this is the only account of
-    /// it anybody gets.
-    pub struct BlockReport {
-        /// Whether the event monitor is installed.
-        pub monitor: bool,
-        /// Whether the view over the parent's content is installed.
-        pub overlay: bool,
-        /// How many events the monitor dropped while the block was up. Read on
-        /// release; zero on a block.
-        pub dropped: u64,
-    }
-
-    /// The view over the parent's content, and the responder it displaced.
-    struct Overlay {
-        view: Retained<NSView>,
-        /// What held the keyboard before the block, restored when it lifts. The
-        /// webview, ordinarily.
-        responder: Option<Retained<NSResponder>>,
-        window: Retained<NSWindow>,
-    }
-
-    thread_local! {
-        /// The installed monitor, held because removing one needs the object
-        /// `addLocalMonitor…` returned. Thread-local rather than global: AppKit
-        /// hands these out on the main thread and takes them back there.
-        static MONITOR: RefCell<Option<Retained<AnyObject>>> = const { RefCell::new(None) };
-        static OVERLAY: RefCell<Option<Overlay>> = const { RefCell::new(None) };
-        static DROPPED: Cell<u64> = const { Cell::new(0) };
-    }
-
-    /// Everything an author does to a window with the pointer or the keyboard.
-    ///
-    /// Movement and scrolling are in the set as well as the presses: a blocked
-    /// parent that still highlighted the row under the pointer, or still
-    /// scrolled its editor, would be taking interaction in the way that counts.
-    fn author_events() -> NSEventMask {
-        NSEventMask::LeftMouseDown
-            | NSEventMask::LeftMouseUp
-            | NSEventMask::RightMouseDown
-            | NSEventMask::RightMouseUp
-            | NSEventMask::OtherMouseDown
-            | NSEventMask::OtherMouseUp
-            | NSEventMask::LeftMouseDragged
-            | NSEventMask::RightMouseDragged
-            | NSEventMask::OtherMouseDragged
-            | NSEventMask::MouseMoved
-            | NSEventMask::ScrollWheel
-            | NSEventMask::KeyDown
-            | NSEventMask::KeyUp
-            | NSEventMask::FlagsChanged
-    }
-
-    /// # Safety
-    /// `ns_window` must be a live `NSWindow` pointer, and the caller must be on
-    /// the main thread.
-    pub unsafe fn set_window_blocked(
-        ns_window: *mut std::ffi::c_void,
-        blocked: bool,
-    ) -> BlockReport {
-        let Some(mtm) = MainThreadMarker::new() else {
-            return BlockReport {
-                monitor: false,
-                overlay: false,
-                dropped: 0,
-            };
-        };
-        // Whatever is installed goes first, so a second block request replaces
-        // it rather than stacking on it.
-        let dropped = release();
-        if !blocked {
-            return BlockReport {
-                monitor: false,
-                overlay: false,
-                dropped,
-            };
-        }
-        let window: &NSWindow = unsafe { &*ns_window.cast() };
-        BlockReport {
-            monitor: install_monitor(window, mtm),
-            overlay: install_overlay(window, mtm),
-            dropped: 0,
-        }
-    }
-
-    fn install_monitor(window: &NSWindow, mtm: MainThreadMarker) -> bool {
-        // The window's *number*, not the window: a number is a plain integer the
-        // handler can hold without keeping the parent alive past its own end.
-        let parent = window.windowNumber();
-        DROPPED.with(|count| count.set(0));
-        let handler = RcBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
-            let event = unsafe { event.as_ref() };
-            let for_parent = event
-                .window(mtm)
-                .is_some_and(|window| window.windowNumber() == parent);
-            if for_parent {
-                // Dropped: nothing else sees it, so it reaches neither the
-                // parent's webview nor a menu key equivalent behind it.
-                DROPPED.with(|count| count.set(count.get().saturating_add(1)));
-                std::ptr::null_mut()
-            } else {
-                // Passed on exactly as it arrived, which is what leaves the
-                // settings window, and every other window, working normally.
-                (event as *const NSEvent).cast_mut()
-            }
-        });
-        let monitor = unsafe {
-            NSEvent::addLocalMonitorForEventsMatchingMask_handler(author_events(), &handler)
-        };
-        let installed = monitor.is_some();
-        MONITOR.with(|slot| *slot.borrow_mut() = monitor);
-        installed
-    }
-
-    fn install_overlay(window: &NSWindow, mtm: MainThreadMarker) -> bool {
-        let Some(content) = window.contentView() else {
-            return false;
-        };
-        let view = NSView::initWithFrame(mtm.alloc::<NSView>(), content.bounds());
-        // The parent is not resizable while it is blocked, but it can be zoomed
-        // by the window server and it can change display; the view follows its
-        // content rather than uncovering a strip of it.
-        view.setAutoresizingMask(
-            NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable,
-        );
-        content.addSubview(&view);
-        // The webview holds the keyboard until something takes it away, and a
-        // view over it does not: a key press would still be typed into whatever
-        // had the caret. Clearing the responder is what stops that, and the
-        // window gives it back when the block lifts.
-        let responder = window.firstResponder();
-        window.makeFirstResponder(None);
-        OVERLAY.with(|slot| {
-            *slot.borrow_mut() = Some(Overlay {
-                view,
-                responder,
-                window: window.retain(),
-            })
-        });
-        true
-    }
-
-    /// Take down whatever is installed, and report what the monitor dropped.
-    fn release() -> u64 {
-        MONITOR.with(|slot| {
-            if let Some(monitor) = slot.borrow_mut().take() {
-                unsafe { NSEvent::removeMonitor(&monitor) };
-            }
-        });
-        OVERLAY.with(|slot| {
-            if let Some(overlay) = slot.borrow_mut().take() {
-                overlay.view.removeFromSuperview();
-                overlay
-                    .window
-                    .makeFirstResponder(overlay.responder.as_deref());
-            }
-        });
-        DROPPED.with(|count| count.replace(0))
-    }
-}
-
-/// Announce which settings window is open (or that none is) to every webview.
-fn announce<R: tauri::Runtime>(app: &tauri::AppHandle<R>, open: Option<SettingsWindowKind>) {
-    let _ = app.emit(
-        EVENT_CHANGED,
-        serde_json::json!({ "open": open.map(|k| k.slug()) }),
-    );
+/// Announce whether the window is open to every webview.
+fn announce<R: tauri::Runtime>(app: &tauri::AppHandle<R>, open: bool) {
+    let _ = app.emit(EVENT_CHANGED, serde_json::json!({ "open": open }));
 }
 
 /// Percent-encode a query-string value.
@@ -622,81 +285,154 @@ pub fn encode_query_value(value: &str) -> String {
     out
 }
 
-/// SWN-FR-03: the inner size that lands the window on `target` **outer** pixels,
-/// given the chrome the platform draws around it.
-///
-/// Pure, because the correction is the whole of what makes "800 × 600" the size
-/// the author can measure rather than the size of the web view inside a title
-/// bar. Never returns zero in either axis: a decoration larger than the target
-/// would otherwise produce a window with no content at all.
-pub fn inner_size_for_outer(target: (u32, u32), decoration: (u32, u32)) -> (u32, u32) {
-    (
-        target.0.saturating_sub(decoration.0).max(1),
-        target.1.saturating_sub(decoration.1).max(1),
-    )
+/// The outer size of `window` in logical pixels, or `None` when the platform
+/// cannot report it.
+fn logical_outer_size<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Option<(u32, u32)> {
+    let outer = window.outer_size().ok()?;
+    let scale = window.scale_factor().ok()?;
+    Some((
+        (outer.width as f64 / scale).round() as u32,
+        (outer.height as f64 / scale).round() as u32,
+    ))
 }
 
-/// Bring the window to exactly [`SETTINGS_WINDOW_SIZE`] outer pixels.
-///
-/// Best-effort: a platform that cannot report one of the three measurements
-/// leaves the window at the size it was built with, which is the same size
-/// minus the chrome — wrong by a title bar rather than unusable.
-fn pin_outer_size<R: tauri::Runtime>(app: &tauri::AppHandle<R>, window: &tauri::WebviewWindow<R>) {
-    let (Ok(outer), Ok(inner), Ok(scale)) = (
-        window.outer_size(),
-        window.inner_size(),
-        window.scale_factor(),
-    ) else {
-        return;
-    };
-    let target = (
-        (SETTINGS_WINDOW_SIZE.0 as f64 * scale).round() as u32,
-        (SETTINGS_WINDOW_SIZE.1 as f64 * scale).round() as u32,
-    );
-    let decoration = (
-        outer.width.saturating_sub(inner.width),
-        outer.height.saturating_sub(inner.height),
-    );
-    let (w, h) = inner_size_for_outer(target, decoration);
-    if let Err(e) = window.set_size(tauri::PhysicalSize::new(w, h)) {
-        logging::log_warn(
-            app,
-            &BUFFER,
-            &DOMAINS,
-            "settings window could not be pinned to its fixed size",
-            log_fields! { "reason" => e.to_string() },
-        );
+/// The size the author last gave the window, read from the user-global store.
+fn stored_size<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<(u32, u32)> {
+    let store = app.try_state::<crate::global_settings::GlobalSettingsStore>()?;
+    match store.load_settings_window_size() {
+        Ok(size) => size
+            .filter(|s| s.width > 0 && s.height > 0)
+            .map(|s| (s.width, s.height)),
+        Err(e) => {
+            logging::log_warn(
+                app,
+                &BUFFER,
+                &DOMAINS,
+                "settings window size could not be read",
+                log_fields! { "reason" => e },
+            );
+            None
+        }
     }
 }
 
-/// SWN-FR-04: place the window in the centre of the display its parent occupies.
-///
-/// Recomputed on every opening and never persisted, so a window the author
-/// dragged elsewhere before closing it opens centred again.
-fn centre_on_parent_display<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    window: &tauri::WebviewWindow<R>,
-) {
-    let Some(parent) = app.get_webview_window(PARENT_WINDOW_LABEL) else {
-        return;
-    };
-    let (Ok(pos), Ok(size), Ok(own)) = (
-        parent.outer_position(),
-        parent.outer_size(),
-        window.outer_size(),
+/// SWN-FR-MRBK: remember the size the author gave the window, when it differs
+/// from the one the window was placed at. Called as the window goes, so one
+/// write covers however many drags the author made.
+fn remember_size<R: tauri::Runtime>(app: &tauri::AppHandle<R>, window: &tauri::WebviewWindow<R>) {
+    let (Some(state), Some(store)) = (
+        app.try_state::<SettingsWindows>(),
+        app.try_state::<crate::global_settings::GlobalSettingsStore>(),
     ) else {
         return;
     };
-    let parent_rect = crate::window::DisplayRect {
-        x: pos.x,
-        y: pos.y,
-        width: size.width,
-        height: size.height,
-    };
-    let Some(display) = crate::window::display_for_rect(app, parent_rect) else {
+    let (Some(placed), Some(now)) = (state.placed(), logical_outer_size(window)) else {
         return;
     };
-    let (x, y) = crate::window::center_window_on_display(display, (own.width, own.height));
+    if placed == now {
+        return;
+    }
+    match store.save_settings_window_size(now.0, now.1) {
+        Ok(()) => logging::log_debug(
+            app,
+            &BUFFER,
+            &DOMAINS,
+            "settings window size stored",
+            log_fields! { "width" => now.0, "height" => now.1 },
+        ),
+        Err(e) => logging::log_warn(
+            app,
+            &BUFFER,
+            &DOMAINS,
+            "settings window size could not be stored",
+            log_fields! { "reason" => e },
+        ),
+    }
+}
+
+/// Where the window opens: the work area of the display the parent occupies, in
+/// physical pixels, and that display's scale factor.
+struct OpeningDisplay {
+    work: crate::window::DisplayRect,
+    scale: f64,
+}
+
+fn opening_display<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<OpeningDisplay> {
+    let parent = app.get_webview_window(PARENT_WINDOW_LABEL)?;
+    let (pos, size) = (parent.outer_position().ok()?, parent.outer_size().ok()?);
+    let (work, scale) = crate::window::work_area_for_rect(
+        app,
+        crate::window::DisplayRect {
+            x: pos.x,
+            y: pos.y,
+            width: size.width,
+            height: size.height,
+        },
+    )?;
+    Some(OpeningDisplay { work, scale })
+}
+
+/// SWN-FR-03, SWN-FR-04, SWN-FR-CLMP: bring the window to the size it opens at
+/// and into the centre of the display its parent occupies.
+///
+/// Best-effort: a platform that cannot report one of the measurements leaves the
+/// window at the size it was built with, which is the same size minus the
+/// chrome — wrong by a title bar rather than unusable. The window is placed
+/// while still hidden, so it is never seen at another size or position first.
+/// The position is never stored, so a window the author dragged elsewhere opens
+/// centred again.
+fn place<R: tauri::Runtime>(app: &tauri::AppHandle<R>, window: &tauri::WebviewWindow<R>) {
+    let display = opening_display(app);
+    let scale = display
+        .as_ref()
+        .map(|d| d.scale)
+        .or_else(|| window.scale_factor().ok())
+        .unwrap_or(1.0);
+    let work_logical = display.as_ref().map(|d| {
+        (
+            (d.work.width as f64 / scale).floor() as u32,
+            (d.work.height as f64 / scale).floor() as u32,
+        )
+    });
+    let target = opening_size(stored_size(app), work_logical);
+    if let (Ok(outer), Ok(inner)) = (window.outer_size(), window.inner_size()) {
+        let decoration = (
+            outer.width.saturating_sub(inner.width),
+            outer.height.saturating_sub(inner.height),
+        );
+        let physical = |logical: (u32, u32)| {
+            (
+                (logical.0 as f64 * scale).round() as u32,
+                (logical.1 as f64 * scale).round() as u32,
+            )
+        };
+        let (w, h) = inner_size_for_outer(physical(target), decoration);
+        let (min_w, min_h) = inner_size_for_outer(physical(MIN_WINDOW_SIZE), decoration);
+        if let Err(e) = window.set_min_size(Some(tauri::PhysicalSize::new(min_w, min_h))) {
+            logging::log_warn(
+                app,
+                &BUFFER,
+                &DOMAINS,
+                "settings window could not be given its minimum size",
+                log_fields! { "reason" => e.to_string() },
+            );
+        }
+        if let Err(e) = window.set_size(tauri::PhysicalSize::new(w, h)) {
+            logging::log_warn(
+                app,
+                &BUFFER,
+                &DOMAINS,
+                "settings window could not be sized",
+                log_fields! { "reason" => e.to_string() },
+            );
+        }
+    }
+    let (Some(display), Ok(own)) = (display, window.outer_size()) else {
+        return;
+    };
+    // Centred in the work area rather than on the whole display, so a window
+    // as tall as the work area does not slide under a menu bar or a taskbar.
+    let (x, y) = crate::window::center_window_on_display(display.work, (own.width, own.height));
     if let Err(e) = window.set_position(tauri::PhysicalPosition::new(x, y)) {
         logging::log_warn(
             app,
@@ -708,23 +444,15 @@ fn centre_on_parent_display<R: tauri::Runtime>(
     }
 }
 
-/// Build and show a settings window (SWN-FR-01 through SWN-FR-04).
+/// Build and show the window (SWN-FR-01 through SWN-FR-04).
 ///
-/// The window is built hidden and shown only once it holds its fixed size in
+/// The window is built hidden and shown only once it holds its final size in
 /// the centre of the parent's display, so it is never seen at another size or
 /// another position first.
-fn create<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    kind: SettingsWindowKind,
-    section: Option<String>,
-) {
+fn create<R: tauri::Runtime>(app: &tauri::AppHandle<R>, section: Option<String>) {
     let url = match &section {
-        Some(s) => format!(
-            "index.html?settings={}&section={}",
-            kind.slug(),
-            encode_query_value(s)
-        ),
-        None => format!("index.html?settings={}", kind.slug()),
+        Some(s) => format!("index.html?settings=1&section={}", encode_query_value(s)),
+        None => "index.html?settings=1".to_string(),
     };
     // Built through a factory rather than a `mut` binding: `parent` consumes
     // the builder and gives it back only on success, so a platform that refuses
@@ -732,18 +460,19 @@ fn create<R: tauri::Runtime>(
     let base = || {
         tauri::WebviewWindowBuilder::new(
             app,
-            kind.label(),
+            SETTINGS_WINDOW_LABEL,
             tauri::WebviewUrl::App(url.clone().into()),
         )
-        .title(kind.title())
+        .title(SETTINGS_WINDOW_TITLE)
         .inner_size(
-            SETTINGS_WINDOW_SIZE.0 as f64,
-            SETTINGS_WINDOW_SIZE.1 as f64,
+            DEFAULT_WINDOW_SIZE.0 as f64,
+            DEFAULT_WINDOW_SIZE.1 as f64,
         )
-        // SWN-FR-03: no drag-to-resize and no maximize. `resizable(false)` also
-        // disables the macOS zoom button's full-screen behaviour, which is what
-        // keeps the window out of OS full-screen.
-        .resizable(false)
+        // SWN-FR-03: the author can drag-resize the window, but it offers no
+        // maximize. Disabling the maximize control also disables the macOS zoom
+        // button, which is what keeps the window out of OS full-screen. The
+        // minimum size is set in `place`, once the chrome can be measured.
+        .resizable(true)
         .maximizable(false)
         .visible(false)
     };
@@ -756,7 +485,7 @@ fn create<R: tauri::Runtime>(
                     &BUFFER,
                     &DOMAINS,
                     "settings window could not be parented",
-                    log_fields! { "window" => kind.slug(), "reason" => e.to_string() },
+                    log_fields! { "reason" => e.to_string() },
                 );
                 base()
             }
@@ -765,7 +494,7 @@ fn create<R: tauri::Runtime>(
     };
     // Blocked before the window is built, not after: building a webview window
     // takes long enough to click through, and SWN-FR-02 gives the parent no
-    // interaction from the moment a settings window is on its way.
+    // interaction from the moment the window is on its way.
     set_parent_enabled(app, false);
     let window = match builder.build() {
         Ok(w) => w,
@@ -775,31 +504,31 @@ fn create<R: tauri::Runtime>(
                 &BUFFER,
                 &DOMAINS,
                 "settings window could not be opened",
-                log_fields! { "window" => kind.slug(), "reason" => e.to_string() },
+                log_fields! { "reason" => e.to_string() },
             );
-            // Nothing opened, so nothing may go on blocking the parent — unless
-            // the other settings window is still there, which a failed switch
-            // leaves behind.
-            if open_kind(app).is_none() {
-                set_parent_enabled(app, true);
-            }
+            // Nothing opened, so nothing may go on blocking the parent.
+            set_parent_enabled(app, true);
             return;
         }
     };
-    pin_outer_size(app, &window);
-    centre_on_parent_display(app, &window);
+    place(app, &window);
     let _ = window.show();
     let _ = window.set_focus();
-    announce(app, Some(kind));
+    // Measured once the window is on screen, so the size a close compares
+    // against is the one the platform really gave it, frame included.
+    let placed = logical_outer_size(&window);
+    if let Some(state) = app.try_state::<SettingsWindows>() {
+        state.set_placed(placed);
+    }
+    announce(app, true);
     logging::log_info(
         app,
         &BUFFER,
         &DOMAINS,
         "settings window opened",
         log_fields! {
-            "window" => kind.slug(),
-            "width" => SETTINGS_WINDOW_SIZE.0,
-            "height" => SETTINGS_WINDOW_SIZE.1,
+            "width" => placed.map(|s| s.0),
+            "height" => placed.map(|s| s.1),
             // The section is a fixed vocabulary of surface names, never author
             // content, so it is safe to record and is what explains where the
             // author landed.
@@ -808,13 +537,10 @@ fn create<R: tauri::Runtime>(
     );
 }
 
-/// SWN-FR-06: focus the window already open and route it to a named section.
-fn focus<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    kind: SettingsWindowKind,
-    section: Option<String>,
-) {
-    let Some(window) = app.get_webview_window(kind.label()) else {
+/// SWN-FR-05 / SWN-FR-06: focus the window already open and route it to a named
+/// section.
+fn focus<R: tauri::Runtime>(app: &tauri::AppHandle<R>, section: Option<String>) {
+    let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) else {
         return;
     };
     let _ = window.set_focus();
@@ -826,7 +552,7 @@ fn focus<R: tauri::Runtime>(
         &BUFFER,
         &DOMAINS,
         "settings window focused",
-        log_fields! { "window" => kind.slug(), "section" => section },
+        log_fields! { "section" => section },
     );
 }
 
@@ -838,7 +564,7 @@ fn begin_sweep<R: tauri::Runtime>(app: &tauri::AppHandle<R>, sweep: PendingSweep
     };
     let Some(window) = app.get_webview_window(&sweep.label) else {
         // Nothing to sweep — the window went between the decision and here.
-        // Perform the transition directly so a switch does not strand.
+        // Perform the transition directly so a quit does not strand.
         perform(app, sweep.next);
         return;
     };
@@ -877,7 +603,6 @@ fn begin_sweep<R: tauri::Runtime>(app: &tauri::AppHandle<R>, sweep: PendingSweep
 fn transition_name(next: &Transition) -> &'static str {
     match next {
         Transition::Close => "close",
-        Transition::Open { .. } => "switch",
         Transition::Quit => "quit",
     }
 }
@@ -885,6 +610,7 @@ fn transition_name(next: &Transition) -> &'static str {
 /// Tear the window down and give the parent its interaction back.
 fn destroy<R: tauri::Runtime>(app: &tauri::AppHandle<R>, label: &str) {
     if let Some(window) = app.get_webview_window(label) {
+        remember_size(app, &window);
         // `destroy` rather than `close`: `close` raises `CloseRequested`, which
         // this module intercepts to start a sweep — and the sweep has just
         // finished, so that would ask the window to save all over again.
@@ -892,24 +618,17 @@ fn destroy<R: tauri::Runtime>(app: &tauri::AppHandle<R>, label: &str) {
     }
 }
 
-/// Perform the transition a completed sweep earned (SWN-FR-07, SWN-FR-19).
+/// Perform the transition a completed sweep earned (SWN-FR-08, SWN-FR-19).
 fn perform<R: tauri::Runtime>(app: &tauri::AppHandle<R>, next: Transition) {
+    set_parent_enabled(app, true);
+    announce(app, false);
     match next {
         Transition::Close => {
-            set_parent_enabled(app, true);
-            announce(app, None);
             if let Some(parent) = app.get_webview_window(PARENT_WINDOW_LABEL) {
                 let _ = parent.set_focus();
             }
         }
-        // SWN-FR-07: the requested window opens only after the open one has
-        // closed, so the switch is never two windows in flight at once.
-        Transition::Open { kind, section } => create(app, kind, section),
-        Transition::Quit => {
-            set_parent_enabled(app, true);
-            announce(app, None);
-            crate::menu::resume_held_exit(app);
-        }
+        Transition::Quit => crate::menu::resume_held_exit(app),
     }
 }
 
@@ -920,10 +639,10 @@ fn dispatch<R: tauri::Runtime>(app: &tauri::AppHandle<R>, request: Request) {
     let Some(state) = app.try_state::<SettingsWindows>() else {
         return;
     };
-    // SWN-FR-16: while no project is open, **no route anywhere** opens the
-    // Project settings window. The menu entry is absent, but an address a
-    // notification carries or a stale frontend call could still name it, so the
-    // rule is enforced where every route meets rather than only in the menu.
+    // SWN-FR-16: while no project is open, **no route anywhere** presents a
+    // Project section. The Project group is absent from the window, but an
+    // address a notification carries or a stale frontend call could still name
+    // one, so the rule is enforced where every route meets.
     let project_open = app
         .try_state::<crate::project::ProjectState>()
         .and_then(|p| p.root())
@@ -933,57 +652,53 @@ fn dispatch<R: tauri::Runtime>(app: &tauri::AppHandle<R>, request: Request) {
             app,
             &BUFFER,
             &DOMAINS,
-            "Project settings was requested with no project open",
+            "a Project settings section was requested with no project open",
             log_fields! {},
         );
         return;
     }
     let sweeping = state.peek().is_some();
-    match decide(request, open_kind(app), sweeping) {
+    match decide(request, is_open(app), sweeping) {
         Action::Inert => {}
-        Action::Focus { kind, section } => focus(app, kind, section),
-        Action::Create { kind, section } => create(app, kind, section),
+        Action::Focus { section } => focus(app, section),
+        Action::Create { section } => create(app, section),
         Action::Sweep(sweep) => begin_sweep(app, sweep),
     }
 }
 
-/// Whether either settings window is on screen (SWN-FR-05).
+/// Whether the window is on screen (SWN-FR-05).
 pub fn a_settings_window_is_open<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
-    open_kind(app).is_some()
+    is_open(app)
 }
 
-/// SWN-FR-13: the in-process entry point the application menu opens a settings
-/// window through. Same rules as the command the frontend calls.
-pub fn request_open<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    kind: SettingsWindowKind,
-    section: Option<String>,
-) {
-    dispatch(app, Request::Open { kind, section });
+/// SWN-FR-13: the in-process entry point the application menu opens the window
+/// through. Same rules as the command the frontend calls.
+pub fn request_open<R: tauri::Runtime>(app: &tauri::AppHandle<R>, section: Option<String>) {
+    dispatch(app, Request::Open { section });
 }
 
-/// SWN-FR-13: open a settings window, focus it when it is the one already open,
-/// or switch to it when the other one is (SWN-FR-05 through SWN-FR-07).
+/// SWN-FR-13: open the window, or focus it when it is already open (SWN-FR-05,
+/// SWN-FR-06).
 ///
-/// `section` names a section within the window — the Agents section the chrome
-/// roster routes to (`AGT-agents.md` AGT-FR-06), the GitHub section a failed Git
-/// operation offers, the section a notification's address carries. `None` opens
-/// the window on whichever section it presents by default.
+/// `section` is a section address naming its scope and its section
+/// (SWN-FR-HZWD) — the Agents section the chrome roster routes to
+/// (`AGT-agents.md` AGT-FR-06), the GitHub section a failed Git operation
+/// offers, the section a notification's address carries. `None` opens the
+/// window on Appearance (SWN-FR-MRNB).
 #[tauri::command]
 pub fn open_settings_window<R: tauri::Runtime>(
-    kind: SettingsWindowKind,
     section: Option<String>,
     app: tauri::AppHandle<R>,
 ) {
-    dispatch(&app, Request::Open { kind, section });
+    dispatch(&app, Request::Open { section });
 }
 
-/// What a settings window needs to know about the project behind it.
+/// What the Settings window needs to know about the project behind it.
 ///
-/// A settings window is its own webview, so it shares no state with the main
-/// window and cannot read the open project off it. Every field is fixed for the
+/// The window is its own webview, so it shares no state with the main window
+/// and cannot read the open project off it. Every field is fixed for the
 /// window's whole life — the parent is blocked, so neither the project nor its
-/// active worktree can change while one is open (SWN-FR-02, `SET-FR-20`) —
+/// active worktree can change while it is open (SWN-FR-02, `SET-FR-20`) —
 /// which is what makes reading it once on mount correct.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -997,13 +712,14 @@ pub struct SettingsWindowContext {
     pub content_root: String,
 }
 
-/// The open project behind the settings window, for the surfaces inside it that
-/// need to name it — the GitHub token picker's title (`GHA-FR-20`) and the
-/// address the Notifications rehearsal mints (`GLS-FR-27`).
+/// The open project behind the Settings window, for the surfaces inside it that
+/// need to name it — the GitHub token picker's title (`GHA-FR-20`), the address
+/// the Notifications rehearsal mints (`GLS-FR-27`), and the presence of the
+/// Project group itself (SWN-FR-16).
 ///
 /// Answers with empty strings rather than an error while no project is open:
-/// Global settings is reachable in exactly that state (SWN-FR-15), and the
-/// sections that need a project disable themselves rather than fail.
+/// the window is reachable in exactly that state (SWN-FR-15), and the window
+/// then shows its Global group alone.
 #[tauri::command]
 pub fn get_settings_window_context<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -1029,9 +745,9 @@ pub fn get_settings_window_context<R: tauri::Runtime>(
 /// `ok` is true once every pending change in every section has been written —
 /// including a write that was already in flight, which the sweep awaits rather
 /// than starting again (SWN-FR-09) — and false when one of them failed. A
-/// failure cancels the transition outright: the window stays open, no other
-/// settings window opens, and a held quit is released (SWN-FR-11, SWN-FR-19).
-/// `section` names the section that failed, so the window can present it.
+/// failure cancels the close outright: the window stays open and a held quit is
+/// released (SWN-FR-11, SWN-FR-19). `section` names the section address that
+/// failed, so the window can present it.
 #[tauri::command]
 pub fn finish_settings_close<R: tauri::Runtime>(
     ok: bool,
@@ -1084,15 +800,15 @@ pub fn finish_settings_close<R: tauri::Runtime>(
     );
 }
 
-/// SWN-FR-19: hold a quit while the open settings window writes what it holds.
+/// SWN-FR-19: hold a quit while the open window writes what it holds.
 ///
-/// Returns whether the quit was taken over here. `false` means no settings
-/// window is open and the ordinary exit path should proceed.
+/// Returns whether the quit was taken over here. `false` means the window is not
+/// open and the ordinary exit path should proceed.
 pub fn defer_quit_for_settings<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
     // Asked before the managed state is touched at all, so the ordinary quit
     // path costs nothing and needs nothing managed on a handle that never opens
     // a settings window.
-    if open_kind(app).is_none() {
+    if !is_open(app) {
         return false;
     }
     // A quit arriving mid-sweep does not start a second one: it upgrades what
@@ -1111,7 +827,7 @@ pub fn defer_quit_for_settings<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> 
     true
 }
 
-/// Intercept what happens to a settings window itself.
+/// Intercept what happens to the window itself.
 ///
 /// A close the author requests — the title-bar button, ⌘W, the Window menu — is
 /// **held**: the window's sections may hold pending changes, and SWN-FR-08
@@ -1125,19 +841,18 @@ pub fn handle_window_event<R: tauri::Runtime>(
     window: &tauri::Window<R>,
     event: &tauri::WindowEvent,
 ) -> bool {
-    let Some(kind) = SettingsWindowKind::from_label(window.label()) else {
+    if window.label() != SETTINGS_WINDOW_LABEL {
         return false;
-    };
+    }
     let app = window.app_handle();
     match event {
         tauri::WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
-            dispatch(app, Request::Close { kind });
+            dispatch(app, Request::Close);
         }
         tauri::WindowEvent::Destroyed => {
             // A sweep this window was under can never land now, so give the
-            // claim back — but only its own: a switch destroys one window while
-            // the other's sweep may already be outstanding.
+            // claim back.
             if let Some(state) = app.try_state::<SettingsWindows>() {
                 if let Some(dropped) = state.take_for(window.label()) {
                     // SWN-FR-19: and a quit held for a sweep that will never
@@ -1148,25 +863,14 @@ pub fn handle_window_event<R: tauri::Runtime>(
                     release_exit_hold(app, &dropped.next);
                 }
             }
-            // Whatever destroyed it, the parent must not stay disabled — unless
-            // a settings window is still up. A switch destroys the outgoing
-            // window and opens the incoming one, and this event is delivered
-            // through the platform's event loop rather than inline, so it can
-            // arrive AFTER the incoming window has already blocked the parent.
-            // Re-enabling unconditionally would hand the author a live main
-            // window underneath an open settings window (SWN-FR-02).
-            if open_kind(app).is_none() {
-                set_parent_enabled(app, true);
-                announce(app, None);
-            }
+            // Whatever destroyed it, the parent must not stay disabled.
+            set_parent_enabled(app, true);
+            announce(app, false);
         }
         // NTF-FR-08: "no window of the application holds OS focus" is what
         // decides whether a raise is posted, and this window is one of ours.
         tauri::WindowEvent::Focused(focused) => {
-            let _ = app.emit(
-                EVENT_FOCUS,
-                serde_json::json!({ "focused": *focused, "window": kind.slug() }),
-            );
+            let _ = app.emit(EVENT_FOCUS, serde_json::json!({ "focused": *focused }));
         }
         _ => {}
     }

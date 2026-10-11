@@ -3144,14 +3144,25 @@ const byNickname = (a: MockAgent, b: MockAgent) =>
 
 const sortedAgents = () => [...agentsRegistry].sort(byNickname);
 
-// The demo project's enrolment: two ready agents plus the degraded one, so the
-// roster, the project section and the mention picker all show a warning row.
-let enrolledAgentIds = ["agt-arch", "agt-scribe", "agt-long"];
+// The demo project's Project agents (AGR-FR-12). Every other agent of the
+// registry is a Personal agent, which is on every project's roster (AGR-FR-02).
+// Two ready agents plus the degraded one, so the roster, both sections and the
+// mention picker all show a warning row.
+let projectScopeIds = ["agt-arch"];
 
-const projectAgents = () =>
-  sortedAgents()
-    .filter((agent) => enrolledAgentIds.includes(agent.id))
-    .map((agent) => ({ agent, availability: availabilityOf(agent) }));
+const scopeOf = (agent: MockAgent) =>
+  projectScopeIds.includes(agent.id) ? "project" : "personal";
+
+const describeAgent = (agent: MockAgent) => ({
+  agent,
+  scope: scopeOf(agent),
+  availability: availabilityOf(agent),
+});
+
+const projectAgents = () => sortedAgents().map(describeAgent);
+
+const agentsOfScope = (scope: string) =>
+  projectAgents().filter((entry) => entry.scope === scope);
 
 /**
  * AGT-FR-36 / CMT-FR-78: enrol extra **ready** agents, so a conversation
@@ -3188,7 +3199,6 @@ const projectAgents = () =>
       title: "Extra agent added from the console",
     };
     agentsRegistry = [...agentsRegistry, created];
-    enrolledAgentIds = [...enrolledAgentIds, created.id];
     made.push(nickname);
   }
   return made;
@@ -6759,16 +6769,19 @@ const mockDockerImages: Array<Record<string, any>> = [
   {
     vendor: "claude_code", configuration: "configured", imageName: "acme/agent", tag: "latest",
     imageReference: "acme/agent:latest", dockerfile: null, dockerfileState: "absent",
-    dockerfileProblem: null, graduationState: "usable",
+    dockerfileProblem: null, buildContext: null, buildContextState: "absent",
+    graduationState: "usable",
   },
   {
     vendor: "codex", configuration: "unset", imageName: "", tag: null, imageReference: null,
     dockerfile: null, dockerfileState: "absent", dockerfileProblem: null,
+    buildContext: null, buildContextState: "absent",
     graduationState: "image_name_missing",
   },
   {
     vendor: "opencode", configuration: "unset", imageName: "", tag: null, imageReference: null,
     dockerfile: null, dockerfileState: "absent", dockerfileProblem: null,
+    buildContext: null, buildContextState: "absent",
     graduationState: "execution_unsupported",
   },
 ];
@@ -7095,13 +7108,13 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
 
     // ---- settings child windows (SWN-settings-windows.md) ----------------
     //
-    // The two settings surfaces are native child windows of the application
-    // (SWN-FR-01), which a browser harness cannot create: their frame, their
-    // fixed size, their modality, and the one-window rule are all the Rust
+    // The Settings surface is a native child window of the application
+    // (SWN-FR-01), which a browser harness cannot create: its frame, its
+    // size, its modality, and the one-window rule are all the Rust
     // side's. What IS verifiable here is the window's BODY, because all three
-    // windows boot one entry point — navigate to `/?settings=global` or
-    // `/?settings=project` (optionally with `&section=`) and `main.tsx` renders
-    // the settings window's root instead of the shell.
+    // windows boot one entry point — navigate to `/?settings=1` (optionally with
+    // `&section=global%2Fagents`, a scope and a section) and `main.tsx` renders
+    // the Settings window's root instead of the shell.
     //
     // So these three record the request rather than performing it: opening a
     // window from the shell is a no-op the harness reports through
@@ -7113,7 +7126,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           | unknown[]
           | undefined ??
         ((globalThis as Record<string, unknown>).__settingsWindowRequests = [])
-      ).push({ kind: a.kind, section: a.section ?? null });
+      ).push({ section: a.section ?? null });
       return undefined;
     case "finish_settings_close":
       return undefined;
@@ -7125,7 +7138,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return {
         projectName: "acme",
         projectKey: "~/dev/acme",
-        contentRoot: "~/dev/acme",
+        // An absolute path, as the real backend answers, and the one that the
+        // mock dialog's default pick lies in: a path field reads a picked path
+        // against this folder.
+        contentRoot: "/Users/demo/dev/acme",
       };
 
     // ---- preferences -----------------------------------------------------
@@ -9483,9 +9499,20 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "load_project_image_build_in_flight":
       return null;
     case "save_project_vendor_image": {
-      const entry = (a.entry ?? {}) as { imageName?: string; tag?: string | null };
+      const entry = (a.entry ?? {}) as {
+        imageName?: string; tag?: string | null; dockerfile?: string | null; buildContext?: string | null;
+      };
       const status = mockDockerImages.find((s) => s.vendor === a.vendor);
       if (!status) throw "unknown_vendor";
+      // PSS-FR-BCTX: a build context must name an existing folder. The mock
+      // treats any path containing "missing" as one that does not exist.
+      if (entry.buildContext && entry.buildContext.includes("missing")) {
+        throw "build_context_not_a_directory";
+      }
+      status.dockerfile = entry.dockerfile ?? null;
+      status.dockerfileState = status.dockerfile ? "valid" : "absent";
+      status.buildContext = entry.buildContext ?? null;
+      status.buildContextState = status.buildContext ? "valid" : "absent";
       status.imageName = entry.imageName ?? "";
       status.tag = entry.tag ?? null;
       status.configuration = status.imageName ? "configured" : "unset";
@@ -9632,8 +9659,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return { provider: a.provider ?? null, resolution: a.provider ? "overridden" : "inherited", overrideProvider: a.provider ?? null };
 
     // ---- conversational agents (AGR / AGC) ------------------------------
-    case "list_agents":
-      return sortedAgents();
+    case "list_personal_agents":
+      return agentsOfScope("personal");
     case "create_agent": {
       const draft = a.draft ?? {};
       const nickname = String(draft.nickname ?? "");
@@ -9659,6 +9686,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         reasoning: draft.reasoning ?? null,
       };
       agentsRegistry = [...agentsRegistry, created];
+      if (a.scope === "project") projectScopeIds = [...projectScopeIds, created.id];
       return created;
     }
     case "update_agent": {
@@ -9692,21 +9720,12 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return updated;
     }
     case "delete_agent":
-      // AGR-FR-11: the definition and every project's enrolment of it, in one.
+      // AGR-FR-11: one definition of one scope.
       agentsRegistry = agentsRegistry.filter((x) => x.id !== a.id);
-      enrolledAgentIds = enrolledAgentIds.filter((id) => id !== a.id);
+      projectScopeIds = projectScopeIds.filter((id) => id !== a.id);
       agentTurns = agentTurns.filter((t) => t.agentId !== a.id);
-      return sortedAgents();
+      return agentsOfScope(String(a.scope));
     case "list_project_agents":
-      return projectAgents();
-    case "enrol_project_agent":
-      if (!enrolledAgentIds.includes(a.agentId)) {
-        enrolledAgentIds = [...enrolledAgentIds, a.agentId];
-      }
-      return projectAgents();
-    case "remove_project_agent":
-      enrolledAgentIds = enrolledAgentIds.filter((id) => id !== a.agentId);
-      agentTurns = agentTurns.filter((t) => t.agentId !== a.agentId);
       return projectAgents();
     /* AGC-FR-55: the recovery registry — at most one entry per conversation,
        each `failed` and each carrying `retryPermitted`. What a card reads when
@@ -9784,7 +9803,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const agent = agentsRegistry.find(
         (x) => x.nickname.toLowerCase() === String(a.nickname).toLowerCase(),
       );
-      if (!agent || !enrolledAgentIds.includes(agent.id)) {
+      if (!agent) {
         throw "agent_not_found";
       }
       if (availabilityOf(agent) !== "ready") throw "agent_unavailable";

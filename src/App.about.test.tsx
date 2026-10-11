@@ -226,7 +226,7 @@ afterEach(() => {
 
 async function enterIde() {
   await userEvent.click(await screen.findByText("acme"));
-  await screen.findByRole("button", { name: "Global settings" });
+  await screen.findByRole("button", { name: "Settings" });
 }
 
 async function fireMenu(event: string) {
@@ -427,7 +427,7 @@ describe("About panel keyboard and link", () => {
     await userEvent.keyboard("{Escape}");
 
     expect(aboutDialog()).toBeNull();
-    expect(screen.getByRole("button", { name: "Global settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
   });
 
   it("ABT-FR-HYFE: focus enters the panel on open and returns to the previous element on close", async () => {

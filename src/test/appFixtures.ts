@@ -305,11 +305,12 @@ export function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
       return { checksum: "c1" };
     case "search_drafts":
       return [];
-    // AGT-FR-03 / AGT-FR-22: one agent enrolled in the open project, so the
+    // AGT-FR-03 / AGT-FR-22: one Project agent in the open project, so the
     // chrome roster has a row to activate (AGT-FR-06, AGT-FR-07).
     case "list_project_agents":
       return [
         {
+          scope: "project",
           agent: {
             id: ROSTER_AGENT_ID,
             nickname: "arch",
@@ -357,7 +358,7 @@ export function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
         unpushedCommits: 2,
         fetchableCommits: 0,
       };
-    case "list_agents":
+    case "list_personal_agents":
       return [];
     case "list_agent_turns":
     case "list_recoverable_agent_turn_failures":
@@ -387,7 +388,7 @@ export async function enterIde() {
   const recent = await screen.findByText("acme");
   await userEvent.click(recent);
   // Activity bar Global settings button only exists in the IDE shell.
-  await screen.findByRole("button", { name: "Global settings" });
+  await screen.findByRole("button", { name: "Settings" });
 }
 
 /**

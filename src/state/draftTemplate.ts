@@ -80,7 +80,7 @@ export const draftTemplateTransport: DocumentTransport = {
  * The mounted Draft template section's own write, or null when no section is
  * mounted.
  *
- * One at a time: exactly one Project settings window exists (SWN-FR-05), and
+ * One at a time: exactly one Settings window exists (SWN-FR-05), and
  * exactly one of its sections is rendered. A second registration replaces the
  * first, which is what a remount does.
  */

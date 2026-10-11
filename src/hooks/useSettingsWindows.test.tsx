@@ -2,13 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 
 import { useSettingsWindows } from "./useSettingsWindows";
+import {
+  noteSettingsInvoker,
+  resetSettingsInvoker,
+} from "../state/settingsInvoker";
 
 /**
- * What the main window knows about the settings child window over it
- * (`../../specifications/ui/SWN-settings-windows.md` SWN-FR-01, SWN-FR-05, and
- * `../../specifications/ui/NTF-notifications.md` NTF-FR-08).
+ * What the main window knows about the Settings child window over it
+ * (`../../specifications/ui/SWN-settings-windows.md` SWN-FR-01, SWN-FR-05,
+ * SWN-FR-FCRT, and `../../specifications/ui/NTF-notifications.md` NTF-FR-08).
  *
- * A settings window is a webview of its own, so neither fact is visible from
+ * The Settings window is a webview of its own, so neither fact is visible from
  * this window without the backend saying so — and the notification facility
  * reads both at raise time. A subscription that missed an announcement, or a
  * ref that lagged a render, would suppress a raise the author should have had
@@ -47,35 +51,33 @@ const listening = (name: string) => (eventHandlers[name] ?? []).length;
 beforeEach(() => {
   for (const k in eventHandlers) delete eventHandlers[k];
   unlistened.length = 0;
+  resetSettingsInvoker();
+  document.body.innerHTML = "";
 });
 afterEach(cleanup);
 
-describe("what the main window knows about the settings window over it", () => {
+describe("what the main window knows about the Settings window over it", () => {
   it("starts believing nothing is open", () => {
     const { result } = renderHook(() => useSettingsWindows());
-    expect(result.current.presence).toEqual({ open: null, focused: false });
+    expect(result.current.presence).toEqual({ open: false, focused: false });
   });
 
-  it("SWN-FR-05: follows which settings window is open", async () => {
+  it("SWN-FR-05: follows whether the Settings window is open", async () => {
     const { result } = renderHook(() => useSettingsWindows());
     await waitFor(() => expect(listening(CHANGED)).toBe(1));
 
-    fire(CHANGED, { open: "global" });
-    expect(result.current.presence.open).toBe("global");
+    fire(CHANGED, { open: true });
+    expect(result.current.presence.open).toBe(true);
 
-    // A switch: at most one is ever open, so this replaces rather than adds.
-    fire(CHANGED, { open: "project" });
-    expect(result.current.presence.open).toBe("project");
-
-    fire(CHANGED, { open: null });
-    expect(result.current.presence.open).toBeNull();
+    fire(CHANGED, { open: false });
+    expect(result.current.presence.open).toBe(false);
   });
 
   it("NTF-FR-08: follows whether that window holds OS focus", async () => {
     const { result } = renderHook(() => useSettingsWindows());
     await waitFor(() => expect(listening(FOCUS)).toBe(1));
 
-    fire(CHANGED, { open: "global" });
+    fire(CHANGED, { open: true });
     fire(FOCUS, { focused: true });
     expect(result.current.presence.focused).toBe(true);
 
@@ -90,12 +92,12 @@ describe("what the main window knows about the settings window over it", () => {
     const { result } = renderHook(() => useSettingsWindows());
     await waitFor(() => expect(listening(CHANGED)).toBe(1));
 
-    fire(CHANGED, { open: "global" });
+    fire(CHANGED, { open: true });
     fire(FOCUS, { focused: true });
-    expect(result.current.presence).toEqual({ open: "global", focused: true });
+    expect(result.current.presence).toEqual({ open: true, focused: true });
 
-    fire(CHANGED, { open: null });
-    expect(result.current.presence).toEqual({ open: null, focused: false });
+    fire(CHANGED, { open: false });
+    expect(result.current.presence).toEqual({ open: false, focused: false });
   });
 
   it("keeps the ref current, because the facility reads it between renders", async () => {
@@ -105,11 +107,11 @@ describe("what the main window knows about the settings window over it", () => {
     const { result } = renderHook(() => useSettingsWindows());
     await waitFor(() => expect(listening(CHANGED)).toBe(1));
 
-    fire(CHANGED, { open: "project" });
+    fire(CHANGED, { open: true });
     fire(FOCUS, { focused: true });
 
     expect(result.current.presenceRef.current).toEqual({
-      open: "project",
+      open: true,
       focused: true,
     });
   });
@@ -124,5 +126,73 @@ describe("what the main window knows about the settings window over it", () => {
     expect(listening(CHANGED)).toBe(0);
     expect(listening(FOCUS)).toBe(0);
     expect(unlistened.sort()).toEqual([CHANGED, FOCUS].sort());
+  });
+});
+
+describe("focus returns to the control that invoked the window (SWN-FR-FCRT)", () => {
+  const control = (label: string) => {
+    const button = document.createElement("button");
+    button.textContent = label;
+    document.body.appendChild(button);
+    return button;
+  };
+
+  it("returns focus to the control the request noted, once the window has closed", async () => {
+    renderHook(() => useSettingsWindows());
+    await waitFor(() => expect(listening(CHANGED)).toBe(1));
+    const invoker = control("Settings");
+    const other = control("Other");
+    noteSettingsInvoker(invoker);
+
+    fire(CHANGED, { open: true });
+    // The author's focus may have moved on while the window was open.
+    other.focus();
+    fire(CHANGED, { open: false });
+
+    expect(invoker).toHaveFocus();
+  });
+
+  it("falls back to the control that held focus as the window opened, for a request with none noted", async () => {
+    renderHook(() => useSettingsWindows());
+    await waitFor(() => expect(listening(CHANGED)).toBe(1));
+    // The application menu's entry names no control; the one that held focus is
+    // the one that invoked the window.
+    const held = control("Held focus");
+    const other = control("Other");
+    held.focus();
+
+    fire(CHANGED, { open: true });
+    other.focus();
+    fire(CHANGED, { open: false });
+
+    expect(held).toHaveFocus();
+  });
+
+  it("does nothing, and does not throw, when the control has left the document", async () => {
+    renderHook(() => useSettingsWindows());
+    await waitFor(() => expect(listening(CHANGED)).toBe(1));
+    const gone = control("Gone");
+    noteSettingsInvoker(gone);
+    fire(CHANGED, { open: true });
+    gone.remove();
+
+    expect(() => fire(CHANGED, { open: false })).not.toThrow();
+  });
+
+  it("forgets the control once focus has returned, so a later opening does not reuse it", async () => {
+    renderHook(() => useSettingsWindows());
+    await waitFor(() => expect(listening(CHANGED)).toBe(1));
+    const first = control("First");
+    const second = control("Second");
+    noteSettingsInvoker(first);
+    fire(CHANGED, { open: true });
+    fire(CHANGED, { open: false });
+    expect(first).toHaveFocus();
+
+    second.focus();
+    fire(CHANGED, { open: true });
+    first.focus();
+    fire(CHANGED, { open: false });
+    expect(second).toHaveFocus();
   });
 });

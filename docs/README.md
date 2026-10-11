@@ -227,7 +227,7 @@ frontend as events.
 
 ## Build, test, and CI
 
-- [`Taskfile.yaml`](../Taskfile.yaml) holds the eight tasks. The reference is in
+- [`Taskfile.yaml`](../Taskfile.yaml) holds the twelve tasks. The reference is in
   [`development.md`](development.md).
 - [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on each pull
   request. It has five lanes: frontend, backend, mock CLI, server, and

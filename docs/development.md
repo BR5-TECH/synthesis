@@ -15,7 +15,7 @@ Specification:
 [`specifications/infra/TSK-taskfile.md`](../specifications/infra/TSK-taskfile.md).
 
 Install the [Task](https://taskfile.dev) runner, then run `task --list` to see
-the eight tasks:
+the twelve tasks:
 
 ```bash
 task build            # bundle the desktop application for this host
@@ -23,12 +23,16 @@ task build:macos      # bundle it on a macOS host
 task build:linux      # bundle it on a Linux host
 task build:windows    # bundle it on a Windows host
 task docker           # build every container image locally, under one tag
+task lint             # check the format and the Clippy lints of every Rust crate
+task lint:backend     # check the application crate alone
+task lint:mock        # check the agentic CLI mock crate alone
+task lint:server      # check the server crate alone
 task specs            # check the specification corpus for broken references
 task tests            # run every verification lane the pipeline runs
 task tests:backend    # run the application backend lane alone
 ```
 
-There are eight tasks and no others. Every task names the directory its commands
+There are twelve tasks and no others. Every task names the directory its commands
 run in, so a task gives the same result whatever directory `task` was started
 from. Every task runs without a prompt, reads no interactive input, and reports
 its outcome as its exit status: zero when every command it ran succeeded,
@@ -238,12 +242,14 @@ theirs.
 | specification | `task specs` | see below |
 | frontend | `pnpm test`, `pnpm build`, `pnpm exec tsc -p tsconfig.test.json --noEmit` | the repository root |
 | application backend | `task tests:backend` | see below |
-| agentic CLI mock | `cargo check`, `cargo test` | `tools/agentic-cli-mock/` |
-| server | `cargo build --locked`, `cargo test --locked` | `server/` |
+| agentic CLI mock | `task lint:mock`, `cargo check`, `cargo test` | `tools/agentic-cli-mock/` |
+| server | `task lint:server`, `cargo build --locked`, `cargo test --locked` | `server/` |
 
 The specification lane and the application backend lane are reached through
-`specs` and `tests:backend` rather than by restating their commands, so the two
-can never name different commands or different directories.
+`specs` and `tests:backend`, and the lint commands of the mock and server lanes
+through `lint:mock` and `lint:server`, rather than by restating their commands.
+A task and a lane can therefore never name different commands or different
+directories.
 
 `tests` reports no GitHub check and blocks no merge: `CI / gate` stays the only
 required check. Because the commands are the lanes' own, a green `task tests`
@@ -254,6 +260,36 @@ installs the frontend dependencies with `pnpm install --frozen-lockfile` and
 copies `src-tauri/rust-toolchain.toml` into `server/` and
 `tools/agentic-cli-mock/` before their cargo steps, and `task tests` does
 neither. Do both by hand to make a local run match a pipeline run exactly.
+
+### `task lint`
+
+| Property | Value |
+| --- | --- |
+| Commands | `task lint:backend`, `task lint:mock`, `task lint:server` |
+| Working directory | each crate's own directory |
+| Output | the format differences and the Clippy findings. It changes no file |
+| Supported hosts | any host that builds the three crates |
+| Prerequisites | the pinned Rust toolchain with its `rustfmt` and `clippy` components, and the system packages the application crate links against |
+| Failure | non-zero, with output naming the crate that failed |
+
+Each crate task runs two commands in its crate's directory. A command exiting
+non-zero fails the task at once, and the command after it does not run.
+
+| Task | Commands | Working directory |
+| --- | --- | --- |
+| `lint:backend` | `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` | `src-tauri/` |
+| `lint:mock` | `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings` | `tools/agentic-cli-mock/` |
+| `lint:server` | `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings` | `server/` |
+
+These are the first commands of the three Rust lanes of the pipeline. The
+`rustfmt.toml` at the repository root is the format configuration of all three
+crates. Clippy denies every warning. A finding that the code cannot avoid gets
+`#[allow(clippy::<lint>)]` on the smallest item, with a comment that gives the
+reason. No lint task changes a file: to apply the format, run `cargo fmt` in the
+crate's directory, and apply each Clippy fix by hand or with `cargo clippy --fix`.
+See
+[`specifications/infra/CIP-ci-pipeline.md`](../specifications/infra/CIP-ci-pipeline.md)
+CIP-FR-TGQF.
 
 ### `task specs`
 
@@ -277,12 +313,12 @@ silently. It is read-only and writes nothing. See
 
 | Property | Value |
 | --- | --- |
-| Commands | `cargo check`, then `cargo test` |
+| Commands | `task lint:backend`, then `cargo check`, then `cargo test` |
 | Working directory | `src-tauri/` |
 | Output | none. It verifies the crate |
 | Supported hosts | any host that builds the application backend |
 | Prerequisites | the pinned Rust toolchain, and the system packages the crate links against |
-| Failure | non-zero. Either command exiting non-zero fails the task at once, and the command after it does not run |
+| Failure | non-zero. A command exiting non-zero fails the task at once, and the commands after it do not run |
 
 ## Development
 

@@ -29,9 +29,12 @@ Package manager: **pnpm** (v10+). Install with `pnpm install`.
 - `pnpm tauri build` — produce a bundled native app (runs `pnpm build` first via `beforeBuildCommand`).
 - `cd src-tauri && cargo check` — quick Rust-side validation without launching the app.
 - `cd src-tauri && cargo test` — run the Rust unit tests (colocated under `#[cfg(test)] mod tests`).
+- `cd src-tauri && cargo fmt --check` — check the Rust format against the root `rustfmt.toml`. Run `cargo fmt` to apply it.
+- `cd src-tauri && cargo clippy --all-targets -- -D warnings` — Clippy with every warning denied. A finding that the code cannot avoid gets `#[allow(clippy::<lint>)]` on the smallest item, with a comment that gives the reason; never a crate-level allow.
+- `task lint` — format check and Clippy for all three Rust crates (`src-tauri/`, `tools/agentic-cli-mock/`, `server/`).
 - `cd src-tauri && cargo build` — compile the Rust binary alone.
 
-Definition-of-done for any frontend change: `pnpm test` green, `pnpm build` green, AND `pnpm exec tsc -p tsconfig.test.json --noEmit` clean. For any backend change: `cargo test` green and `cargo check` clean.
+Definition-of-done for any frontend change: `pnpm test` green, `pnpm build` green, AND `pnpm exec tsc -p tsconfig.test.json --noEmit` clean. For any backend change: `cargo fmt --check` clean, `cargo clippy --all-targets -- -D warnings` clean, `cargo check` clean, and `cargo test` green.
 
 ## Tests must not depend on timing
 

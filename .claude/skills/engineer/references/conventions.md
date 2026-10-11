@@ -118,4 +118,5 @@ Step 3 is not optional: `pnpm build` excludes test files from typechecking, so t
 
 **Backend changes** (anything under `src-tauri/**`), from `src-tauri/`:
 1. `cargo test` — colocated `#[cfg(test)] mod tests`. For `#[tauri::command]` fns that need the runtime, factor logic into a pure helper and test that.
-2. `cargo check` — don't introduce new warnings (pre-existing warnings aren't your concern).
+2. `cargo check` — clean.
+3. `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` — both clean, as CI runs them (`task lint` checks all three Rust crates). A Clippy finding that the code cannot avoid gets `#[allow(clippy::<lint>)]` on the smallest item, with a comment that gives the reason.

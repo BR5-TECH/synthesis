@@ -114,7 +114,7 @@ The composite entries exist because a container runtime with an entrypoint does 
 ## Non-functional requirements
 - The mock performs no network access of any kind. It is usable on a machine with no route to anywhere and inside a container with no network namespace.
 - A run whose scenario configures no delay completes in single-digit milliseconds, so a suite can afford hundreds of invocations.
-- The crate's `cargo check` and `cargo test` run as their own CI lane, separate from the application's Rust lane and needing none of the system packages that lane installs (per `CIP-ci-pipeline.md` CIP-FR-19).
+- The crate's `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings`, `cargo check`, and `cargo test` run as their own CI lane, separate from the application's Rust lane and needing none of the system packages that lane installs (per `CIP-ci-pipeline.md` CIP-FR-19).
 - Behaviour is identical across the platforms the project develops and tests on. The only platform-visible difference is the executable's filename suffix.
 - The mock holds the whole received argument vector, the whole stdin stream, and the whole configured response in memory; scenarios are sized for tests, not for streaming.
 - Every diagnostic the mock produces goes to stderr as the single failure record. The mock writes no log file, emits no progress output, and honours no verbosity option, so stderr is either the configured payload or exactly one record.

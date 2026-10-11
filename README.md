@@ -176,6 +176,7 @@ Build a bundle for your operating system. Then run all the checks of the CI pipe
 
 ```bash
 task build
+task lint
 task tests
 ```
 

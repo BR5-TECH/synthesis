@@ -2,7 +2,7 @@
 #
 # Specification: specifications/infra/TSK-taskfile.md
 #
-# It defines seven tasks and no other task. Every command it holds belongs to
+# It defines twelve tasks and no other task. Every command it holds belongs to
 # another specification, and this file restates that command byte for byte
 # rather than changing it:
 #
@@ -10,6 +10,7 @@
 #   the image build commands      specifications/infra/AVI-agent-vendor-images.md
 #                                 specifications/server/BMS-backend-microservice.md
 #   the verification lanes        specifications/infra/CIP-ci-pipeline.md
+#   the Rust lint commands        specifications/infra/CIP-ci-pipeline.md
 #
 # The file installs nothing and provisions nothing. A prerequisite that is
 # missing is reported, not repaired. No task publishes anything, reads a
@@ -161,6 +162,49 @@ tasks:
             --tag '{{.SERVER_IMAGE}}:{{.VERSION}}' \
             server
 
+  lint:
+    desc: 'Check the format and the Clippy lints of the three Rust crates: src-tauri/, tools/agentic-cli-mock/, server/.'
+    cmds:
+      # The three crate tasks are reached by name and their commands are not
+      # restated here (TSK-FR-FCWU). Each one names its crate when it fails.
+      - task: lint:backend
+      - task: lint:mock
+      - task: lint:server
+
+  # Each lint task checks and reports. It runs cargo fmt only with --check
+  # and cargo clippy without --fix, so it changes no file (TSK-FR-ZFPY). The
+  # root rustfmt.toml is the format configuration of all three crates
+  # (CIP-FR-TGQF).
+  lint:backend:
+    desc: 'Check the application crate: cargo fmt --check, then cargo clippy, from src-tauri/.'
+    dir: '{{.ROOT_DIR}}/src-tauri'
+    cmds:
+      # The lint commands of the backend lane (TSK-FR-MOHU, CIP-FR-12).
+      - cmd: |
+          trap 'echo "task lint: the application crate (src-tauri/) failed." >&2' ERR
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+
+  lint:mock:
+    desc: 'Check the agentic CLI mock crate: cargo fmt --check, then cargo clippy, from tools/agentic-cli-mock/.'
+    dir: '{{.ROOT_DIR}}/tools/agentic-cli-mock'
+    cmds:
+      # The lint commands of the mock lane (TSK-FR-RGLV, CIP-FR-19).
+      - cmd: |
+          trap 'echo "task lint: the agentic CLI mock crate (tools/agentic-cli-mock/) failed." >&2' ERR
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+
+  lint:server:
+    desc: 'Check the server crate: cargo fmt --check, then cargo clippy, from server/.'
+    dir: '{{.ROOT_DIR}}/server'
+    cmds:
+      # The lint commands of the server lane (TSK-FR-LKWE, CIP-FR-21).
+      - cmd: |
+          trap 'echo "task lint: the server crate (server/) failed." >&2' ERR
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+
   specs:
     desc: Run the specification consistency check over the corpus.
     dir: '{{.ROOT_DIR}}'
@@ -199,13 +243,18 @@ tasks:
       # never name different commands or different directories (TSK-FR-26).
       - task: tests:backend
       # The agentic CLI mock lane, from tools/agentic-cli-mock/ (CIP-FR-19).
+      # Its lint commands are reached through lint:mock and are not restated
+      # here (TSK-FR-26).
+      - task: lint:mock
       - cmd: |
           trap 'echo "task tests: the agentic CLI mock lane failed." >&2' ERR
           echo '==> task tests: the agentic CLI mock lane, from tools/agentic-cli-mock/'
           cd '{{.MOCK_LANE_DIR}}'
           cargo check
           cargo test
-      # The server lane, from server/ (CIP-FR-21).
+      # The server lane, from server/ (CIP-FR-21). Its lint commands are
+      # reached through lint:server (TSK-FR-26).
+      - task: lint:server
       - cmd: |
           trap 'echo "task tests: the server lane failed." >&2' ERR
           echo '==> task tests: the server lane, from server/'
@@ -214,10 +263,12 @@ tasks:
           cargo test --locked
 
   tests:backend:
-    desc: 'Run the application backend verification lane: cargo check, then cargo test, from src-tauri/.'
+    desc: 'Run the application backend verification lane: lint:backend, cargo check, then cargo test, from src-tauri/.'
     dir: '{{.ROOT_DIR}}/src-tauri'
     cmds:
-      # Either command exiting non-zero fails the task at once, and the
-      # command after it does not run (TSK-FR-24).
+      # A command exiting non-zero fails the task at once, and the commands
+      # after it do not run (TSK-FR-24). The lint commands are reached through
+      # lint:backend and are not restated here.
+      - task: lint:backend
       - cargo check
       - cargo test

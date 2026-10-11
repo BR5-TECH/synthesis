@@ -37,7 +37,7 @@ pub(crate) fn strip_citation_markers(text: &str) -> Cow<'_, str> {
     while let Some(c) = rest.chars().next() {
         let after = &rest[c.len_utf8()..];
         if c == SPAN_OPEN {
-            let stop = after.find(|ch| ch == SPAN_CLOSE || ch == SPAN_OPEN);
+            let stop = after.find([SPAN_CLOSE, SPAN_OPEN]);
             if let Some(at) = stop.filter(|&at| after[at..].starts_with(SPAN_CLOSE)) {
                 let kept = out.trim_end_matches([' ', '\t']).len();
                 out.truncate(kept);

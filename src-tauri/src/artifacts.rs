@@ -492,8 +492,8 @@ mod tests {
             save_validated_artifact(root, id, body, &tracker).unwrap();
         }
 
-        assert_eq!(root.read_text(&root.join("a.spec.md")).unwrap(), "ONE AGAIN");
-        assert_eq!(root.read_text(&root.join("b.spec.md")).unwrap(), "TWO");
+        assert_eq!(root.read_text(root.join("a.spec.md")).unwrap(), "ONE AGAIN");
+        assert_eq!(root.read_text(root.join("b.spec.md")).unwrap(), "TWO");
         assert_eq!(
             std::fs::read(&local).unwrap(),
             before,
@@ -531,7 +531,7 @@ mod tests {
             "the fixture must actually classify as a Flow or the gate is untested"
         );
         save_validated_artifact(root, "flows/a.flow", body, &tracker).unwrap();
-        assert_eq!(root.read_text(&root.join("flows/a.flow")).unwrap(), body);
+        assert_eq!(root.read_text(root.join("flows/a.flow")).unwrap(), body);
     }
 
     /// PST-FR-31, FGV-FR-12 / PST-FR-28: an invalid Flow is refused before the write. The
@@ -573,7 +573,7 @@ mod tests {
         let root = &crate::fs::RootFs::for_root(dir.path());
         let tracker = ContentTracker::default();
         save_validated_artifact(root, "a.spec.md", "{ not json", &tracker).unwrap();
-        assert_eq!(root.read_text(&root.join("a.spec.md")).unwrap(), "{ not json");
+        assert_eq!(root.read_text(root.join("a.spec.md")).unwrap(), "{ not json");
     }
 
     #[test]
@@ -791,7 +791,7 @@ mod tests {
 
         let tracker = ContentTracker::default();
         save_validated_artifact(root, ".claude/skills/foo.md", "edited\n", &tracker).unwrap();
-        assert_eq!(root.read_text(&root.join(".claude/skills/foo.md")).unwrap(), "edited\n");
+        assert_eq!(root.read_text(root.join(".claude/skills/foo.md")).unwrap(), "edited\n");
 
         assert_eq!(
             open_artifact_by_id_impl(root, ".claude/skills/foo.md").unwrap().kind,

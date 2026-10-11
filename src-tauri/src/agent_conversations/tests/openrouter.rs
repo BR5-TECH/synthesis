@@ -263,9 +263,8 @@ fn the_bridge_marks_the_prompt_and_the_input_for_caching_on_every_round() {
         // string is a shape not every endpoint behind this one accepts, and
         // asserting only the absence of a marker would let that happen.
         let shapes: Vec<&str> = carried.iter().map(content_shape).collect();
-        let expected: Vec<&str> = std::iter::repeat("parts")
-            .take(2)
-            .chain(std::iter::repeat("text").take(rounds * 2))
+        let expected: Vec<&str> = std::iter::repeat_n("parts", 2)
+            .chain(std::iter::repeat_n("text", rounds * 2))
             .collect();
         assert_eq!(
             shapes, expected,
@@ -318,9 +317,8 @@ fn the_bridge_marks_the_stable_head_apart_from_the_conversation_that_grew() {
         // either: the request asks the client to advance a boundary of its own,
         // and reshaping a tool result is the risk that avoids.
         let shapes: Vec<&str> = carried.iter().map(content_shape).collect();
-        let expected: Vec<&str> = std::iter::repeat("parts")
-            .take(2)
-            .chain(std::iter::repeat("text").take(rounds * 2))
+        let expected: Vec<&str> = std::iter::repeat_n("parts", 2)
+            .chain(std::iter::repeat_n("text", rounds * 2))
             .collect();
         assert_eq!(
             shapes, expected,

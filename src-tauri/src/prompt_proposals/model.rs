@@ -64,9 +64,11 @@ pub enum RecordRefusal {
 /// the artifact's one slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum PromptProposalState {
     Pending,
     Accepted,
+    #[default]
     Rejected,
 }
 
@@ -77,12 +79,6 @@ impl PromptProposalState {
             PromptProposalState::Accepted => "accepted",
             PromptProposalState::Rejected => "rejected",
         }
-    }
-}
-
-impl Default for PromptProposalState {
-    fn default() -> Self {
-        PromptProposalState::Rejected
     }
 }
 

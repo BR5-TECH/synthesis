@@ -137,7 +137,7 @@ fn each_image_declares_a_workspace_and_no_volume_or_port() {
     for (vendor, dockerfile) in dockerfiles() {
         let directives = directives(dockerfile);
         assert!(
-            directives.iter().any(|d| *d == "WORKDIR /workspace"),
+            directives.contains(&"WORKDIR /workspace"),
             "{vendor} does not set /workspace as its working directory"
         );
         for forbidden in ["VOLUME", "EXPOSE"] {

@@ -394,15 +394,13 @@ pub fn delete_work_stream<R: tauri::Runtime>(
     // refused, and the refusal names how many. Counted with force too, so the
     // record of a forced deletion says how many commits it dropped.
     let ahead = git::ahead_of_base(&main, &stream);
-    if !force {
-        if ahead > 0 {
-            return Err(refuse(
-                &app,
-                "work stream deletion refused",
-                &stream_id,
-                format!("{ERR_STREAM_UNMERGED}: {ahead}"),
-            ));
-        }
+    if !force && ahead > 0 {
+        return Err(refuse(
+            &app,
+            "work stream deletion refused",
+            &stream_id,
+            format!("{ERR_STREAM_UNMERGED}: {ahead}"),
+        ));
     }
 
     // WKS-FR-DBXN: uncommitted paths are discarded only on the author's word.

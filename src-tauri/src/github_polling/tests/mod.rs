@@ -410,7 +410,7 @@ impl Harness {
         app.manage(super::GithubPollingState::with_buffer(buffer));
         app.manage(super::TestSecret(SECRET.into()));
         let harness = Harness { app, dir, store, fake };
-        harness.open(&harness.dir.path().to_path_buf());
+        harness.open(harness.dir.path());
         harness
     }
 

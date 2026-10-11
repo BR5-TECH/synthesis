@@ -162,7 +162,8 @@ fn das_ts18_both_reads_are_indifferent_to_the_lock() {
         );
     }
     // And the two reads do not, because a lock is not their business.
-    for command in ["read_draft_image"] {
+    {
+        let command = "read_draft_image";
         let at = LIB.find(&format!("pub fn {command}")).expect("the command");
         let body = &LIB[at..at + 900];
         assert!(

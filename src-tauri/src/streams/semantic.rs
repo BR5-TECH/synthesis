@@ -72,7 +72,7 @@ pub(super) fn stage(
         .into_reference();
     let mut opts = git2::WorktreeAddOptions::new();
     opts.reference(Some(&reference));
-    main.worktree(&artifact.attempt_id, &artifact.checkout, Some(&mut opts))
+    main.worktree(&artifact.attempt_id, &artifact.checkout, Some(&opts))
         .map_err(|e| e.to_string())?;
     crate::worktree::normalize_worktree_commondir(main, &artifact.attempt_id)
         .map_err(|e| e.to_string())?;

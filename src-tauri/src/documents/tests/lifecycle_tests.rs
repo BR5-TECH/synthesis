@@ -339,7 +339,7 @@ fn the_documents_index_outlives_a_worktree_change_and_goes_with_a_close() {
     assert_eq!(t.hits("capybara").len(), 1);
 
     let indexer = t.app.state::<Bm25Indexer>();
-    indexer.mount(&crate::fs::RootFs::for_root(&std::fs::canonicalize(second.path()).unwrap()));
+    indexer.mount(&crate::fs::RootFs::for_root(std::fs::canonicalize(second.path()).unwrap()));
     assert_eq!(indexer.snapshot().file_count(IndexId::Documents), 1);
     assert_eq!(t.hits("capybara").len(), 1, "kept across the worktree change");
 

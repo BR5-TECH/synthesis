@@ -96,15 +96,11 @@ pub struct LayoutPreferences {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum VerticalPanelSide {
+    #[default]
     Left,
     Right,
-}
-
-impl Default for VerticalPanelSide {
-    fn default() -> Self {
-        VerticalPanelSide::Left
-    }
 }
 
 /// The bottom panel's active surface (SNV-FR-44 / SNV-FR-46).
@@ -113,16 +109,12 @@ impl Default for VerticalPanelSide {
 /// two sides exchange the same three tokens.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum BottomSurface {
+    #[default]
     Runs,
     Git,
     History,
-}
-
-impl Default for BottomSurface {
-    fn default() -> Self {
-        BottomSurface::Runs
-    }
 }
 
 /// PSS-FR-06: the open project's layout, read from the user-global per-project

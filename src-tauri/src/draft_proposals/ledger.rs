@@ -170,7 +170,7 @@ pub(crate) fn set_hunk_state(
         return Err(ERR_HUNK_ALREADY_DECIDED.to_string());
     }
     row.state = state;
-    row.decided_at = state.is_undecided().then(|| None).unwrap_or_else(|| Some(now_rfc3339()));
+    row.decided_at = if state.is_undecided() { None } else { Some(now_rfc3339()) };
     resettle(&mut record);
     root.write_toml_atomic(record_path(&dir, proposal_id), &record).map_err(|e| e.to_string())?;
     // DRS-FR-WYIN / DRS-FR-JDRY: a proposal is private draft storage. The

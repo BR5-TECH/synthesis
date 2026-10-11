@@ -502,10 +502,7 @@ impl RelayRegistry {
     ) -> Result<Vec<String>, ReasonCode> {
         let state = self.state.lock().expect("the relay state is not poisoned");
         // A connection that no longer holds the route reaches no client of it.
-        if !state
-            .workers
-            .get(instance_id)
-            .is_some_and(|worker| worker.connection_id == connection_id)
+        if state.workers.get(instance_id).is_none_or(|worker| worker.connection_id != connection_id)
         {
             return Err(ReasonCode::WorkerNotFound);
         }
@@ -742,12 +739,7 @@ impl RelayApi for RelayRegistry {
     ) -> Result<ClientConnection, ReasonCode> {
         let result = self.invalidate_handle_inner(handle, instance_id, reason);
         let connection_id = result.as_ref().ok().map(|client| client.connection_id.clone());
-        self.recorded_reason(
-            "invalidate_handle",
-            connection_id.as_deref(),
-            instance_id.as_deref(),
-            result,
-        )
+        self.recorded_reason("invalidate_handle", connection_id.as_deref(), instance_id, result)
     }
 
     fn reset_client(&self, handle: &str) -> Result<ClientConnection, ReasonCode> {

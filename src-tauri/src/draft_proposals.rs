@@ -194,7 +194,7 @@ pub fn save_candidate_impl(
         .map_err(|_| ERR_WRITE_FAILED.to_string())?
         .hunks,
     );
-    root.write_text_atomic(&hunks_path(&dir, proposal_id), &next.to_toml())
+    root.write_text_atomic(hunks_path(&dir, proposal_id), &next.to_toml())
         .map_err(|_| ERR_WRITE_FAILED.to_string())?;
     // DRS-FR-WYIN / DRS-FR-JDRY: a proposal is private draft storage. The
     // ignore file keeps it out of Git, and no commit names it.
@@ -217,7 +217,7 @@ pub fn save_candidate_impl(
             // flag stale. That is the harmless way round — the flag drives a
             // line of prose, while the candidate is the author's work — so the
             // save still succeeds and the miss is recorded by the caller.
-            let _ = root.write_toml_atomic(&record_path(&dir, proposal_id), &record);
+            let _ = root.write_toml_atomic(record_path(&dir, proposal_id), &record);
         }
     }
 

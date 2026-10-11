@@ -230,7 +230,7 @@ pub fn run() {
             // PPK-FR-12: center the picker window on the active display BEFORE it
             // becomes interactive. The position is never persisted; this
             // computation runs unconditionally on every launch.
-            window::center_picker_window(&app.handle());
+            window::center_picker_window(app.handle());
             // SNV-FR-14: install the native Edit menu so OS-level edit
             // accelerators reach the focused webview (EDT-FR-15). Best-effort.
             if let Err(e) = menu::install_app_menu(app) {

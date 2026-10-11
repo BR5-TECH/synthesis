@@ -242,6 +242,7 @@ impl LineEndings {
 /// [`save_project_config_to`] merges rather than replaces — see its note.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
+#[derive(Default)]
 pub struct ProjectConfig {
     pub line_endings: LineEndings,
     /// PSS-FR-21: the project's optional Markdown **draft template** — the text
@@ -314,19 +315,6 @@ where
     T: Deserialize<'de>,
 {
     Option::<T>::deserialize(deserializer).map(Some)
-}
-
-impl Default for ProjectConfig {
-    fn default() -> Self {
-        Self {
-            line_endings: LineEndings::default(),
-            draft_template: None,
-            graduation_concurrency_limit: None,
-            execution_timeout_ms: None,
-            provider_call_deadline_ms: None,
-            retry_budget: None,
-        }
-    }
 }
 
 /// PSS-FR-10: a project-public file that exists but cannot be parsed is a typed

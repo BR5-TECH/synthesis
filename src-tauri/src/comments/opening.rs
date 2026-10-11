@@ -184,10 +184,10 @@ pub fn open_discussion_in(
     // CMS-FR-57: checked before anything is stored, so a target naming nothing in
     // the open project leaves neither a log nor an orphaned attachment behind.
     match target {
-        DiscussionTarget::Draft { draft_id } => {
-            if crate::drafts::read_draft_record(worktree, draft_id).is_err() {
-                return Err(ERR_DRAFT_NOT_FOUND.to_string());
-            }
+        DiscussionTarget::Draft { draft_id }
+            if crate::drafts::read_draft_record(worktree, draft_id).is_err() =>
+        {
+            return Err(ERR_DRAFT_NOT_FOUND.to_string());
         }
         DiscussionTarget::Artifact { artifact_id } if fragment.is_none() => {
             let exists = fsa::resolve_under(worktree.path(), artifact_id)

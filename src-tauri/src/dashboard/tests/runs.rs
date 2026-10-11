@@ -86,7 +86,7 @@ fn a_queue_place_is_counted_within_the_runs_own_stream() {
     let mut a2 = queued_run("r-a2", "d3", "2026-05-15T10:00:00Z");
     a2.stream_id = "w-a".into();
     a2.stream_name = "editor work".into();
-    let items = agent_runs_from(&vec![a1, b1, a2], &HashMap::new());
+    let items = agent_runs_from(&[a1, b1, a2], &HashMap::new());
 
     let item = |id: &str| items.iter().find(|i| i.run_id == id).unwrap();
     assert_eq!(item("r-a1").queue_position, Some(0));

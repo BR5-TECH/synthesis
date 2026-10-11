@@ -135,7 +135,7 @@ fn a_late_candidate_source_still_migrates_into_the_cache() {
     vault.set_candidate_source(Box::new(|| vec![candidate(GITHUB_LEGACY, "a", A)]));
 
     assert_eq!(vault.read_secret(&p(A)).unwrap(), Some("L".into()));
-    assert_eq!(keyring.object().get("github").is_some(), true);
+    assert!(keyring.object().get("github").is_some());
 }
 
 /// ASV-FR-ZUGZ, ASV-FR-GLJD: a mutation as the first operation initializes the
@@ -207,7 +207,7 @@ fn a_failed_mutation_leaves_the_cache_unchanged() {
     // The cache still holds the value that the entry held, so the next
     // successful mutation writes the whole of it.
     set(&vault, &["github", "tokens", "n"], "N").unwrap();
-    assert_eq!(keyring.object().get("later").is_some(), true);
+    assert!(keyring.object().get("later").is_some());
     assert_eq!(vault.read_secret(&p(A)).unwrap(), Some("A".into()));
 }
 

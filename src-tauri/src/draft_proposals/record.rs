@@ -16,9 +16,11 @@ use super::{anchors, hunks};
 /// the draft's one slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum ProposalState {
     Pending,
     Accepted,
+    #[default]
     Rejected,
 }
 
@@ -111,12 +113,6 @@ pub struct DraftChangeProposal {
     pub created_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decided_at: Option<String>,
-}
-
-impl Default for ProposalState {
-    fn default() -> Self {
-        ProposalState::Rejected
-    }
 }
 
 /// DCR-FR-15: what a decision hands back.

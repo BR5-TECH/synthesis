@@ -23,7 +23,9 @@ use super::*;
 /// the draft holds is retained and every read answers as it always did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum DraftStatus {
+    #[default]
     Active,
     Archived,
     Graduated,
@@ -32,12 +34,6 @@ pub enum DraftStatus {
     /// `create_github_shadow_draft` alone. No caller can set it, and no caller
     /// can move a draft out of it.
     GithubShadow,
-}
-
-impl Default for DraftStatus {
-    fn default() -> Self {
-        DraftStatus::Active
-    }
 }
 
 /// Read a record's status, taking anything this enum does not admit as

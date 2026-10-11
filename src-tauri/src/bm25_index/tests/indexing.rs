@@ -222,7 +222,7 @@ fn a_heading_less_file_splits_into_bounded_blocks_at_blank_lines() {
     // BMI-FR-06: no file is ever one unbounded document, and a boundary falls
     // at a blank line.
     let paragraph = "lorem ipsum dolor sit amet ".repeat(40); // ~1080 chars
-    let text = std::iter::repeat(paragraph.trim()).take(12).collect::<Vec<_>>().join("\n\n");
+    let text = std::iter::repeat_n(paragraph.trim(), 12).collect::<Vec<_>>().join("\n\n");
     assert!(text.chars().count() > MAX_CHUNK_CHARS * 2);
 
     let chunks = chunk_text(&text);
@@ -247,7 +247,7 @@ fn one_heading_section_over_the_ceiling_is_split_further() {
     // through the hard-split fallback — those are two different code paths and
     // BMI-FR-06 names this one.
     let paragraph = "lorem ipsum dolor sit amet consectetur ".repeat(20);
-    let body = std::iter::repeat(paragraph.trim()).take(15).collect::<Vec<_>>().join("\n\n");
+    let body = std::iter::repeat_n(paragraph.trim(), 15).collect::<Vec<_>>().join("\n\n");
     let text = format!("# Title\n\n{body}");
     assert!(text.chars().count() > MAX_CHUNK_CHARS);
     let chunks = chunk_text(&text);

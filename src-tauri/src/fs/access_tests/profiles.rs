@@ -70,7 +70,7 @@ fn ts30_the_application_instance_is_rebuilt_rather_than_widened() {
 
     // Four roots: the worktree, both application-owned roots, and a session
     // temp directory.
-    assert!(access.roots().iter().any(|r| *r == root1));
+    assert!(access.roots().contains(&root1));
     assert!(access.session_temp_dir().is_some());
     for (label, expected) in [
         ("app_data_dir()", crate::fs::app_data_dir().unwrap()),
@@ -121,7 +121,7 @@ fn ts33_an_agent_session_reaches_the_project_and_its_own_scratch_and_nothing_els
             .session_temp_dir()
             .unwrap_or_else(|| panic!("{label} has its own scratch (FSA-FR-29)"))
             .to_path_buf();
-        assert!(access.roots().iter().any(|r| *r == root), "{label} reaches the worktree",);
+        assert!(access.roots().contains(&root), "{label} reaches the worktree",);
         assert!(!access.follows_symlinks(), "{label} refuses links");
 
         // FSA-FR-29's whole point: no root either application-owned path could

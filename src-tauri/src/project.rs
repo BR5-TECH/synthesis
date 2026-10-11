@@ -783,7 +783,7 @@ fn open_project_from_git_url_impl(
     if trimmed.is_empty() {
         return Err("url is empty".into());
     }
-    let tail = trimmed.rsplit(|c| c == '/' || c == ':').next().unwrap_or(trimmed);
+    let tail = trimmed.rsplit(['/', ':']).next().unwrap_or(trimmed);
     let name = tail.strip_suffix(".git").unwrap_or(tail).to_string();
     if name.is_empty() {
         return Err("could not derive project name from url".into());

@@ -248,7 +248,7 @@ fn to_string_path(path: &Path) -> String {
 /// `None` for a bare repository, which has no working directory at all.
 pub fn primary_worktree_root(repo: &Repository) -> Option<PathBuf> {
     if !repo.is_worktree() {
-        return repo.workdir().map(|p| canonicalize_lenient(p));
+        return repo.workdir().map(canonicalize_lenient);
     }
     let common = repo.commondir();
     // `commondir` may carry a trailing separator; `parent()` on `<root>/.git/`

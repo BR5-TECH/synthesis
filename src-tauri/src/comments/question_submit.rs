@@ -349,8 +349,7 @@ fn finish_committed_submission(
     let final_answer_comment_id = thread
         .comments
         .iter()
-        .filter(|comment| comment.id.starts_with(&answer_prefix) && comment.id.ends_with("-2a"))
-        .next_back()
+        .rfind(|comment| comment.id.starts_with(&answer_prefix) && comment.id.ends_with("-2a"))
         .map(|comment| comment.id.clone())
         .ok_or_else(|| ERR_QUESTION_SET_NOT_FOUND.to_string())?;
     Ok(SubmissionOutcome {

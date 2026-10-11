@@ -322,8 +322,8 @@ fn no_open_project_reads_identically_from_every_tool() {
         ask_user_comment::AskUserCommentTool::new(
             handle2,
             crate::agent_conversations::OwnedRoots {
-                worktree: crate::fs::RootFs::for_root(&std::env::temp_dir()),
-                store: crate::fs::RootFs::for_root(&std::env::temp_dir()),
+                worktree: crate::fs::RootFs::for_root(std::env::temp_dir()),
+                store: crate::fs::RootFs::for_root(std::env::temp_dir()),
             },
             crate::agent_conversations::ConversationOrigin::stub_artifact(
                 "no-project",

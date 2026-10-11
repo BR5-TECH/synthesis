@@ -30,7 +30,7 @@ pub(super) fn sanitize_segment(branch: &str) -> String {
 /// or is only separators, so the caller can fall back rather than propose a
 /// name ending in one.
 pub(super) fn branch_leaf(branch: &str) -> &str {
-    branch.split('/').map(str::trim).filter(|segment| !segment.is_empty()).next_back().unwrap_or("")
+    branch.split('/').map(str::trim).rfind(|segment| !segment.is_empty()).unwrap_or("")
 }
 
 /// WTC-FR-13: an absolute sibling of the repository's primary worktree, named

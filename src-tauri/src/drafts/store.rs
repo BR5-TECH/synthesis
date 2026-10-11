@@ -326,7 +326,7 @@ pub(super) fn default_draft_name(root: &crate::fs::RootFs) -> String {
     }
     for n in 2..=u32::MAX {
         let candidate = format!("{DEFAULT_NAME} {n}");
-        if !taken.iter().any(|t| *t == candidate) {
+        if !taken.contains(&candidate) {
             return candidate;
         }
     }

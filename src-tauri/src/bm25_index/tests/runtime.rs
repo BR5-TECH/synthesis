@@ -250,16 +250,16 @@ fn an_oversized_file_is_skipped_and_a_readable_one_beside_it_is_not() {
         .unwrap();
     std::fs::write(root.join("specifications/small.md"), "teardown\n").unwrap();
 
-    assert!(read_bounded(&crate::fs::RootFs::for_root(&root), &root.join("specifications/big.md"))
+    assert!(read_bounded(&crate::fs::RootFs::for_root(root), &root.join("specifications/big.md"))
         .is_err());
     assert_eq!(
-        read_bounded(&crate::fs::RootFs::for_root(&root), &root.join("specifications/small.md"))
+        read_bounded(&crate::fs::RootFs::for_root(root), &root.join("specifications/small.md"))
             .unwrap(),
         "teardown\n"
     );
     // The reason names the shape of what was refused, never the contents.
     let reason =
-        read_bounded(&crate::fs::RootFs::for_root(&root), &root.join("specifications/big.md"))
+        read_bounded(&crate::fs::RootFs::for_root(root), &root.join("specifications/big.md"))
             .unwrap_err();
     assert!(reason.contains("ceiling"), "{reason}");
     assert!(

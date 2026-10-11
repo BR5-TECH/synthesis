@@ -278,7 +278,7 @@ fn status_of(delta: Delta) -> Option<CommitFileStatus> {
 }
 
 fn path_text(file: git2::DiffFile<'_>) -> Option<String> {
-    file.path().map(|p| changes::to_forward(p))
+    file.path().map(changes::to_forward)
 }
 
 /// GTC-FR-YCEV: the paths the commit changed against its first parent.

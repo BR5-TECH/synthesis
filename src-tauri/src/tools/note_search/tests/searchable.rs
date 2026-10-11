@@ -62,7 +62,7 @@ fn no_other_index_is_reachable_through_this_tool() {
     );
     fixture.write("flows/thing.flow", "# Flow\n\nThe sarcophagus step runs first.\n");
     crate::tools::tests::write_skill(
-        &fixture.root().to_path_buf(),
+        &fixture.root(),
         ".claude/skills",
         "digger",
         "name: digger\ndescription: opens a sarcophagus",

@@ -31,7 +31,7 @@ fn open_file_refuses_a_link_in_every_write_mode() {
     symlink(&target, &link).unwrap();
 
     for mode in [OpenMode::ReadOnly, OpenMode::Append, OpenMode::Truncate] {
-        let err = access.open_file(&link, mode).err().expect("must refuse");
+        let err = access.open_file(&link, mode).expect_err("must refuse");
         assert!(
             matches!(err, FsError::SymlinkRefused { .. }),
             "{mode:?} through a link must be SymlinkRefused, got {err:?}"

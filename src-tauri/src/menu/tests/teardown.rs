@@ -114,7 +114,7 @@ fn close_project_menu_item_leaves_the_project_open_for_the_frontend_to_flush() {
     let dir = tempfile::TempDir::new().unwrap();
     let app = mock_app_with_project(dir.path());
 
-    handle_menu_event(&app.handle(), MENU_CLOSE_PROJECT);
+    handle_menu_event(app.handle(), MENU_CLOSE_PROJECT);
 
     assert!(
         app.state::<ProjectState>().require_root().is_ok(),

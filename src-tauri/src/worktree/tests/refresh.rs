@@ -125,7 +125,7 @@ fn a_refresh_changes_no_checkout_and_re_roots_nothing() {
     // which is not the claim — the claim is that it tears nothing down.
     let store = GlobalSettingsStore::in_memory();
     reroot(
-        &app.handle(),
+        app.handle(),
         &app.state::<ProjectState>(),
         &app.state::<ProjectWatcher>(),
         &store,
@@ -166,7 +166,7 @@ fn a_refresh_changes_no_checkout_and_re_roots_nothing() {
     let before_primary = checkout_state(f.root());
     let before_alpha = checkout_state(alpha.clone());
 
-    let outcome = refresh_and_announce(&app.handle(), &f.root(), || {
+    let outcome = refresh_and_announce(app.handle(), &f.root(), || {
         fake_fetch(&f, &["origin/feature-new"], &[]);
         Ok(())
     })
@@ -244,7 +244,7 @@ fn every_returning_refresh_emits_exactly_one_branches_changed() {
         ("failed", Err(crate::github_tokens::ERR_GITHUB_UNREACHABLE.to_string())),
     ] {
         count.store(0, Ordering::SeqCst);
-        refresh_and_announce(&app.handle(), &f.root(), || result).unwrap();
+        refresh_and_announce(app.handle(), &f.root(), || result).unwrap();
         assert_eq!(count.load(Ordering::SeqCst), 1, "exactly one event for a {label} remote leg");
     }
 
@@ -271,7 +271,7 @@ fn every_returning_refresh_emits_exactly_one_branches_changed() {
     let outside = TempDir::new().unwrap();
     count.store(0, Ordering::SeqCst);
     assert_eq!(
-        refresh_and_announce(&app.handle(), outside.path(), || Ok(())).unwrap_err(),
+        refresh_and_announce(app.handle(), outside.path(), || Ok(())).unwrap_err(),
         ERR_NOT_A_REPO
     );
     assert_eq!(count.load(Ordering::SeqCst), 0, "a refresh refused under WTC-FR-02 emits nothing");
@@ -325,7 +325,7 @@ fn a_refresh_composes_the_real_fetch_primitive_end_to_end() {
         s.fetch_add(1, Ordering::SeqCst);
     });
 
-    let outcome = refresh_and_announce(&app.handle(), &f.root(), fetch).unwrap();
+    let outcome = refresh_and_announce(app.handle(), &f.root(), fetch).unwrap();
 
     assert_eq!(outcome.remote_state, REMOTE_REFRESHED);
     let listed = branch_names(&outcome.context.branches);
@@ -354,7 +354,7 @@ fn a_refresh_composes_the_real_fetch_primitive_end_to_end() {
             "",
         )
     };
-    let outcome = refresh_and_announce(&app.handle(), &f.root(), fetch).unwrap();
+    let outcome = refresh_and_announce(app.handle(), &f.root(), fetch).unwrap();
     let listed = branch_names(&outcome.context.branches);
     assert!(
         listed.contains(&"origin/feature-new".to_string())
@@ -383,7 +383,7 @@ fn a_refresh_from_a_linked_worktree_offers_no_branches_but_still_fetches() {
     let registry = crate::progress::ProgressRegistry::default();
     let handle = app.handle().clone();
 
-    let outcome = refresh_and_announce(&app.handle(), &alpha, || {
+    let outcome = refresh_and_announce(app.handle(), &alpha, || {
         crate::git::fetch_remote_branches(
             &handle,
             &crate::logging::BUFFER,

@@ -107,9 +107,9 @@ fn create_file_impl_rejects_a_location_escaping_the_root() {
         std::fs::create_dir_all(&p).unwrap();
         crate::fs::RootFs::for_root(&p)
     };
-    std::fs::create_dir_all(&root).unwrap();
+    std::fs::create_dir_all(root).unwrap();
 
-    assert!(create_file_impl(&root, Some("../evil"), "x.ts").is_err());
+    assert!(create_file_impl(root, Some("../evil"), "x.ts").is_err());
 
     assert!(!dir.path().join("evil").exists());
 }

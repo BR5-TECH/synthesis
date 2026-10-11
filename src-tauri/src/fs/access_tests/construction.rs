@@ -41,7 +41,7 @@ fn ts20_builder_accepts_a_real_directory_and_refuses_the_rest() {
 #[test]
 fn ts20_a_built_instance_reports_its_configuration() {
     let (_tmp, access, root) = rooted();
-    assert!(access.roots().iter().any(|r| *r == root));
+    assert!(access.roots().contains(&root));
     // FSA-FR-17: refusal is the default — nothing had to ask for it.
     assert!(!access.follows_symlinks());
     // FSA-FR-20: no temp directory unless one was asked for.

@@ -34,7 +34,7 @@ pub(super) fn new_asset_id() -> String {
     let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
     hasher.write_u64(millis);
     hasher.write_u32(counter);
-    let entropy = hasher.finish() as u64;
+    let entropy = hasher.finish();
     format!("{millis:011x}-{counter:04x}-{entropy:016x}")
 }
 

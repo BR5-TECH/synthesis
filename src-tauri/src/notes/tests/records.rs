@@ -150,10 +150,9 @@ fn note_record_reports_the_note_as_it_now_stands() {
     // NTC-FR-14: and one whose file name disagrees with the id inside it,
     // which the listing path skips for the same reason — answering for it
     // would hand a caller an id no later call could resolve.
-    let mismatched = format!(
-        "id = \"somebody-else\"\nscope = \"project\"\nbody = \"x\"\n\
+    let mismatched = "id = \"somebody-else\"\nscope = \"project\"\nbody = \"x\"\n\
          created_at = \"2026-01-01T00:00:00Z\"\nupdated_at = \"2026-01-01T00:00:00Z\"\n"
-    );
+        .to_string();
     std::fs::write(notes_dir(dir.path()).join("mislabelled.toml"), mismatched).unwrap();
     assert_eq!(note_record(root, "mislabelled").unwrap_err(), ERR_NOTE_NOT_FOUND,);
     assert!(

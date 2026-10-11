@@ -832,7 +832,7 @@ fn read_for<R: tauri::Runtime>(
     {
         let outcome: Result<(), String> = match widget {
             DashboardWidget::AgentActivity => match app.try_state::<ProjectState>() {
-                Some(project) => agent_runs_impl(&app, &project).map(|_| ()),
+                Some(project) => agent_runs_impl(app, &project).map(|_| ()),
                 None => Ok(()),
             },
             DashboardWidget::PendingGit => {

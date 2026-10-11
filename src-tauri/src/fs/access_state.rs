@@ -244,7 +244,7 @@ impl FsAccessState {
         let mut current =
             self.documents_grants.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let standing = self.documents().is_some();
-        if *current == granted && standing == !granted.is_empty() {
+        if *current == granted && standing != granted.is_empty() {
             return refused;
         }
         let mut builder = FsAccess::builder();

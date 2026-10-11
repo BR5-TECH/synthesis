@@ -409,7 +409,7 @@ impl CompletionSeam for ScriptedCompletion {
             })
             .collect();
         assert!(
-            permitted.iter().any(|shape| *shape == offered),
+            permitted.contains(&offered),
             "every request offers the eleven, then `ask_discussion_questions` on a discussion, then at most one proposal tool, and nothing else: {offered:?}",
         );
         // CVL-FR-30: asserted on every dispatch the suite makes rather than in

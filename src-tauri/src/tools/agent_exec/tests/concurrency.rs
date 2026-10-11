@@ -36,7 +36,7 @@ fn a_filesystem_claim_in_an_envelope_is_never_verified_by_the_executor() {
     // verified nothing. The directory comparison above is the evidence — a
     // blocklist of a few method names over one file would pass just as happily
     // for an executor that read the directory by some other call.
-    assert!(outcome.stdout.bytes.len() > 0);
+    assert!(!outcome.stdout.bytes.is_empty());
 }
 
 /// EAC-FR-28 — the configuration that would actually bite: **one** executor and

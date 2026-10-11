@@ -358,7 +358,7 @@ fn a_drafts_review_is_addressed_by_its_stable_id_and_a_move_leaves_it_there() {
 fn a_thread_is_read_by_its_id_alone_in_either_scope() {
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
-    root.write_text_atomic(&root.join("onboarding.md"), "the first session\n").unwrap();
+    root.write_text_atomic(root.join("onboarding.md"), "the first session\n").unwrap();
 
     let anchored = open(
         root,

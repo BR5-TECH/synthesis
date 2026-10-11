@@ -31,7 +31,7 @@ fn rerooting_tears_the_previous_root_down_and_remounts_on_the_new_one() {
     let before_alpha = crate::changes::tests_support::snapshot(alpha.clone());
 
     let context = reroot(
-        &app.handle(),
+        app.handle(),
         &app.state::<ProjectState>(),
         &app.state::<ProjectWatcher>(),
         &store,
@@ -170,7 +170,7 @@ fn rerooting_discards_the_outgoing_worktrees_skill_registry_and_builds_the_incom
 
     let store = GlobalSettingsStore::in_memory();
     reroot(
-        &app.handle(),
+        app.handle(),
         &app.state::<ProjectState>(),
         &app.state::<ProjectWatcher>(),
         &store,
@@ -244,7 +244,7 @@ fn rerooting_terminates_operations_scoped_to_the_outgoing_worktree() {
     let store = GlobalSettingsStore::in_memory();
 
     reroot(
-        &app.handle(),
+        app.handle(),
         &app.state::<ProjectState>(),
         &app.state::<ProjectWatcher>(),
         &store,
@@ -284,7 +284,7 @@ fn rerooting_remembers_the_worktree_against_the_projects_anchor() {
     let store = GlobalSettingsStore::in_memory();
 
     reroot(
-        &app.handle(),
+        app.handle(),
         &app.state::<ProjectState>(),
         &app.state::<ProjectWatcher>(),
         &store,
@@ -321,7 +321,7 @@ fn a_successful_switch_emits_exactly_one_context_changed_event() {
     });
 
     reroot(
-        &app.handle(),
+        app.handle(),
         &app.state::<ProjectState>(),
         &app.state::<ProjectWatcher>(),
         &GlobalSettingsStore::in_memory(),

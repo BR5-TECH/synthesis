@@ -69,7 +69,7 @@ fn a_panicked_poll_clears_its_in_flight_mark() {
     .join();
     assert!(joined.is_err());
     assert!(!h.view().polling);
-    assert!(matches!(begin_poll(&h.handle()).unwrap(), Ok(_)), "a new poll starts");
+    assert!(begin_poll(&h.handle()).unwrap().is_ok(), "a new poll starts");
 }
 
 /// GPP-FR-ELWS: a settings write that races a poll discards its result.

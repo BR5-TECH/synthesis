@@ -190,9 +190,7 @@ impl FsAccess {
         // caller was given would refuse the one path it certainly holds. There
         // is nothing below the root to examine here either: the roots were
         // canonicalised at build (FSA-FR-18) and so carry no unresolved link.
-        if self.roots.iter().any(|root| *root == contained)
-            || self.file_grants.iter().any(|grant| *grant == contained)
-        {
+        if self.roots.contains(&contained) || self.file_grants.contains(&contained) {
             return Ok(contained);
         }
         let (parent, leaf) = match (contained.parent(), contained.file_name()) {

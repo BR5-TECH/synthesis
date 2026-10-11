@@ -121,7 +121,7 @@ fn searching_leaves_every_note_and_the_worktree_exactly_as_they_were() {
     .expect("a discussion opens");
     fixture.reindex();
 
-    let before = tree_fingerprint(&fixture.root().to_path_buf());
+    let before = tree_fingerprint(&fixture.root());
     assert!(before.len() >= 3, "precondition: the fixture has content");
 
     for (query, limit) in [
@@ -136,7 +136,7 @@ fn searching_leaves_every_note_and_the_worktree_exactly_as_they_were() {
     let _ = fixture.refusal("", None);
 
     assert_eq!(
-        tree_fingerprint(&fixture.root().to_path_buf()),
+        tree_fingerprint(&fixture.root()),
         before,
         "every note file, every discussion, and everything else is byte-identical",
     );

@@ -143,7 +143,7 @@ pub fn start_direct_graduation<R: tauri::Runtime>(
         },
     );
     events::announce_queue(&app, &run);
-    let _ = crate::drafts::announce(&app, crate::drafts::DraftChange::to(&draft_id, Vec::new()));
+    crate::drafts::announce(&app, crate::drafts::DraftChange::to(&draft_id, Vec::new()));
     scheduler::dispatch_pending(&app);
     Ok(run)
 }
@@ -339,5 +339,5 @@ pub fn advance_all_queues<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 
 /// The typed code at the head of a refusal, which carries no path or content.
 fn typed_code(reason: &str) -> String {
-    reason.split(|c| c == ':' || c == ' ').next().unwrap_or_default().to_string()
+    reason.split([':', ' ']).next().unwrap_or_default().to_string()
 }

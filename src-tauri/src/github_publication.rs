@@ -410,7 +410,7 @@ fn publish_draft_to_github_impl<R: tauri::Runtime>(
         &publication_choice,
         &settings,
         client.as_ref(),
-        &secret,
+        secret,
         remote.repository_owner.as_deref().unwrap_or_default(),
         remote.repository_name.as_deref().unwrap_or_default(),
     )
@@ -442,7 +442,7 @@ fn publish_draft_to_github_impl<R: tauri::Runtime>(
     );
     announce(app, &draft_id);
 
-    let outcome = flow::publish_with_attempt(&root, &draft_id, &attempt, &secret, client.as_ref());
+    let outcome = flow::publish_with_attempt(&root, &draft_id, &attempt, secret, client.as_ref());
     settle(app, &root, &draft_id, status, outcome)
 }
 
@@ -483,7 +483,7 @@ fn load_publication_metadata_impl<R: tauri::Runtime>(
         .map_err(|_| fail(app, &draft_id, ERR_INVALID_PUBLICATION_SETTINGS.to_string()))?;
     let metadata = flow::load_metadata(
         client.as_ref(),
-        &secret,
+        secret,
         remote.repository_owner.as_deref().unwrap_or_default(),
         remote.repository_name.as_deref().unwrap_or_default(),
         settings,
@@ -519,7 +519,7 @@ fn get_github_publication_settings_impl<R: tauri::Runtime>(
 ) -> Result<GithubPublicationSettings, String> {
     let project = app.state::<ProjectState>();
     let root = require_root(app, &project)?;
-    crate::project_settings::load_github_publication_settings_from(&root).map_err(|error| {
+    crate::project_settings::load_github_publication_settings_from(&root).inspect_err(|_error| {
         logging::log_warn(
             app,
             &logging::BUFFER,
@@ -527,7 +527,6 @@ fn get_github_publication_settings_impl<R: tauri::Runtime>(
             "github publication settings could not be read",
             log_fields! { "refusal" => ERR_INVALID_PUBLICATION_SETTINGS },
         );
-        error
     })
 }
 

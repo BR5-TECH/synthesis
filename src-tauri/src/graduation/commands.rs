@@ -61,7 +61,7 @@ pub fn start_graduation<R: tauri::Runtime>(
     // asked for now and never for a refused start. Nothing waits for it.
     commit_graduation_start(&app, &root, &draft_id, &record.draft.name);
     events::announce_queue(&app, &run);
-    let _ = crate::drafts::announce(&app, crate::drafts::DraftChange::to(&draft_id, Vec::new()));
+    crate::drafts::announce(&app, crate::drafts::DraftChange::to(&draft_id, Vec::new()));
     dispatch_pending(&app);
     Ok(run)
 }

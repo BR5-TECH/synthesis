@@ -12,7 +12,7 @@ fn result_ids(exchange: &[rig::completion::Message]) -> Vec<(String, String)> {
     exchange
         .iter()
         .flat_map(|message| match message {
-            rig::completion::Message::User { content } => content.iter().cloned().collect(),
+            rig::completion::Message::User { content } => content.to_vec(),
             _ => Vec::new(),
         })
         .filter_map(|part| match part {

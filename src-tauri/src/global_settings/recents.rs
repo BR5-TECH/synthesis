@@ -71,10 +71,7 @@ pub fn ordered_visible_recents(entries: &[RecentProjectEntry]) -> Vec<RecentProj
 /// needs to be stable and human-recognisable for the skeleton.
 pub fn derive_id_from_source(source: &str) -> String {
     let trimmed = source.trim().trim_end_matches('/');
-    let tail = trimmed
-        .rsplit(|c| c == '/' || c == ':' || c == '\\')
-        .find(|s| !s.is_empty())
-        .unwrap_or(trimmed);
+    let tail = trimmed.rsplit(['/', ':', '\\']).find(|s| !s.is_empty()).unwrap_or(trimmed);
     tail.strip_suffix(".git").unwrap_or(tail).to_string()
 }
 

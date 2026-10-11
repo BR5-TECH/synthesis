@@ -112,7 +112,7 @@ fn ts8_clear_reverts_assignment() {
     fs::write(root.join("notes/x.md"), "body").unwrap();
 
     assign(root, "notes/x.md", ArtifactType::Scenario, Scope::File).unwrap();
-    assert_eq!(scan(root).children.as_ref().unwrap().is_empty(), false);
+    assert!(!scan(root).children.as_ref().unwrap().is_empty());
     clear(root, "notes/x.md").unwrap();
 
     let tree = scan(root);

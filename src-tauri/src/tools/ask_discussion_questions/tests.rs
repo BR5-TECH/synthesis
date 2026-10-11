@@ -36,7 +36,7 @@ fn an_empty_set_is_refused() {
     let refusal = normalize(&[]).unwrap_err();
     assert!(matches!(refusal, ToolRefusal::InvalidArguments(_)));
     assert_eq!(refusal.kind(), rig::tool::ToolErrorKind::InvalidArgs);
-    assert_eq!(refusal.retryable(), true);
+    assert!(refusal.retryable());
 }
 
 /// ADQ-FR-PVXK: more than ten questions is refused, and ten is accepted.
@@ -121,7 +121,7 @@ fn the_already_pending_refusal_is_not_retryable() {
     let refusal = refusal_for(crate::comments::ERR_QUESTION_SET_ALREADY_PENDING);
     assert!(matches!(refusal, ToolRefusal::QuestionSetAlreadyPending));
     assert_eq!(refusal.kind(), rig::tool::ToolErrorKind::PermissionDenied);
-    assert_eq!(refusal.retryable(), false);
+    assert!(!refusal.retryable());
     assert!(refusal.to_string().contains("will not succeed"));
 }
 
@@ -131,7 +131,7 @@ fn the_locked_refusal_is_not_retryable() {
     let refusal = refusal_for(crate::comments::ERR_DISCUSSION_LOCKED);
     assert!(matches!(refusal, ToolRefusal::QuestionSetConversationLocked));
     assert_eq!(refusal.kind(), rig::tool::ToolErrorKind::PermissionDenied);
-    assert_eq!(refusal.retryable(), false);
+    assert!(!refusal.retryable());
 }
 
 /// ADQ-FR-HBLN: any other failure is the retryable `Other`, and nothing was
@@ -141,7 +141,7 @@ fn any_other_failure_is_the_retryable_other_refusal() {
     let refusal = refusal_for("some disk problem");
     assert!(matches!(refusal, ToolRefusal::QuestionSetNotRecorded));
     assert_eq!(refusal.kind(), rig::tool::ToolErrorKind::Other);
-    assert_eq!(refusal.retryable(), true);
+    assert!(refusal.retryable());
 }
 
 /// ADQ-FR-WBQL: the parameter schema declares the one documented argument with

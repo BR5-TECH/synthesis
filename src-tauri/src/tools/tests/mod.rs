@@ -77,8 +77,8 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
         rig::tool::tool_definition(&ask_user_comment::AskUserCommentTool::new(
             handle,
             crate::agent_conversations::OwnedRoots {
-                worktree: crate::fs::RootFs::for_root(&std::env::temp_dir()),
-                store: crate::fs::RootFs::for_root(&std::env::temp_dir()),
+                worktree: crate::fs::RootFs::for_root(std::env::temp_dir()),
+                store: crate::fs::RootFs::for_root(std::env::temp_dir()),
             },
             crate::agent_conversations::ConversationOrigin::stub_artifact(
                 "definitions",
@@ -100,8 +100,8 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
         rig::tool::tool_definition(&propose_draft_changes::ProposeDraftChangesTool::new(
             handle2,
             crate::agent_conversations::OwnedRoots {
-                worktree: crate::fs::RootFs::for_root(&std::env::temp_dir()),
-                store: crate::fs::RootFs::for_root(&std::env::temp_dir()),
+                worktree: crate::fs::RootFs::for_root(std::env::temp_dir()),
+                store: crate::fs::RootFs::for_root(std::env::temp_dir()),
             },
             crate::agent_conversations::ConversationOrigin::stub_draft(
                 "definitions",
@@ -123,8 +123,8 @@ fn definitions() -> Vec<rig::completion::ToolDefinition> {
         rig::tool::tool_definition(&ask_discussion_questions::AskDiscussionQuestionsTool::new(
             handle3,
             crate::agent_conversations::OwnedRoots {
-                worktree: crate::fs::RootFs::for_root(&std::env::temp_dir()),
-                store: crate::fs::RootFs::for_root(&std::env::temp_dir()),
+                worktree: crate::fs::RootFs::for_root(std::env::temp_dir()),
+                store: crate::fs::RootFs::for_root(std::env::temp_dir()),
             },
             crate::agent_conversations::ConversationOrigin::stub_draft(
                 "definitions",

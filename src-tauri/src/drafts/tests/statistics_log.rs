@@ -32,7 +32,7 @@ fn drs_ts_xkqm_deleting_a_draft_takes_its_statistics_log_and_leaves_every_other(
 
     delete_draft_impl(root, root, &doomed).unwrap();
 
-    assert!(!draft_dir(root, &doomed).is_ok());
+    assert!(draft_dir(root, &doomed).is_err());
     assert!(
         !dir.path()
             .join(crate::statistics::STATISTICS_REL)
@@ -47,7 +47,7 @@ fn drs_ts_xkqm_deleting_a_draft_takes_its_statistics_log_and_leaves_every_other(
     // A draft whose log is already missing deletes without an error.
     let bare = draft(root, "bare");
     delete_draft_impl(root, root, &bare).unwrap();
-    assert!(!draft_dir(root, &bare).is_ok());
+    assert!(draft_dir(root, &bare).is_err());
 }
 
 /// DRS-FR-ZLBK, DRS-FR-21: an event queued before a deletion never brings the log back.

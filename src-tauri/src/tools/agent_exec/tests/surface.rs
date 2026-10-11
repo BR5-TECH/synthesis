@@ -93,7 +93,7 @@ fn claude_codes_generated_invocation_is_exactly_the_descriptor() {
             "--user".into(),
             format!("{uid}:{gid}"),
             "--workdir".into(),
-            harness.workspace_target().into(),
+            harness.workspace_target(),
             "--cap-drop".into(),
             "ALL".into(),
             "--security-opt".into(),

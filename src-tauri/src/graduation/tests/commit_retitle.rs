@@ -7,7 +7,7 @@ use super::*;
 /// A commit on the stream's branch, holding one file and the message named.
 fn commit_on(worktree: &Path, file: &str, message: &str) -> String {
     let fs = crate::fs::FsAccess::builder()
-        .allow_root(&worktree.to_path_buf())
+        .allow_root(worktree.to_path_buf())
         .build()
         .expect("the working copy");
     fs.write_text_atomic(worktree.join(file), message).expect("the file is writable");
@@ -18,11 +18,10 @@ fn commit_on(worktree: &Path, file: &str, message: &str) -> String {
     let tree = repo.find_tree(index.write_tree().expect("a tree")).expect("a tree");
     let signature = repo.signature().expect("a signature");
     let head = repo.head().and_then(|head| head.peel_to_commit()).expect("the head");
-    let revision = repo
-        .commit(Some("HEAD"), &signature, &signature, message, &tree, &[&head])
+
+    repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[&head])
         .expect("committed")
-        .to_string();
-    revision
+        .to_string()
 }
 
 fn head_message(worktree: &Path) -> String {

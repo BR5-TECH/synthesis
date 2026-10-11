@@ -554,7 +554,7 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
             }
             let outcome = crate::draft_proposals::revise_hunk_impl(
                 &self.roots.worktree,
-                &draft_id,
+                draft_id,
                 revises,
                 &proposed[0],
             );

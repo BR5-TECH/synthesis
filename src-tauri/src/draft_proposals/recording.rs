@@ -102,7 +102,7 @@ where
     // DCP-FR-08: the hunk bodies exactly as the agent composed them. The bodies
     // live beside the record rather than in it, because listing reads records and
     // never a document (DCP-FR-09).
-    root.write_text_atomic(&hunks_path(&dir, &id), &document.to_toml())
+    root.write_text_atomic(hunks_path(&dir, &id), &document.to_toml())
         .map_err(|_| RecordRefusal::NotRecorded)?;
     // DCP-FR-25: the agent's own text, so `edited` describes the hunk rather than
     // the history of getting to it — an author who rewrites a hunk and then puts
@@ -145,7 +145,7 @@ where
         let _ = root.delete_under(&dir, format!("{id}.{RECORD_EXT}"), false);
     };
 
-    if root.write_toml_atomic(&record_path(&dir, &id), &record).is_err() {
+    if root.write_toml_atomic(record_path(&dir, &id), &record).is_err() {
         cleanup();
         return Err(RecordRefusal::NotRecorded);
     }

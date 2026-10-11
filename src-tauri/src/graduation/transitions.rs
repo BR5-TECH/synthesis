@@ -64,7 +64,7 @@ pub fn transition<R: tauri::Runtime>(
     // DRS-FR-KQTW: the draft's status follows the runs, so a run that ends
     // releases the lock it held. A merge run holds no draft.
     if next.is_terminal() && !run.input.draft_id.is_empty() {
-        let _ = crate::drafts::announce(
+        crate::drafts::announce(
             app,
             crate::drafts::DraftChange::to(&run.input.draft_id, Vec::new()),
         );

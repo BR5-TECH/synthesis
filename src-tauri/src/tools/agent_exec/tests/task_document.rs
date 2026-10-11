@@ -271,7 +271,7 @@ fn every_vendor_is_told_the_response_contract_in_the_same_words() {
     for outcome in ALL_OUTCOMES {
         let name = outcome_name(outcome);
         let (carried, excluded) = decoder_payload_rule(outcome);
-        let clause = exclusivity_clause(&text, &name);
+        let clause = exclusivity_clause(text, &name);
         let (says_carries, says_neither) = clause_payloads(&clause);
         assert_eq!(
             says_carries, carried,
@@ -594,7 +594,7 @@ fn task_data_appears_only_on_stdin() {
     for marker in [INSTRUCTION, INPUT_VALUE] {
         assert!(!argv.contains(marker), "{marker} leaked into the argv");
     }
-    for (_, value) in &recorded.env {
+    for value in recorded.env.values() {
         for marker in [INSTRUCTION, INPUT_VALUE, RESUME_TOKEN] {
             assert!(!value.contains(marker), "{marker} leaked into the environment");
         }

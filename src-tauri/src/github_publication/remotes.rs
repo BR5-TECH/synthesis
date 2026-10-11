@@ -152,7 +152,7 @@ pub fn parse_remote_repository(url: &str) -> Option<RemoteRepository> {
 
 /// GHP-FR-BXTU: the canonical form two URLs are compared by.
 pub fn canonical_url(url: &str) -> String {
-    canonical_url_with(url, |host| crate::github_tokens::host::is_github_family_host(host))
+    canonical_url_with(url, crate::github_tokens::host::is_github_family_host)
 }
 
 /// [`canonical_url`], where `is_github` decides which hosts have the
@@ -255,7 +255,7 @@ pub fn classify_hosted(
                         match probe_cached(secret, &host, &owner, &repo, client, cache) {
                             ProbeOutcome::TlsUntrusted(cause) => {
                                 tls_failure = Some(crate::tls::TlsFailure::new(
-                                    &crate::github_tokens::github_api_host(&host),
+                                    crate::github_tokens::github_api_host(&host),
                                     cause,
                                 ));
                                 RemoteEligibility::TlsUntrusted

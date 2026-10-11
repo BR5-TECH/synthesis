@@ -75,7 +75,7 @@ fn spec_body(topic: &str, sections: usize) -> String {
 /// A section that mentions `teardown` `weight` times, padded so the files
 /// differ in density rather than only in length.
 fn section(index: usize, weight: usize) -> String {
-    let mentions = std::iter::repeat("teardown").take(weight).collect::<Vec<_>>().join(" ");
+    let mentions = std::iter::repeat_n("teardown", weight).collect::<Vec<_>>().join(" ");
     format!("\n## Section {index}\n\nThis section covers {mentions} and related matters.\n")
 }
 

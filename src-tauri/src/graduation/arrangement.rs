@@ -67,7 +67,7 @@ pub fn reorder_graduation_run<R: tauri::Runtime>(
         ours.iter().map(|i| index.runs[*i].clone()).collect();
     let moved = ordered.remove(actual);
     ordered.insert(new_position, moved);
-    for (slot, entry) in ours.iter().zip(ordered.into_iter()) {
+    for (slot, entry) in ours.iter().zip(ordered) {
         index.runs[*slot] = entry;
     }
     store::write_queue_index(&fs, &base, &index)?;

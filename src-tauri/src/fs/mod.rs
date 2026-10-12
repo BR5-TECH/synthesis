@@ -61,12 +61,14 @@ pub mod error;
 pub mod owned_tree;
 #[cfg(test)]
 pub mod permission_probe;
+pub mod socket_probe;
 
 pub use access::{
     CreateMode, DirEntry, EntryKind, FileHandle, FileInfo, FsAccess, FsAccessBuilder,
     FsAccessState, OpenMode, RootFs, UserChosenPath,
 };
 pub use error::{FsAccessBuildError, FsError, GrantRefusal};
+pub use socket_probe::{probe_unix_socket, SocketProbeError};
 
 /// Convenience alias used throughout this module and re-exported for
 /// downstream callers.

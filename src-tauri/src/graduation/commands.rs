@@ -740,7 +740,43 @@ pub(crate) fn image_preflight<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> R
     // GSS-FR-40: the machine's Docker backend must say verified.
     crate::docker::resolve_docker_backend(&store)
         .map_err(|_| ERR_DOCKER_BACKEND_UNVERIFIED.to_string())?;
+    docker_socket_preflight(app, &root)?;
     Ok(())
+}
+
+/// GSU-FR-RQDS: where the project enables Docker-in-Docker, the socket path
+/// must name a Unix socket. One metadata read; no connection is opened and no
+/// daemon is asked. Where the feature is off, no path is read.
+fn docker_socket_preflight<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &crate::fs::RootFs,
+) -> Result<(), String> {
+    let settings = crate::project_settings::read_docker_in_docker_settings(root);
+    if !settings.enabled {
+        return Ok(());
+    }
+    let path = settings.effective_socket_path;
+    // The mount syntax separates its fields with commas, so a path that holds
+    // one cannot be mounted. The launch refuses it, and so does the start.
+    let probed = if path.contains(',') {
+        Err(crate::fs::SocketProbeError::Missing)
+    } else {
+        crate::fs::probe_unix_socket(std::path::Path::new(&path))
+    };
+    match probed {
+        Ok(_) => Ok(()),
+        Err(problem) => {
+            // The path is the author's own setting, never a credential.
+            logging::log_warn(
+                app,
+                &BUFFER,
+                &[Domain::Backend],
+                "graduation preflight found no usable Docker socket",
+                log_fields! { "path" => path.clone(), "problem" => format!("{problem:?}") },
+            );
+            Err(format!("{ERR_DOCKER_SOCKET_UNAVAILABLE}: {path}"))
+        }
+    }
 }
 
 /// A borrow the transition helper can take without moving the handle.

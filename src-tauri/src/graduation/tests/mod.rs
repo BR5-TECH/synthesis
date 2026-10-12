@@ -29,6 +29,7 @@ mod collaborators;
 mod commit_retitle;
 mod direct;
 mod direct_message;
+mod docker_socket;
 mod e2e;
 mod github_shadow;
 mod hold;

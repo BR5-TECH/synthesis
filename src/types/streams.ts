@@ -316,6 +316,8 @@ export const STREAM_ERRORS = {
   vendorImageInvalid: "vendor_image_invalid",
   vendorExecutionUnsupported: "vendor_execution_unsupported",
   dockerBackendUnverified: "docker_backend_unverified",
+  /** GSU-FR-RQDS: Docker-in-Docker is enabled and its socket is not there. */
+  dockerSocketUnavailable: "docker_socket_unavailable",
   /** WKS-FR-GKPX: a conflict a text turn cannot reconcile; nothing was written. */
   unsupportedConflict: "unsupported_conflict",
   /** GRB-FR-YPEX: the material an update turn reads could not be written. */

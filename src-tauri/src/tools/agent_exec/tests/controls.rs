@@ -156,6 +156,7 @@ fn an_unmountable_directory_is_refused_through_the_executor() {
             project_key: "/dev/acme",
             fs: &fs,
             images: &TEST_IMAGES,
+            docker_in_docker: Default::default(),
         },
         AgentExecutionRequest {
             turn_kind: super::super::TurnKind::Work,
@@ -223,6 +224,7 @@ fn an_api_kind_integration_is_refused_by_its_own_branch() {
                 project_key: "/dev/acme",
                 fs: &fs,
                 images: &TEST_IMAGES,
+                docker_in_docker: Default::default(),
             },
             AgentExecutionRequest {
                 turn_kind: super::super::TurnKind::Work,
@@ -569,6 +571,8 @@ fn the_mock_docker_scenario_matches_what_production_generates() {
                 read_only: false,
             },
         ],
+        groups: vec![],
+        extra_hosts: vec![],
         env_names: vec![descriptor::CLAUDE_TOKEN_ENV.to_string()],
         env_literals: vec![(
             descriptor::claude_code::SESSION_STATE_ENV.to_string(),

@@ -7,6 +7,16 @@ import type { GraduationRun, ReviewSeverity } from "../../types/graduation";
 import { MERGE_BRANCH_MOVED_STATEMENT } from "./merge";
 
 /**
+ * GSD-FR-BXKR: the sentence a start or a merge refused for a missing Docker
+ * socket is rendered as. It names the path the refusal carries and the action
+ * the author must take.
+ */
+export function dockerSocketUnavailableMessage(path: string | null): string {
+  const where = path ? `at ${path}` : "at the configured path";
+  return `The Docker socket is not available ${where}. Start Docker or restore the socket at that path, or correct the Docker-in-Docker socket path in Project settings, in the Docker section. Then start the run again.`;
+}
+
+/**
  * GRU-FR-XQVG: the one line a typed refusal is rendered as, against the run it
  * is about.
  *
@@ -48,6 +58,8 @@ export function graduationErrorMessage(error: string): string {
       return "The active agent cannot be executed in a container.";
     case "docker_backend_unverified":
       return "The machine's Docker backend has not been verified.";
+    case "docker_socket_unavailable":
+      return dockerSocketUnavailableMessage(detail);
     case "stream_busy":
       return "A run holds that work stream.";
     case "stream_dirty":

@@ -28,6 +28,7 @@ import { logInfo, logWarn } from "../logging";
 import { formatSectionAddress } from "../settingsWindow";
 import { pickerStart, projectRelativePath } from "../projectPaths";
 import { PathField } from "./PathField";
+import { ProjectDockerInDocker } from "./ProjectDockerInDocker";
 import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
 import { isAgenticVendorImplemented } from "./agenticImplemented";
 import { ToBeImplementedNotice } from "./ToBeImplementedNotice";
@@ -690,6 +691,9 @@ export function ProjectDockerImages({ contentRoot = "" }: ProjectDockerImagesPro
           Global settings → Docker
         </button>
       </div>
+
+      {/* SET-FR-NXDV: one setting for the whole project, above the vendor tabs. */}
+      <ProjectDockerInDocker />
 
       <div
         role="tablist"

@@ -56,6 +56,16 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
    */
   const [agentsRosterOpen, setAgentsRosterOpen] = useState(false);
   /**
+   * SNV-FR-QXTH / SNV-FR-56: whether the theme selector's dropdown is mounted.
+   * Held here beside the roster's open state for the same reason.
+   */
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  /** Closes both chrome dropdowns that the shell holds the open state of. */
+  const closeChromeDropdowns = () => {
+    setAgentsRosterOpen(false);
+    setThemeMenuOpen(false);
+  };
+  /**
    * TAB-FR-32 / SNV-FR-56: the tab context menu's open state.
    *
    * Held here rather than inside the strip for the same reason the roster's is:
@@ -483,7 +493,7 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
       dismissCommitWindow();
       dismissRollbackWindow();
       if (streamMergeRef.current) settleStreamMergeWindow(null);
-      setAgentsRosterOpen(false);
+      closeChromeDropdowns();
     },
     requestToken: () =>
       new Promise<boolean>((resolve) => openTokenPicker(null, resolve)),
@@ -500,7 +510,7 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
       dismissCommitWindow();
       dismissRollbackWindow();
       if (streamMergeRef.current) settleStreamMergeWindow(null);
-      setAgentsRosterOpen(false);
+      closeChromeDropdowns();
       let answered = false;
       const pending: PendingGraduationStart = {
         draftId,
@@ -526,7 +536,7 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
     dismissCommitWindow();
     dismissRollbackWindow();
     if (streamMergeRef.current) settleStreamMergeWindow(null);
-    setAgentsRosterOpen(false);
+    closeChromeDropdowns();
     // The chrome dropdowns and the context menus keep their open state to
     // themselves and close on a pointer press outside them. A native menu
     // activation raises no such press, so one is announced here.
@@ -556,6 +566,9 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
     rehearsalTimers,
     agentsRosterOpen,
     setAgentsRosterOpen,
+    themeMenuOpen,
+    setThemeMenuOpen,
+    closeChromeDropdowns,
     tabMenu,
     setTabMenu,
     dismissTabMenu,

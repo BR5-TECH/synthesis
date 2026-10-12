@@ -116,6 +116,9 @@ export function AppShell(props: AppShellProps) {
     settlePicker,
     agentsRosterOpen,
     setAgentsRosterOpen,
+    themeMenuOpen,
+    setThemeMenuOpen,
+    closeChromeDropdowns,
     tabMenu,
     setTabMenu,
     dismissTabMenu,
@@ -179,7 +182,7 @@ export function AppShell(props: AppShellProps) {
     dismissPullRequestWindow();
     dismissTabMenu();
     dismissGraduationOverlays();
-    setAgentsRosterOpen(false);
+    closeChromeDropdowns();
     s.setSearchOpen(false);
   };
 
@@ -263,7 +266,7 @@ export function AppShell(props: AppShellProps) {
               dismissPullRequestWindow();
               dismissTabMenu();
               dismissGraduationOverlays();
-              setAgentsRosterOpen(false);
+              closeChromeDropdowns();
             }
             s.setSearchOpen(open);
           }}
@@ -282,7 +285,7 @@ export function AppShell(props: AppShellProps) {
             dismissCommitWindow();
             dismissRollbackWindow();
             dismissPullRequestWindow();
-            setAgentsRosterOpen(false);
+            closeChromeDropdowns();
             // TAB-FR-32 / SNV-FR-56: the tab context menu is one of the
             // window's floating overlays, so a dropdown opening takes it down.
             dismissTabMenu();
@@ -325,6 +328,8 @@ export function AppShell(props: AppShellProps) {
           onOpenProjectSettings={() => s.openProjectSettings("agents")}
           agentsRosterOpen={agentsRosterOpen}
           setAgentsRosterOpen={setAgentsRosterOpen}
+          themeMenuOpen={themeMenuOpen}
+          setThemeMenuOpen={setThemeMenuOpen}
         />
 
         <ActivityBar
@@ -527,7 +532,7 @@ export function AppShell(props: AppShellProps) {
               dismissPullRequestWindow();
               dismissTabMenu();
               dismissGraduationOverlays();
-              setAgentsRosterOpen(false);
+              closeChromeDropdowns();
               s.setSearchOpen(false);
             }}
           />
@@ -612,7 +617,7 @@ export function AppShell(props: AppShellProps) {
               dismissCommitWindow();
               dismissRollbackWindow();
               dismissPullRequestWindow();
-              setAgentsRosterOpen(false);
+              closeChromeDropdowns();
               dismissTabMenu();
             }}
             // GRH-FR-ODLT: the run the panel should select, where the author

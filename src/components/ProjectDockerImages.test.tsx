@@ -130,6 +130,14 @@ function backend(options: Scripted = {}) {
       }
       case "load_project_image_build_in_flight":
         return options.inFlight ?? null;
+      case "load_docker_in_docker_settings":
+        return {
+          enabled: false,
+          socketPath: "",
+          hostGateway: false,
+          defaultSocketPath: "/var/run/docker.sock",
+          support: "supported",
+        };
       case "build_project_vendor_image":
         if (!options.build) throw new Error("docker_backend_unverified");
         return options.build();

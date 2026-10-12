@@ -22,6 +22,12 @@ export function splitRefusal(text: string): [string, string | null] {
  */
 export function refusalText(text: string): string {
   const [code, detail] = splitRefusal(text);
+  // GSU-FR-RQDS / WSS-FR-NPXC: the path is the refusal's detail, so the sentence
+  // names it rather than appending it.
+  if (code === STREAM_ERRORS.dockerSocketUnavailable) {
+    const where = detail ? `at ${detail}` : "at the configured path";
+    return `The Docker socket is not available ${where}, so a conflicting merge cannot be handed off. Start Docker or restore the socket at that path, or correct the Docker-in-Docker socket path in Project settings, in the Docker section. Nothing was written.`;
+  }
   const said: Record<string, string> = {
     [STREAM_ERRORS.notAGitRepository]: "This project is not inside a Git repository.",
     [STREAM_ERRORS.baseBranchRequired]:

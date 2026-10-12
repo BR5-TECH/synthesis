@@ -325,6 +325,36 @@ impl AgentCliExecutor {
             }
         }
 
+        // --- 5e. EAC-FR-DKRS / EAC-FR-HWQN: Docker-in-Docker -----------------
+        //
+        // The application read the settings; nothing the model wrote reaches
+        // this point. A socket that is not usable fails the launch before any
+        // container exists, and the group is read from the socket here, at
+        // every launch, so a recreated socket never leaves a stale group.
+        //
+        // EAC-FR-DKRS: a masked turn gets none of it. The socket reaches the
+        // host repository that the masking of step 5c hides, so a masked turn
+        // is launched as though the setting were off.
+        let dind = if masked {
+            docker_in_docker::DockerInDockerAdditions::default()
+        } else {
+            docker_in_docker::additions(&context.docker_in_docker)?
+        };
+        if context.docker_in_docker.enabled && !masked {
+            logging::log_info(
+                sink,
+                &BUFFER,
+                &[Domain::Ai, Domain::Backend],
+                "agent execution reaches the host Docker daemon through its socket",
+                log_fields! {
+                    "turn_kind" => request.turn_kind.as_str(),
+                    "host_gateway" => context.docker_in_docker.host_gateway,
+                },
+            );
+        }
+        mounts.extend(dind.mounts);
+        env_literals.extend(dind.env_literals);
+
         // --- 6. The runtime --------------------------------------------------
         let runtime = self.runtime_for(context.store)?;
         if runtime.ensure_available().await.is_err() {
@@ -402,6 +432,8 @@ impl AgentCliExecutor {
             host_gid,
             workdir: workspace.clone(),
             mounts: mounts.clone(),
+            groups: dind.groups,
+            extra_hosts: dind.extra_hosts,
             env_names: env_names.clone(),
             env_literals: env_literals.clone(),
             vendor_args: vendor_args.clone(),

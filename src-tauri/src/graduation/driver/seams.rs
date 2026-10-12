@@ -91,6 +91,15 @@ impl<R: tauri::Runtime> GraduationDispatch<R> for AgentCliDispatch {
                         crate::project_settings::images::ERR_VENDOR_IMAGE_UNCONFIGURED.to_string(),
                     )
                 })?;
+            // EAC-FR-DKRS: read from the project-local store at every launch, so
+            // Continue uses the settings and the socket that stand now. The
+            // application reads them; the model has no route to them.
+            let dind = crate::project_settings::read_docker_in_docker_settings(&project_root);
+            let docker_in_docker = crate::tools::agent_exec::DockerInDockerLaunch {
+                enabled: dind.enabled,
+                socket_path: dind.effective_socket_path,
+                host_gateway: dind.host_gateway,
+            };
             let images = crate::tools::agent_exec::ProjectVendorImages::new(project_root);
             let context = LaunchContext {
                 store: &store,
@@ -98,6 +107,7 @@ impl<R: tauri::Runtime> GraduationDispatch<R> for AgentCliDispatch {
                 project_key,
                 fs: &fs,
                 images: &images,
+                docker_in_docker,
             };
             AgentCliExecutor::default().execute_agent_cli(app, &context, request).await
         })

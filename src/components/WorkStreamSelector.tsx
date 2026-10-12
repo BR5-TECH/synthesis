@@ -85,6 +85,7 @@ export interface WorkStreamSelectorProps {
 
 import { StreamUpdateResolution, updateSubject } from "./StreamUpdateResolution";
 import { refusalText, splitRefusal } from "./WorkStreamSelector/refusals";
+import { reportDockerSocketRefusal } from "../state/dockerSocketRefusal";
 import { NewStreamDialog } from "./WorkStreamSelector/NewStreamDialog";
 import { StreamRow } from "./WorkStreamSelector/StreamRow";
 import { MergePrompt } from "./WorkStreamSelector/MergePrompt";
@@ -557,6 +558,11 @@ export function WorkStreamSelector({
       streamId: id,
       reason: code || "unknown",
     });
+    // GSD-FR-BXKR: a merge refused for a missing Docker socket raises the same
+    // Error toast a refused start does, and the row still states it.
+    if (code === STREAM_ERRORS.dockerSocketUnavailable) {
+      reportDockerSocketRefusal(detail);
+    }
     // WSS-FR-OMAP: an uncommitted side is settled in the Changes panel, so the
     // paths are named and the author is routed there — this surface neither
     // commits nor discards their work.

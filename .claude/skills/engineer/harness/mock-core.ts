@@ -6762,6 +6762,8 @@ function graduationChanged(run: any): any {
  * did *not* call — "clicking away made no second rename call" is otherwise
  * invisible from the page, since a refused call changes nothing either.
  */
+/** SET-FR-NXDV: the Docker-in-Docker settings the Docker section reads and writes. */
+const mockDockerInDocker = { enabled: false, socketPath: "", hostGateway: false };
 /** SET-FR-21: the Docker section's per-vendor images (`load_project_docker_images`). */
 const mockDockerImages: Array<Record<string, any>> = [
   {
@@ -9485,6 +9487,23 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     // configured with a tag; the other vendors are unset.
     case "load_project_docker_images":
       return mockDockerImages;
+    // SET-FR-NXDV: the project-local Docker-in-Docker settings. The save keeps
+    // the three values, so a reload shows what the section wrote.
+    case "load_docker_in_docker_settings":
+      return {
+        enabled: mockDockerInDocker.enabled,
+        socketPath: mockDockerInDocker.socketPath,
+        hostGateway: mockDockerInDocker.hostGateway,
+        defaultSocketPath: "/var/run/docker.sock",
+        support: "supported",
+      };
+    case "save_docker_in_docker_settings": {
+      const next: any = a.settings ?? {};
+      mockDockerInDocker.enabled = Boolean(next.enabled);
+      mockDockerInDocker.socketPath = String(next.socketPath ?? "").trim();
+      mockDockerInDocker.hostGateway = Boolean(next.hostGateway);
+      return undefined;
+    }
     case "load_docker_backend":
       return {
         mode: "bollard",

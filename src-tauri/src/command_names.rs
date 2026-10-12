@@ -213,6 +213,9 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // Notes panel state, project-local scope (PSS-FR-19 / NTS-FR-09 / NTS-FR-13).
     "load_drafts_panel_state",
     "save_drafts_panel_state",
+    // Docker-in-Docker settings, project-local scope (PSS-FR-DIND / SET-FR-NXDV).
+    "load_docker_in_docker_settings",
+    "save_docker_in_docker_settings",
     "load_notes_panel_state",
     "save_notes_panel_state",
     // Notes (NTC-notes-storage.md / NTS-notes.md).

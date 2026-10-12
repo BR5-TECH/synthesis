@@ -411,6 +411,8 @@ pub fn run() {
             project_settings::save_notes_panel_state,
             project_settings::load_drafts_panel_state,
             project_settings::save_drafts_panel_state,
+            project_settings::load_docker_in_docker_settings,
+            project_settings::save_docker_in_docker_settings,
             notes::list_notes_for_entity,
             notes::list_project_notes,
             notes::list_all_notes,

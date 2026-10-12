@@ -371,6 +371,26 @@ fn a_refused_preflight_creates_no_run_and_leaves_no_snapshot_ref() {
         ERR_DOCKER_BACKEND_UNVERIFIED,
         "no verified backend"
     );
+
+    // GSU-FR-RQDS, WKS-FR-BPGM: with the backend verified, a project that
+    // enables Docker-in-Docker over a missing socket is refused the same way.
+    fx.allow_execution();
+    let missing = fx.root().join("no-such.sock").to_string_lossy().into_owned();
+    crate::project_settings::save_docker_in_docker_settings_to(
+        &crate::fs::RootFs::for_root(fx.root()),
+        crate::project_settings::DockerInDockerSettings {
+            enabled: true,
+            socket_path: missing.clone(),
+            host_gateway: false,
+        },
+    )
+    .expect("stored settings");
+    commit_file(&fx.repo(), "dind-setting.txt", "committed\n", "commit the docker setting");
+    assert_eq!(
+        refused(&fx, &live(&fx, &stream)),
+        format!("{ERR_DOCKER_SOCKET_UNAVAILABLE}: {missing}"),
+        "no Docker socket"
+    );
 }
 
 // WKS-FR-GKPX, WKS-FR-VQDE: a second request while the merge run has not ended

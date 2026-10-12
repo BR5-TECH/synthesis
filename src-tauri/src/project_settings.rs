@@ -28,6 +28,7 @@ use crate::project::ProjectState;
 
 pub mod build_seam;
 pub mod concurrency;
+pub mod docker_in_docker;
 pub mod github_polling;
 pub mod image_builder;
 pub mod images;
@@ -37,6 +38,7 @@ pub mod loop_settings;
 pub mod public_store;
 pub mod publication_settings;
 pub use concurrency::GraduationConcurrency;
+pub use docker_in_docker::*;
 pub use github_polling::*;
 pub use public_store::*;
 use public_store::{load_public, save_public};

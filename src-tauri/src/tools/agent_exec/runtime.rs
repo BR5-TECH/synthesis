@@ -561,6 +561,11 @@ pub(crate) fn engine_config(
         network_mode: Some(super::descriptor::NETWORK.to_string()),
         cap_drop: Some(spec.dropped_capabilities()),
         security_opt: Some(spec.security_options()),
+        // EAC-FR-DKRS: the same supplementary groups and host mappings the CLI
+        // vector carries, and absent when Docker-in-Docker is off, so a launch
+        // without it is the launch it always was.
+        group_add: (!spec.groups.is_empty()).then(|| spec.group_add()),
+        extra_hosts: (!spec.extra_hosts.is_empty()).then(|| spec.extra_hosts.clone()),
         // EAC-FR-26: removed when the agent exits, exactly as `--rm`.
         auto_remove: Some(true),
         ..Default::default()

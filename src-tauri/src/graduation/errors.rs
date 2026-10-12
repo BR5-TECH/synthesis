@@ -21,11 +21,14 @@ pub const ERR_QUEUE_POSITION_OUT_OF_RANGE: &str = "queue_position_out_of_range";
 pub const ERR_RUN_ARCHIVED: &str = "run_archived";
 /// GRD-FR-BLCR: the run made no commit, so there is nothing to revert.
 pub const ERR_RUN_NOT_REVERTABLE: &str = "run_not_revertable";
-/// GSU-FR-SQRC: the image preflight's four refusals.
+/// GSU-FR-SQRC: the image preflight's five refusals.
 pub const ERR_VENDOR_IMAGE_UNCONFIGURED: &str = "vendor_image_unconfigured";
 pub const ERR_VENDOR_IMAGE_INVALID: &str = "vendor_image_invalid";
 pub const ERR_VENDOR_EXECUTION_UNSUPPORTED: &str = "vendor_execution_unsupported";
 pub const ERR_DOCKER_BACKEND_UNVERIFIED: &str = "docker_backend_unverified";
+/// GSU-FR-RQDS: Docker-in-Docker is enabled and its socket is not a usable Unix
+/// socket. The refusal carries the path: `docker_socket_unavailable: <path>`.
+pub const ERR_DOCKER_SOCKET_UNAVAILABLE: &str = "docker_socket_unavailable";
 /// GSU-FR-SZTZ: the active worktree holds no branch, so a direct run has none to
 /// pin.
 pub const ERR_DIRECT_WORKTREE_DETACHED: &str = "direct_worktree_detached";

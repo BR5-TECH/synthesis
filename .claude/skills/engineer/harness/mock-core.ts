@@ -7025,6 +7025,9 @@ function publicationSettle(draftId: string, issueNumber?: number): any {
   return { kind: "published", record };
 }
 
+/** CPR-FR-ODTB: true once `push_branch` put the head branch on the remote. */
+let pullRequestHeadPushed = false;
+
 /**
  * The app's `invoke`: the unified discussion contract in front of the legacy
  * switch below (see `mock-unified-discussions.ts`).
@@ -8969,6 +8972,26 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return { hasRemote: true, hasUpstream: true, ahead: 2, behind: 1 };
     case "push_current_branch":
       return undefined;
+    // GTC-FR-NEIW / CPR-FR-ODTB: the head branch is not on the remote until
+    // `push_branch` puts it there, so the Create a PR window pushes first.
+    case "get_pull_request_head_state":
+      return {
+        head: String(a.head ?? ""),
+        // The harness checkout is on `main`, so its default base is `develop`.
+        base: String(a.base ?? (a.head === "main" ? "develop" : "main")),
+        hasRemote: true,
+        remoteBranchExists: pullRequestHeadPushed,
+        unpushed: pullRequestHeadPushed ? 0 : null,
+        uncommittedPaths: [],
+        aheadOfBase: 2,
+      };
+    case "push_branch":
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      pullRequestHeadPushed = true;
+      return undefined;
+    case "create_pull_request":
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      return { number: 7, url: "https://github.com/acme/platform/pull/7" };
 
     // ---- worktrees -------------------------------------------------------
     case "list_worktrees_and_branches":

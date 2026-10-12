@@ -41,6 +41,14 @@
 .create-pr__state { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .create-pr__state p { margin: 0; font-size: var(--fs-ui-sm); }
 .create-pr__block { color: var(--warn, var(--fg-1)); }
+.create-pr__notice {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  color: var(--fg-2, var(--fg-1));
+}
+/* The icon stays on the first line when the text wraps. */
+.create-pr__notice > svg { flex: none; margin-top: 2px; }
 .create-pr__failure {
   display: flex;
   align-items: center;

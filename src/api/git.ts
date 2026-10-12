@@ -261,6 +261,15 @@ export const getUpstreamSyncState = () =>
  */
 export const pushCurrentBranch = () => invoke<void>("push_current_branch");
 
+/**
+ * GTC-FR-RZNQ: push the named local branch from the checkout that holds it, on
+ * the same output channels as `pushCurrentBranch`. Rejects with
+ * `"unknown branch"`, `"no remote configured"`, the two typed token errors of
+ * GTC-FR-10, or the remote's own refusal (GTC-FR-KUVE).
+ */
+export const pushBranch = (branch: string) =>
+  invoke<void>("push_branch", { branch });
+
 // --- Worktree context (worktree.rs) ---------------------------------------
 
 /** WTC-FR-04 / WTC-FR-06: the worktree selector's dropdown contents. */

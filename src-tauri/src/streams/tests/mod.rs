@@ -375,5 +375,6 @@ mod merge_snapshot_shapes;
 mod merge_snapshot_tests;
 mod merge_support;
 mod merge_unsupported;
+mod push_checkout;
 mod update_flow;
 mod update_guards;

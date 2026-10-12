@@ -451,6 +451,7 @@ pub fn run() {
             git::rollback_paths,
             git::get_upstream_sync_state,
             git::push_current_branch,
+            git::push_branch,
             worktree::list_worktrees_and_branches,
             worktree::get_active_worktree,
             worktree::activate_worktree,

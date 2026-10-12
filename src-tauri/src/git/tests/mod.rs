@@ -37,6 +37,7 @@ mod pull_request_create;
 mod pull_request_timeline;
 mod pull_requests;
 mod push;
+mod push_named;
 mod rollback;
 mod upstream;
 mod wire_shape;

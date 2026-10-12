@@ -129,7 +129,29 @@ pub fn push_branch_at<S>(
 where
     S: ProgressSink + LogSink + Clone + Send + 'static,
 {
-    let outcome = push_inner(sink, buffer, emit, registry, access);
+    push_finished(emit, push_inner(sink, buffer, emit, registry, access, None))
+}
+
+/// GTC-FR-YHDU / GTC-FR-RZNQ: the same primitive for a named local branch,
+/// which the checkout at `access.root` does not need to have out.
+pub fn push_named_branch_at<S>(
+    sink: &S,
+    buffer: &'static LogBuffer,
+    emit: &impl Fn(&str, serde_json::Value),
+    registry: &ProgressRegistry,
+    access: GithubAccess<'_>,
+    branch: &str,
+) -> Result<(), String>
+where
+    S: ProgressSink + LogSink + Clone + Send + 'static,
+{
+    push_finished(emit, push_inner(sink, buffer, emit, registry, access, Some(branch)))
+}
+
+fn push_finished(
+    emit: &impl Fn(&str, serde_json::Value),
+    outcome: Result<(), String>,
+) -> Result<(), String> {
     // GTC-FR-04: exactly one terminal event, whatever the outcome.
     emit(
         GIT_OPERATION_FINISHED,
@@ -149,6 +171,7 @@ pub(crate) fn push_inner<S>(
     emit: &impl Fn(&str, serde_json::Value),
     registry: &ProgressRegistry,
     access: GithubAccess<'_>,
+    named: Option<&str>,
 ) -> Result<(), String>
 where
     S: ProgressSink + LogSink + Clone + Send + 'static,
@@ -175,19 +198,37 @@ where
         Err(_) => String::new(),
     };
 
-    let branch = match current_branch(&repo) {
-        Some(branch) => branch,
-        None => {
-            log_failure(
-                sink,
-                buffer,
-                TRANSFER,
-                MSG_PUSH_FAILED,
-                ERR_NO_BRANCH_CHECKED_OUT,
-                log_fields! { "remote" => &remote_name },
-            );
-            return Err(ERR_NO_BRANCH_CHECKED_OUT.to_string());
+    let branch = match named {
+        // GTC-FR-KUVE: a named branch must be a local branch, checked before
+        // any transport is opened.
+        Some(name) => {
+            if name.is_empty() || repo.find_branch(name, BranchType::Local).is_err() {
+                log_failure(
+                    sink,
+                    buffer,
+                    TRANSFER,
+                    MSG_PUSH_FAILED,
+                    changes::ERR_UNKNOWN_BRANCH,
+                    log_fields! { "remote" => &remote_name, "branch" => name },
+                );
+                return Err(changes::ERR_UNKNOWN_BRANCH.to_string());
+            }
+            name.to_string()
         }
+        None => match current_branch(&repo) {
+            Some(branch) => branch,
+            None => {
+                log_failure(
+                    sink,
+                    buffer,
+                    TRANSFER,
+                    MSG_PUSH_FAILED,
+                    ERR_NO_BRANCH_CHECKED_OUT,
+                    log_fields! { "remote" => &remote_name },
+                );
+                return Err(ERR_NO_BRANCH_CHECKED_OUT.to_string());
+            }
+        },
     };
 
     // GTC-FR-09 / GTC-FR-10: the credential is resolved BEFORE any transport is

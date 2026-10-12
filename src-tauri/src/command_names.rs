@@ -271,6 +271,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "get_upstream_sync_state",
     // The push both the Git panel and the Changes panel perform (GTC-FR-22).
     "push_current_branch",
+    // The push of a named branch the Create a PR window performs (GTC-FR-RZNQ).
+    "push_branch",
     // Worktree context (WTC-worktree-context.md / WTS-worktree-selector.md).
     "list_worktrees_and_branches",
     "get_active_worktree",

@@ -1,14 +1,14 @@
 /**
  * The words of the Create a PR window
  * (`../../../specifications/ui/CPR-create-pull-request.md` CPR-FR-VYPG,
- * CPR-FR-VZNE).
+ * CPR-FR-PLWK, CPR-FR-VZNE).
  *
  * Kept apart from the window so the wording of a block or a failure is read and
  * tested without a render. No text here carries a token: none reaches the
  * window (per `GTC-git.md` GTC-FR-11).
  */
 import type { PullRequestHeadState } from "../../types";
-import { parseRejection, rejectionMessage } from "../Git/errors";
+import { GIT_ERRORS, parseRejection, rejectionMessage } from "../Git/errors";
 
 /** The rejection codes this window gives wording of its own. */
 const PR_ERRORS = {
@@ -58,16 +58,73 @@ export function pullRequestHeadReadMessage(
   return pullRequestFailureMessage(error);
 }
 
+/**
+ * The push failures that `rejectionMessage` already states in whole words.
+ * Any other cause is the remote's own refusal of the push.
+ */
+const PUSH_CAUSES_IN_WORDS: ReadonlySet<string> = new Set([
+  GIT_ERRORS.notARepository,
+  GIT_ERRORS.noRemote,
+  GIT_ERRORS.tokenRejected,
+  GIT_ERRORS.githubUnreachable,
+  GIT_ERRORS.tokenMissing,
+  GIT_ERRORS.tokenSelectionRequired,
+]);
+
+/** CPR-FR-ODTB / CPR-FR-VZNE: a failure of the push before the creation. */
+export function pushFailureMessage(error: unknown, head: string): string {
+  const { code } = parseRejection(error);
+  if (code === PR_ERRORS.unknownBranch) {
+    return `This repository holds no branch ${head}, so it was not pushed.`;
+  }
+  const message = rejectionMessage(error, { branch: head });
+  return PUSH_CAUSES_IN_WORDS.has(code)
+    ? message
+    : `The remote refused the push of ${head}: ${message}`;
+}
+
 /** CPR-FR-VYPG: a block that stands in the way of **Submit**. */
 export interface PullRequestBlock {
   /** Stable key, also used as a test hook. */
-  key: "no-remote" | "not-pushed" | "unpushed" | "uncommitted" | "nothing";
+  key: "no-remote" | "uncommitted" | "nothing";
+  text: string;
+}
+
+/** CPR-FR-PLWK: **Submit** pushes the head branch first. Not a block. */
+export interface PullRequestPushNotice {
+  /** Stable key, also used as a test hook. */
+  key: "not-pushed" | "unpushed";
   text: string;
 }
 
 /**
+ * CPR-FR-PLWK: the push that **Submit** makes first, or null when the remote
+ * holds the whole head branch. A repository with no remote has nothing to push
+ * to, and its block says so instead.
+ */
+export function pullRequestPushNotice(
+  state: PullRequestHeadState,
+): PullRequestPushNotice | null {
+  if (!state.hasRemote) return null;
+  if (!state.remoteBranchExists) {
+    return {
+      key: "not-pushed",
+      text: "The branch is not on the remote yet. Submit pushes it first.",
+    };
+  }
+  const n = state.unpushed ?? 0;
+  if (n > 0) {
+    return {
+      key: "unpushed",
+      text: `${n} ${plural(n, "commit is", "commits are")} not on the remote yet. Submit pushes ${plural(n, "it", "them")} first.`,
+    };
+  }
+  return null;
+}
+
+/**
  * CPR-FR-VYPG: every block the head state holds, in the order the author acts
- * on them: commit, then push. Several may stand together.
+ * on them. Several may stand together.
  */
 export function pullRequestBlocks(state: PullRequestHeadState): PullRequestBlock[] {
   const blocks: PullRequestBlock[] = [];
@@ -84,17 +141,6 @@ export function pullRequestBlocks(state: PullRequestHeadState): PullRequestBlock
     blocks.push({
       key: "no-remote",
       text: "This repository has no remote to push to.",
-    });
-  } else if (!state.remoteBranchExists) {
-    blocks.push({
-      key: "not-pushed",
-      text: "The branch is not on the remote. Push it first.",
-    });
-  } else if ((state.unpushed ?? 0) > 0) {
-    const n = state.unpushed ?? 0;
-    blocks.push({
-      key: "unpushed",
-      text: `${n} ${plural(n, "commit is", "commits are")} not on the remote. Push first.`,
     });
   }
   if (state.aheadOfBase === 0) {

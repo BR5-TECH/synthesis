@@ -86,6 +86,8 @@ function renderTopChrome() {
       onOpenProjectSettings={() => {}}
       agentsRosterOpen={false}
       setAgentsRosterOpen={() => {}}
+      themeMenuOpen={false}
+      setThemeMenuOpen={() => {}}
     />,
   );
 }

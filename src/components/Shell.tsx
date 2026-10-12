@@ -27,7 +27,7 @@ import { isToggleActive } from "../state/panelToggle";
 import type { CommitFile } from "./CommitMessageModal";
 import type { TabAttention } from "./TabStrip";
 import type { RollbackFile } from "./RollbackConfirm";
-import { THEME_CHOICES } from "./GlobalSettings";
+import { ThemeSelector } from "./ThemeSelector";
 import type {
   AgentScope,
   BottomSurface,
@@ -116,6 +116,9 @@ interface TopChromeProps {
   // SNV-FR-56: the roster's open state, owned by the shell like `searchOpen`.
   agentsRosterOpen: boolean;
   setAgentsRosterOpen: (open: boolean) => void;
+  // SNV-FR-QXTH / SNV-FR-56: the theme selector's dropdown, held by the shell.
+  themeMenuOpen: boolean;
+  setThemeMenuOpen: (open: boolean) => void;
 }
 
 export function TopChrome({
@@ -143,6 +146,8 @@ export function TopChrome({
   onOpenProjectSettings,
   agentsRosterOpen,
   setAgentsRosterOpen,
+  themeMenuOpen,
+  setThemeMenuOpen,
 }: TopChromeProps) {
   // SCH-FR-12 / SCH-FR-13: the active query mode, user-global and persisted.
   const { mode, selectMode } = useSearchQueryMode();
@@ -360,12 +365,6 @@ export function TopChrome({
       </div>
 
       <div className="top-chrome__right">
-        <button
-          className="btn btn--ghost btn--icon btn--sm"
-          title="History"
-        >
-          <Icon.History size={13} />
-        </button>
         {/* SNV-FR-59: the trailing cluster holds the agents control and then the
             theme selector, in that fixed order — the two things that belong to
             the author rather than to the repository. The control is present
@@ -384,52 +383,18 @@ export function TopChrome({
         {/* SNV-FR-15 / SNV-FR-16: a light/dark/system selector that mirrors the
             Global settings Appearance section and edits the same shared
             user-global preference. */}
-        <div
-          role="radiogroup"
-          aria-label="Theme"
-          data-testid="chrome-theme-select"
-          style={{ display: "inline-flex", gap: 2 }}
-        >
-          {THEME_CHOICES.map(([value, label]) => (
-            <button
-              key={value}
-              role="radio"
-              aria-checked={themePref === value}
-              aria-label={label}
-              title={`${label} theme`}
-              className="btn btn--ghost btn--icon btn--sm"
-              data-active={themePref === value}
-              style={{
-                background:
-                  themePref === value ? "var(--bg-active)" : undefined,
-                color: themePref === value ? "var(--accent)" : undefined,
-              }}
-              onClick={() => onSelectTheme(value)}
-            >
-              {value === "light" && <Icon.Sun size={13} />}
-              {value === "dark" && <Icon.Moon size={13} />}
-              {value === "system" && <Icon.Settings size={13} />}
-            </button>
-          ))}
-        </div>
-        <div className="kbd-row">
-          <span
-            style={{
-              width: 24,
-              height: 24,
-              borderRadius: "50%",
-              background: "var(--accent-soft)",
-              color: "var(--accent)",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "var(--fs-ui-xs)",
-              fontWeight: 600,
-            }}
-          >
-            K
-          </span>
-        </div>
+        <ThemeSelector
+          themePref={themePref}
+          onSelectTheme={onSelectTheme}
+          // SNV-FR-56: the dropdown is a floating overlay of the main window,
+          // so opening it closes every other.
+          open={themeMenuOpen}
+          onOpenChange={setThemeMenuOpen}
+          onOverlayOpening={() => {
+            setSearchOpen(false);
+            onOverlayOpening();
+          }}
+        />
       </div>
     </div>
   );

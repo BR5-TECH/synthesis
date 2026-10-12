@@ -101,6 +101,8 @@ function Harness({
   // which is what lets these scenarios assert the real mutual exclusion rather
   // than a callback having been called.
   const [agentsRosterOpen, setAgentsRosterOpen] = useState(false);
+  // SNV-FR-QXTH / SNV-FR-56: so is the theme selector's dropdown.
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [themePref, setThemePref] = useState<ThemePreference>("system");
   return (
     <div>
@@ -143,8 +145,19 @@ function Harness({
         setAgentsRosterOpen={(open) => {
           // The shell closes every other overlay before opening one; the search
           // overlay is the only other one this harness mounts.
-          if (open) setSearchOpen(false);
+          if (open) {
+            setSearchOpen(false);
+            setThemeMenuOpen(false);
+          }
           setAgentsRosterOpen(open);
+        }}
+        themeMenuOpen={themeMenuOpen}
+        setThemeMenuOpen={(open) => {
+          if (open) {
+            setSearchOpen(false);
+            setAgentsRosterOpen(false);
+          }
+          setThemeMenuOpen(open);
         }}
       />
     </div>
@@ -209,9 +222,9 @@ describe("search overlay dismissal (SCH-FR-07)", () => {
     render(<Harness />);
     await openOverlay(user);
 
-    // The History button lives inside the top chrome but outside the search
-    // ref — the spec's own "elsewhere in the top chrome" example.
-    await user.click(screen.getByTitle("History"));
+    // The theme selector's trigger lives inside the top chrome but outside the
+    // search ref — the spec's own "elsewhere in the top chrome" example.
+    await user.click(screen.getByTestId("chrome-theme-trigger"));
 
     expect(overlayMarker()).not.toBeInTheDocument();
   });
@@ -232,7 +245,7 @@ describe("search overlay dismissal (SCH-FR-07)", () => {
     expect(overlayMarker()).toBeInTheDocument();
 
     // Tab-out: focus moves to a control outside the search ref.
-    fireEvent.blur(searchInput(), { relatedTarget: screen.getByTitle("History") });
+    fireEvent.blur(searchInput(), { relatedTarget: screen.getByTestId("chrome-theme-trigger") });
 
     expect(overlayMarker()).not.toBeInTheDocument();
   });
@@ -927,6 +940,45 @@ describe("the trailing cluster (SNV-FR-59)", () => {
     expect(control.closest(".top-chrome__right")).toBe(
       theme.closest(".top-chrome__right"),
     );
+  });
+
+  it("SNV-FR-59, SNV-FR-QXTH: holds exactly two controls, the agents control and the theme trigger, and no history or profile control", async () => {
+    render(<Harness activeWorktree={ON_MAIN} />);
+
+    const control = await screen.findByTestId("chrome-agents-control");
+    const cluster = control.closest(".top-chrome__right")!;
+    const buttons = Array.from(cluster.querySelectorAll("button"));
+
+    expect(buttons.map((b) => b.getAttribute("data-testid"))).toEqual([
+      "chrome-agents-control",
+      "chrome-theme-trigger",
+    ]);
+    expect(screen.queryByTitle("History")).toBeNull();
+  });
+
+  it("SNV-FR-QXTH, SNV-FR-56, SNV-FR-16: the theme dropdown and the roster or search overlay are never mounted together", async () => {
+    const user = userEvent.setup();
+    render(<Harness activeWorktree={ON_MAIN} />);
+
+    await user.click(searchInput());
+    expect(overlayMarker()).toBeInTheDocument();
+    await user.click(screen.getByTestId("chrome-theme-trigger"));
+    expect(screen.getByTestId("chrome-theme-menu")).toBeInTheDocument();
+    expect(overlayMarker()).not.toBeInTheDocument();
+
+    await user.click(await screen.findByTestId("chrome-agents-control"));
+    await screen.findByTestId("agents-roster");
+    expect(screen.queryByTestId("chrome-theme-menu")).toBeNull();
+
+    await user.click(screen.getByTestId("chrome-theme-trigger"));
+    expect(screen.getByTestId("chrome-theme-menu")).toBeInTheDocument();
+    expect(screen.queryByTestId("agents-roster")).toBeNull();
+
+    await user.click(searchInput());
+    await waitFor(() =>
+      expect(screen.queryByTestId("chrome-theme-menu")).toBeNull(),
+    );
+    expect(overlayMarker()).toBeInTheDocument();
   });
 
   it("is present whether or not the project has enrolled anyone", async () => {

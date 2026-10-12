@@ -118,6 +118,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/**
+ * SNV-FR-QXTH: the rows exist only while the dropdown is open. Opens it when it
+ * is closed, then returns the row of the named theme.
+ */
+const trigger = () => screen.getByTestId("chrome-theme-trigger");
+
+async function themeRow(name: "Light" | "Dark" | "System") {
+  if (!screen.queryByTestId("chrome-theme-menu")) {
+    await userEvent.click(await screen.findByTestId("chrome-theme-trigger"));
+  }
+  return within(await screen.findByTestId("chrome-theme-menu")).getByRole(
+    "radio",
+    { name },
+  );
+}
+
 describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
   it("SNV-FR-16: persists the chrome selection via save_app_preferences, applies it immediately, and restores it on relaunch", async () => {
     // Persisted preference is "system" and the OS reports light, so the app
@@ -138,13 +154,12 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
     const { unmount } = render(<App />);
     await enterIde();
 
-    const chrome = screen.getByTestId("chrome-theme-select");
     // Starts resolved to light (system preference + OS light).
     await waitFor(() =>
       expect(document.documentElement.dataset.theme).toBe("light"),
     );
 
-    await userEvent.click(within(chrome).getByRole("radio", { name: "Dark" }));
+    await userEvent.click(await themeRow("Dark"));
 
     // Persisted with the documented payload (SNV-FR-16).
     await waitFor(() =>
@@ -184,11 +199,7 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
     await waitFor(() =>
       expect(document.documentElement.dataset.theme).toBe("dark"),
     );
-    expect(
-      within(screen.getByTestId("chrome-theme-select")).getByRole("radio", {
-        name: "Dark",
-      }),
-    ).toHaveAttribute("aria-checked", "true");
+    expect(trigger()).toHaveAccessibleName("Theme: Dark");
   });
 
   it("SNV-FR-15: reflects the persisted preference at startup, with no interaction and no save", async () => {
@@ -200,11 +211,8 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
     render(<App />);
     await enterIde();
 
-    const chrome = screen.getByTestId("chrome-theme-select");
     await waitFor(() =>
-      expect(
-        within(chrome).getByRole("radio", { name: "Light" }),
-      ).toHaveAttribute("aria-checked", "true"),
+      expect(trigger()).toHaveAccessibleName("Theme: Light"),
     );
     // Initialise-only: reading the preference must not persist anything.
     expect(
@@ -231,12 +239,11 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
 
     render(<App />);
     await enterIde();
-    const chrome = screen.getByTestId("chrome-theme-select");
     await waitFor(() =>
       expect(document.documentElement.dataset.theme).toBe("dark"),
     );
 
-    await userEvent.click(within(chrome).getByRole("radio", { name: "System" }));
+    await userEvent.click(await themeRow("System"));
 
     // Literal "system" persisted (not collapsed to light/dark).
     await waitFor(() =>
@@ -262,9 +269,7 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
     await waitFor(() =>
       expect(document.documentElement.dataset.theme).toBe("light"),
     );
-    expect(
-      within(chrome).getByRole("radio", { name: "System" }),
-    ).toHaveAttribute("aria-checked", "true");
+    expect(trigger()).toHaveAccessibleName("Theme: System");
   });
 
   it("SNV-FR-16: rolls back the chrome selection when persistence fails, so the displayed theme matches what survives relaunch", async () => {
@@ -276,14 +281,11 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
 
     render(<App />);
     await enterIde();
-    const chrome = screen.getByTestId("chrome-theme-select");
     await waitFor(() =>
-      expect(
-        within(chrome).getByRole("radio", { name: "Dark" }),
-      ).toHaveAttribute("aria-checked", "true"),
+      expect(trigger()).toHaveAccessibleName("Theme: Dark"),
     );
 
-    await userEvent.click(within(chrome).getByRole("radio", { name: "Light" }));
+    await userEvent.click(await themeRow("Light"));
 
     // Save attempted, failed -> rolled back to the last persisted value.
     await waitFor(() =>
@@ -292,9 +294,7 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
       ).toBe(true),
     );
     await waitFor(() =>
-      expect(
-        within(chrome).getByRole("radio", { name: "Dark" }),
-      ).toHaveAttribute("aria-checked", "true"),
+      expect(trigger()).toHaveAccessibleName("Theme: Dark"),
     );
     await waitFor(() =>
       expect(document.documentElement.dataset.theme).toBe("dark"),
@@ -308,14 +308,11 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
     // at all. This is the emitting half; `SettingsWindowApp` is the other.
     render(<App />);
     await enterIde();
-    const chrome = screen.getByTestId("chrome-theme-select");
     await waitFor(() =>
-      expect(
-        within(chrome).getByRole("radio", { name: "Dark" }),
-      ).toHaveAttribute("aria-checked", "true"),
+      expect(trigger()).toHaveAccessibleName("Theme: Dark"),
     );
 
-    await userEvent.click(within(chrome).getByRole("radio", { name: "Light" }));
+    await userEvent.click(await themeRow("Light"));
 
     await waitFor(() =>
       expect(
@@ -337,11 +334,8 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
 
     render(<App />);
     await enterIde();
-    const chrome = screen.getByTestId("chrome-theme-select");
     await waitFor(() =>
-      expect(
-        within(chrome).getByRole("radio", { name: "Dark" }),
-      ).toHaveAttribute("aria-checked", "true"),
+      expect(trigger()).toHaveAccessibleName("Theme: Dark"),
     );
 
     // The other window wrote "light" and said so.
@@ -349,9 +343,7 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
     fireBusEvent("app-preferences:changed");
 
     await waitFor(() =>
-      expect(
-        within(chrome).getByRole("radio", { name: "Light" }),
-      ).toHaveAttribute("aria-checked", "true"),
+      expect(trigger()).toHaveAccessibleName("Theme: Light"),
     );
     await waitFor(() =>
       expect(document.documentElement.dataset.theme).toBe("light"),

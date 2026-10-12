@@ -364,6 +364,35 @@
 .top-chrome > :nth-child(2) { max-width: 520px; justify-self: center; width: 100%; }
 .top-chrome__left { display: flex; align-items: center; gap: 10px; }
 .top-chrome__right { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+
+/* ---------- THEME SELECTOR (SNV-FR-15, SNV-FR-QXTH) ---------- */
+.theme-select { position: relative; display: inline-flex; }
+.theme-select__trigger, .theme-select__row { position: relative; }
+.theme-select__trigger[aria-expanded="true"],
+.theme-select__row[data-active="true"] { background: var(--bg-active); color: var(--accent); }
+.theme-select__menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;
+  display: flex; flex-direction: column; gap: 2px; padding: 4px;
+  overflow: visible;
+}
+/* Tooltips show on hover and on keyboard focus. The trigger's sits under it
+   and the rows' sit beside them, on the side that has room in the corner. */
+.theme-select__tip {
+  position: absolute; z-index: var(--z-overlay); display: none;
+  width: max-content; padding: 4px 8px;
+  border: 1px solid var(--border-1); border-radius: var(--r-sm);
+  background: var(--bg-elevated); box-shadow: var(--shadow-4);
+  color: var(--fg-1); font-family: var(--font-sans);
+  font-size: var(--fs-ui-xs); font-weight: 400; line-height: 1.4;
+  white-space: nowrap; pointer-events: none;
+}
+.theme-select__trigger .theme-select__tip { top: calc(100% + 8px); right: 0; }
+.theme-select__row .theme-select__tip { top: 50%; transform: translateY(-50%); right: calc(100% + 8px); }
+.theme-select__trigger:hover .theme-select__tip,
+.theme-select__trigger:focus-visible .theme-select__tip,
+.theme-select__row:hover .theme-select__tip,
+.theme-select__row:focus-visible .theme-select__tip { display: block; }
+.theme-select__trigger[aria-expanded="true"] .theme-select__tip { display: none; }
 .top-chrome__brand { display: flex; align-items: center; gap: 8px; color: var(--fg-1); font-size: var(--fs-ui-md); font-weight: 600; }
 .app-icon { display: block; flex: none; }
 .top-chrome__project {

@@ -21,6 +21,8 @@ fn eac_ts51_both_backends_render_one_specification() {
             target: "/host/worktree".to_string(),
             read_only: false,
         }],
+        groups: vec![],
+        extra_hosts: vec![],
         env_names: vec![],
         env_literals: vec![],
         vendor_args: vec!["-p".to_string()],

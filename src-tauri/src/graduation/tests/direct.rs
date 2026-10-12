@@ -9,7 +9,7 @@ use tauri::Listener;
 
 impl Fixture {
     /// The branch the project's worktree holds.
-    fn branch(&self) -> String {
+    pub(super) fn branch(&self) -> String {
         self.repo().head().expect("a head").shorthand().expect("a branch").to_string()
     }
 

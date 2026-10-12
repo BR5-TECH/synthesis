@@ -49,6 +49,7 @@ pub mod runtime;
 
 // The parts this file was split into. They hold no surface of their own: every
 // item they carry is named through this module, exactly as before.
+mod docker_in_docker;
 mod launch;
 mod observer;
 mod repository;
@@ -365,6 +366,9 @@ pub enum AgentExecutionError {
     RuntimeUnavailable,
     ImageUnavailable(String),
     LaunchFailed(String),
+    /// EAC-FR-HWQN: Docker-in-Docker is enabled and the socket path is not a
+    /// usable Unix socket. Carries the path, so the run can name it.
+    DockerSocketUnavailable(String),
     /// EAC-FR-38: the open project commits no usable image for the resolved
     /// vendor. Distinct from `ImageUnavailable`, which is an image the project
     /// *did* name that Docker could not find or pull: this one is a project
@@ -422,6 +426,7 @@ impl AgentExecutionError {
             AgentExecutionError::RuntimeUnavailable => "runtime_unavailable",
             AgentExecutionError::ImageUnavailable(_) => "image_unavailable",
             AgentExecutionError::LaunchFailed(_) => "launch_failed",
+            AgentExecutionError::DockerSocketUnavailable(_) => "docker_socket_unavailable",
             AgentExecutionError::VendorImageUnresolved(_) => "vendor_image_unresolved",
             AgentExecutionError::SessionStateUnavailable(_) => "session_state_unavailable",
             AgentExecutionError::SupplementaryMountInvalid(_) => "supplementary_mount_invalid",
@@ -449,6 +454,22 @@ pub struct LaunchContext<'a> {
     /// EAC-FR-38: where the image a container is created from comes from — the
     /// project's own committed configuration, and nowhere else.
     pub images: &'a dyn VendorImageSource,
+    /// EAC-FR-DKRS: the project's Docker-in-Docker settings, read by the
+    /// application before the container exists. A task field, an instruction or
+    /// an agent output has no route into it.
+    pub docker_in_docker: DockerInDockerLaunch,
+}
+
+/// EAC-FR-DKRS: what the launch needs of the project's Docker-in-Docker
+/// settings. The default is disabled, and a disabled launch is the launch it
+/// was before the feature existed.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DockerInDockerLaunch {
+    pub enabled: bool,
+    /// The host path of the Docker socket: the stored path, or the platform
+    /// default where the stored path is empty.
+    pub socket_path: String,
+    pub host_gateway: bool,
 }
 
 /// EAC-FR-38: the image the open project commits for a vendor.

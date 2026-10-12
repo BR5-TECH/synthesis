@@ -542,6 +542,8 @@ fn eac_ts_tuaa_a_turn_reaches_its_repository_read_only() {
         })
         .chain(fallback.iter().cloned())
         .collect(),
+        groups: vec![],
+        extra_hosts: vec![],
         env_names: vec![],
         env_literals: vec![],
         vendor_args: vec![],

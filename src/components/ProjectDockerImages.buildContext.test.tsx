@@ -80,6 +80,14 @@ function backend(options: Scripted = {}) {
         return Promise.resolve(null);
       case "load_project_image_build_in_flight":
         return Promise.resolve(null);
+      case "load_docker_in_docker_settings":
+        return Promise.resolve({
+          enabled: false,
+          socketPath: "",
+          hostGateway: false,
+          defaultSocketPath: "/var/run/docker.sock",
+          support: "supported",
+        });
       case "append_log_records":
         return Promise.resolve();
       case "save_project_vendor_image": {

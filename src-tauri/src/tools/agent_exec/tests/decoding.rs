@@ -573,6 +573,7 @@ fn a_project_that_configures_no_image_launches_nothing() {
         project_key: PROJECT_KEY,
         fs: &harness.fs,
         images: &NoImages,
+        docker_in_docker: Default::default(),
     };
     let error = block_on(executor.execute_agent_cli(
         &Silent,

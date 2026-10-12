@@ -54,6 +54,7 @@ import { DirectChoice, directBlocker } from "./GraduationStart/direct";
 import { NewStreamFields } from "./GraduationStart/newStream";
 import { useGraduationQueueRuns } from "./GraduationStart/queue";
 import { refusalText, splitRefusal } from "./WorkStreamSelector/refusals";
+import { reportDockerSocketRefusal } from "../state/dockerSocketRefusal";
 
 /** The refusals of a direct start that the preflight must be read again for. */
 const DIRECT_REFUSALS = [
@@ -376,9 +377,12 @@ export function GraduationStart({
       // GSD-FR-JYRP: the refusal is rendered here, every answer is left as the
       // author set it, and nothing about the draft changed.
       const text = String(reason);
-      const [code] = splitTyped(text);
+      const [code, detail] = splitTyped(text);
       setError(graduationErrorMessage(text));
       logError(["frontend"], "graduation could not be started", { draftId, code });
+      // GSD-FR-BXKR: a missing Docker socket is also raised as an Error toast,
+      // addressed to the place where the path is corrected.
+      if (code === "docker_socket_unavailable") reportDockerSocketRefusal(detail);
       if (createdStream) {
         // GSD-FR-TZGT: the stream the dialog made stays, and a retry starts on
         // it instead of making a second.

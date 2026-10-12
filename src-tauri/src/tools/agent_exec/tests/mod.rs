@@ -48,6 +48,7 @@ mod concurrency;
 mod contracts;
 mod controls;
 mod decoding;
+mod docker_in_docker;
 mod durable;
 mod env_values;
 mod envelope;
@@ -441,6 +442,9 @@ struct Harness {
     /// EAC-FR-31's host root, kept inside the harness so a test run never writes
     /// into the author's real `app_data_dir()`.
     sessions: tempfile::TempDir,
+    /// EAC-FR-DKRS: what the project's Docker-in-Docker settings hand the
+    /// launch. Disabled unless a test sets it.
+    docker_in_docker: DockerInDockerLaunch,
 }
 
 impl Harness {
@@ -451,6 +455,7 @@ impl Harness {
             project_key: PROJECT_KEY,
             fs: &self.fs,
             images: &TEST_IMAGES,
+            docker_in_docker: self.docker_in_docker.clone(),
         }
     }
 
@@ -544,7 +549,7 @@ fn harness_verified_with(vendor: &str, config: Option<VerifyConfig>) -> Harness 
         .build()
         .expect("fs");
 
-    Harness { store, ai, fs, workspace, home, sessions }
+    Harness { store, ai, fs, workspace, home, sessions, docker_in_docker: Default::default() }
 }
 
 /// A harness with nothing configured at all.
@@ -564,7 +569,15 @@ fn empty_harness() -> Harness {
         .allow_root(sessions.path())
         .build()
         .expect("fs");
-    Harness { store: GlobalSettingsStore::in_memory(), ai, fs, workspace, home, sessions }
+    Harness {
+        store: GlobalSettingsStore::in_memory(),
+        ai,
+        fs,
+        workspace,
+        home,
+        sessions,
+        docker_in_docker: Default::default(),
+    }
 }
 
 /// EAC-FR-38: the project's committed image, as this suite's fixture project

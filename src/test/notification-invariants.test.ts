@@ -56,7 +56,7 @@ describe("ordinary work raises nothing (NTF-FR-24)", () => {
   it("has exactly one caller of raiseNotification, and names it", () => {
     // NTF-FR-24: opening, editing, saving, committing, scanning and searching
     // post no notification, because a raise is something a surface asks for
-    // explicitly. Two things ask, and both ask from the same file:
+    // explicitly. Several things ask, and all ask from the same file:
     //
     //  - the rehearsal of GLS-FR-27, which raises only when the author
     //    activates it. Its control is in the Global settings **window**, which
@@ -68,7 +68,10 @@ describe("ordinary work raises nothing (NTF-FR-24)", () => {
     //  - a change an agent has proposed to a draft file (DCR-FR-18), which
     //    raises when the proposal is recorded, because it is a decision the
     //    author is now owed and the tab holding it may not be one they are
-    //    looking at. Nothing raises when such a proposal is *decided*.
+    //    looking at. Nothing raises when such a proposal is *decided*; and
+    //  - a graduation start or a merge that the backend refuses because the
+    //    Docker socket is not there (GSD-FR-BXKR), which the refused surface
+    //    reports and this file raises as an Error toast.
     //
     // This test is the deliberate gate on that list: adding a call means
     // updating it, and updating it means saying which surface now interrupts

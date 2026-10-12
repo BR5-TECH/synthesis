@@ -58,6 +58,7 @@ fn docker_root() -> (tempfile::TempDir, crate::fs::RootFs) {
 
 mod changes_panel;
 mod docker_images;
+mod docker_in_docker;
 mod draft_template;
 mod drafts_panel;
 mod github_polling;

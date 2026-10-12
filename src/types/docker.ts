@@ -138,3 +138,20 @@ export interface ImageBuildFinished {
   /** Present on a failure: a safe, user-displayable account of what went wrong. */
   diagnostic?: string;
 }
+
+/** PSS-FR-QWTN: how well this platform supports Docker-in-Docker. */
+export type DockerInDockerSupport = "supported" | "best_effort" | "unsupported";
+
+/** PSS-FR-DIND: the three values the project-local store holds. */
+export interface DockerInDockerSettings {
+  enabled: boolean;
+  /** Empty means the platform default. */
+  socketPath: string;
+  hostGateway: boolean;
+}
+
+/** PSS-FR-QWTN: the stored values and the two the platform reports. */
+export interface DockerInDockerState extends DockerInDockerSettings {
+  defaultSocketPath: string;
+  support: DockerInDockerSupport;
+}

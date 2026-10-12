@@ -10,6 +10,8 @@ import type {
   DockerBackend,
   InFlightImageBuild,
   DockerBackendConfig,
+  DockerInDockerSettings,
+  DockerInDockerState,
   ProjectVendorImage,
   ProjectVendorImageStatus,
 } from "../types";
@@ -118,3 +120,24 @@ export const loadProjectImageBuildInFlight = () =>
  */
 export const cancelProjectVendorImageBuild = (operationId: string) =>
   invoke<void>("cancel_project_vendor_image_build", { operationId });
+
+// ---------------------------------------------------------------------------
+// Docker-in-Docker (PSS-project-settings-storage.md PSS-FR-DIND..PSS-FR-VRHC)
+// ---------------------------------------------------------------------------
+
+/**
+ * PSS-FR-QWTN: the project-local Docker-in-Docker settings and the platform's
+ * default socket path and support level. Reads one file; reaches no daemon.
+ */
+export const loadDockerInDockerSettings = () =>
+  invoke<DockerInDockerState>("load_docker_in_docker_settings");
+
+/**
+ * PSS-FR-QWTN: write the three values whole to the project-local store.
+ *
+ * Rejects with `docker_socket_path_invalid` or `docker_in_docker_unsupported`
+ * (PSS-FR-VRHC), and on either of them nothing is written. The socket is never
+ * checked here.
+ */
+export const saveDockerInDockerSettings = (settings: DockerInDockerSettings) =>
+  invoke<void>("save_docker_in_docker_settings", { settings });

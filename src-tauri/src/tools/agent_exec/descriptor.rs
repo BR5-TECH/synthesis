@@ -182,6 +182,16 @@ pub const NETWORK: &str = "bridge";
 /// capability at all, and `no-new-privileges` because nothing in either image is
 /// setuid. Never `--privileged`.
 pub const SECURITY_OPTS: &[&str] = &["--cap-drop", "ALL", "--security-opt", "no-new-privileges"];
+/// EAC-FR-DKRS: where a container sees the host Docker socket, whatever its
+/// host path is.
+pub const DOCKER_SOCKET_TARGET: &str = "/var/run/docker.sock";
+/// EAC-FR-DKRS: the host mapping of the host gateway toggle.
+pub const DOCKER_HOST_GATEWAY_MAPPING: &str = "host.docker.internal:host-gateway";
+/// EAC-FR-DKRS: the variable Testcontainers reads to reach the host, set where
+/// the host gateway toggle is on.
+pub const TESTCONTAINERS_HOST_OVERRIDE_ENV: &str = "TESTCONTAINERS_HOST_OVERRIDE";
+/// EAC-FR-DKRS: the value of [`TESTCONTAINERS_HOST_OVERRIDE_ENV`].
+pub const TESTCONTAINERS_HOST_OVERRIDE_VALUE: &str = "host.docker.internal";
 /// The environment variable Claude Code reads its OAuth token from (EAC-FR-15).
 pub const CLAUDE_TOKEN_ENV: &str = "CLAUDE_CODE_OAUTH_TOKEN";
 
@@ -602,12 +612,18 @@ pub struct ContainerSpec {
     /// directory's own host path, or [`WORKSPACE_TARGET`] in the fallback shape.
     pub workdir: String,
     pub mounts: Vec<BindMount>,
+    /// EAC-FR-DKRS: supplementary groups. Empty unless Docker-in-Docker is
+    /// enabled, when it holds the group of the Docker socket.
+    pub groups: Vec<u32>,
+    /// EAC-FR-DKRS: host mappings. Empty unless Docker-in-Docker is enabled and
+    /// the host gateway toggle is on.
+    pub extra_hosts: Vec<String>,
     /// Variables the runtime forwards **by name**, taking their values from the
     /// client's own environment, so a secret never reaches an argument vector
     /// (EAC-FR-15).
     pub env_names: Vec<String>,
     /// Variables carried with their values, every one of them a container path
-    /// this application chose rather than a secret.
+    /// or a host name this application chose rather than a secret.
     pub env_literals: Vec<(String, String)>,
     pub vendor_args: Vec<String>,
 }
@@ -659,6 +675,15 @@ impl ContainerSpec {
             args.push("--mount".into());
             args.push(mount.as_argument());
         }
+        // EAC-FR-DKRS: the socket's group, so the non-root user can use it.
+        for group in &self.groups {
+            args.push("--group-add".into());
+            args.push(group.to_string());
+        }
+        for host in &self.extra_hosts {
+            args.push("--add-host".into());
+            args.push(host.clone());
+        }
         for name in &self.env_names {
             args.push("--env".into());
             args.push(name.clone());
@@ -689,6 +714,11 @@ impl ContainerSpec {
 
     pub fn security_options(&self) -> Vec<String> {
         vec!["no-new-privileges".to_string()]
+    }
+
+    /// `--group-add` as the Engine API's `GroupAdd` spells it.
+    pub fn group_add(&self) -> Vec<String> {
+        self.groups.iter().map(u32::to_string).collect()
     }
 }
 

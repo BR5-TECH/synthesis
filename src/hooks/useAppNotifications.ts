@@ -41,6 +41,7 @@ import {
   withdrawForRoot,
 } from "../state/notifications";
 import { clearToasts } from "../state/toasts";
+import { dockerSocketRaise, onDockerSocketRefusal } from "../state/dockerSocketRefusal";
 import { setSelectionFollowsTab } from "../state/selectionFollowsTab";
 import {
   onAppPreferencesChanged,
@@ -464,6 +465,22 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       unlisten?.();
     };
   }, []);
+
+  /**
+   * GSD-FR-BXKR / NTF-FR-24: a start or a merge was refused because the Docker
+   * socket is not there. The surface that was refused reports it, and this is
+   * where the Error toast is raised, because a raise is made from this file
+   * alone. The toast addresses the Docker section of Project settings.
+   */
+  useEffect(
+    () =>
+      onDockerSocketRefusal((path) => {
+        const { projectKey: key, worktree: tree } = rootRef.current;
+        if (!key || !tree) return;
+        void raiseNotification(dockerSocketRaise(path, key, tree));
+      }),
+    [],
+  );
 
   /**
    * NTF-FR-JLXL / NTF-FR-VALU: a GitHub poll found new ready tasks.

@@ -103,7 +103,16 @@ pub(super) fn stop_of_execution(execution: &AgentExecution, limit_ms: u64) -> Op
 /// GXD-FR-WJOW: a turn that could not be launched. The sentence names the kind
 /// of error and nothing of its text; the full error goes to the application log.
 pub(super) fn stop_of_launch_error(error: &AgentExecutionError, limit_ms: u64) -> Stop {
+    // GXD-FR-UZHX: the one sentence that names a path. The path is the author's
+    // own Docker-in-Docker setting, never a credential or user content.
+    let socket_detail;
     let detail = match error {
+        AgentExecutionError::DockerSocketUnavailable(path) => {
+            socket_detail = format!(
+                "The Docker socket is not available at {path}. Start Docker or restore the socket at that path, or correct the Docker-in-Docker socket path in Project settings, in the Docker section. Then use Continue."
+            );
+            socket_detail.as_str()
+        }
         AgentExecutionError::IntegrationUnresolved(_) => {
             "The project has no agentic integration to run the turn with. Choose one in Project settings."
         }
@@ -166,6 +175,7 @@ pub(super) fn launch_error_kind(error: &AgentExecutionError) -> &'static str {
         AgentExecutionError::RuntimeUnavailable => "runtime_unavailable",
         AgentExecutionError::ImageUnavailable(_) => "image_unavailable",
         AgentExecutionError::LaunchFailed(_) => "launch_failed",
+        AgentExecutionError::DockerSocketUnavailable(_) => "docker_socket_unavailable",
         AgentExecutionError::VendorImageUnresolved(_) => "vendor_image_unresolved",
         AgentExecutionError::SessionStateUnavailable(_) => "session_state_unavailable",
         AgentExecutionError::SupplementaryMountInvalid(_) => "supplementary_mount_invalid",
@@ -349,6 +359,20 @@ mod tests {
             TWO_HOURS
         )
         .is_none());
+    }
+
+    // GXD-FR-UZHX, EAC-FR-HWQN: a missing Docker socket rests the run as a
+    // launch that failed, and its detail names the path and the action.
+    #[test]
+    fn a_missing_docker_socket_rests_launch_failed_with_a_detail_naming_the_path() {
+        let error = AgentExecutionError::DockerSocketUnavailable("/run/x/docker.sock".to_string());
+        let stop = stop_of_launch_error(&error, TWO_HOURS);
+        assert_eq!(stop.reason, GraduationInterruptionReason::LaunchFailed);
+        assert!(stop.detail.contains("/run/x/docker.sock"), "{}", stop.detail);
+        assert!(stop.detail.contains("Project settings"), "{}", stop.detail);
+        assert!(stop.detail.contains("Continue"), "{}", stop.detail);
+        assert_eq!(launch_error_kind(&error), "docker_socket_unavailable");
+        assert_eq!(settled_detail(&stop, Some(false)), stop.detail, "a launch detail stays whole");
     }
 
     // GXD-FR-WJOW: a launch error gives one sentence for its kind and none of

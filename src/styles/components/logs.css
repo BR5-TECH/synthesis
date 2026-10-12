@@ -568,3 +568,22 @@
   padding: 0;
   color: var(--accent);
 }
+
+/* SET-FR-NXDV, SET-FR-JMHE, SET-FR-PQLA: the Docker-in-Docker controls stand
+   above the vendor tabs, because they belong to the whole project. */
+.docker-in-docker {
+  margin-bottom: var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border-1);
+}
+.docker-in-docker__check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+}
+.docker-in-docker__note {
+  margin-top: 0;
+}

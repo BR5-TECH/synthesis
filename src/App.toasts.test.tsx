@@ -10,6 +10,7 @@ import App from "./App";
 import { NOTIFICATION_ACTIVATED } from "./events";
 import { resetAppPreferencesCache } from "./state/appPreferences";
 import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
+import { reportDockerSocketRefusal } from "./state/dockerSocketRefusal";
 import { mintAddress } from "./state/notificationAddress";
 import { resetNotifications } from "./state/notifications";
 import { resetPanelReveals } from "./state/panelReveal";
@@ -130,5 +131,25 @@ describe("the unreachable-address toast", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("notification-toast")).toBeNull(),
     );
+  });
+});
+
+describe("the Docker socket refusal toast (GSD-FR-BXKR, NTF-FR-24)", () => {
+  it("GSD-FR-BXKR, NTF-FR-24: a refusal reported while a project is open shows an Error toast that names the path", async () => {
+    render(<App />);
+    await enterIde();
+    act(() => reportDockerSocketRefusal("/run/x/docker.sock"));
+    const toast = await screen.findByTestId("notification-toast");
+    expect(toast).toHaveAttribute("data-level", "Error");
+    expect(toast).toHaveAttribute("role", "alert");
+    expect(toast).toHaveAttribute("data-key", "docker-socket-unavailable");
+    expect(toast).toHaveTextContent("/run/x/docker.sock");
+  });
+
+  it("NTF-FR-02: a refusal reported with no project open raises nothing", async () => {
+    render(<App />);
+    await screen.findByText("acme");
+    act(() => reportDockerSocketRefusal("/run/x/docker.sock"));
+    expect(screen.queryByTestId("notification-toast")).toBeNull();
   });
 });

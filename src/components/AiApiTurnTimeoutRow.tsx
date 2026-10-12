@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import * as api from "../api";
 import { logWarn } from "../logging";
@@ -64,11 +64,15 @@ export function AiApiTurnTimeoutRow({
 }: AiApiTurnTimeoutRowProps) {
   const [text, setText] = useState(shownSeconds(turnTimeoutMs));
 
-  // Adopt a value changed from outside the field: another tab's record
-  // arriving, a Clear, or the stored value after a commit.
-  useEffect(() => {
+  // Adopt a value changed from outside the field: the record that a Clear or
+  // an activation returns, or the stored value after a commit. This occurs
+  // during the render, not in an effect. An effect also runs after the mount,
+  // and when it runs late it writes the stored value over the first entry typed.
+  const [adopted, setAdopted] = useState(turnTimeoutMs);
+  if (!Object.is(adopted, turnTimeoutMs)) {
+    setAdopted(turnTimeoutMs);
     setText(shownSeconds(turnTimeoutMs));
-  }, [turnTimeoutMs]);
+  }
 
   /** A commit on its way, so Enter and the blur after it send one call. */
   const inFlight = useRef(false);

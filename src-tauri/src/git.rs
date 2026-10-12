@@ -434,6 +434,75 @@ pub async fn push_current_branch(
     .map_err(|e| format!("push failed: {e}"))?
 }
 
+/// GTC-FR-RZNQ / GTC-FR-KUVE: push a named local branch from the checkout that
+/// holds it, streaming its output on the channels `push_current_branch` uses.
+#[tauri::command]
+pub async fn push_branch(
+    branch: String,
+    app: tauri::AppHandle,
+    project: State<'_, ProjectState>,
+) -> Result<(), String> {
+    let root = project.require_root()?;
+    let project_key = project.slot_key();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let checkout = push_checkout(&app, &root, &branch);
+        let store = app.state::<GlobalSettingsStore>();
+        let tokens = app.state::<GithubTokens>();
+        let registry = app.state::<ProgressRegistry>();
+        let emit = |name: &str, payload: serde_json::Value| {
+            let _ = app.emit(name, payload);
+        };
+        push_named_branch_at(
+            &app,
+            &logging::BUFFER,
+            &emit,
+            &registry,
+            GithubAccess {
+                root: &checkout,
+                store: &store,
+                tokens: &tokens,
+                project_key: &project_key,
+            },
+            &branch,
+        )
+    })
+    .await
+    .map_err(|e| format!("push failed: {e}"))?
+}
+
+/// GTC-FR-RZNQ: the checkout a push of `branch` runs from — the one that holds
+/// it, else the primary worktree, else the active root. A holder that cannot
+/// be opened (a stream whose working copy is gone) holds nothing.
+pub(crate) fn push_checkout<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &Path,
+    branch: &str,
+) -> std::path::PathBuf {
+    let held = pull_requests::create::checkout_for_branch(app, root, branch)
+        .filter(|path| changes::open_repo(path).is_ok());
+    let held_by_checkout = held.is_some();
+    let checkout = held
+        .or_else(|| {
+            crate::worktree::context_for(root).ok().and_then(|context| {
+                context
+                    .worktrees
+                    .into_iter()
+                    .find(|w| w.is_primary && !w.is_missing)
+                    .map(|w| std::path::PathBuf::from(w.path))
+            })
+        })
+        .unwrap_or_else(|| root.to_path_buf());
+    logging::log_debug(
+        app,
+        &logging::BUFFER,
+        TRANSFER,
+        "push checkout resolved",
+        log_fields! { "branch" => branch, "heldByCheckout" => held_by_checkout },
+    );
+    checkout
+}
+
 #[tauri::command]
 pub fn get_diff(
     scope: DiffScope,

@@ -185,33 +185,33 @@ describe("what the window reads and blocks on (CPR-FR-SQGZ, CPR-FR-VYPG, CPR-FR-
     await waitFor(() => expect(submit()).toBeEnabled());
   });
 
-  it("CPR-FR-SQGZ: Check again reads anew, so an author who pushed elsewhere continues", async () => {
-    headState = async () => ({ ...READY, remoteBranchExists: false, unpushed: null });
+  it("CPR-FR-SQGZ: Check again reads anew, so an author who commits elsewhere continues", async () => {
+    headState = async () => ({ ...READY, uncommittedPaths: ["a.md"] });
     mount();
-    expect(await screen.findByTestId("create-pr-block-not-pushed")).toHaveTextContent(
-      "The branch is not on the remote. Push it first.",
+    expect(await screen.findByTestId("create-pr-block-uncommitted")).toHaveTextContent(
+      "1 uncommitted file (a.md). Commit first.",
     );
     expect(submit()).toBeDisabled();
     headState = async () => READY;
     await userEvent.click(screen.getByTestId("create-pr-recheck"));
-    await waitFor(() => expect(screen.queryByTestId("create-pr-block-not-pushed")).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId("create-pr-block-uncommitted")).toBeNull());
     expect(submit()).toBeEnabled();
   });
 
-  it("CPR-FR-VYPG: unpushed commits, uncommitted files, no remote and an empty branch each block Submit in words", async () => {
+  it("CPR-FR-VYPG, CPR-FR-PLWK: uncommitted files, no remote and an empty branch each block Submit in words", async () => {
     headState = async () => ({
       ...READY,
       unpushed: 2,
       uncommittedPaths: ["a.md", "b.md", "c.md", "d.md"],
     });
     mount();
-    expect(await screen.findByTestId("create-pr-block-unpushed")).toHaveTextContent(
-      "2 commits are not on the remote. Push first.",
-    );
-    // Several blocks stand together, and the files are named then counted.
-    expect(screen.getByTestId("create-pr-block-uncommitted")).toHaveTextContent(
+    // The files are named then counted. Missing commits are a notice beside
+    // the block, not a block of their own.
+    expect(await screen.findByTestId("create-pr-block-uncommitted")).toHaveTextContent(
       "4 uncommitted files (a.md, b.md, c.md, and 1 more). Commit first.",
     );
+    expect(screen.getByTestId("create-pr-notice-unpushed")).toBeInTheDocument();
+    expect(screen.queryByTestId("create-pr-block-unpushed")).toBeNull();
     expect(submit()).toBeDisabled();
     cleanup();
 
@@ -230,11 +230,12 @@ describe("what the window reads and blocks on (CPR-FR-SQGZ, CPR-FR-VYPG, CPR-FR-
     expect(submit()).toBeDisabled();
   });
 
-  it("CPR-FR-VYPG, CPR-FR-WJIA: a window with every block cleared pushes and commits nothing", async () => {
+  it("CPR-FR-VYPG, CPR-FR-WJIA, CPR-FR-ODTB: a window with every block cleared pushes and commits nothing until Submit", async () => {
     mount();
     await ready();
     expect(submit()).toBeEnabled();
     expect(calls("push_current_branch")).toHaveLength(0);
+    expect(calls("push_branch")).toHaveLength(0);
     expect(calls("commit_paths")).toHaveLength(0);
   });
 

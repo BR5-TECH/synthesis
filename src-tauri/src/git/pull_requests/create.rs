@@ -208,20 +208,30 @@ pub(crate) fn checkout_holding(
         .map(|w| std::path::PathBuf::from(&w.path))
 }
 
-/// GTC-FR-YWCP: the uncommitted paths of the checkout that holds `head`, in
-/// whichever worktree it is out, or the working copy of the work stream whose
-/// branch it is. Empty when nothing holds it.
+/// GTC-FR-YWCP / GTC-FR-RZNQ: the checkout that holds `head`, in whichever
+/// worktree it is out, or else the working copy of the work stream whose branch
+/// it is. `None` when nothing holds it.
+pub(crate) fn checkout_for_branch<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &Path,
+    head: &str,
+) -> Option<std::path::PathBuf> {
+    let held = crate::worktree::context_for(root)
+        .ok()
+        .and_then(|context| checkout_holding(&context.worktrees, head));
+    held.or_else(|| crate::streams::stream_on_branch(app, head).map(|stream| stream.worktree()))
+}
+
+/// GTC-FR-YWCP: the uncommitted paths of the checkout that holds `head`.
+/// Empty when nothing holds it.
 fn uncommitted_paths_for<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     root: &Path,
     head: &str,
 ) -> Vec<String> {
-    let held = crate::worktree::context_for(root)
-        .ok()
-        .and_then(|context| checkout_holding(&context.worktrees, head));
-    let tree = held
-        .or_else(|| crate::streams::stream_on_branch(app, head).map(|stream| stream.worktree()));
-    tree.map(|path| crate::streams::uncommitted_paths_of(&path)).unwrap_or_default()
+    checkout_for_branch(app, root, head)
+        .map(|path| crate::streams::uncommitted_paths_of(&path))
+        .unwrap_or_default()
 }
 
 /// GTC-FR-NEIW: read the head state and report it.

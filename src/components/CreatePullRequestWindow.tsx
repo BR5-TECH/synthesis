@@ -6,9 +6,10 @@
  * the Changes panel footer, and the Git panel's PRs section. The opener gives
  * it a source (CPR-FR-JOIG) and everything after that is the same.
  *
- * The window creates the pull request and nothing else. It commits nothing,
- * pushes nothing and pulls nothing (CPR-FR-VYPG): a head branch GitHub cannot
- * see is a state it names, with what the author must do about it.
+ * When the remote lacks the head branch or some of its commits, **Submit**
+ * pushes the branch first and then creates the pull request (CPR-FR-PLWK,
+ * CPR-FR-ODTB). The window commits nothing and pulls nothing: those states are
+ * blocks it names, with what the author must do about them (CPR-FR-VYPG).
  *
  * The shell mounts it, because it is a floating overlay of the main window and
  * mutually exclusive with the others (SNV-FR-56, CPR-FR-IWDK). It gives way to
@@ -25,6 +26,8 @@ import {
   pullRequestBlocks,
   pullRequestFailureMessage,
   pullRequestHeadReadMessage,
+  pullRequestPushNotice,
+  pushFailureMessage,
 } from "./CreatePullRequest/messages";
 import type {
   PullRequestInput,
@@ -66,6 +69,9 @@ interface Failure {
   missingToken: boolean;
 }
 
+/** CPR-FR-XMRL: what the running request does now. */
+type Phase = "pushing" | "creating";
+
 const FOCUSABLE =
   'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
 
@@ -87,6 +93,7 @@ export function CreatePullRequestWindow({
   const [branches, setBranches] = useState<string[] | null>(null);
   const [head, setHead] = useState<HeadRead>({ status: "loading" });
   const [submitting, setSubmitting] = useState(false);
+  const [phase, setPhase] = useState<Phase>("creating");
   const [failure, setFailure] = useState<Failure | null>(
     resume?.notice ? { message: resume.notice, missingToken: false } : null,
   );
@@ -166,6 +173,10 @@ export function CreatePullRequestWindow({
     () => (head.status === "ready" ? pullRequestBlocks(head.state) : []),
     [head],
   );
+  const pushNotice = useMemo(
+    () => (head.status === "ready" ? pullRequestPushNotice(head.state) : null),
+    [head],
+  );
   const baseMissing =
     branches !== null && base !== "" && !branches.includes(base);
   const baseOptions = useMemo(() => {
@@ -196,6 +207,11 @@ export function CreatePullRequestWindow({
     if (submittingRef.current) return;
     setRunning(true);
     setFailure(null);
+    // CPR-FR-ODTB: the push is due when the last read says the remote lacks
+    // the branch or some of its commits.
+    setPhase(pushNotice !== null ? "pushing" : "creating");
+    if (pushNotice !== null && !(await pushHead(fromResume))) return;
+    if (mounted.current) setPhase("creating");
     logInfo(["frontend", "remote"], "pull request creation started", {
       head: source.head,
       base,
@@ -237,15 +253,64 @@ export function CreatePullRequestWindow({
     }
   };
 
-  // CPR-FR-VZUZ: a token was chosen, so the submission runs once with what was
-  // held.
-  useEffect(() => {
-    if (resume?.submit && !resumedRef.current) {
-      resumedRef.current = true;
-      void submit(true);
+  // CPR-FR-ODTB: push the head branch before the creation. True when the
+  // creation may follow; false when the push failed and the failure is shown.
+  const pushHead = async (fromResume: boolean): Promise<boolean> => {
+    logInfo(["frontend", "remote"], "pull request head push started", {
+      head: source.head,
+      reason: pushNotice?.key,
+    });
+    try {
+      await api.pushBranch(source.head);
+    } catch (error) {
+      logWarn(["frontend", "remote"], "pull request head push failed", {
+        head: source.head,
+        error: parseRejection(error).code,
+      });
+      setRunning(false);
+      if (!mounted.current) return false;
+      if (isTokenSelectionRequired(error) && !fromResume) {
+        // CPR-FR-VZUZ: the push asks for a token as the creation does.
+        onRequestToken({ title, body, base, draft });
+        return false;
+      }
+      setFailure({
+        message: pushFailureMessage(error, source.head),
+        missingToken: isTokenMissing(error),
+      });
+      return false;
     }
+    logInfo(["frontend", "remote"], "pull request head pushed", {
+      head: source.head,
+    });
+    // A window that is gone creates nothing: the project may have changed.
+    if (!mounted.current) {
+      logInfo(["frontend", "remote"], "pull request creation skipped, window gone", {
+        head: source.head,
+      });
+      setRunning(false);
+      return false;
+    }
+    // CPR-FR-ODTB: the remote now holds the branch, so the state is read anew.
+    readHead(base);
+    return true;
+  };
+
+  // CPR-FR-VZUZ: a token was chosen, so the submission runs once with what was
+  // held. It waits for the head state, which decides whether a push is due,
+  // and runs only when nothing makes Submit unavailable (CPR-FR-HGXL).
+  useEffect(() => {
+    if (!resume?.submit || resumedRef.current || head.status === "loading")
+      return;
+    resumedRef.current = true;
+    if (canSubmit) void submit(true);
+    else
+      logInfo(["frontend", "remote"], "pull request resume held back", {
+        head: source.head,
+        reasons: reasons.length,
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [head]);
 
   // CPR-FR-SSQI / CPR-FR-XMRL: Escape closes the window unless a request runs.
   useEffect(() => {
@@ -415,6 +480,16 @@ export function CreatePullRequestWindow({
                 ⚠ {block.text}
               </p>
             ))}
+            {/* CPR-FR-PLWK: information, not a block. */}
+            {pushNotice && (
+              <p
+                className="create-pr__notice"
+                data-testid={`create-pr-notice-${pushNotice.key}`}
+              >
+                <Icon.Info size={12} aria-hidden="true" />
+                <span>{pushNotice.text}</span>
+              </p>
+            )}
             {head.status !== "loading" && (
               <button
                 type="button"
@@ -467,7 +542,11 @@ export function CreatePullRequestWindow({
             data-testid="create-pr-submit"
             onClick={() => void submit()}
           >
-            {submitting ? "Creating the pull request…" : "Submit"}
+            {!submitting
+              ? "Submit"
+              : phase === "pushing"
+                ? "Pushing the branch…"
+                : "Creating the pull request…"}
           </button>
           {reasons.length > 0 && !submitting && (
             <span id={reasonId} className="sr-only">

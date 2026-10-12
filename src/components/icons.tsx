@@ -25,11 +25,6 @@ const I = ({
 );
 
 export const Icon = {
-  Sigma: (p: IconProps) => (
-    <I {...p}>
-      <path d="M18 6H6l7 6-7 6h12" />
-    </I>
-  ),
   /**
    * CHG-FR-56: the rollback the Changes panel's footer performs — a counter-
    * clockwise arrow returning to where it came from, which is what the action

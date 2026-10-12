@@ -1,17 +1,19 @@
+import { useLayoutEffect, useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { aiErrorMessage } from "./AiIntegrations";
-import { turnTimeoutToCommit } from "./AiApiTurnTimeoutRow";
+import { AiApiTurnTimeoutRow, turnTimeoutToCommit } from "./AiApiTurnTimeoutRow";
 import { AI_ERRORS, type AiApiIntegration, type AiApiProviderId } from "../types";
 import * as api from "../api";
-import { logWarn } from "../logging";
+import { logWarn, resetLogBufferForTest } from "../logging";
 import {
   API_ALL,
   BothLevels,
   apiIntegration,
   apiLevel,
+  apiVerified,
   argsOfFor,
   backendFor,
   commandsFor,
@@ -54,6 +56,7 @@ async function field() {
 }
 
 beforeEach(() => {
+  resetLogBufferForTest();
   invokeMock.mockReset();
   vi.mocked(logWarn).mockClear();
 });
@@ -306,6 +309,62 @@ describe("the turn timeout row", () => {
     expect((await field()).value).toBe("");
   });
 
+  it("AII-FR-QSOR: the field shows the value of the record that Clear returns", async () => {
+    backend(
+      {
+        api: API_ALL.map((p) =>
+          p === "openrouter"
+            ? apiVerified("openrouter", "https://openrouter.ai/api/v1", {
+                turnTimeoutMs: 600_000,
+              })
+            : apiIntegration(p),
+        ),
+      },
+      { clear_ai_api_integration: () => API_ALL.map((p) => apiIntegration(p)) },
+    );
+    render(<BothLevels />);
+    const user = userEvent.setup();
+
+    const input = await field();
+    expect(input.value).toBe("600");
+    await user.click(apiLevel().getByRole("button", { name: /clear/i }));
+    await waitFor(() => expect(apiLevel().getByTestId("ai-api-empty")).toBeInTheDocument());
+    // The same element: the row adopts the new value, it is not mounted again.
+    expect(await field()).toBe(input);
+    expect(input.value).toBe("");
+    expect(setCalls()).toBe(0);
+  });
+
+  it("AII-FR-28: an entry made before the effects of the mount run is kept", () => {
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    // A layout effect runs after the mount commit and before every passive
+    // effect. Thus the entry occurs at the same point as a fast entry on a slow
+    // runner, and no real time is necessary.
+    function EditsBeforeEffects() {
+      const box = useRef<HTMLDivElement>(null);
+      useLayoutEffect(() => {
+        const input = box.current!.querySelector("input")!;
+        setValue.call(input, "");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }, []);
+      return (
+        <div ref={box}>
+          <AiApiTurnTimeoutRow
+            provider="openrouter"
+            turnTimeoutMs={600_000}
+            onSaved={() => {}}
+            describeError={String}
+            error=""
+            onError={() => {}}
+          />
+        </div>
+      );
+    }
+    render(<EditsBeforeEffects />);
+
+    expect((screen.getByLabelText("Turn timeout") as HTMLInputElement).value).toBe("");
+  });
+
   it("AAP-FR-FGNK: the wrapper names the command and its arguments", async () => {
     invokeMock.mockResolvedValue(apiIntegration("custom"));
     await api.setAiApiTurnTimeout("custom", null);
@@ -316,6 +375,8 @@ describe("the turn timeout row", () => {
     backend({ api: [] });
     render(<BothLevels />);
     await screen.findByTestId("ai-api-level");
+    // The list has loaded, so the check below is not made before it.
+    await waitFor(() => expect(apiLevel().queryByText("Loading…")).toBeNull());
     expect(apiLevel().queryByLabelText("Turn timeout")).toBeNull();
   });
 });

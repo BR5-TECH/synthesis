@@ -460,7 +460,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
                 draft row without exception — active, archived, graduated, held
                 by a run, and inconsistent alike — because it reads an account
                 of the draft rather than touching the draft. */}
-            {menuEntry("Information", <Icon.Sigma size={12} />, () =>
+            {menuEntry("Information", <Icon.Info size={12} />, () =>
               openOverlay({ kind: "draft-information", id: draft.id }),
             )}
             {/* DRP-FR-NPZO / DRP-FR-YYZU: a GitHub-shadow row offers

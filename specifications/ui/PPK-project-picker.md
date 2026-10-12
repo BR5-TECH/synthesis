@@ -111,6 +111,7 @@ Layout notes for the generator:
 16. **PPK-FR-15** While the picker is the only window, the application menu offers **Settings**, the only route to settings here (per `SWN-settings-windows.md` SWN-FR-15). The window shows its Global group only (SWN-FR-16). It opens application-modal to the picker, centred on its display (SWN-FR-02, SWN-FR-04). The picker renders behind it, takes no interaction, and is unchanged when it closes.
    - *Why:* The Project group is absent rather than disabled because no project is open.
 17. **PPK-FR-EWQH** While the picker is the only window, the application menu also offers **About** (per `ABT-about-panel.md` ABT-FR-KMVD), in the position `SNV-shell-navigation.md` SNV-FR-23 gives it. The About panel opens modal over the picker and blocks it. The picker renders behind it, takes no interaction, and is unchanged when the panel closes (per `ABT-about-panel.md` ABT-FR-QZHW, ABT-FR-ZEJM).
+18. **PPK-FR-DYKZ** The picker header shows the application mark followed by the name "Synthesis". The mark is the same image as the top chrome's app brand (per `SNV-shell-navigation.md` SNV-FR-EZQB).
 
 ## Non-functional requirements
 - The recent project list is local-only in v1 (no cross-machine sync).

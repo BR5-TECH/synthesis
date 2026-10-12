@@ -22,6 +22,7 @@ use tempfile::TempDir;
 
 mod branch_compare;
 mod branch_deletion;
+mod branch_deletion_lock;
 mod branch_deletion_remote;
 mod branch_info;
 mod branches;

@@ -85,6 +85,11 @@ export interface BranchDeletionPlan {
   branch: string;
   worktree?: BranchWorktreeRef;
   /**
+   * GTC-FR-IVPE: present when that linked worktree is locked. `reason` is
+   * absent when Git records none.
+   */
+  worktreeLock?: { reason?: string };
+  /**
    * GTC-FR-JOWX: `aheadOfBase` counts the commits the stream holds that its
    * base branch does not, as WKS-FR-EIBC counts them.
    */

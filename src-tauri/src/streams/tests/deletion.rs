@@ -77,3 +77,22 @@ fn deleting_a_busy_stream_is_refused() {
 }
 
 // ---------------------------------------------------------------------------
+
+// WTC-FR-KELA: a lock on the working copy, as an agent tool puts on the
+// worktree it works in, does not stop the removal.
+#[test]
+fn deleting_a_stream_whose_working_copy_is_locked_removes_it() {
+    let fx = Fixture::new();
+    let stream = fx.create("locked", None).expect("created");
+    let repo = fx.repo();
+    for name in worktree_names(&repo) {
+        repo.find_worktree(&name).unwrap().lock(Some("claude agent agent-x (pid 1)")).unwrap();
+    }
+
+    delete_work_stream(fx.app.clone(), stream.id.clone(), false, false).expect("deleted");
+
+    let repo = fx.repo();
+    assert!(!branch_names(&repo).contains(&stream.branch));
+    assert!(worktree_names(&repo).is_empty());
+    assert!(!Path::new(&stream.worktree_path).exists());
+}

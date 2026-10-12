@@ -605,6 +605,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
       await act(async () => void openDraftMenu(row.name));
       const entries = within(screen.getByRole("menu")).getAllByRole("menuitem");
       expect(entries[1].textContent).toBe("Information");
+      expect(entries[1].querySelector('[data-icon="info"]')).not.toBeNull();
       expect(entries[1]).not.toHaveAttribute("aria-disabled");
     }
 

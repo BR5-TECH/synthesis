@@ -122,6 +122,11 @@ button.git__file {
   padding: 8px 10px; border: 1px solid var(--warn); border-radius: var(--r-md);
   background: var(--warn-soft); color: var(--fg-1); font-size: var(--fs-ui-sm);
 }
+/* GIT-FR-LUEY: information, not a warning. */
+.git-delete__notice {
+  padding: 8px 10px; border: 1px solid var(--border-2); border-radius: var(--r-md);
+  background: var(--bg-sunken); color: var(--fg-1); font-size: var(--fs-ui-sm); overflow-wrap: anywhere;
+}
 .git-delete__paths { margin: 4px 0 0; padding-left: 18px; font-family: var(--font-mono); font-size: var(--fs-ui-xs); overflow-wrap: anywhere; }
 .git-delete__remote { display: flex; gap: 8px; align-items: center; font-size: var(--fs-ui-sm); color: var(--fg-1); }
 

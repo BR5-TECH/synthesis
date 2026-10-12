@@ -4,6 +4,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 
 import { Icon } from "./icons";
+import { AppIcon } from "./AppIcon";
 import type {
   CreateMode,
   ProjectHandle,
@@ -264,26 +265,7 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
     <div className="picker">
       <div className="picker-frame">
         <div className="picker-head">
-          <svg
-            width="32"
-            height="32"
-            viewBox="0 0 64 64"
-            style={{ color: "var(--accent)" }}
-          >
-            <rect
-              x="2"
-              y="2"
-              width="60"
-              height="60"
-              rx="14"
-              fill="currentColor"
-              opacity="0.12"
-            />
-            <path
-              d="M16 14 H48 V20 H26 L36 32 L26 44 H48 V50 H16 V46 L28.5 32 L16 18 Z"
-              fill="currentColor"
-            />
-          </svg>
+          <AppIcon size={32} />
           <span className="t-display" style={{ fontSize: "calc(var(--font-ui-size) * 24 / 13)" }}>
             Synthesis
           </span>

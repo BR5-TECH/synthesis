@@ -1,6 +1,7 @@
 //! Deleting a local branch together with its linked worktree
 //! (`../../specifications/core/GTC-git.md` GTC-FR-UMXA, GTC-FR-WNZH,
-//! GTC-FR-AVKD, GTC-FR-LEBC, GTC-FR-JOWX, GTC-FR-NPCT).
+//! GTC-FR-AVKD, GTC-FR-LEBC, GTC-FR-JOWX, GTC-FR-NPCT, GTC-FR-IVPE,
+//! GTC-FR-MSXC, GTC-FR-JUZP).
 //!
 //! `inspect_branch_deletion` and `delete_branch` share one resolution of the
 //! state a deletion stands in, so the plan an author confirms and the checks the
@@ -21,7 +22,7 @@ use crate::global_settings::GlobalSettingsStore;
 use crate::log_fields;
 use crate::logging::{self, LogBuffer, LogLevel};
 use crate::project::ProjectState;
-use crate::worktree::WorktreeEntry;
+use crate::worktree::{WorktreeEntry, WorktreeLock};
 
 use super::branch_deletion_remote::{remote_target, RemoteTarget};
 use super::branch_info::BranchWorktreeRef;
@@ -72,6 +73,9 @@ pub struct BranchDeletionPlan {
     /// The linked worktree the deletion removes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worktree: Option<BranchWorktreeRef>,
+    /// GTC-FR-IVPE: present when that linked worktree is locked.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktree_lock: Option<WorktreeLock>,
     /// Present for a work stream's branch.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<BranchDeletionStream>,
@@ -116,6 +120,8 @@ struct Resolved {
     branch: String,
     /// The linked worktree that has the branch checked out.
     worktree: Option<WorktreeEntry>,
+    /// GTC-FR-IVPE: the lock on that worktree, also when its directory is gone.
+    worktree_lock: Option<WorktreeLock>,
     stream: Option<crate::streams::WorkStream>,
     remote: Option<RemoteTarget>,
     uncommitted: Vec<String>,
@@ -192,9 +198,13 @@ fn resolve<R: tauri::Runtime>(
     };
     let uncommitted =
         tree.map(|path| crate::streams::uncommitted_paths_of(&path)).unwrap_or_default();
+    let worktree_lock = holder
+        .as_ref()
+        .and_then(|held| crate::worktree::worktree_lock_at(app, &repo, Path::new(&held.path)));
     Ok(Resolved {
         branch: name.to_string(),
         worktree: holder,
+        worktree_lock,
         stream,
         remote: remote_target(&repo, name),
         uncommitted,
@@ -212,6 +222,7 @@ pub fn inspect_branch_deletion_for<R: tauri::Runtime>(
     Ok(BranchDeletionPlan {
         branch: resolved.branch,
         worktree: resolved.worktree.as_ref().map(BranchWorktreeRef::from),
+        worktree_lock: resolved.worktree_lock,
         stream: resolved.stream.map(|s| BranchDeletionStream {
             ahead_of_base: crate::streams::ahead_of_base_of(root, &s),
             stream_id: s.id,
@@ -242,6 +253,8 @@ pub fn inspect_branch_deletion_reported<R: tauri::Runtime>(
             log_fields! {
                 "branch" => plan.branch.as_str(),
                 "hasWorktree" => plan.worktree.is_some(),
+                // GTC-FR-JUZP: a boolean. The lock reason is never logged.
+                "worktreeLocked" => plan.worktree_lock.is_some(),
                 "isStream" => plan.stream.is_some(),
                 "uncommittedCount" => plan.uncommitted_paths.len(),
                 "hasRemoteBranch" => plan.remote_branch.is_some(),
@@ -370,6 +383,8 @@ pub fn delete_branch_at<R: tauri::Runtime>(
         log_fields! {
             "branch" => outcome.branch.as_str(),
             "removedWorktree" => outcome.removed_worktree_path.is_some(),
+            // GTC-FR-JUZP: a boolean. The lock reason is never logged.
+            "worktreeLocked" => resolved.worktree_lock.is_some(),
             "discardedCount" => resolved.uncommitted.len(),
             "remoteState" => outcome.remote.state.as_str(),
             "durationMs" => duration_ms(started),
@@ -388,7 +403,8 @@ fn carry_out<R: tauri::Runtime>(
     token: Option<&str>,
 ) -> Result<BranchDeletionOutcome, String> {
     // GTC-FR-AVKD: the worktree goes first, because Git refuses to delete a
-    // branch a worktree still has checked out.
+    // branch a worktree still has checked out. GTC-FR-MSXC: a locked worktree
+    // goes too, and its lock with it.
     let removed_worktree_path = match &resolved.worktree {
         Some(held) => {
             crate::worktree::remove_linked_worktree(app, root, Path::new(&held.path))?;

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import { Icon } from "./icons";
+import { AppIcon } from "./AppIcon";
 import { SearchOverlay } from "./SearchOverlay";
 import { useSearch } from "../hooks/useSearch";
 import { QUERY_MODES, useSearchQueryMode } from "../hooks/useSearchQueryMode";
@@ -196,7 +197,7 @@ export function TopChrome({
     <div className="top-chrome">
       <div className="top-chrome__left">
         <div className="top-chrome__brand">
-          <Icon.Sigma size={16} />
+          <AppIcon size={16} />
           <span>Synthesis</span>
         </div>
         <span className="sep--v" style={{ height: 16 }} />

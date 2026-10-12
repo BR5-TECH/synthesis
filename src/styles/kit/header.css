@@ -365,7 +365,7 @@
 .top-chrome__left { display: flex; align-items: center; gap: 10px; }
 .top-chrome__right { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
 .top-chrome__brand { display: flex; align-items: center; gap: 8px; color: var(--fg-1); font-size: var(--fs-ui-md); font-weight: 600; }
-.top-chrome__brand .icon { color: var(--accent); }
+.app-icon { display: block; flex: none; }
 .top-chrome__project {
   font-size: var(--fs-ui-sm); color: var(--fg-2);
   display: inline-flex; align-items: center; gap: 6px;

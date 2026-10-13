@@ -11,6 +11,7 @@ pub const ERR_NO_PROJECT: &str = "no_project_open";
 pub const ERR_UNCONFIGURED: &str = "polling_unconfigured";
 pub const ERR_CONFIGURATION_INVALID: &str = "polling_configuration_invalid";
 pub const ERR_INVALID_INTERVAL: &str = "invalid_interval";
+pub const ERR_DUPLICATE_STATUS_OPTION: &str = "duplicate_status_option";
 pub const ERR_PROJECT_UNAVAILABLE: &str = "project_unavailable";
 pub const ERR_STATUS_FIELD_MISSING: &str = "status_field_missing";
 pub const ERR_READY_OPTION_MISSING: &str = "ready_option_missing";
@@ -26,8 +27,11 @@ pub const ERR_PENDING_CLAIM_WRITE_FAILED: &str = "pending_claim_write_failed";
 pub const ERR_SHADOW_CREATE_FAILED: &str = "shadow_draft_create_failed";
 pub const ERR_ISSUE_NOT_LISTED: &str = "issue_not_listed";
 
-/// GPP-FR-DEZO: the exact names the selected Project must hold.
+/// GPP-FR-DEZO: the name of the single-select field the statuses live in.
 pub const STATUS_FIELD: &str = "Status";
+/// GPP-FR-VXSB: the default names. An unset status name resolves to the
+/// option that matches its default case-insensitively. A stored name never
+/// falls back to them.
 pub const READY: &str = "Ready";
 pub const IN_PROGRESS: &str = "In Progress";
 /// GPP-FR-BOQX: the GitHub issue type an eligible issue carries.
@@ -60,12 +64,15 @@ pub fn error_text(code: &str) -> String {
              the Project settings."
         }
         ERR_READY_OPTION_MISSING => {
-            "The \"Status\" field of the selected GitHub Project has no option named \"Ready\". \
-             Add it in the Project settings."
+            "The Ready status is not an option of the \"Status\" field of the selected GitHub \
+             Project. Choose an option in the GitHub Project settings."
         }
         ERR_IN_PROGRESS_OPTION_MISSING => {
-            "The \"Status\" field of the selected GitHub Project has no option named \"In \
-             Progress\". Add it in the Project settings."
+            "The In Progress status is not an option of the \"Status\" field of the selected \
+             GitHub Project. Choose an option in the GitHub Project settings."
+        }
+        ERR_DUPLICATE_STATUS_OPTION => {
+            "The Ready status and the In Progress status must be different options."
         }
         ERR_UNCONFIGURED => "No GitHub Project is selected for polling.",
         ERR_CONFIGURATION_INVALID => {
@@ -78,7 +85,9 @@ pub fn error_text(code: &str) -> String {
         ERR_CLAIM_PENDING => "This task is already claimed on this machine.",
         ERR_CLAIM_IN_PROGRESS => "A claim of this task is already running.",
         ERR_NO_PENDING_CLAIM => "This task has no pending claim.",
-        ERR_STATUS_UPDATE_FAILED => "The task status on GitHub could not be set to In Progress.",
+        ERR_STATUS_UPDATE_FAILED => {
+            "The task status on GitHub could not be set to the In Progress status."
+        }
         ERR_PENDING_CLAIM_WRITE_FAILED => "The claim could not be recorded on this machine.",
         ERR_SHADOW_CREATE_FAILED => "The draft for this task could not be created.",
         ERR_ISSUE_NOT_LISTED => "This issue is not a listed task of the polling repository.",
@@ -100,6 +109,38 @@ pub struct GithubProjectOption {
     pub number: u64,
 }
 
+/// GPP-FR-YNOT: the displayable text of a configuration error. A missing
+/// status names the status and the Project; every other code has its fixed
+/// text.
+pub fn configuration_error_text(
+    code: &str,
+    missing_status: Option<&str>,
+    project_title: Option<&str>,
+) -> String {
+    let label = match code {
+        ERR_READY_OPTION_MISSING => "Ready",
+        ERR_IN_PROGRESS_OPTION_MISSING => "In Progress",
+        _ => return error_text(code),
+    };
+    let Some(status) = missing_status else {
+        return error_text(code);
+    };
+    let project =
+        project_title.map(|t| format!("\"{t}\"")).unwrap_or("the selected Project".into());
+    format!(
+        "The {label} status \"{status}\" is not an option of the \"Status\" field of the GitHub \
+         Project {project}. Choose an option in the GitHub Project settings."
+    )
+}
+
+/// GPP-FR-NNSJ: one option of the selected Project's `Status` field.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubProjectStatusOption {
+    pub id: String,
+    pub name: String,
+}
+
 /// The four configuration states (GPP contract surface).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -117,6 +158,8 @@ pub struct GithubPollingConfiguration {
     pub state: ConfigurationState,
     pub error_code: Option<String>,
     pub error: Option<String>,
+    /// GPP-FR-YNOT: the status name that resolves to no option.
+    pub missing_status: Option<String>,
     pub project_title: Option<String>,
 }
 
@@ -126,6 +169,7 @@ impl GithubPollingConfiguration {
             state: ConfigurationState::Unset,
             error_code: None,
             error: None,
+            missing_status: None,
             project_title: None,
         }
     }
@@ -139,15 +183,22 @@ impl GithubPollingConfiguration {
             state: ConfigurationState::Valid,
             error_code: None,
             error: None,
+            missing_status: None,
             project_title: Some(title.to_string()),
         }
     }
 
-    pub fn invalid(code: &str, title: Option<String>) -> Self {
+    /// GPP-FR-EHRC / GPP-FR-YNOT: an invalid configuration with its cause.
+    pub fn invalid(code: &str, title: Option<String>, missing_status: Option<String>) -> Self {
         Self {
             state: ConfigurationState::Invalid,
             error_code: Some(code.to_string()),
-            error: Some(error_text(code)),
+            error: Some(configuration_error_text(
+                code,
+                missing_status.as_deref(),
+                title.as_deref(),
+            )),
+            missing_status,
             project_title: title,
         }
     }

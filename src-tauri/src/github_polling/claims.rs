@@ -2,15 +2,15 @@
 //! GPP-FR-XPUO, GPP-FR-CWGH, GPP-FR-BSLI, GPP-FR-IGER, GPP-FR-TOED,
 //! GPP-FR-KSMZ, GPP-FR-RAQP, GPP-FR-CRWY).
 //!
-//! The order is the whole guarantee: re-fetch, then move the issue to
-//! `In Progress`, then record the pending claim, then create the shadow draft.
+//! The order is the whole guarantee: re-fetch, then move the issue to the
+//! In Progress status of the polling settings, then record the pending claim, then create the shadow draft.
 //! A claim that fails before the status update has written nothing; one that
 //! fails after it leaves a pending claim — on disk, or held in memory where the
 //! disk refused it — that a retry completes without ever touching GitHub's
 //! status again.
 
 use super::client::{FetchedIssue, GithubProjects};
-use super::eligibility::{self, PollFailure};
+use super::eligibility::{self, PollFailure, StatusNames};
 use super::records::*;
 use crate::drafts::{GithubClaimState, GithubIssueLink};
 use crate::fs::RootFs;
@@ -22,6 +22,8 @@ pub struct ClaimContext<'a> {
     pub secret: &'a str,
     pub repository: &'a RepositoryRef,
     pub project_id: &'a str,
+    /// GPP-FR-VXSB: the status names of the polling settings.
+    pub statuses: &'a StatusNames,
 }
 
 /// The pending claim for an issue of the repository, from disk or from the
@@ -63,6 +65,7 @@ fn put_claim(root: &RootFs, claim: &GithubPendingClaim) -> Result<(), String> {
 fn ready_item<'a>(
     ctx: &ClaimContext<'_>,
     issue: &'a FetchedIssue,
+    ready_name: &str,
 ) -> Option<&'a super::client::IssueProjectItem> {
     let item = issue.project_items.iter().find(|item| item.project_id == ctx.project_id)?;
     eligibility::is_eligible(
@@ -72,6 +75,7 @@ fn ready_item<'a>(
         &issue.repository_name,
         ctx.repository,
         item.status.as_deref(),
+        ready_name,
     )
     .then_some(item)
 }
@@ -138,19 +142,26 @@ pub struct ClaimOutcome {
 pub struct ClaimFailure {
     pub code: String,
     pub project_title: Option<String>,
+    /// GPP-FR-YNOT: the missing status name of a missing-option error.
+    pub missing_status: Option<String>,
     /// Boxed to keep the error small.
     pub unsaved_claim: Option<Box<GithubPendingClaim>>,
 }
 
 impl From<PollFailure> for ClaimFailure {
     fn from(failure: PollFailure) -> Self {
-        Self { code: failure.code, project_title: failure.project_title, unsaved_claim: None }
+        Self {
+            code: failure.code,
+            project_title: failure.project_title,
+            missing_status: failure.missing_status,
+            unsaved_claim: None,
+        }
     }
 }
 
 impl ClaimFailure {
     fn code(code: impl Into<String>) -> Self {
-        Self { code: code.into(), project_title: None, unsaved_claim: None }
+        Self { code: code.into(), project_title: None, missing_status: None, unsaved_claim: None }
     }
 }
 
@@ -167,16 +178,18 @@ pub fn claim(
     if pending_claim(ctx.root, ctx.repository, number, held).is_some() {
         return Err(ClaimFailure::code(ERR_CLAIM_PENDING));
     }
-    let configuration = eligibility::read_configuration(client, ctx.secret, ctx.project_id)?;
+    let configuration =
+        eligibility::read_configuration(client, ctx.secret, ctx.project_id, ctx.statuses)?;
     // GPP-FR-IFVC: the issue as GitHub holds it now, before anything changes.
     let issue = client
         .fetch_issue(ctx.secret, &ctx.repository.owner, &ctx.repository.name, number)
         .map_err(ClaimFailure::code)?
         .ok_or_else(|| ClaimFailure::code(ERR_TASK_NOT_READY))?;
-    let Some(item) = ready_item(ctx, &issue) else {
+    let Some(item) = ready_item(ctx, &issue, &configuration.ready_name) else {
         return Err(ClaimFailure::code(ERR_TASK_NOT_READY));
     };
-    // GPP-FR-ILGG: the status update comes before any local write.
+    // GPP-FR-ILGG: the status update comes before any local write, to the
+    // option that the In Progress status of the settings resolved to.
     client
         .set_item_status(
             ctx.secret,
@@ -200,9 +213,8 @@ pub fn claim(
     };
     if let Err(code) = put_claim(ctx.root, &pending) {
         return Err(ClaimFailure {
-            code,
-            project_title: None,
             unsaved_claim: Some(Box::new(pending)),
+            ..ClaimFailure::code(code)
         });
     }
     // GPP-FR-XPUO / GPP-FR-CWGH: the shadow draft, then its id in the claim.

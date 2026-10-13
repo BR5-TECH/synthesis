@@ -10,10 +10,22 @@ export const GITHUB_POLLING_INTERVALS: readonly GithubPollingInterval[] = [
   1, 5, 15, 30, 60,
 ];
 
-/** GPP-FR-NLPG: one selected GitHub Project and one interval. */
+/**
+ * GPP-FR-NLPG: one selected GitHub Project, one interval, and the names of the
+ * Ready status and the In Progress status. A `null` status name is unset
+ * (GPP-FR-VXSB).
+ */
 export interface GithubPollingSettings {
   projectNodeId: string | null;
   intervalMinutes: GithubPollingInterval | null;
+  readyStatus: string | null;
+  inProgressStatus: string | null;
+}
+
+/** GPP-FR-NNSJ: one option of a Project's `Status` field. */
+export interface GithubProjectStatusOption {
+  id: string;
+  name: string;
 }
 
 /** GPP-FR-WYRP: one GitHub Project the token can read. */
@@ -29,6 +41,8 @@ export interface GithubPollingConfiguration {
   state: "unset" | "unchecked" | "valid" | "invalid";
   errorCode: string | null;
   error: string | null;
+  /** GPP-FR-YNOT: the status name that resolves to no option. */
+  missingStatus: string | null;
   projectTitle: string | null;
 }
 

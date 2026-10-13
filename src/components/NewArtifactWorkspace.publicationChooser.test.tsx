@@ -29,6 +29,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 import {
+  chooseParent,
   failedList,
   fourRemotes,
   loadedList,
@@ -126,14 +127,22 @@ describe("Publication chooser — opening and root publication", () => {
     expect(calls("publish_draft_to_github")).toHaveLength(0);
     expect(dialog).toHaveTextContent("acme/widgets");
     const radios = within(dialog).getAllByRole("radio");
-    expect(radios.map((r) => (r as HTMLInputElement).value)).toEqual(["root", "412", "398"]);
+    expect(radios.map((r) => (r as HTMLInputElement).value)).toEqual(["root", "sub"]);
     expect(radios[0]).toBeChecked();
     expect(radios[0]).toBeEnabled();
-    expect(dialog).toHaveTextContent("#412 Window chrome");
-    expect(dialog).toHaveTextContent("Feature · v1.2");
-    expect(dialog).toHaveTextContent("https://github.com/acme/widgets/issues/412");
-    expect(dialog).toHaveTextContent("#398 Release pipeline");
-    expect(dialog).toHaveTextContent("Feature · No milestone");
+    expect(radios[1]).toHaveAccessibleName("Publish as a sub-issue of");
+    // NAW-FR-YLKD: one combobox in place of a row for each parent.
+    const combobox = within(dialog).getByRole("combobox", { name: "Parent issue" });
+    expect(combobox).toHaveTextContent("Choose a parent issue");
+    await userEvent.click(combobox);
+    const list = within(dialog).getByRole("listbox", { name: "Parent issue" });
+    const options = within(list).getAllByRole("option");
+    expect(options).toHaveLength(2);
+    expect(options[0]).toHaveTextContent("#412 Window chrome");
+    expect(options[0]).toHaveTextContent("Feature · v1.2");
+    expect(options[1]).toHaveTextContent("#398 Release pipeline");
+    expect(options[1]).toHaveTextContent("Feature · No milestone");
+    expect(dialog).not.toHaveTextContent("https://github.com/acme/widgets/issues/412");
   });
 
   it("NAW-FR-ZOAS, NAW-FR-FGUI, NAW-FR-RBTE: the root option sends the selected Type and milestone", async () => {
@@ -222,7 +231,7 @@ describe("Publication chooser — sub-issue publication", () => {
     const dialog = await openChooser();
     await loaded(dialog);
 
-    await userEvent.click(within(dialog).getByRole("radio", { name: /#412 Window chrome/ }));
+    await chooseParent(dialog, 412);
     expect(dialog).toHaveTextContent("Type: Task (set in Project settings)");
     expect(dialog).toHaveTextContent("Milestone: inherited from the parent, v1.2");
     // The author cannot override the configured Type.
@@ -240,7 +249,7 @@ describe("Publication chooser — sub-issue publication", () => {
     const dialog = await openChooser();
     await loaded(dialog);
 
-    await userEvent.click(within(dialog).getByRole("radio", { name: /#398 Release pipeline/ }));
+    await chooseParent(dialog, 398);
     expect(dialog).toHaveTextContent("The parent has no milestone, so the issue publishes without one.");
   });
 
@@ -255,7 +264,7 @@ describe("Publication chooser — sub-issue publication", () => {
     const dialog = await openChooser();
     await loaded(dialog);
 
-    await userEvent.click(within(dialog).getByRole("radio", { name: /#412 Window chrome/ }));
+    await chooseParent(dialog, 412);
     expect(dialog).toHaveTextContent("Milestone: none (set in Project settings)");
     expect(within(dialog).queryByLabelText("Milestone")).toBeNull();
     await userEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
@@ -276,7 +285,7 @@ describe("Publication chooser — sub-issue publication", () => {
     const dialog = await openChooser();
     await loaded(dialog);
 
-    await userEvent.click(within(dialog).getByRole("radio", { name: /#412 Window chrome/ }));
+    await chooseParent(dialog, 412);
     await userEvent.selectOptions(within(dialog).getByLabelText("Milestone"), "v1.3");
     await userEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
 
@@ -291,7 +300,7 @@ describe("Publication chooser — sub-issue publication", () => {
     const dialog = await openChooser();
     await loaded(dialog);
 
-    await userEvent.click(within(dialog).getByRole("radio", { name: /#412 Window chrome/ }));
+    await chooseParent(dialog, 412);
     expect(dialog).toHaveTextContent("The configured Type “Chore” is unavailable in this repository.");
     expect(dialog).toHaveTextContent("publishes without a Type");
     expect(within(dialog).getByRole("button", { name: "Publish" })).toBeEnabled();
@@ -301,7 +310,7 @@ describe("Publication chooser — sub-issue publication", () => {
     const dialog = await openChooser();
     await loaded(dialog);
 
-    await userEvent.click(within(dialog).getByRole("radio", { name: /#412 Window chrome/ }));
+    await chooseParent(dialog, 412);
     await userEvent.click(within(dialog).getByRole("radio", { name: /Publish as a root issue/ }));
     expect(dialog).not.toHaveTextContent("set in Project settings");
     expect(within(dialog).getByLabelText("Type")).toBeInTheDocument();
@@ -316,7 +325,9 @@ describe("Publication chooser — loading, empty, unavailable, and failed states
     const dialog = await openChooser();
     await loaded(dialog);
 
-    expect(within(dialog).getAllByRole("radio")).toHaveLength(1);
+    // NAW-FR-WMEP / NAW-FR-ASYN: the notice stands in place of the combobox.
+    expect(within(dialog).getByRole("radio", { name: "Publish as a sub-issue of" })).toBeDisabled();
+    expect(within(dialog).queryByRole("combobox", { name: "Parent issue" })).toBeNull();
     expect(dialog).toHaveTextContent("Parent issues are unavailable: The open issues of this repository could not be read.");
     expect(dialog).toHaveTextContent("Root publication is still available.");
     // The Type and milestone controls are not taken down with the parents.
@@ -334,7 +345,8 @@ describe("Publication chooser — loading, empty, unavailable, and failed states
     const dialog = await openChooser();
     await loaded(dialog);
 
-    expect(within(dialog).getAllByRole("radio")).toHaveLength(1);
+    expect(within(dialog).getByRole("radio", { name: "Publish as a sub-issue of" })).toBeDisabled();
+    expect(within(dialog).queryByRole("combobox", { name: "Parent issue" })).toBeNull();
     expect(dialog).toHaveTextContent("No open issue of Feature was found.");
     expect(within(dialog).getByRole("radio", { name: /Publish as a root issue/ })).toBeEnabled();
   });
@@ -472,7 +484,7 @@ describe("Publication chooser — cancellation, focus, and accessibility", () =>
 
     within(dialog).getByRole("radio", { name: /Publish as a root issue/ }).focus();
     await userEvent.keyboard("{ArrowDown}");
-    expect(within(dialog).getByRole("radio", { name: /#412 Window chrome/ })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: "Publish as a sub-issue of" })).toBeChecked();
   });
 
   it("NAW-FR-PSMO: each notice is announced as a status", async () => {
@@ -588,7 +600,7 @@ describe("Publication chooser — retry, failure, and recovery keep the saved ch
     });
     const dialog = await openChooser();
     await loaded(dialog);
-    await userEvent.click(within(dialog).getByRole("radio", { name: /#412 Window chrome/ }));
+    await chooseParent(dialog, 412);
     await userEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
 
     const band = await screen.findByTestId("draft-publication-band");

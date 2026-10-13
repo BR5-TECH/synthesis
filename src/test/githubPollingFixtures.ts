@@ -60,11 +60,17 @@ export function pollingView(
   over: Partial<GithubPollingView> = {},
 ): GithubPollingView {
   return {
-    settings: { projectNodeId: "P1", intervalMinutes: 5 },
+    settings: {
+      projectNodeId: "P1",
+      intervalMinutes: 5,
+      readyStatus: "Ready",
+      inProgressStatus: "In Progress",
+    },
     configuration: {
       state: "valid",
       errorCode: null,
       error: null,
+      missingStatus: null,
       projectTitle: "Roadmap",
     },
     repository: { host: "github.com", owner: "acme", name: "platform" },

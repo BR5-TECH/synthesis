@@ -95,6 +95,24 @@ const posts = () =>
   );
 
 let polling: GithubPollingView;
+
+/** GPP-FR-YNOT: a stored Ready status that the Project no longer holds. */
+const invalidView = () =>
+  pollingView({
+    settings: {
+      projectNodeId: "P1",
+      intervalMinutes: 5,
+      readyStatus: "Queued",
+      inProgressStatus: "In Progress",
+    },
+    configuration: {
+      state: "invalid",
+      errorCode: "ready_option_missing",
+      error: "The Ready status is missing.",
+      missingStatus: "Queued",
+      projectTitle: "Roadmap",
+    },
+  });
 /** The order the claim flow's steps ran in, the dialog's mount among them. */
 let order: string[];
 
@@ -210,6 +228,87 @@ describe("GitHub polling in the main window", () => {
     );
     await waitFor(() => expect(posts()).toHaveLength(1));
     expect(posts()[0].body).toBe("5 new ready tasks");
+  });
+
+  it("GIT-FR-AKYZ, NTF-FR-UZGZ, NTF-FR-RNGG, NTF-FR-24: a configuration that becomes invalid raises one Error under its key, addressed to the section, and naming the missing status and the Project", async () => {
+    render(<App />);
+    await enterIde();
+    await waitFor(() => expect(calls("poll_github_ready_tasks")).toHaveLength(1));
+    expect(posts()).toHaveLength(0);
+
+    polling = invalidView();
+    act(() => fireBusEvent("github-polling-changed", { newIssues: [] }));
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    const posted = posts()[0];
+    expect(posted.key).toBe("github-polling-configuration");
+    expect(posted.title).toBe("GitHub polling stopped");
+    expect(posted.body).toContain("“Queued”");
+    expect(posted.body).toContain("“Roadmap”");
+    expect(posted.payload).toBe(
+      mintAddress("~/dev/acme", activeWorktreePath, {
+        kind: "settings",
+        scope: "project",
+        section: "github-polling",
+      }),
+    );
+
+    // A later read of the same error raises nothing. A new object, so the
+    // view really changes and the follower runs again.
+    const reads = calls("get_github_polling_state").length;
+    polling = invalidView();
+    act(() => fireBusEvent("github-polling-changed", { newIssues: [] }));
+    await waitFor(() =>
+      expect(calls("get_github_polling_state").length).toBeGreaterThan(reads),
+    );
+    await act(async () => {});
+    expect(posts()).toHaveLength(1);
+    expect(calls("withdraw_notification")).toHaveLength(0);
+
+    // A change of the error code while it stays invalid raises again.
+    polling = pollingView({
+      configuration: {
+        state: "invalid",
+        errorCode: "project_unavailable",
+        error: "The Project is gone.",
+        missingStatus: null,
+        projectTitle: "Roadmap",
+      },
+    });
+    act(() => fireBusEvent("github-polling-changed", { newIssues: [] }));
+    await waitFor(() => expect(posts()).toHaveLength(2));
+    expect(posts()[1].key).toBe("github-polling-configuration");
+    expect(posts()[1].body).toBe("The Project is gone.");
+
+    // A valid configuration retracts it.
+    polling = pollingView();
+    act(() => fireBusEvent("github-polling-changed", { newIssues: [] }));
+    await waitFor(() => expect(calls("withdraw_notification")).toHaveLength(1));
+    expect(posts()).toHaveLength(2);
+  });
+
+  it("GIT-FR-AKYZ: a project that opens with the configuration already invalid raises once", async () => {
+    polling = invalidView();
+    render(<App />);
+    await enterIde();
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(posts()[0].key).toBe("github-polling-configuration");
+  });
+
+  it("NTF-FR-UZGZ, NTF-FR-WMBD: with the main window focused the configuration error is an Error toast, and a valid configuration removes it", async () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    render(<App />);
+    await enterIde();
+    polling = invalidView();
+    act(() => fireBusEvent("github-polling-changed", { newIssues: [] }));
+    const toast = await screen.findByTestId("notification-toast");
+    expect(toast).toHaveAttribute("data-level", "Error");
+    expect(toast).toHaveAttribute("role", "alert");
+    expect(toast).toHaveAttribute("data-key", "github-polling-configuration");
+    expect(posts()).toHaveLength(0);
+
+    polling = pollingView();
+    act(() => fireBusEvent("github-polling-changed", { newIssues: [] }));
+    await waitFor(() => expect(screen.queryByTestId("notification-toast")).toBeNull());
   });
 
   it("NTF-FR-VALU: a change with no new issue raises nothing", async () => {

@@ -1,8 +1,9 @@
 //! The GitHub polling settings and the GitHub pending claims
 //! (PSS-FR-OPQD, PSS-FR-CNZO, PSS-FR-TXBB, PSS-FR-TXJV).
 //!
-//! The settings are project-public: the selected GitHub Project and the
-//! polling interval are the same for every checkout of the project. The
+//! The settings are project-public: the selected GitHub Project, the polling
+//! interval, and the two status names are the same for every checkout of the
+//! project. The
 //! pending claims are project-local: they record what this machine has done
 //! and must never reach a commit.
 //!
@@ -17,6 +18,8 @@ use super::{load_local, load_public, local_store_lock, local_toml_path, save_pub
 const GITHUB_POLLING_KEY: &str = "githubPolling";
 const PROJECT_NODE_ID_KEY: &str = "projectNodeId";
 const INTERVAL_MINUTES_KEY: &str = "intervalMinutes";
+const READY_STATUS_KEY: &str = "readyStatus";
+const IN_PROGRESS_STATUS_KEY: &str = "inProgressStatus";
 /// PSS-FR-TXBB: the project-local list of pending claims.
 const PENDING_CLAIMS_KEY: &str = "github_pending_claims";
 
@@ -29,6 +32,13 @@ pub const GITHUB_POLLING_INTERVALS: [u32; 5] = [1, 5, 15, 30, 60];
 pub struct GithubPollingSettings {
     pub project_node_id: Option<String>,
     pub interval_minutes: Option<u32>,
+    /// The name of the Ready status option (GPP-FR-VXSB). Unset reads as the
+    /// default, matched case-insensitively.
+    #[serde(default)]
+    pub ready_status: Option<String>,
+    /// The name of the In Progress status option (GPP-FR-VXSB).
+    #[serde(default)]
+    pub in_progress_status: Option<String>,
 }
 
 /// PSS-FR-TXBB: one pending claim, in the shape `GPP-github-polling.md`
@@ -86,17 +96,25 @@ pub fn load_github_polling_settings_from(
     let Some(section) = table.get(GITHUB_POLLING_KEY).and_then(|v| v.as_table()) else {
         return Ok(GithubPollingSettings::default());
     };
-    let project_node_id = section
-        .get(PROJECT_NODE_ID_KEY)
-        .and_then(|v| v.as_str())
-        .filter(|id| !id.trim().is_empty())
-        .map(str::to_string);
+    let text = |key: &str| {
+        section
+            .get(key)
+            .and_then(|v| v.as_str())
+            .filter(|value| !value.trim().is_empty())
+            .map(str::to_string)
+    };
+    let project_node_id = text(PROJECT_NODE_ID_KEY);
     let interval_minutes = section
         .get(INTERVAL_MINUTES_KEY)
         .and_then(|v| v.as_integer())
         .and_then(|n| u32::try_from(n).ok())
         .filter(|n| GITHUB_POLLING_INTERVALS.contains(n));
-    Ok(GithubPollingSettings { project_node_id, interval_minutes })
+    Ok(GithubPollingSettings {
+        project_node_id,
+        interval_minutes,
+        ready_status: text(READY_STATUS_KEY),
+        in_progress_status: text(IN_PROGRESS_STATUS_KEY),
+    })
 }
 
 /// PSS-FR-OPQD: persist the settings. An unset value has no key, and every
@@ -112,6 +130,15 @@ pub fn save_github_polling_settings_to(
     }
     if let Some(minutes) = settings.interval_minutes {
         section.insert(INTERVAL_MINUTES_KEY.to_string(), toml::Value::Integer(i64::from(minutes)));
+    }
+    let statuses = [
+        (READY_STATUS_KEY, &settings.ready_status),
+        (IN_PROGRESS_STATUS_KEY, &settings.in_progress_status),
+    ];
+    for (key, value) in statuses {
+        if let Some(name) = value.as_deref().filter(|name| !name.trim().is_empty()) {
+            section.insert(key.to_string(), toml::Value::String(name.to_string()));
+        }
     }
     match section.is_empty() {
         true => {

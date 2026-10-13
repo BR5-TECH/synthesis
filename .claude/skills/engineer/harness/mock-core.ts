@@ -9928,7 +9928,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return publicationRemotes;
     /* GHP-FR-MDLD: the chooser's read. `?publicationParentsFail`,
        `?publicationTypesFail`, and `?publicationMilestonesEmpty` force the
-       failed and empty states of NAW-FR-WMEP. */
+       failed and empty states of NAW-FR-WMEP. `?publicationManyParents` adds
+       sixty parents, so the bounded combobox of NAW-FR-XTGP can be seen. */
     case "load_publication_metadata": {
       const loaded = (items: unknown[]) => ({
         state: "loaded",
@@ -9963,6 +9964,15 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
                 url: "https://github.com/acme/acme-app/issues/398",
                 milestone: null,
               },
+              ...(harnessFlag("publicationManyParents")
+                ? Array.from({ length: 60 }, (_, i) => ({
+                    number: 500 + i,
+                    title: `Parent feature ${i}`,
+                    issueType: "Feature",
+                    url: `https://github.com/acme/acme-app/issues/${500 + i}`,
+                    milestone: i % 2 ? { number: 8, title: "v1.3" } : null,
+                  }))
+                : []),
             ]),
         issueTypes: harnessFlag("publicationTypesFail")
           ? failed("issue_types_unreadable", "The issue Types of this repository could not be read.")

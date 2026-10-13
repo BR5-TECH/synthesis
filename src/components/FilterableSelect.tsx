@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 /**
  * The model selector of both AI integration levels —
@@ -36,6 +36,11 @@ export interface FilterableOption {
   disabled?: boolean;
   /** Why the option is unavailable, rendered beside its label. */
   hint?: string;
+  /**
+   * Secondary text rendered beside the label, such as a parent issue's Type
+   * and milestone (`NAW-new-artifact.md` NAW-FR-YLKD).
+   */
+  detail?: string;
 }
 
 export interface FilterableSelectProps {
@@ -54,6 +59,77 @@ export interface FilterableSelectProps {
   disabled?: boolean;
   /** Distinguishes the two levels' selectors in tests. */
   testId?: string;
+  /** Replaces `matchesOption` where a caller matches on other terms. */
+  matches?: (option: FilterableOption, filter: string) => boolean;
+  /** The row a filter with no match shows. */
+  emptyText?: string;
+  /** What the resting control shows while nothing is selected. */
+  placeholder?: string;
+  /**
+   * The text a polite status announces each time the filter changes, built
+   * from the filter and the count of matches. Without it the count row is
+   * shown and not announced.
+   */
+  announce?: (filter: string, matches: number) => string;
+  /**
+   * The panel opens as an overlay that stays inside the window: it opens
+   * below or above the control, wherever there is room, and shrinks where
+   * neither side has room for its full height (NAW-FR-XTGP).
+   */
+  fitWindow?: boolean;
+  /**
+   * `onChange` runs also for a pick of the option that is already selected.
+   * A caller sets it where a pick has an effect beyond the value, such as the
+   * parent combobox, whose pick selects the sub-issue option (NAW-FR-ASYN).
+   */
+  alwaysNotify?: boolean;
+}
+
+/** NAW-FR-XTGP: the room the panel leaves to the window's edge. */
+const WINDOW_MARGIN = 8;
+/** The gap between the control and the panel. */
+const MENU_GAP = 4;
+
+export interface MenuPlacement {
+  /** The panel opens above the control. */
+  above: boolean;
+  /** The panel's top edge (below) or bottom edge (above), in window pixels. */
+  edge: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+}
+
+/**
+ * NAW-FR-XTGP: where an overlay panel of `natural` height goes for a control
+ * at `anchor` in a window of `viewport`. It opens below where its full height
+ * fits there, or where below has at least as much room as above; otherwise
+ * above. Its height never exceeds the room on its side, so it never leaves the
+ * window. Pure, so the rule is testable without layout.
+ */
+export function menuPlacement(
+  anchor: { top: number; bottom: number; left: number; width: number },
+  viewport: { width: number; height: number },
+  natural: number,
+): MenuPlacement {
+  const below = Math.max(0, viewport.height - anchor.bottom - MENU_GAP - WINDOW_MARGIN);
+  const aboveRoom = Math.max(0, anchor.top - MENU_GAP - WINDOW_MARGIN);
+  const above = natural > below && aboveRoom > below;
+  const room = above ? aboveRoom : below;
+  const width = Math.min(anchor.width, Math.max(0, viewport.width - 2 * WINDOW_MARGIN));
+  const left = Math.min(
+    Math.max(anchor.left, WINDOW_MARGIN),
+    Math.max(WINDOW_MARGIN, viewport.width - WINDOW_MARGIN - width),
+  );
+  return {
+    above,
+    edge: above
+      ? viewport.height - anchor.top + MENU_GAP
+      : anchor.bottom + MENU_GAP,
+    left,
+    width,
+    maxHeight: Math.min(natural, room),
+  };
 }
 
 /**
@@ -82,6 +158,12 @@ export function FilterableSelect({
   label,
   disabled,
   testId,
+  matches = matchesOption,
+  emptyText = "Nothing matches that.",
+  placeholder = "Nothing selected",
+  announce,
+  fitWindow = false,
+  alwaysNotify = false,
 }: FilterableSelectProps) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -90,11 +172,47 @@ export function FilterableSelect({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const filterRef = useRef<HTMLInputElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [placement, setPlacement] = useState<MenuPlacement | null>(null);
 
   const shown = useMemo(
-    () => options.filter((o) => matchesOption(o, filter)),
-    [options, filter],
+    () => options.filter((o) => matches(o, filter)),
+    [options, filter, matches],
   );
+
+  // NAW-FR-XTGP: measured before paint, and again when the window resizes or
+  // anything scrolls, so the panel never shows outside the window.
+  useLayoutEffect(() => {
+    if (!open || !fitWindow) {
+      setPlacement(null);
+      return;
+    }
+    const place = () => {
+      const button = buttonRef.current;
+      const menu = menuRef.current;
+      if (!button || !menu) return;
+      const rect = button.getBoundingClientRect();
+      setPlacement(
+        menuPlacement(
+          { top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width },
+          { width: window.innerWidth, height: window.innerHeight },
+          menu.scrollHeight,
+        ),
+      );
+    };
+    place();
+    // A scroll of the panel's own list moves nothing it is placed against.
+    const onScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      place();
+    };
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open, fitWindow]);
 
   const selected = options.find((o) => o.id === value) ?? null;
 
@@ -139,8 +257,9 @@ export function FilterableSelect({
     if (options.find((o) => o.id === id)?.disabled) return;
     close(true);
     // A re-pick of what is already selected is not a change, and invoking for
-    // it would spend a round trip to store what is already stored.
-    if (id !== value) onChange(id);
+    // it would spend a round trip to store what is already stored. A caller
+    // that sets `alwaysNotify` gets the pick all the same.
+    if (alwaysNotify || id !== value) onChange(id);
   };
 
   /**
@@ -227,7 +346,7 @@ export function FilterableSelect({
             selected ? "fsel__value" : "fsel__value fsel__value--placeholder"
           }
         >
-          {selected?.label ?? "Nothing selected"}
+          {selected?.label ?? placeholder}
         </span>
         <span aria-hidden="true" className="fsel__caret">
           ▾
@@ -237,7 +356,30 @@ export function FilterableSelect({
       {open && (
         // `.menu` is what makes this an opaque elevated surface rather than a
         // transparent one over the rows beneath.
-        <div className="fsel__menu menu">
+        <div
+          ref={menuRef}
+          className={fitWindow ? "fsel__menu fsel__menu--fit menu" : "fsel__menu menu"}
+          data-testid={testId ? `${testId}-menu` : undefined}
+          data-placement={placement ? (placement.above ? "above" : "below") : undefined}
+          // Focus stays in the filter box while the panel is open, so a press
+          // on the count row or the empty row never leaves Escape to the
+          // surface around the selector (NAW-FR-VJRW).
+          onMouseDown={(e) => {
+            if (e.target !== filterRef.current) e.preventDefault();
+          }}
+          style={
+            placement
+              ? {
+                  left: placement.left,
+                  width: placement.width,
+                  maxHeight: placement.maxHeight,
+                  ...(placement.above
+                    ? { bottom: placement.edge, top: "auto" }
+                    : { top: placement.edge, bottom: "auto" }),
+                }
+              : undefined
+          }
+        >
           <div className="fsel__filter">
             <input
               ref={filterRef}
@@ -271,7 +413,7 @@ export function FilterableSelect({
                 className="fsel__empty"
                 data-testid={testId ? `${testId}-empty` : undefined}
               >
-                Nothing matches that.
+                {emptyText}
               </div>
             )}
             {shown.map((option, index) => (
@@ -296,6 +438,9 @@ export function FilterableSelect({
                 onClick={() => commit(option.id)}
               >
                 <span className="fsel__option-label">{option.label}</span>
+                {option.detail && (
+                  <span className="fsel__option-detail">{option.detail}</span>
+                )}
                 {/* Why it cannot be chosen, beside it rather than in a tooltip
                     alone: an option offered without a reason reads as a bug. */}
                 {option.hint && <span className="fsel__option-hint">{option.hint}</span>}
@@ -309,8 +454,12 @@ export function FilterableSelect({
           <div
             className="fsel__count"
             data-testid={testId ? `${testId}-count` : undefined}
+            role={announce ? "status" : undefined}
+            aria-live={announce ? "polite" : undefined}
           >
-            {shown.length} of {options.length} shown
+            {announce
+              ? announce(filter, shown.length)
+              : `${shown.length} of ${options.length} shown`}
           </div>
         </div>
       )}

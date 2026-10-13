@@ -2,8 +2,9 @@
 //! (`../../specifications/core/GPP-github-polling.md`).
 //!
 //! The module polls the repository GitHub publication resolves (GPP-FR-RGNM),
-//! keeps the open Tasks whose `Status` in one selected GitHub Project is
-//! exactly `Ready`, and on a claim moves the issue to `In Progress`, records a
+//! keeps the open Tasks whose `Status` in one selected GitHub Project is the
+//! configured Ready status, and on a claim moves the issue to the configured
+//! In Progress status (GPP-FR-VXSB), records a
 //! pending claim on this machine, and creates an immutable GitHub-shadow draft
 //! that the graduation-start dialog then graduates.
 //!
@@ -16,7 +17,7 @@
 //!
 //! Nothing here sets an issue to Done, closes an issue, or edits its title,
 //! body, labels, or comments (GPP-FR-CRWY). The only write to GitHub is the
-//! `Ready` to `In Progress` status update of a claim (GPP-FR-ILGG).
+//! status update of a claim to the In Progress status (GPP-FR-ILGG).
 
 use std::sync::Mutex;
 
@@ -43,7 +44,7 @@ pub mod view;
 pub use client::{GithubProjects, GithubProjectsSeam};
 pub use records::*;
 
-use eligibility::{PollFailure, PollSuccess};
+use eligibility::{PollFailure, PollSuccess, StatusNames};
 use session::{ClaimGuards, PollStart, PollTicket, SessionKey, SessionSlot, Settled};
 
 /// GPP-FR-DATH / GPP-FR-RAQP: the managed polling state.
@@ -303,34 +304,102 @@ pub(crate) fn list_projects_impl<R: Runtime>(
     Ok(client::dedupe_projects(projects))
 }
 
+/// GPP-FR-NNSJ: the options of one Project's `Status` field. Read-only.
+#[tauri::command]
+pub async fn list_github_project_statuses(
+    project_node_id: String,
+    app: tauri::AppHandle,
+) -> Result<Vec<GithubProjectStatusOption>, String> {
+    off_thread(move || list_statuses_impl(&app, &project_node_id)).await
+}
+
+pub(crate) fn list_statuses_impl<R: Runtime>(
+    app: &AppHandle<R>,
+    project_node_id: &str,
+) -> Result<Vec<GithubProjectStatusOption>, String> {
+    let ctx = context(app)?;
+    let fail = |code: &str| report(app, "list_statuses", code, None);
+    let project_id = project_node_id.trim();
+    if project_id.is_empty() {
+        return Err(fail(ERR_PROJECT_UNAVAILABLE));
+    }
+    let token = require_token(app, &ctx.project_key).map_err(|c| fail(&c))?;
+    let options = eligibility::status_options(
+        projects_client(app, &token.host).as_ref(),
+        &token.secret,
+        project_id,
+    )
+    .map_err(|c| fail(&c))?;
+    log_to(
+        app,
+        logging::LogLevel::Debug,
+        "github project statuses listed",
+        log_fields! { "options" => options.len() },
+    );
+    Ok(options)
+}
+
 /// "get github polling state": contacts no network.
 #[tauri::command]
 pub fn get_github_polling_state(app: tauri::AppHandle) -> Result<GithubPollingView, String> {
     current_view(&app)
 }
 
-/// GPP-FR-IURX / GPP-FR-HZDD: persist the settings, then validate a selected
-/// Project at once.
+/// GPP-FR-IURX / GPP-FR-HZDD / GPP-FR-DBPI: persist the settings, then
+/// validate a selected Project at once.
 #[tauri::command]
 pub async fn set_github_polling_settings(
     project_node_id: Option<String>,
     interval_minutes: Option<u32>,
+    ready_status: Option<String>,
+    in_progress_status: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<GithubPollingView, String> {
-    off_thread(move || set_settings_impl(&app, project_node_id, interval_minutes)).await
+    let settings = GithubPollingSettings {
+        project_node_id,
+        interval_minutes,
+        ready_status,
+        in_progress_status,
+    };
+    off_thread(move || set_settings_impl(&app, settings)).await
+}
+
+/// GPP-FR-IURX: the settings as they are stored. An empty value is unset, and
+/// a cleared Project clears both status names.
+pub fn normalize_settings(settings: GithubPollingSettings) -> GithubPollingSettings {
+    let present = |value: Option<String>| value.filter(|v| !v.trim().is_empty());
+    let project_node_id =
+        settings.project_node_id.map(|id| id.trim().to_string()).filter(|id| !id.is_empty());
+    let selected = project_node_id.is_some();
+    GithubPollingSettings {
+        project_node_id,
+        interval_minutes: settings.interval_minutes,
+        ready_status: present(settings.ready_status).filter(|_| selected),
+        in_progress_status: present(settings.in_progress_status).filter(|_| selected),
+    }
+}
+
+/// GPP-FR-DBPI: the two status names must differ.
+pub fn validate_statuses(settings: &GithubPollingSettings) -> Result<(), String> {
+    match (&settings.ready_status, &settings.in_progress_status) {
+        (Some(ready), Some(in_progress)) if ready == in_progress => {
+            Err(ERR_DUPLICATE_STATUS_OPTION.to_string())
+        }
+        _ => Ok(()),
+    }
 }
 
 pub(crate) fn set_settings_impl<R: Runtime>(
     app: &AppHandle<R>,
-    project_node_id: Option<String>,
-    interval_minutes: Option<u32>,
+    settings: GithubPollingSettings,
 ) -> Result<GithubPollingView, String> {
     let ctx = context(app)?;
+    let settings = normalize_settings(settings);
+    let interval_minutes = settings.interval_minutes;
     validate_interval(interval_minutes).map_err(|code| report(app, "set_settings", &code, None))?;
-    let project_node_id =
-        project_node_id.map(|id| id.trim().to_string()).filter(|id| !id.is_empty());
-    let settings =
-        GithubPollingSettings { project_node_id: project_node_id.clone(), interval_minutes };
+    validate_statuses(&settings).map_err(|code| report(app, "set_settings", &code, None))?;
+    let project_node_id = settings.project_node_id.clone();
+    let statuses = StatusNames::of(&settings);
     save_github_polling_settings_to(&ctx.root, &settings)
         .map_err(|code| report(app, "set_settings", &code, None))?;
     let generation = {
@@ -348,6 +417,8 @@ pub(crate) fn set_settings_impl<R: Runtime>(
         log_fields! {
             "project_selected" => project_node_id.is_some(),
             "interval_minutes" => interval_minutes,
+            "ready_status_set" => statuses.ready.is_some(),
+            "in_progress_status_set" => statuses.in_progress.is_some(),
         },
     );
     if let Some(project_id) = project_node_id.as_deref() {
@@ -358,10 +429,15 @@ pub(crate) fn set_settings_impl<R: Runtime>(
                 projects_client(app, &token.host).as_ref(),
                 &token.secret,
                 project_id,
+                &statuses,
             ) {
                 Ok(valid) => Ok(GithubPollingConfiguration::valid(&valid.title)),
                 Err(failure) if is_configuration_error(&failure.code) => {
-                    Ok(GithubPollingConfiguration::invalid(&failure.code, failure.project_title))
+                    Ok(GithubPollingConfiguration::invalid(
+                        &failure.code,
+                        failure.project_title,
+                        failure.missing_status,
+                    ))
                 }
                 Err(failure) => Err(failure.code),
             }
@@ -412,6 +488,8 @@ impl<R: Runtime> Drop for InFlight<R> {
 pub(crate) struct Begun<R: Runtime> {
     ctx: Context,
     ticket: PollTicket,
+    /// GPP-FR-VXSB: the status names of the settings the poll started with.
+    statuses: StatusNames,
     _in_flight: InFlight<R>,
 }
 
@@ -460,7 +538,8 @@ pub(crate) fn begin_poll<R: Runtime>(
     };
     let in_flight = InFlight { app: app.clone(), key: ctx.key.clone(), token: ticket.token };
     announce(app, Vec::new());
-    Ok(Ok(Begun { ctx, ticket, _in_flight: in_flight }))
+    let statuses = StatusNames::of(&settings);
+    Ok(Ok(Begun { ctx, ticket, statuses, _in_flight: in_flight }))
 }
 
 /// The network half of a poll.
@@ -476,6 +555,7 @@ pub(crate) fn fetch_poll<R: Runtime>(
         &token.secret,
         &repository,
         &begun.ticket.project_id,
+        &begun.statuses,
     )
 }
 
@@ -576,11 +656,13 @@ pub(crate) fn claim_impl<R: Runtime>(
         .map_err(|c| fail(&c))?;
     let generation = state.slot().generation();
     let held = state.slot().unsaved_claims(&ctx.key);
+    let statuses = StatusNames::of(&settings);
     let claim_ctx = claims::ClaimContext {
         root: &ctx.root,
         secret: &token.secret,
         repository: &repository,
         project_id: &project_id,
+        statuses: &statuses,
     };
     let now = crate::notes::now_rfc3339();
     let result = match claims::claim(
@@ -609,7 +691,11 @@ pub(crate) fn claim_impl<R: Runtime>(
                     &ctx.key,
                     generation,
                     &project_id,
-                    GithubPollingConfiguration::invalid(&failure.code, failure.project_title),
+                    GithubPollingConfiguration::invalid(
+                        &failure.code,
+                        failure.project_title,
+                        failure.missing_status,
+                    ),
                 );
             }
             if let Some(claim) = failure.unsaved_claim {

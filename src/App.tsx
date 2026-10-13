@@ -365,6 +365,7 @@ function App() {
     projectFolders,
     projectArtifacts,
     knownDrafts,
+    githubPollingView: githubPolling.view,
   });
 
   // GIT-FR-QMYB: the window's one push — running state, transcript, and the

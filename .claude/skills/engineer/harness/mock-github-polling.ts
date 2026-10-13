@@ -7,7 +7,9 @@
  * are all reachable without a network.
  *
  * `?githubPollingInvalid` starts with a configuration error, and
- * `?githubPollingUnset` with no Project selected.
+ * `?githubPollingUnset` with no Project selected. The Roadmap Project's
+ * `Status` field says `In progress`, so the default selection of the status
+ * selectors is case-insensitive (GPP-FR-VXSB).
  */
 
 export const NOT_HANDLED = Symbol("not handled");
@@ -30,6 +32,24 @@ const PROJECTS = [
   { nodeId: "PVT_ops", title: "Ops board", ownerLogin: "kira", number: 1 },
 ];
 
+/** GPP-FR-NNSJ: the `Status` options of each Project; Ops board has none. */
+const STATUS_OPTIONS: Record<string, { id: string; name: string }[]> = {
+  PVT_roadmap: [
+    { id: "s1", name: "Todo" },
+    { id: "s2", name: "Ready" },
+    { id: "s3", name: "In progress" },
+    { id: "s4", name: "Done" },
+  ],
+};
+
+/** GPP-FR-VXSB: a stored name matches exactly; an unset one by its default. */
+function resolveStatus(projectNodeId: string, stored: string | null, fallback: string) {
+  const options = STATUS_OPTIONS[projectNodeId] ?? [];
+  return stored !== null
+    ? options.find((o) => o.name === stored)
+    : options.find((o) => o.name.toLowerCase() === fallback.toLowerCase());
+}
+
 /** The shadow draft the seeded drafts list carries as `gh-1`. */
 export const SHADOW_ISSUE = {
   repositoryOwner: "acme",
@@ -44,18 +64,21 @@ const state: any = {
   settings: {
     projectNodeId: flag("githubPollingUnset") ? null : "PVT_roadmap",
     intervalMinutes: flag("githubPollingUnset") ? null : 5,
+    readyStatus: flag("githubPollingUnset") ? null : flag("githubPollingInvalid") ? "Queued" : "Ready",
+    inProgressStatus: flag("githubPollingUnset") ? null : "In progress",
   },
   configuration: flag("githubPollingUnset")
-    ? { state: "unset", errorCode: null, error: null, projectTitle: null }
+    ? { state: "unset", errorCode: null, error: null, missingStatus: null, projectTitle: null }
     : flag("githubPollingInvalid")
       ? {
           state: "invalid",
           errorCode: "ready_option_missing",
           error:
-            "The “Status” field of “Roadmap” has no option named exactly “Ready”. Add it, or select another Project in Project settings.",
+            "The Ready status “Queued” is not an option of the “Status” field of the GitHub Project “Roadmap”. Choose an option in the GitHub Project settings.",
+          missingStatus: "Queued",
           projectTitle: "Roadmap",
         }
-      : { state: "unchecked", errorCode: null, error: null, projectTitle: "Roadmap" },
+      : { state: "unchecked", errorCode: null, error: null, missingStatus: null, projectTitle: "Roadmap" },
   repository: { owner: "acme", name: "platform" },
   polling: false,
   tasks: [] as any[],
@@ -137,26 +160,58 @@ export function githubPollingInvoke(
   switch (cmd) {
     case "list_github_projects":
       return PROJECTS;
+    case "list_github_project_statuses": {
+      const options = STATUS_OPTIONS[String(a.projectNodeId)];
+      if (!options) throw "status_field_missing";
+      return options;
+    }
     case "get_github_polling_state":
       return view();
     case "set_github_polling_settings": {
       const interval = a.intervalMinutes ?? null;
       if (interval !== null && ![1, 5, 15, 30, 60].includes(interval))
         throw "invalid_interval";
-      state.settings = { projectNodeId: a.projectNodeId ?? null, intervalMinutes: interval };
-      const project = PROJECTS.find((p) => p.nodeId === a.projectNodeId);
+      const selected = a.projectNodeId ?? null;
+      const ready = selected === null ? null : (a.readyStatus || null);
+      const inProgress = selected === null ? null : (a.inProgressStatus || null);
+      if (ready !== null && ready === inProgress) throw "duplicate_status_option";
+      state.settings = {
+        projectNodeId: selected,
+        intervalMinutes: interval,
+        readyStatus: ready,
+        inProgressStatus: inProgress,
+      };
+      const project = PROJECTS.find((p) => p.nodeId === selected);
+      const title = project?.title ?? null;
+      const missing =
+        selected === null || selected === "PVT_ops"
+          ? null
+          : !resolveStatus(selected, ready, "Ready")
+            ? { code: "ready_option_missing", label: "Ready", name: ready ?? "Ready" }
+            : !resolveStatus(selected, inProgress, "In Progress")
+              ? { code: "in_progress_option_missing", label: "In Progress", name: inProgress ?? "In Progress" }
+              : null;
       state.configuration =
-        a.projectNodeId == null
-          ? { state: "unset", errorCode: null, error: null, projectTitle: null }
-          : a.projectNodeId === "PVT_ops"
+        selected === null
+          ? { state: "unset", errorCode: null, error: null, missingStatus: null, projectTitle: null }
+          : selected === "PVT_ops"
             ? {
                 state: "invalid",
                 errorCode: "status_field_missing",
                 error:
                   "“Ops board” has no single-select field named “Status”. Add it, or select another Project in Project settings.",
-                projectTitle: project?.title ?? null,
+                missingStatus: null,
+                projectTitle: title,
               }
-            : { state: "valid", errorCode: null, error: null, projectTitle: project?.title ?? null };
+            : missing
+              ? {
+                  state: "invalid",
+                  errorCode: missing.code,
+                  error: `The ${missing.label} status “${missing.name}” is not an option of the “Status” field of the GitHub Project “${title}”. Choose an option in the GitHub Project settings.`,
+                  missingStatus: missing.name,
+                  projectTitle: title,
+                }
+              : { state: "valid", errorCode: null, error: null, missingStatus: null, projectTitle: title };
       fire("github-polling-changed", { newIssues: [] });
       return view();
     }

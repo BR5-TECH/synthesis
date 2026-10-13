@@ -1,59 +1,112 @@
-//! What a poll keeps, decided without a network (GPP-FR-DEZO, GPP-FR-EHRC,
-//! GPP-FR-BOQX, GPP-FR-XSKT, GPP-FR-QCAM).
+//! What a poll keeps, decided without a network (GPP-FR-DEZO, GPP-FR-VXSB,
+//! GPP-FR-EHRC, GPP-FR-YNOT, GPP-FR-BOQX, GPP-FR-XSKT, GPP-FR-QCAM).
 //!
 //! Every function here is pure over what the client returned and what the
 //! disk holds, so the rules a poll applies are testable against a fake client
 //! and a temporary worktree.
 
-use super::client::{GithubProjects, ProjectItem, ProjectShape};
+use super::client::{GithubProjects, ProjectItem, ProjectShape, StatusOption};
 use super::records::*;
 use crate::drafts::GithubIssueLink;
 
+/// GPP-FR-VXSB: the two status names of the polling settings. `None` is an
+/// unset name.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StatusNames {
+    pub ready: Option<String>,
+    pub in_progress: Option<String>,
+}
+
+impl StatusNames {
+    pub fn of(settings: &GithubPollingSettings) -> Self {
+        Self {
+            ready: settings.ready_status.clone(),
+            in_progress: settings.in_progress_status.clone(),
+        }
+    }
+}
+
 /// GPP-FR-DEZO: a configuration that passed validation, with the ids a claim
-/// needs to move an item to `In Progress`.
+/// needs to move an item to the In Progress status, and the option names the
+/// two statuses resolved to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ValidConfiguration {
     pub title: String,
     pub field_id: String,
     pub ready_option_id: String,
+    pub ready_name: String,
     pub in_progress_option_id: String,
+    pub in_progress_name: String,
 }
 
 /// Why a poll or a claim failed, with the Project title where the failure
-/// came after the Project resolved.
+/// came after the Project resolved, and the missing status name of a
+/// missing-option error (GPP-FR-YNOT).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PollFailure {
     pub code: String,
     pub project_title: Option<String>,
+    pub missing_status: Option<String>,
 }
 
 impl PollFailure {
     pub fn code(code: impl Into<String>) -> Self {
-        Self { code: code.into(), project_title: None }
+        Self { code: code.into(), project_title: None, missing_status: None }
     }
 }
 
-/// GPP-FR-DEZO / GPP-FR-EHRC: check the Project's `Status` field.
-pub fn validate_shape(shape: &ProjectShape) -> Result<ValidConfiguration, PollFailure> {
-    let fail = |code: &str| PollFailure {
+/// GPP-FR-VXSB: the option a status name resolves to. A stored name matches
+/// exactly. An unset name matches the first option whose name equals the
+/// default case-insensitively, other than `other` — the option the other
+/// status holds — so the two statuses never resolve to one option
+/// (GPP-FR-DBPI).
+pub fn resolve_status<'a>(
+    options: &'a [StatusOption],
+    stored: Option<&str>,
+    default: &str,
+    other: Option<&str>,
+) -> Option<&'a StatusOption> {
+    match stored {
+        Some(name) => options.iter().find(|o| o.name == name),
+        None => options.iter().find(|o| {
+            o.name.to_lowercase() == default.to_lowercase() && Some(o.name.as_str()) != other
+        }),
+    }
+}
+
+/// GPP-FR-DEZO / GPP-FR-EHRC / GPP-FR-YNOT: check the Project's `Status`
+/// field against the two status names.
+pub fn validate_shape(
+    shape: &ProjectShape,
+    statuses: &StatusNames,
+) -> Result<ValidConfiguration, PollFailure> {
+    let fail = |code: &str, missing: Option<String>| PollFailure {
         code: code.to_string(),
         project_title: Some(shape.title.clone()),
+        missing_status: missing,
     };
     let Some(field) = shape.status_field.as_ref() else {
-        return Err(fail(ERR_STATUS_FIELD_MISSING));
+        return Err(fail(ERR_STATUS_FIELD_MISSING, None));
     };
-    let option = |name: &str| field.options.iter().find(|o| o.name == name).map(|o| o.id.clone());
-    let Some(ready_option_id) = option(READY) else {
-        return Err(fail(ERR_READY_OPTION_MISSING));
+    let resolve = |stored: &Option<String>, default: &str, other: Option<&str>, code: &str| {
+        resolve_status(&field.options, stored.as_deref(), default, other)
+            .ok_or_else(|| fail(code, Some(stored.clone().unwrap_or_else(|| default.to_string()))))
     };
-    let Some(in_progress_option_id) = option(IN_PROGRESS) else {
-        return Err(fail(ERR_IN_PROGRESS_OPTION_MISSING));
-    };
+    let ready =
+        resolve(&statuses.ready, READY, statuses.in_progress.as_deref(), ERR_READY_OPTION_MISSING)?;
+    let in_progress = resolve(
+        &statuses.in_progress,
+        IN_PROGRESS,
+        Some(ready.name.as_str()),
+        ERR_IN_PROGRESS_OPTION_MISSING,
+    )?;
     Ok(ValidConfiguration {
         title: shape.title.clone(),
         field_id: field.field_id.clone(),
-        ready_option_id,
-        in_progress_option_id,
+        ready_option_id: ready.id.clone(),
+        ready_name: ready.name.clone(),
+        in_progress_option_id: in_progress.id.clone(),
+        in_progress_name: in_progress.name.clone(),
     })
 }
 
@@ -62,13 +115,31 @@ pub fn read_configuration(
     client: &dyn GithubProjects,
     secret: &str,
     project_id: &str,
+    statuses: &StatusNames,
 ) -> Result<ValidConfiguration, PollFailure> {
     let shape = client.project_shape(secret, project_id).map_err(PollFailure::code)?;
-    validate_shape(&shape)
+    validate_shape(&shape, statuses)
+}
+
+/// GPP-FR-NNSJ: the options of the Project's `Status` field, in the order of
+/// the field.
+pub fn status_options(
+    client: &dyn GithubProjects,
+    secret: &str,
+    project_id: &str,
+) -> Result<Vec<GithubProjectStatusOption>, String> {
+    let shape = client.project_shape(secret, project_id)?;
+    let field = shape.status_field.ok_or_else(|| ERR_STATUS_FIELD_MISSING.to_string())?;
+    Ok(field
+        .options
+        .into_iter()
+        .map(|o| GithubProjectStatusOption { id: o.id, name: o.name })
+        .collect())
 }
 
 /// GPP-FR-BOQX: the eligibility rule. Open, of issue type `Task`, in the
-/// polling repository, and `Ready` in the selected Project. No label is read.
+/// polling repository, and with the `Status` value that the Ready status
+/// resolved to. No label is read.
 pub fn is_eligible(
     state: &str,
     issue_type: Option<&str>,
@@ -76,16 +147,21 @@ pub fn is_eligible(
     name: &str,
     repository: &RepositoryRef,
     status: Option<&str>,
+    ready_name: &str,
 ) -> bool {
     state.eq_ignore_ascii_case("OPEN")
         && issue_type == Some(TASK_TYPE)
         && owner.eq_ignore_ascii_case(&repository.owner)
         && name.eq_ignore_ascii_case(&repository.name)
-        && status == Some(READY)
+        && status == Some(ready_name)
 }
 
 /// GPP-FR-XSKT: the eligible issues among the Project's items.
-pub fn eligible_tasks(items: &[ProjectItem], repository: &RepositoryRef) -> Vec<GithubReadyTask> {
+pub fn eligible_tasks(
+    items: &[ProjectItem],
+    repository: &RepositoryRef,
+    ready_name: &str,
+) -> Vec<GithubReadyTask> {
     items
         .iter()
         .filter_map(|item| {
@@ -97,6 +173,7 @@ pub fn eligible_tasks(items: &[ProjectItem], repository: &RepositoryRef) -> Vec<
                 &issue.repository_name,
                 repository,
                 item.status.as_deref(),
+                ready_name,
             );
             eligible.then(|| GithubReadyTask {
                 repository_host: repository.host.clone(),
@@ -151,11 +228,13 @@ pub fn poll_once(
     secret: &str,
     repository: &RepositoryRef,
     project_id: &str,
+    statuses: &StatusNames,
 ) -> Result<PollSuccess, PollFailure> {
-    let configuration = read_configuration(client, secret, project_id)?;
-    let read = client
-        .project_items(secret, project_id)
-        .map_err(|code| PollFailure { code, project_title: Some(configuration.title.clone()) })?;
+    let configuration = read_configuration(client, secret, project_id, statuses)?;
+    let read = client.project_items(secret, project_id).map_err(|code| PollFailure {
+        project_title: Some(configuration.title.clone()),
+        ..PollFailure::code(code)
+    })?;
     let shadows: Vec<GithubIssueLink> = crate::drafts::github_shadow_drafts(root)
         .into_iter()
         .filter_map(|draft| draft.github_issue)
@@ -164,7 +243,11 @@ pub fn poll_once(
     Ok(PollSuccess {
         repository: repository.clone(),
         project_title: configuration.title,
-        tasks: exclude_claimed(eligible_tasks(&read.items, repository), &shadows, &pending),
+        tasks: exclude_claimed(
+            eligible_tasks(&read.items, repository, &configuration.ready_name),
+            &shadows,
+            &pending,
+        ),
         truncated: read.truncated,
     })
 }

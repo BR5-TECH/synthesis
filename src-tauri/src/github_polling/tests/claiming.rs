@@ -291,7 +291,7 @@ fn no_operation_closes_or_edits_an_issue() {
     let repository = repo();
     let fake = FakeProjects::with_items(vec![ready(4)]);
     fake.hold_issue(4, "Ready", Some("Task"), "OPEN");
-    poll_once(&root, &fake, SECRET, &repository, PROJECT).unwrap();
+    poll_once(&root, &fake, SECRET, &repository, PROJECT, &StatusNames::default()).unwrap();
     claims::claim(&context(&root, &repository), &fake, 4, NOW, &[]).unwrap();
     claims::retry(&root, SECRET, &repository, &fake, 4, &[]).unwrap();
     claims::acknowledge(&root, &repository, 4).unwrap();

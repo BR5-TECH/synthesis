@@ -136,7 +136,14 @@ fn a_settings_write_validates_and_records_the_configuration() {
 
     let path = h.dir.path().join(".synthesis/project.toml");
     let before = std::fs::read(&path).unwrap();
-    let refused = set_settings_impl(&h.handle(), Some("PVT_other".into()), Some(7));
+    let refused = set_settings_impl(
+        &h.handle(),
+        GithubPollingSettings {
+            project_node_id: Some("PVT_other".into()),
+            interval_minutes: Some(7),
+            ..Default::default()
+        },
+    );
     assert_eq!(refused.unwrap_err(), ERR_INVALID_INTERVAL);
     assert_eq!(std::fs::read(&path).unwrap(), before, "project.toml is byte-identical");
 

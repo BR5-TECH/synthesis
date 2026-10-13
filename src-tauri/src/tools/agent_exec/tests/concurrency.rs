@@ -73,6 +73,7 @@ fn one_executor_driving_two_launches_keeps_them_separate() {
                 &Silent,
                 &claude_context,
                 AgentExecutionRequest {
+                    sandbox_scope: None,
                     turn_kind: super::super::TurnKind::Work,
                     execution_directory: claude.workspace(),
                     task: task("CLAUDE-ONLY"),
@@ -86,6 +87,7 @@ fn one_executor_driving_two_launches_keeps_them_separate() {
                 &Silent,
                 &codex_context,
                 AgentExecutionRequest {
+                    sandbox_scope: None,
                     turn_kind: super::super::TurnKind::Work,
                     execution_directory: codex.workspace(),
                     task: task("CODEX-ONLY"),
@@ -146,6 +148,7 @@ fn concurrent_requests_cannot_cross_contaminate() {
                 &Silent,
                 &claude_context,
                 AgentExecutionRequest {
+                    sandbox_scope: None,
                     turn_kind: super::super::TurnKind::Work,
                     execution_directory: claude.workspace(),
                     task: task("CLAUDE-WORK"),
@@ -159,6 +162,7 @@ fn concurrent_requests_cannot_cross_contaminate() {
                 &Silent,
                 &codex_context,
                 AgentExecutionRequest {
+                    sandbox_scope: None,
                     turn_kind: super::super::TurnKind::Work,
                     execution_directory: codex.workspace(),
                     task: task("CODEX-WORK"),

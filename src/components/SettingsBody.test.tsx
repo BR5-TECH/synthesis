@@ -19,11 +19,19 @@ import {
  */
 
 describe("the section vocabulary", () => {
-  it("SWN-FR-QXTV: the Global group lists 12 sections, the Project group 10, in the keys a route names", () => {
+  it("SWN-FR-QXTV: the Global group lists 13 sections, the Project group 10, in the keys a route names", () => {
     expect(GLOBAL_SECTIONS.map(([key]) => key)).toEqual([...GLOBAL_SECTION_KEYS]);
     expect(PROJECT_SECTIONS.map(([key]) => key)).toEqual([...PROJECT_SECTION_KEYS]);
-    expect(GLOBAL_SECTIONS).toHaveLength(12);
+    expect(GLOBAL_SECTIONS).toHaveLength(13);
     expect(PROJECT_SECTIONS).toHaveLength(10);
+  });
+
+  it("GLS-FR-03: Isolation sits directly after Docker and before Remote connectivity", () => {
+    const keys = GLOBAL_SECTIONS.map(([key]) => key);
+    const docker = keys.indexOf("docker");
+    expect(keys[docker + 1]).toBe("isolation");
+    expect(keys[docker + 2]).toBe("remote");
+    expect(GLOBAL_SECTIONS[docker + 1]).toEqual(["isolation", "Isolation"]);
   });
 
   it("SWN-FR-MRNB: the first section of the Global group is Appearance", () => {

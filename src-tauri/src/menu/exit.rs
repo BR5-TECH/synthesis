@@ -136,6 +136,9 @@ pub fn finish_exit<R: tauri::Runtime>(
         // every asset it had not yet decided untouched and records itself
         // incomplete, and the next trigger simply runs it again.
         crate::draft_assets::begin_shutdown(&app);
+        // EAC-FR-ABHG: the runs are stopped, so every sandbox VM stops before
+        // the process goes.
+        crate::tools::agent_exec::sandbox::stop_all_before_exit(&app);
         app.exit(0);
     }
 }

@@ -261,6 +261,7 @@ pub(super) fn run_with_cancel(
         &Silent,
         &harness.context(),
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory: harness.workspace(),
             task,
@@ -309,6 +310,7 @@ pub(super) fn run_in(
         &Silent,
         &harness.context(),
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory,
             task: task("go"),
@@ -343,6 +345,7 @@ pub(super) fn run_as(
         &Silent,
         &harness.context(),
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind,
             execution_directory: harness.workspace(),
             task: task("go"),
@@ -488,6 +491,7 @@ pub(super) fn run_watching(
         &Silent,
         &harness.context(),
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory: harness.workspace(),
             task,

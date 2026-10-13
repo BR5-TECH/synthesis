@@ -113,6 +113,15 @@ pub(super) fn stop_of_launch_error(error: &AgentExecutionError, limit_ms: u64) -
             );
             socket_detail.as_str()
         }
+        // GXD-FR-QUCP: the sandbox cause in words. The runtime's own message
+        // goes to the application log alone.
+        AgentExecutionError::SandboxLaunchFailed(failure) => {
+            socket_detail = format!(
+                "The Microsandbox VM could not start: {}. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue.",
+                failure.cause.sentence()
+            );
+            socket_detail.as_str()
+        }
         AgentExecutionError::IntegrationUnresolved(_) => {
             "The project has no agentic integration to run the turn with. Choose one in Project settings."
         }
@@ -181,6 +190,7 @@ pub(super) fn launch_error_kind(error: &AgentExecutionError) -> &'static str {
         AgentExecutionError::SupplementaryMountInvalid(_) => "supplementary_mount_invalid",
         AgentExecutionError::RepositoryMaskingUnavailable(_) => "repository_masking_unavailable",
         AgentExecutionError::DurableOutputFailed(_) => "durable_output_failed",
+        AgentExecutionError::SandboxLaunchFailed(_) => "sandbox_launch_failed",
     }
 }
 

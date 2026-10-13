@@ -368,6 +368,10 @@ const CLASSIFIED: &[(&str, &str)] = &[
     // Always compiles its native code from source.
     ("libssh2-sys", "bundled source unless LIBSSH2_SYS_USE_PKG_CONFIG is set"),
     ("aws-lc-sys", "bundled source"),
+    // EAC-FR-HMBJ: the microsandbox runtime's own native code.
+    ("zstd-sys", "bundled source unless ZSTD_SYS_USE_PKG_CONFIG is set"),
+    ("libsqlite3-sys", "bundled source; sqlx enables its `bundled` feature"),
+    ("bzip2-sys", "bundled source; built for the Linux VM monitor alone"),
     ("mac-notification-sys", "bundled source; system frameworks"),
     // Links only operating-system libraries or frameworks.
     ("core-foundation-sys", "system framework"),

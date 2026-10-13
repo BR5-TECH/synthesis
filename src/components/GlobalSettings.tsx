@@ -15,6 +15,7 @@ import {
 } from "./NotificationSettings";
 import { NavigationSettings } from "./NavigationSettings";
 import { DockerSettings } from "./DockerSettings";
+import { IsolationSettings } from "./IsolationSettings";
 import { RemoteConnectivitySettings } from "./RemoteConnectivitySettings";
 import { FontRoleControls } from "./FontRoleControls";
 import { GithubTokens } from "./GithubTokens";
@@ -93,6 +94,11 @@ export const GLOBAL_SECTIONS: [GlobalSectionKey, string][] = [
   // section from GitHub down, everything in it applies immediately and it holds
   // no dirty state.
   ["docker", "Docker"],
+  // GLS-FR-03 / GLS-FR-YAEA: the Isolation section, directly after Docker
+  // because it decides what the agent containers configured there run inside.
+  // Like every section from GitHub down, everything in it applies immediately
+  // and it holds no dirty state (GLS-FR-GHYV).
+  ["isolation", "Isolation"],
   // GLS-FR-03 / GLS-FR-KVNP: the Remote connectivity section, last because it
   // is about how this machine is reached from outside rather than about
   // anything the author writes with. Like every section from GitHub down,
@@ -748,6 +754,10 @@ export function GlobalSettings({
           its own operation, so the section never contributes to the window's
           save-before-close sweep (GLS-FR-13, SWN-FR-08). */}
       {section === "docker" && <DockerSettings />}
+      {/* GLS-FR-GHYV: every change applies immediately through its own
+          operation, so the section never contributes to the window's
+          save-before-close sweep (GLS-FR-13, SWN-FR-08). */}
+      {section === "isolation" && <IsolationSettings />}
       {/* GLS-FR-RBLM: every change applies immediately through its own
           operation, so the section never contributes to the window's
           save-before-close sweep (GLS-FR-13, SWN-FR-08). */}

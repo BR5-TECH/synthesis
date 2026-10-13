@@ -116,7 +116,7 @@ fn split_lines(
 /// differently and share nothing but the bookkeeping: a bound, a truncation
 /// flag, and the line reassembly an observer is fed from.
 #[cfg_attr(test, allow(dead_code))]
-pub(super) struct StreamCapture {
+pub(in crate::tools::agent_exec) struct StreamCapture {
     limit: usize,
     kept: Vec<u8>,
     truncated: bool,
@@ -126,11 +126,15 @@ pub(super) struct StreamCapture {
 
 #[cfg_attr(test, allow(dead_code))]
 impl StreamCapture {
-    pub(super) fn new(limit: usize, channel: StreamChannel) -> Self {
+    pub(in crate::tools::agent_exec) fn new(limit: usize, channel: StreamChannel) -> Self {
         StreamCapture { limit, kept: Vec::new(), truncated: false, pending: Vec::new(), channel }
     }
 
-    pub(super) fn push(&mut self, bytes: &[u8], observer: Option<&dyn StreamObserver>) {
+    pub(in crate::tools::agent_exec) fn push(
+        &mut self,
+        bytes: &[u8],
+        observer: Option<&dyn StreamObserver>,
+    ) {
         if let Some(observer) = observer {
             split_lines(&mut self.pending, bytes, self.channel, observer);
         }
@@ -149,7 +153,10 @@ impl StreamCapture {
     /// What the backend wrote after its last line ending is still something it
     /// said, and an observer holding a piece delivered at the reassembly bound
     /// needs one whole-marked call to flush it.
-    pub(super) fn finish(mut self, observer: Option<&dyn StreamObserver>) -> CapturedStream {
+    pub(in crate::tools::agent_exec) fn finish(
+        mut self,
+        observer: Option<&dyn StreamObserver>,
+    ) -> CapturedStream {
         if let Some(observer) = observer {
             observer.line(self.channel, &self.pending, true);
         }

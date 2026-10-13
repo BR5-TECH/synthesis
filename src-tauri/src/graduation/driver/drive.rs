@@ -845,6 +845,11 @@ async fn execute<R: tauri::Runtime>(
         },
     };
     let request = AgentExecutionRequest {
+        // GXD-FR-SHNW: the run's queue — its stream, or the pinned worktree of
+        // a direct run outside a stream — is the scope whose VM it shares.
+        sandbox_scope: Some(crate::tools::agent_exec::sandbox::SandboxScope {
+            queue_key: run.queue_key(),
+        }),
         execution_directory: execution_directory.to_path_buf(),
         task,
         supplementary_mount: None,

@@ -57,6 +57,7 @@ mod merge_turns;
 mod observers;
 mod rebase_isolation;
 mod rebase_mounts;
+mod sandbox_launch;
 mod surface;
 mod task_document;
 mod watching;

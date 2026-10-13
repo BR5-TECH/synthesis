@@ -102,6 +102,25 @@ export function raiseTitle(run: GraduationRun, stateWord: string): string {
   return run.merge ? `Merge · ${stateWord}` : `Graduation · ${stateWord}`;
 }
 
+/**
+ * NTF-FR-BDNY / GXD-FR-QUCP: the cause a sandbox launch failure names, read
+ * from the run's detail, or `null` where the detail is not a sandbox failure.
+ */
+export function sandboxFailureCause(run: GraduationRun): string | null {
+  const interruption = run.interruption;
+  if (!interruption || interruption.reason !== "launch_failed") return null;
+  const match = /^The Microsandbox VM could not start: (.+?)\.(?: |$)/.exec(interruption.detail ?? "");
+  return match ? match[1] : null;
+}
+
+/** GRU-FR-FJZD / NTF-FR-BDNY: the stop sentence of an interrupted run. */
+function interruptedStatement(run: GraduationRun, title: string): string {
+  if (!run.interruption) return `“${title}” stopped.`;
+  const sandbox = sandboxFailureCause(run);
+  if (sandbox) return `“${title}” stopped: the Microsandbox VM could not start — ${sandbox}.`;
+  return `“${title}” stopped: ${interruptionCause(run.interruption.reason)}.`;
+}
+
 /** GRU-FR-BLSS: the one line the notification carries. */
 export function raiseStatement(run: GraduationRun): string {
   const title = runTitle(run);
@@ -119,6 +138,9 @@ export function raiseStatement(run: GraduationRun): string {
         return `“${title}” was discarded.`;
       case "failed":
         return `“${title}” failed.`;
+      // GRU-FR-CXLB / NTF-FR-BDNY: a merge run stops on the terms every run has.
+      case "interrupted":
+        return interruptedStatement(run, title);
       default:
         return `“${title}” changed.`;
     }
@@ -138,9 +160,7 @@ export function raiseStatement(run: GraduationRun): string {
       return `“${title}” failed.`;
     // GRU-FR-FJZD: the run and the cause its headline states.
     case "interrupted":
-      return run.interruption
-        ? `“${title}” stopped: ${interruptionCause(run.interruption.reason)}.`
-        : `“${title}” stopped.`;
+      return interruptedStatement(run, title);
     default:
       return `“${title}” changed.`;
   }

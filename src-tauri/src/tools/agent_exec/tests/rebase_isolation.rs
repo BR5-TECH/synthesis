@@ -604,6 +604,7 @@ fn eac_ts56_a_semantic_rebase_execution_writes_no_content_into_the_log() {
         &Silent,
         &harness.context(),
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory: harness.workspace(),
             task: request_task,

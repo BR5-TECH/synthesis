@@ -647,6 +647,9 @@ pub fn close_project<R: tauri::Runtime>(
         &app,
         crate::graduation::GraduationInterruptionReason::ProjectChanged,
     );
+    // EAC-FR-ABHG: the runs are stopped, so every sandbox VM stops with the
+    // project.
+    crate::tools::agent_exec::sandbox::stop_all_in_background(&app);
     // GPP-FR-DATH: the polling session ends with the project, so a project
     // opened again starts a new session with nothing reported.
     crate::github_polling::end_session(&app);

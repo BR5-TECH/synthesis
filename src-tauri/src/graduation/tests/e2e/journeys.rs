@@ -498,6 +498,30 @@ fn a_turn_that_could_not_be_launched_rests_the_run_and_ends_nothing() {
         .expect_commits(0);
 }
 
+// GXD-FR-QUCP, GXD-FR-UZHX, GXD-FR-SHNW: a Microsandbox VM that could not start
+// rests the run `interrupted` with `launch_failed`, its detail names the cause,
+// and the dispatch named the run's stream as its sandbox scope.
+#[test]
+fn a_sandbox_that_could_not_start_names_its_cause() {
+    Scenario::named("sandbox launch failure")
+        .work_turn(Script::cannot_launch(AgentExecutionError::SandboxLaunchFailed(
+            crate::tools::agent_exec::sandbox::SandboxFailure {
+                cause: crate::tools::agent_exec::sandbox::SandboxFailureCause::InsufficientMemory,
+                message: "cannot allocate memory".to_string(),
+            },
+        )))
+        .run()
+        .expect_state(GraduationRunState::Interrupted)
+        .expect_interruption("launch_failed")
+        .expect_interruption_detail(
+            "The Microsandbox VM could not start: there is not enough memory for the configured RAM. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue.",
+        )
+        .expect_interrupted_record("launch_failed", "error", &[])
+        .expect_sandbox_scope_is_the_stream()
+        .expect_stream_held()
+        .expect_commits(0);
+}
+
 // ---------------------------------------------------------------------------
 // 9 — resuming from the checkpoint
 // ---------------------------------------------------------------------------

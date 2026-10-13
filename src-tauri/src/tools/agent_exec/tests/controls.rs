@@ -94,6 +94,7 @@ fn a_directory_outside_the_allowlist_is_refused_by_the_guard() {
         &Silent,
         &harness.context(),
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory: outside.path().to_path_buf(),
             task: task("go"),
@@ -159,6 +160,7 @@ fn an_unmountable_directory_is_refused_through_the_executor() {
             docker_in_docker: Default::default(),
         },
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory: comma,
             task: task("go"),
@@ -227,6 +229,7 @@ fn an_api_kind_integration_is_refused_by_its_own_branch() {
                 docker_in_docker: Default::default(),
             },
             AgentExecutionRequest {
+                sandbox_scope: None,
                 turn_kind: super::super::TurnKind::Work,
                 execution_directory: workspace.path().to_path_buf(),
                 task: task("go"),

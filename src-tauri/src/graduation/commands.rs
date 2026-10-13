@@ -740,12 +740,20 @@ pub(crate) fn image_preflight<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> R
     // GSS-FR-40: the machine's Docker backend must say verified.
     crate::docker::resolve_docker_backend(&store)
         .map_err(|_| ERR_DOCKER_BACKEND_UNVERIFIED.to_string())?;
-    docker_socket_preflight(app, &root)?;
+    // GSU-FR-RQDS: a sandbox launch mounts no host Docker socket, so under
+    // Microsandbox the socket is not read at all.
+    let sandboxed = matches!(
+        crate::isolation::resolve_isolation(&store),
+        Ok(crate::isolation::ResolvedIsolation::Microsandbox(_))
+    );
+    if !sandboxed {
+        docker_socket_preflight(app, &root)?;
+    }
     Ok(())
 }
 
-/// GSU-FR-RQDS: where the project enables Docker-in-Docker, the socket path
-/// must name a Unix socket. One metadata read; no connection is opened and no
+/// GSU-FR-RQDS: where the project enables Docker-in-Docker and the isolation is
+/// not Microsandbox, the socket path must name a Unix socket. One metadata read; no connection is opened and no
 /// daemon is asked. Where the feature is off, no path is read.
 fn docker_socket_preflight<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,

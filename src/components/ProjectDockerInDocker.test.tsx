@@ -26,14 +26,30 @@ const state = (patch: Partial<DockerInDockerState> = {}): DockerInDockerState =>
 /** What the fake backend holds; a save writes it, a refusal leaves it. */
 let stored: DockerInDockerState;
 let refuseSave: string | null;
+let isolationMode: "none" | "microsandbox";
 
 beforeEach(() => {
   resetLogBufferForTest();
   invokeMock.mockReset();
   refuseSave = null;
+  isolationMode = "none";
   stored = state();
   invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
     if (cmd === "load_docker_in_docker_settings") return stored;
+    if (cmd === "load_isolation_settings") {
+      return {
+        settings: {
+          mode: isolationMode,
+          cpus: null,
+          memoryGib: null,
+          blockLocalNetwork: true,
+          allowedLocalHosts: [],
+        },
+        host: { microsandboxSupported: true, unsupportedReason: null, logicalCpus: 8, totalMemoryGib: 16 },
+        effectiveCpus: 4,
+        effectiveMemoryGib: 8,
+      };
+    }
     if (cmd === "save_docker_in_docker_settings") {
       if (refuseSave) throw new Error(refuseSave);
       const { settings } = args as { settings: Partial<DockerInDockerState> };
@@ -51,6 +67,23 @@ afterEach(cleanup);
 const checkbox = () => screen.findByRole("checkbox", { name: "Docker-in-Docker" });
 
 describe("Project settings → Docker → Docker-in-Docker (SET-FR-NXDV, SET-FR-JMHE, SET-FR-PQLA)", () => {
+  it("SET-FR-PMHB: under Microsandbox the section states that the setting is ignored, and the checkbox stays editable", async () => {
+    isolationMode = "microsandbox";
+    render(<ProjectDockerInDocker />);
+    expect(await screen.findByText(/so this setting is\s+ignored/)).toBeInTheDocument();
+    const box = await checkbox();
+    expect(box).toBeEnabled();
+    await userEvent.click(box);
+    await waitFor(() => expect(calls("save_docker_in_docker_settings")).toHaveLength(1));
+  });
+
+  it("SET-FR-PMHB: under None the section states nothing about Microsandbox", async () => {
+    render(<ProjectDockerInDocker />);
+    await checkbox();
+    await waitFor(() => expect(calls("load_isolation_settings")).toHaveLength(1));
+    expect(screen.queryByText(/Isolation is Microsandbox/)).not.toBeInTheDocument();
+  });
+
   it("SET-FR-NXDV: the checkbox is off for a project that stored nothing, and the path field and toggle are not shown", async () => {
     render(<ProjectDockerInDocker />);
     expect(await checkbox()).not.toBeChecked();

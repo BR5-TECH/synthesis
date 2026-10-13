@@ -498,6 +498,21 @@ impl Outcome {
     ///
     /// The closure's own return is discarded, so a chain of dispatch
     /// assertions reads the same way whether or not it ends in a semicolon.
+    /// GXD-FR-SHNW: every dispatch named the run's stream as its sandbox scope.
+    pub(crate) fn expect_sandbox_scope_is_the_stream(self) -> Self {
+        let seen = self.dispatches();
+        assert!(!seen.is_empty(), "[{}] no dispatch was made", self.name);
+        for (index, dispatch) in seen.iter().enumerate() {
+            assert_eq!(
+                dispatch.sandbox_scope.as_deref(),
+                Some(self.stream_id.as_str()),
+                "[{}] dispatch {index} sandbox scope",
+                self.name
+            );
+        }
+        self
+    }
+
     pub(crate) fn expect_dispatch<T>(
         self,
         index: usize,

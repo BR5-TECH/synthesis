@@ -38,6 +38,7 @@ pub mod github_publication;
 pub mod github_tokens;
 pub mod global_settings;
 pub mod graduation;
+pub mod isolation;
 pub mod layout;
 pub mod library;
 pub mod logging;
@@ -498,6 +499,8 @@ pub fn run() {
             docker::verify_docker_backend,
             // Remote connectivity (GSS-FR-ZKQT..GSS-FR-TXAO /
             // GLS-FR-KVNP..GLS-FR-XDUJ).
+            isolation::load_isolation_settings,
+            isolation::save_isolation_settings,
             relay_endpoint::load_relay_endpoint,
             relay_endpoint::save_relay_endpoint,
             relay_endpoint::verify_relay_endpoint,

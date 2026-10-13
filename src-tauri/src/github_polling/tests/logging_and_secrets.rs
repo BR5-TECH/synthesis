@@ -68,7 +68,8 @@ fn the_secret_reaches_no_state_record_or_error() {
     fake.hold_issue(6, "Ready", Some("Task"), "OPEN");
     *fake.set_status_error.lock().unwrap() = None;
 
-    let found = poll_once(&root, &fake, SECRET, &repository, PROJECT).unwrap();
+    let found =
+        poll_once(&root, &fake, SECRET, &repository, PROJECT, &StatusNames::default()).unwrap();
     let mut slot = SessionSlot::default();
     let key = key(&dir);
     let ticket = match slot.begin_poll(&key, PROJECT, slot.generation()) {

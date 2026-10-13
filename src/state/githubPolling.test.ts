@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  autoSelectedStatuses,
+  configurationErrorBody,
+  configurationErrorTransition,
+  defaultStatusOption,
   githubPollingErrorMessage,
   intervalMs,
   newIssuesBody,
@@ -18,12 +22,12 @@ describe("polling rules", () => {
     expect(timedPollingEnabled(pollingView())).toBe(true);
     expect(
       timedPollingEnabled(
-        pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null } }),
+        pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null } }),
       ),
     ).toBe(false);
     expect(
       timedPollingEnabled(
-        pollingView({ settings: { projectNodeId: null, intervalMinutes: 5 } }),
+        pollingView({ settings: { projectNodeId: null, intervalMinutes: 5, readyStatus: null, inProgressStatus: null } }),
       ),
     ).toBe(false);
     expect(
@@ -33,6 +37,7 @@ describe("polling rules", () => {
             state: "invalid",
             errorCode: "status_field_missing",
             error: "No Status field.",
+            missingStatus: null,
             projectTitle: "Roadmap",
           },
         }),
@@ -46,6 +51,7 @@ describe("polling rules", () => {
             state: "unchecked",
             errorCode: null,
             error: null,
+            missingStatus: null,
             projectTitle: "Roadmap",
           },
         }),
@@ -57,12 +63,12 @@ describe("polling rules", () => {
     expect(refreshAvailable(null)).toBe(false);
     expect(
       refreshAvailable(
-        pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null } }),
+        pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null } }),
       ),
     ).toBe(true);
     expect(
       refreshAvailable(
-        pollingView({ settings: { projectNodeId: null, intervalMinutes: 5 } }),
+        pollingView({ settings: { projectNodeId: null, intervalMinutes: 5, readyStatus: null, inProgressStatus: null } }),
       ),
     ).toBe(false);
     expect(
@@ -72,6 +78,7 @@ describe("polling rules", () => {
             state: "invalid",
             errorCode: "project_unavailable",
             error: null,
+            missingStatus: null,
             projectTitle: null,
           },
         }),
@@ -90,7 +97,7 @@ describe("GIT-FR-HNGQ / GIT-FR-RUAH: the one state the section renders", () => {
     expect(readyTasksState(null, false)).toBe("unread");
     expect(
       readyTasksState(
-        pollingView({ settings: { projectNodeId: null, intervalMinutes: 5 } }),
+        pollingView({ settings: { projectNodeId: null, intervalMinutes: 5, readyStatus: null, inProgressStatus: null } }),
         false,
       ),
     ).toBe("not-configured");
@@ -101,6 +108,7 @@ describe("GIT-FR-HNGQ / GIT-FR-RUAH: the one state the section renders", () => {
             state: "invalid",
             errorCode: "ready_option_missing",
             error: "x",
+            missingStatus: null,
             projectTitle: "Roadmap",
           },
         }),
@@ -178,5 +186,86 @@ describe("GIT-FR-NQTZ: refusal text", () => {
     expect(githubPollingErrorMessage("tls_untrusted")).toBe(
       "The GitHub operation failed (tls_untrusted).",
     );
+  });
+});
+
+describe("status names", () => {
+  const options = [
+    { id: "a", name: "Todo" },
+    { id: "b", name: "ready" },
+    { id: "c", name: "In progress" },
+    { id: "d", name: "IN PROGRESS" },
+  ];
+
+  it("SET-FR-CJZH: the default is the first option whose name matches case-insensitively, or none", () => {
+    expect(defaultStatusOption(options, "Ready")).toBe("ready");
+    expect(defaultStatusOption(options, "In Progress")).toBe("In progress");
+    expect(defaultStatusOption([{ id: "x", name: "Queued" }], "Ready")).toBeNull();
+  });
+
+  it("SET-FR-SDKP: only an unset name takes its default; a stored name stays; no change writes nothing", () => {
+    expect(autoSelectedStatuses({ readyStatus: null, inProgressStatus: "Todo" }, options)).toEqual({
+      readyStatus: "ready",
+      inProgressStatus: "Todo",
+    });
+    expect(
+      autoSelectedStatuses({ readyStatus: "Gone", inProgressStatus: "Todo" }, options),
+    ).toBeNull();
+    expect(
+      autoSelectedStatuses({ readyStatus: null, inProgressStatus: null }, [{ id: "x", name: "Queued" }]),
+    ).toBeNull();
+  });
+
+  it("SET-FR-QZYV: a default never takes the option the other status holds", () => {
+    const both = [
+      { id: "r", name: "Ready" },
+      { id: "p", name: "In Progress" },
+    ];
+    expect(
+      autoSelectedStatuses({ readyStatus: null, inProgressStatus: "Ready" }, both),
+    ).toBeNull();
+    expect(
+      autoSelectedStatuses({ readyStatus: "In Progress", inProgressStatus: null }, both),
+    ).toBeNull();
+    expect(defaultStatusOption(both, "Ready", "Ready")).toBeNull();
+  });
+});
+
+describe("the configuration-error raise", () => {
+  const invalid = (code: string, missingStatus: string | null = null) =>
+    pollingView({
+      configuration: {
+        state: "invalid",
+        errorCode: code,
+        error: "The Project is gone.",
+        missingStatus,
+        projectTitle: "Roadmap",
+      },
+    }).configuration;
+  const valid = pollingView().configuration;
+
+  it("GIT-FR-AKYZ: raises on a change into invalid or of its code, once, and retracts when it leaves invalid", () => {
+    expect(configurationErrorTransition(null, valid)).toEqual({ action: "none", code: null });
+    expect(configurationErrorTransition(null, invalid("ready_option_missing"))).toEqual({
+      action: "raise",
+      code: "ready_option_missing",
+    });
+    expect(
+      configurationErrorTransition("ready_option_missing", invalid("ready_option_missing")),
+    ).toEqual({ action: "none", code: "ready_option_missing" });
+    expect(
+      configurationErrorTransition("ready_option_missing", invalid("project_unavailable")),
+    ).toEqual({ action: "raise", code: "project_unavailable" });
+    expect(configurationErrorTransition("project_unavailable", valid)).toEqual({
+      action: "retract",
+      code: null,
+    });
+  });
+
+  it("NTF-FR-RNGG: the body names the missing status and the Project, or carries the error", () => {
+    expect(configurationErrorBody(invalid("in_progress_option_missing", "Doing"))).toBe(
+      "The In Progress status “Doing” is not an option in the GitHub Project “Roadmap”. Choose an option in GitHub Project settings.",
+    );
+    expect(configurationErrorBody(invalid("project_unavailable"))).toBe("The Project is gone.");
   });
 });

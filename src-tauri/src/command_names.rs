@@ -114,6 +114,7 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "open_publication_issue",
     // GitHub polling (GPP-github-polling.md).
     "list_github_projects",
+    "list_github_project_statuses",
     "get_github_polling_state",
     "set_github_polling_settings",
     "poll_github_ready_tasks",

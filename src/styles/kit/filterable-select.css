@@ -47,6 +47,17 @@
 .fsel__option--off { color: var(--fg-4); cursor: default; }
 .fsel__option--off[data-highlighted="true"] { background: transparent; }
 .fsel__option-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fsel__option-detail {
+  margin-left: auto; padding-left: var(--sp-2);
+  font-size: var(--fs-ui-xs); color: var(--fg-3); flex: none;
+}
+/* NAW-FR-XTGP: an overlay fixed to the window, placed by the component, that
+   scrolls its list inside a bounded height and changes no layout around it. */
+.fsel__menu--fit {
+  position: fixed; right: auto;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.fsel__menu--fit .fsel__list { flex: 1 1 auto; min-height: 0; }
 .fsel__option-hint {
   margin-left: auto; padding-left: var(--sp-2);
   font-size: var(--fs-ui-xs); color: var(--fg-4); flex: none;

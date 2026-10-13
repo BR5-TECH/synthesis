@@ -107,7 +107,7 @@ fn items_are_read_across_pages() {
     .unwrap();
     assert_eq!(cursors, vec![None, Some("C2".to_string())]);
     assert!(!read.truncated);
-    let kept = eligible_tasks(&read.items, &repo());
+    let kept = eligible_tasks(&read.items, &repo(), READY);
     assert_eq!(kept.iter().map(|t| t.issue_number).collect::<Vec<_>>(), vec![1, 2, 3]);
 
     // A read that always has a next page stops at the cap and says so.

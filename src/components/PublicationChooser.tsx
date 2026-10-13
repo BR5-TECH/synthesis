@@ -1,8 +1,12 @@
 /**
  * The publication chooser — the modal that decides whether a draft is published
  * as a root issue or as a sub-issue, and with which Type and milestone
- * (`NAW-new-artifact.md` NAW-FR-HNVR … NAW-FR-PSMO, served by
+ * (`NAW-new-artifact.md` NAW-FR-HNVR … NAW-FR-PDXJ, served by
  * `../../specifications/core/GHP-github-publication.md` GHP-FR-MDLD).
+ *
+ * The parent issues are one filterable combobox under the sub-issue option
+ * rather than one row each, so a repository with many parents never grows the
+ * chooser past the window (NAW-FR-YLKD, NAW-FR-XTGP).
  *
  * Three lists feed it — the parent issues, the issue Types, and the
  * milestones — and each renders its own loading, empty, unavailable, or loaded
@@ -10,8 +14,9 @@
  * be read costs the author the choices that needed it and nothing else
  * (NAW-FR-TCQB, GHP-FR-UXOT).
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Modal } from "./DraftsPanelParts";
+import { FilterableSelect, type FilterableOption } from "./FilterableSelect";
 import type { PublicationChooserState } from "../hooks/useDraftPublication";
 import type {
   MetadataList,
@@ -21,8 +26,9 @@ import type {
   PublicationParentIssue,
 } from "../types";
 
-/** The root option's value in the radio group; a parent's value is its number. */
+/** The two options of the radio group (NAW-FR-TCQB, NAW-FR-YLKD). */
 const ROOT = "root";
+const SUB = "sub";
 const NONE = "";
 
 type ListView<T> =
@@ -157,9 +163,42 @@ function TypeField({
   }
 }
 
-/** NAW-FR-YLKD: what a parent row says about its issue. */
+/** NAW-FR-YLKD: what a parent option says about its issue. */
 function parentSummary(parent: PublicationParentIssue): string {
   return `${parent.issueType} · ${parent.milestone ? parent.milestone.title : "No milestone"}`;
+}
+
+/** NAW-FR-YLKD: one option of the parent combobox. */
+function parentOption(parent: PublicationParentIssue): FilterableOption {
+  return {
+    id: String(parent.number),
+    label: `#${parent.number} ${parent.title}`,
+    detail: parentSummary(parent),
+  };
+}
+
+/**
+ * NAW-FR-YELA: the filter matches the issue number and the title, as a
+ * case-insensitive substring. The number matches with or without a leading
+ * `#`. The Type and the milestone are not matched.
+ */
+export function matchesParent(
+  parents: readonly PublicationParentIssue[],
+): (option: FilterableOption, filter: string) => boolean {
+  const titles = new Map(parents.map((p) => [String(p.number), p.title.toLowerCase()]));
+  return (option, filter) => {
+    const needle = filter.trim().toLowerCase();
+    if (!needle) return true;
+    const number = needle.startsWith("#") ? needle.slice(1) : needle;
+    return option.id.includes(number) || (titles.get(option.id) ?? "").includes(needle);
+  };
+}
+
+/** NAW-FR-PDXJ: the polite status of the parent filter. */
+function parentAnnouncement(filter: string, count: number): string {
+  const issues = count === 1 ? "1 issue" : `${count} issues`;
+  const trimmed = filter.trim();
+  return trimmed ? `${issues} match “${trimmed}”` : `${issues} available`;
 }
 
 export function PublicationChooser({
@@ -175,6 +214,9 @@ export function PublicationChooser({
 }) {
   // NAW-FR-TCQB: the root option is selected when the chooser opens.
   const [selected, setSelected] = useState<string>(ROOT);
+  // NAW-FR-ASYN: the issue chosen in the combobox, kept while the root option
+  // is selected.
+  const [parentNumber, setParentNumber] = useState(NONE);
   const [rootType, setRootType] = useState(NONE);
   const [rootMilestone, setRootMilestone] = useState(NONE);
   const [subMilestone, setSubMilestone] = useState(NONE);
@@ -184,10 +226,15 @@ export function PublicationChooser({
   const milestones = viewOf(state, (m) => m.milestones);
   const metadata = state.metadata;
   const policy = metadata?.settings.subIssueMilestonePolicy ?? null;
+  const parentItems = parents.kind === "loaded" ? parents.items : null;
+  // Built once per read, so the combobox does not filter again on every
+  // render of the chooser.
+  const parentOptions = useMemo(() => (parentItems ?? []).map(parentOption), [parentItems]);
+  const parentMatcher = useMemo(() => matchesParent(parentItems ?? []), [parentItems]);
   const parent =
-    selected === ROOT || parents.kind !== "loaded"
+    selected !== SUB || parents.kind !== "loaded"
       ? null
-      : (parents.items.find((p) => String(p.number) === selected) ?? null);
+      : (parents.items.find((p) => String(p.number) === parentNumber) ?? null);
   const repository = metadata
     ? `${metadata.repositoryOwner}/${metadata.repositoryName}`
     : state.remoteName;
@@ -248,51 +295,63 @@ export function PublicationChooser({
               </div>
             )}
 
-            {parents.kind === "loading" && <Notice>Loading parent issues…</Notice>}
-            {parents.kind === "unavailable" && (
-              <Notice>
-                {`Parent issues are unavailable: ${parents.error} Root publication is still available.`}
-              </Notice>
-            )}
-            {parents.kind === "empty" && (
-              <Notice>
-                {`No open issue of ${
-                  metadata?.settings.parentIssueTypes.join(", ") ?? "the configured Types"
-                } was found. Root publication is still available.`}
-              </Notice>
-            )}
-            {parents.kind === "loaded" &&
-              parents.items.map((p) => (
-                <div key={p.number}>
-                  <label className="t-ui-sm draft-publication-chooser__option">
-                    <input
-                      type="radio"
-                      name="publication-parent"
-                      value={String(p.number)}
-                      checked={selected === String(p.number)}
-                      onChange={() => setSelected(String(p.number))}
-                    />
-                    <span>
-                      <span className="draft-publication-picker__name">{`#${p.number} ${p.title}`}</span>
-                      <span className="t-ui-xs draft-publication-chooser__summary">
-                        {parentSummary(p)}
-                      </span>
-                      <span className="t-meta draft-publication-picker__url">{p.url}</span>
-                    </span>
-                  </label>
-                  {selected === String(p.number) && metadata && (
-                    <div className="draft-publication-chooser__detail">
-                      <SubIssueDetail
-                        metadata={metadata}
-                        parent={p}
-                        milestones={milestones}
-                        milestone={subMilestone}
-                        onMilestone={setSubMilestone}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
+            <label className="t-ui-sm draft-publication-chooser__option">
+              <input
+                type="radio"
+                name="publication-parent"
+                value={SUB}
+                checked={selected === SUB}
+                // NAW-FR-ASYN: offered only while there is a parent to choose.
+                disabled={parents.kind !== "loaded"}
+                onChange={() => setSelected(SUB)}
+              />
+              <span className="draft-publication-picker__name">Publish as a sub-issue of</span>
+            </label>
+            <div className="draft-publication-chooser__detail">
+              {/* NAW-FR-WMEP: a notice stands in place of the combobox. */}
+              {parents.kind === "loading" && <Notice>Loading parent issues…</Notice>}
+              {parents.kind === "unavailable" && (
+                <Notice>
+                  {`Parent issues are unavailable: ${parents.error} Root publication is still available.`}
+                </Notice>
+              )}
+              {parents.kind === "empty" && (
+                <Notice>
+                  {`No open issue of ${
+                    metadata?.settings.parentIssueTypes.join(", ") ?? "the configured Types"
+                  } was found. Root publication is still available.`}
+                </Notice>
+              )}
+              {parents.kind === "loaded" && (
+                <FilterableSelect
+                  options={parentOptions}
+                  value={parentNumber}
+                  // NAW-FR-ASYN: a choice selects the sub-issue option, also a
+                  // re-pick of the issue kept while the root option is selected.
+                  alwaysNotify
+                  onChange={(id) => {
+                    setParentNumber(id);
+                    setSelected(SUB);
+                  }}
+                  label="Parent issue"
+                  placeholder="Choose a parent issue"
+                  emptyText="No matching issue"
+                  matches={parentMatcher}
+                  announce={parentAnnouncement}
+                  fitWindow
+                  testId="publication-parent"
+                />
+              )}
+              {selected === SUB && metadata && (
+                <SubIssueDetail
+                  metadata={metadata}
+                  parent={parent}
+                  milestones={milestones}
+                  milestone={subMilestone}
+                  onMilestone={setSubMilestone}
+                />
+              )}
+            </div>
           </div>
         </div>
         <div className="modal__actions">
@@ -301,8 +360,9 @@ export function PublicationChooser({
           </button>
           <button
             className="btn btn--primary"
+            // NAW-FR-RBTE: the sub-issue option needs a chosen parent.
             disabled={
-              busy || state.status === "loading" || (selected !== ROOT && parent === null)
+              busy || state.status === "loading" || (selected === SUB && parent === null)
             }
             onClick={() => onConfirm(choice())}
           >
@@ -323,7 +383,8 @@ function SubIssueDetail({
   onMilestone,
 }: {
   metadata: PublicationMetadata;
-  parent: PublicationParentIssue;
+  /** The chosen parent, or `null` while none is chosen. */
+  parent: PublicationParentIssue | null;
   milestones: ListView<PublicationMilestone>;
   milestone: string;
   onMilestone: (next: string) => void;
@@ -343,9 +404,11 @@ function SubIssueDetail({
       )}
       {policy === "inherit_parent" && (
         <p className="t-ui-sm draft-publication-chooser__fixed">
-          {parent.milestone
-            ? `Milestone: inherited from the parent, ${parent.milestone.title}`
-            : "The parent has no milestone, so the issue publishes without one."}
+          {parent === null
+            ? "Milestone: inherited from the parent issue you choose."
+            : parent.milestone
+              ? `Milestone: inherited from the parent, ${parent.milestone.title}`
+              : "The parent has no milestone, so the issue publishes without one."}
         </p>
       )}
       {policy === "no_milestone" && (

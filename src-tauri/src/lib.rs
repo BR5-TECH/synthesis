@@ -332,6 +332,7 @@ pub fn run() {
             github_publication::open_publication_issue,
             // GitHub polling (GPP-github-polling.md).
             github_polling::list_github_projects,
+            github_polling::list_github_project_statuses,
             github_polling::get_github_polling_state,
             github_polling::set_github_polling_settings,
             github_polling::poll_github_ready_tasks,

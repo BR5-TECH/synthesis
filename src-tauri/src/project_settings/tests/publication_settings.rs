@@ -38,8 +38,11 @@ fn the_settings_are_project_public_and_leave_polling_alone() {
         "lineEndings = \"crlf\"\n\n[plugins]\nenabled = [\"git-pr\"]\n",
     )
     .unwrap();
-    let polling =
-        GithubPollingSettings { project_node_id: Some("PVT_1".into()), interval_minutes: Some(15) };
+    let polling = GithubPollingSettings {
+        project_node_id: Some("PVT_1".into()),
+        interval_minutes: Some(15),
+        ..Default::default()
+    };
     save_github_polling_settings_to(&root, &polling).unwrap();
 
     let saved = GithubPublicationSettings {

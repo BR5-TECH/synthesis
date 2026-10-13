@@ -25,6 +25,7 @@ mod enterprise_hosts;
 mod logging_and_secrets;
 mod polling_rules;
 mod session_rules;
+mod status_names;
 
 // ---------------------------------------------------------------------------
 // Harness
@@ -51,6 +52,7 @@ pub(super) fn settings(project: Option<&str>) -> GithubPollingSettings {
     GithubPollingSettings {
         project_node_id: project.map(str::to_string),
         interval_minutes: Some(5),
+        ..Default::default()
     }
 }
 
@@ -248,7 +250,14 @@ pub(super) fn context<'a>(
     root: &'a crate::fs::RootFs,
     repository: &'a RepositoryRef,
 ) -> super::claims::ClaimContext<'a> {
-    super::claims::ClaimContext { root, secret: SECRET, repository, project_id: PROJECT }
+    static STATUSES: StatusNames = StatusNames { ready: None, in_progress: None };
+    super::claims::ClaimContext {
+        root,
+        secret: SECRET,
+        repository,
+        project_id: PROJECT,
+        statuses: &STATUSES,
+    }
 }
 
 pub(super) fn link(number: u64) -> crate::drafts::GithubIssueLink {
@@ -281,7 +290,7 @@ pub(super) fn success(numbers: &[u64]) -> PollSuccess {
     PollSuccess {
         repository: repo(),
         project_title: "Roadmap".into(),
-        tasks: eligible_tasks(&items, &repo()),
+        tasks: eligible_tasks(&items, &repo(), READY),
         truncated: false,
     }
 }
@@ -436,8 +445,7 @@ impl Harness {
     }
 
     pub fn select(&self, project: Option<&str>) -> GithubPollingView {
-        super::set_settings_impl(&self.handle(), project.map(str::to_string), Some(5))
-            .expect("settings saved")
+        super::set_settings_impl(&self.handle(), settings(project)).expect("settings saved")
     }
 
     pub fn view(&self) -> GithubPollingView {

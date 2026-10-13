@@ -23,7 +23,7 @@ fn only_open_ready_tasks_of_the_polling_repository_are_eligible() {
         ProjectItem { item_id: "ITEM_draft".into(), status: Some("Ready".into()), issue: None },
     ];
     let numbers: Vec<u64> =
-        eligible_tasks(&items, &repo()).iter().map(|t| t.issue_number).collect();
+        eligible_tasks(&items, &repo(), READY).iter().map(|t| t.issue_number).collect();
     assert_eq!(numbers, vec![1, 10]);
 }
 
@@ -31,7 +31,7 @@ fn only_open_ready_tasks_of_the_polling_repository_are_eligible() {
 /// the URL, and the Status name.
 #[test]
 fn a_kept_row_carries_everything_the_panel_renders() {
-    let rows = eligible_tasks(&[ready(12)], &repo());
+    let rows = eligible_tasks(&[ready(12)], &repo(), READY);
     assert_eq!(
         rows,
         vec![GithubReadyTask {
@@ -57,7 +57,8 @@ fn a_poll_validates_then_reads_and_keeps_eligible_issues() {
         ready(2),
         item(3, Some("Todo"), "OPEN", Some("Task"), "acme", "widgets"),
     ]);
-    let found = poll_once(&root, &fake, SECRET, &repo(), PROJECT).expect("a poll");
+    let found =
+        poll_once(&root, &fake, SECRET, &repo(), PROJECT, &StatusNames::default()).expect("a poll");
     assert_eq!(found.project_title, "Roadmap");
     assert_eq!(found.tasks.iter().map(|t| t.issue_number).collect::<Vec<_>>(), vec![1, 2]);
     assert_eq!(fake.calls(), vec![Call::Shape(PROJECT.into()), Call::Items(PROJECT.into())]);
@@ -69,26 +70,25 @@ fn a_poll_validates_then_reads_and_keeps_eligible_issues() {
 fn each_configuration_defect_is_named() {
     let mut no_field = valid_shape();
     no_field.status_field = None;
-    assert_eq!(validate_shape(&no_field).unwrap_err().code, ERR_STATUS_FIELD_MISSING);
+    assert_eq!(
+        validate_shape(&no_field, &StatusNames::default()).unwrap_err().code,
+        ERR_STATUS_FIELD_MISSING
+    );
 
     let mut no_ready = valid_shape();
     no_ready.status_field.as_mut().unwrap().options.retain(|o| o.name != "Ready");
-    assert_eq!(validate_shape(&no_ready).unwrap_err().code, ERR_READY_OPTION_MISSING);
+    assert_eq!(
+        validate_shape(&no_ready, &StatusNames::default()).unwrap_err().code,
+        ERR_READY_OPTION_MISSING
+    );
 
     let mut no_progress = valid_shape();
     no_progress.status_field.as_mut().unwrap().options.retain(|o| o.name != "In Progress");
-    let failure = validate_shape(&no_progress).unwrap_err();
+    let failure = validate_shape(&no_progress, &StatusNames::default()).unwrap_err();
     assert_eq!(failure.code, ERR_IN_PROGRESS_OPTION_MISSING);
     assert_eq!(failure.project_title.as_deref(), Some("Roadmap"));
 
-    // Exact names: a differently cased option does not count.
-    let mut cased = valid_shape();
-    for option in &mut cased.status_field.as_mut().unwrap().options {
-        option.name = option.name.to_lowercase();
-    }
-    assert_eq!(validate_shape(&cased).unwrap_err().code, ERR_READY_OPTION_MISSING);
-
-    let valid = validate_shape(&valid_shape()).unwrap();
+    let valid = validate_shape(&valid_shape(), &StatusNames::default()).unwrap();
     assert_eq!(valid.in_progress_option_id, "OPT_progress");
     assert_eq!(valid.ready_option_id, "OPT_ready");
 
@@ -97,7 +97,8 @@ fn each_configuration_defect_is_named() {
     *fake.shape.lock().unwrap() = Err(ERR_PROJECT_UNAVAILABLE.into());
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
-    let failure = poll_once(&root, &fake, SECRET, &repo(), PROJECT).unwrap_err();
+    let failure =
+        poll_once(&root, &fake, SECRET, &repo(), PROJECT, &StatusNames::default()).unwrap_err();
     assert_eq!(failure.code, ERR_PROJECT_UNAVAILABLE);
     assert_eq!(fake.calls(), vec![Call::Shape(PROJECT.into())], "no items read");
 
@@ -122,7 +123,7 @@ fn an_issue_a_shadow_draft_or_a_pending_claim_names_is_excluded() {
     crate::drafts::create_github_shadow_draft(&root, "Task 1", "body", link(1)).unwrap();
     crate::project_settings::save_github_pending_claims_to(&root, &[pending(2, None)]).unwrap();
     let fake = FakeProjects::with_items(vec![ready(1), ready(2), ready(3)]);
-    let found = poll_once(&root, &fake, SECRET, &repo(), PROJECT).unwrap();
+    let found = poll_once(&root, &fake, SECRET, &repo(), PROJECT, &StatusNames::default()).unwrap();
     assert_eq!(found.tasks.iter().map(|t| t.issue_number).collect::<Vec<_>>(), vec![3]);
 
     // The same issue number in another repository is not excluded.
@@ -142,7 +143,7 @@ fn an_issue_a_shadow_draft_or_a_pending_claim_names_is_excluded() {
 /// and only at a `github.com` issue address of the polling repository.
 #[test]
 fn only_a_listed_issue_of_the_polling_repository_opens() {
-    let tasks = eligible_tasks(&[ready(4)], &repo());
+    let tasks = eligible_tasks(&[ready(4)], &repo(), READY);
     let claims = vec![pending(9, Some("d1"))];
     assert_eq!(
         listed_issue_url(4, &repo(), &tasks, &claims).unwrap(),
@@ -259,8 +260,8 @@ fn only_the_five_intervals_are_accepted() {
     }
 }
 
-/// GPP-FR-NLPG: the settings are the Project node id and the interval, stored
-/// project-public through PSS.
+/// GPP-FR-NLPG: the settings are the Project node id, the interval, and the
+/// two status names, stored project-public through PSS.
 #[test]
 fn the_settings_are_project_public() {
     let dir = project();
@@ -272,7 +273,15 @@ fn the_settings_are_project_public() {
     assert!(public.contains(PROJECT));
     assert!(!dir.path().join(".synthesis/local.toml").exists());
     let json = serde_json::to_value(&saved).unwrap();
-    assert_eq!(json, serde_json::json!({ "projectNodeId": PROJECT, "intervalMinutes": 5 }));
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "projectNodeId": PROJECT,
+            "intervalMinutes": 5,
+            "readyStatus": null,
+            "inProgressStatus": null,
+        })
+    );
 }
 
 /// GPP-FR-SUFH: the vocabulary is exactly the codes the contract names, each
@@ -284,6 +293,7 @@ fn the_error_vocabulary_is_exact() {
         (ERR_UNCONFIGURED, "polling_unconfigured"),
         (ERR_CONFIGURATION_INVALID, "polling_configuration_invalid"),
         (ERR_INVALID_INTERVAL, "invalid_interval"),
+        (ERR_DUPLICATE_STATUS_OPTION, "duplicate_status_option"),
         (ERR_PROJECT_UNAVAILABLE, "project_unavailable"),
         (ERR_STATUS_FIELD_MISSING, "status_field_missing"),
         (ERR_READY_OPTION_MISSING, "ready_option_missing"),

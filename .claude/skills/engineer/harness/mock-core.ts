@@ -6768,16 +6768,18 @@ let mockIsolation = {
   mode: "none" as "none" | "microsandbox",
   cpus: null as number | null,
   memoryGib: null as number | null,
+  diskGib: null as number | null,
   blockLocalNetwork: true,
   allowedLocalHosts: [] as string[],
 };
 function mockIsolationState() {
-  const host = { microsandboxSupported: true, unsupportedReason: null, logicalCpus: 10, totalMemoryGib: 32 };
+  const host = { microsandboxSupported: true, unsupportedReason: null, logicalCpus: 10, totalMemoryGib: 32, diskGib: 460 };
   return {
     settings: mockIsolation,
     host,
     effectiveCpus: Math.min(mockIsolation.cpus ?? 4, host.logicalCpus),
     effectiveMemoryGib: Math.min(mockIsolation.memoryGib ?? 8, host.totalMemoryGib),
+    effectiveDiskGib: Math.min(Math.max(mockIsolation.diskGib ?? 64, 8), host.diskGib),
   };
 }
 const mockDockerInDocker = { enabled: false, socketPath: "", hostGateway: false };

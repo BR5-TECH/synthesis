@@ -42,12 +42,14 @@ beforeEach(() => {
           mode: isolationMode,
           cpus: null,
           memoryGib: null,
+          diskGib: null,
           blockLocalNetwork: true,
           allowedLocalHosts: [],
         },
-        host: { microsandboxSupported: true, unsupportedReason: null, logicalCpus: 8, totalMemoryGib: 16 },
+        host: { microsandboxSupported: true, unsupportedReason: null, logicalCpus: 8, totalMemoryGib: 16, diskGib: 460 },
         effectiveCpus: 4,
         effectiveMemoryGib: 8,
+        effectiveDiskGib: 64,
       };
     }
     if (cmd === "save_docker_in_docker_settings") {

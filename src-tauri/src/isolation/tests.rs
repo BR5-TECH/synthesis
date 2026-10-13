@@ -17,7 +17,17 @@ fn buffer() -> &'static LogBuffer {
 }
 
 fn supported(cpus: u32, memory: u32) -> HostFacts {
-    HostFacts { unsupported_reason: None, logical_cpus: cpus, total_memory_gib: memory }
+    HostFacts {
+        unsupported_reason: None,
+        logical_cpus: cpus,
+        total_memory_gib: memory,
+        disk_gib: 500,
+    }
+}
+
+/// A supported machine whose disk is `disk` GiB.
+fn with_disk(disk: u32) -> HostFacts {
+    HostFacts { disk_gib: disk, ..supported(8, 16) }
 }
 
 fn unsupported() -> HostFacts {
@@ -25,6 +35,7 @@ fn unsupported() -> HostFacts {
         unsupported_reason: Some(UnsupportedReason::KvmMissing),
         logical_cpus: 8,
         total_memory_gib: 16,
+        disk_gib: 500,
     }
 }
 
@@ -32,8 +43,8 @@ fn settings(mode: IsolationMode) -> IsolationSettings {
     IsolationSettings { mode, ..IsolationSettings::default() }
 }
 
-// GSS-FR-YDKS: a store that holds no record reads as `none`, unset CPU and
-// RAM, the switch on, and an empty list.
+// GSS-FR-YDKS: a store that holds no record reads as `none`, unset CPU, RAM,
+// and disk size, the switch on, and an empty list.
 #[test]
 fn an_empty_store_reads_the_defaults() {
     let store = GlobalSettingsStore::in_memory();
@@ -41,6 +52,7 @@ fn an_empty_store_reads_the_defaults() {
     assert_eq!(record.mode, IsolationMode::None);
     assert_eq!(record.cpus, None);
     assert_eq!(record.memory_gib, None);
+    assert_eq!(record.disk_gib, None);
     assert!(record.block_local_network);
     assert!(record.allowed_local_hosts.is_empty());
 }
@@ -51,6 +63,8 @@ fn a_partial_record_keeps_the_switch_on() {
     let record: IsolationRecord = toml::from_str("mode = \"microsandbox\"\ncpus = 2\n").unwrap();
     assert_eq!(record.mode, IsolationMode::Microsandbox);
     assert_eq!(record.cpus, Some(2));
+    // A record written before the disk size existed reads it as unset.
+    assert_eq!(record.disk_gib, None);
     assert!(record.block_local_network);
 }
 
@@ -64,6 +78,7 @@ fn the_record_persists_in_the_user_global_store() {
         mode: IsolationMode::Microsandbox,
         cpus: Some(3),
         memory_gib: Some(6),
+        disk_gib: Some(100),
         block_local_network: false,
         allowed_local_hosts: vec!["10.0.0.5".to_string()],
     };
@@ -226,6 +241,7 @@ fn the_record_resolves_with_bounded_values() {
         mode: IsolationMode::Microsandbox,
         cpus: Some(32),
         memory_gib: None,
+        disk_gib: Some(100),
         block_local_network: true,
         allowed_local_hosts: vec!["localhost".to_string(), "::1".to_string()],
     };
@@ -234,6 +250,13 @@ fn the_record_resolves_with_bounded_values() {
     };
     assert_eq!(resolved.cpus, 8);
     assert_eq!(resolved.memory_gib, 8);
+    assert_eq!(resolved.disk_gib, 100);
+    let unset = IsolationRecord { disk_gib: None, ..record.clone() };
+    let ResolvedIsolation::Microsandbox(resolved_unset) = resolve_with(&unset, &supported(8, 16))
+    else {
+        panic!("microsandbox resolves to microsandbox");
+    };
+    assert_eq!(resolved_unset.disk_gib, 64);
     assert_eq!(resolved.allowed, vec![AllowedHost::HostMachine]);
     assert_eq!(resolved.unsupported_reason, None);
     let ResolvedIsolation::Microsandbox(resolved) = resolve_with(&record, &unsupported()) else {
@@ -278,4 +301,72 @@ fn the_wire_shape_is_camel_case() {
     assert_eq!(json["settings"]["blockLocalNetwork"], true);
     assert_eq!(json["host"]["microsandboxSupported"], true);
     assert_eq!(json["effectiveMemoryGib"], 8);
+    assert_eq!(json["effectiveDiskGib"], 64);
+    assert_eq!(json["host"]["diskGib"], 500);
+    assert!(json["settings"]["diskGib"].is_null());
+}
+
+// GSS-FR-JZMH: an unset disk size is 64 GiB, never above the host disk, never
+// below 8 GiB, and the host disk size where that disk is smaller than 8 GiB.
+#[test]
+fn the_effective_disk_size_is_bounded_by_the_host_disk() {
+    assert_eq!(effective_disk_gib(None, &with_disk(500)), 64);
+    assert_eq!(effective_disk_gib(None, &with_disk(40)), 40);
+    assert_eq!(effective_disk_gib(Some(200), &with_disk(500)), 200);
+    assert_eq!(effective_disk_gib(Some(900), &with_disk(500)), 500);
+    assert_eq!(effective_disk_gib(Some(2), &with_disk(500)), 8);
+    assert_eq!(effective_disk_gib(None, &with_disk(5)), 5);
+    assert_eq!(effective_disk_gib(Some(8), &with_disk(5)), 5);
+}
+
+// GSS-FR-TLXE: a disk size below 8 GiB or above the host disk is refused and
+// nothing is written; the bounds themselves and an unset size are valid. On a
+// host disk smaller than 8 GiB the host disk size is the one valid size.
+#[test]
+fn a_disk_size_outside_the_bounds_is_refused() {
+    let host = with_disk(100);
+    for (disk, refused) in [(7, true), (101, true), (8, false), (100, false)] {
+        let store = GlobalSettingsStore::in_memory();
+        let mut record = settings(IsolationMode::Microsandbox);
+        record.disk_gib = Some(disk);
+        let result = save_isolation_settings_with(&Silent, buffer(), &store, &host, record);
+        if refused {
+            assert_eq!(result.unwrap_err(), ERR_DISK_OUT_OF_RANGE, "{disk}");
+            assert_eq!(store.load_isolation().unwrap(), IsolationRecord::default(), "{disk}");
+        } else {
+            assert_eq!(result.unwrap().effective_disk_gib, disk, "{disk}");
+            assert_eq!(store.load_isolation().unwrap().disk_gib, Some(disk));
+        }
+    }
+    let store = GlobalSettingsStore::in_memory();
+    let state = save_isolation_settings_with(
+        &Silent,
+        buffer(),
+        &store,
+        &host,
+        settings(IsolationMode::Microsandbox),
+    )
+    .expect("an unset disk size is valid");
+    assert_eq!(state.effective_disk_gib, 64);
+
+    let small = with_disk(5);
+    for (disk, refused) in [(4, true), (6, true), (5, false)] {
+        let store = GlobalSettingsStore::in_memory();
+        let mut record = settings(IsolationMode::Microsandbox);
+        record.disk_gib = Some(disk);
+        let result = save_isolation_settings_with(&Silent, buffer(), &store, &small, record);
+        assert_eq!(result.is_err(), refused, "{disk} on a 5 GiB disk");
+    }
+}
+
+// GSS-FR-RQWB: the disk size is the size of the file system that holds the
+// directory, in whole GiB, and 64 GiB where the system reports no size.
+#[test]
+fn the_host_disk_size_is_the_file_system_of_the_directory() {
+    let dir = tempfile::tempdir().unwrap();
+    let bytes = crate::fs::probe_volume_size(dir.path()).expect("a size");
+    let expected = u32::try_from(bytes / (1024 * 1024 * 1024)).unwrap().max(1);
+    assert_eq!(disk_gib_of(dir.path()), expected);
+    assert_eq!(disk_gib_of(&dir.path().join("absent")), DEFAULT_DISK_GIB);
+    assert!(read_host().disk_gib >= 1);
 }

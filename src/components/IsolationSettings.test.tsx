@@ -23,6 +23,7 @@ const supportedHost: IsolationHost = {
   unsupportedReason: null,
   logicalCpus: 12,
   totalMemoryGib: 32,
+  diskGib: 460,
 };
 
 /** What the fake backend holds; a save writes it, a refusal leaves it. */
@@ -36,6 +37,7 @@ function stateOf(settings: Settings): IsolationState {
     host,
     effectiveCpus: Math.min(settings.cpus ?? 4, host.logicalCpus),
     effectiveMemoryGib: Math.min(settings.memoryGib ?? 8, host.totalMemoryGib),
+    effectiveDiskGib: Math.min(Math.max(settings.diskGib ?? 64, 8), host.diskGib),
   };
 }
 
@@ -48,6 +50,7 @@ beforeEach(() => {
     mode: "none",
     cpus: null,
     memoryGib: null,
+    diskGib: null,
     blockLocalNetwork: true,
     allowedLocalHosts: [],
   };
@@ -307,5 +310,73 @@ describe("Global settings → Isolation (GLS-FR-YAEA through GLS-FR-GHYV)", () =
     await userEvent.click(await microsandbox());
     expect(await screen.findByRole("alert")).toHaveTextContent(/CPU count must be between 1/);
     expect(screen.getByRole("radio", { name: "None" })).toBeChecked();
+  });
+
+  it("GLS-FR-PVQT, GLS-FR-WMKD: the Disk slider runs from 8 GB to the disk size, defaults to 64 GB, and states what it sizes", async () => {
+    stored = { ...stored, mode: "microsandbox" };
+    render(<IsolationSettings />);
+    const disk = await screen.findByLabelText(/Disk/);
+    expect(disk).toHaveAttribute("min", "8");
+    expect(disk).toHaveAttribute("max", "460");
+    expect(disk).toHaveAttribute("step", "1");
+    expect(disk).toHaveValue("64");
+    expect(screen.getByLabelText(/Disk — 64 GB/)).toBe(disk);
+    expect(screen.getByText("8 – 460 GB")).toBeInTheDocument();
+    expect(disk).toHaveAccessibleDescription(/sandbox's own disk.*grows only as it is used.*each\s+writable folder/s);
+  });
+
+  it("GLS-FR-PVQT: on a disk smaller than 8 GB the slider starts and ends at the disk size", async () => {
+    host = { ...supportedHost, diskGib: 5 };
+    stored = { ...stored, mode: "microsandbox" };
+    render(<IsolationSettings />);
+    const disk = await screen.findByLabelText(/Disk/);
+    expect(disk).toHaveAttribute("min", "5");
+    expect(disk).toHaveAttribute("max", "5");
+    expect(screen.getByText("5 – 5 GB")).toBeInTheDocument();
+  });
+
+  it("GLS-FR-PVQT: on a disk smaller than 64 GB the default is the disk size, and a larger stored value renders at the maximum", async () => {
+    host = { ...supportedHost, diskGib: 40 };
+    stored = { ...stored, mode: "microsandbox" };
+    render(<IsolationSettings />);
+    expect(await screen.findByLabelText(/Disk — 40 GB/)).toHaveAttribute("max", "40");
+    cleanup();
+
+    stored = { ...stored, diskGib: 300 };
+    render(<IsolationSettings />);
+    expect(await screen.findByLabelText(/Disk — 40 GB/)).toHaveAttribute("max", "40");
+  });
+
+  it("GLS-FR-PVQT, GLS-FR-GHYV: the Disk slider writes once, when it is let go", async () => {
+    stored = { ...stored, mode: "microsandbox" };
+    render(<IsolationSettings />);
+    const disk = await screen.findByLabelText(/Disk/);
+    fireEvent.change(disk, { target: { value: "100" } });
+    fireEvent.change(disk, { target: { value: "120" } });
+    expect(calls("save_isolation_settings")).toHaveLength(0);
+    fireEvent.keyUp(disk);
+    await waitFor(() => expect(calls("save_isolation_settings")).toHaveLength(1));
+    expect(lastSaved().diskGib).toBe(120);
+    expect(await screen.findByLabelText(/Disk — 120 GB/)).toHaveValue("120");
+  });
+
+  it("GLS-FR-PVQT: the Disk slider is shown only while Microsandbox is selected", async () => {
+    render(<IsolationSettings />);
+    await screen.findByRole("radio", { name: "None" });
+    expect(screen.queryByLabelText(/Disk/)).not.toBeInTheDocument();
+  });
+
+  it("GLS-FR-GHYV: a refused disk size renders the refusal in words", async () => {
+    stored = { ...stored, mode: "microsandbox" };
+    render(<IsolationSettings />);
+    const disk = await screen.findByLabelText(/Disk/);
+    refuseSave = "disk_out_of_range";
+    fireEvent.change(disk, { target: { value: "100" } });
+    fireEvent.pointerUp(disk);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The disk must be between 8 GB, or the disk size on a smaller disk, and the size of this disk. Nothing was saved.",
+    );
+    // The control keeps the value the backend still holds.
+    expect(screen.getByLabelText(/Disk — 64 GB/)).toHaveValue("64");
   });
 });

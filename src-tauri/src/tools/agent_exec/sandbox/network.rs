@@ -51,6 +51,7 @@ mod tests {
             owner: "1000:1000".into(),
             cpus: 1,
             memory_gib: 1,
+            disk_gib: 8,
             mounts: Vec::<SandboxMount>::new(),
             network: SandboxNetwork { block_local_network: block, allowed },
         }

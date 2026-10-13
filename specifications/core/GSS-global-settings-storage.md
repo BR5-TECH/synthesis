@@ -84,7 +84,7 @@ DockerBackend {
 
 Isolation (per `../ui/GLS-global-settings.md` Isolation section):
 - `"load isolation settings"` → `load_isolation_settings` → `IsolationState`. Reads the stored record and the facts of this machine; boots no VM, runs no executable, and reaches no network.
-- `"save isolation settings"` → `save_isolation_settings(settings)` → `IsolationState`, or a typed error: `isolation_unsupported`, `cpus_out_of_range`, `memory_out_of_range`, `allowed_host_invalid`, `allowed_host_duplicate`, or `allowed_hosts_too_many`. The two host errors carry the entry after a colon.
+- `"save isolation settings"` → `save_isolation_settings(settings)` → `IsolationState`, or a typed error: `isolation_unsupported`, `cpus_out_of_range`, `memory_out_of_range`, `disk_out_of_range`, `allowed_host_invalid`, `allowed_host_duplicate`, or `allowed_hosts_too_many`. The two host errors carry the entry after a colon.
 
 ```
 IsolationMode = "none" | "microsandbox"
@@ -93,6 +93,7 @@ IsolationSettings {
   mode:                 IsolationMode,  // defaults to "none"
   cpus:                 integer | null, // null means the default of GSS-FR-WHYC
   memory_gib:           integer | null, // null means the default of GSS-FR-WHYC
+  disk_gib:             integer | null, // null means the default of GSS-FR-JZMH
   block_local_network:  bool,           // defaults to true
   allowed_local_hosts:  string[]        // defaults to []
 }
@@ -102,14 +103,16 @@ IsolationHost {
   unsupported_reason:     "unsupported_platform" | "apple_silicon_required"
                         | "kvm_missing" | "kvm_inaccessible" | null,
   logical_cpus:           integer,      // at least 1
-  total_memory_gib:       integer       // whole GiB, at least 1
+  total_memory_gib:       integer,      // whole GiB, at least 1
+  disk_gib:               integer       // the disk of GSS-FR-RQWB, whole GiB, at least 1
 }
 
 IsolationState {
   settings:              IsolationSettings,
   host:                  IsolationHost,
   effective_cpus:        integer,       // GSS-FR-WHYC
-  effective_memory_gib:  integer        // GSS-FR-WHYC
+  effective_memory_gib:  integer,       // GSS-FR-WHYC
+  effective_disk_gib:    integer        // GSS-FR-JZMH
 }
 ```
 
@@ -139,7 +142,7 @@ Per-project slot (no UI consumer; read and written by other core modules):
 Internal (no UI consumer; not a Tauri command and unreachable from the frontend):
 - `load_settings_window_size()` / `save_settings_window_size(width, height)` — the size record of GSS-FR-WSZK, in logical pixels. Read and written by the Settings window's owner (`../ui/SWN-settings-windows.md` SWN-FR-MRBK, SWN-FR-CLMP).
 - `resolve_docker_backend()` — returns the verified backend a container or a build operation is performed through, `{ mode: "bollard", endpoint }` or `{ mode: "docker_cli", cli_path }`, or the typed refusal `docker_backend_unverified`. It reads the stored record and probes nothing (GSS-FR-40). Called by `PSS-project-settings-storage.md`'s project image build (PSS-FR-26) and by `../tools/EAC-execute-agent-cli.md`'s runtime seam (EAC-FR-39).
-- `resolve_isolation()` — returns `{ mode: "none" }` or `{ mode: "microsandbox", cpus, memory_gib, block_local_network, allowed_local_hosts }` with the effective values of GSS-FR-WHYC. It reads the stored record and the facts of this machine and probes nothing (GSS-FR-NCAQ). Called by `../tools/EAC-execute-agent-cli.md`'s launch (EAC-FR-SNMS) and by `GSU-graduation-start.md`'s image preflight (GSU-FR-RQDS).
+- `resolve_isolation()` — returns `{ mode: "none" }` or `{ mode: "microsandbox", cpus, memory_gib, disk_gib, block_local_network, allowed_local_hosts }` with the effective values of GSS-FR-WHYC and GSS-FR-JZMH. It reads the stored record and the facts of this machine and probes nothing (GSS-FR-NCAQ). Called by `../tools/EAC-execute-agent-cli.md`'s launch (EAC-FR-SNMS) and by `GSU-graduation-start.md`'s image preflight (GSU-FR-RQDS).
 
 The MRU append on project open/create is performed by `PST-project-storage.md` (PST-FR-06), which writes into this module's store; this module owns the store and its management commands, PST is an appender.
 
@@ -198,10 +201,13 @@ The MRU append on project open/create is performed by `PST-project-storage.md` (
 47. **GSS-FR-ZWJW** The document sources are keyed by project (GSS-FR-18): one list serves a repository however many worktrees it has, and a change of the active worktree reads the same list. The list is user-global because a selected path may lie outside the project. This module stores the paths it is given and does not check that they exist.
 48. **GSS-FR-WSZK** The user-global store holds the **Settings window size**: a width and a height in logical pixels, unset until the author resizes the window. It is not part of the app-preferences record, so `save_app_preferences` never changes it. It needs no project. This module does not interpret the numbers: the default, the minimum, and the clamping belong to `../ui/SWN-settings-windows.md` (SWN-FR-03, SWN-FR-CLMP).
 
-49. **GSS-FR-YDKS** The user-global store holds the **isolation settings**: the mode, the CPU count, the RAM in GiB, the local network switch, and the allowed local hosts. A store that holds no record reads as mode `none`, CPU count and RAM unset, the switch on, and an empty list. The record is never written into a project.
+49. **GSS-FR-YDKS** The user-global store holds the **isolation settings**: the mode, the CPU count, the RAM and the disk size in GiB, the local network switch, and the allowed local hosts. A store with no record reads as mode `none`, CPU count, RAM, and disk size unset, the switch on, and an empty list. The record is never written into a project.
 50. **GSS-FR-DPWS** `load_isolation_settings` returns the stored record with the facts of this machine, which it reads at each load and never stores. Microsandbox is supported on Linux where `/dev/kvm` exists and the user can open it for reading and writing, and on macOS on Apple Silicon. Every other platform, and every build that holds no microsandbox code, reports `unsupported_platform`.
 51. **GSS-FR-WHYC** The **effective** CPU count is the stored count, or 4 where it is unset, and it is never above the logical CPU count. The effective RAM is the stored RAM, or 8 GiB where it is unset, and it is never above the total RAM in whole GiB. Neither is ever below 1.
+51. **GSS-FR-RQWB** The **host disk size** is the total size, in whole GiB, of the file system that holds `app_data_dir()`. `load_isolation_settings` reads it at each load and never stores it. Where the system does not report that size, the host disk size is 64 GiB.
+51. **GSS-FR-JZMH** The **effective** disk size is the stored size, or 64 GiB where it is unset, and it is never above the host disk size. It is never below 8 GiB, except on a host disk smaller than 8 GiB, where it is the host disk size.
 52. **GSS-FR-OAKR** `save_isolation_settings` validates the record before it writes anything. It refuses `microsandbox` on a machine that cannot run it with `isolation_unsupported`, a CPU count outside 1 to the logical CPU count with `cpus_out_of_range`, and RAM outside 1 to the total RAM with `memory_out_of_range`. A refused save writes nothing.
+52. **GSS-FR-TLXE** `save_isolation_settings` refuses a disk size below the smaller of 8 GiB and the host disk size, or above the host disk size, with `disk_out_of_range`, and writes nothing. An unset disk size is valid.
 53. **GSS-FR-BVHS** An allowed local host is an IPv4 or IPv6 address, an IPv4 or IPv6 CIDR range, or a host name of at most 253 characters made of letters, digits, hyphens, and dots. The save refuses another form with `allowed_host_invalid`, a repeat of an earlier entry, ignoring case, with `allowed_host_duplicate`, and more than 64 entries with `allowed_hosts_too_many`.
 54. **GSS-FR-NCAQ** `resolve_isolation()` reads the stored record and the facts of this machine and probes nothing. It is not registered as a Tauri command. A stored `microsandbox` on a machine that cannot run it resolves to `microsandbox`, so the launch reports the failure rather than falling back to `none`.
 

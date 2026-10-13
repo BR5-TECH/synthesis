@@ -17,12 +17,16 @@ use std::net::IpAddr;
 use serde::{Deserialize, Serialize};
 
 mod host;
-pub use host::{read_host, HostFacts};
+pub use host::{disk_gib_of, read_host, HostFacts};
 
 /// GSS-FR-WHYC: the CPU count an unset record uses.
 pub const DEFAULT_CPUS: u32 = 4;
 /// GSS-FR-WHYC: the RAM, in GiB, an unset record uses.
 pub const DEFAULT_MEMORY_GIB: u32 = 8;
+/// GSS-FR-JZMH: the disk size, in GiB, an unset record uses.
+pub const DEFAULT_DISK_GIB: u32 = 64;
+/// GSS-FR-JZMH / GSS-FR-TLXE: the smallest disk size, in GiB.
+pub const MIN_DISK_GIB: u32 = 8;
 /// GSS-FR-BVHS: the most entries the allowed local hosts list holds.
 pub const MAX_ALLOWED_HOSTS: usize = 64;
 /// GSS-FR-BVHS: the longest host name an entry may be.
@@ -32,6 +36,7 @@ pub const MAX_HOST_NAME_LEN: usize = 253;
 pub const ERR_ISOLATION_UNSUPPORTED: &str = "isolation_unsupported";
 pub const ERR_CPUS_OUT_OF_RANGE: &str = "cpus_out_of_range";
 pub const ERR_MEMORY_OUT_OF_RANGE: &str = "memory_out_of_range";
+pub const ERR_DISK_OUT_OF_RANGE: &str = "disk_out_of_range";
 pub const ERR_ALLOWED_HOST_INVALID: &str = "allowed_host_invalid";
 pub const ERR_ALLOWED_HOST_DUPLICATE: &str = "allowed_host_duplicate";
 pub const ERR_ALLOWED_HOSTS_TOO_MANY: &str = "allowed_hosts_too_many";
@@ -65,6 +70,7 @@ pub struct IsolationSettings {
     pub mode: IsolationMode,
     pub cpus: Option<u32>,
     pub memory_gib: Option<u32>,
+    pub disk_gib: Option<u32>,
     pub block_local_network: bool,
     pub allowed_local_hosts: Vec<String>,
 }
@@ -104,6 +110,7 @@ pub struct IsolationHost {
     pub unsupported_reason: Option<UnsupportedReason>,
     pub logical_cpus: u32,
     pub total_memory_gib: u32,
+    pub disk_gib: u32,
 }
 
 /// What `load_isolation_settings` and `save_isolation_settings` return.
@@ -114,6 +121,7 @@ pub struct IsolationState {
     pub host: IsolationHost,
     pub effective_cpus: u32,
     pub effective_memory_gib: u32,
+    pub effective_disk_gib: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +130,8 @@ pub struct IsolationState {
 
 /// The isolation settings as they sit in `synthesis.toml` (GSS-FR-YDKS).
 ///
-/// A store that holds no record reads as mode `none`, CPU count and RAM unset,
+/// A store that holds no record reads as mode `none`, CPU count, RAM, and disk
+/// size unset,
 /// the local network switch on, and an empty list. The switch defaults to on
 /// for a record written without it as well, so a partial record never opens
 /// the local network by accident.
@@ -134,6 +143,8 @@ pub struct IsolationRecord {
     pub cpus: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memory_gib: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disk_gib: Option<u32>,
     pub block_local_network: bool,
     pub allowed_local_hosts: Vec<String>,
 }
@@ -144,6 +155,7 @@ impl Default for IsolationRecord {
             mode: IsolationMode::None,
             cpus: None,
             memory_gib: None,
+            disk_gib: None,
             block_local_network: true,
             allowed_local_hosts: Vec::new(),
         }
@@ -156,6 +168,7 @@ impl From<IsolationRecord> for IsolationSettings {
             mode: record.mode,
             cpus: record.cpus,
             memory_gib: record.memory_gib,
+            disk_gib: record.disk_gib,
             block_local_network: record.block_local_network,
             allowed_local_hosts: record.allowed_local_hosts,
         }
@@ -174,6 +187,7 @@ impl HostFacts {
             unsupported_reason: self.unsupported_reason,
             logical_cpus: self.logical_cpus.max(1),
             total_memory_gib: self.total_memory_gib.max(1),
+            disk_gib: self.disk_gib.max(1),
         }
     }
 }
@@ -190,6 +204,14 @@ pub fn effective_memory_gib(stored: Option<u32>, host: &HostFacts) -> u32 {
     stored.unwrap_or(DEFAULT_MEMORY_GIB).min(host.total_memory_gib.max(1)).max(1)
 }
 
+/// GSS-FR-JZMH: the disk size, in GiB, a launch uses — the stored size or the
+/// default, never above the host disk and never below 8 GiB, except on a host
+/// disk smaller than that, where it is the host disk size.
+pub fn effective_disk_gib(stored: Option<u32>, host: &HostFacts) -> u32 {
+    let host_disk = host.disk_gib.max(1);
+    stored.unwrap_or(DEFAULT_DISK_GIB).max(MIN_DISK_GIB).min(host_disk)
+}
+
 /// The state a load and a save both return.
 pub fn state_of(record: &IsolationRecord, host: &HostFacts) -> IsolationState {
     IsolationState {
@@ -197,6 +219,7 @@ pub fn state_of(record: &IsolationRecord, host: &HostFacts) -> IsolationState {
         host: host.outbound(),
         effective_cpus: effective_cpus(record.cpus, host),
         effective_memory_gib: effective_memory_gib(record.memory_gib, host),
+        effective_disk_gib: effective_disk_gib(record.disk_gib, host),
     }
 }
 
@@ -280,6 +303,14 @@ pub fn validate(settings: &IsolationSettings, host: &HostFacts) -> Result<Isolat
             return Err(ERR_MEMORY_OUT_OF_RANGE.to_string());
         }
     }
+    // GSS-FR-TLXE: from 8 GiB, or from the host disk size on a smaller disk,
+    // to the host disk size. An unset disk size is valid.
+    if let Some(disk) = settings.disk_gib {
+        let host_disk = host.disk_gib.max(1);
+        if disk < MIN_DISK_GIB.min(host_disk) || disk > host_disk {
+            return Err(ERR_DISK_OUT_OF_RANGE.to_string());
+        }
+    }
     if settings.allowed_local_hosts.len() > MAX_ALLOWED_HOSTS {
         return Err(ERR_ALLOWED_HOSTS_TOO_MANY.to_string());
     }
@@ -301,6 +332,7 @@ pub fn validate(settings: &IsolationSettings, host: &HostFacts) -> Result<Isolat
         mode: settings.mode,
         cpus: settings.cpus,
         memory_gib: settings.memory_gib,
+        disk_gib: settings.disk_gib,
         block_local_network: settings.block_local_network,
         allowed_local_hosts: entries,
     })
@@ -322,6 +354,8 @@ pub enum ResolvedIsolation {
 pub struct SandboxSettings {
     pub cpus: u32,
     pub memory_gib: u32,
+    /// EAC-FR-QDVN: the root disk and the write cap of each writable mount.
+    pub disk_gib: u32,
     pub block_local_network: bool,
     /// Sorted and without repeats, so two records that allow the same set
     /// compare equal (EAC-FR-UEFI).
@@ -347,6 +381,7 @@ pub fn resolve_with(record: &IsolationRecord, host: &HostFacts) -> ResolvedIsola
             ResolvedIsolation::Microsandbox(SandboxSettings {
                 cpus: effective_cpus(record.cpus, host),
                 memory_gib: effective_memory_gib(record.memory_gib, host),
+                disk_gib: effective_disk_gib(record.disk_gib, host),
                 block_local_network: record.block_local_network,
                 allowed,
                 unsupported_reason: host.unsupported_reason,
@@ -429,6 +464,7 @@ pub fn save_isolation_settings_with<S: LogSink + Clone + Send + 'static>(
             "mode" => record.mode.as_str(),
             "cpus" => effective_cpus(record.cpus, host),
             "memory_gib" => effective_memory_gib(record.memory_gib, host),
+            "disk_gib" => effective_disk_gib(record.disk_gib, host),
             "block_local_network" => record.block_local_network,
             "allowed_hosts" => record.allowed_local_hosts.len()
         },

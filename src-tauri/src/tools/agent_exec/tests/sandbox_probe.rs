@@ -84,6 +84,7 @@ fn microsandbox() -> ResolvedIsolation {
     ResolvedIsolation::Microsandbox(SandboxSettings {
         cpus: 1,
         memory_gib: 1,
+        disk_gib: 16,
         block_local_network: true,
         allowed: Vec::new(),
         unsupported_reason: None,
@@ -262,6 +263,14 @@ fn sandbox_real_work_turn_writes_as_the_host_user_and_reads_git() {
     assert_eq!(field(&result, "head"), head.to_string(), "{result}");
     assert_eq!(field(&result, "git_dir_writable"), "no", "{result}");
     assert_eq!(field(&result, "config_bytes"), "0", "{result}");
+    // EAC-FR-QDVN: the worktree mount and the root disk each offer the disk
+    // size of the isolation (16 GiB here), not the runtime's 4 GiB and not the
+    // whole host disk.
+    let kib = |name: &str| field(&result, name).parse::<u64>().unwrap_or(0);
+    let gib = 1024 * 1024;
+    for name in ["workspace_kib", "root_kib"] {
+        assert!((15 * gib..=17 * gib).contains(&kib(name)), "{name}: {result}");
+    }
 
     let written = harness.workspace().join(".probe/written");
     let meta = std::fs::metadata(&written).unwrap();

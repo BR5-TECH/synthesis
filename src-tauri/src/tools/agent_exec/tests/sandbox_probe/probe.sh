@@ -13,6 +13,8 @@ host_owner=$(value stat -c %u probe-host-file)
 host_group=$(value stat -c %g probe-host-file)
 host_mode=$(value stat -c %a probe-host-file)
 boot_id=$(value cat /proc/sys/kernel/random/boot_id)
+workspace_kib=$(df -Pk . 2>/dev/null | awk 'NR==2 {print $2}')
+root_kib=$(df -Pk / 2>/dev/null | awk 'NR==2 {print $2}')
 packed=$(value git rev-parse --verify -q refs/heads/probe-packed)
 tool=$(value command -v probe-tool)
 home=$(value printenv HOME)
@@ -58,6 +60,8 @@ result=$(cat <<JSON
   "host_mode": "$host_mode",
   "written_mode": "$written_mode",
   "boot_id": "$boot_id",
+  "workspace_kib": "$workspace_kib",
+  "root_kib": "$root_kib",
   "packed": "$packed",
   "store_writable": "$store_writable",
   "store_leftover": "$store_leftover",

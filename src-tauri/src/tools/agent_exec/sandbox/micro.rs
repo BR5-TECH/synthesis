@@ -121,11 +121,15 @@ impl SandboxRuntime for MicrosandboxRuntime {
                 .map_err(|message| BootError::Failed(SandboxFailureCause::BootFailed, message))?;
             let cpus = u8::try_from(spec.cpus).unwrap_or(u8::MAX).max(1);
             let memory_mib = spec.memory_gib.saturating_mul(1024).max(1024);
+            // EAC-FR-QDVN: the root disk and the write cap of each writable
+            // mount. The runtime otherwise caps both at 4 GiB.
+            let disk_mib = spec.disk_gib.saturating_mul(1024).max(1024);
             let mut builder = Sandbox::builder(vm)
                 .image(reference)
                 .pull_policy(pull)
                 .cpus(cpus)
                 .memory(memory_mib)
+                .root_disk(disk_mib)
                 .quiet_logs()
                 // EAC-FR-ABHG: a VM left under this name by an earlier process
                 // is replaced.
@@ -143,7 +147,7 @@ impl SandboxRuntime for MicrosandboxRuntime {
                     if read_only {
                         m.readonly()
                     } else {
-                        m
+                        m.quota(disk_mib)
                     }
                 });
             }

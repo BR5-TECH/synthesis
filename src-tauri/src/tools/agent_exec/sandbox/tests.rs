@@ -180,6 +180,7 @@ fn settings() -> SandboxSettings {
     SandboxSettings {
         cpus: 2,
         memory_gib: 4,
+        disk_gib: 16,
         block_local_network: true,
         allowed: Vec::new(),
         unsupported_reason: None,
@@ -966,4 +967,24 @@ fn a_read_only_source_made_again_does_not_reboot() {
         pool.launch(&Silent, launch(&fx, "vm-a", &spec, &s, None), process(&args)).await.unwrap();
     });
     assert_eq!(lifecycle(&runtime), vec!["boot", "refresh"]);
+}
+
+// EAC-FR-UEFI, EAC-FR-QDVN: the disk size is part of what a VM boots with, so
+// a launch with another disk size boots a new VM.
+#[test]
+fn another_disk_size_boots_a_new_vm() {
+    let fx = fixture();
+    let runtime = RecordingSandbox::with_boots(Vec::new());
+    let pool = SandboxPool::new(runtime.clone());
+    let s = settings();
+    let first = spec("agent:1", "/w/disk");
+    let mut larger = first.clone();
+    larger.disk_gib = 128;
+    let args: Vec<String> = Vec::new();
+    block_on(async {
+        pool.launch(&Silent, launch(&fx, "vm-a", &first, &s, None), process(&args)).await.unwrap();
+        pool.launch(&Silent, launch(&fx, "vm-a", &larger, &s, None), process(&args)).await.unwrap();
+    });
+    assert_eq!(lifecycle(&runtime), vec!["boot", "stop", "boot"]);
+    assert_eq!(pool.booted("vm-a").map(|spec| spec.disk_gib), Some(128));
 }

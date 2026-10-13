@@ -14,6 +14,8 @@ export interface IsolationSettings {
   cpus: number | null;
   /** Whole GiB. `null` means the default of GSS-FR-WHYC. */
   memoryGib: number | null;
+  /** Whole GiB. `null` means the default of GSS-FR-JZMH. */
+  diskGib: number | null;
   blockLocalNetwork: boolean;
   allowedLocalHosts: string[];
 }
@@ -31,6 +33,8 @@ export interface IsolationHost {
   unsupportedReason: IsolationUnsupportedReason | null;
   logicalCpus: number;
   totalMemoryGib: number;
+  /** GSS-FR-RQWB: the disk that holds the application data, in whole GiB. */
+  diskGib: number;
 }
 
 /** What `load isolation settings` and `save isolation settings` return. */
@@ -41,4 +45,6 @@ export interface IsolationState {
   effectiveCpus: number;
   /** GSS-FR-WHYC: the RAM, in GiB, a launch uses. */
   effectiveMemoryGib: number;
+  /** GSS-FR-JZMH: the disk size, in GiB, a launch uses. */
+  effectiveDiskGib: number;
 }

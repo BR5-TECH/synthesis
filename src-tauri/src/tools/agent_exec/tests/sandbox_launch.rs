@@ -130,6 +130,7 @@ fn microsandbox() -> ResolvedIsolation {
     ResolvedIsolation::Microsandbox(SandboxSettings {
         cpus: 3,
         memory_gib: 6,
+        disk_gib: 48,
         block_local_network: true,
         allowed: Vec::new(),
         unsupported_reason: None,
@@ -203,6 +204,8 @@ fn a_graduation_turn_runs_as_one_process_in_the_vm() {
     assert_eq!(spec.owner, format!("{uid}:{gid}"));
     assert_eq!(spec.cpus, 3);
     assert_eq!(spec.memory_gib, 6);
+    // EAC-FR-QDVN: the disk size of the isolation reaches the VM.
+    assert_eq!(spec.disk_gib, 48);
     assert!(spec.network.block_local_network);
 }
 
@@ -412,6 +415,7 @@ fn an_unsupported_machine_reports_its_cause() {
     let isolation = ResolvedIsolation::Microsandbox(SandboxSettings {
         cpus: 1,
         memory_gib: 1,
+        disk_gib: 48,
         block_local_network: true,
         allowed: Vec::new(),
         unsupported_reason: Some(crate::isolation::UnsupportedReason::KvmMissing),

@@ -64,6 +64,7 @@ pub mod owned_tree;
 #[cfg(test)]
 pub mod permission_probe;
 pub mod socket_probe;
+pub mod volume_probe;
 
 pub use access::{
     CreateMode, DirEntry, EntryKind, FileHandle, FileInfo, FsAccess, FsAccessBuilder,
@@ -73,6 +74,7 @@ pub use device_probe::{probe_kvm_device, KvmDevice};
 pub use error::{FsAccessBuildError, FsError, GrantRefusal};
 pub use identity_probe::{probe_directory_identity, probe_entry_is_dir};
 pub use socket_probe::{probe_unix_socket, SocketProbeError};
+pub use volume_probe::probe_volume_size;
 
 /// Convenience alias used throughout this module and re-exported for
 /// downstream callers.

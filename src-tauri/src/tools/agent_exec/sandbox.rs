@@ -85,6 +85,8 @@ pub struct SandboxSpec {
     pub owner: String,
     pub cpus: u32,
     pub memory_gib: u32,
+    /// EAC-FR-QDVN: the root disk, and the write cap of each writable mount.
+    pub disk_gib: u32,
     /// Sorted, so an order of composition does not count as a difference.
     pub mounts: Vec<SandboxMount>,
     pub network: SandboxNetwork,
@@ -104,6 +106,7 @@ impl SandboxSpec {
             owner,
             cpus: settings.cpus,
             memory_gib: settings.memory_gib,
+            disk_gib: settings.disk_gib,
             mounts,
             network: SandboxNetwork {
                 block_local_network: settings.block_local_network,

@@ -59,6 +59,9 @@ export function isolationRefusalMessage(error: unknown): string {
   if (raw.includes("memory_out_of_range")) {
     return "The RAM must be between 1 GB and the RAM of this machine. Nothing was saved.";
   }
+  if (raw.includes("disk_out_of_range")) {
+    return "The disk must be between 8 GB, or the disk size on a smaller disk, and the size of this disk. Nothing was saved.";
+  }
   if (raw.includes("allowed_hosts_too_many")) {
     return "The list holds at most 64 entries. Nothing was saved.";
   }
@@ -133,6 +136,7 @@ export function IsolationSettings() {
   /** The slider values while they move, so a drag does not write each step. */
   const [cpusDraft, setCpusDraft] = useState<number | null>(null);
   const [memoryDraft, setMemoryDraft] = useState<number | null>(null);
+  const [diskDraft, setDiskDraft] = useState<number | null>(null);
   const mounted = useRef(true);
   /** Writes go one after another, so the last change is the last write. */
   const chain = useRef<Promise<unknown>>(Promise.resolve());
@@ -189,6 +193,7 @@ export function IsolationSettings() {
           mode: saved.settings.mode,
           cpus: saved.effectiveCpus,
           memoryGib: saved.effectiveMemoryGib,
+          diskGib: saved.effectiveDiskGib,
           blockLocalNetwork: saved.settings.blockLocalNetwork,
           allowedHosts: saved.settings.allowedLocalHosts.length,
         });
@@ -230,6 +235,9 @@ export function IsolationSettings() {
   const sandboxed = settings.mode === "microsandbox";
   const cpus = cpusDraft ?? state.effectiveCpus;
   const memory = memoryDraft ?? state.effectiveMemoryGib;
+  const disk = diskDraft ?? state.effectiveDiskGib;
+  // GLS-FR-PVQT: from 8 GB, or from the disk size on a disk smaller than that.
+  const diskMin = Math.min(8, host.diskGib);
 
   /**
    * GLS-FR-USNH / GLS-FR-GHYV: a slider writes once, when the author lets go
@@ -248,6 +256,12 @@ export function IsolationSettings() {
       persist({ memoryGib: memoryDraft });
     }
     setMemoryDraft(null);
+  };
+  const commitDisk = () => {
+    if (diskDraft !== null) {
+      persist({ diskGib: diskDraft });
+    }
+    setDiskDraft(null);
   };
 
   const addEntry = () => {
@@ -359,6 +373,35 @@ export function IsolationSettings() {
               style={{ display: "block", width: "100%", marginTop: 8, accentColor: "var(--accent)" }}
             />
             <span className="t-ui-xs t-muted">1 – {host.totalMemoryGib} GB</span>
+          </div>
+
+          <div style={{ marginBottom: 20, maxWidth: 520 }}>
+            <label className="t-label" htmlFor="isolation-disk">
+              Disk — {disk} GB
+            </label>
+            <input
+              id="isolation-disk"
+              type="range"
+              min={diskMin}
+              max={host.diskGib}
+              step={1}
+              value={disk}
+              aria-valuetext={`${disk} of ${host.diskGib} GB`}
+              aria-describedby="isolation-disk-note"
+              onChange={(e) => setDiskDraft(Number(e.target.value))}
+              onPointerUp={() => commitDisk()}
+              onKeyUp={() => commitDisk()}
+              onBlur={() => commitDisk()}
+              style={{ display: "block", width: "100%", marginTop: 8, accentColor: "var(--accent)" }}
+            />
+            <span className="t-ui-xs t-muted">
+              {diskMin} – {host.diskGib} GB
+            </span>
+            <p id="isolation-disk-note" className="t-ui-xs t-muted" style={{ marginTop: 6 }}>
+              Sizes the sandbox's own disk, which grows only as it is used, and caps
+              what an agent writes into each writable folder, such as the working
+              copy.
+            </p>
           </div>
 
           <p className="t-ui-xs t-muted" style={{ marginBottom: 12, maxWidth: 520 }}>

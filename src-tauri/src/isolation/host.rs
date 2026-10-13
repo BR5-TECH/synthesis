@@ -14,6 +14,9 @@ pub struct HostFacts {
     pub logical_cpus: u32,
     /// Whole GiB, at least 1.
     pub total_memory_gib: u32,
+    /// GSS-FR-RQWB: the size of the disk that holds the application data, in
+    /// whole GiB, at least 1.
+    pub disk_gib: u32,
 }
 
 const GIB: u64 = 1024 * 1024 * 1024;
@@ -26,7 +29,30 @@ pub fn read_host() -> HostFacts {
         .max(1);
     let total_memory_gib =
         u32::try_from(total_memory_bytes().unwrap_or(GIB) / GIB).unwrap_or(u32::MAX).max(1);
-    HostFacts { unsupported_reason: unsupported_reason(), logical_cpus, total_memory_gib }
+    HostFacts {
+        unsupported_reason: unsupported_reason(),
+        logical_cpus,
+        total_memory_gib,
+        disk_gib: disk_gib(),
+    }
+}
+
+/// GSS-FR-RQWB: the size of the file system that holds `app_data_dir()`.
+fn disk_gib() -> u32 {
+    match crate::fs::app_data_dir() {
+        Ok(dir) => disk_gib_of(&dir),
+        Err(_) => super::DEFAULT_DISK_GIB,
+    }
+}
+
+/// GSS-FR-RQWB: the size, in whole GiB, of the file system that holds `dir`.
+/// Where the system does not report it, 64 GiB, so the Disk control still
+/// offers its default.
+pub fn disk_gib_of(dir: &std::path::Path) -> u32 {
+    crate::fs::probe_volume_size(dir)
+        .map(|bytes| u32::try_from(bytes / GIB).unwrap_or(u32::MAX))
+        .unwrap_or(super::DEFAULT_DISK_GIB)
+        .max(1)
 }
 
 /// Linux: supported where the user can open `/dev/kvm` for reading and writing.

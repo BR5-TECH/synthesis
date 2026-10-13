@@ -28,6 +28,9 @@ fn git_meta_rel_covers_head_refs_and_the_index_but_not_locks() {
 
 #[test]
 fn changes_change_count_counts_worktree_and_git_directory_changes() {
+    // The worktree list here is not filtered for `.gitignore`: the count
+    // trusts its caller for that. `watcher/tests.rs` covers the filter
+    // (CHC-FR-AADZ).
     use notify_debouncer_mini::DebouncedEvent;
 
     let root = PathBuf::from("/tmp/proj");
@@ -36,8 +39,11 @@ fn changes_change_count_counts_worktree_and_git_directory_changes() {
         path: base.join(rel),
         kind: notify_debouncer_mini::DebouncedEventKind::Any,
     };
-    let count =
-        |events: Vec<DebouncedEvent>| changes_change_count(&Ok(events), &root, Some(&git_dir));
+    let count = |events: Vec<DebouncedEvent>| {
+        let batch: DebounceEventResult = Ok(events);
+        let worktree = crate::scanning::changed_rel_paths(&batch, &root);
+        changes_change_count(&worktree, &batch, Some(&git_dir))
+    };
 
     // A working-tree edit alone is enough — a content change alters the
     // diff even though the tree shape is untouched.
@@ -53,10 +59,10 @@ fn changes_change_count_counts_worktree_and_git_directory_changes() {
     assert_eq!(count(vec![]), 0);
     let errored: DebounceEventResult =
         Err(notify_debouncer_mini::notify::Error::generic("watcher failed"));
-    assert_eq!(changes_change_count(&errored, &root, Some(&git_dir)), 0);
+    assert_eq!(changes_change_count(&[], &errored, Some(&git_dir)), 0);
 
     // With no repository there is nothing to watch beyond the working tree.
-    assert_eq!(changes_change_count(&Ok(vec![ev(&git_dir, "HEAD")]), &root, None), 0);
+    assert_eq!(changes_change_count(&[], &Ok(vec![ev(&git_dir, "HEAD")]), None), 0);
 }
 
 #[test]
@@ -74,7 +80,9 @@ fn a_co_located_git_directory_still_counts_as_a_change() {
         path: git_dir.join("refs/heads/feature"),
         kind: notify_debouncer_mini::DebouncedEventKind::Any,
     }];
-    assert_eq!(changes_change_count(&Ok(events), &root, Some(&git_dir)), 1);
+    let batch: DebounceEventResult = Ok(events);
+    let worktree = crate::scanning::changed_rel_paths(&batch, &root);
+    assert_eq!(changes_change_count(&worktree, &batch, Some(&git_dir)), 1);
 }
 
 #[test]

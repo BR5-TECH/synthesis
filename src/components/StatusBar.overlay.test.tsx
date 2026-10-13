@@ -5,6 +5,14 @@ import userEvent from "@testing-library/user-event";
 import { OVERLAY_VISIBLE_ROWS, StatusBar, type StatusBarProps } from "./StatusBar";
 import type { Operation } from "../types";
 
+// STB-FR-NAEX / STB-FR-JWLN put the bar on a timer, and
+// `StatusBar.steady.test.tsx` covers that timing. This suite checks what the
+// bar renders and how it is wired, so here the bar follows the in-flight set
+// at once.
+vi.mock("../hooks/useSteadyProgress", () => ({
+  useSteadyProgress: <T,>(operations: T[]) => operations[0],
+}));
+
 // STB-status-bar.md — the in-flight operations overlay: ordering, the five-row
 // viewport, actionable and plain rows, keyboard access, accessible names, and
 // the overlay staying current (STB-FR-11, STB-FR-HJVM, STB-FR-RWPD,

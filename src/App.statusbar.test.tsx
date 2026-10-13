@@ -15,6 +15,24 @@ import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
 import type { Operation } from "./types";
 import { CHANGES_UPDATED, OPERATION_PROGRESS } from "./events";
 import { letWriteLand } from "./test/autosave";
+import { MIN_VISIBLE_MS, SHOW_DELAY_MS } from "./hooks/useSteadyProgress";
+
+// STB-FR-NAEX / STB-FR-JWLN put the bar on a timer, and
+// `StatusBar.steady.test.tsx` covers that timing. This suite checks what the
+// bar renders and how it is wired, so here the bar follows the in-flight set
+// at once — except in the one test that sets `steady.real` to check the timing
+// end to end.
+const { steady } = vi.hoisted(() => ({ steady: { real: false } }));
+vi.mock("./hooks/useSteadyProgress", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./hooks/useSteadyProgress")>();
+  return {
+    ...actual,
+    useSteadyProgress: <T,>(operations: T[]) =>
+      steady.real
+        ? actual.useSteadyProgress(operations as never)
+        : operations[0],
+  };
+});
 
 // STB-status-bar.md wiring at the App level: which backend operations the strip
 // runs and when, and how it participates in the shell (the sixth zone, the
@@ -435,6 +453,43 @@ describe("progress (STB-FR-15 / STB-FR-12)", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("status-bar-progress")).not.toBeInTheDocument(),
     );
+  });
+
+  it("STB-FR-NAEX, STB-FR-JWLN, STB-FR-15: with the real timing, an event-driven operation shows after the delay and leaves after the hold", async () => {
+    steady.real = true;
+    render(<App />);
+    await enterIde();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const progress = (state: string) =>
+        fireBusEvent(OPERATION_PROGRESS, {
+          id: "op-9",
+          kind: "index",
+          label: "Indexing project…",
+          state,
+          sequence: 9,
+        });
+      act(() => progress("running"));
+      expect(screen.queryByTestId("status-bar-progress")).not.toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(SHOW_DELAY_MS);
+      });
+      expect(screen.getByText("Indexing project…")).toBeInTheDocument();
+
+      act(() => progress("finished"));
+      expect(screen.getByTestId("status-bar-progress")).toBeDisabled();
+      act(() => {
+        vi.advanceTimersByTime(MIN_VISIBLE_MS);
+      });
+      expect(screen.queryByTestId("status-bar-progress")).not.toBeInTheDocument();
+    } finally {
+      // Nothing scheduled here goes to the next test.
+      act(() => {
+        vi.runOnlyPendingTimers();
+      });
+      vi.useRealTimers();
+      steady.real = false;
+    }
   });
 
   it("closes the overlay when another of the window's overlays opens", async () => {

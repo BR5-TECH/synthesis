@@ -248,7 +248,9 @@
   height: var(--ctl-h-xs); border-radius: 4px;
   color: inherit; font: inherit; cursor: pointer;
 }
-.status-bar__progress:hover { background: var(--bg-active); }
+.status-bar__progress:hover:not(:disabled) { background: var(--bg-active); }
+/* STB-FR-JWLN: a bar held after its operation ended is not a click target. */
+.status-bar__progress:disabled { cursor: default; }
 .status-bar__progress-label {
   /* Truncate rather than growing the strip (STB non-functional). */
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

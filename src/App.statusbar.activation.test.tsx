@@ -28,6 +28,14 @@ import {
 } from "./test/appFixtures";
 import type { Operation } from "./types";
 
+// STB-FR-NAEX / STB-FR-JWLN put the bar on a timer, and
+// `StatusBar.steady.test.tsx` covers that timing. This suite checks what the
+// bar renders and how it is wired, so here the bar follows the in-flight set
+// at once.
+vi.mock("./hooks/useSteadyProgress", () => ({
+  useSteadyProgress: <T,>(operations: T[]) => operations[0],
+}));
+
 const invokeMock = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({

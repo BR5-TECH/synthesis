@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Icon } from "./icons";
 import { LINE_ENDING_CHOICES } from "../hooks/useLineEndings";
+import { useSteadyProgress } from "../hooks/useSteadyProgress";
 import {
   indentationLabel,
   SPACE_WIDTHS,
@@ -144,8 +145,10 @@ function ProgressRegion({
   // STB-FR-05 / STB-FR-06: the most recently started of the operations
   // currently in flight. The list arrives already ordered (PRG-FR-02), so the
   // "fall back as each terminates" rule needs no bookkeeping of its own —
-  // whoever is at the head is what renders.
-  const displayed = operations[0];
+  // whoever is at the head is what renders. STB-FR-NAEX / STB-FR-JWLN decide
+  // when the region shows at all, and what it holds once nothing is in flight.
+  const displayed = useSteadyProgress(operations);
+  const inFlight = operations.length > 0;
 
   /**
    * STB-FR-14: a pointer-down outside both the overlay and the centre region
@@ -171,14 +174,14 @@ function ProgressRegion({
     };
   }, [overlayOpen, onCloseOverlay]);
 
-  // STB-FR-14: the overlay is anchored to the centre region, so when the last
-  // in-flight operation terminates the region it hangs from is no longer
-  // rendered (STB-FR-07) and it closes on its own.
+  // STB-FR-14: the overlay closes on its own when the last in-flight operation
+  // terminates, so it never lists nothing. This follows the real set, not the
+  // bar, which may still hold that operation (STB-FR-JWLN).
   useEffect(() => {
-    if (overlayOpen && !displayed) onCloseOverlay();
-  }, [overlayOpen, displayed, onCloseOverlay]);
+    if (overlayOpen && !inFlight) onCloseOverlay();
+  }, [overlayOpen, inFlight, onCloseOverlay]);
 
-  // STB-FR-07: with nothing in flight the region renders nothing at all — no
+  // STB-FR-07: with nothing shown (STB-FR-NAEX, STB-FR-JWLN) the region renders nothing at all — no
   // track, no placeholder, no idle label — and is not a click target. The empty
   // div keeps the three-column anchoring (STB-FR-03) without being one.
   if (!displayed) {
@@ -197,6 +200,10 @@ function ProgressRegion({
         data-testid="status-bar-progress"
         aria-label={`${displayed.label} — show in-flight operations`}
         aria-expanded={overlayOpen}
+        // STB-FR-JWLN: a bar held with nothing in flight is not a click
+        // target. `disabled` rather than another element, so the track keeps
+        // its node when a new operation replaces the held one (STB-FR-KPRU).
+        disabled={!inFlight}
         // STB-FR-10: clicking opens the overlay; STB-FR-14: clicking again
         // closes it.
         onClick={() => (overlayOpen ? onCloseOverlay() : onOpenOverlay())}

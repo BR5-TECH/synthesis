@@ -120,7 +120,7 @@ fn a_co_located_projects_git_dir_is_watched_and_its_events_are_counted() {
         },
     ];
     assert_eq!(
-        crate::changes::changes_change_count(&Ok(events), &project_root, Some(&attributed),),
+        crate::changes::changes_change_count(&[], &Ok(events), Some(&attributed)),
         2,
         "a commit in a co-located repository must be a change (CHC-FR-16)"
     );
@@ -724,4 +724,56 @@ fn project_watcher_stop_is_idempotent_and_clears_active() {
     assert!(!watcher.is_active(), "fresh watcher must be inactive");
     watcher.stop();
     assert!(!watcher.is_active(), "stop on an inactive watcher is a no-op");
+}
+
+// ASC-FR-RSGA, BMI-FR-GJLW, CHC-FR-AADZ: a batch that only a build wrote,
+// into ignored folders, leaves the callback nothing to route and no change to
+// count. The callback returns early on exactly that empty list, before it
+// requests a pass or emits a tree change, and emits no `changes updated` for
+// a count of zero.
+#[test]
+fn a_batch_of_ignored_paths_alone_is_no_change() {
+    use notify_debouncer_mini::{DebouncedEvent, DebouncedEventKind};
+    let dir = tempfile::TempDir::new().unwrap();
+    let root = &crate::fs::RootFs::for_root(dir.path());
+    std::fs::write(root.join(".gitignore"), "target/\n").unwrap();
+    std::fs::create_dir_all(root.join("target/debug")).unwrap();
+    std::fs::write(root.join("target/debug/a"), b"x").unwrap();
+    let ev = |p: PathBuf| DebouncedEvent { path: p, kind: DebouncedEventKind::Any };
+    let git_dir = root.join(".git");
+
+    let batch = Ok(vec![ev(root.join("target/debug/a")), ev(root.join("target/debug/b"))]);
+    let (changed, count) = batch_changes(&batch, root, Some(&git_dir));
+    assert!(changed.is_empty(), "nothing is left to route: {changed:?}");
+    assert_eq!(count, 0, "no `changes updated` is due (CHC-FR-AADZ)");
+
+    // CHC-FR-16: a Git-directory change in the same batch still counts.
+    let batch = Ok(vec![ev(root.join("target/debug/a")), ev(git_dir.join("HEAD"))]);
+    let (changed, count) = batch_changes(&batch, root, Some(&git_dir));
+    assert!(changed.is_empty());
+    assert_eq!(count, 1);
+
+    // A tracked path beside the ignored ones is routed and counted alone.
+    let batch = Ok(vec![ev(root.join("target/debug/a")), ev(root.join("a.md"))]);
+    let (changed, count) = batch_changes(&batch, root, Some(&git_dir));
+    assert_eq!(changed, vec!["a.md".to_string()]);
+    assert_eq!(count, 1);
+}
+
+// ASC-FR-RSGA, DSL-FR-19: an edit to a skill under an ignored `.claude/`
+// survives the filter, so the callback still requests the pass that
+// re-enumerates the skill folders.
+#[test]
+fn an_ignored_skill_edit_still_reaches_the_callback() {
+    use notify_debouncer_mini::{DebouncedEvent, DebouncedEventKind};
+    let dir = tempfile::TempDir::new().unwrap();
+    let root = &crate::fs::RootFs::for_root(dir.path());
+    std::fs::write(root.join(".gitignore"), ".claude/\n").unwrap();
+    let path = root.join(".claude/skills/a/SKILL.md");
+    let batch = Ok(vec![
+        DebouncedEvent { path, kind: DebouncedEventKind::Any },
+        DebouncedEvent { path: root.join(".claude/settings.json"), kind: DebouncedEventKind::Any },
+    ]);
+    let (changed, _) = batch_changes(&batch, root, None);
+    assert_eq!(changed, vec![".claude/skills/a/SKILL.md".to_string()]);
 }

@@ -57,6 +57,9 @@ mod merge_turns;
 mod observers;
 mod rebase_isolation;
 mod rebase_mounts;
+mod sandbox_launch;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod sandbox_probe;
 mod surface;
 mod task_document;
 mod watching;

@@ -227,8 +227,8 @@ describe("states (GIT-FR-HNGQ, GIT-FR-RUAH, GIT-FR-EZFL)", () => {
     show(
       controller({
         view: pollingView({
-          settings: { projectNodeId: null, intervalMinutes: null },
-          configuration: { state: "unset", errorCode: null, error: null, projectTitle: null },
+          settings: { projectNodeId: null, intervalMinutes: null, readyStatus: null, inProgressStatus: null },
+          configuration: { state: "unset", errorCode: null, error: null, missingStatus: null, projectTitle: null },
           tasks: [],
         }),
       }),
@@ -248,6 +248,7 @@ describe("states (GIT-FR-HNGQ, GIT-FR-RUAH, GIT-FR-EZFL)", () => {
             state: "invalid",
             errorCode: "status_field_missing",
             error: "The Project has no Status field.",
+            missingStatus: null,
             projectTitle: "Roadmap",
           },
         }),
@@ -315,7 +316,7 @@ describe("states (GIT-FR-HNGQ, GIT-FR-RUAH, GIT-FR-EZFL)", () => {
 
   it("GIT-FR-EZFL: Refresh polls at once, with or without an interval", async () => {
     const polling = controller({
-      view: pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null } }),
+      view: pollingView({ settings: { projectNodeId: "P1", intervalMinutes: null, readyStatus: null, inProgressStatus: null } }),
     });
     show(polling);
     const refresh = screen.getByRole("button", { name: "Refresh ready tasks" });
@@ -335,7 +336,7 @@ describe("states (GIT-FR-HNGQ, GIT-FR-RUAH, GIT-FR-EZFL)", () => {
   it("GIT-FR-EZFL: Refresh is unavailable with no Project, and says why", () => {
     show(
       controller({
-        view: pollingView({ settings: { projectNodeId: null, intervalMinutes: 5 } }),
+        view: pollingView({ settings: { projectNodeId: null, intervalMinutes: 5, readyStatus: null, inProgressStatus: null } }),
       }),
     );
     const refresh = screen.getByRole("button", { name: /Refresh ready tasks \(unavailable: No GitHub Project is selected\)/ });

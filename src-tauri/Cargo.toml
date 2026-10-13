@@ -75,7 +75,9 @@ openrouter-rs = "0.13"
 # while waiting on a deadline and a cancellation flag is exactly the shape a
 # blocking child cannot express without a thread per stream. `macros` is for
 # `select!` at that one call site.
-tokio = { version = "1", features = ["rt", "time", "process", "io-util", "macros"] }
+# EAC-FR-DWBS additionally needs `sync`: launches of one sandbox scope wait on
+# one asynchronous lock, so they run in the scope's VM one at a time.
+tokio = { version = "1", features = ["rt", "time", "process", "io-util", "macros", "sync"] }
 # `ApiErrorContext.status` is an `http::StatusCode`, which the probe maps onto
 # the shared refused-versus-unreachable distinction.
 http = "1"
@@ -274,6 +276,25 @@ libz-sys = { version = "1", features = ["static"] }
 # Defaults are left ON deliberately: `default = ["z"]` is the zbus/D-Bus
 # backend, and disabling it leaves Linux with no way to post at all.
 notify-rust = "=4.17.0"
+
+# EAC-FR-HMBJ: the micro VM runtime a graduation turn runs in when the author's
+# isolation is Microsandbox (EAC-FR-SNMS). The crate compiles only for Linux and
+# macOS, so the Windows build holds no microsandbox code.
+#
+# `embed-binaries` compiles the `msb` + `libkrunfw` runtime archive into the
+# executable, and the first boot installs it from there, so nothing is
+# downloaded at run time. `download-binaries` is the build-time source of that
+# archive. `local` is the local VM backend, and `net` is the network policy
+# surface EAC-FR-CGCE builds on. The defaults are off: `cloud` is a remote
+# backend this application never uses, and `keyring` would link D-Bus a second
+# time for registry credentials this application never asks for.
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+microsandbox = { version = "=0.7.8", default-features = false, features = [
+  "local",
+  "net",
+  "embed-binaries",
+  "download-binaries",
+] }
 
 # FSA-FR-NRQE: `O_NOFOLLOW` and `O_NONBLOCK` for the bounded read of a regular
 # file. Already in the tree as a dependency of many crates.

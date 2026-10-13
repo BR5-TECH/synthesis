@@ -179,6 +179,9 @@ describe("the commit message of a start on an existing stream", () => {
     queueRead = () => new Promise((resolve) => (release = resolve as typeof release));
     draw();
     await waitFor(() => expect(messageField()).toBeInTheDocument());
+    // The dialog moves focus to the picker once the streams are read. Wait for
+    // that, or the late move takes the keys away from the field.
+    await waitFor(() => expect(picker()).toHaveFocus());
     await userEvent.type(messageField(), "typed first");
     release(makeQueue([runOf("r1", "alpha", "working", "alpha work")]));
     await waitFor(() => expect(invoked.mock.calls.map(([c]) => c)).toContain("list_graduation_queue"));

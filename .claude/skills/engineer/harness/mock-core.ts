@@ -6763,6 +6763,25 @@ function graduationChanged(run: any): any {
  * invisible from the page, since a refused call changes nothing either.
  */
 /** SET-FR-NXDV: the Docker-in-Docker settings the Docker section reads and writes. */
+// GSS-FR-YDKS: the stored isolation record of the harness machine.
+let mockIsolation = {
+  mode: "none" as "none" | "microsandbox",
+  cpus: null as number | null,
+  memoryGib: null as number | null,
+  diskGib: null as number | null,
+  blockLocalNetwork: true,
+  allowedLocalHosts: [] as string[],
+};
+function mockIsolationState() {
+  const host = { microsandboxSupported: true, unsupportedReason: null, logicalCpus: 10, totalMemoryGib: 32, diskGib: 460 };
+  return {
+    settings: mockIsolation,
+    host,
+    effectiveCpus: Math.min(mockIsolation.cpus ?? 4, host.logicalCpus),
+    effectiveMemoryGib: Math.min(mockIsolation.memoryGib ?? 8, host.totalMemoryGib),
+    effectiveDiskGib: Math.min(Math.max(mockIsolation.diskGib ?? 64, 8), host.diskGib),
+  };
+}
 const mockDockerInDocker = { enabled: false, socketPath: "", hostGateway: false };
 /** SET-FR-21: the Docker section's per-vendor images (`load_project_docker_images`). */
 const mockDockerImages: Array<Record<string, any>> = [
@@ -9527,6 +9546,14 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       mockDockerInDocker.hostGateway = Boolean(next.hostGateway);
       return undefined;
     }
+    // GLS-FR-YAEA / GSS-FR-DPWS: the isolation settings and the facts of this
+    // machine. The save keeps the record, so a reload shows what was written.
+    case "load_isolation_settings":
+      return mockIsolationState();
+    case "save_isolation_settings": {
+      mockIsolation = { ...(a.settings as typeof mockIsolation) };
+      return mockIsolationState();
+    }
     case "load_docker_backend":
       return {
         mode: "bollard",
@@ -9903,7 +9930,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return publicationRemotes;
     /* GHP-FR-MDLD: the chooser's read. `?publicationParentsFail`,
        `?publicationTypesFail`, and `?publicationMilestonesEmpty` force the
-       failed and empty states of NAW-FR-WMEP. */
+       failed and empty states of NAW-FR-WMEP. `?publicationManyParents` adds
+       sixty parents, so the bounded combobox of NAW-FR-XTGP can be seen. */
     case "load_publication_metadata": {
       const loaded = (items: unknown[]) => ({
         state: "loaded",
@@ -9938,6 +9966,15 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
                 url: "https://github.com/acme/acme-app/issues/398",
                 milestone: null,
               },
+              ...(harnessFlag("publicationManyParents")
+                ? Array.from({ length: 60 }, (_, i) => ({
+                    number: 500 + i,
+                    title: `Parent feature ${i}`,
+                    issueType: "Feature",
+                    url: `https://github.com/acme/acme-app/issues/${500 + i}`,
+                    milestone: i % 2 ? { number: 8, title: "v1.3" } : null,
+                  }))
+                : []),
             ]),
         issueTypes: harnessFlag("publicationTypesFail")
           ? failed("issue_types_unreadable", "The issue Types of this repository could not be read.")

@@ -432,6 +432,12 @@ pub fn delete_work_stream<R: tauri::Runtime>(
     if let Err(reason) = update_record::remove_update(&fs, &store, &stream_id) {
         stranded.push(reason);
     }
+    // EAC-FR-ABHG: the stream has ended, so its sandbox VM stops.
+    crate::tools::agent_exec::sandbox::stop_scope_in_background(
+        &app,
+        key.clone(),
+        stream_id.clone(),
+    );
     // WKS-FR-SPVK: the branch set changed, whether or not every part went.
     crate::worktree::announce_branches_changed(&app, &root, "work stream deletion");
     if !stranded.is_empty() {

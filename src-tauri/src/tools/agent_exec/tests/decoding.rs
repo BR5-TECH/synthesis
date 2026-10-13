@@ -527,6 +527,7 @@ fn the_container_is_created_from_the_image_the_project_commits() {
         &Silent,
         &harness.context(),
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory: harness.workspace(),
             task: task("go"),
@@ -579,6 +580,7 @@ fn a_project_that_configures_no_image_launches_nothing() {
         &Silent,
         &context,
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory: harness.workspace(),
             task: task("go"),
@@ -610,6 +612,7 @@ fn a_configured_image_that_cannot_be_pulled_is_image_unavailable() {
         &Silent,
         &harness.context(),
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory: harness.workspace(),
             task: task("go"),
@@ -639,6 +642,7 @@ fn the_seam_receives_the_specification_the_cli_vector_is_rendered_from() {
         &Silent,
         &harness.context(),
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory: harness.workspace(),
             task: task("go"),
@@ -680,6 +684,7 @@ fn an_unverified_docker_backend_refuses_before_any_container() {
         &Silent,
         &harness.context(),
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory: harness.workspace(),
             task: task("go"),

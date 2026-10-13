@@ -688,19 +688,24 @@ pub fn git_dir_to_watch(git_dir: &Path, root: &Path) -> Option<std::path::PathBu
 }
 
 /// How many changes in a debounced watcher batch could alter the current change
-/// set (CHC-FR-16): every working-tree path the scanner surfaces — a content
-/// edit changes a diff even though it leaves the tree shape alone — plus every
+/// set (CHC-FR-16): every working-tree path in `worktree` — a content edit
+/// changes a diff even though it leaves the tree shape alone — plus every
 /// Git-directory path from [`is_git_meta_rel`]. Zero means no
 /// `"changes updated"` event is due.
+///
+/// `worktree` is the batch's working-tree paths with the `.gitignore`d ones
+/// already removed (`scanning::drop_gitignored`): an ignored path cannot alter
+/// the change set (CHC-FR-AADZ). The watcher filters the batch once and hands
+/// the same list to every consumer.
 ///
 /// `git_dir` is the repository's Git directory, wherever it lives. Passing
 /// `None` (no repository) counts working-tree changes only.
 pub fn changes_change_count(
+    worktree: &[String],
     result: &DebounceEventResult,
-    root: &Path,
     git_dir: Option<&Path>,
 ) -> usize {
-    let worktree = scanning::changed_rel_paths(result, root).len();
+    let worktree = worktree.len();
     let (Ok(events), Some(git_dir)) = (result, git_dir) else {
         return worktree;
     };

@@ -5,6 +5,14 @@ import userEvent from "@testing-library/user-event";
 import { StatusBar, type StatusBarProps } from "./StatusBar";
 import type { Operation } from "../types";
 
+// STB-FR-NAEX / STB-FR-JWLN put the bar on a timer, and
+// `StatusBar.steady.test.tsx` covers that timing. This suite checks what the
+// bar renders and how it is wired, so here the bar follows the in-flight set
+// at once.
+vi.mock("../hooks/useSteadyProgress", () => ({
+  useSteadyProgress: <T,>(operations: T[]) => operations[0],
+}));
+
 // STB-status-bar.md — the strip's three regions in isolation. The App-level
 // suite covers the wiring (which backend operations run, and when); this one
 // covers what the regions render for a given set of inputs.

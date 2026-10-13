@@ -142,6 +142,15 @@ export async function publicationChooser(): Promise<HTMLElement> {
   return root.closest('[role="dialog"]') as HTMLElement;
 }
 
+/**
+ * NAW-FR-YLKD / NAW-FR-ASYN: choose a parent issue in the chooser's
+ * combobox, which selects the sub-issue option.
+ */
+export async function chooseParent(dialog: HTMLElement, issueNumber: number) {
+  await userEvent.click(within(dialog).getByRole("combobox", { name: "Parent issue" }));
+  await userEvent.click(within(dialog).getByTestId(`publication-parent-option-${issueNumber}`));
+}
+
 /** NAW-FR-RBTE: confirm the chooser as it stands, once its read has landed. */
 export async function confirmPublicationChooser() {
   const dialog = await publicationChooser();

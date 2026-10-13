@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type {
   DraftChangeProposal,
   DraftSummary,
+  GithubPollingView,
   PromptChangeProposal,
 } from "../types";
 import type { useAppOverlays } from "./useAppOverlays";
@@ -41,6 +42,7 @@ import {
   withdrawForRoot,
 } from "../state/notifications";
 import { clearToasts } from "../state/toasts";
+import { logDebug, logInfo } from "../logging";
 import { dockerSocketRaise, onDockerSocketRefusal } from "../state/dockerSocketRefusal";
 import { setSelectionFollowsTab } from "../state/selectionFollowsTab";
 import {
@@ -67,7 +69,14 @@ import {
   undecidedHunks,
 } from "../state/draftProposals";
 import { setFocusedHunk } from "../state/draftDiscussion";
-import { newIssuesBody, newIssuesTitle } from "../state/githubPolling";
+import {
+  CONFIGURATION_ERROR_KEY,
+  CONFIGURATION_ERROR_TITLE,
+  configurationErrorBody,
+  configurationErrorTransition,
+  newIssuesBody,
+  newIssuesTitle,
+} from "../state/githubPolling";
 import {
   configurePromptReviewRoute,
   notePromptProposalChanged,
@@ -96,11 +105,20 @@ export interface AppNotificationDeps {
   projectFolders: ReturnType<typeof useProjectFolders>;
   projectArtifacts: ReturnType<typeof useProjectArtifacts>;
   knownDrafts: DraftSummary[];
+  /** GIT-FR-AKYZ: the polling view the main window holds, or null. */
+  githubPollingView: GithubPollingView | null;
 }
 
 export function useAppNotifications(deps: AppNotificationDeps) {
-  const { s, overlays, vpanel, projectFolders, projectArtifacts, knownDrafts } =
-    deps;
+  const {
+    s,
+    overlays,
+    vpanel,
+    projectFolders,
+    projectArtifacts,
+    knownDrafts,
+    githubPollingView,
+  } = deps;
   const {
     dismissCommitWindow,
     dismissGraduationOverlays,
@@ -517,6 +535,55 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       unlisten?.();
     };
   }, []);
+
+  /**
+   * GIT-FR-AKYZ / NTF-FR-UZGZ / NTF-FR-RNGG: the polling configuration became
+   * `invalid`, or left it.
+   *
+   * The view is read on every `"github polling changed"`, so this follows each
+   * change of the configuration and not each poll: a poll that finds the same
+   * error again raises nothing. A view of `null` is a project or worktree
+   * change, which removes every toast already (NTF-FR-15), so the next
+   * session starts from nothing.
+   */
+  const configurationCode = useRef<string | null>(null);
+  useEffect(() => {
+    if (!githubPollingView) {
+      configurationCode.current = null;
+      return;
+    }
+    const configuration = githubPollingView.configuration;
+    const next = configurationErrorTransition(configurationCode.current, configuration);
+    if (next.action === "retract") {
+      configurationCode.current = next.code;
+      logInfo(["frontend"], "github polling configuration error retracted", {});
+      retractNotification(CONFIGURATION_ERROR_KEY);
+      return;
+    }
+    if (next.action !== "raise") return;
+    const { projectKey: key, worktree: tree } = rootRef.current;
+    // Not recorded until it is raised, so a view that lands before the root
+    // is known raises on the next read rather than never.
+    if (!key || !tree) {
+      logDebug(["frontend"], "github polling configuration error raise deferred", {
+        code: next.code,
+      });
+      return;
+    }
+    configurationCode.current = next.code;
+    logInfo(["frontend"], "github polling configuration error raised", { code: next.code });
+    void raiseNotification({
+      key: CONFIGURATION_ERROR_KEY,
+      level: "Error",
+      title: CONFIGURATION_ERROR_TITLE,
+      body: configurationErrorBody(configuration),
+      address: mintAddress(key, tree, {
+        kind: "settings",
+        scope: "project",
+        section: "github-polling",
+      }),
+    });
+  }, [githubPollingView]);
 
   /**
    * PCR-FR-17 / PCR-FR-26: a change was proposed to a prompt artifact, or one

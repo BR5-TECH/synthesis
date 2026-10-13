@@ -110,6 +110,20 @@ pub fn attribution_is_self_write(baseline: Option<&str>, current: Option<&str>) 
     matches!((baseline, current), (Some(b), Some(c)) if b == c)
 }
 
+/// ASC-FR-RSGA / BMI-FR-GJLW / CHC-FR-AADZ: the working-tree paths of a batch
+/// with the `.gitignore`d ones removed, and how many changes in it could alter
+/// the change set (CHC-FR-16). The callback and the tests call this same code.
+pub fn batch_changes(
+    result: &DebounceEventResult,
+    root: &crate::fs::RootFs,
+    git_dir: Option<&Path>,
+) -> (Vec<String>, usize) {
+    let mut changed = scanning::changed_rel_paths(result, root);
+    scanning::drop_gitignored(root, &mut changed);
+    let count = changes::changes_change_count(&changed, result, git_dir);
+    (changed, count)
+}
+
 /// Take the attribution file out of a batch's changed paths, reporting whether
 /// it was there (pure).
 ///
@@ -208,15 +222,25 @@ pub fn start_watching<R: tauri::Runtime>(
             // sources, computed before the early return below (which exists for
             // the tree/content channels, whose sources are working-tree only).
             // The debouncer's window is what coalesces a burst into one event.
-            let changes_count =
-                changes::changes_change_count(&result, &root_owned, git_dir_owned.as_deref());
+            //
+            // ASC-FR-RSGA / BMI-FR-GJLW / CHC-FR-AADZ: a `.gitignore`d path is
+            // outside the tree, every artifact index, and the change set, so it
+            // is removed before any consumer sees the batch. A build that
+            // writes into `target/` many times a second then causes no pass, no
+            // tree reload, and no diff reload — and so no progress in the
+            // status bar. The skill folders stay, for DSL-FR-19.
+            //
+            // No record per batch: a build makes one every 300 ms, and the
+            // log is a bounded ring (LGC-FR-07) that such records would empty
+            // of everything else.
+            let (mut changed, changes_count) =
+                batch_changes(&result, &root_owned, git_dir_owned.as_deref());
             if changes_count > 0 {
                 let _ = app_handle.emit(
                     crate::changes::CHANGES_UPDATED,
                     ChangesUpdatedPayload { change_count: changes_count },
                 );
             }
-            let mut changed = scanning::changed_rel_paths(&result, &root_owned);
             // ASC-FR-09: the attribution file is not a tree node, so it must
             // never become an `"artifact changed externally"` subject nor appear
             // among `structural_paths` / `removed_paths` — no tab is backed by
@@ -270,8 +294,9 @@ pub fn start_watching<R: tauri::Runtime>(
             // burst into one (BMI-FR-21).
             //
             // ASC-FR-20 / DSL-FR-19: `changed` is the raw path channel, which
-            // reports gitignored paths too, and a pass always re-enumerates the
-            // four skill folders whatever scope it was asked for. That pairing
+            // keeps a gitignored path in the four skill folders (ASC-FR-RSGA),
+            // and a pass always re-enumerates those folders whatever scope it
+            // was asked for. That pairing
             // is what makes an edit to a gitignored `.claude/skills/*/SKILL.md`
             // — invisible to the tree, and so to every other consumer here —
             // still reach the skills index.

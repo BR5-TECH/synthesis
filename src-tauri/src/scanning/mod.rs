@@ -28,6 +28,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::fs as fsa;
 
+mod ignored;
+pub use ignored::drop_gitignored;
+
 // ---------------------------------------------------------------------------
 // Fixed built-in type set + node shape (ASC-FR-02, tree node shape)
 // ---------------------------------------------------------------------------
@@ -1036,7 +1039,9 @@ pub(crate) fn is_atomic_tmp_name(rel: &str) -> bool {
 /// `DSL-dynamic-skills-loading.md`, whose four skill folders a project may
 /// legitimately gitignore (DSL-FR-06) — would otherwise have no way to learn
 /// that one of them changed, since a gitignored file's edit changes nothing in
-/// the tree.
+/// the tree. The watcher then removes the ignored paths outside those folders
+/// with [`drop_gitignored`] (ASC-FR-RSGA), which needs the disk and so is not
+/// part of this pure half.
 ///
 /// What *is* pruned is `.git/` — the watcher's own churn rather than the
 /// project's — together with the `.synthesis/` subtrees that each have a

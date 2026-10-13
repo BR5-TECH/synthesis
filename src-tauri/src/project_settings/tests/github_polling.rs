@@ -37,8 +37,11 @@ fn the_polling_settings_are_project_public_and_merge_into_the_store() {
     .unwrap();
     assert_eq!(load_github_polling_settings_from(&root).unwrap(), GithubPollingSettings::default());
 
-    let saved =
-        GithubPollingSettings { project_node_id: Some("PVT_1".into()), interval_minutes: Some(15) };
+    let saved = GithubPollingSettings {
+        project_node_id: Some("PVT_1".into()),
+        interval_minutes: Some(15),
+        ..Default::default()
+    };
     save_github_polling_settings_to(&root, &saved).unwrap();
     assert_eq!(load_github_polling_settings_from(&root).unwrap(), saved);
     let text = std::fs::read_to_string(dir.path().join(".synthesis/project.toml")).unwrap();
@@ -48,7 +51,11 @@ fn the_polling_settings_are_project_public_and_merge_into_the_store() {
     assert!(!dir.path().join(".synthesis/local.toml").exists());
 
     // An unset value has no key.
-    let interval_only = GithubPollingSettings { project_node_id: None, interval_minutes: Some(5) };
+    let interval_only = GithubPollingSettings {
+        project_node_id: None,
+        interval_minutes: Some(5),
+        ..Default::default()
+    };
     save_github_polling_settings_to(&root, &interval_only).unwrap();
     let text = std::fs::read_to_string(dir.path().join(".synthesis/project.toml")).unwrap();
     assert!(!text.contains("projectNodeId"));
@@ -85,11 +92,19 @@ fn invalid_stored_values_read_as_unset() {
         ),
         (
             "[githubPolling]\nprojectNodeId = \"PVT_1\"\nintervalMinutes = 0\n",
-            GithubPollingSettings { project_node_id: Some("PVT_1".into()), interval_minutes: None },
+            GithubPollingSettings {
+                project_node_id: Some("PVT_1".into()),
+                interval_minutes: None,
+                ..Default::default()
+            },
         ),
         (
             "[githubPolling]\nintervalMinutes = 60\n",
-            GithubPollingSettings { project_node_id: None, interval_minutes: Some(60) },
+            GithubPollingSettings {
+                project_node_id: None,
+                interval_minutes: Some(60),
+                ..Default::default()
+            },
         ),
         ("githubPolling = \"not a table\"\n", GithubPollingSettings::default()),
     ] {
@@ -101,6 +116,40 @@ fn invalid_stored_values_read_as_unset() {
         load_github_polling_settings_from(&root),
         Err(ERR_MALFORMED_PROJECT_CONFIG.to_string())
     );
+}
+
+/// PSS-FR-OPQD / PSS-FR-CNZO: the two status names are stored with the
+/// Project and the interval; an empty or non-string name, and a table stored
+/// without them, read as unset.
+#[test]
+fn the_status_names_are_stored_and_repaired_to_unset() {
+    let (dir, root) = fresh();
+    let saved = GithubPollingSettings {
+        project_node_id: Some("PVT_1".into()),
+        interval_minutes: Some(15),
+        ready_status: Some("Queued".into()),
+        in_progress_status: Some("In progress".into()),
+    };
+    save_github_polling_settings_to(&root, &saved).unwrap();
+    assert_eq!(load_github_polling_settings_from(&root).unwrap(), saved);
+    let path = dir.path().join(".synthesis/project.toml");
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.contains("readyStatus = \"Queued\""), "{text}");
+    assert!(text.contains("inProgressStatus = \"In progress\""), "{text}");
+
+    let unset_names = GithubPollingSettings {
+        project_node_id: Some("PVT_1".into()),
+        interval_minutes: Some(15),
+        ..Default::default()
+    };
+    for body in [
+        "[githubPolling]\nprojectNodeId = \"PVT_1\"\nintervalMinutes = 15\n",
+        "[githubPolling]\nprojectNodeId = \"PVT_1\"\nintervalMinutes = 15\nreadyStatus = \"\"\ninProgressStatus = 3\n",
+        "[githubPolling]\nprojectNodeId = \"PVT_1\"\nintervalMinutes = 15\nreadyStatus = \"  \"\n",
+    ] {
+        std::fs::write(&path, body).unwrap();
+        assert_eq!(load_github_polling_settings_from(&root).unwrap(), unset_names, "{body}");
+    }
 }
 
 /// PSS-FR-TXBB: the pending claims are a project-local list; a write carries

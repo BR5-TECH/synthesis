@@ -239,7 +239,11 @@ impl SessionSlot {
                     // GPP-FR-PUXT: recorded as the configuration state instead.
                     session.configuration = Some((
                         ticket.project_id.clone(),
-                        GithubPollingConfiguration::invalid(&failure.code, failure.project_title),
+                        GithubPollingConfiguration::invalid(
+                            &failure.code,
+                            failure.project_title,
+                            failure.missing_status,
+                        ),
                     ));
                 } else {
                     session.last_error = Some(error_text(&failure.code));

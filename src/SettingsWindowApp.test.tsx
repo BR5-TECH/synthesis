@@ -228,6 +228,7 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
       "Agentic AI",
       "Personal Agents",
       "Docker",
+      "Isolation",
       "Remote connectivity",
     ]);
     expect(rowsOf("Project")).toEqual([

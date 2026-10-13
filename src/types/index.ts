@@ -27,6 +27,7 @@ export * from "./comments";
 export * from "./agents";
 export * from "./agentConversations";
 export * from "./docker";
+export * from "./isolation";
 export * from "./remoteConnectivity";
 export * from "./githubPolling";
 export * from "./documents";

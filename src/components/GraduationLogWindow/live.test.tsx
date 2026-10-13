@@ -365,11 +365,18 @@ describe("what the window refuses to show", () => {
     };
     draw({ run: revisedRun(), stage: WORKING });
     await userEvent.type(screen.getByTestId("glw-search"), "o");
+    // The debounced search read must land before the append, or its page
+    // replaces the appended rows. The first page shows the same count, so the
+    // count alone does not show that the search read landed.
+    await waitFor(() => expect(backend.reads().some((read) => read.query === "o")).toBe(true), {
+      timeout: 5000,
+    });
+    await act(async () => {});
     await waitFor(() =>
       expect(screen.getByTestId("glw-match-count")).toHaveTextContent("2 matches"),
     );
     await backend.appended({ runId: "r1", stream: "activity", latestSequence: 4 });
-    await screen.findByText("four");
+    await screen.findByText("four", {}, { timeout: 5000 });
     await waitFor(() =>
       expect(screen.getByTestId("glw-match-count")).toHaveTextContent("4 matches"),
     );

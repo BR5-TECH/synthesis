@@ -72,6 +72,7 @@ fn project_with_synthesis() -> TempDir {
 mod assignments;
 mod change_paths;
 mod classification;
+mod ignored;
 mod scan_skills;
 mod scope_rules;
 mod skill_names;

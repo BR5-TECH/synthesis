@@ -166,6 +166,7 @@ fn the_settings_commands_persist_and_refuse() {
         &crate::project_settings::GithubPollingSettings {
             project_node_id: Some("PVT_1".into()),
             interval_minutes: Some(15),
+            ..Default::default()
         },
     )
     .unwrap();

@@ -84,6 +84,7 @@ fn a_failed_poll_keeps_the_rows_and_marks_them_stale() {
         Err(PollFailure {
             code: ERR_STATUS_FIELD_MISSING.into(),
             project_title: Some("Roadmap".into()),
+            missing_status: None,
         }),
         NOW,
     );
@@ -111,7 +112,7 @@ fn an_invalid_or_missing_configuration_refuses_polls() {
         &key,
         generation,
         PROJECT,
-        GithubPollingConfiguration::invalid(ERR_PROJECT_UNAVAILABLE, None),
+        GithubPollingConfiguration::invalid(ERR_PROJECT_UNAVAILABLE, None, None),
     );
     assert_eq!(
         slot.require_pollable(&key, &settings(Some(PROJECT))),

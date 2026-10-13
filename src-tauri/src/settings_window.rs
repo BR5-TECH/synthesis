@@ -286,11 +286,7 @@ pub fn encode_query_value(value: &str) -> String {
 /// cannot report it.
 fn logical_outer_size<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Option<(u32, u32)> {
     let outer = window.outer_size().ok()?;
-    let scale = window.scale_factor().ok()?;
-    Some((
-        (outer.width as f64 / scale).round() as u32,
-        (outer.height as f64 / scale).round() as u32,
-    ))
+    Some(logical_size((outer.width, outer.height), window.scale_factor().ok()?))
 }
 
 /// The size the author last gave the window, read from the user-global store.
@@ -362,8 +358,17 @@ fn opening_display<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<Openi
     Some(OpeningDisplay { work, scale })
 }
 
+/// What `place` gave the window.
+struct Placed {
+    /// The outer size in logical pixels, or `None` when the window kept the
+    /// size it was built with.
+    size: Option<(u32, u32)>,
+    /// The position in physical pixels, or `None` when it was not centred.
+    position: Option<(i32, i32)>,
+}
+
 /// SWN-FR-03, SWN-FR-04, SWN-FR-CLMP: bring the window to the size it opens at
-/// and into the centre of the display its parent occupies.
+/// and into the centre of the display its parent occupies, at that size.
 ///
 /// Best-effort: a platform that cannot report one of the measurements leaves the
 /// window at the size it was built with, which is the same size minus the
@@ -371,7 +376,7 @@ fn opening_display<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<Openi
 /// while still hidden, so it is never seen at another size or position first.
 /// The position is never stored, so a window the author dragged elsewhere opens
 /// centred again.
-fn place<R: tauri::Runtime>(app: &tauri::AppHandle<R>, window: &tauri::WebviewWindow<R>) {
+fn place<R: tauri::Runtime>(app: &tauri::AppHandle<R>, window: &tauri::WebviewWindow<R>) -> Placed {
     let display = opening_display(app);
     let scale =
         display.as_ref().map(|d| d.scale).or_else(|| window.scale_factor().ok()).unwrap_or(1.0);
@@ -382,48 +387,72 @@ fn place<R: tauri::Runtime>(app: &tauri::AppHandle<R>, window: &tauri::WebviewWi
         )
     });
     let target = opening_size(stored_size(app), work_logical);
-    if let (Ok(outer), Ok(inner)) = (window.outer_size(), window.inner_size()) {
-        let decoration =
-            (outer.width.saturating_sub(inner.width), outer.height.saturating_sub(inner.height));
-        let physical = |logical: (u32, u32)| {
-            ((logical.0 as f64 * scale).round() as u32, (logical.1 as f64 * scale).round() as u32)
-        };
-        let (w, h) = inner_size_for_outer(physical(target), decoration);
-        let (min_w, min_h) = inner_size_for_outer(physical(MIN_WINDOW_SIZE), decoration);
-        if let Err(e) = window.set_min_size(Some(tauri::PhysicalSize::new(min_w, min_h))) {
-            logging::log_warn(
-                app,
-                &BUFFER,
-                &DOMAINS,
-                "settings window could not be given its minimum size",
-                log_fields! { "reason" => e.to_string() },
+    let work = display.map(|d| d.work);
+    let mut sized = None;
+    match (window.outer_size(), window.inner_size()) {
+        (Ok(outer), Ok(inner)) => {
+            let decoration = (
+                outer.width.saturating_sub(inner.width),
+                outer.height.saturating_sub(inner.height),
             );
+            let planned = placement(target, scale, decoration, work);
+            let (min_w, min_h) = planned.min_inner;
+            if let Err(e) = window.set_min_size(Some(tauri::PhysicalSize::new(min_w, min_h))) {
+                logging::log_warn(
+                    app,
+                    &BUFFER,
+                    &DOMAINS,
+                    "settings window could not be given its minimum size",
+                    log_fields! { "reason" => e.to_string() },
+                );
+            }
+            match window.set_size(tauri::PhysicalSize::new(planned.inner.0, planned.inner.1)) {
+                Ok(()) => sized = Some(planned),
+                Err(e) => logging::log_warn(
+                    app,
+                    &BUFFER,
+                    &DOMAINS,
+                    "settings window could not be sized",
+                    log_fields! { "reason" => e.to_string() },
+                ),
+            }
         }
-        if let Err(e) = window.set_size(tauri::PhysicalSize::new(w, h)) {
-            logging::log_warn(
-                app,
-                &BUFFER,
-                &DOMAINS,
-                "settings window could not be sized",
-                log_fields! { "reason" => e.to_string() },
-            );
-        }
-    }
-    let (Some(display), Ok(own)) = (display, window.outer_size()) else {
-        return;
-    };
-    // Centred in the work area rather than on the whole display, so a window
-    // as tall as the work area does not slide under a menu bar or a taskbar.
-    let (x, y) = crate::window::center_window_on_display(display.work, (own.width, own.height));
-    if let Err(e) = window.set_position(tauri::PhysicalPosition::new(x, y)) {
-        logging::log_warn(
+        // The window keeps the size it was built with and gets no minimum.
+        (Err(e), _) | (_, Err(e)) => logging::log_warn(
             app,
             &BUFFER,
             &DOMAINS,
-            "settings window could not be centred",
+            "settings window chrome could not be measured",
             log_fields! { "reason" => e.to_string() },
-        );
+        ),
     }
+    // A window that was sized is centred at the size it was given, not at a
+    // size read back from it: on macOS the resize is applied only after this
+    // call returns, so a read-back still gives the size it was built with. A
+    // window that was not sized still has that size, so a read-back is right.
+    let position = match sized {
+        Some(planned) => planned.position,
+        None => match (work, window.outer_size()) {
+            (Some(work), Ok(own)) => {
+                Some(crate::window::center_window_on_display(work, (own.width, own.height)))
+            }
+            _ => None,
+        },
+    };
+    // Centred in the work area rather than on the whole display, so a window
+    // as tall as the work area does not slide under a menu bar or a taskbar.
+    if let Some((x, y)) = position {
+        if let Err(e) = window.set_position(tauri::PhysicalPosition::new(x, y)) {
+            logging::log_warn(
+                app,
+                &BUFFER,
+                &DOMAINS,
+                "settings window could not be centred",
+                log_fields! { "reason" => e.to_string() },
+            );
+        }
+    }
+    Placed { size: sized.map(|_| target), position }
 }
 
 /// Build and show the window (SWN-FR-01 through SWN-FR-04).
@@ -490,12 +519,14 @@ fn create<R: tauri::Runtime>(app: &tauri::AppHandle<R>, section: Option<String>)
             return;
         }
     };
-    place(app, &window);
+    let Placed { size: sized, position } = place(app, &window);
     let _ = window.show();
     let _ = window.set_focus();
-    // Measured once the window is on screen, so the size a close compares
-    // against is the one the platform really gave it, frame included.
-    let placed = logical_outer_size(&window);
+    // The size a close compares against (SWN-FR-MRBK) is the size the window
+    // was given, not a read-back: on macOS the resize lands only after this
+    // call returns, so a read-back here gives the size it was built with. A
+    // window that was not sized still has that size, so it is measured.
+    let placed = sized.or_else(|| logical_outer_size(&window));
     if let Some(state) = app.try_state::<SettingsWindows>() {
         state.set_placed(placed);
     }
@@ -508,6 +539,8 @@ fn create<R: tauri::Runtime>(app: &tauri::AppHandle<R>, section: Option<String>)
         log_fields! {
             "width" => placed.map(|s| s.0),
             "height" => placed.map(|s| s.1),
+            "x" => position.map(|p| p.0),
+            "y" => position.map(|p| p.1),
             // The section is a fixed vocabulary of surface names, never author
             // content, so it is safe to record and is what explains where the
             // author landed.

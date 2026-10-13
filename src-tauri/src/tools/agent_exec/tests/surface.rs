@@ -308,6 +308,7 @@ fn an_unavailable_credential_prevents_the_launch_without_disclosing_anything() {
         &Silent,
         &context,
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory: workspace.path().to_path_buf(),
             task: task("go"),
@@ -358,6 +359,7 @@ fn an_unavailable_credential_prevents_the_launch_without_disclosing_anything() {
         &Silent,
         &context,
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory: harness.workspace(),
             task: task("go"),
@@ -391,6 +393,7 @@ fn an_unusable_execution_directory_is_refused_before_launch() {
             &Silent,
             &harness.context(),
             AgentExecutionRequest {
+                sandbox_scope: None,
                 turn_kind: super::super::TurnKind::Work,
                 execution_directory: path,
                 task: task("go"),

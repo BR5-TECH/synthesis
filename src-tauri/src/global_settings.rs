@@ -261,6 +261,10 @@ pub struct PersistedState {
     /// (GSS-FR-ZKQT). One table, declared beside `docker_backend` and before the
     /// two project tables below. It holds no token and no key (GSS-FR-VMRB).
     pub relay_endpoint: crate::relay_endpoint::RelayEndpointRecord,
+    /// GSS-FR-YDKS: the isolation settings of graduation agent launches. One
+    /// table, declared beside the other user-global tables and before the two
+    /// project tables below. It holds no credential.
+    pub isolation: crate::isolation::IsolationRecord,
     /// GSS-FR-WSZK: the size the author gave the Settings window, or `None`
     /// until they resize it. One table, declared beside the other user-global
     /// tables and before the two project tables below. It is deliberately not a
@@ -683,6 +687,21 @@ impl GlobalSettingsStore {
         let record = state.docker_backend.clone();
         self.persist(&state)?;
         Ok(record)
+    }
+
+    // -- Isolation (GSS-FR-YDKS) -----------------------------------------
+
+    /// GSS-FR-YDKS: the stored isolation record. Reads the store and nothing
+    /// else.
+    pub fn load_isolation(&self) -> Result<crate::isolation::IsolationRecord, String> {
+        Ok(self.lock()?.isolation.clone())
+    }
+
+    /// GSS-FR-OAKR: write a record the caller has already validated.
+    pub fn save_isolation(&self, record: &crate::isolation::IsolationRecord) -> Result<(), String> {
+        let mut state = self.lock()?;
+        state.isolation = record.clone();
+        self.persist(&state)
     }
 
     // -- Settings window size (GSS-FR-WSZK) ------------------------------

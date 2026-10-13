@@ -498,6 +498,30 @@ fn a_turn_that_could_not_be_launched_rests_the_run_and_ends_nothing() {
         .expect_commits(0);
 }
 
+// GXD-FR-QUCP, GXD-FR-UZHX, GXD-FR-SHNW: a Microsandbox VM that could not start
+// rests the run `interrupted` with `launch_failed`, its detail names the cause,
+// and the dispatch named the run's stream as its sandbox scope.
+#[test]
+fn a_sandbox_that_could_not_start_names_its_cause() {
+    Scenario::named("sandbox launch failure")
+        .work_turn(Script::cannot_launch(AgentExecutionError::SandboxLaunchFailed(
+            crate::tools::agent_exec::sandbox::SandboxFailure {
+                cause: crate::tools::agent_exec::sandbox::SandboxFailureCause::InsufficientMemory,
+                message: "cannot allocate memory".to_string(),
+            },
+        )))
+        .run()
+        .expect_state(GraduationRunState::Interrupted)
+        .expect_interruption("launch_failed")
+        .expect_interruption_detail(
+            "The Microsandbox VM could not start: there is not enough memory for the configured RAM. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue.",
+        )
+        .expect_interrupted_record("launch_failed", "error", &[])
+        .expect_sandbox_scope_is_the_stream()
+        .expect_stream_held()
+        .expect_commits(0);
+}
+
 // ---------------------------------------------------------------------------
 // 9 — resuming from the checkpoint
 // ---------------------------------------------------------------------------
@@ -567,4 +591,33 @@ fn a_run_that_blocked_in_the_review_resumes_in_the_review() {
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_order(&["review"])
         .expect_pass(1);
+}
+
+// GXD-FR-SHNW, EAC-FR-QYBJ: two runs in a row on one stream each dispatch every
+// turn, work and review, with the stream as the sandbox scope, so both use the
+// stream's VM.
+#[test]
+fn sequential_runs_on_a_stream_name_the_stream_as_their_sandbox_scope() {
+    Scenario::named("sequential runs, one sandbox scope")
+        .with_run_on_stream("second", "editor", "Write the header.")
+        .with_stream("editor")
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
+        .review_turn(Script::answers_ready("The work answers the prompt."))
+        .run()
+        .expect_state(GraduationRunState::Completed)
+        .expect_commits(1)
+        .expect_dispatch_order(&["work", "review"])
+        .expect_sandbox_scope_is_the_stream()
+        .driving(
+            "second",
+            vec![
+                Script::reports_success().writes("src/header.ts", "1\n"),
+                Script::answers_ready("The work answers the prompt."),
+            ],
+        )
+        .expect_state(GraduationRunState::Completed)
+        .expect_commits(1)
+        .expect_committed_paths(&["src/header.ts"])
+        .expect_dispatch_order(&["work", "review"])
+        .expect_sandbox_scope_is_the_stream();
 }

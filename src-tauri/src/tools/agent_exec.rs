@@ -46,6 +46,7 @@ pub mod descriptor;
 pub mod finish;
 pub mod protocol;
 pub mod runtime;
+pub mod sandbox;
 
 // The parts this file was split into. They hold no surface of their own: every
 // item they carry is named through this module, exactly as before.
@@ -53,6 +54,8 @@ mod docker_in_docker;
 mod launch;
 mod observer;
 mod repository;
+mod sandbox_launch;
+mod sandbox_store;
 
 use observer::{bounded_payload, directory_problem, merge_session, LaunchObserver};
 pub(crate) use repository::{repository_access, RepositoryAccess};
@@ -212,6 +215,13 @@ pub struct AgentExecutionRequest {
     /// What it decides is stated on [`TurnKind`] itself, where the rest of
     /// EAC-FR-IRRD lives.
     pub turn_kind: TurnKind,
+    /// EAC-FR-SNMS: the run queue whose micro VM a sandbox launch shares, or
+    /// `None` for a launch that is not part of a graduation run.
+    ///
+    /// Not an exception to EAC-FR-02 either: it names which queue a launch
+    /// belongs to. Whether a sandbox is used, and with what CPU, RAM, and
+    /// network, is the author's user-global isolation (EAC-FR-SNMS).
+    pub sandbox_scope: Option<sandbox::SandboxScope>,
 }
 
 /// EAC-FR-IRRD: the closed set of turn kinds a caller may name.
@@ -390,6 +400,9 @@ pub enum AgentExecutionError {
     /// other member this one is returned **after** the container is gone: the
     /// run was cancelled for it (EAC-FR-DUTR).
     DurableOutputFailed(DurableOutputFailure),
+    /// EAC-FR-NCSA: the micro VM could not be established. There is no
+    /// fallback to Docker or to `none`.
+    SandboxLaunchFailed(sandbox::SandboxFailure),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -434,6 +447,7 @@ impl AgentExecutionError {
                 "repository_masking_unavailable"
             }
             AgentExecutionError::DurableOutputFailed(_) => "durable_output_failed",
+            AgentExecutionError::SandboxLaunchFailed(_) => "sandbox_launch_failed",
         }
     }
 }
@@ -525,6 +539,17 @@ pub struct AgentCliExecutor {
     /// what production does; a test names its own directory instead so that a
     /// suite never writes into the author's real application data.
     session_state_root: Option<PathBuf>,
+    /// EAC-FR-SNMS: the isolation a launch uses. `None` reads it from the
+    /// user-global store at every launch, which is what production does; a
+    /// test names its own.
+    isolation: Option<crate::isolation::ResolvedIsolation>,
+    /// EAC-FR-VPNW: the pool sandbox launches go through. `None` is the one
+    /// production pool; a test binds its own over a recording double.
+    sandbox_pool: Option<Arc<sandbox::SandboxPool>>,
+    /// EAC-FR-QULL: the Docker backend the export fallback reads. `None` reads
+    /// the verified backend at launch, which is what production does; a test
+    /// that binds its own pool names one here or reaches none.
+    image_exporter: Option<Arc<dyn sandbox::ImageExporter>>,
 }
 
 /// EAC-FR-FNFV: what [`AgentCliExecutor::repository_mounts`] grants one launch:
@@ -534,13 +559,25 @@ type RepositoryMounts = (Vec<BindMount>, Vec<(String, String)>, bool);
 
 impl Default for AgentCliExecutor {
     fn default() -> Self {
-        AgentCliExecutor { runtime: RuntimeBinding::FromVerifiedBackend, session_state_root: None }
+        AgentCliExecutor {
+            runtime: RuntimeBinding::FromVerifiedBackend,
+            session_state_root: None,
+            isolation: None,
+            sandbox_pool: None,
+            image_exporter: None,
+        }
     }
 }
 
 impl AgentCliExecutor {
     pub fn new(runtime: Arc<dyn DockerRuntime>) -> Self {
-        AgentCliExecutor { runtime: RuntimeBinding::Fixed(runtime), session_state_root: None }
+        AgentCliExecutor {
+            runtime: RuntimeBinding::Fixed(runtime),
+            session_state_root: None,
+            isolation: None,
+            sandbox_pool: None,
+            image_exporter: None,
+        }
     }
 
     /// EAC-FR-39: the runtime this launch goes through — the Docker backend the
@@ -570,6 +607,27 @@ impl AgentCliExecutor {
                 }
             }
         }
+    }
+
+    /// The same executor reading `isolation` rather than the store
+    /// (EAC-FR-SNMS).
+    pub fn with_isolation(mut self, isolation: crate::isolation::ResolvedIsolation) -> Self {
+        self.isolation = Some(isolation);
+        self
+    }
+
+    /// The same executor launching sandboxes through `pool` (EAC-FR-VPNW).
+    pub fn with_sandbox_pool(mut self, pool: Arc<sandbox::SandboxPool>) -> Self {
+        self.sandbox_pool = Some(pool);
+        self
+    }
+
+    /// The same executor exporting sandbox images through `exporter`
+    /// (EAC-FR-QULL), for the real-runtime probe of EAC-FR-RVQE.
+    #[cfg(test)]
+    pub fn with_image_exporter(mut self, exporter: Arc<dyn sandbox::ImageExporter>) -> Self {
+        self.image_exporter = Some(exporter);
+        self
     }
 
     /// The same executor keeping session state under `root` (EAC-FR-31).

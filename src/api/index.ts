@@ -16,6 +16,7 @@
  */
 export * from "./content";
 export * from "./docker";
+export * from "./isolation";
 export * from "./documents";
 export * from "./remoteConnectivity";
 export * from "./drafts";

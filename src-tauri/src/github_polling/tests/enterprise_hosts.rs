@@ -10,7 +10,7 @@ fn ghe_repo() -> RepositoryRef {
 // GPP-FR-HSTE, GPP-FR-XSKT
 #[test]
 fn a_ready_row_keeps_the_host_of_the_polling_repository() {
-    let rows = eligible_tasks(&[ready(7)], &ghe_repo());
+    let rows = eligible_tasks(&[ready(7)], &ghe_repo(), READY);
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].repository_host, "company.ghe.com");
     let wire = serde_json::to_value(&rows[0]).unwrap();
@@ -35,7 +35,7 @@ fn an_issue_opens_only_on_the_host_of_the_polling_repository() {
 #[test]
 fn a_listed_enterprise_issue_resolves_to_its_url_and_a_foreign_url_is_refused() {
     let repository = ghe_repo();
-    let mut rows = eligible_tasks(&[ready(7)], &repository);
+    let mut rows = eligible_tasks(&[ready(7)], &repository, READY);
     rows[0].url = "https://company.ghe.com/acme/widgets/issues/7".into();
     assert_eq!(
         listed_issue_url(7, &repository, &rows, &[]).unwrap(),
@@ -94,7 +94,7 @@ fn a_claim_on_an_enterprise_host_keeps_the_host_in_the_claim_and_the_shadow_link
 }
 
 fn ghe_task(number: u64) -> GithubReadyTask {
-    eligible_tasks(&[ready(number)], &ghe_repo()).remove(0)
+    eligible_tasks(&[ready(number)], &ghe_repo(), READY).remove(0)
 }
 
 fn on_ghe<T>(
@@ -108,7 +108,7 @@ fn on_ghe<T>(
 // GPP-FR-QCAM, GPP-FR-HSTE
 #[test]
 fn a_shadow_or_a_claim_on_one_host_does_not_hide_the_same_issue_of_another_host() {
-    let github_task = eligible_tasks(&[ready(7)], &repo()).remove(0);
+    let github_task = eligible_tasks(&[ready(7)], &repo(), READY).remove(0);
     let enterprise_task = ghe_task(7);
 
     let shadows = [link(7)];
@@ -143,7 +143,7 @@ fn a_shadow_or_a_claim_on_one_host_does_not_hide_the_same_issue_of_another_host(
 fn the_same_issue_of_two_hosts_has_two_identities_and_two_claim_locks() {
     assert_ne!(
         IssueKey::of_task(&ghe_task(7)),
-        IssueKey::of_task(&eligible_tasks(&[ready(7)], &repo())[0])
+        IssueKey::of_task(&eligible_tasks(&[ready(7)], &repo(), READY)[0])
     );
     assert_eq!(
         IssueKey::new("Company.GHE.com", "ACME", "Widgets", 7),

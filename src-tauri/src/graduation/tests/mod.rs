@@ -539,6 +539,8 @@ struct Seen {
     resume_session: Option<String>,
     /// GRB-FR-TOOU: whether the dispatch carried the semantic-rebase mount.
     semantic_mount: bool,
+    /// GXD-FR-SHNW: the run queue the dispatch named as its sandbox scope.
+    sandbox_scope: Option<String>,
 }
 
 impl Seen {
@@ -686,6 +688,7 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                 .as_ref()
                 .and_then(|resume| resume.session_id.clone()),
             semantic_mount: request.supplementary_mount.is_some(),
+            sandbox_scope: request.sandbox_scope.as_ref().map(|scope| scope.queue_key.clone()),
         });
 
         let turn = self.turns.lock().unwrap().pop_front().unwrap_or_else(|| {

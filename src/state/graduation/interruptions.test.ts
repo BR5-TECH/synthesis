@@ -6,9 +6,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { makeRun } from "../../test/graduationFixtures";
+import { makeMergeRun, makeRun } from "../../test/graduationFixtures";
 import type { GraduationInterruptionReason } from "../../types/graduation";
-import { raiseLevel, raiseStatement, raisesForRun } from "./escalations";
+import { raiseLevel, raiseStatement, raisesForRun, sandboxFailureCause } from "./escalations";
 import { conditionSentence, interruptionCause, isFailureStop } from "./stages";
 
 function interrupted(reason: GraduationInterruptionReason) {
@@ -133,5 +133,40 @@ describe("the level of a run's raise (NTF-FR-24, GRU-FR-BLSS)", () => {
     for (const reason of FAILURES) {
       expect(raiseLevel(interrupted(reason))).toBe("Error");
     }
+  });
+});
+
+describe("a Microsandbox VM that could not start", () => {
+  const SANDBOX_DETAIL =
+    "The Microsandbox VM could not start: there is not enough memory for the configured RAM. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue.";
+
+  function sandboxStop() {
+    return makeRun("r1", "interrupted", {
+      interruption: { reason: "launch_failed", detail: SANDBOX_DETAIL, at: "2026-10-03T22:02:36Z" },
+    });
+  }
+
+  it("NTF-FR-BDNY: the raise is an Error that says the sandbox could not start and names the cause", () => {
+    const run = sandboxStop();
+    expect(raisesForRun(run)).toBe(true);
+    expect(raiseLevel(run)).toBe("Error");
+    expect(sandboxFailureCause(run)).toBe("there is not enough memory for the configured RAM");
+    expect(raiseStatement(run)).toMatch(
+      /stopped: the Microsandbox VM could not start — there is not enough memory for the configured RAM\.$/,
+    );
+  });
+
+  it("NTF-FR-BDNY: a merge run raises the same sentence", () => {
+    const run = makeMergeRun("m1", "interrupted", {
+      interruption: { reason: "launch_failed", detail: SANDBOX_DETAIL, at: "2026-10-03T22:02:36Z" },
+    });
+    expect(raiseLevel(run)).toBe("Error");
+    expect(raiseStatement(run)).toMatch(/the Microsandbox VM could not start — there is not enough memory/);
+  });
+
+  it("NTF-FR-BDNY: another launch failure keeps the general cause", () => {
+    const run = interrupted("launch_failed");
+    expect(sandboxFailureCause(run)).toBeNull();
+    expect(raiseStatement(run)).toMatch(/stopped: the agent turn could not start\.$/);
   });
 });

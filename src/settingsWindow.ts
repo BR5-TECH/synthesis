@@ -33,6 +33,7 @@ export const GLOBAL_SECTION_KEYS = [
   "ai-agentic",
   "agents",
   "docker",
+  "isolation",
   "remote",
 ] as const;
 export type GlobalSectionKey = (typeof GLOBAL_SECTION_KEYS)[number];

@@ -386,6 +386,7 @@ fn drive_with(
         &Silent,
         &harness.context(),
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::TurnKind::Work,
             execution_directory: harness.workspace(),
             task,

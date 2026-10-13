@@ -114,6 +114,7 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "open_publication_issue",
     // GitHub polling (GPP-github-polling.md).
     "list_github_projects",
+    "list_github_project_statuses",
     "get_github_polling_state",
     "set_github_polling_settings",
     "poll_github_ready_tasks",
@@ -337,6 +338,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // / GLS-global-settings.md GLS-FR-KVNP..GLS-FR-XDUJ). The store holds no
     // `SYNTHESIS_SERVER_TOKEN` and no private key, so no command here reads or
     // writes one (GSS-FR-VMRB).
+    "load_isolation_settings",
+    "save_isolation_settings",
     "load_relay_endpoint",
     "save_relay_endpoint",
     "verify_relay_endpoint",

@@ -495,6 +495,13 @@ export const Icon = {
       <path d="M4 12.5 9 17.5 20 6.5" />
     </I>
   ),
+  /* NAW-FR-NVYZ: copying a draft's prompt to the clipboard. */
+  Copy: (p: IconProps) => (
+    <I {...p}>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+    </I>
+  ),
   /* CMT-FR-12: quoting a message inside a thread. */
   Quote: (p: IconProps) => (
     <I {...p}>

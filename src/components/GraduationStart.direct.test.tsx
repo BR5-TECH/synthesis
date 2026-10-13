@@ -133,6 +133,14 @@ const radio = (name: string) => screen.getByRole("radio", { name });
 const graduate = () => screen.getByTestId("graduation-start-confirm");
 const calls = (command: string) =>
   invoked.mock.calls.filter(([name]) => name === command);
+// GSD-FR-WMTD: the dialog moves focus to the stream picker once the streams
+// are read. Wait for that before a test moves focus, or the late move takes it.
+const openWithFocusSettled = async () => {
+  await screen.findByTestId("graduation-destination");
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "Work stream" })).toHaveFocus(),
+  );
+};
 const chooseDirectly = async () => {
   await screen.findByTestId("graduation-destination");
   await userEvent.click(radio("Work directly"));
@@ -169,7 +177,7 @@ describe("where the run works", () => {
 
   it("GSD-FR-BZHW, GSD-FR-WMTD: the arrow keys walk all four segments and keep focus in the toggle", async () => {
     draw();
-    await screen.findByTestId("graduation-destination");
+    await openWithFocusSettled();
     act(() => radio("Existing stream").focus());
     for (const next of ["New stream", "Temporary stream", "Work directly", "Existing stream"]) {
       await userEvent.keyboard("{ArrowRight}");
@@ -185,7 +193,7 @@ describe("where the run works", () => {
 
   it("GSD-FR-WMTD, GSD-FR-QGTC: Space on a segment chooses it, and a choice that asks a name moves focus there", async () => {
     draw();
-    await screen.findByTestId("graduation-destination");
+    await openWithFocusSettled();
     act(() => radio("Work directly").focus());
     await userEvent.keyboard(" ");
     expect(radio("Work directly")).toBeChecked();

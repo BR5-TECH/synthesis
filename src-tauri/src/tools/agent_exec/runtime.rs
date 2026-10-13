@@ -46,11 +46,12 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 mod cancel;
 mod capture;
+pub(super) mod export;
 
 pub use cancel::CancellationToken;
 use capture::read_bounded;
 #[cfg(not(test))]
-use capture::StreamCapture;
+pub(in crate::tools::agent_exec) use capture::StreamCapture;
 
 /// Which of the child's two streams a line arrived on (EAC-FR-32).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

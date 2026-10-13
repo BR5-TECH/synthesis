@@ -52,6 +52,7 @@ fn run_keeping(
         &Silent,
         &harness.context(),
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory: harness.workspace(),
             task,
@@ -120,6 +121,7 @@ fn the_excluded_kinds_stay_out_of_the_durable_sink_and_in_the_live_one() {
         &Silent,
         &harness.context(),
         AgentExecutionRequest {
+            sandbox_scope: None,
             turn_kind: super::super::TurnKind::Work,
             execution_directory: harness.workspace(),
             task: task("go"),

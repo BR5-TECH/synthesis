@@ -162,3 +162,24 @@ fn a_restart_takes_the_socket_check_afresh() {
     let refused = fx.start_on(&fx.draft("another"), &stream).unwrap_err();
     assert_eq!(refused, format!("{ERR_DOCKER_SOCKET_UNAVAILABLE}: {comma}"));
 }
+
+/// GSU-FR-RQDS, GSU-FR-HIPF: under Microsandbox the socket is not read, so a
+/// start whose project enables Docker-in-Docker with a missing socket passes.
+#[test]
+fn microsandbox_isolation_reads_no_socket_path() {
+    let fx = Fixture::new();
+    fx.allow_execution();
+    let stream = fx.stream("editor");
+    fx.hold_stream(&stream.id);
+    let draft = fx.draft("task");
+    fx.docker_in_docker(true, "/does/not/exist.sock");
+    let store = fx.app.state::<crate::global_settings::GlobalSettingsStore>();
+    store
+        .save_isolation(&crate::isolation::IsolationRecord {
+            mode: crate::isolation::IsolationMode::Microsandbox,
+            ..crate::isolation::IsolationRecord::default()
+        })
+        .expect("stored isolation");
+
+    fx.start_on(&draft, &stream).expect("Microsandbox mounts no socket, so none is checked");
+}

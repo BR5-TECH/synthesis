@@ -57,6 +57,7 @@ pub mod author_tree;
 mod bounded_read;
 #[cfg(test)]
 pub mod case_probe;
+pub mod device_probe;
 pub mod error;
 pub mod owned_tree;
 #[cfg(test)]
@@ -67,6 +68,7 @@ pub use access::{
     CreateMode, DirEntry, EntryKind, FileHandle, FileInfo, FsAccess, FsAccessBuilder,
     FsAccessState, OpenMode, RootFs, UserChosenPath,
 };
+pub use device_probe::{probe_kvm_device, KvmDevice};
 pub use error::{FsAccessBuildError, FsError, GrantRefusal};
 pub use socket_probe::{probe_unix_socket, SocketProbeError};
 

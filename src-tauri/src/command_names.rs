@@ -337,6 +337,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // / GLS-global-settings.md GLS-FR-KVNP..GLS-FR-XDUJ). The store holds no
     // `SYNTHESIS_SERVER_TOKEN` and no private key, so no command here reads or
     // writes one (GSS-FR-VMRB).
+    "load_isolation_settings",
+    "save_isolation_settings",
     "load_relay_endpoint",
     "save_relay_endpoint",
     "verify_relay_endpoint",

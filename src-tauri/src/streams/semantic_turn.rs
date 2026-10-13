@@ -173,6 +173,9 @@ async fn execute<R: tauri::Runtime>(
         _ => serde_json::Map::new(),
     };
     let request = AgentExecutionRequest {
+        // GXD-FR-SHNW / EAC-FR-QYBJ: a stream update is not a graduation run,
+        // so it names no sandbox scope and launches through Docker.
+        sandbox_scope: None,
         execution_directory: artifact.checkout.clone(),
         task: AgentTaskRequest {
             protocol_version: PROTOCOL_VERSION,

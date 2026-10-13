@@ -131,6 +131,11 @@ impl AgentCliExecutor {
         let mount_source = descriptor::mount_source(&execution_directory)
             .ok_or(AgentExecutionError::ExecutionDirectoryInvalid(DirectoryProblem::Unmountable))?;
 
+        // EAC-FR-SNMS: a graduation launch under Microsandbox runs in the
+        // scope's VM. Decided before anything is mounted, because the mount set
+        // differs (EAC-FR-BJLI).
+        let sandboxed = self.sandbox_settings(context, &request)?;
+
         // --- 5. Launch material, from AIC and nowhere else -------------------
         let credential =
             agentic::resolve_agent_launch_credential(context.store, context.integrations, &vendor)
@@ -289,7 +294,17 @@ impl AgentCliExecutor {
         // metadata that cannot be mounted, launches **without** this and returns
         // no error. Repository access is a convenience of a turn and never a
         // precondition of one, which is the opposite of the masking above.
-        if !masked {
+        if sandboxed.is_some() {
+            // EAC-FR-BJLI: a sandbox mounts directories only, and the grant
+            // needs file mounts, so it is withheld whole.
+            crate::logging::log_debug(
+                sink,
+                &crate::logging::BUFFER,
+                &[crate::logging::Domain::Ai, crate::logging::Domain::Backend],
+                "sandbox execution reaches no repository and reads files instead",
+                crate::log_fields! { "turn_kind" => request.turn_kind.as_str() },
+            );
+        } else if !masked {
             match self.repository_mounts(
                 context.fs,
                 &execution_directory,
@@ -335,12 +350,14 @@ impl AgentCliExecutor {
         // EAC-FR-DKRS: a masked turn gets none of it. The socket reaches the
         // host repository that the masking of step 5c hides, so a masked turn
         // is launched as though the setting were off.
-        let dind = if masked {
+        // EAC-FR-DARS: under Microsandbox the settings add nothing, and the
+        // socket check does not run.
+        let dind = if masked || sandboxed.is_some() {
             docker_in_docker::DockerInDockerAdditions::default()
         } else {
             docker_in_docker::additions(&context.docker_in_docker)?
         };
-        if context.docker_in_docker.enabled && !masked {
+        if context.docker_in_docker.enabled && !masked && sandboxed.is_none() {
             logging::log_info(
                 sink,
                 &BUFFER,
@@ -356,37 +373,47 @@ impl AgentCliExecutor {
         env_literals.extend(dind.env_literals);
 
         // --- 6. The runtime --------------------------------------------------
-        let runtime = self.runtime_for(context.store)?;
-        if runtime.ensure_available().await.is_err() {
-            // EAC-FR-37: what was run and where it was looked for. Without it a
-            // machine whose runtime is installed and running reports having
-            // none, and the author is left to guess at the difference between
-            // an absent runtime, a stopped one, and one this process cannot
-            // reach — three different corrections behind one sentence.
-            logging::log_warn(
-                sink,
-                &BUFFER,
-                &[Domain::Backend],
-                "no container runtime answered",
-                log_fields! {
-                    "program" => runtime.resolved_program().unwrap_or_default(),
-                    "searched" => descriptor::docker_search_paths(),
-                    "path" => std::env::var("PATH").unwrap_or_default(),
-                },
-            );
-            return Err(AgentExecutionError::RuntimeUnavailable);
-        }
+        //
+        // EAC-FR-SNMS: a sandbox launch reaches no Docker runtime here. The
+        // verified Docker backend is read only by its export fallback.
+        let runtime = match &sandboxed {
+            Some(_) => None,
+            None => Some(self.runtime_for(context.store)?),
+        };
+        if let Some(runtime) = &runtime {
+            if runtime.ensure_available().await.is_err() {
+                // EAC-FR-37: what was run and where it was looked for. Without it a
+                // machine whose runtime is installed and running reports having
+                // none, and the author is left to guess at the difference between
+                // an absent runtime, a stopped one, and one this process cannot
+                // reach — three different corrections behind one sentence.
+                logging::log_warn(
+                    sink,
+                    &BUFFER,
+                    &[Domain::Backend],
+                    "no container runtime answered",
+                    log_fields! {
+                        "program" => runtime.resolved_program().unwrap_or_default(),
+                        "searched" => descriptor::docker_search_paths(),
+                        "path" => std::env::var("PATH").unwrap_or_default(),
+                    },
+                );
+                return Err(AgentExecutionError::RuntimeUnavailable);
+            }
 
-        // EAC-FR-38: where the configured image is absent from the local image
-        // store the backend may ask Docker to pull that reference, and a pull
-        // that cannot find or fetch it is `ImageUnavailable`. `ensure_image`
-        // inspects before it pulls, so an image the author built locally runs
-        // without a registry ever being reached.
-        runtime.ensure_image(&image).await.map_err(|error| match error {
-            RuntimeError::ImageUnavailable => AgentExecutionError::ImageUnavailable(vendor.clone()),
-            RuntimeError::Unavailable => AgentExecutionError::RuntimeUnavailable,
-            RuntimeError::LaunchFailed(reason) => AgentExecutionError::LaunchFailed(reason),
-        })?;
+            // EAC-FR-38: where the configured image is absent from the local image
+            // store the backend may ask Docker to pull that reference, and a pull
+            // that cannot find or fetch it is `ImageUnavailable`. `ensure_image`
+            // inspects before it pulls, so an image the author built locally runs
+            // without a registry ever being reached.
+            runtime.ensure_image(&image).await.map_err(|error| match error {
+                RuntimeError::ImageUnavailable => {
+                    AgentExecutionError::ImageUnavailable(vendor.clone())
+                }
+                RuntimeError::Unavailable => AgentExecutionError::RuntimeUnavailable,
+                RuntimeError::LaunchFailed(reason) => AgentExecutionError::LaunchFailed(reason),
+            })?;
+        }
 
         // --- 7. The invocation ------------------------------------------------
         let (host_uid, host_gid) = descriptor::host_ids();
@@ -438,7 +465,19 @@ impl AgentCliExecutor {
             env_literals: env_literals.clone(),
             vendor_args: vendor_args.clone(),
         };
-        let argv = container.docker_run_args();
+        // EAC-FR-DWBS: the VM of this launch's scope, named from the project
+        // and the queue.
+        let vm = request
+            .sandbox_scope
+            .as_ref()
+            .filter(|_| sandboxed.is_some())
+            .map(|scope| sandbox::vm_name(context.project_key, scope));
+        let (program, argv) = match &vm {
+            Some(vm) => {
+                (super::sandbox_launch::SANDBOX_PROGRAM, Self::sandbox_invocation(vm, &container))
+            }
+            None => (descriptor::DOCKER_PROGRAM, container.docker_run_args()),
+        };
 
         // EAC-FR-29: everything this launch handed the container that a record
         // may not carry — the secrets in its environment, the credential paths
@@ -486,6 +525,8 @@ impl AgentCliExecutor {
                     .map(|contract| contract.as_str().to_string()),
                 "timeout_ms" => request.task.execution.timeout_ms,
                 "task_bytes" => stdin_bytes.len(),
+                // EAC-FR-SNMS: whether this turn runs in a micro VM.
+                "isolation" => if sandboxed.is_some() { "microsandbox" } else { "none" },
             },
         );
 
@@ -527,11 +568,7 @@ impl AgentCliExecutor {
             at: crate::notes::now_rfc3339(),
             channel: CHANNEL_EXECUTOR,
             kind: descriptor::ActivityKind::Invocation.as_str(),
-            summary: descriptor::summary_line(&format!(
-                "{} {}",
-                descriptor::DOCKER_PROGRAM,
-                argv_text
-            )),
+            summary: descriptor::summary_line(&format!("{program} {argv_text}")),
             payload,
             payload_truncated,
         });
@@ -546,50 +583,83 @@ impl AgentCliExecutor {
             payload_truncated,
         });
 
-        let outcome = runtime
-            .run(RunRequest {
-                argv: &argv,
-                container: Some(&container),
-                env: &env,
-                stdin: &stdin_bytes,
-                timeout: Duration::from_millis(request.task.execution.timeout_ms),
-                cancel: run_cancel.clone(),
-                stdout_limit: protocol::LIMIT_STDOUT,
-                stderr_limit: protocol::LIMIT_STDERR,
-                observer: Some(&observer),
-            })
-            .await;
+        let (outcome, container_removed) = match (&runtime, &sandboxed, &vm, &request.sandbox_scope)
+        {
+            (None, Some(settings), Some(vm), Some(scope)) => {
+                // EAC-FR-PZNB: the VM outlives the call, and the end of the
+                // process is what a sandbox launch confirms.
+                let outcome = self
+                    .run_in_sandbox(
+                        sink,
+                        context,
+                        vm,
+                        super::sandbox_launch::SandboxRun {
+                            settings,
+                            scope,
+                            image: &image,
+                            mounts: &mounts,
+                            container: &container,
+                            env: &env,
+                            stdin: &stdin_bytes,
+                            timeout: Duration::from_millis(request.task.execution.timeout_ms),
+                            cancel: run_cancel.clone(),
+                            observer: &observer,
+                        },
+                    )
+                    .await?;
+                (outcome, true)
+            }
+            (Some(runtime), _, _, _) => {
+                let outcome = runtime
+                    .run(RunRequest {
+                        argv: &argv,
+                        container: Some(&container),
+                        env: &env,
+                        stdin: &stdin_bytes,
+                        timeout: Duration::from_millis(request.task.execution.timeout_ms),
+                        cancel: run_cancel.clone(),
+                        stdout_limit: protocol::LIMIT_STDOUT,
+                        stderr_limit: protocol::LIMIT_STDERR,
+                        observer: Some(&observer),
+                    })
+                    .await;
 
-        // EAC-FR-26: removal is confirmed on *every* path out, including the
-        // one where the run itself failed. `--rm` handles a clean exit; a
-        // killed client does not necessarily take the container with it.
-        // The answer is not discarded. A removal that fails means a container
-        // is still running under a name that will never be reused, holding the
-        // worktree mount and — for Claude Code — a live token in its
-        // environment. Nothing here can clean that up on the caller's behalf,
-        // but it is exactly the kind of handled failure that is invisible
-        // unless it is reported (EAC-FR-29), so it is logged and returned.
-        let container_removed = runtime.remove_container(&container_name).await.is_ok();
-        if !container_removed {
-            logging::log_error(
-                sink,
-                &BUFFER,
-                &[Domain::Ai, Domain::Backend],
-                "agent container could not be removed",
-                log_fields! {
-                    "vendor" => vendor.as_str(),
-                    // The generated name, which is not sensitive and is the one
-                    // thing that makes the leftover findable by hand.
-                    "container" => container_name.as_str(),
-                },
-            );
-        }
+                // EAC-FR-26: removal is confirmed on *every* path out, including the
+                // one where the run itself failed. `--rm` handles a clean exit; a
+                // killed client does not necessarily take the container with it.
+                // The answer is not discarded. A removal that fails means a container
+                // is still running under a name that will never be reused, holding the
+                // worktree mount and — for Claude Code — a live token in its
+                // environment. Nothing here can clean that up on the caller's behalf,
+                // but it is exactly the kind of handled failure that is invisible
+                // unless it is reported (EAC-FR-29), so it is logged and returned.
+                let container_removed = runtime.remove_container(&container_name).await.is_ok();
+                if !container_removed {
+                    logging::log_error(
+                        sink,
+                        &BUFFER,
+                        &[Domain::Ai, Domain::Backend],
+                        "agent container could not be removed",
+                        log_fields! {
+                            "vendor" => vendor.as_str(),
+                            // The generated name, which is not sensitive and is the one
+                            // thing that makes the leftover findable by hand.
+                            "container" => container_name.as_str(),
+                        },
+                    );
+                }
 
-        let outcome = outcome.map_err(|error| match error {
-            RuntimeError::Unavailable => AgentExecutionError::RuntimeUnavailable,
-            RuntimeError::ImageUnavailable => AgentExecutionError::ImageUnavailable(vendor.clone()),
-            RuntimeError::LaunchFailed(reason) => AgentExecutionError::LaunchFailed(reason),
-        })?;
+                let outcome = outcome.map_err(|error| match error {
+                    RuntimeError::Unavailable => AgentExecutionError::RuntimeUnavailable,
+                    RuntimeError::ImageUnavailable => {
+                        AgentExecutionError::ImageUnavailable(vendor.clone())
+                    }
+                    RuntimeError::LaunchFailed(reason) => AgentExecutionError::LaunchFailed(reason),
+                })?;
+                (outcome, container_removed)
+            }
+            _ => return Err(AgentExecutionError::RuntimeUnavailable),
+        };
 
         // EAC-FR-ZVRP: a run stopped for a durable failure is reported as that
         // failure, whatever the process outcome was. It is returned after the

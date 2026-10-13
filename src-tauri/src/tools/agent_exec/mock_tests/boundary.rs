@@ -84,6 +84,7 @@ fn concurrent_launches_over_real_processes_stay_separate() {
                 &Silent,
                 &context,
                 AgentExecutionRequest {
+                    sandbox_scope: None,
                     turn_kind: super::super::TurnKind::Work,
                     execution_directory: harness.workspace(),
                     task: first,
@@ -97,6 +98,7 @@ fn concurrent_launches_over_real_processes_stay_separate() {
                 &Silent,
                 &context,
                 AgentExecutionRequest {
+                    sandbox_scope: None,
                     turn_kind: super::super::TurnKind::Work,
                     execution_directory: harness.workspace(),
                     task: second,

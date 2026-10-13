@@ -131,3 +131,22 @@ fn a_stream_runs_message_is_its_prompt_line_and_its_draft() {
         );
     }
 }
+
+// GXD-FR-SHNW: a direct run on an ordinary worktree names that worktree's queue
+// as the sandbox scope of every dispatch, never a stream.
+#[test]
+fn a_direct_run_names_its_worktree_queue_as_its_sandbox_scope() {
+    let fx = fixture();
+    let draft = fx.committed_draft("direct");
+    let run = fx.direct("# Add the empty state", &draft);
+    let dispatch =
+        ScriptedDispatch::new(vec![Turn::work().writing("src/panel.ts", "1\n"), Turn::ready()]);
+    fx.drive(&run, dispatch.clone());
+    let seen = dispatch.seen();
+    assert!(!seen.is_empty());
+    for dispatched in seen {
+        let scope = dispatched.sandbox_scope.expect("a graduation dispatch names a scope");
+        assert_eq!(scope, run.queue_key());
+        assert!(scope.starts_with("worktree:"), "{scope}");
+    }
+}

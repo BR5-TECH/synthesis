@@ -55,11 +55,34 @@ export function ProjectDockerInDocker() {
   const desired = useRef<DockerInDockerSettings | null>(null);
   /** Writes go one after another, so the last change is the last write. */
   const chain = useRef<Promise<unknown>>(Promise.resolve());
+  /**
+   * SET-FR-PMHB: whether the machine's isolation is Microsandbox, which
+   * ignores this setting. Read once on mount; `false` until it has landed and
+   * where it cannot be read.
+   */
+  const [sandboxed, setSandboxed] = useState(false);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .loadIsolationSettings()
+      .then((loaded) => {
+        if (live) setSandboxed(loaded?.settings.mode === "microsandbox");
+      })
+      .catch((reason) => {
+        logWarn(["frontend"], "the isolation mode could not be read", {
+          code: refusalCode(reason),
+        });
+      });
+    return () => {
+      live = false;
     };
   }, []);
 
@@ -182,6 +205,13 @@ export function ProjectDockerInDocker() {
         daemon, for example when tests use Testcontainers. This setting is kept
         on this machine and is not committed with the project.
       </p>
+      {sandboxed && (
+        <p className="docker-state docker-in-docker__note" data-isolation="microsandbox">
+          Isolation is Microsandbox in Global settings, so this setting is
+          ignored: no host Docker socket is mounted, and a graduation start does
+          not check the socket. The setting is kept for when Isolation is None.
+        </p>
+      )}
       {unsupported && (
         <p className="docker-state docker-in-docker__note" data-platform="unsupported">
           Docker-in-Docker is not available on Windows. A named pipe cannot be

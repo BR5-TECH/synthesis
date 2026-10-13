@@ -6763,6 +6763,23 @@ function graduationChanged(run: any): any {
  * invisible from the page, since a refused call changes nothing either.
  */
 /** SET-FR-NXDV: the Docker-in-Docker settings the Docker section reads and writes. */
+// GSS-FR-YDKS: the stored isolation record of the harness machine.
+let mockIsolation = {
+  mode: "none" as "none" | "microsandbox",
+  cpus: null as number | null,
+  memoryGib: null as number | null,
+  blockLocalNetwork: true,
+  allowedLocalHosts: [] as string[],
+};
+function mockIsolationState() {
+  const host = { microsandboxSupported: true, unsupportedReason: null, logicalCpus: 10, totalMemoryGib: 32 };
+  return {
+    settings: mockIsolation,
+    host,
+    effectiveCpus: Math.min(mockIsolation.cpus ?? 4, host.logicalCpus),
+    effectiveMemoryGib: Math.min(mockIsolation.memoryGib ?? 8, host.totalMemoryGib),
+  };
+}
 const mockDockerInDocker = { enabled: false, socketPath: "", hostGateway: false };
 /** SET-FR-21: the Docker section's per-vendor images (`load_project_docker_images`). */
 const mockDockerImages: Array<Record<string, any>> = [
@@ -9526,6 +9543,14 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       mockDockerInDocker.socketPath = String(next.socketPath ?? "").trim();
       mockDockerInDocker.hostGateway = Boolean(next.hostGateway);
       return undefined;
+    }
+    // GLS-FR-YAEA / GSS-FR-DPWS: the isolation settings and the facts of this
+    // machine. The save keeps the record, so a reload shows what was written.
+    case "load_isolation_settings":
+      return mockIsolationState();
+    case "save_isolation_settings": {
+      mockIsolation = { ...(a.settings as typeof mockIsolation) };
+      return mockIsolationState();
     }
     case "load_docker_backend":
       return {

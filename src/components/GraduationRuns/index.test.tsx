@@ -290,6 +290,22 @@ describe("the run region", () => {
     expect(commands()).not.toContain("continue_graduation_run");
   });
 
+  it("GRU-FR-XHDI: a run whose Microsandbox VM could not start renders the whole detail and offers Continue", async () => {
+    const detail =
+      "The Microsandbox VM could not start: the image could not be exported from Docker. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue.";
+    queue = makeQueue([
+      makeRun("r1", "interrupted", {
+        interruption: { reason: "launch_failed", detail, at: "2026-10-03T22:02:36Z" },
+      }),
+    ]);
+    await open();
+    const notice = await screen.findByTestId("graduation-interruption");
+    expect(notice).toHaveTextContent("Stopped — the agent turn could not start");
+    expect(notice).toHaveTextContent(detail);
+    const region = screen.getByRole("region", { name: "The selected run" });
+    expect(within(region).getByRole("button", { name: "Continue" })).toBeInTheDocument();
+  });
+
   it("GRU-FR-QLRQ, GRU-FR-BHJO: a run stopped on any other cause offers no route to the time limit", async () => {
     queue = makeQueue([
       makeRun("r1", "interrupted", {

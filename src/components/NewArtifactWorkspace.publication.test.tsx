@@ -117,14 +117,14 @@ describe("New Artifact workspace — publishing to GitHub", () => {
     );
   });
 
-  it("NAW-FR-28, ACT-FR-05: the control offers Discuss, Graduate, Publish to GitHub, and Archive in that order", async () => {
+  it("NAW-FR-28, ACT-FR-05: the control offers Discuss, Graduate, Copy as Source, Publish to GitHub, and Archive in that order", async () => {
     renderWorkspace();
     const menu = await openActions();
     expect(
       within(menu)
         .getAllByRole("menuitem")
         .map((item) => item.textContent?.trim()),
-    ).toEqual(["Discuss", "Graduate", "Publish to GitHub", "Archive"]);
+    ).toEqual(["Discuss", "Graduate", "Copy as Source", "Publish to GitHub", "Archive"]);
   });
 
   it("NAW-FR-ZQMX, NAW-FR-VBHT: an archived draft states that it must be restored first", async () => {

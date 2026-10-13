@@ -9,9 +9,9 @@
  * it (ACT-FR-01, ACT-FR-03).
  *
  * What it offers is decided by the **item** and not by the tab (ACT-FR-04):
- * Discuss on everything, and Graduate, Publish to GitHub, and Archive in
- * addition on a draft — those three contributed by the New Artifact tab, which
- * owns what they do (`NAW-new-artifact.md`).
+ * Discuss on everything, and Graduate, Copy as Source, Publish to GitHub, and
+ * Archive in addition on a draft — those four contributed by the New Artifact
+ * tab, which owns what they do (`NAW-new-artifact.md`).
  *
  * Where the discussions it opens are *read* is the one thing that differs by
  * host. A tab lending the comment rail a margin pins them at its head
@@ -45,6 +45,20 @@ export interface HostAction {
   disabled?: boolean;
   title?: string;
 }
+
+/**
+ * ACT-FR-HPIX: an entry that reports whether it succeeded, so the control can
+ * show **Copied** before it collapses rather than collapse at once.
+ */
+export interface HostCopyAction {
+  label: string;
+  /** Resolves `true` when the copy succeeded and `false` when it failed. */
+  onActivate: () => Promise<boolean>;
+  title?: string;
+}
+
+/** ACT-FR-HPIX: how long the entry reads **Copied** before the control collapses. */
+export const COPIED_LABEL_MS = 1500;
 
 export interface ActionControlProps {
   /**
@@ -87,7 +101,12 @@ export interface ActionControlProps {
   /** ACT-FR-04/05: the draft's own three entries, in their fixed slots. */
   graduate?: HostAction;
   /**
-   * ACT-FR-05: **Publish to GitHub**, between Graduate and Archive.
+   * ACT-FR-05: **Copy as Source**, between Graduate and Publish to GitHub.
+   * ACT-FR-07 is the one state that disables it.
+   */
+  copySource?: HostCopyAction;
+  /**
+   * ACT-FR-05: **Publish to GitHub**, between Copy as Source and Archive.
    *
    * Its enablement and every disabled reason are the host's (NAW-FR-ZQMX,
    * NAW-FR-VBHT); this control renders what it is handed.
@@ -178,6 +197,7 @@ export function ActionControl({
   canDiscuss = true,
   missing = false,
   graduate,
+  copySource,
   publish,
   archive,
   discussionsInRail = false,
@@ -202,10 +222,26 @@ export function ActionControl({
     "none" | "actions" | "composer" | "panel"
   >("none");
   const actionsOpen = floating === "actions";
+  /** The current surface, for code that runs after an await. */
+  const floatingRef = useRef(floating);
+  floatingRef.current = floating;
   const composerOpen = floating === "composer";
   const panelOpen = floating === "panel";
 
   const [posting, setPosting] = useState(false);
+  /**
+   * ACT-FR-HPIX: the state of **Copy as Source**. The ref is the single-flight
+   * guard (NAW-FR-QPTN): it holds before React renders the state change.
+   */
+  const [copyState, setCopyState] = useState<"idle" | "writing" | "copied">(
+    "idle",
+  );
+  const copyBusy = useRef(false);
+  /**
+   * ACT-FR-HPIX: counts each expansion, so a copy that ends after the column
+   * was closed and opened again does not act on the new one.
+   */
+  const expansions = useRef(0);
   const [showResolved, setShowResolved] = useState(false);
   const [composerFocus, setComposerFocus] = useState(0);
 
@@ -228,6 +264,7 @@ export function ActionControl({
 
   const openSurface = useCallback(
     (next: "none" | "actions" | "composer" | "panel") => {
+      if (next === "actions") expansions.current += 1;
       setFloating(next);
       if (next !== "none") {
         onSurfaceOpened?.();
@@ -307,6 +344,67 @@ export function ActionControl({
       window.removeEventListener("mousedown", onDown);
     };
   }, [floating, posting, restoreFocus]);
+
+  /**
+   * The column is about to go. Focus on one of its entries would drop to the
+   * document body, so it goes back to the control instead.
+   */
+  const collapseFromEntry = useCallback(() => {
+    if (document.activeElement?.closest?.(".draft-actions__menu")) {
+      restoreFocus();
+    }
+    setFloating("none");
+  }, [restoreFocus]);
+
+  /**
+   * ACT-FR-HPIX: the entry reads **Copied** for a short interval, and then the
+   * control collapses. Escape, a press outside, or the toggle can collapse it
+   * first, and then the label goes with it.
+   */
+  useEffect(() => {
+    if (copyState !== "copied") return;
+    if (!actionsOpen) {
+      setCopyState("idle");
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setCopyState("idle");
+      collapseFromEntry();
+    }, COPIED_LABEL_MS);
+    return () => window.clearTimeout(timer);
+  }, [copyState, actionsOpen, collapseFromEntry]);
+
+  /**
+   * ACT-FR-HPIX / NAW-FR-QPTN: run the host's copy once. A further activation
+   * while the write runs does nothing. A failure collapses the control at once;
+   * the host shows what failed.
+   */
+  const runCopy = async () => {
+    if (!copySource || copyBusy.current) return;
+    copyBusy.current = true;
+    const expansion = expansions.current;
+    setCopyState("writing");
+    let copied = false;
+    try {
+      copied = await copySource.onActivate();
+    } catch {
+      copied = false;
+    } finally {
+      copyBusy.current = false;
+    }
+    // The column this copy started in is gone: it was collapsed, or collapsed
+    // and expanded again. The result changes nothing in the column now open.
+    if (expansion !== expansions.current || floatingRef.current !== "actions") {
+      setCopyState("idle");
+      return;
+    }
+    if (copied) {
+      setCopyState("copied");
+      return;
+    }
+    setCopyState("idle");
+    collapseFromEntry();
+  };
 
   // ACT-FR-17: the same reason the rail's composers state, and the same route.
   const identityBlock = identityBlockFor(discussions.identityError);
@@ -529,6 +627,29 @@ export function ActionControl({
               <Icon.Graduate size={13} /> {graduate.label}
             </button>
           )}
+          {/* ACT-FR-HPIX: this entry does not collapse the control when it is
+              activated. It reads Copied first, and the status after the column
+              says so to assistive technology. */}
+          {copySource && !readOnly && (
+            <button
+              role="menuitem"
+              className="draft-actions__item"
+              disabled={missing}
+              aria-busy={copyState === "writing"}
+              title={copySource.title}
+              onClick={() => void runCopy()}
+            >
+              {copyState === "copied" ? (
+                <>
+                  <Icon.Check size={13} /> Copied
+                </>
+              ) : (
+                <>
+                  <Icon.Copy size={13} /> {copySource.label}
+                </>
+              )}
+            </button>
+          )}
           {publish && !readOnly && (
             <button
               role="menuitem"
@@ -558,6 +679,14 @@ export function ActionControl({
             </button>
           )}
         </div>
+      )}
+
+      {/* ACT-FR-HPIX: the polite announcement of a copy that succeeded. It
+          stands outside the menu, which holds menu items only. */}
+      {copySource && !readOnly && (
+        <span className="sr-only" role="status" aria-live="polite">
+          {actionsOpen && copyState === "copied" ? "Copied" : ""}
+        </span>
       )}
 
       <div className="action-control__dock">

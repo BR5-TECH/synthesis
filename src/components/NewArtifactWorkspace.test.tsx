@@ -308,7 +308,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     // would say the draft no longer affords it at all.
     expect(
       screen.getAllByRole("menuitem").map((e) => e.textContent?.trim()),
-    ).toEqual(["Discuss", "Graduate", "Publish to GitHub", "Archive"]);
+    ).toEqual(["Discuss", "Graduate", "Copy as Source", "Publish to GitHub", "Archive"]);
     expect(screen.getByRole("menuitem", { name: "Graduate" })).toBeEnabled();
     expect(screen.getByRole("menuitem", { name: "Archive" })).toBeEnabled();
   });
@@ -681,7 +681,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
       within(menu)
         .getAllByRole("menuitem")
         .map((b) => b.textContent?.trim()),
-    ).toEqual(["Discuss", "Graduate", "Publish to GitHub", "Archive"]);
+    ).toEqual(["Discuss", "Graduate", "Copy as Source", "Publish to GitHub", "Archive"]);
     // NAW-FR-17: enabled, with nothing declared beforehand.
     expect(screen.getByRole("menuitem", { name: "Graduate" })).toBeEnabled();
 

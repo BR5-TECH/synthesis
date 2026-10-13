@@ -100,12 +100,13 @@ describe("New Artifact workspace — a GitHub-shadow draft", () => {
     expect(calls("rename_draft")).toHaveLength(0);
   });
 
-  it("NAW-FR-AXFQ: Graduate is the only enabled action; the rest state why not", async () => {
+  it("NAW-FR-AXFQ, NAW-FR-FJXX: Graduate and Copy as Source are the only enabled actions; the rest state why not", async () => {
     stubShadow();
     renderWorkspace();
     await screen.findByTestId("draft-github-shadow-banner");
     await openActions();
     expect(screen.getByRole("menuitem", { name: "Graduate" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Copy as Source" })).toBeEnabled();
     const discuss = screen.getByRole("menuitem", { name: /Discuss/ });
     expect(discuss).toBeDisabled();
     expect(discuss).toHaveAttribute("title", expect.stringMatching(/mirrors a GitHub issue/));

@@ -2,6 +2,7 @@
 //! window keeps its single instance, and which size it opens at.
 
 use super::*;
+use crate::window::DisplayRect;
 
 fn open(section: Option<&str>) -> Request {
     Request::Open { section: section.map(str::to_string) }
@@ -227,6 +228,120 @@ fn a_work_area_smaller_than_the_minimum_falls_back_to_the_default() {
 fn an_unknown_work_area_clamps_nothing_but_the_minimum_holds() {
     assert_eq!(opening_size(Some((1000, 700)), None), (1000, 700));
     assert_eq!(opening_size(Some((10, 10)), None), (800, 600));
+}
+
+fn work(x: i32, y: i32, width: u32, height: u32) -> Option<DisplayRect> {
+    Some(DisplayRect { x, y, width, height })
+}
+
+// SWN-FR-04, SWN-FR-CLMP: a stored size larger than the default
+// is centred at its own size, not at the default size.
+#[test]
+fn a_stored_size_larger_than_the_default_is_centred_at_its_own_size() {
+    let target = opening_size(Some((1200, 800)), Some((1440, 875)));
+    let placed = placement(target, 2.0, (0, 56), work(0, 50, 2880, 1750));
+    assert_eq!(
+        placed,
+        Placement {
+            inner: (2400, 1544),
+            min_inner: (1600, 1144),
+            outer: (2400, 1600),
+            position: Some((240, 125)),
+        }
+    );
+    // The centre of a default-size (1600 x 1200 physical) window.
+    assert_ne!(placed.position, Some((640, 325)));
+}
+
+// SWN-FR-03, SWN-FR-04: the default size is centred in the work area, below
+// the menu bar; an odd remainder is truncated.
+#[test]
+fn the_default_size_is_centred_in_the_work_area() {
+    assert_eq!(
+        placement((800, 600), 1.0, (0, 28), work(0, 25, 1920, 1055)),
+        Placement {
+            inner: (800, 572),
+            min_inner: (800, 572),
+            outer: (800, 600),
+            position: Some((560, 252)),
+        }
+    );
+}
+
+// SWN-FR-03: the minimum does not follow the target; the inner size does.
+#[test]
+fn the_minimum_inner_size_does_not_follow_the_target() {
+    for (target, inner) in
+        [((800, 600), (1600, 1144)), ((1200, 800), (2400, 1544)), ((2000, 1400), (4000, 2744))]
+    {
+        let placed = placement(target, 2.0, (0, 56), None);
+        assert_eq!(placed.min_inner, (1600, 1144));
+        assert_eq!(placed.inner, inner);
+    }
+}
+
+// SWN-FR-03, SWN-FR-04: a fractional scale rounds, and a display to the left
+// of the primary display keeps its negative origin.
+#[test]
+fn a_fractional_scale_rounds_and_a_negative_origin_is_kept() {
+    assert_eq!(
+        placement((801, 601), 1.5, (2, 32), work(-2560, 0, 2560, 1392)),
+        Placement {
+            inner: (1200, 870),
+            min_inner: (1198, 868),
+            outer: (1202, 902),
+            position: Some((-1881, 245)),
+        }
+    );
+}
+
+// SWN-FR-CLMP, SWN-FR-04: a size clamped to the work area fills it from its
+// top-left corner.
+#[test]
+fn a_clamped_size_fills_the_work_area_exactly() {
+    let target = opening_size(Some((2400, 1500)), Some((1440, 875)));
+    assert_eq!(
+        placement(target, 2.0, (0, 56), work(0, 50, 2880, 1750)),
+        Placement {
+            inner: (2880, 1694),
+            min_inner: (1600, 1144),
+            outer: (2880, 1750),
+            position: Some((0, 50)),
+        }
+    );
+}
+
+// SWN-FR-CLMP, SWN-FR-04: on a work area that cannot hold the minimum, the
+// default-size window is placed at the work area's top-left corner rather
+// than at a negative offset.
+#[test]
+fn a_default_window_on_a_too_small_work_area_is_placed_at_its_top_left() {
+    let target = opening_size(Some((1000, 700)), Some((700, 500)));
+    let placed = placement(target, 1.0, (0, 28), work(100, 25, 700, 500));
+    assert_eq!(placed.outer, (800, 600));
+    assert_eq!(placed.position, Some((100, 25)));
+}
+
+// SWN-FR-MRBK: a window nobody resized measures, at the close, the size it
+// was placed at, so the close stores nothing.
+#[test]
+fn an_unresized_window_measures_the_size_it_was_placed_at() {
+    for target in [(800, 600), (801, 601), (1201, 799)] {
+        for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
+            let placed = placement(target, scale, (0, 0), None);
+            assert_eq!(logical_size(placed.outer, scale), target, "{target:?} at {scale}");
+        }
+    }
+}
+
+// SWN-FR-03: with the work area unknown the window is still sized, but it
+// gets no position.
+#[test]
+fn an_unknown_work_area_sizes_the_window_but_gives_no_position() {
+    assert_eq!(
+        placement((1000, 700), 1.0, (0, 28), None),
+        Placement { inner: (1000, 672), min_inner: (800, 572), outer: (1000, 700), position: None }
+    );
 }
 
 // The commands must stay in scope under their registered names, so a rename

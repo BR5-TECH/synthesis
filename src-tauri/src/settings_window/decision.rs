@@ -164,3 +164,47 @@ pub fn releases_exit_gate(next: &Transition) -> bool {
 pub fn inner_size_for_outer(target: (u32, u32), decoration: (u32, u32)) -> (u32, u32) {
     (target.0.saturating_sub(decoration.0).max(1), target.1.saturating_sub(decoration.1).max(1))
 }
+
+/// The physical geometry the window is given as it opens (SWN-FR-03,
+/// SWN-FR-04).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Placement {
+    /// The inner size to set, so that the outer size is `outer`.
+    pub inner: (u32, u32),
+    /// The smallest inner size the author can drag the window to.
+    pub min_inner: (u32, u32),
+    /// The outer size the window has once `inner` is applied.
+    pub outer: (u32, u32),
+    /// The top-left point that centres `outer` in the work area, or `None`
+    /// when the work area is unknown.
+    pub position: Option<(i32, i32)>,
+}
+
+/// SWN-FR-03, SWN-FR-04: the geometry that brings the window to `target` outer
+/// logical pixels, centred in `work` (physical pixels).
+///
+/// The position is computed from the outer size the window is given, never
+/// from a size read back from the window. On macOS a resize is applied after
+/// the call that asks for it returns, so a read-back still gives the size the
+/// window was built with, and the window would be centred at that size.
+pub fn placement(
+    target: (u32, u32),
+    scale: f64,
+    decoration: (u32, u32),
+    work: Option<crate::window::DisplayRect>,
+) -> Placement {
+    let physical = |logical: (u32, u32)| {
+        ((logical.0 as f64 * scale).round() as u32, (logical.1 as f64 * scale).round() as u32)
+    };
+    let inner = inner_size_for_outer(physical(target), decoration);
+    let min_inner = inner_size_for_outer(physical(MIN_WINDOW_SIZE), decoration);
+    let outer = (inner.0.saturating_add(decoration.0), inner.1.saturating_add(decoration.1));
+    let position = work.map(|w| crate::window::center_window_on_display(w, outer));
+    Placement { inner, min_inner, outer, position }
+}
+
+/// SWN-FR-MRBK: a physical size in logical pixels, the measure a close
+/// compares against the size the window was placed at.
+pub fn logical_size(physical: (u32, u32), scale: f64) -> (u32, u32) {
+    ((physical.0 as f64 / scale).round() as u32, (physical.1 as f64 / scale).round() as u32)
+}

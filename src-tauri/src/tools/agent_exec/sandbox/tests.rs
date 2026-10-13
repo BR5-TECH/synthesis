@@ -22,6 +22,7 @@ enum Call {
     Boot(String, BootImage),
     Load(String),
     Run(String, Vec<String>),
+    Refresh(String),
     Stop(String),
 }
 
@@ -39,6 +40,8 @@ struct RecordingSandbox {
     hangs: bool,
     /// Notified when a boot starts.
     boot_started: tokio::sync::Notify,
+    /// The answer of every cache drop; `None` succeeds (EAC-FR-JRVY).
+    refresh_error: StdMutex<Option<String>>,
 }
 
 impl RecordingSandbox {
@@ -114,6 +117,16 @@ impl SandboxRuntime for RecordingSandbox {
         })
     }
 
+    fn refresh<'a>(&'a self, vm: &'a str) -> BoxFuture<'a, Result<(), String>> {
+        Box::pin(async move {
+            self.calls.lock().unwrap().push(Call::Refresh(vm.to_string()));
+            match self.refresh_error.lock().unwrap().clone() {
+                Some(error) => Err(error),
+                None => Ok(()),
+            }
+        })
+    }
+
     fn stop<'a>(&'a self, vm: &'a str) -> BoxFuture<'a, ()> {
         Box::pin(async move {
             self.calls.lock().unwrap().push(Call::Stop(vm.to_string()));
@@ -125,6 +138,8 @@ impl SandboxRuntime for RecordingSandbox {
 struct StubExporter {
     id: Result<String, String>,
     exports: StdMutex<u32>,
+    /// What every export was asked to save (EAC-FR-ASNS).
+    exported: StdMutex<Vec<String>>,
     fail_export: bool,
 }
 
@@ -133,6 +148,7 @@ impl StubExporter {
         Arc::new(StubExporter {
             id: Ok(id.to_string()),
             exports: StdMutex::new(0),
+            exported: StdMutex::new(Vec::new()),
             fail_export: false,
         })
     }
@@ -145,12 +161,13 @@ impl ImageExporter for StubExporter {
 
     fn export<'a>(
         &'a self,
-        _reference: &'a str,
+        reference: &'a str,
         destination: &'a Path,
         fs: &'a FsAccess,
     ) -> BoxFuture<'a, Result<(), String>> {
         Box::pin(async move {
             *self.exports.lock().unwrap() += 1;
+            self.exported.lock().unwrap().push(reference.to_string());
             if self.fail_export {
                 return Err("docker save failed".to_string());
             }
@@ -169,15 +186,27 @@ fn settings() -> SandboxSettings {
     }
 }
 
+/// The host user every spec of this file names (EAC-FR-KTWO).
+const OWNER: &str = "1000:1000";
+
+/// A real directory for a mount source named `name`. A reuse compares the
+/// identity of each read/write source (EAC-FR-HXDN), and a path that does not
+/// exist has none, so a source here must exist.
+fn real_dir(name: &str) -> String {
+    static ROOT: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
+    let root = ROOT.get_or_init(|| tempfile::tempdir().unwrap());
+    let path = root.path().canonicalize().unwrap().join(name.trim_start_matches('/'));
+    std::fs::create_dir_all(&path).unwrap();
+    path.to_string_lossy().into_owned()
+}
+
 fn spec(image: &str, workspace: &str) -> SandboxSpec {
+    let source = real_dir(workspace);
     SandboxSpec::new(
         image.to_string(),
+        OWNER.to_string(),
         &settings(),
-        vec![SandboxMount {
-            source: workspace.to_string(),
-            target: workspace.to_string(),
-            read_only: false,
-        }],
+        vec![SandboxMount { source: source.clone(), target: source, read_only: false }],
     )
 }
 
@@ -232,6 +261,7 @@ fn launch<'a>(
     SandboxLaunch {
         vm,
         spec,
+        turn_kind: TurnKind::Work,
         settings,
         exporter,
         fs: &fx.fs,
@@ -243,8 +273,9 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
     tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(future)
 }
 
-// EAC-FR-DWBS, EAC-FR-UEFI, EAC-FR-ZIYG: the first launch of a scope boots its
-// VM, and a second launch with an equal spec reuses it and boots nothing.
+// EAC-FR-DWBS, EAC-FR-UEFI, EAC-FR-ZIYG, EAC-FR-JRVY: the first launch of a
+// scope boots its VM, and a second launch with an equal spec drops the guest's
+// caches and reuses the VM.
 #[test]
 fn an_equal_launch_reuses_the_running_vm() {
     let fx = fixture();
@@ -262,6 +293,7 @@ fn an_equal_launch_reuses_the_running_vm() {
         vec![
             Call::Boot("vm-a".into(), BootImage::Registry("agent:1".into())),
             Call::Run("vm-a".into(), args.clone()),
+            Call::Refresh("vm-a".into()),
             Call::Run("vm-a".into(), args),
         ]
     );
@@ -300,14 +332,13 @@ fn a_changed_launch_reboots_and_scopes_never_share() {
     assert!(!calls.contains(&Call::Stop("vm-b".into())));
 }
 
-// EAC-FR-QULL, EAC-FR-ASNS, EAC-FR-IGBY: an image no registry serves is
-// exported from the verified Docker backend, loaded under a reference derived
-// from its ID, and booted from that.
+// EAC-FR-QULL, EAC-FR-ASNS, EAC-FR-IGBY: an image the verified Docker backend
+// holds boots from its export, exported by its image ID, and no registry is
+// asked.
 #[test]
 fn a_local_image_boots_from_its_export() {
     let fx = fixture();
-    let runtime =
-        RecordingSandbox::with_boots(vec![Err(BootError::ImageNotFound("not found".into()))]);
+    let runtime = RecordingSandbox::with_boots(Vec::new());
     let pool = SandboxPool::new(runtime.clone());
     let s = settings();
     let spec = spec("local/agent:dev", "/w/one");
@@ -325,13 +356,10 @@ fn a_local_image_boots_from_its_export() {
     let loaded = images::export_reference("local/agent:dev", "sha256:abc123");
     assert_ne!(loaded, "local/agent:dev");
     assert_eq!(
-        runtime.calls()[..3],
-        [
-            Call::Boot("vm-a".into(), BootImage::Registry("local/agent:dev".into())),
-            Call::Load(loaded.clone()),
-            Call::Boot("vm-a".into(), BootImage::Loaded(loaded)),
-        ]
+        runtime.calls()[..2],
+        [Call::Load(loaded.clone()), Call::Boot("vm-a".into(), BootImage::Loaded(loaded))]
     );
+    assert_eq!(*exporter.exported.lock().unwrap(), vec!["sha256:abc123".to_string()]);
     let file = fx
         .root
         .join(EXPORT_CACHE_DIRNAME)
@@ -373,8 +401,12 @@ fn a_failed_export_leaves_nothing_behind() {
     let fx = fixture();
     let root = fx.root.join(EXPORT_CACHE_DIRNAME);
     let cache = images::ExportCache::new(&fx.fs, root.clone());
-    let exporter =
-        StubExporter { id: Ok("sha256:aa".into()), exports: StdMutex::new(0), fail_export: true };
+    let exporter = StubExporter {
+        id: Ok("sha256:aa".into()),
+        exports: StdMutex::new(0),
+        exported: StdMutex::new(Vec::new()),
+        fail_export: true,
+    };
     let error = block_on(cache.ensure("agent:dev", "sha256:aa", &exporter)).unwrap_err();
     assert_eq!(error, "docker save failed");
     assert!(fx.fs.list_dir(&root).unwrap().is_empty());
@@ -404,6 +436,7 @@ fn export_failures_are_typed() {
     let missing: Arc<dyn ImageExporter> = Arc::new(StubExporter {
         id: Err("no such image".into()),
         exports: StdMutex::new(0),
+        exported: StdMutex::new(Vec::new()),
         fail_export: false,
     });
     let pool = SandboxPool::new(RecordingSandbox::with_boots(not_found()));
@@ -421,9 +454,11 @@ fn export_failures_are_typed() {
     let failing: Arc<dyn ImageExporter> = Arc::new(StubExporter {
         id: Ok("sha256:bb".into()),
         exports: StdMutex::new(0),
+        exported: StdMutex::new(Vec::new()),
         fail_export: true,
     });
-    let pool = SandboxPool::new(RecordingSandbox::with_boots(not_found()));
+    let after_export = RecordingSandbox::with_boots(not_found());
+    let pool = SandboxPool::new(after_export.clone());
     let error =
         block_on(pool.launch(&Silent, launch(&fx, "vm", &spec, &s, Some(failing)), process(&args)))
             .unwrap_err();
@@ -434,6 +469,8 @@ fn export_failures_are_typed() {
             ..
         })
     ));
+    // A failed export falls back to nothing: no boot of any kind follows it.
+    assert!(after_export.calls().iter().all(|call| !matches!(call, Call::Boot(..))));
 }
 
 // EAC-FR-NCSA, GSS-FR-NCAQ: a boot failure keeps its cause, a machine that
@@ -539,8 +576,8 @@ fn export_names_derive_from_the_reference_and_the_id() {
 fn mount_order_is_not_a_difference() {
     let a = SandboxMount { source: "/a".into(), target: "/a".into(), read_only: false };
     let b = SandboxMount { source: "/b".into(), target: "/b".into(), read_only: true };
-    let one = SandboxSpec::new("i".into(), &settings(), vec![a.clone(), b.clone()]);
-    let two = SandboxSpec::new("i".into(), &settings(), vec![b, a]);
+    let one = SandboxSpec::new("i".into(), OWNER.into(), &settings(), vec![a.clone(), b.clone()]);
+    let two = SandboxSpec::new("i".into(), OWNER.into(), &settings(), vec![b, a]);
     assert_eq!(one, two);
 }
 
@@ -693,4 +730,240 @@ fn a_boot_past_its_bound_fails() {
     );
     assert!(runtime.calls().contains(&Call::Stop("vm-a".into())));
     assert_eq!(pool.booted("vm-a"), None);
+}
+
+/// A launch of `turn_kind`, otherwise as [`launch`].
+fn launch_kind<'a>(
+    fx: &'a Fixture,
+    spec: &'a SandboxSpec,
+    settings: &'a SandboxSettings,
+    turn_kind: TurnKind,
+) -> SandboxLaunch<'a> {
+    SandboxLaunch { turn_kind, ..launch(fx, "vm-a", spec, settings, None) }
+}
+
+/// The boots and the stops of `vm-a`, in order.
+fn lifecycle(runtime: &RecordingSandbox) -> Vec<&'static str> {
+    runtime
+        .calls()
+        .iter()
+        .filter_map(|call| match call {
+            Call::Boot(vm, _) if vm == "vm-a" => Some("boot"),
+            Call::Stop(vm) if vm == "vm-a" => Some("stop"),
+            Call::Refresh(vm) if vm == "vm-a" => Some("refresh"),
+            _ => None,
+        })
+        .collect()
+}
+
+// EAC-FR-HXDN: a review and a merge_review launch never reuse a VM, even with
+// an equal spec, and the old VM is stopped before the new one boots. A
+// merge_work launch reuses it.
+#[test]
+fn a_review_kind_launch_always_boots_a_new_vm() {
+    let fx = fixture();
+    let s = settings();
+    let spec = spec("agent:1", "/w/kinds");
+    let args: Vec<String> = Vec::new();
+    for (kind, expected) in [
+        (TurnKind::Review, vec!["boot", "stop", "boot"]),
+        (TurnKind::MergeReview, vec!["boot", "stop", "boot"]),
+        (TurnKind::MergeWork, vec!["boot", "refresh"]),
+    ] {
+        let runtime = RecordingSandbox::with_boots(Vec::new());
+        let pool = SandboxPool::new(runtime.clone());
+        block_on(async {
+            for _ in 0..2 {
+                pool.launch(&Silent, launch_kind(&fx, &spec, &s, kind), process(&args))
+                    .await
+                    .unwrap();
+            }
+        });
+        assert_eq!(lifecycle(&runtime), expected, "{kind:?}");
+    }
+}
+
+// EAC-FR-HXDN: a read/write source made again at the same path is another
+// directory, so the next launch boots a new VM.
+#[test]
+fn a_directory_made_again_boots_a_new_vm() {
+    let fx = fixture();
+    let runtime = RecordingSandbox::with_boots(Vec::new());
+    let pool = SandboxPool::new(runtime.clone());
+    let s = settings();
+    let spec = spec("agent:1", "/w/again");
+    let source = PathBuf::from(&spec.mounts[0].source);
+    let args: Vec<String> = Vec::new();
+    block_on(async {
+        pool.launch(&Silent, launch(&fx, "vm-a", &spec, &s, None), process(&args)).await.unwrap();
+        // Renamed aside rather than deleted, so the inode cannot be given back.
+        std::fs::rename(&source, source.with_file_name("again-aside")).unwrap();
+        std::fs::create_dir(&source).unwrap();
+        pool.launch(&Silent, launch(&fx, "vm-a", &spec, &s, None), process(&args)).await.unwrap();
+    });
+    assert_eq!(lifecycle(&runtime), vec!["boot", "stop", "boot"]);
+}
+
+// EAC-FR-HXDN: a read/write source that is not there has no identity, which is
+// never the same, so the launch boots a new VM rather than reusing one.
+#[test]
+fn a_source_with_no_identity_is_never_reused() {
+    let fx = fixture();
+    let runtime = RecordingSandbox::with_boots(Vec::new());
+    let pool = SandboxPool::new(runtime.clone());
+    let s = settings();
+    let absent = real_dir("/w/absent-parent").to_string() + "/absent";
+    let spec = SandboxSpec::new(
+        "agent:1".into(),
+        OWNER.into(),
+        &s,
+        vec![SandboxMount { source: absent.clone(), target: absent, read_only: false }],
+    );
+    let args: Vec<String> = Vec::new();
+    block_on(async {
+        for _ in 0..2 {
+            pool.launch(&Silent, launch(&fx, "vm-a", &spec, &s, None), process(&args))
+                .await
+                .unwrap();
+        }
+    });
+    assert_eq!(lifecycle(&runtime), vec!["boot", "stop", "boot"]);
+}
+
+// EAC-FR-UEFI, EAC-FR-KTWO: the owner is part of what a VM boots with, so a
+// launch for another owner boots a new VM.
+#[test]
+fn another_owner_boots_a_new_vm() {
+    let fx = fixture();
+    let runtime = RecordingSandbox::with_boots(Vec::new());
+    let pool = SandboxPool::new(runtime.clone());
+    let s = settings();
+    let first = spec("agent:1", "/w/owner");
+    let mut other = first.clone();
+    other.owner = "1001:1001".into();
+    let args: Vec<String> = Vec::new();
+    block_on(async {
+        pool.launch(&Silent, launch(&fx, "vm-a", &first, &s, None), process(&args)).await.unwrap();
+        pool.launch(&Silent, launch(&fx, "vm-a", &other, &s, None), process(&args)).await.unwrap();
+    });
+    assert_eq!(lifecycle(&runtime), vec!["boot", "stop", "boot"]);
+    assert_eq!(pool.booted("vm-a").map(|spec| spec.owner), Some("1001:1001".to_string()));
+}
+
+// EAC-FR-JRVY: a VM whose caches cannot be dropped is not reused: it is stopped
+// and a new one boots before the launch.
+#[test]
+fn a_failed_cache_drop_boots_a_new_vm() {
+    let fx = fixture();
+    let runtime = RecordingSandbox::with_boots(Vec::new());
+    *runtime.refresh_error.lock().unwrap() = Some("no root".into());
+    let pool = SandboxPool::new(runtime.clone());
+    let s = settings();
+    let spec = spec("agent:1", "/w/refresh");
+    let args = vec!["-p".to_string()];
+    block_on(async {
+        for _ in 0..2 {
+            pool.launch(&Silent, launch(&fx, "vm-a", &spec, &s, None), process(&args))
+                .await
+                .unwrap();
+        }
+    });
+    assert_eq!(lifecycle(&runtime), vec!["boot", "refresh", "stop", "boot"]);
+    assert_eq!(runtime.calls().last(), Some(&Call::Run("vm-a".into(), args)));
+}
+
+// EAC-FR-QULL: an image the verified Docker backend does not hold boots from
+// the configured reference through a registry, and nothing is exported.
+#[test]
+fn an_image_docker_does_not_hold_boots_from_a_registry() {
+    let fx = fixture();
+    let runtime = RecordingSandbox::with_boots(Vec::new());
+    let pool = SandboxPool::new(runtime.clone());
+    let s = settings();
+    let spec = spec("registry.example/agent:1", "/w/registry");
+    let missing = Arc::new(StubExporter {
+        id: Err("no such image".into()),
+        exports: StdMutex::new(0),
+        exported: StdMutex::new(Vec::new()),
+        fail_export: false,
+    });
+    let args: Vec<String> = Vec::new();
+    block_on(async {
+        let exporter: Arc<dyn ImageExporter> = missing.clone();
+        pool.launch(&Silent, launch(&fx, "vm-a", &spec, &s, Some(exporter)), process(&args))
+            .await
+            .unwrap();
+    });
+    assert_eq!(
+        runtime.calls()[0],
+        Call::Boot("vm-a".into(), BootImage::Registry("registry.example/agent:1".into()))
+    );
+    assert_eq!(*missing.exports.lock().unwrap(), 0);
+}
+
+// EAC-FR-PWLA: the image's `Env` comes first, a launch variable replaces an
+// image variable of the same name, the last of two equal image names wins, a
+// value keeps every `=` after the first, and an entry with no `=` is left out.
+#[test]
+fn the_process_environment_puts_the_launch_over_the_image() {
+    let image = vec![
+        "PATH=/usr/local/cargo/bin:/usr/bin".to_string(),
+        "HOME=/home/agent".to_string(),
+        "GIT_OPTIONAL_LOCKS=1".to_string(),
+        "OPTS=a=b".to_string(),
+        "EMPTY=".to_string(),
+        "NOVALUE".to_string(),
+        "HOME=/home/other".to_string(),
+    ];
+    let launch = vec![
+        ("GIT_OPTIONAL_LOCKS".to_string(), SecretString::new("0".to_string())),
+        ("TOKEN".to_string(), SecretString::new("secret".to_string())),
+    ];
+    let composed: Vec<(String, String)> = compose_env(&image, &launch)
+        .into_iter()
+        .map(|(name, value)| (name, value.expose().to_string()))
+        .collect();
+    let pairs = |list: &[(&str, &str)]| -> Vec<(String, String)> {
+        list.iter().map(|(n, v)| (n.to_string(), v.to_string())).collect()
+    };
+    assert_eq!(
+        composed,
+        pairs(&[
+            ("PATH", "/usr/local/cargo/bin:/usr/bin"),
+            ("OPTS", "a=b"),
+            ("EMPTY", ""),
+            ("HOME", "/home/other"),
+            ("GIT_OPTIONAL_LOCKS", "0"),
+            ("TOKEN", "secret"),
+        ])
+    );
+}
+
+// EAC-FR-HXDN: only read/write sources count. A read-only source made again at
+// the same path does not reboot the VM.
+#[test]
+fn a_read_only_source_made_again_does_not_reboot() {
+    let fx = fixture();
+    let runtime = RecordingSandbox::with_boots(Vec::new());
+    let pool = SandboxPool::new(runtime.clone());
+    let s = settings();
+    let workspace = real_dir("/w/ro-parent");
+    let read_only = real_dir("/w/ro-source");
+    let spec = SandboxSpec::new(
+        "agent:1".into(),
+        OWNER.into(),
+        &s,
+        vec![
+            SandboxMount { source: workspace.clone(), target: workspace, read_only: false },
+            SandboxMount { source: read_only.clone(), target: read_only.clone(), read_only: true },
+        ],
+    );
+    let args: Vec<String> = Vec::new();
+    block_on(async {
+        pool.launch(&Silent, launch(&fx, "vm-a", &spec, &s, None), process(&args)).await.unwrap();
+        std::fs::rename(&read_only, format!("{read_only}-aside")).unwrap();
+        std::fs::create_dir(&read_only).unwrap();
+        pool.launch(&Silent, launch(&fx, "vm-a", &spec, &s, None), process(&args)).await.unwrap();
+    });
+    assert_eq!(lifecycle(&runtime), vec!["boot", "refresh"]);
 }

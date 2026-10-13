@@ -294,23 +294,29 @@ impl AgentCliExecutor {
         // metadata that cannot be mounted, launches **without** this and returns
         // no error. Repository access is a convenience of a turn and never a
         // precondition of one, which is the opposite of the masking above.
-        if sandboxed.is_some() {
-            // EAC-FR-BJLI: a sandbox mounts directories only, and the grant
-            // needs file mounts, so it is withheld whole.
-            crate::logging::log_debug(
-                sink,
-                &crate::logging::BUFFER,
-                &[crate::logging::Domain::Ai, crate::logging::Domain::Backend],
-                "sandbox execution reaches no repository and reads files instead",
-                crate::log_fields! { "turn_kind" => request.turn_kind.as_str() },
-            );
-        } else if !masked {
-            match self.repository_mounts(
-                context.fs,
-                &execution_directory,
-                &workspace,
-                aligned.is_some(),
-            ) {
+        //
+        // EAC-FR-BJLI: a sandbox launch gets the same grant, file mounts and Git
+        // environment included, so a turn in a VM reads its change set as a
+        // turn in a container does.
+        if !masked {
+            let granted = if sandboxed.is_some() {
+                // EAC-FR-TMQS: the store as a generated directory.
+                self.sandbox_repository_mounts(
+                    sink,
+                    context.fs,
+                    &execution_directory,
+                    &workspace,
+                    aligned.is_some(),
+                )
+            } else {
+                self.repository_mounts(
+                    context.fs,
+                    &execution_directory,
+                    &workspace,
+                    aligned.is_some(),
+                )
+            };
+            match granted {
                 Some((repository, env, linked)) => {
                     mounts.extend(repository);
                     env_literals.extend(env);
@@ -324,6 +330,7 @@ impl AgentCliExecutor {
                         crate::log_fields! {
                             "turn_kind" => request.turn_kind.as_str(),
                             "linked_worktree" => linked,
+                            "sandboxed" => sandboxed.is_some(),
                         },
                     );
                 }
@@ -596,6 +603,7 @@ impl AgentCliExecutor {
                         super::sandbox_launch::SandboxRun {
                             settings,
                             scope,
+                            turn_kind: request.turn_kind,
                             image: &image,
                             mounts: &mounts,
                             container: &container,

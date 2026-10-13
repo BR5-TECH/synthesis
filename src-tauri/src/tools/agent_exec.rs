@@ -55,6 +55,7 @@ mod launch;
 mod observer;
 mod repository;
 mod sandbox_launch;
+mod sandbox_store;
 
 use observer::{bounded_payload, directory_problem, merge_session, LaunchObserver};
 pub(crate) use repository::{repository_access, RepositoryAccess};
@@ -545,6 +546,10 @@ pub struct AgentCliExecutor {
     /// EAC-FR-VPNW: the pool sandbox launches go through. `None` is the one
     /// production pool; a test binds its own over a recording double.
     sandbox_pool: Option<Arc<sandbox::SandboxPool>>,
+    /// EAC-FR-QULL: the Docker backend the export fallback reads. `None` reads
+    /// the verified backend at launch, which is what production does; a test
+    /// that binds its own pool names one here or reaches none.
+    image_exporter: Option<Arc<dyn sandbox::ImageExporter>>,
 }
 
 /// EAC-FR-FNFV: what [`AgentCliExecutor::repository_mounts`] grants one launch:
@@ -559,6 +564,7 @@ impl Default for AgentCliExecutor {
             session_state_root: None,
             isolation: None,
             sandbox_pool: None,
+            image_exporter: None,
         }
     }
 }
@@ -570,6 +576,7 @@ impl AgentCliExecutor {
             session_state_root: None,
             isolation: None,
             sandbox_pool: None,
+            image_exporter: None,
         }
     }
 
@@ -612,6 +619,14 @@ impl AgentCliExecutor {
     /// The same executor launching sandboxes through `pool` (EAC-FR-VPNW).
     pub fn with_sandbox_pool(mut self, pool: Arc<sandbox::SandboxPool>) -> Self {
         self.sandbox_pool = Some(pool);
+        self
+    }
+
+    /// The same executor exporting sandbox images through `exporter`
+    /// (EAC-FR-QULL), for the real-runtime probe of EAC-FR-RVQE.
+    #[cfg(test)]
+    pub fn with_image_exporter(mut self, exporter: Arc<dyn sandbox::ImageExporter>) -> Self {
+        self.image_exporter = Some(exporter);
         self
     }
 

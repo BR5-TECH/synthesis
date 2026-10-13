@@ -21,6 +21,7 @@ pub(super) const SANDBOX_PROGRAM: &str = "microsandbox";
 pub(super) struct SandboxRun<'a> {
     pub settings: &'a SandboxSettings,
     pub scope: &'a sandbox::SandboxScope,
+    pub turn_kind: TurnKind,
     pub image: &'a str,
     pub mounts: &'a [BindMount],
     pub container: &'a descriptor::ContainerSpec,
@@ -73,6 +74,9 @@ impl AgentCliExecutor {
     /// EAC-FR-QULL: the verified Docker backend the export fallback reads, or
     /// `None` where there is none.
     fn image_exporter(&self, store: &GlobalSettingsStore) -> Option<Arc<dyn ImageExporter>> {
+        if let Some(exporter) = &self.image_exporter {
+            return Some(exporter.clone());
+        }
         if self.sandbox_pool.is_some() {
             // A test binds its own pool and reaches no Docker backend.
             return None;
@@ -126,12 +130,20 @@ impl AgentCliExecutor {
             .mounts
             .iter()
             .map(|mount| SandboxMount {
-                source: mount.source.clone(),
+                // The runtime refuses a source that goes through a symlink, such
+                // as `/tmp` on macOS, so the source is the resolved path. The
+                // target stays the path the turn knows (EAC-FR-ZKMR).
+                source: crate::changes::canonicalize_lenient(Path::new(&mount.source))
+                    .to_string_lossy()
+                    .into_owned(),
                 target: mount.target.clone(),
                 read_only: mount.read_only,
             })
             .collect();
-        let spec = SandboxSpec::new(run.image.to_string(), run.settings, mounts);
+        // EAC-FR-KTWO: the host user owns what the mounts show, and the
+        // process runs as that user.
+        let spec =
+            SandboxSpec::new(run.image.to_string(), run.container.user(), run.settings, mounts);
         // EAC-FR-15: every value on this process alone. The literals are paths
         // and names this application chose, never a secret.
         let mut env: Vec<(String, SecretString)> = run
@@ -145,6 +157,7 @@ impl AgentCliExecutor {
         let launch = SandboxLaunch {
             vm,
             spec: &spec,
+            turn_kind: run.turn_kind,
             settings: run.settings,
             exporter: self.image_exporter(context.store),
             fs: context.fs,

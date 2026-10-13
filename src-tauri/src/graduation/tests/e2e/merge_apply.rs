@@ -181,3 +181,18 @@ fn a_failing_write_blocks_the_apply_and_continue_retries_it() {
         .expect_dispatch_count(0)
         .expect_base_holds_the_merge_commit("Merge the feature stream");
 }
+
+// GXD-FR-SHNW, EAC-FR-QYBJ: the merge run of a stream dispatches its
+// `merge_work` and `merge_review` turns with the stream as the sandbox scope,
+// so a merge under Microsandbox uses the stream's VM as its runs do.
+#[test]
+fn a_merge_run_names_the_stream_as_its_sandbox_scope() {
+    conflicted_merge("merge, sandbox scope")
+        .with_merge(as_one_commit())
+        .merge_work_turn(settling())
+        .merge_review_turn(Script::answers_ready("Both intents stand."))
+        .run()
+        .expect_state(GraduationRunState::Completed)
+        .expect_dispatch_order(&["merge_work", "merge_review"])
+        .expect_sandbox_scope_is_the_stream();
+}

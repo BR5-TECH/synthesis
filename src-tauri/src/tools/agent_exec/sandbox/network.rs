@@ -48,6 +48,7 @@ mod tests {
     fn spec(block: bool, allowed: Vec<AllowedHost>) -> SandboxSpec {
         SandboxSpec {
             image: "agent:1".into(),
+            owner: "1000:1000".into(),
             cpus: 1,
             memory_gib: 1,
             mounts: Vec::<SandboxMount>::new(),

@@ -76,6 +76,12 @@ impl<'a> ExportCache<'a> {
         id: &str,
         exporter: &dyn ImageExporter,
     ) -> Result<(PathBuf, bool), String> {
+        // One export at a time in this process. Two scopes that boot one image
+        // at the same moment would otherwise write one partial file, and the
+        // prune of one would delete the other's. The second waits and finds
+        // the whole export in the cache.
+        static EXPORTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+        let _one_at_a_time = EXPORTS.lock().await;
         if id_hex(id).is_empty() {
             return Err("the Docker backend reported no image ID".to_string());
         }
@@ -95,7 +101,9 @@ impl<'a> ExportCache<'a> {
         if self.fs.file_info(&partial).is_ok() {
             self.fs.delete_path(&partial, false).map_err(|e| e.to_string())?;
         }
-        if let Err(error) = exporter.export(reference, &partial, self.fs).await {
+        // EAC-FR-ASNS: exported by its image ID, so the archive carries no tag
+        // and its load registers no reference but the ID-derived one.
+        if let Err(error) = exporter.export(id, &partial, self.fs).await {
             let _ = self.fs.delete_path(&partial, false);
             return Err(error);
         }

@@ -1,7 +1,8 @@
-//! EAC-FR-SNMS, EAC-FR-QYBJ, EAC-FR-BJLI, EAC-FR-ZIYG, EAC-FR-PZNB,
-//! EAC-FR-DARS, EAC-FR-NCSA — a graduation launch under Microsandbox runs as
-//! one process in its scope's VM, with the directories it needs and nothing
-//! else, and every other launch stays a Docker launch.
+//! EAC-FR-SNMS, EAC-FR-QYBJ, EAC-FR-BJLI, EAC-FR-TMQS, EAC-FR-ZIYG,
+//! EAC-FR-PZNB, EAC-FR-DARS, EAC-FR-NCSA — a graduation launch under
+//! Microsandbox runs as one process in its scope's VM, with the mounts a Docker
+//! launch has and the repository as a generated store, and every other launch
+//! stays a Docker launch.
 
 use super::sandbox::{
     BootError, BootImage, SandboxFailureCause, SandboxPool, SandboxProcess, SandboxRuntime,
@@ -116,6 +117,10 @@ impl SandboxRuntime for RecordingSandbox {
         })
     }
 
+    fn refresh<'a>(&'a self, _vm: &'a str) -> BoxFuture<'a, Result<(), String>> {
+        Box::pin(async move { Ok(()) })
+    }
+
     fn stop<'a>(&'a self, _vm: &'a str) -> BoxFuture<'a, ()> {
         Box::pin(async move {})
     }
@@ -194,6 +199,8 @@ fn a_graduation_turn_runs_as_one_process_in_the_vm() {
 
     let spec = sandbox.only_boot();
     assert_eq!(spec.image, test_image_reference("claude_code"));
+    // EAC-FR-KTWO: the host user owns what the mounts show.
+    assert_eq!(spec.owner, format!("{uid}:{gid}"));
     assert_eq!(spec.cpus, 3);
     assert_eq!(spec.memory_gib, 6);
     assert!(spec.network.block_local_network);
@@ -204,6 +211,8 @@ fn a_graduation_turn_runs_as_one_process_in_the_vm() {
 /// set on the process.
 #[test]
 fn the_vm_mounts_the_execution_directory_and_session_state_only() {
+    // A directory that belongs to no repository gets no repository access, and
+    // launches all the same (EAC-FR-FNFV).
     let harness = harness_for("claude_code");
     let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
     launch(
@@ -226,17 +235,23 @@ fn the_vm_mounts_the_execution_directory_and_session_state_only() {
     assert!(!process.env.is_empty(), "the launch environment reaches the process");
 }
 
-/// EAC-FR-BJLI: the read-only repository access is withheld in the VM, because
-/// the sandbox mounts directories only.
+// EAC-FR-BJLI, EAC-FR-TMQS, EAC-FR-WBDE, EAC-FR-FNFV: a turn in the VM reaches
+// the repository a turn in a container reaches. The store stands at its own
+// path as a generated directory with an empty `config`, each presented entry is
+// mounted read-only inside it, the `.git` pin is read-only, and the Git
+// environment is the container's.
 #[test]
-fn the_repository_grant_is_withheld_in_the_vm() {
+fn the_vm_reaches_the_repository_through_a_generated_store() {
     let harness = harness_for("claude_code");
     linked_worktree_at(&harness.sessions_root(), &harness.workspace());
-    // The same launch under Docker reaches its repository read-only.
+    let store = crate::changes::canonicalize_lenient(&harness.sessions_root().join("primary/.git"));
+    let store = store.to_string_lossy().into_owned();
+    let workspace = harness.workspace_target();
+
     let docker = RecordingRuntime::replying(&valid_claude_stdout());
     run(&harness, docker.clone(), task("go")).expect("runs");
     let container = docker.only_run().container.expect("the specification");
-    assert!(container.mounts.iter().any(|m| m.read_only));
+    assert!(container.mounts.iter().any(|m| m.target == store && m.read_only));
 
     let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
     launch(
@@ -249,8 +264,76 @@ fn the_repository_grant_is_withheld_in_the_vm() {
     )
     .expect("runs");
     let spec = sandbox.only_boot();
-    assert!(spec.mounts.iter().all(|m| !m.read_only), "{:?}", spec.mounts);
-    assert!(!sandbox.only_process().env.contains_key("GIT_OPTIONAL_LOCKS"));
+    let at = |target: &str| spec.mounts.iter().find(|m| m.target == target);
+
+    let generated = at(&store).expect("the store stands at its own path");
+    assert!(!generated.read_only, "the generated directory is the one writable part");
+    assert_ne!(generated.source, store, "the store itself is never mounted whole");
+    let config = Path::new(&generated.source).join("config");
+    assert_eq!(std::fs::read(&config).expect("an empty config").len(), 0);
+
+    // Exactly the presented entries the store holds, each read-only from the
+    // store itself, and nothing else under the store's path.
+    let existing: Vec<String> = super::super::sandbox_store::PRESENTED_STORE_ENTRIES
+        .iter()
+        .filter(|entry| Path::new(&store).join(entry).exists())
+        .map(|entry| format!("{store}/{entry}"))
+        .collect();
+    assert!(existing.iter().any(|t| t.ends_with("/objects")), "{existing:?}");
+    let mut under: Vec<String> = spec
+        .mounts
+        .iter()
+        .filter(|m| m.target.starts_with(&format!("{store}/")))
+        .map(|m| m.target.clone())
+        .collect();
+    under.sort();
+    let mut expected = existing.clone();
+    expected.sort();
+    assert_eq!(under, expected);
+    for target in &existing {
+        let mount = at(target).unwrap();
+        assert!(mount.read_only, "{target}");
+        assert_eq!(&mount.source, target, "{target}");
+    }
+    assert!(at(&format!("{store}/config")).is_none(), "no mount over config");
+    assert!(at(&format!("{store}/hooks")).is_none(), "no hooks");
+    let pin = at(&format!("{workspace}/.git")).expect("the .git pin");
+    assert!(pin.read_only);
+
+    let env = sandbox.only_process().env;
+    for (name, value) in container.env_literals.iter().filter(|(name, _)| name.starts_with("GIT_"))
+    {
+        assert_eq!(env.get(name), Some(value), "{name}");
+    }
+    assert_eq!(env.get("GIT_OPTIONAL_LOCKS").map(String::as_str), Some("0"));
+}
+
+// EAC-FR-WBDE, EAC-FR-HXDN: a later launch removes what a turn added to the
+// generated store and empties its `config` again. It keeps the directory and
+// its mount points, so a reused VM still holds them.
+#[test]
+fn a_generated_store_drops_what_a_turn_added_and_keeps_its_mount_points() {
+    let harness = harness_for("claude_code");
+    let generated = harness.sessions_root().join("repository-store-test");
+    let entries = [("objects", true), ("HEAD", false)];
+    super::super::sandbox_store::prepare_generated_store(&harness.fs, &generated, &entries)
+        .expect("prepared");
+    let before = crate::fs::probe_directory_identity(&generated);
+    let objects = crate::fs::probe_directory_identity(&generated.join("objects"));
+
+    std::fs::write(generated.join("config"), b"[remote]").unwrap();
+    std::fs::create_dir(generated.join("hooks")).unwrap();
+    std::fs::write(generated.join("hooks/post-checkout"), b"#!/bin/sh").unwrap();
+    std::fs::write(generated.join("index.lock"), b"").unwrap();
+    super::super::sandbox_store::prepare_generated_store(&harness.fs, &generated, &entries)
+        .expect("prepared again");
+
+    assert_eq!(std::fs::read(generated.join("config")).unwrap().len(), 0);
+    assert!(!generated.join("hooks").exists());
+    assert!(!generated.join("index.lock").exists());
+    assert!(generated.join("HEAD").is_file());
+    assert_eq!(crate::fs::probe_directory_identity(&generated), before);
+    assert_eq!(crate::fs::probe_directory_identity(&generated.join("objects")), objects);
 }
 
 /// EAC-FR-DARS: under Microsandbox, Docker-in-Docker adds nothing and its
@@ -380,4 +463,59 @@ fn a_turn_cancelled_before_its_vm_is_there_ends_cancelled() {
     assert!(sandbox.boots.lock().unwrap().is_empty());
     assert!(sandbox.processes.lock().unwrap().is_empty());
     assert_eq!(docker.launched(), 0);
+}
+
+// EAC-FR-WBDE, EAC-FR-HXDN: a symbolic link a turn put in place of `config` is
+// never followed: the file it names keeps its content, and the next launch
+// stands on a generated store made again, with an empty `config` and another
+// identity, so the scope's VM is rebooted onto it rather than reused.
+#[test]
+fn a_link_left_in_the_generated_store_is_never_followed() {
+    let harness = harness_for("claude_code");
+    linked_worktree_at(&harness.sessions_root(), &harness.workspace());
+    let store = crate::changes::canonicalize_lenient(&harness.sessions_root().join("primary/.git"));
+    let store = store.to_string_lossy().into_owned();
+    let sandbox = RecordingSandbox::replying(&valid_claude_stdout());
+    let executor = AgentCliExecutor::new(RecordingRuntime::replying(""))
+        .with_session_state_root(harness.sessions_root())
+        .with_isolation(microsandbox())
+        .with_sandbox_pool(Arc::new(SandboxPool::new(sandbox.clone())));
+    let work = || {
+        block_on(executor.execute_agent_cli(
+            &Silent,
+            &harness.context(),
+            AgentExecutionRequest {
+                sandbox_scope: scope(),
+                turn_kind: TurnKind::Work,
+                execution_directory: harness.workspace(),
+                task: task("go"),
+                cancellation: CancellationToken::new(),
+                activity: None,
+                durable_output: None,
+                supplementary_mount: None,
+            },
+        ))
+        .expect("runs")
+    };
+    let generated = || {
+        let boots = sandbox.boots.lock().unwrap();
+        let spec = &boots.last().expect("a boot").1;
+        PathBuf::from(&spec.mounts.iter().find(|m| m.target == store).unwrap().source)
+    };
+
+    work();
+    let first = generated();
+    let before = crate::fs::probe_directory_identity(&first);
+    let outside = harness.sessions_root().join("outside");
+    std::fs::write(&outside, b"keep").unwrap();
+    std::fs::remove_file(first.join("config")).unwrap();
+    std::os::unix::fs::symlink(&outside, first.join("config")).unwrap();
+
+    work();
+    assert_eq!(sandbox.boots.lock().unwrap().len(), 2, "the VM is rebooted, not reused");
+    assert_eq!(generated(), first, "the store keeps its path");
+    assert_eq!(std::fs::read(&outside).unwrap(), b"keep");
+    let config = std::fs::symlink_metadata(first.join("config")).unwrap();
+    assert!(config.is_file() && config.len() == 0);
+    assert_ne!(crate::fs::probe_directory_identity(&first), before);
 }

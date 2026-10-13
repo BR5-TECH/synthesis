@@ -1,12 +1,13 @@
 //! The production binding of the sandbox seam: the embedded microsandbox
-//! runtime (EAC-FR-HMBJ). Compiled for Linux and macOS alone, and never under
-//! test: a test binds a recording double through the same seam (EAC-FR-VPNW).
+//! runtime (EAC-FR-HMBJ). Compiled for Linux and macOS alone. A unit test binds
+//! a recording double through the same seam (EAC-FR-VPNW); only the ignored
+//! real-runtime probe of EAC-FR-RVQE binds this one under test.
 
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 
-use microsandbox::sandbox::PullPolicy;
+use microsandbox::sandbox::{PullPolicy, StatVirtualization};
 use microsandbox::{ExecEvent, Image, MicrosandboxError, Sandbox};
 
 use super::super::runtime::{
@@ -20,11 +21,17 @@ use super::{
 const POLL_SLICE: Duration = Duration::from_millis(100);
 /// How long a killed process is given to report its end.
 const KILL_GRACE: Duration = Duration::from_secs(10);
+/// EAC-FR-JRVY: the command that drops the guest's file caches.
+const DROP_CACHES: &str = "sync; echo 2 > /proc/sys/vm/drop_caches";
+/// EAC-FR-JRVY: how long a cache drop may take before the VM is rebooted.
+const REFRESH_BOUND: Duration = Duration::from_secs(30);
 
-/// One booted VM: its handle and the entrypoint of the image it booted from.
+/// One booted VM: its handle, and the entrypoint and the `Env` of the image it
+/// booted from.
 struct BootedVm {
     sandbox: Sandbox,
     entrypoint: Vec<String>,
+    image_env: Vec<String>,
 }
 
 #[derive(Default)]
@@ -124,12 +131,15 @@ impl SandboxRuntime for MicrosandboxRuntime {
                 // is replaced.
                 .replace()
                 .network(move |n| n.policy(policy));
-            // EAC-FR-BJLI: the directories the launch names, and nothing else.
+            // EAC-FR-BJLI: the mounts the launch names, and nothing else.
+            // EAC-FR-KTWO: each shows the real host owner and mode, so the host
+            // user the process runs as can write its own working copy, and the
+            // runtime writes no ownership attribute on a host file.
             for mount in &spec.mounts {
                 let source = mount.source.clone();
                 let read_only = mount.read_only;
                 builder = builder.volume(mount.target.as_str(), move |m| {
-                    let m = m.bind(source);
+                    let m = m.bind(source).stat_virtualization(StatVirtualization::Off);
                     if read_only {
                         m.readonly()
                     } else {
@@ -142,8 +152,11 @@ impl SandboxRuntime for MicrosandboxRuntime {
             // (AVI-FR-04), and the vendor arguments follow it, as `docker run`
             // places them. A boot that cannot read it fails, so a vendor
             // argument is never run as the program. The pool logs the cause.
-            let entrypoint = match Image::inspect(reference).await {
-                Ok(detail) => detail.config.and_then(|c| c.entrypoint).unwrap_or_default(),
+            let (entrypoint, image_env) = match Image::inspect(reference).await {
+                Ok(detail) => detail
+                    .config
+                    .map(|c| (c.entrypoint.unwrap_or_default(), c.env))
+                    .unwrap_or_default(),
                 Err(error) => {
                     Self::discard(vm, sandbox).await;
                     return Err(BootError::Failed(
@@ -159,8 +172,11 @@ impl SandboxRuntime for MicrosandboxRuntime {
                     "the image names no entrypoint".to_string(),
                 ));
             }
-            let previous =
-                self.vms.lock().await.insert(vm.to_string(), BootedVm { sandbox, entrypoint });
+            let previous = self
+                .vms
+                .lock()
+                .await
+                .insert(vm.to_string(), BootedVm { sandbox, entrypoint, image_env });
             if let Some(previous) = previous {
                 let _ = previous.sandbox.stop().await;
             }
@@ -207,10 +223,10 @@ impl SandboxRuntime for MicrosandboxRuntime {
                 return Err(RuntimeError::LaunchFailed("the image names no program".into()));
             }
             let program = argv.remove(0);
-            let env: Vec<(String, String)> = process
-                .env
-                .iter()
-                .map(|(name, value)| (name.clone(), value.expose().to_string()))
+            // EAC-FR-PWLA: the image's `Env` first, and the launch's over it.
+            let env: Vec<(String, String)> = super::compose_env(&booted.image_env, &process.env)
+                .into_iter()
+                .map(|(name, value)| (name, value.expose().to_string()))
                 .collect();
             let workdir = process.workdir.to_string();
             let user = process.user.clone();
@@ -281,6 +297,45 @@ impl SandboxRuntime for MicrosandboxRuntime {
                 stdout: stdout.finish(process.observer),
                 stderr: stderr.finish(process.observer),
             })
+        })
+    }
+
+    fn refresh<'a>(&'a self, vm: &'a str) -> BoxFuture<'a, Result<(), String>> {
+        Box::pin(async move {
+            let vms = self.vms.lock().await;
+            let Some(booted) = vms.get(vm) else {
+                return Err("the sandbox VM is not running".to_string());
+            };
+            // EAC-FR-JRVY: as root, a command of this module and never of the
+            // agent. It frees the entries the guest keeps for its mounts.
+            let mut handle = booted
+                .sandbox
+                .exec_stream_with("/bin/sh", |o| {
+                    o.args(["-c", DROP_CACHES]).user("0:0").stdin_null().tty(false)
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+            drop(vms);
+            let ended = tokio::time::timeout(REFRESH_BOUND, async {
+                while let Some(event) = handle.recv().await {
+                    match event {
+                        ExecEvent::Exited { code } => return Some(code),
+                        ExecEvent::Failed(_) => return None,
+                        _ => {}
+                    }
+                }
+                None
+            })
+            .await;
+            match ended {
+                Ok(Some(0)) => Ok(()),
+                Ok(Some(code)) => Err(format!("the cache drop exited with {code}")),
+                Ok(None) => Err("the cache drop did not run".to_string()),
+                Err(_) => {
+                    let _ = handle.kill().await;
+                    Err("the cache drop did not end in time".to_string())
+                }
+            }
         })
     }
 

@@ -50,7 +50,6 @@ pub(super) mod export;
 
 pub use cancel::CancellationToken;
 use capture::read_bounded;
-#[cfg(not(test))]
 pub(in crate::tools::agent_exec) use capture::StreamCapture;
 
 /// Which of the child's two streams a line arrived on (EAC-FR-32).

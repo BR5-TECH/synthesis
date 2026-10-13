@@ -592,3 +592,32 @@ fn a_run_that_blocked_in_the_review_resumes_in_the_review() {
         .expect_dispatch_order(&["review"])
         .expect_pass(1);
 }
+
+// GXD-FR-SHNW, EAC-FR-QYBJ: two runs in a row on one stream each dispatch every
+// turn, work and review, with the stream as the sandbox scope, so both use the
+// stream's VM.
+#[test]
+fn sequential_runs_on_a_stream_name_the_stream_as_their_sandbox_scope() {
+    Scenario::named("sequential runs, one sandbox scope")
+        .with_run_on_stream("second", "editor", "Write the header.")
+        .with_stream("editor")
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
+        .review_turn(Script::answers_ready("The work answers the prompt."))
+        .run()
+        .expect_state(GraduationRunState::Completed)
+        .expect_commits(1)
+        .expect_dispatch_order(&["work", "review"])
+        .expect_sandbox_scope_is_the_stream()
+        .driving(
+            "second",
+            vec![
+                Script::reports_success().writes("src/header.ts", "1\n"),
+                Script::answers_ready("The work answers the prompt."),
+            ],
+        )
+        .expect_state(GraduationRunState::Completed)
+        .expect_commits(1)
+        .expect_committed_paths(&["src/header.ts"])
+        .expect_dispatch_order(&["work", "review"])
+        .expect_sandbox_scope_is_the_stream();
+}

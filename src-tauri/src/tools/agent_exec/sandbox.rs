@@ -17,6 +17,7 @@ use std::time::Duration;
 use super::runtime::{
     BoxFuture, CancellationToken, RunEnd, RuntimeError, RuntimeOutcome, StreamObserver,
 };
+use super::TurnKind;
 use crate::agentic::SecretString;
 use crate::fs::FsAccess;
 use crate::isolation::{AllowedHost, SandboxSettings};
@@ -24,8 +25,10 @@ use crate::log_fields;
 use crate::logging::{self, Domain, LogSink, BUFFER};
 
 pub mod images;
-#[cfg(all(not(test), any(target_os = "linux", target_os = "macos")))]
-mod micro;
+// Compiled under test too, because the real-runtime probe of EAC-FR-RVQE binds
+// it. A test build still uses `NoSandbox` as its production runtime.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub mod micro;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod network;
 
@@ -72,11 +75,14 @@ pub struct SandboxNetwork {
 }
 
 /// Everything a VM boots with (EAC-FR-UEFI). Two launches whose specs are
-/// equal share one VM; any difference boots a new one.
+/// equal can share one VM; any difference boots a new one.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SandboxSpec {
     /// The project's configured reference (EAC-FR-38).
     pub image: String,
+    /// EAC-FR-KTWO: `<uid>:<gid>`, the host user's. Every mount shows the real
+    /// host owner, and the process runs as this user.
+    pub owner: String,
     pub cpus: u32,
     pub memory_gib: u32,
     /// Sorted, so an order of composition does not count as a difference.
@@ -87,6 +93,7 @@ pub struct SandboxSpec {
 impl SandboxSpec {
     pub fn new(
         image: String,
+        owner: String,
         settings: &SandboxSettings,
         mut mounts: Vec<SandboxMount>,
     ) -> SandboxSpec {
@@ -94,6 +101,7 @@ impl SandboxSpec {
         mounts.dedup();
         SandboxSpec {
             image,
+            owner,
             cpus: settings.cpus,
             memory_gib: settings.memory_gib,
             mounts,
@@ -196,6 +204,29 @@ pub struct SandboxProcess<'a> {
     pub observer: Option<&'a dyn StreamObserver>,
 }
 
+/// EAC-FR-PWLA: the environment of a sandbox process. The image's `Env` comes
+/// first, and a variable of the launch replaces an image variable of the same
+/// name, as `docker run` composes them. An image entry with no `=` names no
+/// value and is left out.
+pub fn compose_env(
+    image_env: &[String],
+    process_env: &[(String, SecretString)],
+) -> Vec<(String, SecretString)> {
+    let mut composed: Vec<(String, SecretString)> = Vec::new();
+    for entry in image_env {
+        let Some((name, value)) = entry.split_once('=') else {
+            continue;
+        };
+        composed.retain(|(existing, _)| existing != name);
+        composed.push((name.to_string(), SecretString::new(value.to_string())));
+    }
+    for (name, value) in process_env {
+        composed.retain(|(existing, _)| existing != name);
+        composed.push((name.clone(), SecretString::new(value.expose().to_string())));
+    }
+    composed
+}
+
 /// EAC-FR-VPNW: every VM operation goes through this seam.
 pub trait SandboxRuntime: Send + Sync {
     /// Boot `vm` with `spec` from `image`, replacing a VM left under that name.
@@ -221,6 +252,10 @@ pub trait SandboxRuntime: Send + Sync {
         process: SandboxProcess<'a>,
     ) -> BoxFuture<'a, Result<RuntimeOutcome, RuntimeError>>;
 
+    /// EAC-FR-JRVY: drop the guest's file caches of the running `vm`, so the
+    /// next process sees every change the host made to a mount.
+    fn refresh<'a>(&'a self, vm: &'a str) -> BoxFuture<'a, Result<(), String>>;
+
     /// Stop and remove `vm`. A VM that is not there is not an error.
     fn stop<'a>(&'a self, vm: &'a str) -> BoxFuture<'a, ()>;
 }
@@ -230,7 +265,9 @@ pub trait ImageExporter: Send + Sync {
     /// The image ID (`sha256:<hex>`) the backend holds for `reference`.
     fn image_id<'a>(&'a self, reference: &'a str) -> BoxFuture<'a, Result<String, String>>;
 
-    /// Write the `docker save` archive of `reference` to `destination`.
+    /// Write the `docker save` archive of `reference` to `destination`. The
+    /// cache names the image by its ID, so the archive carries no tag
+    /// (EAC-FR-ASNS).
     fn export<'a>(
         &'a self,
         reference: &'a str,
@@ -243,10 +280,20 @@ pub trait ImageExporter: Send + Sync {
 // The pool (EAC-FR-DWBS, EAC-FR-UEFI)
 // ---------------------------------------------------------------------------
 
-/// One VM's slot: the spec the VM booted with and the stop epoch it booted in.
-/// Held for the whole of a launch, so launches of one scope run one at a time
-/// (EAC-FR-DWBS).
-type Slot = Arc<tokio::sync::Mutex<Option<(SandboxSpec, u64)>>>;
+/// What a booted VM booted with.
+#[derive(Clone)]
+struct Booted {
+    spec: SandboxSpec,
+    /// EAC-FR-HXDN: the device and the inode of each read/write mount source,
+    /// in the order of `spec.mounts`.
+    identities: Vec<Option<(u64, u64)>>,
+    /// The stop epoch it booted in (EAC-FR-ABHG).
+    epoch: u64,
+}
+
+/// One VM's slot. Held for the whole of a launch, so launches of one scope run
+/// one at a time (EAC-FR-DWBS).
+type Slot = Arc<tokio::sync::Mutex<Option<Booted>>>;
 
 /// EAC-FR-DWBS: at most one VM per scope, and the record of what it booted
 /// with.
@@ -265,6 +312,8 @@ pub struct SandboxPool {
 pub struct SandboxLaunch<'a> {
     pub vm: &'a str,
     pub spec: &'a SandboxSpec,
+    /// EAC-FR-HXDN: a `review` or `merge_review` launch never reuses a VM.
+    pub turn_kind: TurnKind,
     pub settings: &'a SandboxSettings,
     /// The verified Docker backend, where there is one (EAC-FR-QULL).
     pub exporter: Option<Arc<dyn ImageExporter>>,
@@ -343,8 +392,24 @@ impl SandboxPool {
             booted = slot.lock() => booted,
         };
         let epoch = self.epoch.load(std::sync::atomic::Ordering::SeqCst);
-        match booted.as_ref() {
-            Some((spec, booted_in)) if spec == launch.spec && *booted_in == epoch => {
+        let identities = source_identities(launch.spec);
+        let mut decision = reuse(booted.as_ref(), &launch, &identities, epoch);
+        if matches!(decision, Reuse::Yes) {
+            // EAC-FR-JRVY: a reused VM sees what the host changed since the
+            // previous launch, or it is rebooted.
+            if let Err(message) = self.runtime.refresh(launch.vm).await {
+                logging::log_warn(
+                    sink,
+                    &BUFFER,
+                    &DOMAINS,
+                    "sandbox VM caches could not be dropped",
+                    log_fields! { "vm" => launch.vm, "message" => message.as_str() },
+                );
+                decision = Reuse::No("refresh_failed");
+            }
+        }
+        match decision {
+            Reuse::Yes => {
                 logging::log_info(
                     sink,
                     &BUFFER,
@@ -353,14 +418,19 @@ impl SandboxPool {
                     log_fields! { "vm" => launch.vm, "image" => launch.spec.image.as_str() },
                 );
             }
-            previous => {
-                if previous.is_some() {
+            decision => {
+                if let Reuse::No(reason) = decision {
                     logging::log_info(
                         sink,
                         &BUFFER,
                         &DOMAINS,
                         "sandbox VM rebooted for a changed launch",
-                        log_fields! { "vm" => launch.vm, "image" => launch.spec.image.as_str() },
+                        log_fields! {
+                            "vm" => launch.vm,
+                            "image" => launch.spec.image.as_str(),
+                            "reason" => reason,
+                            "turn_kind" => launch.turn_kind.as_str(),
+                        },
                     );
                     self.runtime.stop(launch.vm).await;
                 }
@@ -380,7 +450,7 @@ impl SandboxPool {
                     self.runtime.stop(launch.vm).await;
                     return Ok(cancelled_outcome());
                 }
-                *booted = Some((launch.spec.clone(), epoch));
+                *booted = Some(Booted { spec: launch.spec.clone(), identities, epoch });
             }
         }
         let outcome = self.runtime.run(launch.vm, process).await;
@@ -446,55 +516,37 @@ impl SandboxPool {
         }
     }
 
-    /// EAC-FR-QULL / EAC-FR-ASNS / EAC-FR-IGBY: boot from a registry first,
-    /// and from an export of the verified Docker backend where that fails.
+    /// EAC-FR-QULL / EAC-FR-ASNS / EAC-FR-IGBY: boot from the export of the
+    /// image the verified Docker backend holds, and from a registry where no
+    /// backend holds it.
     async fn boot<S>(&self, sink: &S, launch: &SandboxLaunch<'_>) -> Result<(), SandboxLaunchError>
     where
         S: LogSink + Clone + Send + Sync + 'static,
     {
         let image = launch.spec.image.as_str();
-        let registry = BootImage::Registry(image.to_string());
-        let pull_message = match self.runtime.boot(launch.vm, launch.spec, &registry).await {
-            Ok(()) => {
-                logging::log_info(
-                    sink,
-                    &BUFFER,
-                    &DOMAINS,
-                    "sandbox VM booted from the registry image",
-                    log_fields! {
-                        "vm" => launch.vm,
-                        "image" => image,
-                        "cpus" => launch.spec.cpus,
-                        "memory_gib" => launch.spec.memory_gib,
-                        "block_local_network" => launch.spec.network.block_local_network,
-                    },
-                );
-                return Ok(());
-            }
-            Err(BootError::Failed(cause, message)) => {
-                return Err(self.failed(sink, launch.vm, image, cause, message));
-            }
-            Err(BootError::ImageNotFound(message)) => message,
+        let local = match launch.exporter.as_ref() {
+            Some(exporter) => match exporter.image_id(image).await {
+                Ok(id) => Some((exporter, id)),
+                Err(message) => {
+                    logging::log_info(
+                        sink,
+                        &BUFFER,
+                        &DOMAINS,
+                        "sandbox image is not in the Docker backend, booting from a registry",
+                        log_fields! {
+                            "vm" => launch.vm,
+                            "image" => image,
+                            "message" => message.as_str(),
+                        },
+                    );
+                    None
+                }
+            },
+            None => None,
         };
-        logging::log_warn(
-            sink,
-            &BUFFER,
-            &DOMAINS,
-            "sandbox image not available from a registry, exporting it from Docker",
-            log_fields! { "vm" => launch.vm, "image" => image, "message" => pull_message.as_str() },
-        );
-        let Some(exporter) = launch.exporter.as_ref() else {
-            return Err(self.failed(
-                sink,
-                launch.vm,
-                image,
-                SandboxFailureCause::ImageUnavailable,
-                format!("{pull_message}; no verified Docker backend to export from"),
-            ));
+        let Some((exporter, id)) = local else {
+            return self.boot_from_registry(sink, launch).await;
         };
-        let id = exporter.image_id(image).await.map_err(|message| {
-            self.failed(sink, launch.vm, image, SandboxFailureCause::ImageUnavailable, message)
-        })?;
         let cache = images::ExportCache::new(launch.fs, launch.export_root.clone());
         let (archive, hit) =
             cache.ensure(image, &id, exporter.as_ref()).await.map_err(|message| {
@@ -542,6 +594,49 @@ impl SandboxPool {
             Err(BootError::Failed(cause, message)) => {
                 Err(self.failed(sink, launch.vm, image, cause, message))
             }
+        }
+    }
+
+    /// EAC-FR-QULL: boot from the configured reference, which the sandbox
+    /// runtime pulls through a registry where it does not hold it.
+    async fn boot_from_registry<S>(
+        &self,
+        sink: &S,
+        launch: &SandboxLaunch<'_>,
+    ) -> Result<(), SandboxLaunchError>
+    where
+        S: LogSink + Clone + Send + Sync + 'static,
+    {
+        let image = launch.spec.image.as_str();
+        let registry = BootImage::Registry(image.to_string());
+        match self.runtime.boot(launch.vm, launch.spec, &registry).await {
+            Ok(()) => {
+                logging::log_info(
+                    sink,
+                    &BUFFER,
+                    &DOMAINS,
+                    "sandbox VM booted from the registry image",
+                    log_fields! {
+                        "vm" => launch.vm,
+                        "image" => image,
+                        "cpus" => launch.spec.cpus,
+                        "memory_gib" => launch.spec.memory_gib,
+                        "block_local_network" => launch.spec.network.block_local_network,
+                    },
+                );
+                Ok(())
+            }
+            Err(BootError::Failed(cause, message)) => {
+                Err(self.failed(sink, launch.vm, image, cause, message))
+            }
+            // EAC-FR-NCSA: in no registry and in no verified Docker backend.
+            Err(BootError::ImageNotFound(message)) => Err(self.failed(
+                sink,
+                launch.vm,
+                image,
+                SandboxFailureCause::ImageUnavailable,
+                message,
+            )),
         }
     }
 
@@ -615,8 +710,54 @@ impl SandboxPool {
     pub fn booted(&self, vm: &str) -> Option<SandboxSpec> {
         let slot = self.slot(vm);
         let booted = slot.try_lock().ok()?.clone();
-        booted.map(|(spec, _)| spec)
+        booted.map(|booted| booted.spec)
     }
+}
+
+/// Whether a launch can run in the VM its scope has booted.
+enum Reuse {
+    Yes,
+    /// The scope holds no VM.
+    Empty,
+    /// The scope holds a VM that this launch cannot use, for the reason named.
+    No(&'static str),
+}
+
+/// EAC-FR-UEFI / EAC-FR-HXDN: a launch reuses the VM only where it booted in
+/// this epoch with an equal spec, every read/write source is still the same
+/// directory, and the turn is not a review kind. An identity that cannot be
+/// read is never the same.
+fn reuse(
+    booted: Option<&Booted>,
+    launch: &SandboxLaunch<'_>,
+    identities: &[Option<(u64, u64)>],
+    epoch: u64,
+) -> Reuse {
+    let Some(booted) = booted else {
+        return Reuse::Empty;
+    };
+    if booted.epoch != epoch || &booted.spec != launch.spec {
+        return Reuse::No("changed_spec");
+    }
+    if matches!(launch.turn_kind, TurnKind::Review | TurnKind::MergeReview) {
+        return Reuse::No("fresh_checkout");
+    }
+    let same = booted.identities.len() == identities.len()
+        && booted.identities.iter().zip(identities).all(|(a, b)| a.is_some() && a == b);
+    if !same {
+        return Reuse::No("changed_directory");
+    }
+    Reuse::Yes
+}
+
+/// EAC-FR-HXDN: the identity of each read/write mount source, in the order of
+/// the spec's mounts.
+fn source_identities(spec: &SandboxSpec) -> Vec<Option<(u64, u64)>> {
+    spec.mounts
+        .iter()
+        .filter(|mount| !mount.read_only)
+        .map(|mount| crate::fs::probe_directory_identity(Path::new(&mount.source)))
+        .collect()
 }
 
 /// EAC-FR-MIQG: ends when `cancel` is cancelled, and never before.
@@ -701,6 +842,10 @@ impl SandboxRuntime for NoSandbox {
         _process: SandboxProcess<'a>,
     ) -> BoxFuture<'a, Result<RuntimeOutcome, RuntimeError>> {
         Box::pin(async move { Err(RuntimeError::Unavailable) })
+    }
+
+    fn refresh<'a>(&'a self, _vm: &'a str) -> BoxFuture<'a, Result<(), String>> {
+        Box::pin(async move { Err("this build holds no microsandbox runtime".to_string()) })
     }
 
     fn stop<'a>(&'a self, _vm: &'a str) -> BoxFuture<'a, ()> {

@@ -10,11 +10,11 @@ use super::*;
 /// them is reversible at any time — archiving retires a draft from the Drafts
 /// panel's default view and takes nothing off disk.
 ///
-/// DRS-FR-VKQO: `published` is a fourth position, set by exactly one path —
-/// `set_draft_published`, which `GHP-github-publication.md` alone calls once a
-/// GitHub issue exists. It is **not** read-only: a published draft edits,
-/// renames, graduates, and archives exactly as an active one does
-/// (DRS-FR-OGZC).
+/// DRS-FR-VKQO: `published` is a **legacy** position that no operation sets.
+/// A record stored with it reads `published` until the draft's next save,
+/// rename, or move, which stores `active`, or its next archive, which stores
+/// `archived`. It is **not** read-only: such a draft edits, renames,
+/// graduates, and archives exactly as an active one does (DRS-FR-OGZC).
 ///
 /// DRS-FR-20: `graduated` is a third position and a *terminal* one, reached by
 /// exactly one path — `set_draft_graduated`, which `GRD-graduation.md` alone
@@ -56,8 +56,8 @@ where
     Ok(match raw.as_str() {
         "archived" => DraftStatus::Archived,
         "graduated" => DraftStatus::Graduated,
-        // DRS-FR-ULKN: a record written before publication existed carries no
-        // such value, so this arm only ever reads one this application wrote.
+        // DRS-FR-VKQO: a legacy value. It is read as it stands and is not
+        // migrated on load; the next write of the draft replaces it.
         "published" => DraftStatus::Published,
         // DRS-FR-WFLY: written by `create_github_shadow_draft` alone.
         "github_shadow" => DraftStatus::GithubShadow,
@@ -207,6 +207,31 @@ pub struct DraftSummary {
     /// DRS-FR-XDWS: the issue link of a GitHub-shadow draft, or `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub github_issue: Option<GithubIssueLink>,
+    /// DRS-FR-PXHW: the newest record of the draft's publication store, on
+    /// every status, or `None` where the history is empty or the store is
+    /// absent or unreadable. The Drafts panel shows its publication marker
+    /// from this (DRP-FR-TQUB).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publication: Option<DraftListPublication>,
+    /// DRS-FR-PXHW: the publication store is present but does not parse. The
+    /// row then carries no `publication`, and `list_drafts` logs a warning.
+    /// Not sent to the frontend.
+    #[serde(skip)]
+    pub publication_unreadable: bool,
+}
+
+/// DRS-FR-PXHW: the newest record of a draft's publication store
+/// (DRS-FR-EJBM), as one row of `list_drafts` carries it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftListPublication {
+    pub repository_host: String,
+    pub repository_owner: String,
+    pub repository_name: String,
+    pub issue_number: u64,
+    pub issue_url: String,
+    /// RFC 3339 UTC.
+    pub published_at: String,
 }
 
 /// One of the author's organising directories under the drafts root

@@ -216,6 +216,12 @@ pub(super) fn hierarchy_from(
         // already found. No file's contents are read, so the walk still costs a
         // directory read per draft.
         let prompt_activity_at = prompt.and_then(|name| prompt_activity_at(root, &at.dir, &name));
+        // DRS-FR-PXHW: the newest publication record, on every status. A store
+        // that does not parse is reported on this row alone.
+        let (publication, publication_unreadable) = match publication_at(root, &at.dir) {
+            Ok(publication) => (publication, false),
+            Err(()) => (None, true),
+        };
         drafts.push(DraftSummary {
             id: record.id,
             name: record.name,
@@ -231,12 +237,39 @@ pub(super) fn hierarchy_from(
             graduation: None,
             // DRS-FR-XDWS: the list reports the link of a shadow draft.
             github_issue: record.github_issue,
+            publication,
+            publication_unreadable,
         });
     }
     // DRP-FR-21: most-recent-activity first, tie-broken by id so the order is
     // total and a reload never reshuffles two drafts touched in the same second.
     drafts.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then_with(|| a.id.cmp(&b.id)));
     DraftHierarchy { folders, drafts }
+}
+
+/// DRS-FR-PXHW: the newest record of the publication store in `dir`.
+///
+/// An absent store and an empty history both give `Ok(None)`. A store that does
+/// not parse gives `Err(())`: it is neither repaired nor rewritten
+/// (DRS-FR-GWNI), and it never makes the draft inconsistent (DRS-FR-RJYF).
+fn publication_at(
+    root: &crate::fs::RootFs,
+    dir: &Path,
+) -> Result<Option<DraftListPublication>, ()> {
+    let path = dir.join(PUBLICATION_FILE);
+    if root.file_info(&path).is_err() {
+        return Ok(None);
+    }
+    let store: crate::github_publication::PublicationStore =
+        root.read_toml(path).map_err(|_| ())?;
+    Ok(store.publication.last().map(|record| DraftListPublication {
+        repository_host: record.repository_host.clone(),
+        repository_owner: record.repository_owner.clone(),
+        repository_name: record.repository_name.clone(),
+        issue_number: record.issue_number,
+        issue_url: record.issue_url.clone(),
+        published_at: record.published_at.clone(),
+    }))
 }
 
 /// DRS-FR-17: the drafts the text is found in — matched against each draft's

@@ -30,6 +30,7 @@ pub mod build_seam;
 pub mod concurrency;
 pub mod docker_in_docker;
 pub mod github_polling;
+pub mod graduation_loop;
 pub mod image_builder;
 pub mod images;
 use build_seam::AppBuildEvents;
@@ -298,12 +299,21 @@ pub struct ProjectConfig {
     /// three states are `execution_timeout_ms`'s.
     #[serde(default, deserialize_with = "explicit_option")]
     pub provider_call_deadline_ms: Option<Option<u64>>,
-    /// PSS-FR-WPKS: how many attempts a bounded loop may spend. The graduation
-    /// loop counts passes with it and the conversation loop counts physical
-    /// attempts, each keeping its own meaning for the one number. The three
-    /// states are `execution_timeout_ms`'s.
+    /// PSS-FR-WPKS: how many physical attempts the conversation loop may spend
+    /// on one provider call. The three states are `execution_timeout_ms`'s.
     #[serde(default, deserialize_with = "explicit_option")]
     pub retry_budget: Option<Option<u32>>,
+    /// PSS-FR-QBNE / PSS-FR-OWGI: the graduation pass budget. The three states
+    /// are `execution_timeout_ms`'s, except that a value that is not valid is
+    /// refused rather than cleared (PSS-FR-LFUZ).
+    #[serde(default, deserialize_with = "explicit_option")]
+    pub graduation_pass_budget: Option<Option<i64>>,
+    /// PSS-FR-HVSM: the graduation stage time limit, in milliseconds.
+    #[serde(default, deserialize_with = "explicit_option")]
+    pub graduation_stage_time_limit_ms: Option<Option<i64>>,
+    /// PSS-FR-RKTW: the graduation total time limit, in milliseconds.
+    #[serde(default, deserialize_with = "explicit_option")]
+    pub graduation_total_time_limit_ms: Option<Option<i64>>,
 }
 
 /// Tell a key that was **absent** from a key that carried `null`.

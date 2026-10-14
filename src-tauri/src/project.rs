@@ -561,6 +561,9 @@ fn activate_project<R: tauri::Runtime>(
     // above — the shell reopening the last project at launch — the request is
     // coalesced into the pass already scheduled rather than running a second.
     crate::draft_assets::sweep_at_application_start(app);
+    // GHP-FR-ISJI: the publication metadata cache starts empty for the opened
+    // project, and the startup refresh runs in the background.
+    crate::github_publication::metadata_refresh::on_project_opened(app);
 }
 
 /// Tear down everything tied to the open project (SNV-FR-25): forget the root
@@ -653,6 +656,8 @@ pub fn close_project<R: tauri::Runtime>(
     // GPP-FR-DATH: the polling session ends with the project, so a project
     // opened again starts a new session with nothing reported.
     crate::github_polling::end_session(&app);
+    // GHP-FR-ROBR: the publication metadata cache goes with the project.
+    crate::github_publication::metadata_refresh::on_project_closed(&app);
     // PRG-FR-13: nothing may be left in flight against a root the application
     // has stopped reading. Runs before the teardown, while the root is still
     // knowable. Operations with no project scope (a plugin install, PRG-FR-15)

@@ -16,9 +16,11 @@ import { AiApiTurnTimeoutRow } from "./AiApiTurnTimeoutRow";
 import { aiErrorMessage } from "./aiErrorMessage";
 import {
   CUSTOM_GATEWAY_ORIGIN,
+  detectedValuesText,
   modelSelectOptions,
   routeLabel,
 } from "./aiApiCustom";
+import { AiApiCustomReasoningRow, AiApiTokenLimitRow } from "./AiApiCustomRows";
 import { notifyAgentRegistryChanged } from "../state/agentRegistry";
 import {
   FilterableSelect,
@@ -458,6 +460,8 @@ export function AiApiIntegrations() {
   const selectedModel: ModelOption | null =
     current?.models.find((m) => m.id === current.selectedModel) ?? null;
   const reasoningEntries = reasoningOptions(selectedModel);
+  /** AII-FR-ZIEG: the selected Custom model's detected values, if any. */
+  const customDetected = detectedValuesText(selectedModel);
   /**
    * AII-FR-48: a model list that predates this application's knowledge of
    * reasoning looks exactly like a list of models that cannot reason, and both
@@ -592,7 +596,7 @@ export function AiApiIntegrations() {
                 data-testid="ai-api-url-hint"
                 style={{ marginTop: 2 }}
               >
-                Host or base URL, without /v1.
+                Host and any path prefix. /v1 is added to it.
               </div>
             )}
           </div>
@@ -640,7 +644,7 @@ export function AiApiIntegrations() {
             style={{ marginBottom: 4 }}
           >
             {current.provider === "custom"
-              ? "Required — sent as a bearer token."
+              ? "Required — sent as a bearer token. A local host such as Ollama accepts any value."
               : "This provider requires an API key."}
             {current.keyState === "set" &&
               " Leave empty to verify again with the stored key."}
@@ -679,6 +683,46 @@ export function AiApiIntegrations() {
               ? ` · ${routeLabel(selectedModel)}`
               : ""}
           </div>
+
+          {/* AII-FR-ZIEG: what an Ollama host reported about the selected
+              model, shown only. Absent where nothing was detected. */}
+          {current.provider === "custom" && customDetected && (
+            <div
+              className="t-ui-xs t-muted"
+              data-testid="ai-api-detected-values"
+              style={{ marginTop: -14, marginBottom: 18 }}
+            >
+              {customDetected}
+            </div>
+          )}
+
+          {/* AII-FR-41 / AII-FR-XGIM: the Custom tab always renders its
+              reasoning effort, the default for every Custom model. */}
+          {current.provider === "custom" && (
+            <AiApiCustomReasoningRow
+              selectedReasoning={current.selectedReasoning}
+              onSelect={(id) => void onSelectReasoning(current.provider, id)}
+            />
+          )}
+
+          {/* AII-FR-05 / AII-FR-UQLF: the Custom token fields sit above the
+              turn timeout. No other tab renders them. */}
+          {current.provider === "custom" && (
+            <>
+              <AiApiTokenLimitRow
+                kind="maxOutputTokens"
+                tokens={current.maxOutputTokens ?? null}
+                onSaved={replace}
+                describeError={aiErrorMessage}
+              />
+              <AiApiTokenLimitRow
+                kind="maxContextSize"
+                tokens={current.maxContextSize ?? null}
+                onSaved={replace}
+                describeError={aiErrorMessage}
+              />
+            </>
+          )}
 
           {/* AII-FR-41: only in the OpenRouter tab, and only while a model is
               selected whose record declares reasoning. A model that declares

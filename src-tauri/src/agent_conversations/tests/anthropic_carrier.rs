@@ -17,6 +17,8 @@ fn anthropic_endpoint(
     reasoning: Option<ReasoningChoice>,
 ) -> AiApiCall {
     AiApiCall {
+        max_output_tokens: None,
+        context_size: None,
         turn_timeout_ms: None,
         provider: "anthropic".into(),
         base_url: base_url.into(),

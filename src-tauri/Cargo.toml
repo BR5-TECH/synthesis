@@ -191,6 +191,9 @@ rig = { package = "rig-core", version = "0.44", features = ["test-utils"] }
 # relay can be exercised against a real (headless) app handle rather than only
 # through their extracted pure helpers.
 tauri = { version = "2", features = ["test"] }
+# GHP-FR-RVCL / GHP-FR-MSLY: the tests of the 30-minute timer and of the
+# refresh timeout run on paused Tokio time, so no test waits for real time.
+tokio = { version = "1", features = ["test-util"] }
 
 # NTD-notification-delivery.md: the OS notification centre this module posts
 # into. Deliberately NOT `tauri-plugin-notification`, whose desktop path drops
@@ -295,6 +298,12 @@ microsandbox = { version = "=0.7.8", default-features = false, features = [
   "embed-binaries",
   "download-binaries",
 ] }
+
+# EAC-FR-SQWO: the tests build the image error the runtime gives for a catalog
+# it cannot read. The crate is already in the tree under `microsandbox`, which
+# does not re-export its error type.
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dev-dependencies]
+microsandbox-image = "=0.7.8"
 
 # FSA-FR-NRQE: `O_NOFOLLOW` and `O_NONBLOCK` for the bounded read of a regular
 # file. Already in the tree as a dependency of many crates.

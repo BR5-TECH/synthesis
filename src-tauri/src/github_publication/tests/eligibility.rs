@@ -1,10 +1,10 @@
 //! What disables the action, decided from disk alone (GHP-FR-GJEO,
-//! GHP-FR-AKUM, GHP-FR-DTVW, GHP-FR-KZAP, DRS-FR-VKQO, DRS-FR-OGZC).
+//! GHP-FR-AKUM, GHP-FR-DTVW, GHP-FR-KZAP, DRS-FR-10, DRS-FR-VKQO).
 
 use super::*;
 use crate::drafts::DraftStatus;
 
-/// GHP-FR-GJEO: `active`, `published`, and `graduated` may publish; `archived`
+/// GHP-FR-GJEO: `active`, legacy `published`, and `graduated` may publish; `archived`
 /// is refused with the reason that says to restore it first.
 #[test]
 fn only_an_unarchived_draft_is_publishable() {
@@ -58,33 +58,12 @@ fn a_standing_attempt_refuses_a_second_publication() {
     );
 }
 
-/// DRS-FR-VKQO: `published` is set only over `active`, and `set_draft_status`
-/// cannot reach it. DRS-FR-OGZC: a published draft stays editable.
+/// DRS-FR-10 / DRS-FR-VKQO: no caller sets `published` or `graduated`.
 #[test]
-fn published_is_set_only_over_active_and_never_by_a_caller() {
+fn no_caller_sets_published_or_graduated() {
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "widget");
-    assert_eq!(
-        crate::drafts::set_draft_published(&root, &id).unwrap().status,
-        DraftStatus::Published
-    );
-    // A second publication leaves the record where it is.
-    assert_eq!(
-        crate::drafts::set_draft_published(&root, &id).unwrap().status,
-        DraftStatus::Published
-    );
-    // A published draft still takes a prompt write and a rename.
-    save_prompt(&root, &id, "still editable\n");
-    assert!(crate::drafts::rename_draft_impl(&root, &id, "widget 2").is_ok());
-    // A graduated draft keeps `graduated`.
-    let other = draft(&root, "other");
-    crate::drafts::set_draft_graduated(&root, &other, "run-1").unwrap();
-    assert_eq!(
-        crate::drafts::set_draft_published(&root, &other).unwrap().status,
-        DraftStatus::Graduated
-    );
-    // No caller may set either position.
     assert_eq!(
         crate::drafts::set_draft_status_impl(&root, &id, DraftStatus::Published),
         Err(crate::drafts::ERR_STATUS_NOT_SETTABLE.to_string())
@@ -93,19 +72,19 @@ fn published_is_set_only_over_active_and_never_by_a_caller() {
         crate::drafts::set_draft_status_impl(&root, &id, DraftStatus::Graduated),
         Err(crate::drafts::ERR_STATUS_NOT_SETTABLE.to_string())
     );
+    assert_eq!(crate::drafts::draft_record(&root, &id).unwrap().status, DraftStatus::Active);
 }
 
-/// DRS-FR-10: archiving a published draft changes the scalar status alone and
-/// leaves the publication store byte-for-byte as it was; restoring returns it
-/// to `active` with that store intact.
+/// DRS-FR-10 / DRS-FR-VKQO: archiving a legacy `published` draft stores
+/// `archived` and leaves the publication store as it was; restoring stores
+/// `active` with that store intact.
 #[test]
 fn archive_and_restore_keep_the_publication_store() {
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "widget");
-    let attempt = flow::open_attempt(&root, &id, &origin(), "pub-1".into()).unwrap();
-    store::complete_attempt(&root, &id, flow::record_of(&attempt, &issue(7))).unwrap();
-    crate::drafts::set_draft_published(&root, &id).unwrap();
+    record_publication(&root, &id, "pub-1", 7);
+    store_legacy_published(&root, &id);
 
     let archived = crate::drafts::set_draft_status_impl(&root, &id, DraftStatus::Archived).unwrap();
     assert_eq!(archived.status, DraftStatus::Archived);
@@ -118,54 +97,6 @@ fn archive_and_restore_keep_the_publication_store() {
     assert_eq!(store.publication[0].issue_number, 7);
 }
 
-fn issue(number: u64) -> IssueRef {
-    IssueRef {
-        number,
-        url: format!("https://github.com/acme/widgets/issues/{number}"),
-        title: "widget".into(),
-        body: "body".into(),
-        ..Default::default()
-    }
-}
-
-/// DRS-FR-RJYF: `list_drafts` reports the stored status, `published` among
-/// them, and the walk reads no publication store — a `publication.toml` never
-/// makes a draft inconsistent and never costs the panel a read.
-#[test]
-fn the_drafts_listing_reports_published_and_reads_no_publication_store() {
-    let dir = project();
-    let root = crate::fs::RootFs::for_root(dir.path());
-    let id = draft(&root, "widget");
-    let attempt = flow::open_attempt(&root, &id, &origin(), "pub-1".into()).unwrap();
-    store::complete_attempt(&root, &id, flow::record_of(&attempt, &issue(7))).unwrap();
-    crate::drafts::set_draft_published(&root, &id).unwrap();
-
-    let listed = crate::drafts::list_drafts_impl(&root);
-    let row = listed.drafts.iter().find(|d| d.id == id).expect("listed");
-    assert_eq!(row.status, DraftStatus::Published);
-    assert!(!row.inconsistent);
-}
-
-/// DRS-FR-OGZC: a published draft is editable in every respect an active one
-/// is — it moves between drafts folders, deletes, and graduates like any other.
-#[test]
-fn a_published_draft_moves_graduates_and_deletes_like_an_active_one() {
-    let dir = project();
-    let root = crate::fs::RootFs::for_root(dir.path());
-    let id = draft(&root, "widget");
-    crate::drafts::set_draft_published(&root, &id).unwrap();
-    crate::drafts::create_drafts_folder_impl(&root, "", "UI").unwrap();
-
-    crate::drafts::move_draft_to_folder_impl(&root, &id, "UI").expect("moves");
-    // The move carries the status and the publication store with it.
-    assert_eq!(crate::drafts::draft_record(&root, &id).unwrap().status, DraftStatus::Published);
-    // And it graduates like any other draft.
-    assert_eq!(
-        crate::drafts::set_draft_graduated(&root, &id, "run-1").unwrap().status,
-        DraftStatus::Graduated
-    );
-}
-
 /// DRS-FR-KQTW: publication history releases nothing and restores nothing. A
 /// draft whose graduation is released reads `active`, not `published`.
 #[test]
@@ -173,9 +104,7 @@ fn a_release_reads_active_even_where_the_draft_has_publication_history() {
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "widget");
-    let attempt = flow::open_attempt(&root, &id, &origin(), "pub-1".into()).unwrap();
-    store::complete_attempt(&root, &id, flow::record_of(&attempt, &issue(7))).unwrap();
-    crate::drafts::set_draft_published(&root, &id).unwrap();
+    record_publication(&root, &id, "pub-1", 7);
     crate::drafts::set_draft_graduated(&root, &id, "run-1").unwrap();
 
     // The resolution against an empty queue is what a released draft reads.

@@ -400,8 +400,16 @@ pub(crate) fn set_settings_impl<R: Runtime>(
     validate_statuses(&settings).map_err(|code| report(app, "set_settings", &code, None))?;
     let project_node_id = settings.project_node_id.clone();
     let statuses = StatusNames::of(&settings);
+    let previous_project = crate::project_settings::load_github_polling_settings_from(&ctx.root)
+        .ok()
+        .and_then(|previous| previous.project_node_id);
     save_github_polling_settings_to(&ctx.root, &settings)
         .map_err(|code| report(app, "set_settings", &code, None))?;
+    // `GHP-github-publication.md` GHP-FR-JDMU: a change of the selected
+    // GitHub Project refreshes the publication metadata cache.
+    if previous_project != project_node_id {
+        crate::github_publication::metadata_refresh::invalidate(app, "github_project");
+    }
     let generation = {
         let state = state(app);
         let mut slot = state.slot();

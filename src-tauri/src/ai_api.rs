@@ -125,6 +125,10 @@ pub const ERR_PROVIDER_UNCONFIGURED: &str = "provider_unconfigured";
 /// with the key it needs (AAP-FR-34). Distinct from `keychain_unavailable`,
 /// which is the store declining to answer at all.
 pub const ERR_KEY_UNAVAILABLE: &str = "key_unavailable";
+/// AAP-FR-ITBL: the value is not a whole number from 1 to `custom_limits::TOKEN_LIMIT_MAX`.
+pub const ERR_TOKEN_LIMIT_INVALID: &str = "token_limit_invalid";
+/// AAP-FR-ITBL: the provider is not Custom, so it holds no token limits.
+pub const ERR_LIMIT_UNSUPPORTED: &str = "limit_unsupported";
 
 /// AAP-FR-36: the service name of the **earlier** one-entry-per-provider
 /// keyring layout.
@@ -294,7 +298,7 @@ fn settle_image_input(
 /// model exists — a disagreement would let a selection be stored against a
 /// model the selector never showed.
 fn available_models(record: &AiApiRecord, descriptor: &AiApiProvider) -> Vec<ModelOption> {
-    if record.models.is_empty() {
+    let models = if record.models.is_empty() {
         catalog_models(descriptor)
     } else {
         // AAP-FR-35: a persisted record carries the probe's answer without its
@@ -303,7 +307,14 @@ fn available_models(record: &AiApiRecord, descriptor: &AiApiProvider) -> Vec<Mod
         // stored list becomes the list callers read, so it is the one place the
         // three-step decision has to be made.
         settle_image_input(record.models.clone(), descriptor)
+    };
+    // AAP-FR-WSIC: every Custom model offers the fixed reasoning set. It is
+    // given here, where callers read the list, so a list stored before the set
+    // existed offers it too.
+    if descriptor.provider == custom_limits::CUSTOM {
+        return custom_limits::with_custom_reasoning(models);
     }
+    models
 }
 
 // ---------------------------------------------------------------------------
@@ -397,11 +408,18 @@ pub fn reasoning_error(
 
 /// Whether a stored choice still stands against the model now selected
 /// (AAP-FR-29).
+///
+/// AAP-FR-WSIC: a Custom choice is checked against the fixed set, with or
+/// without a selected model, because the set is the same for every model.
 fn reasoning_survives(
+    provider: &str,
     models: &[ModelOption],
     selected: Option<&str>,
     choice: &ReasoningChoice,
 ) -> bool {
+    if provider == custom_limits::CUSTOM {
+        return custom_limits::custom_reasoning_error(choice).is_none();
+    }
     let model = selected.and_then(|id| models.iter().find(|m| m.id == id));
     model.is_some() && reasoning_error(model, choice).is_none()
 }
@@ -438,6 +456,14 @@ pub struct AiApiRecord {
     /// is declared before the table below.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub turn_timeout_ms: Option<u64>,
+    /// AAP-FR-AYKU: the Custom provider's max output tokens. `None` leaves the
+    /// loop's default (`CVL-conversation-loop.md` CVL-FR-FHFM).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<u64>,
+    /// AAP-FR-AYKU: the Custom provider's max context size, used where a model
+    /// has no detected context size (AAP-FR-RANS).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_context_size: Option<u64>,
     /// `None` means the selected model's own default (AAP-FR-27). Serialises as
     /// a table, so it sits after every scalar and before the array-of-tables
     /// below — TOML assigns a bare `key = value` to the most recently opened
@@ -474,6 +500,10 @@ pub struct AiApiIntegration {
     /// AAP-FR-FGNK: `None` means the project's execution timeout, or the
     /// default.
     pub turn_timeout_ms: Option<u64>,
+    /// AAP-FR-AYKU: Custom only. `None` means the loop's default limit.
+    pub max_output_tokens: Option<u64>,
+    /// AAP-FR-AYKU: Custom only. `None` means no provider-level value.
+    pub max_context_size: Option<u64>,
     pub active: bool,
 }
 
@@ -571,6 +601,12 @@ pub struct AiApiCall {
     /// CVL-FR-16). Filled by `resolve_ai_api_endpoint` alone; `None` where the
     /// provider stores none.
     pub turn_timeout_ms: Option<u64>,
+    /// AAP-FR-HFQZ: the effective output limit. `None` leaves the loop's
+    /// default (`CVL-conversation-loop.md` CVL-FR-FHFM).
+    pub max_output_tokens: Option<u64>,
+    /// AAP-FR-RANS: the effective context size, which is the conversation
+    /// loop's token budget (CVL-FR-LCXM). Never sent to the host.
+    pub context_size: Option<u64>,
 }
 
 impl std::fmt::Debug for AiApiCall {
@@ -584,6 +620,8 @@ impl std::fmt::Debug for AiApiCall {
             .field("accepts_image_input", &self.accepts_image_input)
             .field("model_mode", &self.model_mode)
             .field("turn_timeout_ms", &self.turn_timeout_ms)
+            .field("max_output_tokens", &self.max_output_tokens)
+            .field("context_size", &self.context_size)
             .finish()
     }
 }
@@ -597,6 +635,9 @@ impl std::fmt::Debug for AiApiCall {
 /// `GlobalSettingsStore` owns.
 pub struct AiApiIntegrations {
     prober: Box<dyn EndpointProber>,
+    /// AAP-FR-QRAX: how a Custom verification asks a host for each model's
+    /// detected values. `NoDetection` unless set, so a test sends no request.
+    detector: Box<dyn detection::ModelDetector>,
     /// AAP-FR-23: `openrouter` alone is reached through its SDK, because it is
     /// the only provider whose listing reports per-model reasoning. `None`
     /// routes it through `prober` like any other, which is what tests do.
@@ -617,12 +658,24 @@ impl Default for AiApiIntegrations {
             )),
         )
         .with_openrouter_prober(Box::new(OpenRouterProber))
+        .with_detector(Box::new(detection::HttpModelDetector::new()))
     }
 }
 
 impl AiApiIntegrations {
     pub fn new(prober: Box<dyn EndpointProber>, secrets: Box<dyn SecretStore>) -> Self {
-        Self { prober, openrouter_prober: None, secrets, write_lock: Mutex::new(()) }
+        Self {
+            prober,
+            detector: Box::new(detection::NoDetection),
+            openrouter_prober: None,
+            secrets,
+            write_lock: Mutex::new(()),
+        }
+    }
+
+    pub fn with_detector(mut self, detector: Box<dyn detection::ModelDetector>) -> Self {
+        self.detector = detector;
+        self
     }
 
     pub fn with_openrouter_prober(mut self, prober: Box<dyn EndpointProber>) -> Self {
@@ -782,67 +835,12 @@ pub fn integrations_from(
                 selected_model: stored.selected_model.clone(),
                 selected_reasoning: stored.selected_reasoning.clone(),
                 turn_timeout_ms: stored.turn_timeout_ms,
+                max_output_tokens: stored.max_output_tokens,
+                max_context_size: stored.max_context_size,
                 active: active.as_deref() == Some(descriptor.provider),
             }
         })
         .collect()
-}
-
-/// AAP-FR-16: resolve the open project's API integration, and say *how* — which
-/// is what tells the UI what to write on the line.
-pub fn resolve_project(
-    records: &[AiApiRecord],
-    explicit_active: Option<&str>,
-    override_provider: Option<&str>,
-    present: &KeyPresence,
-) -> ProjectAiApiIntegration {
-    let active = active_provider(records, explicit_active, present);
-    let is_verified = |provider: &str| {
-        records
-            .iter()
-            .any(|r| r.provider == provider && state_for(r, present) == IntegrationState::Verified)
-    };
-
-    if let Some(over) = override_provider {
-        if is_verified(over) {
-            return ProjectAiApiIntegration {
-                provider: Some(over.to_string()),
-                resolution: ProjectResolution::Overridden,
-                override_provider: Some(over.to_string()),
-            };
-        }
-        // The override is recorded but no longer usable. It is deliberately not
-        // erased (AAP-FR-15): re-verifying the provider should restore the
-        // author's choice rather than silently having lost it.
-        return ProjectAiApiIntegration {
-            provider: active,
-            resolution: ProjectResolution::OverrideUnavailable,
-            override_provider: Some(over.to_string()),
-        };
-    }
-
-    if let Some(active) = active {
-        return ProjectAiApiIntegration {
-            provider: Some(active),
-            resolution: ProjectResolution::Inherited,
-            override_provider: None,
-        };
-    }
-
-    // Nothing resolves. The distinction the UI needs is whether there is
-    // anything to choose between at all: something configured means "pick one",
-    // nothing configured means "go and set one up".
-    let anything_configured =
-        records.iter().any(|r| state_for(r, present) != IntegrationState::Unconfigured);
-    ProjectAiApiIntegration {
-        provider: None,
-        resolution: if anything_configured {
-            ProjectResolution::NoneSelected
-        } else {
-            ProjectResolution::NoneConfigured
-        },
-        override_provider: None,
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -917,275 +915,6 @@ pub fn catalogs_from(records: &[AiApiRecord]) -> Vec<AiApiCatalog> {
         .collect()
 }
 
-/// AAP-FR-05 / FR-06 / FR-10: reach the endpoint, confirm it answers as a
-/// conversational API, learn its models, and only then commit the configuration.
-pub fn verify_integration_impl(
-    store: &GlobalSettingsStore,
-    ai: &AiApiIntegrations,
-    provider: &str,
-    base_url: &str,
-    api_key: Option<&str>,
-) -> Result<AiApiIntegration, String> {
-    let descriptor = provider_descriptor(provider).ok_or(ERR_UNKNOWN_PROVIDER)?;
-
-    // Both checks happen before any network work: an empty field and a typo are
-    // reported instantly and are never mistaken for an unreachable host.
-    let normalized = normalize_base_url(base_url).map_err(|e| match e {
-        BaseUrlError::Empty => ERR_BASE_URL_EMPTY.to_string(),
-        BaseUrlError::Invalid => ERR_BASE_URL_INVALID.to_string(),
-    })?;
-    // AAP-FR-KRVT: the gateway root carries no `/v1`, so a route is never built
-    // as `/v1/v1/...`.
-    if provider == "custom" && custom_gateway::has_v1_suffix(&normalized) {
-        return Err(ERR_BASE_URL_INVALID.into());
-    }
-    // AAP-FR-32: an empty field means the key is unchanged, not withdrawn. The
-    // field is never populated from the record (AII-FR-07), so treating empty
-    // as "no key" would make a configured provider impossible to verify again
-    // without the author holding their key a second time — which is the one
-    // thing storing it was meant to avoid.
-    let supplied = api_key.map(str::trim).filter(|k| !k.is_empty());
-    let key = match &supplied {
-        Some(k) => Some((*k).to_string()),
-        None => ai
-            .secrets
-            .get(provider)
-            .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
-            .filter(|k| !k.is_empty()),
-    };
-    if descriptor.key_required && key.is_none() {
-        return Err(ERR_KEY_MISSING.into());
-    }
-    let key = key.as_deref();
-
-    let probed = ai
-        .prober_for(provider)
-        .probe(&ProbeRequest {
-            base_url: &normalized,
-            api_key: key,
-            auth: descriptor.auth,
-            models_path: descriptor.models_path,
-            models_format: descriptor.models_format,
-        })
-        .map_err(api_probe_error)?;
-
-    // AAP-FR-10: an endpoint that lists nothing degrades to the bundled catalog
-    // rather than failing a verification that otherwise succeeded.
-    let (models, models_origin) = if probed.is_empty() {
-        (catalog_models(descriptor), ModelsOrigin::Catalog)
-    } else {
-        // AAP-FR-35: what the probe declared about each model's input
-        // modalities stands; what it said nothing about the shipped catalog
-        // settles; and what neither declares carries `false`.
-        (settle_image_input(probed, descriptor), ModelsOrigin::Probed)
-    };
-
-    let _guard = ai.write_lock.lock().map_err(|e| format!("ai api registry poisoned: {e}"))?;
-
-    // AAP-FR-06: a key the author supplied goes to the keychain first. A
-    // keychain that refuses leaves the registry untouched, so a failed write
-    // cannot produce a record describing a key that was never stored.
-    //
-    // AAP-FR-32: nothing is written when the verification re-presented the
-    // stored key — the entry is already what it should be — and no verification
-    // deletes one. Withdrawing a key is what `clear_ai_api_integration` is for,
-    // so an author checking a working provider cannot lose their credential by
-    // leaving the field alone.
-    if let Some(supplied) = supplied {
-        ai.secrets.set(provider, supplied).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
-    }
-
-    let (mut records, active) = store.load_ai_api_registry()?;
-    let index = match records.iter().position(|r| r.provider == provider) {
-        Some(i) => i,
-        None => {
-            records.push(AiApiRecord::empty(provider));
-            records.len() - 1
-        }
-    };
-    {
-        let record = &mut records[index];
-        record.base_url = Some(normalized);
-        record.masked_hint = key.map(mask_hint);
-        record.verified_at = Some(now_iso8601());
-        // AAP-FR-12: a selection the refreshed list no longer offers falls back
-        // to the provider's own default rather than requesting a model that
-        // endpoint does not serve.
-        if let Some(selected) = record.selected_model.clone() {
-            if !models.iter().any(|m| m.id == selected) {
-                record.selected_model = None;
-            }
-        }
-        // AAP-FR-29: and the reasoning choice is re-checked against the refreshed
-        // descriptors, so a level the model has stopped offering — or that fell
-        // away with the model itself just above — does not survive as a depth
-        // the endpoint would refuse.
-        if let Some(choice) = record.selected_reasoning.clone() {
-            if !reasoning_survives(&models, record.selected_model.as_deref(), &choice) {
-                record.selected_reasoning = None;
-            }
-        }
-        record.models = models;
-        record.models_origin = models_origin;
-    }
-
-    store.save_ai_api_registry(records.clone(), active.clone())?;
-    let present = provider_presence(&*ai.secrets, &records);
-    integrations_from(&records, active.as_deref(), &present)
-        .into_iter()
-        .find(|i| i.provider == provider)
-        .ok_or_else(|| ERR_UNKNOWN_PROVIDER.to_string())
-}
-
-/// AAP-FR-11: persist the chosen model. `None` selects the provider's own
-/// default; an id absent from the record's current list is refused.
-pub fn set_model_impl(
-    store: &GlobalSettingsStore,
-    ai: &AiApiIntegrations,
-    provider: &str,
-    model_id: Option<&str>,
-) -> Result<AiApiIntegration, String> {
-    let descriptor = provider_descriptor(provider).ok_or(ERR_UNKNOWN_PROVIDER)?;
-    let _guard = ai.write_lock.lock().map_err(|e| format!("ai api registry poisoned: {e}"))?;
-    let (mut records, active) = store.load_ai_api_registry()?;
-    let index = match records.iter().position(|r| r.provider == provider) {
-        Some(i) => i,
-        None => {
-            records.push(AiApiRecord::empty(provider));
-            records.len() - 1
-        }
-    };
-    {
-        let record = &mut records[index];
-        // The record's *current* list, which is the probed one after a
-        // verification and the bundled catalog before it — matching what the
-        // selector was populated from.
-        let available = available_models(record, descriptor);
-        match model_id {
-            None => record.selected_model = None,
-            Some(id) => {
-                if !available.iter().any(|m| m.id == id) {
-                    return Err(ERR_UNKNOWN_MODEL.into());
-                }
-                record.selected_model = Some(id.to_string());
-            }
-        }
-        // AAP-FR-29: the reasoning choice belongs to the model it was made
-        // against. A new model that cannot honour it returns the record to that
-        // model's own default rather than carrying across a depth it would
-        // refuse — including the case of clearing the model entirely, where no
-        // capability is known at all.
-        if let Some(choice) = record.selected_reasoning.clone() {
-            if !reasoning_survives(&available, record.selected_model.as_deref(), &choice) {
-                record.selected_reasoning = None;
-            }
-        }
-    }
-    store.save_ai_api_registry(records.clone(), active.clone())?;
-    let present = provider_presence(&*ai.secrets, &records);
-    integrations_from(&records, active.as_deref(), &present)
-        .into_iter()
-        .find(|i| i.provider == provider)
-        .ok_or_else(|| ERR_UNKNOWN_PROVIDER.to_string())
-}
-
-/// AAP-FR-27: persist the reasoning the author asked for. `None` means the
-/// selected model's own default; a choice the selected model cannot honour is
-/// refused rather than stored.
-pub fn set_reasoning_impl(
-    store: &GlobalSettingsStore,
-    ai: &AiApiIntegrations,
-    provider: &str,
-    choice: Option<ReasoningChoice>,
-) -> Result<AiApiIntegration, String> {
-    let descriptor = provider_descriptor(provider).ok_or(ERR_UNKNOWN_PROVIDER)?;
-    let _guard = ai.write_lock.lock().map_err(|e| format!("ai api registry poisoned: {e}"))?;
-    let (mut records, active) = store.load_ai_api_registry()?;
-    let index = match records.iter().position(|r| r.provider == provider) {
-        Some(i) => i,
-        None => {
-            records.push(AiApiRecord::empty(provider));
-            records.len() - 1
-        }
-    };
-    {
-        let record = &mut records[index];
-        match choice {
-            None => record.selected_reasoning = None,
-            Some(choice) => {
-                let available = if record.models.is_empty() {
-                    catalog_models(descriptor)
-                } else {
-                    record.models.clone()
-                };
-                // Distinguishing "no model chosen" from "this model cannot
-                // reason" matters to the author: the first is fixed by picking a
-                // model, the second by picking a different one.
-                let Some(selected) = record.selected_model.as_deref() else {
-                    return Err(ERR_NO_MODEL_SELECTED.into());
-                };
-                let model = available.iter().find(|m| m.id == selected);
-                if model.is_none() {
-                    return Err(ERR_NO_MODEL_SELECTED.into());
-                }
-                if let Some(err) = reasoning_error(model, &choice) {
-                    return Err(err.into());
-                }
-                record.selected_reasoning = Some(choice);
-            }
-        }
-    }
-    store.save_ai_api_registry(records.clone(), active.clone())?;
-    let present = provider_presence(&*ai.secrets, &records);
-    integrations_from(&records, active.as_deref(), &present)
-        .into_iter()
-        .find(|i| i.provider == provider)
-        .ok_or_else(|| ERR_UNKNOWN_PROVIDER.to_string())
-}
-
-/// AAP-FR-13: record the user-global active provider. At most one is ever
-/// recorded — activating one clears any other.
-pub fn set_active_impl(
-    store: &GlobalSettingsStore,
-    ai: &AiApiIntegrations,
-    provider: &str,
-) -> Result<Vec<AiApiIntegration>, String> {
-    provider_descriptor(provider).ok_or(ERR_UNKNOWN_PROVIDER)?;
-    let _guard = ai.write_lock.lock().map_err(|e| format!("ai api registry poisoned: {e}"))?;
-    let (records, _) = store.load_ai_api_registry()?;
-    let present = provider_presence(&*ai.secrets, &records);
-    let verified = records
-        .iter()
-        .any(|r| r.provider == provider && state_for(r, &present) == IntegrationState::Verified);
-    if !verified {
-        return Err(ERR_NOT_VERIFIED.into());
-    }
-    store.save_ai_api_registry(records.clone(), Some(provider.to_string()))?;
-    Ok(integrations_from(&records, Some(provider), &present))
-}
-
-/// AAP-FR-15: delete the provider's keychain entry and its record together.
-/// Idempotent. A cleared provider that was active leaves nothing active; a
-/// project override naming it is left recorded and stops resolving.
-pub fn clear_integration_impl(
-    store: &GlobalSettingsStore,
-    ai: &AiApiIntegrations,
-    provider: &str,
-) -> Result<Vec<AiApiIntegration>, String> {
-    provider_descriptor(provider).ok_or(ERR_UNKNOWN_PROVIDER)?;
-    let _guard = ai.write_lock.lock().map_err(|e| format!("ai api registry poisoned: {e}"))?;
-    ai.secrets.delete(provider).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
-    let (mut records, active) = store.load_ai_api_registry()?;
-    records.retain(|r| r.provider != provider);
-    let active = match active {
-        Some(a) if a == provider => None,
-        other => other,
-    };
-    store.save_ai_api_registry(records.clone(), active.clone())?;
-    let present = provider_presence(&*ai.secrets, &records);
-    Ok(integrations_from(&records, active.as_deref(), &present))
-}
-
 /// AAP-FR-36: one migration candidate per configured provider.
 ///
 /// A candidate is supplied for **every** stored record, whether or not the
@@ -1204,603 +933,26 @@ pub fn migration_candidates(records: &[AiApiRecord]) -> Vec<crate::secret_vault:
         .collect()
 }
 
-/// AAP-FR-16: how the open project resolves an API integration right now.
-pub fn get_project_impl(
-    store: &GlobalSettingsStore,
-    ai: &AiApiIntegrations,
-    project_key: &str,
-) -> Result<ProjectAiApiIntegration, String> {
-    let (records, active) = store.load_ai_api_registry()?;
-    // An empty key is "no project open" (`ProjectState::slot_key`), whose slot is
-    // the shared default one — an override read from there would belong to no
-    // project in particular.
-    let override_provider =
-        if project_key.is_empty() { None } else { store.load_ai_api_override(project_key)? };
-    Ok(resolve_project(
-        &records,
-        active.as_deref(),
-        override_provider.as_deref(),
-        &provider_presence(&*ai.secrets, &records),
-    ))
-}
-
-/// AAP-FR-17 / FR-18: record (or clear) the open project's override. A provider
-/// that is not currently verified is refused, so an override can only ever name
-/// an integration the author has already made work.
-pub fn set_project_impl(
-    store: &GlobalSettingsStore,
-    ai: &AiApiIntegrations,
-    project_key: &str,
-    provider: Option<&str>,
-) -> Result<ProjectAiApiIntegration, String> {
-    if project_key.is_empty() {
-        return Err(ERR_NO_PROJECT.into());
-    }
-    match provider {
-        None => store.clear_ai_api_override(project_key)?,
-        Some(provider) => {
-            provider_descriptor(provider).ok_or(ERR_UNKNOWN_PROVIDER)?;
-            let (records, _) = store.load_ai_api_registry()?;
-            let present = provider_presence(&*ai.secrets, &records);
-            let verified = records.iter().any(|r| {
-                r.provider == provider && state_for(r, &present) == IntegrationState::Verified
-            });
-            if !verified {
-                return Err(ERR_NOT_VERIFIED.into());
-            }
-            store.save_ai_api_override(project_key, provider)?;
-        }
-    }
-    get_project_impl(store, ai, project_key)
-}
-
-/// AAP-FR-19: one of the two read paths for a key and an endpoint in the
-/// application, and the one selected by what the *project* resolves to.
-///
-/// Deliberately **not** a `#[tauri::command]`: it is not registered in
-/// `generate_handler!`, so no frontend `invoke` can reach it. Its one consumer
-/// is the graduation loop (`crate::graduation::driver`, GRL-FR-EKXT), which is
-/// therefore the only thing the model and the reasoning an integration stores
-/// ever govern (AAP-FR-31). An agent's turn takes the other path,
-/// `resolve_ai_api_endpoint`, naming its own provider and carrying its own
-/// model and reasoning (AGC-FR-14) — so a stored selection never reaches an
-/// agent and an agent's selection never reaches a graduation run.
-///
-/// It refuses with the same typed distinction `get_project_ai_api_integration`
-/// reports rather than returning a key when the project resolves no integration.
-pub fn resolve_ai_api_call(
-    store: &GlobalSettingsStore,
-    ai: &AiApiIntegrations,
-    project_key: &str,
-) -> Result<AiApiCall, String> {
-    let resolved = get_project_impl(store, ai, project_key)?;
-    let provider = match (resolved.resolution, resolved.provider.as_deref()) {
-        (ProjectResolution::NoneConfigured, _) => return Err(ERR_NONE_CONFIGURED.into()),
-        (ProjectResolution::NoneSelected, _) => return Err(ERR_NONE_SELECTED.into()),
-        (_, Some(provider)) => provider.to_string(),
-        // `override_unavailable` with nothing active: the project names a
-        // provider that no longer works and there is no fallback.
-        (_, None) => return Err(ERR_NONE_SELECTED.into()),
-    };
-    let (records, _) = store.load_ai_api_registry()?;
-    let record = records.iter().find(|r| r.provider == provider).ok_or(ERR_NONE_SELECTED)?;
-    let base_url = record.base_url.clone().filter(|u| !u.is_empty()).ok_or(ERR_NONE_SELECTED)?;
-    // The one place a key is read back out, and only for a caller that is about
-    // to present it to the endpoint it belongs to.
-    let api_key = if record.masked_hint.is_some() {
-        ai.secrets.get(&provider).map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
-    } else {
-        None
-    };
-    let provider_name = provider.clone();
-    Ok(AiApiCall {
-        provider,
-        base_url,
-        api_key,
-        model_id: record.selected_model.clone(),
-        // AAP-FR-31: the one place the stored choice becomes the reasoning a
-        // request carries. `None` sends nothing at all.
-        reasoning: record.selected_reasoning.clone(),
-        // AAP-FR-35: the flag of the model this project resolved to. A record
-        // that names no model resolves to the provider's own default, whose
-        // capability nothing here declares — so it is `false`, on the same terms
-        // every undeclared capability is.
-        accepts_image_input: provider_descriptor(&provider_name)
-            .map(|d| available_models(record, d))
-            .unwrap_or_default()
-            .iter()
-            .find(|m| Some(m.id.as_str()) == record.selected_model.as_deref())
-            .is_some_and(|m| m.accepts_image_input),
-        // AAP-FR-RTMZ: the route metadata of the same model.
-        model_mode: provider_descriptor(&provider_name)
-            .map(|d| available_models(record, d))
-            .unwrap_or_default()
-            .iter()
-            .find(|m| Some(m.id.as_str()) == record.selected_model.as_deref())
-            .and_then(|m| m.mode),
-        // AAP-FR-TXNM: no read path but `resolve_ai_api_endpoint` returns it.
-        turn_timeout_ms: None,
-    })
-}
-
-/// AAP-FR-33: whether a caller's own `(provider, model, reasoning)` is one this
-/// module could serve.
-///
-/// Deliberately **not** a `#[tauri::command]`, on the same terms as the two
-/// resolvers: it is the rule an agent's stored selection is checked against
-/// (`crate::agents`, AGR-FR-06 / AGR-FR-07), not something a frontend decides.
-///
-/// Reads the registry and nothing else. In particular it never asks the
-/// keychain whether the key is still there — `state_of` is handed `true` for
-/// key presence — because a locked keychain must not stop an author *editing*
-/// an agent, only calling one. The keychain is consulted exactly once, in
-/// `resolve_ai_api_endpoint` below, at the moment a call is actually made.
-#[allow(dead_code)]
-pub fn validate_ai_api_selection(
-    store: &GlobalSettingsStore,
-    provider: &str,
-    model_id: &str,
-    reasoning: Option<&ReasoningChoice>,
-) -> Result<(), String> {
-    let descriptor = provider_descriptor(provider).ok_or(ERR_UNKNOWN_PROVIDER)?;
-    let (records, _) = store.load_ai_api_registry()?;
-    let record = records
-        .iter()
-        .find(|r| r.provider == provider)
-        .cloned()
-        .unwrap_or_else(|| AiApiRecord::empty(provider));
-
-    // Registry-only reading of AAP-FR-09 and AAP-FR-13. `key_present: true` is
-    // the assumption that makes this offline: a record that carries a masked
-    // hint was verified with a key, and whether that key is *readable right now*
-    // is a question for the call, not for the edit.
-    match state_assuming_key(&record, descriptor.key_required) {
-        IntegrationState::Unconfigured => return Err(ERR_PROVIDER_UNCONFIGURED.into()),
-        IntegrationState::KeyUnavailable => return Err(ERR_NOT_VERIFIED.into()),
-        IntegrationState::Verified => {}
-    }
-
-    let models = available_models(&record, descriptor);
-    let model = models.iter().find(|m| m.id == model_id).ok_or(ERR_UNKNOWN_MODEL)?;
-    // AAP-FR-27: `None` is the model's own default and is always serviceable.
-    if let Some(choice) = reasoning {
-        if let Some(err) = reasoning_error(Some(model), choice) {
-            return Err(err.into());
-        }
-    }
-    Ok(())
-}
-
-/// AAP-FR-34: the endpoint and key of a provider the **caller** names, carrying
-/// the **caller's** model and reasoning.
-///
-/// The difference from `resolve_ai_api_call` is the whole point of it existing:
-/// that one asks "what does the open project resolve to, and what did the author
-/// choose for it"; this one asks "reach *this* provider with *this* model". The
-/// two consumers are settled and do not overlap (AAP-FR-19): this path serves an
-/// agent's turn alone (`crate::agent_conversations`, AGC-FR-14), which runs each
-/// conversation against the configuration its own agent named — its provider,
-/// its model, its reasoning, all chosen in the Agents section rather than in the
-/// AI API one — and no project override and no stored selection redirects any of
-/// them.
-///
-/// Deliberately **not** a `#[tauri::command]`: it returns a cleartext key.
-pub fn resolve_ai_api_endpoint(
-    store: &GlobalSettingsStore,
-    ai: &AiApiIntegrations,
-    provider: &str,
-    model_id: &str,
-    reasoning: Option<ReasoningChoice>,
-) -> Result<AiApiCall, String> {
-    // Validated first, so an unserviceable combination is refused *before* a key
-    // is read rather than after.
-    validate_ai_api_selection(store, provider, model_id, reasoning.as_ref())?;
-    let (records, _) = store.load_ai_api_registry()?;
-    let record =
-        records.iter().find(|r| r.provider == provider).ok_or(ERR_PROVIDER_UNCONFIGURED)?;
-    let base_url =
-        record.base_url.clone().filter(|u| !u.is_empty()).ok_or(ERR_PROVIDER_UNCONFIGURED)?;
-    let descriptor = provider_descriptor(provider);
-    let api_key = if record.masked_hint.is_some() {
-        match ai.secrets.get(provider) {
-            // The store answered and the entry is gone. A distinct outcome from
-            // the store refusing to answer: one is a credential to re-enter, the
-            // other is a keychain to unlock.
-            Ok(None) => return Err(ERR_KEY_UNAVAILABLE.into()),
-            Ok(some) => some,
-            Err(_) => return Err(ERR_KEYCHAIN_UNAVAILABLE.into()),
-        }
-    } else {
-        None
-    };
-    Ok(AiApiCall {
-        provider: provider.to_string(),
-        base_url,
-        api_key,
-        // The caller's, never the record's. Substituting the provider's stored
-        // selection here would make every agent on a provider answer as one.
-        model_id: Some(model_id.to_string()),
-        reasoning,
-        // AAP-FR-35: the flag of the model that was resolved. `validate_ai_api_selection`
-        // above neither read nor reported it — an agent is never refused for the
-        // pictures a conversation might later carry — so it is read here, from
-        // the same model list the validation resolved against.
-        accepts_image_input: descriptor
-            .map(|d| available_models(record, d))
-            .unwrap_or_default()
-            .iter()
-            .find(|m| m.id == model_id)
-            .is_some_and(|m| m.accepts_image_input),
-        // AAP-FR-RTMZ: the route metadata of the resolved model.
-        model_mode: descriptor
-            .map(|d| available_models(record, d))
-            .unwrap_or_default()
-            .iter()
-            .find(|m| m.id == model_id)
-            .and_then(|m| m.mode),
-        // AAP-FR-TXNM: this read path alone returns it.
-        turn_timeout_ms: record.turn_timeout_ms,
-    })
-}
-
-// ---------------------------------------------------------------------------
-// Logging (LGC-logging.md)
-// ---------------------------------------------------------------------------
-//
-// The emit sites sit at the command layer rather than inside the `*_impl`
-// functions above, which are pure over their collaborators and are what the
-// tests drive. Every command here is a thing the author did, so one record per
-// command is the whole account of how a configuration came to be what it is —
-// and none of the impls has to carry a sink to produce it.
-
-/// AAP-FR-05: a verification is about to reach an endpoint.
-///
-/// Takes the key so the record can report whether one was *supplied* — the
-/// difference between AAP-FR-32's "re-present what is stored" and a fresh
-/// credential, which is the first thing to check when a verification that used
-/// to work stops. The key itself goes no further than this boolean; the record
-/// is built here rather than at the call site precisely so that is a property of
-/// one function a reader can check rather than of every caller.
-fn log_verify_attempt<S: LogSink + Clone + Send + 'static>(
-    sink: &S,
-    buffer: &'static LogBuffer,
-    provider: &str,
-    base_url: &str,
-    api_key: Option<&str>,
-) {
-    logging::log_info(
-        sink,
-        buffer,
-        &[Domain::Ai, Domain::Remote],
-        "verifying ai api integration",
-        log_fields! {
-            "provider" => provider,
-            // The author's raw field, and it has been validated by nothing at
-            // this point: `normalize_base_url`'s refusal of a credential
-            // smuggled into a URL happens inside the verification below, which
-            // is too late for a record already written. `loggable_base_url` is
-            // what makes this field safe — userinfo, query, and fragment gone,
-            // the endpoint still recognisable.
-            "baseUrl" => crate::ai_shared::loggable_base_url(base_url),
-            "keySupplied" => api_key.is_some_and(|k| !k.trim().is_empty()),
-        },
-    );
-}
-
-/// What a verification turned out to be. `ERROR` on failure: the author asked
-/// for something and got nothing, and every one of AAP-FR-05's typed refusals
-/// names a different correction.
-fn log_verify_outcome<S: LogSink + Clone + Send + 'static>(
-    sink: &S,
-    buffer: &'static LogBuffer,
-    provider: &str,
-    result: &Result<AiApiIntegration, String>,
-    duration_ms: u64,
-) {
-    match result {
-        Ok(integration) => logging::log_info(
-            sink,
-            buffer,
-            &[Domain::Ai, Domain::Remote],
-            "ai api integration verified",
-            log_fields! {
-                "provider" => provider,
-                // Normalised by now, so it carries no userinfo — but a stored
-                // URL may still hold a query string, and one gateway or another
-                // puts a key there.
-                "baseUrl" => integration.base_url.as_deref()
-                    .map(crate::ai_shared::loggable_base_url)
-                    .unwrap_or_else(|| "none".to_string()),
-                "state" => integration.state,
-                "keyState" => integration.key_state,
-                "models" => integration.models.len(),
-                // AAP-FR-10: `catalog` means the probe told us nothing and the
-                // list is the bundled one, which is why a model the author
-                // expected may be missing from the selector.
-                "modelsOrigin" => integration.models_origin,
-                "selectedModel" => integration.selected_model.as_deref().unwrap_or("<provider default>"),
-                "durationMs" => duration_ms,
-            },
-        ),
-        Err(error) => logging::log_error(
-            sink,
-            buffer,
-            &[Domain::Ai, Domain::Remote],
-            "ai api verification failed",
-            log_fields! {
-                "provider" => provider,
-                // One of this module's typed errors (AAP-FR-05). No provider
-                // response body and no client error is carried through: both
-                // routinely echo the request that produced them, headers and
-                // all.
-                "error" => error,
-                "durationMs" => duration_ms,
-            },
-        ),
-    }
-}
-
-/// AAP-FR-02: how the registry reads right now.
-///
-/// `DEBUG`, because this runs whenever the settings level renders and says
-/// nothing new most times it does. It earns its slot on the one occasion it
-/// matters: a provider that was working reads `key_unavailable` because the
-/// keychain no longer answers for it (AAP-FR-09), which is invisible everywhere
-/// else until an agent fails to answer and nobody can say why.
-fn log_listing<S: LogSink + Clone + Send + 'static>(
-    sink: &S,
-    buffer: &'static LogBuffer,
-    result: &Result<Vec<AiApiIntegration>, String>,
-) {
-    match result {
-        Ok(integrations) => logging::log_debug(
-            sink,
-            buffer,
-            &[Domain::Ai],
-            "ai api integrations listed",
-            log_fields! {
-                "total" => integrations.len(),
-                "verified" => integrations.iter().filter(|i| i.state == IntegrationState::Verified).count(),
-                "keyUnavailable" => integrations.iter().filter(|i| i.state == IntegrationState::KeyUnavailable).count(),
-                "active" => integrations.iter().find(|i| i.active).map(|i| i.provider.as_str()).unwrap_or("none"),
-            },
-        ),
-        Err(error) => logging::log_error(
-            sink,
-            buffer,
-            &[Domain::Ai],
-            "ai api integrations could not be listed",
-            log_fields! { "error" => error },
-        ),
-    }
-}
-
-/// AAP-FR-16: which provider the open project actually calls, and whether an
-/// override it still names is being ignored.
-///
-/// `DEBUG` on the same terms as the listing: read on every render, and the one
-/// thing worth knowing from it — `override_unavailable`, where the author
-/// believes they are calling one provider and the application is calling another
-/// — is otherwise reported nowhere but in the settings panel they are not
-/// looking at.
-fn log_project_resolution<S: LogSink + Clone + Send + 'static>(
-    sink: &S,
-    buffer: &'static LogBuffer,
-    resolved: &ProjectAiApiIntegration,
-) {
-    logging::log_debug(
-        sink,
-        buffer,
-        &[Domain::Ai],
-        "project ai api integration resolved",
-        log_fields! {
-            "provider" => resolved.provider.as_deref().unwrap_or("none"),
-            "resolution" => resolved.resolution,
-            "override" => resolved.override_provider.as_deref().unwrap_or("none"),
-        },
-    );
-}
-
-/// A change to the registry: `INFO` when it took, `WARN` with the typed refusal
-/// when it did not.
-///
-/// `WARN` rather than `ERROR` because nothing broke — a rejected model id or an
-/// unverified provider is the module declining to store something it could not
-/// serve (AAP-FR-11, AAP-FR-13, AAP-FR-27), and the record exists so an author
-/// wondering why their choice did not stick can see that it was refused.
-fn log_config_outcome<S: LogSink + Clone + Send + 'static, T>(
-    sink: &S,
-    buffer: &'static LogBuffer,
-    message: &str,
-    result: &Result<T, String>,
-    mut fields: Fields,
-) {
-    match result {
-        Ok(_) => logging::log_info(sink, buffer, &[Domain::Ai], message, fields),
-        Err(error) => {
-            fields.insert("error".to_string(), serde_json::json!(error));
-            logging::log_warn(sink, buffer, &[Domain::Ai], message, fields);
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Tauri commands
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
-pub fn list_ai_api_integrations(
-    app: tauri::AppHandle,
-    store: State<'_, GlobalSettingsStore>,
-    ai: State<'_, AiApiIntegrations>,
-) -> Result<Vec<AiApiIntegration>, String> {
-    let result = list_integrations_impl(&store, &ai);
-    log_listing(&app, &logging::BUFFER, &result);
-    result
-}
-
-#[tauri::command]
-pub fn list_ai_api_catalogs(
-    store: State<'_, GlobalSettingsStore>,
-) -> Result<Vec<AiApiCatalog>, String> {
-    list_catalogs_impl(&store)
-}
-
-#[tauri::command]
-pub fn verify_ai_api_integration(
-    provider: String,
-    base_url: String,
-    api_key: Option<String>,
-    app: tauri::AppHandle,
-    store: State<'_, GlobalSettingsStore>,
-    ai: State<'_, AiApiIntegrations>,
-) -> Result<AiApiIntegration, String> {
-    log_verify_attempt(&app, &logging::BUFFER, &provider, &base_url, api_key.as_deref());
-    let started = std::time::Instant::now();
-    let result = verify_integration_impl(&store, &ai, &provider, &base_url, api_key.as_deref());
-    // The duration is what separates `timed_out` from a slow endpoint that
-    // answered, and it is the only measurement of the one network call this
-    // module makes.
-    log_verify_outcome(
-        &app,
-        &logging::BUFFER,
-        &provider,
-        &result,
-        started.elapsed().as_millis() as u64,
-    );
-    result
-}
-
-#[tauri::command]
-pub fn set_ai_api_model(
-    provider: String,
-    model_id: Option<String>,
-    app: tauri::AppHandle,
-    store: State<'_, GlobalSettingsStore>,
-    ai: State<'_, AiApiIntegrations>,
-) -> Result<AiApiIntegration, String> {
-    let result = set_model_impl(&store, &ai, &provider, model_id.as_deref());
-    log_config_outcome(
-        &app,
-        &logging::BUFFER,
-        "ai api model selected",
-        &result,
-        log_fields! {
-            "provider" => &provider,
-            "model" => model_id.as_deref().unwrap_or("<provider default>"),
-            // AAP-FR-29: a model change can clear the reasoning choice under the
-            // author, which is otherwise a silent change to what every call
-            // carries.
-            "reasoning" => result.as_ref().ok()
-                .map(|i| reasoning_label(i.selected_reasoning.as_ref()))
-                .unwrap_or_else(|| "unchanged".to_string()),
-        },
-    );
-    result
-}
-
-#[tauri::command]
-pub fn set_ai_api_reasoning(
-    provider: String,
-    choice: Option<ReasoningChoice>,
-    app: tauri::AppHandle,
-    store: State<'_, GlobalSettingsStore>,
-    ai: State<'_, AiApiIntegrations>,
-) -> Result<AiApiIntegration, String> {
-    let requested = reasoning_label(choice.as_ref());
-    let result = set_reasoning_impl(&store, &ai, &provider, choice);
-    log_config_outcome(
-        &app,
-        &logging::BUFFER,
-        "ai api reasoning selected",
-        &result,
-        log_fields! { "provider" => &provider, "reasoning" => requested },
-    );
-    result
-}
-
-#[tauri::command]
-pub fn set_active_ai_api_integration(
-    provider: String,
-    app: tauri::AppHandle,
-    store: State<'_, GlobalSettingsStore>,
-    ai: State<'_, AiApiIntegrations>,
-) -> Result<Vec<AiApiIntegration>, String> {
-    let result = set_active_impl(&store, &ai, &provider);
-    log_config_outcome(
-        &app,
-        &logging::BUFFER,
-        "active ai api integration set",
-        &result,
-        log_fields! { "provider" => &provider },
-    );
-    result
-}
-
-#[tauri::command]
-pub fn clear_ai_api_integration(
-    provider: String,
-    app: tauri::AppHandle,
-    store: State<'_, GlobalSettingsStore>,
-    ai: State<'_, AiApiIntegrations>,
-) -> Result<Vec<AiApiIntegration>, String> {
-    let result = clear_integration_impl(&store, &ai, &provider);
-    // AAP-FR-15: the keychain entry is gone and every agent naming this provider
-    // stops resolving. Worth a line of its own — an agent that answered
-    // yesterday and refuses today is otherwise unexplained.
-    log_config_outcome(
-        &app,
-        &logging::BUFFER,
-        "ai api integration cleared",
-        &result,
-        log_fields! { "provider" => &provider },
-    );
-    result
-}
-
-#[tauri::command]
-pub fn get_project_ai_api_integration(
-    app: tauri::AppHandle,
-    store: State<'_, GlobalSettingsStore>,
-    ai: State<'_, AiApiIntegrations>,
-    project: State<'_, ProjectState>,
-) -> Result<ProjectAiApiIntegration, String> {
-    let result = get_project_impl(&store, &ai, &project.slot_key());
-    if let Ok(resolved) = &result {
-        log_project_resolution(&app, &logging::BUFFER, resolved);
-    }
-    result
-}
-
-#[tauri::command]
-pub fn set_project_ai_api_integration(
-    provider: Option<String>,
-    app: tauri::AppHandle,
-    store: State<'_, GlobalSettingsStore>,
-    ai: State<'_, AiApiIntegrations>,
-    project: State<'_, ProjectState>,
-) -> Result<ProjectAiApiIntegration, String> {
-    let result = set_project_impl(&store, &ai, &project.slot_key(), provider.as_deref());
-    log_config_outcome(
-        &app,
-        &logging::BUFFER,
-        "project ai api override set",
-        &result,
-        log_fields! {
-            "provider" => provider.as_deref().unwrap_or("<inherit>"),
-            "resolution" => result.as_ref().ok().map(|r| r.resolution),
-        },
-    );
-    result
-}
-
 mod agent_provider;
+mod commands;
 pub(crate) mod custom_gateway;
+pub(crate) mod custom_limits;
+pub(crate) mod detection;
 mod probe_error;
+mod project_override;
+mod read_paths;
+mod selections;
 mod turn_timeout;
+mod verify;
 pub use agent_provider::*;
+pub use commands::*;
+pub use custom_limits::*;
 use probe_error::api_probe_error;
+pub use project_override::*;
+pub use read_paths::*;
+pub use selections::*;
 pub use turn_timeout::*;
+pub use verify::*;
 
 #[cfg(test)]
 mod tests;

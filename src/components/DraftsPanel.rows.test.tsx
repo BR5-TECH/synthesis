@@ -393,49 +393,7 @@ describe("the status filter's toggle row (DRP-FR-07)", () => {
     ).toBeTruthy();
   });
 
-  it("DRP-FR-07: the graduated position admits a published draft as well as a graduated one", async () => {
-    const rows: DraftSummary[] = [
-      { id: "d-grad", name: "notes-cleanup", status: "graduated", folder: "", updatedAt: "2026-07-31T08:00:00Z" },
-      { id: "d-pub", name: "relay-endpoint", status: "published", folder: "", updatedAt: "2026-07-31T07:30:00Z" },
-      { id: "d-active", name: "editor-tweaks", status: "active", folder: "", updatedAt: "2026-07-31T07:00:00Z" },
-      { id: "d-arch", name: "artifact-window", status: "archived", folder: "", updatedAt: "2026-07-31T06:00:00Z" },
-    ];
-    invokeMock.mockImplementation(async (cmd: string) =>
-      cmd === "list_drafts" ? { folders: [], drafts: rows } : undefined,
-    );
-
-    renderPanel({ filter: "graduated" });
-    await screen.findByText("notes-cleanup");
-    expect(screen.getByText("relay-endpoint")).toBeInTheDocument();
-    // Neither of the other two statuses is admitted by that position.
-    expect(screen.queryByText("editor-tweaks")).toBeNull();
-    expect(screen.queryByText("artifact-window")).toBeNull();
-  });
-
-  it("DRP-FR-08: a graduated row and a published row each state their own status", async () => {
-    const rows: DraftSummary[] = [
-      { id: "d-grad", name: "notes-cleanup", status: "graduated", folder: "", updatedAt: "2026-07-31T08:00:00Z" },
-      { id: "d-pub", name: "relay-endpoint", status: "published", folder: "", updatedAt: "2026-07-31T07:30:00Z" },
-    ];
-    invokeMock.mockImplementation(async (cmd: string) =>
-      cmd === "list_drafts" ? { folders: [], drafts: rows } : undefined,
-    );
-
-    // The two statuses stand together in the graduated position, so each row
-    // has to say which it is.
-    renderPanel({ filter: "graduated" });
-    await screen.findByText("notes-cleanup");
-    expect(screen.getByTestId("draft-graduated-marker")).toHaveTextContent("Graduated");
-    expect(screen.getByTestId("draft-published-marker")).toHaveTextContent("Published");
-    // And in the all-drafts position, where every status stands together.
-    cleanup();
-    renderPanel({ filter: "all" });
-    await screen.findByText("notes-cleanup");
-    expect(screen.getByTestId("draft-graduated-marker")).toBeInTheDocument();
-    expect(screen.getByTestId("draft-published-marker")).toBeInTheDocument();
-  });
-
-  it("DRP-FR-18: the archive entry on a published draft archives it", async () => {
+  it("DRP-FR-18: the archive entry on a legacy published draft archives it", async () => {
     const rows: DraftSummary[] = [
       { id: "d-pub", name: "relay-endpoint", status: "published", folder: "", updatedAt: "2026-07-31T07:30:00Z" },
     ];
@@ -446,7 +404,7 @@ describe("the status filter's toggle row (DRP-FR-07)", () => {
     await screen.findByText("relay-endpoint");
 
     openDraftMenu("relay-endpoint");
-    // It reads Archive rather than Restore: a published draft is not retired.
+    // It reads Archive rather than Restore: a legacy published draft is not retired.
     const menu = await screen.findByRole("menu");
     const entry = within(menu).getByRole("menuitem", { name: "Archive" });
     await userEvent.click(entry);
@@ -457,7 +415,7 @@ describe("the status filter's toggle row (DRP-FR-07)", () => {
     });
   });
 
-  it("DRP-FR-35: a published row is not locked — every entry is enabled and it drags", async () => {
+  it("DRP-FR-35: a legacy published row is not locked — every entry is enabled and it drags", async () => {
     const rows: DraftSummary[] = [
       { id: "d-pub", name: "relay-endpoint", status: "published", folder: "", updatedAt: "2026-07-31T07:30:00Z" },
     ];

@@ -19,10 +19,15 @@ mod client_rules;
 mod eligibility;
 mod enterprise_hosts;
 mod github_shadow;
+mod legacy_status;
+mod metadata_cache_rules;
+mod metadata_refresh;
+mod metadata_schedule;
 mod publication_choice;
 mod publication_commands;
 mod publishing;
 mod remote_selection;
+mod update;
 
 // ---------------------------------------------------------------------------
 // Harness
@@ -41,6 +46,31 @@ pub(super) fn draft(root: &crate::fs::RootFs, name: &str) -> String {
 pub(super) fn save_prompt(root: &crate::fs::RootFs, id: &str, body: &str) {
     let prompt = crate::drafts::require_prompt(root, id).unwrap();
     crate::drafts::save_draft_file_impl(root, id, &prompt, body).unwrap();
+}
+
+/// DRS-FR-VKQO: no operation sets `published` any more, so a test writes the
+/// legacy value into the stored record directly, as an older build left it.
+pub(super) fn store_legacy_published(root: &crate::fs::RootFs, id: &str) {
+    let path =
+        crate::drafts::draft_publication_path(root, id).unwrap().with_file_name("draft.toml");
+    let text = root.read_text(&path).unwrap();
+    let legacy = text.replace("status = \"active\"", "status = \"published\"");
+    assert_ne!(legacy, text, "the record holds no `active` status to replace");
+    root.write_text_atomic(&path, &legacy).unwrap();
+}
+
+/// One successful publication record in the draft's store, written without
+/// GitHub.
+pub(super) fn record_publication(root: &crate::fs::RootFs, id: &str, marker: &str, number: u64) {
+    let attempt = flow::open_attempt(root, id, &origin(), marker.to_string()).unwrap();
+    let issue = IssueRef {
+        number,
+        url: format!("https://github.com/acme/widgets/issues/{number}"),
+        title: "widget".into(),
+        body: "body".into(),
+        ..Default::default()
+    };
+    store::complete_attempt(root, id, flow::record_of(&attempt, &issue)).unwrap();
 }
 
 /// One recorded GitHub call, so a test can assert what reached the wire and in
@@ -75,6 +105,14 @@ pub(super) struct FakeGithub {
     pub create_error: Mutex<Option<String>>,
     /// When set, every link and unlink fails with this typed code.
     pub link_error: Mutex<Option<String>>,
+    /// When set, every issue read fails with this typed code.
+    pub read_error: Mutex<Option<String>>,
+    /// When set, every edit fails with this typed code.
+    pub update_error: Mutex<Option<String>>,
+    /// Runs after an edit is accepted, so a test can change the store while
+    /// the edit is in flight.
+    #[allow(clippy::type_complexity)] // One optional callback; a type alias says no more.
+    pub after_update: Mutex<Option<Box<dyn Fn() + Send>>>,
     pub next_number: Mutex<u64>,
     /// The Types the owner holds; `None` makes the read fail.
     pub types: Mutex<Option<Vec<String>>>,
@@ -97,6 +135,9 @@ impl Default for FakeGithub {
             search_error: Mutex::default(),
             create_error: Mutex::default(),
             link_error: Mutex::default(),
+            read_error: Mutex::default(),
+            update_error: Mutex::default(),
+            after_update: Mutex::default(),
             next_number: Mutex::new(1),
             types: Mutex::new(Some(vec!["Feature".into(), "Task".into(), "Bug".into()])),
             milestones: Mutex::new(Some(vec![
@@ -243,6 +284,9 @@ impl GithubIssues for FakeGithub {
         let client::IssueEdit { title, body, fields } = *edit;
         self.record(Call::Update(number));
         self.fields.lock().unwrap().push(fields.clone());
+        if let Some(error) = self.update_error.lock().unwrap().clone() {
+            return Err(error);
+        }
         let milestones = self.milestones.lock().unwrap().clone().unwrap_or_default();
         let mut issues = self.issues.lock().unwrap();
         let issue = issues
@@ -257,7 +301,12 @@ impl GithubIssues for FakeGithub {
         if let Some(wanted) = fields.milestone {
             issue.milestone = milestones.into_iter().find(|m| m.number == wanted);
         }
-        Ok(issue.clone())
+        let edited = issue.clone();
+        drop(issues);
+        if let Some(after) = self.after_update.lock().unwrap().as_ref() {
+            after();
+        }
+        Ok(edited)
     }
 
     fn get_issue(
@@ -268,6 +317,9 @@ impl GithubIssues for FakeGithub {
         number: u64,
     ) -> Result<Option<IssueRef>, String> {
         self.record(Call::Read(number));
+        if let Some(error) = self.read_error.lock().unwrap().clone() {
+            return Err(error);
+        }
         Ok(self.issues.lock().unwrap().iter().find(|i| i.number == number).cloned())
     }
 

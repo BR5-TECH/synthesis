@@ -12,6 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
 import { notifyAgentRegistryChanged, resetAgentRegistry } from "../state/agentRegistry";
+import { resetLogBufferForTest } from "../logging";
 import { AgentsChromeControl, PersonalAgents, ProjectAgents } from "./Agents";
 import type {
   ActiveAiApiCatalog,
@@ -108,6 +109,8 @@ function backend(over: Partial<Backend> = {}): Backend {
         return b.projectAgents;
       case "list_agent_turns":
         return [];
+      case "append_log_records":
+        return null;
       case "create_agent": {
         const { draft } = args as { draft: Omit<Agent, "id"> };
         return agent({ ...draft, id: "new" });
@@ -126,6 +129,7 @@ function backend(over: Partial<Backend> = {}): Backend {
 const calls = (b: Backend, cmd: string) => b.calls.filter((c) => c.cmd === cmd);
 
 beforeEach(() => {
+  resetLogBufferForTest();
   invokeMock.mockReset();
   resetAgentRegistry();
 });
@@ -347,16 +351,47 @@ describe("the Custom gateway in the editor (AGT-FR-15, AGT-FR-16, AGT-FR-RFSH)",
     expect(draft.modelId).toBe("gw-resp");
   });
 
-  it("AGT-FR-16, AGT-FR-RFSH: renders no reasoning selector for any Custom model", async () => {
+  it("AGT-FR-16, AGT-FR-RFSH, AGT-FR-SOIO: renders the fixed reasoning levels for every Custom model", async () => {
     backend({ active: custom() });
     render(<PersonalAgents />);
     await userEvent.click(await screen.findByTestId("agent-create"));
     const editor = await screen.findByTestId("agent-editor");
+    expect(within(editor).queryByTestId("agent-reasoning")).not.toBeInTheDocument();
     for (const label of ["Gateway Both", "Gateway Chat", "Gateway Resp"]) {
       const list = await openSelector(editor, "agent-model");
       await userEvent.click(list.getByText(new RegExp(`^${label}`)));
-      expect(within(editor).queryByTestId("agent-reasoning")).not.toBeInTheDocument();
+      const reasoning = await openSelector(editor, "agent-reasoning");
+      expect(reasoning.getAllByRole("option").map((o) => o.textContent)).toEqual([
+        "Custom provider default",
+        "none",
+        "low",
+        "medium",
+        "high",
+      ]);
+      await userEvent.keyboard("{Escape}");
     }
+    expect(within(editor).getByTestId("agent-reasoning-note")).toHaveTextContent(
+      /Custom provider's reasoning effort.*overrides it for this agent only/,
+    );
+  });
+
+  it("AGT-FR-SOIO: a chosen level is saved as the agent's own reasoning", async () => {
+    const b = backend({ active: custom() });
+    render(<PersonalAgents />);
+    await userEvent.click(await screen.findByTestId("agent-create"));
+    const editor = await screen.findByTestId("agent-editor");
+    await userEvent.type(within(editor).getByTestId("agent-nickname"), "local");
+    const models = await openSelector(editor, "agent-model");
+    await userEvent.click(models.getByText(/^Gateway Chat/));
+    const levels = await openSelector(editor, "agent-reasoning");
+    await userEvent.click(levels.getByText("low"));
+    await userEvent.click(within(editor).getByTestId("agent-editor-confirm"));
+
+    await waitFor(() => expect(calls(b, "create_agent")).toHaveLength(1));
+    const { draft } = calls(b, "create_agent")[0].args as {
+      draft: { reasoning: unknown };
+    };
+    expect(draft.reasoning).toEqual({ kind: "effort", effort: "low" });
   });
 
   it("AGT-FR-15: does not state a gateway origin for a provider that is not Custom", async () => {

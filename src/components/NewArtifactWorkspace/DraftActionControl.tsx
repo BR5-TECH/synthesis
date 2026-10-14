@@ -9,7 +9,7 @@ import type { UseDraftPublicationResult } from "../../hooks/useDraftPublication"
 import { setDraftDiscussionHidden } from "../../state/draftDiscussion";
 import type { DraftSessionStore } from "../../state/draftSessions";
 import { ActionControl } from "../ActionControl";
-import { publicationActionTitle } from "../DraftPublication";
+import { publicationActionTitle, updateActionTitle } from "../DraftPublication";
 import { copyLivePrompt } from "./copySource";
 import {
   SHADOW_ARCHIVE_REASON,
@@ -31,6 +31,7 @@ export function DraftActionControl({
   publication,
   onGraduate,
   onPublish,
+  onUpdate,
   onToggleArchive,
   onDiscussFocus,
   dismissSignal,
@@ -51,12 +52,17 @@ export function DraftActionControl({
   publication: UseDraftPublicationResult;
   onGraduate: () => void;
   onPublish: () => void;
+  /** NAW-FR-KMLN: update the issue of the current record. */
+  onUpdate: () => void;
   onToggleArchive: () => void;
   onDiscussFocus: () => void;
   dismissSignal: number;
   onOverlayChange: (open: boolean) => void;
   onDiscussionOpened: (threadId: string) => void;
 }) {
+  // NAW-FR-KMLN / ACT-FR-SSHS: a draft that holds a current record offers
+  // Update on GitHub in the place of Publish to GitHub.
+  const published = !shadow && !!publication.view?.current;
   return (
     <ActionControl
       discussions={control.discussions}
@@ -123,7 +129,14 @@ export function DraftActionControl({
         onActivate: () => copyLivePrompt(drafts, draftId),
         title: "Copy the prompt text to the clipboard",
       }}
-      publish={{
+      publish={published ? {
+        label: "Update on GitHub",
+        onActivate: onUpdate,
+        /* NAW-FR-HKYL: the same read decides, and a standing attempt is
+           one of its refusals. */
+        disabled: publication.busy || !publication.view?.eligibility.publishable,
+        title: updateActionTitle(publication),
+      } : {
         label: "Publish to GitHub",
         onActivate: onPublish,
         /* NAW-FR-ZQMX: enabled only where the one read reports the draft

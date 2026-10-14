@@ -36,6 +36,8 @@ pub(super) fn bare_merge_run() -> GraduationRun {
         archived_at: None,
         work_turns: 0,
         review_turns: 0,
+        turn_time_used_ms: 0,
+        rest: None,
         logs: crate::graduation::logs::GraduationLogIndexes::default(),
         checkpoint: GraduationCheckpoint::default(),
         observability: GraduationObservability::default(),
@@ -283,13 +285,18 @@ fn a_merge_runs_window_is_two_passes_whatever_the_projects_budget() {
     assert_eq!(wide.pass_limit_from(&draft, 3), 7);
 }
 
-// GRL-FR-KWNP: the turns of a merge run read the execution timeout alone: a
-// settings value for the pass budget changes nothing of a merge run's window,
-// while the timeout stays the project's own.
+// GRL-FR-KWNP, GRB-FR-VTLQ: the turns of a merge run read the two time limits
+// alone: a settings value for the pass budget changes nothing of a merge run's
+// window, while both time limits stay the project's own.
 #[test]
-fn a_merge_run_still_reads_the_execution_timeout() {
-    let settings = driver::LoopSettings { execution_timeout_ms: 123_000, pass_budget: 9 };
+fn a_merge_run_still_reads_the_time_limits() {
+    let settings = driver::LoopSettings {
+        stage_time_limit_ms: 3_600_000,
+        total_time_limit_ms: 5_400_000,
+        pass_budget: 9,
+    };
     let merge = bare_merge_run();
-    assert_eq!(settings.execution_timeout_ms, 123_000);
+    assert_eq!(settings.turn_bound(merge.turn_time_used_ms).limit_ms, 3_600_000);
+    assert_eq!(settings.turn_bound(3_600_000).limit_ms, 1_800_000);
     assert_eq!(settings.pass_limit_for(&merge), 2);
 }

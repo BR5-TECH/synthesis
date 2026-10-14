@@ -275,6 +275,26 @@ export const setAiApiTurnTimeout = (
 ) => invoke<AiApiIntegration>("set_ai_api_turn_timeout", { provider, timeoutMs });
 
 /**
+ * AAP-FR-ITBL: store the Custom provider's max output tokens. `null` clears
+ * it, so the default limit applies. Rejects `token_limit_invalid` for a value
+ * that is not a whole number from 1 to 4294967295, and `limit_unsupported` for
+ * a provider other than Custom.
+ */
+export const setAiApiMaxOutputTokens = (
+  provider: AiApiProviderId,
+  tokens: number | null,
+) => invoke<AiApiIntegration>("set_ai_api_max_output_tokens", { provider, tokens });
+
+/**
+ * AAP-FR-ITBL: store the Custom provider's max context size. `null` clears it.
+ * Rejects as `setAiApiMaxOutputTokens` does.
+ */
+export const setAiApiMaxContextSize = (
+  provider: AiApiProviderId,
+  tokens: number | null,
+) => invoke<AiApiIntegration>("set_ai_api_max_context_size", { provider, tokens });
+
+/**
  * AAP-FR-13: make this the user-global active API integration. Rejects
  * `not_verified` for anything not currently verified. Returns the whole list,
  * because activating one clears any other.

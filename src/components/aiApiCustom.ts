@@ -41,3 +41,58 @@ export function modelSelectOptions(
 
 /** AII-FR-12 / AGT-FR-15: where a Custom model list came from. */
 export const CUSTOM_GATEWAY_ORIGIN = "from the Custom gateway";
+
+/** AII-FR-XGIM / AGT-FR-SOIO: the levels every Custom model offers, in order. */
+export const CUSTOM_REASONING_LEVELS = ["none", "low", "medium", "high"] as const;
+
+/**
+ * AII-FR-XGIM / AGT-FR-SOIO: the entries of a Custom reasoning selector — the
+ * default entry, then the fixed levels. The entry ids are the ones
+ * `reasoningChoiceFor` reads, so an entry maps to `{ kind: "effort" }`.
+ */
+export function customReasoningOptions(
+  defaultLabel: string,
+): { id: string; label: string }[] {
+  return [
+    { id: "", label: defaultLabel },
+    ...CUSTOM_REASONING_LEVELS.map((level) => ({
+      id: `effort:${level}`,
+      label: level,
+    })),
+  ];
+}
+
+/**
+ * AII-FR-ZIEG: the detected values of a Custom model as one line, or `null`
+ * where the model has none. A null value is not shown.
+ */
+export function detectedValuesText(
+  model: Pick<ModelOption, "detectedContextSize" | "detectedCapabilities"> | null,
+): string | null {
+  if (!model) return null;
+  const parts: string[] = [];
+  if (model.detectedContextSize != null) {
+    parts.push(`context ${model.detectedContextSize} tokens`);
+  }
+  if (model.detectedCapabilities && model.detectedCapabilities.length > 0) {
+    parts.push(model.detectedCapabilities.join(", "));
+  }
+  return parts.length > 0 ? `detected · ${parts.join(" · ")}` : null;
+}
+
+/** AII-FR-TWIR: the largest value a Custom token field accepts. */
+export const TOKEN_LIMIT_MAX = 4294967295;
+
+/**
+ * AII-FR-UQLF / AII-FR-TWIR: what the typed text of a token field commits —
+ * `null` to clear, a whole number from 1 to `TOKEN_LIMIT_MAX`, or `undefined`
+ * for an entry that commits nothing.
+ */
+export function tokenLimitToCommit(text: string): number | null | undefined {
+  const trimmed = text.trim();
+  if (trimmed === "") return null;
+  if (!/^\d+$/.test(trimmed)) return undefined;
+  const value = Number(trimmed);
+  if (value < 1 || value > TOKEN_LIMIT_MAX) return undefined;
+  return value;
+}

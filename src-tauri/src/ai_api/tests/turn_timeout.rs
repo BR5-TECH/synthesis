@@ -148,6 +148,8 @@ fn the_graduation_read_path_never_carries_it() {
 #[test]
 fn the_turn_timeout_round_trips_through_the_toml_store() {
     let record = AiApiRecord {
+        max_output_tokens: None,
+        max_context_size: None,
         turn_timeout_ms: Some(600_000),
         provider: "openrouter".into(),
         base_url: Some("https://openrouter.ai/api/v1".into()),

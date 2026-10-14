@@ -22,6 +22,8 @@ fn ladder() -> ModelReasoning {
 /// verified record from a merely-configured one (AAP-FR-13).
 fn verified(provider: &str, models: Vec<ModelOption>) -> AiApiRecord {
     AiApiRecord {
+        max_output_tokens: None,
+        max_context_size: None,
         turn_timeout_ms: None,
         provider: provider.into(),
         base_url: Some(format!("https://{provider}.example/v1")),

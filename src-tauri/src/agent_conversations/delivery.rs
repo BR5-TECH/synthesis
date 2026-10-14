@@ -124,6 +124,7 @@ pub(super) fn record_refinement_usage<R: tauri::Runtime>(
     plan: &TurnPlan,
     round: usize,
     attempt: u32,
+    compaction: bool,
     reply: &ModelReply,
 ) where
     tauri::AppHandle<R>: crate::logging::LogSink + Clone + Send + 'static,
@@ -138,7 +139,13 @@ pub(super) fn record_refinement_usage<R: tauri::Runtime>(
         output_tokens: reply.output_tokens,
     };
     let record = crate::statistics::UsageRecord {
-        usage_id: format!("{}:{round}:{attempt}", plan.turn_id),
+        // CVL-FR-CSLX: a compaction call comes before the invocation it is
+        // numbered with, so its identity names it apart.
+        usage_id: if compaction {
+            format!("{}:{round}:compaction:{attempt}", plan.turn_id)
+        } else {
+            format!("{}:{round}:{attempt}", plan.turn_id)
+        },
         round: round as u32,
         attempt,
         // CVL-FR-WQZD: every provider this loop reaches reports against one

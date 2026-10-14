@@ -300,6 +300,8 @@ pub(super) fn save_plain_run(
         archived_at: None,
         work_turns: 0,
         review_turns: 0,
+        turn_time_used_ms: 0,
+        rest: None,
         logs: GraduationLogIndexes::default(),
         checkpoint: GraduationCheckpoint::default(),
         observability: GraduationObservability::default(),

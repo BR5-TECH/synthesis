@@ -58,6 +58,12 @@ pub fn transition<R: tauri::Runtime>(
 
     runs::save_run(app, run)?;
     events::announce_queue(app, run);
+    // GRD-FR-UESX: a run that is completed or discarded can leave its queue
+    // idle, and an idle queue's sandbox VM stops (EAC-FR-LQRI). A `failed` run
+    // holds its queue, so it leaves nothing idle.
+    if next.is_terminal() && !run.holds_queue() {
+        idle_sandbox::stop_sandbox_if_idle(app, run);
+    }
     // GRD-FR-ZHNV: the run is reported while it executes and in no other state.
     run_progress::sync(app, run);
 

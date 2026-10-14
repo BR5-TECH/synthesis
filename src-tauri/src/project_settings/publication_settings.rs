@@ -1,8 +1,8 @@
 //! The GitHub publication settings (PSS-FR-HWBG, PSS-FR-RDXE, PSS-FR-VCZM).
 //!
 //! The settings are project-public: the parent issue Types, the sub-issue
-//! Type, and the sub-issue milestone policy are the same for every checkout of
-//! the project. They live in a table of their own, apart from the polling
+//! Type, the sub-issue milestone policy, and the root issue Type are the same
+//! for every checkout of the project. They live in a table of their own, apart from the polling
 //! settings, so a write of one group carries the other through unchanged.
 //!
 //! `GHP-github-publication.md` (GHP-FR-KVRH) is the only caller, and no
@@ -17,6 +17,7 @@ const GITHUB_PUBLICATION_KEY: &str = "githubPublication";
 const PARENT_ISSUE_TYPES_KEY: &str = "parentIssueTypes";
 const SUB_ISSUE_TYPE_KEY: &str = "subIssueType";
 const MILESTONE_POLICY_KEY: &str = "subIssueMilestonePolicy";
+const ROOT_ISSUE_TYPE_KEY: &str = "rootIssueType";
 
 /// PSS-FR-HWBG: the parent Type a setting that is unset reads as.
 pub const DEFAULT_PARENT_ISSUE_TYPE: &str = "Feature";
@@ -34,13 +35,17 @@ pub enum MilestonePolicy {
     AuthorSelected,
 }
 
-/// GHP-FR-KVRH: the three project-public publication settings.
+/// GHP-FR-KVRH: the four project-public publication settings.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GithubPublicationSettings {
     pub parent_issue_types: Vec<String>,
     pub sub_issue_type: String,
     pub sub_issue_milestone_policy: MilestonePolicy,
+    /// PSS-FR-HWBG: the Type a root issue is pre-filled with. `None` is
+    /// No Type, which is also the default.
+    #[serde(default)]
+    pub root_issue_type: Option<String>,
 }
 
 impl Default for GithubPublicationSettings {
@@ -49,6 +54,7 @@ impl Default for GithubPublicationSettings {
             parent_issue_types: vec![DEFAULT_PARENT_ISSUE_TYPE.to_string()],
             sub_issue_type: DEFAULT_SUB_ISSUE_TYPE.to_string(),
             sub_issue_milestone_policy: MilestonePolicy::default(),
+            root_issue_type: None,
         }
     }
 }
@@ -104,6 +110,13 @@ pub fn load_github_publication_settings_from(
     {
         settings.sub_issue_milestone_policy = policy;
     }
+    // PSS-FR-RDXE: a blank root issue Type reads as no Type.
+    settings.root_issue_type = section
+        .get(ROOT_ISSUE_TYPE_KEY)
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string);
     Ok(settings)
 }
 
@@ -135,6 +148,10 @@ pub fn save_github_publication_settings_to(
         toml::Value::try_from(settings.sub_issue_milestone_policy)
             .map_err(|_| "failed to encode the GitHub publication settings".to_string())?,
     );
+    // PSS-FR-RDXE: no Type is stored as an absent value.
+    if let Some(name) = &settings.root_issue_type {
+        section.insert(ROOT_ISSUE_TYPE_KEY.to_string(), toml::Value::String(name.clone()));
+    }
     table.insert(GITHUB_PUBLICATION_KEY.to_string(), toml::Value::Table(section));
     save_public(root, &table)
 }

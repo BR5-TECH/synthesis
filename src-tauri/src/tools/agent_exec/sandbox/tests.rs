@@ -21,6 +21,7 @@ impl LogSink for Silent {
 enum Call {
     Boot(String, BootImage),
     Load(String),
+    Reopen,
     Run(String, Vec<String>),
     Refresh(String),
     Stop(String),
@@ -32,7 +33,10 @@ struct RecordingSandbox {
     calls: StdMutex<Vec<Call>>,
     /// Answers for successive boots; `Ok` once the list is empty.
     boots: StdMutex<Vec<Result<(), BootError>>>,
-    load: StdMutex<Option<String>>,
+    /// Answers for successive loads; `Ok` once the list is empty.
+    loads: StdMutex<Vec<Result<(), BootError>>>,
+    /// Answers for successive catalog reopens; `Ok` once the list is empty.
+    reopens: StdMutex<Vec<Result<(), String>>>,
     /// Answers for successive runs; `Ok` once the list is empty.
     runs: StdMutex<Vec<RuntimeError>>,
     /// Whether a boot never ends, as a boot that pulls or exports for a long
@@ -84,12 +88,26 @@ impl SandboxRuntime for RecordingSandbox {
         &'a self,
         _archive: &'a Path,
         reference: &'a str,
-    ) -> BoxFuture<'a, Result<(), String>> {
+    ) -> BoxFuture<'a, Result<(), BootError>> {
         Box::pin(async move {
             self.calls.lock().unwrap().push(Call::Load(reference.to_string()));
-            match self.load.lock().unwrap().clone() {
-                Some(error) => Err(error),
-                None => Ok(()),
+            let mut loads = self.loads.lock().unwrap();
+            if loads.is_empty() {
+                Ok(())
+            } else {
+                loads.remove(0)
+            }
+        })
+    }
+
+    fn reopen_catalog(&self) -> BoxFuture<'_, Result<(), String>> {
+        Box::pin(async move {
+            self.calls.lock().unwrap().push(Call::Reopen);
+            let mut reopens = self.reopens.lock().unwrap();
+            if reopens.is_empty() {
+                Ok(())
+            } else {
+                reopens.remove(0)
             }
         })
     }
@@ -411,67 +429,6 @@ fn a_failed_export_leaves_nothing_behind() {
     let error = block_on(cache.ensure("agent:dev", "sha256:aa", &exporter)).unwrap_err();
     assert_eq!(error, "docker save failed");
     assert!(fx.fs.list_dir(&root).unwrap().is_empty());
-}
-
-// EAC-FR-NCSA: no verified Docker backend, an image Docker does not hold, and a
-// failed export are each their own cause; nothing falls back.
-#[test]
-fn export_failures_are_typed() {
-    let fx = fixture();
-    let s = settings();
-    let spec = spec("local/agent:dev", "/w/one");
-    let args: Vec<String> = Vec::new();
-    let not_found = || vec![Err(BootError::ImageNotFound("not found".into()))];
-
-    let pool = SandboxPool::new(RecordingSandbox::with_boots(not_found()));
-    let error = block_on(pool.launch(&Silent, launch(&fx, "vm", &spec, &s, None), process(&args)))
-        .unwrap_err();
-    assert!(matches!(
-        error,
-        SandboxLaunchError::Sandbox(SandboxFailure {
-            cause: SandboxFailureCause::ImageUnavailable,
-            ..
-        })
-    ));
-
-    let missing: Arc<dyn ImageExporter> = Arc::new(StubExporter {
-        id: Err("no such image".into()),
-        exports: StdMutex::new(0),
-        exported: StdMutex::new(Vec::new()),
-        fail_export: false,
-    });
-    let pool = SandboxPool::new(RecordingSandbox::with_boots(not_found()));
-    let error =
-        block_on(pool.launch(&Silent, launch(&fx, "vm", &spec, &s, Some(missing)), process(&args)))
-            .unwrap_err();
-    assert!(matches!(
-        error,
-        SandboxLaunchError::Sandbox(SandboxFailure {
-            cause: SandboxFailureCause::ImageUnavailable,
-            ..
-        })
-    ));
-
-    let failing: Arc<dyn ImageExporter> = Arc::new(StubExporter {
-        id: Ok("sha256:bb".into()),
-        exports: StdMutex::new(0),
-        exported: StdMutex::new(Vec::new()),
-        fail_export: true,
-    });
-    let after_export = RecordingSandbox::with_boots(not_found());
-    let pool = SandboxPool::new(after_export.clone());
-    let error =
-        block_on(pool.launch(&Silent, launch(&fx, "vm", &spec, &s, Some(failing)), process(&args)))
-            .unwrap_err();
-    assert!(matches!(
-        error,
-        SandboxLaunchError::Sandbox(SandboxFailure {
-            cause: SandboxFailureCause::ImageExportFailed,
-            ..
-        })
-    ));
-    // A failed export falls back to nothing: no boot of any kind follows it.
-    assert!(after_export.calls().iter().all(|call| !matches!(call, Call::Boot(..))));
 }
 
 // EAC-FR-NCSA, GSS-FR-NCAQ: a boot failure keeps its cause, a machine that
@@ -988,3 +945,6 @@ fn another_disk_size_boots_a_new_vm() {
     assert_eq!(lifecycle(&runtime), vec!["boot", "stop", "boot"]);
     assert_eq!(pool.booted("vm-a").map(|spec| spec.disk_gib), Some(128));
 }
+
+mod causes;
+mod idle;

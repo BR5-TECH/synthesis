@@ -17,7 +17,20 @@ import {
   notifyAgentRegistryChanged,
   useAgentRegistryRevision,
 } from "../state/agentRegistry";
-import { CUSTOM_GATEWAY_ORIGIN, modelSelectOptions, routeLabel } from "./aiApiCustom";
+import {
+  CUSTOM_GATEWAY_ORIGIN,
+  customReasoningOptions,
+  modelSelectOptions,
+  routeLabel,
+} from "./aiApiCustom";
+
+/** AGT-FR-SOIO: the default entry of a Custom agent's reasoning selector. */
+export const CUSTOM_PROVIDER_DEFAULT_LABEL = "Custom provider default";
+
+/** AGT-FR-SOIO: what the default entry of a Custom agent does. */
+export const CUSTOM_REASONING_NOTE =
+  "The default uses the Custom provider's reasoning effort, or the model " +
+  "default where it is unset. A level here overrides it for this agent only.";
 import {
   reasoningChoiceFor,
   reasoningDefaultNote,
@@ -100,7 +113,13 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
   const selectedModel = models.find((m) => m.id === modelId) ?? null;
   // AGT-FR-16: rendered only while a model is selected whose record declares
   // reasoning; `null` renders no row at all and the rows beneath close the gap.
-  const reasoningEntries = reasoningOptions(selectedModel);
+  // AGT-FR-SOIO: on the Custom provider every model offers the fixed levels,
+  // and the default entry is the provider's reasoning effort.
+  const isCustom = catalog?.provider === "custom";
+  const reasoningEntries =
+    isCustom && selectedModel
+      ? customReasoningOptions(CUSTOM_PROVIDER_DEFAULT_LABEL)
+      : reasoningOptions(selectedModel);
 
   // AGT-FR-17: changing the model returns the reasoning selector to the
   // model-default entry when the new model cannot honour the previous choice.
@@ -284,7 +303,7 @@ function PersonaEditor({ scope, agent, catalog, onCancel, onSaved }: PersonaEdit
             onChange={setReasoning}
           />
           <span className="t-ui-sm t-muted" data-testid="agent-reasoning-note">
-            {reasoningDefaultNote(selectedModel)}
+            {isCustom ? CUSTOM_REASONING_NOTE : reasoningDefaultNote(selectedModel)}
           </span>
         </div>
       )}

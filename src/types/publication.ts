@@ -26,6 +26,10 @@ export type PublicationErrorCode =
   | "github_unreachable"
   | "issue_create_failed"
   | "issue_update_failed"
+  | "no_publication_record"
+  | "issue_not_found"
+  | "issue_moved"
+  | "issue_update_forbidden"
   | "publication_store_write_failed"
   | "parent_issues_unreadable"
   | "issue_types_unreadable"
@@ -35,7 +39,8 @@ export type PublicationErrorCode =
   | "milestone_unavailable"
   | "invalid_publication_choice"
   | "sub_issue_link_failed"
-  | "invalid_publication_settings";
+  | "invalid_publication_settings"
+  | "github_project_not_selected";
 
 /** GHP-FR-AZPF: how a sub-issue's milestone is resolved. */
 export type MilestonePolicy =
@@ -66,11 +71,13 @@ export interface PublicationChoiceInput {
   milestoneNumber: number | null;
 }
 
-/** GHP-FR-KVRH: the three project-public publication settings. */
+/** GHP-FR-KVRH: the four project-public publication settings. */
 export interface GithubPublicationSettings {
   parentIssueTypes: string[];
   subIssueType: string;
   subIssueMilestonePolicy: MilestonePolicy;
+  /** PSS-FR-HWBG: the Type a root issue is pre-filled with; null is No Type. */
+  rootIssueType: string | null;
 }
 
 /** GHP-FR-DZLB: one metadata list and how its read ended. */
@@ -109,6 +116,34 @@ export interface PublicationMetadata {
   milestones: MetadataList<PublicationMilestone>;
   /** GHP-FR-ETJD: `resolved` is null where the configured Type is unavailable. */
   subIssueType: { name: string; resolved: string | null };
+  /** GHP-FR-AFEX: null where no root issue Type is stored. */
+  rootIssueType: { name: string; resolved: string | null } | null;
+}
+
+/** GHP-FR-SIMK: how one refresh of the metadata cache ended. */
+export type PublicationMetadataRefreshOutcome = "changed" | "unchanged" | "failed";
+
+/** GHP-FR-SIMK: the answer of `"refresh publication metadata"`. */
+export interface PublicationMetadataRefresh {
+  outcome: PublicationMetadataRefreshOutcome;
+  errorCode: string | null;
+  error: string | null;
+  /** The cached remote, or null while the cache is empty. */
+  remoteName: string | null;
+  metadata: PublicationMetadata | null;
+}
+
+/** GHP-FR-JIAU: the payload of `"publication metadata changed"`. */
+export interface PublicationMetadataCacheChanged {
+  /** The cached remote, or null where the cache was emptied. */
+  remoteName: string | null;
+  metadata: PublicationMetadata | null;
+}
+
+/** GHP-FR-ISJI: the payload of `"publication metadata startup failed"`. */
+export interface PublicationMetadataStartupFailed {
+  errorCode: string;
+  error: string;
 }
 
 /**
@@ -126,6 +161,8 @@ export interface PublicationRecord {
   issueNumber: number;
   issueUrl: string;
   publishedAt: string;
+  /** GHP-FR-WUJQ: present only on a record that an update appended. */
+  updatedAt?: string;
   marker: string;
   /** GHP-FR-HSCH: absent in a record written before the choice existed. */
   choice?: PublicationChoice;
@@ -226,3 +263,8 @@ export type PublicationMismatch =
 
 /** GHP-FR-YPGL: the two answers to a recovery choice. */
 export type PublicationRecoveryChoice = "update_existing" | "publish_new";
+
+/** GHP-FR-AXRU / GHP-FR-WUJQ: what an update answers with. */
+export type IssueUpdateOutcome =
+  | { kind: "updated"; record: PublicationRecord }
+  | { kind: "issueClosed"; issueNumber: number; issueUrl: string };

@@ -14,6 +14,10 @@ import type { MutableRefObject } from "react";
 
 import { logInfo } from "../../logging";
 import { formatSectionAddress } from "../../settingsWindow";
+import {
+  STAGE_TIME_LIMIT_ITEM,
+  TOTAL_TIME_LIMIT_ITEM,
+} from "../../state/graduationLoopSettings";
 
 import {
   aheadOf,
@@ -41,6 +45,9 @@ import {
   stageOf,
   stageDescriptorsFor,
   stateLabelOf,
+  totalTimeLimitDetail,
+  totalTimeLimitHeadline,
+  totalTimeLimitRestOf,
 } from "../../state/graduation";
 import { stagesWithLogAccess } from "../../state/graduation/logScopes";
 import type {
@@ -60,6 +67,14 @@ import { MergePaths, MergePublication, MergeResult } from "./merge";
  * say it twice.
  */
 const SAYS_ITSELF = ["blocked", "interrupted", "failed", "discarded"];
+
+/**
+ * GRU-FR-CKOB / GRU-FR-WKTL: whether the run's own paragraph says what it is
+ * doing. A run at rest on the total time limit has one too.
+ */
+function saysItself(run: GraduationRun): boolean {
+  return SAYS_ITSELF.includes(run.state) || totalTimeLimitRestOf(run) !== null;
+}
 
 export interface RunRegionProps {
   run: GraduationRun;
@@ -192,7 +207,7 @@ export function RunRegion({
         // its stage row and nothing else. What the run is doing is said in the
         // region's own words rather than lost with the row that used to carry
         // it. A state that states itself below says nothing twice.
-        !SAYS_ITSELF.includes(run.state) && (
+        !saysItself(run) && (
           <p className="graduation__provenance" data-testid="graduation-condition">
             {conditionSentence(
               run,
@@ -242,8 +257,11 @@ export function RunRegion({
                 onClick={() => {
                   logInfo(["frontend"], "graduation run routed to the time limit setting", {
                     runId: run.id,
+                    setting: STAGE_TIME_LIMIT_ITEM,
                   });
-                  onOpenSettings(formatSectionAddress("project", "graduation"));
+                  onOpenSettings(
+                    formatSectionAddress("project", "graduation", STAGE_TIME_LIMIT_ITEM),
+                  );
                 }}
               >
                 Change the time limit
@@ -252,6 +270,12 @@ export function RunRegion({
           ) : null}
         </p>
       )}
+
+      {/* GRU-FR-WKTL / GRU-FR-TTLR: a run at rest on its total time limit says
+          the limit and the time it used, and routes to the setting that sets
+          the limit, so the author can raise it before Continue. It spent no
+          pass budget, so it says none. */}
+      <TotalTimeLimitRest run={run} onOpenSettings={onOpenSettings} />
 
       {/* GRU-FR-TFEZ: a push the remote did not take, said once. */}
       {pushRefusalStatement(run) && (
@@ -335,5 +359,47 @@ export function RunRegion({
         />
       </div>
     </>
+  );
+}
+
+/** GRU-FR-WKTL / GRU-FR-TTLR: the paragraph of a run at rest on its total time limit. */
+function TotalTimeLimitRest({
+  run,
+  onOpenSettings,
+}: {
+  run: GraduationRun;
+  onOpenSettings?: (address: string) => void;
+}) {
+  const rest = totalTimeLimitRestOf(run);
+  if (!rest) return null;
+  return (
+    <p className="graduation__warning" data-testid="graduation-rest">
+      {totalTimeLimitHeadline(rest)}
+      <span className="t-meta" data-testid="graduation-rest-detail">
+        {" "}
+        {totalTimeLimitDetail(rest)}
+      </span>
+      {onOpenSettings ? (
+        <>
+          {" "}
+          <button
+            type="button"
+            className="btn btn--sm btn--ghost graduation__warning-action"
+            data-testid="graduation-change-total-time-limit"
+            onClick={() => {
+              logInfo(["frontend"], "graduation run routed to the time limit setting", {
+                runId: run.id,
+                setting: TOTAL_TIME_LIMIT_ITEM,
+              });
+              onOpenSettings(
+                formatSectionAddress("project", "graduation", TOTAL_TIME_LIMIT_ITEM),
+              );
+            }}
+          >
+            Change the time limit
+          </button>
+        </>
+      ) : null}
+    </p>
   );
 }

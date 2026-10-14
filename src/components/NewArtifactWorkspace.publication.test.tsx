@@ -376,26 +376,26 @@ describe("New Artifact workspace — publishing to GitHub", () => {
 
   it("NAW-FR-CBUJ: a failure is named ahead of the record it leaves standing", async () => {
     const record = publicationRecord(418, "pub-c");
-    const base = invokeMock.getMockImplementation() as (
+    stub({
+      publication: {
+        ...noPublication(),
+        current: record,
+        history: [record],
+        attempt: openAttempt(),
+      },
+    });
+    const withRecord = invokeMock.getMockImplementation() as (
       cmd: string,
       args?: unknown,
     ) => Promise<unknown>;
-    stub({
-      publication: { ...noPublication(), current: record, history: [record] },
-    });
-    const withRecord = invokeMock.getMockImplementation() as typeof base;
     invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
-      if (cmd === "publish_draft_to_github") throw new Error("github_unreachable");
+      if (cmd === "retry_draft_publication") throw new Error("github_unreachable");
       return withRecord(cmd, args);
     });
 
     renderWorkspace();
-    expect(await screen.findByTestId("draft-publication-tag")).toHaveTextContent(
-      "Published #418",
-    );
-
-    await userEvent.click(await publishEntry());
-    await confirmPublicationChooser();
+    const band = await screen.findByTestId("draft-publication-band");
+    await userEvent.click(within(band).getByRole("button", { name: "Retry" }));
     // The record is still the draft's current publication, so a tag that named
     // it would be true and useless: the failure is what the author must act on.
     await waitFor(() =>
@@ -942,53 +942,5 @@ describe("New Artifact workspace — publishing to GitHub", () => {
     const entry = within(menu).getByRole("menuitem", { name: /Publish to GitHub/ });
     expect(entry).toBeDisabled();
     expect(entry).toHaveAttribute("title", "A graduation run is working from this draft.");
-  });
-
-  it("NAW-FR-UDPM, NAW-FR-TSQE: a deliberate re-publication leaves the tag naming the new record", async () => {
-    const first = publicationRecord(402, "pub-a", "2026-09-04T16:20:00.000Z");
-    const second = publicationRecord(418, "pub-b", "2026-09-12T10:04:00.000Z");
-    let view: DraftPublicationView = {
-      current: first,
-      history: [first],
-      attempt: null,
-      eligibility: noPublication().eligibility,
-    };
-    stub({ publication: () => view });
-    const base = invokeMock.getMockImplementation() as (
-      cmd: string,
-      args?: unknown,
-    ) => Promise<unknown>;
-    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
-      if (cmd === "publish_draft_to_github") {
-        view = {
-          ...view,
-          current: second,
-          history: [second, first],
-        };
-        return { kind: "published", record: second } satisfies PublicationOutcome;
-      }
-      return base(cmd, args);
-    });
-
-    renderWorkspace();
-    expect(await screen.findByTestId("draft-publication-tag")).toHaveTextContent(
-      "Published #402",
-    );
-
-    await userEvent.click(await publishEntry());
-    await confirmPublicationChooser();
-    await waitFor(() => expect(calls("publish_draft_to_github")).toHaveLength(1));
-
-    // NAW-FR-TSQE: the tag follows the one read rather than the tab holding a
-    // copy of what it published.
-    await waitFor(() =>
-      expect(screen.getByTestId("draft-publication-tag")).toHaveTextContent(
-        "Published #418",
-      ),
-    );
-    // The earlier record is untouched on disk and is read in Draft
-    // Information; the tag names the current publication alone.
-    expect(view.history).toEqual([second, first]);
-    expect(screen.queryByText(/#402/)).toBeNull();
   });
 });

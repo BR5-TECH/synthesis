@@ -511,6 +511,8 @@ fn the_anthropic_carrier_asks_for_caching_at_the_short_lifetime() {
     let client = rig::providers::anthropic::AnthropicConfig::new("not-a-real-key")
         .connect(rig_reqwest::ReqwestClient::from(reqwest013::Client::new()));
     let endpoint = AiApiCall {
+        max_output_tokens: None,
+        context_size: None,
         turn_timeout_ms: None,
         provider: "anthropic".into(),
         base_url: "https://example.invalid".into(),

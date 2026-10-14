@@ -362,7 +362,7 @@ fn the_metadata_lists_hold_only_parent_candidates() {
     assert_eq!(metadata.milestones.items.len(), 2);
     assert_eq!(
         metadata.sub_issue_type,
-        SubIssueTypeResolution { name: "Task".into(), resolved: Some("Task".into()) }
+        IssueTypeResolution { name: "Task".into(), resolved: Some("Task".into()) }
     );
     assert!(f
         .github
@@ -832,24 +832,68 @@ fn a_choice_round_trips_through_the_store_file() {
 // Settings
 // ---------------------------------------------------------------------------
 
+/// GHP-FR-AFEX / GHP-FR-MDLD: the root issue Type is null where none is
+/// stored, takes GitHub's spelling where the Type list holds it, and has a null
+/// spelling where the list does not hold it or failed.
+#[test]
+fn the_root_issue_type_resolves_against_the_type_list() {
+    let f = fixture();
+    let unset = flow::load_metadata(&f.github, "secret", "acme", "widgets", Default::default());
+    assert_eq!(unset.root_issue_type, None);
+
+    let typed = |name: &str| GithubPublicationSettings {
+        root_issue_type: Some(name.into()),
+        ..Default::default()
+    };
+    let held = flow::load_metadata(&f.github, "secret", "acme", "widgets", typed("bug"));
+    assert_eq!(
+        held.root_issue_type,
+        Some(IssueTypeResolution { name: "bug".into(), resolved: Some("Bug".into()) })
+    );
+    let missing = flow::load_metadata(&f.github, "secret", "acme", "widgets", typed("Epic"));
+    assert_eq!(
+        missing.root_issue_type,
+        Some(IssueTypeResolution { name: "Epic".into(), resolved: None })
+    );
+    *f.github.types.lock().unwrap() = None;
+    let failed = flow::load_metadata(&f.github, "secret", "acme", "widgets", typed("Bug"));
+    assert_eq!(
+        failed.root_issue_type,
+        Some(IssueTypeResolution { name: "Bug".into(), resolved: None })
+    );
+}
+
 /// GHP-FR-NQWX: the settings a caller may save are cleaned, and an empty Type
-/// list or an empty Type name is refused.
+/// list or an empty Type name is refused. A null root issue Type is No Type.
 #[test]
 fn the_settings_validation_refuses_what_cannot_be_used() {
     let ok = flow::validated_settings(
         vec![" Feature ".into(), "feature".into(), "Epic".into()],
         " Task ".into(),
         MilestonePolicy::AuthorSelected,
+        Some(" Bug ".into()),
     )
     .unwrap();
     assert_eq!(ok.parent_issue_types, vec!["Feature".to_string(), "Epic".to_string()]);
     assert_eq!(ok.sub_issue_type, "Task");
+    assert_eq!(ok.root_issue_type.as_deref(), Some("Bug"));
+    let untyped = flow::validated_settings(
+        vec!["Feature".into()],
+        "Task".into(),
+        MilestonePolicy::default(),
+        None,
+    )
+    .unwrap();
+    assert_eq!(untyped.root_issue_type, None);
 
-    for (types, sub) in
-        [(vec![], "Task"), (vec!["  ".to_string()], "Task"), (vec!["Feature".to_string()], "  ")]
-    {
+    for (types, sub, root) in [
+        (vec![], "Task", None),
+        (vec!["  ".to_string()], "Task", None),
+        (vec!["Feature".to_string()], "  ", None),
+        (vec!["Feature".to_string()], "Task", Some("  ".to_string())),
+    ] {
         assert_eq!(
-            flow::validated_settings(types, sub.to_string(), MilestonePolicy::default()),
+            flow::validated_settings(types, sub.to_string(), MilestonePolicy::default(), root),
             Err(ERR_INVALID_PUBLICATION_SETTINGS.to_string())
         );
     }
@@ -864,6 +908,7 @@ fn saved_settings_are_kept_as_written() {
         vec!["Retired".into()],
         "Gone".into(),
         MilestonePolicy::NoMilestone,
+        Some("Vanished".into()),
     )
     .unwrap();
     save_github_publication_settings_to(&f.root, &saved).unwrap();

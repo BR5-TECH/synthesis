@@ -453,19 +453,19 @@ fn a_cancelled_turn_commits_its_work_as_abandoned_and_keeps_the_stream() {
 #[test]
 fn a_timed_out_turn_rests_the_run_rather_than_failing_it() {
     Scenario::named("timeout")
-        .with_setting(Setting::ExecutionTimeoutMs, 1_000)
+        .with_setting(Setting::StageTimeLimitMs, 1_800_000)
         .work_turn(Script::times_out().writes("src/half-done.ts", "as far as it got\n"))
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("execution_timeout")
-        .expect_interruption_detail_contains("reached the execution time limit of 1 s")
+        .expect_interruption_detail_contains("reached the stage time limit of 30 min")
         .expect_interruption_detail_contains("committed as an abandoned turn")
         .expect_interrupted_record(
             "execution_timeout",
             "error",
             &[
                 ("process_outcome", serde_json::json!("timeout")),
-                ("limit_ms", serde_json::json!(1_000)),
+                ("limit_ms", serde_json::json!(1_800_000)),
                 ("duration_ms", serde_json::json!(0)),
             ],
         )
@@ -475,7 +475,7 @@ fn a_timed_out_turn_rests_the_run_rather_than_failing_it() {
         .expect_checkpoint_paths(&["src/half-done.ts"])
         .expect_stream_held()
         // GXD-FR-MTVR: the turn ran under the timeout the project configured.
-        .expect_dispatch(0, |d| d.execution_timeout_ms(1_000));
+        .expect_dispatch(0, |d| d.execution_timeout_ms(1_800_000));
 }
 
 // GTE-FR-TCUW / GXD-FR-XEUX, GXD-FR-UZHX, GXD-FR-WJOW, GLG-FR-RLQZ: **the seam
@@ -499,8 +499,9 @@ fn a_turn_that_could_not_be_launched_rests_the_run_and_ends_nothing() {
 }
 
 // GXD-FR-QUCP, GXD-FR-UZHX, GXD-FR-SHNW: a Microsandbox VM that could not start
-// rests the run `interrupted` with `launch_failed`, its detail names the cause,
-// and the dispatch named the run's stream as its sandbox scope.
+// rests the run `interrupted` with `launch_failed`, its detail names the cause
+// and gives the runtime's own message, and the dispatch named the run's stream
+// as its sandbox scope.
 #[test]
 fn a_sandbox_that_could_not_start_names_its_cause() {
     Scenario::named("sandbox launch failure")
@@ -514,7 +515,7 @@ fn a_sandbox_that_could_not_start_names_its_cause() {
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("launch_failed")
         .expect_interruption_detail(
-            "The Microsandbox VM could not start: there is not enough memory for the configured RAM. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue.",
+            "The Microsandbox VM could not start: there is not enough memory for the configured RAM. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue. The sandbox runtime reported: cannot allocate memory",
         )
         .expect_interrupted_record("launch_failed", "error", &[])
         .expect_sandbox_scope_is_the_stream()

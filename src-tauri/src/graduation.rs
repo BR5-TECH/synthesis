@@ -53,6 +53,7 @@ mod commit;
 mod direct;
 mod errors;
 mod events;
+mod idle_sandbox;
 mod merge_run;
 mod queue;
 mod record;

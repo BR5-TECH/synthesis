@@ -13,8 +13,16 @@
  * state (NAW-FR-WMEP). None of them gates the root option: a list that cannot
  * be read costs the author the choices that needed it and nothing else
  * (NAW-FR-TCQB, GHP-FR-UXOT).
+ *
+ * The sub-issue option comes first and is the option a loaded parent list
+ * selects; the root option follows it and is selected while there is no parent
+ * to choose (NAW-FR-TCQB, NAW-FR-ASYN).
+ *
+ * The lists can change while the chooser is open, when the backend refresh
+ * ends (NAW-FR-HRXE). A choice that the new list no longer holds is cleared,
+ * and every other choice stays (NAW-FR-VOTL, NAW-FR-LETN).
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal } from "./DraftsPanelParts";
 import { FilterableSelect, type FilterableOption } from "./FilterableSelect";
 import type { PublicationChooserState } from "../hooks/useDraftPublication";
@@ -54,6 +62,30 @@ function viewOf<T>(
     return { kind: "unavailable", error: list.error ?? "GitHub could not be read." };
   }
   return list.items.length === 0 ? { kind: "empty" } : { kind: "loaded", items: list.items };
+}
+
+/**
+ * The ids a list holds, or `null` while it is loading or unavailable, so a
+ * choice is kept until a read says what the list holds.
+ */
+function idsOf<T>(view: ListView<T>, id: (item: T) => string): string[] | null {
+  if (view.kind === "empty") return [];
+  return view.kind === "loaded" ? view.items.map(id) : null;
+}
+
+/**
+ * NAW-FR-VOTL / NAW-FR-LETN: clear `value` to `NONE` where the list no longer
+ * holds it.
+ */
+function useClearedWhenMissing(
+  value: string | null,
+  ids: string[] | null,
+  clear: () => void,
+): void {
+  const missing = value !== null && value !== NONE && ids !== null && !ids.includes(value);
+  useEffect(() => {
+    if (missing) clear();
+  }, [missing, clear]);
 }
 
 /** Where focus goes back to: the action control's trigger (NAW-FR-VUCK). */
@@ -212,19 +244,34 @@ export function PublicationChooser({
   onCancel: () => void;
   onConfirm: (choice: PublicationChoiceInput) => void;
 }) {
-  // NAW-FR-TCQB: the root option is selected when the chooser opens.
-  const [selected, setSelected] = useState<string>(ROOT);
+  // NAW-FR-ASYN: the option the author selected, or `null` while they have
+  // selected none and the chooser decides.
+  const [picked, setPicked] = useState<string | null>(null);
   // NAW-FR-ASYN: the issue chosen in the combobox, kept while the root option
   // is selected.
   const [parentNumber, setParentNumber] = useState(NONE);
-  const [rootType, setRootType] = useState(NONE);
+  // NAW-FR-ZOAS: the Type the author chose, or `null` for the pre-filled one.
+  const [typePicked, setTypePicked] = useState<string | null>(null);
   const [rootMilestone, setRootMilestone] = useState(NONE);
   const [subMilestone, setSubMilestone] = useState(NONE);
+  const clearParent = useMemo(() => () => setParentNumber(NONE), []);
+  const clearType = useMemo(() => () => setTypePicked(NONE), []);
+  const clearRootMilestone = useMemo(() => () => setRootMilestone(NONE), []);
+  const clearSubMilestone = useMemo(() => () => setSubMilestone(NONE), []);
 
   const parents = viewOf(state, (m) => m.parents);
   const types = viewOf(state, (m) => m.issueTypes);
   const milestones = viewOf(state, (m) => m.milestones);
   const metadata = state.metadata;
+  // NAW-FR-TCQB / NAW-FR-ASYN: the root option while there is no parent to
+  // choose; otherwise the sub-issue option, unless the author chose the root
+  // option during the read.
+  const selected = parents.kind !== "loaded" ? ROOT : (picked ?? SUB);
+  const setSelected = (option: string) => setPicked(option);
+  // NAW-FR-ZOAS / GHP-FR-AFEX: the stored root Type in GitHub's spelling, or
+  // No Type where none resolves.
+  const rootType = typePicked ?? metadata?.rootIssueType?.resolved ?? NONE;
+  const setRootType = (name: string) => setTypePicked(name);
   const policy = metadata?.settings.subIssueMilestonePolicy ?? null;
   const parentItems = parents.kind === "loaded" ? parents.items : null;
   // Built once per read, so the combobox does not filter again on every
@@ -238,6 +285,14 @@ export function PublicationChooser({
   const repository = metadata
     ? `${metadata.repositoryOwner}/${metadata.repositoryName}`
     : state.remoteName;
+  // NAW-FR-VOTL: a parent the new list no longer holds is no longer chosen.
+  useClearedWhenMissing(parentNumber, idsOf(parents, (p) => String(p.number)), clearParent);
+  // NAW-FR-LETN: a Type or milestone the new list no longer holds resets to
+  // No Type or No milestone.
+  useClearedWhenMissing(typePicked, idsOf(types, (t) => t.name), clearType);
+  const milestoneIds = idsOf(milestones, (m) => String(m.number));
+  useClearedWhenMissing(rootMilestone, milestoneIds, clearRootMilestone);
+  useClearedWhenMissing(subMilestone, milestoneIds, clearSubMilestone);
 
   /** NAW-FR-RBTE: the choice as the backend receives it. */
   const choice = (): PublicationChoiceInput => {
@@ -273,28 +328,6 @@ export function PublicationChooser({
             aria-label="Publish as"
             className="draft-publication-chooser__options"
           >
-            <label className="t-ui-sm draft-publication-chooser__option">
-              <input
-                type="radio"
-                name="publication-parent"
-                value={ROOT}
-                checked={selected === ROOT}
-                onChange={() => setSelected(ROOT)}
-              />
-              <span className="draft-publication-picker__name">Publish as a root issue</span>
-            </label>
-            {selected === ROOT && (
-              <div className="draft-publication-chooser__detail">
-                <TypeField view={types} value={rootType} onChange={setRootType} />
-                <MilestoneField
-                  view={milestones}
-                  value={rootMilestone}
-                  onChange={setRootMilestone}
-                  id="publication-root-milestone"
-                />
-              </div>
-            )}
-
             <label className="t-ui-sm draft-publication-chooser__option">
               <input
                 type="radio"
@@ -352,6 +385,33 @@ export function PublicationChooser({
                 />
               )}
             </div>
+
+            {/* NAW-FR-TCQB: the root option follows the sub-issue option. */}
+            <label className="t-ui-sm draft-publication-chooser__option">
+              <input
+                type="radio"
+                name="publication-parent"
+                value={ROOT}
+                checked={selected === ROOT}
+                onChange={() => setSelected(ROOT)}
+                // NAW-FR-ASYN: during the read the root option is already
+                // checked, so a click on it fires no change. The click keeps it
+                // selected once the parent list loads.
+                onClick={() => setSelected(ROOT)}
+              />
+              <span className="draft-publication-picker__name">Publish as a root issue</span>
+            </label>
+            {selected === ROOT && (
+              <div className="draft-publication-chooser__detail">
+                <TypeField view={types} value={rootType} onChange={setRootType} />
+                <MilestoneField
+                  view={milestones}
+                  value={rootMilestone}
+                  onChange={setRootMilestone}
+                  id="publication-root-milestone"
+                />
+              </div>
+            )}
           </div>
         </div>
         <div className="modal__actions">
@@ -360,9 +420,13 @@ export function PublicationChooser({
           </button>
           <button
             className="btn btn--primary"
-            // NAW-FR-RBTE: the sub-issue option needs a chosen parent.
+            // NAW-FR-RBTE: the read and the refresh must end, and the
+            // sub-issue option needs a chosen parent.
             disabled={
-              busy || state.status === "loading" || (selected === SUB && parent === null)
+              busy ||
+              state.status === "loading" ||
+              state.refreshing ||
+              (selected === SUB && parent === null)
             }
             onClick={() => onConfirm(choice())}
           >

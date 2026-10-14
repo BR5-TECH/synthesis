@@ -345,6 +345,8 @@ impl Harness {
         self.store()
             .save_ai_api_registry(
                 vec![AiApiRecord {
+                    max_output_tokens: None,
+                    max_context_size: None,
                     turn_timeout_ms: None,
                     provider: "openrouter".into(),
                     base_url: Some("https://openrouter.example/api/v1".into()),
@@ -379,6 +381,8 @@ impl Harness {
         self.store()
             .save_ai_api_registry(
                 vec![AiApiRecord {
+                    max_output_tokens: None,
+                    max_context_size: None,
                     turn_timeout_ms: None,
                     provider: "openrouter".into(),
                     base_url: Some("https://openrouter.example/api/v1".into()),
@@ -410,6 +414,8 @@ impl Harness {
             .save_ai_api_registry(
                 vec![
                     AiApiRecord {
+                        max_output_tokens: None,
+                        max_context_size: None,
                         turn_timeout_ms: None,
                         provider: "openrouter".into(),
                         base_url: Some("https://openrouter.example/api/v1".into()),
@@ -429,6 +435,8 @@ impl Harness {
                         ],
                     },
                     AiApiRecord {
+                        max_output_tokens: None,
+                        max_context_size: None,
                         turn_timeout_ms: None,
                         provider: provider.into(),
                         base_url: Some("https://provider.example/v1".into()),
@@ -575,6 +583,7 @@ mod asking_author;
 mod builders;
 mod cancellation;
 mod citation_markers;
+mod compaction;
 mod custom_adapter;
 mod deadlines;
 mod disclosure;

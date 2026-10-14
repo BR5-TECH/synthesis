@@ -63,6 +63,7 @@ mod draft_template;
 mod drafts_panel;
 mod github_polling;
 mod graduation_concurrency;
+mod graduation_loop_settings;
 mod legacy_keys;
 mod library_panel;
 mod line_endings;

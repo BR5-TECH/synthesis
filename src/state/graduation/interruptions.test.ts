@@ -164,6 +164,30 @@ describe("a Microsandbox VM that could not start", () => {
     expect(raiseStatement(run)).toMatch(/the Microsandbox VM could not start — there is not enough memory/);
   });
 
+  it("GXD-FR-QUCP, GRU-FR-XHDI: the runtime message after the detail does not change the cause the raise names", () => {
+    const run = makeRun("r1", "interrupted", {
+      interruption: {
+        reason: "launch_failed",
+        detail:
+          "The Microsandbox VM could not start: the sandbox runtime could not load the image. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue. The sandbox runtime reported: image error: cache error at /x. Busy.",
+        at: "2026-10-03T22:02:36Z",
+      },
+    });
+    expect(sandboxFailureCause(run)).toBe("the sandbox runtime could not load the image");
+    const catalog = makeRun("r2", "interrupted", {
+      interruption: {
+        reason: "launch_failed",
+        detail:
+          "The Microsandbox VM could not start: the sandbox runtime could not read its own catalog. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue. The sandbox runtime reported: image error: database error: (code: 26) file is not a database",
+        at: "2026-10-03T22:02:36Z",
+      },
+    });
+    expect(sandboxFailureCause(catalog)).toBe("the sandbox runtime could not read its own catalog");
+    expect(raiseStatement(run)).toMatch(
+      /stopped: the Microsandbox VM could not start — the sandbox runtime could not load the image\.$/,
+    );
+  });
+
   it("NTF-FR-BDNY: another launch failure keeps the general cause", () => {
     const run = interrupted("launch_failed");
     expect(sandboxFailureCause(run)).toBeNull();

@@ -153,3 +153,28 @@ describe("the Docker socket refusal toast (GSD-FR-BXKR, NTF-FR-24)", () => {
     expect(screen.queryByTestId("notification-toast")).toBeNull();
   });
 });
+
+describe("the publication metadata startup toast", () => {
+  it("NTF-FR-POEW, NTF-FR-15: a startup failure that the backend kept before the project opened here shows one Error toast once the project is open", async () => {
+    let kept: { errorCode: string; error: string } | null = {
+      errorCode: "token_unavailable",
+      error: "The project has no GitHub token.",
+    };
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "take_publication_metadata_startup_failure") {
+        const failure = kept;
+        kept = null;
+        return failure;
+      }
+      return defaultInvoke(cmd, args);
+    });
+    render(<App />);
+    await enterIde();
+    const toast = await screen.findByTestId("notification-toast");
+    expect(toast).toHaveAttribute("data-level", "Error");
+    expect(toast).toHaveAttribute("data-key", "publication-metadata-refresh-failed");
+    expect(toast).toHaveTextContent("GitHub publication data not loaded");
+    expect(toast).toHaveTextContent("The project has no GitHub token.");
+    expect(kept).toBeNull();
+  });
+});

@@ -358,6 +358,7 @@ pub fn rename_draft_impl(
     }
     record.name = trimmed.to_string();
     record.updated_at = now_rfc3339();
+    retire_legacy_published(&mut record);
     if let Err(e) = write_record_at(root, &dir, &record) {
         // The file has already moved. Put it back rather than leaving a draft
         // whose record and whose file disagree about its name (DRS-FR-26).
@@ -393,8 +394,8 @@ pub fn set_draft_status_impl(
     status: DraftStatus,
 ) -> Result<DraftRecord, String> {
     // DRS-FR-10: neither terminal-ish position is one a caller may set.
-    // `graduated` belongs to `set_draft_graduated` (DRS-FR-20) and `published`
-    // to `set_draft_published` (DRS-FR-VKQO).
+    // `graduated` belongs to `set_draft_graduated` (DRS-FR-20), and no
+    // operation sets the legacy `published` (DRS-FR-VKQO).
     // DRS-FR-WFLY: `github_shadow` belongs to `create_github_shadow_draft`.
     if matches!(status, DraftStatus::Graduated | DraftStatus::Published | DraftStatus::GithubShadow)
     {
@@ -579,6 +580,8 @@ fn touch(root: &crate::fs::RootFs, id: &str) {
 fn touch_at(root: &crate::fs::RootFs, dir: &Path, id: &str) {
     if let Ok(mut record) = read_record_at(root, dir, id) {
         record.updated_at = now_rfc3339();
+        // DRS-FR-VKQO: a save and a move are writes of the draft.
+        retire_legacy_published(&mut record);
         let _ = write_record_at(root, dir, &record);
     }
 }
@@ -640,28 +643,13 @@ pub fn set_draft_graduated(
     Ok(record)
 }
 
-/// DRS-FR-VKQO: mark a draft `published`, the one path to that status.
-///
-/// Reached by `crate::github_publication` alone, once a GitHub issue exists
-/// (GHP-FR-BSYH). It is registered as no Tauri command, so no frontend call can
-/// publish a draft.
-///
-/// It is set **only over `active`**. A `graduated` draft keeps `graduated`,
-/// because local graduation and GitHub publication are different facts and the
-/// scalar status records the stronger one; a draft already `published` is left
-/// byte-for-byte as it is, so a second publication does not make the author's
-/// checkout dirty for a record that did not change. An `archived` draft never
-/// reaches here: publication is refused against one (GHP-FR-GJEO).
-pub fn set_draft_published(root: &fs::RootFs, id: &str) -> Result<DraftRecord, String> {
-    let dir = draft_dir(root, id)?;
-    let mut record = read_record_at(root, &dir, id)?;
-    if record.status != DraftStatus::Active {
-        return Ok(record);
+/// DRS-FR-VKQO: the next write of a draft replaces the legacy `published`
+/// status with `active`. No read calls this, so a record is never migrated on
+/// load. An archive needs no call: it stores `archived` itself (DRS-FR-10).
+fn retire_legacy_published(record: &mut DraftRecord) {
+    if record.status == DraftStatus::Published {
+        record.status = DraftStatus::Active;
     }
-    record.status = DraftStatus::Published;
-    record.updated_at = now_rfc3339();
-    write_record_at(root, &dir, &record)?;
-    Ok(record)
 }
 
 // ---------------------------------------------------------------------------

@@ -62,8 +62,8 @@ export function describeMismatches(mismatches: PublicationMismatch[]): string {
 }
 
 /**
- * NAW-FR-NHAY / NAW-FR-HZSW: the displayable text of the typed errors that
- * publishing as a sub-issue adds. The code stays in the text, so a log or a
+ * NAW-FR-NHAY / NAW-FR-HZSW / NAW-FR-KMFT: the displayable text of the typed
+ * errors that publishing as a sub-issue and updating an issue add. The code stays in the text, so a log or a
  * report that quotes the band still names it. Every other code renders as it
  * always has.
  */
@@ -82,6 +82,24 @@ const PUBLICATION_ERROR_TEXT: Record<string, string> = {
   milestones_unreadable: "The milestones of this repository could not be read.",
   invalid_publication_settings:
     "The publication settings need at least one parent issue Type and a sub-issue Type.",
+  // GHP-FR-MZMW / GHP-FR-SVXP: the failures of Update on GitHub.
+  no_publication_record: "This draft has no published issue to update.",
+  issue_not_found:
+    "GitHub does not find the published issue. It was deleted or moved, or the token cannot read it.",
+  issue_moved: "The published issue moved to another repository, so it was not updated.",
+  issue_update_forbidden: "The token cannot read or edit the published issue.",
+};
+
+/**
+ * NAW-FR-KMFT: codes that the band of a publication shows as they are, but that
+ * the toast of a failed update states in words.
+ */
+const UPDATE_ERROR_TEXT: Record<string, string> = {
+  issue_update_failed: "GitHub did not accept the edit of the published issue.",
+  github_unreachable: "GitHub could not be reached.",
+  publication_store_write_failed:
+    "The issue was edited, but the publication record could not be written.",
+  attempt_in_progress: "A publication attempt for this draft is already in progress.",
 };
 
 export function publicationErrorText(raw: string): string {
@@ -91,4 +109,11 @@ export function publicationErrorText(raw: string): string {
   const text = raw.startsWith("Error: ") ? raw.slice(7) : raw;
   const known = PUBLICATION_ERROR_TEXT[text.trim()];
   return known ? `${known} (${text.trim()})` : raw;
+}
+
+/** NAW-FR-KMFT: the displayable text of a failed **Update on GitHub**. */
+export function updateErrorText(raw: string): string {
+  const text = (raw.startsWith("Error: ") ? raw.slice(7) : raw).trim();
+  const known = UPDATE_ERROR_TEXT[text];
+  return known ? `${known} (${text})` : publicationErrorText(raw);
 }

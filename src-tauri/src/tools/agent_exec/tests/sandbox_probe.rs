@@ -111,7 +111,32 @@ fn executor(
         .with_image_exporter(Arc::new(HostDockerCli::with_program("docker")))
 }
 
+/// EAC-FR-RVQE: the runtime home of every probe, set before the first call
+/// into the runtime. A home of its own, so a probe never changes the catalog
+/// or the VMs of a running application, and one per checkout, so two checkouts
+/// that run their probes at one time share no catalog either. Kept between
+/// runs, so the runtime is installed and an image is loaded there once.
+fn isolated_runtime_home() -> &'static Path {
+    static HOME: OnceLock<PathBuf> = OnceLock::new();
+    HOME.get_or_init(|| {
+        // Short, because the runtime puts its sockets under the home. On macOS
+        // `/tmp` is a link, and the runtime refuses a path through a link.
+        let checkout = &crate::fs::sha256_bytes(env!("CARGO_MANIFEST_DIR").as_bytes())[..8];
+        let base = if cfg!(target_os = "macos") { "/private/tmp" } else { "/tmp" };
+        let home = PathBuf::from(format!("{base}/synthesis-msb-{checkout}"));
+        std::fs::create_dir_all(&home).expect("the probe runtime home");
+        std::env::set_var("MSB_HOME", &home);
+        // The runtime reads the home once, at its first use in this process,
+        // so this fails where a call reached the runtime before this one.
+        let backend = microsandbox::backend::default_backend();
+        let resolved = backend.as_local().expect("a local backend").config().home();
+        assert_eq!(resolved, home, "the runtime uses the probe home");
+        home
+    })
+}
+
 fn real_pool() -> Arc<SandboxPool> {
+    isolated_runtime_home();
     Arc::new(SandboxPool::new(Arc::new(MicrosandboxRuntime::default())))
 }
 
@@ -350,6 +375,110 @@ fn sandbox_real_sequential_turns_see_the_new_head() {
     // EAC-FR-WBDE: what the first turn wrote to the generated store is gone.
     assert_eq!(field(&before, "store_writable"), "yes", "{before}");
     assert_eq!(field(&after, "store_leftover"), "no", "{after}");
+}
+
+// EAC-FR-RVQE, EAC-FR-LQRI, EAC-FR-UEFI: the stop of an idle queue stops its
+// real VM, and the next turn of the scope boots a new VM and completes.
+#[test]
+#[ignore = "needs hardware virtualisation and a Docker daemon"]
+fn sandbox_real_idle_stop_boots_a_new_vm_for_the_next_turn() {
+    build_probe_image();
+    let harness = harness_for("claude_code");
+    let root = tempfile::tempdir().unwrap();
+    repository(root.path(), &harness.workspace(), "idle", "one\n");
+    let pool = real_pool();
+    let rt = runtime();
+    let _stop = StopOnDrop(&rt, pool.clone());
+    let executor = executor(&harness, microsandbox(), &pool);
+    let scope = probe_scope();
+    let workspace = harness.workspace();
+    let vm = super::sandbox::vm_name(harness.context().project_key, &scope);
+
+    let (before, stopped, gone, after) = rt.block_on(async {
+        let before = probe(&executor, &harness, &workspace, TurnKind::Work, &scope).await;
+        let stopped = pool.stop_when(&vm, || true).await;
+        // The runtime itself holds no VM of that name any more.
+        let gone = matches!(
+            microsandbox::Sandbox::get(&vm).await,
+            Err(microsandbox::MicrosandboxError::SandboxNotFound(_))
+        );
+        let after = probe(&executor, &harness, &workspace, TurnKind::Work, &scope).await;
+        (before, stopped, gone, after)
+    });
+
+    assert!(stopped, "the VM of the idle queue stopped");
+    assert!(gone, "the stopped VM was removed");
+    assert_ne!(field(&before, "boot_id"), field(&after, "boot_id"), "a new VM booted");
+}
+
+// EAC-FR-RVQE: a probe VM lives in the probe's own runtime home, and the
+// author's home holds no VM of that name.
+#[test]
+#[ignore = "needs hardware virtualisation and a Docker daemon"]
+fn sandbox_real_probes_use_a_runtime_home_of_their_own() {
+    build_probe_image();
+    let harness = harness_for("claude_code");
+    let root = tempfile::tempdir().unwrap();
+    repository(root.path(), &harness.workspace(), "home", "one\n");
+    let pool = real_pool();
+    let rt = runtime();
+    let _stop = StopOnDrop(&rt, pool.clone());
+    let executor = executor(&harness, microsandbox(), &pool);
+    let scope = probe_scope();
+    let vm = super::sandbox::vm_name(harness.context().project_key, &scope);
+
+    rt.block_on(probe(&executor, &harness, &harness.workspace(), TurnKind::Work, &scope));
+
+    let home = isolated_runtime_home();
+    assert!(home.join("sandboxes").join(&vm).is_dir(), "the VM is in the probe home");
+    let author = std::env::var_os("HOME").map(PathBuf::from).expect("a user home");
+    assert!(!author.join(".microsandbox/sandboxes").join(&vm).exists());
+}
+
+// EAC-FR-SQWO: after a new connection to the real catalog, the VM booted
+// through the earlier connection still runs a turn, stops, and is removed, and
+// the next turn boots a new VM through the new connection. The new connection
+// serves every probe of the process from then on, as it serves the whole
+// application, so the probes that run beside this one show the same thing.
+#[test]
+#[ignore = "needs hardware virtualisation and a Docker daemon"]
+fn sandbox_real_a_new_catalog_connection_keeps_the_vms_working() {
+    build_probe_image();
+    let harness = harness_for("claude_code");
+    let root = tempfile::tempdir().unwrap();
+    repository(root.path(), &harness.workspace(), "catalog", "one\n");
+    isolated_runtime_home();
+    let runtime_of_pool = Arc::new(MicrosandboxRuntime::default());
+    let pool = Arc::new(SandboxPool::new(runtime_of_pool.clone()));
+    let rt = runtime();
+    let _stop = StopOnDrop(&rt, pool.clone());
+    let executor = executor(&harness, microsandbox(), &pool);
+    let scope = probe_scope();
+    let workspace = harness.workspace();
+    let vm = super::sandbox::vm_name(harness.context().project_key, &scope);
+
+    let (first, reused, replaced, stopped, gone, after) = rt.block_on(async {
+        use super::sandbox::SandboxRuntime;
+        let first = probe(&executor, &harness, &workspace, TurnKind::Work, &scope).await;
+        let earlier = microsandbox::backend::default_backend();
+        runtime_of_pool.reopen_catalog().await.expect("a new catalog connection");
+        let replaced = !Arc::ptr_eq(&earlier, &microsandbox::backend::default_backend());
+        let reused = probe(&executor, &harness, &workspace, TurnKind::Work, &scope).await;
+        let stopped = pool.stop_when(&vm, || true).await;
+        let gone = microsandbox::Sandbox::get(&vm).await;
+        let after = probe(&executor, &harness, &workspace, TurnKind::Work, &scope).await;
+        (first, reused, replaced, stopped, gone, after)
+    });
+
+    assert!(replaced, "the process uses a new catalog connection");
+    assert_eq!(field(&first, "boot_id"), field(&reused, "boot_id"), "the VM kept running");
+    assert!(stopped, "the pool stopped the VM");
+    assert!(
+        matches!(gone, Err(microsandbox::MicrosandboxError::SandboxNotFound(_))),
+        "the VM booted through the earlier connection was removed: {:?}",
+        gone.map(|_| ())
+    );
+    assert_ne!(field(&first, "boot_id"), field(&after, "boot_id"), "a new VM booted");
 }
 
 // EAC-FR-RVQE, EAC-FR-HXDN: a review checkout deleted and created again at the

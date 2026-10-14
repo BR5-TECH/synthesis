@@ -99,6 +99,16 @@ impl ModelMode {
 pub struct ModelOption {
     pub id: String,
     pub label: String,
+    /// AAP-FR-JQIJ: the context length an Ollama host reported for this model
+    /// at the last verification. `None` where detection gave nothing. Only a
+    /// Custom model carries a value. A scalar, so it is declared before the
+    /// tables below.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detected_context_size: Option<u64>,
+    /// AAP-FR-JQIJ: the capabilities an Ollama host reported for this model, in
+    /// the order the host gave them. Shown to the author and nothing else.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detected_capabilities: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<ModelReasoning>,
     /// AAP-FR-35: whether this model takes **image content** in its input.
@@ -141,6 +151,8 @@ impl ModelOption {
         Self {
             id: id.to_string(),
             label: label.to_string(),
+            detected_context_size: None,
+            detected_capabilities: None,
             reasoning: None,
             accepts_image_input: false,
             image_input_declared: false,

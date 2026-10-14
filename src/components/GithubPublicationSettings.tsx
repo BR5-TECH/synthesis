@@ -3,8 +3,9 @@
  * (`SET-project-settings.md` SET-FR-BLQN … SET-FR-LJYT, served by
  * `../../specifications/core/GHP-github-publication.md` GHP-FR-KVRH).
  *
- * It holds the Types that may be a parent, the Type of every sub-issue, and
- * the sub-issue milestone policy. Each change persists at once, outside the
+ * It holds the Types that may be a parent, the Type of every sub-issue, the
+ * sub-issue milestone policy, and the Type a root issue is pre-filled with
+ * (SET-FR-ZNLF). Each change persists at once, outside the
  * section dirty state (SET-FR-MQUE), so the group holds nothing to save.
  *
  * GitHub is consulted for one thing, the list of Types, and only to say which
@@ -23,6 +24,9 @@ import type {
   MilestonePolicy,
   PublicationIssueType,
 } from "../types";
+
+/** SET-FR-ZNLF: the option value of No Type. */
+const NO_TYPE = "";
 
 const POLICIES: { value: MilestonePolicy; label: string; hint: string }[] = [
   {
@@ -141,6 +145,14 @@ export function GithubPublicationSettingsGroup() {
         ...offered,
       ]
     : [];
+
+  // SET-FR-ZNLF / SET-FR-LJYT: a stored root Type the list does not hold
+  // stays offered, and selected, so it is not replaced by a fallback.
+  const rootType = settings?.rootIssueType ?? null;
+  const rootChoices = [
+    ...(rootType && !offered.some((n) => sameType(n, rootType)) ? [rootType] : []),
+    ...offered,
+  ];
 
   const toggleParent = (name: string, checked: boolean) => {
     if (!settings) return;
@@ -282,6 +294,41 @@ export function GithubPublicationSettingsGroup() {
                 </span>
               </label>
             ))}
+          </div>
+
+          <label className="t-ui-sm" htmlFor="publication-root-issue-type">
+            Root issue Type
+          </label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <select
+              id="publication-root-issue-type"
+              className="input input--sm"
+              // A stored Type that differs from GitHub's spelling in case alone
+              // selects the listed option.
+              value={
+                rootType === null
+                  ? NO_TYPE
+                  : (offered.find((n) => sameType(n, rootType)) ?? rootType)
+              }
+              disabled={saving}
+              onChange={(e) =>
+                void save({
+                  ...settings,
+                  rootIssueType: e.target.value === NO_TYPE ? null : e.target.value,
+                })
+              }
+            >
+              <option value={NO_TYPE}>No Type</option>
+              {rootChoices.map((name) => (
+                <option key={name} value={name}>
+                  {unavailable(name) ? `${name} (unavailable)` : name}
+                </option>
+              ))}
+            </select>
+            <span className="t-ui-xs t-muted">
+              The Type control of a root issue starts on this Type. You can change it for one
+              publication.
+            </span>
           </div>
         </div>
       )}

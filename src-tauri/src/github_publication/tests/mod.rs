@@ -23,6 +23,7 @@ mod publication_choice;
 mod publication_commands;
 mod publishing;
 mod remote_selection;
+mod update;
 
 // ---------------------------------------------------------------------------
 // Harness
@@ -75,6 +76,14 @@ pub(super) struct FakeGithub {
     pub create_error: Mutex<Option<String>>,
     /// When set, every link and unlink fails with this typed code.
     pub link_error: Mutex<Option<String>>,
+    /// When set, every issue read fails with this typed code.
+    pub read_error: Mutex<Option<String>>,
+    /// When set, every edit fails with this typed code.
+    pub update_error: Mutex<Option<String>>,
+    /// Runs after an edit is accepted, so a test can change the store while
+    /// the edit is in flight.
+    #[allow(clippy::type_complexity)] // One optional callback; a type alias says no more.
+    pub after_update: Mutex<Option<Box<dyn Fn() + Send>>>,
     pub next_number: Mutex<u64>,
     /// The Types the owner holds; `None` makes the read fail.
     pub types: Mutex<Option<Vec<String>>>,
@@ -97,6 +106,9 @@ impl Default for FakeGithub {
             search_error: Mutex::default(),
             create_error: Mutex::default(),
             link_error: Mutex::default(),
+            read_error: Mutex::default(),
+            update_error: Mutex::default(),
+            after_update: Mutex::default(),
             next_number: Mutex::new(1),
             types: Mutex::new(Some(vec!["Feature".into(), "Task".into(), "Bug".into()])),
             milestones: Mutex::new(Some(vec![
@@ -243,6 +255,9 @@ impl GithubIssues for FakeGithub {
         let client::IssueEdit { title, body, fields } = *edit;
         self.record(Call::Update(number));
         self.fields.lock().unwrap().push(fields.clone());
+        if let Some(error) = self.update_error.lock().unwrap().clone() {
+            return Err(error);
+        }
         let milestones = self.milestones.lock().unwrap().clone().unwrap_or_default();
         let mut issues = self.issues.lock().unwrap();
         let issue = issues
@@ -257,7 +272,12 @@ impl GithubIssues for FakeGithub {
         if let Some(wanted) = fields.milestone {
             issue.milestone = milestones.into_iter().find(|m| m.number == wanted);
         }
-        Ok(issue.clone())
+        let edited = issue.clone();
+        drop(issues);
+        if let Some(after) = self.after_update.lock().unwrap().as_ref() {
+            after();
+        }
+        Ok(edited)
     }
 
     fn get_issue(
@@ -268,6 +288,9 @@ impl GithubIssues for FakeGithub {
         number: u64,
     ) -> Result<Option<IssueRef>, String> {
         self.record(Call::Read(number));
+        if let Some(error) = self.read_error.lock().unwrap().clone() {
+            return Err(error);
+        }
         Ok(self.issues.lock().unwrap().iter().find(|i| i.number == number).cloned())
     }
 

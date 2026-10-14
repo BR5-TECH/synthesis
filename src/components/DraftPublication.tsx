@@ -24,6 +24,7 @@ import type {
   PublicationSelectionOrigin,
 } from "../types";
 import type {
+  ClosedIssuePrompt,
   RecoveryPrompt,
   UseDraftPublicationResult,
 } from "../hooks/useDraftPublication";
@@ -237,8 +238,22 @@ export function publicationActionTitle(
 }
 
 /**
- * NAW-FR-DWKA / NAW-FR-HNVR / NAW-FR-EOTB: the three overlays the flow opens,
- * and none stands unless the flow put it there.
+ * NAW-FR-HKYL: what **Update on GitHub** says, on hover. A disabled entry
+ * states the reason of the same read that **Publish to GitHub** states.
+ */
+export function updateActionTitle(publication: UseDraftPublicationResult): string {
+  const eligibility = publication.view?.eligibility;
+  const current = publication.view?.current;
+  const offered = current
+    ? `Update issue #${current.issueNumber} with the current name and prompt`
+    : "Update the published issue";
+  if (!eligibility || eligibility.publishable) return offered;
+  return publicationActionTitle(publication);
+}
+
+/**
+ * NAW-FR-DWKA / NAW-FR-HNVR / NAW-FR-EOTB / NAW-FR-AQBE: the overlays the flow
+ * opens, and none stands unless the flow put it there.
  */
 export function PublicationOverlays({
   publication,
@@ -274,7 +289,67 @@ export function PublicationOverlays({
           onAnswer={(choice) => void publication.answerRecovery(choice)}
         />
       )}
+      {publication.closedIssue && (
+        <ClosedIssueDialog
+          prompt={publication.closedIssue}
+          busy={publication.busy}
+          onCancel={publication.cancelClosedUpdate}
+          onConfirm={() => void publication.confirmClosedUpdate()}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * NAW-FR-AQBE: the closed-issue dialog. **Cancel**, Escape, and the close
+ * control dismiss it and invoke nothing.
+ */
+export function ClosedIssueDialog({
+  prompt,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  prompt: ClosedIssuePrompt;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const where = prompt.repository ? ` in ${prompt.repository}` : "";
+  return (
+    <Modal
+      label="Update closed issue"
+      onClose={onCancel}
+      returnFocus={document.querySelector<HTMLElement>('button[aria-label="Draft actions"]')}
+    >
+      <>
+        <div className="modal__head">
+          <div className="modal__title">Update closed issue</div>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            aria-label="Close"
+            onClick={onCancel}
+          >
+            ✕
+          </button>
+        </div>
+        <div className="modal__body">
+          <p className="t-ui-sm">
+            {`Issue #${prompt.issueNumber}${where} is closed. Update its title and body anyway?`}
+          </p>
+        </div>
+        <div className="modal__actions">
+          <button className="btn btn--ghost" onClick={onCancel}>
+            Cancel
+          </button>
+          <button className="btn btn--primary" disabled={busy} onClick={onConfirm}>
+            Update closed issue
+          </button>
+        </div>
+      </>
+    </Modal>
   );
 }
 

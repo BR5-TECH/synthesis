@@ -329,6 +329,7 @@ pub fn run() {
             github_publication::resolve_draft_publication_conflict,
             github_publication::cancel_draft_publication_conflict,
             github_publication::cancel_draft_publication_attempt,
+            github_publication::update::update_draft_on_github,
             github_publication::open_publication_issue,
             // GitHub polling (GPP-github-polling.md).
             github_polling::list_github_projects,

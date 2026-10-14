@@ -49,9 +49,10 @@ function PublicationGroup({
 }) {
   const current = publication?.current ?? null;
   if (!current) return null;
-  const earlier = (publication?.history ?? []).filter(
-    (record) => record.marker !== current.marker,
-  );
+  // The history is newest first, so the current record is its head. An
+  // update appends a record that keeps the marker of the one before it
+  // (GHP-FR-WUJQ), so the marker does not tell the records apart.
+  const earlier = (publication?.history ?? []).slice(1);
   const open = (url: string) =>
     void openPublicationIssue(draftId, url).catch((e) =>
       logWarn(["frontend"], "a publication issue could not be opened", {
@@ -67,8 +68,12 @@ function PublicationGroup({
       {earlier.length > 0 && (
         <>
           <div className="draft-info__subgroup t-ui-xs">History</div>
-          {earlier.map((record) => (
-            <PublicationEntry key={record.marker} record={record} onOpen={open} />
+          {earlier.map((record, index) => (
+            <PublicationEntry
+              key={`${record.marker}-${record.updatedAt ?? ""}-${index}`}
+              record={record}
+              onOpen={open}
+            />
           ))}
         </>
       )}
@@ -76,7 +81,10 @@ function PublicationGroup({
   );
 }
 
-/** DFI-FR-BZQN: one record — repository, issue, link, instant, and marker. */
+/**
+ * DFI-FR-BZQN: one record — repository, issue, link, instant, the updated
+ * instant where the record holds one, and marker.
+ */
 function PublicationEntry({
   record,
   onOpen,
@@ -95,6 +103,11 @@ function PublicationEntry({
         {`${repository} \u00b7 #${record.issueNumber}`}
       </button>
       <span className="t-ui-xs">{formatBoundary(record.publishedAt)}</span>
+      {record.updatedAt && (
+        <span className="t-ui-xs" data-testid="publication-record-updated">
+          {`updated ${formatBoundary(record.updatedAt)}`}
+        </span>
+      )}
       {/* NAW-FR-QEZG: root or sub-issue, with the Type and milestone the record
           holds. A record written before the choice existed reads as a root issue. */}
       <span className="t-ui-xs" data-testid="publication-record-choice">

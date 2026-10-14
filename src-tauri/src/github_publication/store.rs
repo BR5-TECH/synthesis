@@ -83,3 +83,26 @@ pub fn history_newest_first(store: &PublicationStore) -> Vec<PublicationRecord> 
     history.reverse();
     history
 }
+
+/// GHP-FR-WUJQ: append the record of an update, in one atomic write.
+///
+/// The store is re-read first. An attempt that started meanwhile, or a record
+/// appended meanwhile, means `before` is no longer the current record, and the
+/// record of the update would then name an issue that is not the current one.
+/// Both are reported rather than written (GHP-FR-MZMW).
+pub fn append_update(
+    root: &fs::RootFs,
+    draft_id: &str,
+    before: &PublicationRecord,
+    record: PublicationRecord,
+) -> Result<PublicationRecord, String> {
+    let mut store = read_store(root, draft_id)?;
+    // GHP-FR-BCAV: GitHub has already accepted the edit here, so each refusal
+    // is the failed store write of an accepted edit.
+    if store.attempt.is_some() || store.publication.last() != Some(before) {
+        return Err(ERR_STORE_WRITE_FAILED.to_string());
+    }
+    store.publication.push(record.clone());
+    write_store(root, draft_id, &store)?;
+    Ok(record)
+}

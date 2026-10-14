@@ -21,11 +21,13 @@ import {
   publishDraftToGithub,
   resolveDraftPublicationConflict,
   retryDraftPublication,
+  updateDraftOnGithub,
 } from "../api";
 import { onDraftPublicationChanged } from "../events";
-import { logError, logInfo } from "../logging";
+import { logError, logInfo, logWarn } from "../logging";
 import { githubPollingErrorMessage } from "../state/githubPolling";
-import { publicationErrorText } from "../state/publicationChoice";
+import { publicationErrorText, updateErrorText } from "../state/publicationChoice";
+import { showToast } from "../state/toasts";
 import type {
   DraftPublicationView,
   PublicationChoiceInput,
@@ -35,6 +37,18 @@ import type {
   PublicationRecoveryChoice,
   PublicationRemoteResolution,
 } from "../types";
+
+/** NTF-FR-RMJT: the key of the toast a failed update shows. */
+export const UPDATE_FAILED_KEY = "draft-update-failed";
+/** NTF-FR-RMJT: the title of that toast. */
+export const UPDATE_FAILED_TITLE = "Issue not updated";
+
+/** NAW-FR-AQBE: the closed issue an update waits on. */
+export interface ClosedIssuePrompt {
+  issueNumber: number;
+  issueUrl: string;
+  repository: string;
+}
 
 /** NAW-FR-EOTB: the issue a recovery choice is being offered over. */
 export interface RecoveryPrompt {
@@ -75,6 +89,14 @@ export interface UseDraftPublicationResult {
   publishing: boolean;
   /** NAW-FR-HZSW: the typed error of the last failure, rendered inline. */
   error: string | null;
+  /** NAW-FR-AQBE: the closed-issue dialog while it is open, or `null`. */
+  closedIssue: ClosedIssuePrompt | null;
+  /** NAW-FR-KMLN: update the issue of the current record. */
+  update: () => Promise<void>;
+  /** NAW-FR-AQBE: **Update closed issue**. */
+  confirmClosedUpdate: () => Promise<void>;
+  /** NAW-FR-AQBE: **Cancel**, Escape, or the close control; invokes nothing. */
+  cancelClosedUpdate: () => void;
   /** NAW-FR-DWKA: begin — enumerate, then publish directly or open the picker. */
   begin: () => Promise<void>;
   closePicker: () => void;
@@ -98,6 +120,10 @@ const EMPTY: UseDraftPublicationResult = {
   busy: false,
   publishing: false,
   error: null,
+  closedIssue: null,
+  update: async () => {},
+  confirmClosedUpdate: async () => {},
+  cancelClosedUpdate: () => {},
   begin: async () => {},
   closePicker: () => {},
   confirmPicker: async () => {},
@@ -124,6 +150,9 @@ export function useDraftPublication(
   const [busy, setBusy] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [closedIssue, setClosedIssue] = useState<ClosedIssuePrompt | null>(
+    null,
+  );
   // NAW-FR-JBHV: the guard is a ref rather than the state above, because two
   // activations in one tick would both read the same stale `busy`.
   const inFlight = useRef(false);
@@ -333,6 +362,66 @@ export function useDraftPublication(
     await run(() => cancelDraftPublicationConflict(draftId as string));
   }, [draftId, run]);
 
+  /**
+   * NAW-FR-KMLN / NAW-FR-HKYL: one update call, single-flight. The tag and the
+   * band do not take part: an update is not a publication, so it sets neither
+   * `publishing` nor `error` (NAW-FR-PTYO, NAW-FR-KMFT).
+   */
+  const runUpdate = useCallback(
+    async (updateClosed: boolean) => {
+      if (!draftId || inFlight.current) return;
+      inFlight.current = true;
+      setBusy(true);
+      logInfo(["frontend", "remote"], "updating draft issue on GitHub", {
+        draftId,
+        updateClosed,
+      });
+      try {
+        const outcome = await updateDraftOnGithub(draftId, updateClosed);
+        if (outcome.kind === "issueClosed") {
+          const current = view?.current;
+          setClosedIssue({
+            issueNumber: outcome.issueNumber,
+            issueUrl: outcome.issueUrl,
+            repository: current
+              ? `${current.repositoryOwner}/${current.repositoryName}`
+              : "",
+          });
+        }
+      } catch (e) {
+        // NAW-FR-KMFT / NTF-FR-RMJT: the toast carries the displayable text;
+        // the code alone goes to the log, which holds no prompt text.
+        logWarn(["frontend", "remote"], "draft issue update failed", {
+          draftId,
+          error: String(e),
+        });
+        showToast(
+          {
+            key: UPDATE_FAILED_KEY,
+            level: "Error",
+            title: UPDATE_FAILED_TITLE,
+            body: updateErrorText(String(e)),
+            address: null,
+          },
+          { priority: true },
+        );
+      } finally {
+        inFlight.current = false;
+        setBusy(false);
+        await reload();
+      }
+    },
+    [draftId, reload, view],
+  );
+
+  const update = useCallback(() => runUpdate(false), [runUpdate]);
+
+  const confirmClosedUpdate = useCallback(async () => {
+    if (inFlight.current) return;
+    setClosedIssue(null);
+    await runUpdate(true);
+  }, [runUpdate]);
+
   const openIssue = useCallback(
     (url: string) => {
       if (!draftId) return;
@@ -356,6 +445,10 @@ export function useDraftPublication(
     busy,
     publishing,
     error,
+    closedIssue,
+    update,
+    confirmClosedUpdate,
+    cancelClosedUpdate: () => setClosedIssue(null),
     begin,
     closePicker: () => setRemotes(null),
     confirmPicker,

@@ -82,7 +82,7 @@ DraftMatch {
 The draft-owned **publication store** of DRS-FR-EJBM, whose records `GHP-github-publication.md` writes and reads:
 
 ```
-DraftPublicationRecord {     // one successful GitHub publication
+DraftPublicationRecord {     // one successful GitHub publication or update
   provider,                  // "github"
   repository_host,           // normalized host; absent in a stored record, which reads as github.com
   repository_owner,
@@ -90,6 +90,7 @@ DraftPublicationRecord {     // one successful GitHub publication
   issue_number,
   issue_url,
   published_at,              // RFC 3339 UTC
+  updated_at,                // RFC 3339 UTC | absent; present on a record an update appended (DRS-FR-XNLP)
   marker,                    // the attempt marker the issue body carries
   choice                     // PublicationChoice | absent (DRS-FR-LWQT)
 }
@@ -242,11 +243,11 @@ Every command errors with a typed "no project open" when no project is open, wit
 62. **DRS-FR-ISPI** An existing project whose `.synthesis/.gitignore` still excludes `drafts/` is **migrated by removing that entry** (per `FSA-filesystem-access.md` FSA-FR-08, run on open by `PST-project-storage.md` PST-FR-CDYM). Every draft file stays where it is: the migration deletes, moves, rewrites, stages, and commits nothing.
 63. **DRS-FR-NRQQ** A migrated project's existing committed draft storage reaches the repository through the **next draft-event commit of that draft** (DRS-FR-QHHY) or through the author's own commit. There is no migration commit.
 
-64. **DRS-FR-EJBM** A draft's **publication store** is one file, `publication.toml`, directly inside that draft's own directory (DRS-FR-01). It holds the `DraftPublicationStore` of the Contract surface in two distinct sections: a repeated `[[publication]]` section carrying the append-only successful history oldest first, and at most one `[attempt]` section carrying the draft's standing attempt.
+64. **DRS-FR-EJBM** A draft's **publication store** is one file, `publication.toml`, directly inside that draft's own directory (DRS-FR-01). It holds the `DraftPublicationStore` of the Contract surface in two distinct sections: a repeated `[[publication]]` section carrying the append-only history of successful publications and updates oldest first, and at most one `[attempt]` section carrying the draft's standing attempt.
 65. **DRS-FR-PSCH** The store is **absent until the first attempt**, and an absent file reads as an empty history with no attempt. Every write replaces the whole file **atomically** through `FSA-filesystem-access.md::write_toml_atomic`, and every read reads the file rather than a cache. A file that no longer parses is a typed error against that draft alone.
 66. **DRS-FR-VDQR** An attempt's `state` is `open` or `awaiting_choice`, and both are **non-terminal**. The transitions are exactly three: absent to `open` when an attempt starts, `open` to `awaiting_choice` when a recovery choice is needed, and `awaiting_choice` to `open` when that choice is cancelled.
 67. **DRS-FR-JOEV** A **completed** attempt is cleared in the same atomic write that appends its history record, and an **abandoned** attempt is cleared with nothing appended. `[attempt]` is therefore present only while an attempt is recoverable, and a draft never holds two.
-68. **DRS-FR-XNLP** A history record already in `[[publication]]` is never rewritten, reordered, or removed by any write here. A write appends at most one record, and the newest record is the draft's current publication. Deleting the draft removes the store with the rest of its folder (DRS-FR-21) and is the only thing that removes a record.
+68. **DRS-FR-XNLP** A history record already in `[[publication]]` is never rewritten, reordered, or removed. A write appends at most one record, and the newest record is the draft's current publication. A record that an update appends holds an `updated_at` instant. Deleting the draft removes the store with the rest of its folder (DRS-FR-21), and nothing else removes a record.
 69. **DRS-FR-VKQO** `published` is a **distinct status** set by exactly one path: `set_draft_published`, reached by `GHP-github-publication.md` alone after an issue exists (GHP-FR-BSYH). It is set only over `active`; a draft whose status is `graduated` keeps `graduated` and a draft already `published` stays `published`, the call changing the record in neither case. `set_draft_status` cannot reach it (DRS-FR-10), and no Tauri command can.
 70. **DRS-FR-OGZC** The scalar status and the publication store are **separate facts**. A `published` draft is editable in every respect an `active` one is — `save_draft_file_contents`, `rename_draft`, `move_draft_to_folder`, and `delete_draft` all succeed against it, and it is graduatable like any other draft — while a `graduated` draft stays read-only on DRS-FR-KQTW's terms whatever its store holds.
 71. **DRS-FR-INCJ** `create_github_shadow_draft(name, prompt, link)` creates a draft at the drafts root with status `github_shadow`, the given name, and the `GithubIssueLink` in its record. Its one prompt holds `prompt` normalised to the project's line-ending convention, and the draft template is not applied.

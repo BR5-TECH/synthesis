@@ -13,6 +13,10 @@
  * state (NAW-FR-WMEP). None of them gates the root option: a list that cannot
  * be read costs the author the choices that needed it and nothing else
  * (NAW-FR-TCQB, GHP-FR-UXOT).
+ *
+ * The sub-issue option comes first and is the option a loaded parent list
+ * selects; the root option follows it and is selected while there is no parent
+ * to choose (NAW-FR-TCQB, NAW-FR-ASYN).
  */
 import { useMemo, useState } from "react";
 import { Modal } from "./DraftsPanelParts";
@@ -212,12 +216,14 @@ export function PublicationChooser({
   onCancel: () => void;
   onConfirm: (choice: PublicationChoiceInput) => void;
 }) {
-  // NAW-FR-TCQB: the root option is selected when the chooser opens.
-  const [selected, setSelected] = useState<string>(ROOT);
+  // NAW-FR-ASYN: the option the author selected, or `null` while they have
+  // selected none and the chooser decides.
+  const [picked, setPicked] = useState<string | null>(null);
   // NAW-FR-ASYN: the issue chosen in the combobox, kept while the root option
   // is selected.
   const [parentNumber, setParentNumber] = useState(NONE);
-  const [rootType, setRootType] = useState(NONE);
+  // NAW-FR-ZOAS: the Type the author chose, or `null` for the pre-filled one.
+  const [typePicked, setTypePicked] = useState<string | null>(null);
   const [rootMilestone, setRootMilestone] = useState(NONE);
   const [subMilestone, setSubMilestone] = useState(NONE);
 
@@ -225,6 +231,15 @@ export function PublicationChooser({
   const types = viewOf(state, (m) => m.issueTypes);
   const milestones = viewOf(state, (m) => m.milestones);
   const metadata = state.metadata;
+  // NAW-FR-TCQB / NAW-FR-ASYN: the root option while there is no parent to
+  // choose; otherwise the sub-issue option, unless the author chose the root
+  // option during the read.
+  const selected = parents.kind !== "loaded" ? ROOT : (picked ?? SUB);
+  const setSelected = (option: string) => setPicked(option);
+  // NAW-FR-ZOAS / GHP-FR-AFEX: the stored root Type in GitHub's spelling, or
+  // No Type where none resolves.
+  const rootType = typePicked ?? metadata?.rootIssueType?.resolved ?? NONE;
+  const setRootType = (name: string) => setTypePicked(name);
   const policy = metadata?.settings.subIssueMilestonePolicy ?? null;
   const parentItems = parents.kind === "loaded" ? parents.items : null;
   // Built once per read, so the combobox does not filter again on every
@@ -273,28 +288,6 @@ export function PublicationChooser({
             aria-label="Publish as"
             className="draft-publication-chooser__options"
           >
-            <label className="t-ui-sm draft-publication-chooser__option">
-              <input
-                type="radio"
-                name="publication-parent"
-                value={ROOT}
-                checked={selected === ROOT}
-                onChange={() => setSelected(ROOT)}
-              />
-              <span className="draft-publication-picker__name">Publish as a root issue</span>
-            </label>
-            {selected === ROOT && (
-              <div className="draft-publication-chooser__detail">
-                <TypeField view={types} value={rootType} onChange={setRootType} />
-                <MilestoneField
-                  view={milestones}
-                  value={rootMilestone}
-                  onChange={setRootMilestone}
-                  id="publication-root-milestone"
-                />
-              </div>
-            )}
-
             <label className="t-ui-sm draft-publication-chooser__option">
               <input
                 type="radio"
@@ -352,6 +345,33 @@ export function PublicationChooser({
                 />
               )}
             </div>
+
+            {/* NAW-FR-TCQB: the root option follows the sub-issue option. */}
+            <label className="t-ui-sm draft-publication-chooser__option">
+              <input
+                type="radio"
+                name="publication-parent"
+                value={ROOT}
+                checked={selected === ROOT}
+                onChange={() => setSelected(ROOT)}
+                // NAW-FR-ASYN: during the read the root option is already
+                // checked, so a click on it fires no change. The click keeps it
+                // selected once the parent list loads.
+                onClick={() => setSelected(ROOT)}
+              />
+              <span className="draft-publication-picker__name">Publish as a root issue</span>
+            </label>
+            {selected === ROOT && (
+              <div className="draft-publication-chooser__detail">
+                <TypeField view={types} value={rootType} onChange={setRootType} />
+                <MilestoneField
+                  view={milestones}
+                  value={rootMilestone}
+                  onChange={setRootMilestone}
+                  id="publication-root-milestone"
+                />
+              </div>
+            )}
           </div>
         </div>
         <div className="modal__actions">

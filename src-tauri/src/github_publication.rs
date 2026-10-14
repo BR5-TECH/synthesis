@@ -43,6 +43,7 @@ pub mod flow;
 pub mod records;
 pub mod remotes;
 pub mod store;
+pub mod update;
 
 pub use client::{GithubIssues, GithubIssuesSeam, IssueRef, ProbeOutcome};
 pub use records::*;
@@ -530,12 +531,13 @@ fn get_github_publication_settings_impl<R: tauri::Runtime>(
     })
 }
 
-/// GHP-FR-NQWX: persist the three settings, or refuse and write nothing.
+/// GHP-FR-NQWX: persist the four settings, or refuse and write nothing.
 #[tauri::command]
 pub fn set_github_publication_settings(
     parent_issue_types: Vec<String>,
     sub_issue_type: String,
     sub_issue_milestone_policy: MilestonePolicy,
+    root_issue_type: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<GithubPublicationSettings, String> {
     set_github_publication_settings_impl(
@@ -543,6 +545,7 @@ pub fn set_github_publication_settings(
         parent_issue_types,
         sub_issue_type,
         sub_issue_milestone_policy,
+        root_issue_type,
     )
 }
 
@@ -551,12 +554,17 @@ fn set_github_publication_settings_impl<R: tauri::Runtime>(
     parent_issue_types: Vec<String>,
     sub_issue_type: String,
     sub_issue_milestone_policy: MilestonePolicy,
+    root_issue_type: Option<String>,
 ) -> Result<GithubPublicationSettings, String> {
     let project = app.state::<ProjectState>();
     let root = require_root(app, &project)?;
-    let settings =
-        flow::validated_settings(parent_issue_types, sub_issue_type, sub_issue_milestone_policy)
-            .map_err(|code| fail(app, "", code))?;
+    let settings = flow::validated_settings(
+        parent_issue_types,
+        sub_issue_type,
+        sub_issue_milestone_policy,
+        root_issue_type,
+    )
+    .map_err(|code| fail(app, "", code))?;
     // The store phrases its failures with a filesystem path, so the surface
     // gets the module's own code (GHP-FR-PVOA).
     crate::project_settings::save_github_publication_settings_to(&root, &settings).map_err(
@@ -579,6 +587,7 @@ fn set_github_publication_settings_impl<R: tauri::Runtime>(
         log_fields! {
             "parent_types" => settings.parent_issue_types.len(),
             "policy" => format!("{:?}", settings.sub_issue_milestone_policy),
+            "root_typed" => settings.root_issue_type.is_some(),
         },
     );
     Ok(settings)

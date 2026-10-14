@@ -32,6 +32,7 @@ import type {
   DraftSummary,
   DraftPublicationView,
   GithubPublicationSettings,
+  IssueUpdateOutcome,
   MetadataList,
   PublicationChoiceInput,
   PublicationIssueType,
@@ -515,7 +516,7 @@ export const loadPublicationMetadata = (draftId: string, remoteName: string) =>
 export const getGithubPublicationSettings = () =>
   invoke<GithubPublicationSettings>("get_github_publication_settings");
 
-/** GHP-FR-NQWX: persist the three settings, or refuse and write nothing. */
+/** GHP-FR-NQWX: persist the four settings, or refuse and write nothing. */
 export const setGithubPublicationSettings = (
   settings: GithubPublicationSettings,
 ) =>
@@ -523,6 +524,7 @@ export const setGithubPublicationSettings = (
     parentIssueTypes: settings.parentIssueTypes,
     subIssueType: settings.subIssueType,
     subIssueMilestonePolicy: settings.subIssueMilestonePolicy,
+    rootIssueType: settings.rootIssueType,
   });
 
 /** GHP-FR-PTYL: the issue Types of the publication repository's owner. */
@@ -553,6 +555,17 @@ export const cancelDraftPublicationConflict = (draftId: string) =>
 /** GHP-FR-NAXT: abandon the standing attempt, appending nothing. */
 export const cancelDraftPublicationAttempt = (draftId: string) =>
   invoke<void>("cancel_draft_publication_attempt", { draftId });
+
+/**
+ * GHP-FR-MZMW: edit the title and the body of the issue that the draft's
+ * current record names. A closed issue answers `issueClosed` and is edited only
+ * when the call is made again with `updateClosed` true (GHP-FR-AXRU).
+ */
+export const updateDraftOnGithub = (draftId: string, updateClosed: boolean) =>
+  invoke<IssueUpdateOutcome>("update_draft_on_github", {
+    draftId,
+    updateClosed,
+  });
 
 /**
  * GHP-FR-MJTB: open one recorded issue in the system's external browser. A URL

@@ -354,6 +354,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "set_ai_api_model",
     "set_ai_api_reasoning",
     "set_ai_api_turn_timeout",
+    "set_ai_api_max_output_tokens",
+    "set_ai_api_max_context_size",
     "set_active_ai_api_integration",
     "clear_ai_api_integration",
     "get_project_ai_api_integration",

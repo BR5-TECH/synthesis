@@ -18,6 +18,8 @@ const SECRET: &str = "gw-secret-ZXCV5678";
 
 fn custom_endpoint(base_url: &str, mode: Option<ModelMode>) -> AiApiCall {
     AiApiCall {
+        max_output_tokens: None,
+        context_size: None,
         provider: "custom".into(),
         base_url: base_url.into(),
         api_key: Some(SECRET.into()),
@@ -265,4 +267,62 @@ fn a_dispatch_after_a_provider_switch_to_one_without_the_model_is_refused() {
     assert_eq!(refused, FAIL_AGENT_UNAVAILABLE);
     assert!(h.turns().in_flight(None).is_empty());
     assert!(h.seam.requests().is_empty(), "no call was made");
+}
+
+// CVL-FR-FHFM, AAP-FR-HFQZ: the provider's max output tokens replaces the
+// default limit on both routes; with none set the default stands.
+#[test]
+fn the_providers_max_output_tokens_replaces_the_default_limit() {
+    for mode in [Some(ModelMode::Chat), Some(ModelMode::Responses), None] {
+        let mut endpoint = custom_endpoint("https://gw.example.com", mode);
+        assert_eq!(openai_adapter_config(&endpoint).max_output_tokens, Some(128_000));
+        endpoint.max_output_tokens = Some(4096);
+        assert_eq!(openai_adapter_config(&endpoint).max_output_tokens, Some(4096), "{mode:?}");
+    }
+    let (seen, _) = call_once_with(|url| {
+        let mut endpoint = custom_endpoint(url, Some(ModelMode::Chat));
+        endpoint.max_output_tokens = Some(4096);
+        endpoint
+    });
+    assert_eq!(body_json(&seen)["max_tokens"], 4096, "{seen}");
+}
+
+// CVL-FR-ZPGW, AAP-FR-ADPX: a Custom call carries its effective reasoning in
+// the field of its route, and none where the reasoning is null.
+#[test]
+fn a_custom_call_carries_its_reasoning_in_the_field_of_its_route() {
+    let effort = |e: &str| Some(crate::ai_api::ReasoningChoice::Effort { effort: e.into() });
+    let request = request();
+    let exchange = opening_exchange(&request, false);
+    let built = |mode, reasoning| {
+        let mut endpoint = custom_endpoint("https://gw.example.com", mode);
+        endpoint.reasoning = reasoning;
+        build_completion_request(&request, &exchange, &endpoint).additional_params
+    };
+    assert_eq!(
+        built(Some(ModelMode::Chat), effort("low")),
+        Some(serde_json::json!({ "reasoning_effort": "low" }))
+    );
+    for mode in [Some(ModelMode::Responses), None] {
+        assert_eq!(
+            built(mode, effort("none")),
+            Some(serde_json::json!({ "reasoning": { "effort": "none" } })),
+            "{mode:?}"
+        );
+    }
+    assert_eq!(built(Some(ModelMode::Chat), None), None);
+
+    // The wire the production carrier sends holds it.
+    let (seen, _) = call_once_with(|url| {
+        let mut endpoint = custom_endpoint(url, Some(ModelMode::Chat));
+        endpoint.reasoning = effort("high");
+        endpoint
+    });
+    assert_eq!(body_json(&seen)["reasoning_effort"], "high", "{seen}");
+    let (seen, _) = call_once_with(|url| {
+        let mut endpoint = custom_endpoint(url, None);
+        endpoint.reasoning = effort("medium");
+        endpoint
+    });
+    assert_eq!(body_json(&seen)["reasoning"]["effort"], "medium", "{seen}");
 }

@@ -513,6 +513,8 @@ pub fn run() {
             ai_api::set_ai_api_model,
             ai_api::set_ai_api_reasoning,
             ai_api::set_ai_api_turn_timeout,
+            ai_api::set_ai_api_max_output_tokens,
+            ai_api::set_ai_api_max_context_size,
             ai_api::set_active_ai_api_integration,
             ai_api::clear_ai_api_integration,
             ai_api::get_project_ai_api_integration,

@@ -170,6 +170,7 @@ mod capabilities;
 mod catalogue;
 mod configuration;
 mod gateway_contract;
+mod local_models;
 mod read_paths;
 mod reasoning;
 mod session_logging;

@@ -120,6 +120,8 @@ fn no_configuration_surface_carries_a_provider_native_field() {
     // is asserted directly: a key added anywhere — in this module, in the store,
     // or in a command's payload — turns this red wherever it was declared.
     let record = crate::ai_api::AiApiRecord {
+        max_output_tokens: None,
+        max_context_size: None,
         turn_timeout_ms: None,
         provider: "openrouter".into(),
         base_url: Some("https://openrouter.example/api/v1".into()),

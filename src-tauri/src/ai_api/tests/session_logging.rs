@@ -79,6 +79,8 @@ fn no_verification_record_carries_the_key_or_even_its_hint() {
         &TEST_BUFFER,
         "probe-openai",
         &Ok(AiApiIntegration {
+            max_output_tokens: None,
+            max_context_size: None,
             turn_timeout_ms: None,
             provider: "probe-openai".into(),
             display_name: "OpenAI".into(),
@@ -251,6 +253,8 @@ fn a_listing_reports_a_provider_whose_key_has_gone_missing() {
     // answers for it, and nothing else in the application says so until an
     // agent fails to answer and nobody can explain why.
     let integration = |provider: &str, state: IntegrationState, active: bool| AiApiIntegration {
+        max_output_tokens: None,
+        max_context_size: None,
         turn_timeout_ms: None,
         provider: provider.into(),
         display_name: provider.into(),

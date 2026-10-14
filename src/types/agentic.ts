@@ -90,6 +90,16 @@ export interface ModelOption {
    * means both routes. Only Custom gateway models carry a value.
    */
   mode?: ModelRoute | null;
+  /**
+   * AAP-FR-JQIJ: the context size an Ollama host reported for this Custom
+   * model at the last verification. Absent or null where nothing was detected.
+   */
+  detectedContextSize?: number | null;
+  /**
+   * AAP-FR-JQIJ: the capabilities an Ollama host reported for this Custom
+   * model, in the order the host gave them. Shown only (AII-FR-ZIEG).
+   */
+  detectedCapabilities?: string[] | null;
 }
 
 /** The routes a Custom gateway model can be called on (AAP-FR-RTMZ). */

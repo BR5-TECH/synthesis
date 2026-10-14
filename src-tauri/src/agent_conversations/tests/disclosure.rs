@@ -277,6 +277,8 @@ fn the_reasoning_a_call_carries_is_the_shape_each_provider_takes_it_in() {
             &AgentRequest::default(),
             &opening_exchange(&AgentRequest::default(), false),
             &AiApiCall {
+                max_output_tokens: None,
+                context_size: None,
                 turn_timeout_ms: None,
                 provider: "openrouter".into(),
                 base_url: "https://example/v1".into(),

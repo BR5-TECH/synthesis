@@ -122,6 +122,7 @@ use crate::scanning;
 mod builders;
 mod cancellation;
 mod citation_markers;
+mod compaction;
 mod delivery;
 mod dispatch;
 mod failures;

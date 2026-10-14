@@ -46,6 +46,16 @@ export interface AiApiIntegration {
    * milliseconds. `null` means the project's execution timeout, or five minutes.
    */
   turnTimeoutMs: number | null;
+  /**
+   * AAP-FR-AYKU: the Custom provider's max output tokens. `null` means the
+   * default limit of 128000. Always null for the other providers.
+   */
+  maxOutputTokens?: number | null;
+  /**
+   * AAP-FR-AYKU: the Custom provider's max context size, used where a model
+   * reports none. Always null for the other providers.
+   */
+  maxContextSize?: number | null;
   active: boolean;
 }
 
@@ -148,6 +158,9 @@ export const AI_ERRORS = {
   unknownProvider: "unknown_provider",
   // The turn timeout, the AI API level (AAP-FR-FGNK).
   turnTimeoutOutOfRange: "turn_timeout_out_of_range",
+  // The Custom token fields, the AI API level (AAP-FR-ITBL).
+  tokenLimitInvalid: "token_limit_invalid",
+  limitUnsupported: "limit_unsupported",
   /**
    * AAP-FR-33: the provider has never been configured at all, as distinct from
    * `notVerified` — one is a configuration to write, the other a check to pass.

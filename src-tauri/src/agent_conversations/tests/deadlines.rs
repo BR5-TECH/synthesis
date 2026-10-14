@@ -428,6 +428,8 @@ fn openrouter_request_over(
         native_tools: Vec::new(),
     };
     let endpoint = AiApiCall {
+        max_output_tokens: None,
+        context_size: None,
         turn_timeout_ms: None,
         provider: "openrouter".into(),
         base_url: "https://example.invalid".into(),
@@ -547,6 +549,8 @@ fn the_boundary_and_the_marks_stand_on_every_round() {
         native_tools: Vec::new(),
     };
     let endpoint = AiApiCall {
+        max_output_tokens: None,
+        context_size: None,
         turn_timeout_ms: None,
         provider: "openrouter".into(),
         base_url: "https://example.invalid".into(),
@@ -765,6 +769,8 @@ fn the_openrouter_call_presents_the_search_entry_in_its_tool_array() {
         stable_head_sections: 0,
     };
     let endpoint = AiApiCall {
+        max_output_tokens: None,
+        context_size: None,
         turn_timeout_ms: None,
         provider: "openrouter".into(),
         base_url: "https://example.invalid".into(),

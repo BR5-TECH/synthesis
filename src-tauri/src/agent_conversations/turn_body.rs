@@ -219,7 +219,11 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
     // downstream inspects a provider, strips a part, downgrades a request, or
     // repairs one, so a request refused for any reason is never re-issued with
     // fewer of its images or with some of them turned into text (CVL-FR-38).
-    let mut exchange = opening_exchange(&plan.request, with_images);
+    let mut conversation = compaction::Conversation {
+        compacted: None,
+        exchange: opening_exchange(&plan.request, with_images),
+        with_images,
+    };
     let mut model_calls = 0usize;
 
     let answer = loop {
@@ -228,6 +232,20 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             log_turn_out_of_time(app, turns, plan, model_calls);
             return Err(TurnEnd::TimedOut);
         }
+
+        // CVL-FR-LCXM .. CVL-FR-HFRL: a budgeted turn whose next call is over
+        // budget compacts its older history first. Never between two attempts
+        // of one invocation, so a retry still presents its exchange unchanged.
+        compaction::compact_if_over_budget(
+            app,
+            turns,
+            plan,
+            &endpoint,
+            &mut conversation,
+            bounds.retry,
+            deadline,
+            model_calls + 1,
+        )?;
 
         model_calls += 1;
         plan.model_calls.store(model_calls, Ordering::SeqCst);
@@ -241,8 +259,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             turns,
             plan,
             &endpoint,
-            &exchange,
-            ModelCall { policy: bounds.retry, deadline, model_calls, at_bound },
+            conversation.request(plan),
+            &conversation.exchange,
+            ModelCall { policy: bounds.retry, deadline, model_calls, at_bound, compaction: false },
         )?;
 
         // CVL-FR-31: what the provider ran for itself is reported and recorded
@@ -279,7 +298,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             break reply.text;
         }
 
-        exchange.push(assistant_message(&reply));
+        conversation.exchange.push(assistant_message(&reply));
 
         // CVL-FR-33: every call this reply asked for is reported begun here —
         // in the order the reply asked for them and before any of their results
@@ -378,7 +397,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             // CVL-FR-EKHH: every result carries the id of its call, unchanged,
             // and the name of the tool. The Responses route matches a result to
             // its call by `call_id`, which is that id.
-            exchange.push(rig::completion::Message::tool_result(
+            conversation.exchange.push(rig::completion::Message::tool_result(
                 call.id.clone(),
                 call.function.name.clone(),
                 result,
@@ -409,7 +428,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 None
             };
             if let Some(message) = one_at_a_time {
-                exchange.push(rig::completion::Message::tool_result(
+                conversation.exchange.push(rig::completion::Message::tool_result(
                     call.id.clone(),
                     call.function.name.clone(),
                     message.to_string(),
@@ -428,7 +447,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());
             let result = dispatch_tool(app, turns, plan, call, remaining);
             activity.finish(app, turns, &plan.turn_id, index);
-            exchange.push(rig::completion::Message::tool_result(
+            conversation.exchange.push(rig::completion::Message::tool_result(
                 call.id.clone(),
                 call.function.name.clone(),
                 result,

@@ -3004,16 +3004,34 @@ const aiApis = [
   {
     provider: "custom",
     displayName: "Custom (OpenAI-compatible)",
-    baseUrl: null,
-    keyState: "unset",
-    maskedHint: null,
+    // A local Ollama host, so the Custom tab's local-model rows are visible:
+    // one model with detected values (AAP-FR-JQIJ) and one without.
+    baseUrl: "http://localhost:11434",
+    keyState: "set",
+    maskedHint: "llam",
     keyRequired: true,
-    state: "unconfigured",
-    verifiedAt: null,
-    models: [],
-    modelsOrigin: "catalog",
-    selectedModel: null,
+    state: "verified",
+    verifiedAt: "2026-10-14T09:00:00Z",
+    models: [
+      {
+        id: "qwen3:32b",
+        label: "qwen3:32b",
+        detectedContextSize: 40960,
+        detectedCapabilities: ["completion", "tools", "thinking"],
+        reasoning: { mandatory: false, supportedEfforts: ["none", "low", "medium", "high"] },
+      },
+      {
+        id: "plain-model",
+        label: "plain-model",
+        reasoning: { mandatory: false, supportedEfforts: ["none", "low", "medium", "high"] },
+      },
+    ],
+    modelsOrigin: "probed",
+    selectedModel: "qwen3:32b",
     selectedReasoning: null,
+    turnTimeoutMs: null,
+    maxOutputTokens: null,
+    maxContextSize: 32768,
     active: false,
   },
 ];
@@ -9718,6 +9736,22 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const record = aiApis.find((i: Record<string, unknown>) => i.provider === a.provider);
       if (!record) throw "unknown_provider";
       record.turnTimeoutMs = ms;
+      return record;
+    }
+    // AAP-FR-ITBL: the Custom token values. A value that is not a whole number
+    // from 1 to 4294967295 and a provider other than Custom are refused as the
+    // backend refuses them.
+    case "set_ai_api_max_output_tokens":
+    case "set_ai_api_max_context_size": {
+      if (a.provider !== "custom") throw "limit_unsupported";
+      const tokens = a.tokens ?? null;
+      if (tokens !== null && (!Number.isInteger(tokens) || tokens < 1 || tokens > 4294967295)) {
+        throw "token_limit_invalid";
+      }
+      const record = aiApis.find((i: Record<string, unknown>) => i.provider === "custom");
+      if (!record) throw "unknown_provider";
+      if (cmd === "set_ai_api_max_output_tokens") record.maxOutputTokens = tokens;
+      else record.maxContextSize = tokens;
       return record;
     }
     case "get_project_ai_api_integration":

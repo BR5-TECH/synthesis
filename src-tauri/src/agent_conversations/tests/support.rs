@@ -199,6 +199,8 @@ pub(super) fn all_records() -> Vec<LogRecord> {
 /// names is irrelevant to the preamble, which is the point of CVL-FR-10.
 pub(super) fn any_endpoint() -> AiApiCall {
     AiApiCall {
+        max_output_tokens: None,
+        context_size: None,
         turn_timeout_ms: None,
         provider: "openrouter".into(),
         base_url: "https://example/v1".into(),

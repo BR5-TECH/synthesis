@@ -137,6 +137,8 @@ fn no_debug_output_of_the_call_shape_contains_the_key() {
     // AAP-FR-07: the same reasoning as the agentic level's — `Debug` is the
     // accidental channel a key would escape through, so it is redacted.
     let call = AiApiCall {
+        max_output_tokens: None,
+        context_size: None,
         turn_timeout_ms: None,
         provider: "openai".into(),
         base_url: "https://api.openai.com/v1".into(),

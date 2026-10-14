@@ -454,16 +454,17 @@ export function DraftsPanel({
    */
   const admitsDraft = useCallback(
     (draft: DraftSummary) =>
-      // DRP-FR-07: the **graduated** position admits both `graduated` and
-      // `published`. Every other single-status position admits its own status
-      // alone, and **all drafts** admits everything.
+      // DRP-FR-07: the **graduated** position admits `graduated` alone, and
+      // the **active** position admits the legacy `published` too: publication
+      // to GitHub leaves a draft in the author's working view. **All drafts**
+      // admits everything.
       // DRP-FR-YVXS: the **active** position admits a GitHub-shadow draft
       // whose status is `github_shadow`; one that reports `graduated` falls in
       // the graduated position by its own status.
       (panel.filter === "all" ||
         draft.status === panel.filter ||
-        (panel.filter === "graduated" && draft.status === "published") ||
-        (panel.filter === "active" && draft.status === "github_shadow")) &&
+        (panel.filter === "active" &&
+          (draft.status === "published" || draft.status === "github_shadow"))) &&
       (matches === null || matches.has(draft.id)),
     [panel.filter, matches],
   );
@@ -805,23 +806,28 @@ export function DraftsPanel({
   };
 
   /**
-   * DRP-FR-YYZU: open the issue a GitHub-shadow draft mirrors. The one
+   * DRP-FR-YYZU / DRP-FR-MZEA: open a GitHub issue of a draft. The one
    * publication operation this panel invokes; a refusal renders on the row.
    */
-  const openShadowIssue = (draft: DraftSummary) => {
-    const url = draft.githubIssue?.issueUrl;
+  const openIssue = (draft: DraftSummary, url: string | undefined, what: string) => {
     if (!url) return;
     setOverlay(null);
     const key = `draft:${draft.id}`;
     setRowError(key, null);
     api.openPublicationIssue(draft.id, url).catch((e) => {
-      logWarn(["frontend"], "shadow draft issue could not be opened", {
+      logWarn(["frontend"], `${what} could not be opened`, {
         draftId: draft.id,
         code: refusalCode(e),
       });
       setRowError(key, githubPollingErrorMessage(e));
     });
   };
+  /** DRP-FR-YYZU: the issue a GitHub-shadow draft mirrors. */
+  const openShadowIssue = (draft: DraftSummary) =>
+    openIssue(draft, draft.githubIssue?.issueUrl, "shadow draft issue");
+  /** DRP-FR-MZEA: the issue of the draft's newest publication record. */
+  const openPublishedIssue = (draft: DraftSummary) =>
+    openIssue(draft, draft.publication?.issueUrl, "published draft issue");
 
   // DRP-FR-09 / DRP-FR-20: how one row is drawn, given everything the panel
   // holds. The context is the panel itself — see `./draftsRows`.
@@ -868,6 +874,7 @@ export function DraftsPanel({
       onOpenRun,
       onGraduateDraft,
       openShadowIssue,
+      openPublishedIssue,
     });
 
   const rootFolders = (childFolders.get(ROOT) ?? []).filter((f) =>

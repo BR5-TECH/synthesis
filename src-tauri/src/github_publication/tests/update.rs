@@ -78,8 +78,9 @@ fn an_update_edits_title_and_body_and_appends_one_record() {
     let store = s.store();
     assert_eq!(store.publication, vec![before, record]);
     assert!(store.attempt.is_none());
+    // GHP-FR-BSYH: neither the publication nor the update wrote a status.
     let status = crate::drafts::draft_record(&s.root(), &s.id).unwrap().status;
-    assert_eq!(status, DraftStatus::Published);
+    assert_eq!(status, DraftStatus::Active);
 }
 
 /// GHP-FR-MZMW / GHP-FR-QLDF: with two records, the update edits the issue of

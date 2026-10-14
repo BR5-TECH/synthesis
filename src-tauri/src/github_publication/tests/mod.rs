@@ -19,6 +19,7 @@ mod client_rules;
 mod eligibility;
 mod enterprise_hosts;
 mod github_shadow;
+mod legacy_status;
 mod metadata_cache_rules;
 mod metadata_refresh;
 mod metadata_schedule;
@@ -45,6 +46,31 @@ pub(super) fn draft(root: &crate::fs::RootFs, name: &str) -> String {
 pub(super) fn save_prompt(root: &crate::fs::RootFs, id: &str, body: &str) {
     let prompt = crate::drafts::require_prompt(root, id).unwrap();
     crate::drafts::save_draft_file_impl(root, id, &prompt, body).unwrap();
+}
+
+/// DRS-FR-VKQO: no operation sets `published` any more, so a test writes the
+/// legacy value into the stored record directly, as an older build left it.
+pub(super) fn store_legacy_published(root: &crate::fs::RootFs, id: &str) {
+    let path =
+        crate::drafts::draft_publication_path(root, id).unwrap().with_file_name("draft.toml");
+    let text = root.read_text(&path).unwrap();
+    let legacy = text.replace("status = \"active\"", "status = \"published\"");
+    assert_ne!(legacy, text, "the record holds no `active` status to replace");
+    root.write_text_atomic(&path, &legacy).unwrap();
+}
+
+/// One successful publication record in the draft's store, written without
+/// GitHub.
+pub(super) fn record_publication(root: &crate::fs::RootFs, id: &str, marker: &str, number: u64) {
+    let attempt = flow::open_attempt(root, id, &origin(), marker.to_string()).unwrap();
+    let issue = IssueRef {
+        number,
+        url: format!("https://github.com/acme/widgets/issues/{number}"),
+        title: "widget".into(),
+        body: "body".into(),
+        ..Default::default()
+    };
+    store::complete_attempt(root, id, flow::record_of(&attempt, &issue)).unwrap();
 }
 
 /// One recorded GitHub call, so a test can assert what reached the wire and in

@@ -21,6 +21,8 @@ fn draft(id: &str, name: &str, status: DraftStatus, activity: Option<&str>) -> D
         has_pending_proposal: false,
         graduation: None,
         github_issue: None,
+        publication: None,
+        publication_unreadable: false,
     }
 }
 

@@ -102,6 +102,8 @@ export interface DraftRowContext {
   onGraduateDraft?: (draftId: string, draftName: string) => void;
   /** DRP-FR-YYZU: open the issue a GitHub-shadow draft mirrors. */
   openShadowIssue: (draft: DraftSummary) => void;
+  /** DRP-FR-MZEA: open the issue of the draft's newest publication record. */
+  openPublishedIssue: (draft: DraftSummary) => void;
 }
 
 export function makeRowRenderers(ctx: DraftRowContext) {
@@ -147,6 +149,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
     onOpenRun,
     onGraduateDraft,
     openShadowIssue,
+    openPublishedIssue,
   } = ctx;
 
   const menuEntry = (
@@ -322,6 +325,30 @@ export function makeRowRenderers(ctx: DraftRowContext) {
               <span className="draft-row__label">{draft.name}</span>
             </span>
           )}
+          {/* DRP-FR-TQUB / DRP-FR-MZEA: a draft whose publication store holds
+              a record shows the publication marker, on every status. The
+              marker is a link to the issue and changes nothing on the row's
+              second line. */}
+          {draft.publication && (
+            <button
+              type="button"
+              className="drafts-tree__publication"
+              data-testid="draft-publication-marker"
+              title={`Published · ${formatRelative(draft.publication.publishedAt)}`}
+              aria-label={`Published · ${formatRelative(draft.publication.publishedAt)}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                openPublishedIssue(draft);
+              }}
+              onKeyDown={(e) => {
+                // Enter and Space activate the marker alone. On the row they
+                // would also open the draft (DRP-FR-09).
+                if (e.key === "Enter" || e.key === " ") e.stopPropagation();
+              }}
+            >
+              ⤴
+            </button>
+          )}
           {/* DRP-FR-08: an archived draft is told apart where it sits rather
               than by being listed apart. No marker in the archived position,
               where every row would carry one. */}
@@ -332,8 +359,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
           )}
           {/* DRP-FR-08: on the same terms, and for the same reason — a
               graduated draft is told apart where it sits. It keeps its label in
-              the **graduated** position too, which admits two statuses
-              (DRP-FR-07) and would otherwise leave the two indistinguishable. */}
+              the **graduated** position too. */}
           {draft.status === "graduated" &&
             (panel.filter === "all" || panel.filter === "graduated") && (
               <span
@@ -343,11 +369,11 @@ export function makeRowRenderers(ctx: DraftRowContext) {
                 Graduated
               </span>
             )}
-          {/* DRP-FR-08: a published draft states its own status, distinct from
-              a graduated one — the work went to a GitHub issue rather than to a
-              specification here. */}
+          {/* DRP-FR-08: a legacy `published` draft states its own status. It
+              stands in the **active** position (DRP-FR-07), so it keeps its
+              label there beside the active rows. */}
           {draft.status === "published" &&
-            (panel.filter === "all" || panel.filter === "graduated") && (
+            (panel.filter === "all" || panel.filter === "active") && (
               <span
                 className="drafts-tree__badge"
                 data-testid="draft-published-marker"

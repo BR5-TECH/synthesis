@@ -918,3 +918,16 @@
   flex-direction: column;
   gap: var(--sp-2);
 }
+/* DRP-FR-TQUB: the publication marker, a link to the draft's GitHub issue. */
+.drafts-tree__publication {
+  flex: none;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--fg-3);
+  font-size: var(--fs-ui-xs);
+  line-height: 1;
+  cursor: pointer;
+}
+.drafts-tree__publication:hover,
+.drafts-tree__publication:focus-visible { color: var(--accent); }

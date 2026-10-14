@@ -177,10 +177,33 @@ pub fn continue_graduation_run<R: tauri::Runtime>(
     // still recognised as a run whose budget is spent.
     let settings = crate::graduation::driver::LoopSettings::read(&app);
     let window = settings.pass_limit_for(&run);
+    // GRD-FR-SKLO: a run at rest on its total time is not a run whose pass
+    // budget is spent, even where it stands at the last pass of its window.
     let budget_spent = run.state == GraduationRunState::AwaitingAuthor
         && run.escalation.is_none()
         && run.blocker.is_none()
+        && run.rest.is_none()
         && run.pass_budget_spent(window);
+    // GRL-FR-SPRE: Continue from `total_time_limit` resets the used total time
+    // alone. The pass budget and the checkpoint are carried through untouched,
+    // so no completed pass is made again. A rest is cleared by every Continue,
+    // so no rest outlives the stop it was recorded for.
+    if let Some(rest) = run.rest.take() {
+        if run.state == GraduationRunState::AwaitingAuthor {
+            crate::logging::log_info(
+                &app,
+                &crate::logging::BUFFER,
+                &[crate::logging::Domain::Ai, crate::logging::Domain::Backend],
+                "graduation reset a spent total time",
+                crate::log_fields! {
+                    "run_id" => run.id.clone(),
+                    "limit_ms" => rest.limit_ms as i64,
+                    "used_ms" => run.turn_time_used_ms as i64,
+                },
+            );
+            run.turn_time_used_ms = 0;
+        }
+    }
     run.blocker = None;
     // GRL-FR-TVXI: the author's Continue resets the refusal count, so a run
     // blocked on two unreadable verdicts gets the whole bound again.
@@ -685,6 +708,8 @@ pub(crate) fn build_run(
         archived_at: None,
         work_turns: 0,
         review_turns: 0,
+        turn_time_used_ms: 0,
+        rest: None,
         logs: crate::graduation::logs::GraduationLogIndexes::default(),
         checkpoint: GraduationCheckpoint {
             // GRL-FR-ARPX: every run starts at its first pass.

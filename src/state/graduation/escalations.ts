@@ -10,6 +10,7 @@ import type {
   GraduationRun,
 } from "../../types/graduation";
 import { interruptionCause, isFailureStop } from "./stages";
+import { totalTimeLimitRestOf } from "./rest";
 import type { NotificationLevel } from "../toasts";
 
 /** The questions this run is waiting on, or none. */
@@ -121,15 +122,23 @@ function interruptedStatement(run: GraduationRun, title: string): string {
   return `“${title}” stopped: ${interruptionCause(run.interruption.reason)}.`;
 }
 
+/**
+ * GRU-FR-BLSS / GRU-FR-WKTL: the line of a run that waits on the author. A run
+ * at rest on the total time limit says that limit, not a spent pass budget.
+ */
+function awaitingStatement(run: GraduationRun, title: string): string {
+  if (run.escalation) return `“${title}” is waiting for your answer.`;
+  if (totalTimeLimitRestOf(run)) return `“${title}” stopped at its total time limit.`;
+  return `“${title}” is waiting for your decision.`;
+}
+
 /** GRU-FR-BLSS: the one line the notification carries. */
 export function raiseStatement(run: GraduationRun): string {
   const title = runTitle(run);
   if (run.merge) {
     switch (run.state) {
       case "awaiting_author":
-        return run.escalation
-          ? `“${title}” is waiting for your answer.`
-          : `“${title}” is waiting for your decision.`;
+        return awaitingStatement(run, title);
       case "blocked":
         return `“${title}” is blocked.`;
       case "completed":
@@ -147,9 +156,7 @@ export function raiseStatement(run: GraduationRun): string {
   }
   switch (run.state) {
     case "awaiting_author":
-      return run.escalation
-        ? `“${title}” is waiting for your answer.`
-        : `“${title}” is waiting for your decision.`;
+      return awaitingStatement(run, title);
     case "blocked":
       return `“${title}” is blocked.`;
     case "completed":

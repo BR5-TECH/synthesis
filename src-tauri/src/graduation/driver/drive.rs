@@ -436,7 +436,9 @@ fn settings_for_dispatch<R: tauri::Runtime>(
         log_fields! {
             "run_id" => run.id.clone(),
             "part" => part.to_string(),
-            "execution_timeout_ms" => settings.execution_timeout_ms as i64,
+            "stage_time_limit_ms" => settings.stage_time_limit_ms as i64,
+            "total_time_limit_ms" => settings.total_time_limit_ms as i64,
+            "turn_time_used_ms" => run.turn_time_used_ms as i64,
             "pass_budget" => settings.pass_budget as i64,
             "pass_limit" => run.checkpoint.pass_limit as i64,
         },
@@ -505,6 +507,10 @@ async fn work_turn<R: tauri::Runtime>(
         rest_for_author(app, run);
         return Step::Stop;
     }
+    // GRL-FR-WOBK: a run with no total time left dispatches no turn.
+    if time_budget::rest_if_spent(app, run, &settings, phases::PART_WORK) {
+        return Step::Stop;
+    }
     let purpose = purpose_for(run);
     let input = task_input::compose_input(run, phases::PART_WORK, purpose);
     if let Err(reason) = input.validate(run.checkpoint.pass_limit) {
@@ -542,11 +548,12 @@ async fn work_turn<R: tauri::Runtime>(
         return Step::Stop;
     }
 
-    let limit_ms = settings.execution_timeout_ms;
-    let turn =
-        TurnRequest { execution_directory: worktree, part: phases::PART_WORK, input, settings };
+    // GRL-FR-EFTM: the turn runs under the smaller of the stage time limit and
+    // the remaining total time.
+    let bound = settings.turn_bound(run.turn_time_used_ms);
+    let turn = TurnRequest { execution_directory: worktree, part: phases::PART_WORK, input, bound };
     let outcome = execute(app, run, turn, cancellation, dispatch).await;
-    let step = settle_turn(app, run, worktree, outcome, GraduationEscalationOrigin::Work, limit_ms);
+    let step = settle_turn(app, run, worktree, outcome, GraduationEscalationOrigin::Work, bound);
     if matches!(step, Step::Continue)
         && !logs::emit(
             app,
@@ -584,6 +591,11 @@ async fn review_turn<R: tauri::Runtime>(
     if merge_drive::moved(app, run) {
         return Step::Stop;
     }
+    // GRL-FR-WOBK: a run with no total time left does not enter the review.
+    let bounds = settings::LoopSettings::read(app);
+    if time_budget::rest_if_spent(app, run, &bounds, phases::PART_REVIEW) {
+        return Step::Stop;
+    }
     let _ = transitions::enter_stage(
         app,
         run,
@@ -606,6 +618,10 @@ async fn review_turn<R: tauri::Runtime>(
         // is about what the verdict may start, not about what may run now.
         if run.pass_beyond_window() {
             rest_for_author(app, run);
+            return Step::Stop;
+        }
+        // GRL-FR-WOBK: a run with no total time left dispatches no review.
+        if time_budget::rest_if_spent(app, run, &settings, phases::PART_REVIEW) {
             return Step::Stop;
         }
         let mut input =
@@ -657,13 +673,9 @@ async fn review_turn<R: tauri::Runtime>(
                 return Step::Stop;
             }
         };
-        let limit_ms = settings.execution_timeout_ms;
-        let turn = TurnRequest {
-            execution_directory: &checkout,
-            part: phases::PART_REVIEW,
-            input,
-            settings,
-        };
+        let bound = settings.turn_bound(run.turn_time_used_ms);
+        let turn =
+            TurnRequest { execution_directory: &checkout, part: phases::PART_REVIEW, input, bound };
         let outcome = execute(app, run, turn, cancellation, dispatch).await;
         // GRL-FR-YKRI: removed when the turn ends, whatever it decided.
         //
@@ -690,7 +702,7 @@ async fn review_turn<R: tauri::Runtime>(
             worktree,
             outcome,
             GraduationEscalationOrigin::Review,
-            limit_ms,
+            bound,
         ) {
             Some(execution) => execution,
             None => return Step::Stop,
@@ -813,23 +825,23 @@ pub(super) fn revise_or_rest<R: tauri::Runtime>(
 }
 
 /// One turn to dispatch: where it runs, which part of the loop it is, its
-/// input, and the settings read for this dispatch.
+/// input, and the timeout read for this dispatch.
 struct TurnRequest<'a> {
     execution_directory: &'a Path,
     part: &'a str,
     input: task_input::GraduationTaskInput,
-    settings: settings::LoopSettings,
+    bound: settings::TurnBound,
 }
 
 /// GXD-FR-KXXB: one turn is one call through the dispatch seam.
 async fn execute<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    run: &GraduationRun,
+    run: &mut GraduationRun,
     turn: TurnRequest<'_>,
     cancellation: &CancellationToken,
     dispatch: &dyn seams::GraduationDispatch<R>,
 ) -> Result<AgentExecution, AgentExecutionError> {
-    let TurnRequest { execution_directory, part, input, settings } = turn;
+    let TurnRequest { execution_directory, part, input, bound } = turn;
     let task = AgentTaskRequest {
         protocol_version: PROTOCOL_VERSION,
         instruction: prompts::instruction_for_run(run, part).to_string(),
@@ -841,7 +853,7 @@ async fn execute<R: tauri::Runtime>(
         // this dispatch, and nothing of an earlier turn's controls is reused.
         execution: ExecutionControls {
             cancellation: Cancellation::CallerControlled,
-            timeout_ms: settings.execution_timeout_ms,
+            timeout_ms: bound.limit_ms,
         },
     };
     let request = AgentExecutionRequest {
@@ -885,7 +897,10 @@ async fn execute<R: tauri::Runtime>(
             },
         );
     }
+    let started = std::time::Instant::now();
     let outcome = dispatch.dispatch_graduation_turn(app, &run.project_key, request).await;
+    // GRD-FR-UTTX: the turn's execution time counts against the run's total.
+    time_budget::charge(run, started, &outcome, bound);
     recorder.finish(app, run);
     outcome
 }

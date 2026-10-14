@@ -11,6 +11,7 @@ import type {
 import { passBoundOf } from "../../types/graduation";
 import { blockerSentence } from "./blockers";
 import { failureStatement, isMergeRun } from "./merge";
+import { totalTimeLimitHeadline, totalTimeLimitRestOf } from "./rest";
 import { SLOT_WAIT_HEADLINE } from "./slotWait";
 import type {
   GraduationObservability,
@@ -162,12 +163,19 @@ export function conditionSentence(
     case "reviewing":
       return `${isMergeRun(run) ? "Reviewing" : "Review"} · pass ${passOf(run)} of ${passBoundOf(run)}`;
     case "awaiting_author":
-      // GRU-FR-FZCN: three shapes rest a run for the author — an escalation it
-      // asked, a review that did not settle, and a blocker that repeated.
+      // GRU-FR-FZCN / GRU-FR-WKTL: four shapes rest a run for the author — an
+      // escalation it asked, a review that did not settle, a blocker that
+      // repeated, and a spent total time limit.
       if (run.escalation) return "Waiting for your answer";
       // What stopped it is stated whole in the blocker beneath, so the line
       // says the shape rather than repeating a code in it.
       if (run.blocker) return "Stopped twice on the same thing";
+      {
+        // GRU-FR-WKTL: a run at rest on the total time limit says that limit
+        // and the time it used. It spent no pass budget, so it states none.
+        const rest = totalTimeLimitRestOf(run);
+        if (rest) return totalTimeLimitHeadline(rest);
+      }
       // GRU-FR-FZCN: a review that did not settle before the budget was spent
       // says what it spent, so the author reads a bound rather than a run that
       // stopped for no stated reason. The findings themselves stand in the pass

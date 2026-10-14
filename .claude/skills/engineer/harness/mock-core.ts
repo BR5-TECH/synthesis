@@ -3850,6 +3850,9 @@ let projectConfig: {
   draftTemplate: string | null;
   graduationConcurrencyLimit: number | "unlimited";
   executionTimeoutMs: number | null;
+  graduationPassBudget: number | null;
+  graduationStageTimeLimitMs: number | null;
+  graduationTotalTimeLimitMs: number | null;
 } = {
   lineEndings: "lf",
   draftTemplate: null,
@@ -3865,7 +3868,38 @@ let projectConfig: {
     return seeded !== null && Number.isInteger(n) && n >= 1 ? n : 1;
   })(),
   executionTimeoutMs: null,
+  // PSS-FR-QBNE / PSS-FR-HVSM / PSS-FR-RKTW: the graduation loop settings.
+  // `null` is unset, which the Graduation sliders show as the default.
+  graduationPassBudget: null,
+  graduationStageTimeLimitMs: null,
+  graduationTotalTimeLimitMs: null,
 };
+/**
+ * PSS-FR-LFUZ: the check of one graduation loop setting in a save payload.
+ * Returns the typed error code for a value that is not valid, or null.
+ */
+function graduationLoopRefusal(patch: Record<string, unknown>): string | null {
+  const halfHour = 1_800_000;
+  const checks: [string, string, number, number, number][] = [
+    ["graduationPassBudget", "graduation_pass_budget_invalid", 1, 10, 1],
+    ["graduationStageTimeLimitMs", "graduation_stage_time_limit_invalid", halfHour, 96 * halfHour, halfHour],
+    ["graduationTotalTimeLimitMs", "graduation_total_time_limit_invalid", halfHour, 192 * halfHour, halfHour],
+  ];
+  for (const [key, code, min, max, step] of checks) {
+    const value = patch[key];
+    if (value === undefined || value === null) continue;
+    if (
+      typeof value !== "number" ||
+      !Number.isInteger(value) ||
+      value < min ||
+      value > max ||
+      value % step !== 0
+    ) {
+      return `${code}: ${key} is not valid`;
+    }
+  }
+  return null;
+}
 let searchSeq = 0;
 /**
  * SET-FR-QKKQ: make `save_project_config` fail, so the Graduation section's
@@ -6100,6 +6134,27 @@ graduationRuns.push(
       capturedAt: "2026-09-05T15:00:00Z",
     },
   }),
+  // GRU-FR-WKTL / GRU-FR-TTLR: a run at rest on its total time limit. It
+  // offers Continue and routes to the Total time per run slider.
+  makeStreamRun({
+    id: "g-27",
+    draftId: "d-27",
+    state: "awaiting_author",
+    turnTimeUsedMs: 18_000_000,
+    rest: {
+      reason: "total_time_limit",
+      at: "2026-09-06T12:00:00Z",
+      limitMs: 18_000_000,
+      usedMs: 18_000_000,
+    },
+    input: {
+      draftId: "d-27",
+      draftName: "Long refactor run",
+      prompt: "Split the settings store into modules.",
+      promptChecksum: "sha-p27",
+      capturedAt: "2026-09-05T16:00:00Z",
+    },
+  }),
 );
 
 /**
@@ -7313,6 +7368,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "save_project_config": {
       if (projectConfigSaveRefusal) throw projectConfigSaveRefusal;
       const patch = a.config ?? {};
+      // PSS-FR-LFUZ: a payload with a graduation loop value that is not valid
+      // is refused whole, and nothing is written.
+      const loopRefusal = graduationLoopRefusal(patch);
+      if (loopRefusal) throw loopRefusal;
       projectConfig = {
         lineEndings: patch.lineEndings ?? projectConfig.lineEndings,
         draftTemplate:
@@ -7328,6 +7387,19 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           patch.executionTimeoutMs === undefined
             ? projectConfig.executionTimeoutMs
             : patch.executionTimeoutMs,
+        // PSS-FR-OWGI: omitted leaves a setting as stored; `null` clears it.
+        graduationPassBudget:
+          patch.graduationPassBudget === undefined
+            ? projectConfig.graduationPassBudget
+            : patch.graduationPassBudget,
+        graduationStageTimeLimitMs:
+          patch.graduationStageTimeLimitMs === undefined
+            ? projectConfig.graduationStageTimeLimitMs
+            : patch.graduationStageTimeLimitMs,
+        graduationTotalTimeLimitMs:
+          patch.graduationTotalTimeLimitMs === undefined
+            ? projectConfig.graduationTotalTimeLimitMs
+            : patch.graduationTotalTimeLimitMs,
       };
       return undefined;
     }
@@ -8395,6 +8467,12 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       await graduationActDelay();
       const run = findRun(String(a.runId ?? ""));
       run.state = "running";
+      // GRD-FR-SKLO: Continue from a total time limit rest clears the rest and
+      // resets the used total time alone.
+      if (run.rest?.reason === "total_time_limit") {
+        run.rest = null;
+        run.turnTimeUsedMs = 0;
+      }
       return graduationChanged(run);
     }
     /**

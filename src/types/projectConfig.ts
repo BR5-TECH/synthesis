@@ -42,6 +42,23 @@ export interface ProjectConfig {
    * that holds none reads as one (PSS-FR-KMBT).
    */
   graduationConcurrencyLimit: GraduationConcurrencyLimit;
+  /**
+   * PSS-FR-QBNE: how many passes a run that is not a merge run may take, 1 to
+   * 10. `null` is the unset state, which takes the default of 2 (PSS-FR-YDCA).
+   */
+  graduationPassBudget?: number | null;
+  /**
+   * PSS-FR-HVSM: how long one graduation turn may run, in milliseconds. A
+   * whole multiple of 1,800,000 from 1,800,000 to 172,800,000. `null` is the
+   * unset state, which takes the default of 3 hours.
+   */
+  graduationStageTimeLimitMs?: number | null;
+  /**
+   * PSS-FR-RKTW: how much working and reviewing time one run may use, in
+   * milliseconds. A whole multiple of 1,800,000 from 1,800,000 to
+   * 345,600,000. `null` is the unset state, which takes the default of 5 hours.
+   */
+  graduationTotalTimeLimitMs?: number | null;
 }
 
 /**
@@ -64,4 +81,12 @@ export interface ProjectConfigPatch {
   executionTimeoutMs?: number | null;
   /** PSS-FR-ZVSD: absent leaves the stored limit as it stands. */
   graduationConcurrencyLimit?: GraduationConcurrencyLimit;
+  /**
+   * PSS-FR-OWGI: for each graduation loop setting, omitted leaves it as
+   * stored, `null` clears it to unset, and a valid value stores it. A value
+   * that is not valid is refused whole (PSS-FR-LFUZ).
+   */
+  graduationPassBudget?: number | null;
+  graduationStageTimeLimitMs?: number | null;
+  graduationTotalTimeLimitMs?: number | null;
 }

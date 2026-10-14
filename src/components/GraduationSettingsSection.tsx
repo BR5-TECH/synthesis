@@ -3,9 +3,10 @@
  * (`../../specifications/ui/SET-project-settings.md` SET-FR-DHFS, SET-FR-YMRV).
  *
  * It holds one row: the execution time limit, which is the project's shared
- * execution timeout (PSS-FR-TQMV) shown in whole minutes. An interrupted run
- * that reached the limit routes here (GRU-FR-QLRQ), so the author can raise it
- * before they continue the run.
+ * execution timeout (PSS-FR-TQMV) shown in whole minutes. It bounds the
+ * conversation turns whose provider sets no turn timeout, and no graduation
+ * turn: the stage time limit of `GraduationLoopSliders` bounds those
+ * (SET-FR-PSLD).
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -169,8 +170,9 @@ export function GraduationSettingsSection() {
         data-testid="graduation-time-limit-note"
         style={{ marginBottom: error ? 4 : 18 }}
       >
-        Bounds each graduation turn, and each conversation turn whose provider
-        sets no turn timeout. Empty uses 2 hours.
+        Bounds each conversation turn whose provider sets no turn timeout. It
+        does not bound graduation turns: Time per turn bounds them. Empty uses 2
+        hours.
       </div>
       {error && (
         <span

@@ -14,7 +14,7 @@ pub const PART_MERGE_REVIEW: &str = "merge_review";
 pub const PART_APPLY: &str = "apply";
 
 /// GRL-FR-ARPX: how many passes a run takes where the project configures no
-/// budget of its own (`PSS-project-settings-storage.md` PSS-FR-WPKS).
+/// budget of its own (`PSS-project-settings-storage.md` PSS-FR-QBNE).
 ///
 /// A review that answers `revise` when the budget is spent rests the run for
 /// the author rather than starting another pass: a loop that revises without a
@@ -36,6 +36,11 @@ pub const VERDICT_REFUSAL_BOUND: u32 = 2;
 pub const BLOCK_ATTEMPT_BOUND: u32 = 2;
 
 /// GRL-FR-REPL: how long one agent turn may run where the project configures
-/// no execution timeout of its own (`PSS-project-settings-storage.md`
-/// PSS-FR-TQMV).
-pub const DEFAULT_EXECUTION_TIMEOUT_MS: u64 = 2 * 60 * 60 * 1000;
+/// no stage time limit of its own (`PSS-project-settings-storage.md`
+/// PSS-FR-HVSM).
+pub const DEFAULT_STAGE_TIME_LIMIT_MS: u64 = 3 * 60 * 60 * 1000;
+
+/// GRL-FR-REPL: how much working and reviewing time one run may use where the
+/// project configures no total time limit of its own
+/// (`PSS-project-settings-storage.md` PSS-FR-RKTW).
+pub const DEFAULT_TOTAL_TIME_LIMIT_MS: u64 = 5 * 60 * 60 * 1000;

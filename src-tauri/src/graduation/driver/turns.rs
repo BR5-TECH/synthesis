@@ -8,6 +8,7 @@
 //! here is reached from `drive` alone.
 
 use super::drive::Step;
+use super::settings::TurnBound;
 use super::stops::{self, Stop};
 use super::*;
 use crate::graduation::commit;
@@ -21,9 +22,9 @@ pub(super) fn settle_turn<R: tauri::Runtime>(
     worktree: &PathBuf,
     outcome: Result<AgentExecution, AgentExecutionError>,
     origin: GraduationEscalationOrigin,
-    limit_ms: u64,
+    bound: TurnBound,
 ) -> Step {
-    match settle_execution(app, run, worktree, outcome, origin, limit_ms) {
+    match settle_execution(app, run, worktree, outcome, origin, bound) {
         Some(_) => {
             // GXD-FR-LBYG: what changed is read from the working copy, never
             // from what the agent said it did.
@@ -54,16 +55,18 @@ pub(super) fn settle_turn<R: tauri::Runtime>(
 
 /// The outcomes every turn shares, and what each rests the run on.
 ///
-/// `limit_ms` is the execution timeout the turn was dispatched under, so a
-/// timeout names the limit the turn actually reached (GXD-FR-WJOW).
+/// `bound` is the effective timeout the turn was dispatched under, so a
+/// timeout names the limit the turn actually reached (GXD-FR-WJOW), and says
+/// whether the total time ended it (GRL-FR-WZTE).
 pub(super) fn settle_execution<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run: &mut GraduationRun,
     worktree: &Path,
     outcome: Result<AgentExecution, AgentExecutionError>,
     origin: GraduationEscalationOrigin,
-    limit_ms: u64,
+    bound: TurnBound,
 ) -> Option<AgentExecution> {
+    let limit_ms = bound.limit_ms;
     // GRD-FR-EWTN: a run discarded while its turn ran takes nothing of what the
     // turn answered, and nothing is saved over the discarded record.
     if discarded_meanwhile(app, run) {
@@ -180,6 +183,15 @@ pub(super) fn settle_execution<R: tauri::Runtime>(
             // GXD-FR-UZHX: a stop the author or the application recorded wins,
             // so a pause that races the time limit reads as the pause. Otherwise
             // the run rests on the reason that names how the turn ended.
+            // GRL-FR-WZTE: a turn the remaining total time ended rests the run
+            // for the author rather than interrupting it. A stop the author
+            // or the application recorded still wins.
+            ProcessOutcome::Timeout
+                if bound.total_governs && cancellation_reason_of(app, &run.id).is_none() =>
+            {
+                super::time_budget::rest_on_total_time(app, run, worktree, &execution, bound);
+                None
+            }
             _ => {
                 let stop = match cancellation_reason_of(app, &run.id) {
                     Some(reason) => {
@@ -373,6 +385,26 @@ pub(super) fn abandon<R: tauri::Runtime>(
     if run.state == GraduationRunState::Reviewing && stops_in_place(reason) {
         run.checkpoint.resume_part = Some(phases::PART_REVIEW.to_string());
     }
+    let committed = commit_stopped_turn(app, run, worktree);
+    let stop = Stop { detail: stops::settled_detail(&stop, committed), ..stop };
+    // GLG-FR-RLQZ: the stop is in the run's own log before the run rests. A
+    // record that could not be stored has already rested the run on
+    // `log_persistence_failed`, which is the stop the author must see first.
+    if !stops::note_interrupted(app, run, &stop) {
+        return;
+    }
+    let _ = transitions::interrupt(app, run, reason, stop.detail);
+}
+
+/// GRD-FR-SWOJ: commit what a stopped turn wrote as an abandoned turn.
+///
+/// GXD-FR-WJOW: answers what became of the turn's work, for the detail the
+/// author reads. `None` is work that is not committed, for whatever cause.
+pub(super) fn commit_stopped_turn<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &mut GraduationRun,
+    worktree: &Path,
+) -> Option<bool> {
     // GRD-FR-VAUE: the commit an abandoned turn makes is held to the same pin.
     let pinned = crate::graduation::commit_target_ok(run, worktree);
     if !pinned {
@@ -384,8 +416,6 @@ pub(super) fn abandon<R: tauri::Runtime>(
             log_fields! { "run_id" => run.id.clone() },
         );
     }
-    // GXD-FR-WJOW: what became of the turn's work, for the detail the author
-    // reads. `None` is work that is not committed, for whatever cause.
     let mut committed = None;
     // A merge run commits nothing at all: what its turn wrote stays in the merge
     // worktree the run owns, and Continue resumes from it (GRD-FR-KZPT).
@@ -410,14 +440,7 @@ pub(super) fn abandon<R: tauri::Runtime>(
             ),
         }
     }
-    let stop = Stop { detail: stops::settled_detail(&stop, committed), ..stop };
-    // GLG-FR-RLQZ: the stop is in the run's own log before the run rests. A
-    // record that could not be stored has already rested the run on
-    // `log_persistence_failed`, which is the stop the author must see first.
-    if !stops::note_interrupted(app, run, &stop) {
-        return;
-    }
-    let _ = transitions::interrupt(app, run, reason, stop.detail);
+    committed
 }
 
 /// Why a cancelled turn was cancelled, or `None` where it was not.

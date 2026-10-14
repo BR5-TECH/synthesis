@@ -161,6 +161,23 @@ export interface GraduationBlocker {
   attempt: number;
 }
 
+/**
+ * GRD-FR-SKLO: why a run in `awaiting_author` is at rest without an escalation
+ * or a blocker. A run with a rest is not a run whose pass budget is spent.
+ */
+export type GraduationRestReason = "total_time_limit";
+
+/** GRD-FR-SKLO: the record of a rest on the total time limit. */
+export interface GraduationRest {
+  reason: GraduationRestReason;
+  /** When the run came to rest. */
+  at: string;
+  /** The total time limit the run rested under, in milliseconds. */
+  limitMs: number;
+  /** The used total time when the run came to rest, in milliseconds. */
+  usedMs: number;
+}
+
 /** A run that ended on a failure. */
 export interface GraduationFailure {
   code: string;
@@ -413,6 +430,13 @@ export interface GraduationRun {
   escalation?: GraduationEscalation | null;
   blocker?: GraduationBlocker | null;
   interruption?: GraduationInterruption | null;
+  /**
+   * GRD-FR-UTTX: the used total time, in milliseconds: the execution time of
+   * every turn the run dispatched. Waiting time is not added.
+   */
+  turnTimeUsedMs?: number;
+  /** GRD-FR-SKLO: present while the run is at rest on the total time limit. */
+  rest?: GraduationRest | null;
   restartedFromRunId?: string | null;
   failure?: GraduationFailure | null;
   createdAt: string;

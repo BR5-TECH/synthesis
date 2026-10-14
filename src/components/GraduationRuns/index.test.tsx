@@ -285,7 +285,8 @@ describe("the run region", () => {
       "Stopped — the turn reached its time limit",
     );
     await userEvent.click(within(notice).getByRole("button", { name: "Change the time limit" }));
-    expect(onOpenSettings).toHaveBeenCalledWith("project/graduation");
+    // GRU-FR-QLRQ: the route names the Time per turn slider.
+    expect(onOpenSettings).toHaveBeenCalledWith("project/graduation:stage-time-limit");
     // GRU-FR-QLRQ: the route opens settings and does not continue the run.
     expect(commands()).not.toContain("continue_graduation_run");
   });

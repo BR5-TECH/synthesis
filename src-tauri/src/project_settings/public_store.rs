@@ -14,9 +14,9 @@
 use tauri::State;
 
 use super::{
-    loop_settings, project_toml_path, GraduationConcurrency, LineEndings, ProjectConfig,
-    ProjectState, DRAFT_TEMPLATE_KEY, ERR_MALFORMED_PROJECT_CONFIG, GRADUATION_CONCURRENCY_KEY,
-    LEGACY_STREAM_CONCURRENCY_KEY, LINE_ENDINGS_KEY,
+    graduation_loop, loop_settings, project_toml_path, GraduationConcurrency, LineEndings,
+    ProjectConfig, ProjectState, DRAFT_TEMPLATE_KEY, ERR_MALFORMED_PROJECT_CONFIG,
+    GRADUATION_CONCURRENCY_KEY, LEGACY_STREAM_CONCURRENCY_KEY, LINE_ENDINGS_KEY,
 };
 
 // ---------------------------------------------------------------------------
@@ -83,6 +83,16 @@ pub fn load_project_config_from(root: &crate::fs::RootFs) -> Result<ProjectConfi
         execution_timeout_ms: loop_settings::read_execution_timeout(&table),
         provider_call_deadline_ms: loop_settings::read_provider_call_deadline(&table),
         retry_budget: loop_settings::read_retry_budget(&table),
+        // PSS-FR-YDCA: a value that is not valid is repaired to unset on read.
+        graduation_pass_budget: graduation_loop::read(&table, graduation_loop::PASS_BUDGET),
+        graduation_stage_time_limit_ms: graduation_loop::read(
+            &table,
+            graduation_loop::STAGE_TIME_LIMIT,
+        ),
+        graduation_total_time_limit_ms: graduation_loop::read(
+            &table,
+            graduation_loop::TOTAL_TIME_LIMIT,
+        ),
     })
 }
 
@@ -100,6 +110,8 @@ pub fn save_project_config_to(
     root: &crate::fs::RootFs,
     config: ProjectConfig,
 ) -> Result<(), String> {
+    // PSS-FR-LFUZ: a value that is not valid refuses the whole write first.
+    graduation_loop::validate(&config)?;
     let mut table = load_public(root)?;
     let value = toml::Value::try_from(config.line_endings)
         .map_err(|e| format!("failed to encode line endings: {e}"))?;
@@ -114,6 +126,7 @@ pub fn save_project_config_to(
     // Read before the template is consumed below, the shared bounds being a
     // separate section of the same whole-store write (PSS-FR-17).
     loop_settings::write_into(&mut table, &config);
+    graduation_loop::write_into(&mut table, &config);
     match config.draft_template {
         None => {}
         Some(text) if text.is_empty() => {
@@ -159,7 +172,41 @@ pub fn save_project_config<R: tauri::Runtime>(
     let before =
         load_project_config_from(&root).ok().and_then(|stored| stored.graduation_concurrency_limit);
     let named = config.graduation_concurrency_limit;
-    save_project_config_to(&root, config)?;
+    let loop_named = [
+        config.graduation_pass_budget,
+        config.graduation_stage_time_limit_ms,
+        config.graduation_total_time_limit_ms,
+    ];
+    if let Err(reason) = save_project_config_to(&root, config) {
+        crate::logging::log_warn(
+            &app,
+            &crate::logging::BUFFER,
+            &[crate::logging::Domain::Backend],
+            "project config was not saved",
+            crate::log_fields! { "reason" => reason.clone() },
+        );
+        return Err(reason);
+    }
+    // PSS-FR-OWGI: what a write did to the graduation loop settings. `-1` is a
+    // setting cleared to unset; a setting the payload did not name is absent.
+    if loop_named.iter().any(Option::is_some) {
+        let mut fields = crate::log_fields! {};
+        for (name, value) in ["pass_budget", "stage_time_limit_ms", "total_time_limit_ms"]
+            .into_iter()
+            .zip(loop_named)
+        {
+            if let Some(value) = value {
+                fields.insert(name.to_string(), value.unwrap_or(-1).into());
+            }
+        }
+        crate::logging::log_info(
+            &app,
+            &crate::logging::BUFFER,
+            &[crate::logging::Domain::Backend],
+            "graduation loop settings saved",
+            fields,
+        );
+    }
     // PSS-FR-ZVSD, GRD-FR-IJKV: a limit that grew frees slots at once, so every
     // queue is offered a dispatch without waiting for a run to end.
     if let (Some(before), Some(after)) = (before, named) {

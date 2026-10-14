@@ -8,6 +8,10 @@ import { DraftTemplateSection } from "./DraftTemplateSection";
 import { GithubPollingSection } from "./GithubPollingSection";
 import { GithubPublicationSettingsGroup } from "./GithubPublicationSettings";
 import { GraduationSettingsSection } from "./GraduationSettingsSection";
+import {
+  GraduationLoopSliders,
+  type GraduationFocusRequest,
+} from "./GraduationLoopSliders";
 import { ProjectDockerImages } from "./ProjectDockerImages";
 import { GraduationSettings } from "./GraduationSettings";
 import { LINE_ENDING_CHOICES } from "../hooks/useLineEndings";
@@ -61,14 +65,15 @@ export const PROJECT_SECTIONS: [ProjectSectionKey, string, string][] = [
     "Docker",
     "The container image each agent's work runs in here.",
   ],
-  // SET-FR-03 / SET-FR-DHFS / SET-FR-QKKQ: the Graduation section. Its time
-  // limit row persists at once, so it holds no dirty state (SET-FR-YMRV); its
-  // concurrency limit is a pending change the window writes with its other
-  // pending changes (SET-FR-HQKK).
+  // SET-FR-03 / SET-FR-DHFS / SET-FR-QKKQ / SET-FR-PSLD: the Graduation
+  // section. Its sliders and its time limit row persist at once, so they hold
+  // no dirty state (SET-FR-WTOS, SET-FR-YMRV); its concurrency limit is a
+  // pending change the window writes with its other pending changes
+  // (SET-FR-HQKK).
   [
     "graduation",
     "Graduation",
-    "How many graduation runs this project works at the same time, and how long one agent turn may run.",
+    "How many graduation runs this project works at the same time, and how many passes and how much time each run can use.",
   ],
 ];
 
@@ -125,6 +130,13 @@ export interface SettingsProps {
   agentEditorRequest?: AgentEditorRequest | null;
   /** Called once the request has been honoured, so it is not honoured twice. */
   onAgentEditorRequestHandled?: () => void;
+  /**
+   * GRU-FR-QLRQ / GRU-FR-TTLR: a route asked for one Graduation slider to
+   * receive the focus. The window derives it from the section address item.
+   */
+  graduationFocusRequest?: GraduationFocusRequest | null;
+  /** Called once the focus request has been honoured. */
+  onGraduationFocusHandled?: () => void;
 }
 
 export function Settings({
@@ -136,6 +148,8 @@ export function Settings({
   onOpenGithubTokenPicker,
   agentEditorRequest,
   onAgentEditorRequestHandled,
+  graduationFocusRequest,
+  onGraduationFocusHandled,
 }: SettingsProps) {
   const current = PROJECT_SECTIONS.find((s) => s[0] === section)!;
 
@@ -384,12 +398,18 @@ export function Settings({
           the tab's save-before-close sweep (SET-FR-08, SWN-FR-08). */}
       {section === "docker" && <ProjectDockerImages contentRoot={contentRoot} />}
 
-      {/* SET-FR-QKKQ through SET-FR-IHQE: the concurrency limit. SET-FR-DHFS /
-          SET-FR-YMRV: the time limit row persists at once, so it takes no
-          part in the save-before-close sweep (SET-FR-08, SWN-FR-08). */}
+      {/* SET-FR-QKKQ through SET-FR-IHQE: the concurrency limit. SET-FR-PSLD
+          through SET-FR-OVTW: the pass and time limit sliders. SET-FR-DHFS /
+          SET-FR-YMRV: the execution time limit row. The sliders and the row
+          persist at once, so they take no part in the save-before-close sweep
+          (SET-FR-08, SWN-FR-08). */}
       {section === "graduation" && (
         <>
           <GraduationSettings setting={graduation} />
+          <GraduationLoopSliders
+            focusRequest={graduationFocusRequest}
+            onFocusHandled={onGraduationFocusHandled}
+          />
           <GraduationSettingsSection />
         </>
       )}

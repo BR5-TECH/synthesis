@@ -8,18 +8,28 @@ use super::super::Fixture;
 /// GTE-FR-KAZX: a project setting a scenario runs under.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Setting {
-    /// PSS-FR-TQMV, in milliseconds.
-    ExecutionTimeoutMs,
-    /// PSS-FR-WPKS. The graduation loop counts passes with it.
+    /// PSS-FR-HVSM: the graduation stage time limit, in milliseconds.
+    StageTimeLimitMs,
+    /// PSS-FR-RKTW: the graduation total time limit, in milliseconds.
+    TotalTimeLimitMs,
+    /// PSS-FR-QBNE: the graduation pass budget.
     PassBudget,
+    /// PSS-FR-TQMV: the shared execution timeout, which graduation does not
+    /// read (GRL-FR-NUDC).
+    SharedExecutionTimeoutMs,
+    /// PSS-FR-WPKS: the shared retry budget, which graduation does not read.
+    SharedRetryBudget,
     /// PSS-FR-JRWC: how many runs may hold a project slot at once.
     GraduationConcurrencyLimit,
 }
 
 fn key_of(setting: Setting) -> &'static str {
     match setting {
-        Setting::ExecutionTimeoutMs => "executionTimeoutMs",
-        Setting::PassBudget => "retryBudget",
+        Setting::StageTimeLimitMs => "graduationStageTimeLimitMs",
+        Setting::TotalTimeLimitMs => "graduationTotalTimeLimitMs",
+        Setting::PassBudget => "graduationPassBudget",
+        Setting::SharedExecutionTimeoutMs => "executionTimeoutMs",
+        Setting::SharedRetryBudget => "retryBudget",
         Setting::GraduationConcurrencyLimit => "graduationConcurrencyLimit",
     }
 }

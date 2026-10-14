@@ -64,9 +64,13 @@ describe("Project settings — Graduation", () => {
     const field = await openGraduation();
     expect(field.value).toBe("90");
     expect(screen.getByLabelText("Execution time limit")).toBe(field);
-    expect(screen.getByTestId("graduation-time-limit-note")).toHaveTextContent(
-      "Bounds each graduation turn, and each conversation turn whose provider sets no turn timeout.",
+    const note = screen.getByTestId("graduation-time-limit-note");
+    expect(note).toHaveTextContent(
+      "Bounds each conversation turn whose provider sets no turn timeout.",
     );
+    // SET-FR-DHFS: the row no longer bounds graduation turns, and says so.
+    expect(note).toHaveTextContent("It does not bound graduation turns");
+    expect(note).not.toHaveTextContent("Bounds each graduation turn");
   });
 
   it("SET-FR-DHFS: an unset limit shows the two-hour default as a placeholder", async () => {

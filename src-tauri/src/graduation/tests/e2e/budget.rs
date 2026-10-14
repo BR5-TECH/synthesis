@@ -1,10 +1,10 @@
 //! Journey 11 of the coverage matrix, and the settings every journey runs under
 //! (`../../../../../specifications/infra/GTE-graduation-end-to-end-tests.md`).
 //!
-//! The retry/pass budget is one project setting with a loop-specific meaning:
-//! the graduation loop counts passes with it and the conversation loop counts
-//! the physical attempts of one provider call. Both stop for the author when it
-//! is spent, and both begin again with a whole budget once the author asks.
+//! The pass budget is a graduation-only project setting (PSS-FR-QBNE). A run
+//! that spends it stops for the author, and begins again with a whole budget
+//! once the author asks. The shared retry budget of the conversation loop is a
+//! different setting, and no graduation turn reads it (GRL-FR-NUDC).
 
 use super::scenario::{Scenario, Setting, TurnScript as Script};
 use crate::graduation::{GraduationRunState, ReviewSeverity};
@@ -89,19 +89,19 @@ fn a_wider_pass_budget_grants_more_passes_before_the_run_rests() {
 #[test]
 fn a_setting_changed_between_two_turns_reaches_the_second_of_them() {
     Scenario::named("settings read per dispatch")
-        .with_setting(Setting::ExecutionTimeoutMs, 60_000)
+        .with_setting(Setting::StageTimeLimitMs, 1_800_000)
         .work_turn(
             Script::reports_success()
                 .writes("src/panel.ts", "1\n")
-                .changing(Setting::ExecutionTimeoutMs, 120_000),
+                .changing(Setting::StageTimeLimitMs, 3_600_000),
         )
         .review_turn(Script::answers_ready("The work answers the prompt."))
         .run()
         .expect_state(GraduationRunState::Completed)
-        .expect_dispatch(0, |d| d.execution_timeout_ms(60_000))
+        .expect_dispatch(0, |d| d.execution_timeout_ms(1_800_000))
         // The review turn is dispatched after the change, so it carries the new
         // value rather than the one the run started under.
-        .expect_dispatch(1, |d| d.execution_timeout_ms(120_000));
+        .expect_dispatch(1, |d| d.execution_timeout_ms(3_600_000));
 }
 
 // GTE-FR-GBLI / GRL-FR-KWNP: a resumed run uses the values active at each
@@ -109,17 +109,17 @@ fn a_setting_changed_between_two_turns_reaches_the_second_of_them() {
 #[test]
 fn a_resumed_run_uses_the_settings_active_at_the_dispatch_that_resumes_it() {
     let outcome = Scenario::named("resumed run reads the settings again")
-        .with_setting(Setting::ExecutionTimeoutMs, 60_000)
+        .with_setting(Setting::StageTimeLimitMs, 1_800_000)
         .with_setting(Setting::PassBudget, 1)
         .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
         .review_turn(Script::answers_revise(ReviewSeverity::Major, "Not yet."))
         .run()
         .expect_state(GraduationRunState::AwaitingAuthor)
         .expect_pass_window(1, 1)
-        .expect_dispatch(0, |d| d.execution_timeout_ms(60_000));
+        .expect_dispatch(0, |d| d.execution_timeout_ms(1_800_000));
 
     // The author widens both bounds while the run rests.
-    super::scenario::set_setting(outcome.fixture(), Setting::ExecutionTimeoutMs, 90_000);
+    super::scenario::set_setting(outcome.fixture(), Setting::StageTimeLimitMs, 5_400_000);
     super::scenario::set_setting(outcome.fixture(), Setting::PassBudget, 2);
 
     outcome
@@ -135,8 +135,8 @@ fn a_resumed_run_uses_the_settings_active_at_the_dispatch_that_resumes_it() {
         .expect_pass(3)
         .expect_pass_window(2, 3)
         .expect_dispatch_count(4)
-        .expect_dispatch(0, |d| d.execution_timeout_ms(90_000))
-        .expect_dispatch(3, |d| d.execution_timeout_ms(90_000));
+        .expect_dispatch(0, |d| d.execution_timeout_ms(5_400_000))
+        .expect_dispatch(3, |d| d.execution_timeout_ms(5_400_000));
 }
 
 // GTE-FR-KAZX / PSS-FR-ZLCF: a stored value outside its bounds is repaired to
@@ -145,7 +145,7 @@ fn a_resumed_run_uses_the_settings_active_at_the_dispatch_that_resumes_it() {
 #[test]
 fn a_stored_bound_outside_its_range_leaves_the_loop_at_its_own_default() {
     Scenario::named("malformed settings are repaired")
-        .with_raw_setting(Setting::ExecutionTimeoutMs, 0)
+        .with_raw_setting(Setting::StageTimeLimitMs, 0)
         .with_raw_setting(Setting::PassBudget, -4)
         .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
         .review_turn(Script::answers_revise(ReviewSeverity::Major, "Not yet."))
@@ -156,7 +156,7 @@ fn a_stored_bound_outside_its_range_leaves_the_loop_at_its_own_default() {
         .expect_state(GraduationRunState::AwaitingAuthor)
         .expect_pass_window(1, 2)
         .expect_dispatch(0, |d| {
-            d.execution_timeout_ms(crate::graduation::driver::phases::DEFAULT_EXECUTION_TIMEOUT_MS)
+            d.execution_timeout_ms(crate::graduation::driver::phases::DEFAULT_STAGE_TIME_LIMIT_MS)
         });
 }
 
@@ -164,12 +164,12 @@ fn a_stored_bound_outside_its_range_leaves_the_loop_at_its_own_default() {
 // The conversation loop's half of the shared contract
 // ---------------------------------------------------------------------------
 //
-// The retry budget is one project setting with a loop-specific meaning: the
-// journeys here count passes with it, and `CVL-conversation-loop.md`'s loop
-// counts the physical attempts of one provider call. That half is proved where
-// that loop lives, by `crate::agent_conversations::tests::project_bounds`,
-// which drives real turns under a configured project — this suite drives the
-// graduation loop and nothing else (GTE-FR-QVHM).
+// The shared retry budget counts the physical attempts of one provider call in
+// `CVL-conversation-loop.md`'s loop, and the graduation loop does not read it.
+// That loop's use is proved where that loop lives, by
+// `crate::agent_conversations::tests::project_bounds`, which drives real turns
+// under a configured project — this suite drives the graduation loop and
+// nothing else (GTE-FR-QVHM).
 
 // GTE-FR-KAZX / GRL-FR-KWNP, GRL-FR-XBUE, GXD-FR-PWYD: a budget the author
 // **lowers** while a work turn runs rests the run at the next dispatch, rather

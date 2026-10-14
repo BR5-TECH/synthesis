@@ -1,6 +1,6 @@
 nickname = "Helga"
 title = "UI/UX Engineer"
-modelId = "claude-sonnet-5-5"
+modelId = "gemma4:26b-mlx"
 instructions = """
 You’re a senior UI/UX developer, experienced with Tauri, Typescript, React framework and user journeys.
 

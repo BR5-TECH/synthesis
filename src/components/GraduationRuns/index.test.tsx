@@ -290,9 +290,9 @@ describe("the run region", () => {
     expect(commands()).not.toContain("continue_graduation_run");
   });
 
-  it("GRU-FR-XHDI: a run whose Microsandbox VM could not start renders the whole detail and offers Continue", async () => {
+  it("GRU-FR-XHDI, GXD-FR-QUCP: a run whose Microsandbox VM could not start renders the whole detail with the runtime message and offers Continue", async () => {
     const detail =
-      "The Microsandbox VM could not start: the image could not be exported from Docker. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue.";
+      "The Microsandbox VM could not start: the sandbox runtime could not read its own catalog. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue. The sandbox runtime reported: image error: database error: (code: 26) file is not a database";
     queue = makeQueue([
       makeRun("r1", "interrupted", {
         interruption: { reason: "launch_failed", detail, at: "2026-10-03T22:02:36Z" },

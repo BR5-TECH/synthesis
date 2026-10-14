@@ -33,6 +33,7 @@ mod docker_socket;
 mod e2e;
 mod github_shadow;
 mod hold;
+mod idle_sandbox;
 mod live_index;
 mod log_read_command;
 mod log_reads;
@@ -541,6 +542,8 @@ struct Seen {
     semantic_mount: bool,
     /// GXD-FR-SHNW: the run queue the dispatch named as its sandbox scope.
     sandbox_scope: Option<String>,
+    /// EAC-FR-DWBS: the project key the dispatch named its VM with.
+    project_key: String,
 }
 
 impl Seen {
@@ -659,7 +662,7 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
     fn dispatch_graduation_turn<'a>(
         &'a self,
         _app: &'a tauri::AppHandle<Runtime>,
-        _project_key: &'a str,
+        project_key: &'a str,
         request: AgentExecutionRequest,
     ) -> crate::graduation::driver::DispatchFuture<'a> {
         let directory = request.execution_directory.clone();
@@ -689,6 +692,7 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                 .and_then(|resume| resume.session_id.clone()),
             semantic_mount: request.supplementary_mount.is_some(),
             sandbox_scope: request.sandbox_scope.as_ref().map(|scope| scope.queue_key.clone()),
+            project_key: project_key.to_string(),
         });
 
         let turn = self.turns.lock().unwrap().pop_front().unwrap_or_else(|| {

@@ -21,6 +21,18 @@ pub(super) struct RunningRun {
     pub(super) direct: bool,
 }
 
+/// EAC-FR-LQRI: the check an idle stop runs again once it holds the VM.
+#[cfg(test)]
+pub(crate) type IdleRecheck = Box<dyn FnOnce() -> bool + Send>;
+
+/// GRD-FR-UESX: one VM stop that was asked for, as a test reads it.
+#[cfg(test)]
+struct IdleStop {
+    queue_key: String,
+    vm: String,
+    recheck: Option<IdleRecheck>,
+}
+
 /// GRD-FR-BNTC / GRD-FR-WSXA: which stream each working run holds, and the one
 /// exclusive hold every write of this module takes.
 pub struct GraduationState {
@@ -51,6 +63,10 @@ pub struct GraduationState {
     /// `Default` and a run that cannot be dispatched is a queue that never
     /// moves. Only a test that drives the state machine by hand turns it off.
     loop_enabled: std::sync::atomic::AtomicBool,
+    /// GRD-FR-UESX: the VM stops that were asked for, in order, for a test to
+    /// read.
+    #[cfg(test)]
+    idle_stops: Mutex<Vec<IdleStop>>,
 }
 
 impl Default for GraduationState {
@@ -63,6 +79,8 @@ impl Default for GraduationState {
             operations: Mutex::new(BTreeMap::new()),
             root: Mutex::new(None),
             loop_enabled: std::sync::atomic::AtomicBool::new(true),
+            #[cfg(test)]
+            idle_stops: Mutex::new(Vec::new()),
         }
     }
 }
@@ -71,6 +89,44 @@ impl GraduationState {
     /// A state whose store stands under a root the caller names.
     pub fn rooted_at(root: PathBuf) -> Self {
         Self { root: Mutex::new(Some(root)), ..Default::default() }
+    }
+
+    /// GRD-FR-UESX: note that the VM stop of an idle queue was asked for, with
+    /// a copy of the check the stop runs again once it holds the VM.
+    #[cfg(test)]
+    pub(super) fn record_idle_stop(&self, queue_key: &str, vm: &str, recheck: IdleRecheck) {
+        if let Ok(mut stops) = self.idle_stops.lock() {
+            stops.push(IdleStop {
+                queue_key: queue_key.to_string(),
+                vm: vm.to_string(),
+                recheck: Some(recheck),
+            });
+        }
+    }
+
+    /// GRD-FR-UESX: the queues whose VM stop was asked for, in order.
+    #[cfg(test)]
+    pub(crate) fn idle_stops(&self) -> Vec<String> {
+        self.idle_stops
+            .lock()
+            .map(|stops| stops.iter().map(|stop| stop.queue_key.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    /// EAC-FR-LQRI: the names of the VMs whose stop was asked for, in order.
+    #[cfg(test)]
+    pub(crate) fn idle_stop_vms(&self) -> Vec<String> {
+        self.idle_stops
+            .lock()
+            .map(|stops| stops.iter().map(|stop| stop.vm.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    /// EAC-FR-LQRI: the check that the stop at `index` runs again once it
+    /// holds the VM. Each check is given out once.
+    #[cfg(test)]
+    pub(crate) fn take_idle_recheck(&self, index: usize) -> Option<IdleRecheck> {
+        self.idle_stops.lock().ok()?.get_mut(index)?.recheck.take()
     }
 
     /// Whether a run may be dispatched at all.

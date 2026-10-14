@@ -100,8 +100,30 @@ pub(super) fn stop_of_execution(execution: &AgentExecution, limit_ms: u64) -> Op
     Some(Stop { reason, detail, facts })
 }
 
+/// GXD-FR-QUCP: the longest runtime message a detail carries, in characters.
+const RUNTIME_MESSAGE_LIMIT: usize = 300;
+
+/// GXD-FR-QUCP: the sentence that gives the sandbox runtime's own message, on
+/// one line and cut to [`RUNTIME_MESSAGE_LIMIT`] characters. A control
+/// character, as a terminal colour code has, is left out. Empty where the
+/// runtime gave no message.
+fn runtime_report(message: &str) -> String {
+    let line = message
+        .split_whitespace()
+        .map(|word| word.chars().filter(|c| !c.is_control()).collect::<String>())
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if line.is_empty() {
+        return String::new();
+    }
+    let cut: String = line.chars().take(RUNTIME_MESSAGE_LIMIT).collect();
+    format!(" The sandbox runtime reported: {cut}")
+}
+
 /// GXD-FR-WJOW: a turn that could not be launched. The sentence names the kind
 /// of error and nothing of its text; the full error goes to the application log.
+/// A sandbox failure also gives the runtime's own message (GXD-FR-QUCP).
 pub(super) fn stop_of_launch_error(error: &AgentExecutionError, limit_ms: u64) -> Stop {
     // GXD-FR-UZHX: the one sentence that names a path. The path is the author's
     // own Docker-in-Docker setting, never a credential or user content.
@@ -113,12 +135,13 @@ pub(super) fn stop_of_launch_error(error: &AgentExecutionError, limit_ms: u64) -
             );
             socket_detail.as_str()
         }
-        // GXD-FR-QUCP: the sandbox cause in words. The runtime's own message
-        // goes to the application log alone.
+        // GXD-FR-QUCP: the sandbox cause in words, then the runtime's own
+        // message on one line, which tells the author which fault to correct.
         AgentExecutionError::SandboxLaunchFailed(failure) => {
             socket_detail = format!(
-                "The Microsandbox VM could not start: {}. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue.",
-                failure.cause.sentence()
+                "The Microsandbox VM could not start: {}. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue.{}",
+                failure.cause.sentence(),
+                runtime_report(&failure.message)
             );
             socket_detail.as_str()
         }
@@ -277,6 +300,7 @@ pub(super) fn note_interrupted<R: tauri::Runtime>(
 mod tests {
     use super::*;
     use crate::tools::agent_exec::runtime::CapturedStream;
+    use crate::tools::agent_exec::sandbox::{SandboxFailure, SandboxFailureCause};
 
     fn execution(
         outcome: ProcessOutcome,
@@ -383,6 +407,81 @@ mod tests {
         assert!(stop.detail.contains("Continue"), "{}", stop.detail);
         assert_eq!(launch_error_kind(&error), "docker_socket_unavailable");
         assert_eq!(settled_detail(&stop, Some(false)), stop.detail, "a launch detail stays whole");
+    }
+
+    fn sandbox_failure(cause: SandboxFailureCause, message: &str) -> AgentExecutionError {
+        AgentExecutionError::SandboxLaunchFailed(SandboxFailure {
+            cause,
+            message: message.to_string(),
+        })
+    }
+
+    // GXD-FR-QUCP, EAC-FR-NCSA: each new cause names its fault in words, apart
+    // from the Docker export, and the detail then gives the runtime's message.
+    #[test]
+    fn a_sandbox_detail_names_the_cause_and_the_runtime_message() {
+        let catalog = stop_of_launch_error(
+            &sandbox_failure(
+                SandboxFailureCause::RuntimeCatalogFailed,
+                "image error: database error: file is not a database",
+            ),
+            TWO_HOURS,
+        );
+        assert_eq!(catalog.reason, GraduationInterruptionReason::LaunchFailed);
+        assert_eq!(
+            catalog.detail,
+            "The Microsandbox VM could not start: the sandbox runtime could not read its own catalog. Correct the cause, or choose None in Global settings, in the Isolation section. Then use Continue. The sandbox runtime reported: image error: database error: file is not a database"
+        );
+        let load = stop_of_launch_error(
+            &sandbox_failure(SandboxFailureCause::ImageLoadFailed, "layer missing"),
+            TWO_HOURS,
+        );
+        assert!(
+            load.detail.starts_with(
+                "The Microsandbox VM could not start: the sandbox runtime could not load the image."
+            ),
+            "{}",
+            load.detail
+        );
+        assert!(!load.detail.contains("exported from Docker"), "{}", load.detail);
+        assert_eq!(settled_detail(&load, Some(false)), load.detail, "a launch detail stays whole");
+    }
+
+    // GXD-FR-QUCP: the runtime's message is put on one line, with no control
+    // character, and cut to 300 characters. A message with no text adds
+    // nothing.
+    #[test]
+    fn the_runtime_message_is_one_line_of_at_most_300_characters() {
+        let long = format!("first line\n\tsecond   line {}", "é".repeat(400));
+        let stop = stop_of_launch_error(
+            &sandbox_failure(SandboxFailureCause::BootFailed, &long),
+            TWO_HOURS,
+        );
+        let (_, reported) =
+            stop.detail.split_once("The sandbox runtime reported: ").expect("the message");
+        assert!(!stop.detail.contains('\n') && !stop.detail.contains('\t'), "{}", stop.detail);
+        assert!(reported.starts_with("first line second line é"), "{reported}");
+        assert_eq!(reported.chars().count(), RUNTIME_MESSAGE_LIMIT);
+
+        let exact = "x".repeat(RUNTIME_MESSAGE_LIMIT);
+        let whole = stop_of_launch_error(
+            &sandbox_failure(SandboxFailureCause::BootFailed, &exact),
+            TWO_HOURS,
+        );
+        assert!(whole.detail.ends_with(&format!("reported: {exact}")), "{}", whole.detail);
+
+        let coloured = stop_of_launch_error(
+            &sandbox_failure(SandboxFailureCause::BootFailed, "\u{1b}[31mfailed\u{1b}[0m \u{7}"),
+            TWO_HOURS,
+        );
+        assert!(coloured.detail.ends_with("reported: [31mfailed[0m"), "{}", coloured.detail);
+        assert!(!coloured.detail.chars().any(char::is_control), "{}", coloured.detail);
+
+        let silent = stop_of_launch_error(
+            &sandbox_failure(SandboxFailureCause::BootFailed, " \n "),
+            TWO_HOURS,
+        );
+        assert!(silent.detail.ends_with("Then use Continue."), "{}", silent.detail);
     }
 
     // GXD-FR-WJOW: a launch error gives one sentence for its kind and none of

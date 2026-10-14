@@ -67,14 +67,66 @@ impl MicrosandboxRuntime {
 
     /// EAC-FR-HUXS: stop a VM whose boot could not finish, and remove it.
     async fn discard(vm: &str, sandbox: Sandbox) {
-        let _ = sandbox.stop().await;
+        Self::stop_handle(vm, sandbox).await;
         let _ = Sandbox::remove(vm).await;
     }
+
+    /// Stop the VM of `sandbox`. EAC-FR-SQWO: the handle can hold a catalog
+    /// connection that no longer reads, so where its stop fails the VM is
+    /// stopped through the current connection.
+    async fn stop_handle(vm: &str, sandbox: Sandbox) {
+        stop_with_fallback(sandbox.stop(), || async move {
+            if let Ok(current) = Sandbox::get(vm).await {
+                let _ = current.stop().await;
+            }
+        })
+        .await;
+    }
+}
+
+/// EAC-FR-SQWO: whether a runtime message says that the runtime could not
+/// read its own catalog. The image and sandbox errors carry a catalog error
+/// as text, so the text is what tells it.
+pub fn names_catalog_failure(message: &str) -> bool {
+    message.to_ascii_lowercase().contains("database error")
+}
+
+/// EAC-FR-SQWO: run `first`, and where it fails, run `fallback`. Returns
+/// whether the fallback ran.
+async fn stop_with_fallback<E, G>(
+    first: impl std::future::Future<Output = Result<(), E>>,
+    fallback: impl FnOnce() -> G,
+) -> bool
+where
+    G: std::future::Future<Output = ()>,
+{
+    if first.await.is_ok() {
+        return false;
+    }
+    fallback().await;
+    true
+}
+
+/// EAC-FR-NCSA / EAC-FR-SQWO: the cause of a load that failed.
+fn load_error(error: MicrosandboxError) -> BootError {
+    if is_catalog_error(&error) {
+        BootError::Catalog(error.to_string())
+    } else {
+        BootError::Failed(SandboxFailureCause::ImageLoadFailed, error.to_string())
+    }
+}
+
+/// EAC-FR-SQWO: whether a microsandbox error is a catalog error.
+fn is_catalog_error(error: &MicrosandboxError) -> bool {
+    matches!(error, MicrosandboxError::Database(_)) || names_catalog_failure(&error.to_string())
 }
 
 /// EAC-FR-NCSA: the cause a microsandbox error names.
 fn boot_error(error: MicrosandboxError) -> BootError {
     let message = error.to_string();
+    if is_catalog_error(&error) {
+        return BootError::Catalog(message);
+    }
     match error {
         MicrosandboxError::ImageNotFound(_) | MicrosandboxError::Image(_) => {
             BootError::ImageNotFound(message)
@@ -163,10 +215,11 @@ impl SandboxRuntime for MicrosandboxRuntime {
                     .unwrap_or_default(),
                 Err(error) => {
                     Self::discard(vm, sandbox).await;
-                    return Err(BootError::Failed(
-                        SandboxFailureCause::BootFailed,
-                        format!("the image entrypoint could not be read: {error}"),
-                    ));
+                    let message = format!("the image entrypoint could not be read: {error}");
+                    if is_catalog_error(&error) {
+                        return Err(BootError::Catalog(message));
+                    }
+                    return Err(BootError::Failed(SandboxFailureCause::BootFailed, message));
                 }
             };
             if entrypoint.is_empty() {
@@ -192,18 +245,33 @@ impl SandboxRuntime for MicrosandboxRuntime {
         &'a self,
         archive: &'a Path,
         reference: &'a str,
-    ) -> BoxFuture<'a, Result<(), String>> {
+    ) -> BoxFuture<'a, Result<(), BootError>> {
         Box::pin(async move {
             if let Err(message) = self.ensure_installed().await {
-                return Err(format!("the sandbox runtime is not installed: {message}"));
+                return Err(BootError::Failed(
+                    SandboxFailureCause::RuntimeUnavailable,
+                    format!("the sandbox runtime is not installed: {message}"),
+                ));
             }
             if Image::get(reference).await.is_ok() {
                 return Ok(());
             }
-            Image::load(archive, vec![reference.to_string()])
-                .await
-                .map(|_| ())
-                .map_err(|e| e.to_string())
+            Image::load(archive, vec![reference.to_string()]).await.map(|_| ()).map_err(load_error)
+        })
+    }
+
+    fn reopen_catalog(&self) -> BoxFuture<'_, Result<(), String>> {
+        Box::pin(async move {
+            // EAC-FR-SQWO: a new backend opens its own connection to the
+            // catalog. Every later call of this process goes through it. A VM
+            // handle made before keeps the earlier backend, so `stop` falls
+            // back to this one.
+            let backend =
+                microsandbox::backend::LocalBackend::new().await.map_err(|e| e.to_string())?;
+            let backend: std::sync::Arc<dyn microsandbox::backend::Backend> =
+                std::sync::Arc::new(backend);
+            microsandbox::backend::set_default_backend(backend);
+            Ok(())
         })
     }
 
@@ -347,9 +415,83 @@ impl SandboxRuntime for MicrosandboxRuntime {
         Box::pin(async move {
             let booted = self.vms.lock().await.remove(vm);
             if let Some(booted) = booted {
-                let _ = booted.sandbox.stop().await;
+                Self::stop_handle(vm, booted.sandbox).await;
             }
             let _ = Sandbox::remove(vm).await;
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use microsandbox_image::ImageError;
+
+    /// The error the runtime gave when another process replaced its catalog
+    /// index: a catalog error inside an image error.
+    fn replaced_catalog() -> MicrosandboxError {
+        MicrosandboxError::Image(ImageError::Io(std::io::Error::other(
+            "database error: Connection Error: error returned from database: (code: 26) file is not a database",
+        )))
+    }
+
+    // EAC-FR-SQWO: the message of a catalog that cannot be read names a
+    // catalog failure, also inside an image error, and no other message does.
+    #[test]
+    fn a_catalog_message_names_a_catalog_failure() {
+        assert!(names_catalog_failure(&replaced_catalog().to_string()));
+        assert!(names_catalog_failure("Database Error: locked"));
+        assert!(!names_catalog_failure("image not cached: claude-code:latest"));
+        assert!(!names_catalog_failure("failed to create bind target"));
+    }
+
+    // EAC-FR-SQWO, EAC-FR-NCSA: the error of a replaced catalog index is a
+    // catalog failure at a boot, though it comes as an image error, and an
+    // image the runtime does not hold keeps its own kind.
+    #[test]
+    fn boot_errors_tell_a_catalog_failure_from_a_missing_image() {
+        assert!(matches!(boot_error(replaced_catalog()), BootError::Catalog(_)));
+        let custom = MicrosandboxError::Custom("database error: file is not a database".into());
+        assert!(matches!(boot_error(custom), BootError::Catalog(_)));
+        let missing = MicrosandboxError::ImageNotFound("claude-code:latest".into());
+        assert!(matches!(boot_error(missing), BootError::ImageNotFound(_)));
+        let not_cached = MicrosandboxError::Image(ImageError::NotCached {
+            reference: "claude-code:latest".into(),
+        });
+        assert!(matches!(boot_error(not_cached), BootError::ImageNotFound(_)));
+    }
+
+    // EAC-FR-SQWO, EAC-FR-NCSA: a load that fails on the catalog is a catalog
+    // failure, and any other failed load is `image_load_failed`.
+    #[test]
+    fn load_errors_tell_a_catalog_failure_from_a_load_failure() {
+        assert!(matches!(load_error(replaced_catalog()), BootError::Catalog(_)));
+        let other = MicrosandboxError::Image(ImageError::ManifestParse("bad".into()));
+        match load_error(other) {
+            BootError::Failed(cause, message) => {
+                assert_eq!(cause, SandboxFailureCause::ImageLoadFailed);
+                assert!(message.contains("bad"), "{message}");
+            }
+            other => panic!("expected a load failure, found {other:?}"),
+        }
+    }
+
+    // EAC-FR-SQWO: a stop that fails through the earlier connection runs the
+    // stop through the current one, and a stop that works runs nothing more.
+    #[test]
+    fn a_failed_stop_falls_back_to_the_current_connection() {
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        let ran = std::cell::Cell::new(false);
+        let fell_back =
+            rt.block_on(stop_with_fallback(async { Err::<(), _>("stale") }, || async {
+                ran.set(true);
+            }));
+        assert!(fell_back && ran.get());
+
+        let ran = std::cell::Cell::new(false);
+        let fell_back = rt.block_on(stop_with_fallback(async { Ok::<(), ()>(()) }, || async {
+            ran.set(true);
+        }));
+        assert!(!fell_back && !ran.get());
     }
 }

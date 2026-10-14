@@ -7422,6 +7422,7 @@ dependencies = [
  "libgit2-sys",
  "libz-sys",
  "microsandbox",
+ "microsandbox-image",
  "notify-debouncer-mini",
  "notify-rust",
  "objc2",

@@ -296,6 +296,12 @@ microsandbox = { version = "=0.7.8", default-features = false, features = [
   "download-binaries",
 ] }
 
+# EAC-FR-SQWO: the tests build the image error the runtime gives for a catalog
+# it cannot read. The crate is already in the tree under `microsandbox`, which
+# does not re-export its error type.
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dev-dependencies]
+microsandbox-image = "=0.7.8"
+
 # FSA-FR-NRQE: `O_NOFOLLOW` and `O_NONBLOCK` for the bounded read of a regular
 # file. Already in the tree as a dependency of many crates.
 [target.'cfg(unix)'.dependencies]

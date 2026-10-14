@@ -83,8 +83,17 @@ impl SandboxRuntime for RecordingSandbox {
         &'a self,
         _archive: &'a Path,
         _reference: &'a str,
-    ) -> BoxFuture<'a, Result<(), String>> {
-        Box::pin(async move { Err("no export under test".to_string()) })
+    ) -> BoxFuture<'a, Result<(), BootError>> {
+        Box::pin(async move {
+            Err(BootError::Failed(
+                crate::tools::agent_exec::sandbox::SandboxFailureCause::ImageLoadFailed,
+                "no export under test".to_string(),
+            ))
+        })
+    }
+
+    fn reopen_catalog(&self) -> BoxFuture<'_, Result<(), String>> {
+        Box::pin(async move { Err("no catalog under test".to_string()) })
     }
 
     fn run<'a>(

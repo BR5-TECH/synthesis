@@ -27,10 +27,14 @@ use crate::logging::{self, Domain, LogSink, BUFFER};
 pub mod images;
 // Compiled under test too, because the real-runtime probe of EAC-FR-RVQE binds
 // it. A test build still uses `NoSandbox` as its production runtime.
+mod catalog;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub mod micro;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod network;
+mod stops;
+
+pub use stops::*;
 
 /// The domains every record of this module carries (EAC-FR-FUNB).
 const DOMAINS: [Domain; 2] = [Domain::Ai, Domain::Backend];
@@ -132,6 +136,8 @@ pub enum BootImage {
 pub enum BootError {
     /// The image could not be found or fetched. The export fallback applies.
     ImageNotFound(String),
+    /// EAC-FR-SQWO: the sandbox runtime could not read its own catalog.
+    Catalog(String),
     /// Any other failure, with the cause it names (EAC-FR-NCSA).
     Failed(SandboxFailureCause, String),
 }
@@ -143,6 +149,8 @@ pub enum SandboxFailureCause {
     RuntimeUnavailable,
     ImageUnavailable,
     ImageExportFailed,
+    ImageLoadFailed,
+    RuntimeCatalogFailed,
     InsufficientMemory,
     BootFailed,
 }
@@ -154,6 +162,8 @@ impl SandboxFailureCause {
             SandboxFailureCause::RuntimeUnavailable => "runtime_unavailable",
             SandboxFailureCause::ImageUnavailable => "image_unavailable",
             SandboxFailureCause::ImageExportFailed => "image_export_failed",
+            SandboxFailureCause::ImageLoadFailed => "image_load_failed",
+            SandboxFailureCause::RuntimeCatalogFailed => "runtime_catalog_failed",
             SandboxFailureCause::InsufficientMemory => "insufficient_memory",
             SandboxFailureCause::BootFailed => "boot_failed",
         }
@@ -174,6 +184,12 @@ impl SandboxFailureCause {
             SandboxFailureCause::ImageExportFailed => {
                 "the image could not be exported from Docker"
             }
+            SandboxFailureCause::ImageLoadFailed => {
+                "the sandbox runtime could not load the image"
+            }
+            SandboxFailureCause::RuntimeCatalogFailed => {
+                "the sandbox runtime could not read its own catalog"
+            }
             SandboxFailureCause::InsufficientMemory => {
                 "there is not enough memory for the configured RAM"
             }
@@ -183,7 +199,8 @@ impl SandboxFailureCause {
 }
 
 /// EAC-FR-NCSA: a VM that could not be established, with the runtime's own
-/// message. The message goes to the log alone (GXD-FR-WJOW).
+/// message. The message goes to the log, and on one line to the run's detail
+/// (GXD-FR-QUCP).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SandboxFailure {
     pub cause: SandboxFailureCause,
@@ -241,12 +258,16 @@ pub trait SandboxRuntime: Send + Sync {
     ) -> BoxFuture<'a, Result<(), BootError>>;
 
     /// Load an export under `reference`, where the sandbox runtime does not
-    /// hold that reference already.
+    /// hold that reference already. A failure is `Catalog` or names its cause.
     fn load_export<'a>(
         &'a self,
         archive: &'a Path,
         reference: &'a str,
-    ) -> BoxFuture<'a, Result<(), String>>;
+    ) -> BoxFuture<'a, Result<(), BootError>>;
+
+    /// EAC-FR-SQWO: open a new connection to the runtime's own catalog, for
+    /// every later operation of this process.
+    fn reopen_catalog(&self) -> BoxFuture<'_, Result<(), String>>;
 
     /// Run one process in the running `vm` (EAC-FR-ZIYG).
     fn run<'a>(
@@ -567,10 +588,28 @@ impl SandboxPool {
             log_fields! { "vm" => launch.vm, "image" => image, "image_id" => id.as_str() },
         );
         let loaded = images::export_reference(image, &id);
-        self.runtime.load_export(&archive, &loaded).await.map_err(|message| {
-            self.failed(sink, launch.vm, image, SandboxFailureCause::ImageExportFailed, message)
-        })?;
-        match self.runtime.boot(launch.vm, launch.spec, &BootImage::Loaded(loaded)).await {
+        let load = self
+            .with_catalog_retry(sink, launch, Some(&id), || {
+                self.runtime.load_export(&archive, &loaded)
+            })
+            .await;
+        if let Err(error) = load {
+            let (cause, message) = match error {
+                BootError::Failed(cause, message) => (cause, message),
+                BootError::ImageNotFound(message) => {
+                    (SandboxFailureCause::ImageLoadFailed, message)
+                }
+                BootError::Catalog(message) => (SandboxFailureCause::RuntimeCatalogFailed, message),
+            };
+            return Err(self.failed(sink, launch.vm, image, cause, message));
+        }
+        let from = BootImage::Loaded(loaded);
+        let booted = self
+            .with_catalog_retry(sink, launch, Some(&id), || {
+                self.runtime.boot(launch.vm, launch.spec, &from)
+            })
+            .await;
+        match booted {
             Ok(()) => {
                 logging::log_info(
                     sink,
@@ -587,11 +626,19 @@ impl SandboxPool {
                 );
                 Ok(())
             }
+            // EAC-FR-NCSA: the runtime does not find the export it loaded.
             Err(BootError::ImageNotFound(message)) => Err(self.failed(
                 sink,
                 launch.vm,
                 image,
-                SandboxFailureCause::ImageExportFailed,
+                SandboxFailureCause::ImageLoadFailed,
+                message,
+            )),
+            Err(BootError::Catalog(message)) => Err(self.failed(
+                sink,
+                launch.vm,
+                image,
+                SandboxFailureCause::RuntimeCatalogFailed,
                 message,
             )),
             Err(BootError::Failed(cause, message)) => {
@@ -612,7 +659,12 @@ impl SandboxPool {
     {
         let image = launch.spec.image.as_str();
         let registry = BootImage::Registry(image.to_string());
-        match self.runtime.boot(launch.vm, launch.spec, &registry).await {
+        let booted = self
+            .with_catalog_retry(sink, launch, None, || {
+                self.runtime.boot(launch.vm, launch.spec, &registry)
+            })
+            .await;
+        match booted {
             Ok(()) => {
                 logging::log_info(
                     sink,
@@ -638,6 +690,13 @@ impl SandboxPool {
                 launch.vm,
                 image,
                 SandboxFailureCause::ImageUnavailable,
+                message,
+            )),
+            Err(BootError::Catalog(message)) => Err(self.failed(
+                sink,
+                launch.vm,
+                image,
+                SandboxFailureCause::RuntimeCatalogFailed,
                 message,
             )),
         }
@@ -674,17 +733,28 @@ impl SandboxPool {
     /// EAC-FR-ABHG: stop the VM of one scope, waiting for a launch that runs in
     /// it to end first.
     pub async fn stop(&self, vm: &str) {
+        self.stop_when(vm, || true).await;
+    }
+
+    /// EAC-FR-LQRI: stop the VM of one scope where `still_idle` answers true.
+    /// It waits for a launch that runs in the VM to end first, and it asks
+    /// `still_idle` only after that, while it holds the VM. Returns whether a
+    /// VM stopped.
+    pub async fn stop_when(&self, vm: &str, still_idle: impl FnOnce() -> bool) -> bool {
         let slot = {
             let slots = self.slots.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             slots.get(vm).cloned()
         };
         let Some(slot) = slot else {
-            return;
+            return false;
         };
         let mut booted = slot.lock().await;
-        if booted.take().is_some() {
-            self.runtime.stop(vm).await;
+        if booted.is_none() || !still_idle() {
+            return false;
         }
+        *booted = None;
+        self.runtime.stop(vm).await;
+        true
     }
 
     /// EAC-FR-ABHG: stop every VM this pool booted. A launch that runs is not
@@ -835,7 +905,16 @@ impl SandboxRuntime for NoSandbox {
         &'a self,
         _archive: &'a Path,
         _reference: &'a str,
-    ) -> BoxFuture<'a, Result<(), String>> {
+    ) -> BoxFuture<'a, Result<(), BootError>> {
+        Box::pin(async move {
+            Err(BootError::Failed(
+                SandboxFailureCause::UnsupportedHost,
+                "this build holds no microsandbox runtime".to_string(),
+            ))
+        })
+    }
+
+    fn reopen_catalog(&self) -> BoxFuture<'_, Result<(), String>> {
         Box::pin(async move { Err("this build holds no microsandbox runtime".to_string()) })
     }
 
@@ -853,78 +932,6 @@ impl SandboxRuntime for NoSandbox {
 
     fn stop<'a>(&'a self, _vm: &'a str) -> BoxFuture<'a, ()> {
         Box::pin(async move {})
-    }
-}
-
-/// EAC-FR-ABHG: stop the VM of one stream of one project. Called when the
-/// stream is deleted.
-pub async fn stop_scope<S>(sink: &S, project_key: &str, queue_key: &str)
-where
-    S: LogSink + Clone + Send + Sync + 'static,
-{
-    let vm = vm_name(project_key, &SandboxScope { queue_key: queue_key.to_string() });
-    production_pool().stop(&vm).await;
-    logging::log_info(
-        sink,
-        &BUFFER,
-        &DOMAINS,
-        "sandbox VM of a stream stopped",
-        log_fields! {
-            "vm" => vm.as_str()
-        },
-    );
-}
-
-/// EAC-FR-ABHG: stop every VM. Called when the project closes and when the
-/// application exits.
-pub async fn stop_all<S>(sink: &S)
-where
-    S: LogSink + Clone + Send + Sync + 'static,
-{
-    production_pool().stop_all().await;
-    logging::log_info(sink, &BUFFER, &DOMAINS, "every sandbox VM stopped", log_fields! {});
-}
-
-/// EAC-FR-ABHG: how long an exit waits for the VMs to stop. A VM that does not
-/// stop in that time still ends with the application process.
-const EXIT_STOP_BOUND: Duration = Duration::from_secs(10);
-
-/// EAC-FR-ABHG: stop the VM of a deleted stream, without holding the command
-/// that deleted it.
-pub fn stop_scope_in_background<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    project_key: String,
-    queue_key: String,
-) {
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        stop_scope(&app, &project_key, &queue_key).await;
-    });
-}
-
-/// EAC-FR-ABHG: stop every VM when the project closes, without holding the
-/// close.
-pub fn stop_all_in_background<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        stop_all(&app).await;
-    });
-}
-
-/// EAC-FR-ABHG: stop every VM before the application exits, bounded so a VM
-/// that does not answer cannot hold the exit. Runs on a thread of its own, so
-/// it never blocks inside an asynchronous runtime.
-pub fn stop_all_before_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    let app = app.clone();
-    let stopped = std::thread::spawn(move || {
-        tauri::async_runtime::block_on(async move {
-            let _ = tokio::time::timeout(EXIT_STOP_BOUND, stop_all(&app)).await;
-        });
-    })
-    .join();
-    if stopped.is_err() {
-        // The thread panicked. The VMs still end with the process.
-        eprintln!("synthesis: the sandbox VMs could not be stopped before exit");
     }
 }
 

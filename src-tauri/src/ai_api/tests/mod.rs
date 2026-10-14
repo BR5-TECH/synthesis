@@ -169,6 +169,7 @@ fn find<'a>(list: &'a [AiApiIntegration], provider: &str) -> &'a AiApiIntegratio
 mod capabilities;
 mod catalogue;
 mod configuration;
+mod detection_http;
 mod gateway_contract;
 mod local_models;
 mod read_paths;

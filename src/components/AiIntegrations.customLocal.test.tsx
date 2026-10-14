@@ -51,6 +51,16 @@ function storedCustom(over: Record<string, unknown>) {
   return apiVerified("custom", GATEWAY, { models: LOCAL_MODELS, ...over });
 }
 
+/** The registry with a verified Custom record that holds the given values. */
+function withStored(over: Record<string, unknown>) {
+  return {
+    api: [
+      storedCustom({ selectedModel: null, ...over }),
+      ...API_ALL.filter((p) => p !== "custom").map((p) => apiIntegration(p)),
+    ],
+  };
+}
+
 beforeEach(() => {
   resetLogBufferForTest();
   invokeMock.mockReset();
@@ -233,38 +243,46 @@ describe("the Custom token fields (AII-FR-UQLF, AII-FR-TWIR, AII-FR-FBVE)", () =
   });
 
   it("AII-FR-TWIR: an invalid entry shows an inline message, quotes nothing, commits nothing, and blur restores the stored value", async () => {
-    backend({ api: customWith(LOCAL_MODELS, null).api });
+    backend(withStored({ maxOutputTokens: 8192 }));
     render(<BothLevels />);
     const user = await openCustom();
 
     const output = apiLevel().getByTestId("ai-api-max-output-tokens") as HTMLInputElement;
+    expect(output.value).toBe("8192");
+    await user.clear(output);
     await user.type(output, "12abc");
     const message = apiLevel().getByTestId("ai-api-max-output-tokens-invalid");
     expect(message).toHaveTextContent(/whole number from 1 to 4294967295/i);
     expect(message).not.toHaveTextContent("12abc");
     expect(output).toHaveAttribute("aria-invalid", "true");
 
+    // Enter on an invalid entry commits nothing either.
+    await user.type(output, "{Enter}");
+    expect(commands()).not.toContain(OUTPUT);
+
     await user.tab();
-    expect(output.value).toBe("");
+    expect(output.value).toBe("8192");
     expect(commands()).not.toContain(OUTPUT);
     expect(apiLevel().queryByTestId("ai-api-max-output-tokens-invalid")).not.toBeInTheDocument();
   });
 
   it("AII-FR-TWIR, AII-FR-28: a backend refusal keeps the stored value and renders inline", async () => {
-    backend(
-      { api: customWith(LOCAL_MODELS, null).api },
-      { [CONTEXT]: () => Promise.reject(AI_ERRORS.tokenLimitInvalid) },
-    );
+    backend(withStored({ maxContextSize: 4096 }), {
+      [CONTEXT]: () => Promise.reject(AI_ERRORS.tokenLimitInvalid),
+    });
     render(<BothLevels />);
     const user = await openCustom();
 
     const context = apiLevel().getByTestId("ai-api-max-context-size") as HTMLInputElement;
+    expect(context.value).toBe("4096");
+    await user.clear(context);
     await user.type(context, "100");
     await user.tab();
 
     expect(await apiLevel().findByTestId("ai-api-max-context-size-error")).toHaveTextContent(
       /whole number of tokens/i,
     );
-    expect(context.value).toBe("");
+    expect(argsOf(CONTEXT)).toEqual({ provider: "custom", tokens: 100 });
+    await waitFor(() => expect(context.value).toBe("4096"));
   });
 });

@@ -6,35 +6,51 @@
 
 use super::*;
 use crate::ai_api::detection::{
-    detect_all, detection_counts, parse_show_payload, Detected, ModelDetector,
+    detect_all, parse_show_payload, Detected, DetectionFailure, ModelDetector,
     MAX_CONCURRENT_DETECTIONS,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Condvar;
+use std::time::Duration;
 
 const SECRET: &str = "ollama-anything";
 const BASE: &str = "http://localhost:11434";
 
 /// A detector that answers from a table, counts the requests it is sent, and
-/// records the highest number in flight at one time.
+/// records the highest number in flight at one time. A model with no entry in
+/// the table fails with the status 404, as a host that is not Ollama does.
+///
+/// With `hold` set to the number of models, each request waits until
+/// `MAX_CONCURRENT_DETECTIONS` requests are in flight, or until every model
+/// has a request, or until a bound passes. So a detection that keeps four in
+/// flight shows four in `peak`, and one that keeps more shows more.
 #[derive(Default)]
 struct FakeDetector {
-    answers: StdMutex<HashMap<String, Detected>>,
+    answers: StdMutex<HashMap<String, Result<Detected, DetectionFailure>>>,
     requests: StdMutex<Vec<(String, Option<String>, String)>>,
     in_flight: AtomicUsize,
     peak: AtomicUsize,
+    hold: Option<usize>,
+    /// The requests in flight and the requests that arrived, for `hold`.
+    gate: (StdMutex<(usize, usize)>, Condvar),
 }
 
 impl FakeDetector {
     fn answering(answers: &[(&str, Detected)]) -> Arc<Self> {
         let d = Arc::new(Self::default());
         *d.answers.lock().unwrap() =
-            answers.iter().map(|(id, v)| (id.to_string(), v.clone())).collect();
+            answers.iter().map(|(id, v)| (id.to_string(), Ok(v.clone()))).collect();
         d
     }
 }
 
 impl ModelDetector for Arc<FakeDetector> {
-    fn show(&self, base_url: &str, api_key: Option<&str>, model_id: &str) -> Option<Detected> {
+    fn show(
+        &self,
+        base_url: &str,
+        api_key: Option<&str>,
+        model_id: &str,
+    ) -> Result<Detected, DetectionFailure> {
         let now = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
         self.peak.fetch_max(now, Ordering::SeqCst);
         self.requests.lock().unwrap().push((
@@ -42,8 +58,27 @@ impl ModelDetector for Arc<FakeDetector> {
             api_key.map(str::to_string),
             model_id.to_string(),
         ));
+        if let Some(total) = self.hold {
+            let (lock, ready) = &self.gate;
+            let mut state = lock.lock().unwrap();
+            state.0 += 1;
+            state.1 += 1;
+            ready.notify_all();
+            // The bound only stops a broken detection from hanging the test.
+            let (mut state, _) = ready
+                .wait_timeout_while(state, Duration::from_secs(30), |(in_flight, arrived)| {
+                    *in_flight < MAX_CONCURRENT_DETECTIONS && *arrived < total
+                })
+                .unwrap();
+            state.0 -= 1;
+        }
         self.in_flight.fetch_sub(1, Ordering::SeqCst);
-        self.answers.lock().unwrap().get(model_id).cloned()
+        self.answers
+            .lock()
+            .unwrap()
+            .get(model_id)
+            .cloned()
+            .unwrap_or(Err(DetectionFailure::Status(404)))
     }
 }
 
@@ -179,19 +214,85 @@ fn each_verification_replaces_the_detected_values() {
     assert_eq!(model(&verify_local(&h), "qwen3:32b").detected_context_size, None);
 }
 
-// AAP-FR-QRAX: no more than four requests are in flight at one time.
+// AAP-FR-QRAX: no more than four requests are in flight at one time, and
+// four are, when there are enough models.
 #[test]
 fn detection_keeps_at_most_four_requests_in_flight() {
-    let detector = FakeDetector::answering(&[]);
+    let detector = Arc::new(FakeDetector { hold: Some(12), ..Default::default() });
     let models: Vec<ModelOption> =
         (0..12).map(|i| ModelOption::new(&format!("m{i}"), &format!("m{i}"))).collect();
-    let out = detect_all(&detector, BASE, Some(SECRET), models);
+    let (out, report) = detect_all(&detector, BASE, Some(SECRET), models);
 
     assert_eq!(out.len(), 12);
     assert_eq!(detector.requests.lock().unwrap().len(), 12);
-    assert!(detector.peak.load(Ordering::SeqCst) <= MAX_CONCURRENT_DETECTIONS);
+    assert_eq!(detector.peak.load(Ordering::SeqCst), MAX_CONCURRENT_DETECTIONS);
+    assert_eq!(report.sent, 12);
     // The order of the list is kept.
     assert_eq!(out[11].id, "m11");
+}
+
+// AAP-FR-OVDB, AAP-FR-KJSL: the report counts the models sent, the ones with
+// values, and the failures by kind. An answer with no value is not a failure.
+#[test]
+fn the_detection_report_counts_the_values_and_the_failures_by_kind() {
+    let detector = FakeDetector::answering(&[
+        ("a", detected(Some(4096), None)),
+        ("b", detected(None, Some(&["tools"]))),
+        ("c", detected(None, None)),
+    ]);
+    detector.answers.lock().unwrap().insert("d".into(), Err(DetectionFailure::Timeout));
+    let models: Vec<ModelOption> =
+        ["a", "b", "c", "d", "e"].iter().map(|id| ModelOption::new(id, id)).collect();
+    let (_, report) = detect_all(&detector, BASE, Some(SECRET), models);
+
+    assert_eq!(report.sent, 5);
+    assert_eq!(report.detected, 2);
+    assert_eq!(report.failed, 2);
+    assert_eq!(report.failure_kinds(), "status_404:1,timeout:1");
+}
+
+// AAP-FR-JQIJ, AAP-FR-KJSL: a context length the store cannot hold is not in
+// the expected form, so it cannot fail the verification when it is saved.
+#[test]
+fn a_context_length_above_the_token_bound_is_null() {
+    let body = |n: &str| {
+        format!(r#"{{"model_info": {{"general.architecture": "x", "x.context_length": {n}}}}}"#)
+    };
+    assert_eq!(
+        parse_show_payload(&body(&TOKEN_LIMIT_MAX.to_string())),
+        Some(detected(Some(TOKEN_LIMIT_MAX), None))
+    );
+    for bad in
+        [(TOKEN_LIMIT_MAX + 1).to_string(), u64::MAX.to_string(), "-1".into(), "4096.5".into()]
+    {
+        assert_eq!(parse_show_payload(&body(&bad)), Some(detected(None, None)), "{bad}");
+    }
+
+    let detector = FakeDetector::answering(&[]);
+    detector.answers.lock().unwrap().insert(
+        "qwen3:32b".into(),
+        parse_show_payload(&body(&u64::MAX.to_string())).ok_or(DetectionFailure::BadBody),
+    );
+    let h = local_harness(detector);
+    let rec = verify_local(&h);
+    assert_eq!(rec.state, IntegrationState::Verified);
+    assert_eq!(model(&rec, "qwen3:32b").detected_context_size, None);
+}
+
+// AAP-FR-QRAX, AAP-FR-MDLQ: a model list that is not valid fails the
+// verification, and no detection request is sent.
+#[test]
+fn a_model_list_that_fails_sends_no_detection() {
+    let detector = FakeDetector::answering(&[]);
+    let mut h = local_harness(detector.clone());
+    h.prober = FakeProber::failing(ProbeError::NotExpectedKind);
+    h.ai = AiApiIntegrations::new(Box::new(h.prober.clone()), Box::new(h.keys.clone()))
+        .with_detector(Box::new(detector.clone()));
+    assert_eq!(
+        verify_integration_impl(&h.store, &h.ai, "custom", BASE, Some(SECRET)).unwrap_err(),
+        ERR_NOT_AN_AI_ENDPOINT
+    );
+    assert!(detector.requests.lock().unwrap().is_empty());
 }
 
 // AAP-FR-QRAX: detection runs for Custom alone.
@@ -202,17 +303,6 @@ fn no_other_provider_runs_detection() {
     verify_integration_impl(&h.store, &h.ai, "openai", "https://api.openai.com/v1", Some("sk-1"))
         .unwrap();
     assert!(detector.requests.lock().unwrap().is_empty());
-}
-
-// AAP-FR-OVDB: the counts the detection record names.
-#[test]
-fn detection_counts_name_the_models_sent_and_the_ones_with_values() {
-    let models = vec![
-        ModelOption { detected_context_size: Some(1), ..ModelOption::new("a", "a") },
-        ModelOption { detected_capabilities: Some(vec![]), ..ModelOption::new("b", "b") },
-        ModelOption::new("c", "c"),
-    ];
-    assert_eq!(detection_counts(&models), (3, 2));
 }
 
 // AAP-FR-WSIC, AAP-FR-24, AAP-FR-25: every Custom model offers the fixed set,
@@ -233,9 +323,12 @@ fn every_custom_model_offers_the_fixed_reasoning_set() {
         );
         assert_eq!(reasoning.default_effort, None);
     }
-    // The other providers' models still declare none.
-    let listed = list_integrations_impl(&h.store, &h.ai).unwrap();
-    assert!(find(&listed, "openai").models.iter().all(|m| m.reasoning.is_none()));
+    // The models of another provider still declare none.
+    let openai =
+        verify_integration_impl(&h.store, &h.ai, "openai", "https://api.openai.com/v1", Some("k"))
+            .unwrap();
+    assert!(!openai.models.is_empty());
+    assert!(openai.models.iter().all(|m| m.reasoning.is_none()));
 }
 
 // AAP-FR-27, AAP-FR-AYKU, AAP-FR-WSIC: the Custom reasoning default needs no
@@ -281,7 +374,20 @@ fn the_token_values_are_stored_in_range_for_custom_only() {
             set(TokenLimit::MaxOutputTokens, Some(bad)).unwrap_err(),
             ERR_TOKEN_LIMIT_INVALID
         );
+        assert_eq!(
+            set(TokenLimit::MaxContextSize, Some(bad)).unwrap_err(),
+            ERR_TOKEN_LIMIT_INVALID
+        );
     }
+    // A refused value changes nothing.
+    let listed = list_integrations_impl(&h.store, &h.ai).unwrap();
+    assert_eq!(find(&listed, "custom").max_output_tokens, Some(8192));
+    assert_eq!(find(&listed, "custom").max_context_size, Some(TOKEN_LIMIT_MAX));
+    let rec = set(TokenLimit::MaxOutputTokens, Some(TOKEN_LIMIT_MAX)).unwrap();
+    assert_eq!(rec.max_output_tokens, Some(TOKEN_LIMIT_MAX));
+    let rec = set(TokenLimit::MaxOutputTokens, Some(1)).unwrap();
+    assert_eq!(rec.max_output_tokens, Some(1));
+    set(TokenLimit::MaxOutputTokens, Some(8192)).unwrap();
     let rec = set(TokenLimit::MaxOutputTokens, None).unwrap();
     assert_eq!(rec.max_output_tokens, None);
     assert_eq!(rec.max_context_size, Some(TOKEN_LIMIT_MAX));
@@ -381,6 +487,25 @@ fn another_providers_endpoint_carries_no_custom_values() {
     )
     .unwrap();
     set_active_impl(&h.store, &h.ai, "openrouter").unwrap();
+    // The provider stores a reasoning choice of its own, which is the
+    // graduation loop's and never an agent's.
+    let mut records = h.store.load_ai_api_registry().unwrap().0;
+    let record = records.iter_mut().find(|r| r.provider == "openrouter").unwrap();
+    record.selected_model = Some("gpt-5".into());
+    record.selected_reasoning = Some(ReasoningChoice::On);
+    for m in &mut record.models {
+        m.reasoning = Some(ModelReasoning {
+            mandatory: false,
+            default_enabled: Some(false),
+            supported_efforts: None,
+            default_effort: None,
+        });
+    }
+    h.store.save_ai_api_registry(records, Some("openrouter".into())).unwrap();
+    assert_eq!(
+        resolve_ai_api_call(&h.store, &h.ai, "project").unwrap().reasoning,
+        Some(ReasoningChoice::On)
+    );
     let call = resolve_ai_api_endpoint(&h.store, &h.ai, "openrouter", "gpt-5", None).unwrap();
     assert_eq!(call.context_size, None);
     assert_eq!(call.max_output_tokens, None);

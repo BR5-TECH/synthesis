@@ -11,6 +11,20 @@ pub fn verify_integration_impl(
     base_url: &str,
     api_key: Option<&str>,
 ) -> Result<AiApiIntegration, String> {
+    let mut report = None;
+    verify_integration_reported(store, ai, provider, base_url, api_key, &mut report)
+}
+
+/// `verify_integration_impl`, which also gives the report of the detection
+/// when a Custom verification ran one (AAP-FR-OVDB).
+pub fn verify_integration_reported(
+    store: &GlobalSettingsStore,
+    ai: &AiApiIntegrations,
+    provider: &str,
+    base_url: &str,
+    api_key: Option<&str>,
+    report: &mut Option<detection::DetectionReport>,
+) -> Result<AiApiIntegration, String> {
     let descriptor = provider_descriptor(provider).ok_or(ERR_UNKNOWN_PROVIDER)?;
 
     // Both checks happen before any network work: an empty field and a typo are
@@ -58,7 +72,9 @@ pub fn verify_integration_impl(
     // detection. A failure gives a model no detected values and changes
     // nothing else, so the verification goes on whatever detection reports.
     let probed = if provider == custom_limits::CUSTOM {
-        detection::detect_all(&*ai.detector, &normalized, key, probed)
+        let (models, detected) = detection::detect_all(&*ai.detector, &normalized, key, probed);
+        *report = Some(detected);
+        models
     } else {
         probed
     };

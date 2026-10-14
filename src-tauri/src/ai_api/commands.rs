@@ -99,30 +99,29 @@ pub(super) fn log_verify_outcome<S: LogSink + Clone + Send + 'static>(
     }
 }
 
-/// AAP-FR-OVDB: how the detection of a Custom verification went. Counts only:
-/// no record holds the secret, a request body, or a response body.
+/// AAP-FR-OVDB: how the detection of a Custom verification went. Counts and
+/// failure kinds only: no record holds the secret, a request body, or a
+/// response body. No record where no detection ran.
 pub(super) fn log_detection_outcome<S: LogSink + Clone + Send + 'static>(
     sink: &S,
     buffer: &'static LogBuffer,
     provider: &str,
-    result: &Result<AiApiIntegration, String>,
+    report: Option<&detection::DetectionReport>,
 ) {
-    let Ok(integration) = result else { return };
-    if provider != custom_limits::CUSTOM || integration.models_origin != ModelsOrigin::Probed {
-        return;
-    }
-    let (sent, detected) = detection::detection_counts(&integration.models);
+    let Some(report) = report else { return };
+    let fields = log_fields! {
+        "provider" => provider,
+        "models" => report.sent,
+        "detected" => report.detected,
+        "failed" => report.failed,
+        "failureKinds" => report.failure_kinds(),
+    };
     logging::log_info(
         sink,
         buffer,
         &[Domain::Ai, Domain::Remote],
         "custom model detection finished",
-        log_fields! {
-            "provider" => provider,
-            "models" => sent,
-            "detected" => detected,
-            "failed" => sent - detected,
-        },
+        fields,
     );
 }
 
@@ -243,7 +242,15 @@ pub fn verify_ai_api_integration(
 ) -> Result<AiApiIntegration, String> {
     log_verify_attempt(&app, &logging::BUFFER, &provider, &base_url, api_key.as_deref());
     let started = std::time::Instant::now();
-    let result = verify_integration_impl(&store, &ai, &provider, &base_url, api_key.as_deref());
+    let mut report = None;
+    let result = verify_integration_reported(
+        &store,
+        &ai,
+        &provider,
+        &base_url,
+        api_key.as_deref(),
+        &mut report,
+    );
     // The duration is what separates `timed_out` from a slow endpoint that
     // answered, and it is the only measurement of the one network call this
     // module makes.
@@ -254,7 +261,7 @@ pub fn verify_ai_api_integration(
         &result,
         started.elapsed().as_millis() as u64,
     );
-    log_detection_outcome(&app, &logging::BUFFER, &provider, &result);
+    log_detection_outcome(&app, &logging::BUFFER, &provider, report.as_ref());
     result
 }
 

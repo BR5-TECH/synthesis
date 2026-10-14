@@ -11,11 +11,6 @@ use crate::ai_shared::ModelReasoning;
 /// The id of the Custom provider.
 pub const CUSTOM: &str = "custom";
 
-/// AAP-FR-ITBL: the value is not a whole number from 1 to `TOKEN_LIMIT_MAX`.
-pub const ERR_TOKEN_LIMIT_INVALID: &str = "token_limit_invalid";
-/// AAP-FR-ITBL: the provider is not Custom, so it holds no token limits.
-pub const ERR_LIMIT_UNSUPPORTED: &str = "limit_unsupported";
-
 /// AAP-FR-ITBL: the largest token value a Custom field accepts.
 pub const TOKEN_LIMIT_MAX: u64 = u32::MAX as u64;
 

@@ -12,6 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
 import { notifyAgentRegistryChanged, resetAgentRegistry } from "../state/agentRegistry";
+import { resetLogBufferForTest } from "../logging";
 import { AgentsChromeControl, PersonalAgents, ProjectAgents } from "./Agents";
 import type {
   ActiveAiApiCatalog,
@@ -108,6 +109,8 @@ function backend(over: Partial<Backend> = {}): Backend {
         return b.projectAgents;
       case "list_agent_turns":
         return [];
+      case "append_log_records":
+        return null;
       case "create_agent": {
         const { draft } = args as { draft: Omit<Agent, "id"> };
         return agent({ ...draft, id: "new" });
@@ -126,6 +129,7 @@ function backend(over: Partial<Backend> = {}): Backend {
 const calls = (b: Backend, cmd: string) => b.calls.filter((c) => c.cmd === cmd);
 
 beforeEach(() => {
+  resetLogBufferForTest();
   invokeMock.mockReset();
   resetAgentRegistry();
 });

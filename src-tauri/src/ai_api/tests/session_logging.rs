@@ -323,3 +323,34 @@ fn a_project_resolution_reports_an_override_that_is_being_ignored() {
     assert_eq!(nothing.fields.get("provider"), Some(&serde_json::json!("none")));
     assert_eq!(nothing.fields.get("override"), Some(&serde_json::json!("none")));
 }
+
+// AAP-FR-OVDB: one detection record per Custom verification, with counts and
+// failure kinds, and no secret, no route, and no body.
+#[test]
+fn a_detection_record_holds_counts_and_failure_kinds_only() {
+    use crate::ai_api::detection::DetectionReport;
+    let report = DetectionReport {
+        sent: 3,
+        detected: 1,
+        failed: 2,
+        failures: [("status_404".to_string(), 1), ("timeout".to_string(), 1)].into(),
+    };
+    log_detection_outcome(&NullSink, &TEST_BUFFER, "probe-detect", Some(&report));
+    let record = record_reading("custom model detection finished", "probe-detect");
+    assert_eq!(record.fields.get("models"), Some(&serde_json::json!(3)));
+    assert_eq!(record.fields.get("detected"), Some(&serde_json::json!(1)));
+    assert_eq!(record.fields.get("failed"), Some(&serde_json::json!(2)));
+    assert_eq!(
+        record.fields.get("failureKinds"),
+        Some(&serde_json::json!("status_404:1,timeout:1"))
+    );
+    let text = serde_json::to_string(&record).unwrap();
+    assert!(!text.contains("/api/show"), "{text}");
+    assert!(!text.contains("\\\"model\\\""), "{text}");
+
+    // No detection ran: no record.
+    log_detection_outcome(&NullSink, &TEST_BUFFER, "probe-nodetect", None);
+    assert!(!records()
+        .iter()
+        .any(|r| r.fields.get("provider") == Some(&serde_json::json!("probe-nodetect"))));
+}

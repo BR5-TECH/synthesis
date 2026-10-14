@@ -242,9 +242,13 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             plan,
             &endpoint,
             &mut conversation,
-            bounds.retry,
-            deadline,
-            model_calls + 1,
+            ModelCall {
+                policy: bounds.retry,
+                deadline,
+                model_calls: model_calls + 1,
+                at_bound: false,
+                compaction: true,
+            },
         )?;
 
         model_calls += 1;

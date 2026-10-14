@@ -287,15 +287,16 @@ impl Conversation {
 /// A compaction call that fails or answers with no text leaves the exchange as
 /// it was. Cancellation, the whole-turn deadline, and a locked conversation
 /// end the turn as they do for any call.
+///
+/// `call` is the invocation that compaction comes before; the compaction call
+/// takes its retry budget, its deadline, and its ordinal.
 pub(super) fn compact_if_over_budget<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     turns: &TurnRegistry,
     plan: &TurnPlan,
     endpoint: &AiApiCall,
     conversation: &mut Conversation,
-    policy: RetryPolicy,
-    deadline: std::time::Instant,
-    model_calls: usize,
+    call: ModelCall,
 ) -> Result<(), TurnEnd> {
     let Some(budget) = endpoint.context_size else {
         return Ok(());
@@ -319,7 +320,7 @@ pub(super) fn compact_if_over_budget<R: tauri::Runtime>(
         endpoint,
         &compaction,
         &older,
-        ModelCall { policy, deadline, model_calls, at_bound: true, compaction: true },
+        ModelCall { at_bound: true, compaction: true, ..call },
     );
     let compacted_messages = older_messages + usize::from(discussion_history(request).is_some());
     match result {

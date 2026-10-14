@@ -195,6 +195,16 @@ fn custom_budget_harness(
     h
 }
 
+/// The length of the text of an assistant message, or `None` for any other
+/// message.
+fn assistant_text_len(message: &Message) -> Option<usize> {
+    let Message::Assistant(assistant) = message else { return None };
+    assistant.content.iter().find_map(|c| match c {
+        rig::completion::AssistantContent::Text(text) => Some(text.text.len()),
+        _ => None,
+    })
+}
+
 /// A reply that asks for `read_file` and carries `chars` characters of prose.
 fn big_tool_reply(chars: usize) -> ScriptedReply {
     ScriptedReply {
@@ -211,7 +221,7 @@ fn a_call_over_the_budget_is_preceded_by_a_compaction_call() {
     let h = custom_budget_harness(
         vec![
             Ok(big_tool_reply(400_000)),
-            Ok(big_tool_reply(400_000)),
+            Ok(big_tool_reply(400_001)),
             Ok(ScriptedReply::answer("SUMMARY-OF-OLDER-ROUNDS")),
             Ok(ScriptedReply::answer("Final.")),
         ],
@@ -231,9 +241,14 @@ fn a_call_over_the_budget_is_preceded_by_a_compaction_call() {
         crate::prompts::instruction_text(COMPACT_PROMPT_TEMPLATE)
     );
     assert_eq!(exchanges[2].len(), 1);
-    // The final round: the compacted input, then the latest round alone.
+    // CVL-FR-ZLSM: the same endpoint, model, and reasoning as the turn's own
+    // calls.
+    assert_eq!(requests[2].1, requests[3].1);
+    // The final round: the compacted input, then the latest round alone. The
+    // latest round is the second reply, which is the longer one.
     assert_eq!(exchanges[3].len(), 3);
-    assert_eq!(exchanges[3][1..], exchanges[1][3..5]);
+    assert_eq!(assistant_text_len(&exchanges[3][1]), Some(400_001));
+    assert!(matches!(&exchanges[3][2], Message::User { .. }));
     let input = &requests[3].0.input;
     assert!(section_of(input, TAG_DISCUSSION_HISTORY).body.contains("SUMMARY-OF-OLDER-ROUNDS"));
 
@@ -244,6 +259,14 @@ fn a_call_over_the_budget_is_preceded_by_a_compaction_call() {
     assert_eq!(field(&record, "compactedMessages"), "3");
     let estimate: u64 = field(&record, "estimatedTokens").parse().unwrap();
     assert!(estimate * 4 > 200_000 * 3);
+    // CVL-FR-CSLX: the record of the compaction call says what it is, so it is
+    // not read as a second call of the same ordinal.
+    let calls: Vec<String> = all_records()
+        .iter()
+        .filter(|r| r.message == "calling model" && field(r, "turnId") == terminal.id)
+        .map(|r| format!("{}:{}", field(r, "modelCall"), field(r, "compaction")))
+        .collect();
+    assert_eq!(calls, ["1:false", "2:false", "3:true", "3:false"]);
     for record in all_records() {
         assert!(
             !format!("{record:?}").contains("SUMMARY-OF-OLDER-ROUNDS"),
@@ -290,4 +313,51 @@ fn a_failed_compaction_call_leaves_the_exchange_unchanged() {
 
     let record = wait_for_record(&terminal.id, "conversation history compaction");
     assert_eq!(field(&record, "outcome"), "failed");
+}
+
+// CVL-FR-HFRL, CVL-FR-ZLSM: a compaction call that gives no text, after the
+// retries of its own budget, leaves the exchange as it was, and the turn goes
+// on.
+#[test]
+fn a_compaction_reply_with_no_text_leaves_the_exchange_unchanged() {
+    let mut replies = vec![Ok(big_tool_reply(400_000)), Ok(big_tool_reply(400_000))];
+    replies.extend(vec![Ok(ScriptedReply::answer("   ")); MAX_ATTEMPTS]);
+    replies.push(Ok(ScriptedReply::answer("Final.")));
+    let h = custom_budget_harness(replies, Some(200_000));
+    let (terminal, _) = run_one(&h, "arch");
+    assert_eq!(terminal.state, AgentTurnState::Delivered);
+    let exchanges = h.seam.exchanges();
+    assert_eq!(exchanges.len(), 3 + MAX_ATTEMPTS);
+    assert_eq!(exchanges.last().unwrap().len(), 5, "nothing was compacted");
+    let record = wait_for_record(&terminal.id, "conversation history compaction");
+    assert_eq!(field(&record, "outcome"), "failed");
+}
+
+// CVL-FR-BSMY: a later compaction treats the earlier summary as older history.
+#[test]
+fn a_later_compaction_takes_the_earlier_summary_as_older_history() {
+    let h = custom_budget_harness(
+        vec![
+            Ok(big_tool_reply(400_000)),
+            Ok(big_tool_reply(400_000)),
+            Ok(ScriptedReply::answer("FIRST-SUMMARY")),
+            Ok(big_tool_reply(400_000)),
+            Ok(ScriptedReply::answer("SECOND-SUMMARY")),
+            Ok(ScriptedReply::answer("Final.")),
+        ],
+        Some(200_000),
+    );
+    let (terminal, _) = run_one(&h, "arch");
+    assert_eq!(terminal.state, AgentTurnState::Delivered);
+    let requests = h.seam.requests();
+    let exchanges = h.seam.exchanges();
+    assert_eq!(exchanges.len(), 6);
+    let compact = crate::prompts::instruction_text(COMPACT_PROMPT_TEMPLATE);
+    assert_eq!(requests[4].0.instructions, compact);
+    let older = format!("{:?}", exchanges[4]);
+    assert!(older.contains("FIRST-SUMMARY"), "the first summary is older history now");
+    let input = &requests[5].0.input;
+    let history = &section_of(input, TAG_DISCUSSION_HISTORY).body;
+    assert!(history.contains("SECOND-SUMMARY"));
+    assert!(!history.contains("FIRST-SUMMARY"));
 }

@@ -347,6 +347,18 @@ impl CompletionSeam for ScriptedCompletion {
         // into it — checking only that the instructions are non-empty would pass
         // against a request carrying the agent's instructions bare.
         //
+        // CVL-FR-ZLSM: a compaction call carries the compaction prompt and no
+        // tool of any kind. It is not a turn's own call, so the checks below on
+        // the turn's prompt and tool set do not apply to it.
+        let compaction_instructions =
+            crate::prompts::instruction_text(super::compaction::COMPACT_PROMPT_TEMPLATE);
+        let is_compaction = request.instructions == compaction_instructions;
+        if is_compaction {
+            assert!(
+                request.tools.is_empty() && request.native_tools.is_empty(),
+                "a compaction call offers no tool",
+            );
+        }
         // CVL-FR-03: any of the compiled prompts satisfies this; which of them a
         // turn should have carried is the origin kind's business and is asserted
         // where the origin is known.
@@ -359,7 +371,7 @@ impl CompletionSeam for ScriptedCompletion {
         .iter()
         .any(|template| carries_template(&request.instructions, template));
         assert!(
-            carries_a_compiled_prompt,
+            is_compaction || carries_a_compiled_prompt,
             "every request reaching a model carries the compiled prompt",
         );
         // CVL-FR-08: every request reaching a model offers the eight, in order, so
@@ -409,7 +421,7 @@ impl CompletionSeam for ScriptedCompletion {
             })
             .collect();
         assert!(
-            permitted.contains(&offered),
+            is_compaction || permitted.contains(&offered),
             "every request offers the eleven, then `ask_discussion_questions` on a discussion, then at most one proposal tool, and nothing else: {offered:?}",
         );
         // CVL-FR-30: asserted on every dispatch the suite makes rather than in
@@ -421,11 +433,12 @@ impl CompletionSeam for ScriptedCompletion {
         // CVL-FR-30: the search alone on OpenRouter, and nothing anywhere else.
         // `web_fetch` is withheld (WFT-FR-16), so a request that carried it
         // would be one nobody decided to send.
-        let expected: Vec<&str> = if endpoint.provider == crate::tools::web_search::PROVIDER {
-            vec![crate::tools::web_search::ENTRY_TYPE]
-        } else {
-            Vec::new()
-        };
+        let expected: Vec<&str> =
+            if !is_compaction && endpoint.provider == crate::tools::web_search::PROVIDER {
+                vec![crate::tools::web_search::ENTRY_TYPE]
+            } else {
+                Vec::new()
+            };
         assert_eq!(
             native, expected,
             "a conversational request carries both provider-native entries on OpenRouter and neither anywhere else",

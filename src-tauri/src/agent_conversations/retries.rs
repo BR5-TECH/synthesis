@@ -73,6 +73,9 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 "provider" => &endpoint.provider,
                 "model" => model_label,
                 "modelCall" => model_calls,
+                // CVL-FR-CSLX: a compaction call has the ordinal of the call it
+                // comes before, so this field tells the two apart.
+                "compaction" => compaction,
                 "attempt" => attempt,
                 "maxAttempts" => policy.max_attempts,
                 "physicalCalls" => physical,
@@ -100,7 +103,7 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
         );
         let started = std::time::Instant::now();
         let outcome =
-            turns.seam.complete(&request, exchange, endpoint, call_timeout).map(|mut reply| {
+            turns.seam.complete(request, exchange, endpoint, call_timeout).map(|mut reply| {
                 // CVL-FR-VSSU: the markers go before anything reads the reply,
                 // so a reply that held markers alone is empty (CVL-FR-POAR).
                 let removed = strip_reply_citation_markers(&mut reply);
@@ -183,6 +186,9 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                         "provider" => &endpoint.provider,
                         "model" => model_label,
                         "modelCall" => model_calls,
+                        // CVL-FR-CSLX: a compaction call has the ordinal of the call it
+                        // comes before, so this field tells the two apart.
+                        "compaction" => compaction,
                         "attempt" => attempt,
                         "durationMs" => started.elapsed().as_millis() as u64,
                         // The size of the reply and the number of tools it asked
@@ -321,7 +327,13 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
         logging::log(
             app,
             turns.buffer(),
-            if will_retry { logging::LogLevel::Warn } else { logging::LogLevel::Error },
+            // CVL-FR-HFRL: a failed compaction call does not end the turn, so it
+            // is a `WARN` too.
+            if will_retry || compaction {
+                logging::LogLevel::Warn
+            } else {
+                logging::LogLevel::Error
+            },
             // CVL-FR-28: `ai` and `backend` together, as every record a turn
             // emits carries — and `remote` besides, because an attempt at
             // reaching a provider is exactly what that domain is for. A reader
@@ -337,6 +349,9 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 "provider" => &endpoint.provider,
                 "model" => model_label,
                 "modelCall" => model_calls,
+                // CVL-FR-CSLX: a compaction call has the ordinal of the call it
+                // comes before, so this field tells the two apart.
+                "compaction" => compaction,
                 "attempt" => attempt,
                 "maxAttempts" => policy.max_attempts,
                 // CVL-FR-21: the normalized class, and — where the provider

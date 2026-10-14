@@ -4,7 +4,7 @@
  * (`DRP-drafts-panel.md` DRP-FR-07, DRP-FR-08, DRP-FR-TQUB, DRP-FR-MZEA).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const invokeMock = vi.fn();
@@ -17,6 +17,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 import { draftRow, flat, renderPanel } from "../test/draftsPanelFixtures";
 import { resetPanelReveals } from "../state/panelReveal";
+import { selectorValue } from "../test/selectors";
 import type { DraftListPublication, DraftStatus, DraftSummary } from "../types";
 
 /** Four hours and one minute ago, so the relative text is `4h ago`. */
@@ -170,6 +171,19 @@ describe("Filter positions with a legacy published draft (DRP-FR-07, DRP-FR-08)"
     renderPanel({ filter: "graduated" });
     const graduated = await waitFor(() => draftRow("graduated-draft"));
     expect(within(graduated).getByTestId("draft-graduated-marker")).toHaveTextContent("Graduated");
+  });
+
+  it("DRP-FR-34: a reveal of a legacy published draft keeps the active position", async () => {
+    drafts = mixed();
+    const { revealDraft } = renderPanel({ filter: "active" });
+    await waitFor(() => draftRow("published-draft"));
+
+    act(() => revealDraft("d-pub"));
+    await waitFor(() =>
+      expect(draftRow("published-draft")).toHaveAttribute("aria-selected", "true"),
+    );
+    // The active position already admits the row, so nothing is relaxed.
+    expect(selectorValue("Draft status")).toBe("active");
   });
 
   it("DRP-FR-07: the all-drafts position admits every status", async () => {

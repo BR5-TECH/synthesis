@@ -51,6 +51,7 @@ import {
   isWithin,
   itemKey,
   ROOT,
+  statusAdmits,
   toMatchMap,
   type DraftMatches,
   type MenuAnchor,
@@ -454,17 +455,7 @@ export function DraftsPanel({
    */
   const admitsDraft = useCallback(
     (draft: DraftSummary) =>
-      // DRP-FR-07: the **graduated** position admits `graduated` alone, and
-      // the **active** position admits the legacy `published` too: publication
-      // to GitHub leaves a draft in the author's working view. **All drafts**
-      // admits everything.
-      // DRP-FR-YVXS: the **active** position admits a GitHub-shadow draft
-      // whose status is `github_shadow`; one that reports `graduated` falls in
-      // the graduated position by its own status.
-      (panel.filter === "all" ||
-        draft.status === panel.filter ||
-        (panel.filter === "active" &&
-          (draft.status === "published" || draft.status === "github_shadow"))) &&
+      statusAdmits(panel.filter, draft.status) &&
       (matches === null || matches.has(draft.id)),
     [panel.filter, matches],
   );
@@ -528,8 +519,7 @@ export function DraftsPanel({
     // DRP-FR-34: relax only what would actually hide the row. The status filter
     // moves to **all drafts** rather than to the position naming this draft's
     // own status, so nothing else leaves the tree to make room for it.
-    if (panel.filter !== "all" && draft.status !== panel.filter)
-      panel.setFilter("all");
+    if (!statusAdmits(panel.filter, draft.status)) panel.setFilter("all");
     if (matches !== null && !matches.has(draft.id)) panel.setText("");
 
     const key = `draft:${draft.id}`;

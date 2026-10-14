@@ -318,6 +318,22 @@ impl GraduationInterruptionReason {
     }
 }
 
+/// GRD-FR-SKLO: the reason a run rests on its total time limit.
+pub const REST_TOTAL_TIME_LIMIT: &str = "total_time_limit";
+
+/// GRD-FR-SKLO: a run at rest on its total time limit, with the limit it
+/// rested under and the time it used.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraduationRest {
+    /// `total_time_limit`.
+    pub reason: String,
+    /// RFC 3339 UTC.
+    pub at: String,
+    pub limit_ms: u64,
+    pub used_ms: u64,
+}
+
 /// GRD-FR-XVUD: why an interrupted run stopped and what it waits for.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -569,6 +585,14 @@ pub struct GraduationRun {
     pub work_turns: u32,
     #[serde(default)]
     pub review_turns: u32,
+    /// GRD-FR-UTTX: the used total time, in milliseconds: the execution time
+    /// of every turn this run dispatched. A record written before this field
+    /// existed reads as zero.
+    #[serde(default)]
+    pub turn_time_used_ms: u64,
+    /// GRD-FR-SKLO: why the run rests on its total time limit, where it does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rest: Option<GraduationRest>,
     #[serde(default)]
     pub checkpoint: GraduationCheckpoint,
     /// GRD-FR-OSCG / GRS-FR-CGSP: how far each of the run's two log streams
@@ -705,6 +729,8 @@ impl GraduationRun {
             archived_at: None,
             work_turns: 0,
             review_turns: 0,
+            turn_time_used_ms: 0,
+            rest: None,
             logs: crate::graduation::logs::GraduationLogIndexes::default(),
             checkpoint: GraduationCheckpoint::default(),
             observability: observability::GraduationObservability::default(),

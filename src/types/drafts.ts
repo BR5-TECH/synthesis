@@ -24,10 +24,11 @@ import { DraftGraduation } from "./graduation";
  * precondition on the status, because activating it is itself the author's
  * judgement that the specification is finished (NAW-FR-17).
  *
- * `published` is set by a successful GitHub publication over an `active` draft
- * and by nothing else (DRS-FR-VKQO). It is **not** read-only: a published draft
- * edits, renames, graduates, and archives exactly as an active one does
- * (DRS-FR-OGZC, NAW-FR-GKBP).
+ * `published` is a legacy position that no operation sets (DRS-FR-VKQO). A
+ * draft stored with it reads `published` until its next save, rename, move, or
+ * archive. It is **not** read-only: such a draft edits, renames, graduates,
+ * and archives exactly as an active one does (DRS-FR-OGZC). Whether a draft
+ * was published comes from its publication store, never from this status.
  */
 export type DraftStatus =
   | "active"
@@ -268,6 +269,23 @@ export interface DraftSummary {
   graduation?: DraftGraduation | null;
   /** DRS-FR-XDWS: present on a GitHub-shadow draft alone (DRP-FR-ZRJJ). */
   githubIssue?: GithubIssueLink | null;
+  /**
+   * DRS-FR-PXHW: the newest record of the draft's publication store, on every
+   * status, or absent where the draft holds none. The Drafts panel shows its
+   * publication marker from this (DRP-FR-TQUB).
+   */
+  publication?: DraftListPublication | null;
+}
+
+/** DRS-FR-PXHW: the newest publication record, as a `list_drafts` row carries it. */
+export interface DraftListPublication {
+  repositoryHost: string;
+  repositoryOwner: string;
+  repositoryName: string;
+  issueNumber: number;
+  issueUrl: string;
+  /** RFC 3339 UTC. */
+  publishedAt: string;
 }
 
 /**

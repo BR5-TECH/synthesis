@@ -39,7 +39,8 @@ export type PublicationErrorCode =
   | "milestone_unavailable"
   | "invalid_publication_choice"
   | "sub_issue_link_failed"
-  | "invalid_publication_settings";
+  | "invalid_publication_settings"
+  | "github_project_not_selected";
 
 /** GHP-FR-AZPF: how a sub-issue's milestone is resolved. */
 export type MilestonePolicy =
@@ -117,6 +118,32 @@ export interface PublicationMetadata {
   subIssueType: { name: string; resolved: string | null };
   /** GHP-FR-AFEX: null where no root issue Type is stored. */
   rootIssueType: { name: string; resolved: string | null } | null;
+}
+
+/** GHP-FR-SIMK: how one refresh of the metadata cache ended. */
+export type PublicationMetadataRefreshOutcome = "changed" | "unchanged" | "failed";
+
+/** GHP-FR-SIMK: the answer of `"refresh publication metadata"`. */
+export interface PublicationMetadataRefresh {
+  outcome: PublicationMetadataRefreshOutcome;
+  errorCode: string | null;
+  error: string | null;
+  /** The cached remote, or null while the cache is empty. */
+  remoteName: string | null;
+  metadata: PublicationMetadata | null;
+}
+
+/** GHP-FR-JIAU: the payload of `"publication metadata changed"`. */
+export interface PublicationMetadataCacheChanged {
+  /** The cached remote, or null where the cache was emptied. */
+  remoteName: string | null;
+  metadata: PublicationMetadata | null;
+}
+
+/** GHP-FR-ISJI: the payload of `"publication metadata startup failed"`. */
+export interface PublicationMetadataStartupFailed {
+  errorCode: string;
+  error: string;
 }
 
 /**

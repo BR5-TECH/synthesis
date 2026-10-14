@@ -130,6 +130,8 @@ pub fn run() {
         // relaunch, and protecting nothing afterwards (DAS-FR-13).
         .manage(draft_assets::DraftAssetSweeper::default())
         .manage(github_publication::GithubIssuesSeam::default())
+        // GHP-FR-IQTK: the metadata cache that every window shares.
+        .manage(github_publication::metadata_refresh::PublicationMetadataCache::default())
         // GPP-FR-DATH / GPP-FR-RAQP: the polling session and the per-issue
         // claim guards, and the seam the GitHub Projects client sits behind.
         .manage(github_polling::GithubPollingState::default())
@@ -243,6 +245,9 @@ pub fn run() {
             // whether or not a Dashboard tab exists anywhere, and a project
             // opened later is picked up by the next tick without a restart.
             dashboard::start_refresh_timer(app.handle());
+            // GHP-FR-JDMU: a change of the project token refreshes the
+            // publication metadata cache.
+            github_publication::metadata_refresh::listen_for_token_changes(app.handle());
             Ok(())
         })
         // SNV-FR-24 / SNV-FR-25 / SNV-FR-26: route menu activations. New folder,
@@ -322,6 +327,9 @@ pub fn run() {
             github_publication::list_publication_remotes,
             github_publication::publish_draft_to_github,
             github_publication::load_publication_metadata,
+            github_publication::metadata_refresh::get_publication_metadata_cache,
+            github_publication::metadata_refresh::refresh_publication_metadata,
+            github_publication::metadata_refresh::take_publication_metadata_startup_failure,
             github_publication::get_github_publication_settings,
             github_publication::set_github_publication_settings,
             github_publication::list_github_issue_types,
@@ -513,6 +521,8 @@ pub fn run() {
             ai_api::set_ai_api_model,
             ai_api::set_ai_api_reasoning,
             ai_api::set_ai_api_turn_timeout,
+            ai_api::set_ai_api_max_output_tokens,
+            ai_api::set_ai_api_max_context_size,
             ai_api::set_active_ai_api_integration,
             ai_api::clear_ai_api_integration,
             ai_api::get_project_ai_api_integration,

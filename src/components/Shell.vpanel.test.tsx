@@ -123,9 +123,8 @@ describe("DRP-FR-07: the Drafts surface opens in the active position", () => {
     expect(selectorNames("Draft status")).toEqual([
       "Active",
       "Archived",
-      // DRP-FR-07: the position admits `graduated` and `published` alike, and
-      // its title says so.
-      "Graduated and published",
+      // DRP-FR-07: the position admits `graduated` alone, and its title says so.
+      "Graduated",
       "All drafts",
     ]);
     expect(

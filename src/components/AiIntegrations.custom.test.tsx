@@ -65,7 +65,7 @@ const GATEWAY_MODELS: ModelOption[] = [
 ];
 
 describe("the Custom tab's fields (AII-FR-06, AII-FR-08, AAP-FR-04)", () => {
-  it("AII-FR-06: labels the URL Gateway URL, leaves it empty, and says host or base URL without /v1", async () => {
+  it("AII-FR-06: labels the URL Gateway URL, leaves it empty, and says /v1 is added to the host and optional path prefix", async () => {
     backend();
     render(<BothLevels />);
     const user = userEvent.setup();
@@ -73,7 +73,7 @@ describe("the Custom tab's fields (AII-FR-06, AII-FR-08, AAP-FR-04)", () => {
 
     expect(await apiLevel().findByLabelText("Gateway URL")).toHaveValue("");
     expect(apiLevel().getByTestId("ai-api-url-hint")).toHaveTextContent(
-      "Host or base URL, without /v1.",
+      "Host and any path prefix. /v1 is added to it.",
     );
     expect(apiLevel().queryByLabelText("Base URL")).not.toBeInTheDocument();
   });
@@ -89,6 +89,8 @@ describe("the Custom tab's fields (AII-FR-06, AII-FR-08, AAP-FR-04)", () => {
     const note = apiLevel().getByTestId("ai-api-key-requirement");
     expect(note).toHaveTextContent(/required/i);
     expect(note).toHaveTextContent(/bearer token/i);
+    // AII-FR-08: a local host such as Ollama accepts any value.
+    expect(note).toHaveTextContent(/local host such as Ollama accepts any value/i);
     expect(note).not.toHaveTextContent(/optional/i);
     expect(apiLevel().getByTestId("ai-api-panel-custom")).not.toHaveTextContent(
       /optional/i,
@@ -302,35 +304,45 @@ describe("route-aware model discovery (AII-FR-12, AAP-FR-RTMZ)", () => {
   });
 });
 
-describe("no reasoning for Custom (AII-FR-41)", () => {
-  it("AII-FR-41: renders no reasoning selector for any Custom model", async () => {
+describe("reasoning for Custom (AII-FR-41, AII-FR-XGIM)", () => {
+  it("AII-FR-41, AII-FR-XGIM: renders the reasoning effort with the fixed levels for a selected Custom model", async () => {
     backend(customWith(GATEWAY_MODELS, "gw-both"));
     render(<BothLevels />);
     const user = userEvent.setup();
     await openApiTab(user, apiLevel(), /Custom/);
     await apiLevel().findByRole("combobox", { name: "Model" });
 
-    expect(apiLevel().queryByRole("combobox", { name: "Reasoning" })).not.toBeInTheDocument();
-    expect(apiLevel().queryByTestId("ai-api-reasoning")).not.toBeInTheDocument();
+    expect(await optionsOf(user, apiLevel(), "Reasoning effort")).toEqual([
+      "Model default",
+      "none",
+      "low",
+      "medium",
+      "high",
+    ]);
     expect(apiLevel().queryByTestId("ai-api-reasoning-stale")).not.toBeInTheDocument();
   });
 
-  it("AII-FR-41: renders none even if a Custom record were to carry reasoning", async () => {
-    // Only the OpenRouter tab renders the selector, whatever a record holds.
+  it("AII-FR-41, AII-FR-XGIM: renders the reasoning effort with no model selected, whatever a model record declares", async () => {
     const withReasoning: ModelOption[] = [
       {
         id: "gw-r",
         label: "Gateway R",
-        reasoning: { mandatory: false, supportedEfforts: ["high", "low"] },
+        reasoning: { mandatory: true, supportedEfforts: ["xhigh"] },
       },
     ];
-    backend(customWith(withReasoning, "gw-r"));
+    backend(customWith(withReasoning, null));
     render(<BothLevels />);
     const user = userEvent.setup();
     await openApiTab(user, apiLevel(), /Custom/);
     await apiLevel().findByRole("combobox", { name: "Model" });
 
-    expect(apiLevel().queryByRole("combobox", { name: "Reasoning" })).not.toBeInTheDocument();
+    expect(await optionsOf(user, apiLevel(), "Reasoning effort")).toEqual([
+      "Model default",
+      "none",
+      "low",
+      "medium",
+      "high",
+    ]);
   });
 });
 

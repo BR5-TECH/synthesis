@@ -11,6 +11,23 @@ pub fn list_drafts(
     let root = project.require_root()?;
     let (mut hierarchy, repaired) = list_drafts_reporting(&root);
     attach_graduation(&app, &mut hierarchy.drafts);
+    // DRS-FR-PXHW: a publication store that does not parse costs its row the
+    // publication marker and nothing else. Ids alone, for the reason below.
+    let unreadable: Vec<&str> = hierarchy
+        .drafts
+        .iter()
+        .filter(|d| d.publication_unreadable)
+        .map(|d| d.id.as_str())
+        .collect();
+    if !unreadable.is_empty() {
+        crate::logging::log_warn(
+            &app,
+            &crate::logging::BUFFER,
+            &[crate::logging::Domain::Backend],
+            "draft publication store unreadable",
+            crate::log_fields! { "drafts" => unreadable.len(), "ids" => unreadable.join(",") },
+        );
+    }
     // DRS-FR-37: a repair changes what the author sees — a folder they never
     // made stops being in their tree — so it is worth an explanation in the one
     // place they would look for one. Silent on the ordinary path, where nothing

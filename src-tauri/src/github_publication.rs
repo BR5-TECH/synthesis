@@ -40,6 +40,8 @@ use crate::project::ProjectState;
 
 pub mod client;
 pub mod flow;
+pub mod metadata_cache;
+pub mod metadata_refresh;
 pub mod records;
 pub mod remotes;
 pub mod store;
@@ -417,7 +419,12 @@ fn publish_draft_to_github_impl<R: tauri::Runtime>(
     )
     .map_err(|code| fail(app, &draft_id, code))?;
 
+    let previous = crate::project_settings::load_publication_remote_selection_from(&root);
     flow::persist_choice(&root, &remote, persist_remote)?;
+    // GHP-FR-JDMU: a changed persisted remote refreshes the metadata cache.
+    if previous != crate::project_settings::load_publication_remote_selection_from(&root) {
+        metadata_refresh::invalidate(app, "publication_remote");
+    }
     let attempt = flow::open_attempt_with(
         &root,
         &draft_id,
@@ -444,7 +451,7 @@ fn publish_draft_to_github_impl<R: tauri::Runtime>(
     announce(app, &draft_id);
 
     let outcome = flow::publish_with_attempt(&root, &draft_id, &attempt, secret, client.as_ref());
-    settle(app, &root, &draft_id, status, outcome)
+    settle(app, &draft_id, outcome)
 }
 
 /// GHP-FR-MDLD: everything the publication chooser renders, read-only.
@@ -558,6 +565,7 @@ fn set_github_publication_settings_impl<R: tauri::Runtime>(
 ) -> Result<GithubPublicationSettings, String> {
     let project = app.state::<ProjectState>();
     let root = require_root(app, &project)?;
+    let previous = crate::project_settings::load_github_publication_settings_from(&root).ok();
     let settings = flow::validated_settings(
         parent_issue_types,
         sub_issue_type,
@@ -590,6 +598,10 @@ fn set_github_publication_settings_impl<R: tauri::Runtime>(
             "root_typed" => settings.root_issue_type.is_some(),
         },
     );
+    // GHP-FR-JDMU: the parent issue Types decide the parent list.
+    if previous.is_none_or(|p| p.parent_issue_types != settings.parent_issue_types) {
+        metadata_refresh::invalidate(app, "parent_issue_types");
+    }
     Ok(settings)
 }
 
@@ -642,7 +654,7 @@ fn retry_draft_publication_impl<R: tauri::Runtime>(
     let project = app.state::<ProjectState>();
     let root = require_root(app, &project)?;
     let project_key = project.slot_key();
-    let status = require_publishable_draft(app, &root, &draft_id)?;
+    require_publishable_draft(app, &root, &draft_id)?;
     require_no_local_assets(app, &root, &draft_id)?;
     let Some(attempt) = store::read_store(&root, &draft_id)?.attempt else {
         return Err(fail(app, &draft_id, ERR_NO_ATTEMPT.to_string()));
@@ -658,7 +670,7 @@ fn retry_draft_publication_impl<R: tauri::Runtime>(
     let secret = &token.secret;
     let client = issues_client(app, &token.host);
     let outcome = flow::publish_with_attempt(&root, &draft_id, &attempt, secret, client.as_ref());
-    settle(app, &root, &draft_id, status, outcome)
+    settle(app, &draft_id, outcome)
 }
 
 /// GHP-FR-YPGL: the author's answer to a recovery choice.
@@ -679,7 +691,7 @@ fn resolve_draft_publication_conflict_impl<R: tauri::Runtime>(
     let project = app.state::<ProjectState>();
     let root = require_root(app, &project)?;
     let project_key = project.slot_key();
-    let status = require_publishable_draft(app, &root, &draft_id)?;
+    require_publishable_draft(app, &root, &draft_id)?;
     require_no_local_assets(app, &root, &draft_id)?;
     let Some(attempt) = store::read_store(&root, &draft_id)?.attempt else {
         return Err(fail(app, &draft_id, ERR_NO_ATTEMPT.to_string()));
@@ -730,7 +742,7 @@ fn resolve_draft_publication_conflict_impl<R: tauri::Runtime>(
             flow::publish_with_attempt(&root, &draft_id, &fresh, secret, client.as_ref())
         }
     };
-    settle(app, &root, &draft_id, status, outcome)
+    settle(app, &draft_id, outcome)
 }
 
 /// GHP-FR-EBSA: cancelling the choice leaves the attempt recoverable.
@@ -867,14 +879,12 @@ fn fail<R: tauri::Runtime>(app: &tauri::AppHandle<R>, draft_id: &str, code: Stri
 
 /// GHP-FR-BSYH / GHP-FR-VNCS: what happens after the GitHub calls settle.
 ///
-/// A success over an `active` draft sets `published` **only now**, once the
-/// issue exists; a failure keeps the previous status and leaves the attempt
-/// standing, so the retry path of GHP-FR-OWLB still applies.
+/// A success writes no draft status: the record is already appended to the
+/// publication store, and the draft keeps the status it had. A failure leaves
+/// the attempt standing, so the retry path of GHP-FR-OWLB still applies.
 fn settle<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    root: &crate::fs::RootFs,
     draft_id: &str,
-    status: crate::drafts::DraftStatus,
     outcome: Result<PublicationOutcome, String>,
 ) -> Result<PublicationOutcome, String> {
     // The repository has just been written to, or has just refused a write, so
@@ -883,25 +893,6 @@ fn settle<R: tauri::Runtime>(
     remotes::forget_probes();
     match outcome {
         Ok(PublicationOutcome::Published { record }) => {
-            if status == crate::drafts::DraftStatus::Active {
-                // A status write that fails does not undo a published issue:
-                // the record is already appended and the issue already exists,
-                // so the failure is reported and the draft keeps its status.
-                if crate::drafts::set_draft_published(root, draft_id).is_err() {
-                    logging::log_warn(
-                        app,
-                        &logging::BUFFER,
-                        &[Domain::Backend],
-                        "draft status not advanced after publication",
-                        // The draft rather than the message: a store error
-                        // phrases itself with a filesystem path, and the record
-                        // this names is what a reader needs to look at.
-                        log_fields! { "draft_id" => draft_id },
-                    );
-                } else {
-                    crate::drafts::announce_drafts_changed(app, draft_id);
-                }
-            }
             logging::log_info(
                 app,
                 &logging::BUFFER,

@@ -1,12 +1,11 @@
 //! The three shared loop settings (PSS-FR-TQMV, PSS-FR-HDBN, PSS-FR-WPKS).
 //!
 //! One bound each for how long a turn may run, how long one call to a model may
-//! run, and how much a bounded loop may spend before it stops for the author.
-//! Both agent loops read them: `../../../specifications/ai/GRL-graduation-loop.md`
-//! counts passes against the budget and
-//! `../../../specifications/ai/CVL-conversation-loop.md` counts the physical
-//! attempts of one provider call, each keeping its own meaning for the one
-//! number.
+//! run, and how many physical attempts one provider call may spend. The
+//! conversation loop reads them
+//! (`../../../specifications/ai/CVL-conversation-loop.md`). The graduation loop
+//! reads none of them: it has its own settings in [`super::graduation_loop`]
+//! (`GRL-graduation-loop.md` GRL-FR-NUDC).
 //!
 //! Split out of the module root, which had reached a thousand lines. What the
 //! store holds and what a read returns are unchanged.

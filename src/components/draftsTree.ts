@@ -8,7 +8,7 @@
  * drawn — and because a rule about names is far easier to read, and to test,
  * away from the surface that enforces it.
  */
-import type { DraftMatch, DraftsStatusFilter } from "../types";
+import type { DraftMatch, DraftStatus, DraftsStatusFilter } from "../types";
 import type { SelectorPosition } from "./SelectorRow";
 
 /** DRP-FR-07: the three positions of the status filter. */
@@ -29,12 +29,24 @@ export const STATUS_POSITIONS: SelectorPosition<DraftsStatusFilter>[] = [
   { value: "archived", tag: "Archived", title: "Archived" },
   // DRP-FR-07: `graduated` is a position of its own rather than a kind of
   // archive — a draft a graduation has already turned into specifications is
-  // neither being worked on nor retired (DRS-FR-20). It admits a `published`
-  // draft too: both are drafts whose work has left the panel for somewhere
-  // else, and each row still states which of the two it is (DRP-FR-08).
-  { value: "graduated", tag: "Graduated", title: "Graduated and published" },
+  // neither being worked on nor retired (DRS-FR-20). It admits `graduated`
+  // alone: a publication to GitHub leaves a draft in the active position.
+  { value: "graduated", tag: "Graduated", title: "Graduated" },
   { value: "all", tag: "All", title: "All drafts" },
 ];
+
+/**
+ * DRP-FR-07: whether a status filter position admits a draft of this status.
+ * **All drafts** admits everything, and **graduated** admits `graduated`
+ * alone. **Active** also admits the legacy `published`, because a publication
+ * to GitHub leaves a draft in the author's working view, and `github_shadow`
+ * (DRP-FR-YVXS). A shadow draft that reports `graduated` falls in the
+ * graduated position by its own status.
+ */
+export function statusAdmits(filter: DraftFilter, status: DraftStatus): boolean {
+  if (filter === "all" || status === filter) return true;
+  return filter === "active" && (status === "published" || status === "github_shadow");
+}
 
 /**
  * DRP non-functional requirements: how long the text filter rests after the last

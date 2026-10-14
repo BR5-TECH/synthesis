@@ -66,7 +66,7 @@ pub(super) fn stop_of_execution(execution: &AgentExecution, limit_ms: u64) -> Op
         ProcessOutcome::Timeout => (
             GraduationInterruptionReason::ExecutionTimeout,
             format!(
-                "The agent turn ran for {} and reached the execution time limit of {}, so the application stopped it.",
+                "The agent turn ran for {} and reached the stage time limit of {}, so the application stopped it.",
                 human_duration(execution.duration_ms),
                 human_duration(limit_ms)
             ),
@@ -334,7 +334,7 @@ mod tests {
         assert_eq!(stop.reason, GraduationInterruptionReason::ExecutionTimeout);
         assert_eq!(
             stop.detail,
-            "The agent turn ran for 2 h and reached the execution time limit of 2 h, so the application stopped it."
+            "The agent turn ran for 2 h and reached the stage time limit of 2 h, so the application stopped it."
         );
         assert_eq!(stop.facts.process_outcome, Some("timeout"));
         assert_eq!(stop.facts.duration_ms, Some(TWO_HOURS + 2_000));

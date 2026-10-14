@@ -146,6 +146,10 @@ fn project_config_serialises_camel_case_with_lowercase_conventions() {
             "executionTimeoutMs": null,
             "providerCallDeadlineMs": null,
             "retryBudget": null,
+            // PSS-FR-YDCA: the three graduation loop settings ride there too.
+            "graduationPassBudget": null,
+            "graduationStageTimeLimitMs": null,
+            "graduationTotalTimeLimitMs": null,
         })
     );
     // And it deserialises from the frontend shape, and from an empty object.

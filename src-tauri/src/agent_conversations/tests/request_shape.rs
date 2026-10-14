@@ -255,6 +255,7 @@ fn a_discussion_carries_the_other_prompt() {
     }
 }
 
+// CVL-FR-02, CVL-FR-ZLSM
 #[test]
 fn the_prompt_is_compiled_in_and_nothing_can_reach_it() {
     // CVL-FR-02. `include_str!` is resolved at build time, so a
@@ -312,8 +313,15 @@ fn the_prompt_is_compiled_in_and_nothing_can_reach_it() {
     // `crate::graduation::driver` on its own terms (GRL-FR-GADT) and reached by no
     // conversational turn. Subdirectories are not `.md` and so do not appear
     // here, which is what stops a second loop making this assertion fail.
+    // CVL-FR-02, CVL-FR-ZLSM: the compaction prompt is the fifth, compiled
+    // into the compaction module on the same terms.
+    expected.push("compact.md".to_string());
     expected.sort();
     assert_eq!(on_disk, expected, "the prompts directory holds something else");
+    let compaction = include_str!("../compaction.rs");
+    assert_eq!(compaction.matches("prompts/compact.md").count(), 1);
+    assert!(compaction.contains(r#"include_str!("../../../resources/prompts/compact.md")"#));
+    assert!(!crate::agent_conversations::compaction::COMPACT_PROMPT_TEMPLATE.trim().is_empty());
 
     for name in names {
         assert_eq!(source.matches(name).count(), 1, "{name} is named once, inside the include",);

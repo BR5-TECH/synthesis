@@ -185,12 +185,13 @@ async fn execute<R: tauri::Runtime>(
             // checkout is what this application reads. No verdict shape applies.
             result_contract: None,
             resume: None,
-            // GRL-FR-KWNP: the semantic rebase turn is a graduation dispatch
-            // like any other, so its bounds are read from the project's
-            // settings immediately before it is made.
+            // GRL-FR-KWNP / GRB-FR-VTLQ: the semantic rebase turn is bounded
+            // by the stage time limit alone, read from the project's settings
+            // immediately before it is made. It belongs to no run, so no total
+            // time applies to it.
             execution: ExecutionControls {
                 cancellation: Cancellation::CallerControlled,
-                timeout_ms: LoopSettings::read(app).execution_timeout_ms,
+                timeout_ms: LoopSettings::read(app).stage_time_limit_ms,
             },
         },
         // GRB-FR-TOOU: the mirrors, read-only, at the one container root the

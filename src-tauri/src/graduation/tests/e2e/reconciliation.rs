@@ -326,7 +326,7 @@ fn an_update_pinned_to_a_base_revision_the_branch_has_left_writes_nothing() {
 #[test]
 fn a_setting_changed_during_one_semantic_turn_reaches_the_next() {
     Scenario::named("settings per semantic turn")
-        .with_setting(Setting::ExecutionTimeoutMs, 60_000)
+        .with_setting(Setting::StageTimeLimitMs, 1_800_000)
         .work_turn(Script::reports_success().writes("README.md", "STREAM-SIDE\n"))
         .review_turn(Script::answers_ready("The work answers the prompt."))
         .run()
@@ -337,12 +337,30 @@ fn a_setting_changed_during_one_semantic_turn_reaches_the_next() {
         .updated(
             StreamUpdateStrategy::MergeSource,
             vec![
-                Script::reports_success().changing(Setting::ExecutionTimeoutMs, 120_000),
+                Script::reports_success().changing(Setting::StageTimeLimitMs, 3_600_000),
                 settling(),
             ],
         )
         .expect_update_state(StreamUpdateState::Updated)
         .expect_dispatch_count(2)
-        .expect_dispatch(0, |d| d.semantic_turn().execution_timeout_ms(60_000))
-        .expect_dispatch(1, |d| d.semantic_turn().execution_timeout_ms(120_000));
+        .expect_dispatch(0, |d| d.semantic_turn().execution_timeout_ms(1_800_000))
+        .expect_dispatch(1, |d| d.semantic_turn().execution_timeout_ms(3_600_000));
+}
+
+// GTE-FR-KAZX / GRB-FR-VTLQ, GRL-FR-KWNP: the semantic rebase turn belongs to
+// no run, so it runs under the stage time limit alone, even where the total
+// time limit is smaller.
+#[test]
+fn a_semantic_turn_runs_under_the_stage_limit_alone() {
+    Scenario::named("semantic turn under the stage limit")
+        .with_setting(Setting::StageTimeLimitMs, 3_600_000)
+        .with_setting(Setting::TotalTimeLimitMs, 1_800_000)
+        .work_turn(Script::reports_success().writes("README.md", "STREAM-SIDE\n"))
+        .review_turn(Script::answers_ready("The work answers the prompt."))
+        .run()
+        .committing_on_the_base(".gitignore", "target/\n.synthesis/\n")
+        .committing_on_the_base("README.md", "BASE-SIDE\n")
+        .updated(StreamUpdateStrategy::MergeSource, vec![settling()])
+        .expect_update_state(StreamUpdateState::Updated)
+        .expect_dispatch(0, |d| d.semantic_turn().execution_timeout_ms(3_600_000));
 }

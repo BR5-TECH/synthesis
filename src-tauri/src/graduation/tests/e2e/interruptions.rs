@@ -207,7 +207,7 @@ fn a_timeout_after_an_earlier_pause_is_not_called_a_pause() {
         .continued(vec![Script::times_out().writes("src/panel.ts", "2\n")])
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("execution_timeout")
-        .expect_interruption_detail_contains("reached the execution time limit")
+        .expect_interruption_detail_contains("reached the stage time limit")
         .expect_interrupted_records(&[("author_pause", "info"), ("execution_timeout", "error")])
         .expect_commits(2)
         .expect_stream_held();
@@ -219,7 +219,7 @@ fn a_timeout_after_an_earlier_pause_is_not_called_a_pause() {
 #[test]
 fn a_pause_that_races_the_time_limit_reads_as_the_pause() {
     Scenario::named("pause racing the time limit")
-        .with_setting(Setting::ExecutionTimeoutMs, 1_000)
+        .with_setting(Setting::StageTimeLimitMs, 1_800_000)
         .work_turn(
             Script::times_out().writes("src/panel.ts", "1\n").pausing_the_run().finishing_anyway(),
         )
@@ -234,7 +234,7 @@ fn a_pause_that_races_the_time_limit_reads_as_the_pause() {
             "info",
             &[
                 ("process_outcome", serde_json::json!("timeout")),
-                ("limit_ms", serde_json::json!(1_000)),
+                ("limit_ms", serde_json::json!(1_800_000)),
                 ("duration_ms", serde_json::json!(0)),
             ],
         )
@@ -292,19 +292,19 @@ fn a_timeout_whose_stop_cannot_be_logged_rests_on_the_log_failure() {
 #[test]
 fn a_timeout_names_the_limit_it_was_dispatched_under() {
     Scenario::named("limit changed while the turn ran")
-        .with_setting(Setting::ExecutionTimeoutMs, 1_000)
+        .with_setting(Setting::StageTimeLimitMs, 1_800_000)
         .work_turn(
             Script::times_out()
                 .writes("src/panel.ts", "1\n")
-                .changing(Setting::ExecutionTimeoutMs, 5_000),
+                .changing(Setting::StageTimeLimitMs, 3_600_000),
         )
         .run()
         .expect_interruption("execution_timeout")
-        .expect_interruption_detail_contains("execution time limit of 1 s")
+        .expect_interruption_detail_contains("stage time limit of 30 min")
         .expect_interrupted_record(
             "execution_timeout",
             "error",
-            &[("limit_ms", serde_json::json!(1_000))],
+            &[("limit_ms", serde_json::json!(1_800_000))],
         );
 }
 

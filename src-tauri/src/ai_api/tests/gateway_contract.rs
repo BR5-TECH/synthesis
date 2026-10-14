@@ -185,20 +185,25 @@ fn mode_is_stored_listed_and_returned_by_both_read_paths() {
     assert!(!text.contains(SECRET));
 }
 
-// AAP-FR-25: a Custom model declares no reasoning, so an agent cannot ask for it.
+// AAP-FR-25, AAP-FR-WSIC: the gateway model list declares no reasoning, and
+// every Custom model offers the fixed set, so an agent may ask for a level of
+// it and nothing else.
 #[test]
-fn a_custom_model_offers_no_reasoning() {
+fn a_custom_model_offers_the_fixed_reasoning_set_only() {
     let h = gateway_harness();
     verify_gateway(&h, "https://gw.example.com").unwrap();
-    assert!(h.store.load_ai_api_registry().unwrap().0[0]
-        .models
-        .iter()
-        .all(|m| m.reasoning.is_none()));
+    set_active_impl(&h.store, &h.ai, "custom").unwrap();
+    let listed = list_integrations_impl(&h.store, &h.ai).unwrap();
+    assert!(find(&listed, "custom").models.iter().all(|m| m.reasoning.is_some()));
     assert_eq!(
         resolve_ai_api_endpoint(&h.store, &h.ai, "custom", "both", Some(ReasoningChoice::On))
             .unwrap_err(),
-        ERR_REASONING_UNSUPPORTED,
+        ERR_UNKNOWN_EFFORT,
     );
+    let effort = ReasoningChoice::Effort { effort: "high".into() };
+    let call =
+        resolve_ai_api_endpoint(&h.store, &h.ai, "custom", "both", Some(effort.clone())).unwrap();
+    assert_eq!(call.reasoning, Some(effort));
 }
 
 // AAP-FR-07, AAP-FR-08: the secret reaches no stored record, no listing, no

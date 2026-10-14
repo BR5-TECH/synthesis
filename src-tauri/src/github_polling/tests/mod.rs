@@ -24,6 +24,7 @@ mod client_parsing;
 mod enterprise_hosts;
 mod logging_and_secrets;
 mod polling_rules;
+mod publication_cache;
 mod session_rules;
 mod status_names;
 

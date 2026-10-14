@@ -3004,16 +3004,34 @@ const aiApis = [
   {
     provider: "custom",
     displayName: "Custom (OpenAI-compatible)",
-    baseUrl: null,
-    keyState: "unset",
-    maskedHint: null,
+    // A local Ollama host, so the Custom tab's local-model rows are visible:
+    // one model with detected values (AAP-FR-JQIJ) and one without.
+    baseUrl: "http://localhost:11434",
+    keyState: "set",
+    maskedHint: "llam",
     keyRequired: true,
-    state: "unconfigured",
-    verifiedAt: null,
-    models: [],
-    modelsOrigin: "catalog",
-    selectedModel: null,
+    state: "verified",
+    verifiedAt: "2026-10-14T09:00:00Z",
+    models: [
+      {
+        id: "qwen3:32b",
+        label: "qwen3:32b",
+        detectedContextSize: 40960,
+        detectedCapabilities: ["completion", "tools", "thinking"],
+        reasoning: { mandatory: false, supportedEfforts: ["none", "low", "medium", "high"] },
+      },
+      {
+        id: "plain-model",
+        label: "plain-model",
+        reasoning: { mandatory: false, supportedEfforts: ["none", "low", "medium", "high"] },
+      },
+    ],
+    modelsOrigin: "probed",
+    selectedModel: "qwen3:32b",
     selectedReasoning: null,
+    turnTimeoutMs: null,
+    maxOutputTokens: null,
+    maxContextSize: 32768,
     active: false,
   },
 ];
@@ -3832,6 +3850,9 @@ let projectConfig: {
   draftTemplate: string | null;
   graduationConcurrencyLimit: number | "unlimited";
   executionTimeoutMs: number | null;
+  graduationPassBudget: number | null;
+  graduationStageTimeLimitMs: number | null;
+  graduationTotalTimeLimitMs: number | null;
 } = {
   lineEndings: "lf",
   draftTemplate: null,
@@ -3847,7 +3868,38 @@ let projectConfig: {
     return seeded !== null && Number.isInteger(n) && n >= 1 ? n : 1;
   })(),
   executionTimeoutMs: null,
+  // PSS-FR-QBNE / PSS-FR-HVSM / PSS-FR-RKTW: the graduation loop settings.
+  // `null` is unset, which the Graduation sliders show as the default.
+  graduationPassBudget: null,
+  graduationStageTimeLimitMs: null,
+  graduationTotalTimeLimitMs: null,
 };
+/**
+ * PSS-FR-LFUZ: the check of one graduation loop setting in a save payload.
+ * Returns the typed error code for a value that is not valid, or null.
+ */
+function graduationLoopRefusal(patch: Record<string, unknown>): string | null {
+  const halfHour = 1_800_000;
+  const checks: [string, string, number, number, number][] = [
+    ["graduationPassBudget", "graduation_pass_budget_invalid", 1, 10, 1],
+    ["graduationStageTimeLimitMs", "graduation_stage_time_limit_invalid", halfHour, 96 * halfHour, halfHour],
+    ["graduationTotalTimeLimitMs", "graduation_total_time_limit_invalid", halfHour, 192 * halfHour, halfHour],
+  ];
+  for (const [key, code, min, max, step] of checks) {
+    const value = patch[key];
+    if (value === undefined || value === null) continue;
+    if (
+      typeof value !== "number" ||
+      !Number.isInteger(value) ||
+      value < min ||
+      value > max ||
+      value % step !== 0
+    ) {
+      return `${code}: ${key} is not valid`;
+    }
+  }
+  return null;
+}
 let searchSeq = 0;
 /**
  * SET-FR-QKKQ: make `save_project_config` fail, so the Graduation section's
@@ -6082,6 +6134,27 @@ graduationRuns.push(
       capturedAt: "2026-09-05T15:00:00Z",
     },
   }),
+  // GRU-FR-WKTL / GRU-FR-TTLR: a run at rest on its total time limit. It
+  // offers Continue and routes to the Total time per run slider.
+  makeStreamRun({
+    id: "g-27",
+    draftId: "d-27",
+    state: "awaiting_author",
+    turnTimeUsedMs: 18_000_000,
+    rest: {
+      reason: "total_time_limit",
+      at: "2026-09-06T12:00:00Z",
+      limitMs: 18_000_000,
+      usedMs: 18_000_000,
+    },
+    input: {
+      draftId: "d-27",
+      draftName: "Long refactor run",
+      prompt: "Split the settings store into modules.",
+      promptChecksum: "sha-p27",
+      capturedAt: "2026-09-05T16:00:00Z",
+    },
+  }),
 );
 
 /**
@@ -7047,6 +7120,64 @@ function publicationSettle(draftId: string, issueNumber?: number): any {
 /** CPR-FR-ODTB: true once `push_branch` put the head branch on the remote. */
 let pullRequestHeadPushed = false;
 
+/** GHP-FR-MDLD: the chooser's lists, the same for the read and the cache. */
+function publicationMetadataMock() {
+  const loaded = (items: unknown[]) => ({
+    state: "loaded",
+    items,
+    errorCode: null,
+    error: null,
+  });
+  const failed = (errorCode: string, error: string) => ({
+    state: "failed",
+    items: [],
+    errorCode,
+    error,
+  });
+  return {
+    repositoryOwner: "acme",
+    repositoryName: "acme-app",
+    settings: publicationSettings,
+    parents: harnessFlag("publicationParentsFail")
+      ? failed("parent_issues_unreadable", "The open issues of this repository could not be read.")
+      : loaded([
+          {
+            number: 412,
+            title: "Window chrome",
+            issueType: "Feature",
+            url: "https://github.com/acme/acme-app/issues/412",
+            milestone: { number: 7, title: "v1.2" },
+          },
+          {
+            number: 398,
+            title: "Release pipeline",
+            issueType: "Feature",
+            url: "https://github.com/acme/acme-app/issues/398",
+            milestone: null,
+          },
+          ...(harnessFlag("publicationManyParents")
+            ? Array.from({ length: 60 }, (_, i) => ({
+                number: 500 + i,
+                title: `Parent feature ${i}`,
+                issueType: "Feature",
+                url: `https://github.com/acme/acme-app/issues/${500 + i}`,
+                milestone: i % 2 ? { number: 8, title: "v1.3" } : null,
+              }))
+            : []),
+        ]),
+    issueTypes: harnessFlag("publicationTypesFail")
+      ? failed("issue_types_unreadable", "The issue Types of this repository could not be read.")
+      : loaded([{ name: "Feature" }, { name: "Task" }, { name: "Bug" }]),
+    milestones: harnessFlag("publicationMilestonesEmpty")
+      ? loaded([])
+      : loaded([
+          { number: 7, title: "v1.2" },
+          { number: 8, title: "v1.3" },
+        ]),
+    subIssueType: { name: publicationSettings.subIssueType, resolved: publicationSettings.subIssueType },
+  };
+}
+
 /**
  * The app's `invoke`: the unified discussion contract in front of the legacy
  * switch below (see `mock-unified-discussions.ts`).
@@ -7237,6 +7368,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "save_project_config": {
       if (projectConfigSaveRefusal) throw projectConfigSaveRefusal;
       const patch = a.config ?? {};
+      // PSS-FR-LFUZ: a payload with a graduation loop value that is not valid
+      // is refused whole, and nothing is written.
+      const loopRefusal = graduationLoopRefusal(patch);
+      if (loopRefusal) throw loopRefusal;
       projectConfig = {
         lineEndings: patch.lineEndings ?? projectConfig.lineEndings,
         draftTemplate:
@@ -7252,6 +7387,19 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
           patch.executionTimeoutMs === undefined
             ? projectConfig.executionTimeoutMs
             : patch.executionTimeoutMs,
+        // PSS-FR-OWGI: omitted leaves a setting as stored; `null` clears it.
+        graduationPassBudget:
+          patch.graduationPassBudget === undefined
+            ? projectConfig.graduationPassBudget
+            : patch.graduationPassBudget,
+        graduationStageTimeLimitMs:
+          patch.graduationStageTimeLimitMs === undefined
+            ? projectConfig.graduationStageTimeLimitMs
+            : patch.graduationStageTimeLimitMs,
+        graduationTotalTimeLimitMs:
+          patch.graduationTotalTimeLimitMs === undefined
+            ? projectConfig.graduationTotalTimeLimitMs
+            : patch.graduationTotalTimeLimitMs,
       };
       return undefined;
     }
@@ -8319,6 +8467,12 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       await graduationActDelay();
       const run = findRun(String(a.runId ?? ""));
       run.state = "running";
+      // GRD-FR-SKLO: Continue from a total time limit rest clears the rest and
+      // resets the used total time alone.
+      if (run.rest?.reason === "total_time_limit") {
+        run.rest = null;
+        run.turnTimeUsedMs = 0;
+      }
       return graduationChanged(run);
     }
     /**
@@ -9720,6 +9874,22 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       record.turnTimeoutMs = ms;
       return record;
     }
+    // AAP-FR-ITBL: the Custom token values. A value that is not a whole number
+    // from 1 to 4294967295 and a provider other than Custom are refused as the
+    // backend refuses them.
+    case "set_ai_api_max_output_tokens":
+    case "set_ai_api_max_context_size": {
+      if (a.provider !== "custom") throw "limit_unsupported";
+      const tokens = a.tokens ?? null;
+      if (tokens !== null && (!Number.isInteger(tokens) || tokens < 1 || tokens > 4294967295)) {
+        throw "token_limit_invalid";
+      }
+      const record = aiApis.find((i: Record<string, unknown>) => i.provider === "custom");
+      if (!record) throw "unknown_provider";
+      if (cmd === "set_ai_api_max_output_tokens") record.maxOutputTokens = tokens;
+      else record.maxContextSize = tokens;
+      return record;
+    }
     case "get_project_ai_api_integration":
       return { provider: "anthropic", resolution: "inherited", overrideProvider: null };
     case "set_project_ai_api_integration":
@@ -9932,62 +10102,28 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
        `?publicationTypesFail`, and `?publicationMilestonesEmpty` force the
        failed and empty states of NAW-FR-WMEP. `?publicationManyParents` adds
        sixty parents, so the bounded combobox of NAW-FR-XTGP can be seen. */
-    case "load_publication_metadata": {
-      const loaded = (items: unknown[]) => ({
-        state: "loaded",
-        items,
-        errorCode: null,
-        error: null,
-      });
-      const failed = (errorCode: string, error: string) => ({
-        state: "failed",
-        items: [],
-        errorCode,
-        error,
-      });
-      return {
-        repositoryOwner: "acme",
-        repositoryName: "acme-app",
-        settings: publicationSettings,
-        parents: harnessFlag("publicationParentsFail")
-          ? failed("parent_issues_unreadable", "The open issues of this repository could not be read.")
-          : loaded([
-              {
-                number: 412,
-                title: "Window chrome",
-                issueType: "Feature",
-                url: "https://github.com/acme/acme-app/issues/412",
-                milestone: { number: 7, title: "v1.2" },
-              },
-              {
-                number: 398,
-                title: "Release pipeline",
-                issueType: "Feature",
-                url: "https://github.com/acme/acme-app/issues/398",
-                milestone: null,
-              },
-              ...(harnessFlag("publicationManyParents")
-                ? Array.from({ length: 60 }, (_, i) => ({
-                    number: 500 + i,
-                    title: `Parent feature ${i}`,
-                    issueType: "Feature",
-                    url: `https://github.com/acme/acme-app/issues/${500 + i}`,
-                    milestone: i % 2 ? { number: 8, title: "v1.3" } : null,
-                  }))
-                : []),
-            ]),
-        issueTypes: harnessFlag("publicationTypesFail")
-          ? failed("issue_types_unreadable", "The issue Types of this repository could not be read.")
-          : loaded([{ name: "Feature" }, { name: "Task" }, { name: "Bug" }]),
-        milestones: harnessFlag("publicationMilestonesEmpty")
-          ? loaded([])
-          : loaded([
-              { number: 7, title: "v1.2" },
-              { number: 8, title: "v1.3" },
-            ]),
-        subIssueType: { name: publicationSettings.subIssueType, resolved: publicationSettings.subIssueType },
-      };
-    }
+    case "load_publication_metadata":
+      return publicationMetadataMock();
+    /* GHP-FR-JTYL: the backend cache holds the same lists.
+       `?publicationNoCache` makes it hold none, so the chooser reads itself. */
+    case "get_publication_metadata_cache":
+      return harnessFlag("publicationNoCache") ? null : publicationMetadataMock();
+    /* GHP-FR-SIMK: the refresh ends after a short delay, unchanged.
+       `?publicationRefreshFails` makes it fail. */
+    /* GHP-FR-KPXF: the startup refresh of the harness never fails. */
+    case "take_publication_metadata_startup_failure":
+      return null;
+    case "refresh_publication_metadata":
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      return harnessFlag("publicationRefreshFails")
+        ? {
+            outcome: "failed",
+            errorCode: "github_unreachable",
+            error: "GitHub could not be reached.",
+            remoteName: "origin",
+            metadata: publicationMetadataMock(),
+          }
+        : { outcome: "unchanged", errorCode: null, error: null, remoteName: "origin", metadata: publicationMetadataMock() };
     /* GHP-FR-KVRH / GHP-FR-NQWX / GHP-FR-PTYL: the Publication group of the
        GitHub Project settings section. */
     case "get_github_publication_settings":

@@ -716,6 +716,9 @@ fn reroot_with<R: tauri::Runtime>(
     // WTC-FR-UMGY: a direct run held for its branch starts when the branch is
     // back, so the queues are offered a dispatch once the switch is announced.
     crate::graduation::advance_all_queues(app);
+    // GHP-FR-ROBR / GHP-FR-JDMU: the publication metadata cache belongs to the
+    // outgoing worktree, so it empties and refreshes for the new one.
+    crate::github_publication::metadata_refresh::on_worktree_changed(app);
     Ok(context)
 }
 

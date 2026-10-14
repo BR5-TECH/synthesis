@@ -11,6 +11,7 @@ import { useDraftEditingObserver } from "./hooks/useDraftEditingObserver";
 import { useMainWindowState } from "./hooks/useMainWindowState";
 import { useAppOverlays } from "./hooks/useAppOverlays";
 import { useAppNotifications } from "./hooks/useAppNotifications";
+import { usePublicationMetadataStartupToast } from "./hooks/usePublicationMetadataStartupToast";
 import { NotificationToasts } from "./components/NotificationToasts";
 import { useThemePreference } from "./hooks/useThemePreference";
 import { useFontRoles } from "./hooks/useFontRoles";
@@ -367,6 +368,13 @@ function App() {
     knownDrafts,
     githubPollingView: githubPolling.view,
   });
+
+  // NTF-FR-POEW: a failed startup refresh of the publication metadata. It is
+  // taken only while a project is open here, after the toasts that the
+  // opening clears (NTF-FR-15).
+  usePublicationMetadataStartupToast(
+    s.projectPath ? `${s.projectPath}\u0000${s.activeWorktree?.path ?? s.projectPath}` : null,
+  );
 
   // GIT-FR-QMYB: the window's one push — running state, transcript, and the
   // branch's standing — lives above the keyed shell subtree, so the top-chrome

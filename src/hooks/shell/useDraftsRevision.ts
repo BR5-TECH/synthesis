@@ -1,9 +1,9 @@
 /**
  * DRP-FR-05 / DRS-FR-22: the counter every surface that lists drafts reloads
- * on, and the backend channel that bumps it.
+ * on, and the backend channels that bump it.
  */
 import { useCallback, useEffect, useState } from "react";
-import { onDraftsChanged } from "../../events";
+import { onDraftPublicationChanged, onDraftsChanged } from "../../events";
 
 export function useDraftsRevision(): {
   draftsRevision: number;
@@ -30,6 +30,22 @@ export function useDraftsRevision(): {
     let stop: (() => void) | null = null;
     let cancelled = false;
     void onDraftsChanged(bumpDrafts).then((fn) => {
+      if (cancelled) fn();
+      else stop = fn;
+    });
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [bumpDrafts]);
+
+  // DRP-FR-05 / DRS-FR-PXHW: a publication changes no draft status, so it
+  // sends no `"drafts changed"`. The row's publication marker rides on
+  // `list_drafts`, so a change of a publication store re-lists too.
+  useEffect(() => {
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+    void onDraftPublicationChanged(() => bumpDrafts()).then((fn) => {
       if (cancelled) fn();
       else stop = fn;
     });

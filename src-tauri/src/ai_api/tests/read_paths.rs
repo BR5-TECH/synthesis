@@ -278,6 +278,8 @@ fn a_reasoning_choice_round_trips_through_the_toml_store() {
     // serialises as a table, so a scalar declared after it would be parsed
     // as belonging to it. A round trip is what proves the ordering holds.
     let record = AiApiRecord {
+        max_output_tokens: None,
+        max_context_size: None,
         turn_timeout_ms: None,
         provider: "openrouter".into(),
         base_url: Some("https://openrouter.ai/api/v1".into()),

@@ -17,8 +17,12 @@
  * The sub-issue option comes first and is the option a loaded parent list
  * selects; the root option follows it and is selected while there is no parent
  * to choose (NAW-FR-TCQB, NAW-FR-ASYN).
+ *
+ * The lists can change while the chooser is open, when the backend refresh
+ * ends (NAW-FR-HRXE). A choice that the new list no longer holds is cleared,
+ * and every other choice stays (NAW-FR-VOTL, NAW-FR-LETN).
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal } from "./DraftsPanelParts";
 import { FilterableSelect, type FilterableOption } from "./FilterableSelect";
 import type { PublicationChooserState } from "../hooks/useDraftPublication";
@@ -58,6 +62,30 @@ function viewOf<T>(
     return { kind: "unavailable", error: list.error ?? "GitHub could not be read." };
   }
   return list.items.length === 0 ? { kind: "empty" } : { kind: "loaded", items: list.items };
+}
+
+/**
+ * The ids a list holds, or `null` while it is loading or unavailable, so a
+ * choice is kept until a read says what the list holds.
+ */
+function idsOf<T>(view: ListView<T>, id: (item: T) => string): string[] | null {
+  if (view.kind === "empty") return [];
+  return view.kind === "loaded" ? view.items.map(id) : null;
+}
+
+/**
+ * NAW-FR-VOTL / NAW-FR-LETN: clear `value` to `NONE` where the list no longer
+ * holds it.
+ */
+function useClearedWhenMissing(
+  value: string | null,
+  ids: string[] | null,
+  clear: () => void,
+): void {
+  const missing = value !== null && value !== NONE && ids !== null && !ids.includes(value);
+  useEffect(() => {
+    if (missing) clear();
+  }, [missing, clear]);
 }
 
 /** Where focus goes back to: the action control's trigger (NAW-FR-VUCK). */
@@ -226,6 +254,10 @@ export function PublicationChooser({
   const [typePicked, setTypePicked] = useState<string | null>(null);
   const [rootMilestone, setRootMilestone] = useState(NONE);
   const [subMilestone, setSubMilestone] = useState(NONE);
+  const clearParent = useMemo(() => () => setParentNumber(NONE), []);
+  const clearType = useMemo(() => () => setTypePicked(NONE), []);
+  const clearRootMilestone = useMemo(() => () => setRootMilestone(NONE), []);
+  const clearSubMilestone = useMemo(() => () => setSubMilestone(NONE), []);
 
   const parents = viewOf(state, (m) => m.parents);
   const types = viewOf(state, (m) => m.issueTypes);
@@ -253,6 +285,14 @@ export function PublicationChooser({
   const repository = metadata
     ? `${metadata.repositoryOwner}/${metadata.repositoryName}`
     : state.remoteName;
+  // NAW-FR-VOTL: a parent the new list no longer holds is no longer chosen.
+  useClearedWhenMissing(parentNumber, idsOf(parents, (p) => String(p.number)), clearParent);
+  // NAW-FR-LETN: a Type or milestone the new list no longer holds resets to
+  // No Type or No milestone.
+  useClearedWhenMissing(typePicked, idsOf(types, (t) => t.name), clearType);
+  const milestoneIds = idsOf(milestones, (m) => String(m.number));
+  useClearedWhenMissing(rootMilestone, milestoneIds, clearRootMilestone);
+  useClearedWhenMissing(subMilestone, milestoneIds, clearSubMilestone);
 
   /** NAW-FR-RBTE: the choice as the backend receives it. */
   const choice = (): PublicationChoiceInput => {
@@ -380,9 +420,13 @@ export function PublicationChooser({
           </button>
           <button
             className="btn btn--primary"
-            // NAW-FR-RBTE: the sub-issue option needs a chosen parent.
+            // NAW-FR-RBTE: the read and the refresh must end, and the
+            // sub-issue option needs a chosen parent.
             disabled={
-              busy || state.status === "loading" || (selected === SUB && parent === null)
+              busy ||
+              state.status === "loading" ||
+              state.refreshing ||
+              (selected === SUB && parent === null)
             }
             onClick={() => onConfirm(choice())}
           >

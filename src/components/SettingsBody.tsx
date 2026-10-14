@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import {
   firstSectionOf,
@@ -27,6 +27,7 @@ import {
   type SettingsNavGroup,
   type SettingsSelection,
 } from "./SettingsSectionNav";
+import type { GraduationFocusRequest } from "./GraduationLoopSliders";
 
 /**
  * The body of the Settings window: the side nav with its two groups, and the
@@ -74,6 +75,29 @@ export function resolveSelection(
     : null;
 }
 
+/**
+ * GRU-FR-QLRQ / GRU-FR-TTLR: the Graduation control an address names, for
+ * example `project/graduation:total-time-limit`, or null where the address
+ * names no control of that section, or the window does not offer it.
+ */
+export function graduationFocusOf(
+  request: SectionRequest | null,
+  scopes: ReadonlyArray<SettingsScope>,
+): GraduationFocusRequest | null {
+  if (!request) return null;
+  const parsed = parseSectionAddress(request.section);
+  if (
+    !parsed ||
+    parsed.scope !== "project" ||
+    !scopes.includes("project") ||
+    parsed.section !== "graduation" ||
+    parsed.item === null
+  ) {
+    return null;
+  }
+  return { item: parsed.item, nonce: request.nonce };
+}
+
 /** SWN-FR-MRNB: the first section of the first group. */
 function firstSelection(scopes: ReadonlyArray<SettingsScope>): SettingsSelection {
   const scope = scopes[0] ?? "global";
@@ -94,7 +118,10 @@ export interface SettingsBodyProps {
   /** SWN-FR-FCRT: put the keyboard focus inside the window when it mounts. */
   autoFocus?: boolean;
   /** Needed only where `scopes` holds the Project group. */
-  project?: Omit<SettingsProps, "section" | "active">;
+  project?: Omit<
+    SettingsProps,
+    "section" | "active" | "graduationFocusRequest" | "onGraduationFocusHandled"
+  >;
 }
 
 export function SettingsBody({
@@ -110,12 +137,19 @@ export function SettingsBody({
   const [selected, setSelected] = useState<SettingsSelection>(
     () => resolveSelection(sectionRequest?.section ?? null, scopes) ?? firstSelection(scopes),
   );
+  // GRU-FR-QLRQ / GRU-FR-TTLR: the Graduation slider a request named, held
+  // until the section has given it the focus once.
+  const [graduationFocus, setGraduationFocus] = useState<GraduationFocusRequest | null>(
+    () => graduationFocusOf(sectionRequest, scopes),
+  );
+  const handleGraduationFocus = useCallback(() => setGraduationFocus(null), []);
   const handledNonce = useRef(sectionRequest?.nonce ?? null);
   useEffect(() => {
     if (!sectionRequest || sectionRequest.nonce === handledNonce.current) return;
     handledNonce.current = sectionRequest.nonce;
     const wanted = resolveSelection(sectionRequest.section, scopes);
     if (wanted) setSelected(wanted);
+    setGraduationFocus(graduationFocusOf(sectionRequest, scopes));
   }, [sectionRequest, scopes]);
 
   const idBase = useId();
@@ -160,6 +194,8 @@ export function SettingsBody({
         {scopes.includes("project") && project && (
           <Settings
             {...project}
+            graduationFocusRequest={graduationFocus}
+            onGraduationFocusHandled={handleGraduationFocus}
             section={
               (selected.scope === "project"
                 ? selected.section

@@ -115,6 +115,8 @@ fn gss_ts26_the_ai_api_registry_survives_a_round_trip_through_disk() {
             .save_ai_api_registry(
                 vec![
                     AiApiRecord {
+                        max_output_tokens: None,
+                        max_context_size: None,
                         turn_timeout_ms: None,
                         provider: "openrouter".into(),
                         base_url: Some("https://openrouter.ai/api/v1".into()),

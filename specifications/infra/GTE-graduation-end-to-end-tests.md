@@ -22,7 +22,8 @@ The backend end-to-end suite for graduation, and the scenario language it is wri
 14. **GTE-FR-PFEO** A scenario asserts whether the stream is held or free at the moment the run comes to rest. A run at rest in `awaiting_author`, `blocked`, `interrupted` or `failed` holds the stream, and a run that is `completed` or `discarded` leaves it free, so a run that keeps a stream it must free, or frees one it must keep, fails.
 15. **GTE-FR-JYWB** A failed assertion names the scenario, the turn it belongs to, and the thing that was compared. A dispatch nobody scripted fails the scenario naming the part and the purpose the loop asked for.
 16. **GTE-FR-RSQD** The suite is **deterministic**. It takes no sleep, asserts no wall-clock duration, and reaches no network, no provider credential and no container runtime. A timeout and a cancellation are each produced by a bounded control of the harness rather than by waiting.
-17. **GTE-FR-KAZX** The harness sets the project settings each scenario runs under, and a scenario may set the execution timeout, the provider-call deadline, the retry budget and the graduation concurrency limit to any valid value (per `../core/PSS-project-settings-storage.md` PSS-FR-TQMV, PSS-FR-HDBN, PSS-FR-WPKS and PSS-FR-JRWC).
+17. **GTE-FR-KAZX** The harness sets the project settings each scenario runs under. A scenario may set the graduation pass budget, stage time limit, total time limit and concurrency limit to any valid value (per `../core/PSS-project-settings-storage.md` PSS-FR-QBNE, PSS-FR-HVSM, PSS-FR-RKTW, PSS-FR-JRWC). A scenario that stores the shared execution timeout and retry budget proves no graduation turn reads them.
+17. **GTE-FR-ZTLC** A scenario proves the **total time limit**. A turn stopped by the total time rests the run `awaiting_author` with `total_time_limit`, its work committed, the stream and the slot held. Continue resets the used total time alone and repeats no completed pass. A run with no remaining total time before a dispatch rests on the same reason and dispatches no turn.
 18. **GTE-FR-VNOU** A scenario proves that the settings are read **before every dispatch**, the semantic rebase turn included, by changing a value between two turns of one run and asserting the second turn carried the new value (per `../ai/GRL-graduation-loop.md` GRL-FR-KWNP).
 19. **GTE-FR-GBLI** A scenario proves that a resumed run uses the values active at each resumed dispatch, by changing a setting while the run rests and asserting the resumed turn carried the changed value.
 20. **GTE-FR-WUAP** The suite covers the journeys of the coverage matrix, one scenario each at least. A journey with no scenario is a gap the matrix names.
@@ -172,6 +173,7 @@ The same `Script` answers, effects and hooks serve a merge run. Two chain stages
 38  queue hold                a resting run holds its queue and slot in every resting state and across a relaunch, Continue dispatches at once
 39  discard cascade           discard, revert and discard of a failed run remove the queued runs behind, runs ahead stay, drafts unlocked
 40  failed run                the failed run holds the queue and no slot, runs behind stay queued, no restart, discard removes them
+41  total time limit          awaiting_author with total_time_limit, work committed, stream and slot held, Continue resets the used time alone
 ```
 
 ## Non-functional requirements

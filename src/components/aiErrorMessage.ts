@@ -91,6 +91,10 @@ export function aiErrorMessage(e: unknown): string {
       return "Verify this integration before using it.";
     case AI_ERRORS.turnTimeoutOutOfRange:
       return "Enter a whole number of seconds from 30 to 3600.";
+    case AI_ERRORS.tokenLimitInvalid:
+      return "Enter a whole number of tokens from 1 to 4294967295.";
+    case AI_ERRORS.limitUnsupported:
+      return "Only the Custom provider holds token limits.";
     case AI_ERRORS.unknownVendor:
     case AI_ERRORS.unknownProvider:
       return "That integration is not one Synthesis supports.";

@@ -79,6 +79,8 @@ fn no_verification_record_carries_the_key_or_even_its_hint() {
         &TEST_BUFFER,
         "probe-openai",
         &Ok(AiApiIntegration {
+            max_output_tokens: None,
+            max_context_size: None,
             turn_timeout_ms: None,
             provider: "probe-openai".into(),
             display_name: "OpenAI".into(),
@@ -251,6 +253,8 @@ fn a_listing_reports_a_provider_whose_key_has_gone_missing() {
     // answers for it, and nothing else in the application says so until an
     // agent fails to answer and nobody can explain why.
     let integration = |provider: &str, state: IntegrationState, active: bool| AiApiIntegration {
+        max_output_tokens: None,
+        max_context_size: None,
         turn_timeout_ms: None,
         provider: provider.into(),
         display_name: provider.into(),
@@ -318,4 +322,35 @@ fn a_project_resolution_reports_an_override_that_is_being_ignored() {
     assert_eq!(nothing.message, "project ai api integration resolved");
     assert_eq!(nothing.fields.get("provider"), Some(&serde_json::json!("none")));
     assert_eq!(nothing.fields.get("override"), Some(&serde_json::json!("none")));
+}
+
+// AAP-FR-OVDB: one detection record per Custom verification, with counts and
+// failure kinds, and no secret, no route, and no body.
+#[test]
+fn a_detection_record_holds_counts_and_failure_kinds_only() {
+    use crate::ai_api::detection::DetectionReport;
+    let report = DetectionReport {
+        sent: 3,
+        detected: 1,
+        failed: 2,
+        failures: [("status_404".to_string(), 1), ("timeout".to_string(), 1)].into(),
+    };
+    log_detection_outcome(&NullSink, &TEST_BUFFER, "probe-detect", Some(&report));
+    let record = record_reading("custom model detection finished", "probe-detect");
+    assert_eq!(record.fields.get("models"), Some(&serde_json::json!(3)));
+    assert_eq!(record.fields.get("detected"), Some(&serde_json::json!(1)));
+    assert_eq!(record.fields.get("failed"), Some(&serde_json::json!(2)));
+    assert_eq!(
+        record.fields.get("failureKinds"),
+        Some(&serde_json::json!("status_404:1,timeout:1"))
+    );
+    let text = serde_json::to_string(&record).unwrap();
+    assert!(!text.contains("/api/show"), "{text}");
+    assert!(!text.contains("\\\"model\\\""), "{text}");
+
+    // No detection ran: no record.
+    log_detection_outcome(&NullSink, &TEST_BUFFER, "probe-nodetect", None);
+    assert!(!records()
+        .iter()
+        .any(|r| r.fields.get("provider") == Some(&serde_json::json!("probe-nodetect"))));
 }

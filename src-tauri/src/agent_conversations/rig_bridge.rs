@@ -69,10 +69,26 @@ pub(super) mod rig_seam {
     /// CVL-FR-HBNW: an Anthropic call carries no `reasoning` object. The
     /// Messages API refuses an unknown top-level field, and `rig` flattens these
     /// params into the top level of the body.
+    ///
+    /// CVL-FR-ZPGW: a Custom call carries its effective reasoning in the field
+    /// of its route — `reasoning_effort` on Chat Completions, and
+    /// `reasoning.effort` on Responses, which is also the route an unrestricted
+    /// model takes.
     fn reasoning_params(endpoint: &AiApiCall) -> Option<serde_json::Value> {
         use ai_api::ReasoningChoice;
         if endpoint.provider == "anthropic" {
             return None;
+        }
+        if endpoint.provider == ai_api::custom_limits::CUSTOM {
+            let ReasoningChoice::Effort { effort } = endpoint.reasoning.as_ref()? else {
+                return None;
+            };
+            return Some(match openai_adapter_config(endpoint).route {
+                OpenAiRoute::ChatCompletions => serde_json::json!({ "reasoning_effort": effort }),
+                OpenAiRoute::Unrestricted | OpenAiRoute::Responses => {
+                    serde_json::json!({ "reasoning": { "effort": effort } })
+                }
+            });
         }
         match endpoint.reasoning.as_ref()? {
             ReasoningChoice::Off => Some(serde_json::json!({ "reasoning": { "enabled": false } })),
@@ -452,8 +468,9 @@ pub(super) fn anthropic_model(
 /// Anthropic models accept it.
 pub(super) const ANTHROPIC_MAX_OUTPUT_TOKENS: u64 = 32_000;
 
-/// CVL-FR-FHFM: the output-token limit of every Custom gateway call. Current
-/// Claude 5, GPT-5.6, GPT-6, and GPT-6.1 models accept it.
+/// CVL-FR-FHFM: the output-token limit of a Custom call whose provider sets no
+/// max output tokens. Current Claude 5, GPT-5.6, GPT-6, and GPT-6.1 models
+/// accept it.
 pub(super) const CUSTOM_MAX_OUTPUT_TOKENS: u64 = 128_000;
 
 /// Which conversation route the OpenAI-compatible adapter takes (CVL-FR-ZPGW).
@@ -508,7 +525,8 @@ pub(super) fn openai_adapter_config(endpoint: &AiApiCall) -> OpenAiAdapterConfig
             None => OpenAiRoute::Unrestricted,
         },
         repair_replies: true,
-        max_output_tokens: Some(CUSTOM_MAX_OUTPUT_TOKENS),
+        // CVL-FR-FHFM: the provider's max output tokens, else the default.
+        max_output_tokens: Some(endpoint.max_output_tokens.unwrap_or(CUSTOM_MAX_OUTPUT_TOKENS)),
     }
 }
 

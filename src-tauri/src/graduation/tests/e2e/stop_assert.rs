@@ -118,4 +118,36 @@ impl Outcome {
         assert_eq!(held, detail, "[{}] what the author is told about the stop", self.name);
         self
     }
+
+    /// GRD-FR-SKLO: the run rests on its total time limit, under `limit_ms`,
+    /// and the rest names the time the run had used.
+    pub(crate) fn expect_total_time_rest(self, limit_ms: u64) -> Self {
+        let rest = self
+            .run
+            .rest
+            .clone()
+            .unwrap_or_else(|| panic!("[{}] the run rests on its total time limit", self.name));
+        assert_eq!(rest.reason, "total_time_limit", "[{}] the rest reason", self.name);
+        assert_eq!(rest.limit_ms, limit_ms, "[{}] the limit the run rested under", self.name);
+        assert_eq!(rest.used_ms, self.run.turn_time_used_ms, "[{}] the time used", self.name);
+        self
+    }
+
+    /// GRD-FR-SKLO: the run holds no rest.
+    pub(crate) fn expect_no_rest(self) -> Self {
+        assert!(self.run.rest.is_none(), "[{}] no rest is recorded", self.name);
+        self
+    }
+
+    /// GRD-FR-UTTX: the used total time is at least `at_least` and below
+    /// `below`.
+    pub(crate) fn expect_time_used(self, at_least: u64, below: u64) -> Self {
+        let used = self.run.turn_time_used_ms;
+        assert!(
+            used >= at_least && used < below,
+            "[{}] the used total time {used} is in {at_least}..{below}",
+            self.name
+        );
+        self
+    }
 }

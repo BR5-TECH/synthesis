@@ -191,6 +191,9 @@ rig = { package = "rig-core", version = "0.44", features = ["test-utils"] }
 # relay can be exercised against a real (headless) app handle rather than only
 # through their extracted pure helpers.
 tauri = { version = "2", features = ["test"] }
+# GHP-FR-RVCL / GHP-FR-MSLY: the tests of the 30-minute timer and of the
+# refresh timeout run on paused Tokio time, so no test waits for real time.
+tokio = { version = "1", features = ["test-util"] }
 
 # NTD-notification-delivery.md: the OS notification centre this module posts
 # into. Deliberately NOT `tauri-plugin-notification`, whose desktop path drops

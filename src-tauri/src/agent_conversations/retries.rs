@@ -14,6 +14,10 @@ pub(super) struct ModelCall {
     pub(super) deadline: std::time::Instant,
     pub(super) model_calls: usize,
     pub(super) at_bound: bool,
+    /// CVL-FR-ZLSM: the call is the compaction call that comes before the
+    /// invocation `model_calls`, so its usage record has an identity of its
+    /// own (CVL-FR-CSLX).
+    pub(super) compaction: bool,
 }
 
 /// CVL-FR-17 / CVL-FR-19: one **logical** `complete` invocation, made as up to
@@ -31,10 +35,11 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
     turns: &TurnRegistry,
     plan: &TurnPlan,
     endpoint: &AiApiCall,
+    request: &AgentRequest,
     exchange: &[rig::completion::Message],
     call: ModelCall,
 ) -> Result<ModelReply, TurnEnd> {
-    let ModelCall { policy, deadline, model_calls, at_bound } = call;
+    let ModelCall { policy, deadline, model_calls, at_bound, compaction } = call;
     let model_label = endpoint.model_id.as_deref().unwrap_or("<provider default>");
     for attempt in 1..=policy.max_attempts {
         check_cancelled(plan)?;
@@ -68,24 +73,27 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 "provider" => &endpoint.provider,
                 "model" => model_label,
                 "modelCall" => model_calls,
+                // CVL-FR-CSLX: a compaction call has the ordinal of the call it
+                // comes before, so this field tells the two apart.
+                "compaction" => compaction,
                 "attempt" => attempt,
                 "maxAttempts" => policy.max_attempts,
                 "physicalCalls" => physical,
-                "promptChars" => plan.request.instructions.chars().count(),
-                "inputChars" => plan.request.input.iter().map(|s| s.body.chars().count()).sum::<usize>(),
+                "promptChars" => request.instructions.chars().count(),
+                "inputChars" => request.input.iter().map(|s| s.body.chars().count()).sum::<usize>(),
                 "exchangeMessages" => exchange.len(),
-                "tools" => plan.request.tools.len(),
+                "tools" => request.tools.len(),
                 // CVL-FR-30: how many provider-native entries this request
                 // carries, which is what says whether the provider was offered
                 // the web on this call. A count and never anything a model
                 // composed (CVL-FR-26).
-                "nativeTools" => plan.request.native_tools.len(),
+                "nativeTools" => request.native_tools.len(),
                 // CVL-FR-34: which of them, by entry type. Fixed text compiled
                 // into the binary (TLC-FR-22), so naming it carries nothing of
                 // the project, of the author, or of the conversation — and a
                 // reader can tell a turn offered the web from one offered only
                 // the search half of it.
-                "nativeToolTypes" => plan.request.native_tools
+                "nativeToolTypes" => request.native_tools
                     .iter()
                     .map(|tool| tool.tool_type.as_str())
                     .collect::<Vec<_>>()
@@ -94,8 +102,8 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
             },
         );
         let started = std::time::Instant::now();
-        let outcome = turns.seam.complete(&plan.request, exchange, endpoint, call_timeout).map(
-            |mut reply| {
+        let outcome =
+            turns.seam.complete(request, exchange, endpoint, call_timeout).map(|mut reply| {
                 // CVL-FR-VSSU: the markers go before anything reads the reply,
                 // so a reply that held markers alone is empty (CVL-FR-POAR).
                 let removed = strip_reply_citation_markers(&mut reply);
@@ -119,8 +127,7 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                     );
                 }
                 reply
-            },
-        );
+            });
         // CVL-FR-TQRD: a reply the Custom gateway repair changed. Recorded for
         // every answered attempt, usable or not, and also when the framework
         // still refused the repaired reply, so a gateway that keeps returning
@@ -150,7 +157,7 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
             );
         }
         let failure = match outcome {
-            Ok(reply) if reply_is_usable(&reply, at_bound, &plan.request.tools) => {
+            Ok(reply) if reply_is_usable(&reply, at_bound, &request.tools) => {
                 // CVL-FR-28: accumulated on the usable reply alone. A failed
                 // attempt was never answered and so was never billed, and one
                 // whose reply the loop rejected is retried as the same logical
@@ -167,7 +174,7 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 // was never answered and reports none; a successful retry
                 // reports its own record, which is a distinct reliable record
                 // of the same logical invocation rather than a second turn.
-                record_refinement_usage(app, plan, model_calls, attempt as u32, &reply);
+                record_refinement_usage(app, plan, model_calls, attempt as u32, compaction, &reply);
                 logging::log_info(
                     app,
                     turns.buffer(),
@@ -179,6 +186,9 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                         "provider" => &endpoint.provider,
                         "model" => model_label,
                         "modelCall" => model_calls,
+                        // CVL-FR-CSLX: a compaction call has the ordinal of the call it
+                        // comes before, so this field tells the two apart.
+                        "compaction" => compaction,
                         "attempt" => attempt,
                         "durationMs" => started.elapsed().as_millis() as u64,
                         // The size of the reply and the number of tools it asked
@@ -263,7 +273,7 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                     },
                 );
                 if rejected.tool_calls.is_empty() {
-                    if let Some(tool) = tool_written_as_prose(&rejected.text, &plan.request.tools) {
+                    if let Some(tool) = tool_written_as_prose(&rejected.text, &request.tools) {
                         // CVL-FR-UJXD: the tool it meant, and never the text.
                         logging::log_warn(
                             app,
@@ -317,7 +327,13 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
         logging::log(
             app,
             turns.buffer(),
-            if will_retry { logging::LogLevel::Warn } else { logging::LogLevel::Error },
+            // CVL-FR-HFRL: a failed compaction call does not end the turn, so it
+            // is a `WARN` too.
+            if will_retry || compaction {
+                logging::LogLevel::Warn
+            } else {
+                logging::LogLevel::Error
+            },
             // CVL-FR-28: `ai` and `backend` together, as every record a turn
             // emits carries — and `remote` besides, because an attempt at
             // reaching a provider is exactly what that domain is for. A reader
@@ -333,6 +349,9 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 "provider" => &endpoint.provider,
                 "model" => model_label,
                 "modelCall" => model_calls,
+                // CVL-FR-CSLX: a compaction call has the ordinal of the call it
+                // comes before, so this field tells the two apart.
+                "compaction" => compaction,
                 "attempt" => attempt,
                 "maxAttempts" => policy.max_attempts,
                 // CVL-FR-21: the normalized class, and — where the provider

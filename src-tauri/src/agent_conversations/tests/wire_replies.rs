@@ -22,6 +22,8 @@ fn anthropic_wire(model: &str) -> rig::providers::anthropic::Messages {
     let client = rig::providers::anthropic::AnthropicConfig::new("not-a-real-key")
         .connect(rig_reqwest::ReqwestClient::from(reqwest013::Client::new()));
     let endpoint = AiApiCall {
+        max_output_tokens: None,
+        context_size: None,
         turn_timeout_ms: None,
         provider: "anthropic".into(),
         base_url: "https://example.invalid".into(),
@@ -197,6 +199,8 @@ fn an_openai_refusal_is_recorded_in_the_providers_own_terms() {
     .to_string();
     let server = super::responses_repair::answer_once("400 Bad Request", body);
     let endpoint = AiApiCall {
+        max_output_tokens: None,
+        context_size: None,
         turn_timeout_ms: None,
         provider: "openai".into(),
         base_url: format!("http://{}/v1", server.addr),
@@ -229,6 +233,8 @@ fn a_model_the_catalog_does_not_mark_is_sent_no_thinking() {
     use rig::wire::Wire;
     let request = wire_request();
     let endpoint = AiApiCall {
+        max_output_tokens: None,
+        context_size: None,
         turn_timeout_ms: None,
         provider: "anthropic".into(),
         base_url: "https://example.invalid".into(),

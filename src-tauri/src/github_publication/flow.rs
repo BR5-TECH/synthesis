@@ -254,6 +254,7 @@ pub fn record_of(attempt: &PublicationAttempt, issue: &IssueRef) -> PublicationR
         issue_number: issue.number,
         issue_url: issue.url.clone(),
         published_at: now_rfc3339(),
+        updated_at: None,
         marker: attempt.marker.clone(),
         choice: attempt.choice.clone(),
     }
@@ -494,18 +495,29 @@ fn list_of<T, U>(
     }
 }
 
-/// GHP-FR-ETJD: the configured sub-issue Type in the spelling the Type list
-/// holds, or `None` where the list does not hold it or failed.
+/// GHP-FR-ETJD / GHP-FR-AFEX: a configured Type in the spelling the Type list
+/// holds, or a `None` spelling where the list does not hold it or failed.
+fn resolve_type(name: &str, types: &MetadataList<PublicationIssueType>) -> IssueTypeResolution {
+    let resolved =
+        types.items.iter().find(|t| t.name.eq_ignore_ascii_case(name)).map(|t| t.name.clone());
+    IssueTypeResolution { name: name.to_string(), resolved }
+}
+
+/// GHP-FR-ETJD: the configured sub-issue Type, resolved.
 pub fn resolve_sub_issue_type(
     settings: &GithubPublicationSettings,
     types: &MetadataList<PublicationIssueType>,
-) -> SubIssueTypeResolution {
-    let resolved = types
-        .items
-        .iter()
-        .find(|t| t.name.eq_ignore_ascii_case(&settings.sub_issue_type))
-        .map(|t| t.name.clone());
-    SubIssueTypeResolution { name: settings.sub_issue_type.clone(), resolved }
+) -> IssueTypeResolution {
+    resolve_type(&settings.sub_issue_type, types)
+}
+
+/// GHP-FR-AFEX: the stored root issue Type, resolved, or `None` where no root
+/// issue Type is stored.
+pub fn resolve_root_issue_type(
+    settings: &GithubPublicationSettings,
+    types: &MetadataList<PublicationIssueType>,
+) -> Option<IssueTypeResolution> {
+    settings.root_issue_type.as_deref().map(|name| resolve_type(name, types))
 }
 
 /// GHP-FR-MDLD: read the three lists. Mutates nothing, and one failed list
@@ -548,6 +560,7 @@ pub fn load_metadata(
         |milestone| milestone,
     );
     let sub_issue_type = resolve_sub_issue_type(&settings, &issue_types);
+    let root_issue_type = resolve_root_issue_type(&settings, &issue_types);
     PublicationMetadata {
         repository_owner: owner.to_string(),
         repository_name: repo.to_string(),
@@ -556,6 +569,7 @@ pub fn load_metadata(
         issue_types,
         milestones,
         sub_issue_type,
+        root_issue_type,
     }
 }
 
@@ -571,17 +585,28 @@ pub fn issue_types_list(
 }
 
 /// GHP-FR-NQWX: the settings a caller may save, cleaned, or the typed refusal.
+/// A `None` root issue Type is No Type; a blank name is refused.
 pub fn validated_settings(
     parent_issue_types: Vec<String>,
     sub_issue_type: String,
     sub_issue_milestone_policy: MilestonePolicy,
+    root_issue_type: Option<String>,
 ) -> Result<GithubPublicationSettings, String> {
     let parent_issue_types = clean_type_names(parent_issue_types);
     let sub_issue_type = sub_issue_type.trim().to_string();
-    if parent_issue_types.is_empty() || sub_issue_type.is_empty() {
+    let root_issue_type = root_issue_type.map(|name| name.trim().to_string());
+    if parent_issue_types.is_empty()
+        || sub_issue_type.is_empty()
+        || root_issue_type.as_deref().is_some_and(str::is_empty)
+    {
         return Err(ERR_INVALID_PUBLICATION_SETTINGS.to_string());
     }
-    Ok(GithubPublicationSettings { parent_issue_types, sub_issue_type, sub_issue_milestone_policy })
+    Ok(GithubPublicationSettings {
+        parent_issue_types,
+        sub_issue_type,
+        sub_issue_milestone_policy,
+        root_issue_type,
+    })
 }
 
 /// GHP-FR-BWNI through GHP-FR-AZPF: turn the caller's choice into the choice an

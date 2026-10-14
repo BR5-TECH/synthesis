@@ -18,6 +18,7 @@ const DEFAULTS: GithubPublicationSettings = {
   parentIssueTypes: ["Feature"],
   subIssueType: "Task",
   subIssueMilestonePolicy: "inherit_parent",
+  rootIssueType: null,
 };
 
 const types = (...names: string[]): MetadataList<PublicationIssueType> => ({
@@ -57,6 +58,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 const subType = () => screen.getByLabelText("Sub-issue Type") as HTMLSelectElement;
+const rootType = () => screen.getByLabelText("Root issue Type") as HTMLSelectElement;
 const parentGroup = () => screen.getByRole("group", { name: "Parent issue Types" });
 
 describe("the Publication group of GitHub Project settings", () => {
@@ -103,6 +105,7 @@ describe("the Publication group of GitHub Project settings", () => {
       parentIssueTypes: ["Feature", "Epic"],
       subIssueType: "Task",
       subIssueMilestonePolicy: "inherit_parent",
+      rootIssueType: null,
     });
     expect(screen.queryByRole("button", { name: /^Save/ })).toBeNull();
     await waitFor(() =>
@@ -134,6 +137,7 @@ describe("the Publication group of GitHub Project settings", () => {
       parentIssueTypes: ["Feature"],
       subIssueType: "Bug",
       subIssueMilestonePolicy: "author_selected",
+      rootIssueType: null,
     });
   });
 
@@ -155,6 +159,7 @@ describe("the Publication group of GitHub Project settings", () => {
       parentIssueTypes: ["Retired", "Feature"],
       subIssueType: "Gone",
       subIssueMilestonePolicy: "no_milestone",
+      rootIssueType: null,
     };
     render(<GithubPublicationSettingsGroup />);
 
@@ -224,5 +229,61 @@ describe("the Publication group of GitHub Project settings", () => {
 
     release(types("Feature", "Task"));
     await waitFor(() => expect(screen.queryByTestId("github-types-loading")).toBeNull());
+  });
+
+  it("SET-FR-ZNLF: the Root issue Type is separate from the Sub-issue Type and shows No Type when none is stored", async () => {
+    render(<GithubPublicationSettingsGroup />);
+    await waitFor(() => expect(rootType().value).toBe(""));
+    await waitFor(() => expect(screen.queryByTestId("github-types-loading")).toBeNull());
+
+    expect(rootType().selectedOptions[0].textContent).toBe("No Type");
+    expect(Array.from(rootType().options).map((o) => o.textContent)).toEqual([
+      "No Type",
+      "Feature",
+      "Task",
+      "Bug",
+      "Epic",
+    ]);
+    expect(subType().value).toBe("Task");
+  });
+
+  it("SET-FR-ZNLF, SET-FR-MQUE: a Root issue Type persists at once, and No Type persists as null", async () => {
+    render(<GithubPublicationSettingsGroup />);
+    await waitFor(() => expect(rootType().value).toBe(""));
+    await within(rootType()).findByRole("option", { name: "Bug" });
+
+    await userEvent.selectOptions(rootType(), "Bug");
+    await waitFor(() => expect(calls("set_github_publication_settings")).toHaveLength(1));
+    expect(calls("set_github_publication_settings")[0][1]).toEqual({
+      parentIssueTypes: ["Feature"],
+      subIssueType: "Task",
+      subIssueMilestonePolicy: "inherit_parent",
+      rootIssueType: "Bug",
+    });
+    await waitFor(() => expect(rootType().value).toBe("Bug"));
+    expect(subType().value).toBe("Task");
+
+    await userEvent.selectOptions(rootType(), "No Type");
+    await waitFor(() => expect(calls("set_github_publication_settings")).toHaveLength(2));
+    expect(calls("set_github_publication_settings")[1][1]).toMatchObject({ rootIssueType: null });
+  });
+
+  it("SET-FR-ZNLF, SET-FR-LJYT: a stored Root issue Type that GitHub does not list stays selected and shows as unavailable", async () => {
+    stored = { ...DEFAULTS, rootIssueType: "Retired" };
+    render(<GithubPublicationSettingsGroup />);
+
+    await waitFor(() => expect(rootType().value).toBe("Retired"));
+    await waitFor(() =>
+      expect(rootType().selectedOptions[0].textContent).toBe("Retired (unavailable)"),
+    );
+    expect(calls("set_github_publication_settings")).toHaveLength(0);
+  });
+
+  it("SET-FR-ZNLF: a stored Root issue Type in another case selects GitHub's spelling", async () => {
+    stored = { ...DEFAULTS, rootIssueType: "bug" };
+    render(<GithubPublicationSettingsGroup />);
+
+    await waitFor(() => expect(rootType().value).toBe("Bug"));
+    expect(calls("set_github_publication_settings")).toHaveLength(0);
   });
 });

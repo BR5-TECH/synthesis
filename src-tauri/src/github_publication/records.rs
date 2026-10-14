@@ -28,6 +28,13 @@ pub const ERR_NO_ATTEMPT: &str = "no_attempt";
 pub const ERR_GITHUB_UNREACHABLE: &str = "github_unreachable";
 pub const ERR_ISSUE_CREATE_FAILED: &str = "issue_create_failed";
 pub const ERR_ISSUE_UPDATE_FAILED: &str = "issue_update_failed";
+/// GHP-FR-MZMW: the draft holds no record to update.
+pub const ERR_NO_PUBLICATION_RECORD: &str = "no_publication_record";
+/// GHP-FR-SVXP: the issue of the current record is gone, has moved, or the
+/// token may not read it.
+pub const ERR_ISSUE_NOT_FOUND: &str = "issue_not_found";
+pub const ERR_ISSUE_MOVED: &str = "issue_moved";
+pub const ERR_ISSUE_UPDATE_FORBIDDEN: &str = "issue_update_forbidden";
 pub const ERR_STORE_WRITE_FAILED: &str = "publication_store_write_failed";
 /// GHP-FR-BKLT: a GitHub-shadow draft takes no publication.
 pub const ERR_DRAFT_GITHUB_SHADOW: &str = crate::drafts::ERR_GITHUB_SHADOW;
@@ -181,10 +188,10 @@ pub struct PublicationMilestone {
     pub title: String,
 }
 
-/// GHP-FR-ETJD: the configured sub-issue Type and how it resolved.
+/// GHP-FR-ETJD / GHP-FR-AFEX: a configured Type and how it resolved.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SubIssueTypeResolution {
+pub struct IssueTypeResolution {
     pub name: String,
     /// The Type in GitHub's own spelling, or `None` where it is unavailable.
     pub resolved: Option<String>,
@@ -200,7 +207,9 @@ pub struct PublicationMetadata {
     pub parents: MetadataList<PublicationParentIssue>,
     pub issue_types: MetadataList<PublicationIssueType>,
     pub milestones: MetadataList<PublicationMilestone>,
-    pub sub_issue_type: SubIssueTypeResolution,
+    pub sub_issue_type: IssueTypeResolution,
+    /// GHP-FR-AFEX: `None` where no root issue Type is stored.
+    pub root_issue_type: Option<IssueTypeResolution>,
 }
 
 /// GHP-FR-JAWD: one successful GitHub publication.
@@ -224,6 +233,10 @@ pub struct PublicationRecord {
     pub issue_url: String,
     /// RFC 3339 UTC.
     pub published_at: String,
+    /// GHP-FR-WUJQ / DRS-FR-XNLP: RFC 3339 UTC, present only on a record that
+    /// an update appended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
     /// The attempt marker the issue body carries (GHP-FR-FQIZ).
     pub marker: String,
     /// GHP-FR-HSCH: absent in a record written before the choice existed,
@@ -464,6 +477,19 @@ pub enum PublicationOutcome {
         /// `milestone` differ.
         mismatches: Vec<String>,
     },
+}
+
+/// GHP-FR-AXRU / GHP-FR-WUJQ: what an update answers with.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum IssueUpdateOutcome {
+    Updated {
+        /// Boxed to keep the enum small, as in [`PublicationOutcome`].
+        record: Box<PublicationRecord>,
+    },
+    /// The issue is closed and the caller did not ask to update it anyway.
+    #[serde(rename_all = "camelCase")]
+    IssueClosed { issue_number: u64, issue_url: String },
 }
 
 /// GHP-FR-YPGL: the two answers to a recovery choice.

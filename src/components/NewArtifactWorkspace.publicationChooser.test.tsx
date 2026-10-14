@@ -68,11 +68,14 @@ async function openChooser() {
   return publicationChooser();
 }
 
-/** Wait for the chooser's read to land: its Publish control enables. */
+/** Wait for the chooser's read to land: no list states that it loads. */
 async function loaded(dialog: HTMLElement) {
-  await waitFor(() =>
-    expect(within(dialog).getByRole("button", { name: "Publish" })).toBeEnabled(),
-  );
+  await waitFor(() => expect(dialog).not.toHaveTextContent(/Loading/));
+}
+
+/** NAW-FR-ASYN: select the root option, which a loaded parent list does not. */
+async function selectRoot(dialog: HTMLElement) {
+  await userEvent.click(within(dialog).getByRole("radio", { name: /Publish as a root issue/ }));
 }
 
 const SUB_ISSUE_CHOICE: PublicationChoice = {
@@ -119,7 +122,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Publication chooser — opening and root publication", () => {
-  it("NAW-FR-HNVR, NAW-FR-TCQB, NAW-FR-YLKD: the chooser reads the metadata once, selects the root option, and lists each parent with its facts", async () => {
+  it("NAW-FR-HNVR, NAW-FR-TCQB, NAW-FR-YLKD, NAW-FR-RBTE: the chooser reads the metadata once, lists the sub-issue option first and selects it, and lists each parent with its facts", async () => {
     const dialog = await openChooser();
     await loaded(dialog);
 
@@ -127,10 +130,13 @@ describe("Publication chooser — opening and root publication", () => {
     expect(calls("publish_draft_to_github")).toHaveLength(0);
     expect(dialog).toHaveTextContent("acme/widgets");
     const radios = within(dialog).getAllByRole("radio");
-    expect(radios.map((r) => (r as HTMLInputElement).value)).toEqual(["root", "sub"]);
+    expect(radios.map((r) => (r as HTMLInputElement).value)).toEqual(["sub", "root"]);
+    expect(radios[0]).toHaveAccessibleName("Publish as a sub-issue of");
     expect(radios[0]).toBeChecked();
-    expect(radios[0]).toBeEnabled();
-    expect(radios[1]).toHaveAccessibleName("Publish as a sub-issue of");
+    expect(radios[1]).toHaveAccessibleName("Publish as a root issue");
+    expect(radios[1]).toBeEnabled();
+    // NAW-FR-RBTE: the sub-issue option with no parent chosen cannot publish.
+    expect(within(dialog).getByRole("button", { name: "Publish" })).toBeDisabled();
     // NAW-FR-YLKD: one combobox in place of a row for each parent.
     const combobox = within(dialog).getByRole("combobox", { name: "Parent issue" });
     expect(combobox).toHaveTextContent("Choose a parent issue");
@@ -148,6 +154,7 @@ describe("Publication chooser — opening and root publication", () => {
   it("NAW-FR-ZOAS, NAW-FR-FGUI, NAW-FR-RBTE: the root option sends the selected Type and milestone", async () => {
     const dialog = await openChooser();
     await loaded(dialog);
+    await selectRoot(dialog);
 
     await userEvent.selectOptions(within(dialog).getByLabelText("Type"), "Bug");
     await userEvent.selectOptions(within(dialog).getByLabelText("Milestone"), "v1.3");
@@ -165,6 +172,7 @@ describe("Publication chooser — opening and root publication", () => {
   it("NAW-FR-ZOAS, NAW-FR-FGUI: the Type and milestone controls offer a way to publish without either", async () => {
     const dialog = await openChooser();
     await loaded(dialog);
+    await selectRoot(dialog);
 
     expect(within(dialog).getByRole("option", { name: "No Type" })).toBeInTheDocument();
     expect(within(dialog).getByRole("option", { name: "No milestone" })).toBeInTheDocument();
@@ -172,7 +180,71 @@ describe("Publication chooser — opening and root publication", () => {
     expect(within(dialog).getByLabelText("Milestone")).toHaveValue("");
   });
 
-  it("NAW-FR-RBTE: Publish is disabled while the read is outstanding and enables when it lands", async () => {
+  it("NAW-FR-ZOAS, SET-FR-ZNLF: the Type control opens on the stored root issue Type, and the author can change it", async () => {
+    withMetadata({ rootIssueType: { name: "bug", resolved: "Bug" } });
+    const dialog = await openChooser();
+    await loaded(dialog);
+    await selectRoot(dialog);
+
+    expect(within(dialog).getByLabelText("Type")).toHaveValue("Bug");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(calls("publish_draft_to_github")).toHaveLength(1));
+    expect(calls("publish_draft_to_github")[0][1]).toMatchObject({
+      publicationChoice: { parentIssueNumber: null, issueType: "Bug" },
+    });
+  });
+
+  it("NAW-FR-ZOAS: the author changes the pre-filled Type for one publication", async () => {
+    withMetadata({ rootIssueType: { name: "Bug", resolved: "Bug" } });
+    const dialog = await openChooser();
+    await loaded(dialog);
+    await selectRoot(dialog);
+
+    await userEvent.selectOptions(within(dialog).getByLabelText("Type"), "No Type");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(calls("publish_draft_to_github")).toHaveLength(1));
+    expect(calls("publish_draft_to_github")[0][1]).toMatchObject({
+      publicationChoice: { parentIssueNumber: null, issueType: null },
+    });
+  });
+
+  it("NAW-FR-ZOAS, GHP-FR-AFEX: a stored root issue Type the Type list does not hold pre-fills No Type and publishes without a Type", async () => {
+    withMetadata({ rootIssueType: { name: "Retired", resolved: null } });
+    const dialog = await openChooser();
+    await loaded(dialog);
+    await selectRoot(dialog);
+
+    expect(within(dialog).getByLabelText("Type")).toHaveValue("");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(calls("publish_draft_to_github")).toHaveLength(1));
+    expect(calls("publish_draft_to_github")[0][1]).toMatchObject({
+      publicationChoice: { parentIssueNumber: null, issueType: null },
+    });
+  });
+
+  it("NAW-FR-ASYN: a root option the author selects during the read stays selected when the parents load", async () => {
+    let release: (m: PublicationMetadata) => void = () => {};
+    stub({
+      metadata: () =>
+        new Promise<PublicationMetadata>((resolve) => {
+          release = resolve;
+        }),
+    });
+    const dialog = await openChooser();
+    const sub = within(dialog).getByRole("radio", { name: /Publish as a sub-issue of/ });
+    const root = within(dialog).getByRole("radio", { name: /Publish as a root issue/ });
+    expect(sub).toBeDisabled();
+    expect(root).toBeChecked();
+
+    await userEvent.click(root);
+    await act(async () => release(publicationMetadata()));
+    await loaded(dialog);
+    expect(sub).toBeEnabled();
+    expect(root).toBeChecked();
+    expect(within(dialog).getByRole("button", { name: "Publish" })).toBeEnabled();
+  });
+
+  it("NAW-FR-RBTE: Publish is disabled while the read is outstanding, stays disabled for the sub-issue option with no parent, and enables for the root option", async () => {
     let release: (m: PublicationMetadata) => void = () => {};
     stub({
       metadata: () =>
@@ -189,6 +261,9 @@ describe("Publication chooser — opening and root publication", () => {
     await act(async () => release(publicationMetadata()));
     await loaded(dialog);
     expect(within(dialog).queryByText("Loading parent issues…")).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Publish" })).toBeDisabled();
+    await selectRoot(dialog);
+    expect(within(dialog).getByRole("button", { name: "Publish" })).toBeEnabled();
   });
 
   it("NAW-FR-RBTE, NAW-FR-JBHV: confirming closes the chooser while the held call runs, and the call settles into the tag", async () => {
@@ -203,6 +278,7 @@ describe("Publication chooser — opening and root publication", () => {
     });
     const dialog = await openChooser();
     await loaded(dialog);
+    await selectRoot(dialog);
     await userEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
     await waitFor(() => expect(calls("publish_draft_to_github")).toHaveLength(1));
 
@@ -215,6 +291,7 @@ describe("Publication chooser — opening and root publication", () => {
   it("NAW-FR-JBHV: two activations of Publish are one attempt", async () => {
     const dialog = await openChooser();
     await loaded(dialog);
+    await selectRoot(dialog);
     const publish = within(dialog).getByRole("button", { name: "Publish" });
 
     await act(async () => {
@@ -259,6 +336,7 @@ describe("Publication chooser — sub-issue publication", () => {
         parentIssueTypes: ["Feature"],
         subIssueType: "Task",
         subIssueMilestonePolicy: "no_milestone",
+        rootIssueType: null,
       },
     });
     const dialog = await openChooser();
@@ -280,6 +358,7 @@ describe("Publication chooser — sub-issue publication", () => {
         parentIssueTypes: ["Feature"],
         subIssueType: "Task",
         subIssueMilestonePolicy: "author_selected",
+        rootIssueType: null,
       },
     });
     const dialog = await openChooser();
@@ -340,7 +419,7 @@ describe("Publication chooser — loading, empty, unavailable, and failed states
     });
   });
 
-  it("NAW-FR-WMEP: an empty parent list names the configured Types and offers root", async () => {
+  it("NAW-FR-WMEP, NAW-FR-ASYN: an empty parent list names the configured Types and selects root", async () => {
     withMetadata({ parents: loadedList([]) });
     const dialog = await openChooser();
     await loaded(dialog);
@@ -349,12 +428,15 @@ describe("Publication chooser — loading, empty, unavailable, and failed states
     expect(within(dialog).queryByRole("combobox", { name: "Parent issue" })).toBeNull();
     expect(dialog).toHaveTextContent("No open issue of Feature was found.");
     expect(within(dialog).getByRole("radio", { name: /Publish as a root issue/ })).toBeEnabled();
+    expect(within(dialog).getByRole("radio", { name: /Publish as a root issue/ })).toBeChecked();
+    expect(within(dialog).getByRole("button", { name: "Publish" })).toBeEnabled();
   });
 
   it("NAW-FR-WMEP, NAW-FR-ZOAS: an empty Type list renders a notice instead of an empty selector", async () => {
     withMetadata({ issueTypes: loadedList([]) });
     const dialog = await openChooser();
     await loaded(dialog);
+    await selectRoot(dialog);
 
     expect(within(dialog).queryByLabelText("Type")).toBeNull();
     expect(dialog).toHaveTextContent("No issue Type is available. The issue publishes without a Type.");
@@ -371,6 +453,7 @@ describe("Publication chooser — loading, empty, unavailable, and failed states
     });
     const dialog = await openChooser();
     await loaded(dialog);
+    await selectRoot(dialog);
 
     expect(within(dialog).queryByLabelText("Type")).toBeNull();
     expect(dialog).toHaveTextContent("Issue Types are unavailable: The issue Types of this repository could not be read.");
@@ -381,6 +464,7 @@ describe("Publication chooser — loading, empty, unavailable, and failed states
     withMetadata({ milestones: loadedList([]) });
     let dialog = await openChooser();
     await loaded(dialog);
+    await selectRoot(dialog);
     expect(within(dialog).queryByLabelText("Milestone")).toBeNull();
     expect(dialog).toHaveTextContent("There is no open milestone. The issue publishes without a milestone.");
     cleanup();
@@ -393,6 +477,7 @@ describe("Publication chooser — loading, empty, unavailable, and failed states
     });
     dialog = await openChooser();
     await loaded(dialog);
+    await selectRoot(dialog);
     expect(within(dialog).queryByLabelText("Milestone")).toBeNull();
     expect(dialog).toHaveTextContent("Milestones are unavailable: The milestones of this repository could not be read.");
   });
@@ -461,14 +546,25 @@ describe("Publication chooser — cancellation, focus, and accessibility", () =>
     expect(calls("publish_draft_to_github")).toHaveLength(0);
   });
 
-  it("NAW-FR-PSMO: the chooser is a named modal dialog, focus starts on the root option, and its choices form one labelled radio group", async () => {
+  it("NAW-FR-PSMO: the chooser is a named modal dialog, focus starts on the first enabled option, and its choices form one labelled radio group", async () => {
+    // The read is held, so the chooser opens with the sub-issue option
+    // disabled and the root option is the first enabled option.
+    let release: (m: PublicationMetadata) => void = () => {};
+    stub({
+      metadata: () =>
+        new Promise<PublicationMetadata>((resolve) => {
+          release = resolve;
+        }),
+    });
     const dialog = await openChooser();
-    await loaded(dialog);
 
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAccessibleName("Publish to GitHub");
     expect(within(dialog).getByRole("radiogroup", { name: "Publish as" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: /Publish as a sub-issue of/ })).toBeDisabled();
     expect(within(dialog).getByRole("radio", { name: /Publish as a root issue/ })).toHaveFocus();
+    await act(async () => release(publicationMetadata()));
+    await loaded(dialog);
   });
 
   it("NAW-FR-PSMO: Tab stays inside the chooser, and the radio group moves by arrow key", async () => {
@@ -482,9 +578,13 @@ describe("Publication chooser — cancellation, focus, and accessibility", () =>
     await userEvent.tab({ shift: true });
     expect(dialog.contains(document.activeElement)).toBe(true);
 
-    within(dialog).getByRole("radio", { name: /Publish as a root issue/ }).focus();
+    // The sub-issue option is checked when the parents load (NAW-FR-ASYN),
+    // so the arrow key must move the selection to the root option.
+    const sub = within(dialog).getByRole("radio", { name: "Publish as a sub-issue of" });
+    expect(sub).toBeChecked();
+    sub.focus();
     await userEvent.keyboard("{ArrowDown}");
-    expect(within(dialog).getByRole("radio", { name: "Publish as a sub-issue of" })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /Publish as a root issue/ })).toBeChecked();
   });
 
   it("NAW-FR-PSMO: each notice is announced as a status", async () => {

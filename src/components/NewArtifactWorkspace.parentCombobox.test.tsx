@@ -59,9 +59,8 @@ async function openChooser() {
   const menu = await openActions();
   await userEvent.click(within(menu).getByRole("menuitem", { name: /Publish to GitHub/ }));
   const dialog = await publicationChooser();
-  await waitFor(() =>
-    expect(within(dialog).getByRole("button", { name: "Publish" })).toBeEnabled(),
-  );
+  // The read has landed once the combobox stands in place of its notice.
+  await within(dialog).findByRole("combobox", { name: "Parent issue" });
   return dialog;
 }
 
@@ -99,12 +98,13 @@ describe("Publication chooser — the parent combobox", () => {
     expect(menu.dataset.placement).toBeDefined();
   });
 
-  it("NAW-FR-ASYN, NAW-FR-RBTE: choosing an issue selects the sub-issue option; the root option then sends no parent", async () => {
+  it("NAW-FR-TCQB, NAW-FR-ASYN, NAW-FR-RBTE: choosing an issue selects the sub-issue option; the root option then sends no parent", async () => {
     const dialog = await openChooser();
     const sub = within(dialog).getByRole("radio", { name: "Publish as a sub-issue of" });
 
-    // NAW-FR-RBTE: the sub-issue option with no parent chosen disables Publish.
-    await userEvent.click(sub);
+    // NAW-FR-TCQB / NAW-FR-RBTE: the sub-issue option is selected when the
+    // parents load, and with no parent chosen Publish is disabled.
+    expect(sub).toBeChecked();
     expect(within(dialog).getByRole("button", { name: "Publish" })).toBeDisabled();
 
     await chooseParent(dialog, 412);

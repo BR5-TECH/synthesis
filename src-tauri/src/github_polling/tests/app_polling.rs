@@ -279,6 +279,7 @@ fn the_publication_settings_leave_polling_unchanged() {
         parent_issue_types: vec!["Epic".into()],
         sub_issue_type: "Bug".into(),
         sub_issue_milestone_policy: MilestonePolicy::NoMilestone,
+        root_issue_type: Some("Bug".into()),
     };
     save_github_publication_settings_to(&h.root(), &saved).unwrap();
 

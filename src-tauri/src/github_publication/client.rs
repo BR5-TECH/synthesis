@@ -213,7 +213,15 @@ impl HttpGithubIssues {
 }
 
 fn agent() -> ureq::Agent {
-    crate::tls::ureq_config().timeout_global(Some(TIMEOUT)).build().into()
+    crate::tls::ureq_config()
+        .timeout_global(Some(TIMEOUT))
+        // GHP-FR-SVXP / GHP-FR-HSTA: GitHub answers a moved issue with a
+        // redirect on the same API host. The token follows it there, so the
+        // moved issue is read rather than reported missing, and it goes to no
+        // other host.
+        .redirect_auth_headers(ureq::config::RedirectAuthHeaders::SameHost)
+        .build()
+        .into()
 }
 
 /// Every request carries the same four headers. GitHub rejects a request with

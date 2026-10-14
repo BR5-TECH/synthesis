@@ -13,24 +13,27 @@ use crate::github_publication as gp;
 
 type Mock = tauri::test::MockRuntime;
 
-struct Session {
-    dir: TempDir,
+pub(super) struct Session {
+    pub(super) dir: TempDir,
     _store: TempDir,
-    app: tauri::App<Mock>,
-    fake: Arc<FakeGithub>,
-    id: String,
+    pub(super) app: tauri::App<Mock>,
+    pub(super) fake: Arc<FakeGithub>,
+    pub(super) id: String,
 }
 
 impl Session {
-    fn handle(&self) -> tauri::AppHandle<Mock> {
+    pub(super) fn handle(&self) -> tauri::AppHandle<Mock> {
         self.app.handle().clone()
     }
 
-    fn root(&self) -> crate::fs::RootFs {
+    pub(super) fn root(&self) -> crate::fs::RootFs {
         crate::fs::RootFs::for_root(self.dir.path())
     }
 
-    fn publish(&self, choice: PublicationChoiceInput) -> Result<PublicationOutcome, String> {
+    pub(super) fn publish(
+        &self,
+        choice: PublicationChoiceInput,
+    ) -> Result<PublicationOutcome, String> {
         gp::publish_draft_to_github_impl(
             &self.handle(),
             self.id.clone(),
@@ -40,14 +43,14 @@ impl Session {
         )
     }
 
-    fn store(&self) -> PublicationStore {
+    pub(super) fn store(&self) -> PublicationStore {
         store::read_store(&self.root(), &self.id).unwrap()
     }
 }
 
 /// A project in a real repository with a GitHub `origin`, one draft, and a
 /// token the publication commands resolve.
-fn session() -> Session {
+pub(super) fn session() -> Session {
     let dir = project();
     let repo = git2::Repository::init(dir.path()).unwrap();
     repo.remote("origin", "https://github.com/acme/widgets.git").unwrap();
@@ -175,8 +178,10 @@ fn the_settings_commands_persist_and_refuse() {
         vec!["Feature".into(), "Epic".into()],
         "Bug".into(),
         MilestonePolicy::AuthorSelected,
+        Some("Feature".into()),
     )
     .unwrap();
+    assert_eq!(saved.root_issue_type.as_deref(), Some("Feature"));
     assert_eq!(get().unwrap(), saved);
     let polling = crate::project_settings::load_github_polling_settings_from(&s.root()).unwrap();
     assert_eq!(polling.project_node_id.as_deref(), Some("PVT_1"));
@@ -187,7 +192,8 @@ fn the_settings_commands_persist_and_refuse() {
             &handle,
             vec![],
             "Task".into(),
-            MilestonePolicy::default()
+            MilestonePolicy::default(),
+            None,
         )
         .map(|_| ()),
         Err(ERR_INVALID_PUBLICATION_SETTINGS.to_string())
@@ -280,6 +286,7 @@ fn retry_and_a_new_attempt_keep_the_saved_choice() {
         vec!["Epic".into()],
         "Bug".into(),
         MilestonePolicy::NoMilestone,
+        None,
     )
     .unwrap();
     let retried = gp::retry_draft_publication_impl(&s.handle(), s.id.clone()).unwrap();

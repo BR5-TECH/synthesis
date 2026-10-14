@@ -24,6 +24,7 @@ fn an_unset_store_reads_as_the_defaults() {
     assert_eq!(settings.parent_issue_types, vec!["Feature".to_string()]);
     assert_eq!(settings.sub_issue_type, "Task");
     assert_eq!(settings.sub_issue_milestone_policy, MilestonePolicy::InheritParent);
+    assert_eq!(settings.root_issue_type, None);
     assert_eq!(settings, GithubPublicationSettings::default());
 }
 
@@ -49,6 +50,7 @@ fn the_settings_are_project_public_and_leave_polling_alone() {
         parent_issue_types: vec!["Feature".into(), "Epic".into()],
         sub_issue_type: "Bug".into(),
         sub_issue_milestone_policy: MilestonePolicy::AuthorSelected,
+        root_issue_type: Some("Bug".into()),
     };
     save_github_publication_settings_to(&root, &saved).unwrap();
 
@@ -73,7 +75,7 @@ fn an_invalid_stored_value_reads_as_its_default() {
     let (dir, root) = fresh();
     std::fs::write(
         dir.path().join(".synthesis/project.toml"),
-        "[githubPublication]\nparentIssueTypes = [\"  \", \"\"]\nsubIssueType = \"  \"\nsubIssueMilestonePolicy = \"sometimes\"\n",
+        "[githubPublication]\nparentIssueTypes = [\"  \", \"\"]\nsubIssueType = \"  \"\nsubIssueMilestonePolicy = \"sometimes\"\nrootIssueType = \"   \"\n",
     )
     .unwrap();
     assert_eq!(
@@ -83,13 +85,30 @@ fn an_invalid_stored_value_reads_as_its_default() {
 
     std::fs::write(
         dir.path().join(".synthesis/project.toml"),
-        "[githubPublication]\nparentIssueTypes = [\"Retired\", \"retired\", \" Epic \"]\nsubIssueType = \"Gone\"\nsubIssueMilestonePolicy = \"no_milestone\"\n",
+        "[githubPublication]\nparentIssueTypes = [\"Retired\", \"retired\", \" Epic \"]\nsubIssueType = \"Gone\"\nsubIssueMilestonePolicy = \"no_milestone\"\nrootIssueType = \" Gone \"\n",
     )
     .unwrap();
     let settings = load_github_publication_settings_from(&root).unwrap();
     assert_eq!(settings.parent_issue_types, vec!["Retired".to_string(), "Epic".to_string()]);
     assert_eq!(settings.sub_issue_type, "Gone");
     assert_eq!(settings.sub_issue_milestone_policy, MilestonePolicy::NoMilestone);
+    assert_eq!(settings.root_issue_type.as_deref(), Some("Gone"));
+}
+
+/// PSS-FR-HWBG / PSS-FR-RDXE: a stored root issue Type reads back as stored,
+/// and no Type is stored as an absent value.
+#[test]
+fn the_root_issue_type_is_stored_and_no_type_is_absent() {
+    let (dir, root) = fresh();
+    let typed =
+        GithubPublicationSettings { root_issue_type: Some("Bug".into()), ..Default::default() };
+    save_github_publication_settings_to(&root, &typed).unwrap();
+    assert!(project_toml(&dir).contains("rootIssueType = \"Bug\""));
+    assert_eq!(load_github_publication_settings_from(&root).unwrap(), typed);
+
+    save_github_publication_settings_to(&root, &GithubPublicationSettings::default()).unwrap();
+    assert!(!project_toml(&dir).contains("rootIssueType"));
+    assert_eq!(load_github_publication_settings_from(&root).unwrap().root_issue_type, None);
 }
 
 /// PSS-FR-RDXE: a malformed project-public file stays the typed error of

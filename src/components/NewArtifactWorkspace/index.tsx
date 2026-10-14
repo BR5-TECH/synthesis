@@ -579,6 +579,11 @@ export function NewArtifactWorkspace({
     if (dirty && !(await saveCurrent())) return;
     await publication.begin();
   };
+  /** NAW-FR-KMLN: an update also writes the unsaved prompt first. */
+  const beginUpdate = async () => {
+    if (dirty && !(await saveCurrent())) return;
+    await publication.update();
+  };
 
   // DCR-FR-01 / DDS-FR-ZRPT: the review, in the document column. What it
   // holds, what each decision invokes, and what a refusal leaves standing all
@@ -839,6 +844,7 @@ export function NewArtifactWorkspace({
           publication={publication}
           onGraduate={() => setStarting(true)}
           onPublish={() => void beginPublication()}
+          onUpdate={() => void beginUpdate()}
           onToggleArchive={() => void setStatus(archived ? "active" : "archived")}
           onDiscussFocus={() => setDiscussFocus((n) => n + 1)}
           dismissSignal={dismissControl}

@@ -248,8 +248,9 @@ fn the_type_and_milestone_answers_are_read() {
     assert!(milestone_from_json(&serde_json::json!({ "title": "x" })).is_none());
 }
 
-/// GHP-FR-PLQE / GHP-FR-OHGY: the request names a Type and a milestone only
-/// when the choice does, so a plain root issue sends the title and body alone.
+/// GHP-FR-PLQE / GHP-FR-OHGY / GHP-FR-TCFV: the request names a Type and a
+/// milestone only when the choice does, so a plain root issue and an update
+/// send the title and body alone.
 #[test]
 fn the_request_body_names_only_what_the_choice_names() {
     assert_eq!(

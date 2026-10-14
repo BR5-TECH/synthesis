@@ -459,6 +459,24 @@ describe("DraftInformationModal", () => {
     ]);
   });
 
+  it("DFI-FR-BZQN, NAW-FR-PTYO: a record an update appended shows its updated instant, and the record before it stays listed", async () => {
+    const published = record(418, "pub-c", "2026-09-12T10:04:00.000Z");
+    const updated = { ...published, updatedAt: "2026-10-02T08:00:00.000Z" };
+    renderModal(statistics(), vi.fn(), {
+      current: updated,
+      history: [updated, published],
+      attempt: null,
+      eligibility: NO_PUBLICATION.eligibility,
+    });
+    await screen.findByText("Published to GitHub");
+
+    expect(screen.getAllByTestId("publication-record-updated").map((n) => n.textContent)).toEqual([
+      `updated ${formatBoundary("2026-10-02T08:00:00.000Z")}`,
+    ]);
+    expect(screen.getByText("History")).toBeInTheDocument();
+    expect(screen.getAllByText("marker pub-c")).toHaveLength(2);
+  });
+
   it("DFI-FR-BZQN: the group re-reads on a publication change naming this draft", async () => {
     renderModal(statistics());
     await screen.findByText("Time spent editing");

@@ -4,6 +4,7 @@ import {
   describeMismatches,
   describePublicationChoice,
   publicationErrorText,
+  updateErrorText,
 } from "./publicationChoice";
 
 describe("publication choice wording", () => {
@@ -63,5 +64,26 @@ describe("publication choice wording", () => {
     expect(
       publicationErrorText("Error: tls_untrusted:unknown_issuer:api.github.com"),
     ).toBe("The certificate of api.github.com is not trusted: the issuer of the certificate is unknown.");
+  });
+
+  it("NAW-FR-KMFT, GHP-FR-SVXP, GHP-FR-BCAV: every typed error of an update has displayable text that keeps its code", () => {
+    for (const code of [
+      "no_publication_record",
+      "issue_not_found",
+      "issue_moved",
+      "issue_update_forbidden",
+      "issue_update_failed",
+      "github_unreachable",
+      "publication_store_write_failed",
+      "attempt_in_progress",
+    ]) {
+      const text = updateErrorText(`Error: ${code}`);
+      expect(text).not.toBe(`Error: ${code}`);
+      expect(text.endsWith(`(${code})`)).toBe(true);
+    }
+    // A code the update does not name renders as publication renders it.
+    expect(updateErrorText("parent_issue_unavailable")).toBe(
+      publicationErrorText("parent_issue_unavailable"),
+    );
   });
 });

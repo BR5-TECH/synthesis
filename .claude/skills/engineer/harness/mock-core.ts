@@ -7065,6 +7065,64 @@ function publicationSettle(draftId: string, issueNumber?: number): any {
 /** CPR-FR-ODTB: true once `push_branch` put the head branch on the remote. */
 let pullRequestHeadPushed = false;
 
+/** GHP-FR-MDLD: the chooser's lists, the same for the read and the cache. */
+function publicationMetadataMock() {
+  const loaded = (items: unknown[]) => ({
+    state: "loaded",
+    items,
+    errorCode: null,
+    error: null,
+  });
+  const failed = (errorCode: string, error: string) => ({
+    state: "failed",
+    items: [],
+    errorCode,
+    error,
+  });
+  return {
+    repositoryOwner: "acme",
+    repositoryName: "acme-app",
+    settings: publicationSettings,
+    parents: harnessFlag("publicationParentsFail")
+      ? failed("parent_issues_unreadable", "The open issues of this repository could not be read.")
+      : loaded([
+          {
+            number: 412,
+            title: "Window chrome",
+            issueType: "Feature",
+            url: "https://github.com/acme/acme-app/issues/412",
+            milestone: { number: 7, title: "v1.2" },
+          },
+          {
+            number: 398,
+            title: "Release pipeline",
+            issueType: "Feature",
+            url: "https://github.com/acme/acme-app/issues/398",
+            milestone: null,
+          },
+          ...(harnessFlag("publicationManyParents")
+            ? Array.from({ length: 60 }, (_, i) => ({
+                number: 500 + i,
+                title: `Parent feature ${i}`,
+                issueType: "Feature",
+                url: `https://github.com/acme/acme-app/issues/${500 + i}`,
+                milestone: i % 2 ? { number: 8, title: "v1.3" } : null,
+              }))
+            : []),
+        ]),
+    issueTypes: harnessFlag("publicationTypesFail")
+      ? failed("issue_types_unreadable", "The issue Types of this repository could not be read.")
+      : loaded([{ name: "Feature" }, { name: "Task" }, { name: "Bug" }]),
+    milestones: harnessFlag("publicationMilestonesEmpty")
+      ? loaded([])
+      : loaded([
+          { number: 7, title: "v1.2" },
+          { number: 8, title: "v1.3" },
+        ]),
+    subIssueType: { name: publicationSettings.subIssueType, resolved: publicationSettings.subIssueType },
+  };
+}
+
 /**
  * The app's `invoke`: the unified discussion contract in front of the legacy
  * switch below (see `mock-unified-discussions.ts`).
@@ -9966,62 +10024,28 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
        `?publicationTypesFail`, and `?publicationMilestonesEmpty` force the
        failed and empty states of NAW-FR-WMEP. `?publicationManyParents` adds
        sixty parents, so the bounded combobox of NAW-FR-XTGP can be seen. */
-    case "load_publication_metadata": {
-      const loaded = (items: unknown[]) => ({
-        state: "loaded",
-        items,
-        errorCode: null,
-        error: null,
-      });
-      const failed = (errorCode: string, error: string) => ({
-        state: "failed",
-        items: [],
-        errorCode,
-        error,
-      });
-      return {
-        repositoryOwner: "acme",
-        repositoryName: "acme-app",
-        settings: publicationSettings,
-        parents: harnessFlag("publicationParentsFail")
-          ? failed("parent_issues_unreadable", "The open issues of this repository could not be read.")
-          : loaded([
-              {
-                number: 412,
-                title: "Window chrome",
-                issueType: "Feature",
-                url: "https://github.com/acme/acme-app/issues/412",
-                milestone: { number: 7, title: "v1.2" },
-              },
-              {
-                number: 398,
-                title: "Release pipeline",
-                issueType: "Feature",
-                url: "https://github.com/acme/acme-app/issues/398",
-                milestone: null,
-              },
-              ...(harnessFlag("publicationManyParents")
-                ? Array.from({ length: 60 }, (_, i) => ({
-                    number: 500 + i,
-                    title: `Parent feature ${i}`,
-                    issueType: "Feature",
-                    url: `https://github.com/acme/acme-app/issues/${500 + i}`,
-                    milestone: i % 2 ? { number: 8, title: "v1.3" } : null,
-                  }))
-                : []),
-            ]),
-        issueTypes: harnessFlag("publicationTypesFail")
-          ? failed("issue_types_unreadable", "The issue Types of this repository could not be read.")
-          : loaded([{ name: "Feature" }, { name: "Task" }, { name: "Bug" }]),
-        milestones: harnessFlag("publicationMilestonesEmpty")
-          ? loaded([])
-          : loaded([
-              { number: 7, title: "v1.2" },
-              { number: 8, title: "v1.3" },
-            ]),
-        subIssueType: { name: publicationSettings.subIssueType, resolved: publicationSettings.subIssueType },
-      };
-    }
+    case "load_publication_metadata":
+      return publicationMetadataMock();
+    /* GHP-FR-JTYL: the backend cache holds the same lists.
+       `?publicationNoCache` makes it hold none, so the chooser reads itself. */
+    case "get_publication_metadata_cache":
+      return harnessFlag("publicationNoCache") ? null : publicationMetadataMock();
+    /* GHP-FR-SIMK: the refresh ends after a short delay, unchanged.
+       `?publicationRefreshFails` makes it fail. */
+    /* GHP-FR-KPXF: the startup refresh of the harness never fails. */
+    case "take_publication_metadata_startup_failure":
+      return null;
+    case "refresh_publication_metadata":
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      return harnessFlag("publicationRefreshFails")
+        ? {
+            outcome: "failed",
+            errorCode: "github_unreachable",
+            error: "GitHub could not be reached.",
+            remoteName: "origin",
+            metadata: publicationMetadataMock(),
+          }
+        : { outcome: "unchanged", errorCode: null, error: null, remoteName: "origin", metadata: publicationMetadataMock() };
     /* GHP-FR-KVRH / GHP-FR-NQWX / GHP-FR-PTYL: the Publication group of the
        GitHub Project settings section. */
     case "get_github_publication_settings":

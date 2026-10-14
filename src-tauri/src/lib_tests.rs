@@ -35,6 +35,8 @@ const EVENT_NAMES: &[&str] = &[
     agents::AGENTS_CHANGED,
     comments::DISCUSSION_CHANGED,
     github_tokens::GITHUB_TOKENS_CHANGED,
+    github_publication::metadata_refresh::PUBLICATION_METADATA_CHANGED,
+    github_publication::metadata_refresh::PUBLICATION_METADATA_STARTUP_FAILED,
     logging::LOG_RECORDS_APPENDED,
     notifications::NOTIFICATION_ACTIVATED,
     graduation::GRADUATION_QUEUE_CHANGED,

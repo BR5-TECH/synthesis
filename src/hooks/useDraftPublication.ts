@@ -16,7 +16,6 @@ import {
   cancelDraftPublicationConflict,
   getDraftPublication,
   listPublicationRemotes,
-  loadPublicationMetadata,
   openPublicationIssue,
   publishDraftToGithub,
   resolveDraftPublicationConflict,
@@ -25,13 +24,12 @@ import {
 } from "../api";
 import { onDraftPublicationChanged } from "../events";
 import { logError, logInfo, logWarn } from "../logging";
-import { githubPollingErrorMessage } from "../state/githubPolling";
 import { publicationErrorText, updateErrorText } from "../state/publicationChoice";
 import { showToast } from "../state/toasts";
+import { usePublicationChooser, type PublicationChooserState } from "./usePublicationChooser";
 import type {
   DraftPublicationView,
   PublicationChoiceInput,
-  PublicationMetadata,
   PublicationMismatch,
   PublicationOutcome,
   PublicationRecoveryChoice,
@@ -59,18 +57,7 @@ export interface RecoveryPrompt {
   mismatches: PublicationMismatch[];
 }
 
-/**
- * NAW-FR-HNVR: the publication chooser while it is open. The metadata is read
- * once when it opens (`ready`), or its read failed outright (`failed`), in
- * which case the chooser still offers root publication (NAW-FR-TCQB).
- */
-export interface PublicationChooserState {
-  remoteName: string;
-  persist: boolean;
-  status: "loading" | "ready" | "failed";
-  metadata: PublicationMetadata | null;
-  error: string | null;
-}
+export type { PublicationChooserState } from "./usePublicationChooser";
 
 export interface UseDraftPublicationResult {
   view: DraftPublicationView | null;
@@ -144,9 +131,7 @@ export function useDraftPublication(
     null,
   );
   const [recovery, setRecovery] = useState<RecoveryPrompt | null>(null);
-  const [chooser, setChooser] = useState<PublicationChooserState | null>(null);
-  // A chooser closed before its read lands must not be reopened by the answer.
-  const chooserRequest = useRef(0);
+  const { chooser, openChooser, closeChooser } = usePublicationChooser(draftId);
   const [busy, setBusy] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -234,43 +219,6 @@ export function useDraftPublication(
     [draftId, reload],
   );
 
-  /**
-   * NAW-FR-HNVR: open the chooser and read its metadata once. A read that fails
-   * outright leaves the chooser open on its root option (NAW-FR-TCQB, GHP-FR-UXOT).
-   */
-  const openChooser = useCallback(
-    async (remoteName: string, persist: boolean) => {
-      if (!draftId) return;
-      const request = ++chooserRequest.current;
-      setChooser({
-        remoteName,
-        persist,
-        status: "loading",
-        metadata: null,
-        error: null,
-      });
-      try {
-        const metadata = await loadPublicationMetadata(draftId, remoteName);
-        if (request !== chooserRequest.current) return;
-        setChooser({ remoteName, persist, status: "ready", metadata, error: null });
-      } catch (e) {
-        logError(["frontend", "remote"], "publication metadata could not be read", {
-          draftId,
-          error: String(e),
-        });
-        if (request !== chooserRequest.current) return;
-        setChooser({
-          remoteName,
-          persist,
-          status: "failed",
-          metadata: null,
-          error: githubPollingErrorMessage(e),
-        });
-      }
-    },
-    [draftId],
-  );
-
   const begin = useCallback(async () => {
     if (!draftId || inFlight.current) return;
     inFlight.current = true;
@@ -305,19 +253,13 @@ export function useDraftPublication(
     [draftId, openChooser],
   );
 
-  const closeChooser = useCallback(() => {
-    chooserRequest.current += 1;
-    setChooser(null);
-  }, []);
-
   const confirmChooser = useCallback(
     async (choice: PublicationChoiceInput) => {
       // Checked before the chooser closes: a confirm that `run` would refuse
       // must not take the chooser away with it.
       if (!draftId || !chooser || inFlight.current) return;
       const { remoteName, persist } = chooser;
-      chooserRequest.current += 1;
-      setChooser(null);
+      closeChooser();
       logInfo(["frontend"], "publishing draft to GitHub", {
         draftId,
         remoteName,
@@ -335,7 +277,7 @@ export function useDraftPublication(
         true,
       );
     },
-    [draftId, chooser, run],
+    [draftId, chooser, closeChooser, run],
   );
 
   const retry = useCallback(

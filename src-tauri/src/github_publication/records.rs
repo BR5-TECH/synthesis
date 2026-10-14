@@ -53,6 +53,8 @@ pub const ERR_INVALID_PUBLICATION_CHOICE: &str = "invalid_publication_choice";
 pub const ERR_SUB_ISSUE_LINK_FAILED: &str = "sub_issue_link_failed";
 /// GHP-FR-NQWX: settings the store refuses.
 pub const ERR_INVALID_PUBLICATION_SETTINGS: &str = "invalid_publication_settings";
+/// GHP-FR-SIMK: a metadata refresh with no GitHub Project selected.
+pub const ERR_GITHUB_PROJECT_NOT_SELECTED: &str = "github_project_not_selected";
 
 /// GHP-FR-YDAN: the repository the project's publication remote names.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]

@@ -40,6 +40,8 @@ use crate::project::ProjectState;
 
 pub mod client;
 pub mod flow;
+pub mod metadata_cache;
+pub mod metadata_refresh;
 pub mod records;
 pub mod remotes;
 pub mod store;
@@ -417,7 +419,12 @@ fn publish_draft_to_github_impl<R: tauri::Runtime>(
     )
     .map_err(|code| fail(app, &draft_id, code))?;
 
+    let previous = crate::project_settings::load_publication_remote_selection_from(&root);
     flow::persist_choice(&root, &remote, persist_remote)?;
+    // GHP-FR-JDMU: a changed persisted remote refreshes the metadata cache.
+    if previous != crate::project_settings::load_publication_remote_selection_from(&root) {
+        metadata_refresh::invalidate(app, "publication_remote");
+    }
     let attempt = flow::open_attempt_with(
         &root,
         &draft_id,
@@ -558,6 +565,7 @@ fn set_github_publication_settings_impl<R: tauri::Runtime>(
 ) -> Result<GithubPublicationSettings, String> {
     let project = app.state::<ProjectState>();
     let root = require_root(app, &project)?;
+    let previous = crate::project_settings::load_github_publication_settings_from(&root).ok();
     let settings = flow::validated_settings(
         parent_issue_types,
         sub_issue_type,
@@ -590,6 +598,10 @@ fn set_github_publication_settings_impl<R: tauri::Runtime>(
             "root_typed" => settings.root_issue_type.is_some(),
         },
     );
+    // GHP-FR-JDMU: the parent issue Types decide the parent list.
+    if previous.is_none_or(|p| p.parent_issue_types != settings.parent_issue_types) {
+        metadata_refresh::invalidate(app, "parent_issue_types");
+    }
     Ok(settings)
 }
 

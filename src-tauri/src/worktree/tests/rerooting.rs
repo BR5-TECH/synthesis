@@ -365,3 +365,69 @@ fn a_refused_activation_emits_nothing_and_unmounts_nothing() {
         "and the content root is unchanged"
     );
 }
+
+/// The refresh count, the last trigger, and the timer epoch of the
+/// publication metadata cache.
+type RefreshStarts = (u64, Option<crate::github_publication::metadata_cache::RefreshTrigger>, u64);
+
+/// A reroot onto `alpha` with the publication metadata cache keyed to the
+/// outgoing worktree. Returns the starts before and after the reroot.
+fn reroot_with_publication_cache(github_project: Option<&str>) -> (RefreshStarts, RefreshStarts) {
+    use crate::github_publication::metadata_refresh::{self as mr, PublicationMetadataCache};
+    use tauri::Manager;
+    let f = Fixture::new();
+    f.branch("alpha");
+    let alpha = f.add_worktree("wt-alpha", "alpha");
+    let settings = crate::project_settings::GithubPollingSettings {
+        project_node_id: github_project.map(str::to_string),
+        ..Default::default()
+    };
+    crate::project_settings::save_github_polling_settings_to(
+        &crate::fs::RootFs::for_root(&alpha),
+        &settings,
+    )
+    .unwrap();
+
+    let app = mock_app_on(&f.root(), &f.root());
+    app.manage(PublicationMetadataCache::default());
+    // The fixture has no Git remote, so a refresh fails before it contacts
+    // any host.
+    app.manage(GlobalSettingsStore::in_memory());
+    app.manage(crate::github_tokens::GithubTokens::default());
+    app.manage(crate::github_publication::GithubIssuesSeam::default());
+    mr::open_for_test(app.handle());
+    let before = mr::starts_for_test(app.handle());
+    let store = GlobalSettingsStore::in_memory();
+    reroot(
+        app.handle(),
+        &app.state::<ProjectState>(),
+        &app.state::<ProjectWatcher>(),
+        &store,
+        &alpha,
+    )
+    .unwrap();
+    (before, mr::starts_for_test(app.handle()))
+}
+
+// `GHP-github-publication.md` GHP-FR-ROBR / GHP-FR-JDMU: a reroot empties the
+// publication metadata cache and, with a GitHub Project selected in the new
+// worktree, starts one refresh and re-arms the timer.
+#[test]
+fn rerooting_refreshes_the_publication_metadata_cache() {
+    use crate::github_publication::metadata_cache::RefreshTrigger;
+    let ((n0, _, e0), (n1, trigger, e1)) = reroot_with_publication_cache(Some("PVT_1"));
+    assert_eq!(n1, n0 + 1);
+    assert_eq!(trigger, Some(RefreshTrigger::Invalidation));
+    // One reset and one armed timer.
+    assert_eq!(e1, e0 + 2);
+}
+
+// `GHP-github-publication.md` GHP-FR-ROBR / GHP-FR-HGVL: a reroot with no
+// GitHub Project selected empties the cache, starts no refresh, and arms the
+// idle timer.
+#[test]
+fn rerooting_with_no_selected_github_project_starts_no_publication_refresh() {
+    let ((n0, _, e0), (n1, _, e1)) = reroot_with_publication_cache(None);
+    assert_eq!(n1, n0);
+    assert_eq!(e1, e0 + 2);
+}

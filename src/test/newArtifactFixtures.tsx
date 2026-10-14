@@ -27,6 +27,7 @@ import type {
   Participant,
   PublicationErrorCode,
   PublicationMetadata,
+  PublicationMetadataRefresh,
   PublicationRecord,
   PublicationRemoteResolution,
 } from "../types";
@@ -650,6 +651,10 @@ export function makeStubs(invokeMock: Mock) {
       remotes?: PublicationRemoteResolution;
       /** GHP-FR-MDLD: what `load_publication_metadata` answers or throws. */
       metadata?: PublicationMetadata | (() => Promise<PublicationMetadata>);
+      /** GHP-FR-JTYL: what `get_publication_metadata_cache` answers; none by default. */
+      cache?: PublicationMetadata | null;
+      /** GHP-FR-SIMK: what `refresh_publication_metadata` answers or throws. */
+      refresh?: () => Promise<PublicationMetadataRefresh>;
     } = {},
   ) {
     let lastStatus: DraftStatus = opts.status ?? "active";
@@ -711,6 +716,13 @@ export function makeStubs(invokeMock: Mock) {
             : (opts.publication ?? noPublication());
         case "list_publication_remotes":
           return opts.remotes ?? oneEligibleRemote();
+        case "get_publication_metadata_cache":
+          return opts.cache ?? null;
+        case "refresh_publication_metadata":
+          return opts.refresh
+            ? opts.refresh()
+            : { outcome: "unchanged", errorCode: null, error: null, remoteName: "origin",
+                metadata: opts.cache ?? null };
         case "load_publication_metadata":
           return typeof opts.metadata === "function"
             ? opts.metadata()

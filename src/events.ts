@@ -14,6 +14,8 @@ import type {
   ArtifactChangedPayload,
   BranchesChangedPayload,
   GithubPollingChangedPayload,
+  PublicationMetadataCacheChanged,
+  PublicationMetadataStartupFailed,
   AgentActivityState,
   ChangesUpdatedPayload,
   Discussion,
@@ -122,6 +124,28 @@ export const onDraftPublicationChanged = (
   handler: (payload: { draftId: string }) => void,
 ): Promise<UnlistenFn> =>
   listen<{ draftId: string }>(DRAFT_PUBLICATION_CHANGED, (event) =>
+    handler(event.payload),
+  );
+
+/** GHP-FR-JIAU: a refresh changed the publication metadata cache. */
+export const PUBLICATION_METADATA_CHANGED = "publication-metadata-changed";
+
+/** GHP-FR-JIAU: subscribe to [`PUBLICATION_METADATA_CHANGED`]. */
+export const onPublicationMetadataChanged = (
+  handler: (payload: PublicationMetadataCacheChanged) => void,
+): Promise<UnlistenFn> =>
+  listen<PublicationMetadataCacheChanged>(PUBLICATION_METADATA_CHANGED, (event) =>
+    handler(event.payload),
+  );
+
+/** GHP-FR-ISJI: the startup refresh of the publication metadata failed. */
+export const PUBLICATION_METADATA_STARTUP_FAILED = "publication-metadata-startup-failed";
+
+/** GHP-FR-ISJI: subscribe to [`PUBLICATION_METADATA_STARTUP_FAILED`]. */
+export const onPublicationMetadataStartupFailed = (
+  handler: (payload: PublicationMetadataStartupFailed) => void,
+): Promise<UnlistenFn> =>
+  listen<PublicationMetadataStartupFailed>(PUBLICATION_METADATA_STARTUP_FAILED, (event) =>
     handler(event.payload),
   );
 

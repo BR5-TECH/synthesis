@@ -37,6 +37,8 @@ import type {
   PublicationChoiceInput,
   PublicationIssueType,
   PublicationMetadata,
+  PublicationMetadataRefresh,
+  PublicationMetadataStartupFailed,
   PublicationOutcome,
   PublicationRecoveryChoice,
   PublicationRemoteResolution,
@@ -511,6 +513,31 @@ export const loadPublicationMetadata = (draftId: string, remoteName: string) =>
     draftId,
     remoteName,
   });
+
+/**
+ * GHP-FR-JTYL: the cached lists of `remoteName`, or null where the cache holds
+ * none for it. Contacts no network.
+ */
+export const getPublicationMetadataCache = (remoteName: string) =>
+  invoke<PublicationMetadata | null>("get_publication_metadata_cache", {
+    remoteName,
+  });
+
+/**
+ * GHP-FR-SIMK: start a background refresh of the cache, or join the running
+ * one. Answers when it ends.
+ */
+export const refreshPublicationMetadata = () =>
+  invoke<PublicationMetadataRefresh>("refresh_publication_metadata");
+
+/**
+ * GHP-FR-KPXF: the failed startup refresh that the backend keeps, or null.
+ * The backend discards it, so each failure is answered once.
+ */
+export const takePublicationMetadataStartupFailure = () =>
+  invoke<PublicationMetadataStartupFailed | null>(
+    "take_publication_metadata_startup_failure",
+  );
 
 /** GHP-FR-KVRH: the project's publication settings, defaults applied. */
 export const getGithubPublicationSettings = () =>

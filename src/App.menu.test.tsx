@@ -321,8 +321,10 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
     });
     unmount();
     // The effect cleanup calls each captured unlisten fn, which the mock uses to
-    // delete its event key — so no listener survives the unmount (no leak).
-    expect(listeners).toEqual({});
+    // delete its event key — so no listener survives the unmount (no leak). A
+    // hook that unlistens when its subscription promise settles does so a
+    // moment after the unmount, so the test waits for that state.
+    await waitFor(() => expect(listeners).toEqual({}));
   });
 
   it("NFW-FR-06, NTA-FR-07, SNV-FR-24 / NFI-FR-06: New File opens the New File modal with the location at the project root", async () => {

@@ -93,7 +93,7 @@ function actionTrigger(): HTMLElement | null {
   return document.querySelector<HTMLElement>('button[aria-label="Draft actions"]');
 }
 
-function Notice({ children }: { children: React.ReactNode }) {
+export function Notice({ children }: { children: React.ReactNode }) {
   return (
     <p className="t-ui-xs draft-publication-chooser__notice" role="status">
       {children}
@@ -201,7 +201,7 @@ function parentSummary(parent: PublicationParentIssue): string {
 }
 
 /** NAW-FR-YLKD: one option of the parent combobox. */
-function parentOption(parent: PublicationParentIssue): FilterableOption {
+export function parentOption(parent: PublicationParentIssue): FilterableOption {
   return {
     id: String(parent.number),
     label: `#${parent.number} ${parent.title}`,
@@ -227,7 +227,7 @@ export function matchesParent(
 }
 
 /** NAW-FR-PDXJ: the polite status of the parent filter. */
-function parentAnnouncement(filter: string, count: number): string {
+export function parentAnnouncement(filter: string, count: number): string {
   const issues = count === 1 ? "1 issue" : `${count} issues`;
   const trimmed = filter.trim();
   return trimmed ? `${issues} match “${trimmed}”` : `${issues} available`;

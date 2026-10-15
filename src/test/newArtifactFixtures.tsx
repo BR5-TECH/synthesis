@@ -111,6 +111,7 @@ export function publicationMetadata(
       subIssueType: "Task",
       subIssueMilestonePolicy: "inherit_parent",
       rootIssueType: null,
+      noteIssueType: "Feature",
     },
     parents: loadedList([
       {
@@ -133,8 +134,10 @@ export function publicationMetadata(
       { number: 7, title: "v1.2" },
       { number: 8, title: "v1.3" },
     ]),
+    labels: loadedList([{ name: "bug", color: "d73a4a", description: null }]),
     subIssueType: { name: "Task", resolved: "Task" },
     rootIssueType: null,
+    noteIssueType: { name: "Feature", resolved: "Feature" },
     ...overrides,
   };
 }

@@ -109,7 +109,11 @@ fn a_root_publication_carries_the_selected_type_and_milestone() {
     let record = published(f.publish(&attempt));
     assert_eq!(
         f.github.fields.lock().unwrap().as_slice(),
-        &[client::IssueFields { issue_type: Some("Bug".into()), milestone: Some(8) }]
+        &[client::IssueFields {
+            issue_type: Some("Bug".into()),
+            milestone: Some(8),
+            ..Default::default()
+        }]
     );
     let issue = f.github.issue(record.issue_number);
     assert_eq!(issue.issue_type.as_deref(), Some("Bug"));
@@ -364,11 +368,10 @@ fn the_metadata_lists_hold_only_parent_candidates() {
         metadata.sub_issue_type,
         IssueTypeResolution { name: "Task".into(), resolved: Some("Task".into()) }
     );
-    assert!(f
-        .github
-        .calls()
-        .iter()
-        .all(|c| matches!(c, Call::ListParents | Call::ListTypes | Call::ListMilestones)));
+    assert!(f.github.calls().iter().all(|c| matches!(
+        c,
+        Call::ListParents | Call::ListTypes | Call::ListMilestones | Call::ListLabels
+    )));
 }
 
 /// GHP-FR-DZLB / GHP-FR-YSPJ / GHP-FR-GHEA / GHP-FR-ETJD: one failed list
@@ -624,7 +627,11 @@ fn a_metadata_mismatch_returns_the_recovery_choice() {
             "widgets",
             &content.title,
             &content.body,
-            &client::IssueFields { issue_type: Some("Bug".into()), milestone: None },
+            &client::IssueFields {
+                issue_type: Some("Bug".into()),
+                milestone: None,
+                ..Default::default()
+            },
         )
         .unwrap();
     f.github.calls.lock().unwrap().clear();
@@ -658,7 +665,11 @@ fn update_existing_reconciles_type_milestone_and_parent() {
             "widgets",
             &content.title,
             &content.body,
-            &client::IssueFields { issue_type: Some("Bug".into()), milestone: None },
+            &client::IssueFields {
+                issue_type: Some("Bug".into()),
+                milestone: None,
+                ..Default::default()
+            },
         )
         .unwrap();
     f.github.link_sub_issue("s", "acme", "widgets", first, wrong.id, false).unwrap();
@@ -669,7 +680,11 @@ fn update_existing_reconciles_type_milestone_and_parent() {
     assert_eq!(record.issue_number, wrong.number);
     assert_eq!(
         f.github.fields.lock().unwrap().as_slice(),
-        &[client::IssueFields { issue_type: Some("Task".into()), milestone: Some(8) }]
+        &[client::IssueFields {
+            issue_type: Some("Task".into()),
+            milestone: Some(8),
+            ..Default::default()
+        }]
     );
     assert!(
         f.github.calls().contains(&Call::Link(second, wrong.id, true)),
@@ -688,7 +703,11 @@ fn metadata_a_root_choice_does_not_name_is_not_compared() {
     let f = fixture();
     let attempt = f.attempt_with("pub-1", PublicationChoice::root());
     let content = flow::issue_content(&f.root, &f.id, "pub-1").unwrap();
-    let fields = client::IssueFields { issue_type: Some("Bug".into()), milestone: Some(7) };
+    let fields = client::IssueFields {
+        issue_type: Some("Bug".into()),
+        milestone: Some(7),
+        ..Default::default()
+    };
     f.github.create_issue("s", "acme", "widgets", &content.title, &content.body, &fields).unwrap();
 
     assert!(matches!(f.publish(&attempt), Ok(PublicationOutcome::Published { .. })));
@@ -872,6 +891,7 @@ fn the_settings_validation_refuses_what_cannot_be_used() {
         " Task ".into(),
         MilestonePolicy::AuthorSelected,
         Some(" Bug ".into()),
+        Some("Feature".into()),
     )
     .unwrap();
     assert_eq!(ok.parent_issue_types, vec!["Feature".to_string(), "Epic".to_string()]);
@@ -882,6 +902,7 @@ fn the_settings_validation_refuses_what_cannot_be_used() {
         "Task".into(),
         MilestonePolicy::default(),
         None,
+        Some("Feature".into()),
     )
     .unwrap();
     assert_eq!(untyped.root_issue_type, None);
@@ -893,7 +914,13 @@ fn the_settings_validation_refuses_what_cannot_be_used() {
         (vec!["Feature".to_string()], "Task", Some("  ".to_string())),
     ] {
         assert_eq!(
-            flow::validated_settings(types, sub.to_string(), MilestonePolicy::default(), root),
+            flow::validated_settings(
+                types,
+                sub.to_string(),
+                MilestonePolicy::default(),
+                root,
+                None,
+            ),
             Err(ERR_INVALID_PUBLICATION_SETTINGS.to_string())
         );
     }
@@ -909,6 +936,7 @@ fn saved_settings_are_kept_as_written() {
         "Gone".into(),
         MilestonePolicy::NoMilestone,
         Some("Vanished".into()),
+        Some("Feature".into()),
     )
     .unwrap();
     save_github_publication_settings_to(&f.root, &saved).unwrap();

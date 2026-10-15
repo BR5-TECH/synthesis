@@ -367,6 +367,14 @@ impl crate::github_publication::GithubIssues for OpenRepositories {
     ) -> Result<Vec<crate::github_publication::PublicationMilestone>, String> {
         unreachable!("polling never lists milestones")
     }
+    fn list_labels(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+    ) -> Result<Vec<crate::github_publication::PublicationLabel>, String> {
+        unreachable!("polling never lists labels")
+    }
     fn link_sub_issue(
         &self,
         _: &str,

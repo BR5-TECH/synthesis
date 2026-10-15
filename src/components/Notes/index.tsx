@@ -48,6 +48,8 @@ import {
   newNoteScope,
   type MoveTarget,
   type Overlay } from "./helpers";
+import { NotePublishModal } from "./NotePublishModal";
+import { usePublishAvailability } from "./usePublishAvailability";
 import { NoteOverlay, excerpt, noteLabel } from "./overlays";
 import { fromLocalInput, toLocalInput } from "./reminderTime";
 
@@ -120,6 +122,10 @@ export function Notes({
     setBusyId(id);
   };
   const [overlay, setOverlay] = useState<Overlay | null>(null);
+  /** NTS-FR-FYUJ: the availability read of the open menu. */
+  const [publishAvailability, readPublishAvailability] = usePublishAvailability();
+  /** NIP-FR-WUID: the `[⋯]` button the modal returns focus to. */
+  const menuButton = useRef<HTMLElement | null>(null);
   /** An error from a row's own operation, attached to that row. */
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(
     null,
@@ -239,7 +245,9 @@ export function Notes({
   // invoking anything. The inline editor is deliberately not part of this — it
   // survives an outside click and closes only on Save or Cancel (NTS-FR-17).
   useEffect(() => {
-    if (!overlay) return;
+    // NIP-FR-WUID: the publish modal is a dialog with its own dismissal, and an
+    // outside click does not close it.
+    if (!overlay || overlay.kind === "publish") return;
     const dismiss = () => setOverlay(null);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOverlay(null);
@@ -503,7 +511,34 @@ export function Notes({
   const openOverlay = (kind: Overlay["kind"], noteId: string, anchor: DOMRect) => {
     // NTS-FR-24: opening one overlay dismisses any other. A single piece of
     // state makes that structural rather than a rule to remember.
-    setOverlay({ kind, noteId, x: anchor.left, y: anchor.bottom + 2 });
+    setOverlay({ kind, noteId, x: anchor.left, y: anchor.bottom + 2 } as Overlay);
+    if (kind === "menu") void readPublishAvailability();
+  };
+
+  /** NTS-FR-EZEA: open the note publish modal for `item`. */
+  const startPublish = (item: NoteListItem) => {
+    if (publishAvailability.status !== "available") return;
+    setOverlay({
+      kind: "publish",
+      noteId: item.note.id,
+      x: 0,
+      y: 0,
+      remoteName: publishAvailability.remoteName,
+      repository: publishAvailability.repository,
+      item,
+    });
+  };
+
+  /** NTS-FR-ZDLS: a published note leaves the panel as a deleted one does. */
+  const notePublished = (noteId: string) => {
+    setOverlay(null);
+    onNoteDeleted?.(noteId);
+    setRowError(null);
+    // The row of the `[⋯]` button goes with the reload, so focus moves to the
+    // panel's filter field rather than to the document body.
+    void load().then(() =>
+      document.querySelector<HTMLElement>(".panel-controls input")?.focus(),
+    );
   };
 
   /**
@@ -662,6 +697,7 @@ export function Notes({
                 title="Note actions"
                 onClick={(e) => {
                   e.stopPropagation();
+                  menuButton.current = e.currentTarget;
                   openOverlay(
                     "menu",
                     note.id,
@@ -836,9 +872,24 @@ export function Notes({
         {createError && <div className="note__error">{createError}</div>}
       </div>
 
-      {overlay && (
+      {overlay?.kind === "publish" && (
+        <NotePublishModal
+          item={overlay.item}
+          target={{ remoteName: overlay.remoteName, repository: overlay.repository }}
+          returnFocus={menuButton.current}
+          onClose={() => setOverlay(null)}
+          onPublished={notePublished}
+          onNoteKept={() => {
+            setOverlay(null);
+            void load();
+          }}
+        />
+      )}
+      {overlay && overlay.kind !== "publish" && (
         <NoteOverlay
           overlay={overlay}
+          publishAvailability={publishAvailability}
+          onPublish={(item) => startPublish(item)}
           item={noteById(overlay.noteId)}
           moveTargets={moveTargets}
           moveFilter={moveFilter}

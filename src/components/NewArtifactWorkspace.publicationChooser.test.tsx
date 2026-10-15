@@ -337,6 +337,7 @@ describe("Publication chooser — sub-issue publication", () => {
         subIssueType: "Task",
         subIssueMilestonePolicy: "no_milestone",
         rootIssueType: null,
+        noteIssueType: "Feature",
       },
     });
     const dialog = await openChooser();
@@ -359,6 +360,7 @@ describe("Publication chooser — sub-issue publication", () => {
         subIssueType: "Task",
         subIssueMilestonePolicy: "author_selected",
         rootIssueType: null,
+        noteIssueType: "Feature",
       },
     });
     const dialog = await openChooser();
@@ -430,6 +432,20 @@ describe("Publication chooser — loading, empty, unavailable, and failed states
     expect(within(dialog).getByRole("radio", { name: /Publish as a root issue/ })).toBeEnabled();
     expect(within(dialog).getByRole("radio", { name: /Publish as a root issue/ })).toBeChecked();
     expect(within(dialog).getByRole("button", { name: "Publish" })).toBeEnabled();
+  });
+
+  it("NAW-FR-HQRY: the chooser renders no label list and sends no label, though the metadata holds one", async () => {
+    const dialog = await openChooser();
+    await loaded(dialog);
+    expect(within(dialog).queryByText("Labels")).toBeNull();
+    expect(within(dialog).queryByRole("group", { name: "Labels" })).toBeNull();
+    expect(within(dialog).queryByText("bug")).toBeNull();
+    await userEvent.click(within(dialog).getByRole("radio", { name: /Publish as a root issue/ }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(calls("publish_draft_to_github")).toHaveLength(1));
+    expect(
+      (calls("publish_draft_to_github")[0][1] as { publicationChoice: object }).publicationChoice,
+    ).not.toHaveProperty("labels");
   });
 
   it("NAW-FR-WMEP, NAW-FR-ZOAS: an empty Type list renders a notice instead of an empty selector", async () => {

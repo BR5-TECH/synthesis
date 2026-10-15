@@ -121,14 +121,7 @@ fn only_a_creation_a_body_rewrite_and_a_deletion_surface_on_the_channel() {
     assert_eq!(indexer().take_note_changes(), Vec::new());
 
     // A deletion surfaces.
-    delete_note(
-        note.id.clone(),
-        app.handle().clone(),
-        app.state::<ProjectState>(),
-        app.state::<crate::agent_conversations::TurnRegistry>(),
-        app.state::<crate::progress::ProgressRegistry>(),
-    )
-    .expect("the deletion lands");
+    delete_note(note.id.clone(), app.handle().clone()).expect("the deletion lands");
     assert_eq!(indexer().take_note_changes(), vec![NoteChange::to(&note.id)]);
 }
 

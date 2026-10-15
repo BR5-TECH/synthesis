@@ -42,6 +42,7 @@ pub mod client;
 pub mod flow;
 pub mod metadata_cache;
 pub mod metadata_refresh;
+pub mod note;
 pub mod records;
 pub mod remotes;
 pub mod store;
@@ -509,6 +510,8 @@ fn load_publication_metadata_impl<R: tauri::Runtime>(
             "types_failed" => metadata.issue_types.state == MetadataState::Failed,
             "milestones" => metadata.milestones.items.len(),
             "milestones_failed" => metadata.milestones.state == MetadataState::Failed,
+            "labels" => metadata.labels.items.len(),
+            "labels_failed" => metadata.labels.state == MetadataState::Failed,
         },
     );
     Ok(metadata)
@@ -538,13 +541,14 @@ fn get_github_publication_settings_impl<R: tauri::Runtime>(
     })
 }
 
-/// GHP-FR-NQWX: persist the four settings, or refuse and write nothing.
+/// GHP-FR-NQWX: persist the five settings, or refuse and write nothing.
 #[tauri::command]
 pub fn set_github_publication_settings(
     parent_issue_types: Vec<String>,
     sub_issue_type: String,
     sub_issue_milestone_policy: MilestonePolicy,
     root_issue_type: Option<String>,
+    note_issue_type: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<GithubPublicationSettings, String> {
     set_github_publication_settings_impl(
@@ -553,6 +557,7 @@ pub fn set_github_publication_settings(
         sub_issue_type,
         sub_issue_milestone_policy,
         root_issue_type,
+        note_issue_type,
     )
 }
 
@@ -562,6 +567,7 @@ fn set_github_publication_settings_impl<R: tauri::Runtime>(
     sub_issue_type: String,
     sub_issue_milestone_policy: MilestonePolicy,
     root_issue_type: Option<String>,
+    note_issue_type: Option<String>,
 ) -> Result<GithubPublicationSettings, String> {
     let project = app.state::<ProjectState>();
     let root = require_root(app, &project)?;
@@ -571,6 +577,7 @@ fn set_github_publication_settings_impl<R: tauri::Runtime>(
         sub_issue_type,
         sub_issue_milestone_policy,
         root_issue_type,
+        note_issue_type,
     )
     .map_err(|code| fail(app, "", code))?;
     // The store phrases its failures with a filesystem path, so the surface
@@ -596,6 +603,7 @@ fn set_github_publication_settings_impl<R: tauri::Runtime>(
             "parent_types" => settings.parent_issue_types.len(),
             "policy" => format!("{:?}", settings.sub_issue_milestone_policy),
             "root_typed" => settings.root_issue_type.is_some(),
+            "note_typed" => settings.note_issue_type.is_some(),
         },
     );
     // GHP-FR-JDMU: the parent issue Types decide the parent list.

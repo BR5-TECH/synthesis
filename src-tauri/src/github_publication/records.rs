@@ -55,6 +55,17 @@ pub const ERR_SUB_ISSUE_LINK_FAILED: &str = "sub_issue_link_failed";
 pub const ERR_INVALID_PUBLICATION_SETTINGS: &str = "invalid_publication_settings";
 /// GHP-FR-SIMK: a metadata refresh with no GitHub Project selected.
 pub const ERR_GITHUB_PROJECT_NOT_SELECTED: &str = "github_project_not_selected";
+/// GHP-FR-XLXU: the label list could not be read.
+pub const ERR_LABELS_UNREADABLE: &str = "labels_unreadable";
+/// GHP-FR-VLDP: a requested label the repository does not hold.
+pub const ERR_LABEL_UNAVAILABLE: &str = "label_unavailable";
+/// GHP-FR-JGNI: the note id names no note of the active worktree.
+pub const ERR_NOTE_NOT_FOUND: &str = "note_not_found";
+/// GHP-FR-HKMC: a title or a body that the note publication refuses.
+pub const ERR_INVALID_NOTE_PUBLICATION: &str = "invalid_note_publication";
+/// GHP-FR-MAMB: a URL that is not an issue address of the publication
+/// repository.
+pub const ERR_ISSUE_URL_REFUSED: &str = "issue_url_refused";
 
 /// GHP-FR-YDAN: the repository the project's publication remote names.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -162,6 +173,7 @@ pub fn metadata_error_text(code: &str) -> &'static str {
         ERR_PARENT_ISSUES_UNREADABLE => "The open issues of this repository could not be read.",
         ERR_ISSUE_TYPES_UNREADABLE => "The issue Types of this repository could not be read.",
         ERR_MILESTONES_UNREADABLE => "The milestones of this repository could not be read.",
+        ERR_LABELS_UNREADABLE => "The labels of this repository could not be read.",
         _ => "GitHub could not be reached.",
     }
 }
@@ -190,6 +202,15 @@ pub struct PublicationMilestone {
     pub title: String,
 }
 
+/// GHP-FR-XLXU: one label of the publication repository.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicationLabel {
+    pub name: String,
+    pub color: String,
+    pub description: Option<String>,
+}
+
 /// GHP-FR-ETJD / GHP-FR-AFEX: a configured Type and how it resolved.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -209,9 +230,13 @@ pub struct PublicationMetadata {
     pub parents: MetadataList<PublicationParentIssue>,
     pub issue_types: MetadataList<PublicationIssueType>,
     pub milestones: MetadataList<PublicationMilestone>,
+    /// GHP-FR-XLXU: the label list. The draft chooser does not show it.
+    pub labels: MetadataList<PublicationLabel>,
     pub sub_issue_type: IssueTypeResolution,
     /// GHP-FR-AFEX: `None` where no root issue Type is stored.
     pub root_issue_type: Option<IssueTypeResolution>,
+    /// GHP-FR-JGXW: `None` where No Type is stored as the note issue Type.
+    pub note_issue_type: Option<IssueTypeResolution>,
 }
 
 /// GHP-FR-JAWD: one successful GitHub publication.

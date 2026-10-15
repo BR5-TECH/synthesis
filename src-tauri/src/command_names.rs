@@ -116,6 +116,9 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "cancel_draft_publication_attempt",
     "update_draft_on_github",
     "open_publication_issue",
+    "get_note_publication_availability",
+    "publish_note_to_github",
+    "open_publication_repository_issue",
     // GitHub polling (GPP-github-polling.md).
     "list_github_projects",
     "list_github_project_statuses",

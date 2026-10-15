@@ -751,3 +751,22 @@
   color: var(--fg-3);
   margin-bottom: var(--sp-2);
 }
+
+/* NIP: the note publish modal. The head comes last in the DOM so focus starts
+   on the first option (NIP-FR-YQFL), and `order` draws it first. */
+.note-publication { display: flex; flex-direction: column; }
+.note-publication__head { order: -1; }
+.note-publication__body-scroll { max-height: calc(100vh - 180px); overflow-y: auto; }
+.note-publication__fields { display: flex; flex-direction: column; gap: 8px; }
+.note-publication__text { margin-bottom: -10px; }
+.note-publication__body { min-height: 120px; resize: vertical; font: inherit; padding: 6px 8px; }
+.note-publication__warning { margin: 0; color: var(--warn); }
+.note-publication__labels {
+  display: flex; flex-wrap: wrap; gap: 4px 12px;
+  max-height: 120px; overflow-y: auto;
+}
+.note-publication__label { display: inline-flex; align-items: center; gap: 6px; }
+.note-publication__swatch {
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 1px solid var(--border-1); flex: none;
+}

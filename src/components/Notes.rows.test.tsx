@@ -408,14 +408,14 @@ describe("the overflow menu (NTS-FR-18 / NTS-FR-19 / NTS-FR-21)", () => {
     served.project = [projectNote("1", "a note", "2026-05-01T09:00:00Z")];
   });
 
-  it("offers exactly Discuss, Edit, Move…, the reminder entry and Delete (NTS-FR-18, NTS-FR-19)", async () => {
+  it("offers exactly Discuss, Edit, Move…, the reminder entry, Publish to GitHub and Delete (NTS-FR-18, NTS-FR-19)", async () => {
     render(<Harness entity={null} />);
     await screen.findByText("a note");
 
     const menu = await openMenu("a note");
     expect(
       Array.from(menu.querySelectorAll(".menu-item")).map((el) => el.textContent),
-    ).toEqual(["Discuss", "Edit", "Move…", "Set Reminder…", "Delete"]);
+    ).toEqual(["Discuss", "Edit", "Move…", "Set Reminder…", "Publish to GitHub", "Delete"]);
   });
 
   it("confirms before deleting, and a dismissal invokes nothing (NTS-FR-05, NTS-FR-21)", async () => {

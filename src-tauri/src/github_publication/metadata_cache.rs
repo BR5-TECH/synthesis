@@ -15,7 +15,7 @@ use serde::Serialize;
 
 use super::records::*;
 
-/// GHP-FR-IQTK: the three lists of one resolved publication remote.
+/// GHP-FR-IQTK: the four lists of one resolved publication remote.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CachedLists {
     pub remote_name: String,
@@ -25,6 +25,7 @@ pub struct CachedLists {
     pub parents: MetadataList<PublicationParentIssue>,
     pub issue_types: MetadataList<PublicationIssueType>,
     pub milestones: MetadataList<PublicationMilestone>,
+    pub labels: MetadataList<PublicationLabel>,
 }
 
 impl CachedLists {
@@ -39,9 +40,14 @@ impl CachedLists {
 
     /// GHP-FR-MSLY: the typed error of the first list that failed to read.
     pub fn first_failure(&self) -> Option<String> {
-        [&self.parents.error_code, &self.issue_types.error_code, &self.milestones.error_code]
-            .into_iter()
-            .find_map(Clone::clone)
+        [
+            &self.parents.error_code,
+            &self.issue_types.error_code,
+            &self.milestones.error_code,
+            &self.labels.error_code,
+        ]
+        .into_iter()
+        .find_map(Clone::clone)
     }
 }
 
@@ -67,6 +73,7 @@ pub fn merge(cached: Option<&CachedLists>, fresh: CachedLists) -> CachedLists {
         parents: merge_list(Some(&cached.parents), fresh.parents),
         issue_types: merge_list(Some(&cached.issue_types), fresh.issue_types),
         milestones: merge_list(Some(&cached.milestones), fresh.milestones),
+        labels: merge_list(Some(&cached.labels), fresh.labels),
         ..fresh
     }
 }

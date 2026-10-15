@@ -23,6 +23,7 @@ mod legacy_status;
 mod metadata_cache_rules;
 mod metadata_refresh;
 mod metadata_schedule;
+mod note_publication;
 mod publication_choice;
 mod publication_commands;
 mod publishing;
@@ -90,6 +91,7 @@ pub(super) enum Call {
     ListParents,
     ListTypes,
     ListMilestones,
+    ListLabels,
 }
 
 /// A fake issues client. Nothing here opens a socket.
@@ -118,6 +120,8 @@ pub(super) struct FakeGithub {
     pub types: Mutex<Option<Vec<String>>>,
     /// The open milestones; `None` makes the read fail.
     pub milestones: Mutex<Option<Vec<PublicationMilestone>>>,
+    /// The labels of the repository; `None` makes the read fail.
+    pub labels: Mutex<Option<Vec<PublicationLabel>>>,
     /// When true, the parent list read fails.
     pub parents_fail: Mutex<bool>,
     /// The Type and milestone fields of every create and edit, in order.
@@ -143,6 +147,14 @@ impl Default for FakeGithub {
             milestones: Mutex::new(Some(vec![
                 PublicationMilestone { number: 7, title: "v1.2".into() },
                 PublicationMilestone { number: 8, title: "v1.3".into() },
+            ])),
+            labels: Mutex::new(Some(vec![
+                PublicationLabel { name: "bug".into(), color: "d73a4a".into(), description: None },
+                PublicationLabel {
+                    name: "ui".into(),
+                    color: "0e8a16".into(),
+                    description: Some("User interface".into()),
+                },
             ])),
             parents_fail: Mutex::default(),
             fields: Mutex::default(),
@@ -358,6 +370,16 @@ impl GithubIssues for FakeGithub {
     ) -> Result<Vec<PublicationMilestone>, String> {
         self.record(Call::ListMilestones);
         self.milestones.lock().unwrap().clone().ok_or_else(|| ERR_MILESTONES_UNREADABLE.to_string())
+    }
+
+    fn list_labels(
+        &self,
+        _secret: &str,
+        _owner: &str,
+        _repo: &str,
+    ) -> Result<Vec<PublicationLabel>, String> {
+        self.record(Call::ListLabels);
+        self.labels.lock().unwrap().clone().ok_or_else(|| ERR_LABELS_UNREADABLE.to_string())
     }
 
     fn link_sub_issue(

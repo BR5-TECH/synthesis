@@ -4,8 +4,8 @@
  * `../../specifications/core/GHP-github-publication.md` GHP-FR-KVRH).
  *
  * It holds the Types that may be a parent, the Type of every sub-issue, the
- * sub-issue milestone policy, and the Type a root issue is pre-filled with
- * (SET-FR-ZNLF). Each change persists at once, outside the
+ * sub-issue milestone policy, the Type a root issue is pre-filled with
+ * (SET-FR-ZNLF), and the Type the note publish modal opens on (SET-FR-AXEZ). Each change persists at once, outside the
  * section dirty state (SET-FR-MQUE), so the group holds nothing to save.
  *
  * GitHub is consulted for one thing, the list of Types, and only to say which
@@ -151,6 +151,13 @@ export function GithubPublicationSettingsGroup() {
   const rootType = settings?.rootIssueType ?? null;
   const rootChoices = [
     ...(rootType && !offered.some((n) => sameType(n, rootType)) ? [rootType] : []),
+    ...offered,
+  ];
+
+  // SET-FR-AXEZ / SET-FR-LJYT: the same rule for the note issue Type.
+  const noteType = settings?.noteIssueType ?? null;
+  const noteChoices = [
+    ...(noteType && !offered.some((n) => sameType(n, noteType)) ? [noteType] : []),
     ...offered,
   ];
 
@@ -328,6 +335,39 @@ export function GithubPublicationSettingsGroup() {
             <span className="t-ui-xs t-muted">
               The Type control of a root issue starts on this Type. You can change it for one
               publication.
+            </span>
+          </div>
+
+          <label className="t-ui-sm" htmlFor="publication-note-issue-type">
+            Note issue Type
+          </label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <select
+              id="publication-note-issue-type"
+              className="input input--sm"
+              value={
+                noteType === null
+                  ? NO_TYPE
+                  : (offered.find((n) => sameType(n, noteType)) ?? noteType)
+              }
+              disabled={saving}
+              onChange={(e) =>
+                void save({
+                  ...settings,
+                  noteIssueType: e.target.value === NO_TYPE ? null : e.target.value,
+                })
+              }
+            >
+              <option value={NO_TYPE}>No Type</option>
+              {noteChoices.map((name) => (
+                <option key={name} value={name}>
+                  {unavailable(name) ? `${name} (unavailable)` : name}
+                </option>
+              ))}
+            </select>
+            <span className="t-ui-xs t-muted">
+              The Type control of Publish to GitHub on a note starts on this Type. It does not
+              change the Types of drafts.
             </span>
           </div>
         </div>

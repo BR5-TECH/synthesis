@@ -45,6 +45,7 @@ fn set_parent_types(s: &super::publication_commands::Session, types: &[&str]) {
         "Task".into(),
         MilestonePolicy::InheritParent,
         None,
+        Some("Feature".into()),
     )
     .unwrap();
 }

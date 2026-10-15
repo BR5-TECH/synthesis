@@ -7,6 +7,7 @@
 import type {
   ArtifactType,
   Note,
+  NoteListItem,
   NoteScope,
   NotesEntity,
   NotesScopePosition,
@@ -22,7 +23,30 @@ export type Overlay =
   | { kind: "menu"; noteId: string; x: number; y: number }
   | { kind: "move"; noteId: string; x: number; y: number }
   | { kind: "reminder"; noteId: string; x: number; y: number }
-  | { kind: "confirmDelete"; noteId: string; x: number; y: number };
+  | { kind: "confirmDelete"; noteId: string; x: number; y: number }
+  /** NTS-FR-EZEA: the note publish modal, for the remote of the availability read. */
+  | {
+      kind: "publish";
+      noteId: string;
+      x: number;
+      y: number;
+      remoteName: string;
+      repository: string;
+      /**
+       * The note as the modal opened on it. A list reload that no longer
+       * holds the note does not unmount the modal and lose what was typed.
+       */
+      item: NoteListItem;
+    };
+
+/**
+ * NTS-FR-FYUJ: what the availability read of the open menu answered. While it
+ * is outstanding the **Publish to GitHub** entry is disabled.
+ */
+export type PublishAvailability =
+  | { status: "loading" }
+  | { status: "available"; remoteName: string; repository: string }
+  | { status: "unavailable"; reason: string };
 
 /**
  * An entry of the Move picker's list (NTS-FR-22), and what a group header needs

@@ -179,6 +179,7 @@ fn the_settings_commands_persist_and_refuse() {
         "Bug".into(),
         MilestonePolicy::AuthorSelected,
         Some("Feature".into()),
+        Some("Feature".into()),
     )
     .unwrap();
     assert_eq!(saved.root_issue_type.as_deref(), Some("Feature"));
@@ -194,6 +195,7 @@ fn the_settings_commands_persist_and_refuse() {
             "Task".into(),
             MilestonePolicy::default(),
             None,
+            Some("Feature".into()),
         )
         .map(|_| ()),
         Err(ERR_INVALID_PUBLICATION_SETTINGS.to_string())
@@ -287,6 +289,7 @@ fn retry_and_a_new_attempt_keep_the_saved_choice() {
         "Bug".into(),
         MilestonePolicy::NoMilestone,
         None,
+        Some("Feature".into()),
     )
     .unwrap();
     let retried = gp::retry_draft_publication_impl(&s.handle(), s.id.clone()).unwrap();

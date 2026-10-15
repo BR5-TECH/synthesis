@@ -35,6 +35,9 @@ import type {
   IssueUpdateOutcome,
   MetadataList,
   PublicationChoiceInput,
+  NotePublicationAvailability,
+  NotePublicationChoiceInput,
+  NotePublicationOutcome,
   PublicationIssueType,
   PublicationMetadata,
   PublicationMetadataRefresh,
@@ -543,7 +546,7 @@ export const takePublicationMetadataStartupFailure = () =>
 export const getGithubPublicationSettings = () =>
   invoke<GithubPublicationSettings>("get_github_publication_settings");
 
-/** GHP-FR-NQWX: persist the four settings, or refuse and write nothing. */
+/** GHP-FR-NQWX: persist the five settings, or refuse and write nothing. */
 export const setGithubPublicationSettings = (
   settings: GithubPublicationSettings,
 ) =>
@@ -552,7 +555,30 @@ export const setGithubPublicationSettings = (
     subIssueType: settings.subIssueType,
     subIssueMilestonePolicy: settings.subIssueMilestonePolicy,
     rootIssueType: settings.rootIssueType,
+    noteIssueType: settings.noteIssueType,
   });
+
+/** GHP-FR-CNPX: whether **Publish to GitHub** is available on a note row. */
+export const getNotePublicationAvailability = () =>
+  invoke<NotePublicationAvailability>("get_note_publication_availability");
+
+/**
+ * GHP-FR-JGNI: publish a note as an issue of the publication repository, then
+ * delete the note. The frontend sends no token.
+ */
+export const publishNoteToGithub = (args: {
+  noteId: string;
+  title: string;
+  body: string;
+  choice: NotePublicationChoiceInput;
+}) => invoke<NotePublicationOutcome>("publish_note_to_github", args);
+
+/**
+ * GHP-FR-MAMB: open an issue of the publication repository in the system
+ * browser. Any other address is refused.
+ */
+export const openPublicationRepositoryIssue = (url: string) =>
+  invoke<void>("open_publication_repository_issue", { url });
 
 /** GHP-FR-PTYL: the issue Types of the publication repository's owner. */
 export const listGithubIssueTypes = () =>

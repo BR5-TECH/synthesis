@@ -1,5 +1,5 @@
 import type { NoteListItem, NoteScope } from "../../types";
-import type { MoveTarget, Overlay } from "./helpers";
+import type { MoveTarget, Overlay, PublishAvailability } from "./helpers";
 
 // Overlays (NTS-FR-19 … NTS-FR-24)
 // ---------------------------------------------------------------------------
@@ -7,6 +7,9 @@ import type { MoveTarget, Overlay } from "./helpers";
 interface NoteOverlayProps {
   overlay: Overlay;
   item: NoteListItem | undefined;
+  /** NTS-FR-FYUJ: whether **Publish to GitHub** is enabled, and why not. */
+  publishAvailability: PublishAvailability;
+  onPublish: (item: NoteListItem) => void;
   moveTargets: MoveTarget[] | null;
   moveFilter: string;
   setMoveFilter: (text: string) => void;
@@ -79,6 +82,8 @@ export function excerpt(body: string): string {
 export function NoteOverlay({
   overlay,
   item,
+  publishAvailability,
+  onPublish,
   moveTargets,
   moveFilter,
   setMoveFilter,
@@ -110,7 +115,13 @@ export function NoteOverlay({
   const stop = (e: React.MouseEvent) => e.stopPropagation();
 
   if (overlay.kind === "menu") {
-    // NTS-FR-19: exactly five entries, in this order.
+    // NTS-FR-19: exactly six entries, in this order.
+    const publishReason =
+      publishAvailability.status === "loading"
+        ? "Checking the GitHub publication…"
+        : publishAvailability.status === "unavailable"
+          ? publishAvailability.reason
+          : undefined;
     return (
       <div className="menu" style={style} onClick={stop}>
         {/* NTS-FR-26: offered on every note the panel renders, in all three
@@ -144,6 +155,23 @@ export function NoteOverlay({
             }
           >
             Set Reminder…
+          </div>
+        )}
+        {/* NTS-FR-FYUJ: enabled only where the availability read answered
+            `available`; otherwise disabled with the reason on hover and in its
+            accessible description. */}
+        {publishReason === undefined ? (
+          <div className="menu-item" onClick={() => onPublish(item)}>
+            Publish to GitHub
+          </div>
+        ) : (
+          <div
+            className="menu-item menu-item--disabled"
+            aria-disabled="true"
+            title={publishReason}
+            data-testid="note-publish-disabled"
+          >
+            Publish to GitHub
           </div>
         )}
         <div

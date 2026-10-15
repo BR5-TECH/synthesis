@@ -339,6 +339,9 @@ pub fn run() {
             github_publication::cancel_draft_publication_attempt,
             github_publication::update::update_draft_on_github,
             github_publication::open_publication_issue,
+            github_publication::note::get_note_publication_availability,
+            github_publication::note::publish_note_to_github,
+            github_publication::note::open_publication_repository_issue,
             // GitHub polling (GPP-github-polling.md).
             github_polling::list_github_projects,
             github_polling::list_github_project_statuses,

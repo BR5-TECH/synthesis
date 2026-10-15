@@ -40,7 +40,12 @@ export type PublicationErrorCode =
   | "invalid_publication_choice"
   | "sub_issue_link_failed"
   | "invalid_publication_settings"
-  | "github_project_not_selected";
+  | "github_project_not_selected"
+  | "labels_unreadable"
+  | "label_unavailable"
+  | "note_not_found"
+  | "invalid_note_publication"
+  | "issue_url_refused";
 
 /** GHP-FR-AZPF: how a sub-issue's milestone is resolved. */
 export type MilestonePolicy =
@@ -71,13 +76,18 @@ export interface PublicationChoiceInput {
   milestoneNumber: number | null;
 }
 
-/** GHP-FR-KVRH: the four project-public publication settings. */
+/** GHP-FR-KVRH: the five project-public publication settings. */
 export interface GithubPublicationSettings {
   parentIssueTypes: string[];
   subIssueType: string;
   subIssueMilestonePolicy: MilestonePolicy;
   /** PSS-FR-HWBG: the Type a root issue is pre-filled with; null is No Type. */
   rootIssueType: string | null;
+  /**
+   * PSS-FR-HWBG: the Type the note publish modal opens on; null is No Type.
+   * The default is `Feature`.
+   */
+  noteIssueType: string | null;
 }
 
 /** GHP-FR-DZLB: one metadata list and how its read ended. */
@@ -97,6 +107,13 @@ export interface PublicationIssueType {
   name: string;
 }
 
+/** GHP-FR-XLXU: one label of the publication repository. */
+export interface PublicationLabel {
+  name: string;
+  color: string;
+  description: string | null;
+}
+
 /** GHP-FR-FTMC: one issue offered as a parent. */
 export interface PublicationParentIssue {
   number: number;
@@ -114,11 +131,40 @@ export interface PublicationMetadata {
   parents: MetadataList<PublicationParentIssue>;
   issueTypes: MetadataList<PublicationIssueType>;
   milestones: MetadataList<PublicationMilestone>;
+  /** GHP-FR-XLXU: the label list. The draft chooser does not show it. */
+  labels: MetadataList<PublicationLabel>;
   /** GHP-FR-ETJD: `resolved` is null where the configured Type is unavailable. */
   subIssueType: { name: string; resolved: string | null };
   /** GHP-FR-AFEX: null where no root issue Type is stored. */
   rootIssueType: { name: string; resolved: string | null } | null;
+  /** GHP-FR-JGXW: null where No Type is stored as the note issue Type. */
+  noteIssueType: { name: string; resolved: string | null } | null;
 }
+
+/** GHP-FR-CNPX: whether a note can be published now. */
+export interface NotePublicationAvailability {
+  available: boolean;
+  reasonCode: string | null;
+  reason: string | null;
+  remoteName: string | null;
+  repositoryHost: string | null;
+  repositoryOwner: string | null;
+  repositoryName: string | null;
+}
+
+/** GHP-FR-JGNI: the choice a note publication sends. */
+export interface NotePublicationChoiceInput {
+  parentIssueNumber: number | null;
+  issueType: string | null;
+  milestoneNumber: number | null;
+  labels: string[];
+}
+
+/** GHP-FR-QWFD / GHP-FR-WJBM / GHP-FR-GIVY: what a note publication answers. */
+export type NotePublicationOutcome =
+  | { kind: "published"; issueNumber: number; issueUrl: string }
+  | { kind: "sub_issue_link_failed"; issueNumber: number; issueUrl: string }
+  | { kind: "note_not_removed"; issueNumber: number; issueUrl: string; errorCode: string };
 
 /** GHP-FR-SIMK: how one refresh of the metadata cache ended. */
 export type PublicationMetadataRefreshOutcome = "changed" | "unchanged" | "failed";

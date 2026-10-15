@@ -31,6 +31,11 @@ export interface ToastEntry {
   /** Where a click lands the author. Null for a toast that only dismisses. */
   address: string | null;
   /**
+   * NTF-FR-XNCG: one link of a toast with no address — a label and an action
+   * of the surface that shows it. Activating it leaves the toast in the stack.
+   */
+  link?: ToastLink | null;
+  /**
    * Counts the replacements of this toast. A change restarts the Info timer
    * (NTF-FR-HZNF).
    */
@@ -38,6 +43,12 @@ export interface ToastEntry {
 }
 
 export type ToastInput = Omit<ToastEntry, "revision">;
+
+/** NTF-FR-XNCG: the link a toast with no address may carry. */
+export interface ToastLink {
+  label: string;
+  onActivate: () => void;
+}
 
 /** The visible toasts in arrival order: the oldest first. */
 let visible: ToastEntry[] = [];

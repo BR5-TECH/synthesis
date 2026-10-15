@@ -262,7 +262,11 @@ pub fn record_of(attempt: &PublicationAttempt, issue: &IssueRef) -> PublicationR
 
 /// GHP-FR-OHGY: the Type and milestone a create or an edit names.
 pub fn fields_of(choice: &PublicationChoice) -> IssueFields {
-    IssueFields { issue_type: choice.issue_type.clone(), milestone: choice.milestone_number }
+    IssueFields {
+        issue_type: choice.issue_type.clone(),
+        milestone: choice.milestone_number,
+        labels: Vec::new(),
+    }
 }
 
 /// GHP-FR-PWJG: the saved parent must still be usable before a create or a
@@ -461,6 +465,7 @@ pub fn update_existing(
     let fields = IssueFields {
         issue_type: choice.issue_type.clone().filter(|_| !type_matches(&existing, &choice)),
         milestone: choice.milestone_number.filter(|_| !milestone_matches(&existing, &choice)),
+        labels: Vec::new(),
     };
     let edit = IssueEdit { title: &content.title, body: &content.body, fields: &fields };
     let updated = client.update_issue(secret, owner, repo, existing.number, &edit)?;
@@ -520,7 +525,26 @@ pub fn resolve_root_issue_type(
     settings.root_issue_type.as_deref().map(|name| resolve_type(name, types))
 }
 
-/// GHP-FR-MDLD: read the three lists. Mutates nothing, and one failed list
+/// GHP-FR-JGXW: the stored note issue Type, resolved, or `None` where No Type
+/// is stored.
+pub fn resolve_note_issue_type(
+    settings: &GithubPublicationSettings,
+    types: &MetadataList<PublicationIssueType>,
+) -> Option<IssueTypeResolution> {
+    settings.note_issue_type.as_deref().map(|name| resolve_type(name, types))
+}
+
+/// GHP-FR-XLXU: the label list of one repository.
+pub fn labels_list(
+    client: &dyn GithubIssues,
+    secret: &str,
+    owner: &str,
+    repo: &str,
+) -> MetadataList<PublicationLabel> {
+    list_of(client.list_labels(secret, owner, repo), ERR_LABELS_UNREADABLE, |label| label)
+}
+
+/// GHP-FR-MDLD: read the four lists. Mutates nothing, and one failed list
 /// leaves the others as they are (GHP-FR-DZLB).
 pub fn load_metadata(
     client: &dyn GithubIssues,
@@ -559,8 +583,10 @@ pub fn load_metadata(
         ERR_MILESTONES_UNREADABLE,
         |milestone| milestone,
     );
+    let labels = labels_list(client, secret, owner, repo);
     let sub_issue_type = resolve_sub_issue_type(&settings, &issue_types);
     let root_issue_type = resolve_root_issue_type(&settings, &issue_types);
+    let note_issue_type = resolve_note_issue_type(&settings, &issue_types);
     PublicationMetadata {
         repository_owner: owner.to_string(),
         repository_name: repo.to_string(),
@@ -568,8 +594,10 @@ pub fn load_metadata(
         parents,
         issue_types,
         milestones,
+        labels,
         sub_issue_type,
         root_issue_type,
+        note_issue_type,
     }
 }
 
@@ -585,19 +613,22 @@ pub fn issue_types_list(
 }
 
 /// GHP-FR-NQWX: the settings a caller may save, cleaned, or the typed refusal.
-/// A `None` root issue Type is No Type; a blank name is refused.
+/// A `None` root or note issue Type is No Type; a blank name is refused.
 pub fn validated_settings(
     parent_issue_types: Vec<String>,
     sub_issue_type: String,
     sub_issue_milestone_policy: MilestonePolicy,
     root_issue_type: Option<String>,
+    note_issue_type: Option<String>,
 ) -> Result<GithubPublicationSettings, String> {
     let parent_issue_types = clean_type_names(parent_issue_types);
     let sub_issue_type = sub_issue_type.trim().to_string();
     let root_issue_type = root_issue_type.map(|name| name.trim().to_string());
+    let note_issue_type = note_issue_type.map(|name| name.trim().to_string());
     if parent_issue_types.is_empty()
         || sub_issue_type.is_empty()
         || root_issue_type.as_deref().is_some_and(str::is_empty)
+        || note_issue_type.as_deref().is_some_and(str::is_empty)
     {
         return Err(ERR_INVALID_PUBLICATION_SETTINGS.to_string());
     }
@@ -606,6 +637,7 @@ pub fn validated_settings(
         sub_issue_type,
         sub_issue_milestone_policy,
         root_issue_type,
+        note_issue_type,
     })
 }
 
@@ -694,7 +726,7 @@ fn resolve_root_choice(
 }
 
 /// GHP-FR-LCKZ: the open milestone a number names, or `None` for no number.
-fn open_milestone(
+pub(crate) fn open_milestone(
     client: &dyn GithubIssues,
     secret: &str,
     owner: &str,

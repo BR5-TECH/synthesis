@@ -261,7 +261,11 @@ fn the_request_body_names_only_what_the_choice_names() {
         issue_payload(
             "t",
             "b",
-            &IssueFields { issue_type: Some("Task".into()), milestone: Some(7) }
+            &IssueFields {
+                issue_type: Some("Task".into()),
+                milestone: Some(7),
+                ..Default::default()
+            }
         ),
         serde_json::json!({ "title": "t", "body": "b", "type": "Task", "milestone": 7 })
     );

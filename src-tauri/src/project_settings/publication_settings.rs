@@ -1,7 +1,8 @@
 //! The GitHub publication settings (PSS-FR-HWBG, PSS-FR-RDXE, PSS-FR-VCZM).
 //!
 //! The settings are project-public: the parent issue Types, the sub-issue
-//! Type, the sub-issue milestone policy, and the root issue Type are the same
+//! Type, the sub-issue milestone policy, the root issue Type, and the note
+//! issue Type are the same
 //! for every checkout of the project. They live in a table of their own, apart from the polling
 //! settings, so a write of one group carries the other through unchanged.
 //!
@@ -18,11 +19,18 @@ const PARENT_ISSUE_TYPES_KEY: &str = "parentIssueTypes";
 const SUB_ISSUE_TYPE_KEY: &str = "subIssueType";
 const MILESTONE_POLICY_KEY: &str = "subIssueMilestonePolicy";
 const ROOT_ISSUE_TYPE_KEY: &str = "rootIssueType";
+const NOTE_ISSUE_TYPE_KEY: &str = "noteIssueType";
 
 /// PSS-FR-HWBG: the parent Type a setting that is unset reads as.
 pub const DEFAULT_PARENT_ISSUE_TYPE: &str = "Feature";
 /// PSS-FR-HWBG: the sub-issue Type a setting that is unset reads as.
 pub const DEFAULT_SUB_ISSUE_TYPE: &str = "Task";
+/// PSS-FR-HWBG: the note issue Type a setting that is unset reads as.
+pub const DEFAULT_NOTE_ISSUE_TYPE: &str = "Feature";
+
+fn default_note_issue_type() -> Option<String> {
+    Some(DEFAULT_NOTE_ISSUE_TYPE.to_string())
+}
 
 /// GHP-FR-AZPF: how a sub-issue's milestone is resolved.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,7 +43,7 @@ pub enum MilestonePolicy {
     AuthorSelected,
 }
 
-/// GHP-FR-KVRH: the four project-public publication settings.
+/// GHP-FR-KVRH: the five project-public publication settings.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GithubPublicationSettings {
@@ -46,6 +54,10 @@ pub struct GithubPublicationSettings {
     /// No Type, which is also the default.
     #[serde(default)]
     pub root_issue_type: Option<String>,
+    /// PSS-FR-HWBG / PSS-FR-EKOV: the Type the note publish modal opens on.
+    /// `None` is No Type. The default is `Feature`.
+    #[serde(default = "default_note_issue_type")]
+    pub note_issue_type: Option<String>,
 }
 
 impl Default for GithubPublicationSettings {
@@ -55,6 +67,7 @@ impl Default for GithubPublicationSettings {
             sub_issue_type: DEFAULT_SUB_ISSUE_TYPE.to_string(),
             sub_issue_milestone_policy: MilestonePolicy::default(),
             root_issue_type: None,
+            note_issue_type: default_note_issue_type(),
         }
     }
 }
@@ -117,6 +130,12 @@ pub fn load_github_publication_settings_from(
         .map(str::trim)
         .filter(|name| !name.is_empty())
         .map(str::to_string);
+    // PSS-FR-EKOV: an absent note issue Type reads as `Feature`, and a blank
+    // one is No Type.
+    if let Some(stored) = section.get(NOTE_ISSUE_TYPE_KEY).and_then(|v| v.as_str()) {
+        let name = stored.trim();
+        settings.note_issue_type = (!name.is_empty()).then(|| name.to_string());
+    }
     Ok(settings)
 }
 
@@ -152,6 +171,12 @@ pub fn save_github_publication_settings_to(
     if let Some(name) = &settings.root_issue_type {
         section.insert(ROOT_ISSUE_TYPE_KEY.to_string(), toml::Value::String(name.clone()));
     }
+    // PSS-FR-EKOV: No Type is stored as an empty string, so it stays distinct
+    // from the unset default.
+    section.insert(
+        NOTE_ISSUE_TYPE_KEY.to_string(),
+        toml::Value::String(settings.note_issue_type.clone().unwrap_or_default()),
+    );
     table.insert(GITHUB_PUBLICATION_KEY.to_string(), toml::Value::Table(section));
     save_public(root, &table)
 }

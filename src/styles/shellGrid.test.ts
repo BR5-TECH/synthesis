@@ -70,3 +70,49 @@ describe("the shell's zone adjacency (SNV-FR-55)", () => {
     expect(rows[0]).not.toContain("activity");
   });
 });
+
+/** The declarations of the first rule whose selector is `selector`. */
+function ruleBody(selector: string): string {
+  const rule = CSS.split(selector)[1] ?? "";
+  return rule.slice(0, rule.indexOf("}"));
+}
+
+describe("the top chrome's centred search track (SNV-FR-HMCZ)", () => {
+  const columns = (/grid-template-columns:\s*([^;]+);/.exec(
+    ruleBody("\n.top-chrome {"),
+  )?.[1] ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const tracks = columns.split(/ (?=minmax\()/);
+
+  it("SNV-FR-HMCZ: gives both side tracks the width of the wider cluster", () => {
+    // The regression: `auto 1fr auto` sizes each side track to its own
+    // cluster, so a wide leading cluster pushes the bar right of the midline.
+    expect(tracks).toHaveLength(3);
+    expect(tracks[0]).toBe(tracks[2]);
+    expect(tracks[0]).toContain("var(--top-chrome-side");
+  });
+
+  it("SNV-FR-HMCZ: never lets a side track go below its own cluster", () => {
+    for (const side of [tracks[0], tracks[2]]) {
+      expect(side).toMatch(/^minmax\(max-content,/);
+    }
+  });
+
+  it("SNV-FR-HMCZ: sizes each side track to its own cluster before the first measurement", () => {
+    // Without the default, `var()` names nothing, the declaration is invalid,
+    // and the chrome loses its three tracks.
+    expect(ruleBody("\n.top-chrome {")).toMatch(/--top-chrome-side:\s*max-content;/);
+  });
+
+  it("SNV-FR-HMCZ: gives the search track a floor and lets it flex above it", () => {
+    expect(tracks[1]).toMatch(/^minmax\(\d+px, 1fr\)$/);
+  });
+
+  it("SNV-FR-HMCZ: lets each cluster fit its content at its own edge", () => {
+    // A cluster stretched over its track would measure the track, and the
+    // measured width would feed back into the track it sizes.
+    expect(ruleBody("\n.top-chrome__left {")).toMatch(/justify-self:\s*start/);
+    expect(ruleBody("\n.top-chrome__right {")).toMatch(/justify-self:\s*end/);
+  });
+});

@@ -356,7 +356,17 @@
 .top-chrome {
   grid-area: topchrome;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  /* SNV-FR-HMCZ: both side tracks take the width of the wider cluster
+     (`--top-chrome-side`, set inline by useMirroredClusterWidth), so the search
+     track is on the window's midline. A side track never goes below its own
+     cluster's width. The side tracks fill before the flexible search track, so
+     the bar narrows to stay centred. Below its 240px floor, the narrower
+     cluster's track gives up width instead, and the bar moves toward it. */
+  --top-chrome-side: max-content;
+  grid-template-columns:
+    minmax(max-content, var(--top-chrome-side))
+    minmax(240px, 1fr)
+    minmax(max-content, var(--top-chrome-side));
   align-items: center;
   padding: 0 12px;
   background: var(--bg-chrome);
@@ -364,8 +374,10 @@
   gap: 16px;
 }
 .top-chrome > :nth-child(2) { max-width: 520px; justify-self: center; width: 100%; }
-.top-chrome__left { display: flex; align-items: center; gap: 10px; }
-.top-chrome__right { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+/* SNV-FR-HMCZ: each cluster fits its content at its own edge, so its measured
+   width does not follow the width of its track. */
+.top-chrome__left { display: flex; align-items: center; gap: 10px; justify-self: start; }
+.top-chrome__right { display: flex; align-items: center; gap: 6px; justify-content: flex-end; justify-self: end; }
 
 /* ---------- THEME SELECTOR (SNV-FR-15, SNV-FR-QXTH) ---------- */
 .theme-select { position: relative; display: inline-flex; }

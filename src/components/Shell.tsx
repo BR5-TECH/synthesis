@@ -5,6 +5,7 @@ import { AppIcon } from "./AppIcon";
 import { SearchOverlay } from "./SearchOverlay";
 import { useSearch } from "../hooks/useSearch";
 import { QUERY_MODES, useSearchQueryMode } from "../hooks/useSearchQueryMode";
+import { useMirroredClusterWidth } from "../hooks/useMirroredClusterWidth";
 import { useDraftsPanelState } from "../hooks/useDraftsPanelState";
 import { useLibraryPanelState } from "../hooks/useLibraryPanelState";
 import { useNotesPanelState } from "../hooks/useNotesPanelState";
@@ -178,6 +179,9 @@ export function TopChrome({
   // button, the input itself — is "inside" and keeps the overlay open.
   const searchRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // SNV-FR-HMCZ: both side tracks take the width of the wider cluster, so the
+  // search bar between them is on the window's midline.
+  const clusters = useMirroredClusterWidth<HTMLDivElement, HTMLDivElement>();
   useEffect(() => {
     if (!searchOpen) return;
     const onDown = (e: MouseEvent) => {
@@ -199,8 +203,8 @@ export function TopChrome({
   }, [searchOpen, setSearchOpen]);
 
   return (
-    <div className="top-chrome">
-      <div className="top-chrome__left">
+    <div className="top-chrome" style={clusters.style}>
+      <div className="top-chrome__left" ref={clusters.leftRef}>
         <div className="top-chrome__brand">
           <AppIcon size={16} />
           <span>Synthesis</span>
@@ -364,7 +368,7 @@ export function TopChrome({
         )}
       </div>
 
-      <div className="top-chrome__right">
+      <div className="top-chrome__right" ref={clusters.rightRef}>
         {/* SNV-FR-59: the trailing cluster holds the agents control and then the
             theme selector, in that fixed order — the two things that belong to
             the author rather than to the repository. The control is present

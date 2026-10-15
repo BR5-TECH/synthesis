@@ -918,16 +918,19 @@
   flex-direction: column;
   gap: var(--sp-2);
 }
-/* DRP-FR-TQUB: the publication marker, a link to the draft's GitHub issue. */
+/* DRP-FR-TQUB: the publication marker, a link to the draft's GitHub issue.
+   It is a `.drafts-tree__badge`; these rules remove the button chrome only. */
 .drafts-tree__publication {
-  flex: none;
-  padding: 0 2px;
-  border: none;
   background: none;
-  color: var(--fg-3);
-  font-size: var(--fs-ui-xs);
-  line-height: 1;
+  font-family: inherit;
+  line-height: inherit;
   cursor: pointer;
 }
 .drafts-tree__publication:hover,
-.drafts-tree__publication:focus-visible { color: var(--accent); }
+.drafts-tree__publication:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+/* The same focus ring as the rows of the tree. It lies on the accent border,
+   so the badge shows one ring and not the browser ring as well. */
+.drafts-tree__publication:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }

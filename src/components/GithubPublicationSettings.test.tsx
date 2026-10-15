@@ -19,6 +19,7 @@ const DEFAULTS: GithubPublicationSettings = {
   subIssueType: "Task",
   subIssueMilestonePolicy: "inherit_parent",
   rootIssueType: null,
+  noteIssueType: "Feature",
 };
 
 const types = (...names: string[]): MetadataList<PublicationIssueType> => ({
@@ -106,6 +107,7 @@ describe("the Publication group of GitHub Project settings", () => {
       subIssueType: "Task",
       subIssueMilestonePolicy: "inherit_parent",
       rootIssueType: null,
+      noteIssueType: "Feature",
     });
     expect(screen.queryByRole("button", { name: /^Save/ })).toBeNull();
     await waitFor(() =>
@@ -138,6 +140,7 @@ describe("the Publication group of GitHub Project settings", () => {
       subIssueType: "Bug",
       subIssueMilestonePolicy: "author_selected",
       rootIssueType: null,
+      noteIssueType: "Feature",
     });
   });
 
@@ -160,6 +163,7 @@ describe("the Publication group of GitHub Project settings", () => {
       subIssueType: "Gone",
       subIssueMilestonePolicy: "no_milestone",
       rootIssueType: null,
+      noteIssueType: "Feature",
     };
     render(<GithubPublicationSettingsGroup />);
 
@@ -259,6 +263,7 @@ describe("the Publication group of GitHub Project settings", () => {
       subIssueType: "Task",
       subIssueMilestonePolicy: "inherit_parent",
       rootIssueType: "Bug",
+      noteIssueType: "Feature",
     });
     await waitFor(() => expect(rootType().value).toBe("Bug"));
     expect(subType().value).toBe("Task");
@@ -285,5 +290,59 @@ describe("the Publication group of GitHub Project settings", () => {
 
     await waitFor(() => expect(rootType().value).toBe("Bug"));
     expect(calls("set_github_publication_settings")).toHaveLength(0);
+  });
+});
+
+const noteType = () => screen.getByLabelText("Note issue Type") as HTMLSelectElement;
+
+describe("the Note issue Type selector (SET-FR-AXEZ)", () => {
+  it("SET-FR-AXEZ: offers No Type and each available Type, with Feature selected by default", async () => {
+    render(<GithubPublicationSettingsGroup />);
+    await waitFor(() => expect(noteType().value).toBe("Feature"));
+    expect(Array.from(noteType().options).map((o) => o.textContent)).toEqual([
+      "No Type",
+      "Feature",
+      "Task",
+      "Bug",
+      "Epic",
+    ]);
+  });
+
+  it("SET-FR-AXEZ, SET-FR-MQUE: a change persists at once, No Type as null, and leaves the root and sub-issue Types alone", async () => {
+    render(<GithubPublicationSettingsGroup />);
+    await waitFor(() => expect(noteType().value).toBe("Feature"));
+    await userEvent.selectOptions(noteType(), "Bug");
+    await waitFor(() => expect(calls("set_github_publication_settings")).toHaveLength(1));
+    expect(calls("set_github_publication_settings")[0][1]).toEqual({
+      parentIssueTypes: ["Feature"],
+      subIssueType: "Task",
+      subIssueMilestonePolicy: "inherit_parent",
+      rootIssueType: null,
+      noteIssueType: "Bug",
+    });
+    await waitFor(() => expect(noteType().value).toBe("Bug"));
+    await userEvent.selectOptions(noteType(), "");
+    await waitFor(() => expect(calls("set_github_publication_settings")).toHaveLength(2));
+    expect(
+      (calls("set_github_publication_settings")[1][1] as GithubPublicationSettings).noteIssueType,
+    ).toBeNull();
+    expect(subType().value).toBe("Task");
+    expect(rootType().value).toBe("");
+  });
+
+  it("SET-FR-AXEZ, SET-FR-LJYT: a stored Note issue Type that GitHub does not list stays selected and shows as unavailable", async () => {
+    stored = { ...DEFAULTS, noteIssueType: "Story" };
+    render(<GithubPublicationSettingsGroup />);
+    await waitFor(() => expect(noteType().value).toBe("Story"));
+    expect(noteType().selectedOptions[0].textContent).toBe("Story (unavailable)");
+    expect(calls("set_github_publication_settings")).toHaveLength(0);
+  });
+
+  it("SET-FR-XFNA: while the Type read is outstanding, the Note issue Type keeps the stored value", async () => {
+    stored = { ...DEFAULTS, noteIssueType: "Bug" };
+    typeList = () => new Promise(() => {});
+    render(<GithubPublicationSettingsGroup />);
+    await waitFor(() => expect(noteType().value).toBe("Bug"));
+    expect(screen.getByTestId("github-types-loading")).toBeInTheDocument();
   });
 });

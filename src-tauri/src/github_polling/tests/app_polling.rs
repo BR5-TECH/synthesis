@@ -280,6 +280,7 @@ fn the_publication_settings_leave_polling_unchanged() {
         sub_issue_type: "Bug".into(),
         sub_issue_milestone_policy: MilestonePolicy::NoMilestone,
         root_issue_type: Some("Bug".into()),
+        note_issue_type: None,
     };
     save_github_publication_settings_to(&h.root(), &saved).unwrap();
 

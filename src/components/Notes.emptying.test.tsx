@@ -301,12 +301,12 @@ describe("emptying a note (NTS-FR-16)", () => {
     await save();
     await waitFor(() => expect(screen.getByText(EMPTY_ROW)).toBeInTheDocument());
 
-    // NTS-FR-19: the empty row's menu is the same five entries as any other's.
+    // NTS-FR-19: the empty row's menu is the same six entries as any other's.
     await userEvent.click(screen.getByLabelText("Note actions"));
     const menu = document.querySelector(".menu") as HTMLElement;
     expect(
       Array.from(menu.querySelectorAll(".menu-item")).map((el) => el.textContent),
-    ).toEqual(["Discuss", "Edit", "Move…", "Set Reminder…", "Delete"]);
+    ).toEqual(["Discuss", "Edit", "Move…", "Set Reminder…", "Publish to GitHub", "Delete"]);
 
     // NTS-FR-21: confirmed, and then actually gone.
     await userEvent.click(within(menu).getByText("Delete"));

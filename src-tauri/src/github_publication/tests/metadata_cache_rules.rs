@@ -37,6 +37,11 @@ fn lists(parents: &[u64], types: &[&str], milestones: &[u64]) -> CachedLists {
                 .map(|n| PublicationMilestone { number: *n, title: format!("v{n}") })
                 .collect(),
         ),
+        labels: MetadataList::loaded(vec![PublicationLabel {
+            name: "bug".into(),
+            color: "d73a4a".into(),
+            description: None,
+        }]),
     }
 }
 

@@ -3,7 +3,7 @@
 **Spec code:** `GHP`
 
 ## Intent
-The backend that publishes a draft's prompt as a **GitHub issue**, so that work prepared in the New Artifact tab can be picked up by an agent that runs outside this application. It resolves which configured Git remote the issue goes to, checks that the repository accepts new issues and that the project's GitHub token can read and write them, writes an **attempt record** before the first GitHub request, creates the issue through the REST API of the host of the project's token (`github.com` or a GitHub Enterprise host), and appends one record to the draft's **append-only publication history**. A draft that holds a current record can be **updated**: the issue of that record takes the draft's current name and prompt as its title and body, and one more record is appended. The backend keeps the parent, Type, and milestone lists of the publication remote in an in-memory **metadata cache**, which it refreshes in the background when the project opens, every 30 minutes, and on each change of what the lists depend on, so the publication chooser opens with lists that it does not wait for. The issue is published as a **root issue** or as a **sub-issue** of an open issue in the same repository, with an optional GitHub issue **Type** and **milestone**; the author's choices are saved in the attempt record before the first GitHub mutation. Publication is a fact about a draft's metadata rather than about its prompt: it never edits the prompt, never removes a draft, never changes the draft's status, and never changes local graduation. Out of scope: the remote agent that reads the issue and works on it; labels, assignees, comments, and issue state, which neither a publication nor an update changes; media attachment and local-asset upload, which v1 refuses rather than performs; adding an issue to a GitHub Project, the publication having no Project selector of its own; minting or storing a token, which is `GTS-github-token-storage.md`'s; and the storage layout of the publication store, which is `DRS-draft-storage.md`'s.
+The backend that publishes a draft's prompt as a **GitHub issue**, so that work prepared in the New Artifact tab can be picked up by an agent that runs outside this application. It resolves which configured Git remote the issue goes to, checks that the repository accepts new issues and that the project's GitHub token can read and write them, writes an **attempt record** before the first GitHub request, creates the issue through the REST API of the host of the project's token (`github.com` or a GitHub Enterprise host), and appends one record to the draft's **append-only publication history**. A draft that holds a current record can be **updated**: the issue of that record takes the draft's current name and prompt as its title and body, and one more record is appended. The backend keeps the parent, Type, milestone, and label lists of the publication remote in an in-memory **metadata cache**, which it refreshes in the background when the project opens, every 30 minutes, and on each change of what the lists depend on, so the publication chooser and the note publish modal open with lists that they do not wait for. The issue is published as a **root issue** or as a **sub-issue** of an open issue in the same repository, with an optional GitHub issue **Type** and **milestone**; the author's choices are saved in the attempt record before the first GitHub mutation. Publication is a fact about a draft's metadata rather than about its prompt: it never edits the prompt, never removes a draft, never changes the draft's status, and never changes local graduation. The backend also publishes a **note** as an issue, with a title and a description that the author writes, a parent or none, a Type, a milestone, and labels, and then deletes the note, so a note that has outgrown the project **moves** to GitHub; a note publication keeps no attempt record, no marker, and no history. Out of scope: the remote agent that reads the issue and works on it; labels for a draft publication, and assignees, comments, and issue state for any publication, which neither a publication nor an update changes; media attachment and local-asset upload, which v1 refuses rather than performs; adding an issue to a GitHub Project, the publication having no Project selector of its own; minting or storing a token, which is `GTS-github-token-storage.md`'s; and the storage layout of the publication store, which is `DRS-draft-storage.md`'s.
 
 ## Functional requirements
 1. **GHP-FR-QJNV** Publication targets the host of the remote and reaches it through a programmatic HTTPS client against the REST API base that `GTS-github-token-storage.md` GTS-FR-PDWB resolves from that host, authenticated with the secret the open project resolves through `GTS-github-token-storage.md` (GTS-FR-13). The `gh` CLI is neither required nor invoked, and no operation here shells out to any external program.
@@ -50,22 +50,24 @@ The backend that publishes a draft's prompt as a **GitHub issue**, so that work 
 37. **GHP-FR-MJTB** `open_publication_issue(draft_id, url)` opens the OS default browser at that URL and opens no page inside the application. It refuses a URL that neither a record of that draft's history nor the draft's GitHub-shadow issue link (per `DRS-draft-storage.md` DRS-FR-XDWS) holds, and one that is not an HTTPS issue address on the repository host that the record or the link names, so this operation cannot open an arbitrary address.
 38. **GHP-FR-DHXK** No error payload, metadata view, stored record, log line, or event of this module carries a token secret or a remote URL with an embedded credential, on the terms `GTC-git.md` GTC-FR-11 sets for Git output.
 39. **GHP-FR-YDAN** `resolve_publication_repository()` resolves the project's publication remote on the terms of GHP-FR-HVQG and GHP-FR-XAUP without a draft, and returns the remote name and the repository host, owner, and name, or the refusal code of GHP-FR-ZRFP. It writes nothing and creates nothing on GitHub.
-39. **GHP-FR-PVOA** The typed error vocabulary is exactly `no_project_open`, `draft_not_found`, `draft_archived`, `draft_locked_by_graduation`, `local_assets_unsupported`, `no_remote_configured`, `no_github_remote`, `issues_inaccessible`, `issues_disabled`, `issues_create_forbidden`, `token_unavailable`, `github_host_mismatch`, `attempt_in_progress`, `no_attempt`, `github_unreachable`, `issue_create_failed`, `issue_update_failed`, `no_publication_record`, `issue_not_found`, `issue_moved`, `issue_update_forbidden`, `publication_store_write_failed`, `draft_github_shadow`, `parent_issues_unreadable`, `issue_types_unreadable`, `milestones_unreadable`, `parent_issue_unavailable`, `issue_type_unavailable`, `milestone_unavailable`, `invalid_publication_choice`, `sub_issue_link_failed`, `invalid_publication_settings`, and `github_project_not_selected`. Each carries displayable text stating the exact failure.
+39. **GHP-FR-PVOA** The typed error vocabulary is exactly `no_project_open`, `draft_not_found`, `draft_archived`, `draft_locked_by_graduation`, `local_assets_unsupported`, `no_remote_configured`, `no_github_remote`, `issues_inaccessible`, `issues_disabled`, `issues_create_forbidden`, `token_unavailable`, `github_host_mismatch`, `attempt_in_progress`, `no_attempt`, `github_unreachable`, `issue_create_failed`, `issue_update_failed`, `no_publication_record`, `issue_not_found`, `issue_moved`, `issue_update_forbidden`, `publication_store_write_failed`, `draft_github_shadow`, `parent_issues_unreadable`, `issue_types_unreadable`, `milestones_unreadable`, `parent_issue_unavailable`, `issue_type_unavailable`, `milestone_unavailable`, `invalid_publication_choice`, `sub_issue_link_failed`, `invalid_publication_settings`, and `github_project_not_selected`, `labels_unreadable`, `label_unavailable`, `note_not_found`, `invalid_note_publication`, and `issue_url_refused`. Each carries displayable text stating the exact failure.
 
-40. **GHP-FR-KVRH** The **GitHub publication settings** are four project-public values stored through `PSS-project-settings-storage.md` (PSS-FR-HWBG): the **parent issue Types** (default `Feature`), the **sub-issue Type** (default `Task`), the **sub-issue milestone policy** (default `inherit_parent`), and the **root issue Type** (default unset, which is No Type). `get_github_publication_settings()` returns them with defaults applied to every unset value.
-41. **GHP-FR-NQWX** `set_github_publication_settings(parent_issue_types, sub_issue_type, sub_issue_milestone_policy, root_issue_type)` persists the four values and returns them. A null `root_issue_type` stores No Type. It refuses an empty Type list, an empty Type name, and an unknown policy with `invalid_publication_settings`, and writes nothing. It never checks a Type against GitHub. A failed write returns `publication_store_write_failed`.
+40. **GHP-FR-KVRH** The **GitHub publication settings** are five project-public values stored through `PSS-project-settings-storage.md` (PSS-FR-HWBG): the **parent issue Types** (default `Feature`), the **sub-issue Type** (default `Task`), the **sub-issue milestone policy** (default `inherit_parent`), the **root issue Type** (default No Type), and the **note issue Type** (default `Feature`). `get_github_publication_settings()` returns them with defaults applied to every unset value.
+41. **GHP-FR-NQWX** `set_github_publication_settings(parent_issue_types, sub_issue_type, sub_issue_milestone_policy, root_issue_type, note_issue_type)` persists the five values and returns them. A null `root_issue_type` or `note_issue_type` stores No Type. It refuses an empty Type list, an empty Type name, and an unknown policy with `invalid_publication_settings`, and writes nothing. It never checks a Type against GitHub. A failed write returns `publication_store_write_failed`.
 42. **GHP-FR-PTYL** `list_github_issue_types()` resolves the publication repository on the terms of GHP-FR-YDAN, reads the issue Types of that repository's owner, and returns the Type list of GHP-FR-DZLB. A repository that does not resolve returns its GHP-FR-ZRFP refusal. It mutates nothing on GitHub.
-43. **GHP-FR-MDLD** `load_publication_metadata(draft_id, remote_name)` re-resolves the named remote on the terms of GHP-FR-CVYK and returns the repository, the settings of GHP-FR-KVRH, the **parent list**, the **Type list**, the **milestone list**, the resolved sub-issue Type, and the resolved root issue Type. It mutates nothing on GitHub and writes no attempt record.
-44. **GHP-FR-DZLB** Each of the three lists is `{ state, items, error_code, error }` with `state` either `loaded` or `failed`. One list that fails to read does not fail the command and does not change the other two lists. A `loaded` list may hold no item.
+43. **GHP-FR-MDLD** `load_publication_metadata(draft_id, remote_name)` re-resolves the named remote on the terms of GHP-FR-CVYK and returns the repository, the settings of GHP-FR-KVRH, the **parent list**, the **Type list**, the **milestone list**, the **label list**, the resolved sub-issue Type, the resolved root issue Type, and the resolved note issue Type. It mutates nothing on GitHub and writes no attempt record.
+44. **GHP-FR-DZLB** Each of the four lists is `{ state, items, error_code, error }` with `state` either `loaded` or `failed`. One list that fails to read does not fail the command and does not change the other lists. A `loaded` list may hold no item.
 45. **GHP-FR-FTMC** A **parent issue** is an open issue of the selected publication repository that is not a pull request and whose Type equals a configured parent issue Type, compared without regard to case. A row carries the number, title, Type, milestone or null, and URL. The request names each Type in the owner's spelling where the owner lists it.
 46. **GHP-FR-YSPJ** The **Type list** holds the names of the issue Types that GitHub reports for the repository's owner. An owner that GitHub reports no Types for, including a user account, gives a `loaded` list with no item. Any other failed read gives `failed` with `issue_types_unreadable`.
 47. **GHP-FR-GHEA** The **milestone list** holds the open milestones of the selected repository, each with its number and title. A failed read gives `failed` with `milestones_unreadable`. A failed parent read gives `failed` with `parent_issues_unreadable`.
+47. **GHP-FR-XLXU** The **label list** holds the labels of the selected repository, each with its name, its colour, and its description or null. A repository with no label gives a `loaded` list with no item. A failed read gives `failed` with `labels_unreadable`. Draft publication reads the list and sends no label.
 48. **GHP-FR-UXOT** No failed metadata read refuses root publication. A root issue publishes without a Type when the Type list holds none or failed, and without a milestone when the milestone list holds none or failed.
 49. **GHP-FR-BWNI** The **publication choice** passed to `publish_draft_to_github` is `{ parent_issue_number, issue_type, milestone_number }`, each value a number, a string, or null. A null `parent_issue_number` requests a **root issue**. A number requests a **sub-issue** of that issue in the selected publication repository.
 50. **GHP-FR-LCKZ** For a root issue, a named `issue_type` must equal a Type of the Type list and a named `milestone_number` must be an open milestone of the milestone list. Otherwise the call is refused with `issue_type_unavailable` or `milestone_unavailable`, and nothing is written or requested to create an issue.
 51. **GHP-FR-RMVQ** For a sub-issue, the call reads the parent and refuses with `parent_issue_unavailable` unless the parent exists, is open, is not a pull request, and has a configured parent issue Type. A sub-issue choice that names an `issue_type` is refused with `invalid_publication_choice`. Nothing is written for a refused call.
     - *Why:* The sub-issue Type is set in Project settings alone, so the choice never carries one.
 52. **GHP-FR-AFEX** The resolved **root issue Type** is null where no root issue Type is stored. Otherwise it is the stored name and its spelling in the Type list, or a null spelling where the Type list does not hold it or failed. A root issue Type that does not resolve sends no Type.
+52. **GHP-FR-JGXW** The resolved **note issue Type** is null where No Type is stored as the note issue Type. Otherwise it is the stored name and its spelling in the Type list, or a null spelling where the Type list does not hold it or failed.
 52. **GHP-FR-ETJD** The **sub-issue Type** is the configured sub-issue Type, resolved to the spelling that the Type list holds. Where the Type list does not hold it, or failed, the sub-issue is published without a Type and the metadata view reports the configured Type as unavailable.
 53. **GHP-FR-AZPF** The **sub-issue milestone policy** resolves the milestone. `inherit_parent` uses the parent's current milestone, or none where the parent has none. `no_milestone` uses none. `author_selected` uses the open milestone named by `milestone_number`, or none where it is null. A `milestone_number` under another policy is refused with `invalid_publication_choice`.
 54. **GHP-FR-ATCH** Before the first GitHub mutation, the attempt record holds the **publication choice**: root or sub-issue; the parent repository and issue number; the root Type or the resolved sub-issue Type; the sub-issue milestone policy; and the resolved milestone number and title. Every read that resolves the choice happens before the attempt record is written.
@@ -79,7 +81,7 @@ The backend that publishes a draft's prompt as a **GitHub issue**, so that work 
 61. **GHP-FR-PLQE** A root publication with no Type and no milestone sends a create request with the title and body alone, so its wire shape is the shape of a publication before parent, Type, and milestone existed.
 62. **GHP-FR-CDVT** An attempt record that carries no publication choice reads as a root choice with no Type and no milestone. A choice read back after an application restart equals the choice written, so the retry of GHP-FR-IBXN needs no state held in memory.
 63. **GHP-FR-NDWB** `resolve_draft_publication_conflict(draft_id, "publish_new")` replaces the standing attempt with the new one in one atomic write. A failed write leaves the old attempt and its saved choice standing.
-64. **GHP-FR-HSTA** Every request of publication for one repository uses the REST API base of the repository host: the eligibility read, the marker search, issue creation and update, the issue read of an update, the parent issue read, the Type list, the milestone list, and the sub-issue link and unlink. The token is sent only to that API base.
+64. **GHP-FR-HSTA** Every request of publication for one repository uses the REST API base of the repository host: the eligibility read, the marker search, issue creation and update, the issue read of an update, the parent issue read, the Type list, the milestone list, the label list, the note publication create, and the sub-issue link and unlink. The token is sent only to that API base.
 65. **GHP-FR-HSTB** Each `DraftPublicationRecord` and each `DraftPublicationAttempt` carries the `repository_host` of its repository. A record or an attempt stored without it reads as `github.com`. The issue address a record stores is the address that GitHub returned for the issue.
 66. **GHP-FR-HSTC** Where the host of a repository does not support issue Types or sub-issues, the Type list, the parent issue read, or the sub-issue link reports its existing typed unavailable state (GHP-FR-YSPJ, GHP-FR-ETJD, `sub_issue_link_failed`). A root publication with no Type stays available, and the author is asked for no extra input.
 67. **GHP-FR-MZMW** `update_draft_on_github(draft_id, update_closed)` edits the issue that the draft's **current record** names, and no other issue. A draft that holds no record is refused with `no_publication_record`, and nothing is requested.
@@ -91,10 +93,10 @@ The backend that publishes a draft's prompt as a **GitHub issue**, so that work 
 72. **GHP-FR-TCFV** The edit is one partial request that names the title and the body alone. The title is the draft's current name. The body is the current prompt followed by the marker line of the current record (GHP-FR-FQIZ). Milestone, Type, parent, labels, assignees, and state stay as GitHub holds them. A refused edit gives `issue_update_failed`.
 73. **GHP-FR-WUJQ** A successful edit appends one record in one atomic write. It copies the host, owner, name, issue number, issue URL, publication instant, marker, and publication choice of the current record, and adds the **updated** instant in RFC 3339 UTC. The update answers `updated` with that record and emits `"draft publication changed"`.
 74. **GHP-FR-BCAV** The update changes no draft status. A failed update appends no record and writes nothing to disk. An edit that GitHub accepted, followed by a store write that fails, gives `publication_store_write_failed`.
-75. **GHP-FR-IQTK** The **metadata cache** holds the parent list, the Type list, and the milestone list of GHP-FR-DZLB for one resolved publication remote, with the remote name and the repository host, owner, and name. Each list keeps its own state. The cache is held in memory only, is never written to disk, and is shared by every window of the application.
+75. **GHP-FR-IQTK** The **metadata cache** holds the parent list, the Type list, the milestone list, and the label list of GHP-FR-DZLB for one resolved publication remote, with the remote name and the repository host, owner, and name. Each list keeps its own state. The cache is in memory only and is shared by every window of the application.
 76. **GHP-FR-ROBR** A project close, a project switch, and a change of the active worktree empty the cache. A refresh result that belongs to a project or a worktree that is no longer active is discarded and changes nothing, on the terms of `PST-project-storage.md` PST-FR-37.
 77. **GHP-FR-HGVL** The **run condition** holds only when the GitHub polling settings select a GitHub Project (per `PSS-project-settings-storage.md` PSS-FR-OPQD) and the publication remote resolves on the terms of GHP-FR-YDAN, which requires an eligible project token. Where no GitHub Project is selected, no refresh runs, the cache stays empty, and nothing is raised or logged as a failure.
-78. **GHP-FR-AWEZ** A **refresh** resolves the publication remote, reads the three lists through the read of GHP-FR-MDLD, and merges them into the cache. It runs off the window thread and blocks no command. At most one refresh runs at a time per open project. A request made while one runs starts no second refresh and receives the outcome of the running one.
+78. **GHP-FR-AWEZ** A **refresh** resolves the publication remote, reads the four lists through the read of GHP-FR-MDLD, and merges them into the cache. It runs off the window thread and blocks no command. At most one refresh runs at a time per open project. A request made while one runs starts no second refresh and receives the outcome of the running one.
 79. **GHP-FR-EYGR** A list that the refresh reads as `loaded` replaces the cached list. A list that fails to read keeps the cached list unchanged, and is stored as `failed` only where the cache holds no list for that repository. A refresh for another repository than the cached one replaces the whole cache.
 80. **GHP-FR-MSLY** A refresh **fails** where the run condition does not hold, where one list fails to read, or where it does not end within 120 seconds. A refresh that times out or does not resolve the remote leaves every cached list as it was. Every failure is logged with its typed error code.
 81. **GHP-FR-JIAU** Where the merged lists differ from the cached lists in a state, an item, or the order of the items, the refresh replaces the cache and emits `"publication metadata changed"` once with the new cache. A refresh that changes nothing emits nothing. Emptying a cache that holds lists emits the event with no cache.
@@ -104,9 +106,22 @@ The backend that publishes a draft's prompt as a **GitHub issue**, so that work 
 85. **GHP-FR-JTYL** `get_publication_metadata_cache(remote_name)` returns the cached lists as a `PublicationMetadata`, with the settings and the resolved Types of GHP-FR-MDLD computed from the current settings, where the cache holds lists for a remote of that name. Otherwise it returns null. It contacts no network and writes nothing.
 86. **GHP-FR-SIMK** `refresh_publication_metadata()` starts a refresh, or joins the running one, and answers when it ends with its outcome: `changed`, `unchanged`, or `failed` with the typed error and its displayable text, together with the cache as it then stands. Where no GitHub Project is selected, it answers `failed` with `github_project_not_selected` and reads nothing.
 87. **GHP-FR-KPXF** `take_publication_metadata_startup_failure()` returns the startup failure that GHP-FR-ISJI keeps, as `{ error_code, error }`, and discards it, so each kept failure is returned at most once. Where no failure is kept, or no project is open, it returns null. It contacts no network and writes nothing to disk. The event can come before a window listens for it, and this command lets that window still receive the failure.
+88. **GHP-FR-CNPX** `get_note_publication_availability()` answers whether a note can be published now. It is `available` only where the run condition of GHP-FR-HGVL holds, with the remote name and the repository host, owner, and name. Otherwise it carries `github_project_not_selected` or the GHP-FR-ZRFP refusal, with its displayable text. It writes nothing and creates nothing on GitHub.
+89. **GHP-FR-JGNI** `publish_note_to_github(note_id, title, body, choice)` publishes a note as an issue of the publication repository and then deletes the note. It refuses with `github_project_not_selected` or the GHP-FR-ZRFP refusal where the run condition does not hold, and with `note_not_found` where the id names no note of the active worktree.
+90. **GHP-FR-HKMC** The call refuses with `invalid_note_publication` where the trimmed title is empty, where the title holds more than 256 characters, or where the body holds more than 65,536 characters, each counted in Unicode code points. The issue title is the trimmed title, and the issue body is the body exactly as sent, with no marker line.
+91. **GHP-FR-VLDP** Before it creates anything, the call reads what the choice names: a named Type must be a Type of the owner, a named milestone an open milestone, and each named label a label of the repository. Otherwise it refuses with `issue_type_unavailable`, `milestone_unavailable`, or `label_unavailable`. A refused call creates no issue and deletes no note.
+92. **GHP-FR-WXJD** A choice with a parent requests a sub-issue. The call reads the parent and refuses with `parent_issue_unavailable` on the terms of GHP-FR-RMVQ. The sub-issue takes the Type and the milestone that the choice names: the sub-issue Type and the sub-issue milestone policy of GHP-FR-KVRH do not apply to a note.
+93. **GHP-FR-WJTX** The call sends one create request that carries the title, the body, and, where the choice names them, the Type, the milestone number, and the label names. For a sub-issue it then sends one sub-issue link request, on the terms of GHP-FR-OHGY.
+94. **GHP-FR-GCLP** A note publication writes no attempt record, no marker, no publication store, and no history record, and keeps no retry or recovery state. It emits no `"draft publication changed"`. A second call for the same note is a new publication.
+95. **GHP-FR-BYZQ** A create request that GitHub refuses returns `issue_create_failed`, and one that cannot reach GitHub returns `github_unreachable`. In each case no issue exists, the note stays, and nothing is written.
+96. **GHP-FR-QWFD** A sub-issue link that fails answers `sub_issue_link_failed` with the number and the URL of the created issue. The issue stays on GitHub without its parent, and the note stays.
+97. **GHP-FR-WJBM** After the issue is created and linked, the call deletes the note through the transaction of `NTC-notes-storage.md` NTC-FR-21, which also removes its reminder and its discussion. Where the deletion succeeds, the call answers `published` with the issue number and the issue URL that GitHub returned.
+98. **GHP-FR-GIVY** Where the deletion fails, the call answers `note_not_removed` with the issue number, the issue URL, and the typed error code of the deletion. The issue stays on GitHub, and the note stays as the failed step of NTC-FR-21 leaves it.
+99. **GHP-FR-MAMB** `open_publication_repository_issue(url)` opens the OS default browser at that URL and needs no draft. It resolves the publication repository on the terms of GHP-FR-YDAN, and refuses with `issue_url_refused` a URL that is not an HTTPS issue address of that repository on its host. It opens no page inside the application.
+100. **GHP-FR-MAMT** No log line, error payload, or event of note publication carries the title, the body, or any text of the note. A log line names the note id, the repository, and the issue number alone.
 
 ## Contract surface
-Every operation is a Tauri command invoked by `../ui/NAW-new-artifact.md`. The quoted name is the canonical operation name and matches that spec's "Delegated to backend (abstract)" line byte-for-byte.
+Every operation is a Tauri command invoked by `../ui/NAW-new-artifact.md`, `../ui/NIP-note-issue-publication.md`, `../ui/NTS-notes.md`, or `../ui/SET-project-settings.md`. The quoted name is the canonical operation name and matches the "Delegated to backend (abstract)" line of the spec that invokes it byte-for-byte.
 
 ### Record shapes
 The persisted shapes — `DraftPublicationRecord`, `DraftPublicationAttempt`, and the store holding them — are `DRS-draft-storage.md`'s (DRS-FR-EJBM) and are not restated here. Both carry the `PublicationChoice` below as `choice`.
@@ -169,7 +184,8 @@ GithubPublicationSettings {       // GHP-FR-KVRH
   parent_issue_types,             // [string], at least one
   sub_issue_type,                 // string
   sub_issue_milestone_policy,     // MilestonePolicy
-  root_issue_type                 // string | null; null is No Type
+  root_issue_type,                // string | null; null is No Type
+  note_issue_type                 // string | null; null is No Type
 }
 
 MetadataList<T> {                 // GHP-FR-DZLB
@@ -185,6 +201,7 @@ PublicationParentIssue {          // GHP-FR-FTMC
 }
 PublicationIssueType { name }
 PublicationMilestone { number, title }
+PublicationLabel { name, color, description }   // GHP-FR-XLXU; description: string | null
 
 PublicationMetadata {             // GHP-FR-MDLD
   repository_owner, repository_name,
@@ -192,10 +209,13 @@ PublicationMetadata {             // GHP-FR-MDLD
   parents,                        // MetadataList<PublicationParentIssue>
   issue_types,                    // MetadataList<PublicationIssueType>
   milestones,                     // MetadataList<PublicationMilestone>
+  labels,                         // MetadataList<PublicationLabel>
   sub_issue_type,                 // { name, resolved }: resolved is the Type's GitHub
                                   // spelling, or null when unavailable (GHP-FR-ETJD)
-  root_issue_type                 // { name, resolved } | null; null when none is
+  root_issue_type,                // { name, resolved } | null; null when none is
                                   // stored (GHP-FR-AFEX)
+  note_issue_type                 // { name, resolved } | null; null when No Type is
+                                  // stored (GHP-FR-JGXW)
 }
 
 PublicationMetadataRefresh {      // GHP-FR-SIMK
@@ -210,6 +230,26 @@ PublicationMetadataCacheChanged { // GHP-FR-JIAU
   remote_name,                    // the cached remote's name, or null when emptied
   metadata                        // PublicationMetadata of the cache, or null when emptied
 }
+
+NotePublicationAvailability {     // GHP-FR-CNPX
+  available,                      // bool
+  reason_code,                    // typed error; null when available
+  reason,                         // displayable text; null when available
+  remote_name,                    // null unless available
+  repository_host, repository_owner, repository_name   // null unless available
+}
+
+NotePublicationChoiceInput {      // sent by the caller (GHP-FR-JGNI)
+  parent_issue_number,            // number | null; null requests a root issue
+  issue_type,                     // string | null; null is No Type
+  milestone_number,               // number | null
+  labels                          // [string]; may be empty
+}
+
+NotePublicationOutcome =          // GHP-FR-QWFD, GHP-FR-WJBM, GHP-FR-GIVY
+  | { kind: "published", issue_number, issue_url }
+  | { kind: "sub_issue_link_failed", issue_number, issue_url }
+  | { kind: "note_not_removed", issue_number, issue_url, error_code }
 
 PublicationChoice {               // saved in the attempt and the record (GHP-FR-ATCH)
   kind,                           // "root" | "sub_issue"
@@ -229,7 +269,7 @@ PublicationChoice {               // saved in the attempt and the record (GHP-FR
 - `"publish draft to github (draft id, remote name, persist remote, publication choice)"` → `publish_draft_to_github(draft_id, remote_name, persist_remote, publication_choice)` → `PublicationOutcome` (GHP-FR-CVYK).
 - `"load publication metadata (draft id, remote name)"` → `load_publication_metadata(draft_id, remote_name)` → `PublicationMetadata` (GHP-FR-MDLD).
 - `"get github publication settings"` → `get_github_publication_settings()` → `GithubPublicationSettings` (GHP-FR-KVRH).
-- `"set github publication settings (parent issue types, sub issue type, sub issue milestone policy, root issue type)"` → `set_github_publication_settings(parent_issue_types, sub_issue_type, sub_issue_milestone_policy, root_issue_type)` → `GithubPublicationSettings` (GHP-FR-NQWX).
+- `"set github publication settings (parent issue types, sub issue type, sub issue milestone policy, root issue type, note issue type)"` → `set_github_publication_settings(parent_issue_types, sub_issue_type, sub_issue_milestone_policy, root_issue_type, note_issue_type)` → `GithubPublicationSettings` (GHP-FR-NQWX).
 - `"get publication metadata cache (remote name)"` → `get_publication_metadata_cache(remote_name)` → `PublicationMetadata | null` (GHP-FR-JTYL).
 - `"refresh publication metadata"` → `refresh_publication_metadata()` → `PublicationMetadataRefresh` (GHP-FR-SIMK).
 - `"take publication metadata startup failure"` → `take_publication_metadata_startup_failure()` → `{ error_code, error } | null` (GHP-FR-KPXF). The main window invokes it for the raise of `../ui/NTF-notifications.md` NTF-FR-POEW.
@@ -240,16 +280,19 @@ PublicationChoice {               // saved in the attempt and the record (GHP-FR
 - `"cancel draft publication attempt (draft id)"` → `cancel_draft_publication_attempt(draft_id)` (GHP-FR-NAXT).
 - `"update draft on github (draft id, update closed)"` → `update_draft_on_github(draft_id, update_closed)` → `IssueUpdateOutcome` (GHP-FR-MZMW).
 - `"open publication issue (draft id, url)"` → `open_publication_issue(draft_id, url)` (GHP-FR-MJTB).
+- `"get note publication availability"` → `get_note_publication_availability()` → `NotePublicationAvailability` (GHP-FR-CNPX). Invoked by `../ui/NTS-notes.md`.
+- `"publish note to github (note id, title, body, note publication choice)"` → `publish_note_to_github(note_id, title, body, choice)` → `NotePublicationOutcome` (GHP-FR-JGNI). Invoked by `../ui/NIP-note-issue-publication.md`.
+- `"open publication repository issue (url)"` → `open_publication_repository_issue(url)` (GHP-FR-MAMB). Invoked by `../ui/NIP-note-issue-publication.md`.
 
-Every command except `take_publication_metadata_startup_failure` errors with `no_project_open` when no project is open and `draft_not_found` when `draft_id` names no draft in the active worktree.
+Every command except `take_publication_metadata_startup_failure` errors with `no_project_open` when no project is open. Every command that takes a `draft_id` errors with `draft_not_found` when it names no draft in the active worktree.
 
 ### Events
 - `"draft publication changed"` — emitted whenever a draft's publication store changes. Payload: `{ draft_id }`. Consumed by `../ui/NAW-new-artifact.md`, `../ui/DFI-draft-information.md`, and `../ui/DRP-drafts-panel.md`.
-- `"publication metadata changed"` — emitted when a refresh changes the metadata cache or the cache is emptied (GHP-FR-JIAU). Payload: `PublicationMetadataCacheChanged`. Consumed by `../ui/NAW-new-artifact.md`.
+- `"publication metadata changed"` — emitted when a refresh changes the metadata cache or the cache is emptied (GHP-FR-JIAU). Payload: `PublicationMetadataCacheChanged`. Consumed by `../ui/NAW-new-artifact.md` and `../ui/NIP-note-issue-publication.md`.
 - `"publication metadata startup failed"` — emitted once when the startup refresh fails (GHP-FR-ISJI). Payload: `{ error_code, error }`. Consumed by the main window, which then takes the kept failure (GHP-FR-KPXF) and raises the toast of `../ui/NTF-notifications.md` NTF-FR-POEW.
 
 ### Internal (Rust API, not registered as Tauri commands)
-- `resolve_publication_repository()` → `{ remote_name, repository_host, repository_owner, repository_name }` or a GHP-FR-ZRFP refusal (GHP-FR-YDAN). `GPP-github-polling.md` (GPP-FR-RGNM) and the refresh of the metadata cache (GHP-FR-AWEZ) are its callers.
+- `resolve_publication_repository()` → `{ remote_name, repository_host, repository_owner, repository_name }` or a GHP-FR-ZRFP refusal (GHP-FR-YDAN). `GPP-github-polling.md` (GPP-FR-RGNM) the refresh of the metadata cache (GHP-FR-AWEZ), and the note publication operations (GHP-FR-CNPX, GHP-FR-JGNI, GHP-FR-MAMB) are its callers.
 
 ### Consumed from other modules
 - `resolve_github_token_secret()` — the project's token (`GTS-github-token-storage.md` GTS-FR-13).
@@ -259,11 +302,13 @@ Every command except `take_publication_metadata_startup_failure` errors with `no
 - `load_github_publication_settings()` and `save_github_publication_settings(settings)` — `PSS-project-settings-storage.md` (PSS-FR-HWBG).
 - `load_github_polling_settings()` — the selected GitHub Project of the run condition, `PSS-project-settings-storage.md` (PSS-FR-OPQD).
 - `"github tokens changed"` — the token change that starts a refresh, `GTS-github-token-storage.md` (GTS-FR-AEQO).
+- `note_record(id)` and the deletion transaction of `delete_note(id)` — the note a note publication reads and removes, `NTC-notes-storage.md` (NTC-FR-25, NTC-FR-21, NTC-FR-VPJZ).
 
 ## Non-functional requirements
 - Enumeration and validation are read-only against GitHub: opening the publish flow costs at most one repository read per GitHub remote and creates nothing, so an author who opens the flow and changes their mind has changed nothing anywhere.
 - One publication is at most one search, one create or one edit, one sub-issue link, and one atomic store write, whatever the size of the prompt. One update is one issue read, one edit, and one atomic store write.
-- Reading the three metadata lists costs a bounded number of requests: one Type read, at most three pages of one hundred rows for the milestones, and at most three such pages for each configured parent Type.
+- Reading the four metadata lists costs a bounded number of requests: one Type read, at most three pages of one hundred rows for the milestones and for the labels, and at most three such pages for each configured parent Type.
+- One note publication is the reads that validate its choice, one create, at most one sub-issue link, and one note deletion.
 - Every network call carries the project's own token and no other credential, and a call that cannot be authenticated is refused before it is made.
 - The publication store is small and is read whole; a draft with a long history opens as fast as one with none.
 - One refresh of the metadata cache costs the requests of one metadata read, and at most one refresh runs at a time, so the 30-minute schedule adds a small, bounded load on GitHub.

@@ -89,7 +89,7 @@ A row a graduation run holds, and one that has graduated:
 A row whose draft has been published to GitHub, on any status:
 
 ┌──────────────────────────────┐
-│ ✦ relay-endpoint   ⤴    [⋯] │  ← ⤴ = publication marker, a link to the issue
+│ ✦ relay-api [Published]  [⋯] │  ← [Published] = publication marker, a link to the issue
 │   1h ago                     │    hover text: Published · 4h ago
 └──────────────────────────────┘
 
@@ -178,7 +178,7 @@ delete-folder confirmation            Move to Folder… picker
 39. **DRP-FR-YVXS** The **active** filter position admits a draft whose status is `github_shadow`, and the **graduated** position admits a GitHub-shadow draft that reports `graduated`, on the terms of DRP-FR-07.
 40. **DRP-FR-NPZO** A GitHub-shadow row's menu offers **Open**, **Information**, **Graduate…**, and **Open issue on GitHub**. **Rename…**, **Move to Folder…**, the archive entry, and **Delete** render disabled with the reason that the draft mirrors a GitHub issue, and the row cannot be dragged.
 41. **DRP-FR-YYZU** **Graduate…** on a GitHub-shadow row opens the start dialog of `GSD-graduation-start-dialog.md` for that draft. It is disabled while a graduation run holds the draft or while the draft reports `graduated`. **Open issue on GitHub** invokes `"open publication issue (draft id, url)"` with the draft's issue URL.
-42. **DRP-FR-TQUB** A row whose `"list drafts"` row carries a publication record shows the **publication marker** `⤴`, on every status: `active`, `archived`, `graduated`, and legacy `published`. Its hover text and accessible name read `Published · <relative time>`, the relative time of the newest record's publication instant. A row with no record shows no marker.
+42. **DRP-FR-TQUB** A row whose `"list drafts"` row carries a publication record shows the **publication marker**, the label `Published` drawn as the same badge as the `Archived` and `Graduated` labels, on every status: `active`, `archived`, `graduated`, and legacy `published`. Its hover text and accessible name read `Published · <relative time>`, the relative time of the newest record's publication instant, and its hover and keyboard focus show it in the accent colour, as a link. On a legacy `published` row, the marker takes the place of the `Published` label of DRP-FR-08, so the row shows one `Published` label and not two. A row with no record shows no marker.
 43. **DRP-FR-MZEA** Activating the publication marker invokes `"open publication issue (draft id, url)"` with the newest record's issue URL, and does not open the draft. The marker changes nothing on the row's second line: that line keeps its timestamp, its graduated text, or its run-state phrase, and never reads `Published · <relative time>`.
 
 ## Non-functional requirements

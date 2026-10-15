@@ -7676,6 +7676,10 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         // DRS-FR-18 / DRP-FR-35: the row's graduation comes from the queue and
         // is never cached on the draft, so a row shows what the queue holds.
         d.graduation = draftGraduation(d.id);
+        // DRS-FR-08 / DRP-FR-TQUB: the row carries the draft's current
+        // publication record (or null) from the same store the Publish action
+        // reads, so the row's `Published` marker follows `?publication=`.
+        d.publication = publicationState(d.id).current;
       }
       return {
         // DRP-FR-21 orders folders in the panel, not here; the backend returns

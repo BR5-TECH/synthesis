@@ -439,3 +439,39 @@ describe("layout (NTF-FR-LAWP, NTF-FR-21, NTF-FR-BVCG)", () => {
     );
   });
 });
+
+describe("the link of a toast with no address (NTF-FR-XNCG)", () => {
+  it("NTF-FR-XNCG: renders after the body as its own control, runs the action, and leaves the toast", () => {
+    const onActivate = vi.fn();
+    const routed = renderStack();
+    show(
+      input("note-published", {
+        address: null,
+        link: { label: "Open issue #41", onActivate },
+      }),
+    );
+    const link = screen.getByTestId("notification-toast-link");
+    expect(link).toHaveTextContent("Open issue #41");
+    expect(link.tagName).toBe("BUTTON");
+    fireEvent.click(link);
+    expect(onActivate).toHaveBeenCalledTimes(1);
+    expect(routed).not.toHaveBeenCalled();
+    expect(visibleToasts().map((t) => t.key)).toEqual(["note-published"]);
+  });
+
+  it("NTF-FR-XNCG: a click elsewhere on the toast only dismisses it", () => {
+    const onActivate = vi.fn();
+    const routed = renderStack();
+    show(input("note-published", { address: null, link: { label: "Open", onActivate } }));
+    fireEvent.click(screen.getByTestId("notification-toast-target"));
+    expect(onActivate).not.toHaveBeenCalled();
+    expect(routed).not.toHaveBeenCalled();
+    expect(visibleToasts()).toHaveLength(0);
+  });
+
+  it("NTF-FR-XNCG: a toast with an address carries no link", () => {
+    renderStack();
+    show(input("addressed", { link: { label: "Open", onActivate: vi.fn() } }));
+    expect(screen.queryByTestId("notification-toast-link")).toBeNull();
+  });
+});

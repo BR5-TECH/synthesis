@@ -51,6 +51,7 @@ fn the_settings_are_project_public_and_leave_polling_alone() {
         sub_issue_type: "Bug".into(),
         sub_issue_milestone_policy: MilestonePolicy::AuthorSelected,
         root_issue_type: Some("Bug".into()),
+        note_issue_type: None,
     };
     save_github_publication_settings_to(&root, &saved).unwrap();
 
@@ -139,4 +140,24 @@ fn the_project_config_save_carries_the_settings_through() {
     config.line_endings = LineEndings::Crlf;
     save_project_config_to(&root, config).unwrap();
     assert_eq!(load_github_publication_settings_from(&root).unwrap(), saved);
+}
+
+/// PSS-FR-HWBG / PSS-FR-EKOV: an absent note issue Type reads as `Feature`,
+/// No Type is stored as an empty string and reads back as No Type, and a
+/// named Type reads back as written.
+#[test]
+fn the_note_issue_type_keeps_no_type_apart_from_the_default() {
+    let (dir, root) = fresh();
+    assert_eq!(
+        load_github_publication_settings_from(&root).unwrap().note_issue_type.as_deref(),
+        Some("Feature")
+    );
+    let none = GithubPublicationSettings { note_issue_type: None, ..Default::default() };
+    save_github_publication_settings_to(&root, &none).unwrap();
+    assert!(project_toml(&dir).contains("noteIssueType = \"\""));
+    assert_eq!(load_github_publication_settings_from(&root).unwrap().note_issue_type, None);
+    let bug =
+        GithubPublicationSettings { note_issue_type: Some("Bug".into()), ..Default::default() };
+    save_github_publication_settings_to(&root, &bug).unwrap();
+    assert_eq!(load_github_publication_settings_from(&root).unwrap(), bug);
 }

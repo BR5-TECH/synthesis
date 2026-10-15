@@ -101,6 +101,7 @@ export function Modal({
   label,
   onClose,
   returnFocus,
+  closeOnScrim = true,
   children,
 }: {
   label: string;
@@ -112,6 +113,11 @@ export function Modal({
    * nothing to hand focus back to.
    */
   returnFocus?: HTMLElement | null;
+  /**
+   * Whether a click on the scrim closes the dialog. A dialog that holds typed
+   * text the author would lose keeps it false (NIP-FR-WUID).
+   */
+  closeOnScrim?: boolean;
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -166,7 +172,7 @@ export function Modal({
   return (
     <div
       className="scrim"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={(e) => closeOnScrim && e.target === e.currentTarget && onClose()}
     >
       <div ref={ref} className="modal drafts-overlay" role="dialog" aria-modal="true" aria-label={label}>
         {children}

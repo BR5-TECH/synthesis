@@ -268,6 +268,7 @@ fn a_change_of_the_parent_issue_types_refreshes_the_cache() {
         "Task".into(),
         MilestonePolicy::InheritParent,
         None,
+        Some("Feature".into()),
     )
     .unwrap();
     wait_until(|| {
@@ -287,6 +288,7 @@ fn a_save_that_keeps_the_parent_issue_types_starts_no_refresh() {
         "Bug".into(),
         MilestonePolicy::NoMilestone,
         None,
+        Some("Feature".into()),
     )
     .unwrap();
     assert!(!with_slot(&s, |slot| slot.is_running()));

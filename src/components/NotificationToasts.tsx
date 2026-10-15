@@ -113,61 +113,75 @@ function ToastItem({
         background: "var(--bg-elevated, var(--bg-panel))",
       }}
     >
-      <button
-        type="button"
-        className="ntf-toast__target"
-        data-testid="notification-toast-target"
-        onClick={onClick}
-        style={{
-          flex: 1,
-          minWidth: 0,
-          display: "flex",
-          flexDirection: "column",
-          gap: 2,
-          padding: 0,
-          border: 0,
-          background: "none",
-          color: "inherit",
-          font: "inherit",
-          textAlign: "start",
-          cursor: "pointer",
-        }}
-      >
-        <span
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+        <button
+          type="button"
+          className="ntf-toast__target"
+          data-testid="notification-toast-target"
+          onClick={onClick}
           style={{
+            minWidth: 0,
             display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: "var(--fs-ui-xs)",
-            fontWeight: 600,
-            color: "var(--fg-2)",
+            flexDirection: "column",
+            gap: 2,
+            padding: 0,
+            border: 0,
+            background: "none",
+            color: "inherit",
+            font: "inherit",
+            textAlign: "start",
+            cursor: "pointer",
           }}
         >
-          <LevelIcon size={12} className="icon" />
-          <span data-testid="notification-toast-level">{toast.level}</span>
-        </span>
-        <span
-          style={{
-            fontSize: "var(--fs-ui-sm)",
-            fontWeight: 600,
-            lineHeight: 1.4,
-            overflowWrap: "anywhere",
-          }}
-        >
-          {toast.title}
-        </span>
-        {toast.body !== "" && (
+          <span
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: "var(--fs-ui-xs)",
+              fontWeight: 600,
+              color: "var(--fg-2)",
+            }}
+          >
+            <LevelIcon size={12} className="icon" />
+            <span data-testid="notification-toast-level">{toast.level}</span>
+          </span>
           <span
             style={{
               fontSize: "var(--fs-ui-sm)",
-              lineHeight: 1.45,
+              fontWeight: 600,
+              lineHeight: 1.4,
               overflowWrap: "anywhere",
             }}
           >
-            {toast.body}
+            {toast.title}
           </span>
+          {toast.body !== "" && (
+            <span
+              style={{
+                fontSize: "var(--fs-ui-sm)",
+                lineHeight: 1.45,
+                overflowWrap: "anywhere",
+              }}
+            >
+              {toast.body}
+            </span>
+          )}
+        </button>
+        {/* NTF-FR-XNCG: the link is a control of its own after the body. It
+            runs the surface's action and leaves the toast in the stack. */}
+        {!toast.address && toast.link && (
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            data-testid="notification-toast-link"
+            style={{ alignSelf: "flex-start" }}
+            onClick={() => toast.link?.onActivate()}
+          >
+            {toast.link.label}
+          </button>
         )}
-      </button>
+      </div>
       <button
         type="button"
         className="icon-btn"

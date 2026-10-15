@@ -77,6 +77,9 @@ pub struct IssueRef {
 pub struct IssueFields {
     pub issue_type: Option<String>,
     pub milestone: Option<u64>,
+    /// GHP-FR-WJTX: the label names of a note publication. An empty list is
+    /// left out of the request.
+    pub labels: Vec<String>,
 }
 
 /// GHP-FR-OHGY: what an edit of one existing issue sends: the title, the body,
@@ -160,6 +163,15 @@ pub trait GithubIssues: Send + Sync {
         owner: &str,
         repo: &str,
     ) -> Result<Vec<PublicationMilestone>, String>;
+
+    /// GHP-FR-XLXU: the labels of the repository. Fails with
+    /// `labels_unreadable`.
+    fn list_labels(
+        &self,
+        secret: &str,
+        owner: &str,
+        repo: &str,
+    ) -> Result<Vec<PublicationLabel>, String>;
 
     /// GHP-FR-OHGY: make `sub_issue_id` a sub-issue of `parent_number`. With
     /// `replace_parent`, an existing parent is replaced (GHP-FR-RCNL).
@@ -639,6 +651,29 @@ impl GithubIssues for HttpGithubIssues {
         Ok(found)
     }
 
+    fn list_labels(
+        &self,
+        secret: &str,
+        owner: &str,
+        repo: &str,
+    ) -> Result<Vec<PublicationLabel>, String> {
+        let api = self.api.as_str();
+        let mut found = Vec::new();
+        for page in 1..=MAX_PAGES {
+            let url = format!("{api}/repos/{owner}/{repo}/labels?per_page={PAGE_SIZE}&page={page}");
+            let response =
+                get(secret, &url).map_err(|e| transport_or(&e, api, ERR_LABELS_UNREADABLE))?;
+            let value = read_json(response).map_err(|_| ERR_LABELS_UNREADABLE.to_string())?;
+            let items = value.as_array().cloned().unwrap_or_default();
+            let rows = items.len();
+            found.extend(items.iter().filter_map(label_from_json));
+            if rows < PAGE_SIZE as usize {
+                break;
+            }
+        }
+        Ok(found)
+    }
+
     fn link_sub_issue(
         &self,
         secret: &str,
@@ -687,7 +722,24 @@ pub fn issue_payload(title: &str, body: &str, fields: &IssueFields) -> serde_jso
     if let Some(milestone) = fields.milestone {
         payload["milestone"] = serde_json::Value::from(milestone);
     }
+    if !fields.labels.is_empty() {
+        payload["labels"] = serde_json::Value::from(fields.labels.clone());
+    }
     payload
+}
+
+/// GHP-FR-XLXU: one label of GitHub's label list, or `None` for a row with no
+/// name.
+pub fn label_from_json(value: &serde_json::Value) -> Option<PublicationLabel> {
+    Some(PublicationLabel {
+        name: value.get("name")?.as_str()?.to_string(),
+        color: value.get("color").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+        description: value
+            .get("description")
+            .and_then(|v| v.as_str())
+            .filter(|text| !text.is_empty())
+            .map(str::to_string),
+    })
 }
 
 /// Percent-encode a search query. Small and local rather than a dependency:

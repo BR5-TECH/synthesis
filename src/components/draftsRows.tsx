@@ -332,7 +332,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
           {draft.publication && (
             <button
               type="button"
-              className="drafts-tree__publication"
+              className="drafts-tree__badge drafts-tree__publication"
               data-testid="draft-publication-marker"
               title={`Published · ${formatRelative(draft.publication.publishedAt)}`}
               aria-label={`Published · ${formatRelative(draft.publication.publishedAt)}`}
@@ -346,7 +346,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
                 if (e.key === "Enter" || e.key === " ") e.stopPropagation();
               }}
             >
-              ⤴
+              Published
             </button>
           )}
           {/* DRP-FR-08: an archived draft is told apart where it sits rather
@@ -371,8 +371,10 @@ export function makeRowRenderers(ctx: DraftRowContext) {
             )}
           {/* DRP-FR-08: a legacy `published` draft states its own status. It
               stands in the **active** position (DRP-FR-07), so it keeps its
-              label there beside the active rows. */}
+              label there beside the active rows. When it has a record, the
+              publication marker above is that label (DRP-FR-TQUB). */}
           {draft.status === "published" &&
+            !draft.publication &&
             (panel.filter === "all" || panel.filter === "active") && (
               <span
                 className="drafts-tree__badge"

@@ -89,9 +89,10 @@ pub struct PublicationMetadataStartupFailed {
 /// each code, never a passed-through message (GHP-FR-DHXK).
 pub fn refresh_error_text(code: &str) -> String {
     match code {
-        ERR_PARENT_ISSUES_UNREADABLE | ERR_ISSUE_TYPES_UNREADABLE | ERR_MILESTONES_UNREADABLE => {
-            metadata_error_text(code).to_string()
-        }
+        ERR_PARENT_ISSUES_UNREADABLE
+        | ERR_ISSUE_TYPES_UNREADABLE
+        | ERR_MILESTONES_UNREADABLE
+        | ERR_LABELS_UNREADABLE => metadata_error_text(code).to_string(),
         ERR_GITHUB_PROJECT_NOT_SELECTED => {
             "No GitHub Project is selected in Project settings.".to_string()
         }
@@ -350,7 +351,7 @@ pub(super) async fn settle_within_timeout<R: Runtime, E>(
     finish(app, ticket, result)
 }
 
-/// GHP-FR-HGVL / GHP-FR-AWEZ: one read of the three lists for the resolved
+/// GHP-FR-HGVL / GHP-FR-AWEZ: one read of the four lists for the resolved
 /// publication remote, through the read of GHP-FR-MDLD.
 pub(super) fn read_fresh<R: Runtime>(app: &AppHandle<R>) -> Result<CachedLists, String> {
     let project = app.state::<ProjectState>();
@@ -380,6 +381,7 @@ pub(super) fn read_fresh<R: Runtime>(app: &AppHandle<R>) -> Result<CachedLists, 
         parents: metadata.parents,
         issue_types: metadata.issue_types,
         milestones: metadata.milestones,
+        labels: metadata.labels,
     })
 }
 
@@ -504,10 +506,12 @@ fn compose<R: Runtime>(app: &AppHandle<R>, lists: &CachedLists) -> PublicationMe
         repository_name: lists.repository_name.clone(),
         sub_issue_type: flow::resolve_sub_issue_type(&settings, &lists.issue_types),
         root_issue_type: flow::resolve_root_issue_type(&settings, &lists.issue_types),
+        note_issue_type: flow::resolve_note_issue_type(&settings, &lists.issue_types),
         settings,
         parents: lists.parents.clone(),
         issue_types: lists.issue_types.clone(),
         milestones: lists.milestones.clone(),
+        labels: lists.labels.clone(),
     }
 }
 

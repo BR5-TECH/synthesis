@@ -1,6 +1,7 @@
 //! The Tauri commands of the notes contract surface.
 
 use super::*;
+use tauri::Manager;
 
 // ---------------------------------------------------------------------------
 // Tauri commands
@@ -164,29 +165,37 @@ pub fn update_note<R: tauri::Runtime>(
 /// whole, and cancelling an agent mid-answer in a conversation that is still
 /// there would cost the author work for nothing (AGC-FR-30).
 #[tauri::command]
-pub fn delete_note<R: tauri::Runtime>(
-    id: String,
-    app: tauri::AppHandle<R>,
-    project: State<'_, ProjectState>,
-    turns: State<'_, crate::agent_conversations::TurnRegistry>,
-    progress: State<'_, crate::progress::ProgressRegistry>,
+pub fn delete_note<R: tauri::Runtime>(id: String, app: tauri::AppHandle<R>) -> Result<(), String> {
+    delete_note_transaction(&app, &id)
+}
+
+/// NTC-FR-21 / NTC-FR-VPJZ: the deletion transaction, with the turn sweep and
+/// the index announcement after it. `delete_note` and a note publication
+/// (`crate::github_publication::note`) both remove a note through this call
+/// and through no other step.
+pub(crate) fn delete_note_transaction<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    id: &str,
 ) -> Result<(), String> {
+    let project = app.state::<ProjectState>();
     let root = project.require_root()?;
     let store = project.require_store()?;
-    delete_note_in(&root, &store, &id).inspect_err(|err| {
+    delete_note_in(&root, &store, id).inspect_err(|err| {
         crate::logging::log_warn(
-            &app,
+            app,
             &crate::logging::BUFFER,
             &[crate::logging::Domain::Backend],
             "note deletion failed",
-            crate::log_fields! { "noteId" => id.clone(), "error" => err.clone() },
+            crate::log_fields! { "noteId" => id, "error" => err.clone() },
         );
     })?;
-    crate::agent_conversations::cancel_turns_for_note(&app, &turns, &progress, &id);
+    let turns = app.state::<crate::agent_conversations::TurnRegistry>();
+    let progress = app.state::<crate::progress::ProgressRegistry>();
+    crate::agent_conversations::cancel_turns_for_note(app, &turns, &progress, id);
     // NTC-FR-24: a deletion is a change to the set of notes, so the `notes`
     // index loses its document on the next pass (BMI-FR-29). Announced after the
     // transaction committed, never before: a cleanup that failed left the note
     // where it was.
-    announce_note_change(&app, NoteChange::to(&id));
+    announce_note_change(app, NoteChange::to(id));
     Ok(())
 }

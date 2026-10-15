@@ -18,6 +18,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 import { draftRow, flat, renderPanel } from "../test/draftsPanelFixtures";
 import { resetPanelReveals } from "../state/panelReveal";
 import { selectorValue } from "../test/selectors";
+import { blocksFor, decl, sheet } from "../test/cssRules";
 import type { DraftListPublication, DraftStatus, DraftSummary } from "../types";
 
 /** Four hours and one minute ago, so the relative text is `4h ago`. */
@@ -62,7 +63,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Publication marker (DRP-FR-TQUB, DRP-FR-MZEA)", () => {
-  it("DRP-FR-TQUB: a row with a publication record shows the marker on every status", async () => {
+  it("DRP-FR-TQUB, DRP-FR-08: a row with a publication record shows the marker on every status", async () => {
     drafts = [
       row("d-active", "active", { publication: publication(1) }),
       row("d-archived", "archived", { publication: publication(2) }),
@@ -75,10 +76,14 @@ describe("Publication marker (DRP-FR-TQUB, DRP-FR-MZEA)", () => {
 
     for (const name of ["active-draft", "archived-draft", "graduated-draft", "published-draft"]) {
       const marker = within(draftRow(name)).getByTestId("draft-publication-marker");
-      expect(marker, name).toHaveTextContent("⤴");
+      expect(marker, name).toHaveTextContent("Published");
+      expect(marker, name).toHaveClass("drafts-tree__badge");
       expect(marker, name).toHaveAttribute("title", "Published · 4h ago");
       expect(marker, name).toHaveAccessibleName("Published · 4h ago");
     }
+    // A legacy published row with a record shows one label: the marker.
+    expect(within(draftRow("published-draft")).queryByTestId("draft-published-marker")).toBeNull();
+    expect(within(draftRow("published-draft")).getAllByText("Published")).toHaveLength(1);
     // A row with no record shows no marker.
     expect(within(draftRow("plain-draft")).queryByTestId("draft-publication-marker")).toBeNull();
   });
@@ -110,6 +115,30 @@ describe("Publication marker (DRP-FR-TQUB, DRP-FR-MZEA)", () => {
     await userEvent.keyboard("{Enter}");
     await waitFor(() => expect(calls("open_publication_issue")).toHaveLength(2));
     expect(onOpenDraft).not.toHaveBeenCalled();
+
+    // Space on the marker does the same.
+    screen.getByTestId("draft-publication-marker").focus();
+    await userEvent.keyboard(" ");
+    await waitFor(() => expect(calls("open_publication_issue")).toHaveLength(3));
+    expect(onOpenDraft).not.toHaveBeenCalled();
+  });
+
+  it("DRP-FR-TQUB: the marker is a badge and shows the accent colour on hover and focus", () => {
+    const css = sheet("components/the-drafts-tree.css");
+    // The badge look comes from `.drafts-tree__badge` alone.
+    const own = blocksFor(css, ".drafts-tree__publication");
+    expect(own, "no rule for .drafts-tree__publication").toHaveLength(1);
+    for (const prop of ["border", "padding", "font-size", "color"]) {
+      expect(decl(own[0], prop), prop).toBeNull();
+    }
+    for (const state of [":hover", ":focus-visible"]) {
+      const blocks = blocksFor(css, `.drafts-tree__publication${state}`);
+      expect(blocks.map((b) => decl(b, "color")), state).toContain("var(--accent)");
+      expect(blocks.map((b) => decl(b, "border-color")), state).toContain("var(--accent)");
+    }
+    // One focus ring, the one the rows of the tree use.
+    const focus = blocksFor(css, ".drafts-tree__publication:focus-visible");
+    expect(focus.map((b) => decl(b, "outline"))).toContain("1px solid var(--accent)");
   });
 
   it("DRP-FR-MZEA: a refused open is reported on the row", async () => {
@@ -164,6 +193,15 @@ describe("Filter positions with a legacy published draft (DRP-FR-07, DRP-FR-08)"
     expect(within(published).getByTestId("draft-published-marker")).toHaveTextContent("Published");
     expect(screen.queryByText("graduated-draft")).toBeNull();
     expect(screen.queryByText("archived-draft")).toBeNull();
+  });
+
+  it("DRP-FR-08, DRP-FR-TQUB: in the active position a legacy published row with a record shows one label", async () => {
+    drafts = [row("d-pub", "published", { publication: publication(3) })];
+    renderPanel({ filter: "active" });
+    const published = await waitFor(() => draftRow("published-draft"));
+    expect(within(published).getByTestId("draft-publication-marker")).toHaveTextContent("Published");
+    expect(within(published).queryByTestId("draft-published-marker")).toBeNull();
+    expect(within(published).getAllByText("Published")).toHaveLength(1);
   });
 
   it("DRP-FR-08: the graduated position keeps the Graduated label", async () => {

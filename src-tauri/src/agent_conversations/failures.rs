@@ -19,8 +19,9 @@ pub const AGENT_TURN_STATE_CHANGED: &str = "agent-turn-state-changed";
 pub const FAIL_AGENT_NOT_FOUND: &str = "agent_not_found";
 /// It resolves, but its provider or model no longer serves it.
 pub const FAIL_AGENT_UNAVAILABLE: &str = "agent_unavailable";
-/// The conversation takes no further contribution.
-pub const FAIL_THREAD_LOCKED: &str = "discussion_locked";
+/// AGC-FR-19: the conversation is resolved, or was resolved while the turn was
+/// in flight, and takes no further contribution.
+pub const FAIL_DISCUSSION_RESOLVED: &str = "discussion_resolved";
 /// None of the material the builder needs could be read.
 pub const FAIL_CONTEXT_UNAVAILABLE: &str = "context_unavailable";
 /// The host could not be reached at all.

@@ -136,20 +136,21 @@ describe("CMP-FR-02: the active tab does not steer the panel", () => {
   });
 });
 
-describe("CMP-FR-03, CMP-FR-04, CMP-FR-05: the three groups and their counts", () => {
-  it("renders Active, Locked and Resolved in that order, each thread once", async () => {
+describe("CMP-FR-03, CMP-FR-04, CMP-FR-05: the two groups and their counts", () => {
+  it("CMP-FR-03, CMP-FR-04: renders Active and Resolved in that order, each thread once", async () => {
     listReturns([
       thread({ id: "t1" }),
-      thread({ id: "t2", locked: true }),
+      thread({ id: "t2" }),
       thread({ id: "t3", resolved: true }),
-      thread({ id: "t4", locked: true, resolved: true }),
+      thread({ id: "t4", resolved: true }),
     ]);
     render(<Harness />);
     await waitFor(() => expect(rows()).toHaveLength(4));
 
-    // CMP-FR-04: the both-locked-and-resolved thread is counted once, under
-    // Resolved — so the counts sum to four rather than five.
-    expect(groupHeaders()).toEqual(["Active 1", "Locked 1", "Resolved 2"]);
+    // CMP-FR-04: one group per thread, so the counts sum to four. There is no
+    // Locked group: a legacy lock arrives as `resolved` (CMS-FR-WKZR).
+    expect(groupHeaders()).toEqual(["Active 2", "Resolved 2"]);
+    expect(screen.queryByText(/^Locked/)).not.toBeInTheDocument();
   });
 
   it("renders no header for a group the project has nothing for", async () => {
@@ -283,8 +284,7 @@ describe("CMP-FR-06 … CMP-FR-09: what a row shows", () => {
         thread({
           id: "t2",
           updatedAt: "2024-02-01T00:00:00Z",
-          locked: true,
-          comments: [comment("c2", "locked", author("Architect"))],
+          comments: [comment("c2", "open", author("Architect"))],
         }),
         thread({
           id: "t3",
@@ -311,7 +311,7 @@ describe("CMP-FR-06 … CMP-FR-09: what a row shows", () => {
       };
       // A comparison of two empty structures proves nothing, so pin that the
       // selectors actually matched before trusting the equality below.
-      expect(out.groups).toHaveLength(3);
+      expect(out.groups).toHaveLength(2);
       expect(out.order).toHaveLength(3);
       expect(out.replies).toHaveLength(1);
       cleanup();
@@ -364,25 +364,13 @@ describe("CMP-FR-06 … CMP-FR-09: what a row shows", () => {
     expect(document.querySelector("time")!.textContent).toBe("2h ago");
   });
 
-  it("marks a locked row on its artifact line", async () => {
-    listReturns([
-      thread({ id: "t1", locked: true }),
-      thread({ id: "t2", locked: true, resolved: true }),
-      thread({ id: "t3" }),
-    ]);
+  it("CMP-FR-03: a resolved row carries no lock marker on its artifact line", async () => {
+    listReturns([thread({ id: "t1", resolved: true }), thread({ id: "t3" })]);
     render(<Harness />);
-    await waitFor(() => expect(rows()).toHaveLength(3));
-
-    // Both locked threads carry the marker — including the one that sits under
-    // Resolved rather than under Locked — and the plain thread does not.
-    const marked = rows().map(
-      (r) => r.querySelector(".comment-row__artifact svg") !== null,
-    );
-    expect(marked.filter(Boolean)).toHaveLength(2);
-    const plain = rows().find(
-      (r) => r.querySelector(".comment-row__artifact svg") === null,
-    );
-    expect(plain).toBeDefined();
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    expect(
+      rows().some((r) => r.querySelector(".comment-row__artifact svg") !== null),
+    ).toBe(false);
   });
 
   it("discloses the absolute instant behind the relative timestamp (CMP-FR-08)", async () => {
@@ -529,12 +517,12 @@ describe("CMP-FR-13: orphaning is not this panel's concern", () => {
   it("has no Orphaned group, and groups every thread by its stored status", async () => {
     listReturns([
       thread({ id: "t1" }),
-      thread({ id: "t2", locked: true }),
+      thread({ id: "t2" }),
       thread({ id: "t3", resolved: true }),
     ]);
     render(<Harness />);
     await waitFor(() => expect(rows()).toHaveLength(3));
-    expect(groupHeaders()).toEqual(["Active 1", "Locked 1", "Resolved 1"]);
+    expect(groupHeaders()).toEqual(["Active 2", "Resolved 1"]);
     expect(screen.queryByText(/orphan/i)).not.toBeInTheDocument();
   });
 });
@@ -602,7 +590,7 @@ describe("CMP-FR-16: the panel is read-only", () => {
   it("offers nothing that opens, posts, locks, resolves or quotes", async () => {
     listReturns([
       thread({ id: "t1" }),
-      thread({ id: "t2", locked: true }),
+      thread({ id: "t2" }),
       thread({ id: "t3", resolved: true }),
     ]);
     render(<Harness />);
@@ -631,7 +619,7 @@ describe("CMP-FR-16: the panel is read-only", () => {
 
 describe("CMP-FR-18, CMP-FR-07 / CMP-FR-22: the panel opens no floating overlay", () => {
   it("renders no dialog, menu or draggable node, so it joins no exclusivity group", async () => {
-    listReturns([thread({ id: "t1" }), thread({ id: "t2", locked: true })]);
+    listReturns([thread({ id: "t1" }), thread({ id: "t2", resolved: true })]);
     render(<Harness />);
     await waitFor(() => expect(rows()).toHaveLength(2));
 
@@ -661,7 +649,7 @@ describe("CMP-FR-17: reading needs no identity", () => {
     expect(await screen.findByText("Which session?")).toBeInTheDocument();
     // No picker, no missing-token text: the panel only reads for labels.
     expect(screen.queryByText(/token/i)).not.toBeInTheDocument();
-    expect(invokeMock.mock.calls.some((c) => c[0] === "set_discussion_lock")).toBe(false);
+    expect(invokeMock.mock.calls.some((c) => c[0] === "set_discussion_resolution")).toBe(false);
   });
 });
 

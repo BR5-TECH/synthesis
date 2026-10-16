@@ -18,7 +18,20 @@
  * surface at once.
  */
 import { DiscussionComposer, type OpenDiscussionRequest } from "../discussion";
-import type { Discussion, FragmentTarget, ProjectAgent } from "../../types";
+import type {
+  Discussion,
+  FragmentTarget,
+  ProjectAgent,
+  ProposalHunkReference,
+} from "../../types";
+
+/** DDS-FR-RHKW: the change a new hunk discussion is about. */
+export interface HunkOpening {
+  reference: ProposalHunkReference;
+  /** The change's place in its proposal, for `change N of M`. */
+  position: number;
+  total: number;
+}
 
 /** DDS layout: the states a column showing no transcript can be in. */
 export type OpenState =
@@ -29,7 +42,9 @@ export type OpenState =
   /** The author is writing the first message of another discussion. */
   | "another"
   /** The author is writing the first message of a discussion about a passage. */
-  | "fragment";
+  | "fragment"
+  /** The author is writing the first message of a discussion about one change. */
+  | "hunk";
 
 /**
  * What the column says about the state it is in, and what the composer begins.
@@ -40,7 +55,20 @@ export type OpenState =
 function statementFor(
   state: OpenState,
   resolved: number,
+  hunk: HunkOpening | null,
 ): { lead: string; hint: string } {
+  if (state === "hunk") {
+    // DDS-FR-RHKW: the composer names the change it is about. DCR-FR-JTXE: and
+    // says that talking about it decides nothing.
+    const which =
+      hunk !== null && hunk.position > 0
+        ? `change ${hunk.position} of ${hunk.total}`
+        : "one proposed change";
+    return {
+      lead: `This begins a discussion about ${which}.`,
+      hint: "The change is not decided by this discussion. Accept or reject it in the document.",
+    };
+  }
   if (state === "fragment") {
     return {
       lead: "This begins a discussion about the passage you selected.",
@@ -80,6 +108,7 @@ export function OpenDiscussion({
   resolved,
   draftId,
   fragment,
+  hunk = null,
   onOpen,
   onOpened,
   onCancel,
@@ -103,12 +132,14 @@ export function OpenDiscussion({
   draftId: string;
   /** DDS-FR-QMBC: the passage the discussion will be about, if it has one. */
   fragment: FragmentTarget | null;
+  /** DDS-FR-RHKW: the change the discussion will be about, if it is one. */
+  hunk?: HunkOpening | null;
   onOpen: (request: OpenDiscussionRequest) => Promise<Discussion>;
   onOpened: (discussion: Discussion) => void;
   /** The author discarded the composer. */
   onCancel: () => void;
 }) {
-  const statement = statementFor(state, resolved);
+  const statement = statementFor(state, resolved, hunk);
 
   return (
     <div className="dds-open" data-testid="draft-open-discussion">
@@ -141,7 +172,8 @@ export function OpenDiscussion({
         ariaLabel="Discuss this draft"
         placeholder="Ask an agent about this draft…"
         showAcceleratorHint
-        alwaysShowCancel={fragment !== null}
+        alwaysShowCancel={fragment !== null || hunk !== null}
+        extraAttachments={hunk !== null ? [hunk.reference] : undefined}
         onOpen={onOpen}
         onOpened={onOpened}
         onCancel={onCancel}

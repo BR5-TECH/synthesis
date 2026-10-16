@@ -14,7 +14,7 @@ fn legacy_human() -> serde_json::Value {
 }
 
 /// The lines an older build wrote for one anchored thread: opened, two comments
-/// (one quoting the other, one carrying an attachment), moved, locked, resolved.
+/// (one quoting the other, one carrying an attachment), moved, locked (a legacy line), resolved.
 fn legacy_thread_lines(thread_id: &str, opened_path: &str) -> Vec<serde_json::Value> {
     vec![
         serde_json::json!({
@@ -61,7 +61,7 @@ fn legacy_thread_lines(thread_id: &str, opened_path: &str) -> Vec<serde_json::Va
 
 /// CMS-FR-83, CMS-FR-04, CMS-FR-09, CMS-FR-16, CMS-FR-42: a log of `thread_opened`
 /// and `thread_reanchored` lines folds to a unified discussion that keeps the id,
-/// the comments, the quotes, the attachments, the lock and the resolution, and
+/// the comments, the quotes, the attachments, the legacy lock and the resolution, and
 /// whose fragment carries the owner and the path the log's location names.
 #[test]
 fn a_legacy_anchored_log_folds_to_a_unified_discussion_with_everything_kept() {
@@ -85,7 +85,8 @@ fn a_legacy_anchored_log_folds_to_a_unified_discussion_with_everything_kept() {
         Some(FragmentTarget::in_artifact("specs/a.md", 10, 20, "moved")),
         "the legacy re-anchor is a fragment move",
     );
-    assert!(discussion.locked && discussion.resolved);
+    // CMS-FR-WKZR: the legacy lock and resolution read as one resolved state.
+    assert!(discussion.resolved);
     assert_eq!(
         discussion.comments.iter().map(|c| c.body.as_str()).collect::<Vec<_>>(),
         vec!["first", "reply"],
@@ -148,7 +149,7 @@ fn reading_a_legacy_log_again_changes_nothing_and_duplicate_lines_fold_once() {
     // A new unified line appended after the legacy ones: the legacy part reads
     // as it did, and a fold again agrees with itself.
     write_log(&path, &lines);
-    // The legacy log holds a lock, which refuses a comment as it always did.
+    // The legacy log holds a resolution, which refuses a comment as it always did.
     let log = ThreadRef::artifact("specs/a.md");
     let refused = add_comment_to(
         root,
@@ -159,10 +160,12 @@ fn reading_a_legacy_log_again_changes_nothing_and_duplicate_lines_fold_once() {
         Vec::new(),
         Stamp { by: &human("raver119"), at: "2026-01-02T00:00:00Z" },
     );
-    assert_eq!(refused.unwrap_err(), ERR_DISCUSSION_LOCKED);
+    assert_eq!(refused.unwrap_err(), ERR_DISCUSSION_RESOLVED);
+    // CMS-FR-18 / CMS-FR-20: the reopen clears the legacy lock as well.
     let (unlocked, _) =
-        set_lock_to(root, log, "t1", false, &human("raver119"), "2026-01-02T00:00:00Z").unwrap();
-    assert!(!unlocked.locked);
+        set_resolution_to(root, log, "t1", false, &human("raver119"), "2026-01-02T00:00:00Z")
+            .unwrap();
+    assert!(!unlocked.resolved);
     let appended = add_comment_to(
         root,
         ThreadRef::artifact("specs/a.md"),

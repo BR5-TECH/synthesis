@@ -399,6 +399,38 @@ export function undecidedHunks(
 }
 
 /**
+ * DCR-FR-QPRV: the changes the review visits while the proposal is open —
+ * every undecided one and every rejected one, in proposal order. An accepted
+ * change is in the prompt already, so there is nothing left to visit.
+ */
+export function visitedHunks(
+  proposal: DraftChangeProposal,
+): readonly HunkLedgerRow[] {
+  return ledgerOf(proposal).filter(
+    (row) => isUndecided(row.state) || row.state === "rejected",
+  );
+}
+
+/**
+ * DCR-FR-12: where the review goes after a decision on `hunkId` — the next
+ * undecided change after it in proposal order, else the first undecided one,
+ * else nowhere.
+ *
+ * Counted over the whole ledger, so a decision on a rejected change moves on
+ * from where that change stands rather than from the start.
+ */
+export function nextUndecidedAfter(
+  proposal: DraftChangeProposal,
+  hunkId: string,
+): string | null {
+  const rows = ledgerOf(proposal);
+  const at = rows.findIndex((row) => row.id === hunkId);
+  const open = (row: HunkLedgerRow) => row.id !== hunkId && isUndecided(row.state);
+  const after = rows.slice(at + 1).find(open);
+  return (after ?? rows.find(open))?.id ?? null;
+}
+
+/**
  * DCR-FR-05: the change a review opens on — the first undecided one in proposal
  * order, which is the order the author reads the document in.
  */

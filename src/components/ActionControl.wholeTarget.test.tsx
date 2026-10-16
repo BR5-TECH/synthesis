@@ -69,7 +69,6 @@ function discussion(over: Partial<Discussion> = {}): Discussion {
         createdAt: "2026-01-01T00:00:00Z",
       },
     ],
-    locked: false,
     resolved: false,
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
@@ -275,7 +274,6 @@ describe("the History detail owner and an unavailable owner", () => {
       errors: {},
       open: vi.fn(async () => discussion({ id: "d-new" })),
       reply: async () => {},
-      setLock: async () => {},
       setResolved: async () => {},
     } as UseDiscussionsResult;
   }

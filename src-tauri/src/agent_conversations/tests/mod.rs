@@ -596,6 +596,7 @@ mod openrouter;
 mod origin_contract;
 mod project_bounds;
 mod proposal_history;
+mod proposal_hunk_input;
 mod prose_replies;
 mod provider_failures;
 mod provider_tools;

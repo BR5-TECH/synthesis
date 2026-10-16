@@ -673,7 +673,7 @@ describe("every refusal it can render (PCR-FR-15)", () => {
     ["already_decided", /already been decided/i],
     ["artifact_not_found", /no longer in the project/i],
     ["not_a_prompt_artifact", /no longer in the project as a prompt/i],
-    ["discussion_locked", /conversation is locked/i],
+    ["discussion_resolved", /conversation is resolved/i],
     ["acceptance_in_progress", /still being applied/i],
     ["proposal_not_found", /no longer available/i],
   ];

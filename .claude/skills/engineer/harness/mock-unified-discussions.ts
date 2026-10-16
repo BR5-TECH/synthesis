@@ -3,8 +3,9 @@
  * over the mock's older discussion records.
  *
  * The frontend now names every discussion command by `discussionId` and reads
- * every discussion as `{ id, target, fragmentTarget, comments, locked,
- * resolved, createdAt, updatedAt }`. The seeded records in `mock-core.ts` still
+ * every discussion as `{ id, target, fragmentTarget, comments, resolved,
+ * createdAt, updatedAt }`. A legacy record's `locked` reads as `resolved`
+ * (CMS-FR-WKZR). The seeded records in `mock-core.ts` still
  * carry the earlier `{ scope, kind, artifactId | draftId | noteId, anchor }`
  * shape and are reached by the earlier command names. This adapter sits in
  * front of the legacy `invoke`: it maps the new command names and argument
@@ -50,8 +51,7 @@ export function toUnified(old: any): any {
     target,
     fragmentTarget,
     comments: old.comments,
-    locked: !!old.locked,
-    resolved: !!old.resolved,
+    resolved: !!old.resolved || !!old.locked,
     createdAt: old.createdAt,
     updatedAt: old.updatedAt,
   };
@@ -115,8 +115,6 @@ export async function unifiedInvoke(
       }
       return convert(await legacy("open_discussion_thread", a));
     }
-    case "set_discussion_lock":
-      return convert(await legacy("set_comment_thread_lock", a));
     case "set_discussion_resolution":
       return convert(await legacy("set_comment_thread_resolution", a));
     case "reanchor_discussion_fragment": {

@@ -125,11 +125,11 @@ fn the_already_pending_refusal_is_not_retryable() {
     assert!(refusal.to_string().contains("will not succeed"));
 }
 
-/// ADQ-FR-VDGT: a locked discussion is the not-retryable `PermissionDenied`.
+/// ADQ-FR-VDGT: a resolved discussion is the not-retryable `PermissionDenied`.
 #[test]
-fn the_locked_refusal_is_not_retryable() {
-    let refusal = refusal_for(crate::comments::ERR_DISCUSSION_LOCKED);
-    assert!(matches!(refusal, ToolRefusal::QuestionSetConversationLocked));
+fn the_resolved_refusal_is_not_retryable() {
+    let refusal = refusal_for(crate::comments::ERR_DISCUSSION_RESOLVED);
+    assert!(matches!(refusal, ToolRefusal::QuestionSetConversationResolved));
     assert_eq!(refusal.kind(), rig::tool::ToolErrorKind::PermissionDenied);
     assert!(!refusal.retryable());
 }

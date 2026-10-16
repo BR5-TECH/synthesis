@@ -358,26 +358,49 @@ describe("what a refusal leaves standing (DCR-FR-16)", () => {
   });
 });
 
-describe("holding a change for discussion (DCR-FR-MTFD)", () => {
-  it("DCR-FR-MTFD: Discuss holds the change and moves focus to the composer", async () => {
-    backend();
+describe("a rejected change while the proposal is open (DCR-FR-QPRV, DCR-FR-12, DCR-FR-07)", () => {
+  const mixed = () =>
+    proposal({
+      counts: { pending: 1, accepted: 1, rejected: 1, discussing: 0 },
+      ledger: [row("h1", "rejected"), row("h2"), row("h3", "accepted")],
+    });
+
+  it("DCR-FR-QPRV, DCR-FR-11: the moves visit a rejected change and pass over an accepted one", async () => {
+    backend({ proposal: mixed() });
     renderWorkspace();
     await reviewing();
+    // DCR-FR-12: the review opens on the first undecided change.
+    await waitFor(() =>
+      expect(screen.getByTestId("review-counter").textContent ?? "").toContain("change 2 of"),
+    );
+    // One change is undecided, yet the moves stay available: the rejected
+    // change is still one the review visits.
+    await userEvent.click(screen.getByRole("button", { name: /Next/ }));
+    expect(draftDiscussionState("d1").focusedHunkId).toBe("h1");
+    await userEvent.click(screen.getByRole("button", { name: /Next/ }));
+    expect(draftDiscussionState("d1").focusedHunkId).toBe("h2");
+  });
 
-    // Reached the way the chip reaches it. The chip itself is placed from a
-    // rendered box, which jsdom measures as nothing — what is checkable here is
-    // what activating it does.
-    const composer = await screen.findByRole("textbox", {
-      name: "Discuss this draft",
+  it("DCR-FR-13, DCR-FR-12: Enter on a rejected change accepts it, and Backspace rejects nothing", async () => {
+    const decided: [string, Record<string, unknown>][] = [];
+    backend({ proposal: mixed(), onDecide: (cmd, args) => decided.push([cmd, args]) });
+    renderWorkspace();
+    await reviewing();
+    act(() => {
+      setFocusedHunk("d1", "h1");
     });
-    act(() => setFocusedHunk("d1", "h2"));
-    await act(async () => {
-      screen.getByTestId("draft-discussion-column");
+    act(() => {
+      fireEvent.keyDown(window, { key: "Backspace" });
     });
-
-    // The tab's own Discuss goes to the same place, which is what ACT-FR-QWNP
-    // makes it do. Both routes end with the caret in the column.
-    await waitFor(() => expect(composer).toBeInTheDocument());
+    expect(decided).toEqual([]);
+    act(() => {
+      fireEvent.keyDown(window, { key: "Enter" });
+    });
+    await waitFor(() => expect(decided).toHaveLength(1));
+    expect(decided[0][0]).toBe("accept_draft_change_hunk");
+    expect(decided[0][1]).toMatchObject({ hunkId: "h1" });
+    // DCR-FR-12: and the review moves on to the change still undecided.
+    await waitFor(() => expect(draftDiscussionState("d1").focusedHunkId).toBe("h2"));
   });
 });
 

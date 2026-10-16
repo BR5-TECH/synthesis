@@ -51,7 +51,6 @@ function thread(over: Partial<Discussion> = {}): Discussion {
     target: { kind: "draft", draftId: "d1" },
     fragmentTarget: null,
     comments: [comment("c0", "@arch thoughts?"), comment("decision-1", "Accepted.")],
-    locked: false,
     resolved: false,
     createdAt: "2026-09-10T11:00:00Z",
     updatedAt: "2026-09-10T12:00:00Z",

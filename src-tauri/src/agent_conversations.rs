@@ -705,7 +705,7 @@ pub fn retry_impl<R: tauri::Runtime>(
         // AGC-FR-32 / CTA-FR-UUXA: a dispatch refused synchronously leaves the
         // author exactly where they were — the entry goes back, so the surface
         // restores its failed contribution and the offer is there to take again.
-        // Without this a locked thread would silently swallow the only route
+        // Without this a resolved thread would silently swallow the only route
         // back to a turn that never happened.
         let turns = app.state::<TurnRegistry>();
         turns.remember_recoverable(failed.clone(), entry_project_key.clone());

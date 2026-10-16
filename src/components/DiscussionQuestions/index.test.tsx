@@ -231,12 +231,12 @@ describe("the discussion question block", () => {
   it("DQA-FR-WKTP: a refusal arriving as an Error still reads as its typed message", () => {
     // The backend refuses with a bare slug; a transport failure arrives as an
     // Error. Both must reach the message table as the same slug.
-    const onSubmit = vi.fn().mockRejectedValue(new Error("discussion_locked"));
+    const onSubmit = vi.fn().mockRejectedValue(new Error("discussion_resolved"));
     renderBlock(setOf("s1", 1), onSubmit);
     fireEvent.click(screen.getAllByRole("radio")[0]);
     fireEvent.click(submit());
     return waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("refused: discussion_locked"),
+      expect(screen.getByRole("alert")).toHaveTextContent("refused: discussion_resolved"),
     );
   });
 

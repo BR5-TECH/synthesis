@@ -96,15 +96,19 @@ fn comments_and_events_stamp_the_local_participant_and_keep_saved_authors() {
         Stamp { by: &github, at: "2026-01-01T00:00:01Z" },
     )
     .unwrap();
-    let locked =
-        set_lock_in(root, "specs/a.md", &opened.id, true, &me, "2026-01-01T00:00:02Z").unwrap();
+    let reopened = {
+        set_resolution_in(root, "specs/a.md", &opened.id, true, &me, "2026-01-01T00:00:02Z")
+            .unwrap();
+        set_resolution_in(root, "specs/a.md", &opened.id, false, &me, "2026-01-01T00:00:03Z")
+            .unwrap()
+    };
     let resolved =
-        set_resolution_in(root, "specs/a.md", &opened.id, true, &me, "2026-01-01T00:00:03Z")
+        set_resolution_in(root, "specs/a.md", &opened.id, true, &me, "2026-01-01T00:00:04Z")
             .unwrap();
 
     assert_eq!(replied.comments[0].author, me);
     assert_eq!(replied.comments[1].author, github);
-    assert!(locked.locked && resolved.resolved);
+    assert!(!reopened.resolved && resolved.resolved);
 
     let folded = list_discussions_in(root, &artifact_target("specs/a.md"));
     assert_eq!(folded[0].comments[0].author, me, "the saved snapshot is unchanged");

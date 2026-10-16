@@ -41,7 +41,6 @@ export function buildDiscussion(
         : { owner: target, path, ...range };
   return {
     comments: defaults.comments ?? [],
-    locked: false,
     resolved: false,
     createdAt: "2024-01-01T00:00:00Z",
     updatedAt: "2024-01-01T00:00:00Z",

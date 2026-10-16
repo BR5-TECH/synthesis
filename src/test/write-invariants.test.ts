@@ -52,7 +52,7 @@ const TAB_SURFACES = [
   ...sourceFiles(join("src", "components", "Flow")),
   join("src", "components", "FindPanel.tsx"),
   join("src", "components", "CommentRail", "index.tsx"),
-  join("src", "components", "CommentRail", "ThreadCard.tsx"),
+  join("src", "components", "discussion", "DiscussionMessages.tsx"),
   join("src", "components", "discussion", "DiscussionSurface.tsx"),
   join("src", "components", "discussion", "DiscussionComposer.tsx"),
   join("src", "components", "ActionControl.tsx"),

@@ -2,8 +2,7 @@
  * The one surface every owner renders a discussion with
  * (`CVP-conversation-presentation.md` CVP-FR-SDMQ, CVP-FR-TWRL, CVP-FR-05).
  *
- * It renders the message list, the question-set block, the Lock and Resolve
- * controls, the fragment-or-whole badge, the orphaned and unavailable states,
+ * It renders the message list, the question-set block, the Resolve control, the fragment-or-whole badge, the orphaned and unavailable states,
  * the unread divider and indicator, and the shared `DiscussionComposer`. Owners
  * keep their own layouts and place this component inside them. No owner draws
  * its own message list or composer.
@@ -24,6 +23,7 @@
  * position from `../DraftDiscussion/DiscussionColumn.tsx`.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { agentRoster } from "../agentTags";
 import { DiscussionQuestions } from "../DiscussionQuestions";
@@ -46,6 +46,7 @@ import {
 } from "../../state/discussionSession";
 import { useQuestionSet } from "../../state/questionSets";
 import {
+  AGENT_TURN_FAILURES,
   discussionDraftId,
   discussionFragment,
   type AgentTurn,
@@ -84,7 +85,7 @@ export interface DiscussionSurfaceProps {
   identityBlock?: { message: string; route?: string | null } | null;
   /** The composer is off for want of an identity. Reading is unaffected. */
   disabled?: boolean;
-  /** An operation of the surface is in flight, so Lock, Resolve, and Post are off. */
+  /** An operation of the surface is in flight, so Resolve and Post are off. */
   blocked?: boolean;
   /**
    * The measure the one markup is set at. `card` for a margin, `embedded` for a
@@ -108,8 +109,13 @@ export interface DiscussionSurfaceProps {
     quotes: CommentQuote[],
     attachments: AttachmentInput[],
   ) => Promise<unknown>;
-  onSetLock: (discussionId: string, locked: boolean) => Promise<void>;
   onSetResolved: (discussionId: string, resolved: boolean) => Promise<void>;
+  /**
+   * DDS-FR-MZQJ: where the discussion's menu stands when the owner draws it
+   * outside the messages — the draft column's header. Absent, the menu stands
+   * on the opening comment (CMT-FR-15). `null` while the host is not mounted.
+   */
+  actionsHost?: HTMLElement | null;
 
   /**
    * Overrides for what the surface reads for itself. Absent, the surface reads
@@ -287,7 +293,10 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
     setComposerQuotes(thread.id, [...held, { commentId, excerpt }]);
   };
 
-  const composerOpen = !thread.locked && !thread.resolved;
+  // CMT-FR-11 / CMT-FR-16: a resolved discussion takes no comment, so it offers
+  // no composer and no Quote. A discussion stored as locked arrives resolved
+  // (CMS-FR-WKZR).
+  const composerOpen = !thread.resolved;
   const quoteOffered = composerOpen && !props.disabled && !questionSet;
 
   const threadActions = (
@@ -297,10 +306,13 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
       menuOpen={menu.open}
       onToggleMenu={menu.toggle}
       onCloseMenu={menu.close}
-      onSetLock={props.onSetLock}
       onSetResolved={props.onSetResolved}
     />
   );
+  // DDS-FR-MZQJ: an owner that hosts the menu itself takes it out of the
+  // messages, so no message carries a second copy of it.
+  const hosted = props.actionsHost !== undefined;
+  const messageActions = hosted ? undefined : threadActions;
   const turnOutcomes = (
     <TurnOutcomes
       imageNotice={imageNotice}
@@ -365,7 +377,6 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
       style={props.positioned ? { top: props.top } : undefined}
       data-positioned={props.positioned ?? false}
       data-focused={props.focused ?? false}
-      data-locked={thread.locked}
       data-resolved={thread.resolved}
       data-discussion-id={thread.id}
       data-discussion-owner={owner}
@@ -446,7 +457,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
             beforeComment={beforeComment}
             onQuote={quoteOffered ? quoteFrom : undefined}
             authorOf={authorOf}
-            threadActions={threadActions}
+            threadActions={messageActions}
             pendingTurns={pendingTurns}
             onCancelTurn={onCancelTurn}
             footer={
@@ -467,7 +478,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
             onCancelTurn={onCancelTurn}
             onQuote={quoteOffered ? quoteFrom : undefined}
             authorOf={authorOf}
-            threadActions={threadActions}
+            threadActions={messageActions}
             beforeComment={beforeComment}
             visibleFrom={props.visibleFrom ?? 0}
             afterComments={dividerAtEnd}
@@ -511,8 +522,8 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
         </p>
       )}
 
-      {/* CMT-FR-15 / CMT-FR-16: a locked or resolved discussion renders no
-          composer, and its messages stay fully readable. */}
+      {/* CMT-FR-16: a resolved discussion renders no composer, and its
+          messages stay fully readable. */}
       {composerShown && (
         <DiscussionComposer
           mode="reply"
@@ -531,7 +542,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
       )}
 
       {/* CMT-FR-34: where there is no composer to carry it, a refused operation
-          (a Lock, a Resolve, a Retry) still renders at the foot. */}
+          (a Resolve, a Reopen, a Retry) still renders at the foot. */}
       {!composerShown && operationError && (
         <div className="comment-card__error" role="alert">
           {commentErrorMessage(operationError)}
@@ -540,7 +551,9 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
 
       {/* CTA-FR-IGNT: a turn that failed renders its typed failure inline at the
           foot, leaving every comment untouched. */}
-      {turnFailure && (
+      {/* CTA-FR-QTNB: a turn refused because the author resolved the
+          discussion leaves nothing behind — no failure and no Retry. */}
+      {turnFailure && turnFailure !== AGENT_TURN_FAILURES.discussionResolved && (
         <div
           className="comment-card__error"
           role="alert"
@@ -549,6 +562,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
           {turnFailureMessage(turnFailure)}
         </div>
       )}
+      {hosted && props.actionsHost && createPortal(threadActions, props.actionsHost)}
     </div>
   );
 }

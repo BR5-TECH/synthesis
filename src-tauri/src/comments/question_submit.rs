@@ -290,13 +290,13 @@ pub fn commit_question_answers(
     let target = discussion.thread_ref();
 
     // CMS-FR-WNQD: the refusal is **unconditional** and is checked before
-    // anything is read or reported. A locked conversation takes no further
+    // anything is read or reported. A resolved conversation takes no further
     // contribution and answers from none either — including a retry that would
     // only report work already committed, which a reader recovers from the
-    // conversation itself. Checked first so one rule governs a locked discussion
-    // with no exception a reader has to know about.
-    if thread.locked {
-        return Err(ERR_DISCUSSION_LOCKED.to_string());
+    // conversation itself. Checked first so one rule governs a resolved
+    // discussion with no exception a reader has to know about.
+    if thread.resolved {
+        return Err(ERR_DISCUSSION_RESOLVED.to_string());
     }
     let Some(set) = read_question_set(root, worktree, thread_id) else {
         // CMS-FR-GAVT: the set is gone. Either this submission already committed

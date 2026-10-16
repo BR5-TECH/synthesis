@@ -121,8 +121,8 @@ impl Fixture {
             .expect("thread")
     }
 
-    fn lock(&self) {
-        crate::comments::set_lock_in(
+    fn resolve_conversation(&self) {
+        crate::comments::set_resolution_in(
             &self.root(),
             ARTIFACT,
             &self.thread_id,
@@ -130,7 +130,7 @@ impl Fixture {
             &human(),
             "2026-01-01T00:01:00Z",
         )
-        .expect("lock");
+        .expect("resolve");
     }
 
     fn call(&self, args: AskUserCommentArgs) -> Result<AskUserCommentOutput, ToolRefusal> {
@@ -452,16 +452,18 @@ fn the_output_is_a_json_object_with_a_named_field() {
 }
 
 // ---------------------------------------------------------------------------
-// AUC-FR-10 — a locked conversation (AUC-FR-10, AUC-FR-12)
+// AUC-FR-10 — a resolved conversation (AUC-FR-10, AUC-FR-12)
 // ---------------------------------------------------------------------------
 
+// AUC-FR-10 / AUC-FR-12: a resolved conversation is the not-retryable
+// `PermissionDenied`, and nothing is posted.
 #[test]
-fn a_locked_conversation_refuses_unretryably_and_appends_nothing() {
+fn a_resolved_conversation_refuses_unretryably_and_appends_nothing() {
     let fixture = Fixture::new();
-    fixture.lock();
+    fixture.resolve_conversation();
     let refusal = fixture.call(args("which way?", None)).expect_err("refused");
 
-    assert_eq!(refusal, ToolRefusal::ConversationLocked);
+    assert_eq!(refusal, ToolRefusal::ConversationResolved);
     assert_eq!(refusal.kind(), ToolErrorKind::PermissionDenied);
     assert!(!refusal.retryable(), "AUC-FR-10: no argument unlocks a conversation",);
     let message = refusal.to_string();
@@ -481,7 +483,7 @@ fn a_locked_conversation_refuses_unretryably_and_appends_nothing() {
 fn an_append_that_fails_otherwise_is_a_retryable_other() {
     let fixture = Fixture::new();
     // A conversation that is not there: the thread cannot be located, which is
-    // every append failure that is not a lock.
+    // every append failure that is not a resolution.
     let tool = AskUserCommentTool::new(
         fixture.handle(),
         crate::agent_conversations::OwnedRoots { worktree: fixture.root(), store: fixture.root() },
@@ -623,7 +625,7 @@ fn a_call_reports_the_tool_and_the_conversation_and_nothing_it_composed() {
         .expect("posted");
     // The refusal path where `args.question` is in hand at the emit site.
     fixture.reporting_into(&AUC_LOG).run(args("   ", None)).expect_err("refused");
-    fixture.lock();
+    fixture.resolve_conversation();
     fixture.reporting_into(&AUC_LOG).run(args("and the archive part?", None)).expect_err("refused");
 
     // The same two records under either domain (TLC-FR-14).
@@ -659,7 +661,7 @@ fn a_call_reports_the_tool_and_the_conversation_and_nothing_it_composed() {
             assert_eq!(record.fields["originKind"], serde_json::json!("artifact_comment"),);
         }
         assert_eq!(records[1].fields["reason"], serde_json::json!("invalid_arguments"),);
-        assert_eq!(records[2].fields["reason"], serde_json::json!("conversation_locked"),);
+        assert_eq!(records[2].fields["reason"], serde_json::json!("conversation_resolved"),);
     }
 
     // AUC-FR-17: none of it names what the model composed.

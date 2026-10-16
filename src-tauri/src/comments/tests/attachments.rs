@@ -293,8 +293,8 @@ fn a_refusal_for_any_reason_leaves_the_attachments_folder_clean() {
     );
     assert!(stored_files(root).is_empty(), "the quote was refused first");
 
-    // A locked thread.
-    set_lock_in(root, "specs/a.md", &thread.id, true, &by, "2026-01-03T00:00:00Z").unwrap();
+    // A resolved thread.
+    set_resolution_in(root, "specs/a.md", &thread.id, true, &by, "2026-01-03T00:00:00Z").unwrap();
     assert_eq!(
         add_comment_in(
             root,
@@ -306,7 +306,7 @@ fn a_refusal_for_any_reason_leaves_the_attachments_folder_clean() {
             Stamp { by: &by, at: "2026-01-04T00:00:00Z" }
         )
         .unwrap_err(),
-        ERR_DISCUSSION_LOCKED,
+        ERR_DISCUSSION_RESOLVED,
     );
     assert!(stored_files(root).is_empty(), "the lock was refused first");
 }
@@ -498,7 +498,7 @@ fn attachments_are_immutable_and_never_collected() {
     root.write_bytes_atomic(attachments_dir(root).join(&orphan), b"unreferenced").unwrap();
 
     let by = human("raver119");
-    set_lock_in(root, "specs/a.md", &thread.id, true, &by, "2026-01-02T00:00:00Z").unwrap();
+    set_resolution_in(root, "specs/a.md", &thread.id, true, &by, "2026-01-02T00:00:00Z").unwrap();
     set_resolution_in(root, "specs/a.md", &thread.id, true, &by, "2026-01-03T00:00:00Z").unwrap();
     reanchor_in(
         root,
@@ -610,15 +610,15 @@ fn setting_the_state_a_thread_already_holds_reports_no_append() {
     let by = human("raver119");
 
     let (_, appended) =
-        set_lock_reporting(root, "specs/a.md", &thread.id, true, &by, "2026-01-02T00:00:00Z")
+        set_resolution_reporting(root, "specs/a.md", &thread.id, true, &by, "2026-01-02T00:00:00Z")
             .unwrap();
     assert!(appended, "a real change appends");
     let (_, again) =
-        set_lock_reporting(root, "specs/a.md", &thread.id, true, &by, "2026-01-03T00:00:00Z")
+        set_resolution_reporting(root, "specs/a.md", &thread.id, true, &by, "2026-01-03T00:00:00Z")
             .unwrap();
     assert!(!again, "setting the state it already holds appends nothing");
 
-    let (_, resolved) = set_resolution_reporting(
+    let (_, reopened) = set_resolution_reporting(
         root,
         "specs/a.md",
         &thread.id,
@@ -627,7 +627,17 @@ fn setting_the_state_a_thread_already_holds_reports_no_append() {
         "2026-01-04T00:00:00Z",
     )
     .unwrap();
-    assert!(!resolved, "already unresolved: nothing to append");
+    assert!(reopened, "a reopen of a resolved thread appends");
+    let (_, again) = set_resolution_reporting(
+        root,
+        "specs/a.md",
+        &thread.id,
+        false,
+        &by,
+        "2026-01-05T00:00:00Z",
+    )
+    .unwrap();
+    assert!(!again, "already active: nothing to append");
 }
 
 /// CMS-FR-48 / FSA-FR-10: a digest read back out of a log becomes a path, so
@@ -787,11 +797,10 @@ fn every_command_that_appends_announces_it_and_no_command_announces_a_no_op() {
         &rest[..end]
     }
 
-    // These three have a legitimate no-op branch (CMS-FR-19, CMS-FR-21), so
+    // These two have a legitimate no-op branch (CMS-FR-19, CMS-FR-21), so
     // each must read the `appended` flag its `*_reporting` variant returns
     // rather than emitting unconditionally.
     for (command, reporting) in [
-        ("set_discussion_lock", "set_lock_to"),
         ("set_discussion_resolution", "set_resolution_to"),
         ("reanchor_discussion_fragment", "move_fragment_to"),
     ] {
@@ -846,7 +855,6 @@ fn commands_are_in_scope() {
     let _ = list_discussions;
     let _ = crate::comments::open_discussion::<tauri::Wry>;
     let _ = add_comment::<tauri::Wry>;
-    let _ = set_discussion_lock::<tauri::Wry>;
     let _ = set_discussion_resolution::<tauri::Wry>;
     let _ = reanchor_discussion_fragment::<tauri::Wry>;
     let _ = resolve_comment_author_identity;

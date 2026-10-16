@@ -303,7 +303,7 @@ fn a_deleted_note_leaves_a_turn_no_material() {
 
 /// CVL-FR-30 / CVL-FR-03, CVL-FR-04 / CVL-FR-08: a note turn end to end.
 ///
-/// The five new arms the note origin added — the tool set, `deliver`, the lock
+/// The five new arms the note origin added — the tool set, `deliver`, the resolution
 /// gate, the prompt, and the builder — are only reachable by actually dispatching
 /// one, which the builder-level tests above do not do.
 #[test]
@@ -378,10 +378,10 @@ fn a_note_turn_is_offered_the_nine_and_delivers_into_the_note_s_conversation() {
     );
 }
 
-/// AGC-FR-19 / CMS-FR-17: a locked note discussion refuses a dispatch before it
+/// AGC-FR-19 / CMS-FR-17: a resolved note discussion refuses a dispatch before it
 /// registers a turn, exactly as every other conversation does.
 #[test]
-fn a_locked_note_discussion_refuses_a_dispatch() {
+fn a_resolved_note_discussion_refuses_a_dispatch() {
     let h = Harness::new(vec![Ok("Answered.".into())]);
     h.mount();
     h.create_agent("arch", "");
@@ -390,7 +390,7 @@ fn a_locked_note_discussion_refuses_a_dispatch() {
         seed_note_discussion(&h, crate::notes::NoteScope::Project, "a note", "@arch thoughts?");
     let trigger =
         crate::comments::note_discussion_of(&h.root(), &note_id).unwrap().comments[0].id.clone();
-    crate::comments::set_lock_to(
+    crate::comments::set_resolution_to(
         &h.root(),
         crate::comments::ThreadRef::note_discussion(&note_id),
         origin.discussion_id(),
@@ -401,7 +401,7 @@ fn a_locked_note_discussion_refuses_a_dispatch() {
     .unwrap();
 
     let err = h.dispatch("arch", origin, &trigger).unwrap_err();
-    assert_eq!(err, FAIL_THREAD_LOCKED);
+    assert_eq!(err, FAIL_DISCUSSION_RESOLVED);
     assert!(h.seam.requests().is_empty(), "no model call was made");
     assert_eq!(
         crate::comments::note_discussion_of(&h.root(), &note_id).unwrap().comments.len(),

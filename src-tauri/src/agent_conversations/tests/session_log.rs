@@ -217,10 +217,10 @@ fn a_dispatch_refused_before_registration_is_still_recorded() {
     assert_eq!(record.level, LogLevel::Warn);
 
     // The other two refusals knowable without a call (AGC-FR-02), each naming
-    // the correction it calls for: unlock the conversation, or restore the
+    // the correction it calls for: reopen the conversation, or restore the
     // provider the agent was configured against.
     h.create_agent("scribe", "");
-    crate::comments::set_lock_in(
+    crate::comments::set_resolution_in(
         &h.root(),
         "spec.md",
         &thread.id,
@@ -228,15 +228,15 @@ fn a_dispatch_refused_before_registration_is_still_recorded() {
         &human("ada"),
         "2026-01-01T00:00:03Z",
     )
-    .expect("lock");
+    .expect("resolve");
     assert_eq!(
         h.dispatch("scribe", ConversationOrigin::of(&thread), &thread.comments[0].id,).unwrap_err(),
-        FAIL_THREAD_LOCKED,
+        FAIL_DISCUSSION_RESOLVED,
     );
     let locked = find(&records_where("discussionId", &thread.id), "agent turn refused");
-    assert_eq!(require(&locked, "failure"), FAIL_THREAD_LOCKED);
+    assert_eq!(require(&locked, "failure"), FAIL_DISCUSSION_RESOLVED);
 
-    crate::comments::set_lock_in(
+    crate::comments::set_resolution_in(
         &h.root(),
         "spec.md",
         &thread.id,
@@ -244,7 +244,7 @@ fn a_dispatch_refused_before_registration_is_still_recorded() {
         &human("ada"),
         "2026-01-01T00:00:04Z",
     )
-    .expect("unlock");
+    .expect("reopen");
     h.store().save_ai_api_registry(vec![], None).expect("clear");
     assert_eq!(
         h.dispatch("scribe", ConversationOrigin::of(&thread), &thread.comments[0].id,).unwrap_err(),
@@ -323,9 +323,9 @@ fn an_answer_that_cannot_be_appended_says_so_at_error() {
     let turn = h
         .dispatch("scribe", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
-    // Locked while the model is still thinking, so the answer arrives at a
+    // Resolved while the model is still thinking, so the answer arrives at a
     // thread that will not take it (AGC-FR-19).
-    crate::comments::set_lock_in(
+    crate::comments::set_resolution_in(
         &h.root(),
         "spec.md",
         &thread.id,
@@ -333,7 +333,7 @@ fn an_answer_that_cannot_be_appended_says_so_at_error() {
         &human("ada"),
         "2026-01-01T00:00:05Z",
     )
-    .expect("lock");
+    .expect("resolve");
     wait_for_terminal(&h, &turn.id);
 
     let by_turn = records_where("turnId", &turn.id);
@@ -341,7 +341,7 @@ fn an_answer_that_cannot_be_appended_says_so_at_error() {
     // expensive, and it is why both records have to be there.
     find(&by_turn, "model answered");
     let discarded = find(&by_turn, "agent answer could not be appended");
-    assert_eq!(require(&discarded, "failure"), FAIL_THREAD_LOCKED);
+    assert_eq!(require(&discarded, "failure"), FAIL_DISCUSSION_RESOLVED);
     assert_eq!(require(&discarded, "originKind"), "artifact_comment");
     assert_eq!(discarded.level, LogLevel::Error);
     assert_eq!(h.threads("spec.md")[0].comments.len(), 1, "and nothing was appended");

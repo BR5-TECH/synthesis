@@ -6,8 +6,8 @@ use super::*;
 /// an agent, and reachable from no Tauri command.
 ///
 /// It goes through [`append_as`]'s machinery rather than beside it, so an agent
-/// is subject to every rule an author is: a locked thread refuses it with the
-/// same `thread_locked` error and gains no line (CMS-FR-17), and the appended
+/// is subject to every rule an author is: a resolved thread refuses it with the
+/// same `discussion_resolved` error and gains no line (CMS-FR-17), and the appended
 /// line is the same `comment_added` event with the same fields. A thread's log
 /// therefore carries no evidence of who or what appended it beyond the
 /// participant already stamped in `by`.
@@ -80,9 +80,10 @@ pub fn append_agent_comment_with(
 ) -> Result<Discussion, String> {
     let Stamp { by, at } = stamp;
     let thread = target.find(root, thread_id)?;
-    // CMS-FR-17: a lock stops an agent exactly as it stops a person.
-    if thread.locked {
-        return Err(ERR_DISCUSSION_LOCKED.to_string());
+    // CMS-FR-17 / CMS-FR-41: a resolution stops an agent exactly as it stops a
+    // person.
+    if thread.resolved {
+        return Err(ERR_DISCUSSION_RESOLVED.to_string());
     }
     append_as_scoped(
         root,

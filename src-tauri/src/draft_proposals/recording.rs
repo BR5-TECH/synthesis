@@ -174,8 +174,8 @@ where
             // the draft's one pending slot is free again rather than held by a
             // proposal the author was never told about.
             cleanup();
-            return Err(if error == comments::ERR_DISCUSSION_LOCKED {
-                RecordRefusal::ThreadLocked
+            return Err(if error == comments::ERR_DISCUSSION_RESOLVED {
+                RecordRefusal::ThreadResolved
             } else {
                 RecordRefusal::NotRecorded
             });

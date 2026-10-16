@@ -132,7 +132,6 @@ export function EditorView(props: EditorViewProps) {
     toggleRail,
     discussionsInRail,
     railReply,
-    railSetLock,
     railSetResolved,
     railPendingTurns,
     railTurnFailures,
@@ -682,7 +681,6 @@ export function EditorView(props: EditorViewProps) {
             scrollFragmentIntoView(discussion.id);
           }}
           onReply={railReply}
-          onSetLock={railSetLock}
           onSetResolved={railSetResolved}
           errors={railErrors}
           showResolved={showResolved}

@@ -164,9 +164,9 @@ pub const QUESTION_BLANK: &str =
 ///
 /// Says outright that a further call will not succeed, for the reason
 /// [`NO_PROJECT_OPEN`] does: the `retryable` flag is a hint a model may ignore,
-/// and an agent that keeps asking a locked thread spends its whole budget on a
+/// and an agent that keeps asking a resolved thread spends its whole budget on a
 /// question nobody will ever see.
-pub const CONVERSATION_LOCKED: &str = "This conversation is locked and takes no further comments, so nothing was posted and no answer is coming. Answer with what you already have; asking again will not succeed.";
+pub const CONVERSATION_RESOLVED: &str = "This conversation is resolved and takes no further comments, so nothing was posted and no answer is coming. Answer with what you already have; asking again will not succeed.";
 
 /// AUC-FR-11: the append failed for anything else.
 pub const QUESTION_NOT_POSTED: &str = "The question could not be posted to this conversation.";
@@ -181,16 +181,16 @@ pub const QUESTION_SET_PENDING_FOR_COMMENT: &str = "This discussion already has 
 /// ADQ-FR-QNJU, ADQ-FR-RWTP: the discussion already holds a pending set.
 ///
 /// Says outright that a further call will not succeed, for the reason
-/// [`CONVERSATION_LOCKED`] does: no argument the model could compose frees a
+/// [`CONVERSATION_RESOLVED`] does: no argument the model could compose frees a
 /// slot the author holds, and an agent that keeps asking spends its whole budget
 /// discovering that.
 pub const QUESTION_SET_ALREADY_PENDING: &str = "This discussion already has a question set waiting on the author, so nothing was recorded. Answer with what you already have; asking again will not succeed.";
 
 /// ADQ-FR-VDGT: the discussion takes no further contribution.
 ///
-/// Distinct from [`CONVERSATION_LOCKED`] because what was lost differs: that
+/// Distinct from [`CONVERSATION_RESOLVED`] because what was lost differs: that
 /// costs the model a question, this costs it the whole set it composed.
-pub const QUESTION_SET_CONVERSATION_LOCKED: &str = "This conversation is locked and takes no further contribution, so nothing was recorded and no answer is coming. Answer with what you already have; asking again will not succeed.";
+pub const QUESTION_SET_CONVERSATION_RESOLVED: &str = "This conversation is resolved and takes no further contribution, so nothing was recorded and no answer is coming. Answer with what you already have; asking again will not succeed.";
 
 /// ADQ-FR-HBLN: the reservation failed for anything else.
 pub const QUESTION_SET_NOT_RECORDED: &str =
@@ -266,10 +266,10 @@ pub const PROPOSAL_PENDING: &str = "A change you proposed earlier is still waiti
 /// PDC-FR-09: the conversation takes no further comments, so a proposal nobody
 /// can be told about is one nobody will decide.
 ///
-/// Distinct from [`CONVERSATION_LOCKED`] because the consequence differs: a
+/// Distinct from [`CONVERSATION_RESOLVED`] because the consequence differs: a
 /// question that cannot be posted costs the model a question, and a proposal that
 /// cannot be posted costs it a rewrite it should now describe in prose instead.
-pub const PROPOSAL_CONVERSATION_LOCKED: &str = "This conversation is locked and takes no further comments, so nothing was proposed and no decision is coming. Answer with what you already have; proposing again will not succeed.";
+pub const PROPOSAL_CONVERSATION_RESOLVED: &str = "This conversation is resolved and takes no further comments, so nothing was proposed and no decision is coming. Answer with what you already have; proposing again will not succeed.";
 
 /// PDC-FR-11: the candidate or its comment could not be written.
 pub const PROPOSAL_NOT_RECORDED: &str = "The proposed change could not be recorded.";
@@ -406,10 +406,10 @@ pub enum ToolRefusal {
     DocumentUnavailable,
     /// GDT-FR-HREW: the document has no extractable text.
     DocumentNoText,
-    /// AUC-FR-10: the conversation is locked, so it takes no comment from an
+    /// AUC-FR-10: the conversation is resolved, so it takes no comment from an
     /// agent any more than from a person (CMS-FR-17).
-    ConversationLocked,
-    /// AUC-FR-11: the append failed for a reason other than a lock.
+    ConversationResolved,
+    /// AUC-FR-11: the append failed for a reason other than a resolution.
     QuestionNotPosted,
     /// PDC-FR-06: the turn's conversation is not about a draft.
     NotADraftConversation,
@@ -418,7 +418,7 @@ pub enum ToolRefusal {
     /// PDC-FR-08: the draft already carries an undecided proposal (DCP-FR-04).
     ProposalPending,
     /// PDC-FR-09: the conversation takes no further comments (CMS-FR-17).
-    ProposalConversationLocked,
+    ProposalConversationResolved,
     /// PDC-FR-11 / PPC-FR-12: the candidate or its comment could not be written.
     ProposalNotRecorded,
     /// PPC-FR-07: the turn's conversation is not about a file of the project.
@@ -468,8 +468,8 @@ pub enum ToolRefusal {
     QuestionSetPendingForComment,
     /// ADQ-FR-QNJU: the discussion already holds a pending set.
     QuestionSetAlreadyPending,
-    /// ADQ-FR-VDGT: the discussion is locked.
-    QuestionSetConversationLocked,
+    /// ADQ-FR-VDGT: the discussion is resolved.
+    QuestionSetConversationResolved,
     /// ADQ-FR-HBLN: the reservation failed for any other reason.
     QuestionSetNotRecorded,
 }
@@ -526,7 +526,7 @@ impl ToolRefusal {
             // rather than of shape.
             // PPC-FR-07, PPC-FR-09: the same two shapes against an artifact
             // conversation and an artifact's one pending slot.
-            ToolRefusal::ConversationLocked
+            ToolRefusal::ConversationResolved
             | ToolRefusal::NotADraftConversation
             | ToolRefusal::NotAnArtifactConversation
             | ToolRefusal::ProposalPending
@@ -536,8 +536,8 @@ impl ToolRefusal {
             // of reach rather than of shape.
             | ToolRefusal::QuestionSetPendingForComment
             | ToolRefusal::QuestionSetAlreadyPending
-            | ToolRefusal::QuestionSetConversationLocked
-            | ToolRefusal::ProposalConversationLocked => ToolErrorKind::PermissionDenied,
+            | ToolRefusal::QuestionSetConversationResolved
+            | ToolRefusal::ProposalConversationResolved => ToolErrorKind::PermissionDenied,
             // Neither `InvalidArgs` — no argument is at fault or would help —
             // nor `NotFound`, the skills plainly being there. TLC-FR-10's
             // "`Other` otherwise" is exactly this case. RFT-FR-15's non-text
@@ -584,19 +584,19 @@ impl ToolRefusal {
         match self {
             // Neither is reachable by any argument: one wants a project the
             // model cannot open, the other a name the project made ambiguous.
-            // AUC-FR-10 joins them: no argument a model composes unlocks a
+            // AUC-FR-10 joins them: no argument a model composes reopens a
             // conversation, so a further call refuses identically.
             ToolRefusal::NoProjectOpen
             | ToolRefusal::SkillNameNotUnique
-            | ToolRefusal::ConversationLocked
+            | ToolRefusal::ConversationResolved
             // PDC-FR-06, PDC-FR-09: no argument makes an artifact into a draft or
-            // unlocks a conversation, and an agent told otherwise would spend its
+            // reopens a conversation, and an agent told otherwise would spend its
             // remaining calls proposing somewhere that cannot hold a proposal.
             | ToolRefusal::NotADraftConversation
             // PPC-FR-07: no argument makes a draft or a note into a file of the
             // project, on exactly those terms.
             | ToolRefusal::NotAnArtifactConversation
-            | ToolRefusal::ProposalConversationLocked
+            | ToolRefusal::ProposalConversationResolved
             // RGF-FR-14: no path the model composes brings a removed working
             // copy back. ESU-FR-08, ESU-FR-05: no argument un-escalates a run
             // or makes a discarded one pausable, and a model told otherwise
@@ -604,10 +604,10 @@ impl ToolRefusal {
             | ToolRefusal::GraduationWorkingCopyUnavailable
             | ToolRefusal::NotEscalatableNow
             // ADQ-FR-RWTP, AUC-FR-QSVN: no argument the model composes frees a
-            // slot the author holds, and no call reaches a locked conversation.
+            // slot the author holds, and no call reaches a resolved conversation.
             | ToolRefusal::QuestionSetPendingForComment
             | ToolRefusal::QuestionSetAlreadyPending
-            | ToolRefusal::QuestionSetConversationLocked
+            | ToolRefusal::QuestionSetConversationResolved
             | ToolRefusal::AlreadyEscalated
             // GDT-FR-IFCA, GDT-FR-HREW: no id the model composes brings a moved
             // file back or puts text into a scan.
@@ -681,16 +681,16 @@ impl ToolRefusal {
             ToolRefusal::FileNotFound => "file_not_found",
             ToolRefusal::PathIsFolder => "path_is_folder",
             ToolRefusal::FileNotText => "file_not_text",
-            ToolRefusal::ConversationLocked => "conversation_locked",
+            ToolRefusal::ConversationResolved => "conversation_resolved",
             ToolRefusal::QuestionSetPendingForComment => "question_set_pending",
             ToolRefusal::QuestionSetAlreadyPending => "question_set_already_pending",
-            ToolRefusal::QuestionSetConversationLocked => "conversation_locked",
+            ToolRefusal::QuestionSetConversationResolved => "conversation_resolved",
             ToolRefusal::QuestionSetNotRecorded => "question_set_not_recorded",
             ToolRefusal::QuestionNotPosted => "question_not_posted",
             ToolRefusal::NotADraftConversation => "not_a_draft_conversation",
             ToolRefusal::ProposalPathMissing => "proposal_path_missing",
             ToolRefusal::ProposalPending => "proposal_pending",
-            ToolRefusal::ProposalConversationLocked => "proposal_conversation_locked",
+            ToolRefusal::ProposalConversationResolved => "proposal_conversation_resolved",
             ToolRefusal::ProposalNotRecorded => "proposal_not_recorded",
             ToolRefusal::NotAnArtifactConversation => "not_an_artifact_conversation",
             ToolRefusal::PromptProposalPathMissing => "artifact_not_found",
@@ -737,20 +737,22 @@ impl std::fmt::Display for ToolRefusal {
             ToolRefusal::FileNotFound => f.write_str(FILE_NOT_FOUND),
             ToolRefusal::PathIsFolder => f.write_str(PATH_IS_FOLDER),
             ToolRefusal::FileNotText => f.write_str(FILE_NOT_TEXT),
-            ToolRefusal::ConversationLocked => f.write_str(CONVERSATION_LOCKED),
+            ToolRefusal::ConversationResolved => f.write_str(CONVERSATION_RESOLVED),
             ToolRefusal::QuestionNotPosted => f.write_str(QUESTION_NOT_POSTED),
             ToolRefusal::QuestionSetPendingForComment => {
                 f.write_str(QUESTION_SET_PENDING_FOR_COMMENT)
             }
             ToolRefusal::QuestionSetAlreadyPending => f.write_str(QUESTION_SET_ALREADY_PENDING),
-            ToolRefusal::QuestionSetConversationLocked => {
-                f.write_str(QUESTION_SET_CONVERSATION_LOCKED)
+            ToolRefusal::QuestionSetConversationResolved => {
+                f.write_str(QUESTION_SET_CONVERSATION_RESOLVED)
             }
             ToolRefusal::QuestionSetNotRecorded => f.write_str(QUESTION_SET_NOT_RECORDED),
             ToolRefusal::NotADraftConversation => f.write_str(NOT_A_DRAFT_CONVERSATION),
             ToolRefusal::ProposalPathMissing => f.write_str(PROPOSAL_PATH_MISSING),
             ToolRefusal::ProposalPending => f.write_str(PROPOSAL_PENDING),
-            ToolRefusal::ProposalConversationLocked => f.write_str(PROPOSAL_CONVERSATION_LOCKED),
+            ToolRefusal::ProposalConversationResolved => {
+                f.write_str(PROPOSAL_CONVERSATION_RESOLVED)
+            }
             ToolRefusal::ProposalNotRecorded => f.write_str(PROPOSAL_NOT_RECORDED),
             ToolRefusal::NotAnArtifactConversation => f.write_str(NOT_AN_ARTIFACT_CONVERSATION),
             ToolRefusal::PromptProposalPathMissing => f.write_str(PROMPT_PROPOSAL_PATH_MISSING),

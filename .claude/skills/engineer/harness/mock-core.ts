@@ -1072,7 +1072,8 @@ let appendSeq = 0;
  */
 function storeAttachments(inputs: any[]): any[] {
   return (inputs ?? []).map((input: any) => {
-    if (input.kind === "url") return { ...input };
+    // CMS-FR-TQVB: a reference to one change is stored as given.
+    if (input.kind === "url" || input.kind === "proposalHunk") return { ...input };
     const digest = `posted-${++appendSeq}`;
     ATTACHMENT_BLOBS[digest] = {
       mediaType: input.mediaType,
@@ -1114,7 +1115,8 @@ const seededAttachments = [
  * fixture by. Held here rather than inline in `list_comment_threads` so that
  * everything else rebuilding one — an append, an event payload — rebuilds the
  * SAME thread: a `t-3` that arrives unlocked because the override was left
- * behind reads as CMT-FR-15 being broken and is only the harness forgetting.
+ * behind reads as CMT-FR-WKZR being broken and is only the harness forgetting.
+ * `t-3` is stored as locked, which the adapter reads as resolved.
  */
 const ANCHORED_OVERRIDES: Record<string, Record<string, unknown>> = {
   "t-1": {},
@@ -3498,7 +3500,7 @@ Object.defineProperty(globalThis, "__mockRetryDelayMs", {
  * CMT-FR-74: make the next `retry_agent_turn` refuse, so the failure
  * contribution is restored and the typed reason renders inline.
  *
- *   window.__mockRefuseRetry("thread_locked")   // null clears it
+ *   window.__mockRefuseRetry("discussion_resolved")   // null clears it
  */
 (globalThis as Record<string, unknown>).__mockRefuseRetry = (
   reason: string | null,
@@ -8821,7 +8823,13 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const ledgerRow = row.ledger?.find((r: any) => r.id === hunkId);
       const hunk = (proposalHunks[id] ?? []).find((h) => h.id === hunkId);
       if (!ledgerRow || !hunk) throw "hunk_not_found";
-      if (ledgerRow.state === "accepted" || ledgerRow.state === "rejected") {
+      if (row.state !== "pending") throw "already_decided";
+      // DCP-FR-11 / DCP-FR-17: a rejected change can still be accepted while
+      // the proposal is open; nothing else is decided twice.
+      if (
+        ledgerRow.state === "accepted" ||
+        (ledgerRow.state === "rejected" && !accepted)
+      ) {
         throw "hunk_already_decided";
       }
       if (accepted) {
@@ -9536,7 +9544,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       if (cmd === "add_comment") {
         const target = allDiscussions().find((t) => t.id === a.threadId);
         if (target) {
-          if (target.locked) throw "thread_locked";
+          // CMS-FR-17: a resolved discussion, a legacy locked one included,
+          // takes no comment.
+          if (target.locked || target.resolved) throw "discussion_resolved";
           const posted = {
             id: `${target.id}-a${++appendSeq}`,
             author: human,
@@ -9596,12 +9606,15 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         if (cmd === "reanchor_comment_thread") throw "not_anchored"; // CMS-FR-59
         if (a.locked !== undefined) stored.locked = a.locked;
         if (a.resolved !== undefined) stored.resolved = a.resolved;
+        // CMS-FR-18: a reopen clears a legacy lock too.
+        if (a.resolved === false) stored.locked = false;
         stored.updatedAt = new Date().toISOString();
         return { ...stored };
       }
       return thread(String(a.threadId ?? "t-1"), {
         ...(a.locked === undefined ? {} : { locked: a.locked }),
         ...(a.resolved === undefined ? {} : { resolved: a.resolved }),
+        ...(a.resolved === false ? { locked: false } : {}),
       });
     }
 

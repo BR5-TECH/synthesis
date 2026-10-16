@@ -32,7 +32,6 @@ function discussion(body: string): Discussion {
     target: { kind: "note", noteId: "n1" },
     fragmentTarget: null,
     comments: [comment("c1", body)],
-    locked: false,
     resolved: false,
     createdAt: "2026-02-01T00:00:00Z",
     updatedAt: "2026-02-01T00:00:00Z",

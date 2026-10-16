@@ -201,7 +201,7 @@ pub fn normalize(questions: &[AskedQuestion]) -> Result<Vec<PendingQuestion>, To
 fn refusal_for(error: &str) -> ToolRefusal {
     match error {
         comments::ERR_QUESTION_SET_ALREADY_PENDING => ToolRefusal::QuestionSetAlreadyPending,
-        comments::ERR_DISCUSSION_LOCKED => ToolRefusal::QuestionSetConversationLocked,
+        comments::ERR_DISCUSSION_RESOLVED => ToolRefusal::QuestionSetConversationResolved,
         _ => ToolRefusal::QuestionSetNotRecorded,
     }
 }

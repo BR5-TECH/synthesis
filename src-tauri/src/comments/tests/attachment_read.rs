@@ -235,8 +235,8 @@ fn a_discussion_takes_every_operation_an_anchored_thread_takes() {
     .unwrap();
     assert!(matches!(answered.comments.last().unwrap().author, Participant::Agent { .. }));
 
-    // CMS-FR-17: and a lock stops the agent exactly as it stops a person.
-    set_lock_to(root, target, &thread.id, true, &human("raver119"), "2026-02-01T00:05:00Z")
+    // CMS-FR-17: and a resolution stops the agent exactly as it stops a person.
+    set_resolution_to(root, target, &thread.id, true, &human("raver119"), "2026-02-01T00:05:00Z")
         .unwrap();
     let before = discussion_log_lines(root, &draft).len();
     assert_eq!(
@@ -249,7 +249,7 @@ fn a_discussion_takes_every_operation_an_anchored_thread_takes() {
             "2026-02-01T00:06:00Z",
         )
         .unwrap_err(),
-        ERR_DISCUSSION_LOCKED,
+        ERR_DISCUSSION_RESOLVED,
     );
     assert_eq!(discussion_log_lines(root, &draft).len(), before);
 }

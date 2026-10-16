@@ -198,12 +198,10 @@ export const readCommentAttachment = (args: {
   draftId?: string;
 }) => invoke<AttachmentContent>("read_comment_attachment", args);
 
-/** Set the lock, independently of the resolution. */
-export const setDiscussionLock = (
-  args: DiscussionLocator & { discussionId: string; locked: boolean },
-) => invoke<Discussion>("set_discussion_lock", args);
-
-/** Set the resolution, independently of the lock. */
+/**
+ * CMS-FR-18: resolve or reopen. The one lifecycle write; a reopen dispatches no
+ * agent turn (CMT-FR-16).
+ */
 export const setDiscussionResolution = (
   args: DiscussionLocator & { discussionId: string; resolved: boolean },
 ) => invoke<Discussion>("set_discussion_resolution", args);

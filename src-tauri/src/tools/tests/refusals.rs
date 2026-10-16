@@ -28,7 +28,7 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         ToolRefusal::FileNotFound,
         ToolRefusal::PathIsFolder,
         ToolRefusal::FileNotText,
-        ToolRefusal::ConversationLocked,
+        ToolRefusal::ConversationResolved,
         ToolRefusal::QuestionNotPosted,
         ToolRefusal::InvalidArguments(crate::tools::PROPOSAL_CONTENT_BLANK),
         ToolRefusal::InvalidArguments(crate::tools::PROPOSAL_RATIONALE_BLANK),
@@ -36,7 +36,7 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         ToolRefusal::NotADraftConversation,
         ToolRefusal::ProposalPathMissing,
         ToolRefusal::ProposalPending,
-        ToolRefusal::ProposalConversationLocked,
+        ToolRefusal::ProposalConversationResolved,
         ToolRefusal::ProposalNotRecorded,
         ToolRefusal::InvalidArguments(crate::tools::EMPTY_DRAFT_QUERY),
         // NST-FR-14: this tool's own empty-query refusal joins the group and is
@@ -77,7 +77,7 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         // are held to exactly the same rules.
         ToolRefusal::QuestionSetPendingForComment,
         ToolRefusal::QuestionSetAlreadyPending,
-        ToolRefusal::QuestionSetConversationLocked,
+        ToolRefusal::QuestionSetConversationResolved,
         ToolRefusal::QuestionSetNotRecorded,
         ToolRefusal::InvalidArguments(crate::tools::WRONG_QUESTION_SET_COUNT),
         ToolRefusal::InvalidQuestion(crate::tools::SET_QUESTION_BLANK, 2),
@@ -108,12 +108,12 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         | ToolRefusal::FileNotFound
         | ToolRefusal::PathIsFolder
         | ToolRefusal::FileNotText
-        | ToolRefusal::ConversationLocked
+        | ToolRefusal::ConversationResolved
         | ToolRefusal::QuestionNotPosted
         | ToolRefusal::NotADraftConversation
         | ToolRefusal::ProposalPathMissing
         | ToolRefusal::ProposalPending
-        | ToolRefusal::ProposalConversationLocked
+        | ToolRefusal::ProposalConversationResolved
         | ToolRefusal::ProposalNotRecorded
         | ToolRefusal::DraftNotFound
         | ToolRefusal::DraftInconsistent
@@ -129,7 +129,7 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         | ToolRefusal::InvalidQuestion(..)
         | ToolRefusal::QuestionSetPendingForComment
         | ToolRefusal::QuestionSetAlreadyPending
-        | ToolRefusal::QuestionSetConversationLocked
+        | ToolRefusal::QuestionSetConversationResolved
         | ToolRefusal::QuestionSetNotRecorded
         | ToolRefusal::DocumentNotFound
         | ToolRefusal::DocumentUnavailable
@@ -618,4 +618,44 @@ fn one_instance_serves_two_callers_without_either_observing_the_other() {
     let two = two.join().unwrap();
     assert_eq!(one.skills.first().map(|s| s.name.as_str()), Some("analyst"));
     assert_eq!(two.skills.first().map(|s| s.name.as_str()), Some("deployer"));
+}
+
+// AUC-FR-10 / PDC-FR-09 / PPC-FR-10 / ADQ-FR-VDGT: a resolved conversation is
+// refused in the words each tool specification declares, under a stable
+// `resolved` code, as the not-retryable `PermissionDenied`.
+#[test]
+fn a_resolved_conversation_is_refused_in_the_declared_words() {
+    let cases = [
+        (
+            ToolRefusal::ConversationResolved,
+            "conversation_resolved",
+            "This conversation is resolved and takes no further comments, so nothing was posted and no answer is coming. Answer with what you already have; asking again will not succeed.",
+        ),
+        (
+            ToolRefusal::ProposalConversationResolved,
+            "proposal_conversation_resolved",
+            "This conversation is resolved and takes no further comments, so nothing was proposed and no decision is coming. Answer with what you already have; proposing again will not succeed.",
+        ),
+        (
+            ToolRefusal::QuestionSetConversationResolved,
+            "conversation_resolved",
+            "This conversation is resolved and takes no further contribution, so nothing was recorded and no answer is coming. Answer with what you already have; asking again will not succeed.",
+        ),
+    ];
+    for (refusal, reason, message) in cases {
+        assert_eq!(refusal.to_string(), message);
+        assert_eq!(refusal.reason(), reason);
+        assert_eq!(refusal.kind(), ToolErrorKind::PermissionDenied);
+        assert!(!refusal.retryable(), "{reason}");
+    }
+}
+
+// PDC-FR-GMWR: the refusal of a `revises` that names no change the model can
+// still revise, in the declared words.
+#[test]
+fn a_change_that_cannot_be_revised_is_refused_in_the_declared_words() {
+    assert_eq!(
+        crate::tools::propose_draft_changes::PROPOSAL_NO_SUCH_CHANGE,
+        "The change you named is not one of the changes you can still revise. Propose a new change instead.",
+    );
 }

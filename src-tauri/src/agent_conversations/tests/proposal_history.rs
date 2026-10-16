@@ -188,6 +188,7 @@ fn change(
     after: &str,
 ) -> crate::draft_proposals::ProposalChange {
     crate::draft_proposals::ProposalChange {
+        id: "h-test".into(),
         kind,
         state,
         before: before.into(),

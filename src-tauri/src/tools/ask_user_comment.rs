@@ -221,8 +221,8 @@ pub fn post(
 
 /// The comments vocabulary in this tool's terms (AUC-FR-10, AUC-FR-11).
 fn refusal_for(error: &str) -> ToolRefusal {
-    if error == comments::ERR_DISCUSSION_LOCKED {
-        ToolRefusal::ConversationLocked
+    if error == comments::ERR_DISCUSSION_RESOLVED {
+        ToolRefusal::ConversationResolved
     } else {
         ToolRefusal::QuestionNotPosted
     }

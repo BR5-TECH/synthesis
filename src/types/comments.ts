@@ -170,7 +170,24 @@ export type Attachment =
       artifactId: string;
       /** Project-relative path the proposal would replace. */
       path: string;
-    };
+    }
+  /**
+   * CMS-FR-TQVB: a reference to **one change** of a draft change proposal. It
+   * marks the comment as being about that change alone, and the opening comment
+   * of a hunk discussion carries one (DCP-FR-FHWN, DCR-FR-VBQN). It holds no
+   * content, and the rail renders it as a control (CMT-FR-48).
+   */
+  | ProposalHunkReference;
+
+/** CMS-FR-42: the `proposal_hunk` attachment, as stored and as supplied. */
+export interface ProposalHunkReference {
+  kind: "proposalHunk";
+  proposalId: string;
+  hunkId: string;
+  draftId: string;
+  /** Draft-relative path the change applies to. */
+  path: string;
+}
 
 /**
  * CMS-FR-43: what the rail supplies on an append.
@@ -187,7 +204,9 @@ export type AttachmentInput =
       filename: string;
       /** Base64 of the file's bytes, with no `data:` prefix. */
       data: string;
-    };
+    }
+  /** CMS-FR-43: both append paths take a reference to one change. */
+  | ProposalHunkReference;
 
 /** CMS-FR-48: what `read_comment_attachment` serves back. */
 export interface AttachmentContent {
@@ -205,7 +224,9 @@ export interface AttachmentContent {
  */
 export function attachmentName(a: Attachment): string {
   if (a.kind === "blob") return a.filename;
-  if (a.kind === "proposal" || a.kind === "promptProposal") return a.path;
+  if (a.kind === "proposal" || a.kind === "promptProposal" || a.kind === "proposalHunk") {
+    return a.path;
+  }
   return a.label ?? a.url;
 }
 
@@ -213,7 +234,9 @@ export function attachmentName(a: Attachment): string {
 export function isImageAttachment(a: Attachment): boolean {
   // CMS-FR-42: the two reference kinds hold no content at all, so neither has a
   // media type to read and neither is ever a thumbnail (CMT-FR-48).
-  if (a.kind === "proposal" || a.kind === "promptProposal") return false;
+  if (a.kind === "proposal" || a.kind === "promptProposal" || a.kind === "proposalHunk") {
+    return false;
+  }
   return a.mediaType.split(";")[0].trim().toLowerCase().startsWith("image/");
 }
 
@@ -455,6 +478,8 @@ export const PROPOSAL_ERRORS = {
   /** DCP-FR-27: the stored candidate moved on since this surface read it. */
   candidateStale: "candidate_stale",
   pathMissing: "path_missing",
+  /** DCP-FR-11: the proposal's conversation is resolved, so no decision is recorded. */
+  discussionResolved: "discussion_resolved",
   writeFailed: "write_failed",
   /**
    * DHS-FR-17: the acceptance **landed** and the decision comment is still
@@ -575,7 +600,7 @@ export const PROMPT_PROPOSAL_ERRORS = {
   alreadyDecided: "already_decided",
   /** PCP-FR-24: the stored candidate moved on since this surface read it. */
   candidateStale: "candidate_stale",
-  discussionLocked: "discussion_locked",
+  discussionResolved: "discussion_resolved",
   /**
    * PCP-FR-14: a failure at or before the commit point. **The file has not
    * changed** — the backend never wrote it on any failing path — and the
@@ -743,7 +768,10 @@ export interface Discussion {
   fragmentTarget: FragmentTarget | null;
   /** Oldest first. */
   comments: Comment[];
-  locked: boolean;
+  /**
+   * CMS-FR-18: the one lifecycle flag. A discussion stored as locked folds as
+   * resolved (CMS-FR-WKZR), so no surface reads a lock of its own.
+   */
   resolved: boolean;
   createdAt: string;
   updatedAt: string;
@@ -787,13 +815,14 @@ export function discussionNoteId(d: Discussion): string | undefined {
  *
  * These are matched on rather than merely displayed: a selection-required
  * identity opens the token picker (CMT-FR-25) while a missing one routes to
- * Global settings (CMT-FR-26), and a locked discussion re-renders the card
+ * Global settings (CMT-FR-26), and a resolved discussion re-renders the card
  * (CMT-FR-34). A divergence from the Rust spelling is silent, which is why both
  * sides keep the list as named constants.
  */
 export const COMMENT_ERRORS = {
   discussionNotFound: "discussion_not_found",
-  discussionLocked: "discussion_locked",
+  /** CMS-FR-17: the discussion is resolved and takes no further comment. */
+  discussionResolved: "discussion_resolved",
   quotedCommentNotInDiscussion: "quoted_comment_not_in_discussion",
   invalidFragment: "invalid_fragment",
   /** CMS-FR-47: the media type is outside the set the backend accepts. */

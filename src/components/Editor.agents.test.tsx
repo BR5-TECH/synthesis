@@ -322,10 +322,12 @@ describe("CTA-FR-VQFJ: the composer offers the project's agents", () => {
     expect(screen.queryByTestId("mention-picker")).not.toBeInTheDocument();
   });
 
-  it("gives a locked thread no composer and so no way to address anyone", async () => {
-    // CTA-FR-SKXK, AGT-FR-25, AGT-FR-27's second half / CMT-FR-15: a thread that takes no further
+  it("CTA-FR-SKXK, CMT-FR-16: gives a resolved thread no composer and so no way to address anyone", async () => {
+    // AGT-FR-25, AGT-FR-27's second half: a thread that takes no further
     // comment takes no further participant either.
-    await mount({ threads: [makeThread({ locked: true })] });
+    await mount({ threads: [makeThread({ resolved: true })] });
+    await userEvent.click(screen.getByRole("button", { name: /resolved thread/i }));
+    expect(await screen.findByTestId("comment-thread-t1")).toBeInTheDocument();
     expect(screen.queryByLabelText("Reply to thread t1")).not.toBeInTheDocument();
     expect(screen.queryByTestId("mention-picker")).not.toBeInTheDocument();
   });

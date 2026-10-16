@@ -418,13 +418,13 @@ where
     let (thread_artifact, discussion) =
         locate_thread(root, store, new.thread_id).map_err(|_| RecordRefusal::NotRecorded)?;
     let target = thread_ref(&thread_artifact, discussion);
-    // CMS-FR-17: a locked conversation takes no comment, and a proposal nobody
-    // can be told about is a proposal nobody will decide (PCP-FR-07).
+    // CMS-FR-17: a resolved conversation takes no comment, and a proposal
+    // nobody can be told about is a proposal nobody will decide (PCP-FR-07).
     if comments::thread_at(store, target, new.thread_id)
         .map_err(|_| RecordRefusal::NotRecorded)?
-        .locked
+        .resolved
     {
-        return Err(RecordRefusal::ThreadLocked);
+        return Err(RecordRefusal::ThreadResolved);
     }
 
     let dir = ensure_folder(root).map_err(|_| RecordRefusal::NotRecorded)?;
@@ -496,8 +496,8 @@ where
             // the artifact's one pending slot is free again rather than held by
             // a proposal the author was never told about.
             cleanup();
-            return Err(if error == comments::ERR_DISCUSSION_LOCKED {
-                RecordRefusal::ThreadLocked
+            return Err(if error == comments::ERR_DISCUSSION_RESOLVED {
+                RecordRefusal::ThreadResolved
             } else {
                 RecordRefusal::NotRecorded
             });
@@ -766,9 +766,10 @@ fn clear_owed(
 /// PCP-FR-14 / PCP-FR-16: append the decision comment under the ids the journal
 /// minted, so a repeat contributes nothing a second time (CMS-FR-06).
 ///
-/// The lock the conversation may since have taken is deliberately not consulted:
+/// The resolution the conversation may since have taken is deliberately not
+/// consulted:
 /// PCP-FR-16 checked it before the transaction began, and the transaction has
-/// committed. A lock applied in the window between is a fact about what the
+/// committed. A resolution applied in the window between is a fact about what the
 /// conversation will take **next**, not licence to leave a decision the author
 /// already made unrecorded.
 fn append_decision<R: tauri::Runtime>(

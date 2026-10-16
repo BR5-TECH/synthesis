@@ -43,9 +43,6 @@ import {
 } from "../../types";
 
 export { commentErrorMessage, turnFailureMessage } from "./messages";
-export { useCardMenu } from "./useCardMenu";
-export { ThreadCard } from "./ThreadCard";
-export type { ControlledComposer, ThreadCardProps } from "./cardTypes";
 
 /** Stable empty default, so the memos below do not re-run on every render. */
 const EMPTY_DISCUSSIONS: readonly AnchoredThread[] = [];
@@ -104,7 +101,6 @@ export interface CommentRailProps {
     quotes: CommentQuote[],
     attachments: AttachmentInput[],
   ) => Promise<void>;
-  onSetLock: (threadId: string, locked: boolean) => Promise<void>;
   onSetResolved: (threadId: string, resolved: boolean) => Promise<void>;
   /** Per-discussion inline error from the last failed operation (CMT-FR-34). */
   errors: Readonly<Record<string, string>>;
@@ -269,7 +265,6 @@ export function CommentRail(props: CommentRailProps) {
         disabled={identityBlock !== null}
         blocked={blocked}
         onReply={props.onReply}
-        onSetLock={props.onSetLock}
         onSetResolved={props.onSetResolved}
         error={errors[id]}
         pendingTurns={pendingTurns.filter((t) => t.origin.discussionId === id)}

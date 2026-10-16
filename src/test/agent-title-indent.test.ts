@@ -56,7 +56,7 @@ describe("the agent title indents to the name rather than to the marker", () => 
     expect(body).toMatch(/font-weight:\s*var\(--fw-semi\)/);
   });
 
-  it.each([["components/CommentRail/ThreadCard.tsx"], ["components/Comments.tsx"]])(
+  it.each([["components/discussion/DiscussionMessages.tsx"], ["components/Comments.tsx"]])(
     "keeps the marker %s renders identical to the reserved spacer",
     (component) => {
       const rendered = read(component).match(/kind === "agent" && "([^"]*)"/);

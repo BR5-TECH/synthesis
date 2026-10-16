@@ -70,6 +70,15 @@ pub(super) struct TurnPlan {
     /// AGC-FR-24: the label of the turn's progress operation, supplied here and
     /// displayed as it is.
     pub(super) progress_label: String,
+    /// AGC-FR-19: how many resolving lines the conversation held when the turn
+    /// was dispatched, or `None` where it could not be read then.
+    ///
+    /// A count rather than a time, because a log only grows and the fold counts
+    /// every resolving line it applies: a higher count later shows that the
+    /// conversation was resolved after dispatch, also when the author reopened
+    /// it since. A comparison of second-granularity times cannot tell a
+    /// resolution just before dispatch from one just after it.
+    pub(super) resolution_baseline: Option<usize>,
 }
 
 /// AGC-FR-24: `@<nickname> is thinking about <draft name>…` for a draft,
@@ -103,7 +112,7 @@ pub(super) fn progress_label_of(
 /// model, so no surface is blocked by a conversation.
 ///
 /// The refusals returned *before* registering are exactly the ones knowable
-/// without a call — an unresolvable nickname, an unavailable agent, a locked
+/// without a call — an unresolvable nickname, an unavailable agent, a resolved
 /// conversation. Every other outcome arrives as a state change on the registered
 /// turn (AGC-FR-21).
 ///
@@ -152,7 +161,7 @@ pub fn dispatch_impl<R: tauri::Runtime>(
     // AGC-FR-30: a turn for a conversation whose **note has been deleted** is
     // refused *before it is registered*, so no turn record is created for a
     // deleted note by any route or any race. Knowable without a model call, like
-    // the lock below, and refused here rather than left to fail as
+    // the resolution below, and refused here rather than left to fail as
     // `context_unavailable` on a turn that was published first — a registration
     // for a conversation that no longer exists is a turn a roster would show and
     // a surface would render a pending contribution for.
@@ -164,14 +173,17 @@ pub fn dispatch_impl<R: tauri::Runtime>(
         }
     }
 
-    // AGC-FR-19: a lock is what stops a conversation taking further
+    // AGC-FR-19: a resolution is what stops a conversation taking further
     // contributions, and an agent is subject to it exactly as an author is. The
-    // lock in place *at dispatch* is knowable without a call, so it refuses here
-    // rather than failing a registered turn.
-    if thread_is_locked(roots, &origin) {
-        log_refusal(app, turns.buffer(), nickname, &origin, FAIL_THREAD_LOCKED);
-        return Err(FAIL_THREAD_LOCKED.to_string());
+    // resolution in place *at dispatch* is knowable without a call, so it
+    // refuses here rather than failing a registered turn. The same read gives
+    // the baseline a later resolution is measured against.
+    let at_dispatch = resolve_origin(roots, &origin);
+    if at_dispatch.as_ref().is_some_and(|d| d.resolved) {
+        log_refusal(app, turns.buffer(), nickname, &origin, FAIL_DISCUSSION_RESOLVED);
+        return Err(FAIL_DISCUSSION_RESOLVED.to_string());
     }
+    let resolution_baseline = at_dispatch.as_ref().map(|d| d.resolving_events());
 
     // AGC-FR-29: a reply is answered by a fresh turn and never by resuming the
     // one that asked. If this agent was awaiting a reply in this conversation,
@@ -319,6 +331,7 @@ pub fn dispatch_impl<R: tauri::Runtime>(
         provider,
         cancelled,
         progress_label,
+        resolution_baseline,
     };
 
     let app = app.clone();
@@ -335,7 +348,7 @@ pub fn dispatch_impl<R: tauri::Runtime>(
 /// `WARN` rather than `ERROR`: the application is intact and the surface was
 /// told, but the author's question went unanswered and the reason — a nickname
 /// naming nobody, an agent whose provider stopped serving it, a thread someone
-/// locked — is the thing they will be looking for.
+/// resolved — is the thing they will be looking for.
 fn log_refusal<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     buffer: &'static LogBuffer,
@@ -357,9 +370,17 @@ fn log_refusal<R: tauri::Runtime>(
     );
 }
 
-/// Whether the conversation an origin names refuses further contributions.
-pub(super) fn thread_is_locked(roots: Roots<'_>, origin: &ConversationOrigin) -> bool {
-    resolve_origin(roots, origin).is_some_and(|d| d.locked)
+/// AGC-FR-19: whether the turn's conversation is resolved now, or was resolved
+/// at any moment after the turn was dispatched.
+///
+/// The second half is what makes a reopen before delivery no route back for the
+/// turn: reopening dispatches nothing, so after a reopen only the author writes
+/// in the conversation again. A conversation that cannot be read is not
+/// resolved here; the append that follows fails on its own terms.
+pub(super) fn resolved_during_turn(plan: &TurnPlan) -> bool {
+    resolve_origin(plan.roots.borrowed(), &plan.origin).is_some_and(|d| {
+        d.resolved || plan.resolution_baseline.is_some_and(|base| d.resolving_events() > base)
+    })
 }
 
 /// The whole life of one turn after dispatch has returned.

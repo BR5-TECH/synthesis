@@ -306,7 +306,7 @@ describe("CMT-FR-12: quoting across a thread's several messages", () => {
   it("keeps pending quotes when a post is refused and clears them on cancel", async () => {
     // CMT-FR-34's "leaving the composer's content intact" is about everything
     // the author assembled, not the textarea alone.
-    await mount({ threads: [threadOfThree()], addCommentError: "discussion_locked" });
+    await mount({ threads: [threadOfThree()], addCommentError: "discussion_resolved" });
     await openRail();
 
     fireEvent.click(screen.getByRole("button", { name: "Quote comment 1 by raver119" }));
@@ -322,11 +322,13 @@ describe("CMT-FR-12: quoting across a thread's several messages", () => {
     expect(document.querySelectorAll(".comment__quoted--pending")).toHaveLength(0);
   });
 
-  it("offers no Quote at all on a locked thread or while no identity resolves", async () => {
-    // CMT-FR-12 is a property of an unlocked card; CMT-FR-24 disables the whole
-    // conversation while nobody can be named as its author.
-    await mount({ threads: [{ ...threadOfThree(), locked: true }] });
+  it("CMT-FR-12, CMT-FR-16: offers no Quote at all on a resolved thread or while no identity resolves", async () => {
+    // CMT-FR-12 is a property of a card that takes comments; CMT-FR-24 disables
+    // the whole conversation while nobody can be named as its author.
+    await mount({ threads: [{ ...threadOfThree(), resolved: true }] });
     await openRail();
+    fireEvent.click(screen.getByRole("button", { name: /resolved thread/i }));
+    expect(await screen.findByTestId(`comment-thread-${threadOfThree().id}`)).toBeInTheDocument();
     expect(screen.queryAllByRole("button", { name: /^Quote comment/ })).toHaveLength(0);
 
     cleanup();

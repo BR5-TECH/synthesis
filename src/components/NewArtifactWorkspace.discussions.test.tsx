@@ -239,8 +239,11 @@ describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-F
     expect(
       within(card).getByRole("button", { name: /^Quote comment 1/ }),
     ).toBeInTheDocument();
+    // DDS-FR-MZQJ: the discussion's menu stands in the column header.
     expect(
-      within(card).getByRole("button", { name: "Thread actions for disc-1" }),
+      await within(screen.getByTestId("discussion-header-actions")).findByRole("button", {
+        name: "Thread actions for disc-1",
+      }),
     ).toBeInTheDocument();
     // …and none that does: no anchor quote, and nothing offering to reanchor it.
     expect(card.querySelector(".comment-card__quote")).toBeNull();
@@ -408,7 +411,9 @@ describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-F
 
     const card = await within(column).findByTestId("comment-thread-disc-1");
     await userEvent.click(
-      within(card).getByRole("button", { name: "Thread actions for disc-1" }),
+      await within(screen.getByTestId("discussion-header-actions")).findByRole("button", {
+        name: "Thread actions for disc-1",
+      }),
     );
     await userEvent.click(screen.getByRole("menuitem", { name: "Mark resolved" }));
 
@@ -442,7 +447,9 @@ describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-F
     const column = await screen.findByTestId("draft-discussion-column");
     const card = await within(column).findByTestId("comment-thread-disc-1");
     await userEvent.click(
-      within(card).getByRole("button", { name: "Thread actions for disc-1" }),
+      await within(screen.getByTestId("discussion-header-actions")).findByRole("button", {
+        name: "Thread actions for disc-1",
+      }),
     );
     await userEvent.click(screen.getByRole("menuitem", { name: "Mark resolved" }));
 

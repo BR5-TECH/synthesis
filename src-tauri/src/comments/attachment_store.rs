@@ -11,7 +11,8 @@ use super::*;
 /// refused stores neither.
 pub(super) struct StagedAttachment {
     attachment: Attachment,
-    /// `None` for a `url`, and for a `blob` whose digest is already on disk.
+    /// `None` for a `url`, a `proposal_hunk`, and a `blob` whose digest is already
+    /// on disk.
     bytes: Option<Vec<u8>>,
 }
 
@@ -75,6 +76,18 @@ pub(super) fn stage_attachment(
                     bytes: bytes.len() as u64,
                 },
                 bytes: if already { None } else { Some(bytes) },
+            })
+        }
+        // CMS-FR-43 / CMS-FR-TQVB: recorded verbatim. It holds no content, so
+        // nothing is stored, and the change it names is neither read nor checked.
+        // Only the shape is checked: a reference with an empty part names nothing.
+        AttachmentInput::ProposalHunk { proposal_id, hunk_id, draft_id, path } => {
+            if [&proposal_id, &hunk_id, &draft_id, &path].iter().any(|v| v.trim().is_empty()) {
+                return Err(ERR_MALFORMED_ATTACHMENT.to_string());
+            }
+            Ok(StagedAttachment {
+                attachment: Attachment::ProposalHunk { proposal_id, hunk_id, draft_id, path },
+                bytes: None,
             })
         }
     }

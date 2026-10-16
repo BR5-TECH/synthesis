@@ -285,7 +285,7 @@ impl Conversation {
 /// `model_calls` where the turn has a budget and the estimate is over it.
 ///
 /// A compaction call that fails or answers with no text leaves the exchange as
-/// it was. Cancellation, the whole-turn deadline, and a locked conversation
+/// it was. Cancellation, the whole-turn deadline, and a resolved conversation
 /// end the turn as they do for any call.
 ///
 /// `call` is the invocation that compaction comes before; the compaction call
@@ -342,7 +342,9 @@ pub(super) fn compact_if_over_budget<R: tauri::Runtime>(
             Ok(())
         }
         Err(end @ (TurnEnd::Cancelled | TurnEnd::TimedOut)) => Err(end),
-        Err(TurnEnd::Failed(FAIL_THREAD_LOCKED)) => Err(TurnEnd::Failed(FAIL_THREAD_LOCKED)),
+        Err(TurnEnd::Failed(FAIL_DISCUSSION_RESOLVED)) => {
+            Err(TurnEnd::Failed(FAIL_DISCUSSION_RESOLVED))
+        }
         _ => {
             log_compaction(app, turns, plan, endpoint, estimate, budget, 0, Outcome::Failed);
             Ok(())

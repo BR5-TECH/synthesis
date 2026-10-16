@@ -81,6 +81,9 @@ export const HUNK_CLASS = "hunk";
 function classesFor(hunk: DecoratedHunk, part: "del" | "add"): string {
   const out = [HUNK_CLASS, `${HUNK_CLASS}--${part}`];
   if (hunk.state === "discussing") out.push(`${HUNK_CLASS}--discussing`);
+  // DCR-FR-07: a rejected change stays drawn while its proposal is open, in the
+  // held tone, so the author can still take it.
+  if (hunk.state === "rejected") out.push(`${HUNK_CLASS}--rejected`);
   if (hunk.lost) out.push(`${HUNK_CLASS}--lost`);
   return out.join(" ");
 }
@@ -97,7 +100,9 @@ export function hunkLabel(hunk: DecoratedHunk): string {
         ? "deletion"
         : "replacement";
   const lost = hunk.lost ? ", no longer in the prompt" : "";
-  return `Change ${hunk.position} of ${hunk.total}, ${kind} proposed by ${hunk.agent}${lost}`;
+  // DCR-FR-10: a rejected change says so, because its tone is the held one.
+  const rejected = hunk.state === "rejected" ? ", rejected" : "";
+  return `Change ${hunk.position} of ${hunk.total}, ${kind} proposed by ${hunk.agent}${rejected}${lost}`;
 }
 
 /**
@@ -146,7 +151,9 @@ function proposedNode(
    * and never the draft.
    */
   const teardown = mountProposedText(body, hunk.draft ?? hunk.after ?? "", {
-    editable: hunk.editable,
+    // DCR-FR-24: only an undecided change takes an edit; a rejected one is
+    // taken as it stands or not at all.
+    editable: hunk.editable && hunk.state !== "rejected",
     label: `Proposed text of ${hunkLabel(hunk)}`,
     onChange: onEdit
       ? (after) => {
@@ -178,6 +185,7 @@ function removalFootNode(hunk: DecoratedHunk): HTMLElement {
   // agrees with the struck text above it rather than reading as a deletion.
   const classes = [HUNK_CLASS, `${HUNK_CLASS}--del-foot`];
   if (hunk.state === "discussing") classes.push(`${HUNK_CLASS}--discussing`);
+  if (hunk.state === "rejected") classes.push(`${HUNK_CLASS}--rejected`);
   if (hunk.lost) classes.push(`${HUNK_CLASS}--lost`);
   foot.className = classes.join(" ");
   foot.setAttribute(HUNK_ATTR, hunk.id);
@@ -211,17 +219,17 @@ function blockBoundary(doc: PMNode, pos: number): number {
 }
 
 /**
- * DCR-FR-20 / DCR-FR-17 / DCR-FR-21: which of a proposal's changes are still
- * drawn in the document.
+ * DCR-FR-20 / DCR-FR-17 / DCR-FR-21 / DCR-FR-07: which of a proposal's changes
+ * are still drawn in the document.
  *
- * A change the author has decided — here, or in another window — is no longer
- * part of the review and leaves the prose at once. Every other change is
- * untouched by that decision, which is the whole of "acceptance is per hunk":
- * accepting one must leave the rest exactly where the author is looking at
- * them. A change held for discussion is undecided, so it stays.
+ * An accepted change — here, or in another window — is in the prompt now and
+ * leaves the prose at once. A rejected change stays drawn while the proposal is
+ * open, so the author can still accept it; the whole review goes when the
+ * proposal closes. Every other change is untouched by a decision, which is the
+ * whole of "acceptance is per hunk".
  */
 export function undecoratedByDecision(hunk: DecoratedHunk): boolean {
-  return hunk.state === "accepted" || hunk.state === "rejected";
+  return hunk.state === "accepted";
 }
 
 /**

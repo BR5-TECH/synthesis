@@ -51,7 +51,7 @@ pub enum RecordRefusal {
     /// PCP-FR-07: the proposed text is what the artifact already holds.
     NoChange,
     /// CMS-FR-17: the conversation takes no further comments.
-    ThreadLocked,
+    ThreadResolved,
     /// Anything else — a write that failed, a thread that is not there.
     NotRecorded,
 }

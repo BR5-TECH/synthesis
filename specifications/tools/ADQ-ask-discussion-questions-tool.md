@@ -107,7 +107,7 @@ Nothing else is added to either body: no closing line, no routing tag, no identi
 - **wrong number of options** — kind `InvalidArgs`, retryable: names which question carried how many, and that two or three are accepted.
 - **blank option** — kind `InvalidArgs`, retryable: names which question's option was blank.
 - **too long** — kind `InvalidArgs`, retryable: names which value exceeded which limit.
-- **conversation locked** — kind `PermissionDenied`, not retryable: *"This conversation is locked and takes no further contribution, so nothing was recorded and no answer is coming."*
+- **conversation resolved** — kind `PermissionDenied`, not retryable: *"This conversation is resolved and takes no further contribution, so nothing was recorded and no answer is coming."*
 - **could not record** — kind `Other`, retryable: *"The questions could not be recorded against this discussion."*
 
 ### Side effects
@@ -143,7 +143,7 @@ Declared in full (per TLC-FR-17). One successful call creates **exactly one** `P
 22. **ADQ-FR-EJHR** A retry after a failure or a restart returns or completes the **same ordered result**. It never appends a subset, never duplicates a comment, never deletes the set before the append commits, and never loses the set.
 23. **ADQ-FR-ZXAF** The answers reach the agents as **fresh later turns** and never by resuming the turn that asked, which ended before there was an answer. The asking turn is retired or discarded without being resumed (per `../core/AGC-agent-conversations.md` AGC-FR-TQLC), and the dispatch follows the discussion's ordinary routing once for the whole submission (per `../ui/CTA-comment-agent-turns.md` CTA-FR-PXJB).
 24. **ADQ-FR-SCUW** The tool records and returns. It waits for no reply, holds no timer, opens no watcher, and leaves no request outstanding, so TLC-FR-16 holds for it unchanged.
-25. **ADQ-FR-VDGT** A discussion whose folded state is **locked** (per `../core/CMS-comments-storage.md` CMS-FR-17) is the not-retryable `PermissionDenied` refusal and nothing is recorded, a conversation that takes no further contribution taking no further question either.
+25. **ADQ-FR-VDGT** A discussion whose folded state is **resolved** (per `../core/CMS-comments-storage.md` CMS-FR-17) is the not-retryable `PermissionDenied` refusal and nothing is recorded, a conversation that takes no further contribution taking no further question either.
 26. **ADQ-FR-HBLN** A reservation that fails for any other reason is the retryable `Other` refusal, and nothing was recorded: the discussion holds no set and its log is byte-for-byte what it was.
 27. **ADQ-FR-KOWX** With no project open the tool produces the shared no-open-project refusal (per TLC-FR-13), there being no discussion to record against.
 28. **ADQ-FR-UIYD** The tool holds no state between calls and no state of its own beyond the turn its constructor bound it to (per TLC-FR-15). Two turns hold two instances and neither observes the other's call; what keeps them from both recording is the reservation of ADQ-FR-XKVR rather than anything either instance holds.

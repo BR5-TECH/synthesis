@@ -59,7 +59,6 @@ function discussion(over: Partial<Discussion> = {}): Discussion {
     target: { kind: "artifact", artifactId: "a.md" },
     fragmentTarget: null,
     comments: [comment("c1", "first"), comment("c2", "second")],
-    locked: false,
     resolved: false,
     createdAt: "2026-02-01T00:00:00Z",
     updatedAt: "2026-02-01T00:00:00Z",
@@ -104,7 +103,6 @@ function surface(
       agents={[]}
       liveTurns={false}
       onReply={vi.fn(async () => undefined)}
-      onSetLock={vi.fn(async () => undefined)}
       onSetResolved={vi.fn(async () => undefined)}
       {...over}
     />
@@ -386,11 +384,11 @@ describe("badges and owner state", () => {
     expect(screen.getByRole("button", { name: /Quote comment 1/ })).toBeInTheDocument();
   });
 
-  it("CVP-FR-44: Locked and Resolved are words", () => {
-    render(surface(discussion({ locked: true, resolved: true })));
+  it("CVP-FR-44, CVP-FR-34: Resolved is a word, and no Locked state exists", () => {
+    render(surface(discussion({ resolved: true })));
     const badges = screen.getByTestId("discussion-badges");
-    expect(badges).toHaveTextContent("Locked");
     expect(badges).toHaveTextContent("Resolved");
+    expect(badges).not.toHaveTextContent("Locked");
   });
 });
 
@@ -433,29 +431,28 @@ describe("accessibility", () => {
 });
 
 describe("lifecycle and operations", () => {
-  it("CVP-FR-34: a locked discussion carries no composer and no Quote action", () => {
-    render(surface(discussion({ locked: true })));
+  it("CVP-FR-34, CMT-FR-16: a resolved discussion carries no composer and no Quote action", () => {
+    render(surface(discussion({ resolved: true })));
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.queryByRole("button", { name: /Quote comment/ })).toBeNull();
     expect(screen.getByText("first")).toBeInTheDocument();
   });
 
-  it("CVP-FR-34: a resolved discussion carries no composer and no Quote action", () => {
-    render(surface(discussion({ resolved: true })));
-    expect(screen.queryByRole("textbox")).toBeNull();
-    expect(screen.queryByRole("button", { name: /Quote comment/ })).toBeNull();
-  });
-
-  it("CMT-FR-15: Lock and Resolve are offered from the thread menu", () => {
-    const onSetLock = vi.fn(async () => undefined);
+  it("CMT-FR-15, CVP-FR-34: the thread menu holds one entry, Mark resolved or Reopen discussion", () => {
     const onSetResolved = vi.fn(async () => undefined);
-    render(surface(discussion(), { onSetLock, onSetResolved }));
+    const view = render(surface(discussion(), { onSetResolved }));
     fireEvent.click(screen.getByRole("button", { name: "Thread actions for d1" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Lock thread" }));
-    expect(onSetLock).toHaveBeenCalledWith("d1", true);
-    fireEvent.click(screen.getByRole("button", { name: "Thread actions for d1" }));
+    expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Mark resolved"]);
     fireEvent.click(screen.getByRole("menuitem", { name: "Mark resolved" }));
     expect(onSetResolved).toHaveBeenCalledWith("d1", true);
+
+    view.rerender(surface(discussion({ resolved: true }), { onSetResolved }));
+    fireEvent.click(screen.getByRole("button", { name: "Thread actions for d1" }));
+    expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
+      "Reopen discussion",
+    ]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Reopen discussion" }));
+    expect(onSetResolved).toHaveBeenLastCalledWith("d1", false);
   });
 
   it("CMT-FR-12: Quote seeds the composer from the message and the quote travels in the post", async () => {
@@ -481,9 +478,29 @@ describe("lifecycle and operations", () => {
     expect(onRetryTurn).toHaveBeenCalledWith("t9");
   });
 
-  it("CTA-FR-XZUO: a locked discussion offers no Retry", () => {
-    render(surface(discussion({ locked: true }), { failedTurn: runningTurn("t9") }));
+  it("CTA-FR-XZUO: a resolved discussion offers no Retry", () => {
+    render(surface(discussion({ resolved: true }), { failedTurn: runningTurn("t9") }));
+    expect(screen.getByTestId("comment-failed")).toBeInTheDocument();
     expect(screen.queryByTestId("comment-failed-retry")).toBeNull();
+  });
+
+  it("CTA-FR-QTNB, CTA-FR-IGNT: a turn refused because the discussion was resolved leaves no failure line", () => {
+    render(surface(discussion({ resolved: true }), { turnFailure: "discussion_resolved" }));
+    expect(screen.queryByTestId("comment-turn-error")).toBeNull();
+  });
+
+  it("CTA-FR-IGNT: any other unrecoverable failure still renders inline", () => {
+    render(surface(discussion(), { turnFailure: "agent_not_found" }));
+    expect(screen.getByTestId("comment-turn-error")).toBeInTheDocument();
+  });
+
+  it("DDS-FR-MZQJ: an owner that hosts the menu receives it, and no message carries it", () => {
+    const host = document.createElement("span");
+    document.body.appendChild(host);
+    render(surface(discussion(), { actionsHost: host }));
+    expect(host.querySelector('[aria-label="Thread actions for d1"]')).not.toBeNull();
+    expect(screen.getAllByRole("button", { name: "Thread actions for d1" })).toHaveLength(1);
+    host.remove();
   });
 
   it("CTA-FR-ZOLW: Cancel on a pending placeholder calls onCancelTurn", () => {

@@ -45,7 +45,6 @@ export function discussion(
     target: { kind: "draft", draftId: DRAFT },
     fragmentTarget: null,
     comments,
-    locked: false,
     resolved: false,
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
@@ -90,7 +89,6 @@ export function columnElement(over: Partial<ColumnProps> = {}) {
       identityBlock={null}
       agents={[]}
       onReply={vi.fn(async () => {})}
-      onSetLock={vi.fn(async () => {})}
       onSetResolved={vi.fn(async () => {})}
       errors={{}}
       blocked={false}

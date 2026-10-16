@@ -181,6 +181,39 @@ fn log_lines(root: &Path, artifact: &str) -> Vec<String> {
     std::fs::read_to_string(path).unwrap_or_default().lines().map(|l| l.to_string()).collect()
 }
 
+/// CMS-FR-WKZR: append one line in the legacy lock vocabulary
+/// (`thread_locked`, `thread_unlocked`), as an older build wrote it. This build
+/// has no write path that produces a `thread_locked`, so a test of the legacy
+/// reading writes the line itself.
+fn write_legacy(
+    root: &crate::fs::RootFs,
+    target: ThreadRef<'_>,
+    discussion_id: &str,
+    body: EventBody,
+    at: &str,
+) {
+    append_as_scoped(
+        root,
+        target.scope,
+        target.file_rel,
+        &human("raver119"),
+        at,
+        vec![(discussion_id.to_string(), body)],
+    )
+    .unwrap();
+}
+
+/// The `type` of every line of a log, in the order the lines stand.
+fn line_types(lines: &[String]) -> Vec<String> {
+    lines
+        .iter()
+        .map(|line| {
+            let value: serde_json::Value = serde_json::from_str(line).unwrap();
+            value["type"].as_str().unwrap_or_default().to_string()
+        })
+        .collect()
+}
+
 fn artifact_target(artifact_id: &str) -> DiscussionTarget {
     DiscussionTarget::Artifact { artifact_id: artifact_id.to_string() }
 }
@@ -248,6 +281,7 @@ mod local_participant;
 mod log_and_fold;
 mod note_discussions;
 mod project_wide_read;
+mod proposal_hunk_reference;
 mod proposal_reference;
 mod question_bodies;
 mod question_sets;

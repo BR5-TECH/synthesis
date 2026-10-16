@@ -111,7 +111,7 @@ pub enum RecordRefusal {
     /// DCP-FR-JGCD: two changes covering the same text, and the later of them.
     HunkOverlap { at: usize, of: usize },
     /// CMS-FR-17: the conversation takes no further comments.
-    ThreadLocked,
+    ThreadResolved,
     /// Anything else — a write that failed, a draft that is not there.
     NotRecorded,
 }
@@ -278,16 +278,17 @@ pub fn pending_for(root: &fs::RootFs, draft_id: &str) -> Option<DraftChangePropo
 /// at all is a name that could not have meant anything.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RevisionTarget {
-    /// The change is one of the standing proposal's and awaits the author.
+    /// The change is one of the standing proposal's, undecided or rejected.
     Revisable,
-    /// A proposal stands and holds no such undecided change.
+    /// A proposal stands and holds no such change that can still be revised.
     NoSuchChange,
     /// The draft holds no standing proposal, so no name could have meant one.
     NothingStanding,
 }
 
-/// DCP-FR-XDRV: whether a change id names something the author has still to
-/// decide on this draft.
+/// DCP-FR-XDRV / PDC-FR-GMWR: whether a change id names something its agent
+/// can still revise on this draft — an undecided or a rejected change of the
+/// standing proposal.
 pub fn revision_target(root: &fs::RootFs, draft_id: &str, hunk_id: &str) -> RevisionTarget {
     let Some(mut record) = pending_for(root, draft_id) else {
         return RevisionTarget::NothingStanding;
@@ -303,7 +304,7 @@ pub fn revision_target(root: &fs::RootFs, draft_id: &str, hunk_id: &str) -> Revi
             .unwrap_or_default();
         reads::backfill_legacy_ledger(root, &dir, &mut record, &prompt);
     }
-    let revisable = record.ledger.iter().any(|row| row.id == hunk_id && row.state.is_undecided());
+    let revisable = record.ledger.iter().any(|row| row.id == hunk_id && row.state.is_revisable());
     if revisable {
         RevisionTarget::Revisable
     } else {
@@ -502,7 +503,7 @@ pub(crate) fn append_decision_comment(
 ///
 /// What is common to both, and what stands **before** either path, is the set of
 /// checks that would otherwise make the decision impossible half-way through
-/// (DCP-FR-15): an identity that does not resolve and a locked conversation are
+/// (DCP-FR-15): an identity that does not resolve and a resolved conversation are
 /// each refused up front, with the prompt untouched, no history entry, and the
 /// proposal still pending.
 fn decide<R: tauri::Runtime>(
@@ -574,10 +575,14 @@ where
     // needs the one ledger row its one change is looked up by.
     backfill_legacy_ledger(root, &dir, &mut record, &prompt_of(root, &draft_id));
 
-    // DCP-FR-17: a change is decided once, exactly as a proposal is.
+    // DCP-FR-11 / DCP-FR-17: a rejection settles an undecided change, and an
+    // acceptance settles an undecided or a rejected one. A rejected change can
+    // still be accepted while the proposal stands; an accepted one is final.
     if let Some(hunk_id) = hunk {
         let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
-        if !row.state.is_undecided() {
+        let open = row.state.is_undecided()
+            || (decision == Decision::Accept && row.state == hunks::HunkState::Rejected);
+        if !open {
             return Err(ERR_HUNK_ALREADY_DECIDED.to_string());
         }
     }
@@ -608,11 +613,11 @@ where
     // checked **before anything is written**, so a decision that cannot be
     // recorded is not taken and the prompt, the history, and the proposal's state
     // are all exactly what they were. The identity has already been resolved by
-    // the command; the lock is this.
+    // the command; the resolution is this.
     if comments::thread_at(store, thread_ref(&draft_id, file_rel.as_ref()), &record.thread_id)?
-        .locked
+        .resolved
     {
-        return Err(comments::ERR_DISCUSSION_LOCKED.to_string());
+        return Err(comments::ERR_DISCUSSION_RESOLVED.to_string());
     }
 
     if decision == Decision::Accept {
@@ -840,7 +845,7 @@ pub fn accept_for_test<R: tauri::Runtime>(
 ///
 /// The two are separate because they fail separately (DCP-FR-15): the record
 /// moving is what makes the decision final, and a comment that could not be
-/// appended — a conversation locked between the author reading the diff and
+/// appended — a conversation resolved between the author reading the diff and
 /// deciding it, most plausibly — must not undo an acceptance whose file has
 /// already been written. The caller logs the miss rather than surfacing it,
 /// there being nothing the author could now do about it.

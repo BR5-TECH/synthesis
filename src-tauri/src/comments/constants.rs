@@ -25,8 +25,8 @@ pub const ERR_NOT_SUPPORTED: &str = "not_supported";
 pub const ERR_EMPTY_BODY: &str = "empty_body";
 /// CMS-FR-59: a fragment move asked of a discussion that has no fragment.
 pub const ERR_NOT_FRAGMENT_TARGETED: &str = "not_fragment_targeted";
-/// CMS-FR-17: the one thing a lock prevents.
-pub const ERR_DISCUSSION_LOCKED: &str = "discussion_locked";
+/// CMS-FR-17: a resolved discussion takes no further comment.
+pub const ERR_DISCUSSION_RESOLVED: &str = "discussion_resolved";
 /// CMS-FR-16: a quote naming a comment outside the discussion it is posted into.
 pub const ERR_QUOTED_COMMENT_NOT_IN_DISCUSSION: &str = "quoted_comment_not_in_discussion";
 /// CMS-FR-21: a fragment whose `end` is not past its `start`, or whose owner is

@@ -49,8 +49,8 @@ export const AGENT_TURN_FAILURES = {
   agentNotFound: "agent_not_found",
   /** It resolves, but its provider or model no longer serves it. */
   agentUnavailable: "agent_unavailable",
-  /** The conversation takes no further contribution. */
-  discussionLocked: "discussion_locked",
+  /** AGC-FR-19: the conversation is resolved and takes no further contribution. */
+  discussionResolved: "discussion_resolved",
   /** None of the material the builder needs could be read. */
   contextUnavailable: "context_unavailable",
   unreachable: "unreachable",

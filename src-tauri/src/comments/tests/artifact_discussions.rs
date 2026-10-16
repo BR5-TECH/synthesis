@@ -233,20 +233,26 @@ fn every_command_but_the_reanchor_serves_an_artifact_discussion() {
     .unwrap();
     assert_eq!(replied.comments.len(), 2);
 
-    let (locked, changed) =
-        set_lock_to(root, target, &discussion.id, true, &human("raver119"), "2026-02-04T00:00:00Z")
-            .unwrap();
-    assert!(locked.locked && changed);
     let (resolved, changed) = set_resolution_to(
         root,
         target,
         &discussion.id,
         true,
         &human("raver119"),
-        "2026-02-05T00:00:00Z",
+        "2026-02-04T00:00:00Z",
     )
     .unwrap();
     assert!(resolved.resolved && changed);
+    let (reopened, changed) = set_resolution_to(
+        root,
+        target,
+        &discussion.id,
+        false,
+        &human("raver119"),
+        "2026-02-05T00:00:00Z",
+    )
+    .unwrap();
+    assert!(!reopened.resolved && changed);
 
     // CMS-FR-59: the one command a discussion refuses, in either scope.
     assert_eq!(
@@ -265,7 +271,6 @@ fn every_command_but_the_reanchor_serves_an_artifact_discussion() {
     // The anchored thread beside it is untouched by all of that.
     let still = list_fragment_discussions_in(root, &artifact);
     assert_eq!(still.len(), 1);
-    assert!(!still[0].locked);
     assert!(!still[0].resolved);
 }
 

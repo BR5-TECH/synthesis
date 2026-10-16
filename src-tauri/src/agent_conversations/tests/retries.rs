@@ -573,15 +573,17 @@ fn a_retry_of_anything_but_the_current_entry_is_refused() {
     );
 }
 
+// AGC-FR-32 / AGC-FR-19: a retry in a conversation resolved since the failure
+// is refused `discussion_resolved`, and the offer stands.
 #[test]
 fn a_refused_retry_leaves_the_offer_standing() {
-    // AGC-FR-32 (the locked half) / AGC-FR-32, CTA-FR-QDDG.
+    // CTA-FR-QDDG.
     let h = Harness::new(vec![Err(FAIL_UNREACHABLE); MAX_ATTEMPTS]);
     h.create_agent("arch", "");
     let (failed, thread) = run_one(&h, "arch");
     assert!(failed.retry_permitted);
 
-    crate::comments::set_lock_in(
+    crate::comments::set_resolution_in(
         &h.root(),
         "spec.md",
         &thread.id,
@@ -589,15 +591,15 @@ fn a_refused_retry_leaves_the_offer_standing() {
         &human("ada"),
         "2024-01-01T00:00:00Z",
     )
-    .expect("lock");
+    .expect("resolve");
 
     let app = h.app.handle().clone();
     assert_eq!(
         retry_impl(&app, Roots::same(&h.root()), PROJECT_KEY, &failed.id).unwrap_err(),
-        FAIL_THREAD_LOCKED,
+        FAIL_DISCUSSION_RESOLVED,
     );
     // The offer is exactly where it was, so the author can take it again once
-    // the thread is unlocked rather than losing the only route back to it.
+    // the thread is reopened rather than losing the only route back to it.
     let entries = h.turns().recoverable_failures(None);
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].id, failed.id);

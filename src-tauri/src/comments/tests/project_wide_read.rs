@@ -43,8 +43,14 @@ fn list_all_returns_every_thread_with_its_artifact_most_recent_first() {
     let older = open(root, "specs/a.md", anchor(0, 3, "one"), "first", "2024-01-01T00:00:00Z");
     let locked = open(root, "specs/b.md", anchor(0, 3, "two"), "second", "2024-01-02T00:00:00Z");
     let resolved = open(root, "specs/b.md", anchor(9, 12, "six"), "third", "2024-01-03T00:00:00Z");
-    set_lock_in(root, "specs/b.md", &locked.id, true, &human("raver119"), "2024-01-04T00:00:00Z")
-        .unwrap();
+    // CMS-FR-WKZR: a discussion an older build resolved is listed as resolved.
+    write_legacy(
+        root,
+        locked.log_ref(),
+        &locked.id,
+        EventBody::ThreadLocked,
+        "2024-01-04T00:00:00Z",
+    );
     set_resolution_in(
         root,
         "specs/b.md",
@@ -59,14 +65,14 @@ fn list_all_returns_every_thread_with_its_artifact_most_recent_first() {
     assert_eq!(items.len(), 3, "no thread is withheld for its lock or resolution");
 
     // CMS-FR-32: most-recently-active first — the resolve at ..05 is the
-    // latest event, then the lock at ..04, then the untouched thread.
+    // latest event, then the resolution at ..04, then the untouched thread.
     assert_eq!(listed_ids(&items), vec![resolved.id.clone(), locked.id.clone(), older.id.clone()]);
 
     // CMS-FR-33: each thread names the artifact it was opened against.
     let by_id = |id: &str| items.iter().find(|i| i.discussion.id == id).unwrap();
     assert_eq!(by_id(&older.id).discussion.file_rel(), "specs/a.md");
     assert_eq!(by_id(&locked.id).discussion.file_rel(), "specs/b.md");
-    assert!(by_id(&locked.id).discussion.locked);
+    assert!(by_id(&locked.id).discussion.resolved);
     assert!(by_id(&resolved.id).discussion.resolved);
     assert!(items.iter().all(|i| !i.owner_unavailable), "every artifact exists on disk");
 }

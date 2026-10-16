@@ -259,7 +259,7 @@ fn every_scripted_failure_terminates_its_turn_and_appends_nothing() {
 }
 
 #[test]
-fn an_unresolvable_nickname_an_unavailable_agent_and_a_locked_thread_refuse_before_registering() {
+fn an_unresolvable_nickname_an_unavailable_agent_and_a_resolved_thread_refuse_before_registering() {
     // AGC-FR-02, AGC-FR-15, AGC-FR-19.
     let h = Harness::new(vec![Ok("ok".into())]);
     h.create_agent("arch", "");
@@ -270,7 +270,7 @@ fn an_unresolvable_nickname_an_unavailable_agent_and_a_locked_thread_refuse_befo
     assert_eq!(h.dispatch("nobody", origin.clone(), &trigger).unwrap_err(), FAIL_AGENT_NOT_FOUND,);
     assert!(h.turns().in_flight(None).is_empty(), "nothing was registered",);
 
-    crate::comments::set_lock_in(
+    crate::comments::set_resolution_in(
         &h.root(),
         "spec.md",
         &thread.id,
@@ -278,9 +278,9 @@ fn an_unresolvable_nickname_an_unavailable_agent_and_a_locked_thread_refuse_befo
         &human("ada"),
         "2026-01-01T00:00:03Z",
     )
-    .expect("lock");
-    assert_eq!(h.dispatch("arch", origin.clone(), &trigger).unwrap_err(), FAIL_THREAD_LOCKED,);
-    crate::comments::set_lock_in(
+    .expect("resolve");
+    assert_eq!(h.dispatch("arch", origin.clone(), &trigger).unwrap_err(), FAIL_DISCUSSION_RESOLVED,);
+    crate::comments::set_resolution_in(
         &h.root(),
         "spec.md",
         &thread.id,
@@ -288,7 +288,7 @@ fn an_unresolvable_nickname_an_unavailable_agent_and_a_locked_thread_refuse_befo
         &human("ada"),
         "2026-01-01T00:00:04Z",
     )
-    .expect("unlock");
+    .expect("reopen");
 
     // An agent whose provider has been cleared.
     h.store().save_ai_api_registry(vec![], None).expect("clear");
@@ -296,7 +296,7 @@ fn an_unresolvable_nickname_an_unavailable_agent_and_a_locked_thread_refuse_befo
 }
 
 #[test]
-fn a_thread_locked_while_the_turn_was_in_flight_fails_the_turn_and_appends_nothing() {
+fn a_thread_resolved_while_the_turn_was_in_flight_fails_the_turn_and_appends_nothing() {
     // AGC-FR-02, AGC-FR-15's third clause / AGC-FR-19.
     let h = Harness::with(vec![Ok("too late".into())], Duration::from_millis(250), 4);
     h.create_agent("arch", "");
@@ -304,7 +304,7 @@ fn a_thread_locked_while_the_turn_was_in_flight_fails_the_turn_and_appends_nothi
     let turn = h
         .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
-    crate::comments::set_lock_in(
+    crate::comments::set_resolution_in(
         &h.root(),
         "spec.md",
         &thread.id,
@@ -312,16 +312,89 @@ fn a_thread_locked_while_the_turn_was_in_flight_fails_the_turn_and_appends_nothi
         &human("ada"),
         "2026-01-01T00:00:05Z",
     )
-    .expect("lock");
+    .expect("resolve");
 
     let terminal = wait_for_terminal(&h, &turn.id);
     assert_eq!(terminal.state, AgentTurnState::Failed);
-    assert_eq!(terminal.failure.as_deref(), Some(FAIL_THREAD_LOCKED));
+    assert_eq!(terminal.failure.as_deref(), Some(FAIL_DISCUSSION_RESOLVED));
     // CVL-FR-18: a conversation that takes no further contribution is not one
     // calling again would change, so no offer to retry is left behind.
     assert!(!terminal.retry_permitted);
     assert!(h.turns().recoverable_failures(None).is_empty());
     assert_eq!(h.threads("spec.md")[0].comments.len(), 1);
+}
+
+// AGC-FR-19 / AGC-FR-15: a conversation resolved while the turn is in flight
+// fails the turn `discussion_resolved` and gains no line, also where the author
+// reopened it before the answer arrived. The model call is held at a gate, so
+// the resolution and the reopen happen while it is in flight by construction.
+#[test]
+fn a_thread_resolved_and_reopened_while_the_turn_was_in_flight_still_fails_the_turn() {
+    let (entered, reached_model) = std::sync::mpsc::channel();
+    let gate = Arc::new((Mutex::new(false), Condvar::new()));
+    let h = Harness::with_seam(
+        Box::new(HeldCompletion { entered: Mutex::new(entered), gate: gate.clone() }),
+        4,
+    );
+    h.create_agent("arch", "");
+    let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
+    let turn = h
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
+        .expect("dispatch");
+    reached_model.recv().expect("the call reached the model");
+
+    for (resolved, at) in [(true, "2026-01-01T00:00:05Z"), (false, "2026-01-01T00:00:06Z")] {
+        crate::comments::set_resolution_in(
+            &h.root(),
+            "spec.md",
+            &thread.id,
+            resolved,
+            &human("ada"),
+            at,
+        )
+        .expect("resolution");
+    }
+    assert!(!h.threads("spec.md")[0].resolved, "the conversation is active again");
+    {
+        let (lock, cvar) = &*gate;
+        *lock.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        cvar.notify_all();
+    }
+
+    let terminal = wait_for_terminal(&h, &turn.id);
+    assert_eq!(terminal.state, AgentTurnState::Failed);
+    assert_eq!(terminal.failure.as_deref(), Some(FAIL_DISCUSSION_RESOLVED));
+    assert_eq!(FAIL_DISCUSSION_RESOLVED, "discussion_resolved");
+    assert!(!terminal.retry_permitted, "CVL-FR-18: not recoverable");
+    assert_eq!(h.threads("spec.md")[0].comments.len(), 1, "nothing was appended");
+}
+
+// AGC-FR-19: a reopen before dispatch leaves no trace on later turns. A
+// conversation resolved and reopened *before* a turn is dispatched delivers
+// that turn's answer as usual.
+#[test]
+fn a_thread_reopened_before_dispatch_delivers_the_turn() {
+    let h = Harness::new(vec![Ok("Here is my answer.".into())]);
+    h.create_agent("arch", "");
+    let thread = h.seed_artifact_thread("spec.md", "Some artifact source here.");
+    for (resolved, at) in [(true, "2026-01-01T00:00:05Z"), (false, "2026-01-01T00:00:06Z")] {
+        crate::comments::set_resolution_in(
+            &h.root(),
+            "spec.md",
+            &thread.id,
+            resolved,
+            &human("ada"),
+            at,
+        )
+        .expect("resolution");
+    }
+    let turn = h
+        .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
+        .expect("dispatch");
+
+    let terminal = wait_for_terminal(&h, &turn.id);
+    assert_eq!(terminal.state, AgentTurnState::Delivered);
+    assert_eq!(h.threads("spec.md")[0].comments.len(), 2);
 }
 
 // ---------------------------------------------------------------------------

@@ -679,7 +679,7 @@ describe("a Markdown body is only ever rendered on its own surface", () => {
   it("emits the panel modifier from one component, onto a host that sizes itself", () => {
     const components = [
       "CommentMarkdown.tsx",
-      "CommentRail/ThreadCard.tsx",
+      "discussion/DiscussionMessages.tsx",
       "Comments.tsx",
       "Notes/index.tsx",
     ]
@@ -697,7 +697,7 @@ describe("a Markdown body is only ever rendered on its own surface", () => {
     const hosts = new Set(["comment__body"]);
     for (const file of [
       "CommentMarkdown.tsx",
-      "CommentRail/ThreadCard.tsx",
+      "discussion/DiscussionMessages.tsx",
       "Comments.tsx",
       "Notes/index.tsx",
       "Flow/nodes.tsx",

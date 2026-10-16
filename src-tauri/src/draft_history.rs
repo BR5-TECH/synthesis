@@ -296,6 +296,16 @@ pub(crate) struct Journal {
     comment_body: String,
     created_at: String,
     phase: Phase,
+    /// DHS-FR-17 / DCP-FR-13: the state the accepted hunk held before the
+    /// operation began, which a rollback restores. Absent on a whole-proposal
+    /// acceptance and on a journal an older build left, which read as a hunk
+    /// that was undecided.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    hunk_prior_state: Option<draft_proposals::hunks::HunkState>,
+    /// When the accepted hunk was decided before the operation began, for a
+    /// hunk that was rejected then.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    hunk_prior_decided_at: Option<String>,
     /// The proposing agent, carried into the entry's source metadata.
     agent: Participant,
     /// The acting human the decision comment is stamped with.
@@ -656,6 +666,8 @@ fn stage_for_test(
         comment_body: format!("Accepted the proposed change to `{}`.", proposal.path),
         created_at: now_rfc3339(),
         phase,
+        hunk_prior_state: None,
+        hunk_prior_decided_at: None,
         agent: proposal.agent.clone(),
         comment_by: by.clone(),
     };
@@ -733,6 +745,62 @@ pub(crate) fn stage_committed_for_test(
     by: &Participant,
 ) -> Result<Journal, String> {
     stage_for_test(root, draft_id, proposal, prior, by, Phase::Committed)
+}
+
+/// A process killed inside the acceptance of **one hunk**, before the commit
+/// point, for a test in another module (DCP-FR-13, DHS-FR-19).
+///
+/// The journal records the state the hunk held before, and the hunk's row is
+/// already moved to `accepted`, which is what a reconciliation must undo. The
+/// candidate is the prompt as it stands, so the operation writes no entry and
+/// the restored state is the only thing a rollback has to put back.
+#[cfg(test)]
+pub(crate) fn stage_hunk_prepared_for_test(
+    root: &fs::RootFs,
+    draft_id: &str,
+    proposal: &DraftChangeProposal,
+    hunk_id: &str,
+    by: &Participant,
+) -> Result<(), String> {
+    let hist = drafts::draft_dir(root, draft_id)?.join(drafts::HISTORY_DIR);
+    let prompt = drafts::require_prompt(root, draft_id)?;
+    let prior = root
+        .read_bytes(drafts::draft_file_abs_path(root, draft_id, &prompt)?)
+        .map_err(|e| e.to_string())?;
+    let row = proposal.ledger.iter().find(|row| row.id == hunk_id);
+    let journal = Journal {
+        operation_id: new_note_id(),
+        draft_id: draft_id.to_string(),
+        proposal_id: proposal.id.clone(),
+        hunk_id: Some(hunk_id.to_string()),
+        resolves: false,
+        path: prompt,
+        prior_sha256: fs::sha256_bytes(&prior),
+        candidate_sha256: fs::sha256_bytes(&prior),
+        entry_id: None,
+        original_entry_id: None,
+        entry_seq: 0,
+        comment_id: new_note_id(),
+        event_id: new_note_id(),
+        thread_id: proposal.thread_id.clone(),
+        comment_body: String::new(),
+        created_at: now_rfc3339(),
+        phase: Phase::Prepared,
+        hunk_prior_state: row.map(|row| row.state),
+        hunk_prior_decided_at: row.and_then(|row| row.decided_at.clone()),
+        agent: proposal.agent.clone(),
+        comment_by: by.clone(),
+    };
+    root.write_bytes_atomic(hist.join(JOURNAL_PRIOR), &prior).map_err(|e| e.to_string())?;
+    root.write_toml_atomic(hist.join(JOURNAL_FILE), &journal).map_err(|e| e.to_string())?;
+    draft_proposals::set_hunk_state(
+        root,
+        draft_id,
+        &proposal.id,
+        hunk_id,
+        draft_proposals::hunks::HunkState::Accepted,
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]

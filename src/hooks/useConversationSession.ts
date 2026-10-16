@@ -3,7 +3,7 @@
  * (`CVP-conversation-presentation.md` CVP-FR-33, CVP-FR-36).
  *
  * The tab renders a discussion with no owner layout behind it, so it needs the
- * discussion itself and the three operations a card invokes: reply, Lock, and
+ * discussion itself and the two operations a card invokes: reply and
  * Resolve. Every one is the operation every owner invokes, and each one
  * dispatches turns by the conversation's own rules, so the agents a message
  * reaches do not depend on where it was typed.
@@ -21,7 +21,6 @@ import { useCallback, useMemo, useRef } from "react";
 import {
   addComment as addCommentApi,
   dispatchAgentTurn,
-  setDiscussionLock,
   setDiscussionResolution,
 } from "../api";
 import { addressesEveryone, agentRoster } from "../components/agentTags";
@@ -139,7 +138,6 @@ export interface ConversationSession {
     quotes: CommentQuote[],
     attachments: AttachmentInput[],
   ) => Promise<void>;
-  setLock: (discussionId: string, locked: boolean) => Promise<void>;
   setResolved: (discussionId: string, resolved: boolean) => Promise<void>;
 }
 
@@ -185,19 +183,6 @@ export function useConversationSession(
     [locator],
   );
 
-  const setLock = useCallback(
-    async (discussionId: string, locked: boolean) => {
-      try {
-        const updated = await setDiscussionLock({ ...locator, discussionId, locked });
-        setDiscussionError(discussionId, undefined);
-        publishThread(updated);
-      } catch (e) {
-        setDiscussionError(discussionId, errorText(e));
-      }
-    },
-    [locator],
-  );
-
   const setResolved = useCallback(
     async (discussionId: string, resolved: boolean) => {
       try {
@@ -215,5 +200,5 @@ export function useConversationSession(
     [locator],
   );
 
-  return { thread, identity, identityError, agents, reply, setLock, setResolved };
+  return { thread, identity, identityError, agents, reply, setResolved };
 }

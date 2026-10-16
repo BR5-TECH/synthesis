@@ -132,11 +132,11 @@ fn a_recording_posts_one_comment_carrying_one_prompt_proposal_attachment() {
 
 #[test]
 fn a_recording_whose_append_fails_leaves_nothing_behind() {
-    // PCP-FR-06: a locked thread is the append that cannot happen.
+    // PCP-FR-06: a resolved thread is the append that cannot happen.
     let f = Fixture::new();
-    f.lock();
+    f.resolve_conversation();
     let before = f.discussion().comments.len();
-    assert_eq!(f.propose(PROPOSED), Err(RecordRefusal::ThreadLocked));
+    assert_eq!(f.propose(PROPOSED), Err(RecordRefusal::ThreadResolved));
     assert!(f.folder_files().is_empty(), "neither the record nor the candidate remains",);
     assert_eq!(f.discussion().comments.len(), before);
 }

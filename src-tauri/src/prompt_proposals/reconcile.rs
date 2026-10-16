@@ -275,11 +275,11 @@ where
     let (thread_artifact, discussion) = locate_thread(root, store, &record.thread_id)?;
     // PCP-FR-16: the two conditions that would make the append impossible are
     // checked **before anything is written**. The identity has already been
-    // resolved by the command; the lock is this.
+    // resolved by the command; the resolution is this.
     if comments::thread_at(store, thread_ref(&thread_artifact, discussion), &record.thread_id)?
-        .locked
+        .resolved
     {
-        return Err(comments::ERR_DISCUSSION_LOCKED.to_string());
+        return Err(comments::ERR_DISCUSSION_RESOLVED.to_string());
     }
 
     if decision == Decision::Accept {

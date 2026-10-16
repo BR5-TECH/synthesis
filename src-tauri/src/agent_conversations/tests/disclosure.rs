@@ -501,10 +501,10 @@ fn an_unreadable_file_leaves_the_rest_of_an_artifact_discussion_intact() {
     assert_eq!(tags, vec![TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT]);
 }
 
-/// CMS-FR-54 / AGC-FR-02: a locked artifact discussion takes no further
-/// contribution, and the refusal is knowable before any model is called.
+/// CMS-FR-54 / AGC-FR-02 / AGC-FR-19: a resolved artifact discussion takes no
+/// further contribution, and the refusal is knowable before any model is called.
 #[test]
-fn a_locked_artifact_discussion_refuses_its_turn() {
+fn a_resolved_artifact_discussion_refuses_its_turn() {
     let h = Harness::new(vec![Ok("ok".into())]);
     h.create_agent("arch", "Argue about structure.");
     std::fs::write(h.root().join("spec.md"), "# Spec").expect("spec");
@@ -518,7 +518,7 @@ fn a_locked_artifact_discussion_refuses_its_turn() {
         crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:00Z" },
     )
     .expect("discussion");
-    crate::comments::set_lock_to(
+    crate::comments::set_resolution_to(
         &h.root(),
         crate::comments::ThreadRef::artifact_discussion("spec.md"),
         &discussion.id,
@@ -526,12 +526,12 @@ fn a_locked_artifact_discussion_refuses_its_turn() {
         &human("ada"),
         "2026-01-01T00:01:00Z",
     )
-    .expect("lock");
+    .expect("resolve");
 
     let err = h
         .dispatch("arch", ConversationOrigin::of(&discussion), &discussion.comments[0].id)
-        .expect_err("a locked conversation takes no contribution");
-    assert!(err.contains("discussion_locked"), "got {err}");
+        .expect_err("a resolved conversation takes no contribution");
+    assert_eq!(err, "discussion_resolved");
     h.settle();
     assert!(h.seam.requests().is_empty(), "no model was called");
 }

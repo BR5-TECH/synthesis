@@ -4,7 +4,7 @@
 //! one JSON object per line, in a JSONL log the **repository machine store**
 //! holds (CMS-FR-01, CMS-FR-04, `RMS-repository-machine-storage.md`
 //! RMS-FR-ZXHM). Nothing is ever rewritten or removed: a thread is opened,
-//! comments are added, it is locked, resolved, reopened and re-anchored, and the
+//! comments are added, it is resolved, reopened and re-anchored, and the
 //! state the UI renders is a fold over those lines (CMS-FR-09).
 //!
 //! **Two roots, and only one of them holds a log.** Every path this module

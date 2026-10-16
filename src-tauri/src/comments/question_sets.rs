@@ -271,8 +271,8 @@ pub fn read_discussion_question_set<R: tauri::Runtime>(
 /// tool and by nothing a frontend can call.
 ///
 /// The order of the refusals is the spec's: the thread is resolved first (which
-/// also yields the scope), an anchored thread is `not_supported`, a locked
-/// discussion is `thread_locked`, and only then is the slot claimed.
+/// also yields the scope), an anchored thread is `not_supported`, a resolved
+/// discussion is `discussion_resolved`, and only then is the slot claimed.
 pub fn reserve_discussion_question_set<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     root: &crate::fs::RootFs,
@@ -303,8 +303,8 @@ pub fn reserve_question_set_record(
     let discussion = discussion_ref_of(&thread).ok_or_else(|| ERR_NOT_SUPPORTED.to_string())?;
     // CMS-FR-QLDW / ADQ-FR-VDGT: a conversation that takes no further
     // contribution takes no further question either.
-    if thread.locked {
-        return Err(ERR_DISCUSSION_LOCKED.to_string());
+    if thread.resolved {
+        return Err(ERR_DISCUSSION_RESOLVED.to_string());
     }
     let target = discussion.thread_ref();
     let path = target.scope.question_set_path(root, thread_id)?;

@@ -320,7 +320,6 @@ describe("state that belongs to the discussion (CVP-FR-47, DDS-FR-LPSC)", () => 
         agents={[]}
         identity={HUMAN}
         onReply={vi.fn(async () => {})}
-        onSetLock={vi.fn(async () => {})}
         onSetResolved={vi.fn(async () => {})}
       />,
     );

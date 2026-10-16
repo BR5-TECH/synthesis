@@ -35,7 +35,7 @@ export function failedTurnDetail(turn: AgentTurn): string | null {
  *
  * The typed failures are matched on rather than printed, for the same reason
  * CMT-FR-34's are: each names a different thing for the author to do next — fix
- * a provider, unlock a thread, or simply ask again.
+ * a provider, reopen a discussion, or simply ask again.
  */
 export function turnFailureMessage(raw: string): string {
   switch (raw) {
@@ -43,8 +43,8 @@ export function turnFailureMessage(raw: string): string {
       return "That agent is not enrolled in this project.";
     case AGENT_TURN_FAILURES.agentUnavailable:
       return "That agent's provider or model is no longer available. Check Global settings → Agents.";
-    case AGENT_TURN_FAILURES.discussionLocked:
-      return "This thread was locked, so the agent could not answer.";
+    case AGENT_TURN_FAILURES.discussionResolved:
+      return "This discussion was resolved, so the agent could not answer.";
     case AGENT_TURN_FAILURES.contextUnavailable:
       return "The material under discussion could not be read, so the agent was not asked.";
     case AGENT_TURN_FAILURES.unreachable:
@@ -71,15 +71,15 @@ export function turnFailureMessage(raw: string): string {
 /**
  * CMT-FR-34: what a refused operation says to the author.
  *
- * The wire strings are matched on rather than printed: `discussion_locked` is a fact
+ * The wire strings are matched on rather than printed: `discussion_resolved` is a fact
  * about what someone else did and is recoverable by reloading, while
  * `invalid_fragment` is not something the author can act on at all. Rendering the
  * slug would leak an implementation detail and tell them neither.
  */
 export function commentErrorMessage(raw: string): string {
   switch (raw) {
-    case COMMENT_ERRORS.discussionLocked:
-      return "This thread was locked, so it takes no new comments.";
+    case COMMENT_ERRORS.discussionResolved:
+      return "This discussion was resolved, so it takes no new comments.";
     case COMMENT_ERRORS.discussionNotFound:
       return "This thread is no longer in the artifact's comments.";
     case COMMENT_ERRORS.quotedCommentNotInDiscussion:

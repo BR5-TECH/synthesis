@@ -51,7 +51,6 @@ function discussion(over: Partial<Discussion> = {}): Discussion {
     target: { kind: "note", noteId: "n1" },
     fragmentTarget: null,
     comments: [comment("c1", "first"), comment("c2", "second")],
-    locked: false,
     resolved: false,
     createdAt: "2026-02-01T00:00:00Z",
     updatedAt: "2026-02-01T00:00:00Z",

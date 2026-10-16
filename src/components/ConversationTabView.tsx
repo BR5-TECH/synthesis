@@ -135,7 +135,8 @@ export function ConversationTabView({
             <span title={subject}>❝ {subject}</span>
             {thread && (
               <span>
-                {thread.resolved ? "Resolved" : thread.locked ? "Locked" : "Active"}
+                {/* CVP-FR-34: the two lifecycle states, in words. */}
+                {thread.resolved ? "Resolved" : "Active"}
               </span>
             )}
           </div>
@@ -155,7 +156,6 @@ export function ConversationTabView({
             availability={available ? "available" : "unavailable"}
             ownerLabel={ownerLabel}
             onReply={session.reply}
-            onSetLock={session.setLock}
             onSetResolved={session.setResolved}
           />
         ) : opening && tab.ownerTarget ? (

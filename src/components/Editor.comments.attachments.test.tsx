@@ -181,10 +181,12 @@ describe("CMT-FR-15 / CMT-FR-45: how an attachment is added", () => {
     expect(await screen.findByText("pasted.png")).toBeInTheDocument();
   });
 
-  it("carries no Attach control on a locked thread", async () => {
-    // CMT-FR-15: a locked card has no composer and therefore nowhere to attach.
-    await mount({ threads: [makeThread({ locked: true })] });
+  it("CMT-FR-45, CMT-FR-16: carries no Attach control on a resolved thread", async () => {
+    // A resolved card has no composer and therefore nowhere to attach.
+    await mount({ threads: [makeThread({ resolved: true })] });
     await openRail();
+    fireEvent.click(screen.getByRole("button", { name: /resolved thread/i }));
+    expect(await screen.findByTestId("comment-thread-t1")).toBeInTheDocument();
     expect(screen.queryByTestId("comment-attach-button")).not.toBeInTheDocument();
   });
 });
@@ -461,7 +463,8 @@ describe("CMT-FR-14 / CMT-FR-50: an attachment is immutable with its comment", (
 
     fireEvent.click(screen.getByRole("button", { name: /Thread actions/ }));
     const menu = screen.getByRole("menu");
-    expect(within(menu).getAllByRole("menuitem")).toHaveLength(2);
+    // CMT-FR-15: the menu holds its one entry, and nothing about attachments.
+    expect(within(menu).getAllByRole("menuitem")).toHaveLength(1);
     expect(menu).not.toHaveTextContent(/attach/i);
   });
 });

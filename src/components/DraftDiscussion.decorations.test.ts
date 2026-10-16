@@ -170,10 +170,18 @@ describe("what each kind of change draws (DCR-FR-05, DCR-FR-07)", () => {
     expect(removals(decos)).toHaveLength(0);
   });
 
-  it("DCR-FR-17, DCR-FR-21: a decided change draws nothing at all", () => {
-    for (const state of ["accepted", "rejected"] as const) {
-      expect(drawn(doc(), [hunk({ state, from: 9, to: 22 })])).toHaveLength(0);
-    }
+  it("DCR-FR-17, DCR-FR-21: an accepted change draws nothing at all", () => {
+    expect(drawn(doc(), [hunk({ state: "accepted", from: 9, to: 22 })])).toHaveLength(0);
+  });
+
+  it("DCR-FR-07, DCR-FR-17: a rejected change of an open proposal stays drawn, in the held tone", () => {
+    const body = schema.nodes.doc.create(null, [para("The old body.")]);
+    const decos = drawn(body, [
+      hunk({ kind: "del", after: null, state: "rejected", from: 1, to: 14 }),
+    ]);
+    expect(removals(decos)[0].type.attrs?.class).toContain("hunk--rejected");
+    const foot = widgetElement(blocks(decos, "hunk--del-foot")[0]);
+    expect(foot.classList.contains("hunk--rejected")).toBe(true);
   });
 });
 

@@ -152,7 +152,7 @@ pub fn resolve_comment_author_identity(
 ///
 /// Called on the *success* path alone, which is what makes CMS-FR-52 true without
 /// a second rule: a refused write returns early and never reaches here, and a
-/// no-op lock or resolution returns the discussion unchanged from a path that
+/// no-op resolution returns the discussion unchanged from a path that
 /// appended nothing — so a consumer never redraws for a write that did not happen.
 ///
 /// The emit result is discarded deliberately: an event must never take down the
@@ -306,27 +306,6 @@ pub(super) fn locate_discussion_for_attachment(
         }
     }
     read_discussion_by_id(root, worktree, discussion_id)
-}
-
-#[tauri::command]
-pub fn set_discussion_lock<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-    discussion_id: String,
-    locked: bool,
-    store: State<'_, GlobalSettingsStore>,
-    project: State<'_, ProjectState>,
-) -> Result<Discussion, String> {
-    let root = project.require_store()?;
-    let worktree = project.require_root()?;
-    let by = acting_participant(&store, &project)?;
-    let current = discussion_for_write(&root, &worktree, &discussion_id)?;
-    let (discussion, appended) =
-        set_lock_to(&root, current.log_ref(), &discussion_id, locked, &by, &now_rfc3339())?;
-    // CMS-FR-52: silent when the discussion already held the state asked for.
-    if appended {
-        emit_discussion_changed(&app, &discussion);
-    }
-    Ok(discussion)
 }
 
 #[tauri::command]

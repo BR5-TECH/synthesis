@@ -146,7 +146,7 @@ fn an_unknown_thread_is_the_typed_not_found() {
             Vec::new(),
             Stamp { by: &by, at: "t" },
         ),
-        set_lock_in(root, "specs/a.md", "nope", true, &by, "t"),
+        set_resolution_in(root, "specs/a.md", "nope", true, &by, "t"),
         set_resolution_in(root, "specs/a.md", "nope", true, &by, "t"),
         reanchor_in(root, "specs/a.md", "nope", anchor(0, 1, "a"), &by, "t"),
     ] {
@@ -255,10 +255,10 @@ fn every_step_adds_exactly_one_line_and_rewrites_none() {
                 Stamp { by: &by, at: "2026-01-03T00:00:00Z" },
             )
         }),
-        Box::new(|| set_lock_in(root, "specs/a.md", &id, true, &by, "2026-01-04T00:00:00Z")),
-        Box::new(|| set_resolution_in(root, "specs/a.md", &id, true, &by, "2026-01-05T00:00:00Z")),
-        Box::new(|| set_resolution_in(root, "specs/a.md", &id, false, &by, "2026-01-06T00:00:00Z")),
-        Box::new(|| set_lock_in(root, "specs/a.md", &id, false, &by, "2026-01-07T00:00:00Z")),
+        Box::new(|| set_resolution_in(root, "specs/a.md", &id, true, &by, "2026-01-04T00:00:00Z")),
+        Box::new(|| set_resolution_in(root, "specs/a.md", &id, false, &by, "2026-01-05T00:00:00Z")),
+        Box::new(|| set_resolution_in(root, "specs/a.md", &id, true, &by, "2026-01-06T00:00:00Z")),
+        Box::new(|| set_resolution_in(root, "specs/a.md", &id, false, &by, "2026-01-07T00:00:00Z")),
         Box::new(|| {
             reanchor_in(root, "specs/a.md", &id, anchor(9, 12, "abc"), &by, "2026-01-08T00:00:00Z")
         }),
@@ -267,8 +267,6 @@ fn every_step_adds_exactly_one_line_and_rewrites_none() {
     let allowed = [
         "discussion_opened",
         "comment_added",
-        "thread_locked",
-        "thread_unlocked",
         "thread_resolved",
         "thread_reopened",
         "fragment_moved",

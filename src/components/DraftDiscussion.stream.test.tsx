@@ -237,30 +237,29 @@ describe("a submitted exchange is one card (DQA-FR-KYWR, DQA-FR-ZPGM, DQA-FR-BHX
     ]);
     const card = await screen.findByTestId("dds-question-card");
     // Read-only about the **answer**: no field to change it with, no
-    // re-selection, no reopen. Every control the card does carry is one the
-    // conversation already offered — Quote, and the thread's own menu, which
-    // this card holds because it is the comment the thread opens with
-    // (CMT-FR-12, CMT-FR-15, CMT-FR-HQNV).
+    // re-selection, no reopen. The one control the card carries is the one the
+    // conversation already offers on a message — Quote (CMT-FR-12). The
+    // thread's own menu stands in the column header (DDS-FR-MZQJ).
     expect(card.querySelectorAll("input")).toHaveLength(0);
     const named = [...card.querySelectorAll("button")].map(
       (c) => c.getAttribute("title") ?? c.getAttribute("aria-label"),
     );
-    expect(named.sort()).toEqual(
-      ["Quote", "Thread actions for disc-1"].sort(),
-    );
+    expect(named).toEqual(["Quote"]);
   });
 
-  it("CMT-FR-15: a discussion that opens with a question carries the thread's menu on its card", async () => {
-    // The menu belongs to the comment the thread opens with, whatever form that
-    // comment took. A discussion that begins with a submitted question would
-    // otherwise have no lock, no resolve, and no detach anywhere in the column.
+  it("DDS-FR-MZQJ, CMT-FR-15: a discussion that opens with a question carries its menu in the column header", async () => {
+    // Whatever form the opening comment took, the menu is in one place.
     renderColumn([
       question,
       message("c2", ME, "**Selected option:** Delete uploaded assets after failure"),
     ]);
     const card = await screen.findByTestId("dds-question-card");
     expect(
-      within(card).getByRole("button", { name: "Thread actions for disc-1" }),
+      within(card).queryByRole("button", { name: "Thread actions for disc-1" }),
+    ).toBeNull();
+    const header = screen.getByTestId("discussion-header-actions");
+    expect(
+      await within(header).findByRole("button", { name: "Thread actions for disc-1" }),
     ).toBeInTheDocument();
   });
 

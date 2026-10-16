@@ -37,8 +37,12 @@ fn no_frontend_route_can_put_a_proposal_reference_on_a_comment() {
         .split_once("\n}")
         .expect("its body")
         .0;
+    // CMS-FR-43 / CMS-FR-TQVB: `proposal_hunk` is the one reference kind a
+    // caller may supply, and it is not a `proposal`.
+    let variants = input_variants(input);
+    assert_eq!(variants, vec!["Url", "Inline", "ProposalHunk"], "{input}");
     assert!(
-        !input.to_lowercase().contains("proposal"),
+        !variants.iter().any(|v| *v == "Proposal" || *v == "PromptProposal"),
         "AttachmentInput has no proposal variant (CMS-FR-60): {input}",
     );
 }
@@ -204,7 +208,22 @@ fn a_prompt_proposal_reference_folds_holds_no_content_and_is_never_validated() {
         .split("\n}")
         .next()
         .expect("its body");
-    assert!(!input.contains("Proposal"), "no proposal variant: {input}");
+    let variants = input_variants(input);
+    assert!(
+        !variants.iter().any(|v| *v == "Proposal" || *v == "PromptProposal"),
+        "no proposal variant: {input}"
+    );
+}
+
+/// The variant names of an enum body taken from source, one per line that
+/// opens a variant.
+fn input_variants(body: &str) -> Vec<&str> {
+    body.lines()
+        .filter_map(|line| line.strip_prefix("    "))
+        .filter(|line| !line.starts_with(' ') && !line.starts_with('#') && !line.starts_with('/'))
+        .filter_map(|line| line.split([' ', '{', ',']).next())
+        .filter(|name| name.chars().next().is_some_and(|c| c.is_ascii_uppercase()))
+        .collect()
 }
 
 /// CMS-FR-37, CMS-FR-49, CMS-FR-55, CMS-FR-39: a draft's whole review lives in

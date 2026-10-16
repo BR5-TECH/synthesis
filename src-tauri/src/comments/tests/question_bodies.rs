@@ -222,12 +222,12 @@ fn an_anchored_thread_refuses_a_reservation() {
 /// CMS-FR-QLDW, ADQ-FR-VDGT: a conversation that takes no further contribution
 /// takes no further question either, and nothing is written.
 #[test]
-fn a_locked_discussion_refuses_a_reservation() {
+fn a_resolved_discussion_refuses_a_reservation() {
     let dir = temp_root();
     let root = crate::fs::RootFs::for_root(dir.path());
     let draft_id = make_draft(&root, "Ontology");
     let thread = open_discussion(&root, &draft_id, "shall we?", "2026-09-10T11:00:00Z");
-    set_lock_to(
+    set_resolution_to(
         &root,
         ThreadRef::discussion(&draft_id),
         &thread.id,
@@ -240,7 +240,7 @@ fn a_locked_discussion_refuses_a_reservation() {
     let set = set_for(&thread.id, "s1", &["a?"]);
     assert_eq!(
         reserve_question_set_record(&root, &root, &thread.id, &set),
-        Err(ERR_DISCUSSION_LOCKED.to_string()),
+        Err(ERR_DISCUSSION_RESOLVED.to_string()),
     );
     assert!(read_question_set(&root, &root, &thread.id).is_none());
 }
@@ -371,10 +371,10 @@ fn a_submission_naming_an_unknown_set_is_refused() {
     assert!(read_question_set(&root, &root, &thread.id).is_some());
 }
 
-/// CMS-FR-WNQD: a locked discussion refuses a submission, appends nothing, and
+/// CMS-FR-WNQD: a resolved discussion refuses a submission, appends nothing, and
 /// keeps its pending set so the author retries without re-entering anything.
 #[test]
-fn a_locked_discussion_refuses_a_submission_and_keeps_its_set() {
+fn a_resolved_discussion_refuses_a_submission_and_keeps_its_set() {
     let dir = temp_root();
     let root = crate::fs::RootFs::for_root(dir.path());
     let draft_id = make_draft(&root, "Ontology");
@@ -382,7 +382,7 @@ fn a_locked_discussion_refuses_a_submission_and_keeps_its_set() {
 
     let set = set_for(&thread.id, "s1", &["a?"]);
     reserve_question_set_record(&root, &root, &thread.id, &set).unwrap();
-    set_lock_to(
+    set_resolution_to(
         &root,
         ThreadRef::discussion(&draft_id),
         &thread.id,
@@ -402,7 +402,7 @@ fn a_locked_discussion_refuses_a_submission_and_keeps_its_set() {
             &human("raver119"),
         )
         .err(),
-        Some(ERR_DISCUSSION_LOCKED.to_string()),
+        Some(ERR_DISCUSSION_RESOLVED.to_string()),
     );
     assert_eq!(read_question_set(&root, &root, &thread.id), Some(set));
 }
@@ -638,15 +638,15 @@ fn a_reservation_waits_while_the_pending_set_check_holds_the_lock() {
     assert!(read_question_set(&root, &root, &thread.id).is_some());
 }
 
-/// CMS-FR-WNQD: the lock refuses **unconditionally** — including a retry of a
+/// CMS-FR-WNQD: the resolution refuses **unconditionally** — including a retry of a
 /// submission that already committed.
 ///
 /// The set is gone by then, so the refusal has no pending state to protect: what
-/// it protects is the rule. A locked conversation answers from none of this
+/// it protects is the rule. A resolved conversation answers from none of this
 /// module's operations, so a reader recovers the committed result from the
 /// conversation rather than from a report this one would give.
 #[test]
-fn a_locked_discussion_refuses_even_a_retry_of_committed_work() {
+fn a_resolved_discussion_refuses_even_a_retry_of_committed_work() {
     let dir = temp_root();
     let root = crate::fs::RootFs::for_root(dir.path());
     let draft_id = make_draft(&root, "Ontology");
@@ -656,8 +656,8 @@ fn a_locked_discussion_refuses_even_a_retry_of_committed_work() {
     reserve_question_set_record(&root, &root, &thread.id, &set).unwrap();
     let answers = [answer_for(1, 1, "one", None)];
     commit_question_answers(&root, &root, &thread.id, "s1", &answers, &human("raver119")).unwrap();
-    // The work is committed and the set is gone; now the conversation is locked.
-    set_lock_to(
+    // The work is committed and the set is gone; now the conversation is resolved.
+    set_resolution_to(
         &root,
         ThreadRef::discussion(&draft_id),
         &thread.id,
@@ -670,7 +670,7 @@ fn a_locked_discussion_refuses_even_a_retry_of_committed_work() {
 
     assert_eq!(
         commit_question_answers(&root, &root, &thread.id, "s1", &answers, &human("raver119")).err(),
-        Some(ERR_DISCUSSION_LOCKED.to_string()),
+        Some(ERR_DISCUSSION_RESOLVED.to_string()),
         "CMS-FR-WNQD: the lock is checked before anything is read or reported",
     );
     // And the conversation is byte-for-byte what it was.

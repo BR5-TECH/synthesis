@@ -347,10 +347,20 @@ describe("badges and owner state", () => {
     );
   });
 
-  it("CMT-FR-WZTE: a whole-target discussion carries the word Whole and no fragment quote", () => {
+  it("CMT-FR-WZTE: a whole-target discussion carries no target badge and no fragment quote", () => {
     render(surface(discussion()));
-    expect(screen.getByTestId("discussion-target-badge")).toHaveTextContent("Whole");
+    expect(screen.queryByTestId("discussion-target-badge")).toBeNull();
+    expect(screen.queryByTestId("discussion-badges")).toBeNull();
+    expect(screen.queryByText("Whole")).toBeNull();
     expect(screen.queryByTestId("discussion-fragment-quote")).toBeNull();
+  });
+
+  it("CMT-FR-WZTE, CVP-FR-44: a resolved whole-target discussion says Resolved and not Whole", () => {
+    render(surface(discussion({ resolved: true })));
+    const badges = screen.getByTestId("discussion-badges");
+    expect(badges).toHaveTextContent("Resolved");
+    expect(badges).not.toHaveTextContent("Whole");
+    expect(screen.queryByTestId("discussion-target-badge")).toBeNull();
   });
 
   it("CVP-FR-SDMQ: the fragment quote is a labelled control that calls onFocusFragment", () => {
@@ -373,13 +383,15 @@ describe("badges and owner state", () => {
     expect(screen.getByRole("textbox")).toBeEnabled();
   });
 
-  it("CVP-FR-45 / CVP-FR-46: an unavailable owner is named in words and the composer stays enabled", () => {
+  it("CVP-FR-45 / CVP-FR-46, CMT-FR-WZTE: an unavailable owner is named in words and the composer stays enabled", () => {
     render(
       surface(discussion(), { availability: "unavailable", ownerLabel: "specs/gone.md" }),
     );
     expect(screen.getByTestId("discussion-owner-unavailable")).toHaveTextContent(
       "Owner unavailable: specs/gone.md no longer exists in this project",
     );
+    expect(screen.getByTestId("discussion-badges")).not.toHaveTextContent("Whole");
+    expect(screen.queryByTestId("discussion-target-badge")).toBeNull();
     expect(screen.getByRole("textbox")).toBeEnabled();
     expect(screen.getByRole("button", { name: /Quote comment 1/ })).toBeInTheDocument();
   });

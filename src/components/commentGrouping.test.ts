@@ -50,27 +50,27 @@ function item(
 }
 
 describe("CMP-FR-03 / CMP-FR-04: each thread lands in exactly one group", () => {
-  it("puts a plain thread in Active, a locked one in Locked, a resolved one in Resolved", () => {
+  it("CMP-FR-04: puts a plain thread in Active and a resolved one in Resolved", () => {
     expect(groupKeyFor(item({ id: "t1" }))).toBe("active");
-    expect(groupKeyFor(item({ id: "t2", locked: true }))).toBe("locked");
     expect(groupKeyFor(item({ id: "t3", resolved: true }))).toBe("resolved");
   });
 
-  it("resolves ahead of locks, so a thread that is both is Resolved only", () => {
-    const both = item({ id: "t4", locked: true, resolved: true });
-    expect(groupKeyFor(both)).toBe("resolved");
+  it("CMP-FR-04, CMS-FR-WKZR: a thread stored as locked arrives resolved and is Resolved only", () => {
+    // The backend folds a legacy lock into `resolved`, so the panel reads one flag.
+    const legacy = item({ id: "t4", resolved: true });
+    expect(groupKeyFor(legacy)).toBe("resolved");
 
-    const groups = groupThreads([both], "");
+    const groups = groupThreads([legacy], "");
     expect(groups.map((g) => g.key)).toEqual(["resolved"]);
     expect(groups[0].items).toHaveLength(1);
   });
 
-  it("keeps the counts summing to the project's thread total", () => {
+  it("CMP-FR-04: keeps the counts summing to the project's thread total", () => {
     const items = [
       item({ id: "t1" }),
-      item({ id: "t2", locked: true }),
+      item({ id: "t2" }),
       item({ id: "t3", resolved: true }),
-      item({ id: "t4", locked: true, resolved: true }),
+      item({ id: "t4", resolved: true }),
       item({ id: "t5" }),
     ];
     const groups = groupThreads(items, "");
@@ -78,24 +78,16 @@ describe("CMP-FR-03 / CMP-FR-04: each thread lands in exactly one group", () => 
     expect(total).toBe(items.length);
     expect(
       Object.fromEntries(groups.map((g) => [g.key, g.items.length])),
-    ).toEqual({ active: 2, locked: 1, resolved: 2 });
+    ).toEqual({ active: 3, resolved: 2 });
   });
 
-  it("renders the groups in the fixed order Active, Locked, Resolved", () => {
-    expect(COMMENT_GROUP_ORDER).toEqual(["active", "locked", "resolved"]);
+  it("CMP-FR-03: renders the two groups in the fixed order Active, Resolved", () => {
+    expect(COMMENT_GROUP_ORDER).toEqual(["active", "resolved"]);
     const groups = groupThreads(
-      [
-        item({ id: "t3", resolved: true }),
-        item({ id: "t2", locked: true }),
-        item({ id: "t1" }),
-      ],
+      [item({ id: "t3", resolved: true }), item({ id: "t1" })],
       "",
     );
-    expect(groups.map((g) => g.label)).toEqual([
-      "Active",
-      "Locked",
-      "Resolved",
-    ]);
+    expect(groups.map((g) => g.label)).toEqual(["Active", "Resolved"]);
   });
 });
 

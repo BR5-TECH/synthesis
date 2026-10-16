@@ -111,7 +111,7 @@ pub struct CommentQuote {
 
 /// CMS-FR-42: an attachment as stored and as served back.
 ///
-/// Three kinds rather than one shape with optional fields, because what an
+/// Five kinds rather than one shape with optional fields, because what an
 /// attachment *is* differs at every match site and a tagged union makes that
 /// unmissable. A `url` is an address this module records and never resolves
 /// (CMS-FR-43); a `blob` is content it holds, named by the digest of its bytes so
@@ -168,6 +168,22 @@ pub enum Attachment {
         /// Project-relative path the proposal would replace.
         path: String,
     },
+    /// CMS-FR-42 / CMS-FR-TQVB: one change of a draft change proposal, which
+    /// the comment is about (`DCP-draft-change-proposals.md` DCP-FR-FHWN).
+    ///
+    /// Like the two proposal kinds it carries identity and no content, and this
+    /// module validates nothing about what it names. Unlike them it reaches a
+    /// comment through both append paths: it names a change that already exists
+    /// and offers no control that rewrites the author's material, so it needs
+    /// none of the forging rule of CMS-FR-60.
+    #[serde(rename_all = "camelCase")]
+    ProposalHunk {
+        proposal_id: String,
+        hunk_id: String,
+        draft_id: String,
+        /// Draft-relative path that change applies to.
+        path: String,
+    },
 }
 
 /// CMS-FR-43: what a caller supplies on an append.
@@ -176,7 +192,7 @@ pub enum Attachment {
 /// name a `digest`, or it could claim content it never supplied and produce a
 /// comment pointing at another comment's file; an `inline` input carries bytes
 /// and this module derives the digest itself. And there is deliberately **no
-/// `proposal` variant** (CMS-FR-60): a proposal reference is what a surface
+/// `proposal` and no `prompt_proposal` variant** (CMS-FR-60, CMS-FR-66): a proposal reference is what a surface
 /// renders an accept-this-rewrite control from, so a frontend able to compose one
 /// could offer the author a control that applies text no agent ever proposed. It
 /// reaches a comment through `append_as` alone, called by
@@ -198,6 +214,10 @@ pub enum AttachmentInput {
         /// Base64 of the file's bytes.
         data: String,
     },
+    /// CMS-FR-43 / CMS-FR-TQVB: a reference to one change of a draft change
+    /// proposal, stored verbatim as an [`Attachment::ProposalHunk`].
+    #[serde(rename_all = "camelCase")]
+    ProposalHunk { proposal_id: String, hunk_id: String, draft_id: String, path: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -266,11 +286,50 @@ pub struct Discussion {
     pub fragment_target: Option<FragmentTarget>,
     /// Oldest first.
     pub comments: Vec<Comment>,
-    pub locked: bool,
+    /// CMS-FR-18 / CMS-FR-WKZR: the one lifecycle flag. True while the
+    /// discussion takes no further comment, whether a resolution or a legacy
+    /// lock holds it.
     pub resolved: bool,
     pub created_at: String,
     pub updated_at: String,
+    /// CMS-FR-WKZR: the two flags `resolved` is folded from. Internal to the
+    /// backend and never serialized, so the wire shape has one flag only.
+    #[serde(skip)]
+    pub(crate) resolution: ResolutionMarks,
 }
+
+/// CMS-FR-WKZR: what the fold keeps about a discussion's resolution beside the
+/// `resolved` flag it serves.
+///
+/// Two flags rather than one, because a legacy lock and a resolution were
+/// independent in older logs: the reopen of CMS-FR-18 must know whether a lock
+/// still stands, so it can append the `thread_unlocked` that clears it.
+///
+/// `resolving_events` counts every `thread_resolved` and `thread_locked` line
+/// the fold applied. A log only grows, so a count that is higher than an earlier
+/// reading shows that the discussion was resolved at some moment after that
+/// reading, also when it was reopened since (AGC-FR-19).
+///
+/// Equality is always true: two discussions are equal when their wire shapes
+/// are equal, and these marks are no part of the wire shape.
+#[derive(Clone, Debug, Default)]
+pub struct ResolutionMarks {
+    /// Set by `thread_resolved`, cleared by `thread_reopened`.
+    pub(crate) resolution: bool,
+    /// Set by a legacy `thread_locked`, cleared by `thread_unlocked` and by
+    /// `thread_reopened`.
+    pub(crate) legacy_lock: bool,
+    /// How many `thread_resolved` and `thread_locked` lines were applied.
+    pub(crate) resolving_events: usize,
+}
+
+impl PartialEq for ResolutionMarks {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for ResolutionMarks {}
 
 impl Discussion {
     /// The log this discussion is written in.
@@ -317,6 +376,17 @@ impl Discussion {
     /// The path of the fragment, or `""` for a whole-target discussion.
     pub fn fragment_path(&self) -> &str {
         self.fragment_target.as_ref().map_or("", |f| f.path.as_str())
+    }
+
+    /// CMS-FR-WKZR: whether a legacy lock still stands on this discussion.
+    pub fn legacy_lock_stands(&self) -> bool {
+        self.resolution.legacy_lock
+    }
+
+    /// AGC-FR-19: how many resolving lines (`thread_resolved`, legacy
+    /// `thread_locked`) the fold applied to this discussion.
+    pub fn resolving_events(&self) -> usize {
+        self.resolution.resolving_events
     }
 }
 
@@ -369,7 +439,10 @@ pub enum EventBody {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<Attachment>,
     },
+    /// Legacy. Read as a resolution (CMS-FR-WKZR). This build never writes it.
     ThreadLocked,
+    /// Legacy release of a lock (CMS-FR-WKZR). Written only by a reopen that
+    /// clears a lock that still stands (CMS-FR-18).
     ThreadUnlocked,
     ThreadResolved,
     ThreadReopened,

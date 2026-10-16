@@ -13,18 +13,16 @@ import { ownerLabelOf } from "../state/ownerAvailability";
 import { attachmentName, discussionFragment } from "../types";
 import type { Comment, DiscussionListItem } from "../types";
 
-/** CMP-FR-03: the three groups, in the fixed order the panel renders them. */
-export type CommentGroupKey = "active" | "locked" | "resolved";
+/** CMP-FR-03: the two groups, in the fixed order the panel renders them. */
+export type CommentGroupKey = "active" | "resolved";
 
 export const COMMENT_GROUP_ORDER: readonly CommentGroupKey[] = [
   "active",
-  "locked",
   "resolved",
 ] as const;
 
 const GROUP_LABELS: Record<CommentGroupKey, string> = {
   active: "Active",
-  locked: "Locked",
   resolved: "Resolved",
 };
 
@@ -37,15 +35,12 @@ export interface CommentGroup {
 /**
  * CMP-FR-04: which group a thread belongs to.
  *
- * Lock and resolution are independent booleans (CMS-FR-18), so a thread can
- * satisfy two of these at once. Precedence — resolved, then locked, then active
- * — is what keeps each thread in exactly one group, so the three counts sum to
- * the project's thread total and no conversation is read twice.
+ * `resolved` is the one lifecycle flag (CMS-FR-18). The backend already folds a
+ * discussion stored as locked into it (CMS-FR-WKZR), so each thread is in
+ * exactly one group and the two counts sum to the project's thread total.
  */
 export function groupKeyFor(item: DiscussionListItem): CommentGroupKey {
-  if (item.discussion.resolved) return "resolved";
-  if (item.discussion.locked) return "locked";
-  return "active";
+  return item.discussion.resolved ? "resolved" : "active";
 }
 
 /** CMP-FR-06: the comment that opened the thread. */
@@ -117,7 +112,7 @@ export function sortMostRecentFirst(
 }
 
 /**
- * The panel's rendered shape: the surviving threads in their three groups, in
+ * The panel's rendered shape: the surviving threads in their two groups, in
  * fixed order, each group internally most-recently-active first.
  *
  * CMP-FR-05 / CMP-FR-14: a group holding nothing — because the project has none

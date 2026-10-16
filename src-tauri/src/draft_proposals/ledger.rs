@@ -46,8 +46,8 @@ pub(crate) fn set_decided(
     Ok(record)
 }
 
-/// DCP-FR-XDRV: replace one undecided change in place, keeping its id and its
-/// position in the order.
+/// DCP-FR-XDRV: replace one undecided or rejected change in place, keeping its
+/// id and its position in the order. The change is `pending` after it.
 ///
 /// The id is what every reply addressed to that change names, so a revision that
 /// minted a new one would orphan the discussion about it.
@@ -79,7 +79,8 @@ pub fn revise_hunk_impl(
         backfill_legacy_ledger(root, &dir, &mut record, &prompt);
     }
     let row = record.ledger.iter().find(|row| row.id == hunk_id).ok_or(ERR_HUNK_NOT_FOUND)?;
-    if !row.state.is_undecided() {
+    // DCP-FR-XDRV: an accepted change is written into the prompt and is final.
+    if !row.state.is_revisable() {
         return Err(ERR_HUNK_ALREADY_DECIDED.to_string());
     }
 
@@ -113,10 +114,12 @@ pub fn revise_hunk_impl(
 
     if let Some(row) = record.ledger.iter_mut().find(|row| row.id == hunk_id) {
         // The agent's text is the new origin, so the change reads as unedited
-        // again and stays undecided.
+        // again and is undecided: a rejected change is open to the author's
+        // decision again (DCP-FR-XDRV, PDC-FR-GMWR).
         row.edited = false;
         row.revision += 1;
         row.state = hunks::HunkState::Pending;
+        row.decided_at = None;
     }
     record.candidate_edited = record.ledger.iter().any(|row| row.edited);
     resettle(&mut record);
@@ -164,9 +167,12 @@ pub(crate) fn set_hunk_state(
     // undecided state would put the whole proposal back to `pending` — with its
     // acceptance already written into the prompt and already recorded as a
     // version — so it is refused here rather than only at the command that
-    // usually calls this. Rolling a decision back is `set_hunk_pending`'s,
-    // which is part of a history transaction and says so.
-    if !row.state.is_undecided() {
+    // usually calls this. The one move out of a settled state is the
+    // acceptance of a rejected change (DCP-FR-11). Rolling a decision back is
+    // `restore_hunk_state`'s, which is part of a history transaction and says so.
+    let open = row.state.is_undecided()
+        || (row.state == hunks::HunkState::Rejected && state == hunks::HunkState::Accepted);
+    if !open {
         return Err(ERR_HUNK_ALREADY_DECIDED.to_string());
     }
     row.state = state;
@@ -179,30 +185,35 @@ pub(crate) fn set_hunk_state(
     Ok(record)
 }
 
-/// DHS-FR-19: put one hunk's row back to `pending`, leaving every hunk an
-/// earlier operation decided exactly as it was.
+/// DHS-FR-19 / DCP-FR-13: put one hunk's row back to the state it held before
+/// an acceptance that did not commit, leaving every hunk an earlier operation
+/// decided exactly as it was.
 ///
 /// That last clause is the whole difference from a whole-proposal rollback: a
-/// careless implementation here destroys decisions that already committed.
-pub(crate) fn set_hunk_pending(
+/// careless implementation here destroys decisions that already committed. The
+/// prior state is the journal's (`pending` for a journal an older build wrote),
+/// so a rolled-back acceptance of a rejected change leaves it rejected.
+pub(crate) fn restore_hunk_state(
     root: &fs::RootFs,
     draft_id: &str,
     proposal_id: &str,
     hunk_id: &str,
+    prior: hunks::HunkState,
+    prior_decided_at: Option<String>,
 ) -> Result<(), String> {
     let dir = drafts::draft_proposals_dir(root, draft_id)?;
     let mut record = read_proposal(root, draft_id, proposal_id)?;
     // Deliberately not `set_hunk_state`, which refuses to undecide a settled
     // change. This *is* the one thing allowed to: an acceptance that did not
-    // reach its commit point must leave the change the author may decide again,
-    // and every other change of the proposal exactly as it stands. A record
+    // reach its commit point must leave the change as it stood before, and
+    // every other change of the proposal exactly as it stands. A record
     // holding no row for this change — one an older build wrote, whose ledger
     // was only ever in memory — has nothing to roll back and is left alone.
     let Some(row) = record.ledger.iter_mut().find(|row| row.id == hunk_id) else {
         return Ok(());
     };
-    row.state = hunks::HunkState::Pending;
-    row.decided_at = None;
+    row.state = prior;
+    row.decided_at = if prior.is_undecided() { None } else { prior_decided_at };
     resettle(&mut record);
     root.write_toml_atomic(record_path(&dir, proposal_id), &record).map_err(|e| e.to_string())?;
     // DRS-FR-WYIN / DRS-FR-JDRY: a proposal is private draft storage. The

@@ -175,13 +175,6 @@ export function useCommentRail(deps: CommentRailDeps) {
         : comments.reply(threadId, body, quotes, attachments),
     [discussionIds, control.discussions, comments],
   );
-  const railSetLock = useCallback(
-    (threadId: string, locked: boolean) =>
-      discussionIds.has(threadId)
-        ? control.discussions.setLock(threadId, locked)
-        : comments.setLock(threadId, locked),
-    [discussionIds, control.discussions, comments],
-  );
   const railSetResolved = useCallback(
     (threadId: string, resolved: boolean) =>
       discussionIds.has(threadId)
@@ -258,7 +251,6 @@ export function useCommentRail(deps: CommentRailDeps) {
     toggleRail,
     discussionsInRail,
     railReply,
-    railSetLock,
     railSetResolved,
     railPendingTurns,
     railTurnFailures,

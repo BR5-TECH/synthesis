@@ -47,7 +47,6 @@ function thread(comments: Comment[]): Discussion {
     target: { kind: "draft", draftId: "d-1" },
     fragmentTarget: null,
     comments,
-    locked: false,
     resolved: false,
     createdAt: "2026-09-10T11:00:00Z",
     updatedAt: "2026-09-10T12:00:00Z",

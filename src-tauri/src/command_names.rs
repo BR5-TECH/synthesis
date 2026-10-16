@@ -240,7 +240,6 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "open_discussion",
     "get_or_create_note_discussion",
     "add_comment",
-    "set_discussion_lock",
     "set_discussion_resolution",
     "reanchor_discussion_fragment",
     "resolve_comment_author_identity",

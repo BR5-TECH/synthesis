@@ -574,7 +574,6 @@ export function discussionThread(
       attachments: [],
       createdAt: "2026-02-01T00:00:00Z",
     })),
-    locked: false,
     resolved: false,
     createdAt: "2026-02-01T00:00:00Z",
     updatedAt: "2026-02-01T00:00:00Z",

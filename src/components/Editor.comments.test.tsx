@@ -320,7 +320,7 @@ describe("CMT-FR-08 / CMT-FR-09 / CMT-FR-10: what a card renders", () => {
   });
 });
 
-describe("CMT-FR-11 / CMT-FR-14 / CMT-FR-15: replying, immutability, lock", () => {
+describe("CMT-FR-11 / CMT-FR-14 / CMT-FR-15: replying, immutability, the menu", () => {
   it("posts a reply through add_comment and appends it to the card", async () => {
     const { backend } = await mount({ threads: [makeThread()] });
     await openRail();
@@ -355,35 +355,36 @@ describe("CMT-FR-11 / CMT-FR-14 / CMT-FR-15: replying, immutability, lock", () =
       expect(label).not.toContain("edit");
       expect(label).not.toContain("delete");
     }
-    // And the menu holds exactly the lock and resolve entries (CMT-FR-15).
+    // And the menu holds exactly its one entry (CMT-FR-15).
     const menuItems = Array.from(
       rail.querySelectorAll<HTMLElement>('[role="menuitem"]'),
     ).map((b) => b.textContent);
-    expect(menuItems).toEqual(["Lock thread", "Mark resolved"]);
+    expect(menuItems).toEqual(["Mark resolved"]);
   });
 
-  it("locks a thread, hides its composer, and keeps its comments readable", async () => {
+  it("CMT-FR-15, CMT-FR-16, CTA-FR-CSZT: resolving hides the composer, and reopening restores it and dispatches nothing", async () => {
     const { backend } = await mount({ threads: [makeThread()] });
     await openRail();
     fireEvent.click(screen.getByRole("button", { name: /Thread actions/ }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Lock thread" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark resolved" }));
 
     await waitFor(() =>
       expect(
-        backend.calls.find((c) => c.cmd === "set_discussion_lock")?.args,
-      ).toMatchObject({ discussionId: "t1", locked: true }),
+        backend.calls.find((c) => c.cmd === "set_discussion_resolution")?.args,
+      ).toMatchObject({ discussionId: "t1", resolved: true }),
     );
-    await waitFor(() =>
-      expect(screen.queryByLabelText("Reply to thread t1")).toBeNull(),
-    );
-    expect(screen.getByTestId("comment-thread-t1")).toHaveTextContent("Locked");
+    fireEvent.click(await screen.findByRole("button", { name: /resolved thread/ }));
+    const card = await screen.findByTestId("comment-thread-t1");
+    expect(screen.queryByLabelText("Reply to thread t1")).toBeNull();
+    expect(card).toHaveTextContent("Resolved");
     // The comment itself is still there to read.
-    expect(screen.getByTestId("comment-thread-t1")).toHaveTextContent("Which session?");
+    expect(card).toHaveTextContent("Which session?");
 
-    // And unlocking brings the composer back (CMT-FR-15).
+    // Reopening brings the composer back and starts no agent turn.
     fireEvent.click(screen.getByRole("button", { name: /Thread actions/ }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Unlock thread" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Reopen discussion" }));
     await screen.findByLabelText("Reply to thread t1");
+    expect(backend.calls.some((c) => c.cmd === "dispatch_agent_turn")).toBe(false);
   });
 });
 
@@ -414,21 +415,19 @@ describe("CMT-FR-16 / CMT-FR-17: resolving", () => {
     fireEvent.click(disclosure);
     await screen.findByTestId("comment-thread-t1");
     fireEvent.click(screen.getByRole("button", { name: "Thread actions for t1" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Reopen thread" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Reopen discussion" }));
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /resolved thread/ })).toBeNull(),
     );
   });
 
-  it("lock and resolve are independent", async () => {
-    // CMT-FR-16 / CMS-FR-18: a locked thread can be resolved and reopened, and
-    // stays locked throughout.
-    await mount({ threads: [makeThread({ locked: true })] });
+  it("CMT-FR-15: a resolved thread's menu holds the one entry that reopens it", async () => {
+    await mount({ threads: [makeThread({ resolved: true })] });
     await openRail();
-    fireEvent.click(screen.getByRole("button", { name: /Thread actions/ }));
-    // A locked thread's menu still offers the resolve entry.
-    expect(screen.getByRole("menuitem", { name: "Mark resolved" })).toBeEnabled();
-    expect(screen.getByRole("menuitem", { name: "Unlock thread" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /resolved thread/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Thread actions/ }));
+    const items = screen.getAllByRole("menuitem").map((i) => i.textContent);
+    expect(items).toEqual(["Reopen discussion"]);
   });
 });
 
@@ -584,33 +583,30 @@ describe("CMT-FR-ZCAE: the local participant's label", () => {
 });
 
 describe("CMT-FR-34: a failed operation", () => {
-  it("re-renders the card as locked and keeps the composer's content", async () => {
-    // CMT-FR-34, CMS-FR-17: someone else locked the thread since the rail last read it.
-    // The fixture models exactly that — the refusal AND the state change behind
-    // it — so the "re-renders as locked" clause is actually testable.
+  it("CMT-FR-34, CMS-FR-17: re-renders the card as resolved and states the refusal in words", async () => {
+    // Someone else resolved the thread since the rail last read it. The fixture
+    // models exactly that — the refusal AND the state change behind it — so the
+    // "re-renders as resolved" clause is actually testable.
     const { backend } = await mount({
       threads: [makeThread()],
-      addCommentError: "discussion_locked",
+      addCommentError: "discussion_resolved",
     });
     await openRail();
-    backend.threads = backend.threads.map((t) => ({ ...t, locked: true }));
+    backend.threads = backend.threads.map((t) => ({ ...t, resolved: true }));
 
     const composer = screen.getByLabelText("Reply to thread t1") as HTMLTextAreaElement;
     fireEvent.change(composer, { target: { value: "my careful reply" } });
     fireEvent.click(screen.getByRole("button", { name: "Post" }));
 
-    const alert = await screen.findByRole("alert");
-    // Prose, not the wire slug: the author is told what happened and that it is
-    // someone else's doing, rather than shown an implementation detail.
-    expect(alert.textContent).toMatch(/locked/i);
-    expect(alert.textContent).not.toBe("discussion_locked");
-
-    // The card re-renders as locked, so the composer is gone rather than
-    // inviting a second attempt at something that cannot succeed.
-    await waitFor(() =>
-      expect(screen.queryByLabelText("Reply to thread t1")).toBeNull(),
-    );
-    expect(screen.getByTestId("comment-thread-t1")).toHaveTextContent("Locked");
+    // The card re-renders as resolved: it leaves the aligned column for the
+    // disclosure, and it carries no composer to invite a second attempt.
+    fireEvent.click(await screen.findByRole("button", { name: /resolved thread/ }));
+    const card = await screen.findByTestId("comment-thread-t1");
+    expect(screen.queryByLabelText("Reply to thread t1")).toBeNull();
+    // Prose, not the wire slug.
+    const alert = await within(card).findByRole("alert");
+    expect(alert.textContent).toMatch(/resolved/i);
+    expect(alert.textContent).not.toBe("discussion_resolved");
   });
 
   it("keeps the typed body when the refusal leaves the thread writable", async () => {
@@ -692,11 +688,11 @@ describe("CMT-FR-32: the rail's own transient surfaces", () => {
     const buttons = screen.getAllByRole("button", { name: /Thread actions/ });
 
     fireEvent.click(buttons[0]);
-    expect(screen.getAllByRole("menuitem")).toHaveLength(2);
+    expect(screen.getAllByRole("menuitem")).toHaveLength(1);
 
     fireEvent.click(buttons[1]);
     // Opening the second dismissed the first: still one menu, not two.
-    expect(screen.getAllByRole("menuitem")).toHaveLength(2);
+    expect(screen.getAllByRole("menuitem")).toHaveLength(1);
     expect(buttons[0]).toHaveAttribute("aria-expanded", "false");
     expect(buttons[1]).toHaveAttribute("aria-expanded", "true");
 

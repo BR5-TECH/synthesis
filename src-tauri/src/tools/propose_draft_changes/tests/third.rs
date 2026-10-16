@@ -313,15 +313,13 @@ fn a_change_the_author_held_for_discussion_is_revisable() {
     assert_eq!(after[1].after_text(), "That");
 }
 
-// PDC-FR-GMWR: a change already accepted or rejected, while its siblings are
-// still undecided, is not one the author is waiting on. The proposal still
-// stands, so this is a name the model can correct.
+// PDC-FR-GMWR / DCP-FR-XDRV: a change already accepted, while its siblings are
+// still undecided, is not one the model can revise. The proposal still stands,
+// so this is a name the model can correct.
 #[test]
-fn a_change_already_decided_is_not_one_the_author_awaits() {
-    for state in [
-        crate::draft_proposals::hunks::HunkState::Accepted,
-        crate::draft_proposals::hunks::HunkState::Rejected,
-    ] {
+fn a_change_already_accepted_is_not_one_the_model_can_revise() {
+    {
+        let state = crate::draft_proposals::hunks::HunkState::Accepted;
         let f = Fixture::new();
         f.call(ProposeDraftChangesArgs {
             path: FILE.into(),
@@ -343,6 +341,51 @@ fn a_change_already_decided_is_not_one_the_author_awaits() {
             .unwrap_err();
         assert_eq!(refused.to_string(), PROPOSAL_NO_SUCH_CHANGE, "{state:?}");
     }
+}
+
+// PDC-FR-GMWR / DCP-FR-XDRV: a change the author rejected, while its siblings
+// are still undecided, is revised in place and is undecided again: `pending`,
+// with `decided_at` and `edited` cleared and its `revision` bumped.
+#[test]
+fn a_change_the_author_rejected_is_revised_and_undecided_again() {
+    let f = Fixture::new();
+    f.call(ProposeDraftChangesArgs {
+        path: FILE.into(),
+        rationale: RATIONALE.into(),
+        revises: None,
+        hunks: three_changes(),
+    })
+    .expect("a proposal stands");
+    let rejected = f.hunks_of_the_one_proposal()[2].id.clone();
+    set_state(&f, &rejected, crate::draft_proposals::hunks::HunkState::Rejected);
+    let row_of = |f: &Fixture| {
+        f.proposals()[0].ledger.iter().find(|row| row.id == rejected).cloned().expect("the row")
+    };
+    let before = row_of(&f);
+    assert!(before.decided_at.is_some());
+
+    f.call(ProposeDraftChangesArgs {
+        path: FILE.into(),
+        rationale: RATIONALE.into(),
+        revises: Some(rejected.clone()),
+        hunks: vec![HunkArg {
+            kind: Some("replace".into()),
+            before: Some("The".into()),
+            after: Some("That".into()),
+            after_text: None,
+            note: None,
+        }],
+    })
+    .expect("the rejected change is revised");
+
+    let after = row_of(&f);
+    assert_eq!(after.state, crate::draft_proposals::hunks::HunkState::Pending);
+    assert_eq!(after.decided_at, None);
+    assert!(!after.edited);
+    assert_eq!(after.revision, before.revision + 1);
+    let hunks = f.hunks_of_the_one_proposal();
+    assert_eq!(hunks[2].id, rejected, "it keeps its id and its place");
+    assert_eq!(hunks[2].after_text(), "That");
 }
 
 // PDC-FR-GMWR / PDC-FR-TZKQ: a revision whose text the prompt holds twice reads

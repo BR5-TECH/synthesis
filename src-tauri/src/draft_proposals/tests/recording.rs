@@ -178,19 +178,19 @@ fn a_decision_announces_the_conversation_once_more() {
 }
 
 #[test]
-fn a_decision_refused_by_a_locked_conversation_announces_nothing() {
-    // DCP-FR-06, CMS-FR-51 / DCP-FR-15. A conversation locked between the author reading
+fn a_decision_refused_by_a_resolved_conversation_announces_nothing() {
+    // DCP-FR-06, CMS-FR-51 / DCP-FR-15. A conversation resolved between the author reading
     // the diff and deciding it is refused **before anything is written**, so
     // the decision is not taken and there is nothing appended for a surface to
     // redraw either.
     let f = Fixture::new();
     let pending = f.pending();
-    f.lock();
+    f.resolve_conversation();
     let threads = f.watch_threads();
 
     assert_eq!(
         f.decline_with(&pending.id, None).unwrap_err(),
-        crate::comments::ERR_DISCUSSION_LOCKED,
+        crate::comments::ERR_DISCUSSION_RESOLVED,
     );
     assert_eq!(
         find_proposal(&f.root, &pending.id).expect("still there").1.state,
@@ -203,14 +203,14 @@ fn a_decision_refused_by_a_locked_conversation_announces_nothing() {
 #[test]
 fn a_recording_refused_after_the_append_was_attempted_announces_nothing() {
     // DCP-FR-15, CMS-FR-51 / DCP-FR-06. `ProposalPending` refuses before anything is
-    // written; a locked conversation is the refusal that gets as far as trying
+    // written; a resolved conversation is the refusal that gets as far as trying
     // to append, having already put both files on disk. That is the path a stray
     // announcement would come from, and the one worth watching.
     let f = Fixture::new();
-    f.lock();
+    f.resolve_conversation();
     let threads = f.watch_threads();
 
-    assert_eq!(f.propose(FILE, PROPOSED), Err(RecordRefusal::ThreadLocked),);
+    assert_eq!(f.propose(FILE, PROPOSED), Err(RecordRefusal::ThreadResolved),);
     assert!(threads.lock().unwrap_or_else(|e| e.into_inner()).is_empty());
     assert!(f.proposals_folder_files().is_empty(), "and nothing was kept");
 }
@@ -220,11 +220,11 @@ fn a_recording_refused_after_the_append_was_attempted_announces_nothing() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn a_locked_conversation_leaves_no_candidate_behind() {
+fn a_resolved_conversation_leaves_no_candidate_behind() {
     let f = Fixture::new();
-    f.lock();
+    f.resolve_conversation();
 
-    assert_eq!(f.propose(FILE, PROPOSED).unwrap_err(), RecordRefusal::ThreadLocked);
+    assert_eq!(f.propose(FILE, PROPOSED).unwrap_err(), RecordRefusal::ThreadResolved);
     let dir = f.proposals_dir();
     let left: Vec<String> = std::fs::read_dir(&dir)
         .expect("dir")

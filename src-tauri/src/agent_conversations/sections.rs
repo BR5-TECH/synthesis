@@ -110,7 +110,8 @@ pub(super) fn handle_of(participant: &Participant) -> &str {
 /// to say it cannot see it — and is shown none of the content. Nothing here
 /// decodes a blob or resolves a URL, so the assembled request stays text however
 /// much the conversation is carrying.
-fn attachment_line(attachment: &comments::Attachment, digests: &ProposalDigests) -> String {
+fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -> String {
+    let digests = &reads.digests;
     match attachment {
         comments::Attachment::Blob { filename, media_type, .. } => {
             format!("[attachment: {filename} ({media_type}), not shown]")
@@ -141,6 +142,58 @@ fn attachment_line(attachment: &comments::Attachment, digests: &ProposalDigests)
         comments::Attachment::PromptProposal { path, .. } => {
             format!("[proposed a new version of {path}]")
         }
+        // AGC-FR-DKHT: the one change the comment is about, named by the id an
+        // agent passes as `revises`. A change the read did not answer for keeps
+        // the bare line with its id, so the reference is never lost.
+        comments::Attachment::ProposalHunk { proposal_id, hunk_id, path, .. } => {
+            match reads.hunks.get(&(proposal_id.clone(), hunk_id.clone())) {
+                Some(change) => proposal_hunk_line(path, change),
+                None => format!("[about proposed change {hunk_id} to {path}]"),
+            }
+        }
+    }
+}
+
+/// AGC-FR-DKHT: one change of a proposal, as a `proposal_hunk` attachment
+/// names it — its id, its kind, its state, and bounded excerpts of the text it
+/// changes and the text it offers.
+pub(super) fn proposal_hunk_line(
+    path: &str,
+    change: &crate::draft_proposals::ProposalChange,
+) -> String {
+    let mut line = format!(
+        "[about proposed change {} to {path}: {} — {}",
+        change.id,
+        kind_label(change.kind),
+        state_label(change.state)
+    );
+    if !change.before.is_empty() {
+        line.push_str(&format!(" — changes: {}", excerpt(&change.before)));
+    }
+    if !change.after.is_empty() {
+        line.push_str(&format!(" — offers: {}", excerpt(&change.after)));
+    }
+    line.push(']');
+    line
+}
+
+/// The word a rendering names a change's kind by (AGC-FR-RVQP, AGC-FR-DKHT).
+fn kind_label(kind: crate::draft_proposals::anchors::HunkKind) -> &'static str {
+    match kind {
+        crate::draft_proposals::anchors::HunkKind::Replace => "replace",
+        crate::draft_proposals::anchors::HunkKind::Add => "add",
+        crate::draft_proposals::anchors::HunkKind::Del => "del",
+    }
+}
+
+/// The word a rendering names a change's state by (AGC-FR-RVQP, AGC-FR-DKHT).
+/// A change held for discussion is undecided.
+fn state_label(state: crate::draft_proposals::hunks::HunkState) -> &'static str {
+    match state {
+        crate::draft_proposals::hunks::HunkState::Accepted => "accepted",
+        crate::draft_proposals::hunks::HunkState::Rejected => "rejected",
+        crate::draft_proposals::hunks::HunkState::Pending
+        | crate::draft_proposals::hunks::HunkState::Discussing => "undecided",
     }
 }
 
@@ -175,7 +228,23 @@ pub(super) struct ProposalDigest {
 /// The proposals a thread's attachments name, by proposal id.
 type ProposalDigests = HashMap<String, ProposalDigest>;
 
-/// AGC-FR-RVQP: read every proposal the thread's `proposal` attachments name.
+/// AGC-FR-DKHT: the changes a section's `proposal_hunk` attachments name, by
+/// proposal id and hunk id.
+type HunkReads = HashMap<(String, String), crate::draft_proposals::ProposalChange>;
+
+/// What the attachments of one section read from the proposal store.
+#[derive(Default)]
+pub(super) struct AttachmentReads {
+    /// AGC-FR-RVQP: empty for `current_comment`, where a `proposal` keeps its
+    /// bare line.
+    digests: ProposalDigests,
+    /// AGC-FR-DKHT: read for `discussion_history` and `current_comment` alike.
+    hunks: HunkReads,
+}
+
+/// AGC-FR-RVQP / AGC-FR-DKHT: read every proposal the thread's `proposal`
+/// attachments name, where `with_proposals` is set, and every change its
+/// `proposal_hunk` attachments name.
 ///
 /// One read per **draft** rather than one per attachment, so a conversation
 /// carrying a dozen proposals of one draft costs one read. It reaches
@@ -183,19 +252,31 @@ type ProposalDigests = HashMap<String, ProposalDigest>;
 /// which runs no reconciliation and writes nothing — a turn assembling its input
 /// must not change the draft it is about to read (`../ai/CVL-conversation-loop.md`
 /// CVL-FR-09).
-fn proposal_digests(roots: Roots<'_>, thread: &comments::Discussion) -> ProposalDigests {
+fn attachment_reads(
+    roots: Roots<'_>,
+    thread: &comments::Discussion,
+    with_proposals: bool,
+) -> AttachmentReads {
     // The references this thread actually holds, in the order it holds them.
     // Rank is taken over these rather than over the draft's proposals as a whole:
     // a draft discussed in two threads has proposals this one never mentioned,
     // and letting those decide the rank would collapse this thread's own latest
     // proposal to its counts.
     let mut referenced: Vec<(&str, &str)> = Vec::new();
+    let mut hunk_refs: Vec<(&str, &str, &str)> = Vec::new();
     for comment in &thread.comments {
         for attachment in &comment.attachments {
-            if let comments::Attachment::Proposal { draft_id, proposal_id, .. } = attachment {
-                if !referenced.iter().any(|(_, id)| *id == proposal_id.as_str()) {
+            match attachment {
+                comments::Attachment::Proposal { draft_id, proposal_id, .. }
+                    if with_proposals
+                        && !referenced.iter().any(|(_, id)| *id == proposal_id.as_str()) =>
+                {
                     referenced.push((draft_id, proposal_id));
                 }
+                comments::Attachment::ProposalHunk { draft_id, proposal_id, hunk_id, .. } => {
+                    hunk_refs.push((draft_id, proposal_id, hunk_id));
+                }
+                _ => {}
             }
         }
     }
@@ -203,8 +284,9 @@ fn proposal_digests(roots: Roots<'_>, thread: &comments::Discussion) -> Proposal
     // One read per draft rather than one per reference.
     let mut read: HashMap<String, crate::draft_proposals::ProposalChanges> = HashMap::new();
     let mut drafts: Vec<&str> = Vec::new();
-    for (draft_id, _) in &referenced {
-        if !drafts.contains(draft_id) {
+    let named = referenced.iter().map(|(d, _)| *d).chain(hunk_refs.iter().map(|(d, _, _)| *d));
+    for draft_id in named {
+        if !drafts.contains(&draft_id) {
             drafts.push(draft_id);
         }
     }
@@ -217,6 +299,18 @@ fn proposal_digests(roots: Roots<'_>, thread: &comments::Discussion) -> Proposal
         };
         for proposal in proposals {
             read.insert(proposal.id.clone(), proposal);
+        }
+    }
+
+    // AGC-FR-DKHT: each named change, copied out before the digests below take
+    // the proposals they render.
+    let mut hunks = HunkReads::new();
+    for (_, proposal_id, hunk_id) in hunk_refs {
+        let found = read
+            .get(proposal_id)
+            .and_then(|proposal| proposal.changes.iter().find(|change| change.id == hunk_id));
+        if let Some(change) = found {
+            hunks.insert((proposal_id.to_string(), hunk_id.to_string()), change.clone());
         }
     }
 
@@ -235,7 +329,7 @@ fn proposal_digests(roots: Roots<'_>, thread: &comments::Discussion) -> Proposal
             },
         );
     }
-    digests
+    AttachmentReads { digests, hunks }
 }
 
 /// AGC-FR-RVQP: one proposal's changes and how each was decided.
@@ -253,17 +347,8 @@ pub(super) fn proposal_digest_line(path: &str, digest: &ProposalDigest) -> Strin
         return line;
     };
     for (position, change) in changes.iter().take(CHANGES_RENDERED_PER_PROPOSAL).enumerate() {
-        let kind = match change.kind {
-            crate::draft_proposals::anchors::HunkKind::Replace => "replace",
-            crate::draft_proposals::anchors::HunkKind::Add => "add",
-            crate::draft_proposals::anchors::HunkKind::Del => "del",
-        };
-        let state = match change.state {
-            crate::draft_proposals::hunks::HunkState::Accepted => "accepted",
-            crate::draft_proposals::hunks::HunkState::Rejected => "rejected",
-            crate::draft_proposals::hunks::HunkState::Pending
-            | crate::draft_proposals::hunks::HunkState::Discussing => "undecided",
-        };
+        let kind = kind_label(change.kind);
+        let state = state_label(change.state);
         line.push_str(&format!("\n  {}. {kind} — {state}", position + 1));
         if !change.before.is_empty() {
             line.push_str(&format!(" — changed: {}", excerpt(&change.before)));
@@ -343,7 +428,7 @@ pub(super) fn comment_text(comment: &comments::Comment, handles: &HashMap<&str, 
     out.push_str(&strip_citation_markers(&comment.body));
     out.push('\n');
     for attachment in &comment.attachments {
-        out.push_str(&attachment_line(attachment, &ProposalDigests::new()));
+        out.push_str(&attachment_line(attachment, &AttachmentReads::default()));
         out.push('\n');
     }
     out
@@ -363,7 +448,7 @@ fn comment_parts(
     thread: &comments::Discussion,
     comment: &comments::Comment,
     handles: &HashMap<&str, &str>,
-    digests: &ProposalDigests,
+    reads: &AttachmentReads,
 ) -> Vec<InputPart> {
     let mut prose = format!("@{}:\n", handle_of(&comment.author));
     for quote in &comment.quotes {
@@ -377,7 +462,7 @@ fn comment_parts(
     prose.push('\n');
     let mut parts = vec![InputPart::Text(prose)];
     for attachment in &comment.attachments {
-        let line = format!("{}\n", attachment_line(attachment, digests));
+        let line = format!("{}\n", attachment_line(attachment, reads));
         match attachment_image(roots, thread, comment, attachment, &line) {
             Some(image) => parts.push(InputPart::Image(image)),
             None => parts.push(InputPart::Text(line)),
@@ -554,8 +639,9 @@ pub(super) fn discussion_history_section(
         None => String::new(),
     };
     let handles = handles_of(thread);
-    // AGC-FR-RVQP: read once for the whole section rather than once per attachment.
-    let digests = proposal_digests(roots, thread);
+    // AGC-FR-RVQP / AGC-FR-DKHT: read once for the whole section rather than
+    // once per attachment.
+    let reads = attachment_reads(roots, thread, true);
     // AGC-FR-09 / AGC-FR-35: a comment's attachments contribute into the section
     // holding it, in the order the comment carries them and in the position that
     // comment occupies.
@@ -567,7 +653,7 @@ pub(super) fn discussion_history_section(
         if comment.id == trigger_comment_id {
             break;
         }
-        parts.extend(comment_parts(roots, thread, comment, &handles, &digests));
+        parts.extend(comment_parts(roots, thread, comment, &handles, &reads));
         parts.push(InputPart::Text("\n".to_string()));
     }
     section_of_parts(TAG_DISCUSSION_HISTORY, Vec::new(), parts)
@@ -584,11 +670,19 @@ pub(super) fn current_comment_section(
     trigger_comment_id: &str,
 ) -> InputSection {
     let handles = handles_of(thread);
-    let parts = thread
-        .comments
-        .iter()
-        .find(|c| c.id == trigger_comment_id)
-        .map(|comment| comment_parts(roots, thread, comment, &handles, &ProposalDigests::new()))
+    let trigger = thread.comments.iter().find(|c| c.id == trigger_comment_id);
+    // AGC-FR-DKHT: a `proposal_hunk` names its change here as well. Read only
+    // where the comment carries one, so an ordinary trigger costs no read.
+    let names_hunk = trigger.is_some_and(|comment| {
+        comment.attachments.iter().any(|a| matches!(a, comments::Attachment::ProposalHunk { .. }))
+    });
+    let reads = if names_hunk {
+        attachment_reads(roots, thread, false)
+    } else {
+        AttachmentReads::default()
+    };
+    let parts = trigger
+        .map(|comment| comment_parts(roots, thread, comment, &handles, &reads))
         .unwrap_or_default();
     section_of_parts(TAG_CURRENT_COMMENT, Vec::new(), parts)
 }

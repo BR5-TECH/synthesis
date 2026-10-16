@@ -478,11 +478,13 @@ fn a_pending_proposal_refuses_the_next_call_retryably() {
     f.call_with(second, "# Other\n\nBetter.\n", RATIONALE).expect("a second artifact succeeds");
 }
 
+// PPC-FR-10 / PPC-FR-16: a resolved conversation is the not-retryable
+// `PermissionDenied`, and neither the proposal nor the comment is produced.
 #[test]
-fn a_locked_conversation_refuses_for_good_and_records_nothing() {
+fn a_resolved_conversation_refuses_for_good_and_records_nothing() {
     // PPC-FR-10, PPC-FR-16.
     let f = Fixture::new();
-    crate::comments::set_lock_to(
+    crate::comments::set_resolution_to(
         &f.root(),
         crate::comments::ThreadRef::artifact_discussion(PROMPT),
         &f.thread_id,
@@ -490,10 +492,10 @@ fn a_locked_conversation_refuses_for_good_and_records_nothing() {
         &human(),
         "2026-01-01T00:05:00Z",
     )
-    .expect("lock");
+    .expect("resolve");
 
     let refusal = f.call().expect_err("refused");
-    assert_eq!(refusal, ToolRefusal::ProposalConversationLocked);
+    assert_eq!(refusal, ToolRefusal::ProposalConversationResolved);
     assert_eq!(refusal.kind(), ToolErrorKind::PermissionDenied);
     assert!(!refusal.retryable());
     assert!(refusal.to_string().contains("will not succeed"));

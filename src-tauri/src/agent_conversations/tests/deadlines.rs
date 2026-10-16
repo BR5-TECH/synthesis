@@ -111,7 +111,7 @@ fn the_whole_turn_deadline_caps_the_call_and_is_not_retried() {
 }
 
 #[test]
-fn a_thread_locked_during_a_backoff_wait_stops_the_retry() {
+fn a_thread_resolved_during_a_backoff_wait_stops_the_retry() {
     // CVL-FR-25 (second half) / CVL-FR-19, AGC-FR-19, AGC-FR-31.
     let h = Harness::with_retries(
         vec![Err(FAIL_UNREACHABLE); MAX_ATTEMPTS],
@@ -125,18 +125,18 @@ fn a_thread_locked_during_a_backoff_wait_stops_the_retry() {
         .dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id)
         .expect("dispatch");
 
-    // Lock it while the turn is sitting in its first backoff.
+    // Resolve it while the turn is sitting in its first backoff.
     for _ in 0..500 {
         if h.seam.call_count() >= 1 {
             break;
         }
         std::thread::sleep(Duration::from_millis(2));
     }
-    // Asserted rather than assumed: a budget that ran out locks a thread against
+    // Asserted rather than assumed: a budget that ran out resolves a thread against
     // a turn that has not attempted anything yet, which is a different test than
     // this one — one that would still pass.
     assert!(h.seam.call_count() >= 1, "the first attempt never began");
-    crate::comments::set_lock_in(
+    crate::comments::set_resolution_in(
         &h.root(),
         "spec.md",
         &thread.id,
@@ -144,14 +144,14 @@ fn a_thread_locked_during_a_backoff_wait_stops_the_retry() {
         &human("ada"),
         "2024-01-01T00:00:00Z",
     )
-    .expect("lock");
+    .expect("resolve");
 
     let terminal = wait_for_terminal(&h, &turn.id);
     assert_eq!(terminal.state, AgentTurnState::Failed);
     // A conversation that takes no further contribution has nowhere to deliver
-    // whatever a retry produced, so the turn ends on the lock rather than on
+    // whatever a retry produced, so the turn ends on the resolution rather than on
     // what the provider last did.
-    assert_eq!(terminal.failure.as_deref(), Some(FAIL_THREAD_LOCKED));
+    assert_eq!(terminal.failure.as_deref(), Some(FAIL_DISCUSSION_RESOLVED));
     assert!(!terminal.retry_permitted);
     assert!(h.turns().recoverable_failures(None).is_empty());
     assert_eq!(h.seam.call_count(), 1, "the retry the wait was for was never made");

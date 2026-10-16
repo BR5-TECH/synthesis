@@ -4,8 +4,10 @@ use super::*;
 
 // -- CMS-FR-41, CMS-FR-17, CMS-FR-26: the agent write path ------------------------------------
 
+// CMS-FR-41 / CMS-FR-17: a resolved discussion refuses an agent with the same
+// `discussion_resolved` error it gives a person, and gains no line.
 #[test]
-fn a_lock_refuses_an_agent_exactly_as_it_refuses_a_person() {
+fn a_resolution_refuses_an_agent_exactly_as_it_refuses_a_person() {
     // CMS-FR-41, CMS-FR-17, CMS-FR-26.
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
@@ -16,8 +18,9 @@ fn a_lock_refuses_an_agent_exactly_as_it_refuses_a_person() {
         "@arch can you tighten this?",
         "2026-01-01T00:00:00Z",
     );
-    set_lock_in(root, "specs/a.md", &t.id, true, &human("ada"), "2026-01-01T00:00:01Z").unwrap();
-    let lines_while_locked =
+    set_resolution_in(root, "specs/a.md", &t.id, true, &human("ada"), "2026-01-01T00:00:01Z")
+        .unwrap();
+    let lines_while_resolved =
         std::fs::read_to_string(log_path(root, "specs/a.md").unwrap()).unwrap().lines().count();
 
     assert_eq!(
@@ -31,16 +34,17 @@ fn a_lock_refuses_an_agent_exactly_as_it_refuses_a_person() {
             "2026-01-01T00:00:02Z",
         )
         .unwrap_err(),
-        ERR_DISCUSSION_LOCKED,
+        ERR_DISCUSSION_RESOLVED,
     );
     assert_eq!(
         std::fs::read_to_string(log_path(root, "specs/a.md").unwrap()).unwrap().lines().count(),
-        lines_while_locked,
+        lines_while_resolved,
         "a refused agent write gains the log no line",
     );
 
-    // Unlocked, the same call appends one ordinary comment.
-    set_lock_in(root, "specs/a.md", &t.id, false, &human("ada"), "2026-01-01T00:00:03Z").unwrap();
+    // Reopened, the same call appends one ordinary comment.
+    set_resolution_in(root, "specs/a.md", &t.id, false, &human("ada"), "2026-01-01T00:00:03Z")
+        .unwrap();
     let updated = append_agent_comment(
         root,
         LogScope::Artifact,

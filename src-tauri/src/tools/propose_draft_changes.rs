@@ -89,7 +89,7 @@ pub const PROPOSAL_TEXT_NOT_UNIQUE: &str =
 pub const PROPOSAL_REVISE_ONE: &str =
     "You named a change to replace, so send only the one change that replaces it. Wait for the author to decide the changes already standing before you propose the rest.";
 pub const PROPOSAL_NO_SUCH_CHANGE: &str =
-    "The change you named is not one of the changes still awaiting the author. Propose a new change instead.";
+    "The change you named is not one of the changes you can still revise. Propose a new change instead.";
 pub const PROPOSAL_HUNKS_OVERLAP: &str =
     "Two of your changes cover the same text. Combine them into one change.";
 
@@ -395,7 +395,7 @@ fn refusal_for(refusal: RecordRefusal) -> ToolRefusal {
         RecordRefusal::HunkOverlap { at, of } => {
             ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_HUNKS_OVERLAP, at, of }
         }
-        RecordRefusal::ThreadLocked => ToolRefusal::ProposalConversationLocked,
+        RecordRefusal::ThreadResolved => ToolRefusal::ProposalConversationResolved,
         RecordRefusal::NotRecorded => ToolRefusal::ProposalNotRecorded,
     }
 }

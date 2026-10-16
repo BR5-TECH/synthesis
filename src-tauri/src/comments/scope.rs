@@ -151,7 +151,7 @@ pub enum DiscussionTarget {
 /// Which conversation a command is operating on, in the one shape every write
 /// path here takes.
 ///
-/// CMS-FR-36 / CMS-FR-54: a thread is opened, commented on, locked, resolved, and
+/// CMS-FR-36 / CMS-FR-54: a thread is opened, commented on, resolved, reopened, and
 /// re-anchored identically whichever scope and kind it is, so the write helpers
 /// take this rather than a path — and a discussion travels the same code an
 /// anchored thread does, differing only in what a thread without a passage cannot
@@ -220,7 +220,7 @@ impl<'a> ThreadRef<'a> {
 /// One thread of a conversation, by [`ThreadRef`] and id.
 ///
 /// The typed "not found" of every operation that names a thread, exposed for a
-/// caller outside this module that has to read a thread's state — its lock,
+/// caller outside this module that has to read a thread's state — its resolution,
 /// most of all — **before** it takes an action of its own (DCP-FR-15).
 pub fn thread_at(
     root: &fsa::RootFs,

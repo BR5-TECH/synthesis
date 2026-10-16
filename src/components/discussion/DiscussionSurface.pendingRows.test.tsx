@@ -63,7 +63,6 @@ function discussion(answers: string[] = []): Discussion {
         createdAt: "2026-02-01T00:02:00Z",
       })),
     ],
-    locked: false,
     resolved: false,
     createdAt: "2026-02-01T00:00:00Z",
     updatedAt: "2026-02-01T00:00:00Z",
@@ -106,7 +105,6 @@ function surface(over: Partial<DiscussionSurfaceProps> = {}): React.ReactElement
       agents={[]}
       liveTurns={false}
       onReply={vi.fn(async () => undefined)}
-      onSetLock={vi.fn(async () => undefined)}
       onSetResolved={vi.fn(async () => undefined)}
       {...over}
     />

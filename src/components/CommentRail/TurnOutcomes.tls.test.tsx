@@ -1,13 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
-import { TurnOutcomes as RailTurnOutcomes } from "./ThreadCardParts";
 import { TurnOutcomes as DiscussionTurnOutcomes } from "../discussion/DiscussionParts";
 import type { AgentTurn, Discussion } from "../../types";
 
 afterEach(cleanup);
 
-const thread = { id: "d1", locked: false, resolved: false } as unknown as Discussion;
+const thread = { id: "d1", resolved: false } as unknown as Discussion;
 
 const failed = (over: Partial<AgentTurn> = {}): AgentTurn =>
   ({
@@ -28,7 +27,6 @@ const failed = (over: Partial<AgentTurn> = {}): AgentTurn =>
   }) as unknown as AgentTurn;
 
 describe.each([
-  ["the comment rail", RailTurnOutcomes],
   ["the discussion surface", DiscussionTurnOutcomes],
 ])("a failed contribution in %s", (_name, TurnOutcomes) => {
   it("CTA-FR-ZDDI, CTA-FR-EXVN: a refused certificate names the host and the cause and offers Retry", () => {

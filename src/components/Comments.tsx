@@ -269,11 +269,6 @@ export function Comments({ panel, onReveal }: CommentsProps) {
           <span className="comment-row__path" title={path}>
             {path}
           </span>
-          {item.discussion.locked && (
-            // The marker is decorative beside the Locked group header that
-            // already names the state, so it carries no second announcement.
-            <Icon.Lock size={11} aria-hidden="true" />
-          )}
           {/* CMP-FR-06: the target kind, as text and not as colour alone. */}
           <span
             className="comment-row__kind"

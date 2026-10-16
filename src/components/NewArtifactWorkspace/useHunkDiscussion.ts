@@ -1,0 +1,162 @@
+/**
+ * **Discuss** on one change of a proposal
+ * (`../../../specifications/ui/DCR-draft-change-review.md` DCR-FR-MTFD,
+ * DCR-FR-JTXE, DCR-FR-VBQN; `DDS-draft-discussion.md` DDS-FR-RHKW).
+ *
+ * Discuss opens a **new** discussion of the draft about that one change, rather
+ * than a reply in the discussion on screen. The opening comment carries one
+ * `proposal_hunk` attachment, which is the whole of the link between the change
+ * and its discussion (DCP-FR-FHWN). A change that already has a discussion
+ * shows that one instead of opening a second.
+ *
+ * A discussion decides nothing. After it opens, an undecided change is held for
+ * discussion; a rejected change stays rejected (DCR-FR-JTXE).
+ */
+import { useCallback, useState } from "react";
+
+import * as api from "../../api";
+import { logInfo, logWarn } from "../../logging";
+import { setDraftDiscussionHidden, setFocusedHunk } from "../../state/draftDiscussion";
+import {
+  getDiscussionSession,
+  setComposerBody,
+} from "../../state/discussionSession";
+import { hunkPosition, hunkStateOf } from "../../state/draftProposals";
+import { rereadHunks } from "../../state/proposalHunks";
+import type { HunkOpening } from "../DraftDiscussion/OpenDiscussion";
+import {
+  discussionTargetKey,
+  isUndecided,
+  type Discussion,
+  type DraftChangeProposal,
+  type ProposalHunkReference,
+} from "../../types";
+
+
+/**
+ * DCR-FR-VBQN: the discussion of one change, if it has one.
+ *
+ * A hunk discussion is one whose **opening** comment names the change. A later
+ * comment that names it is a reply in some other conversation, not the
+ * conversation about the change.
+ */
+export function hunkDiscussionOf(
+  discussions: readonly Discussion[],
+  proposalId: string,
+  hunkId: string,
+): Discussion | undefined {
+  return discussions.find((d) =>
+    (d.comments[0]?.attachments ?? []).some(
+      (a) => a.kind === "proposalHunk" && a.proposalId === proposalId && a.hunkId === hunkId,
+    ),
+  );
+}
+
+/** The `proposal_hunk` the opening comment of a discussion carries, if any. */
+export function openingHunkOf(discussion: Discussion): ProposalHunkReference | undefined {
+  const found = (discussion.comments[0]?.attachments ?? []).find(
+    (a) => a.kind === "proposalHunk",
+  );
+  return found?.kind === "proposalHunk" ? found : undefined;
+}
+
+/**
+ * DCR-FR-MTFD: the opening text starts with the proposing agent's tag, so the
+ * agent that made the change is the one who answers about it (CTA-FR-QUXJ).
+ * Text the author already typed is kept after the tag.
+ */
+export function seededBody(handle: string, typed: string): string {
+  const tag = `@${handle}`;
+  if (handle === "" || typed.includes(tag)) return typed;
+  return typed === "" ? `${tag} ` : `${tag} ${typed}`;
+}
+
+export function useHunkDiscussion(input: {
+  draftId: string;
+  proposal: DraftChangeProposal | undefined;
+  discussions: readonly Discussion[];
+  /** Select a discussion in the column. */
+  selectDiscussion: (discussionId: string) => void;
+  /** Put the caret in the column's composer. */
+  focusComposer: () => void;
+}) {
+  const { draftId, proposal, discussions, selectDiscussion, focusComposer } = input;
+  const [opening, setOpening] = useState<HunkOpening | null>(null);
+
+  /** DCR-FR-MTFD / DCR-FR-VBQN: Discuss on one change. */
+  const discuss = useCallback(
+    (hunkId: string) => {
+      if (proposal === undefined) return;
+      setFocusedHunk(draftId, hunkId);
+      // DDS-FR-RHKW: the column comes back where it is hidden, by the route the
+      // action row's own control takes (DDS-FR-XQMF).
+      setDraftDiscussionHidden(draftId, false);
+      const existing = hunkDiscussionOf(discussions, proposal.id, hunkId);
+      if (existing) {
+        logInfo(["frontend"], "a change's discussion was shown", {
+          draftId,
+          proposalId: proposal.id,
+          discussionId: existing.id,
+        });
+        setOpening(null);
+        selectDiscussion(existing.id);
+        focusComposer();
+        return;
+      }
+      const reference: ProposalHunkReference = {
+        kind: "proposalHunk",
+        proposalId: proposal.id,
+        hunkId,
+        draftId,
+        path: proposal.path,
+      };
+      // DCR-FR-MTFD: the opening composer is the draft's own, so the tag goes
+      // into the text it already holds rather than into a second field.
+      const key = discussionTargetKey({ kind: "draft", draftId });
+      const handle = proposal.agent.kind === "agent" ? proposal.agent.handle : "";
+      setComposerBody(key, seededBody(handle, getDiscussionSession(key).body));
+      setOpening({
+        reference,
+        position: hunkPosition(proposal, hunkId),
+        total: proposal.hunkCount,
+      });
+      logInfo(["frontend"], "a discussion of a change is being opened", {
+        draftId,
+        proposalId: proposal.id,
+      });
+      focusComposer();
+    },
+    [draftId, proposal, discussions, selectDiscussion, focusComposer],
+  );
+
+  /** DDS-FR-RHKW: the author discarded the composer. */
+  const cancel = useCallback(() => setOpening(null), []);
+
+  /**
+   * DCR-FR-JTXE: the discussion exists, so an undecided change is held for it.
+   * A rejected change keeps its rejection, and the hold decides nothing.
+   */
+  const opened = useCallback(
+    (created: Discussion) => {
+      const reference = openingHunkOf(created);
+      setOpening(null);
+      if (reference === undefined || proposal === undefined) return;
+      if (reference.proposalId !== proposal.id) return;
+      const state = hunkStateOf(proposal, reference.hunkId);
+      if (state === undefined || !isUndecided(state) || state === "discussing") return;
+      void api
+        .setDraftChangeHunkDiscussing(proposal.id, reference.hunkId, true)
+        .then(() => rereadHunks(proposal.id))
+        .catch((e: unknown) => {
+          logWarn(["frontend"], "a change could not be held for its discussion", {
+            draftId,
+            proposalId: proposal.id,
+            error: String(e),
+          });
+        });
+    },
+    [draftId, proposal],
+  );
+
+  return { opening, discuss, cancel, opened };
+}

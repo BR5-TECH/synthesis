@@ -195,7 +195,6 @@ describe("CVP-FR-60: a note with no discussion opens the opening state", () => {
         target: { kind: "note", noteId: "n1" },
         fragmentTarget: null,
         comments: [],
-        locked: false,
         resolved: false,
         createdAt: "",
         updatedAt: "",

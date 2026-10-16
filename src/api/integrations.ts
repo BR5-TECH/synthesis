@@ -362,7 +362,7 @@ export const deleteAgent = (scope: AgentScope, id: string) =>
 /**
  * AGC-FR-02: register a turn and return it `running` without waiting for the
  * model. The refusals it can return are the ones knowable without a call —
- * `agent_not_found`, `agent_unavailable`, `discussion_locked`; every other outcome
+ * `agent_not_found`, `agent_unavailable`, `discussion_resolved`; every other outcome
  * arrives as an `agent-turn-state-changed` event on the registered turn.
  *
  * AGC-FR-03: never refused because another turn is already running.

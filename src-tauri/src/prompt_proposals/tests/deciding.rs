@@ -56,17 +56,17 @@ fn the_decision_comment_says_whose_candidate_was_decided() {
 }
 
 #[test]
-fn a_locked_conversation_refuses_both_decisions_before_anything_is_written() {
+fn a_resolved_conversation_refuses_both_decisions_before_anything_is_written() {
     // PCP-FR-16.
     let f = Fixture::new();
     let proposal = f.pending();
-    f.lock();
+    f.resolve_conversation();
 
-    assert_eq!(f.accept(&proposal.id).unwrap_err(), comments::ERR_DISCUSSION_LOCKED,);
+    assert_eq!(f.accept(&proposal.id).unwrap_err(), comments::ERR_DISCUSSION_RESOLVED,);
     assert_eq!(f.artifact_body(), ORIGINAL);
     assert!(!f.dir().join(format!("{}.journal", proposal.id)).exists(), "no journal was written",);
     assert_eq!(read_proposal(&f.root, &proposal.id).unwrap().state, PromptProposalState::Pending,);
-    assert_eq!(f.decline(&proposal.id).unwrap_err(), comments::ERR_DISCUSSION_LOCKED,);
+    assert_eq!(f.decline(&proposal.id).unwrap_err(), comments::ERR_DISCUSSION_RESOLVED,);
     assert_eq!(read_proposal(&f.root, &proposal.id).unwrap().state, PromptProposalState::Pending,);
 }
 

@@ -89,7 +89,6 @@ function discussion(over: Partial<Discussion> = {}): Discussion {
         createdAt: "2026-01-01T00:01:00Z",
       },
     ],
-    locked: false,
     resolved: false,
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:01:00Z",
@@ -120,7 +119,6 @@ function anchored(over: Partial<Discussion> = {}): Discussion {
         createdAt: "2026-01-01T00:00:00Z",
       },
     ],
-    locked: false,
     resolved: false,
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
@@ -685,9 +683,9 @@ describe("the tab counts one conversation once (CMT-FR-56)", () => {
     expect(counter()).toHaveAccessibleName(/\(2 unresolved\)/);
   });
 
-  it("locks the discussion from its own card, on the command's reply alone", async () => {
-    // Deliberately without a `discussion-changed` event: a lock routed to
-    // the anchored hook now returns a thread that hook drops (CMT-FR-61), so the
+  it("CMT-FR-15, CMT-FR-16: resolves the discussion from its own card, on the command's reply alone", async () => {
+    // Deliberately without a `discussion-changed` event: a resolution routed to
+    // the anchored hook would return a thread that hook drops (CMT-FR-61), so the
     // card would go on offering a composer for a conversation that takes no
     // further comment — and only a test that emits nothing catches it.
     const b = await mount();
@@ -695,7 +693,7 @@ describe("the tab counts one conversation once (CMT-FR-56)", () => {
     await userEvent.click(
       within(card).getByRole("button", { name: "Thread actions for d1" }),
     );
-    await userEvent.click(await screen.findByRole("menuitem", { name: /lock/i }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Mark resolved" }));
 
     await waitFor(() =>
       expect(
@@ -703,8 +701,9 @@ describe("the tab counts one conversation once (CMT-FR-56)", () => {
       ).not.toBeInTheDocument(),
     );
     expect(
-      b.calls.filter((c) => c.cmd === "set_discussion_lock"),
+      b.calls.filter((c) => c.cmd === "set_discussion_resolution"),
     ).toHaveLength(1);
+    expect(b.calls.some((c) => c.cmd === "set_discussion_lock")).toBe(false);
   });
 
   it("drops back when the discussion is resolved from its own card", async () => {
@@ -794,13 +793,13 @@ describe("the routing is per thread, not per kind in bulk", () => {
     // The error channel is a union too. Filed by thread id under the anchored
     // hook alone, a discussion's refusal has nowhere to render and the post
     // appears to have simply vanished.
-    await mount({ addCommentError: "discussion_locked" });
+    await mount({ addCommentError: "discussion_resolved" });
 
     await replyTo("d1", "one more thing");
 
     const card = await screen.findByTestId("comment-thread-d1");
     await waitFor(() =>
-      expect(card).toHaveTextContent(/thread was locked, so it takes no new/),
+      expect(card).toHaveTextContent(/discussion was resolved, so it takes no new/),
     );
     // NAW-FR-33: the body survives the refusal, so the message is not retyped.
     expect(screen.getByLabelText("Reply to thread d1")).toHaveValue(

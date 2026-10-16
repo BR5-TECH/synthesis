@@ -29,6 +29,12 @@ impl HunkState {
     pub fn is_undecided(self) -> bool {
         matches!(self, HunkState::Pending | HunkState::Discussing)
     }
+
+    /// DCP-FR-XDRV: a hunk its agent may still replace — an undecided one, or
+    /// one the author rejected while the proposal stands.
+    pub fn is_revisable(self) -> bool {
+        self.is_undecided() || self == HunkState::Rejected
+    }
 }
 
 /// One row of the decision ledger the record carries (DCP-FR-01).

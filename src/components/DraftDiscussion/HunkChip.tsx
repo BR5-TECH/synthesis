@@ -35,6 +35,10 @@ export function HunkChip({
   onDiscuss: () => void;
 }) {
   const [box, setBox] = useState<{ top: number; left: number } | null>(null);
+  // DCR-FR-12: a rejected change can still be taken or talked about while its
+  // proposal is open, so its chip holds Accept and Discuss and says why there
+  // is no Reject.
+  const rejected = hunk.state === "rejected";
   const ref = useRef<HTMLDivElement>(null);
 
   // Measured from the decorated element rather than from ProseMirror positions:
@@ -98,6 +102,11 @@ export function HunkChip({
       <span className="dds-chip__at t-ui-xs">
         {hunk.position} / {hunk.total}
       </span>
+      {rejected && (
+        <span className="dds-chip__state t-ui-xs" data-testid="hunk-chip-rejected">
+          Rejected
+        </span>
+      )}
       {/* DCR-FR-31: a change whose text the prompt no longer holds has nowhere
           to go, so Accept states that reason where the action would have been
           and Reject stays live — rejecting is the only act that clears it. */}
@@ -113,18 +122,21 @@ export function HunkChip({
       >
         Accept <kbd className="dds-chip__key">⏎</kbd>
       </button>
-      <button
-        className="btn btn--sm"
-        disabled={busy}
-        title="Reject this change"
-        onClick={onReject}
-      >
-        Reject <kbd className="dds-chip__key">⌫</kbd>
-      </button>
+      {!rejected && (
+        <button
+          className="btn btn--sm"
+          disabled={busy}
+          title="Reject this change"
+          onClick={onReject}
+        >
+          Reject <kbd className="dds-chip__key">⌫</kbd>
+        </button>
+      )}
+      {/* DCR-FR-MTFD: a discussion of its own about this one change. */}
       <button
         className="btn btn--ghost btn--sm"
         disabled={busy}
-        title="Reply to this change in the discussion"
+        title="Discuss this change in a discussion of its own"
         onClick={onDiscuss}
       >
         Discuss →

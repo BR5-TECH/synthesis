@@ -42,7 +42,6 @@ function discussion(id = "d1"): Discussion {
         createdAt: "2026-02-01T00:00:00Z",
       },
     ],
-    locked: false,
     resolved: false,
     createdAt: "2026-02-01T00:00:00Z",
     updatedAt: "2026-02-01T00:00:00Z",
@@ -176,8 +175,12 @@ describe("DiscussionComposer keyboard", () => {
     expect(props.mode === "reply" && props.onReply).not.toHaveBeenCalled();
   });
 
-  it("CVP-FR-40: a locked discussion carries no composer", () => {
-    render(<DiscussionComposer {...replyProps({ locked: true })} />);
+  it("CVP-FR-40, CMT-FR-16: a resolved discussion carries no composer", () => {
+    render(
+      <DiscussionComposer
+        {...replyProps({ discussion: { ...discussion(), resolved: true } } as Partial<DiscussionComposerProps>)}
+      />,
+    );
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 
@@ -211,7 +214,7 @@ describe("DiscussionComposer keyboard", () => {
 describe("DiscussionComposer refusal", () => {
   it("CVP-FR-41: a refused accelerator post renders the typed error and keeps the body and attachments", async () => {
     const onReply = vi.fn(async () => {
-      throw "discussion_locked";
+      throw "discussion_resolved";
     });
     render(<DiscussionComposer {...replyProps({ onReply })} />);
     setComposerAttachments("d1", [
@@ -229,7 +232,7 @@ describe("DiscussionComposer refusal", () => {
   });
 
   it("CMT-FR-34: an error given by the owner renders inline as an alert", () => {
-    render(<DiscussionComposer {...replyProps({ error: "discussion_locked" })} />);
+    render(<DiscussionComposer {...replyProps({ error: "discussion_resolved" })} />);
     expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 });

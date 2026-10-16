@@ -23,7 +23,7 @@ import {
   type OpenDiscussionRequest,
   type OwnerAvailability,
 } from "../discussion";
-import { OpenDiscussion } from "./OpenDiscussion";
+import { OpenDiscussion, type HunkOpening } from "./OpenDiscussion";
 import { COMPOSER_KEY } from "../../hooks/useDiscussions";
 import { expandHistory, useDraftDiscussion } from "../../state/draftDiscussion";
 import { setDiscussionScroll, useDiscussionSession } from "../../state/discussionSession";
@@ -65,7 +65,6 @@ export interface DiscussionColumnProps {
     quotes: CommentQuote[],
     attachments: AttachmentInput[],
   ) => Promise<unknown>;
-  onSetLock: (threadId: string, locked: boolean) => Promise<void>;
   onSetResolved: (threadId: string, resolved: boolean) => Promise<void>;
   errors: Record<string, string>;
   blocked: boolean;
@@ -101,6 +100,13 @@ export interface DiscussionColumnProps {
   openingFragment?: FragmentTarget | null;
   /** DDS-FR-QMBC: the author discarded the opening composer of a fragment. */
   onCancelFragment?: () => void;
+  /**
+   * DDS-FR-RHKW: the change a new hunk discussion is about. While it is set the
+   * column shows the opening composer for it.
+   */
+  openingHunk?: HunkOpening | null;
+  /** DDS-FR-RHKW: the author discarded the composer of a hunk discussion. */
+  onCancelHunk?: () => void;
   /**
    * CMT-FR-19 / DDS-FR-QMBC: whether a fragment discussion's passage can still be
    * found in the prompt. Absent, every discussion is available.
@@ -140,7 +146,10 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
   // DDS-FR-QMBC: a passage chosen in the prompt puts the column on the opening
   // composer that will carry it.
   const fragment = props.openingFragment ?? null;
-  const composingNew = composingOther || fragment !== null;
+  // DDS-FR-RHKW: Discuss on a change puts the column on the composer of a new
+  // discussion about it, whichever discussion the column was reading.
+  const hunk = props.openingHunk ?? null;
+  const composingNew = composingOther || fragment !== null || hunk !== null;
 
   // DDS-FR-QMBC: a discussion focused from outside — the mark of a fragment in
   // the prompt, or a new discussion just opened — is the one the column reads,
@@ -186,6 +195,10 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
   // is the column's last text field whichever of the two the column is showing —
   // the opener before a discussion exists and the reply after.
   const columnRef = useRef<HTMLElement>(null);
+  // DDS-FR-MZQJ: the header holds the discussion's own menu, so the menu is
+  // reachable whatever part of the transcript the column shows. State rather
+  // than a ref, so the surface renders into it once it is mounted.
+  const [actionsHost, setActionsHost] = useState<HTMLSpanElement | null>(null);
   const signal = props.focusSignal ?? 0;
   const focusComposer = () => {
     const fields = columnRef.current?.querySelectorAll("textarea");
@@ -199,6 +212,10 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
   useEffect(() => {
     if (fragment !== null) focusComposer();
   }, [fragment]);
+  // DDS-FR-RHKW: and so does Discuss on a change.
+  useEffect(() => {
+    if (hunk !== null) focusComposer();
+  }, [hunk]);
 
   // DDS-FR-CLBK: the head of a long discussion, as one row that expands in
   // place. Counted rather than measured, because a count is stable.
@@ -233,6 +250,24 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
           >
             {atTail ? "following" : "paused · reading history"}
           </span>
+        )}
+        {/* DDS-FR-MZQJ / DDS-FR-YSNB: a resolved discussion says so in one
+            lowercase word beside its dot. */}
+        {thread?.resolved && (
+          <span
+            className="dds-discussion__state dds-discussion__state--resolved"
+            data-testid="discussion-resolved-state"
+          >
+            <span className="dds-discussion__dot" aria-hidden="true" />
+            resolved
+          </span>
+        )}
+        {transcript && (
+          <span
+            ref={setActionsHost}
+            className="dds-discussion__actions"
+            data-testid="discussion-header-actions"
+          />
         )}
       </header>
 
@@ -373,8 +408,8 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
             }}
             error={props.errors[thread.id]}
             onReply={props.onReply}
-            onSetLock={props.onSetLock}
             onSetResolved={props.onSetResolved}
+            actionsHost={actionsHost}
           />
         ) : (
           /* A draft nobody has spoken about yet. The column carries the
@@ -382,7 +417,9 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
              transcript, which would read as one that failed to load. */
           <OpenDiscussion
             state={
-              fragment !== null
+              hunk !== null
+                ? "hunk"
+                : fragment !== null
                 ? "fragment"
                 : discussions.length === 0
                   ? "unspoken"
@@ -391,6 +428,7 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
                     : "another"
             }
             fragment={fragment}
+            hunk={hunk}
             resolved={resolved.length}
             draftId={draftId}
             agents={props.agents}
@@ -403,7 +441,8 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
             }}
             onCancel={() => {
               setComposingNew(false);
-              props.onCancelFragment?.();
+              if (hunk !== null) props.onCancelHunk?.();
+              else props.onCancelFragment?.();
             }}
           />
         )}

@@ -49,7 +49,7 @@ A question carrying no options is the question alone and carries no closing line
 ### Refusals
 - **no open project** — the shared refusal of `TLC-tool-conventions.md`: kind `NotFound`, not retryable.
 - **blank question** — kind `InvalidArgs`, retryable: *"The question must say what you want to know. Write it as you would write it to a colleague."*
-- **conversation locked** — kind `PermissionDenied`, not retryable: *"This conversation is locked and takes no further comments, so nothing was posted and no answer is coming. Answer with what you already have; asking again will not succeed."*
+- **conversation resolved** — kind `PermissionDenied`, not retryable: *"This conversation is resolved and takes no further comments, so nothing was posted and no answer is coming. Answer with what you already have; asking again will not succeed."*
 - **question set pending** — kind `PermissionDenied`, not retryable: *"This discussion already has a question set waiting on the author, so nothing was posted. Answer with what you already have; asking again will not succeed."*
 - **could not post** — kind `Other`, retryable: *"The question could not be posted to this conversation."*
 
@@ -66,7 +66,8 @@ Declared in full (per TLC-FR-17). One successful call appends **exactly one comm
  7. **AUC-FR-07** `options` is optional and forgiving (per TLC-FR-07): absent, empty, or holding nothing but blank entries, it is no options at all and the body is the question alone. Blank entries are dropped and the rest carried in the order given. A long list is not refused and not truncated — a model that offers six candidates is offering six, and the author reads them.
  8. **AUC-FR-08** The tool posts and returns. It waits for no reply, holds no timer, opens no watcher, and leaves no request outstanding, so TLC-FR-16 holds for it unchanged: the answer reaches the agent as a later turn rather than as this call's result.
  9. **AUC-FR-09** A successful call returns the data object of the contract surface. It composes no sentence about what it did (per TLC-FR-08), the fact of the posting being the whole of the result.
-10. **AUC-FR-10** A conversation whose folded state is locked (per `../core/CMS-comments-storage.md` CMS-FR-17) is the **not retryable** `PermissionDenied` refusal, and its message says a further call will not succeed (per TLC-FR-11). No argument the model could compose would unlock a conversation, and an agent told otherwise would spend its remaining calls asking a thread that cannot answer.
+10. **AUC-FR-10** A conversation whose folded state is resolved (per `../core/CMS-comments-storage.md` CMS-FR-17), a discussion stored as locked included, is the **not retryable** `PermissionDenied` refusal, and nothing is posted. Its message says a further call will not succeed (per TLC-FR-11).
+    - *Why:* Only the author can reopen a conversation, so an agent told otherwise would spend its remaining calls asking a thread that cannot answer.
 11. **AUC-FR-11** An append that fails for any other reason is the retryable `Other` refusal, and nothing was appended: a refused call leaves the conversation byte-for-byte as it was.
 12. **AUC-FR-12** A refusal is not a turn's failure (per `../ai/CVL-conversation-loop.md` CVL-FR-14) **and does not end the turn**: a call that posted nothing leaves the loop running, so an agent whose question was refused answers with what it already has rather than falling silent. Only a call that actually posted ends the turn (per CVL-FR-15).
 13. **AUC-FR-13** With no project open the tool produces the shared no-open-project refusal (per TLC-FR-13), there being no conversation to post into.

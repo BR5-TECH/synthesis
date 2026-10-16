@@ -172,8 +172,8 @@ impl Fixture {
             .expect("thread")
     }
 
-    fn lock(&self) {
-        comments::set_lock_to(
+    fn resolve_conversation(&self) {
+        comments::set_resolution_to(
             &self.root,
             comments::ThreadRef::artifact_discussion(PROMPT),
             &self.thread_id,
@@ -181,7 +181,7 @@ impl Fixture {
             &human(),
             "2026-01-01T00:05:00Z",
         )
-        .expect("lock");
+        .expect("resolve");
     }
 
     /// What `complete_prompt_change_decision` answers with — the reconciliation

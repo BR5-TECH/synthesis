@@ -29,7 +29,9 @@ import {
 import {
   hunkPosition,
   hunkStateOf,
+  nextUndecidedAfter,
   undecidedHunks,
+  visitedHunks,
 } from "../../state/draftProposals";
 import { rereadHunks, useProposalHunks } from "../../state/proposalHunks";
 import { dispatchDecision } from "../DraftDiscussion/decisionDispatch";
@@ -43,7 +45,7 @@ export function useDraftReview({
   flushBeforeApply,
   reloadAfterApply,
   reloadHistory: loadHistory,
-  onDiscussFocus,
+  onDiscussHunk,
   agents,
 }: {
   draftId: string;
@@ -60,8 +62,8 @@ export function useDraftReview({
   /** NAW-FR-42: read the prompt again once an acceptance has rewritten it. */
   reloadAfterApply: (path: string) => void;
   reloadHistory: () => void;
-  /** DCR-FR-MTFD: take the author to the discussion column's composer. */
-  onDiscussFocus: () => void;
+  /** DCR-FR-MTFD: open, or show, the discussion of one change. */
+  onDiscussHunk: (hunkId: string) => void;
   /** CTA-FR-VQFJ: the project's agents, for the decision's own dispatch. */
   agents: readonly ProjectAgent[];
 }): EditorReview | undefined {
@@ -138,6 +140,11 @@ export function useDraftReview({
     () => (pendingProposal ? undecidedHunks(pendingProposal) : []),
     [pendingProposal],
   );
+  /** DCR-FR-QPRV: the changes a move visits, a rejected one included. */
+  const visitedRows = useMemo(
+    () => (pendingProposal ? visitedHunks(pendingProposal) : []),
+    [pendingProposal],
+  );
 
   /**
    * DCR-FR-05: the change the review is on.
@@ -148,7 +155,7 @@ export function useDraftReview({
    */
   const focusedHunkId =
     view.focusedHunkId !== null &&
-    undecidedRows.some((row) => row.id === view.focusedHunkId)
+    visitedRows.some((row) => row.id === view.focusedHunkId)
       ? view.focusedHunkId
       : (undecidedRows[0]?.id ?? null);
 
@@ -208,16 +215,12 @@ export function useDraftReview({
         // reading, to a change they have already looked at — and the
         // acceptance they just made reads as though nothing happened.
         //
-        // Chosen here, from the order as it stood when the decision was made,
-        // rather than left to the fallback: once the ledger has moved on, the
-        // decided change is no longer in it to be counted from.
-        const order = undecidedRows.map((row) => row.id);
-        const at = order.indexOf(hunkId);
+        // Chosen here, from the ledger as it stood when the decision was made,
+        // rather than left to the fallback: a rejected change stays visited
+        // (DCR-FR-QPRV), so the fallback would keep the review on it.
         const next =
-          at === -1
-            ? null
-            : (order.slice(at + 1)[0] ?? order.slice(0, at)[0] ?? null);
-        if (next !== null) setFocusedHunk(draftId, next);
+          pendingProposal !== undefined ? nextUndecidedAfter(pendingProposal, hunkId) : null;
+        setFocusedHunk(draftId, next);
         rereadHunks(proposalId);
         loadHistory();
         // DCR-FR-15: the decision that leaves nothing undecided is the one that
@@ -243,7 +246,6 @@ export function useDraftReview({
       agents,
       path,
       draftId,
-      undecidedRows,
       flushBeforeApply,
       reloadAfterApply,
       loadHistory,
@@ -255,8 +257,13 @@ export function useDraftReview({
     [decide],
   );
   const rejectHunk = useCallback(
-    (hunkId: string) => void decide(hunkId, "reject"),
-    [decide],
+    (hunkId: string) => {
+      // DCR-FR-12: a rejected change offers no Reject, so its accelerator does
+      // nothing either; the backend would refuse it (DCP-FR-17).
+      if (pendingProposal && hunkStateOf(pendingProposal, hunkId) === "rejected") return;
+      void decide(hunkId, "reject");
+    },
+    [decide, pendingProposal],
   );
 
   /**
@@ -326,21 +333,10 @@ export function useDraftReview({
   );
 
   /**
-   * DCR-FR-MTFD: hold the change for discussion and take the author to the
-   * composer with the reply addressed to it.
+   * DCR-FR-MTFD: a change is discussed in a discussion of its own. Opening it
+   * decides nothing; the hold comes once that discussion exists (DCR-FR-JTXE).
    */
-  const discussHunk = useCallback(
-    (hunkId: string) => {
-      if (proposalId === null) return;
-      setFocusedHunk(draftId, hunkId);
-      void api
-        .setDraftChangeHunkDiscussing(proposalId, hunkId, true)
-        .then(() => rereadHunks(proposalId))
-        .catch((e) => setDecisionError(decisionMessage(String(e))));
-      onDiscussFocus();
-    },
-    [proposalId, draftId],
-  );
+  const discussHunk = onDiscussHunk;
 
   /**
    * DCR-FR-11 / DCR-FR-30: the changes a move steps through.
@@ -355,8 +351,8 @@ export function useDraftReview({
     // order, and nothing else — and taking more would tie the accelerators'
     // own effect to `reviewHunks`, whose identity changes on every keystroke
     // of a hunk edit, rebinding the window listener as the author types.
-    () => undecidedRows.map((row) => ({ id: row.id })),
-    [undecidedRows],
+    () => visitedRows.map((row) => ({ id: row.id })),
+    [visitedRows],
   );
 
   // DCR-FR-30: the accelerators, live only while there is a proposal to review.

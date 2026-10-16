@@ -35,6 +35,11 @@ export function decisionMessage(error: string): string {
   if (error.includes(PROPOSAL_ERRORS.pathMissing)) {
     return "That file is no longer in the draft, so this change cannot be applied.";
   }
+  // DCP-FR-11: the proposal's conversation is resolved, and a decision there
+  // would append into it. Reopening it is what lets the decision through.
+  if (error.includes(PROPOSAL_ERRORS.discussionResolved)) {
+    return "The discussion this proposal was posted in is resolved. Reopen it to decide this change. Nothing was changed.";
+  }
   if (error.includes(PROPOSAL_ERRORS.writeFailed)) {
     return "The draft file could not be written. Nothing was changed.";
   }

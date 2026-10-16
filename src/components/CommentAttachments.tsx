@@ -19,6 +19,7 @@
 import { useEffect, useRef, useState } from "react";
 import { readCommentAttachment } from "../api";
 import { Icon } from "./icons";
+import { ProposalHunkControl } from "./ProposalHunkControl";
 import {
   openReview,
   undecidedHunks,
@@ -806,7 +807,7 @@ function AttachmentView({
       <span className="comment-attach__chip-type">
         {failed
           ? "could not be loaded"
-          : isProposalAttachment(attachment)
+          : isProposalAttachment(attachment) || attachment.kind === "proposalHunk"
             ? attachment.path
             : attachment.mediaType}
       </span>
@@ -838,6 +839,8 @@ export function CommentAttachmentList({
           <ProposalAttachmentView key={i} attachment={a} />
         ) : a.kind === "promptProposal" ? (
           <PromptProposalAttachmentView key={i} attachment={a} />
+        ) : a.kind === "proposalHunk" ? (
+          <ProposalHunkControl key={i} attachment={a} />
         ) : (
           <AttachmentView
             key={i}

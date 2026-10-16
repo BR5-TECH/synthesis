@@ -510,10 +510,20 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
     // with an agent participant carrying the agent's id, its nickname as the
     // handle, and the model that produced the answer. The result is a comment
     // the fold, the rail, and the Comments panel read exactly as a human's.
-    deliver(plan.roots.borrowed(), &plan.origin, &plan.author, answer).map_err(|e| {
-        let failure = if e == comments::ERR_DISCUSSION_LOCKED {
-            // AGC-FR-19: locked while the turn was in flight.
-            FAIL_THREAD_LOCKED
+    //
+    // AGC-FR-19: a conversation resolved at any moment while the turn was in
+    // flight takes nothing from it, also where the author reopened it since. The
+    // append path refuses only a conversation resolved *now*, so the resolution
+    // that came and went is checked here and refused on the same terms.
+    let delivered = if resolved_during_turn(plan) {
+        Err(comments::ERR_DISCUSSION_RESOLVED.to_string())
+    } else {
+        deliver(plan.roots.borrowed(), &plan.origin, &plan.author, answer)
+    };
+    delivered.map_err(|e| {
+        let failure = if e == comments::ERR_DISCUSSION_RESOLVED {
+            // AGC-FR-19: resolved while the turn was in flight.
+            FAIL_DISCUSSION_RESOLVED
         } else {
             FAIL_CONTEXT_UNAVAILABLE
         };

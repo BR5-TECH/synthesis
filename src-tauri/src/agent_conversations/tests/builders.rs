@@ -475,13 +475,13 @@ fn an_agents_answer_lands_in_the_discussion_it_was_asked_in() {
 }
 
 #[test]
-fn a_locked_discussion_refuses_a_turn_before_it_is_registered() {
-    // AGC-FR-02, AGC-FR-15 / AGC-FR-19 over a discussion. A lock stops an agent exactly as
+fn a_resolved_discussion_refuses_a_turn_before_it_is_registered() {
+    // AGC-FR-02, AGC-FR-15 / AGC-FR-19 over a discussion. A resolution stops an agent exactly as
     // it stops an author, whichever kind of thread it is on.
     let h = Harness::new(vec![Ok("ok".into())]);
     h.create_agent("arch", "");
     let (draft_id, thread) = seed_discussion(&h, &["@arch thoughts?"]);
-    crate::comments::set_lock_to(
+    crate::comments::set_resolution_to(
         &h.root(),
         crate::comments::ThreadRef::discussion(&draft_id),
         &thread.id,
@@ -489,11 +489,11 @@ fn a_locked_discussion_refuses_a_turn_before_it_is_registered() {
         &human("ada"),
         "2026-01-02T00:00:00Z",
     )
-    .expect("lock");
+    .expect("resolve");
 
     assert_eq!(
         h.dispatch("arch", ConversationOrigin::of(&thread), &thread.comments[0].id,).unwrap_err(),
-        FAIL_THREAD_LOCKED,
+        FAIL_DISCUSSION_RESOLVED,
     );
     assert!(h.turns().in_flight(None).is_empty());
     assert_eq!(

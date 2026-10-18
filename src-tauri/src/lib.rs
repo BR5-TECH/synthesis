@@ -439,7 +439,6 @@ pub fn run() {
             comments::open_discussion,
             comments::get_or_create_note_discussion,
             comments::add_comment,
-            comments::set_discussion_lock,
             comments::set_discussion_resolution,
             comments::reanchor_discussion_fragment,
             comments::resolve_comment_author_identity,

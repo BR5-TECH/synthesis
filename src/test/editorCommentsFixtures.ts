@@ -40,7 +40,6 @@ export function makeThread(over: Partial<Discussion> = {}): Discussion {
         createdAt: "2026-01-01T00:00:00Z",
       },
     ],
-    locked: false,
     resolved: false,
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
@@ -116,7 +115,9 @@ export function wireBackend(invokeMock: Mock, b: Backend) {
                 filename: a.filename,
                 bytes: a.data.length,
               }
-            : { kind: "url", url: a.url, mediaType: a.mediaType, label: a.label },
+            : a.kind === "url"
+              ? { kind: "url", url: a.url, mediaType: a.mediaType, label: a.label }
+              : a,
         );
         const target = b.threads.find((t) => t.id === threadId)!;
         const updated: Discussion = {
@@ -133,12 +134,6 @@ export function wireBackend(invokeMock: Mock, b: Backend) {
             },
           ],
         };
-        b.threads = b.threads.map((t) => (t.id === threadId ? updated : t));
-        return updated;
-      }
-      case "set_discussion_lock": {
-        const { discussionId: threadId, locked } = args as { discussionId: string; locked: boolean };
-        const updated = { ...b.threads.find((t) => t.id === threadId)!, locked };
         b.threads = b.threads.map((t) => (t.id === threadId ? updated : t));
         return updated;
       }

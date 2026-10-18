@@ -23,6 +23,7 @@ import { DiscussionColumn, Splitter, gridTemplate } from "../DraftDiscussion";
 import { DraftHistoryRail } from "./DraftHistoryRail";
 import { GithubShadowBanner } from "./GithubShadow";
 import { useDraftReview } from "./useDraftReview";
+import { useHunkDiscussion } from "./useHunkDiscussion";
 import { useDraftPublication } from "../../hooks/useDraftPublication";
 import { DraftPublicationBand, PublicationOverlays } from "../DraftPublication";
 import { isRefusal, versionCountOf } from "./labels";
@@ -590,6 +591,15 @@ export function NewArtifactWorkspace({
   // live in `useDraftReview` — a hook rather than a component, because what it
   // produces is what the *editing surface* renders rather than a surface of its
   // own.
+  // DCR-FR-MTFD / DDS-FR-RHKW: Discuss on a change opens a discussion of its
+  // own, in the column beside the document.
+  const hunkDiscussion = useHunkDiscussion({
+    draftId,
+    proposal: pendingProposal,
+    discussions: draftDiscussions,
+    selectDiscussion: setFocusedThreadId,
+    focusComposer: () => setDiscussFocus((n) => n + 1),
+  });
   const review = useDraftReview({
     draftId,
     proposal: pendingProposal,
@@ -599,7 +609,7 @@ export function NewArtifactWorkspace({
     flushBeforeApply,
     reloadAfterApply,
     reloadHistory: () => void loadHistory(),
-    onDiscussFocus: () => setDiscussFocus((n) => n + 1),
+    onDiscussHunk: hunkDiscussion.discuss,
     // DCR-FR-15: the roster the decision's own comment is dispatched against.
     agents: discussions.agents,
   });
@@ -806,13 +816,17 @@ export function NewArtifactWorkspace({
           }
           agents={discussions.agents}
           onReply={discussions.reply}
-          onSetLock={discussions.setLock}
           onSetResolved={discussions.setResolved}
           errors={discussions.errors}
           blocked={starting}
           anchor={anchorBar}
           onOpenDiscussion={openDiscussion}
-          onOpened={fragmentsGroup.opened}
+          onOpened={(created) => {
+            fragmentsGroup.opened(created);
+            hunkDiscussion.opened(created);
+          }}
+          openingHunk={hunkDiscussion.opening}
+          onCancelHunk={hunkDiscussion.cancel}
           openingFragment={fragmentsGroup.openingFragment}
           onCancelFragment={fragmentsGroup.cancelOpening}
           availabilityOf={fragmentsGroup.availabilityOf}

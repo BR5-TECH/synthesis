@@ -428,7 +428,6 @@ describe("EDT-FR-61, ESH-FR-CXAI, CMT-FR-02, CMT-FR-03: comments beside the sour
         createdAt: "2026-01-01T00:00:00Z",
       },
     ],
-    locked: false,
     resolved: false,
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",

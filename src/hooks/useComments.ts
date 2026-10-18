@@ -20,7 +20,6 @@ import {
   openDiscussion,
   reanchorDiscussionFragment,
   resolveCommentAuthorIdentity,
-  setDiscussionLock,
   setDiscussionResolution,
 } from "../api";
 import {
@@ -136,7 +135,6 @@ export interface UseCommentsResult {
     quotes: CommentQuote[],
     attachments: AttachmentInput[],
   ) => Promise<void>;
-  setLock: (threadId: string, locked: boolean) => Promise<void>;
   setResolved: (threadId: string, resolved: boolean) => Promise<void>;
   /** CMT-FR-20: track anchors through an edit that took `before` to `after`. */
   noteBufferChange: (before: string, after: string) => void;
@@ -667,11 +665,11 @@ export function useComments(
         dispatchFor(updated, body);
       } catch (e) {
         // CMT-FR-34: the error attaches to the card and the composer keeps its
-        // content, so a post refused because someone else locked the thread is
+        // content, so a post refused because someone else resolved the thread is
         // retried (or copied out) rather than lost.
         noteError(threadId, e);
-        // A refusal because the thread was locked since the rail last read it
-        // must also re-render the card as locked, or the composer invites a
+        // A refusal because the thread was resolved since the rail last read it
+        // must also re-render the card as resolved, or the composer invites a
         // second attempt at something that cannot succeed.
         void listDiscussions({ kind: "artifact", artifactId })
           .then((loaded) => applyThreads(loaded.filter(isFragmentTargeted)))
@@ -680,20 +678,6 @@ export function useComments(
       }
     },
     [artifactId, applyThreads, clearError, mergeThread, noteError, dispatchFor],
-  );
-
-  const setLock = useCallback(
-    async (threadId: string, locked: boolean) => {
-      if (!artifactId) return;
-      try {
-        const updated = await setDiscussionLock({ artifactId, discussionId: threadId, locked });
-        clearError(threadId);
-        mergeThread(updated);
-      } catch (e) {
-        noteError(threadId, e);
-      }
-    },
-    [artifactId, clearError, mergeThread, noteError],
   );
 
   const setResolved = useCallback(
@@ -812,7 +796,6 @@ export function useComments(
     errors,
     openThread,
     reply,
-    setLock,
     setResolved,
     noteBufferChange,
     reanchorAll,

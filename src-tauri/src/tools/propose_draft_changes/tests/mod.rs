@@ -148,8 +148,8 @@ impl Fixture {
         crate::drafts::load_draft_file_impl(&self.root(), &self.draft_id, FILE).expect("file").body
     }
 
-    fn lock(&self) {
-        crate::comments::set_lock_to(
+    fn resolve_conversation(&self) {
+        crate::comments::set_resolution_to(
             &self.root(),
             crate::comments::ThreadRef::discussion(&self.draft_id),
             &self.thread_id,
@@ -157,7 +157,7 @@ impl Fixture {
             &human(),
             "2026-01-01T00:05:00Z",
         )
-        .expect("lock");
+        .expect("resolve");
     }
 }
 
@@ -464,16 +464,18 @@ fn a_second_proposal_is_refused_while_one_is_pending_and_is_retryable() {
 }
 
 // ---------------------------------------------------------------------------
-// PDC-FR-09 — a locked conversation (PDC-FR-09, PDC-FR-15)
+// PDC-FR-09 — a resolved conversation (PDC-FR-09, PDC-FR-15)
 // ---------------------------------------------------------------------------
 
+// PDC-FR-09 / PDC-FR-15: a resolved conversation is the not-retryable
+// `PermissionDenied`, and neither the proposal nor the comment is produced.
 #[test]
-fn a_locked_conversation_refuses_permanently_and_records_nothing() {
+fn a_resolved_conversation_refuses_permanently_and_records_nothing() {
     let f = Fixture::new();
-    f.lock();
+    f.resolve_conversation();
 
     let refusal = f.call(good()).unwrap_err();
-    assert_eq!(refusal, ToolRefusal::ProposalConversationLocked);
+    assert_eq!(refusal, ToolRefusal::ProposalConversationResolved);
     assert_eq!(refusal.kind(), ToolErrorKind::PermissionDenied);
     assert!(!refusal.retryable());
     assert!(

@@ -496,7 +496,6 @@ export function ActionControl({
       availability={missing ? "unavailable" : "available"}
       error={discussions.errors[d.id]}
       onReply={discussions.reply}
-      onSetLock={discussions.setLock}
       onSetResolved={discussions.setResolved}
     />
   );

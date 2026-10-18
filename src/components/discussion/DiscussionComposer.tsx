@@ -102,8 +102,6 @@ interface ComposerCommon {
   alwaysShowCancel?: boolean;
   /** Called when the author discards. The text and the attachments are cleared first. */
   onCancel?: () => void;
-  /** The discussion is locked. A locked discussion carries no composer. */
-  locked?: boolean;
 }
 
 export type DiscussionComposerProps = ComposerCommon &
@@ -125,6 +123,12 @@ export type DiscussionComposerProps = ComposerCommon &
         onOpen: (request: OpenDiscussionRequest) => Promise<Discussion>;
         /** Called with the discussion the backend returned, after the field is cleared. */
         onOpened?: (discussion: Discussion) => void;
+        /**
+         * DCR-FR-MTFD: attachments the opening comment carries beside the strip
+         * — the `proposal_hunk` of a hunk discussion. Not shown in the strip and
+         * not removable there; discarding the composer discards them.
+         */
+        extraAttachments?: readonly AttachmentInput[];
       }
   );
 
@@ -176,7 +180,10 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
   }, [signal]);
 
   const error = props.error ?? session.error;
-  const canPost = !(disabled || blocked || props.locked) && body.trim() !== "";
+  // CVP-FR-40 / CMT-FR-16: a resolved discussion takes no comment, so nothing
+  // here posts into one even where an owner still mounts the field.
+  const resolved = thread?.resolved ?? false;
+  const canPost = !(disabled || blocked || resolved) && body.trim() !== "";
 
   /**
    * CMT-FR-34 / CVP-FR-41: a refused post leaves the text, the quotes, and every
@@ -200,7 +207,7 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
           target: props.target,
           fragmentTarget: props.fragmentTarget ?? null,
           body,
-          attachments: attachments.inputs,
+          attachments: [...(props.extraAttachments ?? []), ...attachments.inputs],
         });
       }
     } catch (e) {
@@ -225,7 +232,7 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
   /**
    * CVP-FR-40 / CMT-FR-70: Ctrl+Enter or Cmd+Enter posts and prevents the newline.
    * It acts only on a body that is not empty, never while a post is in flight,
-   * while the composer is disabled or the discussion is locked, and never during
+   * while the composer is disabled or the discussion is resolved, and never during
    * an IME composition. The mention picker keeps its own keys: the text area does
    * not offer this event to us while the picker is open.
    */
@@ -253,7 +260,7 @@ export function DiscussionComposer(props: DiscussionComposerProps) {
     return c ? participantLabel(c.author) : "";
   };
 
-  if (props.locked) return null;
+  if (resolved) return null;
 
   return (
     <div

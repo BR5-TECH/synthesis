@@ -70,8 +70,8 @@ export function messageFor(error: string): string {
   if (error.includes(PROMPT_PROPOSAL_ERRORS.notAPrompt)) {
     return "This file is no longer in the project as a prompt, so this change cannot be applied.";
   }
-  if (error.includes(PROMPT_PROPOSAL_ERRORS.discussionLocked)) {
-    return "This conversation is locked, so the decision could not be recorded. This file has not changed.";
+  if (error.includes(PROMPT_PROPOSAL_ERRORS.discussionResolved)) {
+    return "This conversation is resolved, so the decision could not be recorded. This file has not changed.";
   }
   if (error.includes(PROMPT_PROPOSAL_ERRORS.acceptanceInProgress)) {
     return "This change is still being applied. Try again in a moment.";

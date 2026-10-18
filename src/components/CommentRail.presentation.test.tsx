@@ -52,7 +52,6 @@ function anchored(
       ...anchor,
     },
     comments: comments(id, "a passage"),
-    locked: false,
     resolved: false,
     createdAt: "2026-02-01T00:00:00Z",
     updatedAt: "2026-02-01T00:00:00Z",
@@ -96,7 +95,6 @@ function mount(threads: AnchoredThread[], over: Record<string, unknown> = {}) {
       onOpenDraft={refuse}
       onCancelDraft={() => {}}
       onReply={noop}
-      onSetLock={noop}
       onSetResolved={noop}
       errors={{}}
       showResolved

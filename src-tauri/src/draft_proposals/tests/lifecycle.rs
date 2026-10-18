@@ -163,7 +163,7 @@ fn a_proposal_reaches_an_anchored_draft_thread_too() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn a_locked_conversation_refuses_the_decision_before_anything_is_written() {
+fn a_resolved_conversation_refuses_the_decision_before_anything_is_written() {
     // DCP-FR-15 (DCP-FR-15): one of the two conditions that would make the
     // decision comment impossible, checked up front — so the prompt is
     // untouched, the history gained nothing, and the proposal is still pending
@@ -171,9 +171,9 @@ fn a_locked_conversation_refuses_the_decision_before_anything_is_written() {
     let f = Fixture::new();
     let proposal = f.pending();
     let before = f.file_body();
-    f.lock();
+    f.resolve_conversation();
 
-    assert_eq!(f.accept(&proposal.id).unwrap_err(), crate::comments::ERR_DISCUSSION_LOCKED,);
+    assert_eq!(f.accept(&proposal.id).unwrap_err(), crate::comments::ERR_DISCUSSION_RESOLVED,);
     assert_eq!(f.file_body(), before, "the prompt is byte-for-byte what it was");
     assert!(
         crate::draft_history::list_impl(&f.root, &f.draft_id).expect("history").entries.is_empty(),
@@ -233,7 +233,7 @@ fn a_refused_recording_announces_nothing() {
 
 #[test]
 fn a_failed_record_write_leaves_no_comment_behind() {
-    // The half the lock refusal cannot reach: the record write is the *last*
+    // The half the resolution refusal cannot reach: the record write is the *last*
     // pre-append step, so a failure there is the one that could leave a comment
     // naming a proposal that does not exist — in a log that is append-only and
     // cannot be corrected (CMS-FR-04).
@@ -422,10 +422,10 @@ fn a_decision_reports_the_comment_and_the_origin_kind_it_landed_in() {
         "and it names the comment actually appended",
     );
 
-    // A locked conversation refuses the decision up front, so there is nothing
+    // A resolved conversation refuses the decision up front, so there is nothing
     // for a turn to answer and nothing was decided (DCP-FR-15).
     let f2 = Fixture::new();
     let p2 = f2.pending();
-    f2.lock();
-    assert_eq!(f2.accept(&p2.id).unwrap_err(), crate::comments::ERR_DISCUSSION_LOCKED,);
+    f2.resolve_conversation();
+    assert_eq!(f2.accept(&p2.id).unwrap_err(), crate::comments::ERR_DISCUSSION_RESOLVED,);
 }

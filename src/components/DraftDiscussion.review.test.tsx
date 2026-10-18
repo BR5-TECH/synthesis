@@ -621,12 +621,13 @@ describe("what a refused decision says (DCR-FR-16)", () => {
 // ---------------------------------------------------------------------------
 
 describe("what one decision leaves standing (DCR-FR-20, DCR-FR-WRJP)", () => {
-  it("DCR-FR-20: a change accepted or rejected leaves the document, and every other change stays", () => {
+  it("DCR-FR-20, DCR-FR-07: an accepted change leaves the document, a rejected one stays, and every other change stays", () => {
     // Acceptance is per change: deciding one must leave the rest exactly where
     // they were, which is what the author is looking at while they decide the
-    // next one.
+    // next one. A rejected change stays drawn while the proposal is open, so it
+    // can still be accepted (DCR-FR-17).
     expect(undecoratedByDecision(hunk({ state: "accepted" }))).toBe(true);
-    expect(undecoratedByDecision(hunk({ state: "rejected" }))).toBe(true);
+    expect(undecoratedByDecision(hunk({ state: "rejected" }))).toBe(false);
     expect(undecoratedByDecision(hunk({ state: "pending" }))).toBe(false);
     // A change held for discussion is undecided, so it is still drawn and still
     // holds the draft's one pending slot (DCP-FR-PWSF).

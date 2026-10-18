@@ -26,7 +26,6 @@ fn opening_a_thread_writes_the_pair_and_returns_it_folded() {
     assert_eq!(thread.comments[0].body, "needs tightening");
     assert!(matches!(thread.comments[0].author, Participant::Human { .. }));
     assert_eq!(thread.created_at, thread.updated_at);
-    assert!(!thread.locked);
     assert!(!thread.resolved);
     assert_eq!(thread.artifact_id(), Some("specs/a.md"));
     assert!(thread.artifact_id().is_some());
@@ -163,7 +162,7 @@ fn damaged_and_future_lines_are_skipped_and_left_on_disk() {
     let threads = list_fragment_discussions_in(root, "specs/a.md");
     assert_eq!(threads.len(), 1, "the well-formed thread is still served");
     assert_eq!(threads[0].comments.len(), 2);
-    assert!(!threads[0].locked, "the v=2 lock line was skipped");
+    assert!(!threads[0].resolved, "the v=2 lock line was skipped");
     assert_eq!(
         std::fs::read_to_string(&path).unwrap(),
         text,

@@ -179,6 +179,29 @@
 /* DDS-FR-DPRJ / DDS-FR-GKMT: which of the two things the column is doing. The
    words carry it; the badge's colour only agrees with them. */
 .dds-discussion__state { white-space: nowrap; }
+/* DDS-FR-MZQJ / DDS-FR-YSNB: a resolved discussion's state, as one lowercase
+   word beside a six-pixel dot in the quiet tone. */
+.dds-discussion__state--resolved {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-3);
+}
+.dds-discussion__dot {
+  width: var(--sp-1-5);
+  height: var(--sp-1-5);
+  flex: none;
+  border-radius: var(--r-full);
+  background: var(--fg-4);
+}
+/* DDS-FR-MZQJ: the discussion's own menu, at the header's trailing end. The
+   menu opens below it, so the host is what it is placed against. */
+.dds-discussion__actions {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
 
 /* DDS-FR-SVBL: the anchor bar. Between the header and the transcript, because
    it is about where the author came from rather than about the column. */
@@ -591,7 +614,9 @@
    and all. */
 .hunk__plain { white-space: pre-wrap; }
 /* DCR-FR-07: a change held for discussion. Undecided, and marked as answered. */
-.hunk--discussing {
+.hunk--discussing,
+/* DCR-FR-07: a rejected change of an open proposal takes the held tone. */
+.hunk--rejected {
   background: var(--warn-soft);
   border-left-color: var(--warn);
   box-shadow: inset 2px 0 0 var(--warn);
@@ -630,6 +655,9 @@
   font-size: var(--fs-ui-2xs);
 }
 .dds-chip__lost { color: var(--fg-3); }
+/* DCR-FR-12: a rejected change's chip names its state in words, in the held
+   tone the change itself takes (DCR-FR-07). */
+.dds-chip__state { color: var(--warn); font-weight: var(--fw-semi); }
 
 /* DCR-FR-BQNL: the gutter map on the scroller's outer edge. */
 .dds-gutter {

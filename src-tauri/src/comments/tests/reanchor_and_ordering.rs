@@ -4,10 +4,11 @@ use super::*;
 
 // -- CMS-FR-21, CMS-FR-22 (reanchor) -----------------------------------------------
 
+// CMS-FR-22 / CMS-FR-21 / CMS-FR-WKZR: a resolved thread, also one an older
+// build resolved, still follows its text. Refusing this would strand every
+// settled thread the moment the artifact above it grew.
 #[test]
-fn a_locked_and_resolved_thread_still_follows_its_text() {
-    // CMS-FR-22 / CMS-FR-21: refusing this would strand every settled thread
-    // the moment the artifact above it grew.
+fn a_resolved_and_legacy_locked_thread_still_follows_its_text() {
     let dir = temp_root();
     let root = &crate::fs::RootFs::for_root(dir.path());
     let t = open(
@@ -18,7 +19,7 @@ fn a_locked_and_resolved_thread_still_follows_its_text() {
         "2026-01-01T00:00:00Z",
     );
     let by = human("raver119");
-    set_lock_in(root, "specs/a.md", &t.id, true, &by, "2026-01-02T00:00:00Z").unwrap();
+    write_legacy(root, t.log_ref(), &t.id, EventBody::ThreadLocked, "2026-01-02T00:00:00Z");
     set_resolution_in(root, "specs/a.md", &t.id, true, &by, "2026-01-03T00:00:00Z").unwrap();
 
     let moved = reanchor_in(
@@ -34,7 +35,7 @@ fn a_locked_and_resolved_thread_still_follows_its_text() {
         moved.fragment_target,
         Some(FragmentTarget::in_artifact("specs/a.md", 72, 93, "the first session")),
     );
-    assert!(moved.locked && moved.resolved);
+    assert!(moved.resolved);
 
     // An anchor that is not a range at all is refused and appends nothing.
     let lines = log_lines(root, "specs/a.md").len();
@@ -96,7 +97,7 @@ fn threads_come_back_in_anchor_order_with_every_state_among_them() {
     let early =
         open(root, "specs/a.md", anchor(120, 130, "onetwenty"), "a", "2026-01-01T00:00:01Z");
     let mid = open(root, "specs/a.md", anchor(450, 460, "fourfifty"), "b", "2026-01-01T00:00:02Z");
-    set_lock_in(root, "specs/a.md", &mid.id, true, &by, "2026-01-02T00:00:00Z").unwrap();
+    set_resolution_in(root, "specs/a.md", &mid.id, true, &by, "2026-01-02T00:00:00Z").unwrap();
     set_resolution_in(root, "specs/a.md", &late.id, true, &by, "2026-01-02T00:00:00Z").unwrap();
 
     let ids: Vec<String> =

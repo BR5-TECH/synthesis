@@ -6,7 +6,8 @@
  *
  * Moved from `../CommentRail/ThreadCardParts.tsx` without change to what they
  * say. `ThreadActions` no longer carries Detach and Maximize, because there are
- * no presentation modes to move between (CVP-FR-HBKV).
+ * no presentation modes to move between (CVP-FR-HBKV), and it carries one
+ * entry because a discussion has one lifecycle flag (CMS-FR-18).
  */
 import { Icon } from "../icons";
 import { isFragmentTargeted } from "../../types";
@@ -19,7 +20,6 @@ export interface ThreadActionsProps {
   menuOpen: boolean;
   onToggleMenu: () => void;
   onCloseMenu: () => void;
-  onSetLock: (threadId: string, locked: boolean) => Promise<void>;
   onSetResolved: (threadId: string, resolved: boolean) => Promise<void>;
 }
 
@@ -30,7 +30,6 @@ export function ThreadActions({
   menuOpen,
   onToggleMenu,
   onCloseMenu,
-  onSetLock,
   onSetResolved,
 }: ThreadActionsProps) {
   return (
@@ -49,18 +48,8 @@ export function ThreadActions({
       </button>
       {menuOpen && (
         <div className="comment-card__menu" role="menu" data-surface-open="true">
-          {/* CMT-FR-15 / CMT-FR-16: exactly two entries, each reversible and
-              each independent of the other. */}
-          <button
-            role="menuitem"
-            disabled={blocked}
-            onClick={() => {
-              onCloseMenu();
-              void onSetLock(thread.id, !thread.locked);
-            }}
-          >
-            {thread.locked ? "Unlock thread" : "Lock thread"}
-          </button>
+          {/* CMT-FR-15: exactly one entry. Reopen dispatches no agent turn
+              (CMT-FR-16); it only sets the flag back. */}
           <button
             role="menuitem"
             disabled={blocked}
@@ -69,7 +58,7 @@ export function ThreadActions({
               void onSetResolved(thread.id, !thread.resolved);
             }}
           >
-            {thread.resolved ? "Reopen thread" : "Mark resolved"}
+            {thread.resolved ? "Reopen discussion" : "Mark resolved"}
           </button>
         </div>
       )}
@@ -143,9 +132,10 @@ export function TurnOutcomes({
             {failedTurnDetail(failedTurn)}
           </p>
         )}
-          {/* CTA-FR-XZUO: a locked thread takes no further turn, so it offers no
-              Retry. A resolved one keeps it. */}
-          {!thread.locked && (
+          {/* CTA-FR-XZUO / CTA-FR-TJCA: a resolved discussion takes no further
+              turn, so it offers no Retry. Reopening it brings the control back
+              and retries nothing (CTA-FR-CSZT). */}
+          {!thread.resolved && (
             <div className="comment__failed-actions">
               <button
                 className="btn btn--ghost btn--sm comment__retry"
@@ -176,9 +166,10 @@ export type OwnerAvailability = "available" | "orphaned" | "unavailable";
 /**
  * CMT-FR-WZTE / CVP-FR-44: the state words of a discussion.
  *
- * Every state is a word. **Fragment** or **Whole** says whether it has a
- * fragment target, and the lifecycle (Locked, Resolved) and the owner state
- * (Orphaned, Owner unavailable) follow it. None rests on a colour.
+ * Every state is a word. **Fragment** says that it has a fragment target, and
+ * the lifecycle (Resolved) and the owner state (Orphaned, Owner unavailable)
+ * follow it. A whole-target discussion has no target badge. None rests on a
+ * colour. When no state applies, nothing renders.
  */
 export function DiscussionBadges({
   discussion,
@@ -190,18 +181,18 @@ export function DiscussionBadges({
   ownerLabel?: string;
 }) {
   const fragment = isFragmentTargeted(discussion);
+  if (!fragment && !discussion.resolved && availability === "available") {
+    return null;
+  }
   return (
     <div className="discussion-badges" data-testid="discussion-badges">
-      <span
-        className="discussion-badge"
-        data-kind={fragment ? "fragment" : "whole"}
-        data-testid="discussion-target-badge"
-      >
-        {fragment ? "Fragment" : "Whole"}
-      </span>
-      {discussion.locked && (
-        <span className="discussion-badge" data-kind="locked">
-          <Icon.Lock size={11} /> Locked
+      {fragment && (
+        <span
+          className="discussion-badge"
+          data-kind="fragment"
+          data-testid="discussion-target-badge"
+        >
+          Fragment
         </span>
       )}
       {discussion.resolved && (

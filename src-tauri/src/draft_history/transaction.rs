@@ -104,7 +104,7 @@ pub struct AcceptedOutcome {
 /// Called by `crate::draft_proposals` (DCP-FR-11) and by nothing else. Its caller
 /// has already made every check that can be made in advance — that the proposal
 /// is pending, that its `path` still names the prompt, that an identity resolves,
-/// and that the conversation is unlocked (DCP-FR-15) — so a failure here is an
+/// and that the conversation is not resolved (DCP-FR-15) — so a failure here is an
 /// I/O failure rather than an ordinary refusal.
 pub fn apply_acceptance<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
@@ -174,6 +174,12 @@ where
     let original_seq = base_seq + 1;
     let next_seq = if original_id.is_some() { base_seq + 2 } else { base_seq + 1 };
 
+    // DCP-FR-13: the state the hunk holds now, which a rollback restores. A
+    // rejected hunk that is accepted and rolled back is rejected again.
+    let prior_row = input
+        .hunk_id
+        .as_deref()
+        .and_then(|hunk_id| input.proposal.ledger.iter().find(|row| row.id == hunk_id));
     let journal = Journal {
         operation_id: new_note_id(),
         draft_id: draft_id.to_string(),
@@ -192,6 +198,8 @@ where
         comment_body: input.comment_body,
         created_at: now_rfc3339(),
         phase: Phase::Prepared,
+        hunk_prior_state: prior_row.map(|row| row.state),
+        hunk_prior_decided_at: prior_row.and_then(|row| row.decided_at.clone()),
         agent: input.proposal.agent.clone(),
         comment_by: input.comment_by.clone(),
     };
@@ -431,11 +439,13 @@ fn roll_back(root: &fs::RootFs, dir: &Path, hist: &Path, journal: &Journal) -> R
         }
     }
     match journal.hunk_id.as_deref() {
-        Some(hunk_id) => draft_proposals::set_hunk_pending(
+        Some(hunk_id) => draft_proposals::restore_hunk_state(
             root,
             &journal.draft_id,
             &journal.proposal_id,
             hunk_id,
+            journal.hunk_prior_state.unwrap_or(draft_proposals::hunks::HunkState::Pending),
+            journal.hunk_prior_decided_at.clone(),
         ),
         None => draft_proposals::set_pending(root, &journal.draft_id, &journal.proposal_id),
     }
@@ -447,9 +457,10 @@ fn roll_back(root: &fs::RootFs, dir: &Path, hist: &Path, journal: &Journal) -> R
 
 /// DHS-FR-20: append the decision comment under the ids the journal minted.
 ///
-/// The lock the conversation may since have taken is deliberately not consulted:
+/// The resolution the conversation may since have taken is deliberately not
+/// consulted:
 /// DCP-FR-15 checked it before the transaction began, and the transaction has
-/// committed. A lock applied in the window between is a fact about what the
+/// committed. A resolution applied in the window between is a fact about what the
 /// conversation will take **next**, not licence to leave a decision the author
 /// already made unrecorded.
 fn append_decision<R: tauri::Runtime>(

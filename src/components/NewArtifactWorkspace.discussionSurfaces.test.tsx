@@ -89,10 +89,11 @@ describe("New Artifact discussions: the surfaces, the event path, and what is st
       ],
     });
     renderWorkspace();
-    const card = await screen.findByTestId("comment-thread-disc-1");
-    const menuButton = within(card).getByRole("button", {
-      name: "Thread actions for disc-1",
-    });
+    await screen.findByTestId("comment-thread-disc-1");
+    // DDS-FR-MZQJ: the column header carries the discussion's menu.
+    const menuButton = await within(
+      screen.getByTestId("discussion-header-actions"),
+    ).findByRole("button", { name: "Thread actions for disc-1" });
 
     invokeMock.mockClear();
     await userEvent.click(menuButton);
@@ -325,7 +326,7 @@ describe("New Artifact discussions: the surfaces, the event path, and what is st
     );
   });
 
-  it("NAW-FR-32, CMT-FR-55, CTA-FR-QUXJ: a discussion carries a quote and an attachment on its reply, and none on a locked one", async () => {
+  it("NAW-FR-32, CMT-FR-55, CTA-FR-QUXJ: a discussion carries a quote and an attachment on its reply, and none on a resolved one", async () => {
     // CMT-FR-55: an ordinary card in every respect that does not depend on an
     // anchor — including what a post actually carries (CMT-FR-13, CMT-FR-47).
     stubDiscussions({
@@ -362,8 +363,8 @@ describe("New Artifact discussions: the surfaces, the event path, and what is st
     expect(posted.attachments).toHaveLength(1);
     expect(posted.attachments[0].filename).toBe("evidence.png");
 
-    // CMT-FR-15: a locked discussion carries no composer, and therefore nowhere
-    // to address anyone and nothing to attach.
+    // CMT-FR-16: a resolved discussion carries no composer, and therefore
+    // nowhere to address anyone and nothing to attach.
     cleanup();
     invokeMock.mockReset();
     stubDiscussions({
@@ -371,11 +372,13 @@ describe("New Artifact discussions: the surfaces, the event path, and what is st
         discussionThread(
           "disc-1",
           [{ id: "c1", author: { kind: "human", login: "raver119" } as Participant, body: "settled" }],
-          { locked: true },
+          { resolved: true },
         ),
       ],
     });
     renderWorkspace();
+    // CMT-FR-17: a resolved discussion is reached through the disclosure.
+    await userEvent.click(await screen.findByRole("button", { name: /1 resolved/ }));
     const locked = await screen.findByTestId("comment-thread-disc-1");
     expect(
       within(locked).queryByLabelText("Reply to thread disc-1"),
@@ -383,7 +386,9 @@ describe("New Artifact discussions: the surfaces, the event path, and what is st
     expect(
       within(locked).queryByTestId("comment-attach-button"),
     ).not.toBeInTheDocument();
-    expect(locked).toHaveTextContent("Locked");
+    expect(locked).toHaveTextContent("Resolved");
+    // DDS-FR-MZQJ: and the column header says so in one word.
+    expect(screen.getByTestId("discussion-resolved-state")).toHaveTextContent("resolved");
   });
 
   it("NAW-FR-33, CMT-FR-24, CMT-FR-26, CMT-FR-51: the refused attachment is removed and the message posted without being retyped", async () => {

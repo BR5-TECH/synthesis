@@ -1,9 +1,9 @@
-//! Adding a comment, and the lock, resolution and re-anchor writes.
+//! Adding a comment, and the resolution and re-anchor writes.
 
 use super::*;
 
-/// CMS-FR-16 / CMS-FR-17: add a comment to a thread, refusing a locked one and a
-/// quote that names a comment outside it.
+/// CMS-FR-16 / CMS-FR-17: add a comment to a thread, refusing a resolved one and
+/// a quote that names a comment outside it.
 pub fn add_comment_in(
     root: &crate::fs::RootFs,
     artifact_id: &str,
@@ -42,9 +42,9 @@ pub fn add_comment_with_id(
     at: &str,
 ) -> Result<Discussion, String> {
     let thread = target.find(root, thread_id)?;
-    // CMS-FR-17: the one thing a lock prevents.
-    if thread.locked {
-        return Err(ERR_DISCUSSION_LOCKED.to_string());
+    // CMS-FR-17: a resolved discussion takes no further comment.
+    if thread.resolved {
+        return Err(ERR_DISCUSSION_RESOLVED.to_string());
     }
     append_as_scoped(
         root,
@@ -66,7 +66,7 @@ pub fn add_comment_with_id(
 }
 
 /// [`add_comment_with_id`] under an `event_id` the caller chose as well, and
-/// without the lock check.
+/// without the resolution check.
 ///
 /// The only caller is the acceptance transaction of `crate::draft_history`
 /// (DHS-FR-20), and both departures are what make that transaction recoverable:
@@ -79,14 +79,15 @@ pub fn add_comment_with_id(
 ///   the first event it sees for an id and ignoring every later one
 ///   (CMS-FR-06). That is what lets an append-only log (CMS-FR-04) carry a
 ///   recoverable transaction without any line of it ever being taken back.
-/// - **The lock is not consulted.** `DCP-FR-15` refuses a decision against a
-///   locked conversation *before* the transaction begins. A lock applied in the
-///   window between that check and this append is a fact about what the
-///   conversation will take next, not licence to leave a decision the author
-///   already made unrecorded — and there is no other place to record it.
+/// - **The resolution is not consulted.** `DCP-FR-15` refuses a decision
+///   against a resolved conversation *before* the transaction begins. A
+///   resolution applied in the window between that check and this append is a
+///   fact about what the conversation will take next, not licence to leave a
+///   decision the author already made unrecorded — and there is no other place
+///   to record it.
 ///
 /// Nothing else may use this: an ordinary comment has no id to preserve and no
-/// reason to pass a lock.
+/// reason to pass a resolution.
 pub fn append_decision_comment_event(
     root: &crate::fs::RootFs,
     target: ThreadRef<'_>,
@@ -132,9 +133,9 @@ pub fn add_comment_to(
 ) -> Result<Discussion, String> {
     let Stamp { by, at } = stamp;
     let thread = target.find(root, thread_id)?;
-    // CMS-FR-17: the one thing a lock prevents.
-    if thread.locked {
-        return Err(ERR_DISCUSSION_LOCKED.to_string());
+    // CMS-FR-17: a resolved discussion takes no further comment.
+    if thread.resolved {
+        return Err(ERR_DISCUSSION_RESOLVED.to_string());
     }
     for quote in &quotes {
         if !thread.comments.iter().any(|c| c.id == quote.comment_id) {
@@ -164,65 +165,9 @@ pub fn add_comment_to(
     target.find(root, thread_id)
 }
 
-/// CMS-FR-18 / CMS-FR-19 / CMS-FR-20: set the lock, on a thread in any state of
-/// its resolution. Setting the state it already holds appends nothing, so a
-/// repeated lock does not accumulate lines or move `updated_at`.
-pub fn set_lock_in(
-    root: &crate::fs::RootFs,
-    artifact_id: &str,
-    thread_id: &str,
-    locked: bool,
-    by: &Participant,
-    at: &str,
-) -> Result<Discussion, String> {
-    set_lock_reporting(root, artifact_id, thread_id, locked, by, at).map(|(thread, _)| thread)
-}
-
-/// [`set_lock_in`], additionally reporting whether a line was actually appended.
-///
-/// The pair exists because CMS-FR-19 makes "set it to what it already is" a
-/// legitimate no-op and CMS-FR-52 makes that no-op *unobservable*: no event may
-/// be emitted for a write that did not happen. Every caller that only wants the
-/// resulting thread uses the plain form; the Tauri command uses this one, because
-/// it is the one that has to decide whether to announce anything.
-pub fn set_lock_reporting(
-    root: &crate::fs::RootFs,
-    artifact_id: &str,
-    thread_id: &str,
-    locked: bool,
-    by: &Participant,
-    at: &str,
-) -> Result<(Discussion, bool), String> {
-    set_lock_to(root, ThreadRef::artifact(artifact_id), thread_id, locked, by, at)
-}
-
-/// [`set_lock_reporting`] naming the conversation as a [`ThreadRef`] (CMS-FR-54).
-pub fn set_lock_to(
-    root: &crate::fs::RootFs,
-    target: ThreadRef<'_>,
-    thread_id: &str,
-    locked: bool,
-    by: &Participant,
-    at: &str,
-) -> Result<(Discussion, bool), String> {
-    let thread = target.find(root, thread_id)?;
-    if thread.locked == locked {
-        return Ok((thread, false));
-    }
-    let body = if locked { EventBody::ThreadLocked } else { EventBody::ThreadUnlocked };
-    append_as_scoped(
-        root,
-        target.scope,
-        target.file_rel,
-        by,
-        at,
-        vec![(thread_id.to_string(), body)],
-    )?;
-    target.find(root, thread_id).map(|thread| (thread, true))
-}
-
-/// CMS-FR-18 / CMS-FR-19 / CMS-FR-20: set the resolution, independently of the
-/// lock and on the same no-op terms.
+/// CMS-FR-18 / CMS-FR-19 / CMS-FR-20: set the one lifecycle flag of a
+/// discussion. Setting the state it already holds appends nothing, so a repeated
+/// resolution does not accumulate lines or move `updated_at`.
 pub fn set_resolution_in(
     root: &crate::fs::RootFs,
     artifact_id: &str,
@@ -235,8 +180,13 @@ pub fn set_resolution_in(
         .map(|(thread, _)| thread)
 }
 
-/// [`set_resolution_in`], reporting whether a line was appended. The counterpart
-/// of [`set_lock_reporting`], and there for the same reason.
+/// [`set_resolution_in`], additionally reporting whether a line was appended.
+///
+/// The pair exists because CMS-FR-19 makes "set it to what it already is" a
+/// legitimate no-op and CMS-FR-52 makes that no-op *unobservable*: no event may
+/// be emitted for a write that did not happen. Every caller that only wants the
+/// resulting discussion uses the plain form; the Tauri command uses this one,
+/// because it is the one that has to decide whether to announce anything.
 pub fn set_resolution_reporting(
     root: &crate::fs::RootFs,
     artifact_id: &str,
@@ -262,21 +212,27 @@ pub fn set_resolution_to(
     if thread.resolved == resolved {
         return Ok((thread, false));
     }
-    let body = if resolved { EventBody::ThreadResolved } else { EventBody::ThreadReopened };
-    append_as_scoped(
-        root,
-        target.scope,
-        target.file_rel,
-        by,
-        at,
-        vec![(thread_id.to_string(), body)],
-    )?;
+    // CMS-FR-18 / CMS-FR-20: a reopen of a discussion whose legacy lock stands
+    // also clears that lock, in the same append, so the reopen leaves the
+    // discussion active. This is the only `thread_unlocked` this build writes,
+    // and no write of this build produces a `thread_locked`.
+    let bodies = if resolved {
+        vec![(thread_id.to_string(), EventBody::ThreadResolved)]
+    } else if thread.legacy_lock_stands() {
+        vec![
+            (thread_id.to_string(), EventBody::ThreadUnlocked),
+            (thread_id.to_string(), EventBody::ThreadReopened),
+        ]
+    } else {
+        vec![(thread_id.to_string(), EventBody::ThreadReopened)]
+    };
+    append_as_scoped(root, target.scope, target.file_rel, by, at, bodies)?;
     target.find(root, thread_id).map(|thread| (thread, true))
 }
 
 /// CMS-FR-21 / CMS-FR-59: move a discussion's fragment to where its text now is.
 ///
-/// Accepted on a locked or resolved discussion, because following the text a
+/// Accepted on a resolved discussion, because following the text a
 /// discussion is attached to is not a contribution to the conversation: refusing
 /// it would strand every settled discussion the moment the source above it grew.
 ///

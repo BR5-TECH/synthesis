@@ -464,18 +464,19 @@ describe("CMS-FR-51, CMS-FR-31 / CMT-FR-04: the rail redraws from the event, nev
     expect(reads(backend)).toBe(1);
   });
 
-  it("re-renders a card as locked when the lock was set anywhere", async () => {
+  it("CMT-FR-04, CMT-FR-16: re-renders a card as resolved when the resolution was set anywhere", async () => {
     const { backend } = await mount({ threads: [makeThread()] });
     await openRail();
     expect(screen.getByLabelText("Reply to thread t1")).toBeInTheDocument();
 
     act(() =>
-      emitEvent("discussion-changed", { ...makeThread(), locked: true }),
+      emitEvent("discussion-changed", { ...makeThread(), resolved: true }),
     );
 
     await waitFor(() =>
       expect(screen.queryByLabelText("Reply to thread t1")).not.toBeInTheDocument(),
     );
+    expect(screen.getByRole("button", { name: /resolved thread/ })).toBeInTheDocument();
     expect(reads(backend)).toBe(1);
   });
 

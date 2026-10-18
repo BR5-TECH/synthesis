@@ -166,7 +166,7 @@ fn refusal_for(refusal: RecordRefusal) -> ToolRefusal {
         RecordRefusal::ArtifactNotFound => ToolRefusal::PromptProposalPathMissing,
         RecordRefusal::NotAPromptArtifact => ToolRefusal::NotAPromptArtifact,
         RecordRefusal::NoChange => ToolRefusal::InvalidArguments(PROPOSAL_NO_CHANGE),
-        RecordRefusal::ThreadLocked => ToolRefusal::ProposalConversationLocked,
+        RecordRefusal::ThreadResolved => ToolRefusal::ProposalConversationResolved,
         RecordRefusal::NotRecorded => ToolRefusal::ProposalNotRecorded,
     }
 }

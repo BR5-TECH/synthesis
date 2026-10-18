@@ -44,7 +44,6 @@ function discussions(): UseDiscussionsResult {
       throw new Error("not used");
     },
     reply: async () => {},
-    setLock: async () => {},
     setResolved: async () => {},
   };
 }

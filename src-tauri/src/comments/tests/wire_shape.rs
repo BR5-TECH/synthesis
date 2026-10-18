@@ -39,10 +39,10 @@ fn the_wire_shape_is_the_one_the_contract_surface_declares() {
             ],
             created_at: "2026-01-01T00:00:00Z".into(),
         }],
-        locked: false,
         resolved: true,
         created_at: "2026-01-01T00:00:00Z".into(),
         updated_at: "2026-01-02T00:00:00Z".into(),
+        resolution: ResolutionMarks::default(),
     };
     let json = serde_json::to_value(&thread).unwrap();
     assert_eq!(json["target"]["kind"], "artifact");
@@ -63,6 +63,10 @@ fn the_wire_shape_is_the_one_the_contract_surface_declares() {
     assert_eq!(json["comments"][0]["quotes"][0]["commentId"], "c0");
     assert_eq!(json["createdAt"], "2026-01-01T00:00:00Z");
     assert_eq!(json["resolved"], true);
+    // CMS-FR-18: `resolved` is the one lifecycle flag on the wire.
+    for removed in ["locked", "resolution"] {
+        assert!(json.get(removed).is_none(), "{removed} is not a field of the wire shape");
+    }
 
     // A whole-target discussion carries an explicit null, never an absent field.
     let whole = Discussion { fragment_target: None, ..thread };
@@ -144,4 +148,37 @@ fn an_event_line_is_one_flat_json_object_carrying_its_type() {
     // And it round-trips.
     let decoded: Event = serde_json::from_str(&line).unwrap();
     assert_eq!(decoded, event);
+}
+
+// CMS-FR-42 / CMS-FR-43 / CMS-FR-TQVB: a `proposal_hunk` attachment and its
+// input have one wire shape, the `proposalHunk` kind with four named parts.
+#[test]
+fn a_proposal_hunk_attachment_has_the_declared_wire_shape() {
+    let stored = Attachment::ProposalHunk {
+        proposal_id: "p1".into(),
+        hunk_id: "h2".into(),
+        draft_id: "d3".into(),
+        path: "prompt.md".into(),
+    };
+    let json = serde_json::to_value(&stored).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "kind": "proposalHunk",
+            "proposalId": "p1",
+            "hunkId": "h2",
+            "draftId": "d3",
+            "path": "prompt.md",
+        })
+    );
+    let input: AttachmentInput = serde_json::from_value(json).unwrap();
+    assert_eq!(
+        input,
+        AttachmentInput::ProposalHunk {
+            proposal_id: "p1".into(),
+            hunk_id: "h2".into(),
+            draft_id: "d3".into(),
+            path: "prompt.md".into(),
+        }
+    );
 }

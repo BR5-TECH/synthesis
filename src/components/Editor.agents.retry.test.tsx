@@ -344,7 +344,7 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
     // the very offer they were already on.
     const b = await mount({
       recoverable: [failedTurn()],
-      retryError: "discussion_locked",
+      retryError: "discussion_resolved",
     });
     const retry = await screen.findByTestId("comment-failed-retry");
     retry.focus();
@@ -364,7 +364,7 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
   it("CTA-FR-QDDG, CTA-FR-TJCA, CMT-FR-34, CMT-FR-15: a refused retry restores the failure and states the reason", async () => {
     const b = await mount({
       recoverable: [failedTurn()],
-      retryError: "discussion_locked",
+      retryError: "discussion_resolved",
     });
     const user = userEvent.setup();
     await user.click(await screen.findByTestId("comment-failed-retry"));
@@ -381,19 +381,7 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
     expect(calls(b, "add_comment")).toHaveLength(0);
   });
 
-  it("CTA-FR-QDDG, CTA-FR-TJCA, CMT-FR-34, CMT-FR-15: a locked thread renders the failure and withholds Retry", async () => {
-    await mount({
-      threads: [makeThread({ locked: true })],
-      recoverable: [failedTurn()],
-    });
-    const failed = await screen.findByTestId("comment-failed");
-    expect(failed.textContent).toContain("could not produce a response");
-    expect(
-      screen.queryByTestId("comment-failed-retry"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("CTA-FR-CSZT, CMT-FR-16, CTA-FR-QTNB: a resolved thread keeps Retry although it carries no composer", async () => {
+  it("CTA-FR-XZUO, CMT-FR-16: a resolved thread renders the failure and withholds Retry", async () => {
     await mount({
       threads: [makeThread({ resolved: true })],
       recoverable: [failedTurn()],
@@ -402,8 +390,9 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
     const disclosure = screen.getByRole("button", { name: /resolved thread/i });
     await userEvent.setup().click(disclosure);
 
-    expect(await screen.findByTestId("comment-failed")).toBeInTheDocument();
-    expect(screen.getByTestId("comment-failed-retry")).toBeInTheDocument();
+    const failed = await screen.findByTestId("comment-failed");
+    expect(failed.textContent).toContain("could not produce a response");
+    expect(screen.queryByTestId("comment-failed-retry")).not.toBeInTheDocument();
   });
 
   it("CTA-FR-STWA: recovers the offer when the card is remounted", async () => {
@@ -434,28 +423,28 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
     expect(postedComments()).toHaveLength(1);
   });
 
-  it("CTA-FR-XZUO: a lock arriving while the failure shows takes the control, not the contribution", async () => {
-    // A lock and a resolution announce themselves on the same channel a comment
-    // does, with the comment list untouched — and in the ordinary case the
-    // thread's last comment is the author's own, the failed turn having appended
-    // nothing (AGC-FR-18). Treating that as "a later human comment" would retire
-    // the offer outright, where CTA-FR-XZUO says a locked thread loses its Retry
-    // *in place*.
-    await mount({ recoverable: [failedTurn()] });
+  it("CTA-FR-TJCA, CTA-FR-CSZT: a resolution takes the control in place, and a reopen gives it back and retries nothing", async () => {
+    // A resolution announces itself on the same channel a comment does, with
+    // the comment list untouched. Treating that as "a later human comment"
+    // would retire the offer outright, where CTA-FR-TJCA says a resolved thread
+    // loses its Retry *in place*.
+    const b = await mount({ recoverable: [failedTurn()] });
     await screen.findByTestId("comment-failed");
     expect(screen.getByTestId("comment-failed-retry")).toBeInTheDocument();
 
-    emitThread(makeThread({ locked: true }));
+    emitThread(makeThread({ resolved: true }));
+    // CMT-FR-17: the resolved card is read in the disclosure.
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: /resolved thread/i }));
+    expect(await screen.findByTestId("comment-failed")).toBeInTheDocument();
+    expect(screen.queryByTestId("comment-failed-retry")).not.toBeInTheDocument();
 
-    await waitFor(() =>
-      expect(
-        screen.queryByTestId("comment-failed-retry"),
-      ).not.toBeInTheDocument(),
-    );
-    expect(screen.getByTestId("comment-failed")).toBeInTheDocument();
-
-    emitThread(makeThread({ locked: false }));
+    emitThread(makeThread({ resolved: false }));
     expect(await screen.findByTestId("comment-failed-retry")).toBeInTheDocument();
+    // CTA-FR-CSZT: reopening starts no turn of its own.
+    expect(calls(b, "retry_agent_turn")).toHaveLength(0);
+    expect(calls(b, "dispatch_agent_turn")).toHaveLength(0);
   });
 
   it("CTA-FR-ESNJ: retrying one conversation leaves another's offer takeable", async () => {

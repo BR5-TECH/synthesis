@@ -60,7 +60,6 @@ function anchored(id: string, anchor: FragmentRange, resolved = false): Anchored
       ...anchor,
     },
     comments: comments(id, "a passage"),
-    locked: false,
     resolved,
     createdAt: "2026-02-01T00:00:00Z",
     updatedAt: "2026-02-01T00:00:00Z",
@@ -71,7 +70,7 @@ function anchored(id: string, anchor: FragmentRange, resolved = false): Anchored
 function discussion(id: string, resolved = false): AnchoredThread {
   const thread: Discussion = {
     id, target: { kind: "draft", draftId: "d1" }, fragmentTarget: null,
-    comments: comments(id, "the whole draft"), locked: false, resolved,
+    comments: comments(id, "the whole draft"), resolved,
     createdAt: "2026-02-01T00:00:00Z", updatedAt: "2026-02-01T00:00:00Z",
   };
   return { thread, anchor: null };
@@ -121,7 +120,6 @@ function view(over: Overrides = {}) {
       onOpenDraft={refuse}
       onCancelDraft={() => {}}
       onReply={noop}
-      onSetLock={noop}
       onSetResolved={noop}
       errors={{}}
       showResolved={over.showResolved ?? false}
@@ -192,7 +190,7 @@ describe("CMT-FR-62: what is pinned and what travels", () => {
 });
 
 describe("CMT-FR-08 / CMT-FR-15: a card leads with a message, not with a header", () => {
-  it("carries the thread's menu on its first comment and renders no row above it", () => {
+  it("CMT-FR-15: carries the thread's menu on its first comment and renders no row above it", () => {
     // A card used to open with its own row — the first comment's author, the
     // thread's last-touched time, and the overflow menu. On a discussion, which
     // has no anchor quote to separate the two (CMT-FR-55), that row sat directly
@@ -210,16 +208,13 @@ describe("CMT-FR-08 / CMT-FR-15: a card leads with a message, not with a header"
     expect(menu.closest(".comment")).toBe(comments[0]);
     expect(card.querySelector(".comment-card__head")).toBeNull();
 
-    // And it is still the thread's menu, carrying both entries (CMT-FR-15,
-    // CMT-FR-16) — moving it changed where it hangs, not what it does.
+    // And it is still the thread's menu, carrying its one entry (CMT-FR-15) —
+    // moving it changed where it hangs, not what it does.
     fireEvent.click(menu);
     const opened = within(card).getByRole("menu");
-    expect(
-      within(opened).getByRole("menuitem", { name: "Lock thread" }),
-    ).toBeInTheDocument();
-    expect(
-      within(opened).getByRole("menuitem", { name: "Mark resolved" }),
-    ).toBeInTheDocument();
+    expect(within(opened).getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
+      "Mark resolved",
+    ]);
   });
 
   it("carries exactly one menu however many messages the thread holds", () => {

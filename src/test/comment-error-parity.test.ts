@@ -52,7 +52,7 @@ describe("comment typed-error parity across the IPC boundary", () => {
   it("finds the Rust constants at all (the test is worthless if the regex drifts)", () => {
     const constants = rustErrorConstants();
     expect(constants.size).toBeGreaterThanOrEqual(4);
-    expect([...constants.values()]).toContain("discussion_locked");
+    expect([...constants.values()]).toContain("discussion_resolved");
   });
 
   it("every error the frontend matches on is declared by the backend", () => {

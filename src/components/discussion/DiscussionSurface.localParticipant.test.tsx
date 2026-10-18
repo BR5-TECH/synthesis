@@ -49,7 +49,6 @@ function discussion(comments: Comment[]): Discussion {
     target: { kind: "artifact", artifactId: "a.md" },
     fragmentTarget: null,
     comments,
-    locked: false,
     resolved: false,
     createdAt: "2026-02-01T00:00:00Z",
     updatedAt: "2026-02-01T00:00:00Z",
@@ -71,7 +70,6 @@ function view(d: Discussion, over: Partial<Parameters<typeof DiscussionSurface>[
       liveTurns={false}
       identity={LOCAL}
       onReply={vi.fn(async () => undefined)}
-      onSetLock={vi.fn(async () => undefined)}
       onSetResolved={vi.fn(async () => undefined)}
       {...over}
     />

@@ -299,21 +299,22 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
         };
 
         // CVL-FR-19: no retry begins after the whole-turn deadline, after
-        // cancellation, or after the conversation becomes locked. Each is read
+        // cancellation, or after the conversation is resolved. Each is read
         // *before* the delay is planned, so a record never promises a retry that
         // will not be made.
         let budget_left = attempt < policy.max_attempts;
         let time_left = !deadline.saturating_duration_since(std::time::Instant::now()).is_zero();
         let cancelled = plan.cancelled.load(Ordering::SeqCst);
-        // AGC-FR-19: a lock is what stops a conversation taking further
-        // contributions, so a turn whose thread was locked while it was failing
-        // has nowhere to deliver whatever a retry produced.
-        let locked = failure.repeatable()
+        // AGC-FR-19: a resolution is what stops a conversation taking further
+        // contributions, so a turn whose thread was resolved while it was
+        // failing has nowhere to deliver whatever a retry produced.
+        let resolved = failure.repeatable()
             && budget_left
             && time_left
             && !cancelled
-            && thread_is_locked(plan.roots.borrowed(), &plan.origin);
-        let will_retry = failure.repeatable() && budget_left && time_left && !cancelled && !locked;
+            && resolved_during_turn(plan);
+        let will_retry =
+            failure.repeatable() && budget_left && time_left && !cancelled && !resolved;
         let planned = if will_retry {
             backoff_delay(&policy, attempt + 1, turns.jitter.as_ref())
         } else {
@@ -391,8 +392,8 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 log_turn_out_of_time(app, turns, plan, model_calls);
                 return Err(TurnEnd::TimedOut);
             }
-            if locked {
-                return Err(TurnEnd::Failed(FAIL_THREAD_LOCKED));
+            if resolved {
+                return Err(TurnEnd::Failed(FAIL_DISCUSSION_RESOLVED));
             }
             if let Some(tls) = failure.tls {
                 return Err(TurnEnd::TlsUntrusted(tls));
@@ -404,17 +405,18 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
         // cancellable where it stands.
         wait_before_retry(app, turns, plan, planned, deadline, model_calls)?;
 
-        // CVL-FR-19: no retry *begins* after the conversation becomes locked —
-        // and a lock set while the wait was running is the case the check above
-        // could not have seen. Read once here rather than inside the wait: the
-        // wait is sliced for cancellation, which is a flag in memory, and a lock
-        // is a read of the conversation's log that has no business on that loop.
-        if thread_is_locked(plan.roots.borrowed(), &plan.origin) {
+        // CVL-FR-19: no retry *begins* after the conversation is resolved — and
+        // a resolution set while the wait was running is the case the check
+        // above could not have seen. Read once here rather than inside the wait:
+        // the wait is sliced for cancellation, which is a flag in memory, and a
+        // resolution is a read of the conversation's log that has no business on
+        // that loop.
+        if resolved_during_turn(plan) {
             logging::log_info(
                 app,
                 turns.buffer(),
                 &[Domain::Ai, Domain::Backend],
-                "a retry was abandoned: the conversation was locked",
+                "a retry was abandoned: the conversation was resolved",
                 log_fields! {
                     "turnId" => &plan.turn_id,
                     "agent" => &plan.agent.nickname,
@@ -422,7 +424,7 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                     "attempt" => attempt,
                 },
             );
-            return Err(TurnEnd::Failed(FAIL_THREAD_LOCKED));
+            return Err(TurnEnd::Failed(FAIL_DISCUSSION_RESOLVED));
         }
     }
     // Unreachable: the loop returns on every path of its last iteration, the

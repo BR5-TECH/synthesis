@@ -239,7 +239,7 @@ fn a_note_discussion_behaves_like_any_other_discussion() {
     .unwrap();
     let target = ThreadRef::note_discussion(&note);
 
-    // A reply, an agent's answer, a lock, and a resolution.
+    // A reply, an agent's answer, a resolution, and a reopen.
     add_comment_to(
         root,
         target,
@@ -262,10 +262,10 @@ fn a_note_discussion_behaves_like_any_other_discussion() {
     let (resolved, changed) =
         set_resolution_to(root, target, &thread.id, true, &by, "2025-03-04T13:00:00Z").unwrap();
     assert!(resolved.resolved && changed);
-    let (locked, changed) =
-        set_lock_to(root, target, &thread.id, true, &by, "2025-03-04T13:30:00Z").unwrap();
-    assert!(locked.locked && changed);
-    assert_eq!(locked.comments.len(), 3, "opening, reply, agent answer");
+    let (reopened, changed) =
+        set_resolution_to(root, target, &thread.id, false, &by, "2025-03-04T13:30:00Z").unwrap();
+    assert!(!reopened.resolved && changed);
+    assert_eq!(reopened.comments.len(), 3, "opening, reply, agent answer");
 
     // CMS-FR-59: the one command a discussion refuses, in every scope.
     let err =
@@ -290,9 +290,9 @@ fn a_note_discussion_behaves_like_any_other_discussion() {
         }],
         Stamp { by: &by, at: "2025-03-04T14:30:00Z" },
     );
-    // The thread was locked above, so unlock it for this append.
+    // The thread was resolved above, so reopen it for this append.
     let _ = with_blob;
-    set_lock_to(root, target, &thread.id, false, &by, "2025-03-04T14:20:00Z").unwrap();
+    set_resolution_to(root, target, &thread.id, false, &by, "2025-03-04T14:20:00Z").unwrap();
     let folded = add_comment_to(
         root,
         target,

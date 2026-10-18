@@ -187,8 +187,8 @@ impl Fixture {
             .expect("thread")
     }
 
-    fn lock(&self) {
-        comments::set_lock_to(
+    fn resolve_conversation(&self) {
+        comments::set_resolution_to(
             &self.root,
             self.target(),
             &self.thread_id,
@@ -196,7 +196,7 @@ impl Fixture {
             &human(),
             "2026-01-01T00:05:00Z",
         )
-        .expect("lock");
+        .expect("resolve");
     }
 
     fn accept(&self, id: &str) -> Result<Decided, String> {
@@ -296,3 +296,4 @@ mod hunk_decisions;
 mod hunk_reads;
 mod lifecycle;
 mod recording;
+mod rejected_hunks;

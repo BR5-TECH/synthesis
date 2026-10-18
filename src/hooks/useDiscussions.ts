@@ -30,7 +30,6 @@ import {
   listProjectAgents,
   openDiscussion,
   resolveCommentAuthorIdentity,
-  setDiscussionLock,
   setDiscussionResolution,
 } from "../api";
 import {
@@ -133,7 +132,6 @@ export interface UseDiscussionsResult {
     quotes: CommentQuote[],
     attachments: AttachmentInput[],
   ) => Promise<void>;
-  setLock: (threadId: string, locked: boolean) => Promise<void>;
   setResolved: (threadId: string, resolved: boolean) => Promise<void>;
 }
 
@@ -594,8 +592,8 @@ export function useDiscussions(
         dispatchFor(updated, body);
       } catch (e) {
         setErrors((prev) => ({ ...prev, [threadId]: errorText(e) }));
-        // A refusal because the discussion was locked since the surface last read
-        // it must also re-render the card as locked, or the composer invites a
+        // A refusal because the discussion was resolved since the surface last read
+        // it must also re-render the card as resolved, or the composer invites a
         // second attempt at something that cannot succeed.
         void listDiscussions(current)
           .then((loaded) => setThreads(Array.isArray(loaded) ? loaded : []))
@@ -604,25 +602,6 @@ export function useDiscussions(
       }
     },
     [clearError, mergeThread, dispatchFor],
-  );
-
-  const setLock = useCallback(
-    async (threadId: string, locked: boolean) => {
-      const current = targetRef.current;
-      if (!current) return;
-      try {
-        const updated = await setDiscussionLock({
-          ...locatorOf(current),
-          discussionId: threadId,
-          locked,
-        });
-        clearError(threadId);
-        mergeThread(updated);
-      } catch (e) {
-        setErrors((prev) => ({ ...prev, [threadId]: errorText(e) }));
-      }
-    },
-    [clearError, mergeThread],
   );
 
   const setResolved = useCallback(
@@ -723,7 +702,6 @@ export function useDiscussions(
     errors,
     open,
     reply,
-    setLock,
     setResolved,
   };
 }

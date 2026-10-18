@@ -192,10 +192,10 @@ pub fn fold_events_for(target: FoldTarget<'_>, events: Vec<Event>) -> Vec<Discus
                 target: target.owner(),
                 fragment_target,
                 comments: Vec::new(),
-                locked: false,
                 resolved: false,
                 created_at: event.at.clone(),
                 updated_at: event.at.clone(),
+                resolution: ResolutionMarks::default(),
             },
         );
     }
@@ -225,10 +225,28 @@ pub fn fold_events_for(target: FoldTarget<'_>, events: Vec<Event>) -> Vec<Discus
                             created_at: event.at.clone(),
                         });
                     }
-                    EventBody::ThreadLocked => discussion.locked = true,
-                    EventBody::ThreadUnlocked => discussion.locked = false,
-                    EventBody::ThreadResolved => discussion.resolved = true,
-                    EventBody::ThreadReopened => discussion.resolved = false,
+                    // CMS-FR-WKZR: a legacy lock reads as a resolution. The
+                    // discussion is resolved while a resolution or a lock
+                    // stands, and a reopen clears both.
+                    EventBody::ThreadLocked => {
+                        discussion.resolution.legacy_lock = true;
+                        discussion.resolution.resolving_events += 1;
+                        discussion.resolved = true;
+                    }
+                    EventBody::ThreadUnlocked => {
+                        discussion.resolution.legacy_lock = false;
+                        discussion.resolved = discussion.resolution.resolution;
+                    }
+                    EventBody::ThreadResolved => {
+                        discussion.resolution.resolution = true;
+                        discussion.resolution.resolving_events += 1;
+                        discussion.resolved = true;
+                    }
+                    EventBody::ThreadReopened => {
+                        discussion.resolution.resolution = false;
+                        discussion.resolution.legacy_lock = false;
+                        discussion.resolved = false;
+                    }
                     // CMS-FR-59: a whole-target discussion has no fragment to
                     // follow, and the command that would append this refuses one.
                     // A log is hand-editable, so the fold stays total by ignoring

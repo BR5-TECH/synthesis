@@ -68,8 +68,17 @@ function signature(
   return JSON.stringify([filter, text, paths]);
 }
 
+/** DRP-FR-07 / PSS-FR-20: every position the store may hand back. */
+const FILTERS: readonly DraftsStatusFilter[] = [
+  "active",
+  "archived",
+  "graduated",
+  "all",
+  "published",
+];
+
 function isFilter(value: unknown): value is DraftsStatusFilter {
-  return value === "active" || value === "archived" || value === "all";
+  return FILTERS.includes(value as DraftsStatusFilter);
 }
 
 export function useDraftsPanelState(): DraftsPanel {

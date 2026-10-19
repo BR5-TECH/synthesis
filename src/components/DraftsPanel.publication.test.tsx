@@ -17,7 +17,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 import { draftRow, flat, renderPanel } from "../test/draftsPanelFixtures";
 import { resetPanelReveals } from "../state/panelReveal";
-import { selectorValue } from "../test/selectors";
+import { pickSelector, selectorValue, selectorValues } from "../test/selectors";
 import { blocksFor, decl, sheet } from "../test/cssRules";
 import type { DraftListPublication, DraftStatus, DraftSummary } from "../types";
 
@@ -231,5 +231,185 @@ describe("Filter positions with a legacy published draft (DRP-FR-07, DRP-FR-08)"
     for (const name of ["published-draft", "active-draft", "archived-draft"]) {
       expect(draftRow(name)).toBeInTheDocument();
     }
+  });
+});
+
+describe("The published position (DRP-FR-07, DRP-FR-GBVS)", () => {
+  const mixed = () => [
+    row("d-active", "active", { publication: publication(1) }),
+    row("d-arch", "archived", { publication: publication(2) }),
+    row("d-grad", "graduated", { publication: publication(3) }),
+    row("d-pub", "published", { publication: publication(4) }),
+    row("d-legacy", "published", { name: "legacy-draft" }),
+    row("d-plain", "active", { name: "plain-draft" }),
+    row("d-shadow", "github_shadow", { name: "shadow-draft", publication: publication(5) }),
+  ];
+
+  it("DRP-FR-GBVS: admits every draft with a publication record, on any status, and no other", async () => {
+    drafts = mixed();
+    renderPanel({ filter: "published" });
+    await waitFor(() => draftRow("active-draft"));
+    for (const name of [
+      "active-draft",
+      "archived-draft",
+      "graduated-draft",
+      "published-draft",
+      "shadow-draft",
+    ]) {
+      expect(draftRow(name), name).toBeInTheDocument();
+    }
+    // The legacy `published` status alone does not admit a draft.
+    expect(screen.queryByText("legacy-draft")).toBeNull();
+    expect(screen.queryByText("plain-draft")).toBeNull();
+  });
+
+  it("DRP-FR-07, DRP-FR-GBVS: activating the fifth button narrows the tree to published drafts", async () => {
+    drafts = mixed();
+    renderPanel({ filter: "active" });
+    await waitFor(() => draftRow("plain-draft"));
+    expect(screen.queryByText("archived-draft")).toBeNull();
+
+    await pickSelector("Draft status", "published");
+    expect(selectorValue("Draft status")).toBe("published");
+    await waitFor(() => expect(screen.queryByText("plain-draft")).toBeNull());
+    expect(draftRow("archived-draft")).toBeInTheDocument();
+    expect(draftRow("graduated-draft")).toBeInTheDocument();
+  });
+
+  it("DRP-FR-GBVS, DRP-FR-08: rows state their own stored status as in all drafts", async () => {
+    drafts = mixed();
+    renderPanel({ filter: "published" });
+    await waitFor(() => draftRow("archived-draft"));
+    expect(within(draftRow("archived-draft")).getByTestId("draft-archived-marker")).toBeInTheDocument();
+    expect(within(draftRow("graduated-draft")).getByTestId("draft-graduated-marker")).toHaveTextContent(
+      "Graduated",
+    );
+    // A legacy published row with a record shows one label: the marker.
+    expect(within(draftRow("published-draft")).getAllByText("Published")).toHaveLength(1);
+    expect(within(draftRow("active-draft")).getByTestId("draft-publication-marker")).toBeInTheDocument();
+  });
+
+  it("DRP-FR-GBVS, DRP-FR-13: the text filter narrows the published position", async () => {
+    drafts = mixed();
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_drafts") return flat(drafts);
+      if (cmd === "append_log_records") return undefined;
+      if (cmd === "search_drafts")
+        return [
+          { draftId: "d-arch", matchedIn: "name" },
+          { draftId: "d-plain", matchedIn: "name" },
+        ];
+      throw new Error(`unexpected command: ${cmd}`);
+    });
+    renderPanel({ filter: "published", text: "draft" });
+    await waitFor(() => draftRow("archived-draft"));
+    await waitFor(() => expect(screen.queryByText("active-draft")).toBeNull());
+    // The search result has landed: the draft both filters admit stays.
+    expect(draftRow("archived-draft")).toBeInTheDocument();
+    // The text admits it, the position does not: both must admit a draft.
+    expect(screen.queryByText("plain-draft")).toBeNull();
+  });
+
+  it("DRP-FR-GBVS, DRP-FR-29: a folder with no published draft still renders", async () => {
+    drafts = [row("d-plain", "active", { name: "plain-draft", folder: "UI" })];
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_drafts") return { folders: [{ path: "UI", parent: "" }], drafts };
+      if (cmd === "append_log_records") return undefined;
+      throw new Error(`unexpected command: ${cmd}`);
+    });
+    renderPanel({ filter: "published", expanded: ["UI"] });
+    expect(await screen.findByText("UI")).toBeInTheDocument();
+    expect(screen.queryByText("plain-draft")).toBeNull();
+  });
+
+  it("DRP-FR-34, DRP-FR-GBVS: a reveal of a published draft keeps the published position", async () => {
+    drafts = mixed();
+    const { revealDraft } = renderPanel({ filter: "published" });
+    await waitFor(() => draftRow("archived-draft"));
+
+    act(() => revealDraft("d-arch"));
+    await waitFor(() => expect(draftRow("archived-draft")).toHaveAttribute("aria-selected", "true"));
+    expect(selectorValue("Draft status")).toBe("published");
+  });
+
+  it("DRP-FR-34: a reveal of an unpublished draft relaxes the published position to all drafts", async () => {
+    drafts = mixed();
+    const { revealDraft } = renderPanel({ filter: "published" });
+    await waitFor(() => draftRow("active-draft"));
+
+    act(() => revealDraft("d-plain"));
+    await waitFor(() => expect(draftRow("plain-draft")).toHaveAttribute("aria-selected", "true"));
+    expect(selectorValue("Draft status")).toBe("all");
+  });
+});
+
+// SNV-FR-63 with five positions: jsdom lays nothing out, so the widths are
+// stubbed as `Library.lens.test.tsx` stubs them.
+describe("The five-button status row at a narrow width (SNV-FR-63, DRP-FR-07)", () => {
+  const BUTTON_W = 40;
+  const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetWidth");
+  const originalClientWidth = Object.getOwnPropertyDescriptor(Element.prototype, "clientWidth");
+  let rowWidth = 1000;
+  let observers: (() => void)[] = [];
+
+  beforeEach(() => {
+    rowWidth = 1000;
+    observers = [];
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.dataset.value ? BUTTON_W : 0;
+      },
+    });
+    Object.defineProperty(Element.prototype, "clientWidth", {
+      configurable: true,
+      get(this: Element) {
+        return this.classList.contains("selector-row") ? rowWidth : 0;
+      },
+    });
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(cb: () => void) {
+          observers.push(cb);
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    if (originalOffsetWidth)
+      Object.defineProperty(HTMLElement.prototype, "offsetWidth", originalOffsetWidth);
+    if (originalClientWidth)
+      Object.defineProperty(Element.prototype, "clientWidth", originalClientWidth);
+  });
+
+  const resizeTo = async (width: number) => {
+    await act(async () => {
+      rowWidth = width;
+      observers.forEach((cb) => cb());
+    });
+  };
+
+  it("SNV-FR-63, DRP-FR-07: keeps Active, Published, and the active position at every width", async () => {
+    drafts = [row("d-active", "active")];
+    renderPanel({ filter: "graduated" });
+    await waitFor(() => expect(selectorValues("Draft status")).toHaveLength(5));
+
+    await resizeTo(2 * BUTTON_W + 4);
+    expect(selectorValues("Draft status")).toEqual(["active", "graduated", "published"]);
+    expect(selectorValue("Draft status")).toBe("graduated");
+
+    await resizeTo(1000);
+    expect(selectorValues("Draft status")).toEqual([
+      "active",
+      "archived",
+      "graduated",
+      "all",
+      "published",
+    ]);
   });
 });

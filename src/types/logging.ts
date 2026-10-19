@@ -379,8 +379,8 @@ export interface RecentProject {
   name: string;
   path: string;
   lastOpenedAt: string;
-  // Added by user-global settings storage (GSS-FR-05). Optional so the
-  // view-and-open Project picker, which ignores them, keeps its existing shape.
+  // Added by user-global settings storage (GSS-FR-05). Optional so that an
+  // entry without them reads as unpinned and present.
   pinned?: boolean;
   missing?: boolean;
 }

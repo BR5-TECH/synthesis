@@ -8,6 +8,7 @@ import {
 } from "./mock-github-polling";
 import { documentsInvoke } from "./mock-documents";
 import { gitPanelInvoke } from "./mock-git-panel";
+import { recentsInvoke } from "./mock-recents";
 
 const now = "2026-07-28T11:24:00Z";
 
@@ -7220,28 +7221,11 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
   // GIT-git.md: the Git panel's history, branch and pull request commands.
   const gitPanel = gitPanelInvoke(cmd, a);
   if (gitPanel !== NOT_HANDLED) return gitPanel;
+  // PPK-project-picker.md: the recent list, with Pin, Unpin, and Hide state.
+  const recents = recentsInvoke(cmd, a);
+  if (recents !== NOT_HANDLED) return recents;
   switch (cmd) {
     // ---- project ---------------------------------------------------------
-    case "list_recent_projects":
-      return [
-        {
-          name: "acme",
-          path: "/Users/demo/dev/acme",
-          lastOpenedAt: "2026-07-28T09:00:00Z",
-          pinned: true,
-        },
-        {
-          name: "synthesis",
-          path: "/Users/demo/develop/synthesis-june",
-          lastOpenedAt: "2026-07-24T18:30:00Z",
-        },
-        {
-          name: "old-thing",
-          path: "/Users/demo/dev/old-thing",
-          lastOpenedAt: "2026-03-01T12:00:00Z",
-          missing: true,
-        },
-      ];
     case "open_project_at_path":
     case "open_project_from_git_url":
     case "create_project":
@@ -7254,10 +7238,6 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "finish_exit":
     case "set_save_menu_state":
     case "set_find_menu_state":
-    case "remove_recent_project":
-    case "clear_recent_projects":
-    case "pin_recent_project":
-    case "unpin_recent_project":
     case "center_picker":
       return undefined;
 

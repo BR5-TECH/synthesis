@@ -400,6 +400,10 @@
   min-width: 200px;
   z-index: var(--z-overlay);
 }
+/* PPK-FR-VEID: the Project picker's recent entry menu floats on the same overlay
+   layer. PPK-FR-FINT: the entry that has keyboard focus shows it. */
+.menu--recent { min-width: 140px; z-index: var(--z-overlay); }
+.menu--recent .menu-item:focus-visible { outline: none; background: var(--bg-active); }
 
 /* NTF-FR-34: the needs-attention mark.
    Always laid out, never conditionally rendered, so a tab taking or losing an

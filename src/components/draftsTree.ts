@@ -8,17 +8,18 @@
  * drawn — and because a rule about names is far easier to read, and to test,
  * away from the surface that enforces it.
  */
-import type { DraftMatch, DraftStatus, DraftsStatusFilter } from "../types";
+import type { DraftMatch, DraftSummary, DraftsStatusFilter } from "../types";
 import type { SelectorPosition } from "./SelectorRow";
 
-/** DRP-FR-07: the three positions of the status filter. */
+/** DRP-FR-07: the five positions of the status filter. */
 export type DraftFilter = DraftsStatusFilter;
 
 /**
- * DRP-FR-07 / SNV-FR-62: the status filter's three positions, in the order the
- * requirement names them — active (the default), archived, all drafts. Active
- * leads because a retired draft is not what the author came to the panel for,
- * and the archived ones are one position away rather than gone.
+ * DRP-FR-07 / SNV-FR-62: the status filter's five positions, in the order the
+ * requirement names them — active (the default), archived, graduated, all
+ * drafts, published. Active leads because a retired draft is not what the
+ * author came to the panel for, and the other positions are one step away
+ * rather than gone.
  *
  * Module-level so its identity is stable across renders: `SelectorRow`
  * re-measures its fit when the position list changes, and this list never
@@ -33,17 +34,28 @@ export const STATUS_POSITIONS: SelectorPosition<DraftsStatusFilter>[] = [
   // alone: a publication to GitHub leaves a draft in the active position.
   { value: "graduated", tag: "Graduated", title: "Graduated" },
   { value: "all", tag: "All", title: "All drafts" },
+  // DRP-FR-GBVS: the drafts published to GitHub, on any status.
+  { value: "published", tag: "Published", title: "Published to GitHub" },
 ];
 
 /**
- * DRP-FR-07: whether a status filter position admits a draft of this status.
+ * DRP-FR-07: whether a status filter position admits this draft.
  * **All drafts** admits everything, and **graduated** admits `graduated`
  * alone. **Active** also admits the legacy `published`, because a publication
  * to GitHub leaves a draft in the author's working view, and `github_shadow`
  * (DRP-FR-YVXS). A shadow draft that reports `graduated` falls in the
  * graduated position by its own status.
+ *
+ * DRP-FR-GBVS: **published** admits a draft whose row carries a publication
+ * record, on any status. The legacy `published` status alone does not admit
+ * it.
  */
-export function statusAdmits(filter: DraftFilter, status: DraftStatus): boolean {
+export function statusAdmits(
+  filter: DraftFilter,
+  draft: Pick<DraftSummary, "status" | "publication">,
+): boolean {
+  if (filter === "published") return !!draft.publication;
+  const { status } = draft;
   if (filter === "all" || status === filter) return true;
   return filter === "active" && (status === "published" || status === "github_shadow");
 }
@@ -54,6 +66,16 @@ export function statusAdmits(filter: DraftFilter, status: DraftStatus): boolean 
  * than one per character.
  */
 export const FILTER_DEBOUNCE_MS = 250;
+
+/**
+ * DRP-FR-27 / DRP-FR-PXMK: the only data a row drag carries. It is a type of
+ * this panel's own, so no editable field and no other surface takes the drop:
+ * a drag from a row is a move within this panel and nothing else.
+ */
+export const DRAG_TYPE = "application/x-synthesis-drafts-item";
+
+/** DRP-FR-PXMK: the attribute that marks the region a row drag may land in. */
+export const DRAG_ZONE_ATTRIBUTE = "data-drafts-drag-zone";
 
 /** The implicit root (DRP-FR-20): the tree's container, never a row. */
 export const ROOT = "";

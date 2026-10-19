@@ -36,8 +36,8 @@ pub use preferences::*;
 /// established wire name already consumed by the Project picker
 /// (`PPK-project-picker.md`); `pinned` and `missing` are additive. Keeping the
 /// existing name (rather than the spec's abstract `last_opened`) preserves the
-/// picker contract; the two new flags are ignored by the picker, which remains
-/// view-and-open only.
+/// picker contract; the picker shows both flags and offers pin, unpin, and
+/// remove for an entry (PPK-FR-SDXU).
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct RecentProjectEntry {

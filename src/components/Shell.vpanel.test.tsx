@@ -85,7 +85,7 @@ describe("DRP-FR-07: the Drafts surface opens in the active position", () => {
   // a position explicitly and so can never see it. Active is the default
   // because a retired draft is not what the author came to the panel for — and
   // it is the Given every archive scenario in DRP is written against.
-  it("mounts with the status filter on Active, offering the four positions", async () => {
+  it("mounts with the status filter on Active, offering the five positions", async () => {
     invokeMock.mockImplementation(async (cmd: string) => {
       if (cmd === "list_drafts")
         return {
@@ -110,7 +110,7 @@ describe("DRP-FR-07: the Drafts surface opens in the active position", () => {
     renderPanel("drafts");
     await screen.findByText("artifact-window");
 
-    // DRP-FR-07 / SNV-FR-62: three toggle buttons acting as one radio group,
+    // DRP-FR-07 / SNV-FR-62: five toggle buttons acting as one radio group,
     // active leading and marked, with no dropdown to open.
     expect(selectorValue("Draft status")).toBe("active");
     expect(selectorValues("Draft status")).toEqual([
@@ -119,6 +119,8 @@ describe("DRP-FR-07: the Drafts surface opens in the active position", () => {
       // DRP-FR-07: `graduated` is a position of its own, not a kind of archive.
       "graduated",
       "all",
+      // DRP-FR-GBVS: the drafts published to GitHub, on any status.
+      "published",
     ]);
     expect(selectorNames("Draft status")).toEqual([
       "Active",
@@ -126,6 +128,7 @@ describe("DRP-FR-07: the Drafts surface opens in the active position", () => {
       // DRP-FR-07: the position admits `graduated` alone, and its title says so.
       "Graduated",
       "All drafts",
+      "Published to GitHub",
     ]);
     expect(
       screen.queryByRole("combobox", { name: "Draft status" }),

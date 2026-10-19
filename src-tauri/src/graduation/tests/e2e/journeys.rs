@@ -478,7 +478,7 @@ fn a_timed_out_turn_rests_the_run_rather_than_failing_it() {
         .expect_dispatch(0, |d| d.execution_timeout_ms(1_800_000));
 }
 
-// GTE-FR-TCUW / GXD-FR-XEUX, GXD-FR-UZHX, GXD-FR-WJOW, GLG-FR-RLQZ: **the seam
+// GTE-FR-TCUW / GXD-FR-XEUX, GXD-FR-UZHX, GXD-FR-WJOW, GLG-FR-RLQZ, GXD-FR-ELUF: **the seam
 // ends no run.** A pre-launch error a retry cannot get past rests the run
 // rather than making it terminal, and the author reads one sentence for it.
 #[test]
@@ -495,7 +495,16 @@ fn a_turn_that_could_not_be_launched_rests_the_run_and_ends_nothing() {
         .expect_interrupted_record_lacks("process_outcome")
         .expect_dispatch_count(1)
         .expect_stream_held()
-        .expect_commits(0);
+        .expect_commits(0)
+        // GXD-FR-ELUF: only a review that could not launch resumes in place. A
+        // work turn that could not launch is asked for again.
+        .expect_no_resume_phase()
+        .continued(vec![
+            Script::reports_success().writes("src/panel.ts", "1\n"),
+            Script::answers_ready("The work answers the prompt."),
+        ])
+        .expect_state(GraduationRunState::Completed)
+        .expect_dispatch_order(&["work", "review"]);
 }
 
 // GXD-FR-QUCP, GXD-FR-UZHX, GXD-FR-SHNW: a Microsandbox VM that could not start

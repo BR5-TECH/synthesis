@@ -441,6 +441,11 @@ pub fn delete_draft_impl(root: &fs::RootFs, store: &fs::RootFs, id: &str) -> Res
     // event rather than the one that ends the draft.
     crate::statistics::wait_for_writer();
     crate::statistics::delete_draft_statistics(store, id)?;
+    // DRS-FR-MQBT: the draft's publication store goes too, on the terms the
+    // statistics log does. Before the review threads, whose removal takes the
+    // draft's whole folder of the machine store, so this removal is the one
+    // route that answers for the store.
+    crate::github_publication::store::delete_store(store, id)?;
     // DRS-FR-WNTA: the draft's review threads go with it, through
     // `CMS-comments-storage.md`'s deletion (CMS-FR-39) and by no other route.
     // Before the folder is removed, on exactly the terms the statistics log is,
@@ -449,8 +454,8 @@ pub fn delete_draft_impl(root: &fs::RootFs, store: &fs::RootFs, id: &str) -> Res
     crate::comments::delete_draft_comments(store, id)?;
     // DRP-FR-12: the draft's files, brief, and history go with it — and nothing
     // outside `.synthesis/drafts/` is touched, because a draft has never been in
-    // the project. Its statistics and its conversations are in the repository
-    // machine store, removed above. DRS-FR-21: the drafts
+    // the project. Its statistics, its conversations, and its publication store
+    // are in the repository machine store, removed above. DRS-FR-21: the drafts
     // folder it was filed in is left standing and empty rather than removed,
     // because it is the author's structure and outlives what was in it.
     root.delete_under(drafts_dir(root), folder_join(&at.folder, id), true)

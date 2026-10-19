@@ -28,6 +28,10 @@ pub mod images;
 // Compiled under test too, because the real-runtime probe of EAC-FR-RVQE binds
 // it. A test build still uses `NoSandbox` as its production runtime.
 mod catalog;
+// EAC-FR-NDDZ: the catalog guard, which only macOS needs.
+#[cfg(target_os = "macos")]
+pub mod catalog_guard;
+pub use catalog::{GuardEnd, GuardOutcome, GuardReport};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub mod micro;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -282,6 +286,13 @@ pub trait SandboxRuntime: Send + Sync {
 
     /// Stop and remove `vm`. A VM that is not there is not an error.
     fn stop<'a>(&'a self, vm: &'a str) -> BoxFuture<'a, ()>;
+
+    /// EAC-FR-NDDZ: keep a catalog guard running beside the catalog
+    /// connection. `renew` ends the earlier guard and starts a new one. A
+    /// runtime that needs no guard reports `NotNeeded`.
+    fn guard_catalog(&self, _renew: bool) -> BoxFuture<'_, GuardReport> {
+        Box::pin(async { GuardReport::default() })
+    }
 }
 
 /// EAC-FR-QULL: the verified Docker backend, as the export fallback reads it.

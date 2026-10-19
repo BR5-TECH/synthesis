@@ -43,6 +43,7 @@ import {
   renderPanel,
 } from "../test/draftsPanelFixtures";
 import { resetPanelReveals } from "../state/panelReveal";
+import { DRAG_TYPE, DRAG_ZONE_ATTRIBUTE } from "./draftsTree";
 
 /** Every `invoke` of one operation, in the order they were made. */
 const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd);
@@ -73,6 +74,30 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
   // -------------------------------------------------------------------------
   // Drag and drop (DRP-FR-27, DRP-FR-30, DRP-FR-32)
   // -------------------------------------------------------------------------
+
+  it("DRP-FR-PXMK, DRP-FR-27: a row drag carries the panel's own type and no text", async () => {
+    invokeMock.mockImplementation(async (cmd) =>
+      cmd === "list_drafts" ? nested() : undefined,
+    );
+    renderPanel({ expanded: ["UI"] });
+    await screen.findByText("scratch");
+
+    for (const row of [
+      screen.getByRole("treeitem", { name: /Draft artifact-window/ }),
+      folderRow("backend"),
+    ]) {
+      const setData = vi.fn();
+      const dataTransfer = { setData, effectAllowed: "", dropEffect: "" };
+      fireEvent.dragStart(row, { dataTransfer });
+      // A text type would let a text field elsewhere take the drop as text.
+      expect(setData).toHaveBeenCalledTimes(1);
+      expect(setData.mock.calls[0][0]).toBe(DRAG_TYPE);
+      expect(dataTransfer.effectAllowed).toBe("move");
+      fireEvent.dragEnd(row);
+      // The guard lets a row drag through only inside the panel's region.
+      expect(row.closest(`[${DRAG_ZONE_ATTRIBUTE}]`)).not.toBeNull();
+    }
+  });
 
   it("DRP-FR-27, DRP-FR-30: dragging a draft onto a folder highlights it and moves the draft", async () => {
     invokeMock.mockImplementation(async (cmd) =>

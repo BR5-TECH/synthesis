@@ -211,6 +211,17 @@ impl Outcome {
         self
     }
 
+    /// GXD-FR-TJRV: the run records no phase to resume at, so Continue starts
+    /// with a work turn.
+    pub(crate) fn expect_no_resume_phase(self) -> Self {
+        assert_eq!(
+            self.run.checkpoint.resume_part, None,
+            "[{}] the run records no phase to resume at",
+            self.name
+        );
+        self
+    }
+
     pub(crate) fn expect_interruption(self, reason: &str) -> Self {
         let held = self.run.interruption.as_ref().map(|i| i.reason.as_str().to_string());
         assert_eq!(held.as_deref(), Some(reason), "[{}] why the run stopped", self.name);

@@ -455,7 +455,7 @@ export function DraftsPanel({
    */
   const admitsDraft = useCallback(
     (draft: DraftSummary) =>
-      statusAdmits(panel.filter, draft.status) &&
+      statusAdmits(panel.filter, draft) &&
       (matches === null || matches.has(draft.id)),
     [panel.filter, matches],
   );
@@ -519,7 +519,7 @@ export function DraftsPanel({
     // DRP-FR-34: relax only what would actually hide the row. The status filter
     // moves to **all drafts** rather than to the position naming this draft's
     // own status, so nothing else leaves the tree to make room for it.
-    if (!statusAdmits(panel.filter, draft.status)) panel.setFilter("all");
+    if (!statusAdmits(panel.filter, draft)) panel.setFilter("all");
     if (matches !== null && !matches.has(draft.id)) panel.setText("");
 
     const key = `draft:${draft.id}`;

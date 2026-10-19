@@ -146,10 +146,15 @@ export interface NotesPanelState {
 }
 
 /**
- * Which of the Drafts panel's four status positions is selected (DRP-FR-07),
+ * Which of the Drafts panel's five status positions is selected (DRP-FR-07),
  * persisted project-local (PSS-FR-20).
  */
-export type DraftsStatusFilter = "active" | "archived" | "graduated" | "all";
+export type DraftsStatusFilter =
+  | "active"
+  | "archived"
+  | "graduated"
+  | "all"
+  | "published";
 
 /**
  * The Drafts panel state persisted per machine and per worktree in project-local

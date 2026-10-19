@@ -253,6 +253,26 @@ fn ts28_a_handle_enforces_its_mode_on_every_call_and_flushes_on_drop() {
     assert_eq!(fs::read_to_string(&d).unwrap(), "flushed-by-drop");
 }
 
+// FSA-FR-ZANF: a read-only handle takes a shared lock on a byte range, also a
+// range past the end of the file, and a handle of another mode is refused with
+// nothing locked. The guard tests show the lock from another process.
+#[cfg(unix)]
+#[test]
+fn a_shared_range_lock_needs_a_read_only_handle() {
+    let (_tmp, access, root) = rooted();
+    let p = root.join("catalog.db");
+    write_raw(&p, "catalog");
+    for mode in [OpenMode::Append, OpenMode::Truncate] {
+        let h = access.open_file(&p, mode).unwrap();
+        let err = h.lock_shared_range(0x4000_0002, 510).unwrap_err();
+        assert!(matches!(err, FsError::WrongMode { attempted: "lock", .. }), "got {err:?}");
+    }
+    let h = access.open_file(&p, OpenMode::ReadOnly).unwrap();
+    h.lock_shared_range(0x4000_0002, 510).expect("a read-only handle takes the lock");
+    let err = h.lock_shared_range(0, u64::MAX).unwrap_err();
+    assert!(matches!(err, FsError::Io(_)), "a range past `off_t` is refused: {err:?}");
+}
+
 // NOTE on the remaining clause of FSA-FR-26 — "a handle does not outlive its
 // instance". That is enforced by the borrow checker rather than at runtime:
 // `FileHandle<'a>` borrows the `FsAccess` it came from, so the code that would

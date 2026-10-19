@@ -105,6 +105,9 @@ pub enum FsError {
     /// FSA-FR-NRQE: `read_regular_bytes` met a file larger than the limit it
     /// was given.
     TooLarge { path: PathBuf, limit: u64 },
+    /// FSA-FR-ZANF: the platform has no advisory byte-range locks. Nothing was
+    /// locked.
+    UnsupportedPlatform { operation: &'static str },
 }
 
 impl fmt::Display for FsError {
@@ -161,6 +164,9 @@ impl fmt::Display for FsError {
             }
             FsError::TooLarge { path, limit } => {
                 write!(f, "file larger than {limit} bytes: {}", path.display())
+            }
+            FsError::UnsupportedPlatform { operation } => {
+                write!(f, "unsupported platform: {operation} is not available here")
             }
         }
     }

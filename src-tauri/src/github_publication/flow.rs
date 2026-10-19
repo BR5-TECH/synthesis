@@ -141,17 +141,19 @@ pub fn local_eligibility(
 /// issue with no Type and no milestone (GHP-FR-CDVT).
 pub fn open_attempt(
     root: &fs::RootFs,
+    machine: &fs::RootFs,
     draft_id: &str,
     remote: &PublicationRemote,
     marker: String,
 ) -> Result<PublicationAttempt, String> {
-    open_attempt_with(root, draft_id, remote, marker, None)
+    open_attempt_with(root, machine, draft_id, remote, marker, None)
 }
 
 /// GHP-FR-RUYT / GHP-FR-ATCH: write the attempt record and the resolved
 /// publication choice **before** the first GitHub mutation.
 pub fn open_attempt_with(
     root: &fs::RootFs,
+    machine: &fs::RootFs,
     draft_id: &str,
     remote: &PublicationRemote,
     marker: String,
@@ -173,30 +175,32 @@ pub fn open_attempt_with(
         updated_at: now,
         choice,
     };
-    let mut current = store::read_store(root, draft_id)?;
-    // GHP-FR-KZAP: one non-terminal attempt per draft, enforced against what is
-    // on disk rather than against what the caller believed.
-    if current.attempt.is_some() {
-        return Err(ERR_ATTEMPT_IN_PROGRESS.to_string());
-    }
-    current.attempt = Some(attempt.clone());
-    store::write_store(root, draft_id, &current)?;
-    Ok(attempt)
+    store::update_store(root, machine, draft_id, |current| {
+        // GHP-FR-KZAP: one non-terminal attempt per draft, enforced against
+        // what is on disk rather than against what the caller believed.
+        if current.attempt.is_some() {
+            return Err(ERR_ATTEMPT_IN_PROGRESS.to_string());
+        }
+        current.attempt = Some(attempt.clone());
+        Ok(attempt)
+    })
 }
 
 /// DRS-FR-VDQR: move the standing attempt to a state, atomically.
 pub fn set_attempt_state(
     root: &fs::RootFs,
+    machine: &fs::RootFs,
     draft_id: &str,
     state: AttemptState,
 ) -> Result<(), String> {
-    let mut current = store::read_store(root, draft_id)?;
-    let Some(attempt) = current.attempt.as_mut() else {
-        return Err(ERR_NO_ATTEMPT.to_string());
-    };
-    attempt.state = state;
-    attempt.updated_at = now_rfc3339();
-    store::write_store(root, draft_id, &current)
+    store::update_store(root, machine, draft_id, |current| {
+        let Some(attempt) = current.attempt.as_mut() else {
+            return Err(ERR_NO_ATTEMPT.to_string());
+        };
+        attempt.state = state;
+        attempt.updated_at = now_rfc3339();
+        Ok(())
+    })
 }
 
 /// GHP-FR-YPGL: replace the standing attempt with a new one in **one** atomic
@@ -204,15 +208,12 @@ pub fn set_attempt_state(
 /// standing rather than neither.
 pub fn restart_attempt(
     root: &fs::RootFs,
+    machine: &fs::RootFs,
     draft_id: &str,
     remote: &PublicationRemote,
     marker: String,
     choice: Option<PublicationChoice>,
 ) -> Result<PublicationAttempt, String> {
-    let mut current = store::read_store(root, draft_id)?;
-    if current.attempt.is_none() {
-        return Err(ERR_NO_ATTEMPT.to_string());
-    }
     let now = now_rfc3339();
     let attempt = PublicationAttempt {
         marker,
@@ -229,19 +230,27 @@ pub fn restart_attempt(
         updated_at: now,
         choice,
     };
-    current.attempt = Some(attempt.clone());
-    store::write_store(root, draft_id, &current)?;
-    Ok(attempt)
+    store::update_store(root, machine, draft_id, |current| {
+        if current.attempt.is_none() {
+            return Err(ERR_NO_ATTEMPT.to_string());
+        }
+        current.attempt = Some(attempt.clone());
+        Ok(attempt)
+    })
 }
 
 /// DRS-FR-JOEV: clear the standing attempt, appending nothing.
-pub fn clear_attempt(root: &fs::RootFs, draft_id: &str) -> Result<(), String> {
-    let mut current = store::read_store(root, draft_id)?;
-    if current.attempt.is_none() {
-        return Err(ERR_NO_ATTEMPT.to_string());
-    }
-    current.attempt = None;
-    store::write_store(root, draft_id, &current)
+pub fn clear_attempt(
+    root: &fs::RootFs,
+    machine: &fs::RootFs,
+    draft_id: &str,
+) -> Result<(), String> {
+    store::update_store(root, machine, draft_id, |current| {
+        if current.attempt.take().is_none() {
+            return Err(ERR_NO_ATTEMPT.to_string());
+        }
+        Ok(())
+    })
 }
 
 /// GHP-FR-JAWD: the record one successful publication appends.
@@ -393,6 +402,7 @@ fn milestone_matches(issue: &IssueRef, choice: &PublicationChoice) -> bool {
 /// and the milestone: nothing here reads the settings or the metadata lists.
 pub fn publish_with_attempt(
     root: &fs::RootFs,
+    machine: &fs::RootFs,
     draft_id: &str,
     attempt: &PublicationAttempt,
     secret: &str,
@@ -413,7 +423,7 @@ pub fn publish_with_attempt(
             if !differs.is_empty() {
                 // GHP-FR-HRUN: it exists and differs, which is the author's
                 // decision.
-                set_attempt_state(root, draft_id, AttemptState::AwaitingChoice)?;
+                set_attempt_state(root, machine, draft_id, AttemptState::AwaitingChoice)?;
                 return Ok(PublicationOutcome::RecoveryRequired {
                     issue_number: issue.number,
                     issue_url: issue.url,
@@ -427,7 +437,7 @@ pub fn publish_with_attempt(
         }
     };
 
-    let record = store::complete_attempt(root, draft_id, record_of(attempt, &issue))?;
+    let record = store::complete_attempt(root, machine, draft_id, record_of(attempt, &issue))?;
     Ok(PublicationOutcome::Published { record: Box::new(record) })
 }
 
@@ -436,6 +446,7 @@ pub fn publish_with_attempt(
 /// attempt.
 pub fn update_existing(
     root: &fs::RootFs,
+    machine: &fs::RootFs,
     draft_id: &str,
     attempt: &PublicationAttempt,
     secret: &str,
@@ -450,7 +461,8 @@ pub fn update_existing(
         // same act the attempt was going to perform anyway, and it keeps the
         // marker, so nothing is duplicated.
         let created = create_with_choice(client, secret, owner, repo, &content, &choice)?;
-        let record = store::complete_attempt(root, draft_id, record_of(attempt, &created))?;
+        let record =
+            store::complete_attempt(root, machine, draft_id, record_of(attempt, &created))?;
         return Ok(PublicationOutcome::Published { record: Box::new(record) });
     };
 
@@ -482,7 +494,7 @@ pub fn update_existing(
     if let (true, Some(old)) = (unlink, existing.parent.as_ref()) {
         client.unlink_sub_issue(secret, &old.owner, &old.repo, old.number, existing.id)?;
     }
-    let record = store::complete_attempt(root, draft_id, record_of(attempt, &updated))?;
+    let record = store::complete_attempt(root, machine, draft_id, record_of(attempt, &updated))?;
     Ok(PublicationOutcome::Published { record: Box::new(record) })
 }
 
@@ -886,8 +898,13 @@ pub fn resolve_repository_hosted(
 /// GHP-FR-MJTB: whether `url` is one this draft holds — in a record of its
 /// publication history, or in its GitHub-shadow issue link (DRS-FR-XDWS) — and
 /// an HTTPS issue address on the repository host of that record or link.
-pub fn is_recorded_issue_url(root: &fs::RootFs, draft_id: &str, url: &str) -> Result<bool, String> {
-    let publication = store::read_store(root, draft_id)?;
+pub fn is_recorded_issue_url(
+    root: &fs::RootFs,
+    machine: &fs::RootFs,
+    draft_id: &str,
+    url: &str,
+) -> Result<bool, String> {
+    let publication = store::read_store(root, machine, draft_id)?;
     let from_record = publication
         .publication
         .iter()

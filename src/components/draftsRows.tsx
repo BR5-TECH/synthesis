@@ -15,7 +15,7 @@ import { Icon } from "./icons";
 import { formatRelative } from "./ProjectPicker";
 import { stateLabel } from "../state/graduation";
 import { AnchoredMenu } from "./DraftsPanelParts";
-import { folderName, ROOT } from "./draftsTree";
+import { DRAG_TYPE, folderName, ROOT } from "./draftsTree";
 import type { DraftMatches, MenuAnchor, TreeItem } from "./draftsTree";
 import type { DraftsPanel as DraftsPanelState } from "../hooks/useDraftsPanelState";
 import { isGithubShadow } from "../types";
@@ -288,10 +288,11 @@ export function makeRowRenderers(ctx: DraftRowContext) {
           // otherwise throw here and break the whole gesture before the panel
           // has recorded what is being dragged. The payload is only there
           // because Firefox will not start a drag without one — the panel
-          // reads its own state rather than this.
+          // reads its own state rather than this. Its type is the panel's own
+          // (DRAG_TYPE), so no text field takes the drop as text.
           if (e.dataTransfer) {
             e.dataTransfer.effectAllowed = "move";
-            e.dataTransfer.setData("text/plain", draft.id);
+            e.dataTransfer.setData(DRAG_TYPE, draft.id);
           }
           setDragging(item);
         }}
@@ -351,17 +352,21 @@ export function makeRowRenderers(ctx: DraftRowContext) {
           )}
           {/* DRP-FR-08: an archived draft is told apart where it sits rather
               than by being listed apart. No marker in the archived position,
-              where every row would carry one. */}
-          {draft.status === "archived" && panel.filter === "all" && (
-            <span className="drafts-tree__badge" data-testid="draft-archived-marker">
-              archived
-            </span>
-          )}
+              where every row would carry one. The published position admits
+              every status, so it marks rows as all drafts does (DRP-FR-GBVS). */}
+          {draft.status === "archived" &&
+            (panel.filter === "all" || panel.filter === "published") && (
+              <span className="drafts-tree__badge" data-testid="draft-archived-marker">
+                archived
+              </span>
+            )}
           {/* DRP-FR-08: on the same terms, and for the same reason — a
               graduated draft is told apart where it sits. It keeps its label in
               the **graduated** position too. */}
           {draft.status === "graduated" &&
-            (panel.filter === "all" || panel.filter === "graduated") && (
+            (panel.filter === "all" ||
+              panel.filter === "graduated" ||
+              panel.filter === "published") && (
               <span
                 className="drafts-tree__badge"
                 data-testid="draft-graduated-marker"
@@ -632,7 +637,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
           onDragStart={(e) => {
             if (e.dataTransfer) {
               e.dataTransfer.effectAllowed = "move";
-              e.dataTransfer.setData("text/plain", folder.path);
+              e.dataTransfer.setData(DRAG_TYPE, folder.path);
             }
             setDragging(item);
           }}

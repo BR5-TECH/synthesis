@@ -131,10 +131,11 @@ fn record(s: &Session, name: &'static str) -> std::sync::Arc<std::sync::Mutex<Ve
 fn a_publication_deletes_the_discussion_of_the_note() {
     let (s, id) = note_session();
     let root = s.root();
+    let machine = s.machine();
     let by =
         crate::comments::Participant::Human { login: "me".into(), display_name: None, email: None };
     crate::comments::get_or_create_note_discussion_in(
-        &root,
+        &machine,
         &root,
         &id,
         "why is this open?".into(),
@@ -143,10 +144,10 @@ fn a_publication_deletes_the_discussion_of_the_note() {
         "2025-03-04T11:00:00Z",
     )
     .unwrap();
-    assert!(crate::comments::note_discussion_index(&root).contains_key(&id));
+    assert!(crate::comments::note_discussion_index(&machine).contains_key(&id));
     let outcome = publish(&s, &id, "Title", root_choice()).unwrap();
     assert!(matches!(outcome, NotePublicationOutcome::Published { .. }));
-    assert!(!crate::comments::note_discussion_index(&root).contains_key(&id));
+    assert!(!crate::comments::note_discussion_index(&machine).contains_key(&id));
     assert!(!note_exists(&s, &id));
 }
 

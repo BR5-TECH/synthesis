@@ -8,6 +8,8 @@ use super::scenario::{Scenario, Setting, TurnScript as Script};
 use crate::graduation::{
     GraduationInterruptionReason, GraduationLogStream, GraduationRunState, ReviewSeverity,
 };
+use crate::tools::agent_exec::sandbox::{SandboxFailure, SandboxFailureCause};
+use crate::tools::agent_exec::AgentExecutionError;
 
 // ---------------------------------------------------------------------------
 // 12 — the author's pause
@@ -451,6 +453,30 @@ fn a_run_abandoned_by_a_relaunch_rests_as_execution_abandoned() {
         .worktree_holds("src/panel.ts", "2\n");
 }
 
+// GXD-FR-ELUF, GRD-FR-XVUD, GXD-FR-TJRV: the process behind a reviewing run is
+// gone. The reviewer changed nothing, so the run resumes at the review, and
+// Continue composes no work turn.
+#[test]
+fn a_review_abandoned_by_a_relaunch_resumes_at_the_review() {
+    Scenario::named("relaunch sweep in the review")
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
+        .review_turn(
+            Script::answers_ready("The work answers the prompt.").abandoned_by_a_relaunch(),
+        )
+        .run()
+        .expect_state(GraduationRunState::Interrupted)
+        .expect_interruption("execution_abandoned")
+        .expect_resume_phase("review")
+        .expect_commits(1)
+        .expect_stream_held()
+        .continued(vec![Script::answers_ready("The work answers the prompt.")])
+        .expect_state(GraduationRunState::Completed)
+        .expect_dispatch_order(&["review"])
+        .expect_pass(1)
+        .expect_commits(1)
+        .expect_branch_head_message_contains("Graduated from the draft");
+}
+
 // ---------------------------------------------------------------------------
 // 14 — a turn that ended without an answer
 // ---------------------------------------------------------------------------
@@ -533,6 +559,7 @@ fn a_review_turn_that_times_out_commits_the_unreviewed_work_and_resumes_with_a_w
         .expect_committed_paths(&["src/panel.ts"])
         .expect_review_checkout_reclaimed()
         .expect_stream_held()
+        .expect_no_resume_phase()
         .continued(vec![
             Script::reports_success(),
             Script::answers_ready("The work answers the prompt."),
@@ -543,6 +570,120 @@ fn a_review_turn_that_times_out_commits_the_unreviewed_work_and_resumes_with_a_w
         .expect_commits(1)
         .expect_branch_commits_since_base(1)
         .expect_branch_head_message_contains("Graduated from the draft");
+}
+
+/// A review turn whose sandbox could not read its own catalog.
+fn review_catalog_failure() -> Script {
+    Script::cannot_launch(AgentExecutionError::SandboxLaunchFailed(SandboxFailure {
+        cause: SandboxFailureCause::RuntimeCatalogFailed,
+        message: "(code: 26) file is not a database".to_string(),
+    }))
+}
+
+// GXD-FR-ELUF, GXD-FR-TJRV, GXD-FR-UZHX, GRD-FR-SWOJ, GRD-FR-ARLT: a review turn
+// that could not launch ran nothing, so the run resumes at the review. Continue
+// composes no work turn and the pass does not advance.
+#[test]
+fn a_review_turn_that_could_not_launch_resumes_at_the_review() {
+    Scenario::named("review launch failure")
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
+        .review_turn(review_catalog_failure())
+        .run()
+        .expect_state(GraduationRunState::Interrupted)
+        .expect_interruption("launch_failed")
+        .expect_resume_phase("review")
+        .expect_dispatch_order(&["work", "review"])
+        .expect_commits(1)
+        .expect_commit_message_contains(0, "Abandoned graduation turn")
+        .expect_committed_paths(&["src/panel.ts"])
+        .expect_review_checkout_reclaimed()
+        .expect_stream_held()
+        .continued(vec![Script::answers_ready("The work answers the prompt.")])
+        .expect_state(GraduationRunState::Completed)
+        .expect_dispatch_order(&["review"])
+        .expect_pass(1)
+        .expect_turns(1, 2)
+        .expect_dispatch(0, |d| d.changed_paths(&["src/panel.ts"]))
+        .expect_commits(1)
+        .expect_branch_commits_since_base(1)
+        .expect_branch_head_message_contains("Graduated from the draft");
+}
+
+// GXD-FR-ELUF, GXD-FR-TJRV, GRD-FR-SWOJ: the resume point is spent when the
+// review is asked for again. A second review that could not launch records the
+// review again, so a third Continue still composes no work turn, and the second
+// stop makes no empty commit.
+#[test]
+fn a_second_review_that_could_not_launch_records_the_review_again() {
+    Scenario::named("second review launch failure")
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
+        .review_turn(review_catalog_failure())
+        .run()
+        .expect_resume_phase("review")
+        .continued(vec![review_catalog_failure()])
+        .expect_state(GraduationRunState::Interrupted)
+        .expect_interruption("launch_failed")
+        .expect_resume_phase("review")
+        .expect_dispatch_order(&["review"])
+        .expect_pass(1)
+        .expect_commits(1)
+        .continued(vec![Script::answers_ready("The work answers the prompt.")])
+        .expect_state(GraduationRunState::Completed)
+        .expect_dispatch_order(&["review"])
+        .expect_turns(1, 3)
+        .expect_commits(1)
+        .expect_branch_head_message_contains("Graduated from the draft");
+}
+
+// GXD-FR-ELUF, GRD-FR-XVUD: a run that a relaunch moved out of the review,
+// and whose review then could not launch, records the review again, so it still
+// composes no work turn.
+#[test]
+fn a_review_that_could_not_launch_after_a_relaunch_is_recorded_again() {
+    Scenario::named("relaunch then review launch failure")
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
+        .review_turn(
+            Script::answers_ready("The work answers the prompt.").abandoned_by_a_relaunch(),
+        )
+        .run()
+        .expect_interruption("execution_abandoned")
+        .expect_resume_phase("review")
+        .continued(vec![review_catalog_failure()])
+        .expect_state(GraduationRunState::Interrupted)
+        .expect_interruption("launch_failed")
+        .expect_resume_phase("review")
+        .expect_dispatch_order(&["review"])
+        .continued(vec![Script::answers_ready("The work answers the prompt.")])
+        .expect_state(GraduationRunState::Completed)
+        .expect_dispatch_order(&["review"])
+        .expect_pass(1);
+}
+
+// GXD-FR-ELUF, GXD-FR-TJRV: after a review resume, a revise verdict sends the
+// run to a work turn of the next pass. A work turn that could not launch there
+// records no resume point, so Continue asks for the work again.
+#[test]
+fn a_work_turn_that_could_not_launch_after_a_review_resume_resumes_the_work() {
+    Scenario::named("work launch failure after a review resume")
+        .work_turn(Script::reports_success().writes("src/panel.ts", "1\n"))
+        .review_turn(review_catalog_failure())
+        .run()
+        .continued(vec![
+            Script::answers_revise(ReviewSeverity::Major, "The empty state is not there."),
+            Script::cannot_launch(AgentExecutionError::RuntimeUnavailable),
+        ])
+        .expect_state(GraduationRunState::Interrupted)
+        .expect_interruption("launch_failed")
+        .expect_pass(2)
+        .expect_dispatch_order(&["review", "work"])
+        .expect_no_resume_phase()
+        .continued(vec![
+            Script::reports_success().writes("src/panel.ts", "2\n"),
+            Script::answers_ready("The empty state is there now."),
+        ])
+        .expect_state(GraduationRunState::Completed)
+        .expect_dispatch_order(&["work", "review"])
+        .expect_dispatch(0, |d| d.part("work").pass(2));
 }
 
 // GTE-FR-MDVQ / GRD-FR-SWOJ, GXD-FR-WJOW: a second stop of a turn that wrote

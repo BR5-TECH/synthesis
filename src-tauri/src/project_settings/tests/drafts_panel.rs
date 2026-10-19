@@ -112,10 +112,26 @@ fn drafts_state_serialises_the_wire_shape_the_frontend_types_against() {
     for (variant, text) in [
         (DraftsStatusFilter::Active, "active"),
         (DraftsStatusFilter::Archived, "archived"),
+        (DraftsStatusFilter::Graduated, "graduated"),
         (DraftsStatusFilter::All, "all"),
+        (DraftsStatusFilter::Published, "published"),
     ] {
         assert_eq!(serde_json::to_value(variant).unwrap(), text);
         let parsed: DraftsStatusFilter = serde_json::from_str(&format!("\"{text}\"")).unwrap();
         assert_eq!(parsed, variant);
     }
+}
+
+// PSS-FR-20: the `published` position is saved and loaded like the other
+// positions, and the default stays `active`.
+#[test]
+fn drafts_state_persists_the_published_position() {
+    let dir = TempDir::new().unwrap();
+    std::fs::create_dir_all(dir.path().join(".synthesis")).unwrap();
+    let root = crate::fs::RootFs::for_root(dir.path());
+    assert_eq!(load_drafts_panel_state_from(&root).status_filter, DraftsStatusFilter::Active);
+
+    let saved = drafts_state(DraftsStatusFilter::Published, "issue", &["UI"]);
+    save_drafts_panel_state_to(&root, saved.clone()).unwrap();
+    assert_eq!(load_drafts_panel_state_from(&root), saved);
 }

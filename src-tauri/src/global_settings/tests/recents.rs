@@ -98,6 +98,22 @@ fn remove_recent_project_drops_only_that_entry() {
 }
 
 #[test]
+fn removed_pinned_entry_returns_unpinned_on_reopen() {
+    // GSS-FR-08, PPK-FR-MQVU: the picker's Hide removes a pinned entry. When
+    // the project is opened again, the entry returns, and it is not pinned.
+    let store = GlobalSettingsStore::in_memory();
+    store.record_recent_project("acme", "~/dev/acme").unwrap();
+    store.pin_recent_project("~/dev/acme").unwrap();
+    store.remove_recent_project("~/dev/acme").unwrap();
+    assert!(store.list_recent_projects().unwrap().is_empty());
+
+    store.record_recent_project("acme", "~/dev/acme").unwrap();
+    let list = store.list_recent_projects().unwrap();
+    assert_eq!(list.len(), 1);
+    assert!(!list[0].pinned, "a hidden entry returns unpinned");
+}
+
+#[test]
 fn clear_recent_projects_empties_the_list() {
     // GSS-FR-08 (clear).
     let store = GlobalSettingsStore::in_memory();

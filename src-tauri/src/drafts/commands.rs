@@ -11,6 +11,18 @@ pub fn list_drafts(
     let root = project.require_root()?;
     let (mut hierarchy, repaired) = list_drafts_reporting(&root);
     attach_graduation(&app, &mut hierarchy.drafts);
+    // DRS-FR-PXHW: the publication stores are in the repository machine store
+    // (DRS-FR-EJBM). A store that cannot be resolved costs every row its
+    // marker and fails nothing else in the listing.
+    if !attach_publication_from(&root, project.require_store(), &mut hierarchy.drafts) {
+        crate::logging::log_warn(
+            &app,
+            &crate::logging::BUFFER,
+            &[crate::logging::Domain::Backend],
+            "draft publication stores unavailable",
+            crate::log_fields! { "drafts" => hierarchy.drafts.len() },
+        );
+    }
     // DRS-FR-PXHW: a publication store that does not parse costs its row the
     // publication marker and nothing else. Ids alone, for the reason below.
     let unreadable: Vec<&str> = hierarchy

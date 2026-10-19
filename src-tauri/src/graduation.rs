@@ -210,6 +210,10 @@ pub fn sweep_abandoned_runs<R: tauri::Runtime>(app: &tauri::AppHandle<R>, queue:
         // GRS-FR-IOHF: the record was saved at the last turn boundary, and the
         // files hold what the stopped turn wrote after it.
         logs::reconcile_saved(app, &mut run);
+        // GXD-FR-ELUF: a run abandoned in the review resumes at the review.
+        if run.state == GraduationRunState::Reviewing {
+            run.checkpoint.resume_part = Some(driver::phases::PART_REVIEW.to_string());
+        }
         let _ = transitions::interrupt(
             app,
             &mut run,

@@ -11,6 +11,7 @@ import {
 } from "./ProjectPicker";
 import type { ProjectHandle, RecentProject } from "../types";
 import { readStylesheet } from "../test/readStylesheet";
+import { resetLogBufferForTest } from "../logging";
 
 const invokeMock = vi.fn();
 const openDialogMock = vi.fn();
@@ -83,13 +84,17 @@ const RECENTS: RecentProject[] = [
 ];
 
 function setupInvoke(impl: (cmd: string, args?: unknown) => unknown) {
+  // The background log flush (`append_log_records`) always succeeds. Every
+  // other command goes to `impl`; a throw there becomes a rejection.
   invokeMock.mockImplementation(
-    async (cmd: string, args?: Record<string, unknown>) => impl(cmd, args),
+    async (cmd: string, args?: Record<string, unknown>) =>
+      cmd === "append_log_records" ? undefined : impl(cmd, args),
   );
 }
 
 beforeEach(() => {
   invokeMock.mockReset();
+  resetLogBufferForTest();
   openDialogMock.mockReset();
   setResizableMock.mockClear();
   setMaximizableMock.mockClear();
@@ -106,6 +111,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  resetLogBufferForTest();
 });
 
 describe("ProjectPicker — initial render", () => {
@@ -140,7 +146,7 @@ describe("ProjectPicker — initial render", () => {
   });
 
   it("falls back to empty state and shows error when list_recent_projects rejects", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
+    setupInvoke((cmd) => {
       if (cmd === "list_recent_projects") throw "boom";
       throw new Error(`unexpected ${cmd}`);
     });
@@ -153,7 +159,7 @@ describe("ProjectPicker — initial render", () => {
 });
 
 describe("ProjectPicker — reflects pinned/missing state (PPK-FR-13)", () => {
-  it("renders pinned and missing badges from list_recent_projects without offering management", async () => {
+  it("renders pinned and missing badges from list_recent_projects and offers no clear-all", async () => {
     setupInvoke((cmd) => {
       if (cmd === "list_recent_projects")
         return [
@@ -182,10 +188,12 @@ describe("ProjectPicker — reflects pinned/missing state (PPK-FR-13)", () => {
     // Both entries are pinned; only the deleted one is flagged missing.
     expect(screen.getAllByText("pinned")).toHaveLength(2);
     expect(screen.getByText("missing")).toBeInTheDocument();
-    // The picker stays view-and-open only: no remove/clear/pin controls.
+    // Single entries are managed through their context menu (PPK-FR-SDXU).
+    // Clearing the whole list stays in Global settings only.
     expect(
       screen.queryByRole("button", { name: /remove|clear|pin/i }),
     ).not.toBeInTheDocument();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
   it("does not render badges for plain entries (no pinned/missing fields)", async () => {
@@ -451,7 +459,7 @@ describe("ProjectPicker — create (PPK-FR-05)", () => {
 describe("ProjectPicker — busy state", () => {
   it("disables action buttons while an open is in flight, re-enables on resolve", async () => {
     let resolve: ((handle: ProjectHandle) => void) | undefined;
-    invokeMock.mockImplementation(async (cmd: string) => {
+    setupInvoke((cmd) => {
       if (cmd === "list_recent_projects") return RECENTS;
       if (cmd === "open_project_at_path") {
         return new Promise<ProjectHandle>((r) => {
@@ -482,7 +490,7 @@ describe("ProjectPicker — busy state", () => {
 
   it("re-enables action buttons after a failed open", async () => {
     let reject: ((reason: unknown) => void) | undefined;
-    invokeMock.mockImplementation(async (cmd: string) => {
+    setupInvoke((cmd) => {
       if (cmd === "list_recent_projects") return RECENTS;
       if (cmd === "open_project_at_path") {
         return new Promise<ProjectHandle>((_, r) => {

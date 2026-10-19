@@ -382,7 +382,7 @@ pub(super) fn abandon<R: tauri::Runtime>(
     }
     // GXD-FR-TJRV: a run the author or the application stopped in the review
     // resumes at the review. The work did not change while it rested.
-    if run.state == GraduationRunState::Reviewing && stops_in_place(reason) {
+    if run.state == GraduationRunState::Reviewing && review_resumes_in_place(reason) {
         run.checkpoint.resume_part = Some(phases::PART_REVIEW.to_string());
     }
     let committed = commit_stopped_turn(app, run, worktree);
@@ -493,6 +493,18 @@ fn stored_stop_reason<R: tauri::Runtime>(
     stored.interruption.map(|interruption| interruption.reason).filter(|reason| {
         stops_in_place(*reason) || *reason == GraduationInterruptionReason::ExecutionAbandoned
     })
+}
+
+/// GXD-FR-TJRV, GXD-FR-ELUF: the stops after which a run in the review resumes
+/// at the review. A review that could not launch ran nothing, and a reviewer
+/// that the application lost changed nothing.
+fn review_resumes_in_place(reason: GraduationInterruptionReason) -> bool {
+    stops_in_place(reason)
+        || matches!(
+            reason,
+            GraduationInterruptionReason::LaunchFailed
+                | GraduationInterruptionReason::ExecutionAbandoned
+        )
 }
 
 /// GXD-FR-TJRV: the stops after which a run resumes at the phase it stood in.
@@ -807,4 +819,46 @@ pub(super) fn first_line(text: &str) -> String {
     let line = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("Graduation run");
     let line = line.trim_start_matches('#').trim();
     line.chars().take(72).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // GXD-FR-TJRV, GXD-FR-ELUF: which stops resume a review in place. A launch
+    // failure and an abandoned review resume there too, but they are not stops
+    // a command makes, so `stops_in_place` stays narrow.
+    #[test]
+    fn a_review_resumes_in_place_after_a_command_stop_a_launch_failure_or_an_abandon() {
+        use GraduationInterruptionReason as R;
+        // An exhaustive match, so a new reason cannot be added without a
+        // decision here.
+        let expected = |reason: R| match reason {
+            R::AuthorPause | R::ApplicationShutdown | R::ProjectChanged => (true, true),
+            R::LaunchFailed | R::ExecutionAbandoned => (false, true),
+            R::RetryableFailure
+            | R::LogPersistenceFailed
+            | R::ExecutionTimeout
+            | R::AgentExited
+            | R::AgentTerminated
+            | R::UnreadableAnswer => (false, false),
+        };
+        for reason in [
+            R::AuthorPause,
+            R::ApplicationShutdown,
+            R::ProjectChanged,
+            R::LaunchFailed,
+            R::ExecutionAbandoned,
+            R::RetryableFailure,
+            R::LogPersistenceFailed,
+            R::ExecutionTimeout,
+            R::AgentExited,
+            R::AgentTerminated,
+            R::UnreadableAnswer,
+        ] {
+            let (in_place, review) = expected(reason);
+            assert_eq!(stops_in_place(reason), in_place, "{reason:?} stops in place");
+            assert_eq!(review_resumes_in_place(reason), review, "{reason:?} resumes the review");
+        }
+    }
 }

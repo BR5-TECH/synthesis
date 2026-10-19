@@ -216,6 +216,59 @@ describe("ProjectPicker — recent entry context menu opening", () => {
     fireEvent.keyDown(acme, { key: "F10" });
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
+
+  it("PPK-FR-SDXU, PPK-FR-02: every opening route blocks the native menu", async () => {
+    setupInvoke({ list_recent_projects: lists([ACME]) });
+    await renderPicker();
+
+    // `fireEvent` returns false when the handler called `preventDefault`.
+    const acme = row(ACME.name);
+    expect(fireEvent.contextMenu(acme, { clientX: 40, clientY: 60 })).toBe(
+      false,
+    );
+    fireEvent.keyDown(await screen.findByRole("menu"), { key: "Escape" });
+    await waitFor(() => expect(document.activeElement).toBe(acme));
+    expect(fireEvent.keyDown(acme, { key: "ContextMenu" })).toBe(false);
+    fireEvent.keyDown(await screen.findByRole("menu"), { key: "Escape" });
+    await waitFor(() => expect(document.activeElement).toBe(acme));
+    expect(fireEvent.keyDown(acme, { key: "F10", shiftKey: true })).toBe(false);
+    await screen.findByRole("menu");
+  });
+
+  it("PPK-FR-02: Enter on the focused entry opens the project", async () => {
+    setupInvoke({
+      list_recent_projects: lists([ACME, DESIGN]),
+      open_project_at_path: (args) => ({
+        name: DESIGN.name,
+        path: args?.path,
+        activeWorktreePath: args?.path,
+      }),
+    });
+    const onOpen = await renderPicker();
+
+    const design = row(DESIGN.name);
+    design.focus();
+    fireEvent.keyDown(design, { key: "Enter" });
+
+    await waitFor(() => expect(onOpen).toHaveBeenCalledTimes(1));
+    expect(calls("open_project_at_path")).toEqual([
+      ["open_project_at_path", { path: DESIGN.path }],
+    ]);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("PPK-FR-SDXU, PPK-FR-VFDK: a Ctrl+click press does not focus the entry", async () => {
+    setupInvoke({ list_recent_projects: lists([ACME]) });
+    await renderPicker();
+
+    // The macOS right-click is Ctrl with the primary button. Its press must not
+    // move focus, because focus can scroll the list and close the menu.
+    expect(
+      fireEvent.mouseDown(row(ACME.name), { button: 0, ctrlKey: true }),
+    ).toBe(false);
+    expect(fireEvent.mouseDown(row(ACME.name), { button: 2 })).toBe(false);
+    expect(fireEvent.mouseDown(row(ACME.name), { button: 0 })).toBe(true);
+  });
 });
 
 describe("ProjectPicker — recent entry context menu entries", () => {
@@ -367,6 +420,9 @@ describe("ProjectPicker — Hide", () => {
     );
 
     expect(await screen.findByText(/No projects yet/i)).toBeInTheDocument();
+    // PPK-FR-RQZV: the other actions stay usable.
+    for (const browse of screen.getAllByRole("button", { name: /browse/i }))
+      expect(browse).toBeEnabled();
     await waitFor(() =>
       expect(document.activeElement).toBe(
         screen.getByTestId("picker-recents-body"),
@@ -477,6 +533,29 @@ describe("ProjectPicker — entry actions and other work", () => {
 
     await waitFor(() => expect(rowNames()).toEqual([DESIGN.path, ACME.path]));
     expect(document.activeElement).toBe(name);
+  });
+});
+
+describe("ProjectPicker — failed Pin", () => {
+  it("PPK-FR-LJNO: a failed Pin keeps the entry unpinned, closes the menu, and shows the error", async () => {
+    setupInvoke({
+      list_recent_projects: lists([ACME, DESIGN]),
+      pin_recent_project: () => {
+        throw new Error("store is read-only");
+      },
+    });
+    await renderPicker();
+
+    fireEvent.contextMenu(row(DESIGN.name));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Pin" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not pin project: store is read-only",
+    );
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(rowNames()).toEqual([ACME.path, DESIGN.path]);
+    expect(screen.queryByText("pinned")).not.toBeInTheDocument();
+    expect(calls("list_recent_projects")).toHaveLength(1);
   });
 });
 
@@ -639,6 +718,37 @@ describe("ProjectPicker — recent entry menu placement", () => {
     const menu = await screen.findByRole("menu");
     await waitFor(() => expect(menu.style.left).toBe("550px"));
     expect(menu.style.top).toBe("520px");
+  });
+
+  it("PPK-FR-VEID: a keyboard menu that flips up does not cover its entry", async () => {
+    vi.stubGlobal("innerWidth", 800);
+    vi.stubGlobal("innerHeight", 600);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        if (this.getAttribute("role") === "menu")
+          return DOMRect.fromRect({ x: 0, y: 0, width: 150, height: 60 });
+        if (this.dataset.recentPath === ACME.path)
+          return DOMRect.fromRect({ x: 10, y: 550, width: 400, height: 40 });
+        return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
+      },
+    );
+    setupInvoke({ list_recent_projects: lists([ACME]) });
+    await renderPicker();
+
+    const acme = row(ACME.name);
+    acme.focus();
+    fireEvent.keyDown(acme, { key: "F10", shiftKey: true });
+
+    // The entry spans 550 to 590. The menu does not fit below 590, so it goes
+    // above the top of the entry: 550 - 60.
+    const menu = await screen.findByRole("menu");
+    await waitFor(() => expect(menu.style.top).toBe("490px"));
+    expect(menu.style.left).toBe("34px");
+  });
+
+  it("PPK-FR-VEID: a flip goes to the other side of the flip point when one is given", () => {
+    expect(placeOnAxis(590, 60, 600, 550)).toBe(490);
+    expect(placeOnAxis(100, 60, 600, 80)).toBe(100);
   });
 
   it("PPK-FR-VEID: a menu that fits stays at the pointer", () => {

@@ -146,7 +146,7 @@ describe("ProjectPicker — initial render", () => {
   });
 
   it("falls back to empty state and shows error when list_recent_projects rejects", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
+    setupInvoke((cmd) => {
       if (cmd === "list_recent_projects") throw "boom";
       throw new Error(`unexpected ${cmd}`);
     });
@@ -459,7 +459,7 @@ describe("ProjectPicker — create (PPK-FR-05)", () => {
 describe("ProjectPicker — busy state", () => {
   it("disables action buttons while an open is in flight, re-enables on resolve", async () => {
     let resolve: ((handle: ProjectHandle) => void) | undefined;
-    invokeMock.mockImplementation(async (cmd: string) => {
+    setupInvoke((cmd) => {
       if (cmd === "list_recent_projects") return RECENTS;
       if (cmd === "open_project_at_path") {
         return new Promise<ProjectHandle>((r) => {
@@ -490,7 +490,7 @@ describe("ProjectPicker — busy state", () => {
 
   it("re-enables action buttons after a failed open", async () => {
     let reject: ((reason: unknown) => void) | undefined;
-    invokeMock.mockImplementation(async (cmd: string) => {
+    setupInvoke((cmd) => {
       if (cmd === "list_recent_projects") return RECENTS;
       if (cmd === "open_project_at_path") {
         return new Promise<ProjectHandle>((_, r) => {

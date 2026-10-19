@@ -15,6 +15,12 @@ export interface RecentMenuState {
   path: string;
   x: number;
   y: number;
+  /**
+   * The vertical point the menu flips to when it does not fit below `y`. A
+   * keyboard opening gives the top of the entry, so that a flipped menu does
+   * not cover the entry it acts on. Without it, the menu flips at `y`.
+   */
+  flipY?: number;
 }
 
 /** The action a menu entry starts (PPK-FR-MHJD). */
@@ -24,12 +30,17 @@ export type RecentMenuAction = "pin" | "unpin" | "hide";
  * PPK-FR-VEID: the position that keeps a box of `size` fully inside `limit`.
  *
  * The menu opens at `at`. When it overhangs the far edge, it flips to the other
- * side of `at`. When it still overhangs, it shifts back inside, and it never
- * goes past the near edge.
+ * side of `flipAt` (by default `at`). When it still overhangs, it shifts back
+ * inside, and it never goes past the near edge.
  */
-export function placeOnAxis(at: number, size: number, limit: number): number {
+export function placeOnAxis(
+  at: number,
+  size: number,
+  limit: number,
+  flipAt: number = at,
+): number {
   let start = at;
-  if (start + size > limit - EDGE_MARGIN) start = at - size;
+  if (start + size > limit - EDGE_MARGIN) start = flipAt - size;
   const max = limit - size - EDGE_MARGIN;
   return Math.max(EDGE_MARGIN, Math.min(start, max));
 }
@@ -104,9 +115,9 @@ export function RecentProjectMenu({
     if (!box) return;
     setPlace({
       left: placeOnAxis(menu.x, box.width, window.innerWidth),
-      top: placeOnAxis(menu.y, box.height, window.innerHeight),
+      top: placeOnAxis(menu.y, box.height, window.innerHeight, menu.flipY),
     });
-  }, [menu.x, menu.y]);
+  }, [menu.x, menu.y, menu.flipY]);
 
   // PPK-FR-FINT: focus moves to the first entry when the menu opens.
   useEffect(() => {

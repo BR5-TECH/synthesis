@@ -169,12 +169,13 @@ function errorMessage(e: unknown): string {
 /**
  * PPK-FR-YNME / PPK-FR-MQVU: the existing recent-project operation behind each
  * menu entry. **Hide** is "remove recent project" (`GSS-FR-08`) under the label
- * the user sees.
+ * the user sees. Each entry reads `api` when it runs, not when the module
+ * loads, so that a partial mock of `api` in another test does not break.
  */
 const ENTRY_OPERATIONS: Record<RecentMenuAction, (path: string) => Promise<void>> = {
-  pin: api.pinRecentProject,
-  unpin: api.unpinRecentProject,
-  hide: api.removeRecentProject,
+  pin: (path) => api.pinRecentProject(path),
+  unpin: (path) => api.unpinRecentProject(path),
+  hide: (path) => api.removeRecentProject(path),
 };
 
 /** The keyboard routes to a context menu (PPK-FR-SDXU). */
@@ -306,7 +307,7 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
     setMenu(
       atPointer
         ? { path, x: e.clientX, y: e.clientY }
-        : { path, x: box.left + 24, y: box.bottom },
+        : { path, x: box.left + 24, y: box.bottom, flipY: box.top },
     );
   };
 
@@ -450,18 +451,29 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
                       // PPK-FR-02: a primary click opens the project. A right
                       // click raises no `click`, so it never opens it.
                       onClick={() => !busy && onRecentClick(r)}
-                      // A right-button press does not focus the entry. Focus
-                      // can scroll a partly visible entry into view, and that
+                      // A right-button press, or a Ctrl+click (the macOS
+                      // right-click), does not focus the entry. Focus can
+                      // scroll a partly visible entry into view, and that
                       // scroll closes the menu (PPK-FR-VFDK).
                       onMouseDown={(e) => {
-                        if (e.button === 2) e.preventDefault();
+                        if (e.button === 2 || (e.button === 0 && e.ctrlKey))
+                          e.preventDefault();
                       }}
                       // PPK-FR-SDXU: a right-click opens the menu.
                       onContextMenu={(e) => openMenu(e, r.path)}
                       // PPK-FR-SDXU: the context-menu key and Shift+F10 open
-                      // the menu on the focused entry.
+                      // the menu on the focused entry. PPK-FR-02: Enter and
+                      // Space on the focused entry open the project, as a
+                      // primary click does.
                       onKeyDown={(e) => {
-                        if (isContextMenuKey(e)) openMenu(e, r.path);
+                        if (isContextMenuKey(e)) {
+                          openMenu(e, r.path);
+                          return;
+                        }
+                        if (e.target !== e.currentTarget) return;
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        e.preventDefault();
+                        if (!busy) onRecentClick(r);
                       }}
                     >
                       <Icon.Folder className="picker-recent-row__icon icon" />

@@ -365,28 +365,26 @@ fn request_with_token(address: SocketAddr, method: &str, path: &str, token: &str
 /// buffer makes the operating system reset the connection, and the client's
 /// pending read then fails even though the whole answer already arrived. Bytes
 /// that were read are therefore kept rather than discarded.
+///
+/// `read_to_end` keeps those bytes in `raw` when it fails, and it tries a read
+/// again when a signal or a stop and resume of the process interrupts it. Linux
+/// never restarts `recv` on a socket that has a read timeout, whatever
+/// `SA_RESTART` says, so a hand-written loop over `read` fails there.
 fn read_response(stream: &mut TcpStream) -> Response {
     let mut raw = Vec::new();
-    let mut buffer = [0_u8; 4096];
 
-    loop {
-        match stream.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(read) => raw.extend_from_slice(&buffer[..read]),
-            // Only a reset, and only after an answer arrived. A timeout must
-            // not end the read: it would leave a truncated answer that the
-            // caller cannot tell from a complete one.
-            Err(error)
-                if !raw.is_empty()
-                    && matches!(
-                        error.kind(),
-                        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted
-                    ) =>
-            {
-                break
-            }
-            Err(error) => panic!("the answer is not readable: {error}"),
-        }
+    match stream.read_to_end(&mut raw) {
+        Ok(_) => {}
+        // Only a reset, and only after an answer arrived. A timeout must not
+        // end the read: it would leave a truncated answer that the caller
+        // cannot tell from a complete one.
+        Err(error)
+            if !raw.is_empty()
+                && matches!(
+                    error.kind(),
+                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted
+                ) => {}
+        Err(error) => panic!("the answer is not readable: {error}"),
     }
 
     parse_response(&raw)

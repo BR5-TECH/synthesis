@@ -3,12 +3,13 @@
 **Spec code:** `PPK`
 
 ## Intent
-The pre-project entry surface, shown before any project is open. The only surface that exists before the main window opens. Lets the user reopen a recent project, open one from disk, open one from a Git URL, or create a new one (standalone or co-located).
+The pre-project entry surface, shown before any project is open. The only surface that exists before the main window opens. Lets the user reopen a recent project, open one from disk, open one from a Git URL, or create a new one (standalone or co-located). Each recent entry also has a context menu to pin, unpin, or hide it, so that the user can keep the list useful without a trip to Global settings.
 
 ## User stories
 - As a returning user, I want to reopen a recent project with one click so that I do not have to navigate the filesystem each time.
 - As a new user, I want to create a new project either as a standalone Synthesis project or co-located inside an existing code repo, so that I can adopt Synthesis without disrupting my repository layout.
 - As a collaborator, I want to open a project directly from a Git URL so that I can join a teammate's project without cloning it manually first.
+- As a returning user, I want to pin, unpin, or hide a recent project from the picker so that the list shows the projects I use, in the order I want.
 
 ## Wireframes
 
@@ -67,6 +68,25 @@ The pre-project entry surface, shown before any project is open. The only surfac
 │  └────────────────────────────┘  └────────────────────────────┘  │
 ```
 
+### Recent entry context menu
+The menu on `design-skills`, opened with a right-click:
+```
+│  │ Recent projects            │
+│  │                            │
+│  │  ▸ acme-platform           │
+│  │    ~/dev/acme-platform     │
+│  │    last opened 2d ago      │
+│  │                            │
+│  │  ▸ design-skills           │
+│  │    ~/dev/d┌─────────────┐  │
+│  │    last op│ [i] Pin     │  │
+│  │           │ [i] Hide    │  │
+│  │  ▸ flow-pr└─────────────┘  │
+│  │    last opened 3w ago      │
+│  │                            │
+│  │  ✗ Could not hide project  │  ← list error (PPK-FR-LJNO)
+```
+
 ### Error attachment (inline, per failing action)
 ```
   Open from Git URL
@@ -80,8 +100,9 @@ The pre-project entry surface, shown before any project is open. The only surfac
 Layout notes for the generator:
 - Two-column split: left column hosts the recent list, right column stacks Open and Create new project panels.
 - Recent list rows are clickable; each row shows project name, full path, last-opened timestamp.
+- A right-click on a row opens its context menu (PPK-FR-SDXU). `[i]` marks a leading icon on each menu entry (per `LCM-library-context-menu.md` LCM-FR-07); the glyphs are illustrative. The menu is a floating overlay: neither the list's scroll region nor the window clips it (PPK-FR-VEID).
 - Mode selector is a single radio group (exactly one of Standalone / Co-located).
-- Errors render inline directly below the action that produced them; they never replace the panel.
+- Errors render inline directly below the action that produced them; they never replace the panel. A failed context-menu action attaches its error to the recent list (PPK-FR-LJNO).
 - Window is the only surface visible — no main shell, no activity bar, no tabs. The Settings child window may be opened over it from the application menu, showing its Global group only, in which case the picker is blocked behind it until it closes (PPK-FR-15). The About panel may be opened over it from the application menu, in which case the picker is blocked behind the panel until it closes (PPK-FR-EWQH).
 - The picker window has a fixed outer size, is not user-resizable, and is never presented in OS full-screen.
 - The right column is sized to fit its panels (Open, Create new project) at their natural dimensions; it never scrolls horizontally or vertically.
@@ -89,12 +110,12 @@ Layout notes for the generator:
 - On every launch, the picker window is positioned at the center of the active display (the display containing the mouse cursor at launch time) before it becomes interactive. The picker window's position is never persisted across launches.
 
 ## UI contract boundary
-- **Owned by the UI**: layout of the picker, recent project list rendering, input fields (folder path, Git URL, new-project name, mode selector), client-side validation of input shape, "open" / "create" button enablement, the About panel's blocking of the picker while it is open (PPK-FR-EWQH).
-- **Delegated to backend (abstract)**: "list recent projects", "open project at path", "open project from git url", "create project (mode = standalone | co-located, target path)", "browse for folder". Stubs may return canned data and accept inputs without side effects during the walking skeleton.
+- **Owned by the UI**: layout of the picker, recent project list rendering, the recent entry context menu (its opening routes, placement, keyboard handling, and dismissal), input fields (folder path, Git URL, new-project name, mode selector), client-side validation of input shape, "open" / "create" button enablement, the About panel's blocking of the picker while it is open (PPK-FR-EWQH).
+- **Delegated to backend (abstract)**: "list recent projects", "pin recent project", "unpin recent project", "remove recent project", "open project at path", "open project from git url", "create project (mode = standalone | co-located, target path)", "browse for folder". Stubs may return canned data and accept inputs without side effects during the walking skeleton.
 
 ## Functional requirements
 1. **PPK-FR-01** The Project picker is the application's startup surface and is rendered until a project is successfully opened.
-2. **PPK-FR-02** The picker shows a Recent projects list; selecting an entry invokes "open project at path" with that entry.
+2. **PPK-FR-02** The picker shows a Recent projects list. A primary click on an entry invokes "open project at path" with that entry. A right-click on an entry does not open the project; it opens the entry's context menu (PPK-FR-SDXU).
 3. **PPK-FR-RQZV** When the recent-projects list is empty, the picker shows an empty-state message in place of the list, and the Browse, Git URL, and Create actions stay usable.
 4. **PPK-FR-03** The picker provides a "Browse for folder" action that invokes "browse for folder" and then "open project at path".
 5. **PPK-FR-04** The picker provides a "Open from Git URL" input; submitting a non-empty URL invokes "open project from git url".
@@ -106,12 +127,22 @@ Layout notes for the generator:
 11. **PPK-FR-10** The right column (Open panel + Create new project panel) is sized to fit its content at natural dimensions and renders no scrollbars — neither vertical nor horizontal — at any window state.
 12. **PPK-FR-11** The left column (Recent projects) occupies all width that the fixed window leaves after the right column; when the recent list contains more entries than fit the available height, the list scrolls vertically within the left column. No other region of the picker scrolls.
 13. **PPK-FR-12** On every application launch, the Project picker window is positioned at the center of the active display (the display containing the mouse cursor at launch) before it becomes interactive. The picker window's prior position is not persisted and not restored; the centering computation is performed fresh on each launch.
-14. **PPK-FR-13** The recent list reflects the ordering and pruning of "list recent projects": pinned entries appear first, and entries whose project no longer exists are not shown (unpinned) or shown flagged as missing (pinned). Management of the list (remove, clear, pin) is performed in Global settings (`GLS-global-settings.md` GLS-FR-07), not in the picker; the picker remains view-and-open only.
-15. **PPK-FR-14** The user-global full-screen preference (`../core/GSS-global-settings-storage.md` GSS-FR-19) governs the main window only. The picker neither reads nor writes it and is presented as a normal fixed-size window whatever its value; the preference is applied when the main window mounts (`SNV-shell-navigation.md` SNV-FR-39 / SNV-FR-40), and a main window that left full-screen to show the picker leaves the stored value set (`SNV-shell-navigation.md` SNV-FR-27).
-16. **PPK-FR-15** While the picker is the only window, the application menu offers **Settings**, the only route to settings here (per `SWN-settings-windows.md` SWN-FR-15). The window shows its Global group only (SWN-FR-16). It opens application-modal to the picker, centred on its display (SWN-FR-02, SWN-FR-04). The picker renders behind it, takes no interaction, and is unchanged when it closes.
+14. **PPK-FR-13** The recent list reflects the ordering and pruning of "list recent projects": pinned entries appear first, and entries whose project no longer exists are not shown (unpinned) or shown flagged as missing (pinned). The picker pins, unpins, and hides single entries through the entry context menu (PPK-FR-SDXU). Clearing the whole list is available in Global settings only (`GLS-global-settings.md` GLS-FR-07).
+15. **PPK-FR-SDXU** Every recent entry opens a context menu on a right-click, and on the context-menu key or Shift+F10 while the entry has focus. A pinned entry and a pinned entry flagged as missing have the same menu.
+16. **PPK-FR-MHJD** The context menu holds exactly two entries in this order: the pin action, then **Hide**. The pin action is **Pin** on an unpinned entry and **Unpin** on a pinned entry. Each entry has a leading icon (per `LCM-library-context-menu.md` LCM-FR-07) and an accessible name equal to its label.
+17. **PPK-FR-YNME** **Pin** invokes "pin recent project" and **Unpin** invokes "unpin recent project" with the entry's path. When the operation succeeds, the menu closes and the picker reloads the list with "list recent projects", so that the list shows pinned entries first and then the most recent first.
+18. **PPK-FR-MQVU** **Hide** invokes "remove recent project" with the entry's path, without a confirmation and without undo. When the operation succeeds, the menu closes and the picker reloads the list with "list recent projects". The project stays on disk. A hidden pinned entry returns unpinned, and only when the project is opened or created again.
+   - *Why:* Hide removes the entry from the shared recent list, so it also leaves the project switcher and Global settings; the picker keeps no hidden flag of its own.
+19. **PPK-FR-QTWG** When **Hide** removes the last entry, the picker shows the empty state of PPK-FR-RQZV.
+20. **PPK-FR-LJNO** When a Pin, Unpin, or Hide operation fails, or the reload after it fails, the menu closes, the shown list stays unchanged, and the picker shows an error message attached to the recent list. The next successful Pin, Unpin, or Hide removes the message.
+21. **PPK-FR-FINT** The context menu has the role `menu` and each entry has the role `menuitem`. When the menu opens, focus moves to its first entry. The Up and Down arrow keys move focus between the entries and wrap at the ends. Enter chooses the focused entry.
+22. **PPK-FR-VFDK** One context menu at most is open. It closes on a choice, on Escape, on a click outside it, or when the recent list scrolls. After Escape, Pin, or Unpin, focus returns to the entry that opened the menu. After Hide, focus moves to the first entry of the list, or to the recent list when it is empty.
+23. **PPK-FR-VEID** The context menu is a floating overlay that neither the recent list's scroll region nor the window clips. A pointer opening places it at the pointer; a keyboard opening places it at the focused entry. Near a window edge it flips or shifts to stay fully inside the window. It adds no scrollbar to any picker region (PPK-FR-10, PPK-FR-11).
+24. **PPK-FR-14** The user-global full-screen preference (`../core/GSS-global-settings-storage.md` GSS-FR-19) governs the main window only. The picker neither reads nor writes it and is presented as a normal fixed-size window whatever its value; the preference is applied when the main window mounts (`SNV-shell-navigation.md` SNV-FR-39 / SNV-FR-40), and a main window that left full-screen to show the picker leaves the stored value set (`SNV-shell-navigation.md` SNV-FR-27).
+25. **PPK-FR-15** While the picker is the only window, the application menu offers **Settings**, the only route to settings here (per `SWN-settings-windows.md` SWN-FR-15). The window shows its Global group only (SWN-FR-16). It opens application-modal to the picker, centred on its display (SWN-FR-02, SWN-FR-04). The picker renders behind it, takes no interaction, and is unchanged when it closes.
    - *Why:* The Project group is absent rather than disabled because no project is open.
-17. **PPK-FR-EWQH** While the picker is the only window, the application menu also offers **About** (per `ABT-about-panel.md` ABT-FR-KMVD), in the position `SNV-shell-navigation.md` SNV-FR-23 gives it. The About panel opens modal over the picker and blocks it. The picker renders behind it, takes no interaction, and is unchanged when the panel closes (per `ABT-about-panel.md` ABT-FR-QZHW, ABT-FR-ZEJM).
-18. **PPK-FR-DYKZ** The picker header shows the application mark followed by the name "Synthesis". The mark is the same image as the top chrome's app brand (per `SNV-shell-navigation.md` SNV-FR-EZQB).
+26. **PPK-FR-EWQH** While the picker is the only window, the application menu also offers **About** (per `ABT-about-panel.md` ABT-FR-KMVD), in the position `SNV-shell-navigation.md` SNV-FR-23 gives it. The About panel opens modal over the picker and blocks it. The picker renders behind it, takes no interaction, and is unchanged when the panel closes (per `ABT-about-panel.md` ABT-FR-QZHW, ABT-FR-ZEJM).
+27. **PPK-FR-DYKZ** The picker header shows the application mark followed by the name "Synthesis". The mark is the same image as the top chrome's app brand (per `SNV-shell-navigation.md` SNV-FR-EZQB).
 
 ## Non-functional requirements
 - The recent project list is local-only in v1 (no cross-machine sync).

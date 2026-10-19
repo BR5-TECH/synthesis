@@ -1,10 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../api";
+import { logDebug, logError, logInfo } from "../logging";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 
 import { Icon } from "./icons";
 import { AppIcon } from "./AppIcon";
+import {
+  RecentProjectMenu,
+  type RecentMenuAction,
+  type RecentMenuState,
+} from "./RecentProjectMenu";
 import type {
   CreateMode,
   ProjectHandle,
@@ -160,6 +166,22 @@ function errorMessage(e: unknown): string {
   return "operation failed";
 }
 
+/**
+ * PPK-FR-YNME / PPK-FR-MQVU: the existing recent-project operation behind each
+ * menu entry. **Hide** is "remove recent project" (`GSS-FR-08`) under the label
+ * the user sees.
+ */
+const ENTRY_OPERATIONS: Record<RecentMenuAction, (path: string) => Promise<void>> = {
+  pin: api.pinRecentProject,
+  unpin: api.unpinRecentProject,
+  hide: api.removeRecentProject,
+};
+
+/** The keyboard routes to a context menu (PPK-FR-SDXU). */
+function isContextMenuKey(e: React.KeyboardEvent): boolean {
+  return e.key === "ContextMenu" || (e.shiftKey && e.key === "F10");
+}
+
 export function ProjectPicker({ onOpen }: ProjectPickerProps) {
   const [recents, setRecents] = useState<RecentProject[] | null>(null);
   const [recentsError, setRecentsError] = useState("");
@@ -180,6 +202,19 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
 
   const [busy, setBusy] = useState(false);
 
+  // PPK-FR-SDXU: the one open recent entry menu, or null (PPK-FR-VFDK).
+  const [menu, setMenu] = useState<RecentMenuState | null>(null);
+  const menuRef = useRef<RecentMenuState | null>(null);
+  menuRef.current = menu;
+  // PPK-FR-LJNO: the error of the last failed Pin, Unpin, or Hide.
+  const [entryActionError, setEntryActionError] = useState("");
+  // PPK-FR-VFDK: where focus goes after the next commit. `path: null` is the
+  // first entry, or the list itself when it is empty.
+  const [focusAfter, setFocusAfter] = useState<{ path: string | null } | null>(
+    null,
+  );
+  const recentsBodyRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     // PPK-FR-09 / PPK-FR-10 / PPK-FR-11: picker uses a fixed, non-resizable window.
     void applyPickerWindowChrome();
@@ -193,6 +228,108 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
         setRecentsError(errorMessage(e));
       });
   }, []);
+
+  useEffect(() => {
+    if (!focusAfter) return;
+    setFocusAfter(null);
+    const body = recentsBodyRef.current;
+    if (!body) return;
+    // A reload ends some time after the choice. When the user has moved focus
+    // to another control in that time, focus stays there.
+    const active = document.activeElement;
+    if (active && active !== document.body && !body.contains(active)) return;
+    const rows = Array.from(
+      body.querySelectorAll<HTMLElement>("[data-recent-path]"),
+    );
+    if (focusAfter.path === null) {
+      (rows[0] ?? body).focus();
+      return;
+    }
+    rows.find((row) => row.dataset.recentPath === focusAfter.path)?.focus();
+  }, [focusAfter, recents]);
+
+  const dismissMenu = useCallback((restoreFocus: boolean) => {
+    const open = menuRef.current;
+    setMenu(null);
+    if (restoreFocus && open) setFocusAfter({ path: open.path });
+  }, []);
+
+  // PPK-FR-YNME / PPK-FR-MQVU / PPK-FR-LJNO: run the entry operation, then
+  // reload the list so the ordering and pruning of "list recent projects"
+  // apply. When either call fails, the shown list stays unchanged.
+  const runEntryAction = async (action: RecentMenuAction, path: string) => {
+    logDebug(["frontend"], "recent project action", { action, path });
+    let stage: "operation" | "reload" = "operation";
+    try {
+      await ENTRY_OPERATIONS[action](path);
+      stage = "reload";
+      const next = await api.listRecentProjects();
+      setRecents(next);
+      setEntryActionError("");
+      setFocusAfter({ path: action === "hide" ? null : path });
+      logInfo(["frontend"], "recent project action done", {
+        action,
+        path,
+        entries: next.length,
+      });
+    } catch (e) {
+      const message = errorMessage(e);
+      logError(["frontend"], "recent project action failed", {
+        action,
+        path,
+        stage,
+        error: message,
+      });
+      setEntryActionError(
+        stage === "operation"
+          ? `Could not ${action} project: ${message}`
+          : `Could not reload recent projects: ${message}`,
+      );
+      setFocusAfter({ path });
+    }
+  };
+
+  // PPK-FR-SDXU / PPK-FR-VEID: open the menu of one entry. A pointer opening
+  // gives the pointer. A keyboard opening, or a `contextmenu` event that a
+  // key made (it has no pointer position), gives a point on the entry.
+  const openMenu = (
+    e: React.MouseEvent | React.KeyboardEvent,
+    path: string,
+  ) => {
+    e.preventDefault();
+    // While a project opens, the picker is about to go away (PPK-FR-06), and
+    // a click on an entry does nothing. The menu does not open either.
+    if (busy) return;
+    const atPointer =
+      "clientX" in e && (e.clientX !== 0 || e.clientY !== 0);
+    const box = e.currentTarget.getBoundingClientRect();
+    setMenu(
+      atPointer
+        ? { path, x: e.clientX, y: e.clientY }
+        : { path, x: box.left + 24, y: box.bottom },
+    );
+  };
+
+  const chooseMenuEntry = (action: RecentMenuAction) => {
+    const open = menuRef.current;
+    if (!open) return;
+    setMenu(null);
+    // PPK-FR-VFDK: Pin and Unpin keep the entry, so focus returns to it now and
+    // again when the reloaded list moves it. Hide removes the entry, so focus
+    // waits for the reloaded list.
+    if (action !== "hide") setFocusAfter({ path: open.path });
+    void runEntryAction(action, open.path);
+  };
+
+  const menuEntry = menu
+    ? recents?.find((r) => r.path === menu.path)
+    : undefined;
+
+  // A menu whose entry left the list, or a menu open when a project starts to
+  // open, is dropped rather than left in state.
+  useEffect(() => {
+    if (menu && (busy || !menuEntry)) setMenu(null);
+  }, [menu, menuEntry, busy]);
 
   const runOpen = async (
     op: () => Promise<ProjectHandle>,
@@ -280,7 +417,17 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
         <div className="picker-grid">
           <div className="picker-card picker-card--recents" data-testid="picker-left">
             <h3 className="picker-card__title">Recent projects</h3>
-            <div className="picker-recents-body" data-testid="picker-recents-body">
+            <div
+              className="picker-recents-body"
+              data-testid="picker-recents-body"
+              ref={recentsBodyRef}
+              // PPK-FR-VFDK: the focus target after Hide empties the list.
+              tabIndex={-1}
+              // PPK-FR-VFDK: a scroll of the list closes the menu.
+              onScroll={() => {
+                if (menuRef.current) setMenu(null);
+              }}
+            >
               {recents === null && (
                 <div className="picker-empty t-muted">Loading…</div>
               )}
@@ -297,15 +444,33 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
                   <div key={`${r.name}:${r.path}`}>
                     <div
                       className="picker-recent-row"
+                      data-recent-path={r.path}
+                      tabIndex={0}
+                      aria-haspopup="menu"
+                      // PPK-FR-02: a primary click opens the project. A right
+                      // click raises no `click`, so it never opens it.
                       onClick={() => !busy && onRecentClick(r)}
+                      // A right-button press does not focus the entry. Focus
+                      // can scroll a partly visible entry into view, and that
+                      // scroll closes the menu (PPK-FR-VFDK).
+                      onMouseDown={(e) => {
+                        if (e.button === 2) e.preventDefault();
+                      }}
+                      // PPK-FR-SDXU: a right-click opens the menu.
+                      onContextMenu={(e) => openMenu(e, r.path)}
+                      // PPK-FR-SDXU: the context-menu key and Shift+F10 open
+                      // the menu on the focused entry.
+                      onKeyDown={(e) => {
+                        if (isContextMenuKey(e)) openMenu(e, r.path);
+                      }}
                     >
                       <Icon.Folder className="picker-recent-row__icon icon" />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="picker-recent-row__name">
                           {r.name}
                           {/* PPK-FR-13: reflect pinned/missing state from
-                              "list recent projects" (read-only; management is
-                              in Global settings, not the picker). */}
+                              "list recent projects". The entry menu changes
+                              it (PPK-FR-SDXU). */}
                           {r.pinned && (
                             <span className="badge" style={{ marginLeft: 6 }}>
                               pinned
@@ -339,6 +504,11 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
             </div>
             {recentsError && (
               <span className="picker-error">✗ {recentsError}</span>
+            )}
+            {entryActionError && (
+              <span className="picker-error" role="alert">
+                ✗ {entryActionError}
+              </span>
             )}
           </div>
 
@@ -447,6 +617,16 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
           </div>
         </div>
       </div>
+      {menu && menuEntry && (
+        <RecentProjectMenu
+          key={menu.path}
+          menu={menu}
+          name={menuEntry.name}
+          pinned={!!menuEntry.pinned}
+          onChoose={chooseMenuEntry}
+          onDismiss={dismissMenu}
+        />
+      )}
     </div>
   );
 }

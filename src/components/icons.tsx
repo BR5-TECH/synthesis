@@ -269,6 +269,18 @@ export const Icon = {
     </I>
   ),
   /**
+   * `PPK-project-picker.md` PPK-FR-MHJD: the leading icon on the recent entry
+   * menu's **Hide**. An eye, struck through: the entry leaves the list, and the
+   * project stays on disk.
+   */
+  Hide: (p: IconProps) => (
+    <I {...p}>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="M4 4l16 16" />
+    </I>
+  ),
+  /**
    * `TAB-tabs.md` TAB-FR-33: the leading icon on **Close tabs to the left** and
    * **Close tabs to the right**.
    *

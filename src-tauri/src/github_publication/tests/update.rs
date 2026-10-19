@@ -218,7 +218,7 @@ fn a_record_on_another_host_is_refused() {
     published(&s);
     let mut moved = s.store();
     moved.publication[0].repository_host = "ghe.acme.example".into();
-    store::write_store(&s.root(), &s.id, &moved).unwrap();
+    store::write_store(&s.root(), &s.machine(), &s.id, &moved).unwrap();
     s.fake.calls.lock().unwrap().clear();
 
     assert_eq!(update(&s, false).map(|_| ()), Err(ERR_HOST_MISMATCH.to_string()));
@@ -236,7 +236,7 @@ fn the_append_checks_the_current_record() {
     let stale = PublicationRecord { issue_number: 999, ..before.clone() };
     let record = PublicationRecord { updated_at: Some("2026-10-14T00:00:00Z".into()), ..before };
     assert_eq!(
-        store::append_update(&s.root(), &s.id, &stale, record),
+        store::append_update(&s.root(), &s.machine(), &s.id, &stale, record),
         Err(ERR_STORE_WRITE_FAILED.to_string())
     );
     assert_eq!(s.store().publication.len(), 1);
@@ -255,11 +255,11 @@ fn the_append_checks_the_current_record() {
         updated_at: "2026-10-14T00:00:00Z".into(),
         choice: None,
     });
-    store::write_store(&s.root(), &s.id, &standing).unwrap();
+    store::write_store(&s.root(), &s.machine(), &s.id, &standing).unwrap();
     let record =
         PublicationRecord { updated_at: Some("2026-10-14T00:00:00Z".into()), ..current.clone() };
     assert_eq!(
-        store::append_update(&s.root(), &s.id, &current, record),
+        store::append_update(&s.root(), &s.machine(), &s.id, &current, record),
         Err(ERR_STORE_WRITE_FAILED.to_string())
     );
     assert_eq!(s.store(), standing);
@@ -304,9 +304,10 @@ fn an_accepted_edit_with_a_failed_store_write_is_reported() {
     let s = session();
     let number = published(&s);
     let root = s.root();
+    let machine = s.machine();
     let id = s.id.clone();
     *s.fake.after_update.lock().unwrap() = Some(Box::new(move || {
-        let mut store = store::read_store(&root, &id).unwrap();
+        let mut store = store::read_store(&root, &machine, &id).unwrap();
         store.attempt = Some(PublicationAttempt {
             marker: "pub-meanwhile".into(),
             remote_name: "origin".into(),
@@ -319,7 +320,7 @@ fn an_accepted_edit_with_a_failed_store_write_is_reported() {
             updated_at: "2026-10-14T00:00:00Z".into(),
             choice: None,
         });
-        store::write_store(&root, &id, &store).unwrap();
+        store::write_store(&root, &machine, &id, &store).unwrap();
     }));
 
     assert_eq!(update(&s, false).map(|_| ()), Err(ERR_STORE_WRITE_FAILED.to_string()));
@@ -360,10 +361,10 @@ fn an_update_without_a_token_is_refused() {
     published(&s);
     s.fake.calls.lock().unwrap().clear();
 
-    // A second application on the same project, which resolves no token.
-    let store_dir = TempDir::new().unwrap();
+    // A second application on the same project and the same machine store,
+    // which resolves no token.
     let root = std::fs::canonicalize(s.dir.path()).unwrap();
-    let store_root = std::fs::canonicalize(store_dir.path()).unwrap();
+    let store_root = std::fs::canonicalize(s.store_dir.path()).unwrap();
     let app = tauri::test::mock_app();
     app.manage(crate::fs::FsAccessState::default());
     app.manage(crate::project::ProjectState::default());
@@ -380,7 +381,7 @@ fn an_update_without_a_token_is_refused() {
     let state = handle.state::<crate::project::ProjectState>();
     state.set_root_with_access(root.clone(), Some(access));
     state.set_anchor(root.to_string_lossy().into_owned());
-    state.set_store(root);
+    state.set_store(store_root);
 
     assert_eq!(
         gp::update::update_draft_on_github_impl(&handle, s.id.clone(), false).map(|_| ()),

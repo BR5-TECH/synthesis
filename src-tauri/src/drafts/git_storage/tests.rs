@@ -594,8 +594,8 @@ fn a_saved_prompt_waits_for_the_next_draft_event() {
 
 // DRS-FR-JDRY / DRS-FR-WYIN: a writer of private draft storage ensures the
 // ignore file again, so a removed `.gitignore` comes back with the next
-// proposal, history entry, or publication write, and the write itself never
-// fails because of it.
+// history entry, and the write itself never fails because of it. The legacy
+// publication store stays ignored (DRS-FR-ULKN).
 #[test]
 fn a_private_writer_restores_the_ignore_file() {
     let f = Fixture::git();
@@ -603,16 +603,49 @@ fn a_private_writer_restores_the_ignore_file() {
     let created = crate::drafts::create_draft_impl(root, Some("a prompt"), None).expect("a draft");
     let id = created.draft.id.clone();
     let ignore = root.path().join(".synthesis/drafts/.gitignore");
+    let hist = crate::drafts::draft_history_dir(root, &id).expect("a history folder");
+    let entry = |entry_id: &'static str, seq: u32| crate::draft_history::NewEntry {
+        entry_id,
+        draft_id: id.as_str(),
+        seq,
+        path: "prompt.md",
+        source: crate::draft_history::DraftHistorySource::Original,
+    };
 
     std::fs::remove_file(&ignore).expect("the file goes");
-    crate::github_publication::store::write_store(root, &id, &Default::default()).expect("a store");
-    assert!(ignore.is_file(), "the publication write restored it");
+    crate::draft_history::write_entry(root, &hist, entry("entry-1", 1), b"one\n")
+        .expect("a history entry");
+    assert!(ignore.is_file(), "the history write restored it");
     assert!(ignored(&f, &format!(".synthesis/drafts/{id}/publication.toml")));
 
     // A `.gitignore` that cannot be written fails no private write.
     std::fs::remove_file(&ignore).expect("the file goes");
     std::fs::create_dir_all(&ignore).expect("a folder in its place");
-    super::ensure_private_ignored(root);
-    crate::github_publication::store::write_store(root, &id, &Default::default())
+    crate::draft_history::write_entry(root, &hist, entry("entry-2", 2), b"two\n")
         .expect("the write does not fail because of the ignore file");
+}
+
+// DRS-FR-WBTA / RMS-FR-HDNZ: a publication write lands in the repository
+// machine store, outside the worktree, so Git reports no path for it and the
+// ignore file plays no part in it.
+#[test]
+fn a_publication_write_lands_outside_the_worktree() {
+    let f = Fixture::git();
+    let root = &f.root;
+    let created = crate::drafts::create_draft_impl(root, Some("a prompt"), None).expect("a draft");
+    let id = created.draft.id.clone();
+    let machine_dir = tempfile::TempDir::new().expect("a machine store");
+    let machine = crate::fs::RootFs::for_root(machine_dir.path());
+
+    crate::github_publication::store::write_store(root, &machine, &id, &Default::default())
+        .expect("a store");
+    assert!(machine_dir.path().join(format!("drafts/{id}/publication.toml")).is_file());
+    let legacy = crate::drafts::draft_publication_path(root, &id).expect("a path");
+    assert!(!legacy.exists(), "nothing is written inside the draft's folder");
+    let repo = git2::Repository::open(root.path()).expect("the repository");
+    let statuses = repo.statuses(None).expect("a status");
+    assert!(
+        statuses.iter().all(|entry| !entry.path().unwrap_or_default().contains("publication")),
+        "Git reports no path of the store"
+    );
 }

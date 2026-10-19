@@ -158,8 +158,8 @@ pub(super) fn reconcile_misplaced_storage(
     repaired
 }
 
-/// Whether `dir` holds nothing but the storage folders of DRS-FR-01, and holds
-/// at least one of them.
+/// Whether `dir` holds nothing but draft storage a husk may hold, and holds at
+/// least one entry of it (DRS-FR-37).
 ///
 /// At least one, because an empty directory holds no misplaced storage to
 /// reunite with anything: it is far likelier a folder the author made and has
@@ -172,9 +172,11 @@ pub(super) fn holds_only_draft_storage(root: &fs::RootFs, dir: &Path) -> bool {
         return false;
     };
     !entries.is_empty()
-        && entries
-            .iter()
-            .all(|e| e.kind == fs::EntryKind::Dir && HUSK_STORAGE_DIRS.contains(&e.name.as_str()))
+        && entries.iter().all(|e| match e.kind {
+            fs::EntryKind::Dir => HUSK_STORAGE_DIRS.contains(&e.name.as_str()),
+            fs::EntryKind::File => HUSK_STORAGE_FILES.contains(&e.name.as_str()),
+            _ => false,
+        })
 }
 
 /// DRS-FR-37: the folders a husk may hold and still be a draft's storage.
@@ -186,6 +188,13 @@ pub(super) fn holds_only_draft_storage(root: &fs::RootFs, dir: &Path) -> bool {
 /// those conversations and carry them into the store, where this build reads a
 /// draft's review from (per `CMS-comments-storage.md` CMS-FR-37).
 const HUSK_STORAGE_DIRS: [&str; 4] = [PROPOSALS_DIR, HISTORY_DIR, ASSETS_DIR, "comments"];
+
+/// DRS-FR-37: the private files a husk may hold (DRS-FR-ZIVL).
+///
+/// Git ignores them, so a move of a draft that Git applies — a merge, a
+/// checkout — leaves them in the old folder. A legacy publication store left
+/// there would cost the draft its publication marker (DRS-FR-ULKN).
+const HUSK_STORAGE_FILES: [&str; 2] = [CONVERSATION_FILE, PUBLICATION_FILE];
 
 /// Move everything under the husk at `husk_rel` into the draft at `dest_rel`,
 /// then remove the emptied husk. Both are drafts-root-relative.

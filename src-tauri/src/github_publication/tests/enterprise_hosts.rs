@@ -183,7 +183,8 @@ fn an_attempt_and_its_record_keep_the_host_of_the_repository() {
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "Hosted");
-    let attempt = flow::open_attempt_with(&root, &id, &remote, "marker".into(), None).unwrap();
+    let attempt =
+        flow::open_attempt_with(&root, &root, &id, &remote, "marker".into(), None).unwrap();
     assert_eq!(attempt.repository_host, "company.ghe.com");
     let issue = IssueRef {
         number: 4,

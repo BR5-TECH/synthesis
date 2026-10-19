@@ -409,3 +409,97 @@ fn ts31_a_folder_the_author_made_is_never_adopted_however_it_is_named() {
     assert!(mixed.join("notes.md").is_file(), "nothing of theirs moved");
     assert!(root.join(DRAFTS_REL).join(orphan).join(PROPOSALS_DIR).is_dir());
 }
+
+#[test]
+fn ts31_a_husk_holding_the_private_files_is_reunited_with_its_draft() {
+    // DRS-FR-37 / DRS-FR-ULKN: Git ignores `publication.toml` and
+    // `conversation.jsonl`, so a move of the draft that Git applies leaves
+    // them in the old folder. The walk reunites them, and the legacy store
+    // still gives the draft its publication marker.
+    let (dir, id) = project_with_filed_draft();
+    let root = &crate::fs::RootFs::for_root(dir.path());
+    let husk = root.join(DRAFTS_REL).join(&id);
+    std::fs::create_dir_all(&husk).unwrap();
+    std::fs::write(
+        husk.join(PUBLICATION_FILE),
+        "[[publication]]\nprovider = \"github\"\nrepositoryOwner = \"acme\"\n\
+         repositoryName = \"widgets\"\nissueNumber = 4\n\
+         issueUrl = \"https://github.com/acme/widgets/issues/4\"\n\
+         publishedAt = \"2026-01-01T00:00:00Z\"\nmarker = \"legacy-4\"\n",
+    )
+    .unwrap();
+    std::fs::write(husk.join(CONVERSATION_FILE), "{\"event_id\":\"e1\"}\n").unwrap();
+
+    let (mut hierarchy, repaired) = list_drafts_reporting(root);
+
+    assert_eq!(repaired, vec![id.clone()]);
+    assert!(!husk.exists(), "the emptied husk is removed");
+    let landed = draft_dir(root, &id).unwrap();
+    assert!(landed.join(PUBLICATION_FILE).is_file());
+    assert!(landed.join(CONVERSATION_FILE).is_file());
+    crate::drafts::attach_publication(root, root, &mut hierarchy.drafts);
+    let row = hierarchy.drafts.iter().find(|d| d.id == id).unwrap();
+    assert_eq!(row.publication.as_ref().map(|p| p.issue_number), Some(4));
+}
+
+#[test]
+fn ts31_a_publication_store_in_both_places_with_other_bytes_stays_in_the_husk() {
+    // DRS-FR-37: a `publication.toml` moves only where the draft holds none.
+    // One that differs from the draft's own stays where it is, and so does
+    // the husk.
+    let (dir, id) = project_with_filed_draft();
+    let root = &crate::fs::RootFs::for_root(dir.path());
+    let own = draft_dir(root, &id).unwrap().join(PUBLICATION_FILE);
+    std::fs::write(&own, "publication = []\n").unwrap();
+    let husk = root.join(DRAFTS_REL).join(&id);
+    std::fs::create_dir_all(&husk).unwrap();
+    std::fs::write(husk.join(PUBLICATION_FILE), "# another\npublication = []\n").unwrap();
+
+    list_drafts_reporting(root);
+
+    assert_eq!(std::fs::read_to_string(&own).unwrap(), "publication = []\n");
+    assert!(husk.join(PUBLICATION_FILE).is_file(), "the husk's file is not dropped");
+}
+
+#[test]
+fn ts31_a_folder_holding_a_file_no_layout_names_is_not_a_husk() {
+    // DRS-FR-37 / DRS-FR-XPQI: a file the draft layout does not name makes the
+    // folder the author's, private files beside it or not.
+    let (dir, id) = project_with_filed_draft();
+    let root = &crate::fs::RootFs::for_root(dir.path());
+    let folder = root.join(DRAFTS_REL).join(&id);
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join(PUBLICATION_FILE), "publication = []\n").unwrap();
+    std::fs::write(folder.join("notes.txt"), "mine\n").unwrap();
+
+    let (_, repaired) = list_drafts_reporting(root);
+
+    assert!(repaired.is_empty());
+    assert!(folder.join("notes.txt").is_file());
+    assert!(folder.join(PUBLICATION_FILE).is_file());
+}
+
+#[test]
+fn ts31_private_files_present_in_both_places_merge_and_the_husk_goes() {
+    // DRS-FR-37: a `publication.toml` with the same bytes in both places is
+    // the same file, and a `conversation.jsonl` in both places concatenates,
+    // so the husk empties and goes.
+    let (dir, id) = project_with_filed_draft();
+    let root = &crate::fs::RootFs::for_root(dir.path());
+    let own = draft_dir(root, &id).unwrap();
+    std::fs::write(own.join(PUBLICATION_FILE), "publication = []\n").unwrap();
+    std::fs::write(own.join(CONVERSATION_FILE), "{\"event_id\":\"e1\"}\n").unwrap();
+    let husk = root.join(DRAFTS_REL).join(&id);
+    std::fs::create_dir_all(husk.join(PROPOSALS_DIR)).unwrap();
+    std::fs::write(husk.join(PROPOSALS_DIR).join("p1.toml"), "id = \"p1\"\n").unwrap();
+    std::fs::write(husk.join(PUBLICATION_FILE), "publication = []\n").unwrap();
+    std::fs::write(husk.join(CONVERSATION_FILE), "{\"event_id\":\"e2\"}\n").unwrap();
+
+    let (_, repaired) = list_drafts_reporting(root);
+
+    assert_eq!(repaired, vec![id.clone()]);
+    assert!(!husk.exists());
+    let log = std::fs::read_to_string(own.join(CONVERSATION_FILE)).unwrap();
+    assert!(log.contains("e1") && log.contains("e2"), "{log}");
+    assert!(own.join(PROPOSALS_DIR).join("p1.toml").is_file());
+}

@@ -2,8 +2,9 @@
 //! RMS-FR-XLTR).
 //!
 //! An earlier build committed the conversation logs and the statistics logs into
-//! the project itself. This pass copies what those folders hold into the
-//! repository machine store, so a project opened by this build reads the whole
+//! the project itself, and kept each draft's publication store inside the
+//! draft's own folder. This pass copies what those hold into the repository
+//! machine store, so a project opened by this build reads the whole
 //! of its own history rather than only what it has recorded since.
 //!
 //! Two rules make it safe to run at every open. It is **additive and
@@ -39,7 +40,8 @@ const GITATTRIBUTES: &str = ".gitattributes";
 pub struct ImportOutcome {
     /// Log lines appended that the store did not already hold.
     pub lines: usize,
-    /// Whole files — attachments — written that the store did not already hold.
+    /// Whole files — attachments and publication stores — written that the
+    /// store did not already hold.
     pub files: usize,
 }
 
@@ -87,8 +89,37 @@ pub fn import_legacy_storage(store: &fsa::RootFs, worktree: &fsa::RootFs) -> Imp
             &store.path().join(DRAFTS_DIRNAME).join(&draft_id).join(COMMENTS_DIRNAME),
             &mut out,
         );
+        if import_publication(store, worktree, &draft_id, &dir) {
+            out.files += 1;
+        }
     }
     out
+}
+
+/// RMS-FR-JVEC / RMS-FR-SUAK: copy one draft's legacy publication store
+/// (`DRS-draft-storage.md` DRS-FR-ULKN) into the store.
+///
+/// Only where the store holds no publication store for that draft: a store
+/// there is the newer one, and every write since the first one went to it.
+/// A legacy store that does not parse is left where it is, so the draft keeps
+/// reading it (and its error) rather than the store hiding it.
+fn import_publication(
+    store: &fsa::RootFs,
+    worktree: &fsa::RootFs,
+    draft_id: &str,
+    draft_dir: &Path,
+) -> bool {
+    let src = draft_dir.join(crate::drafts::PUBLICATION_FILE);
+    let dest =
+        store.path().join(DRAFTS_DIRNAME).join(draft_id).join(crate::drafts::PUBLICATION_FILE);
+    if worktree.read_toml::<crate::github_publication::PublicationStore>(&src).is_err() {
+        return false;
+    }
+    // The check and the copy hold the lock every publication write takes, so
+    // an attempt that a publication opens meanwhile is never replaced by the
+    // older legacy file.
+    let _guard = crate::github_publication::store::lock_stores();
+    copy_absent(store, worktree, &src, &dest)
 }
 
 /// Copy one legacy folder into the store, recursively.

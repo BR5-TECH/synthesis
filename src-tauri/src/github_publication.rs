@@ -171,6 +171,18 @@ fn require_root<R: tauri::Runtime>(
     project.require_root().map_err(|_| fail(app, "", ERR_NO_PROJECT.to_string()))
 }
 
+/// GHP-FR-TWKE: the repository machine store that holds the draft publication
+/// stores, or `publication_store_write_failed`, reported. Every caller asks for
+/// it before its first GitHub request, so a store that cannot be resolved
+/// makes none.
+fn require_machine_store<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    project: &ProjectState,
+    draft_id: &str,
+) -> Result<crate::fs::RootFs, String> {
+    project.require_store().map_err(|_| fail(app, draft_id, ERR_STORE_WRITE_FAILED.to_string()))
+}
+
 /// GHP-FR-SRDL / GHP-FR-GJEO: the two preconditions every mutating operation
 /// shares, and the draft's current status.
 fn require_publishable_draft<R: tauri::Runtime>(
@@ -247,7 +259,9 @@ fn get_draft_publication_impl<R: tauri::Runtime>(
         .map_err(|_| ERR_DRAFT_NOT_FOUND.to_string())?;
     crate::drafts::resolve_graduated_status(app, &mut record);
     let held = crate::graduation::require_no_running_graduation(app, &draft_id).is_err();
-    let publication = store::read_store(&root, &draft_id)?;
+    let machine = require_machine_store(app, &project, &draft_id)?;
+    let publication =
+        store::read_store(&root, &machine, &draft_id).map_err(|code| fail(app, &draft_id, code))?;
 
     let eligibility = if record.github_issue.is_some() {
         // GHP-FR-BKLT: decided from the record alone, before any network read.
@@ -385,7 +399,9 @@ fn publish_draft_to_github_impl<R: tauri::Runtime>(
 
     // GHP-FR-AKUM: the local-asset refusal happens before the first request and
     // before the attempt record, so a refused draft leaves nothing behind.
-    let existing = store::read_store(&root, &draft_id)?;
+    let machine = require_machine_store(app, &project, &draft_id)?;
+    let existing =
+        store::read_store(&root, &machine, &draft_id).map_err(|code| fail(app, &draft_id, code))?;
     let local = flow::local_eligibility(&root, &draft_id, status, existing.attempt.as_ref());
     if !local.publishable {
         return Err(fail(app, &draft_id, local.reason_code.unwrap_or_default()));
@@ -428,6 +444,7 @@ fn publish_draft_to_github_impl<R: tauri::Runtime>(
     }
     let attempt = flow::open_attempt_with(
         &root,
+        &machine,
         &draft_id,
         &remote,
         flow::new_marker(),
@@ -451,7 +468,8 @@ fn publish_draft_to_github_impl<R: tauri::Runtime>(
     );
     announce(app, &draft_id);
 
-    let outcome = flow::publish_with_attempt(&root, &draft_id, &attempt, secret, client.as_ref());
+    let outcome =
+        flow::publish_with_attempt(&root, &machine, &draft_id, &attempt, secret, client.as_ref());
     settle(app, &draft_id, outcome)
 }
 
@@ -664,7 +682,11 @@ fn retry_draft_publication_impl<R: tauri::Runtime>(
     let project_key = project.slot_key();
     require_publishable_draft(app, &root, &draft_id)?;
     require_no_local_assets(app, &root, &draft_id)?;
-    let Some(attempt) = store::read_store(&root, &draft_id)?.attempt else {
+    let machine = require_machine_store(app, &project, &draft_id)?;
+    let Some(attempt) = store::read_store(&root, &machine, &draft_id)
+        .map_err(|code| fail(app, &draft_id, code))?
+        .attempt
+    else {
         return Err(fail(app, &draft_id, ERR_NO_ATTEMPT.to_string()));
     };
     let Some(token) = project_token(app, &project_key) else {
@@ -677,7 +699,8 @@ fn retry_draft_publication_impl<R: tauri::Runtime>(
     }
     let secret = &token.secret;
     let client = issues_client(app, &token.host);
-    let outcome = flow::publish_with_attempt(&root, &draft_id, &attempt, secret, client.as_ref());
+    let outcome =
+        flow::publish_with_attempt(&root, &machine, &draft_id, &attempt, secret, client.as_ref());
     settle(app, &draft_id, outcome)
 }
 
@@ -701,7 +724,11 @@ fn resolve_draft_publication_conflict_impl<R: tauri::Runtime>(
     let project_key = project.slot_key();
     require_publishable_draft(app, &root, &draft_id)?;
     require_no_local_assets(app, &root, &draft_id)?;
-    let Some(attempt) = store::read_store(&root, &draft_id)?.attempt else {
+    let machine = require_machine_store(app, &project, &draft_id)?;
+    let Some(attempt) = store::read_store(&root, &machine, &draft_id)
+        .map_err(|code| fail(app, &draft_id, code))?
+        .attempt
+    else {
         return Err(fail(app, &draft_id, ERR_NO_ATTEMPT.to_string()));
     };
     // A recovery choice answers a question that was actually asked. Against an
@@ -721,7 +748,7 @@ fn resolve_draft_publication_conflict_impl<R: tauri::Runtime>(
 
     let outcome = match choice {
         RecoveryChoice::UpdateExisting => {
-            flow::update_existing(&root, &draft_id, &attempt, secret, client.as_ref())
+            flow::update_existing(&root, &machine, &draft_id, &attempt, secret, client.as_ref())
         }
         // GHP-FR-QLDF: a deliberate re-publication is a **new** attempt with a
         // new marker, so the issue it creates is a second issue rather than an
@@ -742,12 +769,13 @@ fn resolve_draft_publication_conflict_impl<R: tauri::Runtime>(
             // replaces the old one in a single write.
             let fresh = flow::restart_attempt(
                 &root,
+                &machine,
                 &draft_id,
                 &remote,
                 flow::new_marker(),
                 attempt.choice.clone(),
             )?;
-            flow::publish_with_attempt(&root, &draft_id, &fresh, secret, client.as_ref())
+            flow::publish_with_attempt(&root, &machine, &draft_id, &fresh, secret, client.as_ref())
         }
     };
     settle(app, &draft_id, outcome)
@@ -770,7 +798,8 @@ fn cancel_draft_publication_conflict_impl<R: tauri::Runtime>(
     let project = app.state::<ProjectState>();
     let root = require_root(&app, &project)?;
     flow::require_not_shadow(&root, &draft_id).map_err(|code| fail(&app, &draft_id, code))?;
-    flow::set_attempt_state(&root, &draft_id, AttemptState::Open)
+    let machine = require_machine_store(&app, &project, &draft_id)?;
+    flow::set_attempt_state(&root, &machine, &draft_id, AttemptState::Open)
         .map_err(|code| fail(&app, &draft_id, code))?;
     announce(&app, &draft_id);
     Ok(())
@@ -793,7 +822,8 @@ fn cancel_draft_publication_attempt_impl<R: tauri::Runtime>(
     let project = app.state::<ProjectState>();
     let root = require_root(&app, &project)?;
     flow::require_not_shadow(&root, &draft_id).map_err(|code| fail(&app, &draft_id, code))?;
-    flow::clear_attempt(&root, &draft_id).map_err(|code| fail(&app, &draft_id, code))?;
+    let machine = require_machine_store(&app, &project, &draft_id)?;
+    flow::clear_attempt(&root, &machine, &draft_id).map_err(|code| fail(&app, &draft_id, code))?;
     logging::log_info(
         &app,
         &logging::BUFFER,
@@ -846,12 +876,12 @@ pub fn open_publication_issue(
     project: State<'_, ProjectState>,
 ) -> Result<(), String> {
     let root = require_root(&app, &project)?;
-    // Two conditions, and both must hold. The store is committed content that
-    // reaches this machine from whoever else works on the project, so being
-    // named by a record — or by the draft's GitHub-shadow issue link — is not
-    // on its own evidence that a URL is safe to hand to the operating system
-    // (GHP-FR-MJTB).
-    if !flow::is_recorded_issue_url(&root, &draft_id, &url)? {
+    let machine = require_machine_store(&app, &project, &draft_id)?;
+    // Two conditions, and both must hold. A legacy store and a GitHub-shadow
+    // issue link are files on disk that anything can write, so being named by
+    // a record or by the link is not on its own evidence that a URL is safe to
+    // hand to the operating system (GHP-FR-MJTB).
+    if !flow::is_recorded_issue_url(&root, &machine, &draft_id, &url)? {
         return Err(fail(&app, &draft_id, ERR_DRAFT_NOT_FOUND.to_string()));
     }
     use tauri_plugin_opener::OpenerExt;

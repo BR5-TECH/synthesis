@@ -48,12 +48,12 @@ fn a_standing_attempt_refuses_a_second_publication() {
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "widget");
-    let attempt = flow::open_attempt(&root, &id, &origin(), "pub-1".into()).unwrap();
+    let attempt = flow::open_attempt(&root, &root, &id, &origin(), "pub-1".into()).unwrap();
     let refused = flow::local_eligibility(&root, &id, DraftStatus::Active, Some(&attempt));
     assert!(!refused.publishable);
     assert_eq!(refused.reason_code.as_deref(), Some(ERR_ATTEMPT_IN_PROGRESS));
     assert_eq!(
-        flow::open_attempt(&root, &id, &origin(), "pub-2".into()),
+        flow::open_attempt(&root, &root, &id, &origin(), "pub-2".into()),
         Err(ERR_ATTEMPT_IN_PROGRESS.to_string())
     );
 }
@@ -88,11 +88,11 @@ fn archive_and_restore_keep_the_publication_store() {
 
     let archived = crate::drafts::set_draft_status_impl(&root, &id, DraftStatus::Archived).unwrap();
     assert_eq!(archived.status, DraftStatus::Archived);
-    assert_eq!(store::read_store(&root, &id).unwrap().publication.len(), 1);
+    assert_eq!(store::read_store(&root, &root, &id).unwrap().publication.len(), 1);
 
     let restored = crate::drafts::set_draft_status_impl(&root, &id, DraftStatus::Active).unwrap();
     assert_eq!(restored.status, DraftStatus::Active);
-    let store = store::read_store(&root, &id).unwrap();
+    let store = store::read_store(&root, &root, &id).unwrap();
     assert_eq!(store.publication.len(), 1);
     assert_eq!(store.publication[0].issue_number, 7);
 }
@@ -112,20 +112,37 @@ fn a_release_reads_active_even_where_the_draft_has_publication_history() {
     let released = crate::drafts::resolved_status_for_test(&queue, &id, DraftStatus::Graduated);
     assert_eq!(released, DraftStatus::Active);
     // And the history is still there to read.
-    assert_eq!(store::read_store(&root, &id).unwrap().publication.len(), 1);
+    assert_eq!(store::read_store(&root, &root, &id).unwrap().publication.len(), 1);
 }
 
-/// DRS-FR-21: deleting the draft takes its publication store with the rest of
-/// its folder.
+/// DRS-FR-MQBT / DRS-FR-21: deleting the draft takes its publication store
+/// from the machine store, and a legacy store goes with its folder.
 #[test]
 fn deleting_a_draft_removes_its_publication_store() {
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "widget");
-    flow::open_attempt(&root, &id, &origin(), "pub-1".into()).unwrap();
-    let path = crate::drafts::draft_publication_path(&root, &id).unwrap();
+    let other = draft(&root, "other");
+    flow::open_attempt(&root, &root, &id, &origin(), "pub-1".into()).unwrap();
+    flow::open_attempt(&root, &root, &other, &origin(), "pub-2".into()).unwrap();
+    let path = machine_store_path(&root, &id);
     assert!(path.exists());
+    let legacy = crate::drafts::draft_publication_path(&root, &id).unwrap();
+    root.write_text_atomic(&legacy, "publication = []\n").unwrap();
 
     crate::drafts::delete_draft_impl(&root, &root, &id).expect("deletes");
     assert!(!path.exists());
+    assert!(!legacy.exists());
+    // Scoped to the one stable id.
+    assert!(machine_store_path(&root, &other).exists());
+}
+
+/// DRS-FR-MQBT: a store already absent is an already completed deletion.
+#[test]
+fn deleting_a_draft_with_no_publication_store_succeeds() {
+    let dir = project();
+    let root = crate::fs::RootFs::for_root(dir.path());
+    let id = draft(&root, "widget");
+    assert_eq!(store::delete_store(&root, &id), Ok(()));
+    crate::drafts::delete_draft_impl(&root, &root, &id).expect("deletes");
 }

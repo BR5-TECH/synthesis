@@ -43,16 +43,30 @@ impl Fixture {
     }
 
     fn attempt_with(&self, marker: &str, choice: PublicationChoice) -> PublicationAttempt {
-        flow::open_attempt_with(&self.root, &self.id, &origin(), marker.into(), Some(choice))
-            .unwrap()
+        flow::open_attempt_with(
+            &self.root,
+            &self.root,
+            &self.id,
+            &origin(),
+            marker.into(),
+            Some(choice),
+        )
+        .unwrap()
     }
 
     fn publish(&self, attempt: &PublicationAttempt) -> Result<PublicationOutcome, String> {
-        flow::publish_with_attempt(&self.root, &self.id, attempt, "secret", &self.github)
+        flow::publish_with_attempt(
+            &self.root,
+            &self.root,
+            &self.id,
+            attempt,
+            "secret",
+            &self.github,
+        )
     }
 
     fn store(&self) -> PublicationStore {
-        store::read_store(&self.root, &self.id).unwrap()
+        store::read_store(&self.root, &self.root, &self.id).unwrap()
     }
 }
 
@@ -144,7 +158,7 @@ fn a_root_choice_naming_unavailable_metadata_is_refused() {
         Err(ERR_ISSUE_TYPE_UNAVAILABLE.into())
     );
     assert!(f.github.calls().iter().all(|c| !matches!(c, Call::Create(_))));
-    let path = crate::drafts::draft_publication_path(&f.root, &f.id).unwrap();
+    let path = machine_store_path(&f.root, &f.id);
     assert!(!path.exists(), "a refused choice writes no attempt record");
 }
 
@@ -464,16 +478,29 @@ fn a_restarted_attempt_replaces_the_standing_one_and_keeps_the_choice() {
     let choice = f.resolve(&sub_of(parent), &settings(MilestonePolicy::InheritParent)).unwrap();
 
     assert_eq!(
-        flow::restart_attempt(&f.root, &f.id, &origin(), "pub-2".into(), Some(choice.clone())),
+        flow::restart_attempt(
+            &f.root,
+            &f.root,
+            &f.id,
+            &origin(),
+            "pub-2".into(),
+            Some(choice.clone())
+        ),
         Err(ERR_NO_ATTEMPT.to_string())
     );
     assert_eq!(f.store(), PublicationStore::default());
 
     f.attempt_with("pub-1", choice.clone());
-    flow::set_attempt_state(&f.root, &f.id, AttemptState::AwaitingChoice).unwrap();
-    let fresh =
-        flow::restart_attempt(&f.root, &f.id, &origin(), "pub-2".into(), Some(choice.clone()))
-            .unwrap();
+    flow::set_attempt_state(&f.root, &f.root, &f.id, AttemptState::AwaitingChoice).unwrap();
+    let fresh = flow::restart_attempt(
+        &f.root,
+        &f.root,
+        &f.id,
+        &origin(),
+        "pub-2".into(),
+        Some(choice.clone()),
+    )
+    .unwrap();
 
     let standing = f.store().attempt.unwrap();
     assert_eq!(standing, fresh);
@@ -517,6 +544,7 @@ fn a_failed_link_is_recovered_by_updating_the_existing_issue() {
 
     f.github.calls.lock().unwrap().clear();
     let record = published(flow::update_existing(
+        &f.root,
         &f.root,
         &f.id,
         &f.store().attempt.unwrap(),
@@ -676,7 +704,8 @@ fn update_existing_reconciles_type_milestone_and_parent() {
     f.github.calls.lock().unwrap().clear();
     f.github.fields.lock().unwrap().clear();
 
-    let record = published(flow::update_existing(&f.root, &f.id, &attempt, "secret", &f.github));
+    let record =
+        published(flow::update_existing(&f.root, &f.root, &f.id, &attempt, "secret", &f.github));
     assert_eq!(record.issue_number, wrong.number);
     assert_eq!(
         f.github.fields.lock().unwrap().as_slice(),
@@ -734,6 +763,7 @@ fn a_root_choice_removes_a_stray_parent() {
     assert_eq!(mismatches, vec!["parent".to_string()]);
     published(flow::update_existing(
         &f.root,
+        &f.root,
         &f.id,
         &f.store().attempt.unwrap(),
         "secret",
@@ -760,7 +790,7 @@ fn a_failed_reconcile_link_keeps_the_choice_open() {
 
     let standing = f.store().attempt.unwrap();
     assert_eq!(
-        flow::update_existing(&f.root, &f.id, &standing, "secret", &f.github),
+        flow::update_existing(&f.root, &f.root, &f.id, &standing, "secret", &f.github),
         Err(ERR_SUB_ISSUE_LINK_FAILED.to_string())
     );
     assert_eq!(f.store().attempt.unwrap().state, AttemptState::AwaitingChoice);
@@ -776,7 +806,12 @@ fn the_saved_choice_survives_a_restart() {
     let choice = f.resolve(&sub_of(parent), &settings(MilestonePolicy::InheritParent)).unwrap();
     f.attempt_with("pub-1", choice.clone());
 
-    let relaunched = store::read_store(&crate::fs::RootFs::for_root(f._dir.path()), &f.id).unwrap();
+    let relaunched = store::read_store(
+        &crate::fs::RootFs::for_root(f._dir.path()),
+        &crate::fs::RootFs::for_root(f._dir.path()),
+        &f.id,
+    )
+    .unwrap();
     let attempt = relaunched.attempt.unwrap();
     assert_eq!(attempt.choice, Some(choice));
     let record = published(f.publish(&attempt));
@@ -816,7 +851,7 @@ updatedAt = "2025-01-02T00:00:00Z"
     )
     .unwrap();
 
-    let read = store::read_store(&root, &id).unwrap();
+    let read = store::read_store(&root, &root, &id).unwrap();
     assert_eq!(read.publication[0].choice, None);
     let attempt = read.attempt.unwrap();
     assert_eq!(attempt.choice, None);
@@ -833,16 +868,14 @@ fn a_choice_round_trips_through_the_store_file() {
     let attempt = f.attempt_with("pub-1", choice.clone());
     published(f.publish(&attempt));
 
-    let path = crate::drafts::draft_publication_path(&f.root, &f.id).unwrap();
+    let path = machine_store_path(&f.root, &f.id);
     let text = std::fs::read_to_string(path).unwrap();
     assert!(text.contains("parentIssueNumber"));
     assert!(!text.contains("null"));
     assert_eq!(f.store().publication[0].choice, Some(choice));
 
     let root_attempt = f.attempt_with("pub-2", PublicationChoice::root());
-    let text =
-        std::fs::read_to_string(crate::drafts::draft_publication_path(&f.root, &f.id).unwrap())
-            .unwrap();
+    let text = std::fs::read_to_string(machine_store_path(&f.root, &f.id)).unwrap();
     assert_eq!(text.matches("parentIssueNumber").count(), 1, "a root choice holds no parent");
     let _ = root_attempt;
 }

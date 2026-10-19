@@ -38,9 +38,9 @@ fn a_shadow_draft_is_refused_by_publication() {
     assert_eq!(flow::require_not_shadow(&root, &id), Err("draft_github_shadow".to_string()));
     assert_eq!(ERR_DRAFT_GITHUB_SHADOW, "draft_github_shadow");
     // Nothing was written: no publication store exists for it.
-    assert!(store::read_store(&root, &id).unwrap().attempt.is_none());
-    let path = crate::drafts::draft_publication_path(&root, &id).unwrap();
-    assert!(!path.exists());
+    assert!(store::read_store(&root, &root, &id).unwrap().attempt.is_none());
+    assert!(!machine_store_path(&root, &id).exists());
+    assert!(!crate::drafts::draft_publication_path(&root, &id).unwrap().exists());
 
     // An ordinary draft passes.
     let ordinary = draft(&root, "widget");
@@ -56,16 +56,21 @@ fn a_shadow_drafts_issue_link_is_an_openable_url() {
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = shadow(&root);
     assert_eq!(
-        flow::is_recorded_issue_url(&root, &id, "https://github.com/acme/widgets/issues/4"),
+        flow::is_recorded_issue_url(&root, &root, &id, "https://github.com/acme/widgets/issues/4"),
         Ok(true)
     );
     assert_eq!(
-        flow::is_recorded_issue_url(&root, &id, "https://github.com/acme/widgets/issues/5"),
+        flow::is_recorded_issue_url(&root, &root, &id, "https://github.com/acme/widgets/issues/5"),
         Ok(false)
     );
     let ordinary = draft(&root, "widget");
     assert_eq!(
-        flow::is_recorded_issue_url(&root, &ordinary, "https://github.com/acme/widgets/issues/4"),
+        flow::is_recorded_issue_url(
+            &root,
+            &root,
+            &ordinary,
+            "https://github.com/acme/widgets/issues/4"
+        ),
         Ok(false)
     );
 }
@@ -198,6 +203,7 @@ fn every_publication_command_refuses_a_shadow_draft() {
 
     assert!(fake.calls().is_empty(), "no GitHub call");
     assert!(!crate::drafts::draft_publication_path(&root, &id).unwrap().exists());
+    assert!(!machine_store_path(&root, &id).exists());
     assert!(crate::project_settings::load_publication_remote_selection_from(&root).is_none());
 }
 
@@ -219,6 +225,6 @@ fn a_shadow_link_that_is_not_a_github_issue_is_refused() {
             .unwrap()
             .draft
             .id;
-        assert_eq!(flow::is_recorded_issue_url(&root, &id, url), Ok(false), "{url}");
+        assert_eq!(flow::is_recorded_issue_url(&root, &root, &id, url), Ok(false), "{url}");
     }
 }

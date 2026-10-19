@@ -611,3 +611,52 @@ fn sandbox_real_recreated_work_directory_shows_its_new_contents() {
     assert_eq!(field(&after, "head"), second.to_string(), "{after}");
     assert_ne!(field(&before, "boot_id"), field(&after, "boot_id"), "the VM was rebooted");
 }
+
+// EAC-FR-NDDZ, EAC-FR-SQWO: a real boot starts a catalog guard that holds the
+// shared lock range of the probe home's catalog, and a new catalog connection
+// renews it while the VM keeps working. The guard here is the test binary,
+// which holds the lock as the shipped executable does.
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "needs hardware virtualisation and a Docker daemon"]
+fn sandbox_real_a_boot_starts_a_catalog_guard_and_a_new_connection_renews_it() {
+    use super::sandbox::catalog_guard::tests::test_command;
+    use super::sandbox::{GuardOutcome, SandboxRuntime};
+    build_probe_image();
+    let harness = harness_for("claude_code");
+    let root = tempfile::tempdir().unwrap();
+    repository(root.path(), &harness.workspace(), "guard", "one\n");
+    isolated_runtime_home();
+    let runtime_of_pool =
+        Arc::new(MicrosandboxRuntime::with_guard_command(|path| Ok(test_command(path))));
+    let pool = Arc::new(SandboxPool::new(runtime_of_pool.clone()));
+    let rt = runtime();
+    let _stop = StopOnDrop(&rt, pool.clone());
+    let executor = executor(&harness, microsandbox(), &pool);
+    let scope = probe_scope();
+    let workspace = harness.workspace();
+
+    let (first, kept, renewed, second) = rt.block_on(async {
+        let first = probe(&executor, &harness, &workspace, TurnKind::Work, &scope).await;
+        let kept = runtime_of_pool.guard_catalog(false).await;
+        runtime_of_pool.reopen_catalog().await.expect("a new catalog connection");
+        let renewed = runtime_of_pool.guard_catalog(true).await;
+        let second = probe(&executor, &harness, &workspace, TurnKind::Work, &scope).await;
+        (first, kept, renewed, second)
+    });
+
+    // A guard reports `Started` only once it holds its lock.
+    let GuardOutcome::Running { pid: earlier } = kept.outcome else {
+        panic!("the boot started a guard, which still runs: {kept:?}");
+    };
+    let GuardOutcome::Started { pid: later, .. } = renewed.outcome else {
+        panic!("a new connection starts a new guard: {renewed:?}");
+    };
+    let ended = renewed.ended.expect("the earlier guard ended");
+    assert_eq!((ended.pid, ended.cause), (earlier, "replaced"));
+    assert_ne!(earlier, later, "a new guard process");
+    let earlier = libc::pid_t::try_from(earlier).expect("a process ID");
+    // SAFETY: signal 0 sends nothing, it only asks whether the process exists.
+    assert_eq!(unsafe { libc::kill(earlier, 0) }, -1, "the earlier guard process is gone");
+    assert_eq!(field(&first, "boot_id"), field(&second, "boot_id"), "the VM kept running");
+}

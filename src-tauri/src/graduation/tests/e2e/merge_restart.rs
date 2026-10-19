@@ -65,12 +65,13 @@ fn a_working_merge_run_found_after_a_relaunch_rests_interrupted_and_continue_res
         .expect_merge_workspace_reclaimed();
 }
 
-// GTE-FR-DQLR, GTE-FR-HWQM / GRD-FR-XVUD, GRD-FR-PFMD: a run found reviewing rests
-// `interrupted` the same way. The sweep records no resume phase, as for every run
-// it finds, so Continue asks for the pass again from its work turn, which resumes
-// the pass the run stood in, and the review follows it.
+// GTE-FR-DQLR, GTE-FR-HWQM / GRD-FR-XVUD, GRD-FR-PFMD, GXD-FR-ELUF, GXD-FR-TJRV: a
+// run found reviewing rests `interrupted` the same way. The reviewer changed
+// nothing, so the sweep points the run at the review, and Continue composes no
+// work turn and spends no pass.
 #[test]
-fn a_reviewing_merge_run_found_after_a_relaunch_rests_interrupted_and_continue_resumes_the_pass() {
+fn a_reviewing_merge_run_found_after_a_relaunch_rests_interrupted_and_continue_resumes_at_the_review(
+) {
     conflicted_merge("relaunch while reviewing")
         .with_merge(as_one_commit())
         .merge_work_turn(Script::reports_success().writes("README.md", "both sides\n"))
@@ -78,21 +79,17 @@ fn a_reviewing_merge_run_found_after_a_relaunch_rests_interrupted_and_continue_r
         .run()
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("execution_abandoned")
+        .expect_resume_phase("review")
         .expect_stream_held()
         .expect_slots_in_use(1)
         .expect_merge_workspace_standing()
-        .continued(vec![Script::reports_success(), Script::answers_ready("Both intents stand.")])
+        .continued(vec![Script::answers_ready("Both intents stand.")])
         .expect_state(GraduationRunState::Completed)
-        .expect_dispatch_order(&["merge_work", "merge_review"])
-        .expect_dispatch(0, |d| {
-            d.part("merge_work")
-                .pass(1)
-                .purpose("resume")
-                .directory_held("README.md", "both sides\n")
-        })
+        .expect_dispatch_order(&["merge_review"])
         .expect_pass(1)
-        .expect_turns(2, 2)
-        .expect_base_holds_the_merge_commit("Merge the feature stream");
+        .expect_turns(1, 2)
+        .expect_base_holds_the_merge_commit("Merge the feature stream")
+        .expect_merge_workspace_reclaimed();
 }
 
 // GTE-FR-DQLR / GRD-FR-PFMD, GRD-FR-KZPT, WKS-FR-ENRU: a run that ended before the
@@ -138,4 +135,30 @@ fn the_first_queue_read_reclaims_what_an_ended_merge_run_left() {
         .expect_state(GraduationRunState::AwaitingAuthor)
         .expect_escalation_questions(&["Which limit stands?"])
         .expect_merge_workspace_standing();
+}
+
+// GXD-FR-ELUF, GXD-FR-TJRV, GRD-FR-PFMD: a merge review that could not launch
+// ran nothing, so the run resumes at the review. A merge run commits no
+// abandoned turn and keeps its merge worktree, and Continue composes no work
+// turn.
+#[test]
+fn a_merge_review_that_could_not_launch_resumes_at_the_review() {
+    conflicted_merge("review launch failure")
+        .with_merge(as_one_commit())
+        .merge_work_turn(Script::reports_success().writes("README.md", "both sides\n"))
+        .merge_review_turn(Script::cannot_launch(
+            crate::tools::agent_exec::AgentExecutionError::RuntimeUnavailable,
+        ))
+        .run()
+        .expect_state(GraduationRunState::Interrupted)
+        .expect_interruption("launch_failed")
+        .expect_resume_phase("review")
+        .expect_commits(0)
+        .expect_merge_workspace_standing()
+        .continued(vec![Script::answers_ready("Both intents stand.")])
+        .expect_state(GraduationRunState::Completed)
+        .expect_dispatch_order(&["merge_review"])
+        .expect_pass(1)
+        .expect_base_holds_the_merge_commit("Merge the feature stream")
+        .expect_merge_workspace_reclaimed();
 }

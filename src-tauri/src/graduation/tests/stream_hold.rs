@@ -156,6 +156,41 @@ fn a_relaunch_sweeps_a_working_run_and_leaves_a_blocked_one() {
     );
 }
 
+// GRD-FR-XVUD, GXD-FR-ELUF: a relaunch points a run it finds reviewing at the
+// review, and a run it finds working at no phase, so Continue repeats no work
+// turn that already ended.
+#[test]
+fn a_relaunch_points_a_swept_reviewing_run_at_the_review() {
+    for (state, expected) in [
+        (GraduationRunState::Working, None),
+        (GraduationRunState::Reviewing, Some(super::super::driver::phases::PART_REVIEW)),
+    ] {
+        let fx = Fixture::new();
+        let stream = fx.stream("editor");
+        let mut run = fx.enqueue(&stream, "Add the empty state to the panel.");
+        run.state = state;
+        run.checkpoint.resume_part = None;
+        crate::graduation::save_run(&fx.app, &mut run).expect("saved");
+
+        let queue = crate::graduation::project_queue(&fx.app).expect("the queue");
+        crate::graduation::sweep_abandoned_runs(&fx.app, &queue);
+
+        let swept = fx.reload(&run.id);
+        assert_eq!(swept.state, GraduationRunState::Interrupted, "{state:?}: the run rests");
+        assert_eq!(
+            swept.interruption.as_ref().map(|i| i.reason),
+            Some(GraduationInterruptionReason::ExecutionAbandoned),
+            "{state:?}: the author is told why"
+        );
+        assert_eq!(
+            swept.checkpoint.resume_part.as_deref(),
+            expected,
+            "{state:?}: the phase the run resumes at"
+        );
+        assert!(swept.holds_queue() && swept.holds_slot(), "{state:?}: the run keeps its hold");
+    }
+}
+
 /// GRD-FR-MDQZ: a stop is reported as what it was. The author's pause and every
 /// other stop ask different things of them.
 #[test]

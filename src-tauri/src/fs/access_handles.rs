@@ -110,6 +110,52 @@ impl FileHandle<'_> {
     pub fn seek(&mut self, pos: SeekFrom) -> FsResult<u64> {
         self.file.seek(pos).map_err(FsError::Io)
     }
+
+    /// FSA-FR-ZANF: take a POSIX advisory read lock on `len` bytes from the
+    /// offset `start`. The call waits while a write lock holds any part of the
+    /// range, and the lock lasts until the handle is dropped. Only a
+    /// `ReadOnly` handle takes one.
+    pub fn lock_shared_range(&self, start: u64, len: u64) -> FsResult<()> {
+        if self.mode != OpenMode::ReadOnly {
+            return Err(FsError::WrongMode { mode: self.mode.label(), attempted: "lock" });
+        }
+        lock_shared_range(&self.file, start, len)
+    }
+}
+
+/// FSA-FR-ZANF: `F_SETLKW` with `F_RDLCK` on the range of `file`. An
+/// interrupted wait is tried again.
+#[cfg(unix)]
+fn lock_shared_range(file: &fs::File, start: u64, len: u64) -> FsResult<()> {
+    use std::os::fd::AsRawFd;
+
+    let out_of_range = || FsError::Io(std::io::Error::other("the lock range is out of range"));
+    let start = libc::off_t::try_from(start).map_err(|_| out_of_range())?;
+    let len = libc::off_t::try_from(len).map_err(|_| out_of_range())?;
+    // SAFETY: `flock` is a plain C struct, and all zero bits is a valid value.
+    let mut lock: libc::flock = unsafe { std::mem::zeroed() };
+    lock.l_type = libc::F_RDLCK as libc::c_short;
+    lock.l_whence = libc::SEEK_SET as libc::c_short;
+    lock.l_start = start;
+    lock.l_len = len;
+    loop {
+        // SAFETY: the descriptor stays open for the call, because `file` is
+        // borrowed, and `lock` is a valid `flock` that outlives it.
+        let result = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETLKW, &lock) };
+        if result != -1 {
+            return Ok(());
+        }
+        let error = std::io::Error::last_os_error();
+        if error.kind() != std::io::ErrorKind::Interrupted {
+            return Err(FsError::Io(error));
+        }
+    }
+}
+
+/// FSA-FR-ZANF: no advisory byte-range locks on this platform.
+#[cfg(not(unix))]
+fn lock_shared_range(_file: &fs::File, _start: u64, _len: u64) -> FsResult<()> {
+    Err(FsError::UnsupportedPlatform { operation: "lock_shared_range" })
 }
 
 impl Drop for FileHandle<'_> {

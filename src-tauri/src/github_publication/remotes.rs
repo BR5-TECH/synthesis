@@ -117,26 +117,20 @@ pub fn parse_github_remote(url: &str) -> Option<(String, String)> {
 /// and payload this module produces (GHP-FR-DHXK).
 pub fn parse_remote_repository(url: &str) -> Option<RemoteRepository> {
     let trimmed = url.trim();
-    // `git@github.com:owner/repo.git` — the scp-like SSH form, which carries no
-    // scheme and separates the path with a colon.
-    let rest = if let Some(rest) = trimmed.strip_prefix("git@") {
-        rest.replacen(':', "/", 1)
-    } else {
-        let after_scheme = trimmed
-            .split_once("://")
-            .map(|(_, rest)| rest.to_string())
-            .unwrap_or_else(|| trimmed.to_string());
-        // Userinfo is everything before the last `@` of the authority.
-        match after_scheme.split_once('/') {
-            Some((authority, path)) => {
-                let host = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
-                format!("{host}/{path}")
-            }
-            None => after_scheme,
-        }
+    let (authority, path) = match trimmed.split_once("://") {
+        Some((_, rest)) => rest.split_once('/')?,
+        None => match trimmed.split_once(':') {
+            // `git@github.com:owner/repo.git` or
+            // `company@company.ghe.com:owner/repo.git` — the scp-like SSH form,
+            // with any user or none. A `/` before the colon makes it a local
+            // path, as Git reads it.
+            Some((user_host, path)) if !user_host.contains('/') => (user_host, path),
+            _ => trimmed.split_once('/')?,
+        },
     };
-    let (authority, path) = rest.split_once('/')?;
-    let host = authority.split_once(':').map_or(authority, |(h, _)| h);
+    // Userinfo is everything before the last `@` of the authority.
+    let host = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
+    let host = host.split_once(':').map_or(host, |(h, _)| h);
     let host = crate::github_tokens::host::remote_host(&format!("https://{host}/"))?;
     let path = path.trim_end_matches('/');
     let path = path.strip_suffix(".git").unwrap_or(path);

@@ -191,6 +191,22 @@ fn the_listing_reads_viewer_and_owner_projects() {
     assert_eq!(h.fake.calls(), vec![Call::Viewer]);
 }
 
+/// GPP-FR-WYRP / GHP-FR-BXTU: an scp-like remote with a user other than
+/// `git` resolves the repository, so the owner's Projects are listed.
+#[test]
+fn the_listing_reads_owner_projects_for_an_scp_remote_with_any_user() {
+    let h = Harness::new();
+    git2::Repository::open(h.dir.path())
+        .unwrap()
+        .remote_set_url("origin", "someone@github.com:other-org/widgets.git")
+        .unwrap();
+    *h.fake.viewer.lock().unwrap() = vec![option("P1")];
+    *h.fake.owned.lock().unwrap() = vec![option("P3")];
+    let listed = list_projects_impl(&h.handle()).unwrap();
+    assert_eq!(listed.iter().map(|p| p.node_id.as_str()).collect::<Vec<_>>(), vec!["P1", "P3"]);
+    assert_eq!(h.fake.calls(), vec![Call::Viewer, Call::Owner("other-org".into())]);
+}
+
 /// GPP-FR-TYOV: an event follows every change of the view, and only a
 /// successful poll's event names new issues.
 #[test]

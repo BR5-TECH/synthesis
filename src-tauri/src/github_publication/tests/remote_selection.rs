@@ -15,6 +15,8 @@ fn canonicalizes_every_github_url_form_to_one_value() {
         "https://token@github.com/acme/widgets",
         "https://user:secret@GitHub.com:443/acme/widgets/",
         "git@github.com:acme/widgets.git",
+        "someone@github.com:acme/widgets.git",
+        "github.com:acme/widgets",
         "ssh://git@github.com/acme/widgets",
     ];
     for form in forms {
@@ -36,6 +38,36 @@ fn a_non_github_url_is_not_a_github_remote_and_loses_its_credentials() {
     // Not a repository address: too much path.
     assert_eq!(remotes::parse_github_remote("https://github.com/acme"), None);
     assert_eq!(remotes::parse_github_remote("https://github.com/acme/widgets/pulls"), None);
+    assert_eq!(remotes::parse_github_remote("someone@github.com:acme"), None);
+    assert_eq!(remotes::parse_github_remote("someone@github.com:acme/widgets/extra"), None);
+}
+
+/// GHP-FR-BXTU: a `/` before the first colon makes a local path, as Git reads
+/// it, so the text before the colon is not taken as an scp-like host.
+#[test]
+fn a_local_path_with_a_colon_is_not_an_scp_like_address() {
+    for path in [
+        "./github.com:acme/widgets",
+        "/srv/github.com:acme/widgets",
+        "srv/repos/github.com:acme/widgets",
+        "../a:b/c",
+    ] {
+        assert_eq!(remotes::parse_remote_repository(path), None, "{path}");
+    }
+}
+
+/// GHP-FR-BXTU: the host of a stored token is a GitHub host in the scp-like
+/// form too, with any user; without the stored token it is not.
+#[test]
+fn an_scp_like_remote_on_a_stored_token_host_is_a_github_remote() {
+    let fake = FakeGithub::with_probe(ProbeOutcome::Publishable);
+    let remote = [configured("origin", "deploy@git.corp.example:acme/widgets.git")];
+    let known = ["git.corp.example".to_string()];
+    let github = remotes::classify_hosted(&remote, None, &known, &fake, false);
+    assert_eq!(github[0].kind, RemoteKind::Github);
+    assert_eq!(github[0].url, "git.corp.example/acme/widgets");
+    let other = remotes::classify_hosted(&remote, None, &[], &fake, false);
+    assert_eq!(other[0].kind, RemoteKind::Other);
 }
 
 /// GHP-FR-LTAC: a non-GitHub remote is reported with its reason rather than

@@ -55,6 +55,19 @@ fn a_pull_request_list_is_read_for_a_remote_on_the_host_of_the_token() {
     assert_eq!(github.requests()[0].0, SECRET);
 }
 
+// GTC-FR-GXUB, GHP-FR-BXTU
+#[test]
+fn an_scp_like_remote_with_the_enterprise_user_names_the_repository() {
+    let f = repo_with_origin("company@company.ghe.com:acme/platform.git");
+    let github = FakeGithub::new();
+    open_answer(&github);
+
+    let rows = list_open(&f, &github, &token_on("company.ghe.com")).unwrap();
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(github.requests().len(), 1);
+}
+
 // GTC-FR-FSLC, GTS-FR-OBAS
 #[test]
 fn a_token_of_another_host_is_refused_with_no_request() {

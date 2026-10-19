@@ -21,12 +21,15 @@ fn every_url_form_of_an_enterprise_repository_canonicalizes_to_one_value() {
         "https://company.ghe.com/acme/widgets.git",
         "https://user:secret@Company.GHE.com:443/acme/widgets/",
         "git@company.ghe.com:acme/widgets.git",
+        "company@company.ghe.com:acme/widgets.git",
+        "org-123@Company.GHE.com:acme/widgets/",
         "ssh://git@company.ghe.com/acme/widgets",
+        "ssh://company@company.ghe.com:22/acme/widgets.git",
     ] {
         assert_eq!(remotes::canonical_url(form), "company.ghe.com/acme/widgets", "{form}");
         let parsed = remotes::parse_remote_repository(form).unwrap();
-        assert_eq!(parsed.host, "company.ghe.com");
-        assert_eq!((parsed.owner.as_str(), parsed.repo.as_str()), ("acme", "widgets"));
+        assert_eq!(parsed.host, "company.ghe.com", "{form}");
+        assert_eq!((parsed.owner.as_str(), parsed.repo.as_str()), ("acme", "widgets"), "{form}");
     }
     // The legacy parser still answers for `github.com` alone.
     assert_eq!(remotes::parse_github_remote(GHE), None);
@@ -38,6 +41,23 @@ fn a_remote_on_the_host_of_the_token_is_classified_and_probed() {
     let fake = FakeGithub::with_probe(ProbeOutcome::Publishable);
     let classified =
         classify_for(&[configured("origin", GHE)], Some(("secret", "company.ghe.com")), &[], &fake);
+    assert_eq!(classified[0].kind, RemoteKind::Github);
+    assert_eq!(classified[0].eligibility, RemoteEligibility::Eligible);
+    assert_eq!(classified[0].repository_host.as_deref(), Some("company.ghe.com"));
+    assert_eq!(classified[0].url, "company.ghe.com/acme/widgets");
+    assert_eq!(fake.calls(), vec![Call::Probe("acme/widgets".into())]);
+}
+
+// GHP-FR-BXTU, GHP-FR-MZPR
+#[test]
+fn an_scp_like_remote_with_the_enterprise_user_is_a_github_remote() {
+    let fake = FakeGithub::with_probe(ProbeOutcome::Publishable);
+    let classified = classify_for(
+        &[configured("origin", "company@company.ghe.com:acme/widgets.git")],
+        Some(("secret", "company.ghe.com")),
+        &[],
+        &fake,
+    );
     assert_eq!(classified[0].kind, RemoteKind::Github);
     assert_eq!(classified[0].eligibility, RemoteEligibility::Eligible);
     assert_eq!(classified[0].repository_host.as_deref(), Some("company.ghe.com"));

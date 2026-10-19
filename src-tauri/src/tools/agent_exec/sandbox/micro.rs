@@ -25,6 +25,8 @@ const KILL_GRACE: Duration = Duration::from_secs(10);
 const DROP_CACHES: &str = "sync; echo 2 > /proc/sys/vm/drop_caches";
 /// EAC-FR-JRVY: how long a cache drop may take before the VM is rebooted.
 const REFRESH_BOUND: Duration = Duration::from_secs(30);
+/// EAC-FR-SQWO: how long the earlier catalog connections may take to close.
+const CLOSE_BOUND: Duration = Duration::from_secs(10);
 
 /// One booted VM: its handle, and the entrypoint and the `Env` of the image it
 /// booted from.
@@ -40,9 +42,37 @@ pub struct MicrosandboxRuntime {
     /// EAC-FR-HMBJ: set once the runtime is installed from the embedded
     /// archive. A failed install leaves it unset, so the next boot tries again.
     installed: tokio::sync::OnceCell<()>,
+    /// EAC-FR-SQWO: held for a whole reopen, so two launches that fail on the
+    /// catalog at one time open one new connection.
+    reopening: tokio::sync::Mutex<()>,
+    /// EAC-FR-NDDZ: the catalog guard, and how it is started.
+    #[cfg(target_os = "macos")]
+    guard: tokio::sync::Mutex<Option<super::catalog_guard::CatalogGuard>>,
+    #[cfg(target_os = "macos")]
+    guard_command: GuardCommand,
+}
+
+/// EAC-FR-NDDZ: the command that starts a guard of a catalog. A shipped build
+/// starts its own executable, and a real-runtime probe starts the test binary.
+#[cfg(target_os = "macos")]
+struct GuardCommand(fn(&Path) -> Result<std::process::Command, super::catalog_guard::GuardError>);
+
+#[cfg(target_os = "macos")]
+impl Default for GuardCommand {
+    fn default() -> Self {
+        GuardCommand(super::catalog_guard::CatalogGuard::command)
+    }
 }
 
 impl MicrosandboxRuntime {
+    /// EAC-FR-NDDZ: a runtime whose guard is started by `command`.
+    #[cfg(target_os = "macos")]
+    pub fn with_guard_command(
+        command: fn(&Path) -> Result<std::process::Command, super::catalog_guard::GuardError>,
+    ) -> Self {
+        MicrosandboxRuntime { guard_command: GuardCommand(command), ..Default::default() }
+    }
+
     /// EAC-FR-HMBJ: install `msb` and `libkrunfw` from the archive compiled
     /// into this executable, where they are not installed already. Nothing is
     /// downloaded at run time. Only a success is kept: an error goes back to
@@ -84,11 +114,101 @@ impl MicrosandboxRuntime {
     }
 }
 
+#[cfg(target_os = "macos")]
+impl MicrosandboxRuntime {
+    /// EAC-FR-NDDZ, EAC-FR-PIHS: keep one guard running for the catalog of the
+    /// current connection. The lock is held for the whole request, so two
+    /// boots at one time start one guard.
+    async fn keep_guard(&self, renew: bool) -> super::GuardReport {
+        self.keep_guard_of(renew, catalog_path()).await
+    }
+
+    /// EAC-FR-NDDZ: keep one guard running for `catalog`, the catalog of the
+    /// current connection.
+    async fn keep_guard_of(
+        &self,
+        renew: bool,
+        catalog: Option<std::path::PathBuf>,
+    ) -> super::GuardReport {
+        use super::catalog_guard::{CatalogGuard, LOCK_BOUND};
+        use super::{GuardEnd, GuardOutcome, GuardReport};
+
+        let mut slot = self.guard.lock().await;
+        let mut ended = None;
+        if let Some(guard) = slot.as_mut() {
+            let pid = guard.pid();
+            match guard.exited() {
+                None if !renew => {
+                    return GuardReport { ended: None, outcome: GuardOutcome::Running { pid } };
+                }
+                None => {
+                    let exit_code = guard.end();
+                    ended = Some(GuardEnd { pid, cause: "replaced", exit_code });
+                }
+                Some(exit_code) => ended = Some(GuardEnd { pid, cause: "exited", exit_code }),
+            }
+            *slot = None;
+        }
+        let failed = |ended, stage, message| GuardReport {
+            ended,
+            outcome: GuardOutcome::Failed { stage, message },
+        };
+        let Some(catalog) = catalog else {
+            return failed(ended, "catalog", "the runtime has no local catalog".to_string());
+        };
+        let command = match (self.guard_command.0)(&catalog) {
+            Ok(command) => command,
+            Err(error) => return failed(ended, error.stage(), error.to_string()),
+        };
+        match tokio::task::spawn_blocking(move || CatalogGuard::start(command, LOCK_BOUND)).await {
+            Ok(Ok(guard)) => {
+                let pid = guard.pid();
+                *slot = Some(guard);
+                GuardReport { ended, outcome: GuardOutcome::Started { pid, catalog } }
+            }
+            Ok(Err(error)) => failed(ended, error.stage(), error.to_string()),
+            Err(error) => failed(ended, "spawn", error.to_string()),
+        }
+    }
+}
+
+/// EAC-FR-NDDZ: the catalog file of the current connection. The runtime keeps
+/// it at `db/msb.db` under its home.
+#[cfg(target_os = "macos")]
+fn catalog_path() -> Option<std::path::PathBuf> {
+    let backend = microsandbox::backend::default_backend();
+    backend.as_local().map(|local| local.config().home().join("db").join("msb.db"))
+}
+
+/// EAC-FR-SQWO: close every pool of the catalog connection of `backend`, so
+/// that no connection of this process holds the catalog's shared memory.
+/// Returns whether they closed within `bound`. A backend that never opened its
+/// catalog fails to open it here, and has nothing to close.
+pub(crate) async fn close_catalog(
+    backend: &dyn microsandbox::backend::Backend,
+    bound: Duration,
+) -> bool {
+    let Some(local) = backend.as_local() else {
+        return true;
+    };
+    let Ok(pools) = local.db().await else {
+        return true;
+    };
+    tokio::time::timeout(bound, async {
+        let _ = pools.read().inner().close_by_ref().await;
+        let _ = pools.write().inner().close_by_ref().await;
+    })
+    .await
+    .is_ok()
+}
+
 /// EAC-FR-SQWO: whether a runtime message says that the runtime could not
 /// read its own catalog. The image and sandbox errors carry a catalog error
 /// as text, so the text is what tells it.
 pub fn names_catalog_failure(message: &str) -> bool {
-    message.to_ascii_lowercase().contains("database error")
+    let lower = message.to_ascii_lowercase();
+    // A connection that cannot open reports SQLite's own wording instead.
+    lower.contains("database error") || lower.contains("error returned from database")
 }
 
 /// EAC-FR-SQWO: run `first`, and where it fails, run `fallback`. Returns
@@ -262,17 +382,43 @@ impl SandboxRuntime for MicrosandboxRuntime {
 
     fn reopen_catalog(&self) -> BoxFuture<'_, Result<(), String>> {
         Box::pin(async move {
-            // EAC-FR-SQWO: a new backend opens its own connection to the
-            // catalog. Every later call of this process goes through it. A VM
-            // handle made before keeps the earlier backend, so `stop` falls
-            // back to this one.
-            let backend =
-                microsandbox::backend::LocalBackend::new().await.map_err(|e| e.to_string())?;
+            // EAC-FR-SQWO: where another launch opened a new connection while
+            // this one waited, this launch uses that one.
+            let failed = microsandbox::backend::default_backend();
+            let _reopening = self.reopening.lock().await;
+            let earlier = microsandbox::backend::default_backend();
+            if !std::sync::Arc::ptr_eq(&failed, &earlier) {
+                return Ok(());
+            }
+            // The earlier connections close first. A new one beside them
+            // attaches to the shared memory they hold, and reads the same
+            // damage.
+            let closed = close_catalog(earlier.as_ref(), CLOSE_BOUND).await;
+            // A new backend opens its own connection to the catalog. Every
+            // later call of this process goes through it. A running process
+            // reaches its VM through the VM's own socket and not through the
+            // catalog, and `stop` falls back to the new backend where the VM
+            // handle's own one fails.
+            let backend = microsandbox::backend::LocalBackend::new().await.map_err(|e| {
+                if closed {
+                    e.to_string()
+                } else {
+                    format!(
+                        "{e} (the earlier catalog connections did not close in {} seconds)",
+                        CLOSE_BOUND.as_secs()
+                    )
+                }
+            })?;
             let backend: std::sync::Arc<dyn microsandbox::backend::Backend> =
                 std::sync::Arc::new(backend);
             microsandbox::backend::set_default_backend(backend);
             Ok(())
         })
+    }
+
+    #[cfg(target_os = "macos")]
+    fn guard_catalog(&self, renew: bool) -> BoxFuture<'_, super::GuardReport> {
+        Box::pin(async move { self.keep_guard(renew).await })
     }
 
     fn run<'a>(
@@ -441,6 +587,9 @@ mod tests {
     fn a_catalog_message_names_a_catalog_failure() {
         assert!(names_catalog_failure(&replaced_catalog().to_string()));
         assert!(names_catalog_failure("Database Error: locked"));
+        assert!(names_catalog_failure(
+            "connect to /h/db/msb.db: error returned from database: (code: 26) file is not a database"
+        ));
         assert!(!names_catalog_failure("image not cached: claude-code:latest"));
         assert!(!names_catalog_failure("failed to create bind target"));
     }
@@ -493,5 +642,110 @@ mod tests {
             ran.set(true);
         }));
         assert!(!fell_back && !ran.get());
+    }
+
+    /// EAC-FR-NDDZ, EAC-FR-PIHS: the runtime keeps one guard per catalog
+    /// connection. The guards here are the test binary, which holds the lock
+    /// as the shipped executable does.
+    #[cfg(target_os = "macos")]
+    mod guard {
+        use super::super::super::catalog_guard::tests::{catalog, test_command};
+        use super::super::super::{GuardEnd, GuardOutcome};
+        use super::*;
+
+        fn guarded() -> MicrosandboxRuntime {
+            MicrosandboxRuntime::with_guard_command(|path| Ok(test_command(path)))
+        }
+
+        fn rt() -> tokio::runtime::Runtime {
+            tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("runtime")
+        }
+
+        fn started(outcome: &GuardOutcome) -> u32 {
+            match outcome {
+                GuardOutcome::Started { pid, .. } => *pid,
+                other => panic!("a guard started: {other:?}"),
+            }
+        }
+
+        // EAC-FR-NDDZ: a running guard is kept, and a new catalog connection
+        // ends it and starts a new one.
+        #[test]
+        fn a_running_guard_is_kept_and_a_renewal_replaces_it() {
+            let (_dir, path) = catalog();
+            let runtime = guarded();
+            rt().block_on(async {
+                let first = runtime.keep_guard_of(false, Some(path.clone())).await;
+                assert_eq!(first.ended, None);
+                let earlier = started(&first.outcome);
+                let kept = runtime.keep_guard_of(false, Some(path.clone())).await;
+                assert_eq!(kept.outcome, GuardOutcome::Running { pid: earlier });
+                assert_eq!(kept.ended, None);
+                let renewed = runtime.keep_guard_of(true, Some(path.clone())).await;
+                let later = started(&renewed.outcome);
+                assert_ne!(earlier, later);
+                let ended = renewed.ended.expect("the earlier guard ended");
+                assert_eq!((ended.pid, ended.cause), (earlier, "replaced"));
+            });
+        }
+
+        // EAC-FR-NDDZ, EAC-FR-FUNB: a guard that ended on its own is reported
+        // with its exit code, and a new one starts.
+        #[test]
+        fn a_guard_that_ended_on_its_own_is_started_again() {
+            let (_dir, path) = catalog();
+            let runtime = guarded();
+            rt().block_on(async {
+                let earlier =
+                    started(&runtime.keep_guard_of(false, Some(path.clone())).await.outcome);
+                let code = runtime.guard.lock().await.as_mut().expect("a guard").reap();
+                assert_eq!(code, Some(0), "a guard whose input closed ends cleanly");
+                let next = runtime.keep_guard_of(false, Some(path.clone())).await;
+                assert_eq!(
+                    next.ended,
+                    Some(GuardEnd { pid: earlier, cause: "exited", exit_code: Some(0) })
+                );
+                started(&next.outcome);
+            });
+        }
+
+        // EAC-FR-PIHS: a guard that could not start is reported with its
+        // stage, and the next request starts one.
+        #[test]
+        fn a_guard_that_could_not_start_is_started_at_the_next_request() {
+            let (dir, path) = catalog();
+            let missing = dir.path().canonicalize().expect("canonical").join("absent.db");
+            let runtime = guarded();
+            rt().block_on(async {
+                let failed = runtime.keep_guard_of(false, Some(missing)).await;
+                assert!(
+                    matches!(failed.outcome, GuardOutcome::Failed { stage: "open", .. }),
+                    "{failed:?}"
+                );
+                let none = runtime.keep_guard_of(false, None).await;
+                assert!(
+                    matches!(none.outcome, GuardOutcome::Failed { stage: "catalog", .. }),
+                    "{none:?}"
+                );
+                started(&runtime.keep_guard_of(false, Some(path)).await.outcome);
+            });
+        }
+
+        // EAC-FR-NDDZ: two requests at one time start one guard.
+        #[test]
+        fn two_requests_at_one_time_start_one_guard() {
+            let (_dir, path) = catalog();
+            let runtime = guarded();
+            let (one, two) = rt().block_on(async {
+                tokio::join!(
+                    runtime.keep_guard_of(false, Some(path.clone())),
+                    runtime.keep_guard_of(false, Some(path.clone()))
+                )
+            });
+            let outcomes = [one.outcome, two.outcome];
+            let starts = outcomes.iter().filter(|o| matches!(o, GuardOutcome::Started { .. }));
+            let runs = outcomes.iter().filter(|o| matches!(o, GuardOutcome::Running { .. }));
+            assert_eq!((starts.count(), runs.count()), (1, 1), "{outcomes:?}");
+        }
     }
 }

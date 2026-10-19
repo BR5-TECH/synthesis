@@ -61,7 +61,7 @@ fn a_legacy_published_draft_reads_published_until_its_next_write() {
     record_publication(&root, &id, "pub-1", 7);
 
     assert_eq!(stored_status(&root, &id), DraftStatus::Published);
-    let listed = crate::drafts::list_drafts_impl(&root);
+    let listed = listed_with_publication(&root);
     let row = listed.drafts.iter().find(|d| d.id == id).expect("listed");
     assert_eq!(row.status, DraftStatus::Published);
     // The reads above wrote nothing back.
@@ -106,7 +106,7 @@ fn a_move_stores_active_over_legacy_published() {
     let moved = crate::drafts::move_draft_to_folder_impl(&root, &id, "UI").expect("moves");
     assert_eq!(moved.status, DraftStatus::Active);
     assert_eq!(stored_status(&root, &id), DraftStatus::Active);
-    assert_eq!(store::read_store(&root, &id).unwrap().publication.len(), 1);
+    assert_eq!(store::read_store(&root, &root, &id).unwrap().publication.len(), 1);
 }
 
 /// DRS-FR-VKQO: an archive stores `archived`, not `active`.
@@ -157,9 +157,9 @@ fn the_listing_carries_the_newest_publication_record_on_every_status() {
     let plain = draft(&root, "plain");
     // A store holding only a standing attempt has no record yet.
     let pending = draft(&root, "pending");
-    flow::open_attempt(&root, &pending, &origin(), "pub-5".into()).unwrap();
+    flow::open_attempt(&root, &root, &pending, &origin(), "pub-5".into()).unwrap();
 
-    let listed = crate::drafts::list_drafts_impl(&root);
+    let listed = listed_with_publication(&root);
     let row = |id: &str| listed.drafts.iter().find(|d| d.id == id).expect("listed").clone();
 
     let newest = row(&active).publication.expect("a record");
@@ -168,7 +168,7 @@ fn the_listing_carries_the_newest_publication_record_on_every_status() {
     assert_eq!(newest.repository_owner, "acme");
     assert_eq!(newest.repository_name, "widgets");
     assert_eq!(newest.repository_host, "github.com");
-    let stored = store::read_store(&root, &active).unwrap();
+    let stored = store::read_store(&root, &root, &active).unwrap();
     assert_eq!(newest.published_at, stored.publication[1].published_at);
 
     assert_eq!(row(&archived).publication.map(|p| p.issue_number), Some(11));
@@ -190,12 +190,12 @@ fn an_unreadable_publication_store_costs_its_row_the_record_alone() {
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
     let broken = draft(&root, "broken");
-    let path = crate::drafts::draft_publication_path(&root, &broken).unwrap();
+    let path = machine_store_path(&root, &broken);
     root.write_text_atomic(&path, "<<<<<<< HEAD\nnot toml\n").unwrap();
     let fine = draft(&root, "fine");
     record_publication(&root, &fine, "pub-1", 7);
 
-    let listed = crate::drafts::list_drafts_impl(&root);
+    let listed = listed_with_publication(&root);
     let row = |id: &str| listed.drafts.iter().find(|d| d.id == id).expect("listed").clone();
     let broken_row = row(&broken);
     assert!(broken_row.publication.is_none());

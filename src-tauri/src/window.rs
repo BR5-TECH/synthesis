@@ -565,6 +565,27 @@ mod tests {
         }
     }
 
+    // SNV-FR-RQLF, DRP-FR-PXMK: the main window keeps its native file-drop
+    // handler off. With the handler on, macOS and Windows give no drag to the
+    // web content, so no drop target in the window gets `dragover` or `drop`.
+    #[test]
+    fn main_window_hands_drags_to_the_web_content() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let conf_path = std::path::Path::new(manifest_dir).join("tauri.conf.json");
+        let raw = std::fs::read_to_string(&conf_path)
+            .unwrap_or_else(|e| panic!("failed to read {}: {e}", conf_path.display()));
+        let v: serde_json::Value =
+            serde_json::from_str(&raw).expect("tauri.conf.json must be valid JSON");
+        let first = &v["app"]["windows"][0];
+        let label = first.get("label").and_then(|l| l.as_str()).unwrap_or("main");
+        assert_eq!(label, PICKER_WINDOW_LABEL, "the first window must be the main window");
+        assert_eq!(
+            first.get("dragDropEnabled"),
+            Some(&serde_json::Value::Bool(false)),
+            "the main window must declare \"dragDropEnabled\": false",
+        );
+    }
+
     // ------------------------------------------------------------------
     // PPK-FR-12: resize-after-setup re-centers using the new (authoritative)
     // size. The Tauri runtime listener wiring itself cannot be unit-tested

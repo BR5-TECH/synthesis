@@ -12,13 +12,13 @@ fn the_store_is_absent_until_the_first_attempt() {
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "widget");
-    let path = crate::drafts::draft_publication_path(&root, &id).unwrap();
+    let path = machine_store_path(&root, &id);
     assert!(!path.exists());
-    let empty = store::read_store(&root, &id).unwrap();
+    let empty = store::read_store(&root, &root, &id).unwrap();
     assert!(empty.publication.is_empty());
     assert_eq!(empty.attempt, None);
 
-    flow::open_attempt(&root, &id, &origin(), "pub-1".into()).unwrap();
+    flow::open_attempt(&root, &root, &id, &origin(), "pub-1".into()).unwrap();
     assert!(path.exists());
 }
 
@@ -30,10 +30,15 @@ fn the_attempt_record_is_written_before_any_request_and_survives_a_reload() {
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "widget");
-    flow::open_attempt(&root, &id, &origin(), "pub-abc".into()).unwrap();
+    flow::open_attempt(&root, &root, &id, &origin(), "pub-abc".into()).unwrap();
 
     // Read through a second RootFs, which is what a relaunch amounts to.
-    let reloaded = store::read_store(&crate::fs::RootFs::for_root(dir.path()), &id).unwrap();
+    let reloaded = store::read_store(
+        &crate::fs::RootFs::for_root(dir.path()),
+        &crate::fs::RootFs::for_root(dir.path()),
+        &id,
+    )
+    .unwrap();
     let attempt = reloaded.attempt.unwrap();
     assert_eq!(attempt.marker, "pub-abc");
     assert_eq!(attempt.remote_name, "origin");
@@ -50,14 +55,14 @@ fn an_attempt_moves_between_its_two_non_terminal_states() {
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "widget");
-    flow::open_attempt(&root, &id, &origin(), "pub-1".into()).unwrap();
-    flow::set_attempt_state(&root, &id, AttemptState::AwaitingChoice).unwrap();
+    flow::open_attempt(&root, &root, &id, &origin(), "pub-1".into()).unwrap();
+    flow::set_attempt_state(&root, &root, &id, AttemptState::AwaitingChoice).unwrap();
     assert_eq!(
-        store::read_store(&root, &id).unwrap().attempt.unwrap().state,
+        store::read_store(&root, &root, &id).unwrap().attempt.unwrap().state,
         AttemptState::AwaitingChoice
     );
-    flow::set_attempt_state(&root, &id, AttemptState::Open).unwrap();
-    let store = store::read_store(&root, &id).unwrap();
+    flow::set_attempt_state(&root, &root, &id, AttemptState::Open).unwrap();
+    let store = store::read_store(&root, &root, &id).unwrap();
     assert_eq!(store.attempt.unwrap().state, AttemptState::Open);
     assert!(store.publication.is_empty());
 }
@@ -69,14 +74,14 @@ fn abandoning_an_attempt_clears_it_and_appends_nothing() {
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "widget");
-    flow::open_attempt(&root, &id, &origin(), "pub-1".into()).unwrap();
-    flow::clear_attempt(&root, &id).unwrap();
-    let store = store::read_store(&root, &id).unwrap();
+    flow::open_attempt(&root, &root, &id, &origin(), "pub-1".into()).unwrap();
+    flow::clear_attempt(&root, &root, &id).unwrap();
+    let store = store::read_store(&root, &root, &id).unwrap();
     assert_eq!(store.attempt, None);
     assert!(store.publication.is_empty());
-    assert_eq!(flow::clear_attempt(&root, &id), Err(ERR_NO_ATTEMPT.to_string()));
+    assert_eq!(flow::clear_attempt(&root, &root, &id), Err(ERR_NO_ATTEMPT.to_string()));
     assert_eq!(
-        flow::set_attempt_state(&root, &id, AttemptState::Open),
+        flow::set_attempt_state(&root, &root, &id, AttemptState::Open),
         Err(ERR_NO_ATTEMPT.to_string())
     );
 }
@@ -90,7 +95,8 @@ fn completing_an_attempt_appends_one_record_and_clears_it() {
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "widget");
     for (index, number) in [11u64, 12, 13].iter().enumerate() {
-        let attempt = flow::open_attempt(&root, &id, &origin(), format!("pub-{index}")).unwrap();
+        let attempt =
+            flow::open_attempt(&root, &root, &id, &origin(), format!("pub-{index}")).unwrap();
         let issue = IssueRef {
             number: *number,
             url: format!("https://github.com/acme/widgets/issues/{number}"),
@@ -98,9 +104,9 @@ fn completing_an_attempt_appends_one_record_and_clears_it() {
             body: "body".into(),
             ..Default::default()
         };
-        store::complete_attempt(&root, &id, flow::record_of(&attempt, &issue)).unwrap();
+        store::complete_attempt(&root, &root, &id, flow::record_of(&attempt, &issue)).unwrap();
     }
-    let store = store::read_store(&root, &id).unwrap();
+    let store = store::read_store(&root, &root, &id).unwrap();
     assert_eq!(store.attempt, None);
     // Stored oldest first.
     assert_eq!(
@@ -127,7 +133,7 @@ fn an_unparseable_store_is_reported_rather_than_repaired() {
     let id = draft(&root, "widget");
     let path = crate::drafts::draft_publication_path(&root, &id).unwrap();
     std::fs::write(&path, "<<<<<<< HEAD\nnot toml\n").unwrap();
-    assert_eq!(store::read_store(&root, &id), Err(ERR_STORE_WRITE_FAILED.to_string()));
+    assert_eq!(store::read_store(&root, &root, &id), Err(ERR_STORE_WRITE_FAILED.to_string()));
     assert!(std::fs::read_to_string(&path).unwrap().contains("<<<<<<<"));
 }
 
@@ -200,11 +206,11 @@ fn a_completion_refuses_to_clear_somebody_elses_attempt() {
     let dir = project();
     let root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&root, "widget");
-    let mine = flow::open_attempt(&root, &id, &origin(), "pub-mine".into()).unwrap();
+    let mine = flow::open_attempt(&root, &root, &id, &origin(), "pub-mine".into()).unwrap();
 
     // The attempt on disk is replaced while this one is in flight.
-    flow::clear_attempt(&root, &id).unwrap();
-    flow::open_attempt(&root, &id, &origin(), "pub-theirs".into()).unwrap();
+    flow::clear_attempt(&root, &root, &id).unwrap();
+    flow::open_attempt(&root, &root, &id, &origin(), "pub-theirs".into()).unwrap();
 
     let issue = IssueRef {
         number: 5,
@@ -214,10 +220,10 @@ fn a_completion_refuses_to_clear_somebody_elses_attempt() {
         ..Default::default()
     };
     assert_eq!(
-        store::complete_attempt(&root, &id, flow::record_of(&mine, &issue)),
+        store::complete_attempt(&root, &root, &id, flow::record_of(&mine, &issue)),
         Err(ERR_ATTEMPT_IN_PROGRESS.to_string())
     );
-    let store = store::read_store(&root, &id).unwrap();
+    let store = store::read_store(&root, &root, &id).unwrap();
     assert!(store.publication.is_empty());
     assert_eq!(store.attempt.unwrap().marker, "pub-theirs");
 }

@@ -21,15 +21,22 @@ fn fixture(prompt: &str) -> Fixture {
 
 impl Fixture {
     fn attempt(&self, marker: &str) -> PublicationAttempt {
-        flow::open_attempt(&self.root, &self.id, &origin(), marker.to_string()).unwrap()
+        flow::open_attempt(&self.root, &self.root, &self.id, &origin(), marker.to_string()).unwrap()
     }
 
     fn publish(&self, attempt: &PublicationAttempt) -> Result<PublicationOutcome, String> {
-        flow::publish_with_attempt(&self.root, &self.id, attempt, "secret", &self.github)
+        flow::publish_with_attempt(
+            &self.root,
+            &self.root,
+            &self.id,
+            attempt,
+            "secret",
+            &self.github,
+        )
     }
 
     fn store(&self) -> PublicationStore {
-        store::read_store(&self.root, &self.id).unwrap()
+        store::read_store(&self.root, &self.root, &self.id).unwrap()
     }
 }
 
@@ -155,7 +162,8 @@ fn update_existing_edits_the_issue_and_records_one_entry() {
     crate::drafts::rename_draft_impl(&f.root, &f.id, "Widget window v2").unwrap();
     f.github.calls.lock().unwrap().clear();
 
-    let outcome = flow::update_existing(&f.root, &f.id, &attempt, "secret", &f.github).unwrap();
+    let outcome =
+        flow::update_existing(&f.root, &f.root, &f.id, &attempt, "secret", &f.github).unwrap();
     let PublicationOutcome::Published { record } = outcome else { panic!("published") };
     assert_eq!(record.issue_number, 1);
     assert_eq!(record.marker, "pub-1");
@@ -213,7 +221,7 @@ fn a_failed_edit_appends_nothing_and_keeps_the_attempt() {
     f.github.issues.lock().unwrap().clear();
     *f.github.create_error.lock().unwrap() = Some(ERR_ISSUE_CREATE_FAILED.to_string());
     assert_eq!(
-        flow::update_existing(&f.root, &f.id, &attempt, "secret", &f.github),
+        flow::update_existing(&f.root, &f.root, &f.id, &attempt, "secret", &f.github),
         Err(ERR_ISSUE_CREATE_FAILED.to_string())
     );
     let store = f.store();

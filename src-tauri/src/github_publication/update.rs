@@ -40,7 +40,9 @@ pub(super) fn update_draft_on_github_impl<R: tauri::Runtime>(
     let project_key = project.slot_key();
     // GHP-FR-LVVD: the refusals of a publication, before the first request.
     super::require_publishable_draft(app, &root, &draft_id)?;
-    let publication = store::read_store(&root, &draft_id)?;
+    let machine = super::require_machine_store(app, &project, &draft_id)?;
+    let publication = store::read_store(&root, &machine, &draft_id)
+        .map_err(|code| super::fail(app, &draft_id, code))?;
     if publication.attempt.is_some() {
         return Err(super::fail(app, &draft_id, ERR_ATTEMPT_IN_PROGRESS.to_string()));
     }
@@ -71,6 +73,7 @@ pub(super) fn update_draft_on_github_impl<R: tauri::Runtime>(
     let client = super::issues_client(app, &token.host);
     let outcome = update_current_issue(
         &root,
+        &machine,
         &draft_id,
         &current,
         update_closed,
@@ -125,6 +128,7 @@ pub(super) fn update_draft_on_github_impl<R: tauri::Runtime>(
 /// client.
 pub fn update_current_issue(
     root: &fs::RootFs,
+    machine: &fs::RootFs,
     draft_id: &str,
     current: &PublicationRecord,
     update_closed: bool,
@@ -164,7 +168,7 @@ pub fn update_current_issue(
     // adds the instant of the update.
     let record =
         PublicationRecord { updated_at: Some(crate::notes::now_rfc3339()), ..current.clone() };
-    let record = store::append_update(root, draft_id, current, record)?;
+    let record = store::append_update(root, machine, draft_id, current, record)?;
     Ok(IssueUpdateOutcome::Updated { record: Box::new(record) })
 }
 

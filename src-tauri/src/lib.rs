@@ -73,6 +73,13 @@ pub(crate) mod command_names;
 #[cfg(test)]
 pub(crate) use command_names::COMMAND_NAMES;
 
+/// EAC-FR-NDDZ: where this process was started as the sandbox catalog guard,
+/// run the guard and return its exit code. `None` is the application.
+#[cfg(target_os = "macos")]
+pub fn catalog_guard_main() -> Option<i32> {
+    tools::agent_exec::sandbox::catalog_guard::main_from_args()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()

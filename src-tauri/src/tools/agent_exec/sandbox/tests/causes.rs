@@ -437,3 +437,136 @@ fn each_cause_has_its_own_name_and_sentence() {
         assert!(!cause.sentence().contains("Docker"), "{}", cause.sentence());
     }
 }
+
+/// A guard that started and holds its lock on `catalog`.
+fn started(pid: u32) -> GuardReport {
+    GuardReport {
+        ended: None,
+        outcome: GuardOutcome::Started { pid, catalog: "/h/db/msb.db".into() },
+    }
+}
+
+// EAC-FR-NDDZ, EAC-FR-FUNB: a boot opened a catalog connection, so the pool asks
+// for a guard beside it, and records the guard's start and its lock with the VM
+// and the image.
+#[test]
+fn a_boot_asks_for_a_catalog_guard_and_records_its_start_and_lock() {
+    use crate::logging::{Domain, LogLevel};
+    let runtime = RecordingSandbox::with_boots(Vec::new());
+    *runtime.guards.lock().unwrap() = vec![started(4242)];
+    let vm = "vm-nddz-boot-5b1e";
+    registry_launch(&runtime, vm).expect("the launch succeeds");
+    assert_eq!(*runtime.guard_requests.lock().unwrap(), vec![false], "one request, no renewal");
+    let records = records_of(vm);
+    for message in ["sandbox catalog guard started", "sandbox catalog guard holds its lock"] {
+        let r = record(&records, message);
+        assert_eq!(r.level, LogLevel::Info);
+        assert_eq!(r.domains, vec![Domain::Ai, Domain::Backend]);
+        assert_eq!(r.fields["vm"], vm);
+        assert_eq!(r.fields["image"], "ghcr.io/agent:1");
+        assert_eq!(r.fields["pid"], 4242);
+        assert_eq!(r.fields["catalog"], "/h/db/msb.db");
+    }
+}
+
+// EAC-FR-NDDZ, EAC-FR-SQWO, EAC-FR-FUNB: a new catalog connection ends the
+// earlier guard and starts a new one, and the end is recorded. The step tried
+// again goes through that new guard, so it asks for no other.
+#[test]
+fn a_new_catalog_connection_renews_the_guard() {
+    let runtime = RecordingSandbox::with_boots(vec![Err(catalog("database error"))]);
+    let renewed = GuardReport {
+        ended: Some(GuardEnd { pid: 7, cause: "replaced", exit_code: None }),
+        ..started(8)
+    };
+    *runtime.guards.lock().unwrap() = vec![renewed];
+    let vm = "vm-nddz-renew-91c2";
+    registry_launch(&runtime, vm).expect("the second boot succeeds");
+    assert_eq!(*runtime.guard_requests.lock().unwrap(), vec![true]);
+    let records = records_of(vm);
+    let ends: Vec<_> =
+        records.iter().filter(|r| r.message == "sandbox catalog guard ended").collect();
+    assert_eq!(ends.len(), 1, "one guard ended: {ends:?}");
+    let ended = ends[0];
+    assert_eq!(ended.fields["pid"], 7);
+    assert_eq!(ended.fields["cause"], "replaced");
+    assert_eq!(ended.fields["exit_code"], serde_json::Value::Null);
+    let starts =
+        records.iter().filter(|r| r.message == "sandbox catalog guard started").collect::<Vec<_>>();
+    assert_eq!(starts.len(), 1, "one guard started: {starts:?}");
+    assert_eq!(starts[0].fields["pid"], 8);
+}
+
+// EAC-FR-PIHS: a guard that cannot start is a warning that names the stage,
+// and the launch goes on.
+#[test]
+fn a_guard_that_cannot_start_is_a_warning_and_the_launch_goes_on() {
+    use crate::logging::LogLevel;
+    let runtime = RecordingSandbox::with_boots(Vec::new());
+    *runtime.guards.lock().unwrap() = vec![GuardReport {
+        ended: None,
+        outcome: GuardOutcome::Failed {
+            stage: "lock_wait",
+            message: "the guard did not take its lock in time".into(),
+        },
+    }];
+    let vm = "vm-pihs-warn-3d70";
+    registry_launch(&runtime, vm).expect("the launch goes on");
+    assert_eq!(runtime.calls().last(), Some(&run(vm)), "the turn ran");
+    let records = records_of(vm);
+    let warned = record(&records, "sandbox catalog guard could not start");
+    assert_eq!(warned.level, LogLevel::Warn);
+    assert_eq!(warned.domains, vec![crate::logging::Domain::Ai, crate::logging::Domain::Backend]);
+    assert_eq!(warned.fields["vm"], vm);
+    assert_eq!(warned.fields["stage"], "lock_wait");
+    assert_eq!(warned.fields["message"], "the guard did not take its lock in time");
+    assert!(!records.iter().any(|r| r.message == "sandbox catalog guard started"));
+}
+
+// EAC-FR-NDDZ: a launch whose catalog steps all failed has no connection to
+// guard, and a host that needs no guard records nothing.
+#[test]
+fn a_failed_boot_asks_for_no_guard_and_a_host_without_one_records_nothing() {
+    let failed = RecordingSandbox::with_boots(vec![Err(BootError::Failed(
+        SandboxFailureCause::BootFailed,
+        "no".into(),
+    ))]);
+    registry_launch(&failed, "vm-nddz-failed-0a4f").expect_err("the boot fails");
+    assert!(failed.guard_requests.lock().unwrap().is_empty());
+
+    let plain = RecordingSandbox::with_boots(Vec::new());
+    let vm = "vm-nddz-plain-6e2b";
+    registry_launch(&plain, vm).expect("the launch succeeds");
+    assert_eq!(*plain.guard_requests.lock().unwrap(), vec![false]);
+    assert!(!records_of(vm).iter().any(|r| r.message.starts_with("sandbox catalog guard")));
+}
+
+// EAC-FR-NDDZ, EAC-FR-FUNB: each catalog step that succeeds asks for the guard.
+// On the export path the image ID is known, so the guard records carry it, and
+// a guard that ended on its own is recorded with its exit code.
+#[test]
+fn guard_records_of_an_exported_boot_carry_the_image_id() {
+    let runtime = RecordingSandbox::with_boots(Vec::new());
+    *runtime.guards.lock().unwrap() = vec![
+        GuardReport {
+            ended: Some(GuardEnd { pid: 3, cause: "exited", exit_code: Some(0) }),
+            ..started(5)
+        },
+        GuardReport { ended: None, outcome: GuardOutcome::Running { pid: 5 } },
+    ];
+    let vm = "vm-nddz-export-c81d";
+    let (result, _) = exported_launch(&runtime, vm);
+    result.expect("the load and the boot succeed");
+    assert_eq!(*runtime.guard_requests.lock().unwrap(), vec![false, false], "the load, the boot");
+    let records = records_of(vm);
+    let ended = record(&records, "sandbox catalog guard ended");
+    assert_eq!(ended.fields["cause"], "exited");
+    assert_eq!(ended.fields["exit_code"], 0);
+    for message in [
+        "sandbox catalog guard ended",
+        "sandbox catalog guard started",
+        "sandbox catalog guard holds its lock",
+    ] {
+        assert_eq!(record(&records, message).fields["image_id"], "sha256:abc123", "{message}");
+    }
+}

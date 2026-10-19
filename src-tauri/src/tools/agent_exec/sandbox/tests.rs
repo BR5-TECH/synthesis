@@ -46,6 +46,11 @@ struct RecordingSandbox {
     boot_started: tokio::sync::Notify,
     /// The answer of every cache drop; `None` succeeds (EAC-FR-JRVY).
     refresh_error: StdMutex<Option<String>>,
+    /// Answers for successive guard requests; `NotNeeded` once the list is
+    /// empty (EAC-FR-NDDZ).
+    guards: StdMutex<Vec<GuardReport>>,
+    /// The `renew` of every guard request, kept apart from `calls`.
+    guard_requests: StdMutex<Vec<bool>>,
 }
 
 impl RecordingSandbox {
@@ -108,6 +113,18 @@ impl SandboxRuntime for RecordingSandbox {
                 Ok(())
             } else {
                 reopens.remove(0)
+            }
+        })
+    }
+
+    fn guard_catalog(&self, renew: bool) -> BoxFuture<'_, GuardReport> {
+        Box::pin(async move {
+            self.guard_requests.lock().unwrap().push(renew);
+            let mut guards = self.guards.lock().unwrap();
+            if guards.is_empty() {
+                GuardReport::default()
+            } else {
+                guards.remove(0)
             }
         })
     }
@@ -946,5 +963,7 @@ fn another_disk_size_boots_a_new_vm() {
     assert_eq!(pool.booted("vm-a").map(|spec| spec.disk_gib), Some(128));
 }
 
+#[cfg(target_os = "macos")]
+mod catalog_lock;
 mod causes;
 mod idle;

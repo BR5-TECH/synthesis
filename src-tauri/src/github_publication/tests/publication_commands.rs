@@ -15,7 +15,7 @@ type Mock = tauri::test::MockRuntime;
 
 pub(super) struct Session {
     pub(super) dir: TempDir,
-    _store: TempDir,
+    pub(super) store_dir: TempDir,
     pub(super) app: tauri::App<Mock>,
     pub(super) fake: Arc<FakeGithub>,
     pub(super) id: String,
@@ -28,6 +28,12 @@ impl Session {
 
     pub(super) fn root(&self) -> crate::fs::RootFs {
         crate::fs::RootFs::for_root(self.dir.path())
+    }
+
+    /// The repository machine store, a directory apart from the project, so
+    /// a test sees which of the two a command wrote (DRS-FR-EJBM).
+    pub(super) fn machine(&self) -> crate::fs::RootFs {
+        crate::fs::RootFs::for_root(self.store_dir.path())
     }
 
     pub(super) fn publish(
@@ -44,7 +50,7 @@ impl Session {
     }
 
     pub(super) fn store(&self) -> PublicationStore {
-        store::read_store(&self.root(), &self.id).unwrap()
+        store::read_store(&self.root(), &self.machine(), &self.id).unwrap()
     }
 }
 
@@ -79,11 +85,11 @@ pub(super) fn session() -> Session {
     let project_state = handle.state::<crate::project::ProjectState>();
     project_state.set_root_with_access(root.clone(), Some(access));
     project_state.set_anchor(root.to_string_lossy().into_owned());
-    project_state.set_store(root);
+    project_state.set_store(store_root);
     let fs_root = crate::fs::RootFs::for_root(dir.path());
     let id = draft(&fs_root, "Widget window");
     save_prompt(&fs_root, &id, "Do the thing.\n");
-    Session { dir, _store: store, app, fake, id }
+    Session { dir, store_dir: store, app, fake, id }
 }
 
 fn sub_of(parent: u64) -> PublicationChoiceInput {
@@ -341,9 +347,9 @@ fn restart_recovery_retries_with_the_saved_choice() {
 
     // A fresh application over the same files and the same GitHub.
     let relaunched = {
-        let store = TempDir::new().unwrap();
+        // The machine store outlives the application, as it does on disk.
         let root = std::fs::canonicalize(s.dir.path()).unwrap();
-        let store_root = std::fs::canonicalize(store.path()).unwrap();
+        let store_root = std::fs::canonicalize(s.store_dir.path()).unwrap();
         let app = tauri::test::mock_app();
         app.manage(crate::fs::FsAccessState::default());
         app.manage(crate::project::ProjectState::default());
@@ -361,10 +367,10 @@ fn restart_recovery_retries_with_the_saved_choice() {
         let state = handle.state::<crate::project::ProjectState>();
         state.set_root_with_access(root.clone(), Some(access));
         state.set_anchor(root.to_string_lossy().into_owned());
-        state.set_store(root);
-        (app, store)
+        state.set_store(store_root);
+        app
     };
-    let handle = relaunched.0.handle().clone();
+    let handle = relaunched.handle().clone();
     let view = gp::get_draft_publication_impl(&handle, s.id.clone()).unwrap();
     assert_eq!(view.attempt.unwrap().choice.unwrap().parent_issue_number, Some(parent));
 

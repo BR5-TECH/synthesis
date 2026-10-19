@@ -200,6 +200,8 @@ export function DraftsPanelView(props: DraftsPanelViewProps) {
               : "vpanel__body"
         }
         data-drop-target={rootIsTarget ? "true" : undefined}
+        // DRP-FR-PXMK: the one region a row drag may land in (DRAG_ZONE_ATTRIBUTE).
+        data-drafts-drag-zone=""
         onDragOver={(e) => {
           if (!dragging) return;
           if (moveRefusal(dragging, ROOT) !== null) {

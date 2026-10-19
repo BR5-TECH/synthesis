@@ -76,6 +76,33 @@ describe("useDraftsPanelState", () => {
     expect([...result.current.expanded].sort()).toEqual(["UI", "UI/Components"]);
   });
 
+  it("DRP-FR-14, PSS-FR-20: restores the graduated and published positions", async () => {
+    for (const statusFilter of ["graduated", "published"] as const) {
+      invokeMock.mockImplementation(async (cmd: string) => {
+        if (cmd === "load_drafts_panel_state") return { ...DEFAULTS, statusFilter };
+        return undefined;
+      });
+      const { result, unmount } = renderHook(() => useDraftsPanelState());
+      await waitFor(() => expect(result.current.filter).toBe(statusFilter));
+      unmount();
+    }
+  });
+
+  it("DRP-FR-14, PSS-FR-20: the published position is written like the others", async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useDraftsPanelState());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => result.current.setFilter("published"));
+    await act(async () => {
+      vi.advanceTimersByTime(PERSIST_DEBOUNCE_MS);
+      await Promise.resolve();
+    });
+    expect(saves()).toHaveLength(1);
+    expect(lastSaved().statusFilter).toBe("published");
+  });
+
   it("DRP-FR-14: expansion is recorded, not collapse — an unknown folder is collapsed", async () => {
     const { result } = renderHook(() => useDraftsPanelState());
     await waitFor(() => expect(saves()).toHaveLength(0));

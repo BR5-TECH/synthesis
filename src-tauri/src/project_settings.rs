@@ -144,11 +144,12 @@ pub struct NotesPanelState {
     pub text_filter: String,
 }
 
-/// Which of the Drafts panel's four status positions is selected (PSS-FR-20).
+/// Which of the Drafts panel's five status positions is selected (PSS-FR-20).
 ///
-/// The names match `../ui/DRP-drafts-panel.md` DRP-FR-07's four positions: the
+/// The names match `../ui/DRP-drafts-panel.md` DRP-FR-07's five positions: the
 /// drafts still being worked on, the retired ones, the ones a graduation has
-/// already turned into specifications, and every draft at once.
+/// already turned into specifications, every draft at once, and the drafts
+/// published to GitHub.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DraftsStatusFilter {
@@ -162,6 +163,9 @@ pub enum DraftsStatusFilter {
     /// own rather than a kind of archive.
     Graduated,
     All,
+    /// The drafts whose publication store holds a record, on any status
+    /// (`../ui/DRP-drafts-panel.md` DRP-FR-GBVS).
+    Published,
 }
 
 /// The Drafts panel's persisted state (PSS-FR-20).

@@ -282,3 +282,49 @@ describe("a theme changes token values alone (DDS-FR-RJEV)", () => {
     expect(style()).not.toContain("[data-theme");
   });
 });
+
+describe("the opening and the reply composer are one field (DDS-FR-MCDG)", () => {
+  // A whole-file scan, as for DDS-FR-CVLM: a geometry property that only one of
+  // the two states sets is what made the field grow when a discussion started.
+  const GEOMETRY = ["padding", "gap", "font-size", "line-height", "height", "min-height"];
+  const COMPOSER = /\.comment-composer|\.comment-card__composer/;
+
+  for (const file of ["kit/discussion-stream.css", "components/draft-discussion.css"]) {
+    it(`DDS-FR-MCDG: ${file} gives the composer no geometry of one state`, () => {
+      const offending: string[] = [];
+      for (const rule of sheet(file).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selector = rule[1].trim();
+        if (!COMPOSER.test(selector)) continue;
+        if (!/\.comment-card--stream|\.dds-open/.test(selector)) continue;
+        for (const property of GEOMETRY) {
+          if (decl(rule[2], property) !== null) offending.push(`${selector} { ${property} }`);
+        }
+      }
+      expect(offending).toEqual([]);
+    });
+  }
+
+  it("DDS-FR-MCDG: the reply field keeps the opening composer's foot inset", () => {
+    const reply = blocksFor(style(), ".dds-discussion .comment-card--stream > .comment-card__reply")[0];
+    const open = blocksFor(
+      sheet("components/draft-discussion.css"),
+      '.dds-split[data-discussion="shown"] .dds-discussion .dds-open',
+    )[0];
+    const openFoot = decl(open, "padding-bottom");
+    expect(openFoot).toBe("var(--sp-4)");
+    expect(decl(reply, "margin")?.split(/\s+/).pop()).toBe(openFoot);
+  });
+
+  it("DDS-FR-MCDG: the accelerator hint sets its own line height", () => {
+    // Inherited, it took the line height of whichever state it stood in.
+    expect(decl(blocksFor(style(), ".dds-reply__kbd")[0], "line-height")).toBe("var(--lh-normal)");
+  });
+
+  it("DDS-FR-MCDG: the placeholder tone is set for the column, not for one state", () => {
+    expect(blocksFor(style(), ".dds-discussion .comment-card__composer::placeholder")[0]).toBeDefined();
+    const stateOnly = [...style().matchAll(/([^{}]+)\{[^{}]*\}/g)]
+      .map((rule) => rule[1].trim())
+      .filter((s) => s.includes("::placeholder") && /\.comment-card--stream|\.dds-open/.test(s));
+    expect(stateOnly).toEqual([]);
+  });
+});

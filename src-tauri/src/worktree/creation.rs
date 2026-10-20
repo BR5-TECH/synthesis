@@ -7,19 +7,6 @@
 
 use super::*;
 
-/// Replace every character that is awkward in a path segment. Applied to a
-/// branch's leaf (`branch_leaf`), which can still hold characters a directory
-/// name should not — a space, a colon, a backslash.
-pub(super) fn sanitize_segment(branch: &str) -> String {
-    branch
-        .chars()
-        .map(|c| match c {
-            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => c,
-            _ => '-',
-        })
-        .collect()
-}
-
 /// The part of a branch name a directory should be named after (WTC-FR-13):
 /// its **final segment**. `feature/PROJ-12345/editor-scroll` yields
 /// `editor-scroll`.
@@ -33,19 +20,114 @@ pub(super) fn branch_leaf(branch: &str) -> &str {
     branch.split('/').map(str::trim).rfind(|segment| !segment.is_empty()).unwrap_or("")
 }
 
+/// WTC-FR-14: the branch a creation for `requested` checks out. A local branch
+/// of exactly the trimmed name is used as it is. Any other name is normalized
+/// (WTC-FR-XLXY), and a local branch of that name without regard to case is
+/// used in its place. Empty when nothing of `requested` is left.
+pub(super) fn resolve_branch_name(main: &Repository, requested: &str) -> String {
+    let requested = requested.trim();
+    let local = local_branch_names(main);
+    if !requested.is_empty() && local.iter().any(|name| name == requested) {
+        return requested.to_string();
+    }
+    let normalized = normalize_branch_name(requested);
+    if normalized.is_empty() {
+        return normalized;
+    }
+    // On a file system that ignores case, `feature/x` is the branch
+    // `Feature/X`; matching here gives one result on every platform.
+    local.into_iter().find(|name| name.eq_ignore_ascii_case(&normalized)).unwrap_or(normalized)
+}
+
+/// The names of the local branches, case included. `find_branch` does not
+/// give that test: on a file system that ignores case it finds `main` for
+/// `MAIN`.
+fn local_branch_names(main: &Repository) -> Vec<String> {
+    let Ok(branches) = main.branches(Some(BranchType::Local)) else {
+        return Vec::new();
+    };
+    branches
+        .filter_map(|b| b.ok().and_then(|(b, _)| b.name().ok().flatten().map(str::to_string)))
+        .collect()
+}
+
 /// WTC-FR-13: an absolute sibling of the repository's primary worktree, named
-/// `<primary-basename>-<leaf>`. Read-only — creates nothing and does not check
-/// the path for availability.
+/// `<primary-basename>-<leaf>` and normalized as a worktree name
+/// (WTC-FR-AGQQ). Read-only — creates nothing and does not check the path for
+/// availability.
 pub fn propose_path_for(active_root: &Path, branch: &str) -> Result<String, String> {
     let repo = open_repo(active_root)?;
     let primary = primary_worktree_root(&repo).ok_or_else(|| ERR_NOT_A_REPO.to_string())?;
     let base = project::basename(&primary.to_string_lossy());
-    let suffix = sanitize_segment(branch_leaf(branch));
-    let name = if suffix.is_empty() { base } else { format!("{base}-{suffix}") };
+    let branch = resolve_branch_name(&repo, branch);
+    let leaf = branch_leaf(&branch);
+    let name = if leaf.is_empty() {
+        normalize_worktree_name(&base)
+    } else {
+        normalize_worktree_name(&format!("{base}-{leaf}"))
+    };
+    // A basename with no character a worktree name keeps (and no leaf) must not
+    // propose the parent directory itself.
+    let name = if name.is_empty() { base } else { name };
     // A primary worktree at the filesystem root has no parent; siblings of
     // `/` are its own children, and the result stays absolute either way.
     let parent = primary.parent().unwrap_or(primary.as_path());
     Ok(to_string_path(&parent.join(name)))
+}
+
+/// WTC-FR-14: the creation, split out of the command for the same reason as
+/// [`activate_worktree_at`].
+pub(crate) fn create_worktree_in<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    project: &ProjectState,
+    watcher: &ProjectWatcher,
+    store: &GlobalSettingsStore,
+    branch: &str,
+    path: &str,
+) -> Result<WorktreeContext, String> {
+    let root = project.require_root()?;
+    // WTC-FR-FBJQ: creating a worktree makes it the content root.
+    crate::graduation::require_no_dispatched_direct_run(app)?;
+    let offset = root_offset(&open_repo(&root)?, &root);
+    let created = match create_worktree_at(&root, branch, path) {
+        Ok(created) => created,
+        Err(reason) => {
+            crate::logging::log_warn(
+                app,
+                &crate::logging::BUFFER,
+                &[crate::logging::Domain::Backend],
+                "worktree creation refused or failed",
+                crate::log_fields! { "requested_branch" => branch, "path" => path, "reason" => reason.clone() },
+            );
+            return Err(reason);
+        }
+    };
+    let context = reroot(app, project, watcher, store, &content_root_in(&created, &offset))
+        .inspect_err(|reason| {
+            crate::logging::log_error(
+                app,
+                &crate::logging::BUFFER,
+                &[crate::logging::Domain::Backend],
+                "worktree created but the project was not re-rooted on it",
+                crate::log_fields! { "requested_branch" => branch, "path" => created.to_string_lossy(), "reason" => reason.clone() },
+            );
+        })?;
+    // WTC-FR-14: the branch can differ from the one requested (WTC-FR-XLXY).
+    let created_path = created.to_string_lossy();
+    let checked_out = context
+        .worktrees
+        .iter()
+        .find(|w| w.path == created_path)
+        .and_then(|w| w.branch.clone())
+        .unwrap_or_default();
+    crate::logging::log_info(
+        app,
+        &crate::logging::BUFFER,
+        &[crate::logging::Domain::Backend],
+        "worktree created",
+        crate::log_fields! { "requested_branch" => branch, "branch" => checked_out, "path" => created_path },
+    );
+    Ok(context)
 }
 
 /// WTC-FR-QVNL: where a test acts between the worktree being registered and the
@@ -59,9 +141,10 @@ pub(crate) trait CreateSeam {
 pub(crate) struct NoCreateSeam;
 impl CreateSeam for NoCreateSeam {}
 
-/// WTC-FR-14 / WTC-FR-15: create a worktree at `path` with `branch` checked
-/// out, creating `branch` from the active worktree's `HEAD` when no branch of
-/// that name exists. Returns the canonical path of the new worktree.
+/// WTC-FR-14 / WTC-FR-15: create a worktree at `path` with the branch that
+/// `branch` resolves to (`resolve_branch_name`) checked out, creating that
+/// branch from the active worktree's `HEAD` when it does not exist. Returns the
+/// canonical path of the new worktree.
 pub fn create_worktree_at(active_root: &Path, branch: &str, path: &str) -> Result<PathBuf, String> {
     create_worktree_seamed(active_root, branch, path, &NoCreateSeam)
 }
@@ -73,22 +156,32 @@ pub(super) fn create_worktree_seamed(
     seam: &dyn CreateSeam,
 ) -> Result<PathBuf, String> {
     let repo = open_repo(active_root)?;
-    let branch = branch.trim();
-    if branch.is_empty() {
+    if branch.trim().is_empty() {
         return Err(ERR_UNKNOWN_BRANCH.to_string());
     }
     let target = canonicalize_lenient(Path::new(path));
     if target.exists() {
         return Err(ERR_WORKTREE_PATH_EXISTS.to_string());
     }
-    // A branch that already has a worktree cannot get a second one.
-    if worktree_entries(&repo)?.iter().any(|w| w.branch.as_deref() == Some(branch)) {
-        return Err(ERR_BRANCH_ALREADY_CHECKED_OUT.to_string());
-    }
 
     // libgit2 registers worktrees on the primary repository.
     let primary = primary_worktree_root(&repo).ok_or_else(|| ERR_NOT_A_REPO.to_string())?;
     let main = Repository::open(&primary).map_err(|_| ERR_NOT_A_REPO.to_string())?;
+
+    // WTC-FR-XLXY: a name with no character a branch can keep is no branch.
+    let branch = resolve_branch_name(&main, branch);
+    if branch.is_empty() {
+        return Err(ERR_UNKNOWN_BRANCH.to_string());
+    }
+    let branch = branch.as_str();
+    // WTC-FR-15: a branch that already has a worktree cannot get a second one.
+    // Case is ignored here: on a file system that ignores case, `feature/x`
+    // opens the branch `Feature/X`.
+    let checked_out =
+        |w: &WorktreeEntry| w.branch.as_deref().is_some_and(|b| b.eq_ignore_ascii_case(branch));
+    if worktree_entries(&repo)?.iter().any(checked_out) {
+        return Err(ERR_BRANCH_ALREADY_CHECKED_OUT.to_string());
+    }
 
     let mut created_branch = false;
     if main.find_branch(branch, BranchType::Local).is_err() {
@@ -109,9 +202,18 @@ pub(super) fn create_worktree_seamed(
         .into_reference();
     let mut opts = git2::WorktreeAddOptions::new();
     opts.reference(Some(&reference));
-    let name = project::basename(&target.to_string_lossy());
-    main.worktree(&name, &target, Some(&opts))
-        .map_err(|e| format!("failed to create worktree: {e}"))?;
+    let name = registration_name(&target, branch);
+    if let Err(e) = main.worktree(&name, &target, Some(&opts)) {
+        // WTC-FR-PKRW: a refused registration leaves no branch it made. Only
+        // the branch: `name` can be another worktree's registration, which is
+        // not this creation's to prune.
+        if created_branch {
+            if let Ok(mut found) = main.find_branch(branch, BranchType::Local) {
+                let _ = found.delete();
+            }
+        }
+        return Err(format!("failed to create worktree: {e}"));
+    }
     seam.after_worktree();
     // WTC-FR-QVNL: the record the worktree resolves its store through is part
     // of creating it, so a creation that cannot write it reclaims the worktree
@@ -121,6 +223,18 @@ pub(super) fn create_worktree_seamed(
         return Err(format!("failed to create worktree: {reason}"));
     }
     Ok(canonicalize_lenient(&target))
+}
+
+/// WTC-FR-AGQQ: the name Git registers the worktree at `target` under — the
+/// normalized basename of `target`, or the normalized branch when that
+/// basename has no character a worktree name can keep.
+pub(super) fn registration_name(target: &Path, branch: &str) -> String {
+    let name = normalize_worktree_name(&project::basename(&target.to_string_lossy()));
+    if name.is_empty() {
+        normalize_worktree_name(branch)
+    } else {
+        name
+    }
 }
 
 /// WTC-FR-QVNL: remove what a creation made before it failed.

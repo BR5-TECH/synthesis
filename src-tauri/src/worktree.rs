@@ -934,29 +934,13 @@ pub fn create_worktree(
     create_worktree_in(&app, &project, &watcher, &store, &branch, &path)
 }
 
-/// WTC-FR-14: the creation, split out of the command for the same reason as
-/// [`activate_worktree_at`].
-pub(crate) fn create_worktree_in<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    project: &ProjectState,
-    watcher: &ProjectWatcher,
-    store: &GlobalSettingsStore,
-    branch: &str,
-    path: &str,
-) -> Result<WorktreeContext, String> {
-    let root = project.require_root()?;
-    // WTC-FR-FBJQ: creating a worktree makes it the content root.
-    crate::graduation::require_no_dispatched_direct_run(app)?;
-    let offset = root_offset(&open_repo(&root)?, &root);
-    let created = create_worktree_at(&root, branch, path)?;
-    reroot(app, project, watcher, store, &content_root_in(&created, &offset))
-}
-
 mod creation;
+mod naming;
 mod removal;
 mod resume;
 mod switch_guard;
 pub use creation::*;
+pub use naming::*;
 pub use removal::*;
 pub use resume::*;
 pub use switch_guard::*;

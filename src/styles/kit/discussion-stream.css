@@ -448,7 +448,9 @@
   flex: 0 0 auto;
   box-sizing: border-box;
   width: min(var(--doc-page-width), calc(100% - var(--sp-3-5) * 2));
-  margin: 0 auto var(--sp-3-5);
+  /* DDS-FR-MCDG, DDS-FR-QPHL: the foot inset the opening composer has
+     (`.dds-open`), so the first message posted does not move the field. */
+  margin: 0 auto var(--sp-4);
 }
 /* CTA-FR-UUXA: a refused turn renders at the foot, under the reply field. It
    takes the field's measure (DDS-FR-ZMXQ), so it lines up with the field
@@ -457,13 +459,14 @@
   flex: 0 0 auto;
   box-sizing: border-box;
   width: min(var(--doc-page-width), calc(100% - var(--sp-3-5) * 2));
-  margin: calc(var(--sp-2) - var(--sp-3-5)) auto var(--sp-3-5);
+  margin: calc(var(--sp-2) - var(--sp-4)) auto var(--sp-4);
 }
+/* DDS-FR-MCDG: the field takes the kit's padding, control gap and type size, as
+   the opening composer does, so the first message posted does not resize it. */
 .dds-discussion .comment-card--stream .comment-composer {
   background: var(--bg-canvas);
   border: 1px solid var(--border-2);
   border-radius: var(--r-sm);
-  padding: var(--sp-2-5) var(--sp-3);
   transition:
     border-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
@@ -475,13 +478,8 @@
   border-color: var(--accent);
   box-shadow: var(--shadow-focus);
 }
-.dds-discussion .comment-card--stream .comment-composer__row {
-  gap: var(--sp-2-5);
-}
-.dds-discussion .comment-card--stream .comment-card__composer {
-  font-size: var(--fs-ui-md);
-}
-.dds-discussion .comment-card--stream .comment-card__composer::placeholder {
+/* DDS-FR-MCDG: one placeholder tone for the opening and the reply composer. */
+.dds-discussion .comment-card__composer::placeholder {
   color: var(--fg-4);
 }
 /* Quieter than the kit's own key cap, which is drawn to be pressed. This one is
@@ -489,6 +487,9 @@
    in the column takes. */
 .dds-reply__kbd {
   font-size: var(--fs-ui-xs);
+  /* DDS-FR-MCDG: set here, not inherited, so the hint has one size in the
+     opening and in the reply composer. */
+  line-height: var(--lh-normal);
   font-weight: var(--fw-regular);
   color: var(--fg-4);
   background: none;

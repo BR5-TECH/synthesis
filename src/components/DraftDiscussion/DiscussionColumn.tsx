@@ -24,6 +24,8 @@ import {
   type OwnerAvailability,
 } from "../discussion";
 import { OpenDiscussion, type HunkOpening } from "./OpenDiscussion";
+import { HunkSubject } from "./HunkSubject";
+import { openingHunkOf } from "./hunkDiscussion";
 import { COMPOSER_KEY } from "../../hooks/useDiscussions";
 import { expandHistory, useDraftDiscussion } from "../../state/draftDiscussion";
 import { setDiscussionScroll, useDiscussionSession } from "../../state/discussionSession";
@@ -186,6 +188,9 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
    * the author cannot see.
    */
   const transcript = thread !== undefined;
+  // DDS-FR-WKTQ: the change the column is about, while it reads a hunk
+  // discussion or holds the composer of a new one.
+  const subject = hunk?.reference ?? (thread ? openingHunkOf(thread) : undefined);
   // The surface keeps the reading position in the session store; the column
   // only says what it holds.
   const session = useDiscussionSession(thread?.id ?? "");
@@ -202,7 +207,13 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
   const signal = props.focusSignal ?? 0;
   const focusComposer = () => {
     const fields = columnRef.current?.querySelectorAll("textarea");
-    fields?.[fields.length - 1]?.focus();
+    const field = fields?.[fields.length - 1];
+    if (!field) return;
+    field.focus();
+    // DDS-FR-RHKW: the caret goes after the text the composer holds, so what
+    // the author types follows the agent's tag rather than going before it.
+    const end = field.value.length;
+    field.setSelectionRange(end, end);
   };
   useEffect(() => {
     if (signal !== 0) focusComposer();
@@ -271,6 +282,17 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
         )}
       </header>
 
+      {/* DDS-FR-WKTQ: what a hunk discussion is about, above it and outside
+          the scroller, so it stays in view however far the author reads. */}
+      {subject !== undefined && (
+        <HunkSubject
+          // A different change is a different subject, which starts cut.
+          key={`${subject.proposalId}:${subject.hunkId}`}
+          reference={subject}
+          place={hunk !== null ? hunk : null}
+        />
+      )}
+
       {/* DDS-FR-SVBL: while a proposal stands and the author is reading back,
           the way to the change under review — the one thing they came here from
           and the one thing scrolling has taken off screen. */}
@@ -308,6 +330,7 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
         <div className="dds-discussion__threads" role="tablist" aria-label="Discussions">
           {offered.map((d, at) => {
             const quoted = discussionFragment(d);
+            const change = quoted ? undefined : openingHunkOf(d);
             return (
               <button
                 key={d.id}
@@ -318,11 +341,20 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
                 data-active={!composingNew && d.id === thread?.id}
                 data-target={quoted ? "fragment" : "whole"}
                 title={
-                  quoted ? `Discussion ${at + 1}: ${quoted.quote}` : `Discussion ${at + 1}`
+                  quoted
+                    ? `Discussion ${at + 1}: ${quoted.quote}`
+                    : change
+                      ? `Discussion ${at + 1}: a change to ${change.path}`
+                      : `Discussion ${at + 1}`
                 }
                 onClick={() => {
+                  // DDS-FR-YLRM: a tab leaves whichever opening composer
+                  // stands — of a passage or of a change — and shows the
+                  // discussion chosen. The typed text stays in the draft's
+                  // composer.
                   setComposingNew(false);
                   props.onCancelFragment?.();
+                  if (hunk !== null) props.onCancelHunk?.();
                   props.onSelectThread(d.id);
                 }}
               >
@@ -337,7 +369,13 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
             data-testid="discussion-new"
             aria-label="Begin another discussion about this draft"
             title="Begin another discussion about this draft"
-            onClick={() => setComposingNew(true)}
+            onClick={() => {
+              // DDS-FR-YLRM: another discussion of the draft, not the one about
+              // a passage or a change that was being opened.
+              props.onCancelFragment?.();
+              if (hunk !== null) props.onCancelHunk?.();
+              setComposingNew(true);
+            }}
           >
             <Icon.Plus size={11} />
           </button>

@@ -10,7 +10,16 @@
 import { vi } from "vitest";
 
 import { DiscussionColumn } from "../components/DraftDiscussion";
-import type { Comment, Discussion, Participant } from "../types";
+import type {
+  Comment,
+  Discussion,
+  DraftChangeProposal,
+  HunkState,
+  Participant,
+  ProposalHunk,
+  ProposalHunkReference,
+  ProposalHunks,
+} from "../types";
 
 export const DRAFT = "d1";
 export const HUMAN: Participant = { kind: "human", login: "raver119" };
@@ -97,4 +106,65 @@ export function columnElement(over: Partial<ColumnProps> = {}) {
       {...over}
     />
   );
+}
+
+/** A `proposal_hunk` reference to one change of proposal `p1` of the draft. */
+export function hunkReference(hunkId: string): ProposalHunkReference {
+  return { kind: "proposalHunk", proposalId: "p1", hunkId, draftId: DRAFT, path: "Spec.md" };
+}
+
+/**
+ * Proposal `p1` of the draft, holding one change per entry of `states`, named
+ * `h1`, `h2`, … in that order.
+ */
+export function proposalOf(
+  states: HunkState[],
+  state: DraftChangeProposal["state"] = "pending",
+): DraftChangeProposal {
+  return {
+    id: "p1",
+    draftId: DRAFT,
+    path: "Spec.md",
+    agent: { kind: "agent", agentId: "a1", handle: "arch", model: "m" },
+    rationale: "why",
+    threadId: "t1",
+    commentId: "c1",
+    state,
+    candidateEdited: false,
+    legacy: false,
+    hunkCount: states.length,
+    counts: { pending: 0, accepted: 0, rejected: 0, discussing: 0 },
+    ledger: states.map((s, at) => ({
+      id: `h${at + 1}`,
+      kind: "replace",
+      state: s,
+      edited: false,
+      revision: 0,
+    })),
+    createdAt: "2026-01-01T00:00:00Z",
+  };
+}
+
+/** One change of a proposal's hunk reading. */
+export function proposalHunk(id: string, over: Partial<ProposalHunk> = {}): ProposalHunk {
+  return {
+    id,
+    kind: "replace",
+    revision: 0,
+    note: null,
+    before: `old ${id}`,
+    after: `new ${id}`,
+    anchor: { lead: "", trail: "", hint_start: 0, hint_end: 0 },
+    ...over,
+  };
+}
+
+/** What `load_draft_change_proposal_hunks` answers with for these changes. */
+export function hunkReading(hunks: ProposalHunk[]): ProposalHunks {
+  return {
+    hunks,
+    resolutions: hunks.map(() => ({ kind: "resolved", start: 0, end: 0 })),
+    checksum: "hc-1",
+    legacy: false,
+  };
 }

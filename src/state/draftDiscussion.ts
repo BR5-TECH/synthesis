@@ -47,14 +47,11 @@ export interface DraftDiscussionState {
   /** DCR-FR-12: the hunk the review bar and the action chip are about. */
   focusedHunkId: string | null;
   /**
-   * DCR-FR-30: hunk navigation holds focus, so the accelerators that accept and
-   * reject are live.
-   *
-   * False while the caret is in the prose, where the editing surface binds both
-   * keys already — an unguarded accelerator would decide a change whenever the
-   * author typed a new paragraph.
+   * CMT-FR-48 / DDS-FR-PBXN: how many times the author asked to see a change
+   * in the document. A new count scrolls the document to the focused change,
+   * also when that change is already the focused one.
    */
-  hunkFocusHeld: boolean;
+  hunkReveal: number;
 }
 
 const INITIAL: DraftDiscussionState = {
@@ -62,7 +59,7 @@ const INITIAL: DraftDiscussionState = {
   hidden: false,
   historyExpanded: false,
   focusedHunkId: null,
-  hunkFocusHeld: false,
+  hunkReveal: 0,
 };
 
 let states: ReadonlyMap<string, DraftDiscussionState> = new Map();
@@ -99,7 +96,7 @@ function update(
     next.hidden === held.hidden &&
     next.historyExpanded === held.historyExpanded &&
     next.focusedHunkId === held.focusedHunkId &&
-    next.hunkFocusHeld === held.hunkFocusHeld
+    next.hunkReveal === held.hunkReveal
   ) {
     return held;
   }
@@ -202,18 +199,18 @@ export function expandHistory(draftId: string): void {
   update(draftId, { historyExpanded: true });
 }
 
-/** DCR-FR-30: the hunk the review is on, and whether its accelerators are live. */
-export function setFocusedHunk(
-  draftId: string,
-  hunkId: string | null,
-  held = hunkId !== null,
-): void {
-  update(draftId, { focusedHunkId: hunkId, hunkFocusHeld: held });
+/** DCR-FR-12: the hunk the review is on. */
+export function setFocusedHunk(draftId: string, hunkId: string | null): void {
+  update(draftId, { focusedHunkId: hunkId });
 }
 
-/** DCR-FR-30: the caret entered the prose, so the accelerators stand down. */
-export function releaseHunkFocus(draftId: string): void {
-  update(draftId, { hunkFocusHeld: false });
+/**
+ * CMT-FR-48 / DDS-FR-PBXN: put the review on this hunk and scroll the document
+ * to it, also when the review is on it already.
+ */
+export function revealHunk(draftId: string, hunkId: string): void {
+  const held = draftDiscussionState(draftId);
+  update(draftId, { focusedHunkId: hunkId, hunkReveal: held.hunkReveal + 1 });
 }
 
 /** One draft's state, in React. */

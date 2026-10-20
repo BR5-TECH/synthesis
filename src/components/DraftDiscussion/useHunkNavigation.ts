@@ -1,19 +1,15 @@
 /**
- * DCR-FR-30: moving between the proposal's changes, and the accelerators that
- * decide one.
+ * DCR-FR-30: the accelerators that move the review between the proposal's
+ * changes.
  *
- * The move keys are always live; the decide keys are live **only** while the
- * hunk review holds focus. The editing surface binds Enter and Backspace
- * already, so an unguarded accelerator would decide a change every time the
- * author started a new paragraph — which is the one failure this guard exists
- * to prevent.
+ * No accelerator decides a change. Enter and Backspace are typing keys, so a
+ * decide key on either decides a change while the author writes a message or a
+ * paragraph. Accept and Reject are the chip's and the review bar's controls,
+ * which the keyboard reaches as it reaches any other button (DCR-FR-28).
  */
 import { useEffect } from "react";
 
-import {
-  draftDiscussionState,
-  setFocusedHunk,
-} from "../../state/draftDiscussion";
+import { setFocusedHunk } from "../../state/draftDiscussion";
 /**
  * What a move needs to know about a change: which one it is, and where it
  * stands in the order. Anything more would tie this to how a change is
@@ -50,52 +46,44 @@ export function stepTo(
   return hunks[next].id;
 }
 
+/**
+ * DCR-FR-30: a key typed into a text field of the discussion column.
+ *
+ * The prose is a contenteditable surface, not a field, so the moves stay live
+ * there. A field keeps the keys it has: in a composer, Alt+Up and Alt+Down move
+ * the caret.
+ */
+function isTextField(target: EventTarget | null): boolean {
+  return target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement;
+}
+
 export function useHunkNavigation({
   draftId,
   hunks,
   focused,
   active,
-  onAccept,
-  onReject,
 }: {
   draftId: string;
-  /** The undecided changes, in proposal order. */
+  /** The changes a move visits, in proposal order (DCR-FR-QPRV). */
   hunks: readonly MovableHunk[];
   /** The change the review is on, which a move starts from. */
   focused: string | null;
   /** False while there is nothing to review, which unbinds every key. */
   active: boolean;
-  onAccept: (hunkId: string) => void;
-  onReject: (hunkId: string) => void;
 }): void {
   useEffect(() => {
     if (!active || hunks.length === 0) return;
     const onKey = (event: KeyboardEvent) => {
-      const view = draftDiscussionState(draftId);
-
-      // DCR-FR-30: the two move keys. `Alt` because neither the editing surface
-      // nor the shell claims it, so the move is available while the caret is in
-      // the prose — which is where it is most needed.
-      if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
-        event.preventDefault();
-        const next = stepTo(hunks, focused, event.key === "ArrowDown" ? 1 : -1);
-        if (next !== null) setFocusedHunk(draftId, next);
-        return;
-      }
-
-      // The decide keys, and the guard that is the whole of DCR-FR-30's second
-      // sentence: they act only while hunk navigation holds focus.
-      if (!view.hunkFocusHeld || view.focusedHunkId === null) return;
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.key === "Enter") {
-        event.preventDefault();
-        onAccept(view.focusedHunkId);
-      } else if (event.key === "Backspace") {
-        event.preventDefault();
-        onReject(view.focusedHunkId);
-      }
+      // `Alt` because neither the editing surface nor the shell claims it, so
+      // the move is available while the caret is in the prose — which is where
+      // it is most needed.
+      if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+      if (isTextField(event.target)) return;
+      event.preventDefault();
+      const next = stepTo(hunks, focused, event.key === "ArrowDown" ? 1 : -1);
+      if (next !== null) setFocusedHunk(draftId, next);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [draftId, hunks, focused, active, onAccept, onReject]);
+  }, [draftId, hunks, focused, active]);
 }

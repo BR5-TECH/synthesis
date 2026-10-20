@@ -245,6 +245,125 @@
   border-radius: var(--r-xs);
 }
 
+/* DDS-FR-WKTQ / DDS-FR-PBXN: the subject strip of a hunk discussion. Between
+   the header and the transcript, on the chrome tone, so it reads as part of
+   the column's fixed edge rather than as the first message of the scroller. */
+.dds-subject {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  flex: 0 0 auto;
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--border-1);
+  min-width: 0;
+}
+.dds-subject__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  color: var(--fg-2);
+}
+.dds-subject__name { color: var(--fg-1); font-weight: var(--fw-semi); white-space: nowrap; }
+.dds-subject__path {
+  flex: 1;
+  min-width: 0;
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-src-2xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* DDS-FR-YSNB: one lowercase word beside a six-pixel dot in its own tone. */
+.dds-subject__state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+.dds-subject__dot {
+  width: var(--sp-1-5);
+  height: var(--sp-1-5);
+  flex: none;
+  border-radius: var(--r-full);
+  background: var(--fg-4);
+}
+.dds-subject__state[data-state="pending"] .dds-subject__dot,
+.dds-subject__state[data-state="discussing"] .dds-subject__dot { background: var(--live); }
+.dds-subject__state[data-state="rejected"] .dds-subject__dot { background: var(--warn); }
+.dds-subject__state[data-state="accepted"] .dds-subject__dot { background: var(--ok); }
+.dds-subject__note {
+  margin: 0;
+  color: var(--fg-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+/* DCR-FR-07's tones: removed text struck on the deletion fill behind a danger
+   rail, added text on the addition fill behind an ok rail. */
+.dds-subject__text {
+  display: flex;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border-left: 2px solid transparent;
+  border-radius: var(--r-xs);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-snug);
+  color: var(--fg-1);
+  min-width: 0;
+}
+.dds-subject__text--del { background: var(--diff-del-bg); border-left-color: var(--danger); }
+.dds-subject__text--add { background: var(--diff-add-bg); border-left-color: var(--ok); }
+.dds-subject__text--del .dds-subject__body { text-decoration: line-through; }
+.dds-subject__sign { flex: none; font-family: var(--font-mono); color: var(--fg-3); }
+.dds-subject__body {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.dds-subject[data-expanded="true"] .dds-subject__body,
+.dds-subject[data-expanded="true"] .dds-subject__note {
+  display: block;
+  -webkit-line-clamp: unset;
+  /* A long change read whole still leaves the transcript most of the column. */
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.dds-subject__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.dds-subject__action {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dds-subject__action--go { margin-left: auto; }
+.dds-subject__action:hover { color: var(--accent-hover); }
+.dds-subject__action:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
 /* Where a draft holds more than one discussion, which one is being read. */
 .dds-discussion__threads {
   display: flex;
@@ -645,7 +764,6 @@
   box-shadow: var(--shadow-3);
 }
 .dds-chip__at { color: var(--fg-3); font-family: var(--font-mono); }
-.dds-chip__key,
 .dds-review__key {
   padding: 0 var(--sp-1);
   margin-left: var(--sp-1);

@@ -1545,6 +1545,8 @@ const proposalHunks: Record<string, any[]> = {
       id: "h-1",
       kind: "replace",
       revision: 0,
+      // DDS-FR-PBXN: the agent's note on one change, which the subject strip shows.
+      note: "Led with what the command does; the scope moves below.",
       before:
         "This note is about the cleanup command. It should describe the scope of the command, the confirmations it asks for, and the cases it refuses, but at this stage it is mostly scope.",
       after:

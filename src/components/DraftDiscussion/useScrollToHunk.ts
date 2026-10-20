@@ -14,6 +14,7 @@
  */
 import { useEffect, useRef } from "react";
 
+import { logWarn } from "../../logging";
 import { HUNK_ATTR } from "./hunkDecorations";
 
 /** How much of the scroller is kept above the change, so it is not at the lip. */
@@ -32,18 +33,25 @@ export function useScrollToHunk(
    */
   proposalId: string | null,
   focusedId: string | null,
+  /**
+   * CMT-FR-48 / DDS-FR-PBXN: the author asked to see the focused change. A new
+   * count scrolls to it, also when the review did not move: the author may have
+   * scrolled the document away from it since.
+   */
+  reveal = 0,
 ): void {
-  const seen = useRef<{ proposal: string; hunk: string } | null>(null);
+  const seen = useRef<{ proposal: string; hunk: string; reveal: number } | null>(null);
   useEffect(() => {
     const host = hostRef.current;
     if (!host || focusedId === null || proposalId === null) return;
     // The change this review opened on, which the author is already looking at.
     if (seen.current === null || seen.current.proposal !== proposalId) {
-      seen.current = { proposal: proposalId, hunk: focusedId };
+      seen.current = { proposal: proposalId, hunk: focusedId, reveal };
       return;
     }
-    if (seen.current.hunk === focusedId) return;
-    seen.current = { proposal: proposalId, hunk: focusedId };
+    if (seen.current.hunk === focusedId && seen.current.reveal === reveal) return;
+    const asked = seen.current.reveal !== reveal;
+    seen.current = { proposal: proposalId, hunk: focusedId, reveal };
 
     const marked = host.querySelector<HTMLElement>(
       `[${HUNK_ATTR}="${CSS.escape(focusedId)}"]`,
@@ -51,7 +59,17 @@ export function useScrollToHunk(
     // A change the document could not place has nowhere to scroll to. The
     // review still moves to it, because rejecting is how such a change is
     // cleared (DCR-FR-31) and the author reaches it through the bar.
-    if (!marked) return;
+    if (!marked) {
+      // The author asked to see it and nothing moves, which only a record
+      // explains.
+      if (asked) {
+        logWarn(["frontend"], "a change to show has no mark in the document", {
+          proposalId,
+          hunkId: focusedId,
+        });
+      }
+      return;
+    }
 
     const a = marked.getBoundingClientRect();
     const b = host.getBoundingClientRect();
@@ -65,5 +83,5 @@ export function useScrollToHunk(
     } else {
       host.scrollTop = top;
     }
-  }, [hostRef, proposalId, focusedId]);
+  }, [hostRef, proposalId, focusedId, reveal]);
 }

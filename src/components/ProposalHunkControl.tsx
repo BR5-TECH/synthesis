@@ -13,13 +13,8 @@
  * discussion stays readable around it.
  */
 import { Icon } from "./icons";
-import {
-  hunkPosition,
-  hunkStateOf,
-  openReview,
-  useProposalReference,
-} from "../state/draftProposals";
-import { setFocusedHunk } from "../state/draftDiscussion";
+import { hunkPosition, hunkStateOf, useProposalReference } from "../state/draftProposals";
+import { isShownInDocument, showHunkInDocument } from "./DraftDiscussion/hunkDiscussion";
 import { isUndecided, type HunkState, type ProposalHunkReference } from "../types";
 
 /** The one word the control says about where the change stands. */
@@ -42,7 +37,7 @@ export function ProposalHunkControl({
   const total = proposal?.hunkCount ?? 0;
   // DCR-FR-17: only an open proposal is decorated, so only then is there
   // something in the document to go to.
-  const reachable = proposal?.state === "pending" && state !== undefined;
+  const reachable = isShownInDocument(proposal, state);
   const word =
     state !== undefined
       ? hunkStateWord(state)
@@ -59,12 +54,9 @@ export function ProposalHunkControl({
       data-state={state ?? (reference.kind === "gone" ? "missing" : "unresolved")}
       disabled={!reachable}
       title={word === null ? attachment.path : `${name} — ${word} — ${attachment.path}`}
-      onClick={() => {
-        // CMT-FR-48: the route to one change is a scroll of the document column
-        // to it, by way of the review's own focused change.
-        setFocusedHunk(attachment.draftId, attachment.hunkId);
-        openReview(attachment.proposalId);
-      }}
+      // CMT-FR-48: the route to one change is a scroll of the document column
+      // to it, by way of the review's own focused change.
+      onClick={() => showHunkInDocument(attachment)}
     >
       <Icon.Diff size={11} />
       <span className="comment-attach__chip-name">{name}</span>

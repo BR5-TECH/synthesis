@@ -31,7 +31,12 @@ export function ReviewOverlay({
 }) {
   // DCR-FR-30: the document follows the review. Called before the early return
   // so the hook order does not change with the presence of a proposal.
-  useScrollToHunk(hostRef, review?.proposalId ?? null, review?.focused ?? null);
+  useScrollToHunk(
+    hostRef,
+    review?.proposalId ?? null,
+    review?.focused ?? null,
+    review?.reveal ?? 0,
+  );
   if (!review) return null;
   return (
     <>

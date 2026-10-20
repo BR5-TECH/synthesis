@@ -15,7 +15,7 @@
 import { useCallback, useState } from "react";
 
 import * as api from "../../api";
-import { logInfo, logWarn } from "../../logging";
+import { logDebug, logInfo, logWarn } from "../../logging";
 import { setDraftDiscussionHidden, setFocusedHunk } from "../../state/draftDiscussion";
 import {
   getDiscussionSession,
@@ -23,6 +23,7 @@ import {
 } from "../../state/discussionSession";
 import { hunkPosition, hunkStateOf } from "../../state/draftProposals";
 import { rereadHunks } from "../../state/proposalHunks";
+import { hunkDiscussionOf, openingHunkOf } from "../DraftDiscussion/hunkDiscussion";
 import type { HunkOpening } from "../DraftDiscussion/OpenDiscussion";
 import {
   discussionTargetKey,
@@ -31,34 +32,6 @@ import {
   type DraftChangeProposal,
   type ProposalHunkReference,
 } from "../../types";
-
-
-/**
- * DCR-FR-VBQN: the discussion of one change, if it has one.
- *
- * A hunk discussion is one whose **opening** comment names the change. A later
- * comment that names it is a reply in some other conversation, not the
- * conversation about the change.
- */
-export function hunkDiscussionOf(
-  discussions: readonly Discussion[],
-  proposalId: string,
-  hunkId: string,
-): Discussion | undefined {
-  return discussions.find((d) =>
-    (d.comments[0]?.attachments ?? []).some(
-      (a) => a.kind === "proposalHunk" && a.proposalId === proposalId && a.hunkId === hunkId,
-    ),
-  );
-}
-
-/** The `proposal_hunk` the opening comment of a discussion carries, if any. */
-export function openingHunkOf(discussion: Discussion): ProposalHunkReference | undefined {
-  const found = (discussion.comments[0]?.attachments ?? []).find(
-    (a) => a.kind === "proposalHunk",
-  );
-  return found?.kind === "proposalHunk" ? found : undefined;
-}
 
 /**
  * DCR-FR-MTFD: the opening text starts with the proposing agent's tag, so the
@@ -129,8 +102,11 @@ export function useHunkDiscussion(input: {
     [draftId, proposal, discussions, selectDiscussion, focusComposer],
   );
 
-  /** DDS-FR-RHKW: the author discarded the composer. */
-  const cancel = useCallback(() => setOpening(null), []);
+  /** DDS-FR-RHKW / DDS-FR-YLRM: the author discarded or left the composer. */
+  const cancel = useCallback(() => {
+    setOpening(null);
+    logDebug(["frontend"], "the composer of a change's discussion was left", { draftId });
+  }, [draftId]);
 
   /**
    * DCR-FR-JTXE: the discussion exists, so an undecided change is held for it.

@@ -33,7 +33,6 @@ import { stepTo, useHunkNavigation } from "./DraftDiscussion/useHunkNavigation";
 import { useScrollToHunk } from "./DraftDiscussion/useScrollToHunk";
 import {
   draftDiscussionState,
-  releaseHunkFocus,
   resetDraftDiscussions,
   setFocusedHunk,
   useDraftDiscussion,
@@ -368,13 +367,14 @@ describe("the change under review (DCR-FR-12, DCR-FR-31)", () => {
     expect(placedAgainst("del", null)).toHaveStyle({ top: "126px" });
   });
 
-  it("DCR-FR-12: carries Accept, Reject and Discuss, and names the change's place in the proposal", async () => {
+  it("DCR-FR-12, DCR-FR-30: carries Accept, Reject and Discuss, and names the change's place in the proposal", async () => {
     const { onAccept, onReject, onDiscuss } = renderChip();
     const chip = screen.getByTestId("hunk-chip");
     expect(chip).toHaveTextContent("1 / 3");
-    await userEvent.click(screen.getByRole("button", { name: /Accept/ }));
-    await userEvent.click(screen.getByRole("button", { name: /Reject/ }));
-    await userEvent.click(screen.getByRole("button", { name: /Discuss/ }));
+    // DCR-FR-30: no action names an accelerator, since no key decides a change.
+    await userEvent.click(screen.getByRole("button", { name: "Accept" }));
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+    await userEvent.click(screen.getByRole("button", { name: "Discuss →" }));
     expect(onAccept).toHaveBeenCalledTimes(1);
     expect(onReject).toHaveBeenCalledTimes(1);
     expect(onDiscuss).toHaveBeenCalledTimes(1);
@@ -463,16 +463,8 @@ describe("the gutter map (DCR-FR-BQNL)", () => {
 // The keyboard model (DCR-FR-30)
 // ---------------------------------------------------------------------------
 
-describe("moving between changes and deciding one (DCR-FR-30)", () => {
-  function Harness({
-    onAccept,
-    onReject,
-    active = true,
-  }: {
-    onAccept: (id: string) => void;
-    onReject: (id: string) => void;
-    active?: boolean;
-  }) {
+describe("moving between changes (DCR-FR-30)", () => {
+  function Harness({ active = true }: { active?: boolean }) {
     // The change the review is on, exactly as the tab derives it: the store's
     // own focus, and the first change until the author has moved.
     const focused = useDraftDiscussion(DRAFT).focusedHunkId ?? "h1";
@@ -481,14 +473,12 @@ describe("moving between changes and deciding one (DCR-FR-30)", () => {
       hunks: [hunk({ id: "h1" }), hunk({ id: "h2" }), hunk({ id: "h3" })],
       focused,
       active,
-      onAccept,
-      onReject,
     });
     return null;
   }
 
   it("DCR-FR-30: the move keys walk the changes in order and wrap at both ends", () => {
-    render(<Harness onAccept={vi.fn()} onReject={vi.fn()} />);
+    render(<Harness />);
 
     // The review opens on the first change — the bar says so and the chip is
     // drawn there — so the first press **moves**. Landing on the change the
@@ -516,72 +506,71 @@ describe("moving between changes and deciding one (DCR-FR-30)", () => {
     expect(draftDiscussionState(DRAFT).focusedHunkId).toBe("h3");
   });
 
-  it("DCR-FR-30: the decide keys act while hunk navigation holds focus", () => {
-    const onAccept = vi.fn();
-    const onReject = vi.fn();
-    render(<Harness onAccept={onAccept} onReject={onReject} />);
-
+  it("DCR-FR-30: Enter and Backspace are left to whatever has focus, and move nothing", () => {
+    // No accelerator decides a change. A key the review claimed would be
+    // prevented here, and the field or button with focus would never get it.
+    render(<Harness />);
     act(() => setFocusedHunk(DRAFT, "h2"));
+
+    let enter = true;
+    let backspace = true;
     act(() => {
-      fireEvent.keyDown(window, { key: "Enter" });
+      enter = fireEvent.keyDown(window, { key: "Enter" });
+      backspace = fireEvent.keyDown(window, { key: "Backspace" });
     });
-    expect(onAccept).toHaveBeenCalledWith("h2");
-
-    act(() => {
-      fireEvent.keyDown(window, { key: "Backspace" });
-    });
-    expect(onReject).toHaveBeenCalledWith("h2");
-  });
-
-  it("DCR-FR-30: the decide keys do nothing while the caret is in the prose", () => {
-    // The editing surface binds both keys already. Unguarded, this accelerator
-    // would decide a change every time the author started a new paragraph —
-    // which is the one failure the guard exists to prevent.
-    const onAccept = vi.fn();
-    const onReject = vi.fn();
-    render(<Harness onAccept={onAccept} onReject={onReject} />);
-
-    act(() => setFocusedHunk(DRAFT, "h2"));
-    act(() => releaseHunkFocus(DRAFT));
-
-    act(() => {
-      fireEvent.keyDown(window, { key: "Enter" });
-      fireEvent.keyDown(window, { key: "Backspace" });
-    });
-    expect(onAccept).not.toHaveBeenCalled();
-    expect(onReject).not.toHaveBeenCalled();
-
-    // The move keys are still live, because moving decides nothing — and it is
-    // the way back into the review from the prose.
-    act(() => {
-      fireEvent.keyDown(window, { key: "ArrowDown", altKey: true });
-    });
-    expect(draftDiscussionState(DRAFT).hunkFocusHeld).toBe(true);
-  });
-
-  it("DCR-FR-23: a draft with nothing to review binds neither key", () => {
-    const onAccept = vi.fn();
-    const onReject = vi.fn();
-    render(<Harness onAccept={onAccept} onReject={onReject} active={false} />);
-
-    act(() => setFocusedHunk(DRAFT, "h2"));
-    act(() => {
-      fireEvent.keyDown(window, { key: "Enter" });
-      fireEvent.keyDown(window, { key: "ArrowDown", altKey: true });
-    });
-    expect(onAccept).not.toHaveBeenCalled();
+    expect(enter).toBe(true);
+    expect(backspace).toBe(true);
     expect(draftDiscussionState(DRAFT).focusedHunkId).toBe("h2");
   });
 
-  it("DCR-FR-30: a decide key carrying a modifier belongs to whatever claimed it", () => {
-    // Cmd+Enter posts a message, and this must not also accept a change.
-    const onAccept = vi.fn();
-    render(<Harness onAccept={onAccept} onReject={vi.fn()} />);
-    act(() => setFocusedHunk(DRAFT, "h1"));
+  it("DCR-FR-30: the move keys do nothing while the caret is in a text field", () => {
+    // In a composer Alt+Up and Alt+Down move the caret. The review must not take
+    // them from it.
+    render(
+      <>
+        <Harness />
+        <textarea aria-label="composer" />
+        <input aria-label="field" />
+      </>,
+    );
+    for (const target of [screen.getByLabelText("composer"), screen.getByLabelText("field")]) {
+      for (const key of ["ArrowDown", "ArrowUp"]) {
+        let kept = false;
+        act(() => {
+          kept = fireEvent.keyDown(target, { key, altKey: true });
+        });
+        // Not prevented, so the field moves its caret, and the review stays.
+        expect(kept).toBe(true);
+        expect(draftDiscussionState(DRAFT).focusedHunkId).toBeNull();
+      }
+    }
+  });
+
+  it("DCR-FR-30: the move keys stay live while the caret is in the prose", () => {
+    // The prose is a contenteditable surface rather than a field, and it is
+    // where a move is most needed.
+    render(
+      <>
+        <Harness />
+        <div contentEditable suppressContentEditableWarning data-testid="prose">
+          text
+        </div>
+      </>,
+    );
     act(() => {
-      fireEvent.keyDown(window, { key: "Enter", metaKey: true });
+      fireEvent.keyDown(screen.getByTestId("prose"), { key: "ArrowDown", altKey: true });
     });
-    expect(onAccept).not.toHaveBeenCalled();
+    expect(draftDiscussionState(DRAFT).focusedHunkId).toBe("h2");
+  });
+
+  it("DCR-FR-23: a draft with nothing to review binds no key", () => {
+    render(<Harness active={false} />);
+
+    act(() => setFocusedHunk(DRAFT, "h2"));
+    act(() => {
+      fireEvent.keyDown(window, { key: "ArrowDown", altKey: true });
+    });
+    expect(draftDiscussionState(DRAFT).focusedHunkId).toBe("h2");
   });
 });
 
@@ -703,12 +692,14 @@ describe("the document following the review (DCR-FR-30)", () => {
     // Not `ref`: React reads that name as a ref to attach rather than as a
     // value to pass on, and the hook would be handed nothing.
     hostRef,
+    reveal = 0,
   }: {
     proposalId: string | null;
     focused: string | null;
     hostRef: React.RefObject<HTMLElement | null>;
+    reveal?: number;
   }) {
-    useScrollToHunk(hostRef, proposalId, focused);
+    useScrollToHunk(hostRef, proposalId, focused, reveal);
     return null;
   }
 
@@ -726,6 +717,19 @@ describe("the document following the review (DCR-FR-30)", () => {
     const ref = { current: el };
     const { rerender } = render(<Harness proposalId="p1" focused="h1" hostRef={ref} />);
     rerender(<Harness proposalId="p1" focused="h2" hostRef={ref} />);
+    expect(el.scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it("CMT-FR-48, DDS-FR-PBXN: asking to see the change the review is on moves the document to it", () => {
+    // The author may have scrolled the document away from the change since the
+    // review moved to it. Show in document must bring it back all the same.
+    const el = host(["h1", "h2"]);
+    const ref = { current: el };
+    const { rerender } = render(<Harness proposalId="p1" focused="h1" hostRef={ref} />);
+    rerender(<Harness proposalId="p1" focused="h1" hostRef={ref} reveal={1} />);
+    expect(el.scrollTo).toHaveBeenCalledTimes(1);
+    // A render that asks for nothing new moves nothing.
+    rerender(<Harness proposalId="p1" focused="h1" hostRef={ref} reveal={1} />);
     expect(el.scrollTo).toHaveBeenCalledTimes(1);
   });
 

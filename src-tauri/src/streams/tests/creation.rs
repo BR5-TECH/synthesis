@@ -77,6 +77,28 @@ fn a_name_is_reduced_to_a_path_safe_slug() {
     assert_eq!(slug_of("!!!"), "");
 }
 
+// WKS-FR-KDXF: the slug takes the worktree-name rule of WTC-FR-AGQQ, so a
+// typed hyphen collapses with the separators around it and no slug starts with one.
+#[test]
+fn a_slug_has_no_hyphen_run_and_no_hyphen_at_its_ends() {
+    assert_eq!(slug_of("a - b"), "a-b");
+    assert_eq!(slug_of("a--b"), "a-b");
+    assert_eq!(slug_of("-a"), "a");
+    assert_eq!(slug_of("café"), "caf");
+    assert_eq!(slug_of("feature/PROJ 12"), "feature-proj-12");
+    assert_eq!(slug_of("--lead--"), "lead");
+    assert_eq!(branch_name_for("Team/Editor"), "synthesis/stream/team-editor");
+}
+
+// WKS-FR-KDXF: a cut that follows non-ASCII input stays on a character edge.
+#[test]
+fn a_slug_cut_after_non_ascii_input_is_whole() {
+    let name = format!("{}\u{e9}bbbb", "a".repeat(47));
+    assert_eq!(slug_of(&name), "a".repeat(47));
+    let name = format!("{}{}", "\u{e9}".repeat(100), "a".repeat(100));
+    assert_eq!(slug_of(&name), "a".repeat(48));
+}
+
 // WKS-FR-KDXF: the cut is applied last, so a slug never ends in a separator.
 #[test]
 fn a_long_name_is_cut_to_the_slug_limit_without_a_trailing_separator() {

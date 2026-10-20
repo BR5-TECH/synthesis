@@ -249,27 +249,14 @@ pub const UPDATE_ATTEMPTS_MAX: u32 = 3;
 // Naming (WKS-FR-KDXF, WKS-FR-HRUZ)
 // ---------------------------------------------------------------------------
 
-/// WKS-FR-KDXF: a name reduced to path-safe characters and cut to 48.
+/// WKS-FR-KDXF: a name reduced as a worktree name and cut to 48.
 ///
-/// Every character that is not a letter, a digit, a hyphen or an underscore
-/// becomes a hyphen; runs of hyphens collapse; leading and trailing hyphens go.
-/// The cut is applied last, so a long name and its prefix do not collide by
-/// accident of where a separator fell.
+/// The reduction is the one every new worktree name takes
+/// (`WTC-worktree-context.md` WTC-FR-AGQQ). The cut is applied last, so a long
+/// name and its prefix do not collide by accident of where a separator fell.
 pub fn slug_of(name: &str) -> String {
-    let mut out = String::with_capacity(name.len());
-    let mut last_was_sep = true;
-    for ch in name.chars() {
-        if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
-            out.push(ch.to_ascii_lowercase());
-            last_was_sep = false;
-        } else if !last_was_sep {
-            out.push('-');
-            last_was_sep = true;
-        }
-    }
-    while out.ends_with('-') {
-        out.pop();
-    }
+    // The reduction keeps ASCII alone, so the byte cut below is on a char edge.
+    let mut out = crate::worktree::normalize_worktree_name(name);
     if out.len() > SLUG_LIMIT {
         out.truncate(SLUG_LIMIT);
         while out.ends_with('-') {

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as api from "../api";
 import { onBranchesChanged, onWorktreeContextChanged } from "../events";
 
 import { graduationErrorMessage, splitTyped } from "../state/graduation";
+import { normalizeBranchInput } from "../state/worktreeBranchName";
 import { Icon } from "./icons";
 import {
   GITHUB_TOKEN_ERRORS,
@@ -264,6 +265,9 @@ export function WorktreeSelector({
 
   const rootRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
+  const branchRef = useRef<HTMLInputElement>(null);
+  /** WTS-FR-UKSX: where the caret goes once the normalized branch renders. */
+  const branchCaret = useRef<number | null>(null);
 
   // WTS-FR-05: opening closes every other floating overlay. The side effect is
   // kept out of the `setOpen` updater — an updater must stay pure, or
@@ -398,6 +402,17 @@ export function WorktreeSelector({
   const filterLabel = canCheckOutBranches
     ? "Filter worktrees and branches"
     : "Filter worktrees";
+
+  // WTS-FR-UKSX: a normalized value that differs from the typed one makes the
+  // input move its caret to the end. Put it back after what the user typed.
+  useLayoutEffect(() => {
+    const input = branchRef.current;
+    const caret = branchCaret.current;
+    branchCaret.current = null;
+    if (!input || caret === null || document.activeElement !== input) return;
+    const at = Math.min(caret, input.value.length);
+    input.setSelectionRange(at, at);
+  }, [draft?.branch]);
 
   // WTS-FR-02: no repository, no selector — anywhere in the top chrome.
   if (!active) return null;
@@ -541,8 +556,10 @@ export function WorktreeSelector({
   /**
    * WTS-FR-19: while the user has not taken the location over, editing the
    * branch re-derives it. Once they have, it is left exactly as they left it.
+   * WTS-FR-UKSX: an edited branch is normalized as it is typed.
    */
-  const onDraftBranchChange = async (branch: string) => {
+  const onDraftBranchChange = async (typed: string) => {
+    const branch = normalizeBranchInput(typed);
     setDraft((d) => (d ? { ...d, branch } : d));
     const overridden = draft?.locationOverridden ?? false;
     if (overridden) return;
@@ -858,8 +875,14 @@ export function WorktreeSelector({
                   className="input input--mono"
                   aria-label="Branch"
                   autoFocus
+                  ref={branchRef}
                   value={draft.branch}
-                  onChange={(e) => void onDraftBranchChange(e.target.value)}
+                  onChange={(e) => {
+                    const { value, selectionStart } = e.target;
+                    const caret = selectionStart ?? value.length;
+                    branchCaret.current = normalizeBranchInput(value.slice(0, caret)).length;
+                    void onDraftBranchChange(value);
+                  }}
                 />
               </div>
               <div className="picker-field">

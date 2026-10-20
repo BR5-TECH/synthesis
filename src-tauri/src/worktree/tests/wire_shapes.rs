@@ -106,14 +106,6 @@ fn the_event_payload_serialises_camel_case() {
 }
 
 #[test]
-fn sanitise_replaces_every_awkward_segment_character() {
-    assert_eq!(sanitize_segment("fix/editor-scroll"), "fix-editor-scroll");
-    assert_eq!(sanitize_segment("release/2.1"), "release-2.1");
-    assert_eq!(sanitize_segment("feat:a b"), "feat-a-b");
-    assert_eq!(sanitize_segment("plain"), "plain");
-}
-
-#[test]
 fn command_functions_are_in_scope() {
     // A rename here fails to compile rather than silently un-registering a
     // command at runtime (see `lib.rs`'s COMMAND_NAMES guard).

@@ -852,7 +852,8 @@ describe("WorktreeSelector proposed location (WTS-FR-19, WTC-FR-13)", () => {
   // WTS-FR-19, WTC-FR-13: the branch's namespace is dropped from the directory name. The
   // derivation is the backend's (WTC-FR-13) — what is pinned here is that the
   // UI hands over the branch *whole* and shows what comes back, rather than
-  // trimming or deriving anything itself.
+  // trimming or deriving anything itself. WTS-FR-UKSX: the whole branch is the
+  // normalized one.
   it("asks for the proposal with the full branch and shows what comes back", async () => {
     renderSelector();
     await openDropdown();
@@ -869,10 +870,10 @@ describe("WorktreeSelector proposed location (WTS-FR-19, WTC-FR-13)", () => {
       ),
     );
     expect(invokeMock).toHaveBeenCalledWith("propose_worktree_path", {
-      branch: "feature/PROJ-12345/editor-scroll",
+      branch: "feature/proj-12345/editor-scroll",
     });
-    // The namespace is gone from the location but untouched in the branch.
-    expect(branch).toHaveValue("feature/PROJ-12345/editor-scroll");
+    // The namespace is gone from the location but kept in the branch.
+    expect(branch).toHaveValue("feature/proj-12345/editor-scroll");
   });
 });
 

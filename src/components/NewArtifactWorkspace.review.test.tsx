@@ -28,6 +28,49 @@ vi.mock("@tauri-apps/api/event", () => ({
   ),
 }));
 
+/**
+ * DCR-FR-12: the change's actions, as a stand-in for the chip.
+ *
+ * The real chip is placed from the rendered box of its change, and jsdom
+ * renders no box, so it never shows here. The stand-in calls the same handlers
+ * the real chip calls, so a decision takes the same route through the tab.
+ */
+vi.mock("./Editor/ReviewOverlay", async () => {
+  const { createElement } = await import("react");
+  type Review = import("./Editor/props").EditorReview;
+  return {
+    ReviewOverlay: ({ review }: { review: Review | undefined }) => {
+      if (review === undefined || review.focused === null) return null;
+      const id = review.focused;
+      return createElement(
+        "div",
+        {
+          role: "group",
+          "aria-label": "Actions for the change under review",
+          // CMT-FR-48 / DDS-FR-PBXN: how many times the document was asked to
+          // show the change, as the real overlay passes it to its scroll.
+          "data-reveal": review.reveal ?? 0,
+        },
+        createElement(
+          "button",
+          { type: "button", disabled: review.busy, onClick: () => review.onAccept(id) },
+          "Accept",
+        ),
+        createElement(
+          "button",
+          { type: "button", disabled: review.busy, onClick: () => review.onReject(id) },
+          "Reject",
+        ),
+        createElement(
+          "button",
+          { type: "button", disabled: review.busy, onClick: () => review.onDiscuss(id) },
+          "Discuss",
+        ),
+      );
+    },
+  };
+});
+
 import {
   PROMPT,
   draft,
@@ -173,6 +216,14 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+/** DCR-FR-12: press one of the actions of the change under review. */
+async function onChip(action: "Accept" | "Reject" | "Discuss") {
+  const chip = await screen.findByRole("group", {
+    name: "Actions for the change under review",
+  });
+  await userEvent.click(within(chip).getByRole("button", { name: action }));
+}
+
 /** Wait until the review bar has the changes, so a decision has one to take. */
 async function reviewing() {
   const bar = await screen.findByRole("region", { name: "Proposed changes" });
@@ -187,7 +238,7 @@ async function reviewing() {
 }
 
 describe("deciding one change at a time (DCR-FR-13, DCR-FR-14, DCR-FR-20)", () => {
-  it("DCR-FR-13, DCR-FR-20, DCR-FR-30: the accelerators decide the change under review and no other", async () => {
+  it("DCR-FR-13, DCR-FR-20, DCR-FR-30: Accept decides the change the review moved to, and no other", async () => {
     backend();
     renderWorkspace();
     await reviewing();
@@ -202,9 +253,7 @@ describe("deciding one change at a time (DCR-FR-13, DCR-FR-14, DCR-FR-20)", () =
     });
     expect(draftDiscussionState("d1").focusedHunkId).toBe("h2");
 
-    act(() => {
-      fireEvent.keyDown(window, { key: "Enter" });
-    });
+    await onChip("Accept");
 
     await waitFor(() =>
       expect(callsTo("accept_draft_change_hunk")).toHaveLength(1),
@@ -226,9 +275,7 @@ describe("deciding one change at a time (DCR-FR-13, DCR-FR-14, DCR-FR-20)", () =
     const writesBefore = callsTo("save_draft_file_contents").length;
 
     act(() => setFocusedHunk("d1", "h3"));
-    act(() => {
-      fireEvent.keyDown(window, { key: "Backspace" });
-    });
+    await onChip("Reject");
 
     await waitFor(() =>
       expect(callsTo("reject_draft_change_hunk")).toHaveLength(1),
@@ -240,11 +287,7 @@ describe("deciding one change at a time (DCR-FR-13, DCR-FR-14, DCR-FR-20)", () =
     expect(callsTo("save_draft_file_contents")).toHaveLength(writesBefore);
   });
 
-  it("DCR-FR-30: the decide keys do nothing once the caret is in the prose", async () => {
-    // The whole wiring, not the flag: the editing surface binds Enter and
-    // Backspace already, so what has to hold is that *focusing the document*
-    // stands the accelerators down. Asserting the flag alone would pass with
-    // the surface's own focus handler deleted.
+  it("DCR-FR-30: Enter and Backspace decide nothing, on the window or in the document", async () => {
     backend();
     renderWorkspace();
     await reviewing();
@@ -253,16 +296,34 @@ describe("deciding one change at a time (DCR-FR-13, DCR-FR-14, DCR-FR-20)", () =
     const scroller = document.querySelector(".editor");
     expect(scroller, "the document's own scroller").not.toBeNull();
     act(() => {
-      fireEvent.focus(scroller!);
-    });
-
-    expect(draftDiscussionState("d1").hunkFocusHeld).toBe(false);
-    act(() => {
       fireEvent.keyDown(window, { key: "Enter" });
       fireEvent.keyDown(window, { key: "Backspace" });
+      fireEvent.keyDown(scroller!, { key: "Enter" });
+      fireEvent.keyDown(scroller!, { key: "Backspace" });
     });
     expect(callsTo("accept_draft_change_hunk")).toHaveLength(0);
     expect(callsTo("reject_draft_change_hunk")).toHaveLength(0);
+    expect(draftDiscussionState("d1").focusedHunkId).toBe("h1");
+  });
+
+  it("DCR-FR-30, DCR-FR-MTFD: typing in the composer of a change's discussion decides nothing", async () => {
+    // The defect this guards: Discuss put the caret in the composer, and the
+    // first Backspace rejected the change the author meant to talk about.
+    backend();
+    renderWorkspace();
+    await reviewing();
+    act(() => setFocusedHunk("d1", "h2"));
+    await onChip("Discuss");
+
+    const composer = await screen.findByRole("textbox", { name: "Discuss this draft" });
+    await waitFor(() => expect(composer).toHaveFocus());
+    await userEvent.type(composer, "why{Backspace}{Backspace}{Enter}x");
+
+    expect(callsTo("accept_draft_change_hunk")).toHaveLength(0);
+    expect(callsTo("reject_draft_change_hunk")).toHaveLength(0);
+    // The keys did what they do in a text field.
+    expect((composer as HTMLTextAreaElement).value).toMatch(/w\nx$/);
+    expect(draftDiscussionState("d1").focusedHunkId).toBe("h2");
   });
 });
 
@@ -326,9 +387,7 @@ describe("what a refusal leaves standing (DCR-FR-16)", () => {
     const before = drafts.docs.get(key)?.buffer;
 
     act(() => setFocusedHunk("d1", "h1"));
-    act(() => {
-      fireEvent.keyDown(window, { key: "Enter" });
-    });
+    await onChip("Accept");
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /Nothing was changed/i,
@@ -340,9 +399,7 @@ describe("what a refusal leaves standing (DCR-FR-16)", () => {
 
     // Retried from exactly where they are, with nothing retyped.
     refuse = false;
-    act(() => {
-      fireEvent.keyDown(window, { key: "Enter" });
-    });
+    await onChip("Accept");
     await waitFor(() => expect(seen).toEqual(["h1", "h1"]));
   });
 
@@ -381,7 +438,7 @@ describe("a rejected change while the proposal is open (DCR-FR-QPRV, DCR-FR-12, 
     expect(draftDiscussionState("d1").focusedHunkId).toBe("h2");
   });
 
-  it("DCR-FR-13, DCR-FR-12: Enter on a rejected change accepts it, and Backspace rejects nothing", async () => {
+  it("DCR-FR-13, DCR-FR-12: Accept on a rejected change accepts it", async () => {
     const decided: [string, Record<string, unknown>][] = [];
     backend({ proposal: mixed(), onDecide: (cmd, args) => decided.push([cmd, args]) });
     renderWorkspace();
@@ -389,13 +446,7 @@ describe("a rejected change while the proposal is open (DCR-FR-QPRV, DCR-FR-12, 
     act(() => {
       setFocusedHunk("d1", "h1");
     });
-    act(() => {
-      fireEvent.keyDown(window, { key: "Backspace" });
-    });
-    expect(decided).toEqual([]);
-    act(() => {
-      fireEvent.keyDown(window, { key: "Enter" });
-    });
+    await onChip("Accept");
     await waitFor(() => expect(decided).toHaveLength(1));
     expect(decided[0][0]).toBe("accept_draft_change_hunk");
     expect(decided[0][1]).toMatchObject({ hunkId: "h1" });
@@ -475,9 +526,10 @@ describe("an edit to a change (DCR-FR-25, DCR-FR-29)", () => {
     expect(hunkCandidateBuffers.get(key)?.conflict).toEqual({ kind: "candidate" });
 
     act(() => setFocusedHunk("d1", "h1"));
-    act(() => {
-      fireEvent.keyDown(window, { key: "Enter" });
-    });
+    // The chip's actions are off while the conflict stands, so the decision is
+    // asked for by the route that stays live: the whole-proposal action.
+    const bar = screen.getByRole("region", { name: "Proposed changes" });
+    fireEvent.click(within(bar).getByRole("button", { name: "Accept all" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /rewritten elsewhere/i,
@@ -491,9 +543,9 @@ describe("an edit to a change (DCR-FR-25, DCR-FR-29)", () => {
     expect(within(offer).getByRole("button", { name: "Keep what I wrote" })).toBeEnabled();
     expect(within(offer).getByRole("button", { name: "Take the newer text" })).toBeEnabled();
     // Until one is, the change is not decided by any route.
-    act(() => {
-      fireEvent.keyDown(window, { key: "Enter" });
-    });
+    const chip = screen.getByRole("group", { name: "Actions for the change under review" });
+    expect(within(chip).getByRole("button", { name: "Accept" })).toBeDisabled();
+    fireEvent.click(within(chip).getByRole("button", { name: "Accept" }));
     expect(callsTo("accept_draft_change_hunk")).toHaveLength(0);
   });
 
@@ -532,9 +584,7 @@ describe("an edit to a change (DCR-FR-25, DCR-FR-29)", () => {
     );
     expect(hunkCandidateBuffers.get(key)?.text).toBe("my own rewrite");
 
-    act(() => {
-      fireEvent.keyDown(window, { key: "Enter" });
-    });
+    await onChip("Accept");
     await waitFor(() =>
       expect(callsTo("accept_draft_change_hunk")).toHaveLength(1),
     );
@@ -700,12 +750,7 @@ describe("where the review goes after a decision (DCR-FR-12)", () => {
     act(() => {
       setFocusedHunk("d1", "h2");
     });
-    // Through the accelerator: the chip is placed from a rendered box, which
-    // jsdom has none of, and this is the same decision by the same route
-    // (DCR-FR-30).
-    act(() => {
-      fireEvent.keyDown(window, { key: "Enter" });
-    });
+    await onChip("Accept");
     await waitFor(() =>
       expect(draftDiscussionState("d1").focusedHunkId).toBe("h3"),
     );
@@ -718,11 +763,62 @@ describe("where the review goes after a decision (DCR-FR-12)", () => {
     act(() => {
       setFocusedHunk("d1", "h3");
     });
-    act(() => {
-      fireEvent.keyDown(window, { key: "Enter" });
-    });
+    await onChip("Accept");
     await waitFor(() =>
       expect(draftDiscussionState("d1").focusedHunkId).toBe("h1"),
     );
+  });
+});
+
+describe("the change a discussion is about, while it is decided (DDS-FR-YLRM, DDS-FR-WKTQ, DDS-FR-PBXN)", () => {
+  it("DDS-FR-YLRM, DDS-FR-WKTQ: a decision does not close the composer, and the strip states it", async () => {
+    backend();
+    renderWorkspace();
+    await reviewing();
+    act(() => setFocusedHunk("d1", "h2"));
+    await onChip("Discuss");
+    const composer = await screen.findByRole("textbox", { name: "Discuss this draft" });
+    await userEvent.type(composer, "abc");
+
+    await onChip("Accept");
+    await waitFor(() => expect(callsTo("accept_draft_change_hunk")).toHaveLength(1));
+    // The backend reports the decision, as it does after every one.
+    act(() =>
+      noteProposalChanged({
+        draftId: "d1",
+        proposal: proposal({
+          counts: { pending: 2, accepted: 1, rejected: 0, discussing: 0 },
+          ledger: [row("h1"), row("h2", "accepted"), row("h3")],
+        }) as never,
+      }),
+    );
+    // The review moves on; the composer stays on the change it is about.
+    await waitFor(() => expect(draftDiscussionState("d1").focusedHunkId).toBe("h3"));
+    expect(screen.getByRole("textbox", { name: "Discuss this draft" })).toHaveValue("@arch abc");
+    expect(screen.getByTestId("draft-open-discussion")).toHaveTextContent(
+      "This begins a discussion about change 2 of 3.",
+    );
+    const strip = screen.getByTestId("discussion-subject");
+    expect(strip).toHaveTextContent("Change 2 of 3");
+    await waitFor(() =>
+      expect(screen.getByTestId("discussion-subject-state")).toHaveTextContent("accepted"),
+    );
+  });
+
+  it("DDS-FR-PBXN, CMT-FR-48: Show in document asks the document to show the change, each time", async () => {
+    backend();
+    renderWorkspace();
+    await reviewing();
+    act(() => setFocusedHunk("d1", "h2"));
+    await onChip("Discuss");
+    const chip = screen.getByRole("group", { name: "Actions for the change under review" });
+    expect(chip).toHaveAttribute("data-reveal", "0");
+
+    const go = await screen.findByRole("button", { name: "Show in document" });
+    await userEvent.click(go);
+    expect(chip).toHaveAttribute("data-reveal", "1");
+    await userEvent.click(go);
+    expect(chip).toHaveAttribute("data-reveal", "2");
+    expect(draftDiscussionState("d1").focusedHunkId).toBe("h2");
   });
 });

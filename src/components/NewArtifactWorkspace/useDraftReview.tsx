@@ -21,11 +21,7 @@ import { ReviewBar, decisionMessage } from "../DraftDiscussion";
 import { stepTo, useHunkNavigation } from "../DraftDiscussion/useHunkNavigation";
 import type { EditorReview, ReviewHunk } from "../Editor/props";
 import { hunkCandidateBuffers, hunkKey } from "../../state/candidateBuffers";
-import {
-  releaseHunkFocus,
-  setFocusedHunk,
-  useDraftDiscussion,
-} from "../../state/draftDiscussion";
+import { setFocusedHunk, useDraftDiscussion } from "../../state/draftDiscussion";
 import {
   hunkPosition,
   hunkStateOf,
@@ -355,14 +351,13 @@ export function useDraftReview({
     [visitedRows],
   );
 
-  // DCR-FR-30: the accelerators, live only while there is a proposal to review.
+  // DCR-FR-30: the move accelerators, live only while there is a proposal to
+  // review.
   useHunkNavigation({
     draftId,
     hunks: movable,
     focused: focusedHunkId,
     active: pendingProposal !== undefined && !locked,
-    onAccept: acceptHunk,
-    onReject: rejectHunk,
   });
 
   /**
@@ -457,6 +452,7 @@ export function useDraftReview({
           proposalId: pendingProposal.id,
           hunks: reviewHunks,
           focused: focusedHunkId,
+          reveal: view.hunkReveal,
           // DCR-FR-29: a change with an unresolved edit is not decided until
           // the author has said which text survives.
           busy: deciding || locked || conflict !== null,
@@ -498,7 +494,6 @@ export function useDraftReview({
                 onRejectAll={() => void rejectAll()}
               />
             ) : null,
-          onCaretInProse: () => releaseHunkFocus(draftId),
           onPlaced,
         }
       : undefined;

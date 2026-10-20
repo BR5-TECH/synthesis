@@ -71,6 +71,11 @@ export interface EditorReview {
   hunks: ReviewHunk[];
   /** DCR-FR-12: the change the action chip is on. */
   focused: string | null;
+  /**
+   * CMT-FR-48 / DDS-FR-PBXN: a new count scrolls the document to the focused
+   * change, also when it did not move.
+   */
+  reveal?: number;
   /** A decision is in flight, so every decision control is off. */
   busy: boolean;
   onFocus: (hunkId: string) => void;
@@ -85,8 +90,6 @@ export interface EditorReview {
    * chrome of the document rather than of the tab.
    */
   bar?: ReactNode;
-  /** DCR-FR-30: the caret entered the prose, so the accelerators stand down. */
-  onCaretInProse: () => void;
   /**
    * DCR-FR-31: which changes the document could draw.
    *

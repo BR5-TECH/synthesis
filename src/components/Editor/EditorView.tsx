@@ -502,11 +502,6 @@ export function EditorView(props: EditorViewProps) {
           focusThreadFromBody(event);
           focusHunkFromBody(event);
         }}
-        /* DCR-FR-30: the caret entered the prose, so the accelerators that
-           accept and reject stand down — the editing surface binds both keys,
-           and a change decided by typing a new paragraph is the one failure the
-           guard exists to prevent. */
-        onFocusCapture={() => review?.onCaretInProse()}
         onScroll={(e) => {
           // CMT-FR-27: the cards are placed in the body's own coordinates, so
           // the layer holding them is offset by however far the body has

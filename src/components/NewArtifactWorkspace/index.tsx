@@ -37,7 +37,7 @@ export {
   standingOf,
   versionCountOf,
 } from "./labels";
-import { setFocusedHunk } from "../../state/draftDiscussion";
+import { revealHunk } from "../../state/draftDiscussion";
 import { useDiscussionControl } from "../../hooks/useDiscussionControl";
 import { identityBlockFor } from "../../hooks/useComments";
 import {
@@ -225,7 +225,7 @@ export function NewArtifactWorkspace({
       action: at > 0 ? `Back to change ${at}` : "Back to the proposal",
       onActivate: () => {
         const hunkId = view.focusedHunkId ?? undecided[0]?.id ?? null;
-        if (hunkId !== null) setFocusedHunk(draftId, hunkId);
+        if (hunkId !== null) revealHunk(draftId, hunkId);
       },
     };
   }, [pendingProposal, view.focusedHunkId, draftId]);

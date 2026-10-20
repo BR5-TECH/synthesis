@@ -12,11 +12,10 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import {
-  hunkDiscussionOf,
-  openingHunkOf,
   seededBody,
   useHunkDiscussion,
 } from "./useHunkDiscussion";
+import { hunkDiscussionOf, openingHunkOf } from "../DraftDiscussion/hunkDiscussion";
 import {
   draftDiscussionState,
   resetDraftDiscussions,

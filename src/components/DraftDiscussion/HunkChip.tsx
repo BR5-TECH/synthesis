@@ -120,7 +120,7 @@ export function HunkChip({
         }
         onClick={onAccept}
       >
-        Accept <kbd className="dds-chip__key">⏎</kbd>
+        Accept
       </button>
       {!rejected && (
         <button
@@ -129,7 +129,7 @@ export function HunkChip({
           title="Reject this change"
           onClick={onReject}
         >
-          Reject <kbd className="dds-chip__key">⌫</kbd>
+          Reject
         </button>
       )}
       {/* DCR-FR-MTFD: a discussion of its own about this one change. */}

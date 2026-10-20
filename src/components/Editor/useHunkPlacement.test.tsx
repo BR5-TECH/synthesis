@@ -89,7 +89,6 @@ function review(hunks: ReviewHunk[], onPlaced = vi.fn()): EditorReview {
     onReject: vi.fn(),
     onDiscuss: vi.fn(),
     onEdit: vi.fn(),
-    onCaretInProse: vi.fn(),
     onPlaced,
   };
 }

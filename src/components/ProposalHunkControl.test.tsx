@@ -12,7 +12,11 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { CommentAttachmentList } from "./CommentAttachments";
-import { noteProposalChanged, resetDraftProposals } from "../state/draftProposals";
+import {
+  noteProposalChanged,
+  resetDraftProposals,
+  reviewingProposal,
+} from "../state/draftProposals";
 import { draftDiscussionState, resetDraftDiscussions } from "../state/draftDiscussion";
 import { resetLogBufferForTest } from "../logging";
 import type { DraftChangeProposal, HunkState, ProposalHunkReference } from "../types";
@@ -80,10 +84,23 @@ describe("CMT-FR-48: the control a change reference renders", () => {
     expect(control).toBeEnabled();
   });
 
-  it("CMT-FR-48: activating it puts the review on that change", () => {
+  it("CMT-FR-48: activating it puts the review on that change and asks the document to show it, each time", () => {
     act(() => noteProposalChanged({ draftId: "d1", proposal: proposal(["pending", "pending"]) }));
-    fireEvent.click(mount());
+    const control = mount();
+    fireEvent.click(control);
     expect(draftDiscussionState("d1").focusedHunkId).toBe("h2");
+    expect(draftDiscussionState("d1").hunkReveal).toBe(1);
+    expect(reviewingProposal()).toBe("p1");
+    // The review is on the change already, and the document is asked again.
+    fireEvent.click(control);
+    expect(draftDiscussionState("d1").hunkReveal).toBe(2);
+  });
+
+  it("CMT-FR-48, DCR-FR-07: an accepted change of an open proposal has no decoration to go to", () => {
+    act(() => noteProposalChanged({ draftId: "d1", proposal: proposal(["pending", "accepted"]) }));
+    const control = mount();
+    expect(control).toHaveTextContent("accepted");
+    expect(control).toBeDisabled();
   });
 
   it("DCR-FR-17: once the proposal closes there is nothing to go to, so the control only says how the change went", () => {

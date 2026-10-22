@@ -44,6 +44,7 @@ import { EditorView } from "./EditorView";
 import { useCommentAnchors } from "./useCommentAnchors";
 import { useCommentRail } from "./useCommentRail";
 import { useEditorFind } from "./useEditorFind";
+import { useEditorScrollMemory } from "./useEditorScrollMemory";
 import { useEditorSurface } from "./useEditorSurface";
 import { useFragmentHost } from "./useFragmentHost";
 
@@ -625,6 +626,21 @@ function LiveEditor({
   });
   const { bodyScrollRef, setScrollTop, setAnchorTops, identityBlock } =
     anchorGroup;
+  // EDT-FR-UERT / EDT-FR-NYCP: the document comes back where the author left
+  // it when the tab is activated again.
+  const rememberScroll = useEditorScrollMemory({
+    artifactId,
+    mode,
+    bodyScrollRef,
+    sourceRef,
+    sourceHlRef,
+    railOnSource,
+    docVersion,
+    sourceText,
+    setScrollTop,
+    setAtTop,
+    setExpandOverride,
+  });
 
 
   // DCR-FR-05 / DCR-FR-06: the proposal's changes, placed in the document as it
@@ -852,6 +868,7 @@ function LiveEditor({
       atTop={atTop}
       setAtTop={setAtTop}
       setExpandOverride={setExpandOverride}
+      rememberScroll={rememberScroll}
       bodyRef={bodyRef}
       origFmRef={origFmRef}
       applyFm={applyFm}

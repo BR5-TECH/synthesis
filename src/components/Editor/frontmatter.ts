@@ -1,5 +1,12 @@
 import { FRONTMATTER_RE } from "../markdownFidelity";
 
+/**
+ * EDT-FR-20: body scrollTop at or under this (px) counts as "at the top" — the
+ * frontmatter region shows fully expanded there and collapses once scrolled
+ * past it.
+ */
+export const FRONTMATTER_TOP_THRESHOLD = 8;
+
 interface SplitDoc {
   fm: string | null;
   body: string;

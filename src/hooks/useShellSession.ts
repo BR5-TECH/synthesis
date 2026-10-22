@@ -55,6 +55,7 @@ import {
   createDocumentActions,
   useViewerStatePruning,
 } from "./shell/documentActions";
+import { useTabScrollPruning } from "./shell/tabScrollPruning";
 
 export { conversationTabId };
 
@@ -590,6 +591,7 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     activateTab,
   });
   useViewerStatePruning(tabs);
+  useTabScrollPruning(tabs);
 
   // TAB-FR-19: the strip follows `"project tree changed"` for the removed paths
   // it carries. Held through a ref and subscribed once, so the listener is not

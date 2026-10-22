@@ -2,6 +2,7 @@ import type { AttachmentInput } from "../types";
 import type { FlushResult } from "./editSessions";
 import { EditSessionStore } from "./editSessions";
 import { draftDocKey, draftTransport } from "./documentTransport";
+import { rekeyDocumentScroll } from "./tabScroll";
 
 /**
  * The per-draft workspace state of every draft touched in this application
@@ -275,13 +276,20 @@ export class DraftSessionStore {
   renamePath(draftId: string, from: string, to: string): void {
     const session = this.ensure(draftId);
     const moves = (path: string) => path === from || path.startsWith(`${from}/`);
-    for (const key of this.docs.allIds()) {
+    const renamed = (key: string): string | null => {
       const prefix = `${draftId}/`;
-      if (!key.startsWith(prefix)) continue;
+      if (!key.startsWith(prefix)) return null;
       const path = key.slice(prefix.length);
-      if (!moves(path)) continue;
-      this.docs.rekey(key, this.key(draftId, to + path.slice(from.length)));
+      if (!moves(path)) return null;
+      return this.key(draftId, to + path.slice(from.length));
+    };
+    for (const key of this.docs.allIds()) {
+      const next = renamed(key);
+      if (next !== null) this.docs.rekey(key, next);
     }
+    // NAW-FR-IHDU: the renamed document keeps its scroll position too, also
+    // when the author only read it and it holds no edit state.
+    rekeyDocumentScroll(renamed);
     if (session.selected !== null && moves(session.selected)) {
       session.selected = to + session.selected.slice(from.length);
       this.notify();

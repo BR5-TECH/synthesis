@@ -321,6 +321,12 @@ export function useEditorFind(deps: EditorFindDeps) {
     editor.view.dispatch(tr);
   }, [editor, bodyRanges, currentBodyRange]);
 
+  // EDT-FR-UERT: a tab that comes back with its find panel open shows the
+  // document where the author left it. The match that is current when it comes
+  // back was already brought into view before, so only a later one is.
+  const resumedFind = useRef(findActive);
+  const resumedMatch = useRef<string | null>(null);
+
   /**
    * EFR-FR-DOQR: bring the current match into view. Each surface scrolls its own
    * way — the source textarea is scrolled to the offset its highlight layer
@@ -328,7 +334,16 @@ export function useEditorFind(deps: EditorFindDeps) {
    * own scroll container and can be scrolled to directly.
    */
   useEffect(() => {
+    if (!findActive) resumedFind.current = false;
     if (!findActive || engine.current < 0) return;
+    if (resumedFind.current) {
+      // The match's index rather than its offset: content that arrives after
+      // the tab comes back moves offsets without the author moving anything.
+      const key = [find.query, find.mode, engine.current].join("\u0000");
+      if (resumedMatch.current === null) resumedMatch.current = key;
+      if (resumedMatch.current === key) return;
+      resumedFind.current = false;
+    }
     const raf =
       typeof requestAnimationFrame === "function"
         ? requestAnimationFrame
@@ -353,7 +368,14 @@ export function useEditorFind(deps: EditorFindDeps) {
       const mark = root?.querySelector<HTMLElement>(`.${CURRENT_MATCH_CLASS}`);
       mark?.scrollIntoView?.({ block: "nearest" });
     });
-  }, [findActive, engine.current, engine.currentMatch, bodyRanges]);
+  }, [
+    findActive,
+    find.query,
+    find.mode,
+    engine.current,
+    engine.currentMatch,
+    bodyRanges,
+  ]);
 
   /**
    * EFR-FR-EYLX/EFR-FR-FYNZ: rewrite `targets` with the replacement text.

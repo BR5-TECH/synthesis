@@ -26,6 +26,7 @@
  * a buffer.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDiffScrollMemory } from "./scrollMemory";
 import * as api from "../../api";
 import { onChangesUpdated } from "../../events";
 import { ERR_NOT_A_REPOSITORY } from "../../comparison";
@@ -224,6 +225,9 @@ export function DiffView({ target, sessions }: DiffViewProps) {
     }
   }, [target.path, loadRevisions]);
 
+  // DFV-FR-YMJA: a comparison with no target (a deleted file) scrolls too.
+  const scrollMemory = useDiffScrollMemory(revisions, modes.visualization);
+
   return (
     <div className="diff-view">
       <div className="panel-header">
@@ -261,7 +265,12 @@ export function DiffView({ target, sessions }: DiffViewProps) {
             rendering={rendering}
             richApplies={richApplies}
           />
-          <div className="diff-view__body" data-page="off">
+          <div
+            className="diff-view__body"
+            data-page="off"
+            ref={scrollMemory.bodyRef}
+            onScrollCapture={scrollMemory.onScrollCapture}
+          >
             <DiffComparisonBody
               // DFV-FR-15: a comparison with no target still has an original,
               // and Unified and Side-by-side render the deletion as they render
@@ -549,6 +558,9 @@ function DiffTargetView({
     adopt(session.buffer);
   }, [adopt, session, visualization, rendering]);
 
+  // DFV-FR-YMJA
+  const scrollMemory = useDiffScrollMemory(derived, visualization);
+
   return (
     <div className="diff-view__target" ref={rootRef}>
       {/* DFV-FR-07: one toolbar row holding both groups, centred so the two sit
@@ -576,7 +588,9 @@ function DiffTargetView({
           declared only for the rendering that has a page to set on it. */}
       <div
         className="diff-view__body"
+        ref={scrollMemory.bodyRef}
         data-page={richPage ? "on" : "off"}
+        onScrollCapture={scrollMemory.onScrollCapture}
         onFocusCapture={(event) => {
           if (!richTarget) return;
           if ((event.target as HTMLElement).closest?.(".diff-run")) setHeld(true);

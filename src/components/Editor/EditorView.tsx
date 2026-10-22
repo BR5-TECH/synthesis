@@ -29,7 +29,7 @@ import type { UseArtifactDocument } from "../../hooks/useArtifactDocument";
 import type { EditorImageHost } from "../hostImages";
 import type { SearchMode } from "../../types";
 import { indentUnit } from "../../state/indentation";
-import { joinFrontmatter } from "./frontmatter";
+import { FRONTMATTER_TOP_THRESHOLD, joinFrontmatter } from "./frontmatter";
 import { matchesInWindow, renderSegments } from "./highlight";
 import {
   ExternalChangeModal,
@@ -45,13 +45,6 @@ import type { useCommentRail } from "./useCommentRail";
 import type { useEditorFind } from "./useEditorFind";
 import type { useEditorSurface } from "./useEditorSurface";
 import type { useHunkPlacement } from "./useHunkPlacement";
-
-/**
- * EDT-FR-20: body scrollTop at or under this (px) counts as "at the top" — the
- * frontmatter region shows fully expanded there and collapses once scrolled
- * past it.
- */
-const FRONTMATTER_TOP_THRESHOLD = 8;
 
 export interface EditorViewProps {
   findGroup: ReturnType<typeof useEditorFind>;
@@ -74,6 +67,8 @@ export interface EditorViewProps {
   atTop: boolean;
   setAtTop: Dispatch<SetStateAction<boolean>>;
   setExpandOverride: Dispatch<SetStateAction<boolean | null>>;
+  /** EDT-FR-UERT: called from each scroller's scroll handler. */
+  rememberScroll: () => void;
   bodyRef: MutableRefObject<string>;
   origFmRef: MutableRefObject<{ fm: string | null; raw: string }>;
   applyFm: (next: string | null) => void;
@@ -169,6 +164,7 @@ export function EditorView(props: EditorViewProps) {
     atTop,
     setAtTop,
     setExpandOverride,
+    rememberScroll,
     bodyRef,
     origFmRef,
     applyFm,
@@ -261,6 +257,8 @@ export function EditorView(props: EditorViewProps) {
         // the rail is told how far it has scrolled — that is what keeps each
         // card level with its passage.
         if (railOnSource) setScrollTop(e.currentTarget.scrollTop);
+        // EDT-FR-UERT: the tab keeps the offset for its next activation.
+        rememberScroll();
         if (!hl) return;
         hl.scrollTop = e.currentTarget.scrollTop;
         hl.scrollLeft = e.currentTarget.scrollLeft;
@@ -516,6 +514,8 @@ export function EditorView(props: EditorViewProps) {
           // clears it too, so scrolling back up re-expands (scroll wins). `atTop`
           // here is the pre-scroll value.
           if (!nowAtTop || !atTop) setExpandOverride(null);
+          // EDT-FR-UERT: the tab keeps the offset for its next activation.
+          rememberScroll();
         }}
       >
         <EditorContent editor={editor} aria-label="artifact body" />

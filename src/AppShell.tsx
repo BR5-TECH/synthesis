@@ -55,6 +55,7 @@ import type { useDiscussionAnnouncement } from "./state/discussionAnnouncer";
 import type { TabAttention } from "./components/TabStrip";
 import { CreatePullRequestWindow } from "./components/CreatePullRequestWindow";
 import { PullRequestNotice } from "./components/PullRequestNotice";
+import { TabScrollScope } from "./hooks/useRememberedScroll";
 
 /**
  * SNV-FR-06: which edge the activity bar and vertical panel occupy. The side is
@@ -537,53 +538,57 @@ export function AppShell(props: AppShellProps) {
             }}
           />
           <div className="viewport__body">
-            <Viewport
-              activeTab={s.activeTab}
-              activeT={s.activeT}
-              onOpenArtifact={s.openArtifact}
-              onOpenRuns={s.openRuns}
-              onOpenGit={s.openGit}
-              sessions={s.sessions}
-              flows={s.flows}
-              drafts={s.drafts}
-              // CMT-FR-36: the thread a Comments row sent this tab to.
-              focusThread={s.focusThread}
-              onThreadFocused={s.clearFocusThread}
-              // CVP-FR-60: a note's opening post binds its tab to the discussion.
-              onConversationOpened={s.bindConversationTab}
-              // SCH-FR-09 / SCH-FR-11: the full results page follows a result
-              // by the same routing rule the overlay does, and keeps its
-              // finished result set in the shell-owned store.
-              onActivateSearchHit={s.activateSearchHit}
-              searches={s.searches}
-              // DRP-FR-05 / NAW-FR-04 / NAW-FR-24: the Drafts panel and the tab
-              // strip follow what the workspace does to its draft.
-              onDraftChanged={s.bumpDrafts}
-              draftsRevision={s.draftsRevision}
-              onDraftRenamed={s.renameDraftTab}
-              // NAW-FR-28: Archive closes the tab through the shell's ordinary
-              // close, which writes the pending file and keeps the draft.
-              onCloseTab={(tabId) => void s.closeTab(tabId)}
-              // NAW-FR-20 / GRU-FR-MYFA: graduating enqueues a run and does not
-              // end the draft, so the tab stays open — read-only — and the
-              // shell routes to the run in the Runs panel.
-              onGraduationStarted={(runId) => openStartedGraduationRun(runId)}
-              // / CHG-FR-45: the start preflight's optional push
-              // blocked on token selection opens the same picker every other
-              // GitHub operation does, and resolves with whether one was chosen.
-              onOpenRun={(runId) => openGraduationRun(runId)}
-              // DSH-FR-12 / NAW-FR-03: the Dashboard's Active workstreams rows
-              // open an existing draft in a New Artifact tab, by id — so a
-              // draft renamed since the widget last read it is still the one
-              // that opens.
-              onOpenDraft={(draftId) => void s.openDraftById(draftId)}
-              // SMP-FR-QNUH / SMD-FR-HVBE: the Map tab renders from the shell's
-              // map session, and its New draft runs the Drafts panel's creation.
-              specMap={s.specMap}
-              onNewDraftForMapNode={(nodeId) => void s.createDraftForMapNode(nodeId)}
-              // SNV-FR-56: a map dialog closes every other floating overlay.
-              onOverlayOpening={closeOtherOverlays}
-            />
+            {/* EDT-FR-UERT / NAW-FR-IHDU / DFV-FR-YMJA: the active tab's
+                surfaces keep their scroll position under its id. */}
+            <TabScrollScope tabId={s.activeTab}>
+              <Viewport
+                activeTab={s.activeTab}
+                activeT={s.activeT}
+                onOpenArtifact={s.openArtifact}
+                onOpenRuns={s.openRuns}
+                onOpenGit={s.openGit}
+                sessions={s.sessions}
+                flows={s.flows}
+                drafts={s.drafts}
+                // CMT-FR-36: the thread a Comments row sent this tab to.
+                focusThread={s.focusThread}
+                onThreadFocused={s.clearFocusThread}
+                // CVP-FR-60: a note's opening post binds its tab to the discussion.
+                onConversationOpened={s.bindConversationTab}
+                // SCH-FR-09 / SCH-FR-11: the full results page follows a result
+                // by the same routing rule the overlay does, and keeps its
+                // finished result set in the shell-owned store.
+                onActivateSearchHit={s.activateSearchHit}
+                searches={s.searches}
+                // DRP-FR-05 / NAW-FR-04 / NAW-FR-24: the Drafts panel and the tab
+                // strip follow what the workspace does to its draft.
+                onDraftChanged={s.bumpDrafts}
+                draftsRevision={s.draftsRevision}
+                onDraftRenamed={s.renameDraftTab}
+                // NAW-FR-28: Archive closes the tab through the shell's ordinary
+                // close, which writes the pending file and keeps the draft.
+                onCloseTab={(tabId) => void s.closeTab(tabId)}
+                // NAW-FR-20 / GRU-FR-MYFA: graduating enqueues a run and does not
+                // end the draft, so the tab stays open — read-only — and the
+                // shell routes to the run in the Runs panel.
+                onGraduationStarted={(runId) => openStartedGraduationRun(runId)}
+                // / CHG-FR-45: the start preflight's optional push
+                // blocked on token selection opens the same picker every other
+                // GitHub operation does, and resolves with whether one was chosen.
+                onOpenRun={(runId) => openGraduationRun(runId)}
+                // DSH-FR-12 / NAW-FR-03: the Dashboard's Active workstreams rows
+                // open an existing draft in a New Artifact tab, by id — so a
+                // draft renamed since the widget last read it is still the one
+                // that opens.
+                onOpenDraft={(draftId) => void s.openDraftById(draftId)}
+                // SMP-FR-QNUH / SMD-FR-HVBE: the Map tab renders from the shell's
+                // map session, and its New draft runs the Drafts panel's creation.
+                specMap={s.specMap}
+                onNewDraftForMapNode={(nodeId) => void s.createDraftForMapNode(nodeId)}
+                // SNV-FR-56: a map dialog closes every other floating overlay.
+                onOverlayOpening={closeOtherOverlays}
+              />
+            </TabScrollScope>
           </div>
         </div>
 

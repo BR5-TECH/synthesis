@@ -155,6 +155,8 @@ export function wireBackend(invokeMock: Mock, b: Backend) {
         b.threads = b.threads.map((t) => (t.id === threadId ? updated : t));
         return updated;
       }
+      case "append_log_records":
+        return undefined;
       default:
         throw new Error(`unexpected invoke ${cmd}`);
     }

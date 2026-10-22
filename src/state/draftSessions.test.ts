@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -10,6 +10,12 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 import { DraftSessionStore } from "./draftSessions";
+import {
+  documentSurface,
+  holdTabScroll,
+  resetTabScrollForTest,
+  tabScrollOf,
+} from "./tabScroll";
 import { AUTOSAVE_DELAY_MS } from "./writeSchedule";
 import { EditSessionStore } from "./editSessions";
 import {
@@ -308,6 +314,27 @@ describe("DraftSessionStore", () => {
         "unsaved words",
       );
       expect(store.get("d1")?.selected).toBe("ui/NAW-new-artifact.md");
+    });
+
+    afterEach(() => {
+      resetTabScrollForTest();
+    });
+
+    it("NAW-FR-IHDU: a renamed file keeps its scroll position, also with no edit state, and a same-prefixed sibling keeps its own", () => {
+      resetTabScrollForTest();
+      const store = new DraftSessionStore();
+      store.select("d1", "ui/NAW.md");
+      const surface = (path: string) =>
+        documentSurface(store.key("d1", path), "wysiwyg");
+      holdTabScroll("draft:d1", surface("ui/NAW.md"), 640);
+      holdTabScroll("draft:d1", surface("ui/NAW.md.bak"), 20);
+
+      store.renamePath("d1", "ui/NAW.md", "ui/NAW-new-artifact.md");
+
+      expect(store.docs.get(store.key("d1", "ui/NAW.md"))).toBeUndefined();
+      expect(tabScrollOf("draft:d1", surface("ui/NAW-new-artifact.md"))).toBe(640);
+      expect(tabScrollOf("draft:d1", surface("ui/NAW.md"))).toBe(0);
+      expect(tabScrollOf("draft:d1", surface("ui/NAW.md.bak"))).toBe(20);
     });
 
     it("moves a renamed folder's whole subtree", () => {

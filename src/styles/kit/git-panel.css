@@ -160,3 +160,17 @@ button.git__file {
 .git-pr__time { margin-left: auto; }
 .git-pr__path { white-space: normal; overflow-wrap: anywhere; }
 .git-pr__subject { font-size: var(--fs-ui-sm); color: var(--fg-2); overflow-wrap: anywhere; }
+
+/* GIT-FR-MRBQ / GIT-FR-RCDL: the merge-or-rebase dialog of a diverged pull. The
+   tips are short ids that a reader compares, so they do not wrap apart from the
+   word that names them. */
+.pull-reconcile {
+  width: min(520px, calc(100vw - 32px));
+}
+.pull-reconcile .modal__body p {
+  margin: 0 0 var(--sp-2);
+  line-height: 1.5;
+}
+.pull-reconcile code {
+  white-space: nowrap;
+}

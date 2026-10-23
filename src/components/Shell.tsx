@@ -15,6 +15,7 @@ import { ProjectSwitcher } from "./ProjectSwitcher";
 import { WorktreeSelector, type SwitchOutcome } from "./WorktreeSelector";
 import { WorkStreamSelector } from "./WorkStreamSelector";
 import type { PullRequestSource } from "./CreatePullRequest/types";
+import type { PullOutcome } from "../types";
 import { PushControl } from "./PushControl";
 import { Library } from "./Library";
 import { DocumentsPanel } from "./Documents";
@@ -108,6 +109,8 @@ interface TopChromeProps {
   // WTS-FR-35 / GHA-FR-19: where the note sends the author when no token is
   // stored at all and there is nothing to pick between.
   onOpenGlobalSettings: () => void;
+  // WTS-FR-DVGQ: a pull found the branch diverged; the shell opens the dialog.
+  onPullDiverged?: (outcome: PullOutcome) => void;
   // AGT-FR-06 / AGT-FR-07: a roster row, and its add action, open the Settings
   // window on the Project Agents or the Personal Agents section of the agent's
   // scope, with an editor open — that agent's, or a fresh one for `null`.
@@ -143,6 +146,7 @@ export function TopChrome({
   onActivateSearchHit,
   onRequestGithubToken,
   onOpenGlobalSettings,
+  onPullDiverged,
   onOpenAgentInSettings,
   onOpenProjectSettings,
   agentsRosterOpen,
@@ -241,6 +245,7 @@ export function TopChrome({
           // one is added when there are none.
           onRequestGithubToken={onRequestGithubToken}
           onOpenGlobalSettings={onOpenGlobalSettings}
+          onPullDiverged={onPullDiverged}
         />
         {/* GIT-FR-XXLE / SNV-FR-32: immediately after the refresh control and
             before the work stream selector, under the condition the selector is

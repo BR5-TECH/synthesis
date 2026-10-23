@@ -30,6 +30,14 @@ export function canPush(state: UpstreamSyncState | null): boolean {
 /** GIT-FR-QMYB: the sentence every Push control states while a push runs. */
 export const PUSH_RUNNING_REASON = "A push is already running.";
 
+/** GIT-FR-QMYB / GIT-FR-CNQO: the sentence every Push control states while a pull runs. */
+export const PULL_RUNNING_REASON = "A pull is running.";
+
+/** GIT-FR-QMYB: the sentence for the transfer that runs. */
+export function runningReason(operation: "push" | "pull" | null = "push"): string {
+  return operation === "pull" ? PULL_RUNNING_REASON : PUSH_RUNNING_REASON;
+}
+
 /**
  * GIT-FR-QMYB: whether a Push control may start a push now — the branch is
  * publishable (CHG-FR-37) and no push is running, whichever control started it.
@@ -49,8 +57,9 @@ export function canStartPush(
 export function pushUnavailableReason(
   state: UpstreamSyncState | null,
   running = false,
+  operation: "push" | "pull" | null = "push",
 ): string | null {
-  if (running) return PUSH_RUNNING_REASON;
+  if (running) return runningReason(operation);
   if (canPush(state)) return null;
   if (!state) return "The branch's standing against its remote is unknown.";
   if (!state.hasRemote) return "This repository has no remote configured.";

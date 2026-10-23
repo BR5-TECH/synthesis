@@ -36,8 +36,8 @@ import { tokenErrorMessage } from "./GithubTokens";
 import {
   canPush,
   canStartPush,
-  PUSH_RUNNING_REASON,
   pushUnavailableReason,
+  runningReason,
 } from "../gitSync";
 import { useGitTransfer } from "../hooks/useGitTransfer";
 import { ChangesFooter } from "./Changes/ChangesFooter";
@@ -230,7 +230,7 @@ export function Changes({
    * state so this panel and the other Push controls always agree.
    */
   const transfer = useGitTransfer();
-  const { sync, running: pushRunning } = transfer;
+  const { sync, running: pushRunning, operation: transferOperation } = transfer;
   /** CHG-FR-44: a commit or push started here is in flight. */
   const [busy, setBusy] = useState(false);
   /**
@@ -665,9 +665,9 @@ export function Changes({
         : canCommit);
   const primaryReason =
     action === "push"
-      ? pushUnavailableReason(sync, pushRunning)
+      ? pushUnavailableReason(sync, pushRunning, transferOperation)
       : action === "commit_and_push" && pushRunning
-        ? PUSH_RUNNING_REASON
+        ? runningReason(transferOperation)
         : null;
 
   // CHG-FR-28: checking a folder cascades over its currently-visible changed
@@ -743,7 +743,7 @@ export function Changes({
       if (outcome.ok) return true;
       // GIT-FR-QMYB: a push is running, so none starts here and the panel says why.
       if (outcome.cause === "busy") {
-        setNote({ tone: "error", text: PUSH_RUNNING_REASON });
+        setNote({ tone: "error", text: runningReason(transferOperation) });
         return false;
       }
       // CHG-FR-45: tokens are stored but this project has not been pointed at
@@ -776,7 +776,7 @@ export function Changes({
       });
       return false;
     },
-    [onRequestGithubToken, transfer.pushBranch],
+    [onRequestGithubToken, transfer.pushBranch, transferOperation],
   );
 
   /**
@@ -1284,6 +1284,7 @@ export function Changes({
           action={action}
           sync={sync}
           pushRunning={pushRunning}
+          transferOperation={transferOperation}
           busy={busy}
           primaryEnabled={primaryEnabled}
           primaryReason={primaryReason}

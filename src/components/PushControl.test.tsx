@@ -467,3 +467,22 @@ describe("typed token errors (GIT-FR-IMSH)", () => {
     expect(screen.queryByTestId("top-push-note")).toBeNull();
   });
 });
+
+describe("the top-chrome Push while a pull runs (GIT-FR-CNQO, GIT-FR-QMYB)", () => {
+  it("GIT-FR-CNQO, GIT-FR-QMYB: is unavailable and states that a pull is running", async () => {
+    renderControl();
+    await waitAvailable();
+    await act(async () =>
+      bus.emit(GIT_OUTPUT_LINE, { operation: "pull", line: "Pulling main from origin/main" }),
+    );
+    await waitFor(() => expect(button()).toHaveAttribute("aria-disabled", "true"));
+    expect(button()).toHaveAccessibleDescription("A pull is running.");
+    await userEvent.click(button());
+    expect(pushCalls()).toBe(0);
+
+    await act(async () =>
+      bus.emit(GIT_OPERATION_FINISHED, { operation: "pull", ok: true }),
+    );
+    await waitAvailable();
+  });
+});

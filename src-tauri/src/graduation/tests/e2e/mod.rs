@@ -46,6 +46,7 @@ mod merge_restart;
 mod merge_revisions;
 mod merge_tips;
 mod outcome;
+mod pull_journeys;
 mod queue;
 mod reconcile;
 mod reconciliation;

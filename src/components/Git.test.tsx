@@ -12,7 +12,13 @@ import {
 import userEvent from "@testing-library/user-event";
 
 import { Git } from "./Git";
-import type { GitBranch, UpstreamSyncState, WorktreeContext } from "../types";
+import { GITHUB_TOKEN_ERRORS } from "../types";
+import type {
+  GitBranch,
+  PullOutcome,
+  UpstreamSyncState,
+  WorktreeContext,
+} from "../types";
 import {
   COMMIT_DIFF,
   COMMIT_FILES,
@@ -282,6 +288,7 @@ describe("GitHub authentication for operations that reach a remote (GHA-FR-16)",
    */
   const openTransfers = async (props: Partial<{
     onRequestGithubToken: () => Promise<boolean>;
+    onPullDiverged: (outcome: PullOutcome) => void;
   }> = {}) => {
     render(
       <Git
@@ -379,19 +386,126 @@ describe("GitHub authentication for operations that reach a remote (GHA-FR-16)",
       /^keychain_unavailable$/,
     );
   });
+});
 
-  it("applies the same precondition to pulling and to pushing", async () => {
-    // GTC-FR-09: both reach GitHub, so both resolve a token first. Creating a
-    // pull request answers a missing token in its own window (GIT-FR-GZUM).
-    withBinding("none_stored");
-    await openTransfers();
+// ---------------------------------------------------------------------------
+// The Logs section's Pull (GIT-FR-PLWD, GIT-FR-MRBQ)
+// ---------------------------------------------------------------------------
 
-    await userEvent.click(screen.getByRole("button", { name: /Pull/ }));
+describe("Git panel Pull (GIT-FR-PLWD, GIT-FR-MRBQ)", () => {
+  /** What each `pull_current_branch` answers, in order; the last one repeats. */
+  let pulls: Partial<PullOutcome>[];
+  const pullCalls = () =>
+    invokeMock.mock.calls.filter((c) => c[0] === "pull_current_branch").length;
+
+  beforeEach(() => {
+    pulls = [{ state: "up_to_date" }];
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_branches") return branches;
+      if (cmd === "get_upstream_sync_state") return sync;
+      if (cmd === "list_commit_history") return history(3);
+      if (cmd === "append_log_records") return undefined;
+      if (cmd === "pull_current_branch") {
+        const next = pulls.length > 1 ? pulls.shift()! : pulls[0];
+        return {
+          branch: "main",
+          upstream: "origin/main",
+          ahead: 0,
+          behind: 0,
+          updatedPaths: [],
+          refresh: { remoteState: "refreshed" },
+          ...next,
+        };
+      }
+      return Promise.reject(new Error(`unexpected command ${cmd}`));
+    });
+  });
+
+  const openLogs = async (
+    props: {
+      onRequestGithubToken?: () => Promise<boolean>;
+      onPullDiverged?: (outcome: PullOutcome) => void;
+    } = {},
+  ) => {
+    render(<Git onSwitchWorktree={onSwitchWorktree} canCheckOutBranches {...props} />);
+    await userEvent.click(screen.getByText("Logs"));
+    return screen.getByTestId("git-pull");
+  };
+
+  it("GIT-FR-PLWD: invokes the pull and states a fast-forward", async () => {
+    pulls = [{ state: "fast_forwarded", behind: 2 }];
+    const pull = await openLogs();
+    await userEvent.click(pull);
     await waitFor(() =>
-      expect(screen.getByTestId("git-auth-note")).toHaveTextContent(
-        /Pull needs a GitHub token/,
+      expect(screen.getByTestId("git-pull-note")).toHaveTextContent(
+        "Pulled 2 commits into main.",
       ),
     );
+    expect(pullCalls()).toBe(1);
+    // The token is read off the pull's own outcome, so no binding is asked for.
+    expect(
+      invokeMock.mock.calls.some((c) => c[0] === "get_project_github_token_binding"),
+    ).toBe(false);
+  });
+
+  it("GIT-FR-PLWD: states a refusal in words beside the controls", async () => {
+    pulls = [{ state: "refused", error: "pull_would_overwrite: a.md" }];
+    await userEvent.click(await openLogs());
+    await waitFor(() =>
+      expect(screen.getByTestId("git-auth-note")).toHaveTextContent(
+        "The pull would overwrite uncommitted changes in a.md.",
+      ),
+    );
+  });
+
+  it("GIT-FR-PLWD, GIT-FR-10: a fetch blocked on token selection opens the picker and pulls once more", async () => {
+    pulls = [
+      { state: "fetch_failed", error: GITHUB_TOKEN_ERRORS.selectionRequired },
+      { state: "up_to_date" },
+    ];
+    const onRequestGithubToken = vi.fn(async () => true);
+    await userEvent.click(await openLogs({ onRequestGithubToken }));
+    await waitFor(() => expect(pullCalls()).toBe(2));
+    expect(onRequestGithubToken).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.getByTestId("git-pull-note")).toHaveTextContent(/is up to date/),
+    );
+  });
+
+  it("GIT-FR-PLWD, GIT-FR-10: a cancelled picker abandons the pull and says so", async () => {
+    pulls = [{ state: "fetch_failed", error: GITHUB_TOKEN_ERRORS.selectionRequired }];
+    const onRequestGithubToken = vi.fn(async () => false);
+    await userEvent.click(await openLogs({ onRequestGithubToken }));
+    await waitFor(() =>
+      expect(screen.getByTestId("git-auth-note")).toHaveTextContent(
+        /no GitHub token was selected/,
+      ),
+    );
+    expect(pullCalls()).toBe(1);
+  });
+
+  it("GIT-FR-MRBQ: a diverged pull is handed to the shell's dialog", async () => {
+    pulls = [{ state: "diverged", ahead: 1, behind: 1, localTip: "aaa", remoteTip: "bbb" }];
+    const onPullDiverged = vi.fn();
+    await userEvent.click(await openLogs({ onPullDiverged }));
+    await waitFor(() => expect(onPullDiverged).toHaveBeenCalledTimes(1));
+    expect(onPullDiverged.mock.calls[0][0]).toMatchObject({ state: "diverged" });
+  });
+
+  it("GIT-FR-PLWD: is unavailable while the repository has no remote", async () => {
+    sync = { hasRemote: false, hasUpstream: false, ahead: null, behind: null };
+    const pull = await openLogs();
+    await waitFor(() => expect(pull).toBeDisabled());
+    expect(pull).toHaveAttribute("title", "This repository has no remote configured.");
+  });
+
+  it("GIT-FR-PLWD, GIT-FR-QMYB: is unavailable while a push runs", async () => {
+    const pull = await openLogs();
+    await act(async () => {
+      fireGitOutputLine("Pushing main to origin");
+    });
+    await waitFor(() => expect(pull).toBeDisabled());
+    expect(pull).toHaveAttribute("title", "A push is already running.");
   });
 });
 

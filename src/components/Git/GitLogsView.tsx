@@ -1,4 +1,4 @@
-import { canStartPush, pushUnavailableReason } from "../../gitSync";
+import { canStartPush, pushUnavailableReason, runningReason } from "../../gitSync";
 import type { UpstreamSyncState } from "../../types";
 import { Icon } from "../icons";
 
@@ -12,18 +12,26 @@ import { Icon } from "../icons";
 export function LogsView({
   sync,
   transferring,
+  operation = "push",
   lines,
   authNote,
+  pullNote = "",
   onPull,
   onPush,
 }: {
   sync: UpstreamSyncState | null;
   transferring: boolean;
+  /** GIT-FR-QMYB: which transfer runs, so a reason names it. */
+  operation?: "push" | "pull" | null;
   lines: string[];
   authNote: string;
+  /** GIT-FR-PLWD: what a pull that landed or found nothing to land reports. */
+  pullNote?: string;
   onPull: () => void;
   onPush: () => void;
 }) {
+  // GIT-FR-PLWD: unavailable with no remote and while a transfer runs.
+  const noRemote = sync !== null && !sync.hasRemote;
   return (
     <>
       <div className="git__right-head">
@@ -31,7 +39,15 @@ export function LogsView({
         <span className="spacer" />
         <button
           className="btn btn--default btn--sm"
-          disabled={transferring}
+          disabled={transferring || noRemote}
+          title={
+            transferring
+              ? runningReason(operation)
+              : noRemote
+                ? "This repository has no remote configured."
+                : undefined
+          }
+          data-testid="git-pull"
           onClick={onPull}
         >
           <Icon.GitPull size={12} /> Pull
@@ -42,7 +58,7 @@ export function LogsView({
         <button
           className="btn btn--default btn--sm"
           disabled={!canStartPush(sync, transferring)}
-          title={pushUnavailableReason(sync, transferring) ?? undefined}
+          title={pushUnavailableReason(sync, transferring, operation) ?? undefined}
           onClick={onPush}
         >
           Push
@@ -51,6 +67,11 @@ export function LogsView({
       {authNote && (
         <div className="proj-switch__error" data-testid="git-auth-note">
           {authNote}
+        </div>
+      )}
+      {pullNote && (
+        <div className="t-muted" role="status" data-testid="git-pull-note">
+          {pullNote}
         </div>
       )}
       <div

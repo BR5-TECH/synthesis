@@ -16,6 +16,7 @@ import {
 import type {
   BottomSurface,
   GraduationRun,
+  PullOutcome,
   WorkStreamUpdateProgress,
   WorktreeContext,
 } from "../types";
@@ -46,6 +47,8 @@ interface BottomPanelProps {
   canCheckOutBranches: boolean;
   /** GHA-FR-16: open the GitHub token picker for a blocked operation. */
   onRequestGithubToken?: () => Promise<boolean>;
+  /** GIT-FR-MRBQ: a pull found the branch diverged; the shell opens the dialog. */
+  onPullDiverged?: (outcome: PullOutcome) => void;
   /** GIT-FR-05: open the Create a PR window for the current branch. */
   onCreatePullRequest?: (source: PullRequestSource) => void;
   /** GRU-FR-RZDI: open a run's source draft in a New Artifact tab. */
@@ -327,6 +330,7 @@ export function BottomPanel({
   onSwitchWorktree,
   canCheckOutBranches,
   onRequestGithubToken,
+  onPullDiverged,
   onCreatePullRequest,
   onOpenDraft,
   onOpenSettings,
@@ -576,6 +580,7 @@ export function BottomPanel({
             onSwitchWorktree={onSwitchWorktree}
             canCheckOutBranches={canCheckOutBranches}
             onRequestGithubToken={onRequestGithubToken}
+            onPullDiverged={onPullDiverged}
             onCreatePullRequest={onCreatePullRequest}
             readyTasks={readyTasks}
             onOpenDraft={onOpenDraft}

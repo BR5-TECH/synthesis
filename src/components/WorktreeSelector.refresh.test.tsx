@@ -16,6 +16,7 @@ import {
 } from "./WorktreeSelector";
 import {
   GITHUB_TOKEN_ERRORS,
+  type PullOutcome,
   type RefreshOutcome,
   type WorktreeContext,
   type WorktreeEntry,
@@ -58,13 +59,34 @@ let context: WorktreeContext;
 /** What the mocked `list_worktrees_and_branches` does — resolve or throw. */
 let listError: string | null;
 /**
- * What the mocked `refresh_worktrees_and_branches` answers with. A function so a
- * test can vary the answer between calls — which is exactly what the retry after
- * a confirmed token picker needs (WTS-FR-35).
+ * The refresh the mocked `pull_current_branch` runs first (WTC-FR-PLHU). A
+ * function so a test can vary the answer between calls — which is exactly what
+ * the retry after a confirmed token picker needs (WTS-FR-35).
  */
 let refresh: () => Promise<RefreshOutcome>;
-/** How many refreshes were asked for, so a test can prove one was not. */
+/** What the pull makes of a refresh that reached the remote. */
+let landed: Partial<PullOutcome>;
+/** How many pulls were asked for, so a test can prove one was not. */
 let refreshCalls: number;
+
+/** The pull outcome a refresh leads to, as the backend composes it. */
+function pullOf(r: RefreshOutcome): PullOutcome {
+  const base = {
+    ahead: 0,
+    behind: 0,
+    updatedPaths: [],
+    refresh: r,
+    branch: "main",
+    upstream: "origin/main",
+  };
+  if (r.remoteState === "skipped") {
+    return { ...base, state: "refused", error: "no remote configured" };
+  }
+  if (r.remoteState === "failed") {
+    return { ...base, state: "fetch_failed", error: r.remoteError };
+  }
+  return { ...base, state: "up_to_date", ...landed };
+}
 let proposed: string;
 /** The outcome the shell reports for a requested switch. */
 let outcome: SwitchOutcome;
@@ -81,6 +103,7 @@ beforeEach(() => {
   outcome = { ok: true };
   handedOperation = null;
   refreshCalls = 0;
+  landed = {};
   // The happy path: the remote was reached and the listing is the refreshed one.
   refresh = async () => ({ context, remoteState: "refreshed" });
   context = defaultWorktreeContext();
@@ -92,10 +115,11 @@ beforeEach(() => {
     }
     if (cmd === "propose_worktree_path") return proposed;
     if (cmd === "browse_for_folder") return "cancelled";
-    if (cmd === "refresh_worktrees_and_branches") {
+    if (cmd === "pull_current_branch") {
       refreshCalls += 1;
-      return refresh();
+      return pullOf(await refresh());
     }
+    if (cmd === "append_log_records") return undefined;
     return undefined;
   });
   onSwitch = vi.fn(async (op: () => Promise<WorktreeContext>) => {
@@ -112,6 +136,7 @@ function renderSelector(
   extra?: {
     onRequestGithubToken?: () => Promise<boolean>;
     onOpenGlobalSettings?: () => void;
+    onPullDiverged?: (outcome: PullOutcome) => void;
   },
 ) {
   return render(
@@ -186,7 +211,7 @@ describe("WorktreeSelector refresh invocation (WTS-FR-30)", () => {
     await userEvent.click(refreshBtn());
 
     await waitFor(() => expect(refreshCalls).toBe(1));
-    expect(invokeMock).toHaveBeenCalledWith("refresh_worktrees_and_branches");
+    expect(invokeMock).toHaveBeenCalledWith("pull_current_branch");
     // WTS-FR-30: it belongs to the chrome, not to the dropdown.
     expect(screen.queryByTestId("worktree-selector-menu")).toBeNull();
   });
@@ -360,11 +385,40 @@ describe("WorktreeSelector remote outcome note (WTS-FR-34)", () => {
     expect(shown).not.toHaveTextContent(/token/i);
   });
 
-  it("says nothing at all when the remote was reached", async () => {
+  it("WTS-FR-34: names an up-to-date branch when the remote was reached", async () => {
     renderSelector();
     await userEvent.click(refreshBtn());
-    await waitFor(() => expect(refreshCalls).toBe(1));
-    expect(note()).toBeNull();
+    await waitFor(() =>
+      expect(note()).toHaveTextContent("main is up to date with origin/main."),
+    );
+    expect(note()).not.toHaveTextContent("⚠");
+  });
+
+  it("WTS-FR-34: names the commits a fast-forward brought", async () => {
+    landed = { state: "fast_forwarded", behind: 3, updatedPaths: ["a.md"] };
+    renderSelector();
+    await userEvent.click(refreshBtn());
+    await waitFor(() =>
+      expect(note()).toHaveTextContent("Pulled 3 commits into main."),
+    );
+  });
+
+  it("WTS-FR-34: names the uncommitted paths a pull would overwrite", async () => {
+    landed = { state: "refused", error: "pull_would_overwrite: a.md, b.md" };
+    renderSelector();
+    await userEvent.click(refreshBtn());
+    await waitFor(() =>
+      expect(note()).toHaveTextContent(
+        "The pull would overwrite uncommitted changes in a.md, b.md.",
+      ),
+    );
+  });
+
+  it("WTS-FR-34: names a branch that tracks nothing", async () => {
+    landed = { state: "refused", error: "no_upstream" };
+    renderSelector();
+    await userEvent.click(refreshBtn());
+    await waitFor(() => expect(note()).toHaveTextContent(/tracks no remote branch/));
   });
 });
 
@@ -414,7 +468,10 @@ describe("WorktreeSelector refresh token routing (WTS-FR-35 .. WTS-FR-36, WTS-FR
     expect(
       within(screen.getByTestId("branch-group")).getByText("origin/fetched"),
     ).toBeInTheDocument();
-    expect(note()).toBeNull();
+    // The retried pull reached the remote, so the note is its outcome and
+    // no token cause stands any more.
+    expect(note()).toHaveTextContent(/is up to date/);
+    expect(note()).not.toHaveTextContent(/token/i);
   });
 
   it("abandons the remote leg on cancel, keeping the local listing and saying so", async () => {
@@ -564,7 +621,7 @@ describe("WorktreeSelector refresh failure and note vocabulary (WTS-FR-31 / WTS-
     await userEvent.click(refreshBtn());
 
     const shown = await screen.findByTestId("worktree-refresh-note");
-    expect(shown).toHaveTextContent(/could not be refreshed/i);
+    expect(shown).toHaveTextContent(/could not be fetched/i);
     expect(shown).not.toHaveTextContent(/couldn't reach/i);
     expect(shown).not.toHaveTextContent(/no remote is configured/i);
     expect(shown).not.toHaveTextContent(/credential/i);
@@ -595,7 +652,7 @@ describe("WorktreeSelector refresh failure and note vocabulary (WTS-FR-31 / WTS-
     await waitFor(() => expect(refreshCalls).toBe(2));
   });
 
-  it("clears a previous note once a refresh succeeds", async () => {
+  it("replaces a previous note once a pull succeeds", async () => {
     refresh = async () => ({ context, remoteState: "skipped" });
     renderSelector();
     await userEvent.click(refreshBtn());
@@ -603,7 +660,8 @@ describe("WorktreeSelector refresh failure and note vocabulary (WTS-FR-31 / WTS-
 
     refresh = async () => ({ context, remoteState: "refreshed" });
     await userEvent.click(refreshBtn());
-    await waitFor(() => expect(note()).toBeNull());
+    await waitFor(() => expect(note()).toHaveTextContent(/is up to date/));
+    expect(note()).not.toHaveTextContent(/no remote/i);
   });
 
   it("renders exactly one note, inside the dropdown while it is open", async () => {
@@ -766,5 +824,54 @@ describe("WorktreeSelector refresh icon (WTS-FR-31, WTS-FR-37, WTS-FR-34)", () =
     await userEvent.click(refreshBtn());
     await waitFor(() => expect(note()).toBeInTheDocument());
     expect(glyph()).toBe("pull-down");
+  });
+});
+
+describe("WorktreeSelector diverged pull (WTS-FR-DVGQ)", () => {
+  it("WTS-FR-DVGQ: hands a diverged outcome to the shell and closes the dropdown", async () => {
+    landed = {
+      state: "diverged",
+      ahead: 1,
+      behind: 2,
+      localTip: "1111111aaaa",
+      remoteTip: "2222222bbbb",
+    };
+    const onPullDiverged = vi.fn();
+    renderSelector(ACTIVE, undefined, { onPullDiverged });
+    await openDropdown();
+    await userEvent.click(refreshBtn());
+
+    await waitFor(() => expect(onPullDiverged).toHaveBeenCalledTimes(1));
+    expect(onPullDiverged.mock.calls[0][0]).toMatchObject({
+      state: "diverged",
+      ahead: 1,
+      behind: 2,
+      localTip: "1111111aaaa",
+      remoteTip: "2222222bbbb",
+    });
+    expect(screen.queryByTestId("worktree-selector-menu")).toBeNull();
+    // The dialog says what happened, so no note stands beside it.
+    expect(note()).toBeNull();
+  });
+});
+
+describe("WorktreeSelector pull and the shared transfer (WTS-FR-31, GIT-FR-QMYB)", () => {
+  it("WTS-FR-31: is not activatable while a push runs, whichever control started it", async () => {
+    renderSelector();
+    expect(refreshBtn()).not.toBeDisabled();
+
+    await act(async () => {
+      fire("git-output-line", { operation: "push", line: "Pushing main to origin" });
+    });
+    await waitFor(() => expect(refreshBtn()).toBeDisabled());
+    // Not busy itself: the busy state is the pull's own (WTS-FR-31).
+    expect(refreshBtn()).toHaveAttribute("aria-busy", "false");
+    await userEvent.click(refreshBtn());
+    expect(refreshCalls).toBe(0);
+
+    await act(async () => {
+      fire("git-operation-finished", { operation: "push", ok: true });
+    });
+    await waitFor(() => expect(refreshBtn()).not.toBeDisabled());
   });
 });

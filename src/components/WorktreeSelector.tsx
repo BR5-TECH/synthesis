@@ -2,14 +2,15 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as api from "../api";
 import { onBranchesChanged, onWorktreeContextChanged } from "../events";
 
+import { useGitTransfer } from "../hooks/useGitTransfer";
 import { graduationErrorMessage, splitTyped } from "../state/graduation";
+import { pullErrorText, pullNote } from "../state/pullText";
 import { normalizeBranchInput } from "../state/worktreeBranchName";
 import { Icon } from "./icons";
 import {
   GITHUB_TOKEN_ERRORS,
-  GIT_REMOTE_ERRORS,
   type BranchEntry,
-  type RefreshOutcome,
+  type PullOutcome,
   type WorktreeContext,
   type WorktreeEntry,
 } from "../types";
@@ -30,15 +31,16 @@ import {
  * worktrees and creating new ones — both of which change which checkout the
  * project reads from — and nothing that moves a checkout onto another branch.
  *
- * Beside the selector sits the refresh control (WTS-FR-29 .. WTS-FR-36), which
+ * Beside the selector sits the pull control (WTS-FR-29 .. WTS-FR-37), which
  * lives in this file because what it does is inseparable from the dropdown: a
- * returning refresh re-renders the open rows in place (WTS-FR-32), its outcome
+ * returning pull re-renders the open rows in place (WTS-FR-32), its outcome
  * note moves inside the dropdown while that is open (WTS-FR-34), and the token
- * picker it can open has to close it (WTS-FR-36). It is nonetheless a *sibling*
- * of the selector, not part of it — its own button, outside the selector's
- * activation area, so pressing it never opens the dropdown (WTS-FR-30).
+ * picker and the merge-or-rebase dialog it can open have to close it
+ * (WTS-FR-36, WTS-FR-DVGQ). It is nonetheless a *sibling* of the selector, not
+ * part of it — its own button, outside the selector's activation area, so
+ * pressing it never opens the dropdown (WTS-FR-30).
  *
- * A refresh is not a switch (WTS-FR-33): it flushes nothing, closes no tab, and
+ * A pull is not a switch (WTS-FR-33): it flushes nothing, closes no tab, and
  * changes no active worktree, so it deliberately does NOT go through `onSwitch`.
  *
  * The component performs no Git operation and computes nothing about the
@@ -94,44 +96,11 @@ export interface WorktreeSelectorProps {
    * is added rather than shown a picker with no rows.
    */
   onOpenGlobalSettings?: () => void;
-}
-
-/**
- * WTS-FR-34: the remote outcome, phrased by the cause the author would act on
- * differently — no remote configured, a remote that could not be reached, and a
- * credential GitHub refused. `null` when there is nothing worth reporting.
- *
- * A skipped leg is reported too: "there is no remote" is exactly the thing an
- * author who expected remote branches needs told, and staying silent would look
- * like a refresh that found nothing.
- */
-export function remoteNote(outcome: RefreshOutcome): string | null {
-  if (outcome.remoteState === "refreshed") return null;
-  if (outcome.remoteState === "skipped") {
-    return "No remote is configured — local branches are up to date.";
-  }
-  switch (outcome.remoteError) {
-    case GITHUB_TOKEN_ERRORS.tokenMissing:
-      return "Fetching from the remote needs a GitHub token.";
-    case GITHUB_TOKEN_ERRORS.selectionRequired:
-      return "No GitHub token was selected — local branches are up to date.";
-    case GITHUB_TOKEN_ERRORS.invalidToken:
-      return "The remote refused the credential — local branches are up to date.";
-    case GITHUB_TOKEN_ERRORS.keychainUnavailable:
-      return "That GitHub token could not be read from the keychain.";
-    case GITHUB_TOKEN_ERRORS.hostMismatch:
-      return "The project token belongs to another GitHub host than this remote — local branches are up to date.";
-    case GITHUB_TOKEN_ERRORS.githubUnreachable:
-      return "Couldn't reach the remote — local branches are up to date.";
-    case GIT_REMOTE_ERRORS.noRemoteConfigured:
-      return "No remote is configured — local branches are up to date.";
-    default:
-      // A cause outside the vocabulary above must not be dressed up as one of
-      // WTS-FR-34's three: claiming the remote was unreachable when the real
-      // failure was something else sends the author to check their network over
-      // a problem that has nothing to do with it.
-      return "The remote could not be refreshed — local branches are up to date.";
-  }
+  /**
+   * WTS-FR-DVGQ: a pull found the branch and its upstream diverged. The shell
+   * opens the merge-or-rebase dialog (GIT-FR-MRBQ).
+   */
+  onPullDiverged?: (outcome: PullOutcome) => void;
 }
 
 /**
@@ -181,13 +150,15 @@ function RemoteNote({
   onDismiss,
   onOpenGlobalSettings,
 }: {
-  note: { message: string; missingToken: boolean };
+  note: { message: string; missingToken: boolean; ok?: boolean };
   onDismiss: () => void;
   onOpenGlobalSettings?: () => void;
 }) {
   return (
     <>
-      <span className="wt-select__note-text">⚠ {note.message}</span>
+      <span className="wt-select__note-text" role="status">
+        {note.ok ? "✓" : "⚠"} {note.message}
+      </span>
       {/* WTS-FR-35 / GHA-FR-19: a real route, not a sentence naming one. */}
       {note.missingToken && onOpenGlobalSettings && (
         <button
@@ -231,7 +202,11 @@ export function WorktreeSelector({
   onOpen,
   onRequestGithubToken,
   onOpenGlobalSettings,
+  onPullDiverged,
 }: WorktreeSelectorProps) {
+  // GIT-FR-QMYB: the pull is one transfer of the window, shared with every Push
+  // and Pull control.
+  const transfer = useGitTransfer();
   const [open, setOpen] = useState(false);
   const [context, setContext] = useState<WorktreeContext | null>(null);
   const [filter, setFilter] = useState("");
@@ -261,6 +236,8 @@ export function WorktreeSelector({
   const [note, setNote] = useState<{
     message: string;
     missingToken: boolean;
+    /** WTS-FR-34: the pull landed or found nothing to land. */
+    ok?: boolean;
   } | null>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
@@ -448,48 +425,60 @@ export function WorktreeSelector({
   };
 
   /**
-   * WTS-FR-30 .. WTS-FR-35: run a refresh and answer its remote outcome.
+   * WTS-FR-30 .. WTS-FR-35, WTS-FR-DVGQ: run a pull and answer its outcome.
    *
-   * Deliberately not routed through `onSwitch` (WTS-FR-33): a refresh reads what
-   * the repository holds rather than moving the project onto a different
-   * checkout, so nothing is flushed, no tab closes, and the flush-and-cancel
-   * rule of WTS-FR-23 does not apply — which is what makes it available while an
+   * Deliberately not routed through `onSwitch` (WTS-FR-33): a pull moves the
+   * branch the active worktree holds, not the project onto another checkout,
+   * so nothing is flushed, no tab closes, and the flush-and-cancel rule of
+   * WTS-FR-23 does not apply — which is what makes it available while an
    * Editor tab holds unsaved changes.
    *
    * `retrying` guards the one recursive step: a selection-required failure whose
-   * picker was confirmed re-invokes the whole refresh once (WTS-FR-35), and a
+   * picker was confirmed re-invokes the whole pull once (WTS-FR-35), and a
    * second selection-required answer must not reopen the picker forever.
    */
   const runRefresh = async (retrying = false) => {
     // WTS-FR-31: not re-activatable while one is in flight. The retry below is
-    // the continuation of the refresh already running, not a second one, so it is
+    // the continuation of the pull already running, not a second one, so it is
     // the one caller allowed past the gate.
     if (!retrying && refreshingRef.current) return;
     refreshingRef.current = true;
     setRefreshing(true);
     setNote(null);
     try {
-      const outcome = await api.refreshWorktreesAndBranches();
+      const call = await transfer.pullBranch();
+      if (!call.ok) {
+        // GIT-FR-QMYB: another transfer runs, so none starts here.
+        setNote({
+          message:
+            call.cause === "busy"
+              ? "A push or a pull is already running."
+              : pullErrorText(call.error),
+          missingToken: false,
+        });
+        return;
+      }
+      const outcome = call.outcome;
 
-      // WTS-FR-32 / WTS-FR-34: the locally refreshed listing is applied whatever
-      // the remote leg did. Applied straight from the outcome rather than waiting
+      // WTS-FR-32 / WTS-FR-34: the refreshed listing is applied whatever the
+      // remote leg did. Applied straight from the outcome rather than waiting
       // for `"branches changed"`, so an undelivered event cannot leave the rows
       // stale — the event handler above converges on the same content.
-      if (open) setContext(outcome.context);
+      if (open) setContext(outcome.refresh.context);
 
       // WTS-FR-35: a remote leg blocked on token *selection* opens the picker,
-      // and confirming re-runs the whole refresh. Cancelling abandons the remote
-      // leg — and either way the listing the local half refreshed stays in place.
+      // and confirming re-runs the whole pull. Cancelling abandons it — and
+      // either way the refreshed listing stays in place.
       if (
         !retrying &&
-        outcome.remoteState === "failed" &&
-        outcome.remoteError === GITHUB_TOKEN_ERRORS.selectionRequired &&
+        outcome.state === "fetch_failed" &&
+        outcome.error === GITHUB_TOKEN_ERRORS.selectionRequired &&
         onRequestGithubToken
       ) {
         // WTS-FR-36: the picker is a floating overlay, so it closes the dropdown
         // rather than being presented over it.
         setOpen(false);
-        // The control stays busy while the picker is up: the refresh is still
+        // The control stays busy while the picker is up: the pull is still
         // outstanding, and clearing it here would let a second one start
         // alongside — leaving two in flight with their notes racing.
         const chosen = await onRequestGithubToken();
@@ -497,26 +486,35 @@ export function WorktreeSelector({
           await runRefresh(true);
           return;
         }
-        setNote({ message: remoteNote(outcome) ?? "", missingToken: false });
+        setNote({ message: pullNote(outcome) ?? "", missingToken: false });
         return;
       }
 
-      const message = remoteNote(outcome);
+      // WTS-FR-DVGQ: the author chooses how the two histories join, in a
+      // floating overlay that closes the dropdown.
+      if (outcome.state === "diverged") {
+        setOpen(false);
+        onPullDiverged?.(outcome);
+        return;
+      }
+
+      const message = pullNote(outcome);
       setNote(
         message
           ? {
               message,
+              ok:
+                outcome.state === "up_to_date" ||
+                outcome.state === "fast_forwarded",
               // WTS-FR-35: nothing to choose between, so the note routes to
               // where a token is added instead of opening a picker.
-              missingToken:
-                outcome.remoteError === GITHUB_TOKEN_ERRORS.tokenMissing,
+              missingToken: outcome.error === GITHUB_TOKEN_ERRORS.tokenMissing,
             }
           : null,
       );
     } catch (e) {
-      // The only rejection is "not a git repository" (WTC-FR-02), which cannot
-      // happen while this control is rendered at all (WTS-FR-29) — but a project
-      // closed mid-flight would produce it, so it is reported rather than lost.
+      // The pull hook answers every rejection itself; a throw here is a
+      // programming error, reported rather than lost.
       setNote({ message: errorMessage(e), missingToken: false });
     } finally {
       refreshingRef.current = false;
@@ -623,18 +621,18 @@ export function WorktreeSelector({
         className="btn btn--ghost btn--icon btn--sm wt-select__refresh"
         data-testid="worktree-refresh"
         data-busy={refreshing}
-        aria-label="Refresh branches"
+        aria-label="Pull current branch"
         aria-busy={refreshing}
-        // WTS-FR-31: busy and not re-activatable, so a second refresh cannot be
-        // stacked on the first.
-        disabled={refreshing}
-        title="Refresh local and remote branches"
+        // WTS-FR-31: busy while a pull runs, and not activatable while any
+        // transfer runs, so no second transfer is stacked on the first.
+        disabled={refreshing || transfer.running}
+        title="Pull the current branch and refresh branches"
         onClick={() => void runRefresh()}
       >
         {/* WTS-FR-37: the control depicts material arriving from elsewhere,
-            and the icon never varies with what a previous refresh reported
+            and the icon never varies with what a previous pull reported
             (WTS-FR-34). The busy state of WTS-FR-31 is the one thing that
-            replaces it, and only while a refresh is in flight — the circular
+            replaces it, and only while a pull is in flight — the circular
             arrows read as motion under the spin the stylesheet applies, which
             is what a wait wants and what a resting control does not. */}
         {refreshing ? <Icon.Refresh size={13} /> : <Icon.PullDown size={13} />}

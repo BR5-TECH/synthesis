@@ -21,6 +21,11 @@ use crate::graduation::{
 use crate::logging::LogLevel;
 use crate::streams::{MergeApplyFailure, StreamMergePublication, ERR_MERGE_BRANCH_MOVED};
 
+/// GRD-FR-PRBZ: a pull run's rebase could not reproduce the settled tree.
+pub(crate) const ERR_PULL_REBASE_UNSETTLED: &str = "pull_rebase_unsettled";
+/// GRD-FR-PAPX: a pull run's worktree no longer holds its branch.
+pub(crate) const ERR_PULL_TARGET_CHANGED: &str = "pull_target_changed";
+
 /// GRD-FR-XHSE: whether either pinned tip of a merge run has left its branch.
 pub(super) fn tips_moved<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
@@ -82,10 +87,24 @@ pub(super) fn fail_branch_moved<R: tauri::Runtime>(
             extra: log_fields! { "checked_at" => boundary },
         },
     );
+    let message = if run.is_pull() {
+        "The local branch this pull was pinned to has moved. Nothing was written. Pull again."
+    } else {
+        "A branch this merge was pinned to has moved. Nothing was written. Start Merge again from the work stream."
+    };
+    end_failed(app, run, ERR_MERGE_BRANCH_MOVED, message);
+}
+
+/// End a merge run `failed` with a typed failure that is not retried.
+fn end_failed<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    run: &mut GraduationRun,
+    code: &str,
+    message: &str,
+) {
     run.failure = Some(GraduationFailure {
-        code: ERR_MERGE_BRANCH_MOVED.to_string(),
-        message: "A branch this merge was pinned to has moved. Nothing was written. Start Merge again from the work stream."
-            .to_string(),
+        code: code.to_string(),
+        message: message.to_string(),
         retryable: false,
     });
     let _ = transitions::enter_stage(
@@ -213,11 +232,21 @@ pub(super) fn finish_merge<R: tauri::Runtime>(
         Err(reason) => return block_apply(app, run, "merge_apply_failed", reason),
     };
 
-    match crate::streams::apply_merge_run(app, &run.stream_id, &data, tree) {
+    // GRD-FR-PAPX: a pull run lands on its local branch through the safe landing.
+    let applied = match data.pull.as_ref() {
+        Some(_) => crate::streams::apply_pull_run(app, &data, tree),
+        None => crate::streams::apply_merge_run(app, &run.stream_id, &data, tree),
+    };
+    match applied {
         Ok(applied) => {
             run.merge = run.merge.take().map(|mut merge| {
+                let rebased = merge
+                    .pull
+                    .as_ref()
+                    .is_some_and(|pull| pull.strategy == crate::git::PullStrategy::Rebase);
                 merge.result = Some(GraduationMergeResult {
-                    published: match merge.publication {
+                    published: match &merge.publication {
+                        _ if rebased => MergePublished::Rebased,
                         StreamMergePublication::Uncommitted => MergePublished::Uncommitted,
                         StreamMergePublication::Commit { .. } => MergePublished::Commit,
                     },
@@ -307,6 +336,20 @@ pub(super) fn finish_merge<R: tauri::Runtime>(
         Err(MergeApplyFailure::Failed(reason)) => {
             block_apply(app, run, "merge_apply_failed", reason)
         }
+        // GRD-FR-PRBZ: the replay did not reproduce what the run settled.
+        Err(MergeApplyFailure::Unsettled(paths)) => {
+            block_apply(app, run, ERR_PULL_REBASE_UNSETTLED, paths.join(", "))
+        }
+        // GRD-FR-PAPX: the worktree no longer holds the branch.
+        Err(MergeApplyFailure::TargetChanged) => {
+            end_failed(
+                app,
+                run,
+                ERR_PULL_TARGET_CHANGED,
+                "The worktree this pull was for no longer holds its branch. Nothing was written. Pull again.",
+            );
+            Step::Stop
+        }
     }
 }
 
@@ -342,6 +385,7 @@ fn block_apply<R: tauri::Runtime>(
         "merge_guard_held" => {
             "Wait for the update or merge that is running, then continue the merge."
         }
+        ERR_PULL_REBASE_UNSETTLED => "Discard the run, then pull again and choose Merge.",
         _ => "Resolve what stopped the apply, then continue the merge.",
     };
     let _ = transitions::block(app, run, code, reason, clears_by, phases::PART_APPLY);

@@ -64,6 +64,7 @@ fn a_live_merge_run_refuses_a_second_merge_and_an_ended_run_does_not() {
         changed_paths: vec!["added.txt".into()],
         unresolved_paths: Vec::new(),
         conflicts: Vec::new(),
+        pull: None,
     };
     let mut run = crate::graduation::enqueue_merge_run(&fx.app, request).expect("a merge run");
 

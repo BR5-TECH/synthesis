@@ -24,6 +24,8 @@ pub enum MergePublished {
     Uncommitted,
     /// One merge commit on the base branch.
     Commit,
+    /// GRD-FR-PRBZ: the local commits of a pull run, replayed onto its upstream.
+    Rebased,
 }
 
 /// GRD-FR-AQNW: what an applied merge wrote.
@@ -31,12 +33,26 @@ pub enum MergePublished {
 #[serde(rename_all = "camelCase")]
 pub struct GraduationMergeResult {
     pub published: MergePublished,
-    /// The merge commit, where the publication made one.
+    /// The merge commit, where the publication made one, or the new tip of a
+    /// rebased branch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commit: Option<String>,
     /// Project-relative paths the result changes against the base tip.
     #[serde(default)]
     pub merged_paths: Vec<String>,
+}
+
+/// GRD-FR-PLSB: what makes a merge run a pull run.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PullMergeSubject {
+    /// The local branch, which is the run's base branch.
+    pub branch: String,
+    /// The upstream's short name, which is the run's stream branch.
+    pub upstream: String,
+    /// The absolute path of the worktree that holds the local branch.
+    pub worktree_path: String,
+    pub strategy: crate::git::PullStrategy,
 }
 
 /// GRD-FR-KZPT: what a merge run pins and carries.
@@ -67,6 +83,9 @@ pub struct GraduationMergeData {
     /// Written when the merge is applied (GRD-FR-AQNW).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub result: Option<GraduationMergeResult>,
+    /// GRD-FR-PLSB: present on a pull run alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pull: Option<PullMergeSubject>,
 }
 
 /// What the stream merge handoff gives this module.
@@ -86,11 +105,18 @@ pub struct MergeRunRequest {
     pub changed_paths: Vec<String>,
     pub unresolved_paths: Vec<String>,
     pub conflicts: Vec<StreamMergeConflict>,
+    /// GRD-FR-PLSB: the subject of a pull run, with the worktree's name.
+    pub pull: Option<(PullMergeSubject, String)>,
 }
 
 /// GRD-FR-VCTH: the title of a merge run.
 pub fn merge_title(stream_name: &str) -> String {
     format!("Merge {stream_name}")
+}
+
+/// GRD-FR-VCTH: the title of a pull run.
+pub fn pull_title(upstream: &str, branch: &str) -> String {
+    format!("Pull {upstream} into {branch}")
 }
 
 /// GRD-FR-MRNQ: enqueue a merge run, durably, and tell every reader.
@@ -108,11 +134,30 @@ pub fn enqueue_merge_run<R: tauri::Runtime>(
         return Err(ERR_NO_PROJECT_OPEN.to_string());
     }
 
-    let title = merge_title(&request.stream_name);
-    let prompt = format!(
-        "Reconcile the merge of the work stream \"{}\" (branch {}) into the branch {}.",
-        request.stream_name, request.stream_branch, request.base_branch
-    );
+    let (title, prompt) = match &request.pull {
+        Some((subject, _)) => (
+            pull_title(&subject.upstream, &subject.branch),
+            format!(
+                "Reconcile the pull of the upstream {} into the local branch {} by {}.",
+                subject.upstream,
+                subject.branch,
+                subject.strategy.as_str()
+            ),
+        ),
+        None => (
+            merge_title(&request.stream_name),
+            format!(
+                "Reconcile the merge of the work stream \"{}\" (branch {}) into the branch {}.",
+                request.stream_name, request.stream_branch, request.base_branch
+            ),
+        ),
+    };
+    // GRD-FR-PQKY: a pull run works for the worktree that holds its branch.
+    let direct_target = request.pull.as_ref().map(|(subject, worktree_name)| DirectTarget {
+        worktree_path: subject.worktree_path.clone(),
+        worktree_name: worktree_name.clone(),
+        branch: subject.branch.clone(),
+    });
     let input = CapturedGraduationInput {
         draft_id: String::new(),
         draft_name: String::new(),
@@ -124,7 +169,7 @@ pub fn enqueue_merge_run<R: tauri::Runtime>(
         &request.project_key,
         request.stream_id.clone(),
         request.stream_name.clone(),
-        None,
+        direct_target,
         input,
         StandingWork::Keep,
         None,
@@ -143,6 +188,7 @@ pub fn enqueue_merge_run<R: tauri::Runtime>(
         unresolved_paths: request.unresolved_paths,
         conflicts: request.conflicts,
         result: None,
+        pull: request.pull.map(|(subject, _)| subject),
     });
     // GRS-FR-KDOY: both log streams are created in the write that creates the
     // run, so a run that has emitted nothing still has two readable ones.
@@ -167,6 +213,11 @@ impl GraduationRun {
     /// GRD-FR-MRNQ: whether this run is a merge run.
     pub fn is_merge(&self) -> bool {
         self.merge.is_some()
+    }
+
+    /// GRD-FR-PLSB: whether this run is a pull run.
+    pub fn is_pull(&self) -> bool {
+        self.merge.as_ref().is_some_and(|merge| merge.pull.is_some())
     }
 }
 

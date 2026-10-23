@@ -9172,6 +9172,29 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return `/Users/demo/dev/acme-${String(a.branch).replace(/\//g, "-")}`;
     case "refresh_worktrees_and_branches":
       return { context: worktreeContext, remoteState: "refreshed" };
+    // GTC-FR-KDRW: the harness branch is 2 ahead and 1 behind its upstream
+    // (`get_upstream_sync_state`), so a pull reports it diverged and the
+    // merge-or-rebase dialog opens (GIT-FR-MRBQ).
+    case "pull_current_branch":
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      return {
+        state: "diverged",
+        branch: "main",
+        upstream: "origin/main",
+        localTip: "4f1c2a9e0b7d3c5a8e6f1b2d4c3a5e7f9b0d1c2e",
+        remoteTip: "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b",
+        ahead: 2,
+        behind: 1,
+        updatedPaths: [],
+        refresh: { context: worktreeContext, remoteState: "refreshed" },
+      };
+    // GTC-FR-SBLF / GTC-FR-EGIP: a merge Git settles; a rebase it hands to a
+    // pull run.
+    case "reconcile_pull":
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      return a.strategy === "merge"
+        ? { state: "merged", commit: "c0ffee1234567890c0ffee1234567890c0ffee12", updatedPaths: ["src/App.tsx"] }
+        : { state: "handed_to_run", runId: "run-pull-demo", runTitle: "Pull origin/main into main", updatedPaths: [] };
 
     // ---- panels ----------------------------------------------------------
     case "load_library_panel_state":

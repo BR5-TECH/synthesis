@@ -352,9 +352,12 @@ export interface GraduationMergeConflict {
 
 /** GRD-FR-AQNW: what an applied merge put on the base branch. */
 export interface GraduationMergeResult {
-  /** Whether the result was left uncommitted or committed. */
-  published: "uncommitted" | "commit";
-  /** The merge commit, where the publication committed. */
+  /**
+   * Whether the result was left uncommitted, committed, or — for a pull run's
+   * rebase — replayed onto the upstream (GRD-FR-PRBZ).
+   */
+  published: "uncommitted" | "commit" | "rebased";
+  /** The merge commit, where the publication committed, or the rebased tip. */
   commit?: string | null;
   /** Project-relative. */
   mergedPaths: string[];
@@ -368,7 +371,7 @@ export interface GraduationMergeResult {
  * its draft's name (GRD-FR-VCTH).
  */
 export interface GraduationMergeData {
-  /** `Merge <stream name>`. */
+  /** `Merge <stream name>`, or `Pull <upstream> into <branch>` (GRD-FR-VCTH). */
   name: string;
   streamBranch: string;
   baseBranch: string;
@@ -384,6 +387,19 @@ export interface GraduationMergeData {
   conflicts: GraduationMergeConflict[];
   /** Written when the merge is applied (GRD-FR-AQNW). */
   result?: GraduationMergeResult | null;
+  /** GRD-FR-PLSB: present on a pull run alone. */
+  pull?: GraduationPullSubject | null;
+}
+
+/** GRD-FR-PLSB: what makes a merge run a pull run. */
+export interface GraduationPullSubject {
+  /** The local branch, which is the run's base branch. */
+  branch: string;
+  /** The upstream's short name, which is the run's stream branch. */
+  upstream: string;
+  /** The absolute path of the worktree that holds the local branch. */
+  worktreePath: string;
+  strategy: "merge" | "rebase";
 }
 
 export interface GraduationRun {

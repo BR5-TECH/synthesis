@@ -30,6 +30,7 @@ fn hand_off_with(
         changed_paths: vec!["added.txt".into()],
         unresolved_paths: Vec::new(),
         conflicts: Vec::new(),
+        pull: None,
     };
     crate::graduation::enqueue_merge_run(app, request).expect("a merge run")
 }

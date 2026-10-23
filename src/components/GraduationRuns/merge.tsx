@@ -16,6 +16,7 @@ import {
   fateByPath,
   mergeResultSentence,
   publicationSentence,
+  pullStrategySentence,
   shortCommit,
 } from "../../state/graduation";
 import type { GraduationRun } from "../../types";
@@ -31,6 +32,15 @@ export function MergePublication({
 }) {
   const merge = run.merge;
   if (!merge) return null;
+  // GRU-FR-PRNW: a pull run states its strategy in place of the publication.
+  const strategy = pullStrategySentence(run);
+  if (strategy) {
+    return (
+      <p className="t-meta graduation__merge-publication" data-testid={testId}>
+        Strategy: {strategy}
+      </p>
+    );
+  }
   const publication = merge.publication;
   return (
     <p

@@ -75,8 +75,8 @@ pub use events::{
 };
 pub use logs::{GraduationLogIndexes, GraduationLogStream};
 pub use merge_run::{
-    enqueue_merge_run, merge_title, reclaim_ended_merge_run, GraduationMergeData,
-    GraduationMergeResult, MergePublished, MergeRunRequest, MERGE_PASS_BUDGET,
+    enqueue_merge_run, merge_title, pull_title, reclaim_ended_merge_run, GraduationMergeData,
+    GraduationMergeResult, MergePublished, MergeRunRequest, PullMergeSubject, MERGE_PASS_BUDGET,
 };
 pub(crate) use merge_run::{log_merge_boundary, MergeBoundary};
 pub use observability::{
@@ -84,10 +84,10 @@ pub use observability::{
     PassStatus, StageReason, StageTransition,
 };
 pub use queue::{
-    draft_graduation, draft_graduation_stands, holder_of_queue, latest_run_for, load_queue,
-    merge_runs_by_stream, next_eligible, position_in_queue, project_queue, queue_of,
-    queued_counts_by_stream, require_no_running_graduation, require_unlocked_draft, slot_holders,
-    streams_with_runs,
+    draft_graduation, draft_graduation_stands, holder_of_queue, latest_run_for,
+    live_run_on_worktree, load_queue, merge_runs_by_stream, next_eligible, position_in_queue,
+    project_queue, queue_of, queued_counts_by_stream, require_no_running_graduation,
+    require_unlocked_draft, slot_holders, streams_with_runs,
 };
 pub use record::*;
 pub use run_progress::{end_with_loop as end_run_progress, PROGRESS_KIND_GRADUATION};

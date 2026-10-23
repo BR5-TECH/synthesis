@@ -20,7 +20,7 @@ import type { useShellSession } from "./useShellSession";
 import type { CommitFile } from "../components/CommitMessageModal";
 import type { RollbackFile } from "../components/RollbackConfirm";
 import type { TabMenuState } from "../components/TabStrip";
-import type { CommitOutcome, RollbackResult } from "../types";
+import type { CommitOutcome, PullOutcome, RollbackResult } from "../types";
 
 export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
   /**
@@ -468,9 +468,30 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
     return await s.performRollback(files.map((f) => f.path));
   };
 
+  /**
+   * GIT-FR-MRBQ / WTS-FR-DVGQ: the merge-or-rebase dialog of a diverged pull.
+   * Two controls pull — the top-chrome pull control and the Git panel's
+   * **Pull** — and only one dialog may exist.
+   */
+  const [pullChoice, setPullChoice] = useState<PullOutcome | null>(null);
+  const dismissPullChoice = () => setPullChoice(null);
+  const openPullChoice = (outcome: PullOutcome) => {
+    closeSiblingOverlays();
+    dismissCommitWindow();
+    dismissRollbackWindow();
+    if (streamMergeRef.current) settleStreamMergeWindow(null);
+    closeChromeDropdowns();
+    // The project switcher and the work stream selector keep their open state
+    // to themselves and close on a pointer press outside them. A pull returns
+    // with no such press, so one is announced here, as `openAbout` does.
+    document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    setPullChoice(outcome);
+  };
+
   // CMW-FR-01 / NAW-FR-01 / SNV-FR-56: opening an overlay closes any other open
   // one rather than coexisting with it.
   const closeSiblingOverlays = () => {
+    dismissPullChoice();
     s.setNewFileSeed(null);
     s.setNewFolderSeed(null);
     s.setNewTypedArtifactSeed(null);
@@ -605,6 +626,9 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
     aboutOpen,
     openAbout,
     closeAbout,
+    pullChoice,
+    openPullChoice,
+    dismissPullChoice,
     ...pullRequest,
   };
 }

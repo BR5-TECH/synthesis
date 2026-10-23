@@ -23,6 +23,8 @@ mod merge_apply;
 mod merge_handoff;
 mod merge_progress;
 mod merge_snapshot;
+mod pull_apply;
+mod pull_reconcile;
 mod semantic;
 mod semantic_turn;
 mod state;
@@ -41,6 +43,8 @@ pub use lookup::{stream_at_path, stream_on_branch};
 pub use merge_apply::{apply_merge_run, merge_tips_moved, MergeApplied, MergeApplyFailure};
 pub use merge_handoff::*;
 pub(crate) use merge_snapshot::{has_ref as has_snapshot_ref, release_ref as release_snapshot_ref};
+pub use pull_apply::apply_pull_run;
+pub use pull_reconcile::{begin_pull, reconcile_pull_blocking};
 #[cfg(test)]
 pub(crate) use semantic_turn::merge_input_field_names;
 pub use state::{Reconciliation, StreamState};
@@ -94,6 +98,8 @@ pub const ERR_STALE_BASE_REVISION: &str = "stale_base_revision";
 pub const ERR_UPDATE_ATTEMPTS_EXHAUSTED: &str = "update_attempts_exhausted";
 /// WKS-FR-TSOA: an update of this repository already holds the update guard.
 pub const ERR_UPDATE_IN_PROGRESS: &str = "update_in_progress";
+/// `GTC-git.md` GTC-FR-TRWC: a pull of this repository holds the update guard.
+pub const ERR_PULL_IN_PROGRESS: &str = "pull_in_progress";
 /// GRB-FR-TXVL: the author stopped the update. Neither branch moved.
 pub const ERR_UPDATE_CANCELLED: &str = "update_cancelled";
 /// WKS-FR-QFTH: the application stopped while this update was running.
@@ -432,6 +438,12 @@ pub fn stream_of<R: tauri::Runtime>(
 /// application-owned storage is in it.
 pub fn uncommitted_paths_of(worktree: &Path) -> Vec<String> {
     git::uncommitted_paths(worktree, false)
+}
+
+/// `GTC-git.md` GTC-FR-VOXB: the uncommitted paths of a worktree that a checkout
+/// writes, read on the terms of WKS-FR-JVLM for the side that is checked out.
+pub fn checked_out_uncommitted_paths_of(worktree: &Path) -> Vec<String> {
+    git::uncommitted_paths(worktree, true)
 }
 
 /// WKS-FR-EIBC / `GTC-git.md` GTC-FR-JOWX: how many commits the stream holds

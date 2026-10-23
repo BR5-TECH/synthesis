@@ -214,6 +214,7 @@ fn check<R: tauri::Runtime>(
         changed_paths: snapshot.changed_paths.clone(),
         unresolved_paths: snapshot.unresolved_paths.clone(),
         conflicts: snapshot.conflicts.clone(),
+        pull: None,
     };
     match crate::graduation::enqueue_merge_run(app, request) {
         Ok(run) => {

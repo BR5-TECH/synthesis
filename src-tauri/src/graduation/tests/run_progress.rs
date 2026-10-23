@@ -276,6 +276,7 @@ fn a_merge_runs_label_names_its_title_and_no_draft() {
         unresolved_paths: Vec::new(),
         conflicts: Vec::new(),
         result: None,
+        pull: None,
     });
     crate::graduation::save_run(&fx.app, &mut run).unwrap();
     transition(&fx.app, &mut run, GraduationRunState::Working).unwrap();

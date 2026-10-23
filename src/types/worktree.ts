@@ -98,6 +98,61 @@ export interface RefreshOutcome {
   remoteError?: string;
 }
 
+/** GTC-FR-KDRW: how a pull ended. */
+export type PullState =
+  | "up_to_date"
+  | "fast_forwarded"
+  | "diverged"
+  | "refused"
+  | "fetch_failed";
+
+/** What `pullCurrentBranch` answers with (GTC contract surface). */
+export interface PullOutcome {
+  state: PullState;
+  /** The typed cause, for `refused` and `fetch_failed`. */
+  error?: string;
+  branch?: string;
+  /** The upstream's short name, for example `origin/main`. */
+  upstream?: string;
+  localTip?: string;
+  remoteTip?: string;
+  ahead: number;
+  behind: number;
+  updatedPaths: string[];
+  /** WTC-FR-PLHU: the refresh the pull ran first; always present. */
+  refresh: RefreshOutcome;
+}
+
+/** GTC-FR-NJUY: how the author joins a diverged branch with its upstream. */
+export type PullStrategy = "merge" | "rebase";
+
+/** What `reconcilePull` answers with (GTC contract surface). */
+export interface PullReconcileOutcome {
+  state: "merged" | "rebased" | "handed_to_run" | "refused";
+  error?: string;
+  /** The new tip of the branch, for `merged` and `rebased`. */
+  commit?: string;
+  updatedPaths: string[];
+  runId?: string;
+  runTitle?: string;
+}
+
+/** The typed causes of a pull the UI words (GTC contract surface). */
+export const PULL_ERRORS = {
+  noBranch: "no branch is checked out",
+  noUpstream: "no_upstream",
+  upstreamGone: "upstream_gone",
+  upstreamNotOnPrimaryRemote: "upstream_not_on_primary_remote",
+  wouldOverwrite: "pull_would_overwrite",
+  tipsMoved: "pull_tips_moved",
+  pullInProgress: "pull_in_progress",
+  mergeInProgress: "merge_in_progress",
+  updateInProgress: "update_in_progress",
+  pullRunActive: "pull_run_active",
+  directGraduationActive: "direct graduation active",
+  workStreamBusy: "work stream busy",
+} as const;
+
 /**
  * One entry of the Git panel's branches section (GTC-FR-07). Deliberately
  * without a worktree association — that is `WorktreeContext`'s job.

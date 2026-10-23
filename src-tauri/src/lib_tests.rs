@@ -394,6 +394,8 @@ fn command_names_list_contains_layout_preferences_commands() {
         "propose_worktree_path",
         "create_worktree",
         "refresh_worktrees_and_branches",
+        "pull_current_branch",
+        "reconcile_pull",
         "get_uncommitted_diff_totals",
         "list_in_flight_operations",
         "load_project_config",

@@ -280,6 +280,10 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "push_current_branch",
     // The push of a named branch the Create a PR window performs (GTC-FR-RZNQ).
     "push_branch",
+    // The pull of the active worktree's branch, and the join of a diverged
+    // one (GTC-FR-QHMT / GTC-FR-NJUY).
+    "pull_current_branch",
+    "reconcile_pull",
     // Worktree context (WTC-worktree-context.md / WTS-worktree-selector.md).
     "list_worktrees_and_branches",
     "get_active_worktree",

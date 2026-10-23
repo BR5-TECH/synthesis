@@ -124,6 +124,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
     dismissGraduationOverlays,
     dismissRollbackWindow,
     dismissPullRequestWindow,
+    dismissPullChoice,
     dismissTabMenu,
     dismissTokenPicker,
     openGraduationRun,
@@ -892,6 +893,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       dismissCommitWindow();
       dismissRollbackWindow();
       dismissPullRequestWindow();
+      dismissPullChoice();
       dismissTabMenu();
       dismissGraduationOverlays();
       // The Location select is fed from the same published folder list the New
@@ -904,6 +906,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       dismissCommitWindow();
       dismissRollbackWindow();
       dismissPullRequestWindow();
+      dismissPullChoice();
       dismissTabMenu();
       dismissGraduationOverlays();
       // Refresh the parent list only if it may have gone stale since the Library
@@ -922,6 +925,7 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       dismissCommitWindow();
       dismissRollbackWindow();
       dismissPullRequestWindow();
+      dismissPullChoice();
       dismissTabMenu();
       dismissGraduationOverlays();
       // The Location select is fed from the same published folder list the New

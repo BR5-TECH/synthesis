@@ -28,6 +28,9 @@ import type {
   PullRequestListState,
   PullRequestSummary,
   PullRequestTimeline,
+  PullOutcome,
+  PullReconcileOutcome,
+  PullStrategy,
   RefreshOutcome,
   UpstreamSyncState,
   WorkingTreeStatus,
@@ -269,6 +272,35 @@ export const pushCurrentBranch = () => invoke<void>("push_current_branch");
  */
 export const pushBranch = (branch: string) =>
   invoke<void>("push_branch", { branch });
+
+/**
+ * GTC-FR-QHMT / GTC-FR-KDRW: fetch, then bring the active worktree's branch up
+ * to its upstream when it holds nothing of its own. A diverged branch is
+ * reported and not written. Output streams on the same channels as a push,
+ * under the operation `"pull"` (GTC-FR-OYDA).
+ *
+ * Resolves for every pull that ran, a refused one included: read `state`, and
+ * `refresh` for the listing and the remote leg (WTC-FR-PLHU). Rejects only
+ * when the content root is not inside a Git repository.
+ */
+export const pullCurrentBranch = () =>
+  invoke<PullOutcome>("pull_current_branch");
+
+/**
+ * GTC-FR-NJUY: join a diverged branch with its upstream by `strategy`, at the
+ * tips the author was shown. Git settles it, or a pull run does
+ * (GTC-FR-EGIP). Makes no network request.
+ */
+export const reconcilePull = (
+  strategy: PullStrategy,
+  localTip: string,
+  remoteTip: string,
+) =>
+  invoke<PullReconcileOutcome>("reconcile_pull", {
+    strategy,
+    localTip,
+    remoteTip,
+  });
 
 // --- Worktree context (worktree.rs) ---------------------------------------
 

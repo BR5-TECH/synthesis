@@ -674,10 +674,15 @@ describe("WorktreeSelector follows the context-changed event (WTS-FR-25)", () =>
   it("unsubscribes every channel when it unmounts", async () => {
     const { unmount } = renderSelector();
     // Both channels the selector follows: the active worktree changing, and the
-    // branch set being re-read.
-    await waitFor(() => expect(handlers.length).toBe(2));
+    // branch set being re-read. Rendered with no provider, the pull control owns
+    // a transfer state of its own (GIT-FR-QMYB), which follows the transfer
+    // channels and the change set.
+    await waitFor(() => expect(handlers.length).toBe(5));
     expect(handlers.map(([name]) => name).sort()).toEqual([
       "branches-changed",
+      "changes-updated",
+      "git-operation-finished",
+      "git-output-line",
       "worktree-context-changed",
     ]);
     unmount();

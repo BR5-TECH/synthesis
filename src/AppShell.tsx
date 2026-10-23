@@ -55,6 +55,7 @@ import type { useDiscussionAnnouncement } from "./state/discussionAnnouncer";
 import type { TabAttention } from "./components/TabStrip";
 import { CreatePullRequestWindow } from "./components/CreatePullRequestWindow";
 import { PullRequestNotice } from "./components/PullRequestNotice";
+import { PullReconcileDialog } from "./components/PullReconcileDialog";
 import { TabScrollScope } from "./hooks/useRememberedScroll";
 
 /**
@@ -157,6 +158,9 @@ export function AppShell(props: AppShellProps) {
     graduationStart,
     openGraduationStart,
     closeGraduationStart,
+    pullChoice,
+    openPullChoice,
+    dismissPullChoice,
   } = overlays;
 
   // STB-FR-RWPD: a status bar row with a destination opens the surface that owns
@@ -181,6 +185,7 @@ export function AppShell(props: AppShellProps) {
     dismissCommitWindow();
     dismissRollbackWindow();
     dismissPullRequestWindow();
+    dismissPullChoice();
     dismissTabMenu();
     dismissGraduationOverlays();
     closeChromeDropdowns();
@@ -265,6 +270,7 @@ export function AppShell(props: AppShellProps) {
               dismissCommitWindow();
               dismissRollbackWindow();
               dismissPullRequestWindow();
+              dismissPullChoice();
               dismissTabMenu();
               dismissGraduationOverlays();
               closeChromeDropdowns();
@@ -286,6 +292,7 @@ export function AppShell(props: AppShellProps) {
             dismissCommitWindow();
             dismissRollbackWindow();
             dismissPullRequestWindow();
+            dismissPullChoice();
             closeChromeDropdowns();
             // TAB-FR-32 / SNV-FR-56: the tab context menu is one of the
             // window's floating overlays, so a dropdown opening takes it down.
@@ -305,6 +312,8 @@ export function AppShell(props: AppShellProps) {
           // between, so the note routes to where one is added — the Global
           // Settings window's Global GitHub section (SWN-FR-13, GIT-FR-10).
           onOpenGlobalSettings={() => s.openGlobalSettings("github")}
+          // WTS-FR-DVGQ / GIT-FR-MRBQ: a diverged pull opens the one dialog.
+          onPullDiverged={openPullChoice}
           // AGT-FR-06 / AGT-FR-07: the roster is how an agent is reached to be
           // looked at or changed, and how a new one is described. A row opens
           // the Settings **window** on the Project Agents section of its Project
@@ -383,6 +392,7 @@ export function AppShell(props: AppShellProps) {
               dismissCommitWindow();
               dismissRollbackWindow();
               dismissPullRequestWindow();
+              dismissPullChoice();
               dismissTabMenu();
               dismissGraduationOverlays();
               projectFolders.ensureFresh();
@@ -400,6 +410,7 @@ export function AppShell(props: AppShellProps) {
               dismissCommitWindow();
               dismissRollbackWindow();
               dismissPullRequestWindow();
+              dismissPullChoice();
               dismissTabMenu();
               dismissGraduationOverlays();
               projectFolders.ensureFresh();
@@ -414,6 +425,7 @@ export function AppShell(props: AppShellProps) {
               dismissCommitWindow();
               dismissRollbackWindow();
               dismissPullRequestWindow();
+              dismissPullChoice();
               dismissTabMenu();
               dismissGraduationOverlays();
               projectFolders.ensureFresh();
@@ -531,6 +543,7 @@ export function AppShell(props: AppShellProps) {
               dismissCommitWindow();
               dismissRollbackWindow();
               dismissPullRequestWindow();
+              dismissPullChoice();
               dismissTabMenu();
               dismissGraduationOverlays();
               closeChromeDropdowns();
@@ -622,6 +635,7 @@ export function AppShell(props: AppShellProps) {
               dismissCommitWindow();
               dismissRollbackWindow();
               dismissPullRequestWindow();
+              dismissPullChoice();
               closeChromeDropdowns();
               dismissTabMenu();
             }}
@@ -648,6 +662,8 @@ export function AppShell(props: AppShellProps) {
               // so the picker opens with no preselection of its own.
               new Promise<boolean>((resolve) => openTokenPicker(null, resolve))
             }
+            // GIT-FR-MRBQ: a diverged pull from the Logs section's Pull.
+            onPullDiverged={openPullChoice}
             // GIT-FR-05: the PRs rail's Create PR for current branch opens the
             // shared window.
             onCreatePullRequest={openPullRequestWindow}
@@ -679,6 +695,7 @@ export function AppShell(props: AppShellProps) {
           dismissCommitWindow();
           dismissRollbackWindow();
           dismissPullRequestWindow();
+          dismissPullChoice();
           dismissTabMenu();
           dismissGraduationOverlays();
           s.openProgressOverlay();
@@ -784,6 +801,16 @@ export function AppShell(props: AppShellProps) {
             s.bumpDrafts();
             openStartedGraduationRun(run.id);
           }}
+        />
+      )}
+
+      {/* GIT-FR-MRBQ / GIT-FR-RCDL: the merge-or-rebase dialog of a diverged
+          pull, from either Pull control. */}
+      {pullChoice && (
+        <PullReconcileDialog
+          outcome={pullChoice}
+          onClose={dismissPullChoice}
+          onOpenRun={(runId) => openGraduationRun(runId)}
         />
       )}
 

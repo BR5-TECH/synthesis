@@ -55,7 +55,11 @@ export function PushControl({
   if (!inRepository) return null;
 
   const available = canStartPush(transfer.sync, transfer.running);
-  const reason = pushUnavailableReason(transfer.sync, transfer.running);
+  const reason = pushUnavailableReason(
+    transfer.sync,
+    transfer.running,
+    transfer.operation,
+  );
   const state = transfer.running
     ? "busy"
     : available

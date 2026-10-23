@@ -231,6 +231,7 @@ pub(super) fn merge_data_for(
         unresolved_paths: snapshot.unresolved_paths.clone(),
         conflicts: snapshot.conflicts.clone(),
         result: None,
+        pull: None,
     }
 }
 

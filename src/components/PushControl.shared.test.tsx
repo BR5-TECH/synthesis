@@ -186,6 +186,30 @@ describe("one push across the three surfaces (GIT-FR-QMYB)", () => {
     await waitFor(() => expect(primary()).toBeEnabled());
   });
 
+  it("GIT-FR-QMYB, CHG-FR-44 makes Commit & Push unavailable in the Changes panel while a pull runs, and says a pull runs", async () => {
+    render(<Window />);
+    await screen.findByText(/files selected/);
+    await chooseAction("Commit & Push");
+    const checks = screen
+      .getByTestId("changes-surface")
+      .querySelectorAll<HTMLInputElement>("input[type=checkbox]");
+    await userEvent.click(checks[0]);
+    await waitFor(() => expect(primary()).toBeEnabled());
+
+    await act(async () =>
+      bus.emit(GIT_OUTPUT_LINE, { operation: "pull", line: "Pulling main from origin/main" }),
+    );
+    await waitFor(() => expect(primary()).toBeDisabled());
+    expect(primary()).toHaveAttribute("title", "A pull is running.");
+    expect(top()).toHaveAttribute("aria-disabled", "true");
+
+    await act(async () =>
+      bus.emit(GIT_OPERATION_FINISHED, { operation: "pull", ok: true }),
+    );
+    await waitFor(() => expect(primary()).toBeEnabled());
+    expect(pushInvocations).toBe(0);
+  });
+
   it("GIT-FR-QMYB, GIT-FR-PZIE records a push started from the chrome in the output area when the Git panel was closed", async () => {
     render(<Window initiallyOpen={false} />);
     await waitFor(() => expect(top()).toHaveAttribute("aria-disabled", "false"));

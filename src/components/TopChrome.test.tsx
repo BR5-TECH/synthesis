@@ -880,14 +880,23 @@ describe("Push control placement in the top chrome (SNV-FR-32, GIT-FR-XXLE)", ()
     expect(screen.queryByTestId("top-push")).toBeNull();
   });
 
-  // WTS-FR-GVBD: Refresh stays fetch-only, and Push never refreshes.
-  it("WTS-FR-GVBD keeps Refresh fetch-only and Push free of refresh and switch commands", async () => {
+  // WTS-FR-GVBD: the pull control pulls and never pushes or commits; Push never
+  // pulls, fetches or switches.
+  it("WTS-FR-GVBD, WTS-FR-30: the pull control pulls without pushing, and Push pulls nothing", async () => {
     const user = userEvent.setup();
     invokeMock.mockImplementation(async (cmd: string) => {
       if (cmd === "get_upstream_sync_state")
         return { hasRemote: true, hasUpstream: true, ahead: 1, behind: 0 };
-      if (cmd === "refresh_worktrees_and_branches")
-        return { remoteState: "refreshed" };
+      if (cmd === "pull_current_branch")
+        return {
+          state: "up_to_date",
+          branch: "main",
+          upstream: "origin/main",
+          ahead: 1,
+          behind: 0,
+          updatedPaths: [],
+          refresh: { remoteState: "refreshed" },
+        };
       if (cmd === "load_app_preferences") return { theme: "system" };
       if (cmd === "list_recent_projects") return [];
       if (cmd === "list_project_agents") return [];
@@ -899,9 +908,10 @@ describe("Push control placement in the top chrome (SNV-FR-32, GIT-FR-XXLE)", ()
       invokeMock.mock.calls.filter((c) => c[0] === name).length;
 
     await user.click(screen.getByTestId("worktree-refresh"));
-    await waitFor(() => expect(calls("refresh_worktrees_and_branches")).toBe(1));
+    await waitFor(() => expect(calls("pull_current_branch")).toBe(1));
     expect(calls("push_current_branch")).toBe(0);
-    expect(calls("pull_current_branch")).toBe(0);
+    expect(calls("commit_paths")).toBe(0);
+    expect(calls("refresh_worktrees_and_branches")).toBe(0);
 
     await waitFor(() =>
       expect(screen.getByTestId("top-push")).toHaveAttribute(
@@ -911,7 +921,8 @@ describe("Push control placement in the top chrome (SNV-FR-32, GIT-FR-XXLE)", ()
     );
     await user.click(screen.getByTestId("top-push"));
     await waitFor(() => expect(calls("push_current_branch")).toBe(1));
-    expect(calls("refresh_worktrees_and_branches")).toBe(1);
+    expect(calls("pull_current_branch")).toBe(1);
+    expect(calls("refresh_worktrees_and_branches")).toBe(0);
     expect(calls("activate_worktree")).toBe(0);
     expect(calls("check_out_branch_in_active_worktree")).toBe(0);
   });

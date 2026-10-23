@@ -1,14 +1,15 @@
 /**
- * The main window's one push: its running state, its transcript, and the
- * branch's standing against its remote
+ * The main window's one transfer — a push or a pull: its running state, its
+ * transcript, and the branch's standing against its remote
  * (`specifications/ui/GIT-git.md` GIT-FR-QMYB).
  *
- * The top-chrome **Push** control, the Git panel's **Push**, and the Changes
- * panel's **Push** are three ways to start one operation. They read one state
- * from here, so a push started by any of them makes the other two unavailable,
- * and every output line lands in one transcript that the Git panel renders. The
- * state lives above the panels because a push started while the Git panel is
- * closed must still be in its output area when the panel opens.
+ * The top-chrome **Push** control, the top-chrome pull control, the Git panel's
+ * **Push** and **Pull**, and the Changes panel's **Push** start one of two
+ * transfers. They read one state from here, so a transfer started by any of
+ * them makes every other one unavailable, and every output line lands in one
+ * transcript that the Git panel renders. The state lives above the panels
+ * because a transfer started while the Git panel is closed must still be in its
+ * output area when the panel opens.
  *
  * Nothing here writes to the diagnostic Logs panel. A push failure is a
  * transfer outcome, and it belongs in the transcript (GIT-FR-IMSH).
@@ -32,7 +33,12 @@ import {
 import { tokenErrorMessage } from "../components/GithubTokens";
 import { logDebug } from "../logging";
 import { GITHUB_TOKEN_ERRORS } from "../types";
-import type { UpstreamSyncState } from "../types";
+import type {
+  PullOutcome,
+  PullReconcileOutcome,
+  PullStrategy,
+  UpstreamSyncState,
+} from "../types";
 
 /** How a push that did not complete ended, as the three controls tell it apart. */
 export type PushFailure =
@@ -46,11 +52,31 @@ export type PushFailure =
 
 export type PushOutcome = { ok: true } | PushFailure;
 
+/** Which transfer runs (GIT-FR-QMYB). */
+export type TransferOperation = "push" | "pull";
+
+/**
+ * How a pull call ended. A pull that ran answers its outcome, a refused one
+ * included (GTC-FR-QHMT); only a busy transfer or a rejection is a failure.
+ */
+export type PullCall =
+  | { ok: true; outcome: PullOutcome }
+  | { ok: false; cause: "busy" }
+  | { ok: false; cause: "failed"; error: string };
+
+/** How a reconcile call ended (GTC-FR-NJUY). */
+export type ReconcileCall =
+  | { ok: true; outcome: PullReconcileOutcome }
+  | { ok: false; cause: "busy" }
+  | { ok: false; cause: "failed"; error: string };
+
 export interface GitTransfer {
   /** CHG-FR-37: the branch's standing against its upstream, `null` when unread. */
   sync: UpstreamSyncState | null;
-  /** GIT-FR-QMYB: a push is running, whichever control started it. */
+  /** GIT-FR-QMYB: a transfer is running, whichever control started it. */
   running: boolean;
+  /** GIT-FR-QMYB: which transfer runs, `null` while none does. */
+  operation: TransferOperation | null;
   /** GIT-FR-PZIE: the push/pull output area's lines. */
   lines: string[];
   /**
@@ -59,8 +85,24 @@ export interface GitTransfer {
    * because each control answers them its own way (GIT-FR-10, CHG-FR-45).
    */
   pushBranch: () => Promise<PushOutcome>;
+  /** GIT-FR-QMYB / WTS-FR-30: invoke `"pull current branch"` unless a transfer runs. */
+  pullBranch: () => Promise<PullCall>;
+  /**
+   * GIT-FR-RCDL: invoke `"reconcile pull"` at the tips the author was shown,
+   * unless a transfer runs.
+   */
+  reconcilePull: (
+    strategy: PullStrategy,
+    localTip: string,
+    remoteTip: string,
+  ) => Promise<ReconcileCall>;
   /** CHG-FR-38: read the standing again. */
   refreshSync: () => void;
+}
+
+/** The text of a rejected invocation. */
+function rejection(e: unknown): string {
+  return typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
 }
 
 /** The two typed causes of GTC-FR-10 end a push that made no network request. */
@@ -98,16 +140,20 @@ export function useGitTransferState({
     [resetKey],
   );
   const [syncEpoch, setSyncEpoch] = useState(0);
-  const [running, setRunning] = useState(false);
+  const [operation, setOperation] = useState<TransferOperation | null>(null);
+  const running = operation !== null;
   const [lines, setLines] = useState<string[]>([]);
   // The ref is the gate and the state is what renders: two activations in one
   // tick both see the state as idle, and only the ref tells the second one.
   const runningRef = useRef(false);
 
-  const setRunningNow = useCallback((next: boolean) => {
-    runningRef.current = next;
-    setRunning(next);
-  }, []);
+  const setRunningNow = useCallback(
+    (next: boolean, which: TransferOperation = "push") => {
+      runningRef.current = next;
+      setOperation(next ? which : null);
+    },
+    [],
+  );
 
   const refreshSync = useCallback(() => setSyncEpoch((n) => n + 1), []);
 
@@ -172,12 +218,13 @@ export function useGitTransferState({
       else unlisteners.push(fn);
     };
     void onGitOutputLine((payload) => {
-      if (payload.operation === "push") setRunningNow(true);
+      if (payload.operation === "push" || payload.operation === "pull")
+        setRunningNow(true, payload.operation);
       setLines((prev) => [...prev, payload.line]);
     }).then(keep);
     void onGitOperationFinished((payload) => {
       setRunningNow(false);
-      // A completed push leaves the branch level with its remote.
+      // A completed transfer moves the branch's standing against its remote.
       refreshSync();
       const cause = payload.error ?? "unknown error";
       const failure = isTokenCause(cause) ? tokenErrorMessage(cause) : cause;
@@ -201,7 +248,7 @@ export function useGitTransferState({
       await api.pushCurrentBranch();
       return { ok: true };
     } catch (e) {
-      const raw = typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
+      const raw = rejection(e);
       if (raw.includes(GITHUB_TOKEN_ERRORS.selectionRequired))
         return { ok: false, cause: "selection_required", error: raw };
       if (raw.includes(GITHUB_TOKEN_ERRORS.tokenMissing))
@@ -215,7 +262,50 @@ export function useGitTransferState({
     }
   }, [refreshSync, setRunningNow]);
 
-  return { sync, running, lines, pushBranch, refreshSync };
+  const pullBranch = useCallback(async (): Promise<PullCall> => {
+    if (runningRef.current) return { ok: false, cause: "busy" };
+    setRunningNow(true, "pull");
+    try {
+      return { ok: true, outcome: await api.pullCurrentBranch() };
+    } catch (e) {
+      return { ok: false, cause: "failed", error: rejection(e) };
+    } finally {
+      setRunningNow(false);
+      refreshSync();
+    }
+  }, [refreshSync, setRunningNow]);
+
+  const reconcilePull = useCallback(
+    async (
+      strategy: PullStrategy,
+      localTip: string,
+      remoteTip: string,
+    ): Promise<ReconcileCall> => {
+      if (runningRef.current) return { ok: false, cause: "busy" };
+      setRunningNow(true, "pull");
+      try {
+        const outcome = await api.reconcilePull(strategy, localTip, remoteTip);
+        return { ok: true, outcome };
+      } catch (e) {
+        return { ok: false, cause: "failed", error: rejection(e) };
+      } finally {
+        setRunningNow(false);
+        refreshSync();
+      }
+    },
+    [refreshSync, setRunningNow],
+  );
+
+  return {
+    sync,
+    running,
+    operation,
+    lines,
+    pushBranch,
+    pullBranch,
+    reconcilePull,
+    refreshSync,
+  };
 }
 
 const GitTransferContext = createContext<GitTransfer | null>(null);

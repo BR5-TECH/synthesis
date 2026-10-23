@@ -30,6 +30,8 @@ interface ChangesFooterProps {
   action: ChangesCommitAction;
   sync: UpstreamSyncState | null;
   pushRunning: boolean;
+  /** CHG-FR-44: which transfer runs, so the reason names it. */
+  transferOperation?: "push" | "pull" | null;
   busy: boolean;
   primaryEnabled: boolean;
   primaryReason: string | null;
@@ -48,6 +50,7 @@ export function ChangesFooter({
   action,
   sync,
   pushRunning,
+  transferOperation = "push",
   busy,
   primaryEnabled,
   primaryReason,
@@ -115,7 +118,9 @@ export function ChangesFooter({
           value,
           label: ACTION_LABELS[value],
           unavailable:
-            value === "push" ? pushUnavailableReason(sync, pushRunning) : null,
+            value === "push"
+              ? pushUnavailableReason(sync, pushRunning, transferOperation)
+              : null,
         }))}
         onChange={onSelectAction}
         onActivate={onRunPrimary}

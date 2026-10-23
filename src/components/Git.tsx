@@ -16,7 +16,9 @@ import { CurrentBranchButton } from "./CreatePullRequest/CurrentBranchButton";
 import type { PullRequestSource } from "./CreatePullRequest/types";
 import { useGitLog } from "./Git/useGitLog";
 import { usePullRequests } from "./Git/usePullRequests";
-import type { GitBranch, WorktreeContext } from "../types";
+import { GITHUB_TOKEN_ERRORS } from "../types";
+import type { GitBranch, PullOutcome, WorktreeContext } from "../types";
+import { pullErrorText, pullNote } from "../state/pullText";
 import type { SwitchOutcome } from "./WorktreeSelector";
 import {
   ReadyTasks,
@@ -50,6 +52,8 @@ interface GitProps {
    * (GHA-FR-17).
    */
   onRequestGithubToken?: () => Promise<boolean>;
+  /** GIT-FR-MRBQ: a pull found the branch diverged; the shell opens the dialog. */
+  onPullDiverged?: (outcome: PullOutcome) => void;
   /** GIT-FR-05: open the Create a PR window for the current branch. */
   onCreatePullRequest?: (source: PullRequestSource) => void;
   /** GIT-FR-OGHO: the window's GitHub polling view and its actions. */
@@ -83,6 +87,7 @@ export function Git({
   onSwitchWorktree,
   canCheckOutBranches,
   onRequestGithubToken,
+  onPullDiverged,
   onCreatePullRequest,
   readyTasks,
   onOpenDraft,
@@ -233,6 +238,53 @@ export function Git({
       if (outcome.ok || outcome.cause === "busy") return;
       setAuthNote(`Push failed: ${tokenErrorMessage(outcome.error)}`);
     });
+  };
+
+  /**
+   * GIT-FR-PLWD: the panel's own pull, answered as the top-chrome pull control
+   * answers it (WTS-FR-34, WTS-FR-35). A token the pull could not resolve is
+   * read off its outcome, so a remote that needs none is never asked for one.
+   */
+  const [pullNoteText, setPullNoteText] = useState("");
+  const runPull = async (retried = false): Promise<void> => {
+    setAuthNote("");
+    setPullNoteText("");
+    const call = await transfer.pullBranch();
+    if (!call.ok) {
+      setAuthNote(
+        call.cause === "busy"
+          ? "A push or a pull is already running."
+          : pullErrorText(call.error),
+      );
+      return;
+    }
+    const outcome = call.outcome;
+    if (
+      !retried &&
+      outcome.state === "fetch_failed" &&
+      outcome.error === GITHUB_TOKEN_ERRORS.selectionRequired
+    ) {
+      const chosen = (await onRequestGithubToken?.()) ?? false;
+      if (chosen) return runPull(true);
+      setAuthNote("Pull cancelled — no GitHub token was selected.");
+      return;
+    }
+    if (outcome.state === "diverged") {
+      onPullDiverged?.(outcome);
+      return;
+    }
+    // GIT-FR-10 / GHA-FR-19: no token stored at all, so the note names where
+    // one is added, as the panel's Push says it.
+    if (outcome.error === GITHUB_TOKEN_ERRORS.tokenMissing) {
+      setAuthNote("Pull needs a GitHub token. Add one in Global settings → GitHub.");
+      return;
+    }
+    const note = pullNote(outcome) ?? "";
+    if (outcome.state === "up_to_date" || outcome.state === "fast_forwarded") {
+      setPullNoteText(note);
+    } else {
+      setAuthNote(note);
+    }
   };
 
   // GIT-FR-LNEI / GIT-FR-FZMS: the one selected row — the row the author
@@ -396,11 +448,9 @@ export function Git({
             transferring={transferring}
             lines={transferLines}
             authNote={authNote}
-            onPull={() =>
-              void runAuthenticated("Pull", () =>
-                setAuthNote("Pull is not wired to a remote in this build."),
-              )
-            }
+            pullNote={pullNoteText}
+            operation={transfer.operation}
+            onPull={() => void runPull()}
             onPush={() => void runAuthenticated("Push", runPush)}
           />
         ) : (

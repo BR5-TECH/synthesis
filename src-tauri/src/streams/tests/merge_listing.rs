@@ -32,6 +32,7 @@ fn merge_run_of(fx: &Fixture, stream: &WorkStream) -> GraduationRun {
             changed_paths: vec!["README.md".into()],
             unresolved_paths: vec!["README.md".into()],
             conflicts: Vec::new(),
+            pull: None,
         },
     )
     .expect("a merge run")

@@ -851,7 +851,7 @@ pub(crate) fn check_out_branch_at<R: tauri::Runtime>(
 /// Nothing is unmounted or remounted, the remembered active worktree is not
 /// rewritten, and no `"worktree context changed"` is emitted, because nothing
 /// that event describes has changed.
-fn refresh_and_announce<R: tauri::Runtime>(
+pub(crate) fn refresh_and_announce<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     root: &Path,
     fetch: impl FnOnce() -> Result<(), String>,

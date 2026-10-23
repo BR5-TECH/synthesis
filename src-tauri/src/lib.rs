@@ -472,6 +472,8 @@ pub fn run() {
             git::get_upstream_sync_state,
             git::push_current_branch,
             git::push_branch,
+            git::pull_current_branch,
+            git::reconcile_pull,
             worktree::list_worktrees_and_branches,
             worktree::get_active_worktree,
             worktree::activate_worktree,

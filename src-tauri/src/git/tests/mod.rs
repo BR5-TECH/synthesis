@@ -33,6 +33,7 @@ mod file_revisions;
 mod github_hosts;
 mod history;
 mod log_records;
+mod pull;
 mod pull_request_create;
 mod pull_request_timeline;
 mod pull_requests;

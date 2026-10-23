@@ -123,9 +123,12 @@ pub fn merge_runs_by_stream(
     // The order runs earliest to latest, so the last entry of a stream is its
     // newest.
     for entry in store::read_queue_index(fs, base, project_key).runs {
+        // GRD-FR-PQKY: a pull run carries a worktree, and is never a stream's
+        // merge run.
         if !entry.merge
             || entry.archived
             || entry.stream_id.is_empty()
+            || !entry.worktree_path.is_empty()
             || entry.state == GraduationRunState::Discarded
         {
             continue;
@@ -163,6 +166,37 @@ pub fn dispatched_direct_run<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Op
         .into_iter()
         .find(|entry| entry.dispatched_direct && !entry.state.is_terminal())
         .map(|entry| entry.run_id)
+}
+
+/// `GTC-git.md` GTC-FR-TRWC: the live run that stops a pull of the worktree at
+/// `worktree_path`, with whether it is a pull run.
+///
+/// A pull run that has not ended stops it whether or not it was dispatched,
+/// and a direct run stops it only once dispatched. Read from the run order
+/// index and from the direct claim held in memory, as WTC-FR-FBJQ reads it.
+pub fn live_run_on_worktree<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    worktree_path: &str,
+) -> Option<(String, bool)> {
+    let key = project_key(app);
+    if key.is_empty() {
+        return None;
+    }
+    let fs = store::store_fs(app).ok()?;
+    let base = store::store_base(app).ok()?;
+    let index = store::read_queue_index(&fs, &base, &key);
+    let found = index.runs.iter().find(|entry| {
+        !entry.state.is_terminal()
+            && entry.worktree_path == worktree_path
+            && (entry.merge || entry.dispatched_direct)
+    });
+    if let Some(entry) = found {
+        return Some((entry.run_id.clone(), entry.merge));
+    }
+    let claimed = app.try_state::<GraduationState>().and_then(|state| state.direct_claim())?;
+    let run = runs::load_run(app, &claimed).ok()?;
+    let on_this = run.direct_target.as_ref().is_some_and(|t| t.worktree_path == worktree_path);
+    on_this.then(|| (run.id.clone(), run.is_merge()))
 }
 
 /// GRD-FR-DXWL: the draft's non-terminal run, if it has one.

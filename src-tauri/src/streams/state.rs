@@ -235,14 +235,15 @@ impl StreamState {
     }
 }
 
-/// WKS-FR-TSOA: which of the two reconciliations holds the repository update
-/// guard.
+/// WKS-FR-TSOA: which reconciliation holds the repository update guard.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Reconciliation {
     /// The stream branch into its base branch.
     Merge,
     /// A pinned revision of the base branch into the stream branch.
     Update,
+    /// `GTC-git.md` GTC-FR-TRWC: an upstream into the active worktree's branch.
+    Pull,
 }
 
 impl Reconciliation {
@@ -251,6 +252,7 @@ impl Reconciliation {
         match self {
             Self::Merge => super::ERR_MERGE_IN_PROGRESS,
             Self::Update => super::ERR_UPDATE_IN_PROGRESS,
+            Self::Pull => super::ERR_PULL_IN_PROGRESS,
         }
     }
 }

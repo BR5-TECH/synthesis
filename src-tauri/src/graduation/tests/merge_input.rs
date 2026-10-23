@@ -63,6 +63,7 @@ pub(super) fn bare_merge_run() -> GraduationRun {
                 stream_change: "deleted".into(),
             }],
             result: None,
+            pull: None,
         }),
         created_at: "t0".into(),
         updated_at: "t0".into(),

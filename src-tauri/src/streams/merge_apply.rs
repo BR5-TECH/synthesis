@@ -28,6 +28,11 @@ pub enum MergeApplyFailure {
     DirtySide(String),
     /// Git could not write the result. The typed text of the failure.
     Failed(String),
+    /// GRD-FR-PRBZ: the replay of a pull run's rebase does not hold the result
+    /// tree at these paths.
+    Unsettled(Vec<String>),
+    /// GRD-FR-PAPX: the worktree of a pull run no longer holds its branch.
+    TargetChanged,
 }
 
 /// What an apply wrote.
@@ -56,12 +61,17 @@ pub fn merge_tips_moved<R: tauri::Runtime>(
     tips_moved(&main, data)
 }
 
-fn tips_moved(main: &git2::Repository, data: &GraduationMergeData) -> bool {
+pub(super) fn tips_moved(main: &git2::Repository, data: &GraduationMergeData) -> bool {
     let pinned = |revision: &str| git2::Oid::from_str(revision).ok();
     let (Some(base), Some(stream)) = (pinned(&data.base_tip), pinned(&data.stream_tip)) else {
         return true;
     };
     let now_base = merge::branch_tip(main, &data.base_branch);
+    // GRD-FR-XHSE: a pull run pins its local branch alone. A later fetch moves
+    // the upstream, and the snapshot keeps the pinned upstream tip reachable.
+    if data.pull.is_some() {
+        return now_base != Ok(base);
+    }
     let now_stream = merge::branch_tip(main, &data.stream_branch);
     !(now_base == Ok(base) && now_stream == Ok(stream))
 }
@@ -160,7 +170,11 @@ pub fn apply_merge_run<R: tauri::Runtime>(
 }
 
 /// The paths of `paths` that hold a conflict marker in `tree`.
-fn markers_in(main: &git2::Repository, tree: git2::Oid, paths: &[String]) -> Vec<String> {
+pub(super) fn markers_in(
+    main: &git2::Repository,
+    tree: git2::Oid,
+    paths: &[String],
+) -> Vec<String> {
     let Ok(tree) = main.find_tree(tree) else {
         return Vec::new();
     };

@@ -202,6 +202,17 @@ function seededTree(): any {
                 artifactType: "spec",
                 typeSource: "inferred",
               },
+              // EDT-FR-MOYS / EDT-FR-XTEB: a file with one valid and one
+              // invalid Mermaid fence, so the diagram surface is answerable in
+              // a browser. See `MD_BODY_DIAGRAMS`.
+              {
+                id: "specifications/ui/DIA-diagrams.md",
+                name: "DIA-diagrams.md",
+                path: "specifications/ui/DIA-diagrams.md",
+                nodeKind: "file",
+                artifactType: "spec",
+                typeSource: "inferred",
+              },
             ],
           },
           {
@@ -751,6 +762,51 @@ down, the frontmatter region must collapse to its single-line summary bar
  * points at a file the harness's own Vite root already serves, so the pixels
  * actually arrive and "does the image render" is answerable without a backend.
  */
+/**
+ * EDT-FR-MOYS / EDT-FR-XTEB / DFV-FR-EGFA: one valid Mermaid fence and one
+ * invalid fence. `MD_BODY_DIAGRAMS_OLD` is the earlier revision the Diff tab
+ * compares against; its diagram differs in one node label.
+ */
+const MD_BODY_DIAGRAMS = `# Diagrams fixture
+
+A paragraph before the diagram.
+
+\`\`\`mermaid
+graph TD
+  A[Start] --> B{Choice}
+  B -->|yes| C[Done]
+  B -->|no| A
+\`\`\`
+
+A paragraph between the two diagrams.
+
+\`\`\`mermaid
+graph TD
+  A --> 
+  this is not valid ((
+\`\`\`
+
+A wide diagram must scale down to the page measure.
+
+\`\`\`mermaid
+graph LR
+  S1[Collect requirements] --> S2[Write specification] --> S3[Review specification]
+  S3 --> S4[Implement feature] --> S5[Write tests] --> S6[Review code] --> S7[Ship release]
+\`\`\`
+`;
+const MD_BODY_DIAGRAMS_OLD = `# Diagrams fixture
+
+A paragraph before the diagram.
+
+\`\`\`mermaid
+graph TD
+  A[Begin] --> B{Choice}
+  B -->|yes| C[Finished]
+\`\`\`
+
+A paragraph between the two diagrams.
+`;
+
 const MD_BODY_FIDELITY = `# Fidelity fixture
 
 A paragraph carrying **strong**, *emphasis*, ~~strikethrough~~, \`inline code\`,
@@ -842,6 +898,17 @@ const worktreeContext = {
 };
 
 const changeEntries = [
+  {
+    id: "specifications/ui/DIA-diagrams.md",
+    path: "specifications/ui/DIA-diagrams.md",
+    name: "DIA-diagrams.md",
+    changeStatus: "modified",
+    addedLines: 9,
+    removedLines: 3,
+    isBinary: false,
+    artifactType: "spec",
+    typeSource: "inferred",
+  },
   {
     id: "specifications/ui/LIB-library.md",
     path: "specifications/ui/LIB-library.md",
@@ -7511,7 +7578,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
             ? source
             : String(a.id).endsWith("EDT-editor.md")
               ? MD_BODY_FM
-              : String(a.id).endsWith("FID-fidelity.md")
+              : String(a.id).endsWith("DIA-diagrams.md")
+                ? MD_BODY_DIAGRAMS
+                : String(a.id).endsWith("FID-fidelity.md")
                 ? MD_BODY_FIDELITY
                 : String(a.id).endsWith("SKILL.md")
                   ? MD_BODY_SKILL
@@ -9036,6 +9105,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const newSource = SOURCE_BODIES[ext];
       if (oldSource !== undefined && newSource !== undefined) {
         return { old: oldSource, new: newSource, isBinary: false };
+      }
+      if (path.endsWith("DIA-diagrams.md")) {
+        return { old: MD_BODY_DIAGRAMS_OLD, new: MD_BODY_DIAGRAMS, isBinary: false };
       }
       return { old: OLD_TEXT, new: NEW_TEXT, isBinary: false };
     }

@@ -25,7 +25,7 @@ What the Editor does with a file that is not a Markdown document. Every file the
 12. **ESH-FR-BABL** A source file's text is syntax-highlighted wherever a language resolves for it: the tokens that language recognises carry colours of the theme's own and every other character renders as ordinary text.
 13. **ESH-FR-KQVP** Highlighting reaches the source surface of a source file and nothing else.
 14. **ESH-FR-ZCKP** A Markdown file receives no highlighting in either of its modes, its raw-text mode included, so the raw Markdown an author reads is the raw Markdown they have always read.
-15. **ESH-FR-RKHL** The WYSIWYG surface's rendering of Markdown, of inline and fenced code, and of the frontmatter region is untouched by any of this (per `EDT-editor.md` EDT-FR-18, EDT-FR-21).
+15. **ESH-FR-RKHL** The WYSIWYG surface's rendering of Markdown, of inline and fenced code, and of the frontmatter region is untouched by any of this (per `EDT-editor.md` EDT-FR-18, EDT-FR-21). A `mermaid` fence there shows as a diagram under `EDT-editor.md` EDT-FR-MOYS and gets no highlighting from this spec.
 16. **ESH-FR-XXYW** A source file for which no language resolves renders plain, and is edited exactly as one that highlights.
 17. **ESH-FR-CFEQ** A source file's language is resolved from the file alone, in a fixed order whose first answer wins.
 18. **ESH-FR-PBFJ** The first step is the file's final filename extension, matched case-insensitively against the map below. The map is at minimum:

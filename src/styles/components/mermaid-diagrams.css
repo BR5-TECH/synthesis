@@ -1,0 +1,118 @@
+/* ---------- Diagram fences (EDT-editor.md EDT-FR-MOYS – EDT-FR-UYEN) ---------- */
+
+/* EDT-FR-MOYS: in its diagram view a fence is a figure on the page rather than
+   a code tile. It keeps the frame of a fenced block, so it still reads as one
+   block of the document, but takes the page's own ground. A diff mark on the
+   block (DFV-FR-EGFA) keeps its own ground. */
+.doc pre.mermaid-block { position: relative; }
+.doc pre.mermaid-block--diagram:not([data-mark]),
+.doc pre.mermaid-block--pending:not([data-mark]) {
+  background: var(--doc-page-bg);
+}
+/* The inert diagram of an original block: the mark is on the block around it. */
+.diff-block[data-mark="added"] pre.mermaid-block,
+.diff-block[data-mark="removed"] pre.mermaid-block {
+  background: transparent;
+}
+
+/* EDT-FR-UYEN: the source stays in the document at zero size, so Find, the
+   comment fragments and the selection still have text to work on. The block
+   itself is set at zero size too: each source line still makes a line box, and
+   at the block's own line height those leave a blank band under the diagram. */
+.doc pre.mermaid-block--diagram,
+.doc pre.mermaid-block--pending {
+  font-size: 0;
+  line-height: 0;
+}
+.doc pre.mermaid-block--diagram > code,
+.doc pre.mermaid-block--pending > code {
+  font-size: 0;
+  line-height: 0;
+  color: transparent;
+  caret-color: transparent;
+}
+
+.doc .mermaid-head {
+  display: block;
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-sm);
+  line-height: var(--font-ui-line-height);
+  white-space: normal;
+  color: var(--fg-3);
+}
+
+.doc .mermaid-diagram {
+  display: flex;
+  justify-content: center;
+  padding: var(--sp-2) 0;
+  border-radius: var(--r-xs);
+}
+/* A wide diagram scales down to the page measure rather than scrolling, which
+   the Diff viewer does not allow. */
+.doc .mermaid-diagram svg { max-width: 100%; height: auto; }
+/* EDT-FR-KQXZ: a diagram that takes input says so under the pointer. */
+.doc .mermaid-diagram[role="button"] { cursor: pointer; }
+.doc .mermaid-diagram[role="button"]:hover { background: var(--bg-hover); }
+.doc .mermaid-diagram--pending { padding: var(--sp-4) 0; }
+/* EDT-FR-USWS: a diagram that has the toggle starts below it, so a diagram as
+   wide as the page does not run under the toggle. */
+.doc .mermaid-head:has(.mermaid-toggle) .mermaid-diagram {
+  padding-top: calc(var(--sp-2) + 1.75rem);
+}
+
+/* EDT-FR-USWS: the view toggle sits in the top-right corner in both views.
+   Quiet until it is wanted, but never hidden, so it does not depend on hover. */
+.doc .mermaid-toggle {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  padding: 2px 8px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-xs);
+  background: var(--bg-canvas);
+  color: var(--fg-3);
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-medium);
+  line-height: var(--font-ui-line-height);
+  cursor: pointer;
+}
+.doc .mermaid-toggle:hover {
+  color: var(--fg-1);
+  border-color: var(--border-2);
+}
+/* The first source line runs clear of the toggle. */
+.doc pre.mermaid-block--source { padding-right: calc(var(--sp-4) + 4.5rem); }
+
+.doc .mermaid-diagram:focus-visible,
+.doc .mermaid-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* EDT-FR-UYEN: a comment fragment in a fence that shows its diagram marks the
+   whole diagram, in the colour a fragment in prose carries. */
+.doc pre.mermaid-block[data-diagram-commented="true"] .mermaid-diagram {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* EDT-FR-XTEB: the error under the source, as text. The attribute selector
+   outranks the editor's own `white-space: normal` for non-editable content, so
+   the line breaks and the column pointer of a parse error hold. */
+.doc .mermaid-error,
+.doc .mermaid-error[contenteditable="false"] {
+  display: block;
+  margin-top: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--r-xs);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-sm);
+  line-height: var(--font-ui-line-height);
+  white-space: pre-wrap;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.doc .mermaid-error--static { margin: calc(-1 * var(--sp-2)) 0 var(--sp-3); }

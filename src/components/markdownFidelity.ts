@@ -37,6 +37,7 @@ import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Markdown } from "tiptap-markdown";
 import { LiteralBacktick } from "./markdownBacktick";
+import { MermaidDiagrams } from "./markdownMermaid";
 
 /** The shape `tiptap-markdown` calls a node's serializer with. */
 type SerializerState = { text: (value: string, escape?: boolean) => void };
@@ -192,6 +193,9 @@ export function markdownExtensions(extra: Extensions = []): Extensions {
     TaskList,
     TaskItem,
     TightTaskList,
+    // EDT-FR-MOYS: a `mermaid` fence shows as its diagram. Decorations only, so
+    // the fence round-trips as the plain fenced block it is (EDT-FR-67).
+    MermaidDiagrams,
     Markdown.configure({ html: false }),
     ...extra,
   ];

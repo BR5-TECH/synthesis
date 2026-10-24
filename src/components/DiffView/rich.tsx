@@ -14,6 +14,8 @@ import {
   type RichUnitMark,
 } from "../DiffRichTarget";
 import { frontmatterLineCount } from "../markdownFidelity";
+import { DIAGRAM_LANGUAGE } from "../markdownMermaid";
+import { MermaidStatic } from "./MermaidStatic";
 import type { FileRevisions } from "../../types";
 
 // ---------------------------------------------------------------------------
@@ -400,14 +402,21 @@ function MarkdownBody({
         </Tag>
       );
     }
-    case "code":
-      return (
+    case "code": {
+      const fence = (
         <pre data-language={block.language ?? ""}>
           <code>
             <Marked text={block.text} offset={0} ranges={ranges} />
           </code>
         </pre>
       );
+      // DFV-FR-EGFA: a diagram fence drawn here is an inert diagram.
+      return block.language?.trim() === DIAGRAM_LANGUAGE ? (
+        <MermaidStatic source={block.text}>{fence}</MermaidStatic>
+      ) : (
+        fence
+      );
+    }
     case "list-item": {
       // One block per item (DFV-FR-19), so each renders as a one-item list —
       // which is what keeps the bullet, the indent, and the typography the

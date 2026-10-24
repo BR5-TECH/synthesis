@@ -13,6 +13,7 @@ import type { RefObject } from "react";
 import type { Editor as TiptapEditor } from "@tiptap/react";
 import { docText, rangeToPositions } from "../findHighlight";
 import { commentHighlightKey, type AnchorRange } from "../commentHighlight";
+import { DIAGRAM_LAYOUT_EVENT, fragmentTop } from "../markdownMermaid";
 import { findNearest } from "../../state/commentAnchors";
 import { identityBlockFor, DRAFT_KEY } from "../../hooks/useComments";
 import { useCommentArrangement } from "../../hooks/useCommentArrangement";
@@ -65,6 +66,17 @@ export function useCommentAnchors(deps: CommentAnchorDeps) {
   const [scrollTop, setScrollTop] = useState(0);
   const [anchorTops, setAnchorTops] = useState<Record<string, number>>({});
   const [anchorRanges, setAnchorRanges] = useState<AnchorRange[]>([]);
+  // EDT-FR-UYEN: a diagram fence changes height without a document change — a
+  // change of view, or a render that finished — so the cards align again on it.
+  const [diagramLayout, setDiagramLayout] = useState(0);
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    const dom = editor.view?.dom;
+    if (!dom) return;
+    const bump = () => setDiagramLayout((n) => n + 1);
+    dom.addEventListener(DIAGRAM_LAYOUT_EVENT, bump);
+    return () => dom.removeEventListener(DIAGRAM_LAYOUT_EVENT, bump);
+  }, [editor]);
 
   /**
    * CMT-FR-28: push the anchor ranges and the focused thread into the decoration
@@ -167,7 +179,9 @@ export function useCommentAnchors(deps: CommentAnchorDeps) {
       if (!pos) return;
       if (mark) ranges.push({ threadId: key, from: pos.from, to: pos.to });
       try {
-        tops[key] = Math.max(0, editor.view.coordsAtPos(pos.from).top - containerTop);
+        // EDT-FR-UYEN: a fragment in a fence that shows its diagram aligns
+        // with the top of the diagram, since its text has no height there.
+        tops[key] = Math.max(0, fragmentTop(editor.view, pos.from) - containerTop);
       } catch {
         // A position the view cannot resolve (mid-relayout) simply has no
         // alignment this pass; the next one picks it up.
@@ -204,9 +218,19 @@ export function useCommentAnchors(deps: CommentAnchorDeps) {
         Object.keys(tops).every((k) => prev[k] === tops[k]);
       return sameKeys ? prev : tops;
     });
-    // `docVersion` stands in for the mutable document.
+    // `docVersion` stands in for the mutable document, and `diagramLayout` for
+    // the height of its diagram fences.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, railOpen, editor, docVersion, comments.threads, draft, session.seedToken]);
+  }, [
+    mode,
+    railOpen,
+    editor,
+    docVersion,
+    diagramLayout,
+    comments.threads,
+    draft,
+    session.seedToken,
+  ]);
 
   return {
     bodyScrollRef,

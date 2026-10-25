@@ -169,8 +169,14 @@ export function getMarkdown(editor: {
  * `undoRedo` is off because undo and redo are served from the tab-wide history
  * (EDT-FR-22); two competing stacks would let ⌘Z reverse a body edit without the
  * tab knowing.
+ *
+ * `diagramEditor` is false on the candidate of a review modal, which offers no
+ * Edit button on its diagram fences (EDT-FR-MOQW).
  */
-export function markdownExtensions(extra: Extensions = []): Extensions {
+export function markdownExtensions(
+  extra: Extensions = [],
+  { diagramEditor = true }: { diagramEditor?: boolean } = {},
+): Extensions {
   return [
     MarkdownStarterKit.configure({ undoRedo: false, text: false }),
     LiteralText,
@@ -195,7 +201,7 @@ export function markdownExtensions(extra: Extensions = []): Extensions {
     TightTaskList,
     // EDT-FR-MOYS: a `mermaid` fence shows as its diagram. Decorations only, so
     // the fence round-trips as the plain fenced block it is (EDT-FR-67).
-    MermaidDiagrams,
+    MermaidDiagrams.configure({ editButton: diagramEditor }),
     Markdown.configure({ html: false }),
     ...extra,
   ];

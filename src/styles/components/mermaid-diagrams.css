@@ -54,19 +54,25 @@
 .doc .mermaid-diagram[role="button"] { cursor: pointer; }
 .doc .mermaid-diagram[role="button"]:hover { background: var(--bg-hover); }
 .doc .mermaid-diagram--pending { padding: var(--sp-4) 0; }
-/* EDT-FR-USWS: a diagram that has the toggle starts below it, so a diagram as
-   wide as the page does not run under the toggle. */
-.doc .mermaid-head:has(.mermaid-toggle) .mermaid-diagram {
+/* EDT-FR-USWS, EDT-FR-ADNU: a diagram that has the toggle or the Edit button
+   starts below them, so a diagram as wide as the page does not run under them. */
+.doc .mermaid-head:has(.mermaid-controls) .mermaid-diagram {
   padding-top: calc(var(--sp-2) + 1.75rem);
 }
 
-/* EDT-FR-USWS, EDT-FR-UTHM: the view toggle is an icon button in the
-   top-right corner in both views. Quiet until it is wanted, but never hidden,
-   so it does not depend on hover. */
-.doc .mermaid-toggle {
+/* EDT-FR-USWS, EDT-FR-ADNU: the view toggle and the Edit button sit together
+   in the top-right corner in both views, the Edit button first. */
+.doc .mermaid-controls {
   position: absolute;
   top: var(--sp-2);
   right: var(--sp-2);
+  display: inline-flex;
+  gap: var(--sp-1);
+}
+/* EDT-FR-USWS, EDT-FR-UTHM, EDT-FR-ADNU: icon buttons. Quiet until they are
+   wanted, but never hidden, so they do not depend on hover. */
+.doc .mermaid-toggle,
+.doc .mermaid-edit {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -79,16 +85,20 @@
   color: var(--fg-3);
   cursor: pointer;
 }
-.doc .mermaid-toggle .icon { width: 15px; height: 15px; flex: none; }
-.doc .mermaid-toggle:hover {
+.doc .mermaid-toggle .icon,
+.doc .mermaid-edit .icon { width: 15px; height: 15px; flex: none; }
+.doc .mermaid-toggle:hover,
+.doc .mermaid-edit:hover {
   color: var(--fg-1);
   border-color: var(--border-2);
 }
-/* The first source line runs clear of the toggle. */
-.doc pre.mermaid-block--source { padding-right: calc(var(--sp-4) + 26px); }
+/* The first source line runs clear of the buttons. */
+.doc pre.mermaid-block--source,
+.doc pre.mermaid-block--error { padding-right: calc(var(--sp-4) + 56px); }
 
 .doc .mermaid-diagram:focus-visible,
-.doc .mermaid-toggle:focus-visible {
+.doc .mermaid-toggle:focus-visible,
+.doc .mermaid-edit:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
 }

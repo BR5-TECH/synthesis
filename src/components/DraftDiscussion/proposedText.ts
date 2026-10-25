@@ -58,7 +58,9 @@ const LocalHistory = Extension.create({
  * an empty band at the foot of the change, and it writes nothing.
  */
 function proposedTextExtensions() {
-  return markdownExtensions([LocalHistory]).map((extension) =>
+  // EDT-FR-MOQW: a proposed text is the candidate of a review, so its diagram
+  // fences offer no Edit button.
+  return markdownExtensions([LocalHistory], { diagramEditor: false }).map((extension) =>
     extension.name === "starterKit"
       ? (extension as AnyExtension).configure({ trailingNode: false })
       : extension,

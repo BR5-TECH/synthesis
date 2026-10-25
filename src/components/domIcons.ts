@@ -14,6 +14,9 @@ export const DIAGRAM_GLYPH =
   "M15 13h4a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2z" +
   "M7 11v4a2 2 0 0 0 2 2h4";
 
+/** EDT-FR-ADNU: a pencil. */
+export const PENCIL_GLYPH = "M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4zM13.5 6.5l4 4";
+
 /**
  * An icon as a DOM element, with the attributes of the `I` wrapper in
  * `icons.tsx`. It is decoration: the control that holds it has the name.

@@ -14,6 +14,10 @@
  */
 import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
+import {
+  closeDiagramEditor,
+  setDiagramEditorOpening,
+} from "../components/DiagramEditor/store";
 import { useSettingsWindows } from "./useSettingsWindows";
 import { usePullRequestWindow } from "./usePullRequestWindow";
 import type { useShellSession } from "./useShellSession";
@@ -95,8 +99,10 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
 
   // ABT-FR-LBNA: the panel never outlives the surface it overlays, so a project
   // opening or closing, or the project being switched, takes it down.
+  // EDT-FR-TOVY: the diagram editor overlay closes with its window too.
   useEffect(() => {
     setAboutOpen(false);
+    closeDiagramEditor("window");
   }, [s.screen, s.projectPath]);
 
   /**
@@ -152,6 +158,8 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
     // ABT-FR-GCPK: every opener in this shell already ends by calling this, so
     // it is also where the About panel is taken down when another overlay opens.
     setAboutOpen(false);
+    // EDT-FR-TOVY: and the diagram editor overlay, for the same reason.
+    closeDiagramEditor("other-overlay");
   };
 
 
@@ -566,6 +574,25 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
   };
 
   const closeAbout = () => setAboutOpen(false);
+
+  /**
+   * EDT-FR-TOVY / SNV-FR-56: the diagram editor overlay opens from an editor
+   * widget rather than from the shell, so the shell tells its store what to
+   * close before it opens. It closes every other overlay, as `openAbout` does.
+   */
+  const openingDiagramEditor = useRef<() => void>(() => {});
+  openingDiagramEditor.current = () => {
+    closeSiblingOverlays();
+    dismissCommitWindow();
+    dismissRollbackWindow();
+    if (streamMergeRef.current) settleStreamMergeWindow(null);
+    closeChromeDropdowns();
+    document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  };
+  useEffect(() => {
+    setDiagramEditorOpening(() => openingDiagramEditor.current());
+    return () => setDiagramEditorOpening(null);
+  }, []);
 
   const openCommitWindow = (files: CommitFile[], hidden: CommitFile[]) =>
     new Promise<CommitOutcome | null>((resolve) => {

@@ -365,9 +365,12 @@ export function EditableRichRun({
     {
       // The Editor's own extension set, so a construct that survives a
       // round-trip there survives one here (EDT-FR-68).
-      extensions: markdownExtensions([
-        DiffMarks.configure({ units: () => unitsRef.current }),
-      ]),
+      extensions: markdownExtensions(
+        [DiffMarks.configure({ units: () => unitsRef.current })],
+        // EDT-FR-MOQW, DFV-FR-EGFA: the Edit button on the target's diagram
+        // fences, except where the target is the candidate of a review.
+        { diagramEditor: editing.diagramEditor !== false },
+      ),
       editorProps: {
         attributes: {
           // `doc` is what typesets an Editor tab's WYSIWYG surface, so the

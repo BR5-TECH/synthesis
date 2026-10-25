@@ -1,0 +1,108 @@
+/* ---------- Diagram editor overlay (EDT-editor.md EDT-FR-SJGJ – EDT-FR-WPGE) ---------- */
+
+/* EDT-FR-SJGJ: the scrim covers the whole window. The overlay is placed by its
+   own left, top, width and height (EDT-FR-NKGX), not by the scrim grid. */
+.scrim.diagram-editor-scrim { display: block; }
+.modal.diagram-editor {
+  /* EDT-FR-NKGX: the border is inside the size the overlay is given, so the
+     overlay stays inside the window. */
+  box-sizing: border-box;
+  position: absolute;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  animation: none;
+}
+/* EDT-FR-HGAZ: the dialog takes the focus after a press in the preview pane. */
+.modal.diagram-editor:focus { outline: none; }
+
+/* EDT-FR-NKGX: the title bar is the handle that moves the overlay. */
+.diagram-editor__head {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-1);
+  cursor: move;
+  user-select: none;
+  -webkit-user-select: none;
+  flex: none;
+}
+
+/* EDT-FR-ULPU: two panes side by side, with the divider between them. The
+   grid columns carry the split. */
+.diagram-editor__panes {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  overflow: hidden;
+}
+
+/* EDT-FR-EBEZ: the source pane is plain text in the Source code role. */
+.diagram-editor__source {
+  min-width: 0;
+  resize: none;
+  border: 0;
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-sunken);
+  color: var(--fg-1);
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-md);
+  line-height: var(--font-source-line-height);
+  tab-size: 4;
+  white-space: pre;
+  overflow: auto;
+}
+.diagram-editor__source:focus { outline: none; }
+.diagram-editor__source:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); }
+
+/* EDT-FR-HVGG: the divider takes focus and shows it. */
+.diagram-editor__divider {
+  width: 6px;
+  cursor: col-resize;
+  background: var(--border-1);
+  touch-action: none;
+}
+.diagram-editor__divider:hover { background: var(--border-2); }
+.diagram-editor__divider:focus { outline: none; }
+.diagram-editor__divider:focus-visible { background: var(--accent); }
+
+/* EDT-FR-QSOQ: the live diagram, on the ground of the page. */
+.diagram-editor__preview.doc {
+  min-width: 0;
+  overflow: auto;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--doc-page-bg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.diagram-editor__preview .diagram-editor__figure { flex: none; }
+.diagram-editor__preview .diagram-editor__figure svg { max-width: 100%; height: auto; }
+/* EDT-FR-STFK: the last diagram that rendered, dimmed under an invalid source. */
+.diagram-editor__figure--stale { opacity: 0.4; filter: grayscale(0.6); }
+/* EDT-FR-UDVE: the statement in place of a diagram. */
+.diagram-editor__statement {
+  margin: var(--sp-4) 0 0;
+  text-align: center;
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-md);
+  color: var(--fg-3);
+}
+.diagram-editor__preview .mermaid-error.diagram-editor__error { margin-top: 0; user-select: text; -webkit-user-select: text; }
+
+/* EDT-FR-NKGX: the edges and corners that resize the overlay. */
+.diagram-editor__edge { position: absolute; z-index: 1; touch-action: none; }
+.diagram-editor__edge--n, .diagram-editor__edge--s { left: 8px; right: 8px; height: 6px; cursor: ns-resize; }
+.diagram-editor__edge--e, .diagram-editor__edge--w { top: 8px; bottom: 8px; width: 6px; cursor: ew-resize; }
+.diagram-editor__edge--n { top: -3px; }
+.diagram-editor__edge--s { bottom: -3px; }
+.diagram-editor__edge--e { right: -3px; }
+.diagram-editor__edge--w { left: -3px; }
+.diagram-editor__edge--ne, .diagram-editor__edge--nw,
+.diagram-editor__edge--se, .diagram-editor__edge--sw { width: 12px; height: 12px; }
+.diagram-editor__edge--ne { top: -4px; right: -4px; cursor: nesw-resize; }
+.diagram-editor__edge--sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.diagram-editor__edge--nw { top: -4px; left: -4px; cursor: nwse-resize; }
+.diagram-editor__edge--se { bottom: -4px; right: -4px; cursor: nwse-resize; }

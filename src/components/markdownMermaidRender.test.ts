@@ -14,10 +14,12 @@ import { logDebug } from "../logging";
 import {
   holdNextRender,
   mermaidApi,
+  overrideNextParse,
   overrideNextRender,
   resetMermaidMock,
 } from "../test/mermaidMock";
 import {
+  DIAGRAM_ERROR,
   cachedDiagram,
   currentTheme,
   diagramElement,
@@ -31,6 +33,16 @@ import {
 } from "./markdownMermaidRender";
 
 const SRC = "graph TD\nA-->B";
+
+/**
+ * The shape of a Mermaid flowchart with an HTML label, as Mermaid writes it:
+ * HTML serialisation, so `<br>` has no close and U+00A0 is `&nbsp;`.
+ */
+const htmlLabelSvg = (id: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" id="${id}" viewBox="0 0 10 10"><g>` +
+  '<foreignObject width="10" height="10"><div xmlns="http://www.w3.org/1999/xhtml">' +
+  '<span class="nodeLabel"><p>Frontend<br>React&nbsp;19</p></span></div>' +
+  "</foreignObject></g></svg>";
 
 beforeEach(() => {
   resetMermaidForTest();
@@ -139,7 +151,8 @@ describe("the render queue", () => {
     const next = renderDiagram(SRC, "light");
     expect(await failed).toEqual({
       state: "error",
-      message: "Parse error on line 1: INVALID",
+      summary: DIAGRAM_ERROR.syntax,
+      detail: "Parse error on line 1: INVALID",
     });
     expect((await next)?.state).toBe("rendered");
   });
@@ -157,7 +170,8 @@ describe("the render queue", () => {
     });
     expect(await renderDiagram(SRC, "light")).toEqual({
       state: "error",
-      message: "bad config",
+      summary: DIAGRAM_ERROR.draw,
+      detail: "bad config",
     });
     // The next render configures again rather than trusting the failed one.
     expect((await renderDiagram("graph TD\nX", "light"))?.state).toBe("rendered");
@@ -166,29 +180,70 @@ describe("the render queue", () => {
 });
 
 describe("render errors", () => {
-  it("EDT-FR-XTEB: an empty message gives a plain sentence, and a thrown string is the message", async () => {
+  it("EDT-FR-XKMP: a parse failure names the syntax step and gives the reason of Mermaid", async () => {
+    overrideNextParse(async () => {
+      throw new Error("Parse error on line 2:\nA-->\n----^\nExpecting 'NODE_STRING', got 'EOF'");
+    });
+    expect(await renderDiagram(SRC, "light")).toEqual({
+      state: "error",
+      summary: DIAGRAM_ERROR.syntax,
+      detail: "Parse error on line 2:\nA-->\n----^\nExpecting 'NODE_STRING', got 'EOF'",
+    });
+    // A source that does not parse is never drawn.
+    expect(mermaidApi.render).not.toHaveBeenCalled();
+  });
+
+  it("EDT-FR-XKMP: a draw failure after a valid parse names the draw step", async () => {
+    overrideNextRender(async () => {
+      throw new Error("Cannot read properties of undefined (reading 'x')");
+    });
+    expect(await renderDiagram(SRC, "light")).toEqual({
+      state: "error",
+      summary: DIAGRAM_ERROR.draw,
+      detail: "Cannot read properties of undefined (reading 'x')",
+    });
+  });
+
+  it("EDT-FR-XKMP: an empty reason is left out, and a thrown string is the reason", async () => {
     overrideNextRender(async () => {
       throw new Error("   ");
     });
     expect(await renderDiagram("graph TD\nA", "light")).toEqual({
       state: "error",
-      message: "The diagram could not be rendered.",
+      summary: DIAGRAM_ERROR.draw,
     });
-    overrideNextRender(async () => {
+    overrideNextParse(async () => {
       throw "  plain failure  ";
     });
     expect(await renderDiagram("graph TD\nB", "light")).toEqual({
       state: "error",
-      message: "plain failure",
+      summary: DIAGRAM_ERROR.syntax,
+      detail: "plain failure",
     });
   });
 
-  it("EDT-FR-XTEB: an SVG that does not parse is an error, not an empty diagram", async () => {
+  it("EDT-FR-XTEB, EDT-FR-XKMP: an output with no SVG is a read error, not an empty diagram", async () => {
+    overrideNextRender(async () => ({ svg: "<div>no drawing</div>" }));
+    expect(await renderDiagram(SRC, "light")).toEqual({
+      state: "error",
+      summary: DIAGRAM_ERROR.read,
+      detail: "The output of Mermaid has no <svg> element.",
+    });
+  });
+
+  it("EDT-FR-XTEB, EDT-FR-XKMP: a truncated output is a read error", async () => {
     overrideNextRender(async () => ({ svg: "<svg" }));
     expect(await renderDiagram(SRC, "light")).toEqual({
       state: "error",
-      message: "The diagram could not be rendered.",
+      summary: DIAGRAM_ERROR.read,
+      detail: "The output of Mermaid has no <svg> element.",
     });
+  });
+
+  it("EDT-FR-LXFD: an SVG with HTML line breaks and entities in its labels renders", async () => {
+    overrideNextRender(async (id) => ({ svg: htmlLabelSvg(id) }));
+    const result = await renderDiagram(SRC, "light");
+    expect(result?.state).toBe("rendered");
   });
 
   it("EDT-FR-XTEB: the temporary container a failed render leaves is removed", async () => {
@@ -208,7 +263,11 @@ describe("render errors", () => {
     const payload = JSON.stringify(vi.mocked(logDebug).mock.calls[0]);
     expect(payload).not.toContain("secret");
     expect(payload).not.toContain("Parse error");
-    expect(vi.mocked(logDebug).mock.calls[0][2]).toEqual({ length: 20, theme: "light" });
+    expect(vi.mocked(logDebug).mock.calls[0][2]).toEqual({
+      step: "syntax",
+      length: 20,
+      theme: "light",
+    });
   });
 });
 
@@ -286,9 +345,110 @@ describe("the SVG element", () => {
     expect(a).not.toBe(b);
   });
 
-  it("EDT-FR-JBZU: markup that is not an SVG, or does not parse, gives nothing", () => {
+  it("EDT-FR-JBZU: markup that does not start with an SVG gives nothing", () => {
     expect(diagramElement('<div xmlns="http://www.w3.org/1999/xhtml"/>', "m-1")).toBeNull();
-    expect(diagramElement("<svg><g></svg>", "m-1")).toBeNull();
+    expect(diagramElement("<p>text</p><svg></svg>", "m-1")).toBeNull();
+    expect(diagramElement("", "m-1")).toBeNull();
+    expect(diagramElement("<math><svg></svg></math>", "m-1")).toBeNull();
+  });
+
+  it("EDT-FR-LXFD: an HTML label with a line break and a non-breaking space keeps both", () => {
+    const el = diagramElement(htmlLabelSvg("m-1"), "m-1")!;
+    expect(el).not.toBeNull();
+    expect(el.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    const label = el.querySelector("foreignObject p")!;
+    expect(label.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
+    expect(label.querySelectorAll("br")).toHaveLength(1);
+    expect(label.textContent).toBe("FrontendReact\u00a019");
+    // The HTML parser keeps the case of SVG names.
+    expect(el.getAttribute("viewBox")).toBe("0 0 10 10");
+    expect(el.querySelector("foreignObject")?.localName).toBe("foreignObject");
+  });
+
+  it("EDT-FR-XTEB: an SVG with no closing tags is closed by the parser and shows what it holds", () => {
+    // The HTML parser closes open elements at the end of the input, as a
+    // browser does for any page. Mermaid never writes such output.
+    const el = diagramElement('<svg xmlns="http://www.w3.org/2000/svg" id="m-1"><g><text>t', "m-1");
+    expect(el?.querySelector("g text")?.textContent).toBe("t");
+  });
+
+  it("EDT-FR-JBZU: elements that change the document, a form, and a template are removed from a label", () => {
+    const el = diagramElement(
+      svg(
+        '<foreignObject><div xmlns="http://www.w3.org/1999/xhtml">' +
+          '<base href="https://evil.invalid/"><meta http-equiv="refresh" content="0;url=https://evil.invalid">' +
+          '<form action="https://evil.invalid"><input></form>' +
+          '<button formaction="javascript:evil()">b</button>' +
+          "<template><img src=x onerror=evil()><script>evil()</script></template>label</div></foreignObject>",
+      ),
+      "m-1",
+    )!;
+    const names = Array.from(el.getElementsByTagName("*")).map((e) => e.localName);
+    for (const name of ["base", "meta", "form", "template", "script"]) {
+      expect(names).not.toContain(name);
+    }
+    expect(el.querySelector("button")?.getAttribute("formaction")).toBeNull();
+    expect(el.textContent).toContain("label");
+  });
+
+  it("EDT-FR-JBZU: an import spelled with a CSS escape and an SVG data URL are removed", () => {
+    const el = diagramElement(
+      svg(
+        "<style>@\\69mport url(evil.css);</style><style>.ok{fill:red}</style>" +
+          '<g style="@\\69mport url(evil.css)"/>' +
+          '<use href="data:image/svg+xml,&lt;svg onload=evil()&gt;"/>' +
+          '<image href="data:image/png;base64,AAAA"/>',
+      ),
+      "m-1",
+    )!;
+    const styles = Array.from(el.getElementsByTagName("style")).map((s) => s.textContent);
+    expect(styles).toEqual([".ok{fill:red}"]);
+    expect(el.querySelector("g")?.getAttribute("style")).toBeNull();
+    expect(el.querySelector("use")?.getAttribute("href")).toBeNull();
+    expect(el.querySelector("image")?.getAttribute("href")).toBe("data:image/png;base64,AAAA");
+  });
+
+  it("EDT-FR-JBZU: an HTML element in SVG content ends the SVG, and nothing after the SVG is kept", () => {
+    const el = diagramElement(
+      svg('<g><img src="x" onerror="evil()"><text>lost</text></g>') + "<p>after</p>",
+      "m-1",
+    )!;
+    expect(el.getElementsByTagName("img")).toHaveLength(0);
+    expect(el.textContent).not.toContain("lost");
+    expect(el.textContent).not.toContain("after");
+  });
+
+  it("EDT-FR-JBZU: a script URL in an upper-case xlink:href is removed", () => {
+    const el = diagramElement(svg('<a XLINK:HREF="javascript:evil()"><text>t</text></a>'), "m-1")!;
+    const a = el.querySelector("a")!;
+    expect(a.attributes).toHaveLength(0);
+  });
+
+  it("EDT-FR-JBZU: markup quoted in an attribute stays text, because the SVG is never parsed twice", () => {
+    const el = diagramElement(
+      svg(
+        '<foreignObject><div xmlns="http://www.w3.org/1999/xhtml">' +
+          '<noscript><p title="</noscript><img src=x onerror=evil()>">n</p></noscript></div></foreignObject>',
+      ),
+      "m-1",
+    )!;
+    expect(el.getElementsByTagName("img")).toHaveLength(0);
+    expect(el.querySelector("noscript p")?.getAttribute("title")).toBe(
+      "</noscript><img src=x onerror=evil()>",
+    );
+  });
+
+  it("EDT-FR-JBZU: an event attribute and a script inside an HTML label are removed", () => {
+    const el = diagramElement(
+      svg(
+        '<foreignObject><div xmlns="http://www.w3.org/1999/xhtml">' +
+          '<img src="x" onerror="evil()"><br><script>evil()</script>label</div></foreignObject>',
+      ),
+      "m-1",
+    )!;
+    expect(el.querySelector("img")?.getAttribute("onerror")).toBeNull();
+    expect(el.getElementsByTagName("script")).toHaveLength(0);
+    expect(el.textContent).toContain("label");
   });
 
   it("EDT-FR-JBZU: scripts, event attributes and script URLs are removed", () => {

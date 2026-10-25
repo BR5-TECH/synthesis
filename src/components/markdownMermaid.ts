@@ -30,6 +30,7 @@ import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 
 import { logDebug } from "../logging";
 import { commentHighlightKey } from "./commentHighlight";
+import { CODE_GLYPH, DIAGRAM_GLYPH, iconElement } from "./domIcons";
 import { findHighlightKey } from "./findHighlight";
 import {
   cachedDiagram,
@@ -220,8 +221,11 @@ function toggleButton(
   button.type = "button";
   button.className = "mermaid-toggle";
   const toSource = shown !== "source";
-  button.textContent = toSource ? "Source" : "Diagram";
-  button.setAttribute("aria-label", toSource ? SHOW_SOURCE_LABEL : SHOW_DIAGRAM_LABEL);
+  // EDT-FR-UTHM: an icon and no text; the name and the tooltip say the view.
+  const label = toSource ? SHOW_SOURCE_LABEL : SHOW_DIAGRAM_LABEL;
+  button.appendChild(iconElement(toSource ? CODE_GLYPH : DIAGRAM_GLYPH));
+  button.setAttribute("aria-label", label);
+  button.title = label;
   button.addEventListener("mousedown", (event) => event.preventDefault());
   button.addEventListener("click", (event) => {
     event.preventDefault();
@@ -313,7 +317,7 @@ function fenceDecorations(input: FenceDecorationInput): Decoration[] {
     );
   }
   if (shown === "error" && input.result?.state === "error") {
-    const message = input.result.message;
+    const { summary, detail } = input.result;
     decos.push(
       Decoration.widget(
         end - 1,
@@ -322,12 +326,22 @@ function fenceDecorations(input: FenceDecorationInput): Decoration[] {
           line.className = "mermaid-error";
           line.contentEditable = "false";
           // EDT-FR-JBZU: the message can quote the source, so it is text.
-          line.textContent = `Diagram error: ${message}`;
+          const head = document.createElement("span");
+          head.className = "mermaid-error__summary";
+          head.textContent = `Diagram error: ${summary}`;
+          line.appendChild(head);
+          if (detail !== undefined) {
+            // EDT-FR-VIOP: the reason, in the source font, line for line.
+            const reason = document.createElement("span");
+            reason.className = "mermaid-error__detail";
+            reason.textContent = detail;
+            line.appendChild(reason);
+          }
           return line;
         },
         {
           side: 1,
-          key: `mermaid-error:${textTag(message)}`,
+          key: `mermaid-error:${textTag(`${summary}\u0000${detail ?? ""}`)}`,
           ignoreSelection: true,
           stopEvent: () => true,
         },

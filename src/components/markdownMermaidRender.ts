@@ -5,8 +5,8 @@
  * The Mermaid library is bundled with the application and loaded on first use,
  * so a file without a diagram costs nothing and a file with one renders offline.
  * Diagram source is untrusted: every render runs at Mermaid's strict security
- * level, and what comes back is parsed as SVG and handed over as a node — the
- * caller never assigns markup through `innerHTML`.
+ * level, and what comes back is parsed in an inert document, sanitised, and
+ * handed over as a node — the caller never assigns markup through `innerHTML`.
  */
 import type * as Mermaid from "mermaid";
 
@@ -29,7 +29,10 @@ export type DiagramResult =
     }
   | {
       state: "error";
-      message: string;
+      /** EDT-FR-XKMP: the step that failed, as one sentence. */
+      summary: string;
+      /** EDT-FR-XKMP: the reason the failed step gave, when it gave one. */
+      detail?: string;
       /**
        * The library could not be loaded. Such a result is shown, but it is
        * forgotten at the next edit (`forgetTransientFailures`), so a later
@@ -172,13 +175,30 @@ let queue: Promise<unknown> = Promise.resolve();
 let configuredTheme: DiagramTheme | null = null;
 let nextId = 0;
 
-const RENDER_FAILED = "The diagram could not be rendered.";
+/** EDT-FR-XKMP: one sentence for each step that can fail. */
+export const DIAGRAM_ERROR = {
+  syntax: "The Mermaid source is not valid.",
+  draw: "Mermaid cannot draw the diagram.",
+  read: "The application cannot read the drawing that Mermaid made.",
+  load: "The diagram library cannot be loaded.",
+} as const;
 
-function errorMessage(error: unknown): string {
+type DiagramStep = keyof typeof DIAGRAM_ERROR;
+
+/** The trimmed text of an error, or undefined when it has none. */
+function errorDetail(error: unknown): string | undefined {
   const text = error instanceof Error ? error.message : String(error);
-  return text.trim() || RENDER_FAILED;
+  return text.trim() || undefined;
 }
 
+function diagramError(
+  step: DiagramStep,
+  detail: string | undefined,
+): Extract<DiagramResult, { state: "error" }> {
+  return detail === undefined
+    ? { state: "error", summary: DIAGRAM_ERROR[step] }
+    : { state: "error", summary: DIAGRAM_ERROR[step], detail };
+}
 
 async function renderNow(
   source: string,
@@ -188,17 +208,16 @@ async function renderNow(
   try {
     mermaid = (await loadMermaid()).default;
   } catch (error) {
+    const detail = errorDetail(error);
     logWarn(["frontend"], "the diagram library could not be loaded", {
-      error: errorMessage(error),
+      error: detail ?? "",
     });
-    return {
-      state: "error",
-      message: "The diagram library could not be loaded.",
-      transient: true,
-    };
+    return { ...diagramError("load", detail), transient: true };
   }
   const id = `synthesis-mermaid-${++nextId}`;
   const started = performance.now();
+  // The step that runs now, so a failure names it (EDT-FR-XKMP).
+  let step: DiagramStep = "draw";
   try {
     if (configuredTheme !== theme) {
       configuredTheme = null;
@@ -212,15 +231,20 @@ async function renderNow(
       });
       configuredTheme = theme;
     }
+    step = "syntax";
+    await mermaid.parse(source);
+    step = "draw";
     const { svg } = await mermaid.render(id, source);
     // EDT-FR-XTEB: an SVG that cannot be shown is an error, not an empty
     // figure.
-    if (diagramElement(svg, id) === null) {
-      logDebug(["frontend"], "a diagram rendered to an SVG that does not parse", {
+    const read = readDiagramSvg(svg, id);
+    if ("reason" in read) {
+      logDebug(["frontend"], "a diagram rendered to an SVG that cannot be read", {
         length: source.length,
+        svgLength: svg.length,
         theme,
       });
-      return { state: "error", message: RENDER_FAILED };
+      return diagramError("read", read.reason);
     }
     logDebug(["frontend"], "a diagram rendered", {
       length: source.length,
@@ -233,10 +257,11 @@ async function renderNow(
     // The message can quote the source, which is user content, so only its
     // shape is logged.
     logDebug(["frontend"], "a diagram did not render", {
+      step,
       length: source.length,
       theme,
     });
-    return { state: "error", message: errorMessage(error) };
+    return diagramError(step, errorDetail(error));
   } finally {
     // Mermaid measures in a temporary container; a failed render can leave it.
     document.getElementById(`d${id}`)?.remove();
@@ -288,54 +313,90 @@ export function renderDiagram(
 
 let copies = 0;
 
-/** Elements that can run script, load a document, or retarget a link. */
-const UNSAFE_ELEMENTS = ["script", "iframe", "object", "embed", "link", "animate", "set"];
+/**
+ * Elements that can run script, load a document, retarget a link, or change
+ * the document they are put in (`base`, `meta`). A `template` goes too: its
+ * content is a separate fragment that the sanitising pass does not walk.
+ */
+const UNSAFE_ELEMENTS = [
+  "script",
+  "iframe",
+  "object",
+  "embed",
+  "link",
+  "animate",
+  "set",
+  "base",
+  "meta",
+  "form",
+  "template",
+];
+
+/** A style that imports, also when a CSS escape spells the at-rule. */
+const IMPORTING_STYLE = /@(?:import|\\)/i;
 
 /** An attribute that can run script or load a script URL. */
 function unsafeAttribute(name: string, value: string): boolean {
   const lower = name.toLowerCase();
   if (lower.startsWith("on")) return true;
-  if (lower === "href" || lower === "xlink:href" || lower === "src" || lower === "action") {
+  if (["href", "xlink:href", "src", "action", "formaction"].includes(lower)) {
     // Browsers drop control characters and whitespace inside a scheme.
     // eslint-disable-next-line no-control-regex
     const compact = value.replace(/[\u0000-\u0020]/g, "").toLowerCase();
-    if (compact.startsWith("data:image/")) return false;
+    // A raster image is safe; an SVG image is a document that can hold script.
+    if (/^data:image\/(?!svg)/.test(compact)) return false;
     return /^(javascript|data|vbscript):/.test(compact);
   }
-  if (lower === "style") return /@import|url\(\s*["']?\s*javascript:/i.test(value);
+  if (lower === "style") {
+    return IMPORTING_STYLE.test(value) || /url\(\s*["']?\s*javascript:/i.test(value);
+  }
   return false;
 }
 
 /**
- * EDT-FR-JBZU: an SVG element for a rendered diagram, parsed as XML and
- * imported into this document. No HTML parser sees the markup, and the element
- * is new on each call, so two surfaces that show one diagram never share a node.
+ * EDT-FR-JBZU, EDT-FR-LXFD: an SVG element for a rendered diagram, imported
+ * into this document, or the reason there is none. The element is new on each
+ * call, so two surfaces that show one diagram never share a node.
+ *
+ * Mermaid writes its SVG with HTML serialisation: a label in a
+ * `foreignObject` holds `<br>` and `&nbsp;`, which are not XML. So the markup
+ * is parsed as HTML, in a document that `DOMParser` makes inert: no script in
+ * it runs and nothing in it loads.
  *
  * Mermaid has already sanitised the SVG at its strict level. This removes, as a
- * second layer, every element that can run script or load a document, every
- * event attribute, every script URL, and every style that imports. Each copy also gets its own ids, because one
- * diagram shown twice would otherwise put each id, and each `url(#…)` that
- * points at it, in the page two times.
+ * second layer, every element that can run script, load a document, or change
+ * this document, every event attribute, every script URL, and every style that
+ * imports. Each copy
+ * also gets its own ids, because one diagram shown twice would otherwise put
+ * each id, and each `url(#…)` that points at it, in the page two times.
  */
-export function diagramElement(svg: string, id: string): Element | null {
+function readDiagramSvg(svg: string, id: string): { element: Element } | { reason: string } {
   const unique = `${id}-c${++copies}`;
   const scoped = id ? svg.split(id).join(unique) : svg;
-  const parsed = new DOMParser().parseFromString(scoped, "image/svg+xml");
-  const root = parsed.documentElement;
-  if (!root || root.nodeName.toLowerCase() !== "svg") return null;
-  if (root.getElementsByTagName("parsererror").length > 0) return null;
+  const parsed = new DOMParser().parseFromString(scoped, "text/html");
+  const root = parsed.body.firstElementChild;
+  // The HTML parser puts an `<svg>` tag in the SVG namespace.
+  if (!(root instanceof SVGElement) || root.localName !== "svg") {
+    return { reason: "The output of Mermaid has no <svg> element." };
+  }
   // By local name, so a prefixed element (`svg:script`) is caught too.
   for (const el of Array.from(root.getElementsByTagName("*"))) {
     const name = el.localName.toLowerCase();
     if (UNSAFE_ELEMENTS.includes(name)) el.remove();
-    else if (name === "style" && /@import/i.test(el.textContent ?? "")) el.remove();
+    else if (name === "style" && IMPORTING_STYLE.test(el.textContent ?? "")) el.remove();
   }
   for (const el of [root, ...Array.from(root.getElementsByTagName("*"))]) {
     for (const attr of Array.from(el.attributes)) {
       if (unsafeAttribute(attr.name, attr.value)) el.removeAttribute(attr.name);
     }
   }
-  return document.importNode(root, true);
+  return { element: document.importNode(root, true) };
+}
+
+/** EDT-FR-JBZU: the SVG element for a rendered diagram, or null. */
+export function diagramElement(svg: string, id: string): Element | null {
+  const read = readDiagramSvg(svg, id);
+  return "element" in read ? read.element : null;
 }
 
 /** Test seam: forgets every result, the loaded library, and the queue. */

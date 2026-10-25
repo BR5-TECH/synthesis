@@ -60,29 +60,32 @@
   padding-top: calc(var(--sp-2) + 1.75rem);
 }
 
-/* EDT-FR-USWS: the view toggle sits in the top-right corner in both views.
-   Quiet until it is wanted, but never hidden, so it does not depend on hover. */
+/* EDT-FR-USWS, EDT-FR-UTHM: the view toggle is an icon button in the
+   top-right corner in both views. Quiet until it is wanted, but never hidden,
+   so it does not depend on hover. */
 .doc .mermaid-toggle {
   position: absolute;
   top: var(--sp-2);
   right: var(--sp-2);
-  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
   border: 1px solid var(--border-1);
   border-radius: var(--r-xs);
   background: var(--bg-canvas);
   color: var(--fg-3);
-  font-family: var(--font-ui-family);
-  font-size: var(--fs-ui-xs);
-  font-weight: var(--fw-medium);
-  line-height: var(--font-ui-line-height);
   cursor: pointer;
 }
+.doc .mermaid-toggle .icon { width: 15px; height: 15px; flex: none; }
 .doc .mermaid-toggle:hover {
   color: var(--fg-1);
   border-color: var(--border-2);
 }
 /* The first source line runs clear of the toggle. */
-.doc pre.mermaid-block--source { padding-right: calc(var(--sp-4) + 4.5rem); }
+.doc pre.mermaid-block--source { padding-right: calc(var(--sp-4) + 26px); }
 
 .doc .mermaid-diagram:focus-visible,
 .doc .mermaid-toggle:focus-visible {
@@ -116,3 +119,17 @@
   -webkit-user-select: none;
 }
 .doc .mermaid-error--static { margin: calc(-1 * var(--sp-2)) 0 var(--sp-3); }
+.doc .mermaid-error__summary { display: block; }
+/* EDT-FR-VIOP: the reason sets in the Source code role and keeps its line
+   breaks, so the column pointer of a parse error stands under its token. A
+   line wider than the page wraps: the Diff viewer allows no horizontal
+   scroller (DFV non-functional). */
+.doc .mermaid-error__detail {
+  display: block;
+  margin-top: var(--sp-1);
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-xs);
+  line-height: var(--font-source-line-height);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

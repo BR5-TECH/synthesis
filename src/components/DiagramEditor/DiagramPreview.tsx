@@ -6,81 +6,23 @@
  * messages as a diagram fence on the page (EDT-FR-JIBV, EDT-FR-JBZU,
  * EDT-FR-XKMP), so the pane and the fence behind the scrim always agree.
  */
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
 
-import { logDebug } from "../../logging";
-import {
-  cachedDiagram,
-  currentTheme,
-  diagramElement,
-  releaseDiagrams,
-  renderDiagram,
-  showDiagrams,
-  subscribeTheme,
-  type DiagramResult,
-} from "../markdownMermaidRender";
+import { diagramElement, type DiagramResult } from "../markdownMermaidRender";
+import { useDiagramRender, type RenderedDiagram } from "./useDiagramRender";
 
 /** EDT-FR-UDVE: the statement the pane shows when it has no diagram. */
 export const NO_DIAGRAM = "No diagram to show";
 /** EDT-FR-HVGG: the accessible name of the pane. */
 export const PREVIEW_LABEL = "Diagram preview";
 
-type Rendered = Extract<DiagramResult, { state: "rendered" }>;
+type Rendered = RenderedDiagram;
 type Failed = Extract<DiagramResult, { state: "error" }>;
 
 export function DiagramPreview({ source }: { source: string }) {
-  const [theme, setTheme] = useState(currentTheme);
-  useEffect(() => subscribeTheme(setTheme), []);
-
-  const empty = source.trim() === "";
-  /**
-   * The last result that came back during this opening. While a render is in
-   * progress, the pane keeps what it shows (EDT-FR-QSOQ).
-   */
-  const [settled, setSettled] = useState<DiagramResult | null>(() =>
-    empty ? null : (cachedDiagram(source, theme) ?? null),
-  );
-  /** EDT-FR-STFK: the last diagram that rendered during this opening. */
-  const [lastRendered, setLastRendered] = useState<Rendered | null>(() =>
-    settled?.state === "rendered" ? settled : null,
-  );
-
-  // The diagram this pane asks for stays in the cache while it shows.
-  const [owner] = useState(() => ({}));
-  useEffect(() => {
-    showDiagrams(owner, empty ? [] : [[source, theme]]);
-  }, [owner, source, theme, empty]);
-  useEffect(() => () => releaseDiagrams(owner), [owner]);
-
-  useEffect(() => {
-    if (empty) {
-      // An empty source shows no diagram, so no earlier result stands for it.
-      setSettled(null);
-      return;
-    }
-    const take = (result: DiagramResult) => {
-      setSettled(result);
-      if (result.state === "rendered") setLastRendered(result);
-    };
-    const known = cachedDiagram(source, theme);
-    if (known) {
-      take(known);
-      return;
-    }
-    let live = true;
-    renderDiagram(source, theme, () => live)
-      .then((result) => {
-        if (live && result) take(result);
-      })
-      .catch((error: unknown) => {
-        logDebug(["frontend"], "a diagram editor render request failed", {
-          error: error instanceof Error ? error.name : typeof error,
-        });
-      });
-    return () => {
-      live = false;
-    };
-  }, [source, theme, empty]);
+  // EDT-FR-QSOQ: while a render is in progress, the pane keeps what it shows.
+  // EDT-FR-STFK: the last diagram that rendered during this opening.
+  const { empty, settled, lastRendered } = useDiagramRender(source);
 
   const failed: Failed | null = !empty && settled?.state === "error" ? settled : null;
   // EDT-FR-STFK: an invalid source keeps the last diagram, dimmed.

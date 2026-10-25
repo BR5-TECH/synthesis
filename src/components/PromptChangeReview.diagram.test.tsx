@@ -155,7 +155,7 @@ afterEach(() => {
 });
 
 describe("diagram fences in the review candidate", () => {
-  it("EDT-FR-MOQW: the editable candidate shows its diagram fence with no Edit button", async () => {
+  it("EDT-FR-MOQW, PCR-FR-JPKZ: the editable candidate shows its diagram fence with no Edit button and no View button", async () => {
     render(<PromptChangeReview artifactId={ARTIFACT} sessions={sessions} />);
     await act(async () => {
       openPromptReview("prop-1");
@@ -169,5 +169,7 @@ describe("diagram fences in the review candidate", () => {
     // The candidate is editable, so the fence has its view toggle.
     await waitFor(() => expect(review.querySelector(".ProseMirror .mermaid-toggle")).not.toBeNull());
     expect(review.querySelector(".mermaid-edit")).toBeNull();
+    expect(review.querySelector(".mermaid-view")).toBeNull();
+    expect(screen.queryByRole("button", { name: "View diagram" })).toBeNull();
   });
 });

@@ -97,6 +97,20 @@ async function openOverlay() {
   return settings;
 }
 
+describe("the diagram viewer overlay in the Settings window", () => {
+  it("SET-FR-16, EDT-FR-TOVY, EDT-FR-YVAI: View diagram on a Draft template fence opens the viewer inside this window", async () => {
+    render(<SettingsWindowApp initialSection="project/template" />);
+    await screen.findByRole("button", { name: "Mermaid diagram, edit source" });
+    const settings = document.querySelector(".ProseMirror") as HTMLElement;
+    fireEvent.click(await within(settings).findByRole("button", { name: "View diagram" }));
+    const viewer = screen.getByRole("dialog", { name: "View Mermaid diagram" });
+    expect(settings.contains(viewer)).toBe(false);
+    expect(openingSpy).not.toHaveBeenCalledWith(expect.any(Function));
+    fireEvent.keyDown(viewer, { key: "Escape" });
+    expect(isDiagramEditorOpen()).toBe(false);
+  });
+});
+
 describe("the diagram editor overlay in the Settings window", () => {
   it("EDT-FR-TOVY, SET-FR-16: Edit diagram on a Draft template fence opens the overlay inside this window", async () => {
     const settings = await openOverlay();

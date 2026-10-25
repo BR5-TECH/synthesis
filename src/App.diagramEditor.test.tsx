@@ -307,6 +307,41 @@ describe("the diagram editor overlay in the main window", () => {
     expect(diagramEditor()).not.toBeNull();
   });
 
+  it("EDT-FR-TOVY, SNV-FR-56: the diagram viewer overlay is a floating overlay of the main window too", async () => {
+    render(<App />);
+    await enterIde();
+    await userEvent.click(await screen.findByText("a.md"));
+    await screen.findByRole("button", { name: "Mermaid diagram, edit source" });
+    await fireMenu("menu:new-folder");
+    await screen.findByRole("dialog", { name: /new folder/i });
+
+    // Opening it closes the other overlay.
+    act(() => screen.getByRole("button", { name: "View diagram" }).click());
+    await screen.findByRole("dialog", { name: "View Mermaid diagram" });
+    expect(screen.queryByRole("dialog", { name: /new folder/i })).toBeNull();
+
+    // Opening another overlay closes it.
+    await fireMenu("menu:about");
+    await screen.findByRole("dialog", { name: "About Synthesis" });
+    expect(screen.queryByRole("dialog", { name: "View Mermaid diagram" })).toBeNull();
+  });
+
+  it("EDT-FR-TOVY: the diagram viewer overlay closes when its window is replaced", async () => {
+    render(<App />);
+    await enterIde();
+    await userEvent.click(await screen.findByText("a.md"));
+    await screen.findByRole("button", { name: "Mermaid diagram, edit source" });
+    await userEvent.click(await screen.findByRole("button", { name: "View diagram" }));
+    await screen.findByRole("dialog", { name: "View Mermaid diagram" });
+
+    await fireMenu("menu:close-project");
+
+    await screen.findByText("acme");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "View Mermaid diagram" })).toBeNull(),
+    );
+  });
+
   it("EDT-FR-TOVY: it closes when its window is replaced", async () => {
     render(<App />);
     await enterIde();

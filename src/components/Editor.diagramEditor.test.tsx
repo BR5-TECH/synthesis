@@ -25,7 +25,13 @@ import { resetLogBufferForTest } from "../logging";
 import { holdNextRender, resetMermaidMock } from "../test/mermaidMock";
 import { letWriteLand } from "../test/autosave";
 import userEvent from "@testing-library/user-event";
-import { DIAGRAM_LABEL, EDIT_DIAGRAM_LABEL, SHOW_SOURCE_LABEL } from "./markdownMermaid";
+import {
+  DIAGRAM_LABEL,
+  EDIT_DIAGRAM_LABEL,
+  SHOW_SOURCE_LABEL,
+  VIEW_DIAGRAM_LABEL,
+} from "./markdownMermaid";
+import { HINTS_LABEL } from "./DiagramEditor/HintsArea";
 import { resetMermaidForTest } from "./markdownMermaidRender";
 import { ARTIFACT_CHANGED_EXTERNALLY } from "../events";
 import type { ArtifactChangedPayload } from "../types";
@@ -119,7 +125,7 @@ afterEach(() => {
 });
 
 describe("the Edit button of a diagram fence", () => {
-  it("EDT-FR-ADNU: an icon button named Edit diagram sits next to the view toggle, in both views", async () => {
+  it("EDT-FR-ADNU, EDT-FR-YVAI: an icon button named Edit diagram sits between the View button and the view toggle, in both views", async () => {
     await mount();
     await screen.findByRole("button", { name: DIAGRAM_LABEL });
     const button = editButton();
@@ -129,8 +135,12 @@ describe("the Edit button of a diagram fence", () => {
     const controls = button.parentElement as HTMLElement;
     expect(controls.className).toBe("mermaid-controls");
     expect(within(controls).getByRole("button", { name: SHOW_SOURCE_LABEL })).toBeInTheDocument();
-    // The Edit button comes first; the toggle keeps the corner.
-    expect(controls.firstElementChild).toBe(button);
+    // The View button comes first, then the Edit button; the toggle keeps the corner.
+    expect(Array.from(controls.children).map((el) => el.getAttribute("aria-label"))).toEqual([
+      VIEW_DIAGRAM_LABEL,
+      EDIT_DIAGRAM_LABEL,
+      SHOW_SOURCE_LABEL,
+    ]);
 
     fireEvent.click(screen.getByRole("button", { name: SHOW_SOURCE_LABEL }));
     expect(fence().getAttribute("data-diagram-view")).toBe("source");
@@ -150,7 +160,7 @@ describe("the Edit button of a diagram fence", () => {
     expect(screen.queryByRole("button", { name: SHOW_SOURCE_LABEL })).toBeNull();
   });
 
-  it("EDT-FR-QTHL: a fence shown as a Find peek keeps the Edit button and has no toggle", async () => {
+  it("EDT-FR-QTHL, EDT-FR-OXQC: a fence shown as a Find peek keeps the Edit button and the View button and has no toggle", async () => {
     await mount();
     await screen.findByRole("button", { name: DIAGRAM_LABEL });
     act(() => {
@@ -159,7 +169,11 @@ describe("the Edit button of a diagram fence", () => {
     fireEvent.change(screen.getByLabelText("Find"), { target: { value: "A-->B" } });
     await waitFor(() => expect(fence().getAttribute("data-diagram-view")).toBe("source"));
     expect(screen.queryByRole("button", { name: SHOW_SOURCE_LABEL })).toBeNull();
-    expect(editButton().parentElement?.children).toHaveLength(1);
+    const controls = editButton().parentElement as HTMLElement;
+    expect(Array.from(controls.children).map((el) => el.getAttribute("aria-label"))).toEqual([
+      VIEW_DIAGRAM_LABEL,
+      EDIT_DIAGRAM_LABEL,
+    ]);
   });
 
   it("EDT-FR-LEUI, EDT-FR-QTHL: a surface that takes no input has no Edit button", async () => {
@@ -222,13 +236,14 @@ describe("the diagram editor overlay", () => {
     expect(pane.value).toBe("graph TD\nA-->B");
 
     const close = within(dialog()).getByRole("button", { name: "Close" });
-    const divider = within(dialog()).getByRole("separator");
-    // The order of focus: Close, the source pane, the divider.
-    divider.focus();
-    fireEvent.keyDown(divider, { key: "Tab" });
+    const hints = within(dialog()).getByRole("region", { name: HINTS_LABEL });
+    // The order of focus: Close, the source pane, the divider, the hints area.
+    expect(hints).toHaveAttribute("tabindex", "0");
+    hints.focus();
+    fireEvent.keyDown(hints, { key: "Tab" });
     expect(document.activeElement).toBe(close);
     fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
-    expect(document.activeElement).toBe(divider);
+    expect(document.activeElement).toBe(hints);
   });
 
   it("EDT-FR-SRXG, EDT-FR-HGAZ: Close and Escape close it, keep the edit, and give focus to the Edit button", async () => {
@@ -358,6 +373,40 @@ describe("the diagram editor overlay", () => {
 });
 
 describe("the diagram pane", () => {
+  it("EDT-FR-FKUH, EDT-FR-NKGX, EDT-FR-NWZX, EDT-FR-HVGG: the hints area under the panes follows the chart type while the author types", async () => {
+    await mount();
+    await openOverlay();
+    const hints = within(dialog()).getByRole("region", { name: HINTS_LABEL });
+    // EDT-FR-NKGX: the hints area sits under the panes, as a part of the
+    // overlay itself, so its 20% is a share of the whole overlay.
+    expect(hints.previousElementSibling).toBe(sourcePane().parentElement);
+    expect(hints.parentElement).toBe(dialog());
+    expect(within(hints).getByRole("heading", { level: 2 }).textContent).toBe("Flowchart");
+    typeSource("sequenceDiagram\nA->>B: hi");
+    expect(within(hints).getByRole("heading", { level: 2 }).textContent).toBe("Sequence diagram");
+    typeSource("");
+    expect(within(hints).getByRole("heading", { level: 2 }).textContent).toBe("General hints");
+  });
+
+  it("EDT-FR-IYTC: reading, selecting, and scrolling the hints change nothing in the buffer", async () => {
+    const { backend } = await mount();
+    await openOverlay();
+    const hints = within(dialog()).getByRole("region", { name: HINTS_LABEL });
+    hints.focus();
+    fireEvent.mouseDown(hints);
+    fireEvent.scroll(hints, { target: { scrollTop: 40 } });
+    const snippet = hints.querySelector("code") as HTMLElement;
+    const range = document.createRange();
+    range.selectNodeContents(snippet);
+    window.getSelection()?.addRange(range);
+    fireEvent.click(snippet);
+    fireEvent.keyDown(hints, { key: "ArrowDown" });
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Close" }));
+    expect(unsaved()).toBeNull();
+    await saveNow();
+    expect(backend.saves).toEqual([BODY]);
+  });
+
   it("EDT-FR-QSOQ: it shows the diagram of the source and renders again while the author types", async () => {
     await mount();
     await openOverlay();

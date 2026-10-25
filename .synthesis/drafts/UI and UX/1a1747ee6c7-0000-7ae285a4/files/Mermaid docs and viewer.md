@@ -15,6 +15,7 @@ we need to adjust our recent mermaid functionality.
 - The diagram fits the window on open. The author zooms with the mouse wheel and the keys `+` and `-`, pans by drag and with the arrow keys, and returns to fit with the key `0` or a visible Fit control. Zoom and pan are view state and reset at each opening.
 - The viewer renders again when the source changes while it is open (undo, external reload, edit). It closes, and focus goes to the surface, when the fence is removed or is no longer a diagram fence, when the source stops being a valid diagram, or when its surface stops accepting input (as EDT-FR-SHYX and EDT-FR-WPGE do for the editor overlay).
 - Opening, using, and closing the viewer is view state: no change to the buffer, no dirty mark, no undo step.
+- `frontend-design` skill must be used for UI development.
 
 # Change 2.
 
@@ -28,6 +29,7 @@ we need to adjust our recent mermaid functionality.
 - A hint set exists for every chart type that the bundled Mermaid version supports. The list of types comes from that version, and a test fails when a supported type has no hint set. The 10 most important types (for example flowchart, sequence, class, state, ER, gantt, pie, mindmap, timeline, journey) get rich sets: node and edge forms, labels, grouping, styling, comments, and a short complete example. The other types get at least their declaration line, their main element forms, and a short example.
 - Hints are English text in the bundled application, with no network read. A snippet is code text in the Source code role.
 - Viewing hints is view state and has no effect on the buffer.
+- `frontend-design` skill must be used for UI development.
 
 # Specifications to change.
 

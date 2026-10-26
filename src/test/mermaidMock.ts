@@ -38,7 +38,7 @@ function escapeXml(text: string): string {
 export function fakeSvg(id: string, source: string, themeName = theme): string {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" id="${id}" data-theme="${themeName}"` +
-    ` data-source="${escapeXml(source)}"><text>${escapeXml(source)}</text>` +
+    ` viewBox="0 0 200 100" data-source="${escapeXml(source)}"><text>${escapeXml(source)}</text>` +
     '<foreignObject width="10" height="10"><div xmlns="http://www.w3.org/1999/xhtml">' +
     '<span class="nodeLabel"><p>Label<br>two&nbsp;lines</p></span></div></foreignObject></svg>'
   );

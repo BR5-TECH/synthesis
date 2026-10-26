@@ -202,7 +202,8 @@ describe("the window rules of the diagram editor overlay", () => {
     expect(within(dialog()).getByRole("button", { name: "Close" })).toHaveFocus();
     act(() => dialog().focus());
     fireEvent.keyDown(dialog(), { key: "Tab", shiftKey: true });
-    expect(within(dialog()).getByRole("separator")).toHaveFocus();
+    // The hints area is the last part that takes focus (EDT-FR-YNQF).
+    expect(within(dialog()).getByRole("region", { name: "Mermaid syntax hints" })).toHaveFocus();
     expect(source).not.toHaveFocus();
   });
 
@@ -218,7 +219,7 @@ describe("the window rules of the diagram editor overlay", () => {
 });
 
 describe("the surfaces that offer the Edit button", () => {
-  function mountSurface(diagramEditor: boolean | undefined) {
+  function mountSurface(diagramEditor: boolean | undefined, content = "```mermaid\nINVALID\n```\n") {
     const element = document.createElement("div");
     document.body.appendChild(element);
     const editor = new TiptapEditor({
@@ -227,7 +228,7 @@ describe("the surfaces that offer the Edit button", () => {
         diagramEditor === undefined
           ? markdownExtensions()
           : markdownExtensions([], { diagramEditor }),
-      content: "```mermaid\nINVALID\n```\n",
+      content,
     });
     return { element, editor };
   }
@@ -247,6 +248,25 @@ describe("the surfaces that offer the Edit button", () => {
     expect(element.querySelector(".mermaid-edit")).toBeNull();
     editor.destroy();
     element.remove();
+  });
+
+  it("EDT-FR-MOQW, EDT-FR-YVAI: a valid diagram offers the View button on an editable surface, and not on the review candidate", async () => {
+    const valid = "```mermaid\ngraph TD\nA-->B\n```\n";
+    const offered = mountSurface(undefined, valid);
+    await waitFor(() => expect(offered.element.querySelector(".mermaid-view")).not.toBeNull());
+    offered.editor.destroy();
+    offered.element.remove();
+
+    const candidate = mountSurface(false, valid);
+    await waitFor(() =>
+      expect(candidate.element.querySelector("pre")?.getAttribute("data-diagram-view")).toBe(
+        "diagram",
+      ),
+    );
+    expect(candidate.element.querySelector(".mermaid-view")).toBeNull();
+    expect(candidate.element.querySelector(".mermaid-edit")).toBeNull();
+    candidate.editor.destroy();
+    candidate.element.remove();
   });
 
   it("EDT-FR-TOVY: an overlay that is open closes when a new one opens", async () => {

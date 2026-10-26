@@ -4,7 +4,7 @@
  * `EDT-editor.md` EDT-FR-MOQW, EDT-FR-YARW).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("mermaid", async () => (await import("../test/mermaidMock")).mermaidModule);
 
@@ -73,5 +73,18 @@ describe("the diagram editor overlay on a draft prompt", () => {
     await letWriteLand();
     await waitFor(() => expect(writes().some((body) => body.includes("A-->Z"))).toBe(true));
     expect(screen.getByRole("dialog", { name: "Edit Mermaid diagram" })).toBeInTheDocument();
+  });
+
+  it("NAW-FR-11, EDT-FR-MOQW, EDT-FR-YVAI: the prompt's diagram fence opens the viewer, which writes nothing", async () => {
+    renderWorkspace();
+    render(<DiagramEditorHost />);
+    await screen.findByRole("button", { name: "Mermaid diagram, edit source" });
+    fireEvent.click(await screen.findByRole("button", { name: "View diagram" }));
+    const viewer = screen.getByRole("dialog", { name: "View Mermaid diagram" });
+    await waitFor(() => expect(viewer.querySelector("svg")).not.toBeNull());
+    fireEvent.click(within(viewer).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await letWriteLand();
+    expect(writes()).toEqual([]);
   });
 });

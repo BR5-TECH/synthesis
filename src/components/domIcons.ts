@@ -14,6 +14,9 @@ export const DIAGRAM_GLYPH =
   "M15 13h4a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2z" +
   "M7 11v4a2 2 0 0 0 2 2h4";
 
+/** EDT-FR-YVAI: an expand glyph — two arrows that point out to two corners. */
+export const EXPAND_GLYPH = "M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5";
+
 /** EDT-FR-ADNU: a pencil. */
 export const PENCIL_GLYPH = "M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4zM13.5 6.5l4 4";
 

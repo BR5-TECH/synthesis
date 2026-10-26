@@ -60,8 +60,8 @@
   padding-top: calc(var(--sp-2) + 1.75rem);
 }
 
-/* EDT-FR-USWS, EDT-FR-ADNU: the view toggle and the Edit button sit together
-   in the top-right corner in both views, the Edit button first. */
+/* EDT-FR-YVAI, EDT-FR-ADNU, EDT-FR-USWS: the View button, the Edit button and
+   the view toggle sit together in the top-right corner, in this order. */
 .doc .mermaid-controls {
   position: absolute;
   top: var(--sp-2);
@@ -72,7 +72,8 @@
 /* EDT-FR-USWS, EDT-FR-UTHM, EDT-FR-ADNU: icon buttons. Quiet until they are
    wanted, but never hidden, so they do not depend on hover. */
 .doc .mermaid-toggle,
-.doc .mermaid-edit {
+.doc .mermaid-edit,
+.doc .mermaid-view {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -86,19 +87,23 @@
   cursor: pointer;
 }
 .doc .mermaid-toggle .icon,
-.doc .mermaid-edit .icon { width: 15px; height: 15px; flex: none; }
+.doc .mermaid-edit .icon,
+.doc .mermaid-view .icon { width: 15px; height: 15px; flex: none; }
 .doc .mermaid-toggle:hover,
-.doc .mermaid-edit:hover {
+.doc .mermaid-edit:hover,
+.doc .mermaid-view:hover {
   color: var(--fg-1);
   border-color: var(--border-2);
 }
 /* The first source line runs clear of the buttons. */
 .doc pre.mermaid-block--source,
 .doc pre.mermaid-block--error { padding-right: calc(var(--sp-4) + 56px); }
+.doc pre.mermaid-block--source:has(.mermaid-view) { padding-right: calc(var(--sp-4) + 86px); }
 
 .doc .mermaid-diagram:focus-visible,
 .doc .mermaid-toggle:focus-visible,
-.doc .mermaid-edit:focus-visible {
+.doc .mermaid-edit:focus-visible,
+.doc .mermaid-view:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
 }

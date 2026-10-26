@@ -1,6 +1,7 @@
 /**
- * EDT-FR-SJGJ: which diagram fence the diagram editor overlay edits now, and
- * the window rules around it.
+ * EDT-FR-SJGJ, EDT-FR-KMSI: which diagram fence the diagram editor overlay
+ * edits, or the diagram viewer overlay shows, now, and the window rules around
+ * them. The two overlays are modal, so at most one of them is open.
  *
  * A module store rather than React state, because the Edit button is an editor
  * widget drawn outside React (EDT-FR-ADNU), and the overlay is drawn by the
@@ -17,14 +18,19 @@ import type { EditorView } from "@tiptap/pm/view";
 
 import { logDebug, logInfo } from "../../logging";
 
+/** The two diagram overlays: the editor (EDT-FR-SJGJ) and the viewer (EDT-FR-KMSI). */
+export type DiagramOverlayKind = "edit" | "view";
+
 export interface DiagramEditorRequest {
   /** A new number for each opening, so each opening starts fresh (EDT-FR-NKGX). */
   id: number;
+  /** Which overlay is open. */
+  kind: DiagramOverlayKind;
   /** The surface that holds the fence. */
   view: EditorView;
   /** The start position of the fence when the overlay opened. */
   fence: number;
-  /** The Edit button that opened the overlay. */
+  /** The Edit button or the View button that opened the overlay. */
   opener: HTMLElement | null;
 }
 
@@ -35,6 +41,7 @@ export type CloseReason =
   | "other-overlay"
   | "window"
   | "fence-removed"
+  | "not-a-diagram"
   | "write-failed"
   | "surface-ended"
   | "surface-hidden"
@@ -75,38 +82,69 @@ export function setDiagramEditorOpening(next: (() => void) | null): void {
   opening = next;
 }
 
-/** EDT-FR-ADNU: open the overlay on the fence at `fence` in `view`. */
-export function openDiagramEditor(
+function openOverlay(
+  kind: DiagramOverlayKind,
   view: EditorView,
   fence: number,
   opener: HTMLElement | null,
 ): void {
   focusReturn = null;
   // EDT-FR-TOVY: opening closes every other overlay of the main window. That
-  // also closes an overlay that is open on another fence.
+  // also closes a diagram overlay that is open on another fence.
   opening?.();
-  request = { id: nextId++, view, fence, opener };
-  logInfo(["frontend"], "diagram editor opened", { fence });
+  request = { id: nextId++, kind, view, fence, opener };
+  logInfo(["frontend"], kind === "edit" ? "diagram editor opened" : "diagram viewer opened", {
+    fence,
+  });
   emit();
 }
 
-/** EDT-FR-SRXG: close the overlay. A close discards nothing. */
+/** EDT-FR-ADNU: open the editor overlay on the fence at `fence` in `view`. */
+export function openDiagramEditor(
+  view: EditorView,
+  fence: number,
+  opener: HTMLElement | null,
+): void {
+  openOverlay("edit", view, fence, opener);
+}
+
+/** EDT-FR-YVAI: open the viewer overlay on the fence at `fence` in `view`. */
+export function openDiagramViewer(
+  view: EditorView,
+  fence: number,
+  opener: HTMLElement | null,
+): void {
+  openOverlay("view", view, fence, opener);
+}
+
+/**
+ * EDT-FR-SRXG, EDT-FR-ELUJ: close the diagram overlay that is open, the
+ * editor or the viewer. A close discards nothing.
+ */
 export function closeDiagramEditor(reason: CloseReason): void {
   if (!request) return;
+  const { kind } = request;
   request = null;
-  logInfo(["frontend"], "diagram editor closed", { reason });
+  logInfo(["frontend"], kind === "edit" ? "diagram editor closed" : "diagram viewer closed", {
+    reason,
+  });
   emit();
 }
 
 /**
- * EDT-FR-HGAZ: the fence whose Edit button takes the focus back after the
- * overlay closed. The fence can draw its button again after the close, when a
- * render settles; the new button then takes the focus that the old one held.
+ * EDT-FR-HGAZ, EDT-FR-ELUJ: the fence whose Edit button or View button takes
+ * the focus back after its overlay closed. The fence can draw its button again
+ * after the close, when a render settles; the new button then takes the focus
+ * that the old one held.
  */
-let focusReturn: { view: EditorView; fence: number } | null = null;
+let focusReturn: { view: EditorView; fence: number; kind: DiagramOverlayKind } | null = null;
 
-export function returnFocusToFence(view: EditorView, fence: number): void {
-  focusReturn = { view, fence };
+export function returnFocusToFence(
+  view: EditorView,
+  fence: number,
+  kind: DiagramOverlayKind,
+): void {
+  focusReturn = { view, fence, kind };
   // The next press of the author ends it, so the focus is never taken later
   // from where the author put it.
   const end = () => {
@@ -118,9 +156,20 @@ export function returnFocusToFence(view: EditorView, fence: number): void {
   document.addEventListener("keydown", end, true);
 }
 
-/** Whether a new Edit button of `fence` in `view` takes the focus back. */
-export function takesFocusBack(view: EditorView, fence: number): boolean {
-  if (!focusReturn || focusReturn.view !== view || focusReturn.fence !== fence) return false;
+/** Whether a new button of `kind` on `fence` in `view` takes the focus back. */
+export function takesFocusBack(
+  view: EditorView,
+  fence: number,
+  kind: DiagramOverlayKind,
+): boolean {
+  if (
+    !focusReturn ||
+    focusReturn.view !== view ||
+    focusReturn.fence !== fence ||
+    focusReturn.kind !== kind
+  ) {
+    return false;
+  }
   const active = document.activeElement;
   const resting = active === null || active === document.body || !active.isConnected;
   if (resting) focusReturn = null;

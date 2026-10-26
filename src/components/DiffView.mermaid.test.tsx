@@ -145,6 +145,14 @@ describe("diagram fences in a Rich diff (DFV-FR-EGFA)", () => {
     expect(within(left).queryByRole("button", { name: "Edit diagram" })).toBeNull();
   });
 
+  it("DFV-FR-EGFA, EDT-FR-YVAI: the target's fence has the View button and the original's has none", async () => {
+    renderDiff(target("notes.md"));
+    const [left, right] = await fenceRow();
+    expect(await within(right).findByRole("button", { name: "View diagram" })).toBeInTheDocument();
+    expect(within(left).queryByRole("button", { name: "View diagram" })).toBeNull();
+    expect(left.querySelector(".mermaid-controls")).toBeNull();
+  });
+
   it("DFV-FR-EGFA, EDT-FR-MOQW, EDT-FR-EBEZ, EDT-FR-HBEB: the overlay edits the target, which writes the file, and undo uses its history", async () => {
     const sessions = new EditSessionStore();
     render(

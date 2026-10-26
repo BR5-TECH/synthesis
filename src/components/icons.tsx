@@ -1,6 +1,6 @@
 import type { ReactNode, SVGProps } from "react";
 
-import { CODE_GLYPH } from "./domIcons";
+import { CODE_GLYPH, DIAGRAM_GLYPH } from "./domIcons";
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
@@ -137,6 +137,25 @@ export const Icon = {
   Caret: (p: IconProps) => (
     <I {...p}>
       <path d="m6 9 6 6 6-6" />
+    </I>
+  ),
+  /**
+   * EDT-FR-VUGQ: the Insert diagram button — two boxes that a connector joins,
+   * the glyph of the diagram fence's own view toggle (EDT-FR-UTHM).
+   */
+  Diagram: (p: IconProps) => (
+    <I {...p}>
+      <path d={DIAGRAM_GLYPH} />
+    </I>
+  ),
+  /**
+   * EDT-FR-LGQA: the table of contents control — lines of a list, each one
+   * indented a step further, as headings of deeper levels are.
+   */
+  Toc: (p: IconProps) => (
+    <I {...p}>
+      <path d="M4 6h16M8 12h12M12 18h8" />
+      <path d="M4 12h.01M4 18h.01M8 18h.01" />
     </I>
   ),
   CaretUp: (p: IconProps) => (

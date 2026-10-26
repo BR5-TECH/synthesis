@@ -41,7 +41,7 @@ The Find & Replace panel (⌘R) occupying the same band:
 
 ## Functional requirements
 1. **EFR-FR-ABHF** The band directly above the Editor's editing surface holds at most one of three surfaces at any moment: the formatting toolbar, the Find panel, or the Find & Replace panel.
-2. **EFR-FR-ABVQ** Over a Markdown file (per `ESH-editor-source-files.md` ESH-FR-FKZB) the formatting toolbar occupies the band whenever neither panel is open, and returns the moment a panel closes.
+2. **EFR-FR-ABVQ** Over a Markdown file (per `ESH-editor-source-files.md` ESH-FR-FKZB) in WYSIWYG mode (per `EDT-editor.md` EDT-FR-17), the formatting toolbar occupies the band whenever neither panel is open, and returns the moment a panel closes. In raw-text mode the band holds the find panels alone.
 3. **EFR-FR-ACMM** Over a source file (per `ESH-editor-source-files.md` ESH-FR-SSDV) the band holds the find panels alone and is otherwise empty: the toolbar's controls format a rich Markdown document, and a source file has none to format.
 4. **EFR-FR-APFR** The band keeps its place whichever surface occupies it, so a panel opening or closing shifts nothing beneath it.
 5. **EFR-FR-AVGS** The band sits on the field rather than on the page (per `EDT-editor.md` EDT-FR-63), so the controls over a document are never mistaken for part of it.

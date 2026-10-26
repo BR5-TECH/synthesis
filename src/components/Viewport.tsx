@@ -238,6 +238,8 @@ export function Viewport({
           : null
       }
       onThreadFocused={onThreadFocused}
+      // EDT-FR-LGQA: an Editor tab carries the table of contents control.
+      toc
     />
   );
 }

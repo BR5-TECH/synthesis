@@ -24,7 +24,7 @@ import { PromptChangeReview } from "../PromptChangeReview";
 import { ActionControl } from "../ActionControl";
 import { EditSessionStore } from "../../state/editSessions";
 import type { EditSession } from "../../state/editSessions/types";
-import type { EditMode, EditSurface } from "../../state/editHistory";
+import { sealBurst, type EditMode, type EditSurface } from "../../state/editHistory";
 import type { UseArtifactDocument } from "../../hooks/useArtifactDocument";
 import type { EditorImageHost } from "../hostImages";
 import type { SearchMode } from "../../types";
@@ -37,6 +37,9 @@ import {
   FrontmatterRegion,
 } from "./regions";
 import { ActionCluster } from "./toolbar";
+import { insertDiagramFence, type DiagramTemplate } from "./diagramTemplates";
+import type { DocumentOutline } from "./useDocumentOutline";
+import { logDebug, logWarn } from "../../logging";
 import type { CommentSelection, PendingSelection } from "./selection";
 import type { LayerAnchor } from "./highlight";
 import type { EditorProps } from "./props";
@@ -81,6 +84,8 @@ export interface EditorViewProps {
   review: EditorProps["review"];
   showComments: boolean;
   showActions: boolean;
+  /** EDT-FR-LGQA: the outline the table of contents control lists. */
+  outline: DocumentOutline | undefined;
   showResolved: boolean;
   pendingProposal: { id: string } | undefined;
   openPromptReview: (proposalId: string) => void;
@@ -177,6 +182,7 @@ export function EditorView(props: EditorViewProps) {
     review,
     showComments,
     showActions,
+    outline,
     showResolved,
     pendingProposal,
     openPromptReview,
@@ -198,6 +204,27 @@ export function EditorView(props: EditorViewProps) {
 
   /** The name the chrome of a modal or a picker calls this artifact by. */
   const title = artifactName ?? artifactId;
+
+  /**
+   * EDT-FR-IPMX / EDT-FR-HAGB: the insert is one step of the history of its
+   * own. The burst is sealed on both sides, so neither the typing before it
+   * nor the typing after it joins that step.
+   */
+  const insertDiagram = (template: DiagramTemplate) => {
+    if (!editor) {
+      logWarn(["frontend"], "diagram fence not inserted: no editing surface", {
+        chartType: template.key,
+      });
+      return;
+    }
+    sealBurst(session.history);
+    const inserted = insertDiagramFence(editor, template.example);
+    sealBurst(session.history);
+    logDebug(["frontend"], "diagram fence inserted", {
+      chartType: template.key,
+      inserted,
+    });
+  };
 
   /**
    * CMT-FR-05: a non-empty selection reveals the affordance that starts a thread
@@ -378,7 +405,13 @@ export function EditorView(props: EditorViewProps) {
              source file the band holds the find panels alone and is otherwise
              empty — those controls format a rich Markdown document, and a source
              file has none to format. */
-          mode === "wysiwyg" && <FormattingButtons editor={editor} />
+          mode === "wysiwyg" && (
+            <FormattingButtons
+              editor={editor}
+              editable={!blocked}
+              onInsertDiagram={insertDiagram}
+            />
+          )
         )}
         {/* NAW-FR-53 / NAW-FR-54: the removal action an image the surface has
             selected carries. Reachable from the keyboard on the selected image
@@ -412,6 +445,8 @@ export function EditorView(props: EditorViewProps) {
              move between. */
           mode={isMarkdown ? mode : undefined}
           onToggleMode={isMarkdown ? toggleMode : undefined}
+          // EDT-FR-LGQA: a Markdown file's, directly before the comments control.
+          outline={outline}
           // CMT-FR-29: present in both editing modes, so switching to raw text
           // never hides the fact that threads exist.
           comments={

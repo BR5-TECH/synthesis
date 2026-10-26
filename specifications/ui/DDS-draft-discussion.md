@@ -67,7 +67,7 @@ At rest — both columns scroll on their own, the discussion pinned to the tail:
 ```
 ┌─ ✦ Draft discussion · Backend comms.md   ● 3 proposed changes   [doc70|50/50|chat70] ⌘\ ✕ ┐
 ├───────────────────────────────────────────┬─┬───────────────────────────────────────────┤
-│ B I ⟨⟩ │ H1 H2 H3 │ • 1.                  │ │ DISCUSSION                    [following] │
+│ B I ⟨⟩ │ H1 H2 H3 H4 │ • 1.               │ │ DISCUSSION                    [following] │
 ├───────────────────────────────────────────┤ ├───────────────────────────────────────────┤
 │  ## Ontology                            ▍ │ │ ──── 14 earlier messages ────             │
 │  This prompt is structured around…      ▍ │ │ raver119                          6h ago  │

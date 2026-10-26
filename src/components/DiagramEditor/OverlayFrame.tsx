@@ -25,6 +25,12 @@ import {
   type Rect,
 } from "./geometry";
 
+/**
+ * A part that keeps Tab and Shift+Tab for its own edit, such as the source
+ * pane of the diagram editor (EDT-FR-UYBZ). Ctrl+Tab moves focus out of it.
+ */
+export const TAB_INPUT_ATTR = "data-tab-input";
+
 /** The parts of an overlay that take focus with Tab (EDT-FR-HGAZ, EDT-FR-ELUJ). */
 export const FOCUSABLE =
   "textarea, button:not([disabled]), [role='separator'][tabindex], [tabindex='0']";
@@ -97,11 +103,23 @@ export function OverlayFrame({
       }
       if (e.key !== "Tab") return;
       if (!dialog) return;
+      const active = document.activeElement;
+      // EDT-FR-UYBZ: a part that keeps Tab for its own edit gets the key.
+      const tabInput = active instanceof HTMLElement && active.hasAttribute(TAB_INPUT_ATTR);
+      if (tabInput && !e.ctrlKey) return;
       const items = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
       if (items.length === 0) return;
       const first = items[0];
       const last = items[items.length - 1];
-      const active = document.activeElement;
+      if (tabInput) {
+        // EDT-FR-CFCQ: Ctrl+Tab and Ctrl+Shift+Tab leave that part, as Tab and
+        // Shift+Tab leave any other part.
+        e.preventDefault();
+        const at = items.indexOf(active);
+        const next = (at + (e.shiftKey ? -1 : 1) + items.length) % items.length;
+        items[next].focus();
+        return;
+      }
       // The dialog itself holds the focus after a press on a part that takes
       // no focus.
       if (!(active instanceof Node) || !dialog.contains(active) || active === dialog) {

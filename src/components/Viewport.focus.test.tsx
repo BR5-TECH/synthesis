@@ -124,3 +124,10 @@ describe("CMP-FR-11 / CMT-FR-36: the focus reaches only the artifact it names", 
     expect(onThreadFocused).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("EDT-FR-LGQA: an Editor tab carries the table of contents control", () => {
+  it("EDT-FR-LGQA: the Editor of an Editor tab is asked for the control", () => {
+    renderViewport("specs/onboarding.md", null);
+    expect(lastEditorProps().toc).toBe(true);
+  });
+});

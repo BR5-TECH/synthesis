@@ -54,6 +54,9 @@
 /* NAW-FR-XTGP: an overlay fixed to the window, placed by the component, that
    scrolls its list inside a bounded height and changes no layout around it. */
 .fsel__menu--fit {
+  /* The placement gives the full width, so the padding and the border of
+     `.menu` stay inside it and the panel does not pass the window edge. */
+  box-sizing: border-box;
   position: fixed; right: auto;
   display: flex; flex-direction: column; overflow: hidden;
 }

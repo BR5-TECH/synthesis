@@ -41,6 +41,7 @@ import { REVIEW_SELECTOR, type EditorProps } from "./props";
 import { MockEditor } from "./MockEditor";
 import { DRAFT_KEY } from "../../hooks/useComments";
 import { EditorView } from "./EditorView";
+import { useDocumentOutline } from "./useDocumentOutline";
 import { useCommentAnchors } from "./useCommentAnchors";
 import { useCommentRail } from "./useCommentRail";
 import { useEditorFind } from "./useEditorFind";
@@ -99,6 +100,8 @@ function LiveEditor({
   announce,
   review,
   fragmentHost,
+  toc = false,
+  onOutline,
 }: EditorProps & { artifactId: string; sessions: EditSessionStore }) {
   // EXC-FR-LKHZ: keep the store's divergence watch alive while an Editor is up, so
   // the surface works on its own (embedded, or without the shell) rather than
@@ -361,6 +364,15 @@ function LiveEditor({
     setExpandOverride,
   });
   const { sourceTokens, sourceRef, sourceHlRef, sourceWrapRef } = findGroup;
+
+  // EDT-FR-LGQA / NAW-FR-TFFX: the headings of the document, for the table of
+  // contents control in this tab's cluster or in the row of its host.
+  const outline = useDocumentOutline({ editor, mode, sourceText, sourceRef });
+  useEffect(() => {
+    if (!onOutline || !isMarkdown) return;
+    onOutline(outline);
+    return () => onOutline(null);
+  }, [onOutline, outline, isMarkdown]);
 
 
   /**
@@ -881,6 +893,7 @@ function LiveEditor({
       review={review}
       showComments={showComments}
       showActions={showActions}
+      outline={toc && isMarkdown ? outline : undefined}
       showResolved={showResolved}
       pendingProposal={pendingProposal}
       openPromptReview={openPromptReview}

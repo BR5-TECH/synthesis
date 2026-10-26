@@ -264,6 +264,34 @@
 }
 /* EDT-FR-16: right-aligned cluster of graphical action controls. */
 .editor__actions { display: flex; align-items: center; gap: 4px; flex: none; }
+/* EDT-FR-OWNT / EDT-FR-PNGU / EDT-FR-IZHD: the dropdowns of the Editor's
+   chrome — the diagram type menu of the toolbar and the table of contents
+   panel. Each is the filterable selector (`filterable-select.css`) under an
+   icon trigger, fixed to the window so that it never scrolls the surface it
+   opens over. */
+.toolbar-dropdown, .toc { display: inline-flex; flex: none; }
+.toolbar-dropdown > .btn[aria-expanded="true"],
+.toc__trigger[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+.fsel__menu.diagram-menu, .fsel__menu.toc__panel { z-index: var(--z-overlay); }
+.diagram-menu .fsel__list { max-height: min(360px, 50vh); }
+.toc__panel .fsel__list { max-height: min(420px, 60vh); }
+.toc__panel--empty .fsel__count { display: none; }
+/* EDT-FR-PNGU / EDT-FR-EKCY: each level indents one step, and the text size
+   falls from level 1 to level 4. Each size stays below the UI size of a panel
+   section header, far below the heading on the page. A long heading ends in
+   an ellipsis with its full text in the tooltip. */
+.toc__panel .fsel__option { height: auto; min-height: 26px; padding-top: 2px; padding-bottom: 2px; }
+.toc__panel .fsel__option[data-level="1"] { font-size: var(--fs-ui-lg); font-weight: 600; }
+.toc__panel .fsel__option[data-level="2"] { font-size: var(--fs-ui-title); font-weight: 600; padding-left: calc(var(--sp-2) + 12px); }
+.toc__panel .fsel__option[data-level="3"] { font-size: var(--fs-ui-md); font-weight: 500; padding-left: calc(var(--sp-2) + 24px); }
+.toc__panel .fsel__option[data-level="4"] { font-size: var(--fs-ui-sm); padding-left: calc(var(--sp-2) + 36px); }
+.toc__panel .fsel__option[data-level="5"] { font-size: var(--fs-ui-xs); color: var(--fg-2); padding-left: calc(var(--sp-2) + 48px); }
+.toc__panel .fsel__option[data-level="6"] { font-size: var(--fs-ui-xs); color: var(--fg-2); padding-left: calc(var(--sp-2) + 60px); }
+.toc__panel .fsel__option-label { min-width: 0; }
+/* EDT-FR-YSJX: a heading scrolled to the top of the view keeps a small gap
+   above it, so it does not touch the edge of the scroller. */
+.editor .ProseMirror h1, .editor .ProseMirror h2, .editor .ProseMirror h3,
+.editor .ProseMirror h4, .editor .ProseMirror h5, .editor .ProseMirror h6 { scroll-margin-top: 16px; }
 /* Square icon buttons — sized as comfortable pointer targets. */
 .btn.btn--icon { width: var(--ctl-h-lg); height: var(--ctl-h-md); padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .btn.btn--icon[data-active="true"] { background: var(--accent-soft); color: var(--accent); }

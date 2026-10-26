@@ -7,6 +7,8 @@ import {
 } from "../../state/frontmatterYaml";
 import type { FindMatch } from "../../state/findMatches";
 import { highlightYaml } from "./highlight";
+import { DiagramInsertMenu } from "./DiagramInsertMenu";
+import type { DiagramTemplate } from "./diagramTemplates";
 
 /**
  * EDT-FR-18/EDT-FR-20: the WYSIWYG-only frontmatter region — a visually distinct,
@@ -189,10 +191,20 @@ function DescriptionCount({
  */
 /**
  * Formatting controls wired to Tiptap commands, with active-state highlighting.
- * Rendered only in WYSIWYG mode (EDT-FR-17); the primary actions live in the
- * right-aligned ActionCluster (EDT-FR-16).
+ * Rendered only in WYSIWYG mode (EDT-FR-NTHC, EFR-FR-ABVQ); the primary actions
+ * live in the right-aligned ActionCluster (EDT-FR-16).
  */
-export function FormattingButtons({ editor }: { editor: TiptapEditor | null }) {
+export function FormattingButtons({
+  editor,
+  editable,
+  onInsertDiagram,
+}: {
+  editor: TiptapEditor | null;
+  /** EDT-FR-VUGQ: whether the surface accepts input. */
+  editable: boolean;
+  /** EDT-FR-IPMX: inserts a diagram fence that holds the example of a type. */
+  onInsertDiagram: (template: DiagramTemplate) => void;
+}) {
   // `onMouseDown` preventDefault keeps the selection in the editor when a
   // toolbar button is clicked (otherwise the button steals focus first).
   const cmd = (run: () => void) => (e: React.MouseEvent) => {
@@ -229,11 +241,15 @@ export function FormattingButtons({ editor }: { editor: TiptapEditor | null }) {
         <span style={{ fontFamily: "var(--font-mono)" }}>{"<>"}</span>
       </button>
       <span className="sep--v" style={{ height: 18, margin: "0 6px" }} />
-      {([1, 2, 3] as const).map((level) => (
+      {/* EDT-FR-NTHC: H1 to H4. The command makes a heading of the level a
+          paragraph again. */}
+      {([1, 2, 3, 4] as const).map((level) => (
         <button
           key={level}
+          type="button"
           className="btn btn--ghost btn--sm"
           title={`Heading ${level}`}
+          aria-label={`Heading ${level}`}
           data-active={active("heading", { level })}
           onMouseDown={cmd(() =>
             editor?.chain().focus().toggleHeading({ level }).run(),
@@ -267,6 +283,7 @@ export function FormattingButtons({ editor }: { editor: TiptapEditor | null }) {
       >
         ”
       </button>
+      <DiagramInsertMenu disabled={!editable} onInsert={onInsertDiagram} />
     </>
   );
 }

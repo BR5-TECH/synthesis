@@ -1,10 +1,12 @@
 import { Icon } from "../icons";
 import type { EditMode } from "../../state/editHistory";
+import { TocControl } from "./TocControl";
+import type { DocumentOutline } from "./useDocumentOutline";
 
 /**
  * EDT-FR-16: the Editor's primary actions rendered as graphical icon controls in
- * a single right-aligned cluster — the WYSIWYG⇄source mode toggle (EDT-FR-17)
- * and the comments control. `mode`/`onToggleMode` are omitted on surfaces
+ * a single right-aligned cluster — the table of contents control (EDT-FR-LGQA),
+ * the WYSIWYG⇄source mode toggle (EDT-FR-17), and the comments control. `mode`/`onToggleMode` are omitted on surfaces
  * without dual-mode editing (the mock).
  *
  * The cluster carries no Save control: an artifact writes itself (EDT-FR-70), so
@@ -42,6 +44,11 @@ interface ActionClusterProps {
    * where the trailing control does.
    */
   report?: string;
+  /**
+   * EDT-FR-LGQA: the table of contents control, directly before the comments
+   * control. Present over a Markdown file of an Editor tab alone.
+   */
+  outline?: DocumentOutline;
 }
 
 export function ActionCluster({
@@ -51,6 +58,7 @@ export function ActionCluster({
   comments,
   proposal,
   report,
+  outline,
 }: ActionClusterProps) {
   return (
     <div className="editor__actions">
@@ -65,6 +73,7 @@ export function ActionCluster({
           </span>
         )
       )}
+      {outline && <TocControl outline={outline} />}
       {comments && (
         <button
           className="btn btn--ghost btn--icon editor__comments-toggle"
@@ -136,6 +145,7 @@ export function EditorToolbar({ dirty }: { dirty: boolean }) {
       <button className="btn btn--ghost btn--sm">H1</button>
       <button className="btn btn--ghost btn--sm">H2</button>
       <button className="btn btn--ghost btn--sm">H3</button>
+      <button className="btn btn--ghost btn--sm">H4</button>
       <span className="sep--v" style={{ height: 18, margin: "0 6px" }} />
       <button className="btn btn--ghost btn--sm" title="Bulleted list">
         •

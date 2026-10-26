@@ -11,6 +11,7 @@
  */
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -21,9 +22,18 @@ import {
 import { DiagramPreview } from "./DiagramPreview";
 import { DiagramViewerOverlay } from "./DiagramViewer";
 import { sendHistoryKey, writeSource } from "./fence";
-import { SPLIT_STEP, clampSplit, OPEN_SPLIT, MAX_SPLIT, MIN_SPLIT } from "./geometry";
+import {
+  SPLIT_STEP,
+  clampSplit,
+  dragSplit,
+  splitLabel,
+  OPEN_SPLIT,
+  MAX_SPLIT,
+  MIN_SPLIT,
+} from "./geometry";
 import { HintsArea } from "./HintsArea";
-import { OverlayFrame } from "./OverlayFrame";
+import { indentSource, outdentSource } from "./indent";
+import { OverlayFrame, TAB_INPUT_ATTR } from "./OverlayFrame";
 import { diagramEditorRequest, subscribeDiagramEditor, type DiagramEditorRequest } from "./store";
 import { useFence } from "./useFence";
 
@@ -48,7 +58,19 @@ function DiagramEditorOverlay({ request }: { request: DiagramEditorRequest }) {
     () => sourceRef.current?.value ?? null,
   );
   const [split, setSplit] = useState(OPEN_SPLIT);
+  /** EDT-FR-SPAG: where on the divider the tooltip shows, while a drag lasts. */
+  const [dragTipTop, setDragTipTop] = useState<number | null>(null);
   const panesRef = useRef<HTMLDivElement>(null);
+  /** EDT-FR-UYBZ: the selection that an indent puts back after the render. */
+  const pendingSelection = useRef<{ start: number; end: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const el = sourceRef.current;
+    const pending = pendingSelection.current;
+    if (!el || !pending) return;
+    pendingSelection.current = null;
+    el.setSelectionRange(pending.start, pending.end);
+  }, [source]);
 
   // EDT-FR-HGAZ: focus moves into the source pane, with the caret in it.
   useEffect(() => {
@@ -86,8 +108,33 @@ function DiagramEditorOverlay({ request }: { request: DiagramEditorRequest }) {
     if (!writeSource(view, at.pos, next)) finish("write-failed");
   };
 
+  /**
+   * EDT-FR-UYBZ: Tab indents and Shift+Tab outdents the source. Ctrl+Tab is
+   * left to the overlay, which moves focus with it (EDT-FR-CFCQ).
+   */
+  const onSourceTab = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    e.preventDefault();
+    if (!place.current) return;
+    const el = e.currentTarget;
+    const edit = (e.shiftKey ? outdentSource : indentSource)(
+      el.value,
+      el.selectionStart,
+      el.selectionEnd,
+    );
+    if (edit.value === el.value) return;
+    pendingSelection.current = { start: edit.start, end: edit.end };
+    onSourceChange(edit.value);
+  };
+
   /** EDT-FR-HBEB: the undo and redo keys of the surface. */
   const onSourceKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    // A key that ends an IME composition is the composition's, not an indent.
+    // WebKit gives it the key code 229 and no `isComposing`.
+    const composing = e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229;
+    if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey && !composing) {
+      onSourceTab(e);
+      return;
+    }
     if (!e.metaKey && !e.ctrlKey) return;
     const key = e.key.toLowerCase();
     const isRedo = key === "y" || (key === "z" && e.shiftKey);
@@ -113,12 +160,18 @@ function DiagramEditorOverlay({ request }: { request: DiagramEditorRequest }) {
     e.preventDefault();
     const target = e.currentTarget;
     target.setPointerCapture?.(e.pointerId);
-    const onMove = (ev: PointerEvent) => {
+    const place = (ev: { clientX: number; clientY: number }) => {
       const box = panes.getBoundingClientRect();
       if (box.width <= 0) return;
-      setSplit(clampSplit((ev.clientX - box.left) / box.width));
+      // EDT-FR-UPYC: the middle holds the divider while the pointer is near it.
+      setSplit(dragSplit((ev.clientX - box.left) / box.width));
+      // EDT-FR-SPAG: the tooltip follows the pointer along the divider.
+      setDragTipTop(Math.min(Math.max(ev.clientY - box.top, 0), box.height));
     };
+    place(e);
+    const onMove = (ev: PointerEvent) => place(ev);
     const onUp = () => {
+      setDragTipTop(null);
       target.removeEventListener("pointermove", onMove);
       target.removeEventListener("pointerup", onUp);
       target.removeEventListener("pointercancel", onUp);
@@ -165,6 +218,7 @@ function DiagramEditorOverlay({ request }: { request: DiagramEditorRequest }) {
           autoCapitalize="off"
           autoCorrect="off"
           value={source}
+          {...{ [TAB_INPUT_ATTR]: "" }}
           onChange={(e) => onSourceChange(e.target.value)}
           onKeyDown={onSourceKeyDown}
         />
@@ -176,10 +230,25 @@ function DiagramEditorOverlay({ request }: { request: DiagramEditorRequest }) {
           aria-valuemin={Math.round(MIN_SPLIT * 100)}
           aria-valuemax={Math.round(MAX_SPLIT * 100)}
           aria-valuenow={Math.round(split * 100)}
+          aria-valuetext={splitLabel(split)}
+          data-dragging={dragTipTop !== null}
           tabIndex={0}
           onPointerDown={onDividerPointerDown}
           onKeyDown={onDividerKeyDown}
-        />
+        >
+          {dragTipTop !== null && (
+            // EDT-FR-SPAG: the split while the drag lasts. The separator gives
+            // the same text to assistive technology through its value.
+            <span
+              className="diagram-editor__split-tip"
+              data-testid="diagram-split-tip"
+              aria-hidden="true"
+              style={{ top: dragTipTop }}
+            >
+              {splitLabel(split)}
+            </span>
+          )}
+        </div>
         <DiagramPreview source={source} />
       </div>
       <HintsArea source={source} />

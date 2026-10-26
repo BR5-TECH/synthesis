@@ -146,11 +146,28 @@ function dispatchMeta(view: EditorView, meta: MermaidMeta, select?: Selection): 
  * the author cannot see.
  */
 function selectionOutside(doc: PMNode, fence: number, node: PMNode): Selection {
-  const after = Selection.findFrom(doc.resolve(fence + node.nodeSize), 1, true);
+  const after = textOutsideFences(doc, fence + node.nodeSize, 1);
   if (after) return after;
-  const before = Selection.findFrom(doc.resolve(fence), -1, true);
+  const before = textOutsideFences(doc, fence, -1);
   if (before) return before;
   return NodeSelection.create(doc, fence);
+}
+
+/**
+ * The nearest text position from `pos` in direction `dir` that is not in a
+ * diagram fence. A fence beside this one can show its diagram, and the text
+ * of its source then has no size on screen.
+ */
+function textOutsideFences(doc: PMNode, pos: number, dir: 1 | -1): Selection | null {
+  let from = pos;
+  for (;;) {
+    const found = Selection.findFrom(doc.resolve(from), dir, true);
+    if (!found) return null;
+    const other = fenceAround(doc, found.from);
+    if (other === null) return found;
+    const size = doc.nodeAt(other)?.nodeSize ?? 0;
+    from = dir === 1 ? other + size : other;
+  }
 }
 
 /**

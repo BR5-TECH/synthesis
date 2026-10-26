@@ -137,6 +137,23 @@ describe("the view toggle and the keyboard (EDT-FR-USWS)", () => {
     expect(ed.state.selection.from).toBeGreaterThanOrEqual(end);
   });
 
+  it("EDT-FR-USWS, EDT-FR-IPMX: showing the diagram moves the caret past a next fence that shows its diagram", async () => {
+    const ed = mount("Intro\n\n```mermaid\ngraph TD\n```\n\n```mermaid\npie\n```\n\nOutro");
+    await vi.waitFor(() => {
+      const views = [...ed.view.dom.querySelectorAll("pre")].map((p) =>
+        p.getAttribute("data-diagram-view"),
+      );
+      expect(views).toEqual(["diagram", "diagram"]);
+    });
+    figureOf(ed)!.click();
+    select(ed, IN_FENCE);
+    toggleOf(ed)!.click();
+    expect(viewOf(ed)).toBe("diagram");
+    const { $from } = ed.state.selection;
+    expect($from.parent.type.name).toBe("paragraph");
+    expect($from.parent.textContent).toBe("Outro");
+  });
+
   it("EDT-FR-USWS: a fence that is the last block moves the caret before it", async () => {
     const ed = mount("Intro\n\n```mermaid\ngraph TD\n```", true, false);
     await rendered(ed);

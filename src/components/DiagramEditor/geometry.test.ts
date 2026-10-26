@@ -7,6 +7,8 @@ import {
   MIN_WIDTH,
   clampRect,
   clampSplit,
+  dragSplit,
+  splitLabel,
   moveRect,
   openRect,
   resizeRect,
@@ -56,5 +58,27 @@ describe("the geometry of the diagram editor overlay", () => {
     expect(clampSplit(0)).toBe(MIN_SPLIT);
     expect(clampSplit(1)).toBe(MAX_SPLIT);
     expect(clampSplit(0.4)).toBe(0.4);
+  });
+});
+
+describe("the drag of the divider (EDT-FR-UPYC, EDT-FR-SPAG)", () => {
+  it("EDT-FR-UPYC: the split holds at the middle within 2 percentage points of it, and follows the pointer outside them", () => {
+    expect(dragSplit(0.5)).toBe(0.5);
+    expect(dragSplit(0.51)).toBe(0.5);
+    expect(dragSplit(0.485)).toBe(0.5);
+    expect(dragSplit(0.52)).toBe(0.5);
+    expect(dragSplit(0.48)).toBe(0.5);
+    expect(dragSplit(0.5201)).toBe(0.5201);
+    expect(dragSplit(0.4799)).toBe(0.4799);
+    expect(dragSplit(0.53)).toBe(0.53);
+    expect(dragSplit(0.47)).toBe(0.47);
+    expect(dragSplit(0.02)).toBe(MIN_SPLIT);
+    expect(dragSplit(0.99)).toBe(MAX_SPLIT);
+  });
+
+  it("EDT-FR-SPAG: the label gives the widths of the two panes in whole percent", () => {
+    expect(splitLabel(0.5)).toBe("50 / 50");
+    expect(splitLabel(0.623)).toBe("62 / 38");
+    expect(splitLabel(0.15)).toBe("15 / 85");
   });
 });

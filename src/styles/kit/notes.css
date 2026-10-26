@@ -255,12 +255,18 @@
 .note-group__header--link { cursor: pointer; }
 .note-group__header--link:hover { color: var(--fg-1); text-decoration: underline; }
 
-/* NTS-FR-04: the create affordance, pinned below the list. */
+/* NTS-FR-04: the create affordance, pinned below the list and centred across
+   the panel's width, as the Drafts panel centres its own (DRP-FR-06). A failed
+   create's error keeps the full width below the button. */
 .notes__create {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   padding: 6px 8px;
   border-top: 1px solid var(--border-1);
   background: var(--bg-panel);
 }
+.notes__create > .note__error { align-self: stretch; }
 
 /* NTS-FR-22: the Move picker's type-to-filter list. */
 .notes-move { min-width: 220px; max-width: 320px; }

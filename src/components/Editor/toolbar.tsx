@@ -5,9 +5,11 @@ import type { DocumentOutline } from "./useDocumentOutline";
 
 /**
  * EDT-FR-16: the Editor's primary actions rendered as graphical icon controls in
- * a single right-aligned cluster — the table of contents control (EDT-FR-LGQA),
- * the WYSIWYG⇄source mode toggle (EDT-FR-17), and the comments control. `mode`/`onToggleMode` are omitted on surfaces
- * without dual-mode editing (the mock).
+ * a single right-aligned cluster — the comments control, the pending proposal
+ * indication, the table of contents control (EDT-FR-LGQA), and the
+ * WYSIWYG⇄source mode toggle (EDT-FR-17). The table of contents control and the
+ * toggle are a pair, with no control between them. `mode`/`onToggleMode` are
+ * omitted on surfaces without dual-mode editing (the mock).
  *
  * The cluster carries no Save control: an artifact writes itself (EDT-FR-70), so
  * a control to write it would either do nothing or duplicate what has already
@@ -45,8 +47,8 @@ interface ActionClusterProps {
    */
   report?: string;
   /**
-   * EDT-FR-LGQA: the table of contents control, directly before the comments
-   * control. Present over a Markdown file of an Editor tab alone.
+   * EDT-FR-LGQA: the table of contents control, directly before the mode
+   * toggle. Present over a Markdown file alone.
    */
   outline?: DocumentOutline;
 }
@@ -73,7 +75,6 @@ export function ActionCluster({
           </span>
         )
       )}
-      {outline && <TocControl outline={outline} />}
       {comments && (
         <button
           className="btn btn--ghost btn--icon editor__comments-toggle"
@@ -109,6 +110,9 @@ export function ActionCluster({
           <Icon.Diff size={15} />
         </button>
       )}
+      {/* EDT-FR-LGQA: directly before the mode toggle, with no control
+          between them. */}
+      {outline && <TocControl outline={outline} />}
       {mode && onToggleMode && (
         <button
           className="btn btn--ghost btn--icon"

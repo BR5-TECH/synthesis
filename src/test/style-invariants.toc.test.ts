@@ -76,3 +76,35 @@ describe("the text size of the table of contents entries (EDT-FR-EKCY)", () => {
     expect(decl(blocks[0], "display")).toBe("none");
   });
 });
+
+describe("the action cluster keeps the table of contents beside the mode toggle (EDT-FR-16)", () => {
+  // The whole bundle is read, so a later part that overrides the rule gives a
+  // second rule for the class and fails the count.
+  const kit = sheet("kit.css");
+
+  it("EDT-FR-16, EDT-FR-LGQA: the cluster and the control keep their own width, so the pair never separates", () => {
+    const cluster = blocksFor(kit, ".editor__actions");
+    expect(cluster).toHaveLength(1);
+    expect(decl(cluster[0], "flex")).toBe("none");
+    const toc = blocksFor(kit, ".toc");
+    expect(toc).toHaveLength(1);
+    expect(decl(toc[0], "flex")).toBe("none");
+  });
+
+  it("EDT-FR-16: the surface of the band takes the width left and clips what does not fit, on one row", () => {
+    const surface = blocksFor(kit, ".editor__band-surface");
+    expect(surface).toHaveLength(1);
+    expect(decl(surface[0], "flex")).toBe("1 1 auto");
+    expect(decl(surface[0], "min-width")).toBe("0");
+    expect(decl(surface[0], "overflow-x")).toBe("clip");
+    // Only the horizontal axis clips, so focus rings and the find panel's
+    // second row are not cut.
+    expect(decl(surface[0], "overflow")).toBeNull();
+    expect(decl(surface[0], "overflow-y")).toBeNull();
+    // The leading focus ring (3px) stays inside the clip, and no control moves.
+    expect(decl(surface[0], "margin-inline-start")).toBe("-4px");
+    expect(decl(surface[0], "padding-inline-start")).toBe("4px");
+    const [band] = blocksFor(kit, ".editor__toolbar");
+    expect(decl(band, "flex-wrap")).toBe("nowrap");
+  });
+});

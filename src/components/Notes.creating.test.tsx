@@ -428,7 +428,7 @@ describe("creating a note (NTS-FR-04 / NTS-FR-10)", () => {
     await waitFor(() => expect(calls("create_note")).toHaveLength(1));
   });
 
-  it("reports a failed create below the affordance", async () => {
+  it("NTS-FR-04: reports a failed create below the affordance", async () => {
     render(<Harness entity={null} />);
     await screen.findByLabelText("Notes scope");
 
@@ -436,11 +436,19 @@ describe("creating a note (NTS-FR-04 / NTS-FR-10)", () => {
       if (cmd === "create_note") throw "no project open";
       if (cmd === "list_project_notes") return served.project;
       if (cmd === "load_notes_panel_state") return served.panelState;
-      return undefined;
+      if (cmd === "append_log_records") return undefined;
+      return Promise.reject(new Error(`unexpected invoke ${cmd}`));
     });
     await userEvent.click(screen.getByRole("button", { name: "New note" }));
 
-    expect(await screen.findByText("no project open")).toBeInTheDocument();
+    const error = await screen.findByText("no project open");
     expect(screen.queryByLabelText("Edit note")).not.toBeInTheDocument();
+    // The centred affordance and the full-width error are rules on the direct
+    // children of `.notes__create`, so the error is one, after the button.
+    const button = screen.getByRole("button", { name: "New note" });
+    expect(error).toHaveClass("note__error");
+    expect(error.parentElement).toHaveClass("notes__create");
+    expect(button.parentElement).toBe(error.parentElement);
+    expect(button.compareDocumentPosition(error) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

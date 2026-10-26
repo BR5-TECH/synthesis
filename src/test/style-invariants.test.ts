@@ -115,6 +115,30 @@ describe("a vertical panel's pinned footer centres its button (LIB-FR-VMAQ / DRP
   });
 });
 
+describe("the Notes panel centres its create affordance (NTS-FR-04 / DRP-FR-06)", () => {
+  // The whole bundle is read, so a later part that overrides the rule gives a
+  // second rule for the class and fails the count.
+  const css = sheet("kit.css");
+
+  it("NTS-FR-04, DRP-FR-06: + Note is centred across the panel's width, pinned below the list", () => {
+    const blocks = blocksFor(css, ".notes__create");
+    expect(blocks).toHaveLength(1);
+    const [block] = blocks;
+    expect([
+      decl(block, "display"),
+      decl(block, "flex-direction"),
+      decl(block, "align-items"),
+    ]).toEqual(["flex", "column", "center"]);
+    expect(decl(block, "border-top")).toBe("1px solid var(--border-1)");
+  });
+
+  it("NTS-FR-04: a failed create's error keeps the full width below the button", () => {
+    const blocks = blocksFor(css, ".notes__create > .note__error");
+    expect(blocks).toHaveLength(1);
+    expect(decl(blocks[0], "align-self")).toBe("stretch");
+  });
+});
+
 describe("the status bar does not clip its own overlay (STB-FR-12)", () => {
   // `.status-bar__overlay` is positioned against `.status-bar__center` and grows
   // UPWARD out of the 26px strip. An `overflow: hidden` on the strip clips it to

@@ -154,7 +154,7 @@ afterEach(() => {
 });
 
 describe("the table of contents control (EDT-FR-LGQA, EDT-FR-16)", () => {
-  it("EDT-FR-LGQA, EDT-FR-16: an icon control with its name and tooltip, directly before the comments control", async () => {
+  it("EDT-FR-LGQA, EDT-FR-16: an icon control with its name and tooltip", async () => {
     wireBackend();
     await mountMarkdown();
     const button = tocButton();
@@ -162,12 +162,57 @@ describe("the table of contents control (EDT-FR-LGQA, EDT-FR-16)", () => {
     expect(button.textContent).toBe("");
     expect(button.querySelector("svg")).not.toBeNull();
     expect(button).toHaveAttribute("aria-expanded", "false");
-    const cluster = button.closest(".editor__actions") as HTMLElement;
-    const controls: HTMLElement[] = Array.from(cluster.querySelectorAll("button"));
-    const comments = cluster.querySelector(".editor__comments-toggle");
-    expect(comments).not.toBeNull();
-    expect(controls.indexOf(comments as HTMLElement)).toBe(controls.indexOf(button) + 1);
   });
+
+  /**
+   * The pair rule: the control's wrapper is the element directly before the
+   * mode toggle, so no control of any kind stands between them, and the
+   * comments control stands before the pair.
+   */
+  function expectPairedWithToggle(toggleName: string) {
+    const button = tocButton();
+    const toggle = screen.getByRole("button", { name: toggleName });
+    const cluster = button.closest(".editor__actions");
+    expect(cluster).not.toBeNull();
+    expect(toggle.closest(".editor__actions")).toBe(cluster);
+    expect(button.closest(".toc")?.nextElementSibling).toBe(toggle);
+    // EDT-FR-16: the cluster stands beside the band's clipping surface, not in
+    // it, so a narrow band never clips the pair.
+    expect(cluster!.closest(".editor__band-surface")).toBeNull();
+    expect(cluster!.previousElementSibling).toHaveClass("editor__band-surface");
+    const comments = cluster!.querySelector(".editor__comments-toggle");
+    expect(comments).not.toBeNull();
+    expect(comments!.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  }
+
+  it("EDT-FR-LGQA, EDT-FR-16: in WYSIWYG with the formatting toolbar, directly before the mode toggle, after the comments control", async () => {
+    wireBackend();
+    await mountMarkdown();
+    expect(screen.getByRole("button", { name: "Heading 1" })).toBeInTheDocument();
+    expectPairedWithToggle("Edit as Markdown source");
+  });
+
+  it("EDT-FR-LGQA, EDT-FR-16: in raw-text mode, directly before the mode toggle, after the comments control", async () => {
+    wireBackend();
+    await mountMarkdown();
+    await toRaw();
+    await screen.findByRole("button", { name: "Edit as rich text" });
+    expectPairedWithToggle("Edit as rich text");
+  });
+
+  it.each(["find", "replace"] as const)(
+    "EDT-FR-LGQA, EDT-FR-16: with the %s panel in the band, directly before the mode toggle",
+    async (form) => {
+      wireBackend();
+      await mountMarkdown();
+      act(() => {
+        sessions.setFind("a.md", { form });
+      });
+      await screen.findByLabelText("Find");
+      expect(screen.queryByRole("button", { name: "Heading 1" })).toBeNull();
+      expectPairedWithToggle("Edit as Markdown source");
+    },
+  );
 
   it("EDT-FR-LGQA, EDT-FR-16: a source file has no table of contents control", async () => {
     wireBackend("const a = 1;\n");

@@ -40,7 +40,6 @@ export function DraftDocumentColumn({
   onEdit,
   fragmentHost,
   review,
-  onOutline,
 }: {
   drafts: DraftSessionStore;
   /** The edit-session key of the live prompt, or null before the record lands. */
@@ -65,7 +64,6 @@ export function DraftDocumentColumn({
   onEdit: () => void;
   fragmentHost: EditorProps["fragmentHost"];
   review: EditorProps["review"];
-  onOutline: EditorProps["onOutline"];
 }) {
   /**
    * CMT-FR-64: the field the page and the margin share, measured so the cards
@@ -288,10 +286,10 @@ export function DraftDocumentColumn({
                the one under review, and the gutter map on the scroller's
                edge. There is no modal and no second surface. */
             review={review}
-            /* NAW-FR-TFFX: the chrome row carries the table of contents
-               control of the live prompt, so the surface lends it the
-               outline. */
-            onOutline={onOutline}
+            /* NAW-FR-TFFX: the table of contents control of the live
+               prompt, directly before its mode toggle. A past version reads
+               through `DraftVersionReading` above and has none. */
+            toc
           />
         ) : (
           /* The moment before the record has landed. A draft always holds

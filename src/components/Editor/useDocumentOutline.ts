@@ -13,11 +13,10 @@ import {
  * EDT-FR-KJLQ / EDT-FR-YSJX: the headings of the document a surface shows, and
  * the way to move to one of them.
  *
- * A store for `useSyncExternalStore`, so a table of contents control that is
- * not inside the Editor (the chrome row of a New Artifact tab, NAW-FR-TFFX)
- * reads the same list as one that is. The list is computed only when a
- * subscriber asks for it, and again only when the document changes, so a
- * closed panel costs nothing.
+ * A store for `useSyncExternalStore`, which the table of contents control reads
+ * only while its panel is open. The list is computed only when a subscriber
+ * asks for it, and again only when the document changes, so a closed panel
+ * costs nothing.
  */
 export interface DocumentOutline {
   subscribe: (listener: () => void) => () => void;

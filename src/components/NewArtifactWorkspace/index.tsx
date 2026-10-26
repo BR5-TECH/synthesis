@@ -52,7 +52,6 @@ import { InconsistentDraft } from "./InconsistentDraft";
 import { DraftActionControl } from "./DraftActionControl";
 import { DraftChrome } from "./DraftChrome";
 import { DraftDocumentColumn } from "./DraftDocumentColumn";
-import type { DocumentOutline } from "../Editor/useDocumentOutline";
 import { useDraftGraduation } from "./useDraftGraduation";
 import { useDraftHistory } from "./useDraftHistory";
 import { useDraftImages } from "./useDraftImages";
@@ -192,8 +191,6 @@ export function NewArtifactWorkspace({
    * by the control rather than held with it, the tab being what owns the field.
    */
   const [overlayOpen, setOverlayOpen] = useState(false);
-  /** NAW-FR-TFFX: the outline of the live prompt, lent by its Editor. */
-  const [outline, setOutline] = useState<DocumentOutline | null>(null);
   const identityBlock = identityBlockFor(discussions.identityError);
 
   const { splitRef, view, setRatio, toggleDiscussion } = useDraftSplit(draftId);
@@ -692,7 +689,6 @@ export function NewArtifactWorkspace({
         view={view}
         onRatioChange={setRatio}
         onToggleDiscussion={toggleDiscussion}
-        outline={viewing ? null : outline}
       />
 
       {error && <div className="draft-workspace__error">{error}</div>}
@@ -784,7 +780,6 @@ export function NewArtifactWorkspace({
           onEdit={() => setEditTick((n) => n + 1)}
           fragmentHost={fragmentsGroup.host}
           review={review}
-          onOutline={setOutline}
         />
 
         {/* DDS-FR-PNXR: the splitter, dragged and also moved by keyboard. It

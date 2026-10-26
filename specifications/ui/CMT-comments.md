@@ -17,7 +17,7 @@ The margin surface of the Editor for **fragment-targeted discussions**: the conv
 An Editor tab in WYSIWYG mode with the artifact's comments showing:
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│ Skill · onboarding.md                          [ ⤓ ] [ → ] [◧] [ 💬 2 ]│  ← action cluster
+│ Skill · onboarding.md                    [ ⤓ ] [ → ] [ 💬 2 ] [ ☰ ] [◧]│  ← action cluster
 ├────────────────────────────────────────────────────────────────────┬───┤
 │  B  I  S  ⟨⟩ │ H1 H2 H3 │ •  1. │ ❝  ⌗  🔗                          │   │
 ├────────────────────────────────────────────────────────────────────┤   │

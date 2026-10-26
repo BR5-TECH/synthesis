@@ -531,13 +531,21 @@ export const Icon = {
   ),
   /* CMT-FR-48: an attachment carried as an address rather than as content. */
   Link: (p: IconProps) => (
-    <I {...p}>
+    <I data-icon="link" {...p}>
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </I>
   ),
+  /* NAW-FR-KVFM: opening an issue in the system's external browser. */
+  ExternalLink: (p: IconProps) => (
+    <I data-icon="external-link" {...p}>
+      <path d="M14 4h6v6" />
+      <path d="M20 4l-9 9" />
+      <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+    </I>
+  ),
   /* Posting a composed message. */
-  Send: (p: IconProps) => (
+  Send:(p: IconProps) => (
     <I {...p}>
       <path d="M21 3 10.5 13.5" />
       <path d="M21 3l-6.5 18-4-8-8-4z" />

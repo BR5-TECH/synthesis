@@ -5,13 +5,15 @@
  * NAW-FR-EOTB, NAW-FR-HZSW, NAW-FR-CBUJ, NAW-FR-XRLD, NAW-FR-QTVX).
  *
  * The tag states the draft's publication and nothing more: it edits, reorders,
- * and removes no record, and its one control leaves the application entirely
- * (NAW-FR-XRLD). The records themselves are read in the Draft Information
- * modal (per `DFI-draft-information.md` DFI-FR-BZQN), so this tab states the
- * current publication rather than listing every one again.
+ * and removes no record. Its open part leaves the application entirely, and its
+ * copy part only writes the clipboard (NAW-FR-XRLD, NAW-FR-KVFM). The records
+ * themselves are read in the Draft Information modal (per
+ * `DFI-draft-information.md` DFI-FR-BZQN), so this tab states the current
+ * publication rather than listing every one again.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Icon } from "./icons";
+import { copyIssueLink } from "./NewArtifactWorkspace/copyIssueLink";
 import { GITHUB_HOST_MISMATCH_MESSAGE } from "../types/github";
 import { Modal } from "./DraftsPanelParts";
 import { PublicationChooser } from "./PublicationChooser";
@@ -98,17 +100,26 @@ export function DraftPublicationTag({
     // the tag has the width to say.
     const title = `Open issue #${record.issueNumber} in ${repository}, published ${publishedAt(record.publishedAt)}`;
     return (
-      <button
-        type="button"
-        className="draft-workspace__publication t-ui-xs"
-        data-testid="draft-publication-tag"
-        data-state="published"
-        title={title}
-        aria-label={title}
-        onClick={() => publication.openIssue(record.issueUrl)}
+      <span
+        className="draft-workspace__publication-split"
+        data-testid="draft-publication-split"
       >
-        <Icon.Link size={11} /> Published #{record.issueNumber}
-      </button>
+        <button
+          type="button"
+          className="draft-workspace__publication t-ui-xs"
+          data-testid="draft-publication-tag"
+          data-state="published"
+          title={title}
+          aria-label={title}
+          onClick={() => publication.openIssue(record.issueUrl)}
+        >
+          <Icon.ExternalLink size={11} /> Published #{record.issueNumber}
+        </button>
+        <PublicationLinkCopy
+          issueNumber={record.issueNumber}
+          issueUrl={record.issueUrl}
+        />
+      </span>
     );
   }
 
@@ -138,6 +149,43 @@ export function DraftPublicationTag({
       )}
       {label}
     </span>
+  );
+}
+
+/**
+ * NAW-FR-KVFM / NAW-FR-ZBZH: the copy part of the publication tag. It writes
+ * the issue URL to the clipboard, and the toast says how the write ended.
+ */
+function PublicationLinkCopy({
+  issueNumber,
+  issueUrl,
+}: {
+  issueNumber: number;
+  issueUrl: string;
+}) {
+  // NAW-FR-ZBZH: one activation is one write, however often it is repeated.
+  const copying = useRef(false);
+  const label = `Copy the link to issue #${issueNumber}`;
+  const copy = async () => {
+    if (copying.current) return;
+    copying.current = true;
+    try {
+      await copyIssueLink(issueNumber, issueUrl);
+    } finally {
+      copying.current = false;
+    }
+  };
+  return (
+    <button
+      type="button"
+      className="draft-workspace__publication-copy"
+      data-testid="draft-publication-copy"
+      title={label}
+      aria-label={label}
+      onClick={() => void copy()}
+    >
+      <Icon.Link size={11} />
+    </button>
   );
 }
 

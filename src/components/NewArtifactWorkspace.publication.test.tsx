@@ -303,7 +303,7 @@ describe("New Artifact workspace — publishing to GitHub", () => {
     expect(calls("publish_draft_to_github")).toHaveLength(0);
   });
 
-  it("NAW-FR-CBUJ, NAW-FR-XRLD, NAW-FR-QTVX: the tag names the current issue and its one control leaves the app", async () => {
+  it("NAW-FR-CBUJ, NAW-FR-XRLD, NAW-FR-QTVX: the tag names the current issue and its open part leaves the app", async () => {
     const current = publicationRecord(418, "pub-c", "2026-09-12T10:04:00.000Z");
     stub({
       publication: {
@@ -336,7 +336,7 @@ describe("New Artifact workspace — publishing to GitHub", () => {
     expect(screen.queryByText(/marker pub-c/)).toBeNull();
     expect(screen.queryByRole("region", { name: "Published to GitHub" })).toBeNull();
 
-    // NAW-FR-XRLD: the tag's one control opens the current issue outside the
+    // NAW-FR-XRLD: the open part of the tag opens the current issue outside the
     // application and opens no page, tab, or overlay of its own.
     await userEvent.click(tag);
     expect(calls("open_publication_issue")[0][1]).toEqual({

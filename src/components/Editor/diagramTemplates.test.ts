@@ -123,6 +123,18 @@ describe("DIAGRAM_TEMPLATES (EDT-FR-SCSP)", () => {
   });
 });
 
+describe("the keyword of a template (EDT-FR-OWNT)", () => {
+  it("EDT-FR-OWNT: each template carries the keyword its hint set declares, which its example uses", () => {
+    for (const template of DIAGRAM_TEMPLATES) {
+      const set = HINT_SETS.find((s) => s.key === template.key);
+      expect(template.keyword).not.toBe("");
+      expect(set?.declaration.code.startsWith(template.keyword)).toBe(true);
+      expect(template.example).toContain(template.keyword.replace(/-beta$/, ""));
+    }
+    expect(DIAGRAM_TEMPLATES.find((t) => t.key === "sequence")?.keyword).toBe("sequenceDiagram");
+  });
+});
+
 describe("insertDiagramFence (EDT-FR-IPMX, EDT-FR-HAGB)", () => {
   it("EDT-FR-IPMX: an empty paragraph is replaced by the fence, which shows its source with the caret in it", () => {
     const ed = mountRichEditor("");

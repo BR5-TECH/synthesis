@@ -78,8 +78,9 @@ const pmEl = () => document.querySelector(".ProseMirror") as HTMLElement;
 const tiptap = () => (pmEl() as unknown as { editor: TiptapEditor }).editor;
 const tocButton = () => screen.getByRole("button", { name: "Table of contents" });
 const entries = () =>
-  within(screen.getByRole("tree", { name: "Table of contents" })).getAllByRole("treeitem");
-const entryTexts = () => entries().map((e) => `${e.getAttribute("aria-level")}:${e.textContent}`);
+  within(screen.getByRole("listbox", { name: "Table of contents" })).getAllByRole("option");
+const entryTexts = () => entries().map((e) => `${e.getAttribute("data-level")}:${e.textContent}`);
+const tocFilter = () => screen.getByTestId("toc-filter");
 const pressUndo = () => fireEvent.keyDown(pmEl(), { key: "z", metaKey: true });
 const pressRedo = () => fireEvent.keyDown(pmEl(), { key: "z", metaKey: true, shiftKey: true });
 
@@ -192,8 +193,9 @@ describe("the table of contents panel", () => {
     expect(entryTexts()).toEqual(["1:Intro", "2:Prerequisites", "4:Details"]);
     const [first, second] = entries();
     expect(second).toHaveAttribute("title", "Prerequisites");
-    expect(second).toHaveAttribute("data-level", "2");
-    expect(first).toHaveFocus();
+    expect(second).toHaveAccessibleName("Prerequisites, heading level 2");
+    expect(first).toHaveAccessibleName("Intro, heading level 1");
+    expect(tocFilter()).toHaveFocus();
   });
 
   it("EDT-FR-OCJG: in raw-text mode the panel lists the ATX headings of the source, without frontmatter or fenced lines", async () => {
@@ -211,8 +213,8 @@ describe("the table of contents panel", () => {
     expect(tocButton()).not.toBeDisabled();
     fireEvent.click(tocButton());
     expect(screen.getByText("No headings")).toBeInTheDocument();
-    expect(screen.queryByRole("tree")).toBeNull();
-    fireEvent.keyDown(tocButton(), { key: "Escape" });
+    expect(screen.queryByRole("option")).toBeNull();
+    fireEvent.keyDown(tocFilter(), { key: "Escape" });
     expect(screen.queryByText("No headings")).toBeNull();
   });
 
@@ -274,7 +276,7 @@ describe("the table of contents panel", () => {
     fireEvent.click(tocButton());
     fireEvent.click(entries()[1]);
 
-    expect(screen.queryByTestId("toc-panel")).toBeNull();
+    expect(screen.queryByTestId("toc-menu")).toBeNull();
     const ed = tiptap();
     const { $from } = ed.state.selection;
     expect($from.parent.type.name).toBe("heading");
@@ -312,11 +314,11 @@ describe("the table of contents panel", () => {
     wireBackend();
     await mountMarkdown();
     fireEvent.click(tocButton());
-    fireEvent.keyDown(entries()[0], { key: "ArrowDown" });
-    expect(entries()[1]).toHaveFocus();
-    fireEvent.keyDown(entries()[1], { key: "ArrowDown" });
-    fireEvent.keyDown(entries()[2], { key: "Enter" });
-    expect(screen.queryByTestId("toc-panel")).toBeNull();
+    fireEvent.keyDown(tocFilter(), { key: "ArrowDown" });
+    expect(entries()[1]).toHaveAttribute("data-highlighted", "true");
+    fireEvent.keyDown(tocFilter(), { key: "ArrowDown" });
+    fireEvent.keyDown(tocFilter(), { key: "Enter" });
+    expect(screen.queryByTestId("toc-menu")).toBeNull();
     expect(tiptap().state.selection.$from.parent.textContent).toBe("Details");
   });
 
@@ -348,24 +350,44 @@ describe("the table of contents panel", () => {
     const heard = vi.fn();
     document.addEventListener("keydown", heard);
     fireEvent.click(tocButton());
-    fireEvent.keyDown(entries()[0], { key: "Escape" });
+    fireEvent.keyDown(tocFilter(), { key: "Escape" });
     document.removeEventListener("keydown", heard);
     expect(heard).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("toc-panel")).toBeNull();
+    expect(screen.queryByTestId("toc-menu")).toBeNull();
     expect(tocButton()).toHaveFocus();
     expect(screen.getByRole("textbox", { name: /find/i })).toBeInTheDocument();
   });
 
-  it("EDT-FR-KOUB: a pointer-down outside closes the panel, and Tab out of it closes it", async () => {
+  it("EDT-FR-KOUB: a pointer-down outside closes the panel", async () => {
     wireBackend();
     await mountMarkdown();
     fireEvent.click(tocButton());
     fireEvent.mouseDown(document.body);
-    expect(screen.queryByTestId("toc-panel")).toBeNull();
+    expect(screen.queryByTestId("toc-menu")).toBeNull();
+  });
 
+  it("EDT-FR-IZHD, EDT-FR-YSJX: a filtered entry still moves the caret to its own heading", async () => {
+    wireBackend();
+    await mountMarkdown();
     fireEvent.click(tocButton());
-    fireEvent.keyDown(entries()[0], { key: "Tab" });
-    expect(screen.queryByTestId("toc-panel")).toBeNull();
+    fireEvent.change(tocFilter(), { target: { value: "DETAIL" } });
+    expect(entryTexts()).toEqual(["4:Details"]);
+    fireEvent.click(entries()[0]);
+    expect(tiptap().state.selection.$from.parent.textContent).toBe("Details");
+    await waitFor(() => expect(pmEl().contains(document.activeElement)).toBe(true));
+  });
+
+  it("EDT-FR-YSJX: the rich surface takes focus at once, before the smooth scroll starts", async () => {
+    wireBackend();
+    await mountMarkdown();
+    let focusedAtScroll = false;
+    scrollIntoView.mockImplementation(() => {
+      focusedAtScroll = pmEl().contains(document.activeElement);
+    });
+    fireEvent.click(tocButton());
+    fireEvent.click(entries()[1]);
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    expect(focusedAtScroll).toBe(true);
   });
 
   it("EDT-FR-KOUB: opening and closing the panel leave the comment rail as it is", async () => {
@@ -375,7 +397,7 @@ describe("the table of contents panel", () => {
     fireEvent.click(comments);
     await waitFor(() => expect(comments).toHaveAttribute("aria-expanded", "true"));
     fireEvent.click(tocButton());
-    fireEvent.keyDown(entries()[0], { key: "Escape" });
+    fireEvent.keyDown(tocFilter(), { key: "Escape" });
     fireEvent.click(tocButton());
     fireEvent.click(entries()[0]);
     expect(comments).toHaveAttribute("aria-expanded", "true");

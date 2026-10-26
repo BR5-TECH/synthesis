@@ -570,3 +570,131 @@ describe("when the fence or the surface changes under the overlay", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
+
+describe("the keys and the divider of the source pane", () => {
+  it("EDT-FR-UYBZ, EDT-FR-HGAZ: Tab in the source pane indents by two spaces, keeps focus there, and edits the buffer", async () => {
+    const { backend } = await mount();
+    await openOverlay();
+    const pane = sourcePane();
+    pane.setSelectionRange(9, 9);
+    const pressed = fireEvent.keyDown(pane, { key: "Tab" });
+    expect(pressed).toBe(false);
+    expect(document.activeElement).toBe(pane);
+    expect(pane.value).toBe("graph TD\n  A-->B");
+    expect(pane.selectionStart).toBe(11);
+    expect(pane.selectionEnd).toBe(11);
+    await waitFor(() => expect(unsaved()).toBeInTheDocument());
+    await saveNow();
+    expect(backend.saves[backend.saves.length - 1]).toContain("```mermaid\ngraph TD\n  A-->B\n```");
+  });
+
+  it("EDT-FR-UYBZ: Tab indents each line of a selection that spans lines, and Shift+Tab outdents them again", async () => {
+    await mount("```mermaid\ngraph TD\nA-->B\nB-->C\n```\n");
+    await openOverlay();
+    const pane = sourcePane();
+    pane.setSelectionRange(9, pane.value.length);
+    fireEvent.keyDown(pane, { key: "Tab" });
+    expect(pane.value).toBe("graph TD\n  A-->B\n  B-->C");
+    expect([pane.selectionStart, pane.selectionEnd]).toEqual([9, pane.value.length]);
+    expect(document.activeElement).toBe(pane);
+
+    expect(fireEvent.keyDown(pane, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(pane.value).toBe("graph TD\nA-->B\nB-->C");
+    expect([pane.selectionStart, pane.selectionEnd]).toEqual([9, pane.value.length]);
+    expect(document.activeElement).toBe(pane);
+  });
+
+  it("EDT-FR-UYBZ: Shift+Tab on a line with no leading space changes nothing and keeps focus", async () => {
+    await mount();
+    await openOverlay();
+    const pane = sourcePane();
+    pane.setSelectionRange(3, 3);
+    // The key is still the source pane's: the browser does not move focus.
+    expect(fireEvent.keyDown(pane, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(pane.value).toBe("graph TD\nA-->B");
+    expect(document.activeElement).toBe(pane);
+    expect(sessions.get("a.md")?.dirty ?? false).toBe(false);
+  });
+
+  it("EDT-FR-UYBZ: a Tab that ends an IME composition is the composition's, not an indent", async () => {
+    await mount();
+    await openOverlay();
+    const pane = sourcePane();
+    pane.setSelectionRange(9, 9);
+    expect(fireEvent.keyDown(pane, { key: "Tab", keyCode: 229 })).toBe(true);
+    expect(fireEvent.keyDown(pane, { key: "Tab", isComposing: true })).toBe(true);
+    expect(pane.value).toBe("graph TD\nA-->B");
+  });
+
+  it("EDT-FR-UYBZ, EDT-FR-HBEB: an indent is an edit in the one history of the artifact, which undo reverses", async () => {
+    await mount();
+    await openOverlay();
+    const pane = sourcePane();
+    pane.setSelectionRange(9, 9);
+    fireEvent.keyDown(pane, { key: "Tab" });
+    expect(pane.value).toBe("graph TD\n  A-->B");
+    await waitFor(() => expect(tiptap().state.doc.textContent).toContain("graph TD\n  A-->B"));
+    fireEvent.keyDown(pane, { key: "z", metaKey: true });
+    await waitFor(() => expect(sourcePane().value).toBe("graph TD\nA-->B"));
+    expect(tiptap().state.doc.textContent).toContain("graph TD\nA-->B");
+  });
+
+  it("EDT-FR-CFCQ: Ctrl+Tab and Ctrl+Shift+Tab move focus out of the source pane, and change no text", async () => {
+    await mount();
+    await openOverlay();
+    const pane = sourcePane();
+    fireEvent.keyDown(pane, { key: "Tab", ctrlKey: true });
+    expect(document.activeElement).toBe(within(dialog()).getByRole("separator"));
+
+    pane.focus();
+    fireEvent.keyDown(pane, { key: "Tab", ctrlKey: true, shiftKey: true });
+    expect(document.activeElement).toBe(within(dialog()).getByRole("button", { name: "Close" }));
+    expect(pane.value).toBe("graph TD\nA-->B");
+  });
+
+  it("EDT-FR-SPAG, EDT-FR-UPYC: a drag of the divider shows the split in a tooltip, holds at the middle near it, and the tooltip goes when the drag ends", async () => {
+    await mount();
+    await openOverlay();
+    const divider = within(dialog()).getByRole("separator");
+    const panes = divider.parentElement as HTMLElement;
+    vi.spyOn(panes, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 1000,
+      bottom: 400,
+      width: 1000,
+      height: 400,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    expect(screen.queryByTestId("diagram-split-tip")).toBeNull();
+
+    fireEvent.pointerDown(divider, { button: 0, clientX: 500, clientY: 120, pointerId: 3 });
+    expect(screen.getByTestId("diagram-split-tip")).toHaveTextContent("50 / 50");
+    expect(divider).toContainElement(screen.getByTestId("diagram-split-tip"));
+
+    fireEvent.pointerMove(divider, { clientX: 623, clientY: 150, pointerId: 3 });
+    expect(screen.getByTestId("diagram-split-tip")).toHaveTextContent("62 / 38");
+    expect(divider).toHaveAttribute("aria-valuenow", "62");
+    expect(divider).toHaveAttribute("aria-valuetext", "62 / 38");
+    expect(screen.getByTestId("diagram-split-tip").style.top).toBe("150px");
+
+    // EDT-FR-UPYC: 1.5 points from the middle, the divider holds at 50/50.
+    fireEvent.pointerMove(divider, { clientX: 515, clientY: 150, pointerId: 3 });
+    expect(divider).toHaveAttribute("aria-valuenow", "50");
+    expect(screen.getByTestId("diagram-split-tip")).toHaveTextContent("50 / 50");
+    fireEvent.pointerMove(divider, { clientX: 530, clientY: 150, pointerId: 3 });
+    expect(divider).toHaveAttribute("aria-valuenow", "53");
+
+    fireEvent.pointerUp(divider, { pointerId: 3 });
+    expect(screen.queryByTestId("diagram-split-tip")).toBeNull();
+    expect(divider).toHaveAttribute("aria-valuenow", "53");
+
+    // A drag that the system cancels also ends the tooltip.
+    fireEvent.pointerDown(divider, { button: 0, clientX: 530, clientY: 120, pointerId: 4 });
+    expect(screen.getByTestId("diagram-split-tip")).toBeInTheDocument();
+    fireEvent.pointerCancel(divider, { pointerId: 4 });
+    expect(screen.queryByTestId("diagram-split-tip")).toBeNull();
+  });
+});

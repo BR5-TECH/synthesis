@@ -98,3 +98,22 @@ export function resizeRect(
 export function clampSplit(split: number): number {
   return clamp(split, MIN_SPLIT, MAX_SPLIT);
 }
+
+/** EDT-FR-UPYC: how near the middle the pointer holds the divider there. */
+export const SPLIT_SNAP = 0.02;
+
+/**
+ * EDT-FR-UPYC: the split that a drag of the divider to `raw` gives. It holds
+ * at the middle while `raw` is within SPLIT_SNAP of it.
+ */
+export function dragSplit(raw: number): number {
+  // A small margin keeps the edge in: 0.52 - 0.5 is a little more than 0.02.
+  if (Math.abs(raw - OPEN_SPLIT) <= SPLIT_SNAP + 1e-9) return OPEN_SPLIT;
+  return clampSplit(raw);
+}
+
+/** EDT-FR-SPAG: the widths of the two panes in whole percent, "62 / 38". */
+export function splitLabel(split: number): string {
+  const left = Math.round(split * 100);
+  return `${left} / ${100 - left}`;
+}

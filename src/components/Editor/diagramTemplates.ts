@@ -12,6 +12,11 @@ export interface DiagramTemplate {
   key: string;
   /** The name of the chart type that the menu shows. */
   name: string;
+  /**
+   * EDT-FR-OWNT: the Mermaid keyword that declares the chart type, such as
+   * `sequenceDiagram`, which the filter of the menu also matches.
+   */
+  keyword: string;
   /** A short example that the bundled Mermaid version parses. */
   example: string;
 }
@@ -54,7 +59,12 @@ export const DIAGRAM_TEMPLATES: readonly DiagramTemplate[] = (() => {
   return sets
     .map((set, index) => ({ set, index }))
     .sort((a, b) => rank(a.set.key) - rank(b.set.key) || a.index - b.index)
-    .map(({ set }) => ({ key: set.key, name: set.name, example: set.example }));
+    .map(({ set }) => ({
+      key: set.key,
+      name: set.name,
+      keyword: set.declaration.code.split(/\s/)[0] ?? "",
+      example: set.example,
+    }));
 })();
 
 /**

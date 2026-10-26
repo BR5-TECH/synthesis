@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { Editor as TiptapEditor } from "@tiptap/react";
+import { TextSelection } from "@tiptap/pm/state";
 import type { EditMode } from "../../state/editHistory";
 import { logDebug, logWarn } from "../../logging";
 import {
@@ -115,12 +116,15 @@ export function useDocumentOutline({
 function revealRich(editor: TiptapEditor, pos: number): boolean {
   const node = editor.state.doc.nodeAt(pos);
   if (!node || node.type.name !== "heading") return false;
-  editor
-    .chain()
-    .setTextSelection(pos + 1)
-    .focus(undefined, { scrollIntoView: false })
-    .run();
-  const dom = editor.view.nodeDOM(pos);
+  const { view } = editor;
+  view.dispatch(
+    view.state.tr.setSelection(TextSelection.create(view.state.doc, pos + 1)),
+  );
+  // Focus goes to the surface now, not in a later frame as the focus command
+  // of the editor does. A focus that comes after the smooth scroll starts
+  // puts the caret on screen in WebKit, and that cuts the scroll short.
+  view.focus();
+  const dom = view.nodeDOM(pos);
   if (dom instanceof HTMLElement && typeof dom.scrollIntoView === "function") {
     dom.scrollIntoView({ behavior: "smooth", block: "start" });
   }

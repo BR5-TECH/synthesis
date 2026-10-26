@@ -106,12 +106,12 @@ describe("the table of contents of a draft (NAW-FR-TFFX)", () => {
     await waitFor(() => expect(tocButtons()).toHaveLength(1));
 
     fireEvent.click(tocButtons()[0]);
-    const tree = screen.getByRole("tree", { name: "Table of contents" });
-    const items = within(tree).getAllByRole("treeitem");
+    const list = screen.getByRole("listbox", { name: "Table of contents" });
+    const items = within(list).getAllByRole("option");
     expect(items.map((i) => i.textContent)).toEqual(["Artifact window", "What it must cover"]);
     fireEvent.click(items[1]);
 
-    expect(screen.queryByRole("tree")).toBeNull();
+    expect(screen.queryByRole("listbox")).toBeNull();
     const pm = document.querySelector(".ProseMirror") as HTMLElement;
     await waitFor(() => expect(pm.contains(document.activeElement)).toBe(true));
     const selection = document.getSelection();

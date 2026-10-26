@@ -47,6 +47,10 @@ const tiptap = () => (pmEl() as unknown as { editor: TiptapEditor }).editor;
 const pressUndo = () => fireEvent.keyDown(pmEl(), { key: "z", metaKey: true });
 const pressRedo = () => fireEvent.keyDown(pmEl(), { key: "z", metaKey: true, shiftKey: true });
 const diagramButton = () => screen.getByRole("button", { name: "Insert diagram" });
+const typeMenu = () => screen.queryByRole("listbox", { name: "Insert diagram" });
+const typeOptions = () => within(typeMenu() as HTMLElement).getAllByRole("option");
+const typeFilter = () => screen.getByTestId("diagram-type-filter");
+const typeOption = (name: string) => screen.getByRole("option", { name });
 
 async function mount(props: { readOnly?: boolean } = {}) {
   const view = render(
@@ -159,50 +163,90 @@ describe("Insert diagram (EDT-FR-VUGQ, EDT-FR-OWNT, EDT-FR-IPMX, EDT-FR-HAGB)", 
     wireBackend();
     const view = await mount();
     fireEvent.click(diagramButton());
-    expect(screen.getByRole("menu", { name: "Diagram type" })).toBeInTheDocument();
+    expect(typeMenu()).toBeInTheDocument();
 
     view.rerender(<Editor artifactId="a.md" artifactName="a.md" sessions={sessions} readOnly />);
     await waitFor(() => {
       expect(diagramButton()).toBeDisabled();
-      expect(screen.queryByRole("menu", { name: "Diagram type" })).toBeNull();
+      expect(typeMenu()).toBeNull();
     });
   });
 
-  it("EDT-FR-SCSP, EDT-FR-OWNT: the menu lists every template, with focus on the first one", async () => {
+  it("EDT-FR-SCSP, EDT-FR-OWNT: the menu lists every template, with focus in the filter box", async () => {
     wireBackend();
     await mount();
     fireEvent.click(diagramButton());
-    const menu = screen.getByRole("menu", { name: "Diagram type" });
-    const items = within(menu).getAllByRole("menuitem");
-    expect(items.map((i) => i.textContent)).toEqual(DIAGRAM_TEMPLATES.map((t) => t.name));
+    expect(typeOptions().map((i) => i.textContent)).toEqual(DIAGRAM_TEMPLATES.map((t) => t.name));
     expect(diagramButton()).toHaveAttribute("aria-expanded", "true");
-    expect(items[0]).toHaveFocus();
+    expect(typeFilter()).toHaveFocus();
+    expect(typeOptions()[0]).toHaveAttribute("data-highlighted", "true");
   });
 
-  it("EDT-FR-OWNT: the arrow keys, Home, and End move between types and stop at both ends", async () => {
+  it("EDT-FR-OWNT: the arrow keys move the highlight between types, and Enter inserts the highlighted type", async () => {
+    wireBackend();
+    await mount();
+    caretIn("Some text.");
+    fireEvent.click(diagramButton());
+    fireEvent.keyDown(typeFilter(), { key: "ArrowDown" });
+    fireEvent.keyDown(typeFilter(), { key: "ArrowDown" });
+    fireEvent.keyDown(typeFilter(), { key: "ArrowUp" });
+    expect(typeOptions()[1]).toHaveAttribute("data-highlighted", "true");
+    fireEvent.keyDown(typeFilter(), { key: "Enter" });
+    expect(typeMenu()).toBeNull();
+    const fence = tiptap().state.doc.child(2);
+    expect(fence.textContent).toBe(DIAGRAM_TEMPLATES[1].example);
+  });
+
+  it("EDT-FR-OWNT: the filter matches the type name and its Mermaid keyword, with no regard to case", async () => {
     wireBackend();
     await mount();
     fireEvent.click(diagramButton());
-    const items = within(screen.getByRole("menu")).getAllByRole("menuitem");
-    fireEvent.keyDown(items[0], { key: "ArrowUp" });
-    expect(items[0]).toHaveFocus();
-    fireEvent.keyDown(items[0], { key: "ArrowDown" });
-    expect(items[1]).toHaveFocus();
-    fireEvent.keyDown(items[1], { key: "End" });
-    expect(items[items.length - 1]).toHaveFocus();
-    fireEvent.keyDown(items[items.length - 1], { key: "ArrowDown" });
-    expect(items[items.length - 1]).toHaveFocus();
-    fireEvent.keyDown(items[items.length - 1], { key: "Home" });
-    expect(items[0]).toHaveFocus();
+    fireEvent.change(typeFilter(), { target: { value: "SEQUENCE" } });
+    expect(typeOptions().map((i) => i.textContent)).toEqual(["Sequence diagram"]);
+    // `erDiagram` is the keyword of the entity relationship type, whose name
+    // does not hold it.
+    fireEvent.change(typeFilter(), { target: { value: "erdiagram" } });
+    const er = DIAGRAM_TEMPLATES.find((t) => t.key === "er");
+    expect(er?.name.toLowerCase()).not.toContain("erdiagram");
+    expect(typeOptions().map((i) => i.textContent)).toEqual([er?.name]);
+    // A word of the name alone: the keyword of the type is `erDiagram`.
+    fireEvent.change(typeFilter(), { target: { value: "Relationship" } });
+    expect(typeOptions().map((i) => i.textContent)).toEqual([er?.name]);
+    // The count states what the filter shows out of all types (AII-FR-38).
+    expect(screen.getByTestId("diagram-type-count")).toHaveTextContent(
+      `1 of ${DIAGRAM_TEMPLATES.length} shown`,
+    );
+  });
+
+  it("EDT-FR-OWNT: a filter with no match shows \"Nothing matches\", and Enter inserts nothing", async () => {
+    wireBackend();
+    await mount();
+    caretIn("Some text.");
+    fireEvent.click(diagramButton());
+    fireEvent.change(typeFilter(), { target: { value: "zzzz" } });
+    expect(screen.getByText("Nothing matches")).toBeInTheDocument();
+    fireEvent.keyDown(typeFilter(), { key: "Enter" });
+    expect(pmEl().querySelector("pre")).toBeNull();
+  });
+
+  it("EDT-FR-IPMX, EDT-FR-OWNT: Enter on a filtered type inserts it after the block that had the caret, though the filter box took focus", async () => {
+    wireBackend();
+    await mount();
+    caretIn("Title");
+    fireEvent.click(diagramButton());
+    fireEvent.change(typeFilter(), { target: { value: "pie" } });
+    fireEvent.keyDown(typeFilter(), { key: "Enter" });
+    const pie = DIAGRAM_TEMPLATES.find((t) => t.key === "pie");
+    expect(tiptap().state.doc.child(1).textContent).toBe(pie?.example);
+    expect(pmEl().contains(document.activeElement)).toBe(true);
   });
 
   it("EDT-FR-OWNT: Escape closes the menu and returns focus to the button", async () => {
     wireBackend();
     await mount();
     fireEvent.click(diagramButton());
-    const items = within(screen.getByRole("menu")).getAllByRole("menuitem");
-    fireEvent.keyDown(items[2], { key: "Escape" });
-    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.keyDown(typeFilter(), { key: "Escape" });
+    expect(typeMenu()).toBeNull();
     expect(diagramButton()).toHaveFocus();
     expect(diagramButton()).toHaveAttribute("aria-expanded", "false");
   });
@@ -212,12 +256,12 @@ describe("Insert diagram (EDT-FR-VUGQ, EDT-FR-OWNT, EDT-FR-IPMX, EDT-FR-HAGB)", 
     await mount();
     fireEvent.click(diagramButton());
     fireEvent.mouseDown(document.body);
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(typeMenu()).toBeNull();
 
     fireEvent.click(diagramButton());
-    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(typeMenu()).toBeInTheDocument();
     fireEvent.click(diagramButton());
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(typeMenu()).toBeNull();
     expect(tiptap().getText()).not.toContain("graph");
   });
 
@@ -226,9 +270,9 @@ describe("Insert diagram (EDT-FR-VUGQ, EDT-FR-OWNT, EDT-FR-IPMX, EDT-FR-HAGB)", 
     await mount();
     caretIn("Title");
     fireEvent.click(diagramButton());
-    fireEvent.click(screen.getByRole("menuitem", { name: "Sequence diagram" }));
+    fireEvent.click(typeOption("Sequence diagram"));
 
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(typeMenu()).toBeNull();
     const sequence = DIAGRAM_TEMPLATES.find((t) => t.key === "sequence");
     const kinds: string[] = [];
     tiptap().state.doc.forEach((node) => kinds.push(node.type.name));
@@ -251,7 +295,7 @@ describe("Insert diagram (EDT-FR-VUGQ, EDT-FR-OWNT, EDT-FR-IPMX, EDT-FR-HAGB)", 
     render(<Editor artifactId="a.md" artifactName="a.md" sessions={sessions} />);
     await waitFor(() => expect(pmEl()).not.toBeNull());
     fireEvent.click(diagramButton());
-    fireEvent.click(screen.getByRole("menuitem", { name: "Pie chart" }));
+    fireEvent.click(typeOption("Pie chart"));
     const first = tiptap().state.doc.child(0);
     expect(first.type.name).toBe("codeBlock");
     expect(first.attrs.language).toBe("mermaid");
@@ -262,7 +306,7 @@ describe("Insert diagram (EDT-FR-VUGQ, EDT-FR-OWNT, EDT-FR-IPMX, EDT-FR-HAGB)", 
     await mount();
     caretIn("Some text.");
     fireEvent.click(diagramButton());
-    fireEvent.click(screen.getByRole("menuitem", { name: "Flowchart" }));
+    fireEvent.click(typeOption("Flowchart"));
     await screen.findByText("● unsaved");
 
     const flowchart = DIAGRAM_TEMPLATES[0];
@@ -289,7 +333,7 @@ describe("Insert diagram (EDT-FR-VUGQ, EDT-FR-OWNT, EDT-FR-IPMX, EDT-FR-HAGB)", 
     try {
       fireEvent.mouseDown(screen.getByRole("button", { name: "Heading 2" }));
       fireEvent.click(diagramButton());
-      fireEvent.click(screen.getByRole("menuitem", { name: "Pie chart" }));
+      fireEvent.click(typeOption("Pie chart"));
       caretIn("Some text.");
       fireEvent.mouseDown(screen.getByRole("button", { name: "Heading 2" }));
     } finally {

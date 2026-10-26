@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 /**
  * The model selector of both AI integration levels —
@@ -41,6 +48,16 @@ export interface FilterableOption {
    * and milestone (`NAW-new-artifact.md` NAW-FR-YLKD).
    */
   detail?: string;
+  /**
+   * A depth the row shows, such as the level of a heading in the table of
+   * contents (`EDT-editor.md` EDT-FR-PNGU). The row carries it as
+   * `data-level`, and the caller's styles indent and size it.
+   */
+  level?: number;
+  /** The tooltip of the row. Without it the row shows `hint` as its tooltip. */
+  title?: string;
+  /** The accessible name of the row, where the label alone says too little. */
+  ariaLabel?: string;
 }
 
 export interface FilterableSelectProps {
@@ -83,6 +100,30 @@ export interface FilterableSelectProps {
    * parent combobox, whose pick selects the sub-issue option (NAW-FR-ASYN).
    */
   alwaysNotify?: boolean;
+  /**
+   * The control is an action menu rather than a field: the trigger is a
+   * plain button that shows `content`, such as an icon, and takes `label` as
+   * its accessible name and tooltip (`EDT-editor.md` EDT-FR-LGQA,
+   * EDT-FR-VUGQ). Without it the trigger shows the selected value.
+   */
+  trigger?: { content: ReactNode; className: string };
+  /**
+   * The least width of a `fitWindow` panel, for a trigger narrower than its
+   * options, such as an icon button.
+   */
+  menuWidth?: number;
+  /** A class the panel carries in addition to its own, for scoped styles. */
+  menuClassName?: string;
+  /** A class the root carries in addition to its own, for the row it sits in. */
+  className?: string;
+  /** Runs each time the panel opens or closes. */
+  onOpenChange?: (open: boolean) => void;
+  /**
+   * A pick returns focus to the trigger. A caller whose pick moves focus to
+   * a different surface sets it to false (EDT-FR-YSJX). Escape returns focus
+   * all the same.
+   */
+  returnFocus?: boolean;
 }
 
 /** NAW-FR-XTGP: the room the panel leaves to the window's edge. */
@@ -111,12 +152,16 @@ export function menuPlacement(
   anchor: { top: number; bottom: number; left: number; width: number },
   viewport: { width: number; height: number },
   natural: number,
+  minWidth = 0,
 ): MenuPlacement {
   const below = Math.max(0, viewport.height - anchor.bottom - MENU_GAP - WINDOW_MARGIN);
   const aboveRoom = Math.max(0, anchor.top - MENU_GAP - WINDOW_MARGIN);
   const above = natural > below && aboveRoom > below;
   const room = above ? aboveRoom : below;
-  const width = Math.min(anchor.width, Math.max(0, viewport.width - 2 * WINDOW_MARGIN));
+  const width = Math.min(
+    Math.max(anchor.width, minWidth),
+    Math.max(0, viewport.width - 2 * WINDOW_MARGIN),
+  );
   const left = Math.min(
     Math.max(anchor.left, WINDOW_MARGIN),
     Math.max(WINDOW_MARGIN, viewport.width - WINDOW_MARGIN - width),
@@ -164,8 +209,20 @@ export function FilterableSelect({
   announce,
   fitWindow = false,
   alwaysNotify = false,
+  trigger,
+  menuWidth = 0,
+  menuClassName,
+  className,
+  onOpenChange,
+  returnFocus = true,
 }: FilterableSelectProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
+  // The caller hears of the change in the same event, so a caller that reads
+  // its options only while the panel is open renders them in the same pass.
+  const setOpen = (next: boolean) => {
+    setOpenState(next);
+    onOpenChange?.(next);
+  };
   const [filter, setFilter] = useState("");
   /** Index into the *filtered* list, which is what the arrows walk. */
   const [highlight, setHighlight] = useState(0);
@@ -197,6 +254,7 @@ export function FilterableSelect({
           { top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width },
           { width: window.innerWidth, height: window.innerHeight },
           menu.scrollHeight,
+          menuWidth,
         ),
       );
     };
@@ -212,14 +270,16 @@ export function FilterableSelect({
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", onScroll, true);
     };
-  }, [open, fitWindow]);
+  }, [open, fitWindow, menuWidth]);
 
   const selected = options.find((o) => o.id === value) ?? null;
 
   // AII-FR-36: the box takes focus on open, so a model is reached by typing
   // rather than by first clicking into the field.
   useEffect(() => {
-    if (open) filterRef.current?.focus();
+    // The panel must not scroll the surface it opens over: a scroll under the
+    // pointer can take the first click on an option away (EDT-FR-YSJX).
+    if (open) filterRef.current?.focus({ preventScroll: true });
   }, [open]);
 
   // A narrowing filter can strand the highlight past the end of the list, or on
@@ -241,6 +301,13 @@ export function FilterableSelect({
     if (restoreFocus) buttonRef.current?.focus();
   };
 
+  // A control that stops accepting input closes the panel it can no longer
+  // act on.
+  useEffect(() => {
+    if (disabled && open) close(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [disabled, open]);
+
   // Dismiss on outside click, like every other dropdown in the application.
   useEffect(() => {
     if (!open) return;
@@ -255,7 +322,7 @@ export function FilterableSelect({
 
   const commit = (id: string) => {
     if (options.find((o) => o.id === id)?.disabled) return;
-    close(true);
+    close(returnFocus);
     // A re-pick of what is already selected is not a change, and invoking for
     // it would spend a round trip to store what is already stored. A caller
     // that sets `alwaysNotify` gets the pick all the same.
@@ -327,38 +394,64 @@ export function FilterableSelect({
     shown.length > 0 ? optionDomId(highlight) : undefined;
 
   return (
-    <div ref={rootRef} className="fsel">
-      <button
-        ref={buttonRef}
-        type="button"
-        className="input fsel__trigger"
-        role="combobox"
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-controls={open ? listboxId : undefined}
-        aria-label={label}
-        disabled={disabled}
-        data-testid={testId}
-        onClick={() => (open ? close(true) : setOpen(true))}
-      >
-        <span
-          className={
-            selected ? "fsel__value" : "fsel__value fsel__value--placeholder"
-          }
+    <div ref={rootRef} className={className ? `fsel ${className}` : "fsel"}>
+      {trigger ? (
+        <button
+          ref={buttonRef}
+          type="button"
+          className={trigger.className}
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-controls={open ? listboxId : undefined}
+          aria-label={label}
+          title={label}
+          data-active={open}
+          disabled={disabled}
+          data-testid={testId}
+          onClick={() => (open ? close(true) : setOpen(true))}
         >
-          {selected?.label ?? placeholder}
-        </span>
-        <span aria-hidden="true" className="fsel__caret">
-          ▾
-        </span>
-      </button>
+          {trigger.content}
+        </button>
+      ) : (
+        <button
+          ref={buttonRef}
+          type="button"
+          className="input fsel__trigger"
+          role="combobox"
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-controls={open ? listboxId : undefined}
+          aria-label={label}
+          disabled={disabled}
+          data-testid={testId}
+          onClick={() => (open ? close(true) : setOpen(true))}
+        >
+          <span
+            className={
+              selected ? "fsel__value" : "fsel__value fsel__value--placeholder"
+            }
+          >
+            {selected?.label ?? placeholder}
+          </span>
+          <span aria-hidden="true" className="fsel__caret">
+            ▾
+          </span>
+        </button>
+      )}
 
       {open && (
         // `.menu` is what makes this an opaque elevated surface rather than a
         // transparent one over the rows beneath.
         <div
           ref={menuRef}
-          className={fitWindow ? "fsel__menu fsel__menu--fit menu" : "fsel__menu menu"}
+          className={[
+            "fsel__menu",
+            fitWindow ? "fsel__menu--fit" : null,
+            "menu",
+            menuClassName ?? null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
           data-testid={testId ? `${testId}-menu` : undefined}
           data-placement={placement ? (placement.above ? "above" : "below") : undefined}
           // Focus stays in the filter box while the panel is open, so a press
@@ -426,7 +519,9 @@ export function FilterableSelect({
                 role="option"
                 aria-selected={option.id === value}
                 aria-disabled={option.disabled || undefined}
-                title={option.hint}
+                title={option.title ?? option.hint}
+                aria-label={option.ariaLabel}
+                data-level={option.level}
                 data-highlighted={index === highlight}
                 data-selected={option.id === value}
                 data-testid={testId ? `${testId}-option-${option.id}` : undefined}

@@ -1,16 +1,35 @@
-import { useEffect } from "react";
+import { FilterableSelect, type FilterableOption } from "../FilterableSelect";
 import { Icon } from "../icons";
 import { DIAGRAM_TEMPLATES, type DiagramTemplate } from "./diagramTemplates";
-import { useDropdown } from "./useDropdown";
+
+const OPTIONS: FilterableOption[] = DIAGRAM_TEMPLATES.map((template) => ({
+  id: template.key,
+  label: template.name,
+}));
+const BY_KEY = new Map(DIAGRAM_TEMPLATES.map((template) => [template.key, template]));
+
+/**
+ * EDT-FR-OWNT: the filter matches the name of the chart type and the Mermaid
+ * keyword that declares it, with no regard to case.
+ */
+export function matchesDiagramType(option: FilterableOption, filter: string): boolean {
+  const needle = filter.trim().toLowerCase();
+  if (!needle) return true;
+  const keyword = BY_KEY.get(option.id)?.keyword ?? "";
+  return (
+    option.label.toLowerCase().includes(needle) ||
+    keyword.toLowerCase().includes(needle)
+  );
+}
 
 /**
  * EDT-FR-VUGQ / EDT-FR-SCSP / EDT-FR-OWNT: the Insert diagram button of the
- * formatting toolbar and the diagram type menu it opens.
+ * formatting toolbar and the diagram type menu it opens — the filterable
+ * selector of `AII-ai-integrations.md` AII-FR-36 to AII-FR-39.
  *
- * The button keeps the selection of the editor when it is pressed, as the
- * other toolbar buttons do, so the fence goes where the caret was. The menu
- * takes focus while it is open; the editor keeps its selection while it does
- * not have focus, and the insert gives focus back to it.
+ * The filter box takes focus while the menu is open. The editor keeps its
+ * selection while it does not have focus, so the fence goes where the caret
+ * was, and the insert gives focus back to the editor.
  */
 export function DiagramInsertMenu({
   disabled,
@@ -20,68 +39,26 @@ export function DiagramInsertMenu({
   disabled: boolean;
   onInsert: (template: DiagramTemplate) => void;
 }) {
-  const menu = useDropdown();
-  const { open, setOpen } = menu;
-  menu.itemRefs.current.length = DIAGRAM_TEMPLATES.length;
-
-  // A surface that stops accepting input closes the menu it can no longer act on.
-  useEffect(() => {
-    if (disabled && open) setOpen(false);
-  }, [disabled, open, setOpen]);
-
-  const choose = (template: DiagramTemplate) => {
-    menu.close(false);
-    onInsert(template);
-  };
-
   return (
-    <div
-      ref={menu.rootRef}
+    <FilterableSelect
+      options={OPTIONS}
+      value=""
+      onChange={(key) => {
+        const template = BY_KEY.get(key);
+        if (template) onInsert(template);
+      }}
+      label="Insert diagram"
+      disabled={disabled}
+      testId="diagram-type"
+      matches={matchesDiagramType}
+      emptyText="Nothing matches"
+      fitWindow
+      alwaysNotify
+      returnFocus={false}
+      menuWidth={240}
+      menuClassName="diagram-menu"
       className="toolbar-dropdown"
-      onKeyDown={menu.onRootKeyDown}
-    >
-      <button
-        ref={menu.triggerRef}
-        type="button"
-        className="btn btn--ghost btn--sm"
-        title="Insert diagram"
-        aria-label="Insert diagram"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        data-active={open}
-        disabled={disabled}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={menu.toggle}
-        onKeyDown={menu.onTriggerKeyDown}
-      >
-        <Icon.Diagram size={14} />
-      </button>
-      {open && (
-        <div
-          role="menu"
-          aria-label="Diagram type"
-          className="menu toolbar-dropdown__panel"
-          data-testid="diagram-type-menu"
-        >
-          {DIAGRAM_TEMPLATES.map((template, index) => (
-            <button
-              key={template.key}
-              ref={(el) => {
-                menu.itemRefs.current[index] = el;
-              }}
-              type="button"
-              role="menuitem"
-              tabIndex={-1}
-              className="menu-item toolbar-dropdown__item"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => choose(template)}
-              onKeyDown={(e) => menu.onItemKeyDown(e, index)}
-            >
-              {template.name}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+      trigger={{ content: <Icon.Diagram size={14} />, className: "btn btn--ghost btn--sm" }}
+    />
   );
 }

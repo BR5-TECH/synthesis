@@ -79,6 +79,27 @@
 .diagram-editor__divider:hover { background: var(--border-2); }
 .diagram-editor__divider:focus { outline: none; }
 .diagram-editor__divider:focus-visible { background: var(--accent); }
+.diagram-editor__divider { position: relative; }
+.diagram-editor__divider[data-dragging="true"] { background: var(--accent); }
+/* EDT-FR-SPAG: the split while a drag lasts, centred on the divider at the
+   height of the pointer, with the look of the application's tooltips. */
+.diagram-editor__split-tip {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, calc(-100% - 10px));
+  z-index: 1;
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated, var(--bg-chrome));
+  color: var(--fg-1);
+  border: 1px solid var(--border-1);
+  box-shadow: var(--shadow-1, 0 2px 8px rgb(0 0 0 / 0.25));
+  font-size: var(--fs-ui-xs);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
 
 /* EDT-FR-QSOQ: the live diagram, on the ground of the page. */
 .diagram-editor__preview.doc {

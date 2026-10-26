@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("mermaid", async () => (await import("../test/mermaidMock")).mermaidModule);
 
@@ -19,6 +19,13 @@ import { makeWireBackend, renderDiff, revs, target } from "../test/diffViewFixtu
 import { resetMermaidMock } from "../test/mermaidMock";
 import { DIAGRAM_LABEL, SHOW_DIAGRAM_LABEL, SHOW_SOURCE_LABEL } from "./markdownMermaid";
 import { resetMermaidForTest } from "./markdownMermaidRender";
+import { DiffView } from "./DiffView";
+import { DiagramEditorHost } from "./DiagramEditor";
+import { resetDiagramEditorForTest } from "./DiagramEditor/store";
+import { EditSessionStore } from "../state/editSessions";
+import { clearAllDiscussionSessions } from "../state/discussionSession";
+import { resetDiscussionFocus } from "../state/discussionFocus";
+import type { Discussion } from "../types";
 
 const wireBackend = makeWireBackend(invokeMock);
 const callsTo = (name: string) => invokeMock.mock.calls.filter((c) => c[0] === name);
@@ -33,6 +40,9 @@ beforeEach(() => {
   resetLogBufferForTest();
   resetMermaidForTest();
   resetMermaidMock();
+  resetDiagramEditorForTest();
+  clearAllDiscussionSessions();
+  resetDiscussionFocus();
   wireBackend({
     revisions: revs(OLD, NEW),
     prefs: { diffRenderingMode: "rich", diffVisualizationMode: "side_by_side" },
@@ -126,5 +136,144 @@ describe("diagram fences in a Rich diff (DFV-FR-EGFA)", () => {
     await waitFor(() => expect(view.querySelectorAll("pre").length).toBeGreaterThan(1));
     expect(view.querySelector(".mermaid-block")).toBeNull();
     expect(view.querySelector(".mermaid-diagram")).toBeNull();
+  });
+
+  it("DFV-FR-EGFA, EDT-FR-ADNU: the target's fence has the Edit button and the original's has none", async () => {
+    renderDiff(target("notes.md"));
+    const [left, right] = await fenceRow();
+    expect(within(right).getByRole("button", { name: "Edit diagram" })).toBeInTheDocument();
+    expect(within(left).queryByRole("button", { name: "Edit diagram" })).toBeNull();
+  });
+
+  it("DFV-FR-EGFA, EDT-FR-YVAI: the target's fence has the View button and the original's has none", async () => {
+    renderDiff(target("notes.md"));
+    const [left, right] = await fenceRow();
+    expect(await within(right).findByRole("button", { name: "View diagram" })).toBeInTheDocument();
+    expect(within(left).queryByRole("button", { name: "View diagram" })).toBeNull();
+    expect(left.querySelector(".mermaid-controls")).toBeNull();
+  });
+
+  it("DFV-FR-EGFA, EDT-FR-MOQW, EDT-FR-EBEZ, EDT-FR-HBEB: the overlay edits the target, which writes the file, and undo uses its history", async () => {
+    const sessions = new EditSessionStore();
+    render(
+      <>
+        <DiffView target={target("notes.md")} sessions={sessions} />
+        <DiagramEditorHost />
+      </>,
+    );
+    const [, right] = await fenceRow();
+    fireEvent.click(within(right).getByRole("button", { name: "Edit diagram" }));
+    const source = screen.getByRole("textbox", { name: "Diagram source" }) as HTMLTextAreaElement;
+    expect(source.value).toBe("graph TD\nA-->C");
+
+    fireEvent.change(source, { target: { value: "graph TD\nA-->D" } });
+    await act(async () => {
+      await sessions.flush("notes.md", { force: true });
+    });
+    const saves = callsTo("save_artifact_contents");
+    expect((saves[saves.length - 1][1] as { body: string }).body).toContain("A-->D");
+
+    fireEvent.keyDown(source, { key: "z", metaKey: true });
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("textbox", { name: "Diagram source" }) as HTMLTextAreaElement).value,
+      ).toBe("graph TD\nA-->C"),
+    );
+  });
+
+  it("DFV-FR-EGFA, EDT-FR-SJGJ: in Unified, the overlay on an unchanged fence stays open while the author edits it", async () => {
+    const SAME = "# Title\n\nOld text.\n\n```mermaid\ngraph TD\nA-->B\n```\n\nText.\n";
+    const CHANGED = "# Title\n\nNew text.\n\n```mermaid\ngraph TD\nA-->B\n```\n\nText.\n";
+    wireBackend({
+      revisions: revs(SAME, CHANGED),
+      prefs: { diffRenderingMode: "rich", diffVisualizationMode: "unified" },
+    });
+    const sessions = new EditSessionStore();
+    render(
+      <>
+        <DiffView target={target("notes.md")} sessions={sessions} />
+        <DiagramEditorHost />
+      </>,
+    );
+    const view = await screen.findByTestId("diff-rich-unified");
+    await within(view).findByRole("button", { name: DIAGRAM_LABEL });
+    fireEvent.click(within(view).getByRole("button", { name: "Edit diagram" }));
+    const source = () =>
+      screen.getByRole("textbox", { name: "Diagram source" }) as HTMLTextAreaElement;
+
+    // One edit that adds a line, and one that does not.
+    fireEvent.change(source(), { target: { value: "graph TD\nA-->B\nB-->C" } });
+    fireEvent.change(source(), { target: { value: "graph TD\nA-->B\nB-->D" } });
+    await letWriteLand();
+    expect(screen.getByRole("dialog", { name: "Edit Mermaid diagram" })).toBeInTheDocument();
+    expect(source().value).toBe("graph TD\nA-->B\nB-->D");
+    const saves = callsTo("save_artifact_contents");
+    expect((saves[saves.length - 1][1] as { body: string }).body).toContain("B-->D");
+
+    // The comparison catches up once the overlay closes.
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(within(view).getAllByRole("img", { name: "Mermaid diagram" }).length).toBeGreaterThan(0),
+    );
+  });
+
+  it("DFV-FR-EGFA, EDT-FR-SJGJ, EDT-FR-SRXG: with the discussion panel open, one Escape closes the overlay alone", async () => {
+    const opened: Discussion = {
+      id: "d1",
+      target: { kind: "artifact", artifactId: "notes.md" },
+      fragmentTarget: null,
+      comments: [
+        {
+          id: "c1",
+          author: { kind: "human", login: "raver119" },
+          body: "Is the diagram right?",
+          quotes: [],
+          attachments: [],
+          createdAt: "2026-01-01T00:00:00Z",
+        },
+      ],
+      resolved: false,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    };
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation(async (cmd: string, args: unknown) => {
+      if (cmd === "list_discussions") return [opened];
+      if (cmd === "list_project_agents" || cmd === "list_agent_turns") return [];
+      return base(cmd, args);
+    });
+    render(
+      <>
+        <DiffView target={target("notes.md")} sessions={new EditSessionStore()} />
+        <DiagramEditorHost />
+      </>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /Show discussion/ }));
+    expect(screen.getByRole("dialog", { name: "Discussion" })).toBeInTheDocument();
+
+    const [, right] = await fenceRow();
+    fireEvent.click(within(right).getByRole("button", { name: "Edit diagram" }));
+    const overlay = screen.getByRole("dialog", { name: "Edit Mermaid diagram" });
+
+    fireEvent.keyDown(within(overlay).getByRole("textbox", { name: "Diagram source" }), {
+      key: "Escape",
+    });
+    expect(screen.queryByRole("dialog", { name: "Edit Mermaid diagram" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Discussion" })).toBeInTheDocument();
+
+    // Without the overlay, Escape is the panel's again.
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Discussion" })).toBeNull());
+
+    // EDT-FR-SJGJ: a press in the overlay does not reach the tab, so the
+    // actions menu behind the overlay stays as it is.
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.click(within(right).getByRole("button", { name: "Edit diagram" }));
+    fireEvent.mouseDown(screen.getByRole("textbox", { name: "Diagram source" }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
   });
 });

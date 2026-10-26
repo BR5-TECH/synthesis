@@ -1,5 +1,7 @@
 import type { ReactNode, SVGProps } from "react";
 
+import { CODE_GLYPH } from "./domIcons";
+
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
 const I = ({
@@ -587,7 +589,7 @@ export const Icon = {
   ),
   Code: (p: IconProps) => (
     <I {...p}>
-      <path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 6l-3 12" />
+      <path d={CODE_GLYPH} />
     </I>
   ),
   /* SMZ-FR-JWXA: zoom out — a centred bar, the pair of Plus. */

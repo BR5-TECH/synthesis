@@ -15,7 +15,7 @@ import {
   overrideNextRender,
   resetMermaidMock,
 } from "../../test/mermaidMock";
-import { renderDiagram, resetMermaidForTest } from "../markdownMermaidRender";
+import { DIAGRAM_ERROR, renderDiagram, resetMermaidForTest } from "../markdownMermaidRender";
 import { MermaidStatic } from "./MermaidStatic";
 
 const SRC = "graph TD\nA-->B";
@@ -51,14 +51,35 @@ describe("an inert diagram outside an editing surface (DFV-FR-EGFA, EDT-FR-LEUI)
     expect(screen.getByRole("img", { name: "Mermaid diagram" })).toBe(figure);
   });
 
-  it("DFV-FR-EGFA, EDT-FR-XTEB, EDT-FR-JBZU: an invalid diagram shows its source and the error as text", async () => {
+  it("DFV-FR-EGFA, EDT-FR-XTEB, EDT-FR-XKMP, EDT-FR-JBZU: an invalid diagram shows its source and the error as text", async () => {
     overrideNextRender(async () => {
       throw new Error("<b>bad</b> INVALID");
     });
     render(<MermaidStatic source="graph TD">{fallback}</MermaidStatic>);
-    const error = await screen.findByText("Diagram error: <b>bad</b> INVALID");
+    expect(
+      await screen.findByText(`Diagram error: ${DIAGRAM_ERROR.draw}`),
+    ).toBeInTheDocument();
+    const error = screen.getByText("<b>bad</b> INVALID");
+    expect(error).toHaveClass("mermaid-error__detail");
     expect(error.querySelector("b")).toBeNull();
     expect(screen.getByTestId("fallback")).toBeInTheDocument();
+  });
+
+  it("EDT-FR-XKMP: an error with no reason shows the step alone", async () => {
+    overrideNextRender(async () => {
+      throw new Error("   ");
+    });
+    const { container } = render(<MermaidStatic source="graph TD">{fallback}</MermaidStatic>);
+    expect(
+      await screen.findByText(`Diagram error: ${DIAGRAM_ERROR.draw}`),
+    ).toBeInTheDocument();
+    expect(container.querySelector(".mermaid-error__detail")).toBeNull();
+  });
+
+  it("DFV-FR-EGFA, EDT-FR-LXFD: a diagram whose label holds an HTML line break shows it", async () => {
+    render(<MermaidStatic source={SRC}>{fallback}</MermaidStatic>);
+    const figure = await screen.findByRole("img", { name: "Mermaid diagram" });
+    await waitFor(() => expect(figure.querySelector("foreignObject p br")).not.toBeNull());
   });
 
   it("DFV-FR-EGFA: a diagram already rendered shows at once", async () => {

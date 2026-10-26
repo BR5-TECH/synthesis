@@ -25,7 +25,14 @@
  * derives its own: no operation anywhere can diff a revision that only exists in
  * a buffer.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useDiffScrollMemory } from "./scrollMemory";
 import * as api from "../../api";
 import { onChangesUpdated } from "../../events";
@@ -50,6 +57,7 @@ import type {
   FileRevisions,
 } from "../../types";
 import { useSettledText } from "./settle";
+import { diagramEditorRequest, subscribeDiagramEditor } from "../DiagramEditor/store";
 import { DiffComparisonBody, DiffModeToolbar } from "./comparison";
 
 export { DERIVE_SETTLE_MS } from "./settle";
@@ -437,12 +445,28 @@ function DiffTargetView({
    * at once, so the comparison is never more than a caret's departure behind.
    */
   const [held, setHeld] = useState(false);
+  /**
+   * EDT-FR-SJGJ / DFV-FR-EGFA: the diagram editor overlay edits a fence of the
+   * rich target from outside this tab, so the caret is not here while it does.
+   * The derivation is held for as long as the overlay edits a fence of this
+   * tab, because a new grouping of the runs would take the fence away under it.
+   */
+  const rootRef = useRef<HTMLDivElement>(null);
+  const diagramRequest = useSyncExternalStore(subscribeDiagramEditor, diagramEditorRequest);
+  const editingDiagram =
+    diagramRequest !== null && rootRef.current?.contains(diagramRequest.view.dom) === true;
   const { settled, adopt } = useSettledText(
     session.buffer,
     session.seedToken,
     editEpoch,
-    held,
+    held || editingDiagram,
   );
+  // The overlay closed: the comparison catches up at once, as on a blur.
+  const wasEditingDiagram = useRef(false);
+  useEffect(() => {
+    if (wasEditingDiagram.current && !editingDiagram) adopt(session.buffer);
+    wasEditingDiagram.current = editingDiagram;
+  }, [editingDiagram, adopt, session]);
 
   const derived = useMemo(() => {
     const original = revisions.old;
@@ -517,7 +541,6 @@ function DiffTargetView({
    * DFV-FR-53: inert while the external-change modal is unresolved, like every
    * other edit operation on the tab.
    */
-  const rootRef = useRef<HTMLDivElement>(null);
   const traverse = useCallback(
     (direction: "undo" | "redo") => {
       if (doc.conflict) return;

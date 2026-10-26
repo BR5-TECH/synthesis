@@ -42,9 +42,12 @@ afterEach(() => {
 
 describe("a library that does not load (EDT-FR-XTEB)", () => {
   it("EDT-FR-XTEB: a failed load shows an error, and the load is tried again once the failure is forgotten", async () => {
-    expect(await render.renderDiagram(SRC, "light")).toEqual({
+    // EDT-FR-XKMP: the load step, with the reason the import gave. Vitest
+    // wraps the error of the mock factory, so only its presence is checked.
+    expect(await render.renderDiagram(SRC, "light")).toMatchObject({
       state: "error",
-      message: "The diagram library could not be loaded.",
+      summary: render.DIAGRAM_ERROR.load,
+      detail: expect.any(String),
       transient: true,
     });
     library.fail = false;
@@ -63,8 +66,8 @@ describe("a library that does not load (EDT-FR-XTEB)", () => {
     editors.push(ed);
     const pre = () => ed.view.dom.querySelector("pre")!;
     await vi.waitFor(() => expect(pre().getAttribute("data-diagram-view")).toBe("error"));
-    expect(pre().querySelector(".mermaid-error")?.textContent).toBe(
-      "Diagram error: The diagram library could not be loaded.",
+    expect(pre().querySelector(".mermaid-error__summary")?.textContent).toBe(
+      "Diagram error: The diagram library cannot be loaded.",
     );
     library.fail = false;
     // An edit elsewhere in the document is enough to try again.

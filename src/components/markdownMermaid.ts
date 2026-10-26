@@ -25,11 +25,26 @@ import {
   Selection,
   TextSelection,
   type EditorState,
+  type Transaction,
 } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 
 import { logDebug } from "../logging";
 import { commentHighlightKey } from "./commentHighlight";
+import {
+  notifyDiagramSurface,
+  openDiagramEditor,
+  openDiagramViewer,
+  takesFocusBack,
+  type DiagramOverlayKind,
+} from "./DiagramEditor/store";
+import {
+  CODE_GLYPH,
+  DIAGRAM_GLYPH,
+  EXPAND_GLYPH,
+  PENCIL_GLYPH,
+  iconElement,
+} from "./domIcons";
 import { findHighlightKey } from "./findHighlight";
 import {
   cachedDiagram,
@@ -51,6 +66,10 @@ export const DIAGRAM_LANGUAGE = "mermaid";
 /** EDT-FR-USWS: the accessible names of the view toggle, by the view it shows. */
 export const SHOW_SOURCE_LABEL = "Show diagram source";
 export const SHOW_DIAGRAM_LABEL = "Show diagram";
+/** EDT-FR-ADNU: the accessible name and the tooltip of the Edit button. */
+export const EDIT_DIAGRAM_LABEL = "Edit diagram";
+/** EDT-FR-YVAI: the accessible name and the tooltip of the View button. */
+export const VIEW_DIAGRAM_LABEL = "View diagram";
 /** EDT-FR-KQXZ: the accessible name of a diagram that takes input. */
 export const DIAGRAM_LABEL = "Mermaid diagram, edit source";
 /** EDT-FR-LEUI: the accessible name of an inert diagram. */
@@ -69,6 +88,12 @@ export type DiagramView = "diagram" | "source" | "error" | "pending";
 interface MermaidState {
   /** Start positions of the fences the author set to show their source. */
   sources: readonly number[];
+  /**
+   * EDT-FR-OXQC, EDT-FR-RCAV: start positions of the fences whose source last
+   * rendered as a valid diagram. A fence keeps its place here while a changed
+   * source renders, so the View button does not flicker while the author types.
+   */
+  valid: readonly number[];
   theme: DiagramTheme;
 }
 
@@ -99,7 +124,7 @@ function eachFence(doc: PMNode, visit: (node: PMNode, pos: number) => void): voi
 }
 
 /** The start of the diagram fence that holds `pos`, or null. */
-function fenceAround(doc: PMNode, pos: number): number | null {
+export function fenceAround(doc: PMNode, pos: number): number | null {
   if (pos < 0 || pos > doc.content.size) return null;
   const $pos = doc.resolve(pos);
   for (let depth = $pos.depth; depth > 0; depth--) {
@@ -197,11 +222,24 @@ interface FenceLook {
   toggle: boolean;
 }
 
+/** The options of the diagram extension. */
+export interface MermaidDiagramsOptions {
+  /**
+   * EDT-FR-MOQW: the surface offers the Edit button and the View button. False
+   * on the candidate of a review modal, which no diagram overlay opens over.
+   */
+  editButton: boolean;
+}
+
 interface FenceDecorationInput extends FenceLook {
   node: PMNode;
   pos: number;
   result: DiagramResult | undefined;
   editable: boolean;
+  /** EDT-FR-ADNU, EDT-FR-QTHL: the Edit button is drawn, in every view. */
+  edit: boolean;
+  /** EDT-FR-YVAI, EDT-FR-OXQC: the View button is drawn. */
+  viewer: boolean;
   theme: DiagramTheme;
   commented: boolean;
 }
@@ -220,8 +258,11 @@ function toggleButton(
   button.type = "button";
   button.className = "mermaid-toggle";
   const toSource = shown !== "source";
-  button.textContent = toSource ? "Source" : "Diagram";
-  button.setAttribute("aria-label", toSource ? SHOW_SOURCE_LABEL : SHOW_DIAGRAM_LABEL);
+  // EDT-FR-UTHM: an icon and no text; the name and the tooltip say the view.
+  const label = toSource ? SHOW_SOURCE_LABEL : SHOW_DIAGRAM_LABEL;
+  button.appendChild(iconElement(toSource ? CODE_GLYPH : DIAGRAM_GLYPH));
+  button.setAttribute("aria-label", label);
+  button.title = label;
   button.addEventListener("mousedown", (event) => event.preventDefault());
   button.addEventListener("click", (event) => {
     event.preventDefault();
@@ -229,6 +270,55 @@ function toggleButton(
     if (fence === null) return;
     showFenceView(view, fence, toSource ? "source" : "diagram");
     focusToggle(view, fence);
+  });
+  return button;
+}
+
+/** The button of each diagram overlay: its class, its glyph, and its name. */
+const OVERLAY_BUTTONS: Record<
+  DiagramOverlayKind,
+  { className: string; glyph: string; label: string }
+> = {
+  edit: { className: "mermaid-edit", glyph: PENCIL_GLYPH, label: EDIT_DIAGRAM_LABEL },
+  view: { className: "mermaid-view", glyph: EXPAND_GLYPH, label: VIEW_DIAGRAM_LABEL },
+};
+
+/**
+ * EDT-FR-ADNU, EDT-FR-YVAI: the Edit button and the View button. Each opens
+ * its diagram overlay on the fence that holds it.
+ */
+function overlayButton(
+  view: EditorView,
+  getPos: () => number | undefined,
+  kind: DiagramOverlayKind,
+): HTMLButtonElement {
+  const look = OVERLAY_BUTTONS[kind];
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = look.className;
+  button.appendChild(iconElement(look.glyph));
+  button.setAttribute("aria-label", look.label);
+  button.title = look.label;
+  button.addEventListener("mousedown", (event) => event.preventDefault());
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    const fence = fenceOfWidget(view, getPos);
+    if (fence === null || !view.editable) {
+      logDebug(["frontend"], "a diagram button opened no overlay", {
+        kind,
+        placed: fence !== null,
+        editable: view.editable,
+      });
+      return;
+    }
+    if (kind === "edit") openDiagramEditor(view, fence, button);
+    else openDiagramViewer(view, fence, button);
+  });
+  // EDT-FR-HGAZ, EDT-FR-ELUJ: a button drawn again just after its overlay
+  // closed takes the focus that the button it replaces held.
+  queueMicrotask(() => {
+    const fence = button.isConnected ? fenceOfWidget(view, getPos) : null;
+    if (fence !== null && takesFocusBack(view, fence, kind)) button.focus();
   });
   return button;
 }
@@ -280,7 +370,7 @@ function diagramFigure(
 }
 
 function fenceDecorations(input: FenceDecorationInput): Decoration[] {
-  const { node, pos, view: shown, editable, toggle } = input;
+  const { node, pos, view: shown, editable, toggle, edit, viewer } = input;
   const end = pos + node.nodeSize;
   const attrs: Record<string, string> = {
     class: `mermaid-block mermaid-block--${shown}`,
@@ -289,12 +379,14 @@ function fenceDecorations(input: FenceDecorationInput): Decoration[] {
   if (input.commented) attrs["data-diagram-commented"] = "true";
   const decos = [Decoration.node(pos, end, attrs)];
   const hasDiagram = shown === "diagram" || shown === "pending";
-  if (hasDiagram || toggle) {
+  if (hasDiagram || toggle || edit || viewer) {
     const key = [
       "mermaid",
       shown,
       editable ? "edit" : "inert",
       toggle ? "toggle" : "",
+      edit ? "button" : "",
+      viewer ? "viewer" : "",
       hasDiagram && input.result?.state === "rendered" ? input.result.tag : "",
     ].join(":");
     decos.push(
@@ -305,7 +397,17 @@ function fenceDecorations(input: FenceDecorationInput): Decoration[] {
           head.className = "mermaid-head";
           head.contentEditable = "false";
           if (hasDiagram) head.appendChild(diagramFigure(view, getPos, input));
-          if (toggle) head.appendChild(toggleButton(view, getPos, shown));
+          if (toggle || edit || viewer) {
+            // EDT-FR-YVAI, EDT-FR-ADNU: the View button, the Edit button, and
+            // the view toggle sit in this order in the top-right corner. A
+            // control that the fence does not have leaves no gap.
+            const controls = document.createElement("span");
+            controls.className = "mermaid-controls";
+            if (viewer) controls.appendChild(overlayButton(view, getPos, "view"));
+            if (edit) controls.appendChild(overlayButton(view, getPos, "edit"));
+            if (toggle) controls.appendChild(toggleButton(view, getPos, shown));
+            head.appendChild(controls);
+          }
           return head;
         },
         { side: -1, key, ignoreSelection: true, stopEvent: () => true },
@@ -313,7 +415,7 @@ function fenceDecorations(input: FenceDecorationInput): Decoration[] {
     );
   }
   if (shown === "error" && input.result?.state === "error") {
-    const message = input.result.message;
+    const { summary, detail } = input.result;
     decos.push(
       Decoration.widget(
         end - 1,
@@ -322,12 +424,22 @@ function fenceDecorations(input: FenceDecorationInput): Decoration[] {
           line.className = "mermaid-error";
           line.contentEditable = "false";
           // EDT-FR-JBZU: the message can quote the source, so it is text.
-          line.textContent = `Diagram error: ${message}`;
+          const head = document.createElement("span");
+          head.className = "mermaid-error__summary";
+          head.textContent = `Diagram error: ${summary}`;
+          line.appendChild(head);
+          if (detail !== undefined) {
+            // EDT-FR-VIOP: the reason, in the source font, line for line.
+            const reason = document.createElement("span");
+            reason.className = "mermaid-error__detail";
+            reason.textContent = detail;
+            line.appendChild(reason);
+          }
           return line;
         },
         {
           side: 1,
-          key: `mermaid-error:${textTag(message)}`,
+          key: `mermaid-error:${textTag(`${summary}\u0000${detail ?? ""}`)}`,
           ignoreSelection: true,
           stopEvent: () => true,
         },
@@ -335,6 +447,42 @@ function fenceDecorations(input: FenceDecorationInput): Decoration[] {
     );
   }
   return decos;
+}
+
+/** The fence positions of `positions` after `tr`, where a diagram fence still starts. */
+function mapFences(
+  positions: readonly number[],
+  tr: Transaction,
+  doc: PMNode,
+): number[] {
+  return positions
+    .map((pos) => tr.mapping.mapResult(pos, 1))
+    .filter((mapped) => !mapped.deleted)
+    .map((mapped) => mapped.pos)
+    .filter((pos) => {
+      const node = doc.nodeAt(pos);
+      return node !== null && isDiagramFence(node);
+    });
+}
+
+/**
+ * EDT-FR-OXQC, EDT-FR-RCAV: the fences of `doc` whose source renders as a
+ * valid diagram. A fence whose render is not known yet keeps its place in
+ * `previous`.
+ */
+function validFences(doc: PMNode, theme: DiagramTheme, previous: readonly number[]): number[] {
+  const valid: number[] = [];
+  eachFence(doc, (node, pos) => {
+    const source = node.textContent;
+    if (source.trim() === "") return;
+    const result = cachedDiagram(source, theme);
+    if (result ? result.state === "rendered" : previous.includes(pos)) valid.push(pos);
+  });
+  return valid;
+}
+
+function samePositions(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((pos, at) => pos === b[at]);
 }
 
 /** The current Find match as a position range, if there is one. */
@@ -353,11 +501,16 @@ const overlaps = (a: { from: number; to: number }, from: number, to: number) =>
  * every surface that reuses the Editor's rich surface carries it (NAW-FR-11,
  * SET-FR-16, DFV-FR-EGFA).
  */
-export const MermaidDiagrams = Extension.create({
+export const MermaidDiagrams = Extension.create<MermaidDiagramsOptions>({
   name: "mermaidDiagrams",
+
+  addOptions() {
+    return { editButton: true };
+  },
 
   addProseMirrorPlugins() {
     const editor = this.editor;
+    const offersEdit = this.options.editButton;
     let editorView: EditorView | null = null;
     // Whether the latest caret move came from the keyboard. Only then can the
     // caret enter text set at zero size, so only then does it reveal the source.
@@ -401,29 +554,30 @@ export const MermaidDiagrams = Extension.create({
       new Plugin<MermaidState>({
         key: mermaidKey,
         state: {
-          init: () => ({ sources: [], theme: currentTheme() }),
+          init: (_config, state) => {
+            const theme = currentTheme();
+            return { sources: [], valid: validFences(state.doc, theme, []), theme };
+          },
           apply(tr, value, _old, next) {
             const meta = tr.getMeta(mermaidKey) as MermaidMeta | undefined;
-            let { sources, theme } = value;
-            if (tr.docChanged && sources.length > 0) {
-              sources = sources
-                .map((pos) => tr.mapping.mapResult(pos, 1))
-                .filter((mapped) => !mapped.deleted)
-                .map((mapped) => mapped.pos)
-                .filter((pos) => {
-                  const node = next.doc.nodeAt(pos);
-                  return node !== null && isDiagramFence(node);
-                });
-            }
+            let { sources, valid, theme } = value;
+            if (tr.docChanged && sources.length > 0) sources = mapFences(sources, tr, next.doc);
+            if (tr.docChanged && valid.length > 0) valid = mapFences(valid, tr, next.doc);
             if (meta?.type === "show") {
               sources = sources.filter((pos) => pos !== meta.pos);
               if (meta.view === "source") sources = [...sources, meta.pos];
             } else if (meta?.type === "theme") {
               theme = meta.theme;
             }
-            return sources === value.sources && theme === value.theme
+            // EDT-FR-OXQC, EDT-FR-RCAV: a settled render decides; a render in
+            // progress keeps what the fence had.
+            if (tr.docChanged || meta !== undefined) {
+              const settled = validFences(next.doc, theme, valid);
+              if (!samePositions(settled, valid)) valid = settled;
+            }
+            return sources === value.sources && valid === value.valid && theme === value.theme
               ? value
-              : { sources, theme };
+              : { sources, valid, theme };
           },
         },
         props: {
@@ -450,6 +604,12 @@ export const MermaidDiagrams = Extension.create({
                   pos,
                   result,
                   editable,
+                  // EDT-FR-LEUI, EDT-FR-QTHL: every editable fence, in every
+                  // view, and no inert one.
+                  edit: editable && offersEdit,
+                  // EDT-FR-OXQC: only a fence whose source renders as a
+                  // valid diagram.
+                  viewer: editable && offersEdit && plugin.valid.includes(pos),
                   theme: plugin.theme,
                   commented: comments.some((range) => overlaps(range, pos, end)),
                 }),
@@ -560,6 +720,9 @@ export const MermaidDiagrams = Extension.create({
           return {
             update(updated, previous) {
               if (updated.state.doc !== previous.doc) forgetTransientFailures();
+              // EDT-FR-SHYX, EDT-FR-WPGE: the diagram editor overlay follows
+              // its fence through each new state of this surface.
+              notifyDiagramSurface(updated, "update");
               requestRenders();
               if (drawn !== announced) {
                 announced = drawn;
@@ -568,6 +731,7 @@ export const MermaidDiagrams = Extension.create({
             },
             destroy() {
               destroyed = true;
+              notifyDiagramSurface(view, "destroy");
               editorView = null;
               releaseDiagrams(owner);
               stopTheme();

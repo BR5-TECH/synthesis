@@ -13,9 +13,11 @@ vi.mock("../logging", () => ({
 import {
   holdNextRender,
   mermaidApi,
+  overrideNextParse,
   overrideNextRender,
   resetMermaidMock,
 } from "../test/mermaidMock";
+import { CODE_GLYPH, DIAGRAM_GLYPH } from "./domIcons";
 import { getMarkdown, markdownExtensions } from "./markdownFidelity";
 import {
   mermaidKey,
@@ -25,7 +27,12 @@ import {
   SHOW_DIAGRAM_LABEL,
   SHOW_SOURCE_LABEL,
 } from "./markdownMermaid";
-import { cachedDiagram, renderDiagram, resetMermaidForTest } from "./markdownMermaidRender";
+import {
+  DIAGRAM_ERROR,
+  cachedDiagram,
+  renderDiagram,
+  resetMermaidForTest,
+} from "./markdownMermaidRender";
 
 const FENCE = "```mermaid\ngraph TD\nA-->B\n```";
 
@@ -155,12 +162,11 @@ describe("the view toggle (EDT-FR-USWS, EDT-FR-CQBG)", () => {
     toggleOf(ed)!.click();
     expect(viewOf(ed)).toBe("source");
     expect(toggleOf(ed)?.getAttribute("aria-label")).toBe(SHOW_DIAGRAM_LABEL);
-    expect(toggleOf(ed)?.textContent).toBe("Diagram");
     expect(figureOf(ed)).toBeNull();
 
     toggleOf(ed)!.click();
     expect(viewOf(ed)).toBe("diagram");
-    expect(toggleOf(ed)?.textContent).toBe("Source");
+    expect(toggleOf(ed)?.getAttribute("aria-label")).toBe(SHOW_SOURCE_LABEL);
 
     expect(ed.state.doc).toBe(doc);
     expect(onUpdate).not.toHaveBeenCalled();
@@ -203,13 +209,38 @@ describe("the view toggle (EDT-FR-USWS, EDT-FR-CQBG)", () => {
   });
 });
 
+describe("the toggle icon (EDT-FR-UTHM)", () => {
+  const glyphOf = (button: HTMLButtonElement | null) =>
+    button?.querySelector("svg path")?.getAttribute("d");
+
+  it("EDT-FR-UTHM, EDT-FR-USWS: the toggle shows an icon and no text, with a tooltip that names the view", async () => {
+    const ed = mount(FENCE);
+    await rendered(ed);
+    const toSource = toggleOf(ed)!;
+    expect(toSource.textContent).toBe("");
+    expect(glyphOf(toSource)).toBe(CODE_GLYPH);
+    expect(toSource.title).toBe(SHOW_SOURCE_LABEL);
+    expect(toSource.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+
+    toSource.click();
+    const toDiagram = toggleOf(ed)!;
+    expect(toDiagram.textContent).toBe("");
+    expect(glyphOf(toDiagram)).toBe(DIAGRAM_GLYPH);
+    expect(toDiagram.title).toBe(SHOW_DIAGRAM_LABEL);
+  });
+});
+
 describe("invalid syntax (EDT-FR-XTEB, EDT-FR-JBZU)", () => {
   it("EDT-FR-XTEB, EDT-FR-BQIU: an invalid fence shows its source and an inline error, and stays editable", async () => {
     const ed = mount("```mermaid\nINVALID\n```");
     await vi.waitFor(() => expect(viewOf(ed)).toBe("error"));
     const pre = pres(ed)[0];
-    expect(pre.querySelector(".mermaid-error")?.textContent).toBe(
-      "Diagram error: Parse error on line 1: INVALID",
+    // EDT-FR-XKMP: the step that failed, then the reason of Mermaid.
+    expect(pre.querySelector(".mermaid-error__summary")?.textContent).toBe(
+      `Diagram error: ${DIAGRAM_ERROR.syntax}`,
+    );
+    expect(pre.querySelector(".mermaid-error__detail")?.textContent).toBe(
+      "Parse error on line 1: INVALID",
     );
     expect(figureOf(ed)).toBeNull();
     expect(toggleOf(ed)).toBeNull();
@@ -235,15 +266,68 @@ describe("invalid syntax (EDT-FR-XTEB, EDT-FR-JBZU)", () => {
     await vi.waitFor(() => expect(viewOf(ed)).toBe("error"));
     const error = pres(ed)[0].querySelector(".mermaid-error")!;
     expect(error.querySelector("img")).toBeNull();
-    expect(error.textContent).toContain('<img src=x onerror="window.__mermaidX=1">');
+    expect(error.querySelector(".mermaid-error__detail")?.textContent).toBe(
+      '<img src=x onerror="window.__mermaidX=1">',
+    );
     expect((window as unknown as Record<string, unknown>).__mermaidX).toBeUndefined();
   });
 
-  it("EDT-FR-XTEB: an SVG that does not parse is an error with the source, not an empty diagram", async () => {
-    overrideNextRender(async () => ({ svg: "<svg" }));
+  it("EDT-FR-XTEB, EDT-FR-XKMP: an output with no SVG is an error with the source, not an empty diagram", async () => {
+    overrideNextRender(async () => ({ svg: "<p>no drawing</p>" }));
     const ed = mount(FENCE);
     await vi.waitFor(() => expect(viewOf(ed)).toBe("error"));
     expect(figureOf(ed)).toBeNull();
+    expect(pres(ed)[0].querySelector(".mermaid-error__summary")?.textContent).toBe(
+      `Diagram error: ${DIAGRAM_ERROR.read}`,
+    );
+  });
+
+  it("EDT-FR-VIOP: a reason of several lines keeps each line", async () => {
+    const reason = "Parse error on line 2:\n...A-->\n-------^\nExpecting 'NODE_STRING', got 'EOF'";
+    overrideNextParse(async () => {
+      throw new Error(reason);
+    });
+    const ed = mount(FENCE);
+    await vi.waitFor(() => expect(viewOf(ed)).toBe("error"));
+    expect(pres(ed)[0].querySelector(".mermaid-error__detail")?.textContent).toBe(reason);
+  });
+
+  it("EDT-FR-LXFD: a diagram whose label holds an HTML line break shows it", async () => {
+    const ed = mount(FENCE);
+    await rendered(ed);
+    const label = figureOf(ed)!.querySelector("foreignObject p")!;
+    expect(label.querySelectorAll("br")).toHaveLength(1);
+    expect(label.textContent).toBe("Labeltwo\u00a0lines");
+  });
+
+  it("EDT-FR-XKMP: an error with no reason shows the step alone", async () => {
+    overrideNextRender(async () => {
+      throw new Error("  ");
+    });
+    const ed = mount(FENCE);
+    await vi.waitFor(() => expect(viewOf(ed)).toBe("error"));
+    const error = pres(ed)[0].querySelector(".mermaid-error")!;
+    expect(error.textContent).toBe(`Diagram error: ${DIAGRAM_ERROR.draw}`);
+    expect(error.querySelector(".mermaid-error__detail")).toBeNull();
+  });
+
+  it("EDT-FR-XKMP: a new reason for the same step redraws the message", async () => {
+    overrideNextParse(async () => {
+      throw new Error("first reason");
+    });
+    const ed = mount(FENCE);
+    await vi.waitFor(() => expect(viewOf(ed)).toBe("error"));
+    // Only the edited source fails, so no other parse takes this override.
+    overrideNextParse(async (source) => {
+      if (source.includes("C")) throw new Error("second reason");
+      return {};
+    });
+    ed.view.dispatch(ed.state.tr.insertText("C", 2));
+    await vi.waitFor(() =>
+      expect(pres(ed)[0].querySelector(".mermaid-error__detail")?.textContent).toBe(
+        "second reason",
+      ),
+    );
   });
 });
 

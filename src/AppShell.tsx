@@ -28,6 +28,7 @@ import { StatusBar } from "./components/StatusBar";
 import { Toast } from "./components/Toast";
 import { NewFileModal } from "./components/NewFileModal";
 import { AboutPanel } from "./components/AboutPanel";
+import { DiagramEditorHost } from "./components/DiagramEditor";
 import { NewFolderModal } from "./components/NewFolderModal";
 import { NewTypedArtifactModal } from "./components/NewTypedArtifactModal";
 import { GithubTokenPicker } from "./components/GithubTokenPicker";
@@ -716,6 +717,10 @@ export function AppShell(props: AppShellProps) {
       {/* ABT-about-panel.md: the About panel, mounted only while open. One of
           the floating overlays of SNV-FR-56 (ABT-FR-GCPK). */}
       {overlays.aboutOpen && <AboutPanel onClose={overlays.closeAbout} />}
+
+      {/* EDT-FR-SJGJ / EDT-FR-TOVY: the diagram editor overlay, mounted only
+          while open. One of the floating overlays of SNV-FR-56. */}
+      <DiagramEditorHost />
 
       {/* NFI-new-file.md: the New File modal, mounted only while creating (a
           closed modal is unmounted so it re-centers fresh on each open,

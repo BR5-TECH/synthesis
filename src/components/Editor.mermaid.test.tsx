@@ -165,8 +165,9 @@ describe("diagram fences in an Editor tab", () => {
     fireEvent.click(screen.getByRole("button", { name: SHOW_SOURCE_LABEL }));
     typeInFence(" INVALID");
     expect(
-      await screen.findByText(/Diagram error: Parse error on line 1: INVALID/),
+      await screen.findByText("Diagram error: The Mermaid source is not valid."),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Parse error on line 1: INVALID/)).toBeInTheDocument();
     // EDT-FR-70: the write the edit scheduled lands by itself.
     await waitFor(() => expect(backend.saves.length).toBeGreaterThan(0), { timeout: 5000 });
     expect(lastSave(backend)).toContain("A-->B INVALID\n```");

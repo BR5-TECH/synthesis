@@ -96,7 +96,10 @@ export function MermaidStatic({
       {children}
       {result?.state === "error" && (
         <span className="mermaid-error mermaid-error--static">
-          Diagram error: {result.message}
+          <span className="mermaid-error__summary">Diagram error: {result.summary}</span>
+          {result.detail !== undefined && (
+            <span className="mermaid-error__detail">{result.detail}</span>
+          )}
         </span>
       )}
     </>

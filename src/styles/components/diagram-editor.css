@@ -1,0 +1,249 @@
+/* ---------- Diagram overlays (EDT-editor.md EDT-FR-SJGJ – EDT-FR-EAOC) ---------- */
+
+/* EDT-FR-SJGJ, EDT-FR-KMSI: the scrim covers the whole window. The editor
+   overlay and the viewer overlay are placed by their own left, top, width and
+   height (EDT-FR-NKGX), not by the scrim grid. */
+.scrim.diagram-editor-scrim { display: block; }
+.modal.diagram-overlay {
+  /* EDT-FR-NKGX: the border is inside the size the overlay is given, so the
+     overlay stays inside the window. */
+  box-sizing: border-box;
+  position: absolute;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  animation: none;
+}
+/* EDT-FR-NKGX, EDT-FR-KMSI: the edges that resize each overlay sit across its
+   border, so the overlay does not clip them. */
+.modal.diagram-editor,
+.modal.diagram-viewer { overflow: visible; }
+/* EDT-FR-HGAZ: the dialog takes the focus after a press on a part that takes
+   no focus. */
+.modal.diagram-overlay:focus { outline: none; }
+
+/* EDT-FR-NKGX: the title bar is the handle that moves the overlay. */
+.diagram-overlay__head {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-1);
+  cursor: move;
+  user-select: none;
+  -webkit-user-select: none;
+  flex: none;
+}
+/* EDT-FR-CCZU: the controls of the title bar sit together at its end. */
+.diagram-overlay__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: default;
+}
+
+/* EDT-FR-ULPU: two panes side by side, with the divider between them. The
+   grid columns carry the split. EDT-FR-NKGX: the panes take the height that
+   the title bar and the hints area leave. */
+.diagram-editor__panes {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+/* EDT-FR-EBEZ: the source pane is plain text in the Source code role. */
+.diagram-editor__source {
+  min-width: 0;
+  resize: none;
+  border: 0;
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-sunken);
+  color: var(--fg-1);
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-md);
+  line-height: var(--font-source-line-height);
+  tab-size: 4;
+  white-space: pre;
+  overflow: auto;
+}
+.diagram-editor__source:focus { outline: none; }
+.diagram-editor__source:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); }
+
+/* EDT-FR-HVGG: the divider takes focus and shows it. */
+.diagram-editor__divider {
+  width: 6px;
+  cursor: col-resize;
+  background: var(--border-1);
+  touch-action: none;
+}
+.diagram-editor__divider:hover { background: var(--border-2); }
+.diagram-editor__divider:focus { outline: none; }
+.diagram-editor__divider:focus-visible { background: var(--accent); }
+
+/* EDT-FR-QSOQ: the live diagram, on the ground of the page. */
+.diagram-editor__preview.doc {
+  min-width: 0;
+  overflow: auto;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--doc-page-bg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.diagram-editor__preview .diagram-editor__figure { flex: none; }
+.diagram-editor__preview .diagram-editor__figure svg { max-width: 100%; height: auto; }
+/* EDT-FR-STFK: the last diagram that rendered, dimmed under an invalid source. */
+.diagram-editor__figure--stale { opacity: 0.4; filter: grayscale(0.6); }
+/* EDT-FR-UDVE: the statement in place of a diagram. */
+.diagram-editor__statement {
+  margin: var(--sp-4) 0 0;
+  text-align: center;
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-md);
+  color: var(--fg-3);
+}
+.diagram-editor__preview .mermaid-error.diagram-editor__error { margin-top: 0; user-select: text; -webkit-user-select: text; }
+
+/* EDT-FR-FKUH: the hints area, a quiet reference band under the panes. Its
+   groups flow in columns across the full width, so a short band holds many
+   hints, and it scrolls when they do not fit. EDT-FR-NKGX: it takes the
+   bottom 20% of the whole overlay at each size of the overlay. Its padding and
+   its border are inside that 20%, because this project has no global
+   box-sizing reset. */
+.diagram-hints {
+  box-sizing: border-box;
+  flex: 0 0 20%;
+  min-height: 0;
+  overflow: auto;
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  border-top: 1px solid var(--border-1);
+  background: var(--bg-panel);
+  padding: var(--sp-2) var(--sp-4) var(--sp-3);
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-sm);
+  line-height: var(--font-ui-line-height);
+  color: var(--fg-2);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.diagram-hints:focus { outline: none; }
+.diagram-hints:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); }
+/* EDT-FR-YNQF: the name of the chart type, as a micro-label that stays in
+   view while the list scrolls under it. */
+.diagram-hints__title {
+  position: sticky;
+  top: calc(-1 * var(--sp-2));
+  z-index: 1;
+  margin: calc(-1 * var(--sp-2)) calc(-1 * var(--sp-4)) var(--sp-2);
+  padding: var(--sp-2) var(--sp-4) var(--sp-1);
+  background: var(--bg-panel);
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--font-ui-line-height);
+  font-weight: 600;
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.diagram-hints__groups {
+  columns: 24rem auto;
+  column-gap: var(--sp-6);
+}
+.diagram-hints__group {
+  break-inside: avoid;
+  margin: 0 0 var(--sp-3);
+}
+.diagram-hints__group-title {
+  margin: 0 0 var(--sp-1);
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--font-ui-line-height);
+  font-weight: 600;
+  color: var(--fg-1);
+}
+.diagram-hints__list { margin: 0; }
+.diagram-hints__item {
+  display: grid;
+  grid-template-columns: minmax(7rem, 45%) 1fr;
+  gap: var(--sp-3);
+  align-items: baseline;
+  padding: 2px 0;
+  break-inside: avoid;
+}
+/* EDT-FR-NVGA: a snippet is code text in the Source code role. */
+.diagram-hints__code {
+  min-width: 0;
+  margin: 0;
+}
+/* A long snippet line wraps, so the area scrolls on one axis only. */
+.diagram-hints__code code {
+  display: block;
+  font-family: var(--font-source-family);
+  font-size: var(--fs-src-xs);
+  line-height: var(--font-source-line-height);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--fg-1);
+}
+.diagram-hints__text {
+  min-width: 0;
+  margin: 0;
+  color: var(--fg-2);
+}
+
+/* ---------- Diagram viewer overlay (EDT-FR-KMSI – EDT-FR-EAOC) ---------- */
+
+/* EDT-FR-CCZU: the zoom of the diagram, as a quiet reading beside Fit. */
+.diagram-viewer__zoom {
+  min-width: 3.5em;
+  text-align: right;
+  font-family: var(--font-ui-family);
+  font-size: var(--fs-ui-xs);
+  line-height: var(--font-ui-line-height);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-3);
+}
+.diagram-viewer__fit { gap: var(--sp-1); }
+
+/* EDT-FR-VWNJ: the diagram alone, on the ground of the page. The drawing is
+   placed by its transform, so nothing in the area scrolls. */
+.diagram-viewer__area.doc {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  background: var(--doc-page-bg);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.diagram-viewer__area--dragging.doc { cursor: grabbing; }
+.diagram-viewer__area:focus { outline: none; }
+.diagram-viewer__area:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); }
+/* EDT-FR-LJAP, EDT-FR-MZIF: the transform scales from the top-left corner. */
+.diagram-viewer__area .diagram-viewer__stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  padding: 0;
+  transform-origin: 0 0;
+}
+.diagram-viewer__area .diagram-viewer__stage svg { display: block; max-width: none; }
+
+/* EDT-FR-NKGX: the edges and corners that resize an overlay. */
+.diagram-overlay__edge { position: absolute; z-index: 1; touch-action: none; }
+.diagram-overlay__edge--n, .diagram-overlay__edge--s { left: 8px; right: 8px; height: 6px; cursor: ns-resize; }
+.diagram-overlay__edge--e, .diagram-overlay__edge--w { top: 8px; bottom: 8px; width: 6px; cursor: ew-resize; }
+.diagram-overlay__edge--n { top: -3px; }
+.diagram-overlay__edge--s { bottom: -3px; }
+.diagram-overlay__edge--e { right: -3px; }
+.diagram-overlay__edge--w { left: -3px; }
+.diagram-overlay__edge--ne, .diagram-overlay__edge--nw,
+.diagram-overlay__edge--se, .diagram-overlay__edge--sw { width: 12px; height: 12px; }
+.diagram-overlay__edge--ne { top: -4px; right: -4px; cursor: nesw-resize; }
+.diagram-overlay__edge--sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.diagram-overlay__edge--nw { top: -4px; left: -4px; cursor: nwse-resize; }
+.diagram-overlay__edge--se { bottom: -4px; right: -4px; cursor: nwse-resize; }

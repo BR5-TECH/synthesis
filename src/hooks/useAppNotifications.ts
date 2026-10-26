@@ -83,6 +83,7 @@ import {
   openPromptReview,
   pendingOf as pendingPromptOf,
 } from "../state/promptProposals";
+import { isDiagramEditorOpen } from "../components/DiagramEditor/store";
 import {
   mintAddress,
   parseAddress,
@@ -947,11 +948,13 @@ export function useAppNotifications(deps: AppNotificationDeps) {
     // SNV-FR-43: Find and Find & Replace toggle the active Editor tab's panel
     // (EFR-FR-AYNZ / EFR-FR-BJUY). Like Save, both only ever fire while their menu
     // item is enabled.
+    // EDT-FR-SJGJ: the diagram editor overlay blocks the window the same way,
+    // but its edits keep the write schedule, so Save and Save All still act.
     find: () => {
-      if (!overlays.aboutOpen) s.requestFind("find");
+      if (!overlays.aboutOpen && !isDiagramEditorOpen()) s.requestFind("find");
     },
     findReplace: () => {
-      if (!overlays.aboutOpen) s.requestFind("replace");
+      if (!overlays.aboutOpen && !isDiagramEditorOpen()) s.requestFind("replace");
     },
     // ABT-FR-KMVD: About is offered whether or not a project is open, so this
     // handler lives with the window-level subscription rather than the shell's.

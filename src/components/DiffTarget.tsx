@@ -83,6 +83,11 @@ export interface TargetEditing {
    * makes the editing surface inert without making it an original.
    */
   disabled?: boolean;
+  /**
+   * EDT-FR-MOQW: false on the candidate of a review modal, whose diagram fences
+   * offer no Edit button. Absent means the target offers it.
+   */
+  diagramEditor?: boolean;
 }
 
 /**

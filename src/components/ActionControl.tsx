@@ -21,6 +21,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
+import { isDiagramEditorOpen } from "./DiagramEditor/store";
 import { DiscussionComposer, DiscussionSurface } from "./discussion";
 import type { UseDiscussionsResult } from "../hooks/useDiscussions";
 import { identityBlockFor } from "../hooks/useComments";
@@ -293,6 +294,10 @@ export function ActionControl({
     if (floating === "none") return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      // EDT-FR-SJGJ: the diagram editor overlay holds the keyboard of the
+      // window, so its Escape closes the overlay alone. This listener can be
+      // registered ahead of the overlay's, so it must yield by itself.
+      if (isDiagramEditorOpen()) return;
       // AGT-FR-30 / ACT-FR-12: the mention picker is a transient of the composer
       // that owns it, so one Escape closes the picker and leaves the composer —
       // a nickname being completed must not cost the sentence it is in.
@@ -317,6 +322,9 @@ export function ActionControl({
     // where the shell's other dismissals are bound and what catches an event
     // dispatched at the window itself.
     const onDown = (e: MouseEvent) => {
+      // EDT-FR-SJGJ: a press while the diagram editor overlay is open is a
+      // press in the overlay or on its scrim, never on this tab.
+      if (isDiagramEditorOpen()) return;
       // The discussion panel stays: it is a conversation being read rather than
       // a menu being chosen from, and a press in the tab while reading one is
       // as likely to be scrolling what it is about as it is to be leaving it.

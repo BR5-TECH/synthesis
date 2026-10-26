@@ -337,6 +337,9 @@ function ReviewModal({
       seed,
       currentText: () => promptCandidateBuffers.get(proposal.id)?.text ?? "",
       disabled: candidate.conflict !== null || deciding,
+      // EDT-FR-MOQW: the candidate is inside a modal, which the diagram editor
+      // overlay does not open over.
+      diagramEditor: false,
       replaceLines: (from, to, replacement) => {
         const buffer = promptCandidateBuffers.get(proposal.id);
         if (!buffer) return;

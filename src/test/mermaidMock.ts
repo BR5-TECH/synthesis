@@ -7,7 +7,10 @@
  *     vi.mock("mermaid", async () => (await import("../test/mermaidMock")).mermaidModule);
  *
  * A render returns a small SVG that names its source, its theme, and its id.
- * A source that contains `INVALID` fails with a parse error. `holdNextRender`
+ * Like real Mermaid output, it is HTML-serialised: its label holds a `<br>`
+ * with no close and a `&nbsp;`, which an XML parser rejects (EDT-FR-LXFD).
+ * A source that contains `INVALID` fails with a parse error, in `parse` and in
+ * `render` alike, as the library does. `holdNextRender`
  * makes the next render wait until the test releases it, so a test can order
  * renders without a timer.
  */
@@ -22,6 +25,8 @@ const holds: Array<{ promise: Promise<void> }> = [];
 
 /** What the next render does instead of the default, when a test sets it. */
 let nextRender: ((id: string, source: string) => Promise<{ svg: string }>) | null = null;
+/** What the next parse does instead of the default, when a test sets it. */
+let nextParse: ((source: string) => Promise<unknown>) | null = null;
 
 function escapeXml(text: string): string {
   return text.replace(/[&<>"]/g, (ch) =>
@@ -33,13 +38,24 @@ function escapeXml(text: string): string {
 export function fakeSvg(id: string, source: string, themeName = theme): string {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" id="${id}" data-theme="${themeName}"` +
-    ` data-source="${escapeXml(source)}"><text>${escapeXml(source)}</text></svg>`
+    ` viewBox="0 0 200 100" data-source="${escapeXml(source)}"><text>${escapeXml(source)}</text>` +
+    '<foreignObject width="10" height="10"><div xmlns="http://www.w3.org/1999/xhtml">' +
+    '<span class="nodeLabel"><p>Label<br>two&nbsp;lines</p></span></div></foreignObject></svg>'
   );
 }
 
 export const mermaidApi = {
   initialize: vi.fn((config: { theme?: string }) => {
     theme = config.theme ?? "default";
+  }),
+  parse: vi.fn(async (source: string): Promise<unknown> => {
+    const custom = nextParse;
+    nextParse = null;
+    if (custom) return custom(source);
+    if (source.includes("INVALID")) {
+      throw new Error("Parse error on line 1: INVALID");
+    }
+    return { diagramType: "flowchart" };
   }),
   render: vi.fn(async (id: string, source: string): Promise<{ svg: string }> => {
     const held = holds.shift();
@@ -73,11 +89,18 @@ export function overrideNextRender(
   nextRender = impl;
 }
 
+/** The next parse does `impl` instead of the default. */
+export function overrideNextParse(impl: (source: string) => Promise<unknown>): void {
+  nextParse = impl;
+}
+
 /** Restores the stand-in to its first state. Call it in `beforeEach`. */
 export function resetMermaidMock(): void {
   theme = "default";
   holds.length = 0;
   nextRender = null;
+  nextParse = null;
   mermaidApi.initialize.mockClear();
+  mermaidApi.parse.mockClear();
   mermaidApi.render.mockClear();
 }

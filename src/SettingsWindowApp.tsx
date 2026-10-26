@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as api from "./api";
 import { SettingsBody } from "./components/SettingsBody";
 import { GithubTokenPicker } from "./components/GithubTokenPicker";
+import { DiagramEditorHost } from "./components/DiagramEditor";
 import { useThemePreference } from "./hooks/useThemePreference";
 import { useFontRoles } from "./hooks/useFontRoles";
 import { useLineEndings } from "./hooks/useLineEndings";
@@ -324,6 +325,9 @@ export function SettingsWindowApp({
           }}
         />
       )}
+      {/* EDT-FR-TOVY: the diagram editor overlay of the Draft template covers
+          this window. SNV-FR-56 does not apply here. */}
+      <DiagramEditorHost />
     </div>
   );
 }

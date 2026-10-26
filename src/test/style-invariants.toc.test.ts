@@ -101,6 +101,9 @@ describe("the action cluster keeps the table of contents beside the mode toggle 
     // second row are not cut.
     expect(decl(surface[0], "overflow")).toBeNull();
     expect(decl(surface[0], "overflow-y")).toBeNull();
+    // The leading focus ring (3px) stays inside the clip, and no control moves.
+    expect(decl(surface[0], "margin-inline-start")).toBe("-4px");
+    expect(decl(surface[0], "padding-inline-start")).toBe("4px");
     const [band] = blocksFor(kit, ".editor__toolbar");
     expect(decl(band, "flex-wrap")).toBe("nowrap");
   });

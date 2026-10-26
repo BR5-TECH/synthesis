@@ -190,11 +190,14 @@
    takes the width the action cluster leaves and clips at its trailing end the
    controls that do not fit. `clip` on one axis keeps the other one visible, so
    focus rings above and below a button stay whole, and a dropdown is fixed to
-   the window and opens past the clip. */
+   the window and opens past the clip. The surface reaches 4px into the band's
+   leading padding, with the same padding back, so the 3px focus ring of its
+   first control is not clipped and no control moves. */
 .editor__band-surface {
   flex: 1 1 auto; min-width: 0;
   display: flex; align-items: center; gap: 4px;
   overflow-x: clip;
+  margin-inline-start: -4px; padding-inline-start: 4px;
 }
 /* Active formatting state for the Tiptap toolbar buttons. */
 .editor__toolbar .btn[data-active="true"] { background: var(--accent-soft); color: var(--accent); }

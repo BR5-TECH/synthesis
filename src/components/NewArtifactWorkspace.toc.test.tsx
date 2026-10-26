@@ -54,6 +54,23 @@ const originalScrollIntoView = Object.getOwnPropertyDescriptor(
 );
 const tocButtons = () => screen.queryAllByRole("button", { name: "Table of contents" });
 
+/**
+ * NAW-FR-TFFX: the one control stands in the live prompt's action cluster, and
+ * its wrapper is the element directly before the mode toggle — so no control,
+ * the discussion-column control included, stands between them.
+ */
+function expectPairedWithToggle(toggleName: string) {
+  expect(tocButtons()).toHaveLength(1);
+  const toc = tocButtons()[0];
+  const toggle = screen.getByRole("button", { name: toggleName });
+  const cluster = toc.closest(".editor__actions");
+  expect(cluster).not.toBeNull();
+  expect(toggle.closest(".editor__actions")).toBe(cluster);
+  expect(toc.closest(".toc")?.nextElementSibling).toBe(toggle);
+  expect(toc.closest(".draft-workspace__chrome")).toBeNull();
+  expect(cluster!.contains(screen.getByTestId("draft-discussion-toggle"))).toBe(false);
+}
+
 beforeEach(() => {
   invokeMock.mockReset();
   hunkCandidateBuffers.clear();
@@ -81,21 +98,26 @@ afterEach(() => {
 });
 
 describe("the table of contents of a draft (NAW-FR-TFFX)", () => {
-  it("NAW-FR-TFFX, EDT-FR-LGQA: one control, in the chrome row, directly before the discussion control", async () => {
+  it("NAW-FR-TFFX, EDT-FR-LGQA: one control, in the live prompt's action cluster, directly before its mode toggle", async () => {
     stub();
     withPromptBody();
     renderWorkspace();
     await screen.findByRole("heading", { name: "Artifact window" });
 
     await waitFor(() => expect(tocButtons()).toHaveLength(1));
-    const toc = tocButtons()[0];
-    const chrome = toc.closest(".draft-workspace__chrome") as HTMLElement;
-    expect(chrome).not.toBeNull();
-    const discussion = screen.getByTestId("draft-discussion-toggle");
-    const buttons: HTMLElement[] = Array.from(chrome.querySelectorAll("button"));
-    expect(buttons.indexOf(discussion)).toBe(buttons.indexOf(toc) + 1);
-    // The embedded Editor's own cluster carries none.
-    expect(document.querySelector(".editor__actions .toc__trigger")).toBeNull();
+    expectPairedWithToggle("Edit as Markdown source");
+  });
+
+  it("NAW-FR-TFFX, EDT-FR-LGQA: in raw-text mode the control still stands directly before the toggle", async () => {
+    stub();
+    withPromptBody();
+    renderWorkspace();
+    await screen.findByRole("heading", { name: "Artifact window" });
+    await waitFor(() => expect(tocButtons()).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit as Markdown source" }));
+    await screen.findByRole("button", { name: "Edit as rich text" });
+    expectPairedWithToggle("Edit as rich text");
   });
 
   it("NAW-FR-TFFX, EDT-FR-PNGU, EDT-FR-YSJX: the panel lists the headings of the live prompt and moves the caret to one", async () => {
@@ -133,6 +155,7 @@ describe("the table of contents of a draft (NAW-FR-TFFX)", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "← Back to live prompt" }));
     await waitFor(() => expect(tocButtons()).toHaveLength(1));
+    expectPairedWithToggle("Edit as Markdown source");
   });
 
   it("NAW-FR-11, EDT-FR-NTHC, EDT-FR-VUGQ: the live prompt has the same toolbar, with H4 and Insert diagram", async () => {

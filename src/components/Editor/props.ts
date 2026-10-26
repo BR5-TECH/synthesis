@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import type { EditorImageHost } from "../hostImages";
 import type { EditSessionStore } from "../../state/editSessions";
 import type { ArtifactType, NodeType } from "../../types";
-import type { DocumentOutline } from "./useDocumentOutline";
 
 /**
  * EDT-FR-84: the review modal this tab hosts, whose candidate keeps its own undo
@@ -228,14 +227,9 @@ export interface EditorProps {
    */
   announce?: (message: string) => void;
   /**
-   * EDT-FR-LGQA: whether the action cluster carries the table of contents
-   * control. An Editor tab passes `true`; it shows over a Markdown file alone.
+   * EDT-FR-LGQA / NAW-FR-TFFX: whether the action cluster carries the table of
+   * contents control. An Editor tab and the live prompt of a New Artifact tab
+   * pass `true`; it shows over a Markdown file alone.
    */
   toc?: boolean;
-  /**
-   * NAW-FR-TFFX: lends the outline of a Markdown file to a host that shows the
-   * table of contents control in a row of its own. Called with `null` when the
-   * surface goes away.
-   */
-  onOutline?: (outline: DocumentOutline | null) => void;
 }

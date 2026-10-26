@@ -186,6 +186,16 @@
   flex-wrap: nowrap;
 }
 .editor__toolbar .btn { flex: none; }
+/* EDT-FR-16: the surface of the band (the formatting toolbar or a find panel)
+   takes the width the action cluster leaves and clips at its trailing end the
+   controls that do not fit. `clip` on one axis keeps the other one visible, so
+   focus rings above and below a button stay whole, and a dropdown is fixed to
+   the window and opens past the clip. */
+.editor__band-surface {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 4px;
+  overflow-x: clip;
+}
 /* Active formatting state for the Tiptap toolbar buttons. */
 .editor__toolbar .btn[data-active="true"] { background: var(--accent-soft); color: var(--accent); }
 /* EDT-FR-85: the two states an image the host has not drawn renders in.

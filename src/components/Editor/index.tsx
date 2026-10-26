@@ -101,7 +101,6 @@ function LiveEditor({
   review,
   fragmentHost,
   toc = false,
-  onOutline,
 }: EditorProps & { artifactId: string; sessions: EditSessionStore }) {
   // EXC-FR-LKHZ: keep the store's divergence watch alive while an Editor is up, so
   // the surface works on its own (embedded, or without the shell) rather than
@@ -366,13 +365,8 @@ function LiveEditor({
   const { sourceTokens, sourceRef, sourceHlRef, sourceWrapRef } = findGroup;
 
   // EDT-FR-LGQA / NAW-FR-TFFX: the headings of the document, for the table of
-  // contents control in this tab's cluster or in the row of its host.
+  // contents control in this tab's cluster.
   const outline = useDocumentOutline({ editor, mode, sourceText, sourceRef });
-  useEffect(() => {
-    if (!onOutline || !isMarkdown) return;
-    onOutline(outline);
-    return () => onOutline(null);
-  }, [onOutline, outline, isMarkdown]);
 
 
   /**

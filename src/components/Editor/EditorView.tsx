@@ -382,52 +382,57 @@ export function EditorView(props: EditorViewProps) {
           chrome rather than a floating overlay, so an open panel neither
           closes nor is closed by the main window's overlays (STB-FR-12). */}
       <div className="editor__toolbar" data-find={find.form ?? "off"}>
-        {find.form !== null ? (
-          <FindPanel
-            form={find.form}
-            query={find.query}
-            replacement={find.replacement}
-            mode={find.mode}
-            ordinal={engine.current + 1}
-            total={engine.matches.length}
-            valid={engine.valid}
-            focus={findFocus}
-            onQueryChange={(query) => patchFind({ query })}
-            onReplacementChange={(replacement) => patchFind({ replacement })}
-            onModeChange={(next: SearchMode) => patchFind({ mode: next })}
-            onStep={engine.step}
-            onReplace={replaceCurrent}
-            onReplaceAll={replaceAll}
-            onClose={() => patchFind({ form: null })}
-          />
-        ) : (
-          /* EFR-FR-ACMM: the formatting affordances are the rich surface's. Over a
-             source file the band holds the find panels alone and is otherwise
-             empty — those controls format a rich Markdown document, and a source
-             file has none to format. */
-          mode === "wysiwyg" && (
-            <FormattingButtons
-              editor={editor}
-              editable={!blocked}
-              onInsertDiagram={insertDiagram}
+        {/* EDT-FR-16: the surface of the band takes the width that the action
+            cluster leaves, and clips at its trailing end the controls that do
+            not fit. So at a narrow width no control paints over the cluster
+            or outside the band. */}
+        <div className="editor__band-surface">
+          {find.form !== null ? (
+            <FindPanel
+              form={find.form}
+              query={find.query}
+              replacement={find.replacement}
+              mode={find.mode}
+              ordinal={engine.current + 1}
+              total={engine.matches.length}
+              valid={engine.valid}
+              focus={findFocus}
+              onQueryChange={(query) => patchFind({ query })}
+              onReplacementChange={(replacement) => patchFind({ replacement })}
+              onModeChange={(next: SearchMode) => patchFind({ mode: next })}
+              onStep={engine.step}
+              onReplace={replaceCurrent}
+              onReplaceAll={replaceAll}
+              onClose={() => patchFind({ form: null })}
             />
-          )
-        )}
-        {/* NAW-FR-53 / NAW-FR-54: the removal action an image the surface has
-            selected carries. Reachable from the keyboard on the selected image
-            and named in words rather than by an icon alone, and offered only
-            where the host takes images at all — an Editor tab on a project file
-            has none to remove (EDT-FR-86). */}
-        {find.form === null && imageHost && selectedImage && (
-          <button
-            type="button"
-            className="editor__image-remove"
-            onClick={removeSelectedImage}
-          >
-            Remove image
-          </button>
-        )}
-        <div className="spacer" />
+          ) : (
+            /* EFR-FR-ACMM: the formatting affordances are the rich surface's. Over a
+               source file the band holds the find panels alone and is otherwise
+               empty — those controls format a rich Markdown document, and a source
+               file has none to format. */
+            mode === "wysiwyg" && (
+              <FormattingButtons
+                editor={editor}
+                editable={!blocked}
+                onInsertDiagram={insertDiagram}
+              />
+            )
+          )}
+          {/* NAW-FR-53 / NAW-FR-54: the removal action an image the surface has
+              selected carries. Reachable from the keyboard on the selected image
+              and named in words rather than by an icon alone, and offered only
+              where the host takes images at all — an Editor tab on a project file
+              has none to remove (EDT-FR-86). */}
+          {find.form === null && imageHost && selectedImage && (
+            <button
+              type="button"
+              className="editor__image-remove"
+              onClick={removeSelectedImage}
+            >
+              Remove image
+            </button>
+          )}
+        </div>
         <ActionCluster
           dirty={doc.dirty}
           report={report}
@@ -445,7 +450,7 @@ export function EditorView(props: EditorViewProps) {
              move between. */
           mode={isMarkdown ? mode : undefined}
           onToggleMode={isMarkdown ? toggleMode : undefined}
-          // EDT-FR-LGQA: a Markdown file's, directly before the comments control.
+          // EDT-FR-LGQA: a Markdown file's, directly before the mode toggle.
           outline={outline}
           // CMT-FR-29: present in both editing modes, so switching to raw text
           // never hides the fact that threads exist.

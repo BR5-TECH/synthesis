@@ -18,8 +18,6 @@ import { Icon } from "../icons";
 import { RatioControl, type SplitRatio } from "../DraftDiscussion";
 import { DraftPublicationTag } from "../DraftPublication";
 import { GithubShadowTag } from "./GithubShadow";
-import { TocControl } from "../Editor/TocControl";
-import type { DocumentOutline } from "../Editor/useDocumentOutline";
 import type { DraftRename } from "./useDraftRename";
 
 export function DraftChrome({
@@ -39,7 +37,6 @@ export function DraftChrome({
   view,
   onRatioChange,
   onToggleDiscussion,
-  outline,
 }: {
   draftId: string;
   name: string;
@@ -57,8 +54,6 @@ export function DraftChrome({
   view: DraftDiscussionState;
   onRatioChange: (ratio: SplitRatio) => void;
   onToggleDiscussion: () => void;
-  /** NAW-FR-TFFX: the outline of the live prompt, null while none shows. */
-  outline: DocumentOutline | null;
 }) {
   return (
     /* NAW-FR-05: the tab's chrome carries the draft's name and the rail's
@@ -194,17 +189,6 @@ export function DraftChrome({
             ⌘\
           </kbd>
         </>
-      )}
-
-      {/* NAW-FR-TFFX: the table of contents of the live prompt, directly
-          before the control that hides and shows the discussion column. A
-          past version that shows has none. */}
-      {outline && (
-        <TocControl
-          outline={outline}
-          className="btn btn--ghost btn--icon-sm"
-          iconSize={13}
-        />
       )}
 
       {/* DDS-FR-XQMF: the way to the whole window for the draft, and the way

@@ -10,7 +10,7 @@ The Editor's in-tab search. A Find panel and a Find & Replace panel take over th
 The Find panel (⌘F) occupying the band:
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ Skill · onboarding.md                            [ ❝ ] [ ◧ ] │
+│ Skill · onboarding.md                      [ ❝ ] [ ☰ ] [ ◧ ] │
 ├──────────────────────────────────────────────────────────────┤
 │ [Aa][aA][.*] session                   3/17    ‹   ›     ✕   │  ← Find panel
 ├──────────────────────────────────────────────────────────────┤
@@ -23,7 +23,7 @@ The Find panel (⌘F) occupying the band:
 The Find & Replace panel (⌘R) occupying the same band:
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ Skill · onboarding.md                            [ ❝ ] [ ◧ ] │
+│ Skill · onboarding.md                      [ ❝ ] [ ☰ ] [ ◧ ] │
 ├──────────────────────────────────────────────────────────────┤
 │ [Aa][aA][.*] session                   3/17    ‹   ›     ✕   │  ← Find & Replace panel
 │              run                    [ Replace ] [ Replace All ]│

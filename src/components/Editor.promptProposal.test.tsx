@@ -8,7 +8,7 @@
  * tested in `PromptChangeReview.test.tsx`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -61,6 +61,7 @@ function wire() {
         return proposals;
       case "load_prompt_change_proposal_content":
         return { content: "# Review\n\nBetter.\n", checksum: "cand-1" };
+      case "list_comment_threads":
       case "list_discussions":
       case "list_agent_turns":
       case "list_recoverable_agent_turn_failures":
@@ -288,5 +289,36 @@ describe("the pending indication (EDT-FR-16, PCR-FR-16)", () => {
     expect(
       screen.getByTestId("editor-prompt-proposal-indication"),
     ).toBeInTheDocument();
+  });
+
+  it("EDT-FR-16, EDT-FR-LGQA, EDT-FR-84: the cluster reads comments, the indication, the table of contents, then the mode toggle", async () => {
+    proposals = [proposal()];
+    render(
+      <Editor
+        artifactId={ARTIFACT}
+        artifactName="review.md"
+        sessions={sessions}
+        showActions={false}
+        toc
+      />,
+    );
+
+    const indication = await screen.findByTestId(
+      "editor-prompt-proposal-indication",
+    );
+    const cluster = indication.closest(".editor__actions") as HTMLElement;
+    const comments = cluster.querySelector(".editor__comments-toggle");
+    expect(comments).not.toBeNull();
+    const toc = within(cluster).getByRole("button", { name: "Table of contents" });
+    const toggle = within(cluster).getByRole("button", {
+      name: "Edit as Markdown source",
+    });
+    expect(
+      comments!.compareDocumentPosition(indication) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // The pair rule: the indication stands directly before the pair, and no
+    // control stands between the table of contents and the toggle.
+    expect(toc.closest(".toc")?.previousElementSibling).toBe(indication);
+    expect(toc.closest(".toc")?.nextElementSibling).toBe(toggle);
   });
 });

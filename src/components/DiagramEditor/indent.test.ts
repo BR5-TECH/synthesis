@@ -1,13 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { indentSource, outdentSource } from "./indent";
 
-/** The text with `[` and `]` marking the selection, or `|` the caret. */
+/**
+ * The text with `[` and `]` marking the selection, or `|` the caret. Each
+ * marker shows once; a case with more is a mistake in the test, not input.
+ */
 function parse(marked: string) {
   const caret = marked.indexOf("|");
-  if (caret !== -1) return { value: marked.replace("|", ""), start: caret, end: caret };
-  const start = marked.indexOf("[");
-  const end = marked.indexOf("]") - 1;
-  return { value: marked.replace("[", "").replace("]", ""), start, end };
+  if (caret !== -1) {
+    expect(marked.indexOf("|", caret + 1)).toBe(-1);
+    return { value: marked.slice(0, caret) + marked.slice(caret + 1), start: caret, end: caret };
+  }
+  const open = marked.indexOf("[");
+  const close = marked.indexOf("]");
+  expect(open).toBeGreaterThanOrEqual(0);
+  expect(close).toBeGreaterThan(open);
+  const value = marked.slice(0, open) + marked.slice(open + 1, close) + marked.slice(close + 1);
+  return { value, start: open, end: close - 1 };
 }
 
 function show({ value, start, end }: { value: string; start: number; end: number }) {

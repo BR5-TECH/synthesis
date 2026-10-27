@@ -145,7 +145,7 @@ describe("Library filesystem tree", () => {
     expect(within(sub).getByText("Clear Type")).toBeInTheDocument();
 
     // Clear Type is the very last entry in the submenu, after a divider that
-    // separates it from the eight type rows.
+    // separates it from the nine type rows.
     const items = Array.from(sub.querySelectorAll(".menu-item"));
     expect(items[items.length - 1].textContent).toContain("Clear Type");
     expect(sub.querySelector(".menu-sep")).toBeInTheDocument();
@@ -420,7 +420,7 @@ describe("Library filesystem tree", () => {
     setLoadTree(baseTree());
     renderLibrary();
 
-    // Open a skill menu, then expand the Artifact Type submenu so its eight type
+    // Open a skill menu, then expand the Artifact Type submenu so its nine type
     // rows and Clear Type are present too.
     fireEvent.contextMenu(await screen.findByText("onboarding.md"));
     const menu = document.querySelector(".menu") as HTMLElement;

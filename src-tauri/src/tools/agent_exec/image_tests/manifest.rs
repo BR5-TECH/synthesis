@@ -256,6 +256,23 @@ fn the_verify_command_refuses_the_sentinel_and_checks_what_the_manifest_claims()
     assert!(VERIFY_SH.contains("python3 -m venv"));
     assert!(VERIFY_SH.contains("pip --version"));
 
+    // AVI-FR-DHCF: the C library version is asked of the built image, because
+    // the base digest decides it and no directive in a Dockerfile names it.
+    // Read from the code lines only, so a threshold that the comments name and
+    // the script does not compare against cannot pass.
+    let code: Vec<&str> =
+        VERIFY_SH.lines().map(str::trim).filter(|line| !line.starts_with('#')).collect();
+    assert!(code.iter().any(|line| line.contains("getconf GNU_LIBC_VERSION")));
+    assert!(
+        code.iter().any(|line| line.contains("sort -V") && line.contains("2.38")),
+        "verify.sh does not compare the glibc version against 2.38"
+    );
+    let refusal = code
+        .iter()
+        .position(|line| line.contains("AVI-FR-DHCF needs 2.38 or later"))
+        .expect("verify.sh does not report a glibc older than 2.38");
+    assert_eq!(code[refusal + 1], "status=1", "a glibc older than 2.38 does not fail verify.sh");
+
     // AVI-FR-16, AVI-FR-13's other half, and the whole reason the browser check lives in
     // a script rather than here: that the browser *starts*, under the
     // conditions a real launch imposes — every capability dropped, no new
@@ -329,7 +346,9 @@ fn the_readme_documents_everything_avi_requires() {
     for (what, needle) in [
         ("the two definitions", "claude-code/Dockerfile"),
         ("the codex definition", "codex/Dockerfile"),
-        ("the pinned base", "node:22-bookworm-slim"),
+        ("the pinned base", "node:22-trixie-slim"),
+        ("the C library floor", "AVI-FR-DHCF"),
+        ("the C library version", "glibc 2.38"),
         ("the build command", "docker build"),
         ("the publish command", "docker push"),
         ("the verify command", "verify.sh"),

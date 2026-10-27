@@ -17,6 +17,8 @@ The optional vector index that improves the ranking of specifications and docume
 8. **EMB-FR-XTLI** The default model is BGE-small-en-v1.5. A store with no selected model reads as the default.
 9. **EMB-FR-MHHY** Inference uses the Candle backend of FastEmbed when Candle can run the selected model, and ONNX Runtime when it cannot. Each model entry names the backend that runs it. Both backends are compiled into the application.
    - *Why:* in FastEmbed, Candle runs only some models, and the four recommended models run on ONNX Runtime.
+9. **EMB-FR-YGXX** A build for `aarch64-unknown-linux-gnu` enables the `fp16` target feature in `src-tauri/.cargo/config.toml`. Such a build runs only on a CPU that has the ARMv8.2 half-precision extension.
+   - *Why:* the `gemm` crate under Candle uses half-precision instructions outside a function that enables them, so a debug build without the feature does not compile.
 9. **EMB-FR-QQER** When a model defines a query prefix or a passage prefix, the module puts that prefix before the query text or the chunk text that it embeds. The prefix changes no chunk ID and no content hash. A change of the prefixes that the application uses is a change of the store schema version (EMB-FR-UJLS).
 10. **EMB-FR-OJRK** A chunk text that is longer than the input limit of the model is truncated to that limit before it is embedded. The chunk, its chunk ID, and its BM25 text do not change.
 11. **EMB-FR-NNOK** Models download from HuggingFace into a cache under `app_data_dir()/models/`. A model that the cache holds whole loads with no network access. A download starts only while the Global switch is on and the selected model is not in the cache.

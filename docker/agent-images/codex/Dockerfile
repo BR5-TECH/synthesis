@@ -5,7 +5,11 @@
 # same package floor, same UID/GID, same working directory, same entrypoint
 # contract — so the executor's invocation differs between the two only in the
 # vendor arguments themselves.
-FROM node:22-bookworm-slim@sha256:d649c27dae7ba0137b3cef5dd75baa422c08dc3d9e3fc0c23dfb172dc3cc6436
+#
+# AVI-FR-DHCF: Debian 13 (trixie), because the work links a prebuilt ONNX
+# Runtime archive (`ort-sys`, under the embeddings index) that calls glibc 2.38
+# functions. On an older C library the application build does not link.
+FROM node:22-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf
 
 # AVI-FR-02: the same package floor as the Claude Code image and nothing more —
 # CA certificates, curl, Python with pip and venv, the C compiler and linker the
@@ -42,16 +46,16 @@ RUN apt-get update \
         curl \
         fonts-liberation \
         git \
-        libasound2 \
-        libatk-bridge2.0-0 \
-        libatk1.0-0 \
-        libatspi2.0-0 \
+        libasound2t64 \
+        libatk-bridge2.0-0t64 \
+        libatk1.0-0t64 \
+        libatspi2.0-0t64 \
         libcairo2 \
-        libcups2 \
+        libcups2t64 \
         libdbus-1-3 \
         libdrm2 \
         libgbm1 \
-        libglib2.0-0 \
+        libglib2.0-0t64 \
         libnspr4 \
         libnss3 \
         libpango-1.0-0 \

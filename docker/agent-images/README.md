@@ -33,7 +33,7 @@ run, a test suite to start, a tool that is written in it. `python3-pip` and
 needs into an environment of its own — Debian marks the system environment
 externally-managed, and a virtual environment is the answer to that rather than
 a flag that overrides it. No Dockerfile names a Python version: the interpreter
-is the one the pinned base carries (Python 3.11 today), so a rebuild reproduces
+is the one the pinned base carries (Python 3.13 today), so a rebuild reproduces
 it for the same reason it reproduces everything else in that layer.
 
 `pkg-config`, `libssl-dev`, and `libwebkit2gtk-4.1-dev` are the native floor
@@ -53,9 +53,12 @@ directory, and a Git command in a container could therefore never read the
 repository it appears to stand in. Every Git operation belonging to a run is the
 application's, performed on the host where the whole repository is reachable.
 
-- **Base image** — `node:22-bookworm-slim`, pinned by digest rather than by tag
+- **Base image** — `node:22-trixie-slim`, pinned by digest rather than by tag
   (AVI-FR-05), so a rebuild reproduces the same foundation — including the
   Python it carries.
+  It is Debian 13 (trixie), with glibc 2.38 or later (AVI-FR-DHCF), because the
+  prebuilt ONNX Runtime that `ort-sys` links calls glibc 2.38 functions.
+  `verify.sh` checks the version.
 - **Vendor CLI** — installed at an exact version (AVI-FR-06). Never `latest`,
   and never a binary copied in from the host.
 - **User** — a non-root `agent` at UID/GID **10001/10001** (AVI-FR-03), with
@@ -281,7 +284,7 @@ That last sentence holds only once a digest has been recorded. While an entry
 in `manifest.toml` carries the all-zero sentinel, there is no digest to pin to,
 so the executor addresses that image by its `image_ref` — repository **and
 tag** — and the tag it names is the CLI version with a build revision after it
-(`2.1.233-2`), not the version `task docker` resolves. The two are different tags, and `task docker` does not build the one
+(`2.1.233-4`), not the version `task docker` resolves. The two are different tags, and `task docker` does not build the one
 the application launches.
 
 So on a machine running an unpublished image, the tag the executor asks for is

@@ -29,7 +29,7 @@ describe("artifact-type lens <-> persisted filter (PSS-FR-18 / LIB-FR-14)", () =
     expect(filterToLens("all_files")).toBe("files");
   });
 
-  it("passes each of the eight built-in types through unchanged", () => {
+  it("PSS-FR-18, ASC-FR-02: passes each of the nine built-in types through unchanged", () => {
     for (const { value } of ARTIFACT_TYPES) {
       expect(lensToFilter(value)).toBe(value);
       expect(filterToLens(value)).toBe(value);
@@ -68,12 +68,12 @@ describe("artifact-type lens <-> persisted filter (PSS-FR-18 / LIB-FR-14)", () =
    * divergence from the Rust side — if the backend serialized `"instruction"`
    * where this side expects `"instructions"`, `filterToLens` would quietly fall
    * back to the default lens and every test here would still pass. This literal
-   * list is asserted against the same eight strings in
-   * `src-tauri/src/project_settings.rs`'s `the_wire_vocabulary_is_exactly_these_ten_strings`,
+   * list is asserted against the same nine type strings in
+   * `src-tauri/src/project_settings.rs`'s `the_wire_vocabulary_is_exactly_these_eleven_strings`,
    * so a rename on either side breaks a named assertion rather than silently
    * degrading at runtime.
    */
-  it("pins the exact wire vocabulary shared with the Rust side", () => {
+  it("PSS-FR-18, ASC-FR-02: pins the exact wire vocabulary shared with the Rust side", () => {
     expect([
       "all_artifacts",
       ...ARTIFACT_TYPES.map((t) => lensToFilter(t.value)),
@@ -88,6 +88,7 @@ describe("artifact-type lens <-> persisted filter (PSS-FR-18 / LIB-FR-14)", () =
       "instructions",
       "scenario",
       "scratchpad",
+      "doc",
       "all_files",
     ]);
   });

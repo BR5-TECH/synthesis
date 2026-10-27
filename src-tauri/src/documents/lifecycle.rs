@@ -24,6 +24,7 @@ use super::model::{
     format_of, DocumentsError, DocumentsSnapshot, PickDocumentSourcesResult, PickMode, SourceKind,
     StoredSource,
 };
+use super::typed::{worktree_type_sources, TypeSources};
 use super::watcher::{watch_targets, DocumentsWatcher};
 
 /// DCL-FR-PTRP: the event that carries the whole snapshot to the frontend.
@@ -138,7 +139,16 @@ pub fn run_refresh<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> RefreshOutco
     if collection.is_open() && collection.snapshot() == Err(DocumentsError::StoreUnavailable) {
         retry_store(app);
     }
-    let outcome = collection.refresh(&fs, app, &|snapshot| {
+    // DCL-FR-DKXQ: the type sources are read from the active worktree for every
+    // refresh, so a worktree change (DCL-FR-OWQA) and a changed assignment
+    // (DCL-FR-RMVT) both show in the next snapshot.
+    let read_typed = || {
+        app.try_state::<crate::project::ProjectState>()
+            .and_then(|p| p.require_root().ok())
+            .map(|root| worktree_type_sources(&root))
+            .unwrap_or_else(TypeSources::none)
+    };
+    let outcome = collection.refresh_with(&fs, app, &read_typed, &|snapshot| {
         // DCL-FR-PTRP: emitted inside the refresh gate, so the events reach the
         // frontend in the order the snapshots arose.
         if let Err(error) = app.emit(DOCUMENTS_CHANGED, snapshot) {
@@ -222,6 +232,7 @@ pub fn remove_source<R: tauri::Runtime>(
     let removed = collection
         .remove_source(path, &*persist)
         .inspect_err(|error| log_refused(app, "remove document source", *error))?;
+    let type_cleared = clear_type_source(app, path);
     run_refresh(app);
     let snapshot = collection.snapshot()?;
     app.log(
@@ -229,12 +240,37 @@ pub fn remove_source<R: tauri::Runtime>(
         "document source removed",
         crate::log_fields! {
             "removed" => removed.is_some(),
+            "type_cleared" => type_cleared,
             "source_kind" => removed.as_ref().map(|s| s.kind.as_str()).unwrap_or("none"),
             "documents" => snapshot.documents.len(),
             "duration_ms" => started.elapsed().as_millis() as u64,
         },
     );
     Ok(snapshot)
+}
+
+/// DCL-FR-ATNL: clear the `doc` assignment at `path`, when `path` is below the
+/// active worktree and carries one. Returns whether an assignment was cleared.
+///
+/// The write is the attribution write of ASC-FR-24 and touches only
+/// `.synthesis/library.toml`. The project watcher sees that write as a change of
+/// the attribution file, so the tree, the indexes, and this collection follow it
+/// as they follow any other change of that file (DCL-FR-RMVT).
+fn clear_type_source<R: tauri::Runtime>(app: &tauri::AppHandle<R>, path: &str) -> bool {
+    let Some(root) =
+        app.try_state::<crate::project::ProjectState>().and_then(|p| p.require_root().ok())
+    else {
+        return false;
+    };
+    match super::typed::clear_type_assignment(&root, path) {
+        Ok(cleared) => cleared,
+        Err(_) => {
+            // DCL-FR-TAGV: the error can name the path, so the record says only
+            // that the write failed.
+            app.log(LogLevel::Error, "document type could not be cleared", crate::log_fields! {});
+            false
+        }
+    }
 }
 
 /// DCL-FR-VXXI: turn what the picker returned into sources and add them.

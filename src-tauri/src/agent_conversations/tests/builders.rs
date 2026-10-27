@@ -214,6 +214,17 @@ fn an_artifact_section_names_the_type_the_library_shows_for_the_same_path() {
     .expect("assign");
     assert_eq!(type_of(&discussion_on("notes/thing.md")).as_deref(), Some("scenario"),);
 
+    // AGC-FR-07: a Document file names no type, as a file with no type does.
+    // The agent-facing set stays at eight types.
+    crate::scanning::assign(
+        &root,
+        "notes/thing.md",
+        crate::scanning::ArtifactType::Doc,
+        crate::scanning::Scope::File,
+    )
+    .expect("assign");
+    assert_eq!(type_of(&discussion_on("notes/thing.md")), None);
+
     // AGC-FR-07 is about *every* builder, so the anchored one says it too — an
     // agent answering a remark pinned to a passage of a skill is answering about
     // a skill.

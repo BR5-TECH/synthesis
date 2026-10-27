@@ -10,10 +10,16 @@
 
 import { NOT_HANDLED } from "./mock-github-polling";
 
-type Source = { kind: "file" | "folder"; path: string; status: "available" };
+type Source = {
+  kind: "file" | "folder";
+  path: string;
+  status: "available";
+  origin?: "manual" | "type" | "both";
+};
 type Entry = {
   id: string;
   path: string;
+  project_path?: string;
   name: string;
   format: "pdf" | "markdown" | "text";
   status: "available";
@@ -57,11 +63,64 @@ const sources: Source[] = new URLSearchParams(location.search).has(
   ? [FOLDER_SOURCE]
   : [];
 
+/** The project root the harness's demo project opens at. */
+const PROJECT_ROOT = "/Users/demo/dev/acme";
+
+/**
+ * DCL-FR-DKXQ / DCL-FR-TQZB: the Document-typed files and folders of the demo
+ * project, and the supported files that resolve to `doc`. Set by the mock of
+ * `assign_artifact_type` / `clear_artifact_type` in `mock-core.ts`.
+ */
+let typeSources: { kind: "file" | "folder"; rel: string }[] = [];
+let typeFiles: string[] = [];
+
+export function setDocumentTypes(
+  next: { kind: "file" | "folder"; rel: string }[],
+  files: string[],
+): unknown {
+  typeSources = next;
+  typeFiles = files.filter((f) => /\.(md|markdown|txt|pdf)$/i.test(f));
+  return snapshot();
+}
+
+function hexOf(text: string): string {
+  let h = 0;
+  for (const c of text) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return h.toString(16).padStart(8, "0").repeat(4);
+}
+
 function snapshot() {
+  const typed = typeSources.map((t) => ({
+    kind: t.kind,
+    path: `${PROJECT_ROOT}/${t.rel}`,
+    status: "available" as const,
+    origin: "type" as const,
+  }));
+  const typedDocs: Entry[] = typeFiles.map((rel) => ({
+    id: `doc-${hexOf(rel)}`,
+    path: `${PROJECT_ROOT}/${rel}`,
+    project_path: rel,
+    name: rel.split("/").pop() ?? rel,
+    format: rel.toLowerCase().endsWith(".pdf")
+      ? "pdf"
+      : rel.toLowerCase().endsWith(".txt")
+        ? "text"
+        : "markdown",
+    status: "available",
+    revision: "r1",
+  }));
   return {
-    sources: sources.map((s) => ({ ...s })),
-    documents: sources.flatMap((s) => BY_SOURCE[s.path] ?? []),
+    sources: [...sources.map((s) => ({ ...s, origin: "manual" as const })), ...typed],
+    documents: [...sources.flatMap((s) => BY_SOURCE[s.path] ?? []), ...typedDocs],
   };
+}
+
+/** The path a type source names, relative to the project, or null. */
+export function typeSourceAt(path: string): string | null {
+  const prefix = `${PROJECT_ROOT}/`;
+  if (!path.startsWith(prefix)) return null;
+  const rel = path.slice(prefix.length);
+  return typeSources.some((t) => t.rel === rel) ? rel : null;
 }
 
 export function documentsInvoke(cmd: string, a: Record<string, any>): unknown {
@@ -76,6 +135,8 @@ export function documentsInvoke(cmd: string, a: Record<string, any>): unknown {
     case "remove_document_source": {
       const at = sources.findIndex((s) => s.path === a.path);
       if (at >= 0) sources.splice(at, 1);
+      // DCL-FR-ATNL: a type source is removed by clearing its type, which
+      // `mock-core.ts` does when it sees this command name a type source.
       return snapshot();
     }
     case "read_document": {

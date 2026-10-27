@@ -121,8 +121,8 @@ describe("New Folder modal (NFW-new-folder.md)", () => {
   });
 
   // NFW-FR-05: the type options are the explicit unset state followed by exactly
-  // the eight built-in types (ASC-FR-02).
-  it("NFW-FR-05: offers an unset state plus exactly the eight built-in types", () => {
+  // the nine built-in types (ASC-FR-02).
+  it("NFW-FR-05: offers an unset state plus exactly the nine built-in types", () => {
     renderModal();
 
     const type = screen.getByLabelText("Artifact Type") as HTMLSelectElement;
@@ -132,6 +132,9 @@ describe("New Folder modal (NFW-new-folder.md)", () => {
     ]);
     expect(type.options[0].text).toBe("(not set)");
     expect(type).toHaveValue("");
+    // ASC-FR-02: the ninth type is offered with the label the menus use.
+    const options = Array.from(type.options);
+    expect(options[options.length - 1].text).toBe("Document");
   });
 
   // NFW-FR-08: Create is gated on a bare-basename Name, so one

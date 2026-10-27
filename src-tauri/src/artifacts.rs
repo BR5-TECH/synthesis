@@ -343,17 +343,7 @@ fn open_artifact_by_id_impl(root: &fs::RootFs, id: &str) -> Result<OpenedArtifac
 /// through this one resolver.
 pub(crate) fn resolved_type(root: &fs::RootFs, id: &str) -> Option<scanning::ArtifactType> {
     let assignments = scanning::load_assignments(root);
-    let root_owned = root.clone();
-    let content = move |rel: &str| -> scanning::ContentFacts {
-        if !rel.to_ascii_lowercase().ends_with(".md") {
-            return scanning::ContentFacts::default();
-        }
-        match root_owned.read_text(rel) {
-            Ok(text) => scanning::read_content_facts(&text),
-            Err(_) => scanning::ContentFacts::default(),
-        }
-    };
-    scanning::classify_file(id, &assignments, &content).0
+    scanning::classify_file(id, &assignments, &scanning::markdown_facts(root)).0
 }
 
 /// PST-FR-08 / PST-FR-24: resolve an id to its stable key and the kind hint the
@@ -593,6 +583,7 @@ mod tests {
             ArtifactType::Instructions,
             ArtifactType::Scenario,
             ArtifactType::Scratchpad,
+            ArtifactType::Doc,
         ] {
             assert_eq!(ArtifactKind::from(t), ArtifactKind::Markdown);
         }

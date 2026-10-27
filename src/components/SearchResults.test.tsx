@@ -50,6 +50,32 @@ afterEach(cleanup);
 const TARGET = { query: "needle", mode: "literal_insensitive" as const };
 
 describe("Search results tab (SCH-FR-08 / SCH-FR-18)", () => {
+  it("SCH-FR-03, SCC-FR-08: the type filter offers the eight artifact subtypes and no Document", async () => {
+    render(
+      <SearchResults
+        tabId="search:1"
+        target={TARGET}
+        onActivate={vi.fn()}
+        sessions={new SearchSessionStore()}
+      />,
+    );
+    const select = screen.getByRole("combobox", { name: "Filter by artifact type" });
+    const labels = Array.from((select as HTMLSelectElement).options).map((o) => o.text);
+    expect(labels).toEqual([
+      "All Results",
+      "Artifacts Only",
+      "Skill",
+      "Agent",
+      "Prompt",
+      "Spec",
+      "Flow",
+      "Instructions",
+      "Scenario",
+      "Scratchpad",
+    ]);
+    await waitFor(() => expect(startCalls()).toHaveLength(1));
+  });
+
   it("SCH-FR-08: dispatches its own search with scope = full", async () => {
     render(
       <SearchResults

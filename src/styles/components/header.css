@@ -515,6 +515,7 @@
 .chip-type[data-type="instructions"] { background: #FFEDE0; color: #E5530B; }
 .chip-type[data-type="scenario"]     { background: #EDE5FB; color: #6F47C2; }
 .chip-type[data-type="scratchpad"]   { background: #E0EBF8; color: #2862AB; }
+.chip-type[data-type="doc"]          { background: #FBE4F1; color: #B02A74; }
 [data-theme="dark"] .chip-type[data-type="skill"]        { background: #232745; color: #9AA7FF; }
 [data-theme="dark"] .chip-type[data-type="agent"]        { background: #3A2E10; color: #E0A93B; }
 [data-theme="dark"] .chip-type[data-type="prompt"]       { background: #14322A; color: #6BD7AA; }
@@ -523,6 +524,7 @@
 [data-theme="dark"] .chip-type[data-type="instructions"] { background: #3A1E10; color: #FF8453; }
 [data-theme="dark"] .chip-type[data-type="scenario"]     { background: #2A1F40; color: #C19EFF; }
 [data-theme="dark"] .chip-type[data-type="scratchpad"]   { background: #1A2538; color: #8AB4E8; }
+[data-theme="dark"] .chip-type[data-type="doc"]          { background: #3D1630; color: #F08BC6; }
 
 /* Lifecycle status dot */
 .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }

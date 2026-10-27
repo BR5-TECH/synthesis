@@ -111,7 +111,8 @@
 }
 .documents-source {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* kind | path | DOC tag | Remove (DPN-FR-PZMB) */
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   column-gap: var(--sp-2);
   padding: 2px var(--sp-1);
@@ -127,10 +128,13 @@
   color: var(--fg-3);
   min-width: 4.2em;
 }
-/* A long path truncates in the middle: the head gives way, the tail stays. */
+/* A long path truncates in the middle: the head gives way, the tail stays.
+   On a row narrower than the tail, the tail is clipped at the path's own edge
+   rather than drawn over the DOC tag and the Remove button (DPN-FR-PZMB). */
 .documents-source__path {
   display: flex;
   min-width: 0;
+  overflow: hidden;
 }
 .documents-source__path-head {
   flex: 0 1 auto;
@@ -146,8 +150,12 @@
 .documents-source__remove {
   flex: none;
 }
+.documents-source__tag {
+  display: inline-flex;
+  flex: none;
+}
 .documents-source__state {
-  grid-column: 2 / 4;
+  grid-column: 2 / 5;
   font-size: var(--fs-ui-xs);
   font-style: italic;
   color: var(--fg-3);

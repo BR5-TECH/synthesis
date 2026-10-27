@@ -6,7 +6,7 @@ use std::path::Path;
 use tauri::Manager;
 
 use crate::logging::{log_warn, Domain, BUFFER};
-use crate::scanning::{ArtifactType, Candidate, CandidateStore};
+use crate::scanning::{Candidate, CandidateStore};
 
 use super::{documents, FileRef, IndexId, IndexSet, PassScope, SourceFile, MAX_FILE_BYTES};
 
@@ -33,10 +33,10 @@ pub(super) fn collect_sources<R: tauri::Runtime>(
     if scope.artifacts {
         let candidates = app.state::<CandidateStore>().candidates(root);
         for candidate in candidates.iter() {
-            let Some(artifact_type) = candidate.artifact_type else {
+            let Some(index) = candidate.artifact_type.and_then(IndexId::for_artifact_type) else {
                 continue;
             };
-            sources.push(read_artifact(root, candidate, artifact_type));
+            sources.push(read_artifact(root, candidate, index));
         }
     }
     if scope.drafts {
@@ -115,9 +115,8 @@ pub(super) fn log_skill_exclusions<R: tauri::Runtime>(
 pub(super) fn read_artifact(
     root: &crate::fs::RootFs,
     candidate: &Candidate,
-    artifact_type: ArtifactType,
+    index: IndexId,
 ) -> SourceFile {
-    let index = IndexId::for_artifact_type(artifact_type);
     let file = FileRef::artifact(candidate.path.clone());
     // BMI-FR-26: resolved through the `FSA-filesystem-access.md` gate rather
     // than joined onto the root, so FSA-FR-10's path-escape rejection binds

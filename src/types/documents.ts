@@ -16,9 +16,16 @@ export type DocumentSourceKind = "file" | "folder";
 export type DocumentSourceReason = "missing" | "unreadable" | "link";
 
 /** One selected reference, with the path exactly as the user selected it. */
+/**
+ * DCL-FR-NLCE: what made a source. `manual` is a selection, `type` is a file or
+ * folder of the Document type, and `both` is a path that is the two at once.
+ */
+export type DocumentSourceOrigin = "manual" | "type" | "both";
+
 export interface DocumentSource {
   kind: DocumentSourceKind;
   path: string;
+  origin: DocumentSourceOrigin;
   status: DocumentStatus;
   reason?: DocumentSourceReason;
 }
@@ -28,6 +35,8 @@ export interface DocumentEntry {
   /** `doc-` followed by 32 hexadecimal characters (DCL-FR-QKJO). */
   id: string;
   path: string;
+  /** DCL-FR-HYAF: relative to the active worktree root, when below it. */
+  project_path?: string;
   name: string;
   format: DocumentFormat;
   status: DocumentStatus;

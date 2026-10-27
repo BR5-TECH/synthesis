@@ -461,9 +461,10 @@ pub fn group_for(path: &str, artifact_type: Option<ArtifactType>) -> SearchGroup
     if path.starts_with(".synthesis/roles/") {
         return SearchGroup::Role;
     }
+    // A `doc` file is in the `file` group: no artifact hit names that type.
     match artifact_type {
+        Some(ArtifactType::Doc) | None => SearchGroup::File,
         Some(_) => SearchGroup::Artifact,
-        None => SearchGroup::File,
     }
 }
 

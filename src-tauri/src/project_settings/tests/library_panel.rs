@@ -281,12 +281,12 @@ fn the_artifact_type_filter_rejects_an_unknown_value() {
 /// The persisted vocabulary, spelled out. The frontend's own round-trip
 /// test cannot catch a divergence from this side: a rename to
 /// `"instruction"` here would leave `filterToLens` quietly falling back to
-/// the default lens rather than failing. The same ten strings are asserted
+/// the default lens rather than failing. The same eleven strings are asserted
 /// in `src/artifactTypes.test.ts`'s
 /// "pins the exact wire vocabulary shared with the Rust side", so a rename
 /// on either side breaks a named assertion.
 #[test]
-fn the_wire_vocabulary_is_exactly_these_ten_strings() {
+fn the_wire_vocabulary_is_exactly_these_eleven_strings() {
     use ArtifactTypeFilter::*;
     let all = [
         AllArtifacts,
@@ -298,6 +298,7 @@ fn the_wire_vocabulary_is_exactly_these_ten_strings() {
         Instructions,
         Scenario,
         Scratchpad,
+        Doc,
         AllFiles,
     ];
     let wire: Vec<String> = all
@@ -316,6 +317,7 @@ fn the_wire_vocabulary_is_exactly_these_ten_strings() {
             "instructions",
             "scenario",
             "scratchpad",
+            "doc",
             "all_files",
         ]
     );

@@ -322,6 +322,11 @@ pub fn start_watching<R: tauri::Runtime>(
                 }
                 !is_self
             };
+            // DCL-FR-RMVT: an external change of the attribution file can give
+            // or clear a `doc` assignment, which the Documents collection reads.
+            if attribution_changed {
+                crate::documents::request_refresh(&app_handle);
+            }
             if changed.is_empty() && !attribution_changed {
                 return;
             }

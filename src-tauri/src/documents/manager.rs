@@ -20,7 +20,11 @@ use super::discovery::{discover, SourceReport};
 use super::log::DocLog;
 use super::model::{
     document_id, file_name_of, is_absolute_path, normalise_path, Availability, DocumentEntry,
-    DocumentFormat, DocumentSource, DocumentsError, DocumentsSnapshot, SourceKind, StoredSource,
+    DocumentFormat, DocumentSource, DocumentsError, DocumentsSnapshot, SourceKind, SourceOrigin,
+    StoredSource,
+};
+use super::typed::{
+    extra_type_sources, merge_files, ordered_reports, project_path_of, TypeSources,
 };
 
 /// How a PDF's extraction ended, kept for the session (DCL-FR-QVYZ).
@@ -405,7 +409,26 @@ impl DocumentsCollection {
         log: &dyn DocLog,
         on_change: &dyn Fn(&DocumentsSnapshot),
     ) -> RefreshOutcome {
+        self.refresh_with(fs, log, &TypeSources::none, on_change)
+    }
+
+    /// One refresh over the manual sources and the type sources of the active
+    /// worktree (DCL-FR-DKXQ, DCL-FR-TQZB). The type sources are read again for
+    /// every refresh, so a worktree change or a changed assignment shows in the
+    /// next one (DCL-FR-OWQA, DCL-FR-RMVT).
+    ///
+    /// `read_typed` runs inside the refresh gate. So a refresh that runs later
+    /// also read `.synthesis/library.toml` later, and a refresh that read an
+    /// older assignment never publishes after one that read a newer one.
+    pub fn refresh_with(
+        &self,
+        fs: &FsAccessState,
+        log: &dyn DocLog,
+        read_typed: &dyn Fn() -> TypeSources<'static>,
+        on_change: &dyn Fn(&DocumentsSnapshot),
+    ) -> RefreshOutcome {
         let _gate = lock(&self.refresh_gate);
+        let typed = &read_typed();
         let started = Instant::now();
         let (generation, sources, previous_snapshot, previous_records) = {
             let inner = lock(&self.inner);
@@ -418,9 +441,10 @@ impl DocumentsCollection {
         // FSA-FR-WBKZ: the instance follows the sources as they stand, so a
         // removed source is refused from here on. It is rebuilt only when the
         // set of grantable sources changed.
+        let extra = extra_type_sources(&sources, typed);
         let mut files: Vec<PathBuf> = Vec::new();
         let mut folders: Vec<PathBuf> = Vec::new();
-        for source in &sources {
+        for source in sources.iter().chain(&extra) {
             match source.kind {
                 SourceKind::File => files.push(PathBuf::from(&source.path)),
                 SourceKind::Folder => folders.push(PathBuf::from(&source.path)),
@@ -432,7 +456,15 @@ impl DocumentsCollection {
             .map(|(path, reason)| (normalise_path(&path.to_string_lossy()), reason))
             .collect();
         let access = fs.documents();
-        let discovery = discover(access.as_deref(), &refused, &sources, log);
+        let mut discovery = discover(access.as_deref(), &refused, &sources, log);
+        let mut typed_discovery = discover(access.as_deref(), &refused, &typed.sources, log);
+        let extra_reports: Vec<SourceReport> = std::mem::take(&mut typed_discovery.reports)
+            .into_iter()
+            .filter(|report| extra.contains(&report.source))
+            .collect();
+        merge_files(&mut discovery, typed_discovery, &*typed.is_doc);
+        let reports =
+            ordered_reports(std::mem::take(&mut discovery.reports), &typed.sources, extra_reports);
 
         let mut records: BTreeMap<String, DocRecord> = BTreeMap::new();
         for (path, format) in &discovery.files {
@@ -454,7 +486,11 @@ impl DocumentsCollection {
                 .entry(id.clone())
                 .or_insert_with(|| unavailable_record(&id, path, *format, None));
         }
-        let snapshot = build_snapshot(&discovery.reports, &records);
+        let root = typed.worktree_root.as_deref();
+        for record in records.values_mut() {
+            record.entry.project_path = project_path_of(&record.entry.path, root);
+        }
+        let snapshot = build_snapshot(&reports, &records);
 
         let changed = {
             let mut inner = lock(&self.inner);
@@ -532,6 +568,7 @@ fn read_record(
             entry: DocumentEntry {
                 id: id.to_string(),
                 path: path.to_string(),
+                project_path: None,
                 name: file_name_of(path).to_string(),
                 format,
                 status: Availability::Available,
@@ -564,6 +601,7 @@ fn unavailable_record(
         entry: DocumentEntry {
             id: id.to_string(),
             path: path.to_string(),
+            project_path: None,
             name: file_name_of(path).to_string(),
             format,
             status: Availability::Unavailable,
@@ -576,7 +614,7 @@ fn unavailable_record(
 /// DCL-FR-SQEP: the sources in stored order and the documents sorted by
 /// normalised path.
 fn build_snapshot(
-    reports: &[SourceReport],
+    reports: &[(SourceOrigin, SourceReport)],
     records: &BTreeMap<String, DocRecord>,
 ) -> DocumentsSnapshot {
     let mut documents: Vec<DocumentEntry> = records.values().map(|r| r.entry.clone()).collect();
@@ -584,9 +622,10 @@ fn build_snapshot(
     DocumentsSnapshot {
         sources: reports
             .iter()
-            .map(|report| DocumentSource {
+            .map(|(origin, report)| DocumentSource {
                 kind: report.source.kind,
                 path: report.source.path.clone(),
+                origin: *origin,
                 status: report.status,
                 reason: report.reason,
             })

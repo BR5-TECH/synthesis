@@ -12,6 +12,8 @@
 //! - `manager.rs`: the state of the collection and its refresh.
 //! - `reading.rs`: reads of one document and the session PDF text cache.
 //! - `watcher.rs`: the watch over the selected paths.
+//! - `typed.rs`: the type sources, read from the `doc` assignments of the
+//!   active worktree.
 //! - `lifecycle.rs`: the collection on the application.
 //! - `commands.rs`: the Tauri commands.
 
@@ -22,16 +24,19 @@ pub mod log;
 pub mod manager;
 pub mod model;
 pub mod reading;
+mod typed;
 pub mod watcher;
 
 #[cfg(test)]
 pub(crate) mod tests;
 
+pub use lifecycle::request_refresh;
 pub use manager::DocumentsCollection;
 pub use model::{
     document_id, format_of, normalise_path, Availability, DocumentEntry, DocumentFormat,
     DocumentPdf, DocumentSource, DocumentText, DocumentsError, DocumentsSnapshot,
-    PickDocumentSourcesResult, PickMode, SourceKind, SourceReason, StoredSource,
+    PickDocumentSourcesResult, PickMode, SourceKind, SourceOrigin, SourceReason, StoredSource,
 };
 pub use reading::IndexDocument;
+pub use typed::TypeSources;
 pub use watcher::DocumentsWatcher;

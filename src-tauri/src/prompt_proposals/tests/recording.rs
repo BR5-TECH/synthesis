@@ -343,3 +343,22 @@ fn a_list_returns_every_proposal_most_recently_created_first() {
         .expect("its body");
     assert!(!list_body.contains("CONTENT_EXT"), "a list reads no candidate: {list_body}",);
 }
+
+#[test]
+fn a_recording_accepts_a_project_document() {
+    // PPC-FR-06, PCP-FR-07: a file of the Document type is a target as a prompt
+    // is, and the files of every other type stay refused.
+    let f = Fixture::new();
+    write_file(&f.root, "guides/intro.md", "# Intro\n");
+    write_file(&f.root, "guides/CLAUDE.md", "# Rules\n");
+    crate::scanning::assign(&f.root, "guides", ArtifactType::Doc, crate::scanning::Scope::Folder)
+        .unwrap();
+
+    let recorded = f.propose_against("guides/intro.md", "# Intro\n\nClearer.\n");
+    assert!(recorded.is_ok(), "a project document takes a proposal: {recorded:?}");
+    // An inferred type below a Document folder wins over it (ASC-FR-06).
+    assert_eq!(
+        f.propose_against("guides/CLAUDE.md", "# Rules\n\nMore.\n"),
+        Err(RecordRefusal::NotAPromptArtifact),
+    );
+}

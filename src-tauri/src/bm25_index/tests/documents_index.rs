@@ -23,6 +23,15 @@ fn there_are_twelve_indexes_and_documents_is_one() {
     assert!(!IndexId::Documents.is_artifact_index(), "no scan node id");
 }
 
+// BMI-FR-02, BMI-FR-03: a Document file belongs to no artifact index. Its text
+// reaches the documents index through the Documents collection alone.
+#[test]
+fn a_doc_file_belongs_to_no_artifact_index() {
+    use crate::scanning::ArtifactType;
+    assert_eq!(IndexId::for_artifact_type(ArtifactType::Doc), None);
+    assert_eq!(IndexId::for_artifact_type(ArtifactType::Spec), Some(IndexId::Spec));
+}
+
 // BMI-FR-05, BMI-FR-FGGU: a Markdown document is cut at its headings, and a text
 // or PDF document is cut at blank lines only, so a `#` line is not a section.
 #[test]

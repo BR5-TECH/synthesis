@@ -34,14 +34,14 @@
 # Dockerfile, and record the digest the push reported beside it.
 
 [claude_code]
-image_ref = "ghcr.io/br5-tech/synthesis-agent-claude-code:2.1.233-3"
+image_ref = "ghcr.io/br5-tech/synthesis-agent-claude-code:2.1.233-4"
 image_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 cli_version = "2.1.233"
 uid = 10001
 gid = 10001
 
 [codex]
-image_ref = "ghcr.io/br5-tech/synthesis-agent-codex:0.147.0-3"
+image_ref = "ghcr.io/br5-tech/synthesis-agent-codex:0.147.0-4"
 image_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 cli_version = "0.147.0"
 uid = 10001

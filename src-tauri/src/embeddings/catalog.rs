@@ -323,6 +323,31 @@ mod tests {
         );
     }
 
+    // EMB-FR-YGXX: an aarch64 Linux build enables `fp16`, which the half-precision
+    // `asm!` under Candle needs. No other target and no `build.rustflags` gets
+    // it, so no other build starts to need a CPU feature its target does not
+    // promise. That Cargo applies the flag is shown only by a real aarch64
+    // Linux build from `src-tauri/`; no suite here compiles that target.
+    #[test]
+    fn only_the_aarch64_linux_build_enables_fp16() {
+        const TRIPLE: &str = "aarch64-unknown-linux-gnu";
+        let config: toml::Value = toml::from_str(include_str!("../../.cargo/config.toml")).unwrap();
+        assert_eq!(
+            config["target"][TRIPLE]["rustflags"],
+            toml::Value::Array(vec!["-C".into(), "target-feature=+fp16".into()])
+        );
+        let names_fp16 = |table: &toml::Value| {
+            table.get("rustflags").is_some_and(|flags| flags.to_string().contains("fp16"))
+        };
+        for (target, table) in config["target"].as_table().unwrap() {
+            assert!(target == TRIPLE || !names_fp16(table), "{target} also enables fp16");
+        }
+        assert!(
+            !config.get("build").is_some_and(names_fp16),
+            "build.rustflags enables fp16 everywhere"
+        );
+    }
+
     /// The digest of the prefixes that schema version 2 was built with.
     const PREFIX_DIGEST: &str = "2a4069fefb421ace914edf6bea331baaa3e1376c063dc8e7f8709167b2642759";
 }

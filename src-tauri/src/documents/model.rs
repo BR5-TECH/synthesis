@@ -80,11 +80,23 @@ impl SourceReason {
     }
 }
 
+/// DCL-FR-TYOU / DCL-FR-NLCE: what made a source. A `manual` source is one the
+/// user selected, a `type` source is a `doc` assignment of the active worktree,
+/// and `both` is a path that is the two at once.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SourceOrigin {
+    Manual,
+    Type,
+    Both,
+}
+
 /// A source as a snapshot reports it (DCL contract: `DocumentSource`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocumentSource {
     pub kind: SourceKind,
     pub path: String,
+    pub origin: SourceOrigin,
     pub status: Availability,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<SourceReason>,
@@ -97,6 +109,10 @@ pub struct DocumentEntry {
     pub id: String,
     /// The normalised absolute path.
     pub path: String,
+    /// DCL-FR-HYAF: the path relative to the active worktree root, when the
+    /// document is below that root.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_path: Option<String>,
     /// The file name.
     pub name: String,
     pub format: DocumentFormat,

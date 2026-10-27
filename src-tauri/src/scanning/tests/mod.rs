@@ -19,9 +19,9 @@ fn entry(rel: &str, is_dir: bool) -> Entry {
     Entry { rel: rel.to_string(), is_dir }
 }
 
-/// The eight built-in types, so a variant added later fails to compile here
+/// The nine built-in types, so a variant added later fails to compile here
 /// rather than quietly escaping the checks below.
-const EVERY_TYPE: [ArtifactType; 8] = [
+const EVERY_TYPE: [ArtifactType; 9] = [
     ArtifactType::Skill,
     ArtifactType::Agent,
     ArtifactType::Prompt,
@@ -30,6 +30,7 @@ const EVERY_TYPE: [ArtifactType; 8] = [
     ArtifactType::Instructions,
     ArtifactType::Scenario,
     ArtifactType::Scratchpad,
+    ArtifactType::Doc,
 ];
 
 /// The three entries a skill produces on disk: the folder, its `SKILL.md`,

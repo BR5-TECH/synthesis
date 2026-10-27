@@ -99,6 +99,7 @@ pub enum ArtifactTypeFilter {
     Instructions,
     Scenario,
     Scratchpad,
+    Doc,
 }
 
 /// The Library panel's persisted state (PSS-FR-18).

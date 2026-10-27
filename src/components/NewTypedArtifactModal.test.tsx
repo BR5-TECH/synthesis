@@ -133,9 +133,9 @@ describe("New Artifact modal (NTA-new-typed-artifact.md)", () => {
     ]);
   });
 
-  // NTA-FR-06, NTA-FR-09: exactly the eight built-in types, with no unset entry among
+  // NTA-FR-06, NTA-FR-09: exactly the nine built-in types, with no unset entry among
   // them, and Create gated on one being chosen.
-  it("NTA-FR-06, NTA-FR-09: offers exactly the eight built-in types with no unset entry", async () => {
+  it("NTA-FR-06, NTA-FR-09: offers exactly the nine built-in types with no unset entry", async () => {
     renderModal();
 
     const options = within(type() as HTMLSelectElement).getAllByRole(
@@ -156,8 +156,9 @@ describe("New Artifact modal (NTA-new-typed-artifact.md)", () => {
       "Instructions",
       "Scenario",
       "Scratchpad",
+      "Document",
     ]);
-    expect(options).toHaveLength(9);
+    expect(options).toHaveLength(10);
 
     // A valid name with no type chosen is still not creatable.
     await userEvent.type(name(), "login.scenario.md");

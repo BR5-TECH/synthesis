@@ -39,7 +39,7 @@ A single, universal search box available from every screen at all times. Two pre
 ## Functional requirements
 1. **SCH-FR-01** A universal search input is rendered in the top chrome of the main window and is always visible (see `SNV-shell-navigation.md` SNV-FR-01). It cannot be hidden or gated behind a hotkey.
 2. **SCH-FR-02** As the user types, an overlay appears below the input showing results grouped by entity type, populated by the streamed hits of the dispatched search (SCH-FR-15, SCH-FR-16).
-3. **SCH-FR-03** Result groups in v1 are, in this order: Artifacts (split by subtype — Skill, Agent, Prompt, Spec, Flow, Instructions, Scenario, Scratchpad), Documents, Drafts, Playbooks, Workstreams, Roles, Runs, History matches, and Files. The Artifacts subtypes are exactly the built-in artifact types of `../core/ASC-artifact-scanning.md` ASC-FR-02; the Files group holds matches in files carrying no artifact type.
+3. **SCH-FR-03** Result groups in v1 are, in this order: Artifacts (split by subtype — Skill, Agent, Prompt, Spec, Flow, Instructions, Scenario, Scratchpad), Documents, Drafts, Playbooks, Workstreams, Roles, Runs, History matches, and Files. The Artifacts subtypes are exactly the built-in artifact types of `../core/ASC-artifact-scanning.md` ASC-FR-02 other than Document; the Files group holds matches in files carrying no artifact type and in files of the Document type.
 4. **SCH-FR-04** Empty result groups are hidden from the overlay and from the full results page. A group appears when its first hit arrives and is never rendered ahead of one.
 5. **SCH-FR-05** Each group is collapsible (overlay and full page).
 6. **SCH-FR-06** At the bottom right corner of overlay, is a "View all results" button that opens a full results page.
@@ -53,7 +53,7 @@ A single, universal search box available from every screen at all times. Two pre
    - Run → Runs (bottom panel).
    - History match → History viewer scoped to that entity.
    - File → Editor, opened as a plain text file (per `ESH-editor-source-files.md` ESH-FR-ATDS).
-   - Document → its viewer tab, opened by the document id as the Documents panel opens it (per `DPN-documents-panel.md` DPN-FR-CDFO).
+   - Document → the tab the Documents panel opens for it, by the document id: the Editor tab of its project path or its viewer tab (per `DPN-documents-panel.md` DPN-FR-CDFO and `TAB-tabs.md` TAB-FR-UEKW).
    - Draft → its New Artifact tab, opened as the Drafts panel opens it (per `DRP-drafts-panel.md` DRP-FR-09).
 10. **SCH-FR-10** The full results page exposes filters over the result set by owner, author, role, workstream, playbook, source, target, tags, lifecycle status, and custom fields. The overlay does not expose these filters.
 11. **SCH-FR-11** Navigation from a result on the full results page preserves the tab so the user can return to the same query via Back / tab focus.

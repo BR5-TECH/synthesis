@@ -8,7 +8,11 @@
  * the word **Unavailable** followed by the reason. State is always in words.
  * The **Remove** button removes the reference and asks for no confirmation,
  * because no file or folder is deleted.
+ *
+ * DPN-FR-PZMB: a source that the Document type makes carries the **DOC** tag of
+ * the Project panel, and its **Remove** also clears that type.
  */
+import { typeChip } from "../../artifactTypes";
 import { Icon } from "../icons";
 import type { DocumentSource, DocumentSourceReason } from "../../types";
 
@@ -69,6 +73,17 @@ export function SourcesSection({
               {source.kind === "file" ? "File" : "Folder"}
             </span>
             <MiddleTruncated path={source.path} />
+            <span className="documents-source__tag">
+              {(source.origin === "type" || source.origin === "both") && (
+                <span
+                  className="chip-type"
+                  data-type="doc"
+                  title="The Document type makes this a source. Remove also clears the type."
+                >
+                  {typeChip("doc")}
+                </span>
+              )}
+            </span>
             <button
               type="button"
               className="icon-btn documents-source__remove"

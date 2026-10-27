@@ -700,8 +700,10 @@ pub(super) fn current_comment_section(
 /// Absent rather than `unclassified` for a file the scan resolves no type for: a
 /// value naming the absence would be a ninth type in the vocabulary, and the
 /// prompt reads an attribute that is not there as the thing not being known.
+/// A `doc` file names no type either: the agent-facing set stays at eight, and
+/// an agent reaches project documents through the Documents tools.
 pub(super) fn type_attribute(resolved: Option<scanning::ArtifactType>) -> Option<(String, String)> {
-    resolved.map(|t| ("type".to_string(), t.as_str().to_string()))
+    resolved.filter(|t| t.is_agent_facing()).map(|t| ("type".to_string(), t.as_str().to_string()))
 }
 
 /// AGC-FR-07: the artifact type of one file of a draft.

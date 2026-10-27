@@ -4,7 +4,8 @@
 # Resolves every image by the digest `manifest.toml` records — not by its tag,
 # which is exactly the substitution the digest exists to prevent — and checks
 # that the image at that digest reports the manifest's `cli_version`, runs as
-# the manifest's UID and GID, carries the Python floor AVI-FR-02 states, answers
+# the manifest's UID and GID, carries the C library version AVI-FR-DHCF
+# states, carries the Python floor AVI-FR-02 states, answers
 # for the native libraries that floor also states, builds
 # with the toolchains AVI-FR-17 states at the versions their Dockerfile pins,
 # gives the launching user the writable home AVI-FR-18 states, and starts the
@@ -117,6 +118,18 @@ for vendor in claude_code codex; do
     # named in a directive.
     if ! docker run --rm --entrypoint sh "$pinned" -c 'git --version' >/dev/null 2>&1; then
         echo "FAIL $vendor: git is not on the image's path or does not run; AVI-FR-02 makes it part of the floor" >&2
+        status=1
+    fi
+
+    # AVI-FR-DHCF / AVI-FR-13: the C library of the base is glibc 2.38 or
+    # later. The prebuilt ONNX Runtime that `ort-sys` links calls glibc 2.38
+    # functions, so on an older C library the application build does not link.
+    # Asked of the image, because the base digest is the only thing that
+    # decides it.
+    glibc="$(docker run --rm --entrypoint sh "$pinned" -c 'getconf GNU_LIBC_VERSION' 2>/dev/null \
+        | tr -d "\r" | grep -oE "[0-9]+\.[0-9]+" | head -1 || true)"
+    if [[ -z "$glibc" ]] || [[ "$(printf '%s\n' 2.38 "$glibc" | sort -V | head -1)" != "2.38" ]]; then
+        echo "FAIL $vendor: the image's glibc is '${glibc:-unknown}', and AVI-FR-DHCF needs 2.38 or later" >&2
         status=1
     fi
 

@@ -21,16 +21,22 @@ export interface DocumentActionDeps {
   setTabs: Dispatch<SetStateAction<Tab[]>>;
   setActiveTab: Dispatch<SetStateAction<string>>;
   activateTab: (id: string) => void;
+  /**
+   * TAB-FR-UEKW: open a file of the active worktree in its Editor tab, by its
+   * project-relative path.
+   */
+  openProjectFile: (path: string, name: string) => void;
 }
 
 export interface DocumentActions {
   openDocument: (entry: DocumentEntry) => void;
   openDocumentById: (documentId: string) => void;
+  openDocumentByProjectPath: (path: string) => void;
   closeTabsForRemovedDocuments: (documentIds: string[]) => void;
 }
 
 export function createDocumentActions(deps: DocumentActionDeps): DocumentActions {
-  const { tabsRef, setTabs, setActiveTab, activateTab } = deps;
+  const { tabsRef, setTabs, setActiveTab, activateTab, openProjectFile } = deps;
 
   /**
    * DPN-FR-CDFO / TAB-FR-QXRF: open a document in a **Document tab** (Markdown
@@ -40,6 +46,14 @@ export function createDocumentActions(deps: DocumentActionDeps): DocumentActions
    * opens its tab on the same terms: the tab shows its unavailable state.
    */
   const openDocument = (entry: DocumentEntry) => {
+    // TAB-FR-UEKW: a Markdown or text document of the active worktree opens in
+    // the Editor, where it can be edited and discussed. A PDF always opens in
+    // its viewer.
+    if (entry.format !== "pdf" && entry.project_path) {
+      logDebug(["frontend"], "document opened in the editor", { documentId: entry.id });
+      openProjectFile(entry.project_path, entry.name);
+      return;
+    }
     const id = documentTabId(entry.id);
     setTabs((ts) =>
       ts.some((t) => t.id === id)
@@ -117,7 +131,32 @@ export function createDocumentActions(deps: DocumentActionDeps): DocumentActions
     }
   };
 
-  return { openDocument, openDocumentById, closeTabsForRemovedDocuments };
+  /**
+   * TAB-FR-GVOS: a Document-typed PDF clicked in the Project panel opens the
+   * PDF Viewer tab of its document. The document is found by its project path.
+   * A file that is not in the collection opens nothing.
+   */
+  const openDocumentByProjectPath = (path: string) => {
+    void api
+      .listDocuments()
+      .then((snapshot) => {
+        const entry = snapshot.documents.find((d) => d.project_path === path);
+        if (entry) openDocument(entry);
+        else logWarn(["frontend"], "project file is not a document of the collection", { path });
+      })
+      .catch((e) => {
+        logWarn(["frontend"], "documents could not be listed to open a project file", {
+          error: e instanceof Error ? e.message : String(e),
+        });
+      });
+  };
+
+  return {
+    openDocument,
+    openDocumentById,
+    openDocumentByProjectPath,
+    closeTabsForRemovedDocuments,
+  };
 }
 
 /**

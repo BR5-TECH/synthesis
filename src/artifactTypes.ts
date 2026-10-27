@@ -25,7 +25,16 @@ export const ARTIFACT_TYPES: {
   { value: "instructions", label: "Instructions", chip: "INS", icon: Icon.Doc },
   { value: "scenario", label: "Scenario", chip: "SCN", icon: Icon.Play },
   { value: "scratchpad", label: "Scratchpad", chip: "SCR", icon: Icon.Code },
+  // ASC-FR-JWPH: a file or folder of this type is a source of the Documents
+  // collection. Its icon is the one the Documents panel toggle carries.
+  { value: "doc", label: "Document", chip: "DOC", icon: Icon.Documents },
 ];
+
+/**
+ * SCH-FR-03: the subtypes the Search page filters by. A Document file is in the
+ * Files group, so no artifact hit carries that type.
+ */
+export const SEARCH_ARTIFACT_TYPES = ARTIFACT_TYPES.filter((t) => t.value !== "doc");
 
 /** The short tag rendered on a row for a resolved artifact type. */
 export function typeChip(type: ArtifactType): string {
@@ -37,7 +46,7 @@ export function typeChip(type: ArtifactType): string {
  * (LIB-FR-04 / LIB-FR-05): `"artifacts"` (the default) shows only classified
  * files, a specific `ArtifactType` narrows to that type, and `"files"` shows
  * every file including unclassified ones. The two sentinels can't collide with
- * an `ArtifactType` (none of the eight built-ins is named "artifacts"/"files").
+ * an `ArtifactType` (none of the nine built-ins is named "artifacts"/"files").
  */
 export type TypeLens = "artifacts" | ArtifactType | "files";
 

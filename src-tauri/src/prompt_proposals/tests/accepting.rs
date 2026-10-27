@@ -331,3 +331,24 @@ fn a_rolled_back_transaction_completes_to_a_pending_proposal() {
     let untouched = f.complete(&proposal.id).expect("no-op");
     assert_eq!(untouched.proposal.state, PromptProposalState::Pending);
 }
+
+#[test]
+fn an_acceptance_on_a_project_document_writes_it_and_one_whose_type_was_cleared_is_refused() {
+    // PCP-FR-19, PPC-FR-06: a file of the Document type takes a proposal and its
+    // acceptance writes the file. Once the type is cleared, an acceptance is
+    // `not_a_prompt_artifact`: nothing is written and the proposal stays pending.
+    let f = Fixture::new();
+    let doc = crate::scanning::Scope::File;
+    crate::scanning::assign(&f.root, PROMPT, ArtifactType::Doc, doc).unwrap();
+    let proposal = f.pending();
+    f.accept(&proposal.id).expect("accepted");
+    assert_eq!(f.artifact_body(), PROPOSED);
+
+    write_file(&f.root, PROMPT, ORIGINAL);
+    let second = f.pending();
+    crate::scanning::clear(&f.root, PROMPT).unwrap();
+    assert_eq!(f.accept(&second.id).unwrap_err(), ERR_NOT_A_PROMPT_ARTIFACT);
+    assert_eq!(f.artifact_body(), ORIGINAL, "nothing is written");
+    let still = list_proposals_impl(&f.root, PROMPT);
+    assert!(still.iter().any(|p| p.id == second.id && p.state == PromptProposalState::Pending));
+}

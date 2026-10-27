@@ -110,6 +110,8 @@ fn consumer_pool_size() -> usize {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchMode {
+    /// SCC-FR-UYZW: ranked through the indexes; reads no file.
+    Semantic,
     /// Literal substring, ignoring case.
     LiteralInsensitive,
     /// Literal substring, ignoring case while the query is all-lowercase and
@@ -144,6 +146,10 @@ pub enum MatchKind {
 #[serde(rename_all = "snake_case")]
 pub enum SearchGroup {
     Artifact,
+    /// SCC-FR-UEDP: a document of the Documents collection (semantic mode).
+    Document,
+    /// SCC-FR-UDOH: a draft (semantic mode).
+    Draft,
     Playbook,
     Workstream,
     Role,
@@ -185,9 +191,16 @@ pub struct SearchHit {
     /// Content matches only: 1-based line number of the first match.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub line: Option<u32>,
-    /// Content matches only: the text of that line (SCC-FR-07).
+    /// Content matches only: the text of that line (SCC-FR-07), or the chunk
+    /// text of a semantic hit (SCC-FR-VXJL).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snippet: Option<String>,
+    /// Document group only: the document id (SCC-FR-UEDP).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document_id: Option<String>,
+    /// Draft group only: the draft id (SCC-FR-UDOH).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub draft_id: Option<String>,
 }
 
 /// Payload of `"search results"` (SCC-FR-19).
@@ -344,6 +357,9 @@ impl Matcher {
             SearchMode::Regex => {
                 regex::Regex::new(query).map(Matcher::Regex).map_err(|_| INVALID_QUERY.to_string())
             }
+            // SCC-FR-DBBK: a semantic query is never invalid, and it is never
+            // matched line by line; the matcher is not used.
+            SearchMode::Semantic => Ok(Matcher::Insensitive(query.to_lowercase())),
         }
     }
 
@@ -488,6 +504,8 @@ pub fn hit_for(
         edit_context,
         line,
         snippet,
+        document_id: None,
+        draft_id: None,
     };
 
     if let Some(text) = content {
@@ -849,7 +867,11 @@ pub fn start_search<R: tauri::Runtime>(
             None,
         );
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            search_thread_body(&app, &spawned_id, root, matcher, scope, &stop, operation)
+            if mode == SearchMode::Semantic {
+                semantic::run(&app, &spawned_id, root, &query, scope, &stop)
+            } else {
+                search_thread_body(&app, &spawned_id, root, matcher, scope, &stop, operation)
+            }
         }));
         let state = match outcome {
             Ok(reason) => reason.operation_state(),
@@ -923,6 +945,8 @@ pub fn cancel_search(search_id: String, registry: State<'_, SearchRegistry>) {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+pub(crate) mod semantic;
 
 #[cfg(test)]
 mod tests;

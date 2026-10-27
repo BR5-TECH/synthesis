@@ -11,7 +11,7 @@
  * user-global query mode the universal search input persists (EFR-FR-CWUR, per
  * `SCH-search.md` SCH-FR-13), so the two surfaces' modes move independently.
  */
-import type { SearchMode } from "../types";
+import type { LiteralSearchMode } from "../types";
 
 /**
  * Which of the two panels occupies the band (EFR-FR-ABHF). `find` is the query row
@@ -28,11 +28,11 @@ export interface FindState {
    * again restores what the user had typed.
    */
   replacement: string;
-  mode: SearchMode;
+  mode: LiteralSearchMode;
 }
 
 /** EFR-FR-DBOW: an artifact whose panel has not been opened starts here. */
-export const DEFAULT_FIND_MODE: SearchMode = "literal_insensitive";
+export const DEFAULT_FIND_MODE: LiteralSearchMode = "literal_insensitive";
 
 export function createFindState(): FindState {
   return { form: null, query: "", replacement: "", mode: DEFAULT_FIND_MODE };

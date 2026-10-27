@@ -374,3 +374,32 @@ fn a_pass_reports_progress_that_becomes_determinate_and_never_exceeds_its_total(
     assert_eq!(seen, vec![0, 1, 2, 3]);
     assert!(seen.iter().all(|c| *c < total));
 }
+
+// BMI-FR-OEQM: the chunk ID is the path and the ordinal, and it parses back.
+#[test]
+fn chunk_ids_name_path_and_ordinal_and_parse_back() {
+    let key = ChunkKey { draft_id: None, path: "specifications/a#b.md".to_string(), ordinal: 3 };
+    assert_eq!(key.chunk_id(), "specifications/a#b.md#3");
+    assert_eq!(parse_chunk_id(&key.chunk_id()), Some(("specifications/a#b.md", 3)));
+    assert_eq!(parse_chunk_id("no-ordinal"), None);
+    assert_eq!(parse_chunk_id("x#notanumber"), None);
+}
+
+// BMI-FR-OEQM: `chunks` lists every chunk of an index with its text, and `hit`
+// gives the same fields `search` gives for one chunk.
+#[test]
+fn chunks_and_hit_read_the_snapshot() {
+    let set = pass(
+        &IndexSet::default(),
+        vec![artifact(IndexId::Spec, "specifications/a.md", "# A\n\nalpha\n\n# B\n\nbeta")],
+        PassScope::ARTIFACTS,
+    );
+    let chunks = set.chunks(IndexId::Spec);
+    assert_eq!(chunks.len(), 2);
+    assert_eq!(chunks[1].0.chunk_id(), "specifications/a.md#1");
+    let hit = set.hit(IndexId::Spec, &chunks[1].0, 0.5).unwrap();
+    assert_eq!(hit.node_id.as_deref(), Some("specifications/a.md"));
+    assert_eq!(hit.chunk_ordinal, 1);
+    assert_eq!(hit.text, chunks[1].1);
+    assert!(set.hit(IndexId::Drafts, &chunks[1].0, 0.5).is_none());
+}

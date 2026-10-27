@@ -3,12 +3,12 @@
 **Spec code:** `SCC`
 
 ## Intent
-The engine behind the universal search bar (`../ui/SCH-search.md`). It answers a query by matching the text of the project's files rather than by consulting an index: one asynchronous producer enumerates the files of the active content root and a fixed pool of asynchronous consumers matches them, streaming each hit to the UI the moment it is found so the overlay fills progressively instead of waiting for a whole-project sweep. The file list it enumerates is the one the Project panel's scan already maintains, so a search costs no second walk of the tree and honours one set of ignore rules. Out of scope: any persistent or incremental index — every search reads the files afresh; relevance ranking — results carry the enumeration's order and no score; search over historical revisions, over the content of non-text files, or over any content outside the active worktree.
+The engine behind the universal search bar (`../ui/SCH-search.md`). In its three **literal modes** it answers a query by matching the text of the project's files rather than by consulting an index: one asynchronous producer enumerates the files of the active content root and a fixed pool of asynchronous consumers matches them, streaming each hit to the UI the moment it is found so the overlay fills progressively instead of waiting for a whole-project sweep. The file list it enumerates is the one the Project panel's scan already maintains, so a search costs no second walk of the tree and honours one set of ignore rules; a literal search reads the files afresh and its results carry the enumeration's order and no score. In the **semantic mode** it reads no file: it ranks specifications, documents, and drafts through the indexes of `BMI-bm25-indexing.md` and `EMB-embeddings-index.md`. Out of scope: search over historical revisions, over the content of non-text files, or over any content outside the active worktree and the Documents collection.
 
 ## Contract surface
 Tauri commands — names match `../ui/SCH-search.md` byte-for-byte:
 
-- `"start search (query, mode, scope)"` → `start_search(query, mode, scope)` → `search_id`. Returns as soon as the search is registered, before any file has been matched. `mode ∈ { literal_insensitive, smart_case, regex }`; `scope ∈ { capped, full }`.
+- `"start search (query, mode, scope)"` → `start_search(query, mode, scope)` → `search_id`. Returns as soon as the search is registered, before any file has been matched. `mode ∈ { semantic, literal_insensitive, smart_case, regex }`; `scope ∈ { capped, full }`.
 - `"cancel search (search id)"` → `cancel_search(search_id)` — stops a running search. A `search_id` that is already ended is a no-op, not an error.
 
 ### Events (Tauri event bus)
@@ -18,20 +18,28 @@ Tauri commands — names match `../ui/SCH-search.md` byte-for-byte:
 ### Payload shapes
 ```
 SearchHit {
-  id,            // the ASC node id of the file (ASC-FR-13) — the identity ../ui/TAB-tabs.md TAB-FR-04 compares
-  name,          // basename
-  path,          // project-relative path
-  ordinal,       // the file's position in the enumeration; the ordering key (SCC-FR-10)
-  group,         // "artifact" | "playbook" | "workstream" | "role" | "run" | "history" | "file"
+  id,            // the ASC node id of the file (ASC-FR-13) — the identity ../ui/TAB-tabs.md TAB-FR-04 compares;
+                 // the document id for a document hit, the draft id for a draft hit
+  name,          // basename; the draft name for a draft hit
+  path,          // project-relative path; the normalised absolute path for a document hit;
+                 // the draft's folder path in the drafts tree for a draft hit
+  ordinal,       // literal modes: the file's position in the enumeration (SCC-FR-10);
+                 // semantic mode: the hit's rank within its group, from 0 (SCC-FR-LXCP)
+  group,         // "artifact" | "document" | "draft" | "playbook" | "workstream" | "role" | "run" | "history" | "file"
   match_kind,    // "content" | "name"
   subtype?,      // artifact group only: one of the eight types of ASC-artifact-scanning.md ASC-FR-02
   edit_context?, // artifact group only: "standalone" | "flow"
-  line?,         // content matches only: 1-based line number of the first match
-  snippet?       // content matches only: the text of that line (SCC-FR-07)
+  line?,         // literal content matches only: 1-based line number of the first match
+  snippet?,      // content matches only: the text of that line (SCC-FR-07), or the chunk text
+                 // of a semantic hit (SCC-FR-VXJL)
+  document_id?,  // document group only: the document id (DCL-documents-collection.md DCL-FR-QKJO)
+  draft_id?      // draft group only: the draft id (DRS-draft-storage.md DRS-FR-02)
 }
 ```
 
 Typed errors returned by `start_search`: `"invalid query"` (SCC-FR-06).
+
+The semantic mode calls `hybrid_search` of `EMB-embeddings-index.md` and `search` of `BMI-bm25-indexing.md`, and `resolve_document` of `DCL-documents-collection.md`; it adds no command and no event.
 
 ## Functional requirements
 1. **SCC-FR-01** `start_search` and `cancel_search` exist as Tauri commands and `"search results"` and `"search ended"` as events, all with the documented payload shapes. In the walking-skeleton build the implementation may stream canned hits; the overlay and the full-results tab must both be exercisable against them.
@@ -53,6 +61,15 @@ Typed errors returned by `start_search`: `"invalid query"` (SCC-FR-06).
 17. **SCC-FR-17** When no project is open, `start_search` issues a `search_id`, emits no `"search results"`, and immediately emits `"search ended"` with `reason = "completed"`. It returns no error; v1 search is scoped to the open project's content root.
 18. **SCC-FR-18** Every search registers an operation with `PRG-progress-reporting.md` under `kind = "search"` (per PRG-FR-11) and terminates it when the search ends, whatever the `reason`. Both `capped` and `full` searches attribute; the operation becomes determinate once the candidate count is known, and PRG's coalescing (PRG-FR-07) absorbs the churn of searches dispatched in quick succession.
 19. **SCC-FR-19** Hits are streamed, not accumulated: a `"search results"` event is emitted as soon as there are hits to report rather than being withheld until the search ends. A search that finds its first hit early therefore delivers it while the rest of the tree is still being matched.
+20. **SCC-FR-MKYT** The rules of SCC-FR-02, SCC-FR-03, SCC-FR-05, SCC-FR-07, SCC-FR-08, SCC-FR-10, SCC-FR-11, SCC-FR-15, and SCC-FR-19 apply to the three literal modes. A search with `mode = semantic` follows SCC-FR-UYZW through SCC-FR-DBBK instead. Every other requirement of this specification applies to all four modes.
+21. **SCC-FR-UYZW** A `semantic` search reads no file and walks no candidate list. It returns hits of three groups only: specifications from `hybrid_search` over the `spec` index, documents from `hybrid_search` over the `documents` index (`EMB-embeddings-index.md` EMB-FR-BWTI), and drafts from `search` over the `drafts` index (`BMI-bm25-indexing.md` BMI-FR-10). It returns no other file.
+22. **SCC-FR-VXJL** A semantic hit keeps the best chunk of its file, document, or draft, and each file, document, or draft gives at most one hit. Its `match_kind` is `content`, its `snippet` is the text of that chunk bounded to a maximum length, and it carries no `line`.
+23. **SCC-FR-NRMI** A specification hit has `group = "artifact"`, `subtype = "spec"`, `edit_context = "standalone"`, and the ASC node id, name, and project-relative path of its file. A chunk whose file the current scan does not surface gives no hit.
+24. **SCC-FR-UEDP** A document hit has `group = "document"`, the document id in `id` and `document_id`, the file name in `name`, and the normalised path in `path`. A document that is not in the collection or not available at the moment of the search (`DCL-documents-collection.md` DCL-FR-SQEP) gives no hit.
+25. **SCC-FR-UDOH** A draft hit has `group = "draft"`, the draft id in `id` and `draft_id`, the draft name in `name`, and the draft's folder path in `path`. A draft that no longer exists at the moment of the search gives no hit.
+26. **SCC-FR-LXCP** In a semantic search, `ordinal` is the rank of the hit within its group, from 0, in the order that the ranking call returned. The same query against the same index state gives the same ordinals.
+27. **SCC-FR-WEAK** `scope` bounds each group of a semantic search: `capped` and `full` each have a fixed limit of hits per group, and the `full` limit is larger. A semantic search ends with `reason = "completed"` unless it is cancelled or superseded.
+28. **SCC-FR-DBBK** A `semantic` query is never an `"invalid query"`. When embeddings are not ready (`EMB-embeddings-index.md` EMB-FR-BLHF), the specification and document groups carry the BM25 ranking, and the search raises no error.
 
 ## Non-functional requirements
 - The consumer pool is a fixed size chosen from the machine's available parallelism and bounded so a search never starves the rest of the application; it does not grow with the size of the tree.
@@ -60,4 +77,6 @@ Typed errors returned by `start_search`: `"invalid query"` (SCC-FR-06).
 - The content-size ceiling of SCC-FR-15 is an implementation choice; the contract is only that an oversized or non-text file is never read line by line.
 - Batching of `"search results"` is an implementation choice; the contract is that hits are not withheld until the end and that the event bus is not flooded per hit.
 - No search requires network access, and none reads outside the active content root.
-- There is no persistent index: the cost of a search is the cost of reading the candidate files, and nothing about a search survives it.
+- A literal search uses no index: its cost is the cost of reading the candidate files, and nothing about a search survives it.
+- A semantic search reads no file. Its cost is three index lookups and, when embeddings are ready, one query embedding.
+- The per-group limits of SCC-FR-WEAK are implementation choices of the order of ten hits for `capped` and fifty for `full`.

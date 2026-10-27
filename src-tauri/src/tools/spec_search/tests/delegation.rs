@@ -49,7 +49,7 @@ fn the_module_reads_no_file_and_enumerates_no_folder() {
     // or widened. A behavioural test cannot see a second call that happens to
     // return the same thing, so the single call site is what is pinned.
     assert_eq!(
-        body.matches("bm25_index::search(").count(),
+        body.matches("embeddings::hybrid_search(").count(),
         1,
         "exactly one call site for the delegated search (SPS-FR-08)",
     );

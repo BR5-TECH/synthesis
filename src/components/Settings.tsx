@@ -14,6 +14,7 @@ import {
 } from "./GraduationLoopSliders";
 import { ProjectDockerImages } from "./ProjectDockerImages";
 import { GraduationSettings } from "./GraduationSettings";
+import { ProjectIndexingSettings } from "./ProjectIndexingSettings";
 import { LINE_ENDING_CHOICES } from "../hooks/useLineEndings";
 import { useGraduationConcurrencySetting } from "../state/graduationConcurrency";
 import type { ProjectSectionKey } from "../settingsWindow";
@@ -74,6 +75,13 @@ export const PROJECT_SECTIONS: [ProjectSectionKey, string, string][] = [
     "graduation",
     "Graduation",
     "How many graduation runs this project works at the same time, and how many passes and how much time each run can use.",
+  ],
+  // SET-FR-03 / SET-FR-QCUJ: the Indexing section, last. Its switch is this
+  // user's own choice for the project and persists at once (SET-FR-DHIZ).
+  [
+    "indexing",
+    "Indexing",
+    "Whether embeddings improve search in this project, and how far its index is.",
   ],
 ];
 
@@ -403,6 +411,10 @@ export function Settings({
           SET-FR-YMRV: the execution time limit row. The sliders and the row
           persist at once, so they take no part in the save-before-close sweep
           (SET-FR-08, SWN-FR-08). */}
+      {/* SET-FR-QCUJ through SET-FR-VGQB: the Indexing section persists at
+          once, so it takes no part in the save-before-close sweep. */}
+      {section === "indexing" && <ProjectIndexingSettings />}
+
       {section === "graduation" && (
         <>
           <GraduationSettings setting={graduation} />
@@ -433,7 +445,8 @@ export function Settings({
         section !== "docker" &&
         section !== "graduation" &&
         section !== "github-polling" &&
-        section !== "agents" && (
+        section !== "agents" &&
+        section !== "indexing" && (
         <div
           className="card"
           style={{

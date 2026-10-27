@@ -191,9 +191,12 @@
 }
 .search-input:hover { border-color: var(--border-2); }
 .search-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); background: var(--bg-canvas); }
-.search-input input { all: unset; flex: 1; font-size: var(--fs-ui-sm); color: var(--fg-1); }
+.search-input input { all: unset; flex: 1; min-width: 0; font-size: var(--fs-ui-sm); color: var(--fg-1); }
+/* The text field is what gives way on a narrow window; the icon, the mode
+   toggles and the shortcut hint keep their own width. */
+.search-input > svg, .search-input__modes, .search-input > kbd { flex: none; }
 
-/* SCH-FR-12: the three query-mode toggles, inside the input at its leading
+/* SCH-FR-12: the four query-mode toggles, inside the input at its leading
    edge, ahead of the text caret. Same size class as the other top-chrome
    controls, and reachable by keyboard from the input. */
 .search-input__modes { display: inline-flex; align-items: center; gap: 2px; }

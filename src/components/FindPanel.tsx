@@ -10,15 +10,15 @@
  */
 import { useEffect, useRef } from "react";
 import { Icon } from "./icons";
-import { QUERY_MODES } from "../hooks/useSearchQueryMode";
+import { LITERAL_QUERY_MODES } from "../hooks/useSearchQueryMode";
 import type { FindForm } from "../state/findState";
-import type { SearchMode } from "../types";
+import type { LiteralSearchMode } from "../types";
 
 export interface FindPanelProps {
   form: FindForm;
   query: string;
   replacement: string;
-  mode: SearchMode;
+  mode: LiteralSearchMode;
   /** Ordinal of the current match (1-based), or 0 when there is none. */
   ordinal: number;
   total: number;
@@ -28,7 +28,7 @@ export interface FindPanelProps {
   focus: "query" | "replacement";
   onQueryChange: (value: string) => void;
   onReplacementChange: (value: string) => void;
-  onModeChange: (mode: SearchMode) => void;
+  onModeChange: (mode: LiteralSearchMode) => void;
   onStep: (delta: 1 | -1) => void;
   onReplace: () => void;
   onReplaceAll: () => void;
@@ -129,7 +129,7 @@ export function FindPanel({
               data-testid="find-mode-toggles"
               className="search-input__modes"
             >
-              {QUERY_MODES.map((option) => (
+              {LITERAL_QUERY_MODES.map((option) => (
                 <button
                   key={option.value}
                   type="button"

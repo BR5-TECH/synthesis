@@ -27,7 +27,7 @@ import type { EditSession } from "../../state/editSessions/types";
 import { sealBurst, type EditMode, type EditSurface } from "../../state/editHistory";
 import type { UseArtifactDocument } from "../../hooks/useArtifactDocument";
 import type { EditorImageHost } from "../hostImages";
-import type { SearchMode } from "../../types";
+import type { LiteralSearchMode } from "../../types";
 import { indentUnit } from "../../state/indentation";
 import { FRONTMATTER_TOP_THRESHOLD, joinFrontmatter } from "./frontmatter";
 import { matchesInWindow, renderSegments } from "./highlight";
@@ -399,7 +399,7 @@ export function EditorView(props: EditorViewProps) {
               focus={findFocus}
               onQueryChange={(query) => patchFind({ query })}
               onReplacementChange={(replacement) => patchFind({ replacement })}
-              onModeChange={(next: SearchMode) => patchFind({ mode: next })}
+              onModeChange={(next: LiteralSearchMode) => patchFind({ mode: next })}
               onStep={engine.step}
               onReplace={replaceCurrent}
               onReplaceAll={replaceAll}

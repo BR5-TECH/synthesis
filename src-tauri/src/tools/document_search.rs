@@ -46,7 +46,7 @@ mod tests;
 pub const NAME: &str = "search_documents";
 
 /// SDT-FR-JMSA: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Search for Documents: find the reference documents the user selected for this project that are most relevant to a topic, ranked by how well each document's text matches what you describe. Use this to discover what the user's PDF, Markdown, and text references say about a subject, wherever those files live on the machine. Returns the best matches first, each with the document's id, its name, the folder it sits in, its format, a short passage that matched, and a score that orders this result set. Each document appears at most once. Pass the id to Get Document to read the document. Only the user's selected documents are searched — not specifications, not drafts, not notes, not project files. Nothing that is found is changed. Returns an empty list when nothing matches, which means no selected document bears on that topic.";
+pub const DESCRIPTION: &str = "Search for Documents: find the reference documents the user selected for this project that are most relevant to a topic, ranked by how well each document's text matches the meaning and the words of what you describe. Use this to discover what the user's PDF, Markdown, and text references say about a subject, wherever those files live on the machine. Returns the best matches first, each with the document's id, its name, the folder it sits in, its format, a short passage that matched, and a score that orders this result set. Each document appears at most once. Pass the id to Get Document to read the document. Only the user's selected documents are searched — not specifications, not drafts, not notes, not project files. Nothing that is found is changed. Returns an empty list when nothing matches, which means no selected document bears on that topic.";
 
 const QUERY_DESCRIPTION: &str = "A plain description of the topic you want reference documents about, in your own words. For example: 'how the vendor API rate limits requests'.";
 
@@ -174,13 +174,26 @@ pub fn search(
     collection: &DocumentsCollection,
     args: &SearchDocumentsArgs,
 ) -> Result<SearchDocumentsOutput, ToolRefusal> {
+    search_ranked(indexer, None, collection, args)
+}
+
+/// SDT-FR-BKAW: the same search through `hybrid_search` of
+/// `EMB-embeddings-index.md` — Reciprocal Rank Fusion of BM25 and vector ranks
+/// when `ranker` is ready, and BM25 alone when it is absent or not ready.
+pub fn search_ranked(
+    indexer: &Bm25Indexer,
+    ranker: Option<&dyn crate::embeddings::VectorRanker>,
+    collection: &DocumentsCollection,
+    args: &SearchDocumentsArgs,
+) -> Result<SearchDocumentsOutput, ToolRefusal> {
     if args.query.trim().is_empty() {
         return Err(ToolRefusal::InvalidArguments(EMPTY_DOCUMENT_QUERY));
     }
     let limit = normalize_limit(args.limit);
-    let hits = bm25_index::search(
+    let hits = crate::embeddings::hybrid_search(
         indexer,
-        &[IndexId::Documents],
+        ranker,
+        IndexId::Documents,
         &args.query,
         limit.saturating_mul(OVERFETCH_FACTOR),
     );
@@ -286,7 +299,14 @@ impl<R: tauri::Runtime> SearchDocumentsTool<R> {
                 .try_state::<DocumentsCollection>()
                 .filter(|collection| collection.is_open())
                 .ok_or(ToolRefusal::NoProjectOpen)?;
-            search(&indexer, &collection, &args)
+            let service = self.app.try_state::<crate::embeddings::EmbeddingsService>();
+            let ranker = crate::embeddings::ranker(&self.app, service.as_deref());
+            search_ranked(
+                &indexer,
+                ranker.as_ref().map(|r| r as &dyn crate::embeddings::VectorRanker),
+                &collection,
+                &args,
+            )
         });
         match &outcome {
             Ok(output) => {

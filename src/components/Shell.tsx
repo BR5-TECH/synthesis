@@ -284,9 +284,9 @@ export function TopChrome({
       <div style={{ position: "relative" }} ref={searchRef}>
         <div className="search-input" onClick={() => setSearchOpen(true)}>
           <Icon.Search size={12} />
-          {/* SCH-FR-12: the three query-mode toggles sit INSIDE the input at its
+          {/* SCH-FR-12: the four query-mode toggles sit INSIDE the input at its
               leading edge, ahead of the text caret, with exactly one active.
-              Activating one deactivates the other two; there is no state in
+              Activating one deactivates the other three; there is no state in
               which none is active. */}
           <div
             role="radiogroup"

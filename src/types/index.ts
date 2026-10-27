@@ -7,6 +7,7 @@ export * from "./core";
 export * from "./changes";
 export * from "./diff";
 export * from "./search";
+export * from "./embeddings";
 export * from "./drafts";
 export * from "./publication";
 export * from "./statistics";

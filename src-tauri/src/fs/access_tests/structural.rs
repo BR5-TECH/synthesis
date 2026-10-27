@@ -53,6 +53,11 @@ fn no_backend_module_reaches_the_filesystem_outside_the_helper() {
         // outside the active root, and it is what makes two spellings of one
         // repository select one store (RMS-FR-BNKD). No content is read.
         ("repository_store.rs", "normalize_identity"),
+        // EMB-FR-NNOK: the weights index of a Candle model, in the model cache
+        // that `hf-hub` writes and owns under `app_data_dir()/models/`. The
+        // cache has no `FsAccess` instance of its own, as `hf-hub` and
+        // `fastembed` read and write it themselves.
+        ("embeddings/model.rs", "weight_files"),
     ];
 
     /// Spellings that reach the filesystem. Path-shaped *method* calls are in

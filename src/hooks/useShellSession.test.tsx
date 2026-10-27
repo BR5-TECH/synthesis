@@ -593,6 +593,74 @@ describe("routing a search result (SCH-FR-09)", () => {
     ).toBe("flow");
   });
 
+  it("SCH-FR-09: a Document result opens its viewer tab through list documents, by the document id", async () => {
+    const wired = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "list_documents") {
+        return {
+          sources: [],
+          documents: [
+            { id: "doc-0123", path: "/refs/Manual.PDF", name: "Manual.PDF", format: "pdf", status: "available", revision: "r" },
+          ],
+        };
+      }
+      return wired(cmd, args as { id?: string });
+    });
+    const { result } = renderHook(() => useShellSession());
+    act(() =>
+      result.current.activateSearchHit(
+        hitFor({
+          id: "doc-0123",
+          documentId: "doc-0123",
+          name: "Manual.PDF",
+          path: "/refs/Manual.PDF",
+          group: "document",
+          matchKind: "content",
+        }),
+      ),
+    );
+    await waitFor(() => expect(result.current.tabs.some((t) => t.documentId === "doc-0123")).toBe(true));
+    const tab = result.current.tabs.find((t) => t.documentId === "doc-0123");
+    expect(tab?.kind).toBe("pdf");
+    expect(tab?.label).toBe("Manual.PDF");
+    expect(result.current.activeTab).toBe(tab?.id);
+  });
+
+  it("SCH-FR-09: a Document result whose document left the collection opens nothing", async () => {
+    const wired = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "list_documents") return { sources: [], documents: [] };
+      return wired(cmd, args as { id?: string });
+    });
+    const { result } = renderHook(() => useShellSession());
+    const before = result.current.tabs.length;
+    await act(async () => {
+      result.current.activateSearchHit(
+        hitFor({ id: "doc-gone", documentId: "doc-gone", name: "x.md", group: "document", matchKind: "content" }),
+      );
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(invokeMock.mock.calls.some((c) => c[0] === "list_documents")).toBe(true));
+    expect(result.current.tabs).toHaveLength(before);
+  });
+
+  it("SCH-FR-09: a Draft result opens the draft as the Drafts panel opens it", async () => {
+    const wired = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "open_draft") return { id: "d-1", name: "Search", status: "active", createdAt: "", updatedAt: "" };
+      return wired(cmd, args as { id?: string });
+    });
+    const { result } = renderHook(() => useShellSession());
+    await act(async () => {
+      result.current.activateSearchHit(
+        hitFor({ id: "d-1", draftId: "d-1", name: "Search", path: "Core", group: "draft", matchKind: "content" }),
+      );
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.tabs.some((t) => t.id === "draft:d-1")).toBe(true));
+    expect(invokeMock.mock.calls.find((c) => c[0] === "open_draft")?.[1]).toEqual({ id: "d-1" });
+  });
+
   it("a Run result opens the Runs bottom panel rather than a tab", () => {
     const { result } = renderHook(() => useShellSession());
     const before = result.current.tabs.length;

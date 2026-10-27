@@ -318,7 +318,7 @@ describe("search overlay dismissal (SCH-FR-07)", () => {
 
     await user.click(overlayMarker()!);
 
-    expect(onOpenSearchResults).toHaveBeenCalledWith("needle", "literal_insensitive");
+    expect(onOpenSearchResults).toHaveBeenCalledWith("needle", "semantic");
     expect(overlayMarker()).not.toBeInTheDocument();
   });
 
@@ -443,7 +443,7 @@ describe("universal search dispatch (SCH-FR-15 / SCH-FR-16 / SCH-FR-17)", () => 
     const call = invokeMock.mock.calls.find((c) => c[0] === "start_search");
     expect(call?.[1]).toEqual({
       query: "abcdefgh",
-      mode: "literal_insensitive",
+      mode: "semantic",
       // SCH-FR-18: the overlay's search is capped so typing stays cheap.
       scope: "capped",
     });
@@ -580,6 +580,55 @@ describe("universal search dispatch (SCH-FR-15 / SCH-FR-16 / SCH-FR-17)", () => 
   });
 });
 
+describe("Semantic results (SCH-FR-LTSO / SCH-FR-RAAU)", () => {
+  afterEach(cleanup);
+
+  it("SCH-FR-LTSO, SCH-FR-RAAU: a Semantic hit shows its chunk as the snippet, with no line number", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await streamResults(user, "teardown", [
+      {
+        id: "doc-1",
+        documentId: "doc-1",
+        name: "manual.md",
+        path: "/refs/manual.md",
+        ordinal: 0,
+        group: "document",
+        matchKind: "content",
+        snippet: "How a worktree is torn down.",
+      },
+    ]);
+    expect(screen.getByText("Documents")).toBeInTheDocument();
+    expect(screen.getByText("/refs/manual.md")).toBeInTheDocument();
+    const snippet = screen.getByText("How a worktree is torn down.");
+    expect(snippet.closest(".search-result__snippet--chunk")).not.toBeNull();
+    expect(document.querySelector(".search-result__line")).toBeNull();
+  });
+});
+
+describe("Semantic mode with embeddings off (SCH-FR-IESG)", () => {
+  afterEach(cleanup);
+
+  it("SCH-FR-IESG: results show with no error and no special state", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await streamResults(user, "teardown", [
+      hit({
+        id: "specifications/a.md",
+        path: "specifications/a.md",
+        group: "artifact",
+        subtype: "spec",
+        matchKind: "content",
+        line: undefined,
+        snippet: "How a worktree is torn down.",
+      }),
+    ]);
+    expect(screen.getByText("specifications/a.md")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(document.querySelector(".search-state--error")).toBeNull();
+  });
+});
+
 describe("query-mode toggles (SCH-FR-12 / SCH-FR-13 / SCH-FR-14)", () => {
   afterEach(cleanup);
 
@@ -590,7 +639,7 @@ describe("query-mode toggles (SCH-FR-12 / SCH-FR-13 / SCH-FR-14)", () => {
     const toggles = within(screen.getByTestId("query-mode-toggles")).getAllByRole(
       "radio",
     );
-    expect(toggles).toHaveLength(3);
+    expect(toggles).toHaveLength(4);
     expect(toggles.filter((t) => t.getAttribute("aria-checked") === "true")).toHaveLength(1);
 
     await user.click(screen.getByRole("radio", { name: /Regular expression/i }));
@@ -625,12 +674,12 @@ describe("query-mode toggles (SCH-FR-12 / SCH-FR-13 / SCH-FR-14)", () => {
       );
     }
 
-    // And the three descriptions are distinct — a shared blurb would leave the
+    // And the four descriptions are distinct — a shared blurb would leave the
     // two literal modes indistinguishable, which is the actual confusion.
-    expect(new Set(QUERY_MODES.map((m) => m.description)).size).toBe(3);
+    expect(new Set(QUERY_MODES.map((m) => m.description)).size).toBe(4);
   });
 
-  it("SCH-FR-13: the mode is read from app preferences on mount, defaulting to case-insensitive literal", async () => {
+  it("SCH-FR-13: the mode is read from app preferences on mount, defaulting to Semantic", async () => {
     invokeMock.mockImplementation(async (cmd: string) =>
       cmd === "load_app_preferences"
         ? { theme: "system", searchQueryMode: "regex" }
@@ -644,7 +693,7 @@ describe("query-mode toggles (SCH-FR-12 / SCH-FR-13 / SCH-FR-14)", () => {
       ).toHaveAttribute("aria-checked", "true"),
     );
 
-    // And a user who has never chosen one starts in case-insensitive literal.
+    // And a user who has never chosen one starts in Semantic.
     cleanup();
     resetAppPreferencesCache();
     invokeMock.mockImplementation(async (cmd: string) =>
@@ -653,7 +702,7 @@ describe("query-mode toggles (SCH-FR-12 / SCH-FR-13 / SCH-FR-14)", () => {
     render(<Harness />);
     await waitFor(() =>
       expect(
-        screen.getByRole("radio", { name: /Case-insensitive/i }),
+        screen.getByRole("radio", { name: /^Semantic/i }),
       ).toHaveAttribute("aria-checked", "true"),
     );
   });
@@ -719,7 +768,7 @@ describe("escalating to the full results tab (SCH-FR-08)", () => {
 
     await user.keyboard("{Enter}");
 
-    expect(onOpenSearchResults).toHaveBeenCalledWith("needle", "literal_insensitive");
+    expect(onOpenSearchResults).toHaveBeenCalledWith("needle", "semantic");
     expect(overlayMarker()).not.toBeInTheDocument();
   });
 

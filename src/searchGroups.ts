@@ -21,6 +21,8 @@ import type { ArtifactType, SearchGroup, SearchHit } from "./types";
  */
 const GROUP_ORDER: ReadonlyArray<{ group: SearchGroup; title: string }> = [
   { group: "artifact", title: "Artifacts" },
+  { group: "document", title: "Documents" },
+  { group: "draft", title: "Drafts" },
   { group: "playbook", title: "Playbooks" },
   { group: "workstream", title: "Workstreams" },
   { group: "role", title: "Roles" },
@@ -116,10 +118,14 @@ export function groupHits(hits: SearchHit[]): RenderedGroup[] {
  * - every other artifact opens in the **Editor**;
  * - a workstream reveals the Library filtered to it;
  * - a run opens the Runs bottom panel; a history match the History viewer;
- * - a **file** opens in the Editor as a plain text file (ESH-FR-ATDS).
+ * - a **file** opens in the Editor as a plain text file (ESH-FR-ATDS);
+ * - a **document** opens in its viewer tab by its id (DPN-FR-CDFO);
+ * - a **draft** opens as the Drafts panel opens it (DRP-FR-09).
  */
 export type SearchRoute =
   | { kind: "editor"; hit: SearchHit }
+  | { kind: "document"; hit: SearchHit }
+  | { kind: "draft"; hit: SearchHit }
   | { kind: "flow"; hit: SearchHit }
   | { kind: "workstream"; hit: SearchHit }
   | { kind: "runs"; hit: SearchHit }
@@ -133,6 +139,10 @@ export function routeForHit(hit: SearchHit): SearchRoute {
       return { kind: "runs", hit };
     case "history":
       return { kind: "history", hit };
+    case "document":
+      return { kind: "document", hit };
+    case "draft":
+      return { kind: "draft", hit };
     case "artifact":
       return hit.editContext === "flow" || hit.subtype === "flow"
         ? { kind: "flow", hit }

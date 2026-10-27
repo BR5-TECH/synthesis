@@ -7,6 +7,7 @@ import {
   githubPollingInvoke,
 } from "./mock-github-polling";
 import { documentsInvoke } from "./mock-documents";
+import { embeddingsInvoke } from "./mock-embeddings";
 import { gitPanelInvoke } from "./mock-git-panel";
 import { recentsInvoke } from "./mock-recents";
 
@@ -7287,6 +7288,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
   // DCL-documents-collection.md: the Documents commands live in their own module.
   const documents = documentsInvoke(cmd, a);
   if (documents !== NOT_HANDLED) return documents;
+  // EMB-embeddings-index.md: the Indexing sections and the Semantic search mode.
+  const embeddings = embeddingsInvoke(cmd, a);
+  if (embeddings !== NOT_HANDLED) return embeddings;
   // GIT-git.md: the Git panel's history, branch and pull request commands.
   const gitPanel = gitPanelInvoke(cmd, a);
   if (gitPanel !== NOT_HANDLED) return gitPanel;

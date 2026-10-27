@@ -25,7 +25,7 @@ pub mod reading;
 pub mod watcher;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 pub use manager::DocumentsCollection;
 pub use model::{

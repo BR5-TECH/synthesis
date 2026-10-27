@@ -1,0 +1,7 @@
+/* GLS-FR-RQFK / SET-FR-UNRY: the progress rows of the two Indexing sections —
+   the model download and the running embedding job. */
+.indexing-progress {
+  display: flex; flex-direction: column; gap: 4px;
+  margin-top: 8px; max-width: 560px;
+}
+.indexing-progress progress { width: 100%; height: 6px; }

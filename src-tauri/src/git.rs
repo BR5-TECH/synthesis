@@ -42,6 +42,7 @@ pub mod commit;
 pub mod diff;
 pub mod fetch;
 pub mod history;
+pub mod objects;
 pub mod pull;
 pub mod pull_requests;
 pub mod push;

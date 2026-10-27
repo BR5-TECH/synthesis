@@ -175,6 +175,9 @@ function GroupHeader({
  * result that matched only on its path shows no snippet line, and no result
  * carries a match count of its own (a file is one hit however many times the
  * query occurs in it).
+ *
+ * SCH-FR-LTSO / SCH-FR-RAAU: a Semantic hit has no line; its snippet is the
+ * matching chunk, shown on up to two lines with no line number.
  */
 function ResultRow({
   hit,
@@ -203,6 +206,11 @@ function ResultRow({
       {hit.matchKind === "content" && hit.line != null && (
         <div className="search-result__snippet">
           <span className="search-result__line">{hit.line}</span>
+          <span className="search-result__snippet-text">{hit.snippet}</span>
+        </div>
+      )}
+      {hit.matchKind === "content" && hit.line == null && hit.snippet && (
+        <div className="search-result__snippet search-result__snippet--chunk">
           <span className="search-result__snippet-text">{hit.snippet}</span>
         </div>
       )}

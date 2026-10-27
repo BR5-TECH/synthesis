@@ -1,6 +1,30 @@
 //! Retrieval (BMI-FR-10, BMI-FR-11).
 
-use super::{Bm25Indexer, ChunkHit, IndexId, IndexSet};
+use super::{Bm25Indexer, ChunkHit, ChunkKey, IndexId, IndexSet};
+
+/// The hit for one chunk of `index`.
+pub(super) fn hit_of(index: IndexId, key: ChunkKey, score: f32, text: String) -> ChunkHit {
+    ChunkHit {
+        index,
+        // The ASC node id is the project-relative path (ASC-FR-13); a draft
+        // chunk has no scan node and carries its draft id instead, and a skill
+        // descriptor has none either — its file may be gitignored and so absent
+        // from the scan entirely (DSL-FR-06).
+        node_id: index.is_artifact_index().then(|| key.path.clone()),
+        draft_id: key.draft_id.clone(),
+        // BMI-FR-28: a note's identity within its index is its id, so the
+        // `path` slot of the key carries it and this is where it comes back out
+        // under the name a consumer can act on.
+        note_id: (index == IndexId::Notes).then(|| key.path.clone()),
+        // BMI-FR-FGGU: likewise a document's id, which is the one thing a
+        // consumer resolves it by.
+        document_id: (index == IndexId::Documents).then(|| key.path.clone()),
+        path: key.path,
+        chunk_ordinal: key.ordinal,
+        score,
+        text,
+    }
+}
 
 /// BMI-FR-10 / BMI-FR-11: the `limit` highest-scoring chunks across `indexes`,
 /// ordered by descending score.
@@ -27,28 +51,7 @@ pub fn search_snapshot(
             continue;
         }
         for result in engine.search(query, Some(limit)) {
-            let key = result.document.id;
-            hits.push(ChunkHit {
-                index: *index,
-                // The ASC node id is the project-relative path (ASC-FR-13); a
-                // draft chunk has no scan node and carries its draft id
-                // instead, and a skill descriptor has none either — its file
-                // may be gitignored and so absent from the scan entirely
-                // (DSL-FR-06).
-                node_id: index.is_artifact_index().then(|| key.path.clone()),
-                draft_id: key.draft_id.clone(),
-                // BMI-FR-28: a note's identity within its index is its id, so
-                // the `path` slot of the key carries it and this is where it
-                // comes back out under the name a consumer can act on.
-                note_id: (*index == IndexId::Notes).then(|| key.path.clone()),
-                // BMI-FR-FGGU: likewise a document's id, which is the one thing
-                // a consumer resolves it by.
-                document_id: (*index == IndexId::Documents).then(|| key.path.clone()),
-                path: key.path,
-                chunk_ordinal: key.ordinal,
-                score: result.score,
-                text: result.document.contents,
-            });
+            hits.push(hit_of(*index, result.document.id, result.score, result.document.contents));
         }
     }
     // Descending score, then a total tie-break on identity. The engine's own

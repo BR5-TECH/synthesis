@@ -235,6 +235,12 @@ pub fn start_watching<R: tauri::Runtime>(
             // of everything else.
             let (mut changed, changes_count) =
                 batch_changes(&result, &root_owned, git_dir_owned.as_deref());
+            // EMB-FR-VQSK: Git metadata changed — a commit, a checkout, a pull,
+            // a ref write — so the root branch tip may have moved. The count
+            // holds the working-tree paths plus the Git-directory paths.
+            if changes_count > changed.len() {
+                crate::embeddings::note_root_tip_check(&app_handle);
+            }
             if changes_count > 0 {
                 let _ = app_handle.emit(
                     crate::changes::CHANGES_UPDATED,

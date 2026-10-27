@@ -24,6 +24,7 @@
 //! every tool in this group.
 
 use std::collections::HashSet;
+use tauri::Manager;
 
 use serde::{Deserialize, Serialize};
 
@@ -46,7 +47,7 @@ mod tests;
 pub const NAME: &str = "search_specifications";
 
 /// SPS-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Find the specifications most relevant to a topic, ranked by how well each one's text matches what you describe. Use this when you need to know what this project has already decided about something — search with a plain description of the topic or the behaviour, not with a guessed filename. Returns the best matches first, each with the specification's path, the passage inside it that matched, and a score that orders the results. That passage is one section of the file rather than the whole of it, so read the file at that path when you need the rest. Each specification appears at most once, however many of its sections matched your query. Only specifications are searched — not source code, not skills, not notes — and nothing that is found is changed. Returns an empty list when nothing matches, which means this project has no specification bearing on that topic.";
+pub const DESCRIPTION: &str = "Find the specifications most relevant to a topic, ranked by how well each one's text matches the meaning and the words of what you describe. Use this when you need to know what this project has already decided about something — search with a plain description of the topic or the behaviour, not with a guessed filename. Returns the best matches first, each with the specification's path, the passage inside it that matched, and a score that orders the results. That passage is one section of the file rather than the whole of it, so read the file at that path when you need the rest. Each specification appears at most once, however many of its sections matched your query. Only specifications are searched — not source code, not skills, not notes — and nothing that is found is changed. Returns an empty list when nothing matches, which means this project has no specification bearing on that topic.";
 
 const QUERY_DESCRIPTION: &str = "A plain description of the topic or behaviour you need this project's decisions about, in your own words. For example: 'how the file tree decides which files are artifacts'.";
 
@@ -164,6 +165,17 @@ pub fn search(
     indexer: &Bm25Indexer,
     args: &SpecificationSearchArgs,
 ) -> Result<SpecificationSearchOutput, ToolRefusal> {
+    search_ranked(indexer, None, args)
+}
+
+/// SPS-FR-03 / SPS-FR-05: the same search through `hybrid_search` of
+/// `EMB-embeddings-index.md` — Reciprocal Rank Fusion of BM25 and vector ranks
+/// when `ranker` is ready, and BM25 alone when it is absent or not ready.
+pub fn search_ranked(
+    indexer: &Bm25Indexer,
+    ranker: Option<&dyn crate::embeddings::VectorRanker>,
+    args: &SpecificationSearchArgs,
+) -> Result<SpecificationSearchOutput, ToolRefusal> {
     if args.query.trim().is_empty() {
         return Err(ToolRefusal::InvalidArguments(EMPTY_SPEC_QUERY));
     }
@@ -173,9 +185,10 @@ pub fn search(
             // SPS-FR-05: the `spec` index alone. Every other index — skills,
             // drafts, flows, and the rest — is unreachable through this tool
             // however well its text matches.
-            bm25_index::search(
+            crate::embeddings::hybrid_search(
                 indexer,
-                &[IndexId::Spec],
+                ranker,
+                IndexId::Spec,
                 &args.query,
                 limit.saturating_mul(OVERFETCH_FACTOR),
             ),
@@ -270,7 +283,15 @@ impl<R: tauri::Runtime> SpecSearchTool<R> {
 
     /// The whole call, with its logging (TLC-FR-14, SPS-FR-19).
     fn run(&self, args: SpecificationSearchArgs) -> Result<SpecificationSearchOutput, ToolRefusal> {
-        let outcome = require_open_project(&self.app).and_then(|indexer| search(&indexer, &args));
+        let outcome = require_open_project(&self.app).and_then(|indexer| {
+            let service = self.app.try_state::<crate::embeddings::EmbeddingsService>();
+            let ranker = crate::embeddings::ranker(&self.app, service.as_deref());
+            search_ranked(
+                &indexer,
+                ranker.as_ref().map(|r| r as &dyn crate::embeddings::VectorRanker),
+                &args,
+            )
+        });
         match &outcome {
             // SPS-FR-19: what was asked and what came back. The arguments are
             // the two this tool's spec names as loggable (per TLC-FR-14); no

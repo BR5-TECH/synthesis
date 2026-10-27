@@ -18,6 +18,7 @@ export * from "./content";
 export * from "./docker";
 export * from "./isolation";
 export * from "./documents";
+export * from "./embeddings";
 export * from "./remoteConnectivity";
 export * from "./drafts";
 export * from "./git";

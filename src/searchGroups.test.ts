@@ -184,3 +184,25 @@ describe("routeForHit (SCH-FR-09)", () => {
     ).toBeUndefined();
   });
 });
+
+describe("Semantic groups (SCH-FR-03 / SCH-FR-09 / SCH-FR-LTSO)", () => {
+  it("SCH-FR-03, SCH-FR-LTSO: Documents and Drafts follow Artifacts, in rank order", () => {
+    resetHitOrdinals();
+    const groups = groupHits([
+      hit({ path: "Core", group: "draft", ordinal: 0 }),
+      hit({ path: "/refs/b.md", group: "document", ordinal: 1 }),
+      hit({ path: "/refs/a.md", group: "document", ordinal: 0 }),
+      hit({ path: "specifications/x.md", group: "artifact", subtype: "spec", ordinal: 0 }),
+      hit({ path: ".synthesis/playbooks/p.md", group: "playbook" }),
+    ]);
+    expect(groups.map((g) => g.title)).toEqual(["Artifacts", "Documents", "Drafts", "Playbooks"]);
+    expect(groups[1].hits.map((h) => h.path)).toEqual(["/refs/a.md", "/refs/b.md"]);
+  });
+
+  it("SCH-FR-09: a document routes to its viewer and a draft to the Drafts panel's open", () => {
+    expect(routeForHit(hit({ group: "document" })).kind).toBe("document");
+    expect(routeForHit(hit({ group: "draft" })).kind).toBe("draft");
+  });
+
+
+});

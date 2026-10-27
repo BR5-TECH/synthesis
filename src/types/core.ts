@@ -16,7 +16,8 @@ export type ArtifactType =
   | "flow"
   | "instructions"
   | "scenario"
-  | "scratchpad";
+  | "scratchpad"
+  | "doc";
 
 export type NodeType =
   | "project"

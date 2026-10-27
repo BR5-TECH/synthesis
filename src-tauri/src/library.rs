@@ -131,6 +131,9 @@ pub(crate) fn republish_classification<R: tauri::Runtime>(
     }
     candidates.invalidate();
     crate::bm25_index::request_pass(app, crate::bm25_index::PassScope::ARTIFACTS);
+    // DCL-FR-RMVT: a `doc` assignment given or cleared changes the type sources
+    // of the Documents collection.
+    crate::documents::request_refresh(app);
 }
 
 /// The typed error string a caller sees when a path leaves the project root —

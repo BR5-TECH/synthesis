@@ -725,3 +725,19 @@ fn it_reaches_nothing_of_the_draft_proposal_tool() {
         "the two proposal tools are attached exclusively",
     );
 }
+
+// PPC-FR-UZRY: the description, the path argument, and the type refusal name the
+// targets as a prompt or a project document, and never name `doc` as a type
+// (AGC-FR-07).
+#[test]
+fn the_tool_names_its_targets_without_the_doc_type() {
+    let refusal = ToolRefusal::NotAPromptArtifact.to_string();
+    let missing = ToolRefusal::PromptProposalPathMissing.to_string();
+    for text in [DESCRIPTION, PATH_DESCRIPTION, refusal.as_str(), missing.as_str()] {
+        assert!(text.contains("project document"), "names project documents: {text}");
+        assert!(text.contains("Prompt"), "names prompts: {text}");
+        let words: Vec<&str> =
+            text.split(|c: char| !c.is_ascii_alphanumeric()).filter(|w| !w.is_empty()).collect();
+        assert!(!words.iter().any(|w| w.eq_ignore_ascii_case("doc")), "no type name: {text}");
+    }
+}

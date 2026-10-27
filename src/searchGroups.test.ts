@@ -33,7 +33,7 @@ describe("groupHits (SCH-FR-03 / SCH-FR-04 / SCH-FR-16)", () => {
     expect(groups[1].subgroups).toBeUndefined();
   });
 
-  it("SCH-FR-03: the Artifacts subtypes are exactly the eight built-in types", () => {
+  it("SCH-FR-03: the Artifacts subtypes are exactly the built-in types other than Document", () => {
     resetHitOrdinals();
     const eight = [
       "skill",

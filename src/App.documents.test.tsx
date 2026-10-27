@@ -142,8 +142,8 @@ beforeEach(() => {
   pdfjsFake.getDocument.mockReset();
   pdfState.pages = [page("Page one text"), page("Page two text")];
   sources = [
-    { kind: "folder", path: "/refs", status: "available" },
-    { kind: "file", path: "/loose/plain.txt", status: "available" },
+    { kind: "folder", path: "/refs", origin: "manual", status: "available" },
+    { kind: "file", path: "/loose/plain.txt", origin: "manual", status: "available" },
   ];
   documents = [MD, PDF, TXT];
   texts = { [MD.id]: "# Notes heading\n\nBody of notes.", [TXT.id]: "plain text body" };
@@ -397,8 +397,8 @@ describe("DPN-FR-ZHEJ, TAB-FR-KUIN: removing a source", () => {
 
   it("DPN-FR-ZHEJ, TAB-FR-KUIN: a document that another source still includes keeps its tab and stays in the tree", async () => {
     sources = [
-      { kind: "folder", path: "/refs", status: "available" },
-      { kind: "file", path: "/refs/specs/notes.md", status: "available" },
+      { kind: "folder", path: "/refs", origin: "manual", status: "available" },
+      { kind: "file", path: "/refs/specs/notes.md", origin: "manual", status: "available" },
     ];
     documents = [MD, PDF];
     render(<App />);
@@ -407,7 +407,7 @@ describe("DPN-FR-ZHEJ, TAB-FR-KUIN: removing a source", () => {
     await userEvent.click(row(/notes\.md/));
     await userEvent.click(row(/manual\.pdf/));
     removeImpl = () => {
-      sources = [{ kind: "file", path: "/refs/specs/notes.md", status: "available" }];
+      sources = [{ kind: "file", path: "/refs/specs/notes.md", origin: "manual", status: "available" }];
       documents = [MD];
       return snapshot();
     };

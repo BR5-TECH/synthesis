@@ -72,7 +72,7 @@ export function src(
   path: string,
   patch: Partial<DocumentSource> = {},
 ): DocumentSource {
-  return { kind, path, status: "available", ...patch };
+  return { kind, path, origin: "manual", status: "available", ...patch };
 }
 
 export function snap(

@@ -482,6 +482,11 @@
   z-index: 1;
 }
 
+/* CMT-FR-QHTW: the whole-target opening composer, first in the Discussion
+   section, set apart from the cards below it as a card is from the next. */
+.comment-rail__opening {
+  margin: var(--sp-2) 0;
+}
 /* The section's own header stays put while its cards scroll under it. The
    section scrolls within itself once it is full (CMT-FR-62), and a header that
    scrolled away with them would leave the discussions unlabelled — and, on a

@@ -45,6 +45,8 @@ export interface OpenActionDeps {
   openDocumentHit: (hit: SearchHit) => void;
   /** SCH-FR-09: open a draft hit as the Drafts panel opens it (DRP-FR-09). */
   openDraftHit: (hit: SearchHit) => void;
+  /** TAB-FR-GVOS: open the PDF Viewer tab of the document at a project path. */
+  openDocumentByProjectPath: (path: string) => void;
 }
 
 export interface OpenActions {
@@ -70,6 +72,7 @@ export function createOpenActions(deps: OpenActionDeps): OpenActions {
     activeTab,
     openDocumentHit,
     openDraftHit,
+    openDocumentByProjectPath,
   } = deps;
   const openRuns = () => showBottom("runs");
 
@@ -233,6 +236,12 @@ export function createOpenActions(deps: OpenActionDeps): OpenActions {
     if (activeTab === SPEC_MAP_TAB.id && item.artifactType === "spec" && item.id) {
       logDebug(["frontend"], "spec row routed to the specification map", { path: item.id });
       specMap.selectByPath(item.id);
+      return;
+    }
+    // LIB-FR-03 / TAB-FR-GVOS: a Document-typed PDF has no Editor surface. It
+    // opens in the PDF Viewer tab of its document.
+    if (item.artifactType === "doc" && item.id?.toLowerCase().endsWith(".pdf")) {
+      openDocumentByProjectPath(item.id);
       return;
     }
     openArtifact(item);

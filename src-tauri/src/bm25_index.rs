@@ -135,17 +135,20 @@ impl IndexId {
 
     /// BMI-FR-03: the index a file's resolved artifact type names. A file with
     /// no resolved type belongs to no index, which is what leaves unclassified
-    /// source files, playbooks, workstreams, and roles unindexed.
-    pub fn for_artifact_type(artifact_type: ArtifactType) -> IndexId {
+    /// source files, playbooks, workstreams, and roles unindexed. A `doc` file
+    /// belongs to no artifact index: its text reaches the `documents` index
+    /// through the Documents collection alone (BMI-FR-03).
+    pub fn for_artifact_type(artifact_type: ArtifactType) -> Option<IndexId> {
         match artifact_type {
-            ArtifactType::Skill => IndexId::Skill,
-            ArtifactType::Agent => IndexId::Agent,
-            ArtifactType::Prompt => IndexId::Prompt,
-            ArtifactType::Spec => IndexId::Spec,
-            ArtifactType::Flow => IndexId::Flow,
-            ArtifactType::Instructions => IndexId::Instructions,
-            ArtifactType::Scenario => IndexId::Scenario,
-            ArtifactType::Scratchpad => IndexId::Scratchpad,
+            ArtifactType::Skill => Some(IndexId::Skill),
+            ArtifactType::Agent => Some(IndexId::Agent),
+            ArtifactType::Prompt => Some(IndexId::Prompt),
+            ArtifactType::Spec => Some(IndexId::Spec),
+            ArtifactType::Flow => Some(IndexId::Flow),
+            ArtifactType::Instructions => Some(IndexId::Instructions),
+            ArtifactType::Scenario => Some(IndexId::Scenario),
+            ArtifactType::Scratchpad => Some(IndexId::Scratchpad),
+            ArtifactType::Doc => None,
         }
     }
 

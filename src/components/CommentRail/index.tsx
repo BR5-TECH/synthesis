@@ -28,6 +28,7 @@ import { useCallback, useMemo, useState } from "react";
 import { DiscussionComposer, DiscussionSurface } from "../discussion";
 import type { OpenDiscussionRequest } from "../discussion";
 import { stackCards, type AnchoredThread } from "../../state/commentAnchors";
+import { WholeTargetComposer, type WholeTargetOpening } from "./WholeTargetComposer";
 import type { CommentArrangement } from "../../hooks/useCommentArrangement";
 import { DRAFT_KEY } from "../../hooks/useComments";
 import {
@@ -43,6 +44,7 @@ import {
 } from "../../types";
 
 export { commentErrorMessage, turnFailureMessage } from "./messages";
+export type { WholeTargetOpening } from "./WholeTargetComposer";
 
 /** Stable empty default, so the memos below do not re-run on every render. */
 const EMPTY_DISCUSSIONS: readonly AnchoredThread[] = [];
@@ -145,6 +147,11 @@ export interface CommentRailProps {
   ownerLabel?: string;
   /** CMT-FR-RPLC: the owner file has gone from the project. */
   ownerUnavailable?: boolean;
+  /**
+   * CMT-FR-QHTW / ACT-FR-BRZK: the whole-target opening composer that the tab's
+   * **Discuss** opened, or null while it is closed.
+   */
+  wholeTargetOpening?: WholeTargetOpening | null;
 }
 
 export function CommentRail(props: CommentRailProps) {
@@ -176,6 +183,7 @@ export function CommentRail(props: CommentRailProps) {
     arrangement = "beside",
     ownerLabel,
     ownerUnavailable = false,
+    wholeTargetOpening = null,
   } = props;
 
   /** CMT-FR-64: below the page there is no margin to align a card in. */
@@ -305,10 +313,19 @@ export function CommentRail(props: CommentRailProps) {
 
       {/* CMT-FR-53 / CMT-FR-62: the Discussion section, pinned at the rail's
           HEAD as the orphaned section and the resolved disclosure are pinned at
-          its foot. A rail with no whole-target discussion renders no section. */}
-      {openDiscussions.length > 0 && (
+          its foot. A rail with no whole-target discussion renders no section,
+          unless the whole-target opening composer is open (CMT-FR-QHTW). */}
+      {(openDiscussions.length > 0 || wholeTargetOpening !== null) && (
         <div className="comment-rail__pinned-head" data-testid="discussion-section">
           <div className="comment-rail__section-title">Discussion</div>
+          {wholeTargetOpening !== null && (
+            <WholeTargetComposer
+              opening={wholeTargetOpening}
+              agents={agents}
+              disabled={identityBlock !== null}
+              blocked={blocked}
+            />
+          )}
           {openDiscussions.map((entry) =>
             renderEntry(entry, { positioned: false }),
           )}
@@ -365,7 +382,10 @@ export function CommentRail(props: CommentRailProps) {
           className="comment-rail__unaligned"
           /* CMT-FR-63: the foot is bounded by what else the margin has to show. */
           data-bounded={
-            openDiscussions.length > 0 || aligned.length > 0 || draft !== null
+            openDiscussions.length > 0 ||
+            wholeTargetOpening !== null ||
+            aligned.length > 0 ||
+            draft !== null
           }
         >
           {orphaned.length > 0 && (

@@ -287,14 +287,14 @@ pub const NOT_AN_ARTIFACT_CONVERSATION: &str = "This conversation is not about a
 /// Names no path of its own: TLC-FR-09 keeps a message free of anything the
 /// model sent, and the advice works without it — the file under discussion was
 /// in the material this agent was given, under its project-relative path.
-pub const PROMPT_PROPOSAL_PATH_MISSING: &str = "The project holds no file at that path. This tool offers a rewrite of a prompt the project already has and never creates one, so name a file that exists.";
+pub const PROMPT_PROPOSAL_PATH_MISSING: &str = "The project holds no file at that path. This tool offers a rewrite of a Prompt file or a project document the project already has and never creates one, so name a file that exists.";
 
 /// PPC-FR-06: the path names a file whose resolved artifact type is not
 /// `prompt`.
 ///
 /// Told apart from [`PROMPT_PROPOSAL_PATH_MISSING`] because the corrections
 /// differ: one is a path to fix, the other is a file to stop proposing against.
-pub const NOT_A_PROMPT_ARTIFACT: &str = "This tool reaches a file whose type is Prompt and no other kind of file, and that path names one of another kind. Name a Prompt file instead, or say what you would change in prose.";
+pub const NOT_A_PROMPT_ARTIFACT: &str = "This tool reaches a Prompt file or a project document and no other kind of file, and that path names one of another kind. Name a Prompt file or a project document instead, or say what you would change in prose.";
 
 /// PPC-FR-08: the author reads the rationale beside the comparison, so it has to
 /// say something.

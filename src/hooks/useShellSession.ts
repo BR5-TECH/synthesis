@@ -406,6 +406,7 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     activeTab,
     // SCH-FR-09: called on a click, after both factories below have run.
     openDocumentHit: (hit) => openDocumentById(hit.documentId ?? hit.id),
+    openDocumentByProjectPath: (path) => openDocumentByProjectPath(path),
     openDraftHit: (hit) => void openDraftById(hit.draftId ?? hit.id),
   });
   /**
@@ -587,11 +588,17 @@ export function useShellSession(stores: ShellSessionStores = {}) {
   } = createTabClosures({ tabs, setTabs, setActiveTab, sessions, flows });
 
   // TAB-FR-LKCT / TAB-FR-KUIN: the viewer tabs of the Documents collection.
-  const { openDocument, openDocumentById, closeTabsForRemovedDocuments } = createDocumentActions({
+  const {
+    openDocument,
+    openDocumentById,
+    openDocumentByProjectPath,
+    closeTabsForRemovedDocuments,
+  } = createDocumentActions({
     tabsRef,
     setTabs,
     setActiveTab,
     activateTab,
+    openProjectFile: (path, name) => openArtifact({ id: path, name }),
   });
   useViewerStatePruning(tabs);
   useTabScrollPruning(tabs);

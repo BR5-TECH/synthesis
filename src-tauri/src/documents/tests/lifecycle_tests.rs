@@ -366,3 +366,116 @@ fn an_unavailable_document_is_not_indexed() {
     t.index(&std::fs::canonicalize(project.path()).unwrap());
     assert_eq!(t.app.state::<Bm25Indexer>().snapshot().file_count(IndexId::Documents), 1);
 }
+
+// ---------------------------------------------------------------------------
+// Type sources on the application (DCL-FR-DKXQ, DCL-FR-ATNL, DCL-FR-RMVT)
+// ---------------------------------------------------------------------------
+
+impl App {
+    /// Make the temporary tree the active worktree, as a project open does.
+    fn mount_worktree(&self) -> crate::fs::RootFs {
+        let project = crate::project::ProjectState::default();
+        project.set_root(self.root.clone());
+        self.app.manage(project);
+        crate::fs::RootFs::for_root(&self.root)
+    }
+}
+
+// DCL-FR-DKXQ, DCL-FR-ATNL, DCL-FR-LRUP, DCL-FR-VEVZ, DPN-FR-PZMB: the removal
+// command on a type source clears its `doc` assignment, answers with a snapshot
+// without it, and leaves the files on disk. The manual reference of a path that
+// is both goes too.
+#[test]
+fn removing_a_type_source_clears_its_type_and_keeps_its_files() {
+    let a = App::new();
+    let root = a.mount_worktree();
+    let guide = a.write("guides/intro.md", "# Intro\n");
+    a.write("shared/both.md", "both\n");
+    crate::scanning::assign(
+        &root,
+        "guides",
+        crate::scanning::ArtifactType::Doc,
+        crate::scanning::Scope::Folder,
+    )
+    .unwrap();
+    crate::scanning::assign(
+        &root,
+        "shared",
+        crate::scanning::ArtifactType::Doc,
+        crate::scanning::Scope::Folder,
+    )
+    .unwrap();
+    a.open_with(vec![a.folder_source("shared")]);
+    let names =
+        |s: &DocumentsSnapshot| s.documents.iter().map(|d| d.name.clone()).collect::<Vec<_>>();
+    let before = a.collection().snapshot().unwrap();
+    assert_eq!(names(&before), vec!["intro.md", "both.md"]);
+
+    let after =
+        lifecycle::remove_source(&a.handle(), &a.root.join("guides").to_string_lossy()).unwrap();
+    assert_eq!(names(&after), vec!["both.md"]);
+    let stored = crate::scanning::load_assignments(&root);
+    assert!(!stored.assignments.contains_key("guides"));
+    assert_eq!(std::fs::read_to_string(guide).unwrap(), "# Intro\n");
+
+    let after =
+        lifecycle::remove_source(&a.handle(), &a.root.join("shared").to_string_lossy()).unwrap();
+    assert!(after.documents.is_empty());
+    assert!(after.sources.is_empty());
+    assert!(!crate::scanning::load_assignments(&root).assignments.contains_key("shared"));
+    assert!(a.app.state::<GlobalSettingsStore>().load_document_sources(KEY).unwrap().is_empty());
+}
+
+// DCL-FR-ATNL, DCL-FR-YWCP: a type source whose files a manual folder also
+// includes leaves those documents in the collection when it is removed.
+#[test]
+fn removing_a_type_source_keeps_documents_a_manual_folder_includes() {
+    let a = App::new();
+    let root = a.mount_worktree();
+    a.write("refs/guides/intro.md", "# Intro\n");
+    crate::scanning::assign(
+        &root,
+        "refs/guides",
+        crate::scanning::ArtifactType::Doc,
+        crate::scanning::Scope::Folder,
+    )
+    .unwrap();
+    a.open_with(vec![a.folder_source("refs")]);
+
+    let after =
+        lifecycle::remove_source(&a.handle(), &a.root.join("refs/guides").to_string_lossy())
+            .unwrap();
+    assert_eq!(after.documents.len(), 1);
+    assert_eq!(after.sources.len(), 1);
+}
+
+// DCL-FR-RMVT: an attribution write asks the collection for a refresh.
+#[test]
+fn an_attribution_write_requests_a_documents_refresh() {
+    let a = App::new();
+    let root = a.mount_worktree();
+    a.app.manage(crate::scanning::AttributionBaseline::default());
+    a.open_with(Vec::new());
+    a.write("guides/intro.md", "# Intro\n");
+    crate::scanning::assign(
+        &root,
+        "guides",
+        crate::scanning::ArtifactType::Doc,
+        crate::scanning::Scope::Folder,
+    )
+    .unwrap();
+    let watcher = a.app.state::<DocumentsWatcher>();
+    // Hold the background refresh, so the request is seen rather than run.
+    watcher.running.store(true, std::sync::atomic::Ordering::SeqCst);
+    watcher.pending.store(false, std::sync::atomic::Ordering::SeqCst);
+
+    let candidates = a.app.state::<crate::scanning::CandidateStore>();
+    crate::library::republish_classification(&a.handle(), &root, &candidates);
+
+    assert!(watcher.pending.load(std::sync::atomic::Ordering::SeqCst), "a refresh is owed");
+    watcher.running.store(false, std::sync::atomic::Ordering::SeqCst);
+    lifecycle::run_refresh(&a.handle());
+    let snapshot = a.collection().snapshot().unwrap();
+    assert_eq!(snapshot.documents.len(), 1);
+    assert_eq!(snapshot.documents[0].project_path.as_deref(), Some("guides/intro.md"));
+}

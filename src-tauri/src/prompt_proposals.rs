@@ -207,7 +207,7 @@ pub fn load_content_impl(
 // ---------------------------------------------------------------------------
 
 /// PCP-FR-07 / PCP-FR-19: the artifact exists in the active worktree and its
-/// resolved type is exactly `prompt` (ASC-FR-06).
+/// resolved type is `prompt` or `doc` (ASC-FR-06, PPC-FR-06).
 ///
 /// The two refusals are told apart because the corrections differ: one is a path
 /// to fix, the other is a file to stop proposing against.
@@ -220,9 +220,11 @@ pub fn require_prompt_artifact(root: &fs::RootFs, artifact_id: &str) -> Result<P
     if !root.file_info(&path).is_ok_and(|i| i.kind == fs::EntryKind::File) {
         return Err(ERR_ARTIFACT_NOT_FOUND.to_string());
     }
-    if crate::artifacts::resolved_type(root, artifact_id)
-        != Some(crate::scanning::ArtifactType::Prompt)
-    {
+    use crate::scanning::ArtifactType;
+    if !matches!(
+        crate::artifacts::resolved_type(root, artifact_id),
+        Some(ArtifactType::Prompt | ArtifactType::Doc)
+    ) {
         return Err(ERR_NOT_A_PROMPT_ARTIFACT.to_string());
     }
     Ok(path)

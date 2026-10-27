@@ -18,7 +18,7 @@ import { SearchResultList } from "./SearchResultList";
 import { useSearch } from "../hooks/useSearch";
 import { QUERY_MODES } from "../hooks/useSearchQueryMode";
 import { SearchSessionStore } from "../state/searchSessions";
-import { ARTIFACT_TYPES, type TypeLens } from "../artifactTypes";
+import { SEARCH_ARTIFACT_TYPES, type TypeLens } from "../artifactTypes";
 import type { SearchHit, SearchMode } from "../types";
 
 export interface SearchResultsTarget {
@@ -144,7 +144,7 @@ export function SearchResults({
           >
             <option value="files">All Results</option>
             <option value="artifacts">Artifacts Only</option>
-            {ARTIFACT_TYPES.map((t) => (
+            {SEARCH_ARTIFACT_TYPES.map((t) => (
               <option key={t.value} value={t.value}>
                 {t.label}
               </option>

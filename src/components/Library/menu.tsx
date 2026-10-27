@@ -192,7 +192,7 @@ export function RecursiveDeleteConfirm({
 // type, driven entirely by ACTION_APPLIES: file ops are universal; Notes appears
 // for artifact files and Flows; Paste only
 // for folders (greyed when the clipboard is empty); and artifact-type curation
-// lives under a nested **Artifact Type** submenu (LCM-FR-04) that holds the eight
+// lives under a nested **Artifact Type** submenu (LCM-FR-04) that holds the nine
 // types and, below a divider, **Clear Type** at the very bottom. Every entry and
 // submenu carries a leading icon (LCM-FR-07). Rename resolves inline in a rename
 // input; Delete acts directly and needs no native dialog.
@@ -412,7 +412,7 @@ export function ContextMenu({
 
       {/* LCM-FR-04: the nested **Artifact Type** submenu. It opens on mouse-over
           and carries its own leading icon (LCM-FR-04 / LCM-FR-07). It lists the
-          eight types and, after a divider, **Clear Type** at the very bottom
+          nine types and, after a divider, **Clear Type** at the very bottom
           (LCM-FR-04). */}
       <div
         className="menu-item--parent"

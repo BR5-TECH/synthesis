@@ -172,7 +172,7 @@ const calls = (b: Backend, cmd: string) =>
 
 async function renderEditor(
   b: Backend,
-  opts: { artifactType?: "spec" | "prompt" } = {},
+  opts: { artifactType?: "spec" | "prompt"; raw?: boolean } = {},
 ) {
   wire(b);
   render(
@@ -184,6 +184,13 @@ async function renderEditor(
     />,
   );
   await screen.findByRole("button", { name: "Actions" });
+  // ACT-FR-13: the floating composer is the raw-Markdown mode's. In WYSIWYG
+  // Discuss opens the rail's composer instead (ACT-FR-BRZK).
+  if (opts.raw) {
+    await userEvent.click(
+      screen.getByRole("button", { name: "Edit as Markdown source" }),
+    );
+  }
 }
 
 const toggle = () => screen.getByRole("button", { name: "Actions" });
@@ -317,7 +324,7 @@ describe("the control is the tab's own chrome (ACT-FR-01, ACT-FR-03)", () => {
 describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)", () => {
   it("ACT-FR-15, ACT-FR-16, AGC-FR-05, AGT-FR-36, AGT-FR-39, CVP-FR-64: posting targets the artifact and dispatches the artifact origin", async () => {
     const b = backend();
-    await renderEditor(b, { artifactType: "spec" });
+    await renderEditor(b, { artifactType: "spec", raw: true });
 
     // ACT-FR-13: closed rather than always present.
     expect(
@@ -368,7 +375,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
         },
       ],
     });
-    await renderEditor(b, { artifactType: "spec" });
+    await renderEditor(b, { artifactType: "spec", raw: true });
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -403,7 +410,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
 
   it("ACT-FR-13, ACT-FR-14 / ACT-FR-16, ACT-FR-17, ACT-FR-28: the composer keeps its text through any dismissal short of a successful post", async () => {
     const b = backend();
-    await renderEditor(b);
+    await renderEditor(b, { raw: true });
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -438,7 +445,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
     expect(calls(b, "open_discussion")).toHaveLength(0);
   });
 
-  it("ACT-FR-12, ACT-FR-13, ACT-FR-14: a host surface taking the composer's place keeps its text", async () => {
+  it("ACT-FR-12, ACT-FR-14, ACT-FR-BRZK, CMT-FR-32: a host surface taking the rail composer's place keeps its text", async () => {
     const b = backend({ discussions: [discussion()] });
     await renderEditor(b);
     await screen.findByTestId("discussion-section");
@@ -470,7 +477,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
 
   it("ACT-FR-17: no identity disables the composer and opens nothing", async () => {
     const b = backend({ identityError: "github_token_selection_required" });
-    await renderEditor(b);
+    await renderEditor(b, { raw: true });
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -501,7 +508,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
 
   it("ACT-FR-17: a refused post keeps the body and opens nothing", async () => {
     const b = backend({ openError: "unsupported_media_type" });
-    await renderEditor(b);
+    await renderEditor(b, { raw: true });
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -519,7 +526,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
 
   it("ACT-FR-28, CVP-FR-40, CVP-FR-41: Ctrl/Cmd+Enter posts, and is a no-op while empty, disabled, or mid-mention-completion", async () => {
     const b = backend();
-    await renderEditor(b, { artifactType: "spec" });
+    await renderEditor(b, { artifactType: "spec", raw: true });
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -551,7 +558,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
 
   it("ACT-FR-28, CVP-FR-40, CVP-FR-41: the accelerator does nothing while the composer is disabled for want of an identity", async () => {
     const b = backend({ identityError: "github_token_selection_required" });
-    await renderEditor(b);
+    await renderEditor(b, { raw: true });
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -565,7 +572,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
 
   it("ACT-FR-16, ACT-FR-17, ACT-FR-28: a second Post while the first is still in flight invokes the operation once", async () => {
     const b = backend();
-    await renderEditor(b);
+    await renderEditor(b, { raw: true });
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -736,7 +743,7 @@ describe("where the discussions are read (ACT-FR-19, ACT-FR-20)", () => {
 
   it("ACT-FR-13: a press elsewhere in the tab dismisses the composer, one inside it does not", async () => {
     const b = backend();
-    await renderEditor(b);
+    await renderEditor(b, { raw: true });
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -791,7 +798,7 @@ describe("where the discussions are read (ACT-FR-19, ACT-FR-20)", () => {
 
   it("ACT-FR-13: a press elsewhere while a post is in flight leaves the composer, and its refusal, standing", async () => {
     const b = backend();
-    await renderEditor(b);
+    await renderEditor(b, { raw: true });
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));

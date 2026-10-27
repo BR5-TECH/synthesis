@@ -56,6 +56,8 @@ fn ts11_an_entity_directory_outranks_artifact_classification() {
     // A `.synthesis/` path that is NOT one of the three entity directories
     // falls through to ordinary classification.
     assert_eq!(group_for(".synthesis/notes/x.md", None), SearchGroup::File);
+    // SCC-FR-08: a Document file takes the `file` group, with no subtype.
+    assert_eq!(group_for("guides/intro.md", Some(ArtifactType::Doc)), SearchGroup::File);
 }
 
 #[test]

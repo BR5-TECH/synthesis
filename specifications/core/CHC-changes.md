@@ -39,7 +39,7 @@ ChangeEntry {
   added_lines?,                // null when is_binary
   removed_lines?,              // null when is_binary
   is_binary,
-  artifact_type?,              // one of the eight built-in types, when classified
+  artifact_type?,              // one of the nine built-in types, when classified
   type_source?: "inferred" | "assigned" | "inherited"
 }
 

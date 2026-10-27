@@ -13,7 +13,7 @@
  * are what decide those names, so a field added to one of them reaches the
  * markup without a prop being threaded through for it.
  */
-import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
+import { useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 import { EditorContent } from "@tiptap/react";
 import { Icon } from "../icons";
 import { FindPanel } from "../FindPanel";
@@ -22,6 +22,7 @@ import { GithubTokenPicker } from "../GithubTokenPicker";
 import { ReviewOverlay } from "./ReviewOverlay";
 import { PromptChangeReview } from "../PromptChangeReview";
 import { ActionControl } from "../ActionControl";
+import { requestPendingFocus } from "../../state/discussionFocus";
 import { EditSessionStore } from "../../state/editSessions";
 import type { EditSession } from "../../state/editSessions/types";
 import { sealBurst, type EditMode, type EditSurface } from "../../state/editHistory";
@@ -107,6 +108,10 @@ export interface EditorViewProps {
 }
 
 export function EditorView(props: EditorViewProps) {
+  // ACT-FR-BRZK / CMT-FR-QHTW: the rail's whole-target opening composer. Zero
+  // while it is closed; each Discuss advances it, which also puts the caret in
+  // the field again.
+  const [wholeOpening, setWholeOpening] = useState(0);
   const {
     find,
     sourceTokens,
@@ -681,6 +686,28 @@ export function EditorView(props: EditorViewProps) {
           retryingTurnIds={railRetryingTurnIds}
           onRetryTurn={railRetryTurn}
           onCancelTurn={railCancelTurn}
+          wholeTargetOpening={
+            wholeOpening > 0 && discussionsInRail
+              ? {
+                  target: { kind: "artifact", artifactId },
+                  noun: artifactType === "spec" ? "specification" : "file",
+                  focusSignal: wholeOpening,
+                  onOpen: (request) =>
+                    control.discussions.open(request.body, request.attachments),
+                  onOpened: (created) => {
+                    // ACT-FR-16: the composer goes, and focus lands in the reply
+                    // composer of the new discussion in the rail.
+                    logDebug(["frontend"], "the comment rail opened a discussion", {
+                      discussionId: created.id,
+                    });
+                    setWholeOpening(0);
+                    requestPendingFocus(created.id, "composer");
+                    setFocusedThread(created.id);
+                  },
+                  onClose: () => setWholeOpening(0),
+                }
+              : null
+          }
           draft={
             draft
               ? {
@@ -786,6 +813,16 @@ export function EditorView(props: EditorViewProps) {
            addition on an artifact whose type is `spec`. */
         artifactType={artifactType === "spec" ? "spec" : undefined}
         discussionsInRail={discussionsInRail}
+        /* ACT-FR-BRZK: where the rail has a margin, Discuss opens the rail and
+           its whole-target opening composer, never the floating one. */
+        onDiscuss={
+          discussionsInRail
+            ? () => {
+                if (!railOpen) sessions.update(artifactId, { railOpen: true });
+                setWholeOpening((n) => n + 1);
+              }
+            : undefined
+        }
         /* CVP-FR-08 / CVP-FR-64: the same owner the rail's own cards name, so a
            discussion created here and one detached from the rail read the same
            label wherever either is presented. */

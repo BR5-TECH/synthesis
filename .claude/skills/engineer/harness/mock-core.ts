@@ -6,7 +6,7 @@ import {
   SHADOW_ISSUE,
   githubPollingInvoke,
 } from "./mock-github-polling";
-import { documentsInvoke } from "./mock-documents";
+import { documentsInvoke, setDocumentTypes, typeSourceAt } from "./mock-documents";
 import { embeddingsInvoke } from "./mock-embeddings";
 import { gitPanelInvoke } from "./mock-git-panel";
 import { recentsInvoke } from "./mock-recents";
@@ -120,7 +120,55 @@ function tree() {
   // the order the renames were made, because a second rename of the same node
   // names it by the path the first one gave it.
   for (const { path, newName } of renames) applyRename(seeded, path, newName);
+  applyAssignments(seeded);
   return seeded;
+}
+
+/**
+ * ASC-FR-05 / ASC-FR-06: the type assignments made this session. A file-scope
+ * assignment types its file, and a folder-scope one types the folder and every
+ * file below it that carries no type of its own.
+ */
+const assignedTypes: Record<string, { type: string; scope: "file" | "folder" }> = {};
+
+function applyAssignments(root: any) {
+  for (const [path, { type, scope }] of Object.entries(assignedTypes)) {
+    const node = findIn(root, path);
+    if (!node) continue;
+    node.artifactType = type;
+    node.typeSource = "assigned";
+    if (scope !== "folder") continue;
+    const inherit = (n: any) => {
+      for (const c of n.children ?? []) {
+        if (c.nodeKind === "file" && !c.artifactType) {
+          c.artifactType = type;
+          c.typeSource = "inherited";
+        }
+        inherit(c);
+      }
+    };
+    inherit(node);
+  }
+}
+
+/** DCL-FR-DKXQ / DCL-FR-RMVT: tell the Documents mock what the types now say. */
+function publishDocumentTypes() {
+  const current = tree();
+  const files: string[] = [];
+  const walk = (n: any) => {
+    if (n.nodeKind === "file" && n.artifactType === "doc") files.push(n.path);
+    for (const c of n.children ?? []) walk(c);
+  };
+  walk(current);
+  const next = Object.entries(assignedTypes)
+    .filter(([, a]) => a.type === "doc")
+    .map(([rel, a]) => ({ kind: a.scope, rel }));
+  const snapshot = setDocumentTypes(next, files);
+  queueMicrotask(() => {
+    const fire = (globalThis as Record<string, unknown>)
+      .__fireBusEvent as ((n: string, p?: unknown) => void) | undefined;
+    fire?.("documents-changed", snapshot);
+  });
 }
 
 /**
@@ -332,6 +380,39 @@ function seededTree(): any {
             ],
           },
           { id: "src/NOTES.txt", name: "NOTES.txt", path: "src/NOTES.txt", nodeKind: "file" },
+        ],
+      },
+      // DCL-FR-DKXQ / TAB-FR-UEKW: a folder of untyped Markdown, so a `doc`
+      // assignment on it from the Project context menu has files to type,
+      // and the Documents panel has project Markdown that opens in the Editor.
+      {
+        id: "handbook",
+        name: "handbook",
+        path: "handbook",
+        nodeKind: "folder",
+        hasArtifacts: false,
+        children: [
+          {
+            id: "handbook/onboarding.md",
+            name: "onboarding.md",
+            path: "handbook/onboarding.md",
+            nodeKind: "file",
+          },
+          {
+            id: "handbook/guides",
+            name: "guides",
+            path: "handbook/guides",
+            nodeKind: "folder",
+            hasArtifacts: false,
+            children: [
+              {
+                id: "handbook/guides/release-checklist-for-the-quarterly-platform-update.md",
+                name: "release-checklist-for-the-quarterly-platform-update.md",
+                path: "handbook/guides/release-checklist-for-the-quarterly-platform-update.md",
+                nodeKind: "file",
+              },
+            ],
+          },
         ],
       },
       { id: "README.md", name: "README.md", path: "README.md", nodeKind: "file" },
@@ -7286,6 +7367,20 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
   });
   if (polled !== NOT_HANDLED) return polled;
   // DCL-documents-collection.md: the Documents commands live in their own module.
+  // DCL-FR-ATNL: removing a type source clears its type. The tree follows
+  // through the watcher's event, as it does for the real backend.
+  if (cmd === "remove_document_source") {
+    const rel = typeSourceAt(String(a.path));
+    if (rel !== null) {
+      delete assignedTypes[rel];
+      publishDocumentTypes();
+      queueMicrotask(() => {
+        const fire = (globalThis as Record<string, unknown>)
+          .__fireBusEvent as ((n: string, p?: unknown) => void) | undefined;
+        fire?.("project-tree-changed", { changeCount: 1, removedPaths: [] });
+      });
+    }
+  }
   const documents = documentsInvoke(cmd, a);
   if (documents !== NOT_HANDLED) return documents;
   // EMB-embeddings-index.md: the Indexing sections and the Semantic search mode.
@@ -7484,10 +7579,16 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return harnessFlag("cancelSave")
         ? "cancelled"
         : { selected: { path: `/Users/demo/Desktop/${a.defaultName ?? "export"}` } };
+    case "assign_artifact_type":
+      assignedTypes[String(a.path)] = { type: String(a.artifactType), scope: a.scope };
+      publishDocumentTypes();
+      return tree();
+    case "clear_artifact_type":
+      delete assignedTypes[String(a.path)];
+      publishDocumentTypes();
+      return tree();
     case "load_project_tree":
     case "rescan_project_tree":
-    case "assign_artifact_type":
-    case "clear_artifact_type":
     case "create_file":
     case "create_folder":
       return tree();

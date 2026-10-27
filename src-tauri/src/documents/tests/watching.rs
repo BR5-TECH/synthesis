@@ -6,7 +6,13 @@ use crate::documents::model::{Availability, DocumentSource};
 use crate::documents::watcher::{watch_targets, DocumentsWatcher, WatchTarget, DEBOUNCE};
 
 fn source(kind: SourceKind, path: &str, status: Availability) -> DocumentSource {
-    DocumentSource { kind, path: path.to_string(), status, reason: None }
+    DocumentSource {
+        kind,
+        path: path.to_string(),
+        origin: crate::documents::SourceOrigin::Manual,
+        status,
+        reason: None,
+    }
 }
 
 // DCL-FR-ZYQC: a folder is watched recursively, a file through its parent

@@ -24,6 +24,7 @@ mod persistence;
 mod reading_tests;
 mod robustness;
 mod sources;
+mod typed_sources;
 mod watching;
 
 /// A sink that keeps every record, so a test can read back what was reported.

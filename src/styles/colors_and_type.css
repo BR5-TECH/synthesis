@@ -45,25 +45,6 @@
      inferred from where the text happens to stop. */
   --doc-page-radius: var(--r-md);
 
-  /* ---------- COMMENT MARGIN (CMT-FR-63, CMT-FR-64) ----------
-     The narrowest measure a card stays readable at, and what the margin needs
-     beside the page to hold one: the card itself, the gutter against the frame
-     (`--sp-6`, taken on the rail's own box), and the gap between a card and the
-     prose it is about (`--sp-4`). Below that width — with the page already slid
-     as far toward the leading edge as its inset allows — the cards leave the
-     margin for a column under the page. `useCommentArrangement.ts` mirrors these
-     numbers to decide which arrangement holds; `style-invariants.test.ts` keeps
-     the two from drifting apart. */
-  --comment-card-min-w: 232px;
-  --comment-margin-need: calc(
-    var(--comment-card-min-w) + var(--sp-6) + var(--sp-4)
-  );
-  /* CMT-FR-63: the height the margin keeps back from its foot for whatever else
-     it has to show, so a footer of resolved threads never buries a thread still
-     open. Roughly one card — enough to read the top of the first one and reach
-     it. Nothing is kept back when there is nothing else to keep it for. */
-  --comment-card-floor: 96px;
-
   /* ---------- TYPOGRAPHIC ROLES (OVW-FR-13) ----------
      Every piece of text the app renders belongs to exactly one of three roles,
      each carrying a family, a base size, and a line height. The nine values
@@ -289,7 +270,7 @@
   --attention-surface: #DDE0F5; /* NTF-FR-34: a tab needing attention */
   /* EDT-FR-63: the page and the field it is set on. Three tones have to stay
      apart from one another under either theme — the page, the field around it,
-     and a comment card sitting on that field (CMT-FR-38) — so the field takes a
+     and a comment card sitting on that field — so the field takes a
      tone of its own rather than borrowing the panel's, which is what a card
      already uses. */
   --doc-page-bg:   var(--bg-canvas);
@@ -400,7 +381,7 @@
   --bg-elevated:   #232733;
   --bg-sunken:     #0B0D11;
   --attention-surface: #262B4C; /* NTF-FR-34: a tab needing attention */
-  /* EDT-FR-63 / CMT-FR-38: page, field, and card, all three distinct here too —
+  /* EDT-FR-63: page, field, and card, all three distinct here too —
      the field recedes below the canvas the page carries, and the panel tone a
      card takes sits between them. */
   --doc-page-bg:   var(--bg-canvas);

@@ -14,7 +14,7 @@
  * surface that ignored this module would draw the same comments ungrouped.
  */
 import { isProposalAttachment, type Attachment, type Comment } from "../../../types";
-import type { PairedHalf } from "../../CommentRail/questionPairs";
+import type { PairedHalf } from "../../discussion/questionPairs";
 
 /** A change reference a comment carries, with the comment it came from. */
 export type ChangeReference = Extract<

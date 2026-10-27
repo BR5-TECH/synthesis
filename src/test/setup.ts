@@ -188,13 +188,18 @@ afterEach(async () => {
     { clearAllDiscussionSessions },
     { resetDiscussionFocus },
     { resetImplementedAgenticVendorsForTest },
+    { resetDiscussionColumns },
   ] = await Promise.all([
     import("../state/discussionSession"),
     import("../state/discussionFocus"),
     import("../components/agenticImplemented"),
+    import("../state/discussionColumn"),
   ]);
   clearAllDiscussionSessions();
   resetDiscussionFocus();
+  // DDS-FR-PNXR / CMT-FR-30: a column a test hid or split stays so in the store,
+  // and would open hidden or split in the next test.
+  resetDiscussionColumns();
   // AII-FR-OTQY: a test that opens the vendor gate must not leave it open.
   resetImplementedAgenticVendorsForTest();
   if (pendingShortTimers.size === 0 || vi.isFakeTimers()) {

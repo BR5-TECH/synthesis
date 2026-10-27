@@ -109,7 +109,7 @@ export function useEditorFind(deps: EditorFindDeps) {
    * All three of its reasons share it, so a query matched inside a coloured
    * token keeps both its marking and its colour (ESH-FR-GXUX). A source file
    * carries it whether or not it has tokens: it is also where the comment
-   * anchors are marked and measured (CMT-FR-27, CMT-FR-28), which a textarea
+   * anchors are marked (CMT-FR-28), which a textarea
    * cannot do — and a layer of plain text over plain text is the same glyphs in
    * the same place.
    *

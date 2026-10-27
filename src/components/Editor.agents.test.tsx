@@ -1,4 +1,4 @@
-// Addressing an agent from the comment rail — `specifications/ui/CMT-comments.md`
+// Addressing an agent from the discussion column — `specifications/ui/CMT-comments.md`
 // CTA-FR-SKXK, CMT-FR-15, AGT-FR-25, AGT-FR-27 … CMT-FR-37, CTA-FR-RPVU, AGC-FR-07.
 //
 // Driven through the real Editor, so what is exercised is the wiring: which
@@ -30,6 +30,7 @@ import {
   turn,
 } from "../test/editorAgentsFixtures";
 import type { Backend } from "../test/editorAgentsFixtures";
+import { discussionToggle, openColumn } from "../test/editorCommentsFixtures";
 import {
   artifactCommentOrigin,
   expectBackendOrigin,
@@ -193,13 +194,7 @@ async function mount(over: Partial<Backend> = {}) {
     />,
   );
   await screen.findByLabelText("artifact body");
-  const toggle = screen.getByRole("button", {
-    name: /comments \(\d+ unresolved\)/i,
-  });
-  if (toggle.getAttribute("aria-expanded") !== "true") {
-    await userEvent.click(toggle);
-  }
-  await screen.findByRole("complementary", { name: "Comments" });
+  await openColumn();
   return b;
 }
 
@@ -220,13 +215,7 @@ async function remount(b: Backend) {
     />,
   );
   await screen.findByLabelText("artifact body");
-  const toggle = screen.getByRole("button", {
-    name: /comments \(\d+ unresolved\)/i,
-  });
-  if (toggle.getAttribute("aria-expanded") !== "true") {
-    await userEvent.click(toggle);
-  }
-  await screen.findByRole("complementary", { name: "Comments" });
+  await openColumn();
   return b;
 }
 
@@ -300,8 +289,8 @@ describe("CTA-FR-VQFJ: the composer offers the project's agents", () => {
 
   it("completes an agent with Tab, where the composer has real neighbours", async () => {
     // CTA-FR-SKXK, CMT-FR-15, AGT-FR-25's Tab clause, per AGT-FR-27. Asserted here rather than only
-    // against the standalone composer because the rail's card is the one place
-    // the composer has sibling focusables — Cancel and Post — so it is the only
+    // against the standalone composer because the column's reply composer has
+    // sibling focusables — Attach and Post — so it is a
     // surface where a Tab prevented on the wrong branch actually costs the
     // author something.
     await mount();
@@ -326,7 +315,8 @@ describe("CTA-FR-VQFJ: the composer offers the project's agents", () => {
     // AGT-FR-25, AGT-FR-27's second half: a thread that takes no further
     // comment takes no further participant either.
     await mount({ threads: [makeThread({ resolved: true })] });
-    await userEvent.click(screen.getByRole("button", { name: /resolved thread/i }));
+    // CMT-FR-17: a resolved discussion is reached through the disclosure.
+    await userEvent.click(screen.getByRole("button", { name: /^1 resolved$/ }));
     expect(await screen.findByTestId("comment-thread-t1")).toBeInTheDocument();
     expect(screen.queryByLabelText("Reply to thread t1")).not.toBeInTheDocument();
     expect(screen.queryByTestId("mention-picker")).not.toBeInTheDocument();
@@ -367,8 +357,8 @@ describe("CTA-FR-EACI / CTA-FR-ZVKL: appending first, then dispatching", () => {
     }
   });
 
-  it("CTA-FR-DGOC, CMT-FR-61, CTA-FR-RPVU, ACT-FR-13: an anchored thread derives its active agents as a discussion does, and the rail begins no discussion", async () => {
-    // CTA-FR-DGOC: the active set binds every conversation the rail holds and
+  it("CTA-FR-DGOC, CMT-FR-61, CTA-FR-RPVU, ACT-FR-13: an anchored thread derives its active agents as a discussion does, and a reply begins no discussion", async () => {
+    // CTA-FR-DGOC: the active set binds every conversation the column holds and
     // distinguishes none of them. A remark pinned to a line is a conversation
     // the author is holding with somebody as much as a discussion is, so an
     // untagged reply here reaches whoever the author last named — `@arch`, whose
@@ -408,12 +398,10 @@ describe("CTA-FR-EACI / CTA-FR-ZVKL: appending first, then dispatching", () => {
       nickname: "arch",
     });
 
-    //
-    // CMT-FR-61: the rail itself never BEGINS a discussion. It reads this
-    // artifact's discussions (there are none here, so no section renders), but
-    // no affordance in it opens a thread that is not anchored to a passage — the
-    // one route to one is the tab's action control (ACT-FR-13).
-    expect(screen.queryByTestId("discussion-section")).not.toBeInTheDocument();
+    // CMT-FR-61: a reply goes into the discussion the column shows. The column
+    // shows that discussion and not its opening composer, and nothing began a
+    // new discussion (ACT-FR-13).
+    expect(screen.queryByTestId("draft-open-discussion")).not.toBeInTheDocument();
     expect(b.calls.some((c) => c.cmd === "open_discussion")).toBe(false);
   });
 
@@ -431,7 +419,7 @@ describe("CTA-FR-EACI / CTA-FR-ZVKL: appending first, then dispatching", () => {
     const b = await mount();
     await userEvent.type(composer(), "@arch first");
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
-    await waitFor(() => expect(screen.getAllByTestId("comment-pending")).toHaveLength(1));
+    await waitFor(() => expect(screen.getAllByTestId("dds-transient")).toHaveLength(1));
 
     await userEvent.type(composer(), "@arch again");
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
@@ -439,7 +427,7 @@ describe("CTA-FR-EACI / CTA-FR-ZVKL: appending first, then dispatching", () => {
 
     // CTA-FR-ZOLW: both turns run, and the agent still shows as one placeholder.
     expect(calls(b, "cancel_agent_turn")).toHaveLength(0);
-    const pending = screen.getAllByTestId("comment-pending");
+    const pending = screen.getAllByTestId("dds-transient");
     expect(pending).toHaveLength(1);
     expect(pending[0]).toHaveTextContent("arch");
   });
@@ -466,31 +454,33 @@ describe("CVP-FR-HWTN: a turn that ended never draws as pending again", () => {
 
     const live = turn({ id: "turn-1", nickname: "arch" });
     emitTurn(live);
-    await screen.findByTestId("comment-pending");
+    await screen.findByTestId("dds-transient");
     emitTurn({ ...live, state: "delivered", endedAt: "2026-01-01T00:01:00Z" });
     await act(async () => release());
     await waitFor(() => expect(calls(b, "dispatch_agent_turn")).toHaveLength(1));
 
-    expect(screen.queryByTestId("comment-pending")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("dds-transient")).not.toBeInTheDocument();
   });
 });
 
 describe("CTA-FR-ZOLW, CTA-FR-XMCQ / CTA-FR-VHOY: what the placeholder says while an agent thinks", () => {
-  it("reads Thinking…, attributed to the agent, with no timestamp and no attachment", async () => {
+  it("reads thinking, attributed to the agent, with no timestamp and no attachment", async () => {
     await mount();
     await userEvent.type(composer(), "@arch thoughts?");
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
 
-    const pending = await screen.findByTestId("comment-pending");
+    const pending = await screen.findByTestId("dds-transient");
     // Worded as a participant who has not answered yet, rather than as a
-    // spinner or a progress bar.
-    expect(pending).toHaveTextContent("Thinking…");
+    // spinner or a progress bar. DDS-FR-TGWY: one lowercase word.
+    expect(within(pending).getByTestId("dds-transient-status")).toHaveTextContent(
+      /^thinking$/,
+    );
     expect(pending).toHaveTextContent("arch");
     // Shaped like a comment: it occupies the position the answer will take,
     // among the thread's own comments.
-    expect(pending.className).toContain("comment");
+    expect(pending.className).toContain("dds-message");
     // Nothing to stamp yet, and nothing attached.
-    expect(pending.querySelector(".comment__time")).toBeNull();
+    expect(pending.querySelector(".dds-stream__time")).toBeNull();
     expect(
       within(pending).queryByTestId("comment-attachments"),
     ).not.toBeInTheDocument();
@@ -501,45 +491,45 @@ describe("CTA-FR-ZOLW, CTA-FR-XMCQ / CTA-FR-VHOY: what the placeholder says whil
   });
 
   it("leaves no trace when the application is relaunched mid-turn", async () => {
-    // CTA-FR-ZJZD: the placeholder is held in memory by the rail alone and no log
+    // CTA-FR-ZJZD: the placeholder is held in memory by the column alone and no log
     // line records it, so a fresh mount with the turn gone shows the author's
     // comment and nothing else (AGC-FR-23).
     await mount();
     await userEvent.type(composer(), "@arch thoughts?");
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
-    await screen.findByTestId("comment-pending");
+    await screen.findByTestId("dds-transient");
 
     cleanup();
     // A relaunch: the backend reports no turn in flight anywhere.
     await mount({ turns: [] });
 
     await waitFor(() =>
-      expect(screen.queryByTestId("comment-pending")).not.toBeInTheDocument(),
+      expect(screen.queryByTestId("dds-transient")).not.toBeInTheDocument(),
     );
-    expect(screen.queryByText("Thinking…")).not.toBeInTheDocument();
+    expect(screen.queryByText("thinking")).not.toBeInTheDocument();
   });
 });
 
 describe("CTA-FR-FBJR, CTA-FR-IHOB … CTA-FR-IVNG, CTA-FR-JQUU: the activity status, driven by the event", () => {
   const status = () =>
-    screen.getByTestId("comment-pending-status").textContent ?? "";
+    screen.getByTestId("dds-transient-status").textContent ?? "";
 
-  /** The turn the rail already holds, with these calls now active in it. */
+  /** The turn the column already holds, with these calls now active in it. */
   function active(...calls: AgentTurn["activeToolCalls"]): AgentTurn {
     return turn({ id: "turn-1", nickname: "arch", activeToolCalls: calls });
   }
 
   it("follows the calls the turn reports, and is blank at no moment", async () => {
-    // CTA-FR-FBJR, CTA-FR-IHOB / CTA-FR-IVNG, CTA-FR-JQUU through the channel the rail actually reads:
+    // CTA-FR-FBJR, CTA-FR-IHOB / CTA-FR-IVNG, CTA-FR-JQUU through the channel the column actually reads:
     // `"agent turn state changed"` (CTA-FR-QXIG, AGC-FR-34). The static-prop
-    // tests in `CommentRail.test.tsx` cannot see a reducer that dropped
+    // tests of `DiscussionSurface` cannot see a reducer that dropped
     // `activeToolCalls` or a surface that ignored a non-terminal event.
     await mount({ turns: [active()] });
-    expect(status()).toBe("Thinking…");
+    expect(status()).toBe("thinking");
 
     // A call becomes active in that turn.
     emitTurn(active({ id: "call-1", tool: "search_specifications", activationSeq: 1 }));
-    expect(status()).toBe("Searching related specifications…");
+    expect(status()).toBe("searching related specifications");
 
     // A second, activated later, is the one spoken for (CTA-FR-IWOJ, CTA-FR-KWOF).
     emitTurn(
@@ -548,16 +538,16 @@ describe("CTA-FR-FBJR, CTA-FR-IHOB … CTA-FR-IVNG, CTA-FR-JQUU: the activity st
         { id: "call-2", tool: "openrouter:web_search", activationSeq: 2 },
       ),
     );
-    expect(status()).toBe("Searching the web…");
+    expect(status()).toBe("searching the web");
 
     // The web search finishes: the line goes to the most recently activated
     // call STILL active, at once, and never to an empty string (CTA-FR-IVNG, CTA-FR-JQUU).
     emitTurn(active({ id: "call-1", tool: "search_specifications", activationSeq: 1 }));
-    expect(status()).toBe("Searching related specifications…");
+    expect(status()).toBe("searching related specifications");
 
     // And when that one refuses, the turn is waiting on its model again.
     emitTurn(active());
-    expect(status()).toBe("Thinking…");
+    expect(status()).toBe("thinking");
   });
 
   it("reads the turn's activation order, not the order the events arrived", async () => {
@@ -571,16 +561,16 @@ describe("CTA-FR-FBJR, CTA-FR-IHOB … CTA-FR-IVNG, CTA-FR-JQUU: the activity st
         { id: "call-1", tool: "read_file", activationSeq: 1 },
       ),
     );
-    expect(status()).toBe("Searching available skills…");
+    expect(status()).toBe("searching available skills");
   });
 
-  it("reads Working… for a tool the rail has not been taught", async () => {
+  it("reads working for a tool the column has not been taught", async () => {
     // CTA-FR-FBJR, CTA-FR-IHOB's last clause / TLC-FR-27: never an empty line, and never the
     // tool's own name.
     await mount({ turns: [active()] });
     emitTurn(active({ id: "call-1", tool: "a_tool_added_since", activationSeq: 1 }));
-    expect(status()).toBe("Working…");
-    expect(screen.getByTestId("comment-pending").textContent ?? "").not.toContain(
+    expect(status()).toBe("working");
+    expect(screen.getByTestId("dds-transient").textContent ?? "").not.toContain(
       "a_tool_added_since",
     );
   });
@@ -590,7 +580,7 @@ describe("CTA-FR-FBJR, CTA-FR-IHOB … CTA-FR-IVNG, CTA-FR-JQUU: the activity st
     // this turn exactly as it does for one with no tool call active.
     const b = await mount({ turns: [active()] });
     emitTurn(active({ id: "call-1", tool: "read_file", activationSeq: 1 }));
-    expect(status()).toBe("Reading a project file…");
+    expect(status()).toBe("reading a project file");
 
     await userEvent.click(
       screen.getByRole("button", { name: /Cancel .*'s reply/ }),
@@ -614,7 +604,7 @@ describe("CTA-FR-FBJR, CTA-FR-IHOB … CTA-FR-IVNG, CTA-FR-JQUU: the activity st
     await mount({ turns: [first, second] });
     const order = () =>
       screen
-        .getAllByTestId("comment-pending")
+        .getAllByTestId("dds-transient")
         .map((node) => node.getAttribute("data-turn-id"));
     expect(order()).toEqual(["turn-1", "turn-2"]);
 
@@ -625,8 +615,8 @@ describe("CTA-FR-FBJR, CTA-FR-IHOB … CTA-FR-IVNG, CTA-FR-JQUU: the activity st
     });
     expect(order()).toEqual(["turn-1", "turn-2"]);
     expect(
-      screen.getAllByTestId("comment-pending-status").map((n) => n.textContent),
-    ).toEqual(["Reading a project file…", "Thinking…"]);
+      screen.getAllByTestId("dds-transient-status").map((n) => n.textContent),
+    ).toEqual(["reading a project file", "thinking"]);
 
     // …and finishes it. Still in place.
     emitTurn({ ...first, activeToolCalls: [] });
@@ -638,18 +628,18 @@ describe("CTA-FR-ZOLW / CTA-FR-QTNB: what a pending contribution becomes", () =>
   it("renders one pending contribution when the event beats the dispatch reply", async () => {
     // The backend publishes the registration event *before*
     // `dispatch_agent_turn` resolves, and there is no ordering between the two.
-    // A rail that appended on both would render one outstanding turn twice.
+    // A column that appended on both would render one outstanding turn twice.
     const b = await mount();
     await userEvent.type(composer(), "@arch thoughts?");
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
-    await screen.findByTestId("comment-pending");
+    await screen.findByTestId("dds-transient");
     const turnId = screen
-      .getByTestId("comment-pending")
+      .getByTestId("dds-transient")
       .getAttribute("data-turn-id")!;
 
     // The same turn arriving again on the event channel, as it does in the app.
     emitTurn(turn({ id: turnId, nickname: "arch" }));
-    expect(screen.getAllByTestId("comment-pending")).toHaveLength(1);
+    expect(screen.getAllByTestId("dds-transient")).toHaveLength(1);
     expect(calls(b, "dispatch_agent_turn")).toHaveLength(1);
   });
 
@@ -657,7 +647,7 @@ describe("CTA-FR-ZOLW / CTA-FR-QTNB: what a pending contribution becomes", () =>
     // CTA-FR-QXIG, CTA-FR-FSBH's first clause.
     const b = await mount({ turns: [turn({ id: "turn-9", nickname: "arch" })] });
     await waitFor(() => expect(calls(b, "list_agent_turns")).toHaveLength(1));
-    const pending = await screen.findByTestId("comment-pending");
+    const pending = await screen.findByTestId("dds-transient");
     expect(pending).toHaveTextContent("arch");
   });
 
@@ -666,11 +656,11 @@ describe("CTA-FR-ZOLW / CTA-FR-QTNB: what a pending contribution becomes", () =>
     const b = await mount();
     await userEvent.type(composer(), "@arch thoughts?");
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
-    const pending = await screen.findByTestId("comment-pending");
+    const pending = await screen.findByTestId("dds-transient");
     const turnId = pending.getAttribute("data-turn-id")!;
 
     // The agent wrote through the backend's own append path, so the comment
-    // reaches the rail on `"discussion changed"` (CMS-FR-51) — the turn
+    // reaches the column on `"discussion changed"` (CMS-FR-51) — the turn
     // event only clears the pending contribution.
     const delivered: Discussion = {
       ...b.threads[0],
@@ -699,7 +689,7 @@ describe("CTA-FR-ZOLW / CTA-FR-QTNB: what a pending contribution becomes", () =>
 
     expect(await screen.findByText("Two specs, I think.")).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.queryByTestId("comment-pending")).not.toBeInTheDocument(),
+      expect(screen.queryByTestId("dds-transient")).not.toBeInTheDocument(),
     );
   });
 
@@ -708,7 +698,7 @@ describe("CTA-FR-ZOLW / CTA-FR-QTNB: what a pending contribution becomes", () =>
     await mount();
     await userEvent.type(composer(), "@arch thoughts?");
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
-    const pending = await screen.findByTestId("comment-pending");
+    const pending = await screen.findByTestId("dds-transient");
     const turnId = pending.getAttribute("data-turn-id")!;
     const commentsBefore = screen.getAllByText(/Which session\?|@arch thoughts\?/).length;
 
@@ -725,7 +715,7 @@ describe("CTA-FR-ZOLW / CTA-FR-QTNB: what a pending contribution becomes", () =>
     expect(await screen.findByTestId("comment-turn-error")).toHaveTextContent(
       /could not be reached/i,
     );
-    expect(screen.queryByTestId("comment-pending")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("dds-transient")).not.toBeInTheDocument();
     expect(
       screen.getAllByText(/Which session\?|@arch thoughts\?/).length,
     ).toBe(commentsBefore);
@@ -736,11 +726,11 @@ describe("CTA-FR-ZOLW / CTA-FR-QTNB: what a pending contribution becomes", () =>
     const b = await mount();
     await userEvent.type(composer(), "@arch thoughts?");
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
-    await screen.findByTestId("comment-pending");
+    await screen.findByTestId("dds-transient");
 
-    await userEvent.click(screen.getByTestId("comment-pending-cancel"));
+    await userEvent.click(screen.getByTestId("dds-transient-cancel"));
     await waitFor(() => expect(calls(b, "cancel_agent_turn")).toHaveLength(1));
-    expect(screen.queryByTestId("comment-pending")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("dds-transient")).not.toBeInTheDocument();
     expect(screen.getByText("Which session?")).toBeInTheDocument();
   });
 
@@ -781,27 +771,27 @@ describe("AGT-FR-30 / CMT-FR-32: the picker is the card's transient surface", ()
 });
 
 describe("CTA-FR-OBRO: a pending contribution is not part of the conversation", () => {
-  it("is counted by no unresolved-thread total and matches nothing in Find", async () => {
+  it("CTA-FR-OBRO, CMT-FR-53: is counted by no chooser tab and matches nothing in Find", async () => {
     // CTA-FR-XKRY / CTA-FR-OBRO, CMT-FR-29, CMT-FR-31.
     await mount();
-    const toggle = () =>
-      screen.getByRole("button", { name: /comments \(\d+ unresolved\)/i });
-    const before = toggle().getAttribute("title");
+    const tabs = () =>
+      within(screen.getByRole("tablist", { name: "Discussions" })).getAllByRole("tab");
+    expect(tabs()).toHaveLength(1);
 
     await userEvent.type(composer(), "@arch thoughts?");
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
-    await screen.findByTestId("comment-pending");
+    await screen.findByTestId("dds-transient");
 
-    expect(toggle()).toHaveAttribute("title", before!);
-    // It lives in the rail, which is outside the artifact body Find searches.
+    expect(tabs()).toHaveLength(1);
+    // It lives in the column, which is outside the artifact body Find searches.
     const body = screen.getByLabelText("artifact body");
-    expect(body.textContent ?? "").not.toContain("Thinking");
+    expect(body.textContent ?? "").not.toMatch(/thinking/i);
   });
 });
 
 describe("CTA-FR-YGYP / AGT-FR-35 … AGT-FR-38: @all from a card", () => {
   it("dispatches once per agent that can answer, and not to a degraded one", async () => {
-    // CTA-FR-YGYP. Driven through the real rail because the pure rule is only half
+    // CTA-FR-YGYP. Driven through the real column because the pure rule is only half
     // the feature: `useComments` has to hand `dispatchTargets` the enrolment
     // *with its availability*. Flatten that to a bare nickname list at
     // the call site and `@all` reaches an agent whose provider is gone — the exact
@@ -853,8 +843,8 @@ describe("CTA-FR-YGYP / AGT-FR-35 … AGT-FR-38: @all from a card", () => {
   });
 
   it("bolds a live tag in the card and leaves every dead @ as prose", async () => {
-    // AGT-FR-24 / AGT-FR-28, AGT-FR-38 / AGT-FR-29, in the rail — the surface the
-    // requirement names first. `CommentRail` has to hand the renderer the roster;
+    // AGT-FR-24 / AGT-FR-28, AGT-FR-38 / AGT-FR-29, in the column — the surface
+    // the requirement names first. The column has to hand the renderer the roster;
     // pass it an empty one and the marking silently disappears.
     await mount({
       threads: [
@@ -901,42 +891,41 @@ describe("CTA-FR-YGYP / AGT-FR-35 … AGT-FR-38: @all from a card", () => {
         }),
       ],
     });
-    await screen.findByRole("complementary", { name: "Comments" });
+    await screen.findByTestId("comment-thread-t1");
     expect(screen.queryAllByTestId("comment-tag")).toHaveLength(0);
     expect(document.body.textContent).toContain("@all take a look");
   });
 });
 
-describe("CVP-FR-47, CTA-FR-ZOLW, CMT-FR-HQNV: a pending placeholder outlives the rail", () => {
-  it("CVP-FR-47: shows the same one placeholder when the rail is hidden and shown again", async () => {
+describe("CVP-FR-47, CTA-FR-ZOLW, CMT-FR-HQNV, DDS-FR-XQMF: a pending placeholder outlives a hidden column", () => {
+  it("CVP-FR-47, DDS-FR-XQMF: shows the same one placeholder when the column is hidden and shown again", async () => {
     await mount();
     await userEvent.type(composer(), "@arch thoughts?");
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
-    await screen.findByTestId("comment-pending");
+    await screen.findByTestId("dds-transient");
 
-    const toggle = () =>
-      screen.getByRole("button", { name: /comments \(\d+ unresolved\)/i });
-    await userEvent.click(toggle());
-    await waitFor(() =>
-      expect(screen.queryByRole("complementary", { name: "Comments" })).toBeNull(),
-    );
-    expect(screen.queryByTestId("comment-pending")).toBeNull();
+    const column = screen.getByTestId("editor-discussion-column");
+    await userEvent.click(discussionToggle());
+    await waitFor(() => expect(column.hidden).toBe(true));
+    // DDS-FR-XQMF: hidden rather than unmounted, so nothing of it shows.
+    expect(screen.getByTestId("dds-transient")).not.toBeVisible();
 
-    await userEvent.click(toggle());
-    await screen.findByRole("complementary", { name: "Comments" });
-    // One placeholder and one card: the surface of the discussion is not doubled.
-    expect(await screen.findAllByTestId("comment-pending")).toHaveLength(1);
+    await userEvent.click(discussionToggle());
+    await waitFor(() => expect(column.hidden).toBe(false));
+    // One placeholder and one discussion: the surface is not doubled.
+    expect(await screen.findAllByTestId("dds-transient")).toHaveLength(1);
+    expect(screen.getByTestId("dds-transient")).toBeVisible();
     expect(screen.getAllByTestId("comment-thread-t1")).toHaveLength(1);
   });
 
-  it("CVP-FR-47: keeps the unsent text of a reply across the same round trip", async () => {
+  it("CVP-FR-47, DDS-FR-XQMF: keeps the unsent text of a reply across the same round trip", async () => {
     await mount();
     await userEvent.type(composer(), "half written");
-    const toggle = () =>
-      screen.getByRole("button", { name: /comments \(\d+ unresolved\)/i });
-    await userEvent.click(toggle());
-    await userEvent.click(toggle());
-    await screen.findByRole("complementary", { name: "Comments" });
+    const column = screen.getByTestId("editor-discussion-column");
+    await userEvent.click(discussionToggle());
+    await waitFor(() => expect(column.hidden).toBe(true));
+    await userEvent.click(discussionToggle());
+    await waitFor(() => expect(column.hidden).toBe(false));
     expect(composer()).toHaveValue("half written");
   });
 });

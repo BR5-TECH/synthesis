@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 
 import { Editor } from "./Editor";
@@ -15,7 +16,7 @@ import {
   BODY,
   human,
   makeThread,
-  openRail,
+  openColumn,
   selectWithin,
   wireBackend,
   fragment,
@@ -25,11 +26,11 @@ import type { Backend } from "../test/editorCommentsFixtures";
 /**
  * CMT-comments.md, driven through the real Editor.
  *
- * The rail's arithmetic — re-anchoring, tracking an edit, card stacking — lives
- * in `../state/commentAnchors` and is covered by its own unit tests. What is
+ * The anchor arithmetic — re-anchoring and tracking an edit — lives in
+ * `../state/commentAnchors` and is covered by its own unit tests. What is
  * exercised here is the wiring: which command each affordance invokes, what the
- * rail renders in each of its states, and the claims the Editor spec makes about
- * hosting it (EDT-FR-61).
+ * discussion column renders in each of its states, and the claims the Editor
+ * spec makes about hosting it (EDT-FR-61).
  */
 const invokeMock = vi.fn();
 const unlistenMock = vi.fn();
@@ -39,7 +40,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 /**
- * The rail follows `"discussion changed"` (CMT-FR-04), so the mock keeps the
+ * The column follows `"discussion changed"` (CMT-FR-04), so the mock keeps the
  * handlers rather than discarding them — a test emits on a channel exactly as
  * the backend would.
  */
@@ -136,7 +137,7 @@ describe("CMT-FR-12: quoting a message inside a thread", () => {
     // normally clears that selection before the click lands, which is why
     // activating Quote appeared to do nothing at all.
     await mount({ threads: [makeThread()] });
-    await openRail();
+    await openColumn();
 
     const quote = screen.getByRole("button", { name: "Quote comment 1 by raver119" });
     const press = createEvent.mouseDown(quote);
@@ -147,12 +148,12 @@ describe("CMT-FR-12: quoting a message inside a thread", () => {
   it("seeds the composer with the selected excerpt of that comment", async () => {
     // CMT-FR-12, CMT-FR-13.
     const { backend } = await mount({ threads: [makeThread()] });
-    const rail = await openRail();
+    const column = await openColumn();
 
     selectWithin(screen.getByTestId("comment-thread-t1"), "session?");
     fireEvent.click(screen.getByRole("button", { name: "Quote comment 1 by raver119" }));
 
-    const pending = rail.querySelector(".comment__quoted--pending");
+    const pending = column.querySelector(".comment__quoted--pending");
     expect(pending?.textContent).toContain("session?");
     expect(pending?.textContent).toContain("raver119");
 
@@ -172,12 +173,12 @@ describe("CMT-FR-12: quoting a message inside a thread", () => {
     // Activating an action must do the thing it names. Quoting a message with
     // no part of it picked out means the message.
     await mount({ threads: [makeThread()] });
-    const rail = await openRail();
+    const column = await openColumn();
 
     window.getSelection()?.removeAllRanges();
     fireEvent.click(screen.getByRole("button", { name: "Quote comment 1 by raver119" }));
 
-    expect(rail.querySelector(".comment__quoted--pending")?.textContent).toContain(
+    expect(column.querySelector(".comment__quoted--pending")?.textContent).toContain(
       "Which session?",
     );
   });
@@ -185,24 +186,24 @@ describe("CMT-FR-12: quoting a message inside a thread", () => {
   it("ignores a selection made outside the comment being quoted", async () => {
     // Text highlighted in the artifact is not what the reader is quoting.
     await mount({ threads: [makeThread()] });
-    const rail = await openRail();
+    const column = await openColumn();
 
     selectInBody("the first session");
     fireEvent.click(screen.getByRole("button", { name: "Quote comment 1 by raver119" }));
 
-    const pending = rail.querySelector(".comment__quoted--pending");
+    const pending = column.querySelector(".comment__quoted--pending");
     expect(pending?.textContent).not.toContain("the first session");
     expect(pending?.textContent).toContain("Which session?");
   });
 
   it("drops a quote the author removes before posting", async () => {
     const { backend } = await mount({ threads: [makeThread()] });
-    const rail = await openRail();
+    const column = await openColumn();
 
     fireEvent.click(screen.getByRole("button", { name: "Quote comment 1 by raver119" }));
-    expect(rail.querySelector(".comment__quoted--pending")).not.toBeNull();
+    expect(column.querySelector(".comment__quoted--pending")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Remove quote" }));
-    expect(rail.querySelector(".comment__quoted--pending")).toBeNull();
+    expect(column.querySelector(".comment__quoted--pending")).toBeNull();
 
     fireEvent.change(screen.getByLabelText("Reply to thread t1"), {
       target: { value: "no quote" },
@@ -253,7 +254,7 @@ describe("CMT-FR-12: quoting across a thread's several messages", () => {
     // CMT-FR-35: a control reachable by name is no use if two of them answer to
     // the same one — a keyboard user would have no way to say which they meant.
     await mount({ threads: [threadOfThree()] });
-    await openRail();
+    await openColumn();
 
     expect(screen.getByRole("button", { name: "Quote comment 1 by raver119" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Quote comment 2 by raver119" })).toBeInTheDocument();
@@ -263,13 +264,15 @@ describe("CMT-FR-12: quoting across a thread's several messages", () => {
   it("quotes the message whose action was activated, not the one selected in", async () => {
     // A selection in a sibling message is not what this Quote is for.
     await mount({ threads: [threadOfThree()] });
-    const rail = await openRail();
+    const column = await openColumn();
 
-    const comments = screen.getByTestId("comment-thread-t1").querySelectorAll(".comment");
+    const comments = screen
+      .getByTestId("comment-thread-t1")
+      .querySelectorAll("[data-comment-id]");
     selectWithin(comments[1], "second message");
     fireEvent.click(screen.getByRole("button", { name: "Quote comment 1 by raver119" }));
 
-    const pending = rail.querySelector(".comment__quoted--pending");
+    const pending = column.querySelector(".comment__quoted--pending");
     expect(pending?.textContent).toContain("first message here");
     expect(pending?.textContent).not.toContain("second message");
   });
@@ -278,7 +281,7 @@ describe("CMT-FR-12: quoting across a thread's several messages", () => {
     // CMT-FR-12 names this in so many words, and the removal is by index over a
     // list rendered by index — exactly the shape that goes wrong silently.
     const { backend } = await mount({ threads: [threadOfThree()] });
-    await openRail();
+    await openColumn();
 
     fireEvent.click(screen.getByRole("button", { name: "Quote comment 1 by raver119" }));
     fireEvent.click(screen.getByRole("button", { name: "Quote comment 2 by raver119" }));
@@ -307,7 +310,7 @@ describe("CMT-FR-12: quoting across a thread's several messages", () => {
     // CMT-FR-34's "leaving the composer's content intact" is about everything
     // the author assembled, not the textarea alone.
     await mount({ threads: [threadOfThree()], addCommentError: "discussion_resolved" });
-    await openRail();
+    await openColumn();
 
     fireEvent.click(screen.getByRole("button", { name: "Quote comment 1 by raver119" }));
     fireEvent.change(screen.getByLabelText("Reply to thread t1"), {
@@ -323,11 +326,11 @@ describe("CMT-FR-12: quoting across a thread's several messages", () => {
   });
 
   it("CMT-FR-12, CMT-FR-16: offers no Quote at all on a resolved thread or while no identity resolves", async () => {
-    // CMT-FR-12 is a property of a card that takes comments; CMT-FR-24 disables
-    // the whole conversation while nobody can be named as its author.
+    // CMT-FR-12 is a property of a discussion that takes comments; CMT-FR-24
+    // disables the whole conversation while nobody can be named as its author.
     await mount({ threads: [{ ...threadOfThree(), resolved: true }] });
-    await openRail();
-    fireEvent.click(screen.getByRole("button", { name: /resolved thread/i }));
+    const column = await openColumn();
+    fireEvent.click(within(column).getByRole("button", { name: /^\d+ resolved$/ }));
     expect(await screen.findByTestId(`comment-thread-${threadOfThree().id}`)).toBeInTheDocument();
     expect(screen.queryAllByRole("button", { name: /^Quote comment/ })).toHaveLength(0);
 
@@ -336,7 +339,7 @@ describe("CMT-FR-12: quoting across a thread's several messages", () => {
       threads: [threadOfThree()],
       identityError: GITHUB_TOKEN_ERRORS.tokenMissing,
     });
-    await openRail();
+    await openColumn();
     expect(screen.queryAllByRole("button", { name: /^Quote comment/ })).toHaveLength(0);
   });
 });

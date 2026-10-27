@@ -31,7 +31,8 @@ import {
   type OpenableArtifact,
   type Tab,
 } from "../../types";
-import { conversationTabId, neverEmpty, railSurfaceFor } from "./tabRecords";
+import { conversationTabId, neverEmpty, fragmentSurfaceFor } from "./tabRecords";
+import { fileColumn, setColumnHidden } from "../../state/discussionColumn";
 
 export interface DiscussionActionDeps {
   tabsRef: MutableRefObject<Tab[]>;
@@ -144,20 +145,20 @@ export function createDiscussionActions(
 
   /**
    * CMP-FR-10 / CMP-FR-11 / CMT-FR-36: open the owner and land on the
-   * discussion. The rail's surface and open state are written into the
-   * artifact's session before the tab opens, so the Editor mounts already
-   * showing the rail. The pending focus the route already holds is what lands
-   * focus when the discussion's surface mounts.
+   * discussion. The file's column is shown, and a fragment discussion also puts
+   * the tab on a surface that marks its fragment, before the tab opens, so the
+   * Editor mounts already showing both. The pending focus the route already
+   * holds is what lands focus when the discussion's surface mounts.
    */
   const openOwner = (reveal: DiscussionReveal) => {
     const { target } = reveal;
     if (target.kind === "artifact") {
       const id = target.artifactId;
       sessions.update(id, {
-        ...railSurfaceFor(id),
-        railOpen: true,
+        ...(reveal.fragmentTarget ? fragmentSurfaceFor(id) : {}),
         ...(reveal.resolved ? { resolvedOpen: true } : {}),
       });
+      setColumnHidden(fileColumn(id), false);
       openArtifact({ id, name: basename(id) });
       if (reveal.discussionId) {
         setFocusThread({ artifactId: id, threadId: reveal.discussionId });

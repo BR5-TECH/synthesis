@@ -35,7 +35,7 @@ import {
   draftDiscussionState,
   resetDraftDiscussions,
   setFocusedHunk,
-  useDraftDiscussion,
+  useDraftReviewState,
 } from "../state/draftDiscussion";
 import { PROPOSAL_ERRORS } from "../types";
 import type { DraftChangeProposal } from "../types";
@@ -467,7 +467,7 @@ describe("moving between changes (DCR-FR-30)", () => {
   function Harness({ active = true }: { active?: boolean }) {
     // The change the review is on, exactly as the tab derives it: the store's
     // own focus, and the first change until the author has moved.
-    const focused = useDraftDiscussion(DRAFT).focusedHunkId ?? "h1";
+    const focused = useDraftReviewState(DRAFT).focusedHunkId ?? "h1";
     useHunkNavigation({
       draftId: DRAFT,
       hunks: [hunk({ id: "h1" }), hunk({ id: "h2" }), hunk({ id: "h3" })],

@@ -1,13 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  BESIDE_MIN_WIDTH,
-  CARD_MIN_WIDTH,
-  MARGIN_GUTTERS,
-  PAGE_INSET,
-  PAGE_OUTER,
-} from "../hooks/useCommentArrangement";
 import { blocksFor, decl, layersOf, sheet } from "./cssRules";
 
 /**
@@ -254,7 +247,7 @@ describe("a Markdown body takes its host's type treatment (NTS-FR-25 / CMP-FR-12
   // `.doc` sets a size AND a colour on every block it renders. `.doc--ui` is
   // the modifier that makes that rendering fit a panel row, and the surfaces
   // using it — `.comment__body` in the Comments panel, the Notes panel, and the
-  // rail — have already declared what a body reads like there. A modifier that
+  // discussion column — have already declared what a body reads like there. A modifier that
   // names a size of its own overrules all three, so the container renders at one
   // size and the paragraph inside it at another. Both are classes on the same
   // element in the DOM, so `toHaveClass` passes either way.
@@ -330,162 +323,6 @@ describe("a Markdown body takes its host's type treatment (NTS-FR-25 / CMP-FR-12
       if (decl(m[2], "font-size") !== null) offenders.push(selector);
     }
     expect(offenders).toEqual([]);
-  });
-});
-
-describe("the rail's pinned footer covers the rail's foot (CMT-FR-17)", () => {
-  // The footer is opaque so the aligned cards behind it do not read through.
-  // Anything it leaves uncovered at the bottom is a strip of whatever card runs
-  // past it, sliced mid-line — so the gutter has to be its own padding rather
-  // than an offset that leaves a gap.
-  it("sits flush with the foot and takes the gutter as padding", () => {
-    const blocks = blocksFor(sheet("kit.css"), ".comment-rail__unaligned");
-    expect(blocks).toHaveLength(1);
-    // Laid at the foot rather than stuck to it: `margin-top: auto` is what puts
-    // it there when the head above does not fill the margin.
-    expect(decl(blocks[0], "margin-top")).toBe("auto");
-    expect(decl(blocks[0], "padding-bottom")).toBe("var(--sp-3)");
-    // Covering the foot is only half of it: an opaque surface is what stops the
-    // cards behind reading through the footer that sits over them. Which colour
-    // is not free either — the rail sits on the FIELD beside the page
-    // (CMT-FR-01, per `EDT-editor.md` EDT-FR-63), so a footer in any other one
-    // paints a slab the width of the margin, ending wherever its cards end.
-    expect(decl(blocks[0], "background")).toBe("var(--doc-field-bg)");
-  });
-
-  it("gives the pinned head at the rail's other end the same surface", () => {
-    // CMT-FR-62: the Discussion section is pinned at the head on exactly the
-    // terms the footer is pinned at the foot, so it is opaque in the same colour
-    // — one rail, not two surfaces that happen to share a margin.
-    const blocks = blocksFor(sheet("kit.css"), ".comment-rail__pinned-head");
-    expect(blocks).toHaveLength(1);
-    expect(decl(blocks[0], "background")).toBe("var(--doc-field-bg)");
-  });
-
-  it("bounds the head by the footer actually rendered, not by a fraction", () => {
-    // The two sections are laid out, not each stuck to an end and bounded by a
-    // guess. A fraction cannot see the difference between a collapsed resolved
-    // disclosure — one row — and an expanded one, so it charged the discussions
-    // the same either way and left two-fifths of the margin empty below them.
-    const rail = blocksFor(sheet("kit.css"), ".comment-rail")[0];
-    expect(decl(rail, "display")).toBe("flex");
-    expect(decl(rail, "flex-direction")).toBe("column");
-
-    // The head takes what is left: its natural height while that fits, shrinking
-    // and scrolling within itself only once it does not. Nothing reserves a
-    // share of the margin from it.
-    const head = blocksFor(sheet("kit.css"), ".comment-rail__pinned-head")[0];
-    expect(decl(head, "flex")).toBe("0 1 auto");
-    expect(decl(head, "min-height")).toBe("0");
-    expect(decl(head, "overflow-y")).toBe("auto");
-    expect(decl(head, "max-height")).toBeNull();
-
-    // The foot takes what it needs and never grows into space the discussions
-    // could use. Shrinkable like the head, so when both want more than the
-    // margin has, each gives up a share of the deficit weighted by what it asked
-    // for — a one-row footer beside twenty discussions keeps its row, and a
-    // twenty-thread footer beside one discussion is the one that scrolls.
-    const foot = blocksFor(sheet("kit.css"), ".comment-rail__unaligned")[0];
-    expect(decl(foot, "flex")).toBe("0 1 auto");
-    expect(decl(foot, "min-height")).toBe("0");
-    expect(decl(foot, "overflow-y")).toBe("auto");
-  });
-
-  it("bounds the foot by what else the margin holds, not by a fraction (CMT-FR-63)", () => {
-    // A fixed ceiling could not tell the difference between a margin with
-    // threads still open in it and one whose every thread is resolved. It bound
-    // both, so an artifact with nothing else to show spent the upper two-fifths
-    // of its margin on nothing while the disclosure scrolled inside the lower
-    // three — which is the defect this pair of rules exists to prevent.
-    const css = sheet("kit.css");
-    const foot = blocksFor(css, ".comment-rail__unaligned")[0];
-    // Unbounded by default: with nothing else to show, the foot has the margin.
-    expect(decl(foot, "max-height")).toBe("100%");
-
-    // The ceiling means the whole box. `max-height` bounds the CONTENT box by
-    // default, and this section carries padding and a top border — so the height
-    // it kept back measured 87px against a floor of 96, and the card it was
-    // keeping room for showed twelve pixels of itself.
-    expect(decl(foot, "box-sizing")).toBe("border-box");
-
-    // Bounded only while something else is there to be buried — a discussion at
-    // the head, a thread aligned in the body, or the card being written. The
-    // component sets the flag; CommentRail.test.tsx holds it to those three.
-    const bounded = blocksFor(css, '.comment-rail__unaligned[data-bounded="true"]');
-    expect(bounded, "no rule bounds the foot when the margin holds more").toHaveLength(1);
-    expect(decl(bounded[0], "max-height")).toBe(
-      "calc(100% - var(--comment-card-floor))",
-    );
-    // A real length rather than a fraction: what has to stay reachable is a
-    // card, and a percentage of a short margin is not one.
-    expect(sheet("colors_and_type.css")).toMatch(
-      /--comment-card-floor:\s*96px/,
-    );
-  });
-
-  it("keeps the aligned layer out of that layout", () => {
-    // The cards are placed at their anchors' offsets and the whole layer is
-    // translated by the body's scroll (CMT-FR-27). It has to stay absolutely
-    // positioned, or it becomes a third flex item and takes height from the two
-    // sections that are supposed to divide the margin between them.
-    const aligned = blocksFor(sheet("kit.css"), ".comment-rail__aligned")[0];
-    expect(decl(aligned, "position")).toBe("absolute");
-    expect(decl(aligned, "top")).toBe("0");
-  });
-
-  it("keeps the head section's own gutter on its header rather than on the section", () => {
-    // The section scrolls within itself, and its header sticks to the top of it.
-    // Padding on the SECTION is a strip the header cannot reach — a card
-    // scrolling under it shows through above the word Discussion, sliced
-    // mid-line, which is the same defect the footer's own padding rule avoids at
-    // the other end. So the gutter belongs to the header, which is opaque and
-    // travels with the top edge.
-    const section = blocksFor(sheet("kit.css"), ".comment-rail__pinned-head")[0];
-    expect(decl(section, "padding-top")).toBeNull();
-    const header = blocksFor(
-      sheet("kit.css"),
-      ".comment-rail__pinned-head > .comment-rail__section-title",
-    );
-    expect(header).toHaveLength(1);
-    expect(decl(header[0], "position")).toBe("sticky");
-    expect(decl(header[0], "top")).toBe("0");
-    expect(decl(header[0], "padding-top")).toBe("var(--sp-3)");
-    expect(decl(header[0], "background")).toBe("var(--doc-field-bg)");
-  });
-
-  it("starts the New Artifact tab's rail below that tab's formatting toolbar", () => {
-    // An Editor tab's rail is laid inside the box below the toolbar; a draft
-    // tab's is a child of the whole surface, toolbar included. Without the
-    // offset the head section's opaque surface starts a toolbar's height too
-    // high and cuts a notch out of the formatting controls, with the section's
-    // own header behind them.
-    const blocks = blocksFor(sheet("kit.css"), ".draft-editor > .comment-rail");
-    expect(blocks).toHaveLength(1);
-    expect(decl(blocks[0], "top")).toBe(
-      "calc(var(--editor-toolbar-h) + var(--doc-page-inset))",
-    );
-  });
-
-  it("ends that rail level with the page rather than above the action control", () => {
-    // A DELIBERATE DEVIATION from NAW-FR-27's clause that the margin's pinned
-    // sections end above the action control. The two share the field's trailing
-    // edge — the control is `--sp-4` from the frame and the rail `--sp-6`, so
-    // most of the control is over the rail whatever height it is given — and
-    // ending above it cost the foot a control's height of margin at every window
-    // size. Pinned here so that restoring the requirement is a deliberate act
-    // rather than something that drifts back.
-    const rail = blocksFor(sheet("kit.css"), ".draft-editor > .comment-rail")[0];
-    expect(decl(rail, "bottom")).toBe("var(--doc-page-inset)");
-
-    // What the deviation costs is bounded by this: the collapsed disclosure is
-    // the row that now sits beside the control, so its BOX is shortened to clear
-    // it. Padding would not do — it is inside the button's own box and so still
-    // part of what the button can be clicked on, which would leave the two
-    // sharing pixels and the control taking clicks meant for the row.
-    const row = blocksFor(sheet("kit.css"), ".draft-editor .comment-rail__disclosure");
-    expect(row).toHaveLength(1);
-    expect(decl(row[0], "width")).toBe("calc(100% - var(--draft-actions-clear))");
-    expect(decl(row[0], "padding-right")).toBeNull();
   });
 });
 
@@ -697,7 +534,7 @@ describe("a Markdown body is only ever rendered on its own surface", () => {
   // page, the document scale, which is the defect relocated rather than fixed.
   //
   // One component emits the modifier, and it composes it onto a host class its
-  // caller names: a card in the rail, and a Flow node rendering its inline
+  // caller names: a card in a discussion, and a Flow node rendering its inline
   // prompt (`FLO-flow.md` FLO-FR-13). So the invariant is not one fixed class —
   // it is that EVERY host handed to it declares its own `font-size`.
   it("emits the panel modifier from one component, onto a host that sizes itself", () => {
@@ -713,7 +550,7 @@ describe("a Markdown body is only ever rendered on its own surface", () => {
 
     const source = emitters[0][1];
     // The modifier is composed onto the caller's class rather than hardcoded,
-    // and the default host is the rail's card.
+    // and the default host is a discussion's card.
     expect(source).toContain("${className} doc doc--ui");
     expect(source).toContain('className = "comment__body"');
 

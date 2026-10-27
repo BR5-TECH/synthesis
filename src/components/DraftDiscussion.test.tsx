@@ -50,10 +50,10 @@ import { TAIL_SLACK } from "./discussion";
 import {
   draftDiscussionState,
   resetDraftDiscussions,
-  restoreDraftRatios,
   setDraftDiscussionHidden,
   setDraftRatio,
 } from "../state/draftDiscussion";
+import { restoreDiscussionColumns } from "../state/discussionColumn";
 import {
   getDiscussionSession,
   noteDiscussionArrivals,
@@ -701,7 +701,7 @@ describe("hiding the discussion column (DDS-FR-XQMF, SNV-FR-08)", () => {
       return undefined;
     });
     await act(async () => {
-      await restoreDraftRatios("/repo");
+      await restoreDiscussionColumns("/repo");
     });
 
     setDraftRatio(DRAFT, "doc70");
@@ -732,7 +732,7 @@ describe("hiding the discussion column (DDS-FR-XQMF, SNV-FR-08)", () => {
       return undefined;
     });
     await act(async () => {
-      await restoreDraftRatios("/repo");
+      await restoreDiscussionColumns("/repo");
     });
 
     expect(draftDiscussionState(DRAFT).ratio).toBe("chat70");
@@ -750,7 +750,7 @@ describe("hiding the discussion column (DDS-FR-XQMF, SNV-FR-08)", () => {
       return undefined;
     });
     await act(async () => {
-      await restoreDraftRatios("/repo");
+      await restoreDiscussionColumns("/repo");
     });
 
     expect(draftDiscussionState(DRAFT).ratio).toBe("doc70");
@@ -766,7 +766,7 @@ describe("hiding the discussion column (DDS-FR-XQMF, SNV-FR-08)", () => {
       cmd === "load_layout_preferences" ? {} : undefined,
     );
     await act(async () => {
-      await restoreDraftRatios("/repo");
+      await restoreDiscussionColumns("/repo");
     });
 
     setDraftDiscussionHidden("d1", true);

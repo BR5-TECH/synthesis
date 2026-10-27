@@ -238,6 +238,19 @@ export interface LayoutPreferences {
    * it, and a draft returned to must open on the arrangement it was left in.
    */
   draftDiscussionHidden?: Record<string, boolean>;
+
+  /**
+   * SNV-FR-08 / CMT-FR-30: how each file's Editor tab is split between its
+   * document column and its discussion column, keyed by the file's
+   * project-relative path.
+   */
+  fileDiscussionRatios?: Record<string, string>;
+
+  /**
+   * SNV-FR-08 / CMT-FR-30: whether each file's discussion column is hidden,
+   * keyed by the file's project-relative path. A file with no entry shows it.
+   */
+  fileDiscussionHidden?: Record<string, boolean>;
 }
 
 /**

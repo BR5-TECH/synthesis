@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 
 import { Editor } from "./Editor";
@@ -51,10 +52,8 @@ function wireBackend(b: Backend) {
         return { checksum: "ck-saved" };
       case "list_discussions":
         return b.threads ?? [];
-      case "resolve_comment_identity":
+      case "resolve_comment_author_identity":
         return { kind: "human", login: "raver119" };
-      case "list_discussion_threads_for_target":
-        return [];
       case "list_personal_agents":
         return [];
       case "append_log_records":
@@ -407,9 +406,9 @@ describe("ESH-FR-MJRH: nothing waits on the colouring", () => {
   });
 });
 
-// EDT-FR-61, ESH-FR-CXAI, CMT-FR-03 / CMT-FR-05, ESH-FR-ATDS, ESH-FR-BLTT / CMT-FR-02: the rail renders beside a source file's
-// page, because that is where the Editor sets its text.
-describe("EDT-FR-61, ESH-FR-CXAI, CMT-FR-02, CMT-FR-03: comments beside the source page", () => {
+// EDT-FR-61, ESH-FR-CXAI, CMT-FR-03 / CMT-FR-05, ESH-FR-ATDS, ESH-FR-BLTT / CMT-FR-02: the discussion column
+// stands beside a source file's page, because that is where the Editor sets its text.
+describe("EDT-FR-61, ESH-FR-CXAI, CMT-FR-02, CMT-FR-03: the discussion column beside the source page", () => {
   const thread = (): Discussion => ({
     id: "t1",
     target: { kind: "artifact", artifactId: "src/main.rs" },
@@ -433,13 +432,13 @@ describe("EDT-FR-61, ESH-FR-CXAI, CMT-FR-02, CMT-FR-03: comments beside the sour
     updatedAt: "2026-01-01T00:00:00Z",
   });
 
-  it("renders the rail and marks the anchored passage on the source layer", async () => {
+  it("CMT-FR-01, DDS-FR-KTVW, CMT-FR-28: shows the column and marks the anchored passage on the source layer", async () => {
     mount("src/main.rs", RUST, { threads: [thread()] });
     await screen.findByLabelText("Source");
-    // CMT-FR-30: the rail opens for a file carrying an unresolved thread.
-    const rail = await screen.findByRole("complementary", { name: "Comments" });
-    expect(rail).toBeInTheDocument();
-    expect(rail.textContent).toContain("Why greet here?");
+    // DDS-FR-KTVW: the column is shown for every file, with no step from the author.
+    const column = await screen.findByTestId("editor-discussion-column");
+    expect(column).toBeVisible();
+    await waitFor(() => expect(column.textContent).toContain("Why greet here?"));
     // CMT-FR-28: the passage itself is marked, on the same layer the tokens are.
     await waitFor(() => {
       const anchor = layer()!.querySelector("[data-comment-thread='t1']");
@@ -453,7 +452,7 @@ describe("EDT-FR-61, ESH-FR-CXAI, CMT-FR-02, CMT-FR-03: comments beside the sour
     ).not.toBeNull();
   });
 
-  it("offers the affordance over a selection in the source surface", async () => {
+  it("CMT-FR-05, DDS-FR-QMBC: offers the affordance over a selection in the source surface", async () => {
     mount("src/main.rs", RUST, { threads: [] });
     const source = (await screen.findByLabelText(
       "Source",
@@ -469,12 +468,14 @@ describe("EDT-FR-61, ESH-FR-CXAI, CMT-FR-02, CMT-FR-03: comments beside the sour
       name: "Comment on selection",
     });
     fireEvent.click(button);
-    // The composer opens in the rail, quoting exactly the passage selected.
-    const rail = await screen.findByRole("complementary", { name: "Comments" });
-    await waitFor(() => expect(rail.textContent).toContain('"x < y & z"'));
+    // The opening composer of the column takes the passage, quoting exactly
+    // what was selected.
+    const column = await screen.findByTestId("editor-discussion-column");
+    const quote = await within(column).findByTestId("discussion-opening-fragment");
+    expect(quote.textContent).toContain('"x < y & z"');
   });
 
-  it("renders no rail on a Markdown file's raw-text surface", async () => {
+  it("CMT-FR-02, CMT-FR-28: keeps the column on a Markdown file's raw-text surface, with no passage marked", async () => {
     mount("a.md", "# H\n\nSome prose about greeting.\n", {
       threads: [
         {
@@ -490,12 +491,24 @@ describe("EDT-FR-61, ESH-FR-CXAI, CMT-FR-02, CMT-FR-03: comments beside the sour
         },
       ],
     });
-    await screen.findByRole("complementary", { name: "Comments" });
+    const column = await screen.findByTestId("editor-discussion-column");
+    await waitFor(() => expect(column.textContent).toContain("Why greet here?"));
+    // The rich page marks the passage.
+    await waitFor(() =>
+      expect(document.querySelector(".ProseMirror [data-comment-thread]")).not.toBeNull(),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Edit as Markdown source" }),
     );
-    await screen.findByLabelText("Markdown source");
-    expect(screen.queryByRole("complementary", { name: "Comments" })).toBeNull();
+    const raw = await screen.findByLabelText("Markdown source");
+    // The discussion stays where it is read; the raw-text surface marks no
+    // fragment, and the rich page with its marks is not displayed.
+    expect(column).toBeVisible();
+    expect(column.textContent).toContain("Why greet here?");
+    expect(raw.closest(".editor__source-wrap")!.querySelector("[data-comment-thread]")).toBeNull();
+    expect(
+      (document.querySelector(".ProseMirror")!.closest(".editor") as HTMLElement).style.display,
+    ).toBe("none");
   });
 });
 
@@ -542,19 +555,34 @@ describe("ESH-FR-CAKG, ESH-FR-YNIV: a theme change over an open file", () => {
   });
 });
 
-// ACT-FR-19: a source file lends the rail a margin, so its discussions are read
-// there rather than in the floating panel.
-describe("ACT-FR-19: discussions over a source file", () => {
-  it("reads them in the rail and carries no floating panel", async () => {
-    mount("src/main.rs", RUST, { threads: [] });
+// ACT-FR-19: a source file's discussions are read in the column beside it,
+// so the action control carries no floating panel and no control for one.
+describe("ACT-FR-19, ACT-FR-20: discussions over a source file", () => {
+  it("reads them in the column and carries no floating panel", async () => {
+    mount("src/main.rs", RUST, {
+      threads: [
+        {
+          id: "t1",
+          target: { kind: "artifact", artifactId: "src/main.rs" },
+          fragmentTarget: null,
+          comments: [],
+          resolved: false,
+          createdAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-01T00:00:00Z",
+        },
+      ],
+    });
     await screen.findByLabelText("Source");
+    await screen.findByTestId("comment-thread-t1");
     // The control is the tab's, in the corner of the field beside the page.
     expect(
       await screen.findByRole("button", { name: "Actions" }),
     ).toBeInTheDocument();
-    // ACT-FR-20's discussions control belongs to the surfaces that lend no
-    // margin; a source file is not one of them.
-    expect(screen.queryByRole("button", { name: /discussion/i })).toBeNull();
+    // ACT-FR-20: the discussions control belongs to the surfaces with no
+    // column; a source file is not one of them.
+    expect(screen.queryByRole("button", { name: /^(Show|Hide) discussion\b/ })).toBeNull();
+    expect(document.querySelector(".action-control__discussions")).toBeNull();
+    expect(document.querySelector(".action-control__panel")).toBeNull();
   });
 });
 

@@ -1,6 +1,7 @@
 /**
- * DDS-FR-KTVW / DDS-FR-HGMB: the right column of the New Artifact tab — the
- * conversation between the author and the draft's agents.
+ * DDS-FR-KTVW / DDS-FR-HGMB: the right column of the New Artifact tab and of the
+ * Editor tab — the conversation between the author and the agents about the
+ * draft or the file (`CMT-comments.md` CMT-FR-01).
  *
  * A **column, not a rail**. The measure is what decides this: an agent's answer
  * is prose, and prose read at 370 pixels is read one clause at a time. That is
@@ -27,13 +28,19 @@ import { OpenDiscussion, type HunkOpening } from "./OpenDiscussion";
 import { HunkSubject } from "./HunkSubject";
 import { openingHunkOf } from "./hunkDiscussion";
 import { COMPOSER_KEY } from "../../hooks/useDiscussions";
-import { expandHistory, useDraftDiscussion } from "../../state/draftDiscussion";
+import {
+  expandColumnHistory,
+  useDiscussionColumn,
+  type ColumnKey,
+} from "../../state/discussionColumn";
 import { setDiscussionScroll, useDiscussionSession } from "../../state/discussionSession";
+import type { DiscussionSurfaceProps } from "../discussion";
 import {
   discussionFragment,
   type AttachmentInput,
   type CommentQuote,
   type Discussion,
+  type DiscussionTarget,
   type FragmentTarget,
   type Participant,
   type ProjectAgent,
@@ -48,8 +55,33 @@ import {
 export const COLLAPSE_ABOVE = 20;
 const KEPT_WHEN_COLLAPSED = 12;
 
+/** What the surface takes from a host that supplies the turns itself. */
+export type SurfaceTurns = Pick<
+  DiscussionSurfaceProps,
+  | "pendingTurns"
+  | "failedTurn"
+  | "imageNotice"
+  | "retryingTurnIds"
+  | "onRetryTurn"
+  | "onCancelTurn"
+  | "turnFailure"
+  | "liveTurns"
+>;
+
 export interface DiscussionColumnProps {
-  draftId: string;
+  /** DDS-FR-PNXR / CMT-FR-30: whose column this is — a draft's or a file's. */
+  column: ColumnKey;
+  /** What a new discussion of the column is about. */
+  target: DiscussionTarget;
+  /**
+   * What the column calls the item in its statements and names: `draft`,
+   * `file`, or `specification`.
+   */
+  noun: string;
+  /** What the item's text is called: the draft's `prompt`, or the file. */
+  material: string;
+  /** The test id the column carries in its host tab. */
+  testId?: string;
   /**
    * CMT-FR-53: the draft's discussions, in the order they were opened. The
    * whole-target ones and the fragment ones are listed together (DDS-FR-VHZN).
@@ -59,7 +91,12 @@ export interface DiscussionColumnProps {
   selectedThreadId: string | null;
   onSelectThread: (threadId: string) => void;
   identity: Participant | null;
-  identityBlock: { message: string; route?: string | null } | null;
+  identityBlock: {
+    message: string;
+    route?: string | null;
+    /** CMT-FR-25: the one refusal the author can clear from here. */
+    action?: { label: string; onActivate: () => void };
+  } | null;
   agents: readonly ProjectAgent[];
   onReply: (
     threadId: string,
@@ -127,11 +164,22 @@ export interface DiscussionColumnProps {
    * second press nothing happens for.
    */
   focusSignal?: number;
+  /**
+   * The turns of a discussion, for a host whose own hooks hold them. Absent,
+   * the surface reads them for itself.
+   */
+  turnsFor?: (discussionId: string) => SurfaceTurns;
+  /**
+   * CMT-FR-17 / CMT-FR-30: whether the resolved disclosure is expanded, for a
+   * host that keeps it. Absent, the column keeps it for this sitting.
+   */
+  showResolved?: boolean;
+  onShowResolved?: (shown: boolean) => void;
 }
 
 export function DiscussionColumn(props: DiscussionColumnProps) {
-  const { draftId, discussions } = props;
-  const view = useDraftDiscussion(draftId);
+  const { column, discussions, noun } = props;
+  const view = useDiscussionColumn(column);
 
   /**
    * NAW-FR-32: the author is writing the first message of a **new** discussion
@@ -143,7 +191,12 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
    */
   const [composingOther, setComposingNew] = useState(false);
   /** CMT-FR-17: whether the resolved discussions are being shown with the rest. */
-  const [showResolved, setShowResolved] = useState(false);
+  const [heldResolved, setHeldResolved] = useState(false);
+  const showResolved = props.showResolved ?? heldResolved;
+  const setShowResolved = (shown: boolean) => {
+    setHeldResolved(shown);
+    props.onShowResolved?.(shown);
+  };
 
   // DDS-FR-QMBC: a passage chosen in the prompt puts the column on the opening
   // composer that will carry it.
@@ -241,7 +294,7 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
       className="dds-discussion"
       aria-label="Discussion"
       hidden={props.hidden}
-      data-testid="draft-discussion-column"
+      data-testid={props.testId ?? "draft-discussion-column"}
     >
       {/* DDS-FR-DPRJ / DDS-FR-GKMT: the column's own state, in words. The badge
           says which of the two things the column is doing, so an author who has
@@ -367,8 +420,8 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
             className="dds-discussion__thread t-ui-xs"
             data-active={composingNew}
             data-testid="discussion-new"
-            aria-label="Begin another discussion about this draft"
-            title="Begin another discussion about this draft"
+            aria-label={`Begin another discussion about this ${noun}`}
+            title={`Begin another discussion about this ${noun}`}
             onClick={() => {
               // DDS-FR-YLRM: another discussion of the draft, not the one about
               // a passage or a change that was being opened.
@@ -388,7 +441,7 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
               className="dds-discussion__thread dds-discussion__resolved t-ui-xs"
               aria-expanded={showResolved}
               data-active={showResolved}
-              onClick={() => setShowResolved((shown) => !shown)}
+              onClick={() => setShowResolved(!showResolved)}
             >
               {resolved.length} resolved
             </button>
@@ -403,6 +456,15 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
             {props.identityBlock.route && (
               <div className="comment-rail__route">{props.identityBlock.route}</div>
             )}
+            {props.identityBlock.action && (
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={props.identityBlock.action.onActivate}
+              >
+                {props.identityBlock.action.label}
+              </button>
+            )}
           </div>
         )}
 
@@ -413,6 +475,11 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
              own message (DDS-FR-VTKD). The markup is the shared surface's; the
              `stream` variant sets only its measure. */
           <DiscussionSurface
+            // One surface per discussion: a menu left open on one discussion
+            // does not stand over the next one the chooser shows. The text,
+            // the scroll position and the unread state are in the session
+            // store, keyed by discussion, so nothing the author holds is lost.
+            key={thread.id}
             discussion={thread}
             owner="column"
             variant="stream"
@@ -436,7 +503,7 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
                   type="button"
                   className="dds-earlier t-ui-xs"
                   data-testid="discussion-earlier"
-                  onClick={() => expandHistory(draftId)}
+                  onClick={() => expandColumnHistory(column)}
                 >
                   <span className="dds-earlier__rule" aria-hidden="true" />
                   {hidden} earlier {hidden === 1 ? "message" : "messages"}
@@ -448,6 +515,7 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
             onReply={props.onReply}
             onSetResolved={props.onSetResolved}
             actionsHost={actionsHost}
+            {...props.turnsFor?.(thread.id)}
           />
         ) : (
           /* A draft nobody has spoken about yet. The column carries the
@@ -468,7 +536,9 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
             fragment={fragment}
             hunk={hunk}
             resolved={resolved.length}
-            draftId={draftId}
+            target={props.target}
+            noun={noun}
+            material={props.material}
             agents={props.agents}
             disabled={props.blocked || props.identityBlock !== null}
             error={props.errors[COMPOSER_KEY]}

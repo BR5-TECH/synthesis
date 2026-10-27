@@ -1,4 +1,4 @@
-// Addressing an agent from the comment rail — `specifications/ui/CMT-comments.md`
+// Addressing an agent from the discussion column — `specifications/ui/CMT-comments.md`
 // CTA-FR-SKXK, CMT-FR-15, AGT-FR-25, AGT-FR-27 … CMT-FR-37, CTA-FR-RPVU, AGC-FR-07.
 //
 // Driven through the real Editor, so what is exercised is the wiring: which
@@ -29,6 +29,7 @@ import {
   fragment,
 } from "../test/editorAgentsFixtures";
 import type { Backend } from "../test/editorAgentsFixtures";
+import { openColumn } from "../test/editorCommentsFixtures";
 import {
   artifactCommentOrigin,
   expectBackendOrigin,
@@ -192,13 +193,7 @@ async function mount(over: Partial<Backend> = {}) {
     />,
   );
   await screen.findByLabelText("artifact body");
-  const toggle = screen.getByRole("button", {
-    name: /comments \(\d+ unresolved\)/i,
-  });
-  if (toggle.getAttribute("aria-expanded") !== "true") {
-    await userEvent.click(toggle);
-  }
-  await screen.findByRole("complementary", { name: "Comments" });
+  await openColumn();
   return b;
 }
 
@@ -219,13 +214,7 @@ async function remount(b: Backend) {
     />,
   );
   await screen.findByLabelText("artifact body");
-  const toggle = screen.getByRole("button", {
-    name: /comments \(\d+ unresolved\)/i,
-  });
-  if (toggle.getAttribute("aria-expanded") !== "true") {
-    await userEvent.click(toggle);
-  }
-  await screen.findByRole("complementary", { name: "Comments" });
+  await openColumn();
   return b;
 }
 
@@ -256,22 +245,21 @@ function failedTurn(over: Partial<AgentTurn> = {}): AgentTurn {
 const card = () => screen.getByTestId("comment-thread-t1");
 /** The comments actually in the thread — a failed contribution is not one. */
 const postedComments = () =>
-  card().querySelectorAll(
-    ".comment:not(.comment--pending):not(.comment--failed)",
-  );
+  card().querySelectorAll(".dds-message__part[data-comment-id]");
 
 describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", () => {
-  it("CTA-FR-AZEU, CTA-FR-HBAB: reads Thinking… throughout, whatever the retries are doing", async () => {
-    // The rail cannot see an attempt at all: a turn repeating a model call is
+  it("CTA-FR-AZEU, CTA-FR-HBAB: reads thinking throughout, whatever the retries are doing", async () => {
+    // The column cannot see an attempt at all: a turn repeating a model call is
     // still `running`, and nothing about a retry reaches a surface (CVL-FR-20).
     // What this witnesses is that the card renders the running turn as a pending
     // contribution and shows no failure and no count while it does.
     const b = await mount({ turns: [turn({ id: "turn-1", nickname: "arch" })] });
-    const pending = await screen.findByTestId("comment-pending");
-    expect(pending.textContent).toContain("Thinking…");
+    const pending = await screen.findByTestId("dds-transient");
+    // DDS-FR-TGWY: the column words the status as one lowercase word.
+    expect(pending.textContent).toContain("thinking");
     expect(pending.textContent).not.toMatch(/attempt|retry|1 of 3/i);
     expect(
-      within(pending).getByTestId("comment-pending-cancel"),
+      within(pending).getByTestId("dds-transient-cancel"),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("comment-failed")).not.toBeInTheDocument();
     // Read by each conversational surface the tab mounts, exactly as
@@ -283,7 +271,7 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
 
   it("CTA-FR-ZDDI: replaces the pending contribution in place when the attempts run out", async () => {
     await mount({ turns: [turn({ id: "turn-1", nickname: "arch" })] });
-    await screen.findByTestId("comment-pending");
+    await screen.findByTestId("dds-transient");
 
     emitTurn(failedTurn());
 
@@ -295,7 +283,7 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
     // than colour: its own marker, and its own container.
     expect(failed.querySelector('[data-icon="alert-triangle"]')).toBeTruthy();
     expect(failed).toHaveClass("comment--failed");
-    expect(screen.queryByTestId("comment-pending")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("dds-transient")).not.toBeInTheDocument();
     // It names no failure code and no provider — the diagnosis is in the log.
     expect(failed.textContent).not.toMatch(/unreachable|openrouter|timed_out/i);
     // The thread's comments are exactly what they were.
@@ -320,7 +308,7 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
       expect(screen.queryByTestId("comment-failed")).not.toBeInTheDocument(),
     );
     emitTurn(turn({ id: "turn-retry-1", nickname: "arch" }));
-    expect(await screen.findByTestId("comment-pending")).toBeInTheDocument();
+    expect(await screen.findByTestId("dds-transient")).toBeInTheDocument();
   });
 
   it("CTA-FR-QDDG, CTA-FR-XNBS, CTA-FR-CERW: one activation is one turn however impatiently it is pressed", async () => {
@@ -386,8 +374,8 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
       threads: [makeThread({ resolved: true })],
       recoverable: [failedTurn()],
     });
-    // The resolved disclosure is where a resolved card is reached.
-    const disclosure = screen.getByRole("button", { name: /resolved thread/i });
+    // CMT-FR-17: the resolved disclosure is where a resolved discussion is reached.
+    const disclosure = screen.getByRole("button", { name: /^1 resolved$/ });
     await userEvent.setup().click(disclosure);
 
     const failed = await screen.findByTestId("comment-failed");
@@ -433,10 +421,10 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
     expect(screen.getByTestId("comment-failed-retry")).toBeInTheDocument();
 
     emitThread(makeThread({ resolved: true }));
-    // CMT-FR-17: the resolved card is read in the disclosure.
+    // CMT-FR-17: the resolved discussion is read through the disclosure.
     await userEvent
       .setup()
-      .click(await screen.findByRole("button", { name: /resolved thread/i }));
+      .click(await screen.findByRole("button", { name: /^1 resolved$/ }));
     expect(await screen.findByTestId("comment-failed")).toBeInTheDocument();
     expect(screen.queryByTestId("comment-failed-retry")).not.toBeInTheDocument();
 
@@ -448,8 +436,9 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
   });
 
   it("CTA-FR-ESNJ: retrying one conversation leaves another's offer takeable", async () => {
-    // The disable is on *the* control whose dispatch is initiating, not on every
-    // Retry the rail happens to be rendering.
+    // The disable is on *the* control whose dispatch is initiating, not on the
+    // Retry of another discussion. The column shows one discussion at a time,
+    // so each offer is reached through its chooser tab.
     const second = makeThread({
       id: "t2",
       fragmentTarget: fragment({ start: 0, end: 12, quote: "# Onboarding" }),
@@ -474,21 +463,39 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
       release = resolve;
     });
 
-    await waitFor(() =>
-      expect(screen.getAllByTestId("comment-failed-retry")).toHaveLength(2),
-    );
-    const [first, other] = screen.getAllByTestId("comment-failed-retry");
     const user = userEvent.setup();
+    const chooser = screen.getByRole("tablist", { name: "Discussions" });
+    const [firstTab, otherTab] = within(chooser).getAllByRole("tab");
+    await user.click(firstTab);
+    const first = await within(
+      await screen.findByTestId("comment-thread-t1"),
+    ).findByTestId("comment-failed-retry");
     await user.click(first);
     await waitFor(() => expect(calls(b, "retry_agent_turn")).toHaveLength(1));
+    expect(calls(b, "retry_agent_turn")[0].args).toEqual({ turnId: "turn-1" });
 
     // Its own control is off while it dispatches — `aria-disabled`, so it keeps
     // focus rather than dropping it to the document body (CTA-FR-ESNJ).
     await waitFor(() => expect(first).toHaveAttribute("aria-disabled", "true"));
     // ...and the other conversation's is not.
+    await user.click(otherTab);
+    const other = await within(
+      await screen.findByTestId("comment-thread-t2"),
+    ).findByTestId("comment-failed-retry");
     expect(other).toHaveAttribute("aria-disabled", "false");
     await user.click(other);
     await waitFor(() => expect(calls(b, "retry_agent_turn")).toHaveLength(2));
+    expect(calls(b, "retry_agent_turn")[1].args).toEqual({ turnId: "turn-2" });
+
+    // Back on the first discussion, its control is still off: the switch of
+    // tabs does not give a second dispatch of the same turn.
+    await user.click(firstTab);
+    const again = await within(
+      await screen.findByTestId("comment-thread-t1"),
+    ).findByTestId("comment-failed-retry");
+    expect(again).toHaveAttribute("aria-disabled", "true");
+    await user.click(again);
+    expect(calls(b, "retry_agent_turn")).toHaveLength(2);
 
     await act(async () => {
       release();
@@ -560,16 +567,16 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
     await screen.findByTestId("comment-failed");
 
     // Not a comment: the thread holds exactly the one that was posted, and the
-    // unresolved count is what it was before the agent was addressed.
+    // chooser offers the one unresolved discussion it offered before the agent
+    // was addressed.
     expect(postedComments()).toHaveLength(1);
-    expect(
-      screen.getByRole("button", { name: /comments \(1 unresolved\)/i }),
-    ).toBeInTheDocument();
+    const chooser = screen.getByRole("tablist", { name: "Discussions" });
+    expect(within(chooser).getAllByRole("tab")).toHaveLength(1);
   });
 
   it("CTA-FR-ZDDI: a non-recoverable failure renders inline with no Retry", async () => {
     await mount({ turns: [turn({ id: "turn-1", nickname: "arch" })] });
-    await screen.findByTestId("comment-pending");
+    await screen.findByTestId("dds-transient");
 
     emitTurn(
       turn({
@@ -583,7 +590,7 @@ describe("CTA-FR-MGVJ … CTA-FR-XZUO: the failed contribution and its Retry", (
     );
 
     await waitFor(() =>
-      expect(screen.queryByTestId("comment-pending")).not.toBeInTheDocument(),
+      expect(screen.queryByTestId("dds-transient")).not.toBeInTheDocument(),
     );
     expect(screen.queryByTestId("comment-failed")).not.toBeInTheDocument();
     expect(screen.queryByTestId("comment-failed-retry")).not.toBeInTheDocument();
@@ -610,7 +617,7 @@ describe("CTA-FR-ARBB: a turn whose images could not be sent", () => {
 
   it("CTA-FR-ARBB, CTA-FR-GFZE: renders a notice beside the contribution, announced and legible without colour", async () => {
     await mount({ turns: [turn({ id: "turn-1", nickname: "arch" })] });
-    await screen.findByTestId("comment-pending");
+    await screen.findByTestId("dds-transient");
 
     emitTurn(omittedTurn());
 
@@ -668,9 +675,10 @@ describe("CTA-FR-ARBB: a turn whose images could not be sent", () => {
   it("CTA-FR-LVPC: no comment is marked by it and nothing posts it into the thread", async () => {
     const b = await mount({ imageNotices: [omittedTurn()] });
     await screen.findByTestId("comment-image-notice");
-    // The notice is held by the rail alone: no comment was appended for it, and
+    // The notice is held by the column alone: no comment was appended for it, and
     // no reader of the conversation ever sees it (CTA-FR-NCVL).
     expect(calls(b, "add_comment")).toHaveLength(0);
+    expect(postedComments()).toHaveLength(1);
     for (const comment of postedComments()) {
       expect(comment.textContent).not.toMatch(/Images were not sent/);
     }

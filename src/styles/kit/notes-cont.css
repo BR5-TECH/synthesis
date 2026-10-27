@@ -18,7 +18,7 @@
    message the thread opens with (CMT-FR-15) and resolves its offsets against
    this box. */
 .comment__head { display: flex; align-items: center; gap: var(--sp-2); position: relative; }
-/* CMT-FR-38: a message's author line recedes below the message, on the same
+/* A message's author line recedes below the message, on the same
    terms the card head's does — a name set at the body's own size and colour
    competes with what it signs. */
 .comment__author {
@@ -486,24 +486,6 @@
   border-color: var(--accent);
   box-shadow: var(--shadow-3);
 }
-
-/* CMT-FR-29: the count rides with the control in the action cluster. Sized to
-   its contents rather than to the square an icon-only button gets, so the
-   numeral has room to sit beside the glyph instead of crowding it. */
-.btn.editor__comments-toggle {
-  position: relative;
-  width: auto;
-  min-width: 30px;
-  padding: 0 var(--sp-2);
-  gap: 5px;
-}
-.editor__comments-count {
-  font-size: var(--fs-ui-xs);
-  font-weight: var(--fw-semi);
-  font-variant-numeric: tabular-nums;
-  color: var(--fg-2);
-}
-.editor__comments-toggle[data-active="true"] .editor__comments-count { color: inherit; }
 
 /* CMT-FR-28: an anchored passage is marked in the body, and the focused
    thread's range distinguishably from the rest. Presentation only — no layout

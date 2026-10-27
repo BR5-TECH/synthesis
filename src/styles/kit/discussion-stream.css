@@ -435,6 +435,23 @@
   margin-top: auto;
 }
 
+/* CMT-FR-19 / DDS-FR-ZMXQ: the state words and the fragment quote stand above
+   the transcript, outside its scroller. They take their own height, so a long
+   transcript does not squeeze the quote to nothing, and they take the content
+   column's measure, so they line up with the messages and the reply field
+   rather than with the panel's edge. */
+.dds-discussion .comment-card--stream > .discussion-badges,
+.dds-discussion .comment-card--stream > .comment-card__quote {
+  flex: none;
+  box-sizing: border-box;
+  width: min(var(--doc-page-width), calc(100% - var(--sp-3-5) * 2));
+  margin-left: auto;
+  margin-right: auto;
+}
+.dds-discussion .comment-card--stream > .discussion-badges {
+  margin-top: var(--sp-2);
+}
+
 /* ---------- the reply field (DDS-FR-HQTX) ---------- */
 
 /* One bounded field carrying the placeholder, the attach and post controls, and

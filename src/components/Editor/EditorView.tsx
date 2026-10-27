@@ -1,28 +1,29 @@
 /**
  * Everything the Editor tab draws: the band above the page, the page itself in
- * whichever of its two surfaces is showing, the comment rail beside it, and the
- * overlays that sit over the lot.
+ * whichever of its two surfaces is showing, the discussion column beside it, and
+ * the overlays that sit over the lot.
  *
- * A presentational component over the Editor's own state — it owns none of it
- * and holds no hook of its own. Split out so `./index.tsx` reads as the state
+ * A presentational component over the Editor's own state — it owns none of it.
+ * The one state it holds is the request to focus the column's composer, and
+ * the ref of the grid the splitter is measured against. Split out so `./index.tsx` reads as the state
  * the tab is, with the markup that renders it in one place beside it.
  *
  * The four groups arrive whole rather than field by field, and are unpacked
  * here under the names the markup already used: the hooks that produce them
- * (`useEditorFind`, `useCommentRail`, `useCommentAnchors`, `useEditorSurface`)
+ * (`useEditorFind`, `useEditorDiscussions`, `useCommentAnchors`, `useEditorSurface`)
  * are what decide those names, so a field added to one of them reaches the
  * markup without a prop being threaded through for it.
  */
-import { useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
+import { useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 import { EditorContent } from "@tiptap/react";
 import { Icon } from "../icons";
 import { FindPanel } from "../FindPanel";
-import { CommentRail } from "../CommentRail";
+import { gridTemplate } from "../DraftDiscussion";
+import { EditorDiscussionColumn } from "./EditorDiscussionColumn";
 import { GithubTokenPicker } from "../GithubTokenPicker";
 import { ReviewOverlay } from "./ReviewOverlay";
 import { PromptChangeReview } from "../PromptChangeReview";
 import { ActionControl } from "../ActionControl";
-import { requestPendingFocus } from "../../state/discussionFocus";
 import { EditSessionStore } from "../../state/editSessions";
 import type { EditSession } from "../../state/editSessions/types";
 import { sealBurst, type EditMode, type EditSurface } from "../../state/editHistory";
@@ -45,14 +46,14 @@ import type { CommentSelection, PendingSelection } from "./selection";
 import type { LayerAnchor } from "./highlight";
 import type { EditorProps } from "./props";
 import type { useCommentAnchors } from "./useCommentAnchors";
-import type { useCommentRail } from "./useCommentRail";
+import type { useEditorDiscussions } from "./useEditorDiscussions";
 import type { useEditorFind } from "./useEditorFind";
 import type { useEditorSurface } from "./useEditorSurface";
 import type { useHunkPlacement } from "./useHunkPlacement";
 
 export interface EditorViewProps {
   findGroup: ReturnType<typeof useEditorFind>;
-  railGroup: ReturnType<typeof useCommentRail>;
+  railGroup: ReturnType<typeof useEditorDiscussions>;
   anchorGroup: ReturnType<typeof useCommentAnchors>;
   surfaceGroup: ReturnType<typeof useEditorSurface>;
   hunkGroup: ReturnType<typeof useHunkPlacement>;
@@ -108,10 +109,11 @@ export interface EditorViewProps {
 }
 
 export function EditorView(props: EditorViewProps) {
-  // ACT-FR-BRZK / CMT-FR-QHTW: the rail's whole-target opening composer. Zero
-  // while it is closed; each Discuss advances it, which also puts the caret in
-  // the field again.
-  const [wholeOpening, setWholeOpening] = useState(0);
+  // ACT-FR-BRZK / DDS-FR-JWNC: each Discuss advances it, which puts the caret
+  // in the column's composer.
+  const [discussFocus, setDiscussFocus] = useState(0);
+  // DDS-FR-PNXR: the grid the splitter's drag is measured against.
+  const splitRef = useRef<HTMLDivElement | null>(null);
   const {
     find,
     sourceTokens,
@@ -126,36 +128,10 @@ export function EditorView(props: EditorViewProps) {
     replaceCurrent,
     replaceAll,
   } = props.findGroup;
-  const {
-    comments,
-    control,
-    dismissControl,
-    unresolvedInTab,
-    railOpen,
-    railOnSource,
-    railHere,
-    toggleRail,
-    discussionsInRail,
-    railReply,
-    railSetResolved,
-    railPendingTurns,
-    railTurnFailures,
-    railErrors,
-    railFailedTurns,
-    railImageNotices,
-    railRetryingTurnIds,
-    railRetryTurn,
-    railCancelTurn,
-  } = props.railGroup;
-  const {
-    bodyScrollRef,
-    arrangement,
-    scrollTop,
-    setScrollTop,
-    anchorTops,
-    identityBlock,
-    scrollFragmentIntoView,
-  } = props.anchorGroup;
+  const { comments, control, dismissControl, split, showColumn } = props.railGroup;
+  // CMT-FR-02 / ESH-FR-SSDV: a source file marks its fragments on its source.
+  const railOnSource = !props.isMarkdown;
+  const { bodyScrollRef, identityBlock, revealFragment } = props.anchorGroup;
   const { editor, selectedImage, removeSelectedImage, takeSourceImage } =
     props.surfaceGroup;
   const { placedHunks, focusedPlaced, focusHunkFromBody } = props.hunkGroup;
@@ -256,10 +232,10 @@ export function EditorView(props: EditorViewProps) {
           }
           setDraft({ start, end, quote });
           setPendingSelection(null);
-          // The composer lives in the rail, so starting a thread has to make the
-          // rail visible — otherwise activating this button would appear to do
-          // nothing at all.
-          if (!railOpen) sessions.update(artifactId, { railOpen: true });
+          // CMT-FR-05: the composer lives in the column, so starting a
+          // discussion has to make the column visible — otherwise activating
+          // this button would appear to do nothing at all.
+          showColumn();
         }}
       >
         <Icon.Comment size={14} />
@@ -285,10 +261,6 @@ export function EditorView(props: EditorViewProps) {
       // Keep the highlight layer registered with the text it sits behind.
       onScroll={(e) => {
         const hl = sourceHlRef.current;
-        // CMT-FR-27: the cards are placed in the surface's own coordinates, so
-        // the rail is told how far it has scrolled — that is what keeps each
-        // card level with its passage.
-        if (railOnSource) setScrollTop(e.currentTarget.scrollTop);
         // EDT-FR-UERT: the tab keeps the offset for its next activation.
         rememberScroll();
         if (!hl) return;
@@ -308,7 +280,9 @@ export function EditorView(props: EditorViewProps) {
         const hit = sourceAnchors.find(
           (a) => a.marked && at >= a.start && at <= a.end,
         );
-        if (hit) setFocusedThread(hit.threadId);
+        if (!hit) return;
+        showColumn();
+        setFocusedThread(hit.threadId);
       }}
       // EDT-FR-38: Tab inserts the artifact's indentation convention
       // (STB-FR-21/STB-FR-23) rather than moving focus out of the source
@@ -353,127 +327,13 @@ export function EditorView(props: EditorViewProps) {
     />
   );
 
-  return (
-    <div
-      ref={rootRef}
-      /* EDT-FR-63: the tab is one band above one page, both set on the field.
-         The field is declared here, on the one element that is present in both
-         editing modes, so the page's edge has the same thing behind it whether
-         the WYSIWYG surface or the raw-text surface is the one showing. */
-      className="editor-tab"
-      /* EDT-FR-63 / EDT-FR-18: the frontmatter region is part of the editing
-         surface, so it takes the head of the page rather than floating on the
-         field above it. The sheet gives up its own top inset and top corners
-         to it, which is what this says. */
-      data-frontmatter={mode === "wysiwyg" && fm !== null ? "on" : "off"}
-      /* EDT-FR-61 / CMT-FR-64: whether the margin is showing, and where its
-         cards are. Declared here rather than on the wrapper below because the
-         page slides as one with the frontmatter region above it — the region is
-         a sibling of that wrapper, so this is the nearest element from which
-         both can be reached. */
-      data-rail={railHere && railOpen ? "open" : "closed"}
-      data-comments={arrangement}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        position: "relative",
-      }}
-    >
-      {/* EFR-FR-ABHF: the band holds exactly one of three surfaces — the
-          formatting toolbar, the Find panel, or the Find & Replace panel. The
-          formatting toolbar occupies it whenever neither panel is open and
-          returns the moment one closes. The band is part of the tab's own
-          chrome rather than a floating overlay, so an open panel neither
-          closes nor is closed by the main window's overlays (STB-FR-12). */}
-      <div className="editor__toolbar" data-find={find.form ?? "off"}>
-        {/* EDT-FR-16: the surface of the band takes the width that the action
-            cluster leaves, and clips at its trailing end the controls that do
-            not fit. So at a narrow width no control paints over the cluster
-            or outside the band. */}
-        <div className="editor__band-surface">
-          {find.form !== null ? (
-            <FindPanel
-              form={find.form}
-              query={find.query}
-              replacement={find.replacement}
-              mode={find.mode}
-              ordinal={engine.current + 1}
-              total={engine.matches.length}
-              valid={engine.valid}
-              focus={findFocus}
-              onQueryChange={(query) => patchFind({ query })}
-              onReplacementChange={(replacement) => patchFind({ replacement })}
-              onModeChange={(next: LiteralSearchMode) => patchFind({ mode: next })}
-              onStep={engine.step}
-              onReplace={replaceCurrent}
-              onReplaceAll={replaceAll}
-              onClose={() => patchFind({ form: null })}
-            />
-          ) : (
-            /* EFR-FR-ACMM: the formatting affordances are the rich surface's. Over a
-               source file the band holds the find panels alone and is otherwise
-               empty — those controls format a rich Markdown document, and a source
-               file has none to format. */
-            mode === "wysiwyg" && (
-              <FormattingButtons
-                editor={editor}
-                editable={!blocked}
-                onInsertDiagram={insertDiagram}
-              />
-            )
-          )}
-          {/* NAW-FR-53 / NAW-FR-54: the removal action an image the surface has
-              selected carries. Reachable from the keyboard on the selected image
-              and named in words rather than by an icon alone, and offered only
-              where the host takes images at all — an Editor tab on a project file
-              has none to remove (EDT-FR-86). */}
-          {find.form === null && imageHost && selectedImage && (
-            <button
-              type="button"
-              className="editor__image-remove"
-              onClick={removeSelectedImage}
-            >
-              Remove image
-            </button>
-          )}
-        </div>
-        <ActionCluster
-          dirty={doc.dirty}
-          report={report}
-          /* PCR-FR-16 / EDT-FR-84: an artifact carrying a proposal in state
-             `pending` renders an indication in this cluster saying so, whichever
-             editing mode the tab is in. */
-          proposal={
-            pendingProposal
-              ? { onOpen: () => openPromptReview(pendingProposal.id) }
-              : undefined
-          }
-          /* EDT-FR-16 / ESH-FR-LKNM: the toggle is a Markdown file's. Over a
-             source file the cluster holds the comments control alone — that
-             file has one editing surface, so there is nothing for a toggle to
-             move between. */
-          mode={isMarkdown ? mode : undefined}
-          onToggleMode={isMarkdown ? toggleMode : undefined}
-          // EDT-FR-LGQA: a Markdown file's, directly before the mode toggle.
-          outline={outline}
-          // CMT-FR-29: present in both editing modes, so switching to raw text
-          // never hides the fact that threads exist.
-          comments={
-            showComments
-              ? {
-                  // CMT-FR-56: an unresolved discussion is counted here like any
-                  // other thread — a conversation waiting on the author is
-                  // waiting on them whether it names a passage or not.
-                  count: unresolvedInTab,
-                  open: railOpen,
-                  onToggle: toggleRail,
-                }
-              : undefined
-          }
-        />
-      </div>
-
+  /**
+   * EDT-FR-18 / EDT-FR-17 / DCR-FR-11: what the document column holds — the
+   * frontmatter region, the page in whichever surface is showing, and the
+   * review bar at its foot.
+   */
+  const documentColumn = (
+    <>
       {/* EDT-FR-18: in WYSIWYG the frontmatter is carved into a visually distinct,
           editable region above the rich body (never as body content). In text
           mode it is edited inline in the source surface, so no region here.
@@ -506,27 +366,17 @@ export function EditorView(props: EditorViewProps) {
         />
       )}
 
+
       {/* EDT-FR-17: WYSIWYG vs raw Markdown source. The Tiptap surface stays
           mounted (kept in sync) and is hidden in text mode so its instance and
           history survive a round-trip; the source surface holds the whole file.
           EDT-FR-20: this is the scroll container that drives the collapse. */}
-      {/* CMT-FR-01: the cards occupy the empty margin this page already leaves
-          beside itself rather than a column taken from it, so the artifact keeps
-          its width and its position whether or not they are showing. They are a
-          region of the tab, not a floating overlay of the main window, and so
-          take no part in their mutual exclusion (STB-FR-12).
-
-          Both pages live inside this one wrapper, because the rail is beside
-          whichever of them is showing (CMT-FR-02): a Markdown file's rich page,
+      {/* Both pages live inside this one wrapper: a Markdown file's rich page,
           and a source file's own (ESH-FR-SSDV). The page that is not showing is
           `display: none` rather than merely empty — it is a `flex: 1` sibling of
           the other, so leaving it displayed would let it claim half the tab's
           height and push the visible one into the bottom of it. */}
-      <div
-        className="editor__with-rail"
-        data-rail={railHere && railOpen ? "open" : "closed"}
-        data-testid="editor-with-rail"
-      >
+      <div className="editor__document" data-testid="editor-document">
       {/* ESH-FR-SSDV: a source file has no rich page at all — not a hidden one.
           Rendering one would put a rich editing surface in the tab of a file
           that is never read on it. */}
@@ -546,10 +396,6 @@ export function EditorView(props: EditorViewProps) {
           focusHunkFromBody(event);
         }}
         onScroll={(e) => {
-          // CMT-FR-27: the cards are placed in the body's own coordinates, so
-          // the layer holding them is offset by however far the body has
-          // scrolled — that is what keeps each card level with its passage.
-          setScrollTop(e.currentTarget.scrollTop);
           const nowAtTop =
             e.currentTarget.scrollTop <= FRONTMATTER_TOP_THRESHOLD;
           setAtTop(nowAtTop);
@@ -644,114 +490,8 @@ export function EditorView(props: EditorViewProps) {
           {sourceTextarea}
         </div>
       )}
-      {railHere && railOpen && (
-        <CommentRail
-          threads={comments.threads}
-          anchorTops={anchorTops}
-          scrollTop={scrollTop}
-          arrangement={arrangement}
-          /* CMT-FR-RPLC: what the unavailable state names. */
-          ownerLabel={artifactName ?? artifactId}
-          ownerUnavailable={doc.error !== null && session.buffer === ""}
-          /* CMT-FR-53 / CMT-FR-61: the Discussion section, pinned at the rail's
-             head above the aligned cards. An Editor tab renders one wherever the
-             rail renders at all — the artifact's conversations and the remarks
-             pinned inside it are read in the one place. */
-          discussions={showActions ? control.discussions.discussions : []}
-          identity={comments.identity}
-          identityBlock={
-            identityBlock
-              ? {
-                  message: identityBlock.message,
-                  route: identityBlock.route,
-                  // CMT-FR-25: the one refusal the author can resolve from here.
-                  action: identityBlock.opensPicker
-                    ? { label: "Choose a token…", onActivate: () => setPickerOpen(true) }
-                    : undefined,
-                }
-              : null
-          }
-          blocked={blocked}
-          focusedThreadId={focusedThread}
-          onFocusThread={setFocusedThread}
-          // CTA-FR-VQFJ / CTA-FR-ZOLW / CTA-FR-LCVQ: the agents a composer can
-          // address, what is still coming, and why a turn stopped coming. All
-          // three are the hook's — the rail renders them and dispatches nothing
-          // (AGT-FR-32).
-          agents={comments.agents}
-          pendingTurns={railPendingTurns}
-          turnFailures={railTurnFailures}
-          failedTurns={railFailedTurns}
-          imageNotices={railImageNotices}
-          retryingTurnIds={railRetryingTurnIds}
-          onRetryTurn={railRetryTurn}
-          onCancelTurn={railCancelTurn}
-          wholeTargetOpening={
-            wholeOpening > 0 && discussionsInRail
-              ? {
-                  target: { kind: "artifact", artifactId },
-                  noun: artifactType === "spec" ? "specification" : "file",
-                  focusSignal: wholeOpening,
-                  onOpen: (request) =>
-                    control.discussions.open(request.body, request.attachments),
-                  onOpened: (created) => {
-                    // ACT-FR-16: the composer goes, and focus lands in the reply
-                    // composer of the new discussion in the rail.
-                    logDebug(["frontend"], "the comment rail opened a discussion", {
-                      discussionId: created.id,
-                    });
-                    setWholeOpening(0);
-                    requestPendingFocus(created.id, "composer");
-                    setFocusedThread(created.id);
-                  },
-                  onClose: () => setWholeOpening(0),
-                }
-              : null
-          }
-          draft={
-            draft
-              ? {
-                  target: { kind: "artifact", artifactId },
-                  fragmentTarget: {
-                    owner: { kind: "artifact", artifactId },
-                    path: artifactId,
-                    start: draft.start,
-                    end: draft.end,
-                    quote: draft.quote,
-                  },
-                }
-              : null
-          }
-          onOpenDraft={(request) =>
-            comments.openThread(
-              // The draft moves with the buffer, so the request reads it as it
-              // stands now rather than as it stood when the card opened.
-              request.fragmentTarget ?? {
-                owner: request.target,
-                path: artifactId,
-                start: draft?.start ?? 0,
-                end: draft?.end ?? 0,
-                quote: draft?.quote ?? "",
-              },
-              request.body,
-              request.attachments,
-            )
-          }
-          onCancelDraft={() => setDraft(null)}
-          onFocusFragment={(_fragment, discussion) => {
-            setFocusedThread(discussion.id);
-            scrollFragmentIntoView(discussion.id);
-          }}
-          onReply={railReply}
-          onSetResolved={railSetResolved}
-          errors={railErrors}
-          showResolved={showResolved}
-          onToggleResolved={() =>
-            sessions.update(artifactId, { resolvedOpen: !showResolved })
-          }
-        />
-      )}
       </div>
+
 
       {/* DCR-FR-11: the review bar, at the **foot** of the document column
           below the scroller. It holds its place there while the document
@@ -759,6 +499,167 @@ export function EditorView(props: EditorViewProps) {
           sits where the hand already is rather than standing between the
           formatting toolbar and the first line of the prompt. */}
       {review?.bar}
+    </>
+  );
+
+  return (
+    <div
+      ref={rootRef}
+      /* EDT-FR-63: the tab is one band above one page, both set on the field.
+         The field is declared here, on the one element that is present in both
+         editing modes, so the page's edge has the same thing behind it whether
+         the WYSIWYG surface or the raw-text surface is the one showing. */
+      className="editor-tab"
+      /* EDT-FR-63 / EDT-FR-18: the frontmatter region is part of the editing
+         surface, so it takes the head of the page rather than floating on the
+         field above it. The sheet gives up its own top inset and top corners
+         to it, which is what this says. */
+      data-frontmatter={mode === "wysiwyg" && fm !== null ? "on" : "off"}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        position: "relative",
+      }}
+    >
+      {/* EFR-FR-ABHF: the band holds exactly one of three surfaces — the
+          formatting toolbar, the Find panel, or the Find & Replace panel. The
+          formatting toolbar occupies it whenever neither panel is open and
+          returns the moment one closes. The band is part of the tab's own
+          chrome rather than a floating overlay, so an open panel neither
+          closes nor is closed by the main window's overlays (STB-FR-12). */}
+      <div className="editor__toolbar" data-find={find.form ?? "off"}>
+        {/* EDT-FR-16: the surface of the band takes the width that the action
+            cluster leaves, and clips at its trailing end the controls that do
+            not fit. So at a narrow width no control paints over the cluster
+            or outside the band. */}
+        <div className="editor__band-surface">
+          {find.form !== null ? (
+            <FindPanel
+              form={find.form}
+              query={find.query}
+              replacement={find.replacement}
+              mode={find.mode}
+              ordinal={engine.current + 1}
+              total={engine.matches.length}
+              valid={engine.valid}
+              focus={findFocus}
+              onQueryChange={(query) => patchFind({ query })}
+              onReplacementChange={(replacement) => patchFind({ replacement })}
+              onModeChange={(next: LiteralSearchMode) => patchFind({ mode: next })}
+              onStep={engine.step}
+              onReplace={replaceCurrent}
+              onReplaceAll={replaceAll}
+              onClose={() => patchFind({ form: null })}
+            />
+          ) : (
+            /* EFR-FR-ACMM: the formatting affordances are the rich surface's. Over a
+               source file the band holds the find panels alone and is otherwise
+               empty — those controls format a rich Markdown document, and a source
+               file has none to format. */
+            mode === "wysiwyg" && (
+              <FormattingButtons
+                editor={editor}
+                editable={!blocked}
+                onInsertDiagram={insertDiagram}
+              />
+            )
+          )}
+          {/* NAW-FR-53 / NAW-FR-54: the removal action an image the surface has
+              selected carries. Reachable from the keyboard on the selected image
+              and named in words rather than by an icon alone, and offered only
+              where the host takes images at all — an Editor tab on a project file
+              has none to remove (EDT-FR-86). */}
+          {find.form === null && imageHost && selectedImage && (
+            <button
+              type="button"
+              className="editor__image-remove"
+              onClick={removeSelectedImage}
+            >
+              Remove image
+            </button>
+          )}
+        </div>
+        <ActionCluster
+          dirty={doc.dirty}
+          report={report}
+          /* PCR-FR-16 / EDT-FR-84: an artifact carrying a proposal in state
+             `pending` renders an indication in this cluster saying so, whichever
+             editing mode the tab is in. */
+          proposal={
+            pendingProposal
+              ? { onOpen: () => openPromptReview(pendingProposal.id) }
+              : undefined
+          }
+          /* EDT-FR-16 / ESH-FR-LKNM: the toggle is a Markdown file's. Over a
+             source file the cluster holds the column's controls alone — that
+             file has one editing surface, so there is nothing for a toggle to
+             move between. */
+          mode={isMarkdown ? mode : undefined}
+          onToggleMode={isMarkdown ? toggleMode : undefined}
+          // EDT-FR-LGQA: a Markdown file's, directly before the mode toggle.
+          outline={outline}
+          // CMT-FR-29 / DDS-FR-XQMF: the column's split and its hide control,
+          // at the trailing end in every editing mode, so switching to raw
+          // text never hides the way to the discussions.
+          split={
+            showComments
+              ? {
+                  ratio: split.view.ratio,
+                  hidden: split.view.hidden,
+                  onRatioChange: split.setRatio,
+                  onToggle: split.toggleDiscussion,
+                }
+              : undefined
+          }
+        />
+      </div>
+
+      {showComments ? (
+        /* CMT-FR-01 / DDS-FR-KTVW: the document column, the splitter, and the
+           discussion column, as one grid below the toolbar. DDS-FR-XQMF: one
+           column takes the whole tab while the other is hidden. */
+        <div
+          className="dds-split editor__split"
+          ref={splitRef}
+          style={{
+            gridTemplateColumns: split.view.hidden
+              ? "1fr"
+              : gridTemplate(split.view.ratio),
+          }}
+          data-discussion={split.view.hidden ? "hidden" : "shown"}
+          data-testid="editor-discussion-split"
+        >
+          <div className="editor__column">{documentColumn}</div>
+          <EditorDiscussionColumn
+            group={props.railGroup}
+            splitRef={splitRef}
+            artifactId={artifactId}
+            artifactName={artifactName}
+            artifactType={artifactType}
+            identityBlock={identityBlock}
+            onChooseToken={() => setPickerOpen(true)}
+            blocked={blocked}
+            draft={draft}
+            setDraft={setDraft}
+            focusedThread={focusedThread}
+            setFocusedThread={setFocusedThread}
+            onFocusFragment={(threadId) => {
+              // CMT-FR-28: the raw-text surface marks no fragment, so the tab
+              // goes to WYSIWYG first and the passage is scrolled to there.
+              if (isMarkdown && mode !== "wysiwyg") toggleMode();
+              revealFragment(threadId);
+            }}
+            showResolved={showResolved}
+            onShowResolved={(shown) =>
+              sessions.update(artifactId, { resolvedOpen: shown })
+            }
+            focusSignal={discussFocus}
+          />
+        </div>
+      ) : (
+        documentColumn
+      )}
 
       {/* EDT-FR-71 / EDT-FR-32, EDT-FR-34: a write that failed is attached to the tab, and
           it arrives without the author having asked for anything — nobody is
@@ -812,19 +713,35 @@ export function EditorView(props: EditorViewProps) {
         /* ACT-FR-04: Discuss on everything the Editor opens, and Implement in
            addition on an artifact whose type is `spec`. */
         artifactType={artifactType === "spec" ? "spec" : undefined}
-        discussionsInRail={discussionsInRail}
-        /* ACT-FR-BRZK: where the rail has a margin, Discuss opens the rail and
-           its whole-target opening composer, never the floating one. */
+        /* ACT-FR-19: the discussions are read in the column, so no floating
+           panel is rendered. */
+        discussionsInRail={showComments}
+        /* ACT-FR-BRZK / ACT-FR-23: with the column shown the conversation is
+           already beside the file, so the action has nothing left to do and
+           says so rather than reading as a control that does nothing. */
+        discussUnavailable={
+          showComments && !split.view.hidden
+            ? `The discussion is already beside the ${
+                artifactType === "spec" ? "specification" : "file"
+              }`
+            : undefined
+        }
+        /* ACT-FR-BRZK / DDS-FR-JWNC: Discuss opens no composer of its own. It
+           shows the column by the route of the toolbar's own control, which
+           persists the state (DDS-FR-XQMF), and puts the caret in it. */
         onDiscuss={
-          discussionsInRail
+          showComments
             ? () => {
-                if (!railOpen) sessions.update(artifactId, { railOpen: true });
-                setWholeOpening((n) => n + 1);
+                showColumn();
+                setDiscussFocus((n) => n + 1);
+                logDebug(["frontend"], "Discuss showed the discussion column", {
+                  artifactId,
+                });
               }
             : undefined
         }
-        /* CVP-FR-08 / CVP-FR-64: the same owner the rail's own cards name, so a
-           discussion created here and one detached from the rail read the same
+        /* CVP-FR-08 / CVP-FR-64: the same owner the column names, so a
+           discussion created here and one read in the column read the same
            label wherever either is presented. */
         ownerLabel={artifactName ?? artifactId}
         ownerSurface="editor"
@@ -836,9 +753,8 @@ export function EditorView(props: EditorViewProps) {
         dismissSignal={dismissControl}
         onDiscussionOpened={(threadId: string) => {
           // ACT-FR-16: the conversation is where it will be read from the moment
-          // it exists — which, in WYSIWYG mode, means showing the margin.
-          if (mode !== "wysiwyg") return;
-          if (!railOpen) sessions.update(artifactId, { railOpen: true });
+          // it exists, which is the column.
+          showColumn();
           setFocusedThread(threadId);
         }}
       />

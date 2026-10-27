@@ -167,7 +167,8 @@ describe("the table of contents control (EDT-FR-LGQA, EDT-FR-16)", () => {
   /**
    * The pair rule: the control's wrapper is the element directly before the
    * mode toggle, so no control of any kind stands between them, and the
-   * comments control stands before the pair.
+   * control that hides the discussion column stands after the pair, last in
+   * the cluster (CMT-FR-29).
    */
   function expectPairedWithToggle(toggleName: string) {
     const button = tocButton();
@@ -180,19 +181,20 @@ describe("the table of contents control (EDT-FR-LGQA, EDT-FR-16)", () => {
     // it, so a narrow band never clips the pair.
     expect(cluster!.closest(".editor__band-surface")).toBeNull();
     expect(cluster!.previousElementSibling).toHaveClass("editor__band-surface");
-    const comments = cluster!.querySelector(".editor__comments-toggle");
-    expect(comments).not.toBeNull();
-    expect(comments!.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const columnToggle = screen.getByTestId("editor-discussion-toggle");
+    const buttons = cluster!.querySelectorAll("button");
+    expect(buttons[buttons.length - 1]).toBe(columnToggle);
+    expect(toggle.compareDocumentPosition(columnToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   }
 
-  it("EDT-FR-LGQA, EDT-FR-16: in WYSIWYG with the formatting toolbar, directly before the mode toggle, after the comments control", async () => {
+  it("EDT-FR-LGQA, EDT-FR-16, CMT-FR-29: in WYSIWYG with the formatting toolbar, directly before the mode toggle, before the column's controls", async () => {
     wireBackend();
     await mountMarkdown();
     expect(screen.getByRole("button", { name: "Heading 1" })).toBeInTheDocument();
     expectPairedWithToggle("Edit as Markdown source");
   });
 
-  it("EDT-FR-LGQA, EDT-FR-16: in raw-text mode, directly before the mode toggle, after the comments control", async () => {
+  it("EDT-FR-LGQA, EDT-FR-16, CMT-FR-29: in raw-text mode, directly before the mode toggle, before the column's controls", async () => {
     wireBackend();
     await mountMarkdown();
     await toRaw();
@@ -435,16 +437,29 @@ describe("the table of contents panel", () => {
     expect(focusedAtScroll).toBe(true);
   });
 
-  it("EDT-FR-KOUB: opening and closing the panel leave the comment rail as it is", async () => {
+  it("EDT-FR-KOUB, DDS-FR-XQMF: opening and closing the panel leave the discussion column as it is", async () => {
     wireBackend();
     await mountMarkdown();
-    const comments = document.querySelector(".editor__comments-toggle") as HTMLButtonElement;
-    fireEvent.click(comments);
-    await waitFor(() => expect(comments).toHaveAttribute("aria-expanded", "true"));
-    fireEvent.click(tocButton());
-    fireEvent.keyDown(tocFilter(), { key: "Escape" });
-    fireEvent.click(tocButton());
-    fireEvent.click(entries()[0]);
-    expect(comments).toHaveAttribute("aria-expanded", "true");
+    const split = screen.getByTestId("editor-discussion-split");
+    const columnToggle = screen.getByTestId("editor-discussion-toggle");
+    const useTheToc = () => {
+      fireEvent.click(tocButton());
+      fireEvent.keyDown(tocFilter(), { key: "Escape" });
+      fireEvent.click(tocButton());
+      fireEvent.click(entries()[0]);
+    };
+
+    // Shown, which is how every file opens.
+    expect(split).toHaveAttribute("data-discussion", "shown");
+    useTheToc();
+    expect(split).toHaveAttribute("data-discussion", "shown");
+    expect(columnToggle).toHaveAttribute("aria-pressed", "true");
+
+    // And hidden: the panel does not show it again.
+    fireEvent.click(columnToggle);
+    await waitFor(() => expect(split).toHaveAttribute("data-discussion", "hidden"));
+    useTheToc();
+    expect(split).toHaveAttribute("data-discussion", "hidden");
+    expect(screen.getByTestId("editor-discussion-toggle")).toHaveAttribute("aria-pressed", "false");
   });
 });

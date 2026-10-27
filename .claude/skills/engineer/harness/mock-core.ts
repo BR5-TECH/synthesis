@@ -9447,6 +9447,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
 
     // ---- comments --------------------------------------------------------
     case "list_comment_threads": {
+      // `?noComments` also empties every file's discussions, so the Editor's
+      // discussion column shows its empty statement (EDT / DDS-FR-QPHL).
+      if (harnessFlag("noComments")) return [];
       // The seeded anchors quote `LIB-library.md`'s body. `EDT-editor.md` is the
       // frontmatter-carrying artifact, so it gets its own set quoting passages
       // that actually occur in `MD_BODY_FM` — otherwise every thread on the one

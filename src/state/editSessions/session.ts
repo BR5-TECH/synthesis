@@ -23,7 +23,6 @@ export function newSession(artifactId: string): EditSession {
     indentation: DEFAULT_INDENTATION,
     indentationOverridden: false,
     find: createFindState(),
-    railOpen: null,
     resolvedOpen: false,
     error: null,
     loaded: false,

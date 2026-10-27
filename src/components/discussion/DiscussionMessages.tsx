@@ -25,7 +25,7 @@ import {
   type Discussion,
   type Participant,
 } from "../../types";
-import type { PairedHalf } from "../CommentRail/questionPairs";
+import type { PairedHalf } from "./questionPairs";
 import { useParticipantLabel } from "../../state/projectIdentity";
 
 /**

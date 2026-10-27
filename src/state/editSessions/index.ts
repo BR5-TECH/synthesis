@@ -439,11 +439,8 @@ export class EditSessionStore {
    *
    * EDT-FR-28: a find panel the user opened keeps the record alive too, even
    * with no edit behind it — the panel and its query are state they authored,
-   * and reopening the artifact must bring them back (EFR-FR-GIPZ, EFR-FR-GBJT, EFR-FR-GNBZ). A comment rail
-   * the author opened or closed counts for the same reason (CMT-FR-30 /
-   * CMT-FR-30, EDT-FR-28); the *default* rail state does not, which is why only an explicit
-   * toggle writes `railOpen` at all. An expanded resolved disclosure counts
-   * too, on the same footing.
+   * and reopening the artifact must bring them back (EFR-FR-GIPZ, EFR-FR-GBJT, EFR-FR-GNBZ). An
+   * expanded resolved disclosure counts too, on the same footing (CMT-FR-30).
    */
   closeTab(artifactId: string): void {
     const s = this.sessions.get(artifactId);
@@ -453,7 +450,6 @@ export class EditSessionStore {
       !hasEdits(s.history) &&
       !s.dirty &&
       !s.indentationOverridden &&
-      s.railOpen === null &&
       !s.resolvedOpen &&
       findStateIsPristine(s.find)
     ) {

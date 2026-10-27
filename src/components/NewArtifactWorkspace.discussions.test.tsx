@@ -43,7 +43,8 @@ import {
 } from "../test/newArtifactFixtures";
 import type { AgentTurn, ConversationOrigin, Participant } from "../types";
 import { hunkCandidateBuffers } from "../state/candidateBuffers";
-import { resetDraftDiscussions, restoreDraftRatios } from "../state/draftDiscussion";
+import { resetDraftDiscussions } from "../state/draftDiscussion";
+import { restoreDiscussionColumns } from "../state/discussionColumn";
 import { resetLayoutPreferencesCache } from "../state/layoutPreferences";
 import { clearAllDiscussionSessions } from "../state/discussionSession";
 import { resetDiscussionFocus } from "../state/discussionFocus";
@@ -95,14 +96,14 @@ beforeEach(() => {
 afterEach(cleanup);
 
 // ---------------------------------------------------------------------------
-// Discussions (NAW-FR-31, NAW-FR-32, ACT-FR-16, ACT-FR-19, CVP-FR-64, CMT-FR-53 … NAW-FR-33, CMT-FR-24, CMT-FR-26, CMT-FR-51, CMT-FR-52, CMT-FR-54, CMT-FR-55, CMT-FR-62 … CTA-FR-TTMS, CTA-FR-DGOC)
+// Discussions (NAW-FR-31, NAW-FR-32, ACT-FR-16, ACT-FR-19, CVP-FR-64, CMT-FR-53 … NAW-FR-33, CMT-FR-24, CMT-FR-26, CMT-FR-51, CMT-FR-52, CMT-FR-54, CMT-FR-55 … CTA-FR-TTMS, CTA-FR-DGOC)
 //
 // A discussion is a comment thread about the draft as a WHOLE — no anchor, no
 // file (CMS-FR-53). This tab begins one (NAW-FR-32); the comment margin renders
 // and continues it (CMT-FR-53 … CTA-FR-QNBS).
 // ---------------------------------------------------------------------------
 
-describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-FR-62)", () => {
+describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-FR-55)", () => {
   it("NAW-FR-31, NAW-FR-32, ACT-FR-16, ACT-FR-19, CVP-FR-64, CMT-FR-53: posts a tagged message, dispatches once, and focuses the new card at the margin's head", async () => {
     stubDiscussions({ agents: ["arch", "sec"] });
     renderWorkspace();
@@ -326,17 +327,16 @@ describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-F
     // The discussion used to be a ~370px margin beside the page, which is why it
     // was pulled out into a floating window that covered the draft. It is a
     // column now: the field beside the page lends it nothing, the page keeps its
-    // whole measure, and the anchored threads take the arrangement CMT-FR-64
-    // defines below the page rather than beside it.
+    // whole measure, and no margin arrangement is left on the field.
     stubDiscussions({ existing: [] });
     renderWorkspace();
     const field = () =>
       document.querySelector(".draft-editor") as HTMLElement | null;
     await waitFor(() => expect(field()).not.toBeNull());
     expect(document.querySelector(".comment-rail")).toBeNull();
-    expect(field()!.dataset.rail).toBe("closed");
-    // In jsdom nothing has a width, so the arrangement is the ordinary one.
-    expect(field()!.dataset.comments).toBe("beside");
+    // The field carries no state of a margin of cards: there is none.
+    expect(field()!.hasAttribute("data-rail")).toBe(false);
+    expect(field()!.hasAttribute("data-comments")).toBe(false);
     // DDS-FR-KTVW: the column stands whether or not anything has been said.
     expect(screen.getByTestId("draft-discussion-column")).toBeInTheDocument();
 
@@ -358,7 +358,8 @@ describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-F
     // A discussion costs the document column nothing: no margin opens beside
     // the page, and the page's field is exactly as it was.
     expect(document.querySelector(".comment-rail")).toBeNull();
-    expect(field()!.dataset.rail).toBe("closed");
+    expect(field()!.hasAttribute("data-rail")).toBe(false);
+    expect(field()!.hasAttribute("data-comments")).toBe(false);
   });
 
   it("CMT-FR-52, CMT-FR-54, CMT-FR-55, DDS-FR-KTVW: the discussion is read once and survives what the page is showing", async () => {
@@ -557,7 +558,7 @@ describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-F
         : base(cmd, args),
     );
     await act(async () => {
-      await restoreDraftRatios("/repo");
+      await restoreDiscussionColumns("/repo");
     });
 
     renderWorkspace();
@@ -583,7 +584,7 @@ describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-F
         : base(cmd, args),
     );
     await act(async () => {
-      await restoreDraftRatios("/repo");
+      await restoreDiscussionColumns("/repo");
     });
     renderWorkspace();
     expect(await screen.findByTestId("draft-discussion-column")).not.toBeVisible();
@@ -672,6 +673,12 @@ describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-F
     act(() => cycle());
     const cycled = grid();
     expect(cycled).not.toBe(opened);
+    // One press is one step, from Even to Discussion: the Editor the tab
+    // embeds binds no accelerator of its own to step it again.
+    expect(screen.getByRole("radio", { name: "Discussion" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
 
     // Hidden, the accelerator rearranges nothing — a keypress that silently
     // moved a split the author cannot see would land them on another one the

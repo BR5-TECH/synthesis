@@ -21,7 +21,7 @@ import { ReviewBar, decisionMessage } from "../DraftDiscussion";
 import { stepTo, useHunkNavigation } from "../DraftDiscussion/useHunkNavigation";
 import type { EditorReview, ReviewHunk } from "../Editor/props";
 import { hunkCandidateBuffers, hunkKey } from "../../state/candidateBuffers";
-import { setFocusedHunk, useDraftDiscussion } from "../../state/draftDiscussion";
+import { setFocusedHunk, useDraftReviewState } from "../../state/draftDiscussion";
 import {
   hunkPosition,
   hunkStateOf,
@@ -63,7 +63,7 @@ export function useDraftReview({
   /** CTA-FR-VQFJ: the project's agents, for the decision's own dispatch. */
   agents: readonly ProjectAgent[];
 }): EditorReview | undefined {
-  const view = useDraftDiscussion(draftId);
+  const view = useDraftReviewState(draftId);
 
   /**
    * DCR-FR-08: the changes the standing proposal holds, read when the tab opens

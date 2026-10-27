@@ -298,24 +298,31 @@
 }
 .git__output-line { padding: 0 12px; white-space: pre-wrap; word-break: break-word; }
 
-/* --- Comment rail (CMT-comments.md) --------------------------------------
-   CMT-FR-01: comments occupy the margin the page already leaves to the right of
-   the artifact — no column of their own, no rule between them and the text. The
-   document keeps its width and its position whether or not comments are showing,
-   so opening them moves nothing the author is reading. */
-.editor__with-rail {
+/* --- Discussion column (CMT-comments.md) --------------------------------
+   CMT-FR-01 / DDS-FR-KTVW: the Editor tab's discussions are read in the column
+   the New Artifact tab uses, beside the document column and below the toolbar.
+   The grid is `.dds-split` (`draft-discussion.css`); what is here is the
+   document column, which stacks the frontmatter region, the page, and the
+   review bar. */
+.dds-split > .editor__column {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.editor__document {
   flex: 1;
   display: flex;
   min-height: 0;
   min-width: 0;
   position: relative;
 }
-/* Both pages are flex items of this row now (CMT-FR-02 puts the rail beside
-   whichever is showing), and a flex item's `min-width: auto` refuses to shrink
-   below its content — which on a source file is however long its longest line
-   is. Either page would then push the rail's margin off the tab. */
-.editor__with-rail > .editor,
-.editor__with-rail > .editor__source-wrap { min-width: 0; }
+/* A flex item's `min-width: auto` refuses to shrink below its content — which
+   on a source file is however long its longest line is. Either page would then
+   push the discussion column off the tab. */
+.editor__document > .editor,
+.editor__document > .editor__source-wrap { min-width: 0; }
 /* ACT-FR-09: the collapsed control covers no part of the page AT ANY WINDOW
    SIZE. Where the field beside the page is wide enough to hold it clear, the
    page runs the full height of the tab; where it is not, a strip of field is
@@ -325,291 +332,17 @@
    `(100% - page) / 2` is the field on one side — percentages in padding resolve
    against the inline size — and the multiplier turns the comparison into a step,
    the ramp between the two being a thousandth of a pixel wide. */
-.editor__with-rail {
+.editor__document {
   padding-bottom: clamp(
     0px,
     (var(--draft-actions-clear) - (100% - var(--doc-page-box)) / 2) * 1000,
     calc(var(--draft-actions-size) + var(--sp-4) * 2)
   );
 }
-
-.comment-rail {
-  position: absolute;
-  /* CMT-FR-27 / EDT-FR-63: level with the page, not with the field around it.
-     A card's top is placed at its anchor's offset within the page's scroller,
-     so the layer holding the cards has to start where the page starts —
-     otherwise every card sits a page-inset too high. */
-  top: var(--doc-page-inset);
-  /* The window-edge gutter is taken here, on the rail's own box, and not as
-     padding: everything inside it is absolutely positioned, and an absolutely
-     positioned child resolves `left`/`right` against its ancestor's *padding
-     box* — so padding would leave the cards flush against the frame. */
-  right: var(--sp-6);
-  bottom: var(--doc-page-inset);
-  /* Everything the page leaves on its trailing side, less both gutters: the one
-     against the frame taken by `right` above, and the one between a card and the
-     prose it is about. `--page-lead` is where the page's leading edge actually
-     sits (see `.editor-tab[data-rail="open"]`), so this measures the field that
-     is really there rather than assuming the page is centred — which is what
-     lets the slide widen the margin instead of leaving the cards over the text.
-
-     Bounded above so the cards stay legible on a wide window, and below at the
-     narrowest measure a card stays readable at. The tab never asks for less than
-     that floor here: below the width where the floor still fits beside the page
-     the cards leave the margin entirely (CMT-FR-64), which is what keeps a card
-     from ever being laid over the page. */
-  width: clamp(
-    var(--comment-card-min-w),
-    calc(
-      100% - var(--doc-page-outer) - var(--page-lead, 0px) - var(--sp-6) -
-        var(--sp-4)
-    ),
-    360px
-  );
-  overflow: hidden;
-  background: none;
-  border: none;
-  padding: var(--sp-3) 0;
-  /* The layer itself is empty space; only the cards in it take the pointer, so
-     a click in the margin still reaches the document. */
-  pointer-events: none;
-  /* The two pinned sections are laid out rather than each stuck to an end and
-     bounded by a guess. The head takes what the foot leaves and the foot takes
-     what it needs, so a collapsed resolved disclosure costs the discussions one
-     row rather than two-fifths of the margin. The aligned layer is absolutely
-     positioned and so takes no part in this. */
-  display: flex;
-  flex-direction: column;
-}
-.comment-rail > * { pointer-events: auto; }
-
-/* The aligned layer: a card's top tracks the line its anchor is on
-   (CMT-FR-27), so cards are positioned rather than in normal flow, and the
-   whole layer is translated by the body's scroll offset so they travel with the
-   passages they belong to. */
-.comment-rail__aligned {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  pointer-events: none;
-}
-.comment-rail__aligned > * { pointer-events: auto; }
-
-/* Threads with no line to sit beside — they belong to the artifact rather than
-   to a passage of it, so they stay put at the foot of the margin. */
-.comment-rail__unaligned {
-  /* Positioned only to carry a stacking order — it is a flex item, laid at the
-     rail's foot rather than stuck there. `margin-top: auto` is what puts it
-     there when the head above does not fill the margin; it takes the height it
-     needs and never grows into space the discussions could use, which is the
-     whole difference between a collapsed disclosure costing one row and costing
-     a fixed share (CMT-FR-62).
-
-     Shrinkable, so when the head and the foot both want more than the margin
-     has, each gives up a share of the deficit weighted by what it asked for —
-     which leaves a one-row footer beside twenty discussions with its row, and a
-     twenty-thread footer beside one discussion doing the scrolling.
-
-     What bounds it is CMT-FR-63: nothing at all while the margin has nothing
-     else to show, and the margin less one card's worth while it has. The first
-     case is the whole point — an artifact whose every thread is resolved was
-     spending the upper half of its margin on nothing while the disclosure
-     scrolled inside the lower one. */
-  position: relative;
-  flex: 0 1 auto;
-  margin-top: auto;
-  min-height: 0;
-  /* `max-height` bounds the CONTENT box by default, and this section carries
-     both padding and a top border — so a ceiling of `100% - one card` left the
-     footer 21px taller than that and the card it was keeping room for showed
-     twelve pixels of itself. The height meant here is the whole box. */
-  box-sizing: border-box;
-  max-height: 100%;
-  /* The gutter the rail's own padding would have given it taken here instead:
-     anything the footer leaves uncovered is a strip of whatever aligned card
-     runs past it, sliced mid-line. */
-  padding-bottom: var(--sp-3);
-  overflow-y: auto;
-  padding-top: var(--sp-2);
-  /* Pinned at the rail's foot means pinned IN FRONT of whatever aligned card
-     reaches that far (CMT-FR-17, CMT-FR-19). Without an opaque surface of its
-     own the two sets of text draw over each other; with one it reads as the
-     footer it is. The rule above it stands in for the gap it no longer has.
-     Opacity is the whole requirement, and the FIELD is what it must be opaque
-     in: the rail sits on the field beside the page (CMT-FR-01, per EDT-FR-63),
-     so any other colour paints a slab the width of the margin that stops where
-     the cards do — canvas white on a warm field reads as a stray rectangle
-     rather than as the surface it is. */
-  background: var(--doc-field-bg);
-  border-top: 1px solid var(--border-1);
-  z-index: 1;
-}
-/* CMT-FR-63: the height kept back for whatever else the margin has to show — a
-   discussion pinned at the head, or a thread aligned in the body. Without one of
-   those there is nothing to keep it back for, and the rule above lets the foot
-   have the margin whole. */
-.comment-rail__unaligned[data-bounded="true"] {
-  max-height: calc(100% - var(--comment-card-floor));
-}
-
-/* CMT-FR-53 / CMT-FR-62: the Discussion section, pinned at the rail's HEAD as
-   the orphaned section and the resolved disclosure are pinned at its foot. All
-   three stay put while the aligned cards scroll with the body, because a thread
-   with no line to align to has nothing to travel with.
-
-   It carries an opaque surface of its own for the same reason the footer does,
-   and in the same colour: pinned in front of whatever aligned card reaches that
-   far, two sets of text would otherwise draw over each other, and the field is
-   what it is pinned over. */
-.comment-rail__pinned-head {
-  /* Positioned only to carry a stacking order — like the footer it is a flex
-     item, and it takes exactly what the footer leaves: its natural height while
-     that fits, shrinking (and scrolling within itself) only once it does not.
-     No fraction of the margin is reserved from it, so what bounds the
-     discussions is the height of the footer actually rendered rather than a
-     guess at how tall one might get. */
-  position: relative;
-  flex: 0 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  /* No padding at the top: the header below takes it instead. Padding here is a
-     strip the sticky header cannot reach, and a card scrolling under it shows
-     through as a sliced line of text above the word Discussion. */
-  padding-bottom: var(--sp-2);
-  background: var(--doc-field-bg);
-  border-bottom: 1px solid var(--border-1);
-  z-index: 1;
-}
-
-/* CMT-FR-QHTW: the whole-target opening composer, first in the Discussion
-   section, set apart from the cards below it as a card is from the next. */
-.comment-rail__opening {
-  margin: var(--sp-2) 0;
-}
-/* The section's own header stays put while its cards scroll under it. The
-   section scrolls within itself once it is full (CMT-FR-62), and a header that
-   scrolled away with them would leave the discussions unlabelled — and, on a
-   short window, half-clipped at the top edge as the newest card is brought into
-   view. It is opaque and carries the section's top gutter for the same reason:
-   everything it does not cover is a card sliced mid-line. */
-.comment-rail__pinned-head > .comment-rail__section-title {
-  position: sticky;
-  top: 0;
-  padding-top: var(--sp-3);
-  background: var(--doc-field-bg);
-  z-index: 1;
-}
-
-/* Placing the rail in a New Artifact tab.
-
-   The top offset: an Editor tab's rail is laid inside the box *below* the
-   formatting toolbar, so its own `top` is measured from there; here the rail is
-   a child of the whole draft surface, toolbar included, and the same offset
-   would start it a toolbar's height too high — the Discussion section's header
-   would sit behind the formatting controls, and its opaque surface would cut a
-   notch out of them.
-
-   The foot ends level with the page's, so the margin runs the length of the
-   document beside it. This is a DELIBERATE DEVIATION from NAW-FR-27's clause
-   that the margin's pinned sections "end above" the action control: the control
-   and the rail share the field's trailing edge — the control is `--sp-4` from
-   the frame, the rail `--sp-6`, so twenty-eight of the control's thirty-six
-   pixels are over the rail whatever height it is given — and ending above it
-   cost the foot a control's height of margin at every window size. The
-   collapsed disclosure is a short label on the leading side and is never under
-   it; an expanded one can put the bottom-trailing corner of its last card
-   behind it, which is the trade taken here. Restoring the requirement means
-   putting `calc(var(--sp-4) + var(--draft-actions-size) + var(--sp-2))` back. */
-.draft-editor > .comment-rail {
-  top: calc(var(--editor-toolbar-h) + var(--doc-page-inset));
-  bottom: var(--doc-page-inset);
-}
-
-/* CMT-FR-64: the cards below the page.
- *
- * Reached when the tab cannot hold a card beside the page even with the page
- * slid as far leading as it goes. The rail stops being a layer over the field
- * and becomes the second item of the column it was already a child of — so the
- * arrangement changes without a card moving in the DOM, and the order they were
- * already in (discussions, then the aligned cards in document order, then the
- * orphaned and resolved sections) is the order the column reads in.
- *
- * Bounded to a share of the tab and scrolling within itself, because the
- * alternative — a column as tall as the threads happen to be — pushes the page
- * off the top of a narrow window, which is the arrangement this one exists to
- * avoid. The page keeps the greater part either way.
- *
- * Both selectors are needed: an Editor tab's rail is inside the wrapper that
- * holds the page beside it, a draft tab's is a child of the tab itself. */
-.editor-tab[data-comments="below"] .editor__with-rail {
-  flex-direction: column;
-}
-.editor-tab[data-comments="below"] .editor__with-rail > .editor {
-  /* A flex item's automatic minimum is its content's height; in a column that
-     is the whole document, and the rail below would be laid out past the foot
-     of the tab. */
-  min-height: 0;
-}
-.editor-tab[data-comments="below"] .comment-rail,
-.draft-editor[data-comments="below"] > .comment-rail {
-  position: static;
-  flex: 0 1 auto;
-  width: auto;
-  max-height: 40%;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0 var(--sp-6) var(--sp-3);
-  border-top: 1px solid var(--border-1);
-  /* The bound is on the whole box, padding and border included — otherwise the
-     column is a little taller than the share it was given, at the expense of
-     the page above it. */
-  box-sizing: border-box;
-  /* Beside the page the rail is an empty layer over the field and only its cards
-     take the pointer, so a click in the margin still reaches the document. Here
-     it is a region of its own below the page, with nothing behind it to click
-     through to and a scroll of its own to receive. */
-  pointer-events: auto;
-}
-/* The two pinned sections stop being pinned: with the whole rail scrolling as
-   one column there is no fold for them to be pinned against, and a section
-   scrolling inside a section is two scrollbars for one list. */
-.editor-tab[data-comments="below"] .comment-rail__pinned-head,
-.draft-editor[data-comments="below"] .comment-rail__pinned-head,
-.editor-tab[data-comments="below"] .comment-rail__unaligned,
-.draft-editor[data-comments="below"] .comment-rail__unaligned {
-  flex: 0 0 auto;
-  max-height: none;
-  overflow: visible;
-  margin-top: 0;
-}
-/* The aligned layer aligns to nothing here — its cards are in flow, in document
-   order, and the component leaves off the scroll offset that would otherwise
-   slide the whole column off the top of the rail. */
-.editor-tab[data-comments="below"] .comment-rail__aligned,
-.draft-editor[data-comments="below"] .comment-rail__aligned {
-  position: static;
-}
-/* CMT-FR-64: the cards keep the measure they hold in the margin. The section is
-   full width; a card stretched to match it is a comment set across a thousand
-   pixels, which is neither the card that was beside the page nor a readable
-   measure for one. */
-.editor-tab[data-comments="below"] .comment-card,
-.draft-editor[data-comments="below"] .comment-card {
-  /* The measure is the card's whole box. A card carries padding and a hairline
-     and there is no box-sizing reset in this project, so a bare `max-width`
-     bounds only what is inside them and the card lands 26px over its measure. */
-  box-sizing: border-box;
-  max-width: 360px;
-}
-/* The section header stops sticking with them. It stuck to the top of the
-   margin because the section scrolled within itself; here the rail is the
-   scroller, so a sticky header would ride over the orphaned and resolved cards
-   further down the column, labelling them Discussion. */
-.editor-tab[data-comments="below"] .comment-rail__pinned-head > .comment-rail__section-title,
-.draft-editor[data-comments="below"] .comment-rail__pinned-head > .comment-rail__section-title {
-  position: static;
-}
+/* ACT-FR-09 / DDS-FR-TGBX: with the discussion column shown, the control's
+   corner falls over that column and not over this one, so nothing here is held
+   open for it, as in the New Artifact tab. */
+.editor__split[data-discussion="shown"] .editor__document { padding-bottom: 0; }
 
 .comment-rail__blocked {
   font-size: var(--fs-ui-sm);
@@ -667,7 +400,7 @@
   width: calc(100% - var(--draft-actions-clear));
 }
 
-/* CMT-FR-38: a card is weighted **below** the page it annotates. It carries a
+/* A card is weighted **below** the page it is about. It carries a
    surface of its own — the warm panel tone, distinct from both the page and the
    field it sits on (EDT-FR-63) — bounded by a hairline and by no elevation at
    all, so the document stays the most prominent thing in the tab and the
@@ -690,26 +423,18 @@
               background var(--dur-fast) var(--ease-out);
 }
 .comment-card:hover { border-color: var(--border-2); }
-/* Only the aligned column positions its cards; the orphaned and resolved
-   sections render theirs in normal flow. */
-.comment-card[data-positioned="true"] {
-  position: absolute;
-  left: 0;
-  right: 0;
-  margin-bottom: 0;
-}
 /* CMT-FR-05: the draft is the card being written, so it sits above whatever it
    happens to align beside. Both selectors carry a second simple selector so they
    outrank the hover rule above; without it, hovering the card being written
    would quietly take its accent outline away. */
 .comment-card.comment-card--draft,
 .comment-card[data-focused="true"] {
-  /* CMT-FR-38: the card keeps its OWN surface while focused. `--bg-elevated`
+  /* The card keeps its OWN surface while focused. `--bg-elevated`
      is the page's own colour under the light theme, so lifting onto it made a
      focused card indistinguishable from the document it annotates — the accent
      edge below is what marks the card being worked in. */
   border-color: var(--accent);
-  /* CMT-FR-38: the card being worked in is marked by its accent edge, not by
+  /* The card being worked in is marked by its accent edge, not by
      rising above the page — no card ever out-elevates the document, or the
      margin stops reading as margin. */
   box-shadow: var(--shadow-1);

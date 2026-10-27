@@ -16,7 +16,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => []) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 
 import { StreamMessages } from "./StreamMessages";
-import type { PairedHalf } from "../../CommentRail/questionPairs";
+import type { PairedHalf } from "../../discussion/questionPairs";
 import type { Attachment, Comment, Participant } from "../../../types";
 
 const HELGA: Participant = { kind: "agent", agentId: "a1", handle: "helga" };

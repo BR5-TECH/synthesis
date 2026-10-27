@@ -133,7 +133,7 @@ export function DraftVersionReading({
           <pre className="draft-reading__yaml">{frontmatter}</pre>
         </div>
       )}
-      <div className="editor__with-rail">
+      <div className="editor__document">
         <div className="editor" style={{ flex: 1, overflow: "auto" }}>
           <EditorContent editor={editor} />
         </div>

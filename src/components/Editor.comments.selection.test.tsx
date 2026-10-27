@@ -11,13 +11,14 @@ import {
 
 import { AFFORDANCE_WIDTH, Editor } from "./Editor";
 import { EditSessionStore } from "../state/editSessions";
+import { discussionColumnState, fileColumn } from "../state/discussionColumn";
 import { GITHUB_TOKEN_ERRORS } from "../types";
 import type { AttachmentInput, FragmentRange } from "../types";
 import {
   BODY,
-  commentsToggle,
+  discussionToggle,
   makeThread,
-  openRail,
+  openColumn,
   wireBackend,
   fragment,
 } from "../test/editorCommentsFixtures";
@@ -26,11 +27,11 @@ import type { Backend } from "../test/editorCommentsFixtures";
 /**
  * CMT-comments.md, driven through the real Editor.
  *
- * The rail's arithmetic — re-anchoring, tracking an edit, card stacking — lives
- * in `../state/commentAnchors` and is covered by its own unit tests. What is
- * exercised here is the wiring: which command each affordance invokes, what the
- * rail renders in each of its states, and the claims the Editor spec makes about
- * hosting it (EDT-FR-61).
+ * The anchor arithmetic — re-anchoring and tracking an edit — lives in
+ * `../state/commentAnchors` and is covered by its own unit tests. What is
+ * exercised here is the wiring of a selection: the Comment affordance, the
+ * opening composer it puts in the discussion column (DDS-FR-QMBC), and the
+ * command a post invokes.
  */
 const invokeMock = vi.fn();
 const unlistenMock = vi.fn();
@@ -40,7 +41,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 /**
- * The rail follows `"discussion changed"` (CMT-FR-04), so the mock keeps the
+ * The column follows `"discussion changed"` (CMT-FR-04), so the mock keeps the
  * handlers rather than discarding them — a test emits on a channel exactly as
  * the backend would.
  */
@@ -131,26 +132,35 @@ afterEach(() => {
   while (selectionHosts.length) selectionHosts.pop()!.remove();
 });
 
+/**
+ * DDS-FR-QMBC: the column's opening composer, which the affordance opens for a
+ * passage. The quote it carries is its own element.
+ */
+const opening = () => screen.getByTestId("draft-open-discussion");
+const openingQuote = () => screen.findByTestId("discussion-opening-fragment");
+const opener = () =>
+  within(opening()).getByRole("textbox", { name: "Discuss this file" }) as HTMLTextAreaElement;
+const openerButton = (name: "Post" | "Cancel") =>
+  within(opening()).getByRole("button", { name });
+
 describe("CMT-FR-05 / CMT-FR-06 / CMT-FR-07: starting a thread", () => {
-  it("opens a thread over the selection and anchors it in the Markdown source", async () => {
+  it("CMT-FR-05, DDS-FR-QMBC: opens a thread over the selection and anchors it in the Markdown source", async () => {
     // CMT-FR-05, CMT-FR-06, CMT-FR-07. The entry point of the whole feature.
     const { backend } = await mount({ threads: [] });
-    // The rail is closed for an artifact with no threads, so the author opens it
-    // and then selects — the affordance must work from there.
-    fireEvent.click(commentsToggle());
-    await screen.findByRole("complementary", { name: "Comments" });
+    // The column is shown for every file, so the author selects at once.
+    await openColumn();
 
     selectInBody("the first session");
     const affordance = await screen.findByRole("button", { name: "Comment on selection" });
     fireEvent.click(affordance);
 
-    const draft = await screen.findByTestId("comment-draft");
-    expect(draft).toHaveTextContent("the first session");
+    expect(await openingQuote()).toHaveTextContent("the first session");
+    expect(opening()).toHaveTextContent(
+      "This begins a discussion about the passage you selected.",
+    );
 
-    fireEvent.change(screen.getByLabelText("New comment"), {
-      target: { value: "needs tightening" },
-    });
-    fireEvent.click(within(draft).getByRole("button", { name: "Post" }));
+    fireEvent.change(opener(), { target: { value: "needs tightening" } });
+    fireEvent.click(openerButton("Post"));
 
     await waitFor(() =>
       expect(backend.calls.some((c) => c.cmd === "open_discussion")).toBe(true),
@@ -169,8 +179,9 @@ describe("CMT-FR-05 / CMT-FR-06 / CMT-FR-07: starting a thread", () => {
     expect(args.attachments).toEqual([]);
     // The offsets address the Markdown source, not the rendered body.
     expect(BODY.slice(args.fragmentTarget.start, args.fragmentTarget.end)).toBe("the first session");
-    // And the draft is replaced by the created thread's card.
-    await waitFor(() => expect(screen.queryByTestId("comment-draft")).toBeNull());
+    // And the composer is replaced by the created discussion, in the column.
+    expect(await screen.findByTestId("comment-thread-t-new")).toBeInTheDocument();
+    expect(screen.queryByTestId("discussion-opening-fragment")).toBeNull();
   });
 
   it("anchors to the occurrence nearest the selection when the quote repeats", async () => {
@@ -178,15 +189,13 @@ describe("CMT-FR-05 / CMT-FR-06 / CMT-FR-07: starting a thread", () => {
     // later ones to the first.
     const repeated = "## Steps\n\nalpha\n\n## Steps\n\nbeta\n";
     const { backend } = await mount({ threads: [], load: { body: repeated, checksum: "ck1" } });
-    fireEvent.click(commentsToggle());
-    await screen.findByRole("complementary", { name: "Comments" });
+    await openColumn();
 
     selectInBody("## Steps");
     fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    fireEvent.change(screen.getByLabelText("New comment"), { target: { value: "x" } });
-    fireEvent.click(
-      within(screen.getByTestId("comment-draft")).getByRole("button", { name: "Post" }),
-    );
+    await openingQuote();
+    fireEvent.change(opener(), { target: { value: "x" } });
+    fireEvent.click(openerButton("Post"));
 
     await waitFor(() =>
       expect(backend.calls.some((c) => c.cmd === "open_discussion")).toBe(true),
@@ -201,7 +210,7 @@ describe("CMT-FR-05 / CMT-FR-06 / CMT-FR-07: starting a thread", () => {
   it("reveals nothing for an empty selection and discards a cancelled draft", async () => {
     // CMT-FR-05 / CMT-FR-07 / CMT-FR-05.
     const { backend } = await mount({ threads: [makeThread()] });
-    await openRail();
+    await openColumn("t1");
 
     // A collapsed selection reveals no affordance.
     window.getSelection()?.removeAllRanges();
@@ -210,16 +219,20 @@ describe("CMT-FR-05 / CMT-FR-06 / CMT-FR-07: starting a thread", () => {
 
     selectInBody("the first session");
     fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    const draft = await screen.findByTestId("comment-draft");
-    fireEvent.change(screen.getByLabelText("New comment"), { target: { value: "typed" } });
-    fireEvent.click(within(draft).getByRole("button", { name: "Cancel" }));
+    await openingQuote();
+    fireEvent.change(opener(), { target: { value: "typed" } });
+    fireEvent.click(openerButton("Cancel"));
 
-    await waitFor(() => expect(screen.queryByTestId("comment-draft")).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByTestId("discussion-opening-fragment")).toBeNull(),
+    );
+    // The column goes back to the discussion it was reading.
+    expect(await screen.findByTestId("comment-thread-t1")).toBeInTheDocument();
     expect(backend.calls.some((c) => c.cmd === "open_discussion")).toBe(false);
   });
 
-  it("surfaces a refused first comment on the draft card itself", async () => {
-    // CMT-FR-34 for the one card that has no thread id yet. Without this the
+  it("CMT-FR-34: surfaces a refused first comment on the opening composer itself", async () => {
+    // CMT-FR-34 for the one composer that has no thread id yet. Without this the
     // author sees a composer that appears to have done nothing.
     const { backend } = await mount({
       threads: [],
@@ -227,21 +240,22 @@ describe("CMT-FR-05 / CMT-FR-06 / CMT-FR-07: starting a thread", () => {
         throw "invalid_fragment";
       },
     });
-    fireEvent.click(commentsToggle());
-    await screen.findByRole("complementary", { name: "Comments" });
+    await openColumn();
 
     selectInBody("the first session");
     fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    fireEvent.change(screen.getByLabelText("New comment"), { target: { value: "body" } });
-    fireEvent.click(
-      within(screen.getByTestId("comment-draft")).getByRole("button", { name: "Post" }),
-    );
+    await openingQuote();
+    fireEvent.change(opener(), { target: { value: "body" } });
+    fireEvent.click(openerButton("Post"));
 
-    const alert = await screen.findByRole("alert");
+    const alert = await within(opening()).findByRole("alert");
     expect(alert.textContent).not.toBe("invalid_fragment");
     expect(alert.textContent).toMatch(/anchored/i);
-    // The draft is still there with what the author typed.
-    expect((screen.getByLabelText("New comment") as HTMLTextAreaElement).value).toBe("body");
+    // The composer is still there with the passage and what the author typed.
+    expect(opener().value).toBe("body");
+    expect(screen.getByTestId("discussion-opening-fragment")).toHaveTextContent(
+      "the first session",
+    );
     expect(backend.calls.some((c) => c.cmd === "open_discussion")).toBe(true);
   });
 });
@@ -269,45 +283,45 @@ afterEach(() => {
 });
 
 describe("CMT-FR-05: the affordance stays reachable and sits with the selection", () => {
-  it("opens the rail when the affordance is activated with it closed", async () => {
-    // The composer lives in the rail. With the rail closed — which is the
-    // default for an artifact carrying no threads (CMT-FR-30) — activating the
-    // affordance used to hide it and show nothing in its place, leaving no way
-    // to start the very first thread on an artifact.
-    const { sessions } = await mount({ threads: [] });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
-    expect(screen.queryByRole("complementary", { name: "Comments" })).toBeNull();
+  it("CMT-FR-05, DDS-FR-QMBC, DDS-FR-XQMF: shows the column when the affordance is activated with it hidden", async () => {
+    // The composer lives in the column. With the column hidden, activating the
+    // affordance must show it, or the author would see nothing happen.
+    await mount({ threads: [] });
+    const column = await screen.findByTestId("editor-discussion-column");
+    fireEvent.click(discussionToggle());
+    await waitFor(() => expect(column.hidden).toBe(true));
 
     selectInBody("the first session");
     fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
 
-    const rail = await screen.findByRole("complementary", { name: "Comments" });
-    expect(within(rail).getByTestId("comment-draft")).toHaveTextContent(
+    await waitFor(() => expect(column.hidden).toBe(false));
+    expect(within(column).getByTestId("discussion-opening-fragment")).toHaveTextContent(
       "the first session",
     );
-    // Starting a thread is as deliberate an act as toggling the rail, so it
-    // records the same choice (CMT-FR-30) — the rail does not snap shut again
-    // the next time this artifact is opened.
-    expect(sessions.get("a.md")?.railOpen).toBe(true);
+    // Showing it is as deliberate an act as the toggle, so it records the same
+    // choice (DDS-FR-XQMF): the column does not hide again the next time this
+    // file is opened.
+    expect(discussionColumnState(fileColumn("a.md")).hidden).toBe(false);
+    expect(discussionToggle()).toHaveAttribute("aria-pressed", "true");
   });
 
   it("reveals the affordance again for a fresh selection after a cancelled draft", async () => {
     await mount({ threads: [] });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
+    await waitFor(() => expect(discussionToggle()).toBeInTheDocument());
 
     selectInBody("the first session");
     fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    const draft = await screen.findByTestId("comment-draft");
-    fireEvent.click(within(draft).getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByTestId("comment-draft")).toBeNull());
+    await openingQuote();
+    fireEvent.click(openerButton("Cancel"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("discussion-opening-fragment")).toBeNull(),
+    );
 
     // A second selection must be able to start a thread just like the first.
     selectInBody("Steps to run");
     const again = await screen.findByRole("button", { name: "Comment on selection" });
     fireEvent.click(again);
-    expect(await screen.findByTestId("comment-draft")).toHaveTextContent(
-      "Steps to run",
-    );
+    expect(await openingQuote()).toHaveTextContent("Steps to run");
   });
 
   it("does not discard an open draft when the selection collapses", async () => {
@@ -316,45 +330,47 @@ describe("CMT-FR-05: the affordance stays reachable and sits with the selection"
     // selected at this instant, so a stray click must not throw away what the
     // author has typed.
     await mount({ threads: [] });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
+    await waitFor(() => expect(discussionToggle()).toBeInTheDocument());
 
     selectInBody("the first session");
     fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    await screen.findByTestId("comment-draft");
-    fireEvent.change(screen.getByLabelText("New comment"), {
-      target: { value: "half a thought" },
-    });
+    await openingQuote();
+    fireEvent.change(opener(), { target: { value: "half a thought" } });
 
     window.getSelection()?.removeAllRanges();
     fireEvent.mouseUp(screen.getByLabelText("artifact body"));
 
-    expect(screen.getByTestId("comment-draft")).toHaveTextContent("the first session");
-    expect((screen.getByLabelText("New comment") as HTMLTextAreaElement).value).toBe(
-      "half a thought",
+    expect(screen.getByTestId("discussion-opening-fragment")).toHaveTextContent(
+      "the first session",
     );
+    expect(opener().value).toBe("half a thought");
   });
 
-  it("abandons a draft the author can no longer see", async () => {
-    // Closing the rail takes the composer with it; leaving the draft armed would
-    // suppress the affordance with nothing on screen to cancel.
+  it("DDS-FR-XQMF: keeps the opening composer of a passage while the column is hidden", async () => {
+    // The column is hidden rather than unmounted, so a message part way
+    // written is where the author left it when the column shows again.
     await mount({ threads: [] });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
+    const column = await openColumn();
 
     selectInBody("the first session");
     fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    await screen.findByTestId("comment-draft");
+    await openingQuote();
+    fireEvent.change(opener(), { target: { value: "half a thought" } });
 
-    fireEvent.click(commentsToggle());
-    await waitFor(() => expect(screen.queryByTestId("comment-draft")).toBeNull());
+    fireEvent.click(discussionToggle());
+    await waitFor(() => expect(column.hidden).toBe(true));
+    fireEvent.click(discussionToggle());
+    await waitFor(() => expect(column.hidden).toBe(false));
 
-    selectInBody("Steps to run");
-    fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    expect(await screen.findByTestId("comment-draft")).toHaveTextContent("Steps to run");
+    expect(screen.getByTestId("discussion-opening-fragment")).toHaveTextContent(
+      "the first session",
+    );
+    expect(opener().value).toBe("half a thought");
   });
 
   it("places the affordance at the end of the selection, not at a fixed corner", async () => {
     await mount({ threads: [] });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
+    await waitFor(() => expect(discussionToggle()).toBeInTheDocument());
 
     const surface = document.querySelector(".editor") as HTMLElement;
     surface.getBoundingClientRect = () =>
@@ -383,11 +399,11 @@ describe("CMT-FR-05: the affordance stays reachable and sits with the selection"
       threads: [],
       load: { body: withFm, checksum: "ck1" },
     });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
+    await waitFor(() => expect(discussionToggle()).toBeInTheDocument());
 
     selectInBody("the first session");
     fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    await screen.findByTestId("comment-draft");
+    await openingQuote();
 
     // Grow the frontmatter, which sits entirely before the anchored passage.
     const fm = screen.getByLabelText("Frontmatter") as HTMLTextAreaElement;
@@ -395,10 +411,8 @@ describe("CMT-FR-05: the affordance stays reachable and sits with the selection"
       target: { value: `${fm.value}\ndescription: a much longer line` },
     });
 
-    fireEvent.change(screen.getByLabelText("New comment"), { target: { value: "x" } });
-    fireEvent.click(
-      within(screen.getByTestId("comment-draft")).getByRole("button", { name: "Post" }),
-    );
+    fireEvent.change(opener(), { target: { value: "x" } });
+    fireEvent.click(openerButton("Post"));
     await waitFor(() =>
       expect(backend.calls.some((c) => c.cmd === "open_discussion")).toBe(true),
     );
@@ -423,40 +437,43 @@ describe("CMT-FR-05: the affordance stays reachable and sits with the selection"
     // selection here would silently re-point it at text the author never chose
     // while leaving what they had typed in place.
     await mount({ threads: [] });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
+    await waitFor(() => expect(discussionToggle()).toBeInTheDocument());
 
     selectInBody("the first session");
     fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    await screen.findByTestId("comment-draft");
+    await openingQuote();
 
     selectInBody("Steps to run");
 
-    expect(screen.getByTestId("comment-draft")).toHaveTextContent("the first session");
+    expect(screen.getByTestId("discussion-opening-fragment")).toHaveTextContent(
+      "the first session",
+    );
     // And no second affordance appears over the editing surface.
     const surface = within(document.querySelector(".editor") as HTMLElement);
     expect(surface.queryByRole("button", { name: "Comment on selection" })).toBeNull();
   });
 
-  it("abandons a draft on the way out to raw Markdown source", async () => {
-    // CMT-FR-02: the rail — and the composer with it — belongs to WYSIWYG. A
-    // draft left armed behind the source surface would suppress the affordance
-    // on return with nothing on screen to cancel.
+  it("CMT-FR-02: keeps the opening composer of a passage in raw Markdown, where the column stands too", async () => {
+    // The column stands in both editing modes, so the composer in it stays
+    // with what the author typed.
     await mount({ threads: [] });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
+    const column = await openColumn();
 
     selectInBody("the first session");
     fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    await screen.findByTestId("comment-draft");
+    await openingQuote();
+    fireEvent.change(opener(), { target: { value: "half a thought" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Edit as Markdown source" }));
     await screen.findByLabelText("Markdown source");
-    fireEvent.click(screen.getByRole("button", { name: "Edit as rich text" }));
-    await screen.findByRole("complementary", { name: "Comments" });
-    expect(screen.queryByTestId("comment-draft")).toBeNull();
+    expect(column).toBeVisible();
+    expect(within(column).getByTestId("discussion-opening-fragment")).toHaveTextContent(
+      "the first session",
+    );
 
-    selectInBody("Steps to run");
-    fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    expect(await screen.findByTestId("comment-draft")).toHaveTextContent("Steps to run");
+    fireEvent.click(screen.getByRole("button", { name: "Edit as rich text" }));
+    await screen.findByLabelText("artifact body");
+    expect(opener().value).toBe("half a thought");
   });
 
   it("reveals no affordance while no identity resolves", async () => {
@@ -464,34 +481,26 @@ describe("CMT-FR-05: the affordance stays reachable and sits with the selection"
     // starts a thread is gated with it — offering a composer that can never
     // post would be worse than offering nothing.
     await mount({ threads: [], identityError: GITHUB_TOKEN_ERRORS.tokenMissing });
-    await openRail();
+    const column = await openColumn();
+    // The refusal has landed: the column states its reason.
+    await waitFor(() =>
+      expect(column.querySelector(".comment-rail__blocked")).not.toBeNull(),
+    );
 
     selectInBody("the first session");
     expect(screen.queryByRole("button", { name: "Comment on selection" })).toBeNull();
   });
 
-  it("takes the draft card out of flow so it can align to its selection", async () => {
-    // CMT-FR-05: the card sits beside the passage like any other. Left in
-    // normal flow its computed `top` would be inert and it would always render
-    // at the head of the rail.
-    await mount({ threads: [] });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
-
-    selectInBody("the first session");
-    fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    expect((await screen.findByTestId("comment-draft")).dataset.positioned).toBe("true");
-  });
-
-  it("puts focus in the composer when a draft opens", async () => {
+  it("CMT-FR-05, DDS-FR-QMBC: puts focus in the opening composer when it opens for a passage", async () => {
     // CMT-FR-05: the author is mid-thought; the affordance suppresses the
     // browser's default focus handling precisely so this can hold.
     await mount({ threads: [] });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
+    await waitFor(() => expect(discussionToggle()).toBeInTheDocument());
 
     selectInBody("the first session");
     fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    await screen.findByTestId("comment-draft");
-    expect(screen.getByLabelText("New comment")).toHaveFocus();
+    await openingQuote();
+    await waitFor(() => expect(opener()).toHaveFocus());
   });
 
   it("keeps the affordance with the passage as the body scrolls", async () => {
@@ -499,7 +508,7 @@ describe("CMT-FR-05: the affordance stays reachable and sits with the selection"
     // the space an absolutely positioned child of it lives in — so the button
     // travels with the text rather than hovering over unrelated prose.
     await mount({ threads: [] });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
+    await waitFor(() => expect(discussionToggle()).toBeInTheDocument());
 
     const surface = document.querySelector(".editor") as HTMLElement;
     surface.getBoundingClientRect = () => ({ top: 0, left: 0 }) as DOMRect;
@@ -515,7 +524,7 @@ describe("CMT-FR-05: the affordance stays reachable and sits with the selection"
 
   it("keeps the affordance from overhanging the right edge of the surface", async () => {
     await mount({ threads: [] });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
+    await waitFor(() => expect(discussionToggle()).toBeInTheDocument());
 
     const surface = document.querySelector(".editor") as HTMLElement;
     surface.getBoundingClientRect = () => ({ top: 0, left: 0 }) as DOMRect;
@@ -532,7 +541,7 @@ describe("CMT-FR-05: the affordance stays reachable and sits with the selection"
 describe("CMT-FR-28: anchors are marked in the body", () => {
   it("marks each anchored passage and distinguishes the focused one", async () => {
     await mount({ threads: [makeThread()] });
-    await openRail();
+    await openColumn("t1");
 
     await waitFor(() =>
       expect(document.querySelectorAll(".comment-anchor").length).toBeGreaterThan(0),
@@ -541,11 +550,9 @@ describe("CMT-FR-28: anchors are marked in the body", () => {
     expect(marked.getAttribute("data-comment-thread")).toBe("t1");
     expect(marked.classList.contains("comment-anchor--focused")).toBe(false);
 
-    // Activating the highlight focuses its card, and the card is marked focused.
+    // Activating the highlight focuses its discussion in the column.
     fireEvent.click(marked);
-    await waitFor(() =>
-      expect(screen.getByTestId("comment-thread-t1").dataset.focused).toBe("true"),
-    );
+    await waitFor(() => expect(screen.getByTestId("comment-thread-t1")).toHaveFocus());
     await waitFor(() =>
       expect(
         document.querySelector(".comment-anchor")?.classList.contains("comment-anchor--focused"),
@@ -557,8 +564,7 @@ describe("CMT-FR-28: anchors are marked in the body", () => {
     // CMT-FR-17: a resolved thread is no longer under discussion; the disclosure
     // is where it lives.
     await mount({ threads: [makeThread({ resolved: true })] });
-    fireEvent.click(commentsToggle());
-    await screen.findByRole("complementary", { name: "Comments" });
+    await openColumn();
     await waitFor(() =>
       expect(document.querySelectorAll(".comment-anchor")).toHaveLength(0),
     );
@@ -578,14 +584,13 @@ describe("CMT-FR-06: a selection that spans blocks", () => {
       threads: [],
       load: { body: STRUCTURED, checksum: "ck1" },
     });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
+    await waitFor(() => expect(discussionToggle()).toBeInTheDocument());
 
     selectInBody("User stories\nAs an author, I want a WYSIWYG editor.");
     fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    fireEvent.change(screen.getByLabelText("New comment"), { target: { value: "x" } });
-    fireEvent.click(
-      within(screen.getByTestId("comment-draft")).getByRole("button", { name: "Post" }),
-    );
+    await openingQuote();
+    fireEvent.change(opener(), { target: { value: "x" } });
+    fireEvent.click(openerButton("Post"));
 
     await waitFor(() =>
       expect(backend.calls.some((c) => c.cmd === "open_discussion")).toBe(true),
@@ -606,7 +611,7 @@ describe("CMT-FR-06: a selection that spans blocks", () => {
     // CMT-FR-06's floor: anchoring to the wrong passage is worse than not
     // anchoring at all.
     await mount({ threads: [], load: { body: STRUCTURED, checksum: "ck1" } });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
+    await waitFor(() => expect(discussionToggle()).toBeInTheDocument());
 
     selectInBody("nothing in this document says this");
     expect(screen.queryByRole("button", { name: "Comment on selection" })).toBeNull();
@@ -618,7 +623,7 @@ describe("CMT-FR-06: a selection that spans blocks", () => {
     // nothing to tell them so.
     const source = "## Alpha\n\nshared line\n\n## Beta\n\n- tail item\n";
     await mount({ threads: [], load: { body: source, checksum: "ck1" } });
-    await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
+    await waitFor(() => expect(discussionToggle()).toBeInTheDocument());
 
     // `shared line` occurs only above `Beta`, so there is no range from one to
     // the other.

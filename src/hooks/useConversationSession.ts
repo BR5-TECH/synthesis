@@ -25,7 +25,7 @@ import {
 } from "../api";
 import { addressesEveryone, agentRoster } from "../components/agentTags";
 import { logDebug, logWarn } from "../logging";
-import { loggableTurnFailure } from "../components/CommentRail/messages";
+import { loggableTurnFailure } from "../components/discussion/messages";
 import {
   dispatchTargets,
   withoutAwaitingReply,

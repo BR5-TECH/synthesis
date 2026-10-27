@@ -19,7 +19,12 @@ import { useDraftDiscussionWiring } from "./useDraftDiscussionWiring";
 import { GraduationStart } from "../GraduationStart";
 import type { EditMode } from "../../state/editHistory";
 import { AUTOSAVE_DELAY_MS } from "../../state/editSessions";
-import { DiscussionColumn, Splitter, gridTemplate } from "../DraftDiscussion";
+import {
+  DiscussionColumn,
+  Splitter,
+  gridTemplate,
+  useDiscussionSplit,
+} from "../DraftDiscussion";
 import { DraftHistoryRail } from "./DraftHistoryRail";
 import { GithubShadowBanner } from "./GithubShadow";
 import { useDraftReview } from "./useDraftReview";
@@ -37,7 +42,8 @@ export {
   standingOf,
   versionCountOf,
 } from "./labels";
-import { revealHunk } from "../../state/draftDiscussion";
+import { revealHunk, useDraftReviewState } from "../../state/draftDiscussion";
+import { draftColumn } from "../../state/discussionColumn";
 import { useDiscussionControl } from "../../hooks/useDiscussionControl";
 import { identityBlockFor } from "../../hooks/useComments";
 import {
@@ -56,7 +62,6 @@ import { useDraftGraduation } from "./useDraftGraduation";
 import { useDraftHistory } from "./useDraftHistory";
 import { useDraftImages } from "./useDraftImages";
 import { useDraftRename } from "./useDraftRename";
-import { useDraftSplit } from "./useDraftSplit";
 
 /**
  * New Artifact — the tab a draft is developed in
@@ -149,8 +154,8 @@ export function NewArtifactWorkspace({
   const [editTick, setEditTick] = useState(0);
 
   /**
-   * CMT-FR-52 … CMT-FR-62: the draft's discussions, which the comment margin
-   * beside the page renders and continues. This tab only ever *begins* one
+   * CMT-FR-52 … CMT-FR-61: the draft's discussions, which the discussion
+   * column beside the page renders and continues. This tab only ever *begins* one
    * (NAW-FR-32, per `ACT-action-control.md` ACT-FR-16); every later message in it
    * is posted in its card.
    */
@@ -193,7 +198,7 @@ export function NewArtifactWorkspace({
   const [overlayOpen, setOverlayOpen] = useState(false);
   const identityBlock = identityBlockFor(discussions.identityError);
 
-  const { splitRef, view, setRatio, toggleDiscussion } = useDraftSplit(draftId);
+  const { splitRef, view, setRatio, toggleDiscussion } = useDiscussionSplit(draftColumn(draftId));
 
   /**
    * NAW-FR-35 / DCP-FR-04: the draft's undecided proposal, if it has one.
@@ -211,11 +216,12 @@ export function NewArtifactWorkspace({
    * The proposal and the change under review — the one thing the author left
    * the tail to look at, and the one thing scrolling has taken off screen.
    */
+  const { focusedHunkId } = useDraftReviewState(draftId);
   const anchorBar = useMemo(() => {
     if (pendingProposal === undefined) return null;
     const undecided = undecidedHunks(pendingProposal);
-    const at = view.focusedHunkId
-      ? hunkPosition(pendingProposal, view.focusedHunkId)
+    const at = focusedHunkId
+      ? hunkPosition(pendingProposal, focusedHunkId)
       : hunkPosition(pendingProposal, undecided[0]?.id ?? "");
     const changes = pendingProposal.hunkCount;
     return {
@@ -224,11 +230,11 @@ export function NewArtifactWorkspace({
       }`,
       action: at > 0 ? `Back to change ${at}` : "Back to the proposal",
       onActivate: () => {
-        const hunkId = view.focusedHunkId ?? undecided[0]?.id ?? null;
+        const hunkId = focusedHunkId ?? undecided[0]?.id ?? null;
         if (hunkId !== null) revealHunk(draftId, hunkId);
       },
     };
-  }, [pendingProposal, view.focusedHunkId, draftId]);
+  }, [pendingProposal, focusedHunkId, draftId]);
   /**
    * NAW-FR-10 / NAW-FR-30: whether the review modal is standing over the tab.
    *
@@ -804,7 +810,10 @@ export function NewArtifactWorkspace({
             silently discard. */}
         <DiscussionColumn
           hidden={view.hidden}
-          draftId={draftId}
+          column={draftColumn(draftId)}
+          target={{ kind: "draft", draftId }}
+          noun="draft"
+          material="prompt"
           discussions={draftDiscussions}
           selectedThreadId={focusedThreadId}
           onSelectThread={setFocusedThreadId}

@@ -4,12 +4,11 @@
  * of a past version, and the Editor over the live prompt. Split out of
  * `index.tsx` to keep that file within the size rule.
  */
-import { useRef, type ComponentProps } from "react";
+import type { ComponentProps } from "react";
 
 import type { DraftHistoryEntry } from "../../types";
 import type { DraftSessionStore } from "../../state/draftSessions";
 import type { EditMode } from "../../state/editHistory";
-import { useCommentArrangement } from "../../hooks/useCommentArrangement";
 import { Icon } from "../icons";
 import { Editor } from "../Editor";
 import { DraftVersionReading } from "../DraftVersionReading";
@@ -65,25 +64,6 @@ export function DraftDocumentColumn({
   fragmentHost: EditorProps["fragmentHost"];
   review: EditorProps["review"];
 }) {
-  /**
-   * CMT-FR-64: the field the page and the margin share, measured so the cards
-   * know which arrangement they are in. The History rail is inside the tab and
-   * outside this element, so showing it narrows what is measured here — which is
-   * right, because it narrows what the cards actually have.
-   */
-  const draftEditorRef = useRef<HTMLDivElement | null>(null);
-  const arrangement = useCommentArrangement(draftEditorRef);
-
-  /**
-   * NAW-FR-14 / DDS-FR-KPSZ: the threads anchored to a passage of the prompt.
-   *
-   * They render below the page on CMT-FR-64's arrangement rather than in a
-   * margin beside it. This tab does not serve them yet — `showComments` is off
-   * on the embedded Editor for the reason NAW-FR-14 records — so the list is
-   * empty and the field opens no margin.
-   */
-  const anchoredThreads: readonly unknown[] = [];
-
   return (
     /* NAW-FR-27: the field the page is set on, and the corner of it the
        action control floats in. The collapsed control has a strip of that
@@ -97,18 +77,7 @@ export function DraftDocumentColumn({
        page's box stays exactly where it is. */
     <div
       className="draft-editor"
-      ref={draftEditorRef}
       data-overlay={overlayOpen ? "on" : "off"}
-      /* NAW-FR-14 / CMT-FR-64: the field's margin state and its
-         arrangement, on the element that owns the field.
-
-         The draft's **discussions** are no longer here — they are the
-         column beside this one (DDS-FR-KTVW), and they lend the page's
-         field nothing. What can still open a margin is a thread anchored to
-         a passage of the prompt, which this tab does not yet serve; until it
-         does, the field keeps its whole measure for the writing. */
-      data-rail={anchoredThreads.length > 0 ? "open" : "closed"}
-      data-comments={arrangement}
     >
       {/* NAW-FR-51 / NAW-FR-54: the typed refusal of an insertion, rendered
           inline where the author is looking, and the live region that

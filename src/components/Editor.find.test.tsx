@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import { Editor } from "./Editor";
 import { EditSessionStore } from "../state/editSessions";
@@ -258,7 +258,12 @@ describe("query modes (EFR-FR-CLZF)", () => {
     const { sessions } = await renderInTextMode("text");
     setFind(sessions, { form: "find" });
 
-    const toggles = screen.getAllByRole("radio");
+    // The toolbar also holds the split presets of the discussion column
+    // (DDS-FR-PNXR), which are radios too, so the query is scoped to the mode
+    // group of the panel.
+    const toggles = within(
+      screen.getByRole("radiogroup", { name: "Query mode" }),
+    ).getAllByRole("radio");
     expect(toggles.map((t) => t.textContent?.slice(0, 2))).toEqual([
       "Aa",
       "aA",

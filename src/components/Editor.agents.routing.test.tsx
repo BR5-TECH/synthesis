@@ -1,4 +1,4 @@
-// Addressing an agent from the comment rail — `specifications/ui/CMT-comments.md`
+// Addressing an agent from the discussion column — `specifications/ui/CMT-comments.md`
 // CTA-FR-SKXK, CMT-FR-15, AGT-FR-25, AGT-FR-27 … CMT-FR-37, CTA-FR-RPVU, AGC-FR-07.
 //
 // Driven through the real Editor, so what is exercised is the wiring: which
@@ -28,6 +28,7 @@ import {
   turn,
 } from "../test/editorAgentsFixtures";
 import type { Backend } from "../test/editorAgentsFixtures";
+import { openColumn } from "../test/editorCommentsFixtures";
 import {
   artifactCommentOrigin,
   expectBackendOrigin,
@@ -191,13 +192,7 @@ async function mount(over: Partial<Backend> = {}) {
     />,
   );
   await screen.findByLabelText("artifact body");
-  const toggle = screen.getByRole("button", {
-    name: /comments \(\d+ unresolved\)/i,
-  });
-  if (toggle.getAttribute("aria-expanded") !== "true") {
-    await userEvent.click(toggle);
-  }
-  await screen.findByRole("complementary", { name: "Comments" });
+  await openColumn();
   return b;
 }
 
@@ -218,13 +213,7 @@ async function remount(b: Backend) {
     />,
   );
   await screen.findByLabelText("artifact body");
-  const toggle = screen.getByRole("button", {
-    name: /comments \(\d+ unresolved\)/i,
-  });
-  if (toggle.getAttribute("aria-expanded") !== "true") {
-    await userEvent.click(toggle);
-  }
-  await screen.findByRole("complementary", { name: "Comments" });
+  await openColumn();
   return b;
 }
 
@@ -253,11 +242,6 @@ function failedTurn(over: Partial<AgentTurn> = {}): AgentTurn {
 }
 
 const card = () => screen.getByTestId("comment-thread-t1");
-/** The comments actually in the thread — a failed contribution is not one. */
-const postedComments = () =>
-  card().querySelectorAll(
-    ".comment:not(.comment--pending):not(.comment--failed)",
-  );
 
 describe("CTA-FR-HCMJ … CTA-FR-QUXJ: routing by the conversation's active agents", () => {
   /** A thread whose comments are exactly these bodies, human unless `agent`. */

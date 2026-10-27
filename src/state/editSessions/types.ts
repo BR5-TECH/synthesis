@@ -60,22 +60,10 @@ export interface EditSession {
    */
   find: FindState;
   /**
-   * CMT-FR-30: whether the comment rail is open. Part of the artifact's retained
-   * edit state, so closing the rail survives the tab closing and reopening within
-   * the session, and is discarded with everything else here.
-   *
-   * `null` means the author has not said, and the default applies: the rail opens
-   * for an artifact carrying at least one unresolved thread and stays closed for
-   * one carrying none. Only an explicit toggle writes a boolean here, which is
-   * what keeps the *default* from looking like a decision — an artifact that was
-   * merely opened and read must still be dropped on close (EDT-FR-28).
-   */
-  railOpen: boolean | null;
-  /**
-   * CMT-FR-17 / CMT-FR-30: whether the rail's resolved-thread disclosure is
-   * expanded. Retained beside `railOpen` for the same reason and on the same
-   * terms — the Editor is unmounted and remounted when its tab is closed and
-   * reopened, so component state would collapse it every time.
+   * CMT-FR-17 / CMT-FR-30: whether the column's resolved disclosure is
+   * expanded. Retained in the session because the Editor is unmounted and
+   * remounted when its tab is closed and reopened, so component state would
+   * collapse it every time.
    *
    * Collapsed is the default, so `false` is pristine and expanding it is the
    * author's own choice.

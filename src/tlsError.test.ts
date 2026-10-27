@@ -11,7 +11,7 @@ import { tokenErrorMessage } from "./components/GithubTokens";
 import { rejectionMessage } from "./components/Git/errors";
 import { relayVerifyMessage } from "./components/RemoteConnectivitySettings";
 import { githubPollingErrorMessage } from "./state/githubPolling";
-import { turnFailureMessage, failedTurnDetail } from "./components/CommentRail/messages";
+import { turnFailureMessage, failedTurnDetail } from "./components/discussion/messages";
 import type { AgentTurn } from "./types";
 
 describe("the typed TLS error", () => {

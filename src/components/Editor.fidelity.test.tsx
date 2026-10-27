@@ -19,6 +19,7 @@ import {
 } from "@testing-library/react";
 import { Editor } from "./Editor";
 import { EditSessionStore } from "../state/editSessions";
+import { openColumn } from "../test/editorCommentsFixtures";
 import type { ArtifactContents, Discussion } from "../types";
 
 const invokeMock = vi.fn();
@@ -78,16 +79,6 @@ function threadOn(body: string, quote: string): Discussion {
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
   };
-}
-
-async function openRail() {
-  const toggle = () =>
-    screen.getByRole("button", { name: /comments \(\d+ unresolved\)/i });
-  await waitFor(() => expect(toggle()).toBeInTheDocument());
-  if (toggle().getAttribute("aria-expanded") !== "true") {
-    fireEvent.click(toggle());
-  }
-  return screen.getByRole("complementary", { name: "Comments" });
 }
 
 /**
@@ -256,21 +247,24 @@ describe("a respelling does not orphan a comment thread (CMT-FR-66)", () => {
   const SOURCE = "* keep the first session\n* and the second\n\nA closing line.\n";
   const QUOTE = "the first session";
 
+  /** CMT-FR-19: the discussion in the column still finds its passage. */
+  const expectAnchored = () => {
+    const card = screen.getByTestId("comment-thread-t1");
+    expect(card).toHaveAttribute("data-availability", "available");
+    expect(card).not.toHaveTextContent("Orphaned");
+  };
+
   it("keeps the thread anchored across the edit that first serialises the file", async () => {
     await open(SOURCE, [threadOn(SOURCE, QUOTE)]);
-    const rail = await openRail();
-    await waitFor(() => expect(rail).toHaveTextContent(QUOTE));
+    const column = await openColumn("t1");
+    await waitFor(() => expect(column).toHaveTextContent(QUOTE));
 
     // An edit to a different paragraph, which nonetheless respells the bullets.
     fireEvent.keyDown(pmEl(), { key: "a", ctrlKey: true });
     fireEvent.mouseDown(screen.getByTitle("Italic"));
 
-    await waitFor(() =>
-      expect(screen.getByRole("complementary", { name: "Comments" })).toHaveTextContent(QUOTE),
-    );
-    expect(
-      screen.getByRole("complementary", { name: "Comments" }),
-    ).not.toHaveTextContent("Orphaned");
+    await waitFor(() => expect(column).toHaveTextContent(QUOTE));
+    expectAnchored();
   });
 
   it("keeps the thread anchored across the undo itself", async () => {
@@ -278,19 +272,15 @@ describe("a respelling does not orphan a comment thread (CMT-FR-66)", () => {
     // orphan for it (CMT-FR-20). The traversal replaces the buffer wholesale,
     // which the single-range diff would read as one document-sized edit.
     await open(SOURCE, [threadOn(SOURCE, QUOTE)]);
-    const rail = await openRail();
-    await waitFor(() => expect(rail).toHaveTextContent(QUOTE));
+    const column = await openColumn("t1");
+    await waitFor(() => expect(column).toHaveTextContent(QUOTE));
 
     fireEvent.keyDown(pmEl(), { key: "a", ctrlKey: true });
     fireEvent.mouseDown(screen.getByTitle("Italic"));
     fireEvent.keyDown(pmEl(), { key: "z", metaKey: true });
 
-    await waitFor(() =>
-      expect(screen.getByRole("complementary", { name: "Comments" })).toHaveTextContent(QUOTE),
-    );
-    expect(
-      screen.getByRole("complementary", { name: "Comments" }),
-    ).not.toHaveTextContent("Orphaned");
+    await waitFor(() => expect(column).toHaveTextContent(QUOTE));
+    expectAnchored();
   });
 
   it("keeps the thread anchored on the edit that follows a full undo", async () => {
@@ -299,8 +289,8 @@ describe("a respelling does not orphan a comment thread (CMT-FR-66)", () => {
     // re-resolve the anchors. A latch set once at the first edit would skip it
     // here and orphan the thread.
     await open(SOURCE, [threadOn(SOURCE, QUOTE)]);
-    const rail = await openRail();
-    await waitFor(() => expect(rail).toHaveTextContent(QUOTE));
+    const column = await openColumn("t1");
+    await waitFor(() => expect(column).toHaveTextContent(QUOTE));
 
     fireEvent.keyDown(pmEl(), { key: "a", ctrlKey: true });
     fireEvent.mouseDown(screen.getByTitle("Italic"));
@@ -308,12 +298,8 @@ describe("a respelling does not orphan a comment thread (CMT-FR-66)", () => {
     fireEvent.keyDown(pmEl(), { key: "a", ctrlKey: true });
     fireEvent.mouseDown(screen.getByTitle("Bold"));
 
-    await waitFor(() =>
-      expect(screen.getByRole("complementary", { name: "Comments" })).toHaveTextContent(QUOTE),
-    );
-    expect(
-      screen.getByRole("complementary", { name: "Comments" }),
-    ).not.toHaveTextContent("Orphaned");
+    await waitFor(() => expect(column).toHaveTextContent(QUOTE));
+    expectAnchored();
   });
 });
 

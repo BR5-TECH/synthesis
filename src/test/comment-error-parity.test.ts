@@ -106,7 +106,7 @@ describe("comment typed-error parity across the IPC boundary", () => {
 
 describe("the store refusal reaches the author as prose", () => {
   it("CMS-FR-YQND, CMT-FR-34: store_unavailable is not rendered as its own slug", async () => {
-    const { commentErrorMessage } = await import("../components/CommentRail/messages");
+    const { commentErrorMessage } = await import("../components/discussion/messages");
     const rendered = commentErrorMessage(COMMENT_ERRORS.storeUnavailable);
     // A store that could not be reached is a storage fault the author can act
     // on — retry, check the disk — and it must not read as a conversation that

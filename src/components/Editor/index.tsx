@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -9,8 +8,8 @@ import {
 import type { MouseEvent as ReactMouseEvent } from "react";
 import type { Editor as TiptapEditor } from "@tiptap/react";
 import type { EditorImageHost } from "../hostImages";
-import { ANCHOR_ATTR, threadIdAtEvent } from "../commentHighlight";
-import { focusDiscussion } from "../../state/discussionFocus";
+import { threadIdAtEvent } from "../commentHighlight";
+import { focusDiscussion, requestPendingFocus } from "../../state/discussionFocus";
 import { diffEdit, findNearest, shiftAnchor } from "../../state/commentAnchors";
 import { useHunkPlacement } from "./useHunkPlacement";
 import { useArtifactDocument } from "../../hooks/useArtifactDocument";
@@ -39,11 +38,10 @@ import {
 import type { LayerAnchor } from "./highlight";
 import { REVIEW_SELECTOR, type EditorProps } from "./props";
 import { MockEditor } from "./MockEditor";
-import { DRAFT_KEY } from "../../hooks/useComments";
 import { EditorView } from "./EditorView";
 import { useDocumentOutline } from "./useDocumentOutline";
 import { useCommentAnchors } from "./useCommentAnchors";
-import { useCommentRail } from "./useCommentRail";
+import { useEditorDiscussions } from "./useEditorDiscussions";
 import { useEditorFind } from "./useEditorFind";
 import { useEditorScrollMemory } from "./useEditorScrollMemory";
 import { useEditorSurface } from "./useEditorSurface";
@@ -362,7 +360,7 @@ function LiveEditor({
     applySourceText,
     setExpandOverride,
   });
-  const { sourceTokens, sourceRef, sourceHlRef, sourceWrapRef } = findGroup;
+  const { sourceRef, sourceHlRef, sourceWrapRef } = findGroup;
 
   // EDT-FR-LGQA / NAW-FR-TFFX: the headings of the document, for the table of
   // contents control in this tab's cluster.
@@ -482,26 +480,23 @@ function LiveEditor({
   }, [undo, redo]);
 
   /**
-   * CMT-FR-05 / CMT-FR-25: the composer's draft, declared before the rail so the
-   * rail's own toggle can abandon one in flight rather than leave it armed where
-   * it cannot be seen or cancelled.
+   * CMT-FR-05: the passage the column's opening composer is about, recorded by
+   * the Comment affordance and moved with the buffer until it is posted.
    */
   const [draft, setDraft] = useState<CommentSelection | null>(null);
 
-  // ---- Comment rail (CMT-comments.md, hosted per EDT-FR-61) ---------------
-  const railGroup = useCommentRail({
+  // ---- Discussion column (CMT-comments.md, hosted per EDT-FR-61) ----------
+  const railGroup = useEditorDiscussions({
     artifactId,
-    sessions,
     session,
     doc,
-    mode,
-    isMarkdown,
     showComments,
     showActions,
     currentDoc,
-    setDraft,
   });
-  const { comments, railOpen, railOnSource } = railGroup;
+  const { comments } = railGroup;
+  /** CMT-FR-02 / ESH-FR-SSDV: a source file marks its fragments on its source. */
+  const railOnSource = !isMarkdown;
 
 
   /**
@@ -568,21 +563,44 @@ function LiveEditor({
   }, [session.seedToken, doc.loaded]);
 
   /**
-   * CMT-FR-28: activating a highlight focuses that thread's card. The rail's own
-   * `onMouseDown` closes the loop in the other direction.
+   * CMT-FR-28: activating a highlight shows the column where it is hidden and
+   * focuses that discussion in it. The fragment quote in the column closes the
+   * loop in the other direction.
    */
+  const { showColumn } = railGroup;
+  // The frame a highlight's focus waits for. A tab that closes first takes the
+  // request with it, so no surface of another tab picks it up later.
+  const focusFrameRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (focusFrameRef.current !== null) cancelAnimationFrame(focusFrameRef.current);
+    },
+    [],
+  );
   const focusThreadFromBody = useCallback(
     (e: ReactMouseEvent) => {
       const threadId = threadIdAtEvent(e.target);
       if (!threadId) return;
       setFocusedThread(threadId);
-      // CMT-FR-28 / CVP-FR-06: the card that already shows the discussion takes
-      // focus. The text is not touched.
-      focusDiscussion(threadId);
+      if (showComments) {
+        // CMT-FR-28 / CVP-FR-06: the column shows the discussion, and its
+        // surface takes focus. The column may be hidden, or showing another
+        // discussion, so the focus waits for the next frame, when the surface
+        // is on screen. A surface that mounts later still takes it from the
+        // held request. The text is not touched.
+        showColumn();
+        if (focusFrameRef.current !== null) cancelAnimationFrame(focusFrameRef.current);
+        focusFrameRef.current = requestAnimationFrame(() => {
+          focusFrameRef.current = null;
+          if (focusDiscussion(threadId) === "closed") requestPendingFocus(threadId);
+        });
+      } else {
+        focusDiscussion(threadId);
+      }
       // DDS-FR-QMBC: activating a fragment focuses its discussion in the host.
       fragmentHost?.onActivate(threadId);
     },
-    [fragmentHost],
+    [fragmentHost, showComments, showColumn],
   );
 
   // CMT-FR-05: the selection a Comment affordance would open a thread over, and
@@ -598,16 +616,15 @@ function LiveEditor({
    */
   const [focusedThread, setFocusedThread] = useState<string | null>(null);
   // CMT-FR-17 / CMT-FR-30: per artifact and part of its retained edit state, so
-  // it survives both the rail unmounting on a mode toggle and the tab closing
-  // and reopening within the session.
+  // it survives the tab closing and reopening within the session.
   const showResolved = session.resolvedOpen;
-  // CMT-FR-25: the picker is open because the rail asked for it. Cancelling
-  // leaves the rail disabled with the reason still stated; confirming
+  // CMT-FR-25: the picker is open because the column asked for it. Cancelling
+  // leaves the column disabled with the reason still stated; confirming
   // re-resolves the identity, which is what enables commenting.
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  // CMT-FR-27 / CMT-FR-28 / CMT-FR-36 / CMT-FR-64: where each thread's passage
-  // sits on the surface, and which card has the focus.
+  // CMT-FR-28 / CMT-FR-36: where each thread's passage sits on the surface,
+  // and which discussion has the focus.
   const hosted = useFragmentHost(fragmentHost, setFocusedThread, rootRef);
   const anchorComments = useMemo(
     () => ({
@@ -617,21 +634,18 @@ function LiveEditor({
     [comments.threads, comments.identityError, hosted.threads],
   );
   const anchorGroup = useCommentAnchors({
-    rootRef,
     editor,
     session,
     mode,
-    railOpen: railOpen || hosted.active,
+    marksShown: showComments || hosted.active,
     docVersion,
     comments: anchorComments,
-    draft,
     focusedThread,
     setFocusedThread,
     focusThreadId,
     onThreadFocused,
   });
-  const { bodyScrollRef, setScrollTop, setAnchorTops, identityBlock } =
-    anchorGroup;
+  const { bodyScrollRef, identityBlock } = anchorGroup;
   // EDT-FR-UERT / EDT-FR-NYCP: the document comes back where the author left
   // it when the tab is activated again.
   const rememberScroll = useEditorScrollMemory({
@@ -640,10 +654,8 @@ function LiveEditor({
     bodyScrollRef,
     sourceRef,
     sourceHlRef,
-    railOnSource,
     docVersion,
     sourceText,
-    setScrollTop,
     setAtTop,
     setExpandOverride,
   });
@@ -668,11 +680,10 @@ function LiveEditor({
    * of the source (CMT-FR-06), so there is no projection to invert here — the
    * quote is looked up in the buffer by the same nearest-occurrence rule
    * re-anchoring uses, and that is the answer. A quote the buffer no longer
-   * holds places nothing, and its thread is still read in the rail with its card
-   * at the top; alignment is best-effort, the thread never is.
+   * holds marks nothing, and its thread is still read in the column.
    */
   const sourceAnchors: LayerAnchor[] = useMemo(() => {
-    if (mode !== "text" || !railOnSource || !railOpen) return [];
+    if (mode !== "text" || !railOnSource || !showComments) return [];
     const out: LayerAnchor[] = [];
     const place = (threadId: string, quote: string, hint: number, mark: boolean) => {
       if (quote === "") return;
@@ -683,8 +694,7 @@ function LiveEditor({
         start: at,
         end: at + quote.length,
         // A resolved thread's passage is no longer under discussion, so it is
-        // not marked — but it is still placed, because its card is aligned to it
-        // while the disclosure holding it is open (CMT-FR-17).
+        // not marked (CMT-FR-17).
         focused: mark && threadId === focusedThread,
         marked: mark,
       });
@@ -698,7 +708,6 @@ function LiveEditor({
         !entry.thread.resolved,
       );
     }
-    if (draft) place(DRAFT_KEY, draft.quote, draft.start, false);
     // Overlapping anchors would nest on the layer, and the outer of the two
     // would swallow the inner's measurement. Ordering by start and dropping a
     // span that reaches back into its predecessor keeps them disjoint, the way
@@ -711,38 +720,7 @@ function LiveEditor({
       disjoint.push(a);
     }
     return disjoint;
-  }, [mode, railOnSource, railOpen, sourceText, comments.threads, draft, focusedThread]);
-
-  /**
-   * CMT-FR-27 on the source surface: each card's alignment, measured off the
-   * layer that marked the passages.
-   *
-   * The layer is the only place on this surface where a passage has a box at
-   * all — the textarea renders one run of text with no elements inside it — so
-   * it is what the offsets are read from. They are in the layer's own content
-   * coordinates, which is the space the rail's cards are placed in once the
-   * scroll offset is subtracted, exactly as for the rich body.
-   */
-  useLayoutEffect(() => {
-    if (mode !== "text" || !railOnSource || !railOpen) return;
-    const layer = sourceHlRef.current;
-    if (!layer) return;
-    const base = layer.getBoundingClientRect().top - layer.scrollTop;
-    const tops: Record<string, number> = {};
-    layer
-      .querySelectorAll<HTMLElement>(`[${ANCHOR_ATTR}]`)
-      .forEach((el) => {
-        const id = el.getAttribute(ANCHOR_ATTR);
-        if (!id || id in tops) return;
-        tops[id] = Math.max(0, el.getBoundingClientRect().top - base);
-      });
-    setAnchorTops((prev) => {
-      const same =
-        Object.keys(prev).length === Object.keys(tops).length &&
-        Object.keys(tops).every((k) => prev[k] === tops[k]);
-      return same ? prev : tops;
-    });
-  }, [mode, railOnSource, railOpen, sourceAnchors, sourceText, sourceTokens]);
+  }, [mode, railOnSource, showComments, sourceText, comments.threads, focusedThread]);
 
   /**
    * CMT-FR-05 on the source surface: a non-empty selection in the textarea
@@ -820,22 +798,12 @@ function LiveEditor({
   }, [mode, blocked, identityBlock, currentDoc, editor, draft]);
 
   /**
-   * A Markdown file toggled to raw text takes both the affordance and the
-   * composer off screen (CMT-FR-02), so neither may stay armed behind the source
-   * surface — a draft the author can no longer see or cancel would leave the
-   * Comment affordance suppressed on return. A source file never leaves the one
-   * surface it has, so nothing here ever fires for it.
+   * A Markdown file toggled to raw text takes the affordance off screen
+   * (CMT-FR-02), so it may not stay armed behind the source surface. The
+   * column's opening composer stays, because the column stands in both modes.
    */
   useEffect(() => {
-    if (mode === "wysiwyg") {
-      // Hiding the surface resets its scroll position, and no scroll event
-      // fires on the way back — so the offset is re-read rather than trusted,
-      // or the cards return shifted by however far the body used to be scrolled.
-      setScrollTop(bodyScrollRef.current?.scrollTop ?? 0);
-      return;
-    }
-    setDraft(null);
-    setPendingSelection(null);
+    if (mode !== "wysiwyg") setPendingSelection(null);
   }, [mode]);
 
   /**

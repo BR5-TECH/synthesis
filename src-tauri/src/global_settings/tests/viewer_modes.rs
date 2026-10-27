@@ -158,7 +158,8 @@ fn a_record_written_before_the_query_mode_existed_still_loads() {
         serde_json::from_str(r#"{"theme":"dark","mainWindowFullscreen":true}"#).unwrap();
     assert_eq!(decoded.theme, Theme::Dark);
     assert!(decoded.main_window_fullscreen);
-    assert_eq!(decoded.search_query_mode, SearchQueryMode::LiteralInsensitive);
+    // GSS-FR-21: a record with no stored mode reads as the default, Semantic.
+    assert_eq!(decoded.search_query_mode, SearchQueryMode::Semantic);
 }
 
 #[test]

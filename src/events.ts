@@ -22,6 +22,7 @@ import type {
   PendingQuestionSet,
   DashboardRefreshFailedPayload,
   DocumentsSnapshot,
+  EmbeddingsStatus,
   DraftPromptChangedPayload,
   DraftStatisticsChangedPayload,
   GitOperationFinishedPayload,
@@ -202,6 +203,20 @@ export const onDocumentsChanged = (
   handler: (snapshot: DocumentsSnapshot) => void,
 ): Promise<UnlistenFn> =>
   listen<DocumentsSnapshot>(DOCUMENTS_CHANGED, (event) =>
+    handler(event.payload),
+  );
+
+/** EMB-FR-ZFGT: the status of the embeddings index changed. */
+export const EMBEDDINGS_STATUS_CHANGED = "embeddings-status-changed";
+
+/**
+ * EMB-FR-ZFGT: the embeddings index changed state, or a job made progress. The
+ * payload is the whole status (GLS-FR-RQFK, SET-FR-UNRY).
+ */
+export const onEmbeddingsStatusChanged = (
+  handler: (status: EmbeddingsStatus) => void,
+): Promise<UnlistenFn> =>
+  listen<EmbeddingsStatus>(EMBEDDINGS_STATUS_CHANGED, (event) =>
     handler(event.payload),
   );
 

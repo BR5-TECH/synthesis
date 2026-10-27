@@ -44,6 +44,9 @@ Tauri commands — names match `../ui/GIT-git.md` byte-for-byte:
 ### Internal (Rust API)
 - `push_branch_at(checkout, branch?)` — pushes a branch from a checkout to the project's primary remote: the named branch when one is given, else the branch that checkout has out (GTC-FR-YHDU). Authenticated against a GitHub remote (GTC-FR-09). It is not registered as a Tauri command; `push_current_branch` composes it for the active worktree, `push_branch` composes it for a named branch, and `GRD-graduation.md`'s run driver composes it for a work stream's checkout.
 - `fetch_remote_branches()` — updates the repository's remote-tracking refs from the project's primary remote and drops the ones whose upstream branch is gone (GTC-FR-12). Authenticated against a GitHub remote (GTC-FR-09). It is not registered as a Tauri command, so no frontend call can reach it; it is the single fetch primitive in the codebase and `WTC-worktree-context.md` WTC-FR-22 composes it.
+- `branch_tip(name)` — the commit id at the tip of the branch `name` (GTC-FR-FWYK). Read-only; no Tauri command. `EMB-embeddings-index.md` composes it for its root tip (EMB-FR-HDFV).
+- `list_files_at(commit, prefix)` — every file of the tree of `commit` below `prefix`, with its path and blob id (GTC-FR-SHLL). Read-only; no Tauri command.
+- `read_blob(blob_id)` — the bytes of one blob (GTC-FR-GUSU). Read-only; no Tauri command. `EMB-embeddings-index.md` composes this primitive and `list_files_at` for its root layer (EMB-FR-LGLI).
 
 ### Payload shapes
 ```
@@ -306,6 +309,9 @@ Typed errors of the history and branch operations: `"not a git repository"`, `"u
 62. **GTC-FR-YWCP** `remote_branch_exists` is true when the primary remote has a remote-tracking ref for `head`, and `unpushed` counts the commits reachable from `head` and not from that ref. `uncommitted_paths` is read from the checkout that holds `head`, whether it is the primary worktree, the active worktree, another linked worktree, or the working copy of a work stream, on the terms of GTC-FR-LEBC, and is empty when no checkout holds `head`. `ahead_of_base` counts the commits reachable from `head` and not from the base, counted as `WKS-work-streams.md` WKS-FR-EIBC counts the commits of a stream.
 63. **GTC-FR-FSLC** A GitHub remote is an HTTPS remote whose host is `github.com`, ends in `.ghe.com`, or is the host of a stored token. When the token the project resolves belongs to another host, an authenticated operation returns the typed error `github_host_mismatch` (`GTS-github-token-storage.md` GTS-FR-OBAS), makes no network request, and writes no ref.
 64. **GTC-FR-XUAC** The pull request operations use the API base of the host of the remote for every request. `create_pull_request` accepts the page address that GitHub returns only when it is an HTTPS address on that host.
+90. **GTC-FR-FWYK** `branch_tip(name)` returns the commit id of the local branch `name`. When no local branch has that name, it returns the commit id of the remote-tracking branch of the primary remote with that name. When neither exists, it returns the typed error `branch_missing`.
+91. **GTC-FR-SHLL** `list_files_at(commit, prefix)` returns the path and the blob id of every file in the tree of `commit` below the repository-relative folder `prefix`. It reads Git objects only. It checks out nothing, and it changes no worktree, no Git index, and no ref. An unknown commit returns the typed error `object_missing`.
+92. **GTC-FR-GUSU** `read_blob(blob_id)` returns the bytes of one blob from the Git objects, with no checkout and no write. An unknown blob returns the typed error `object_missing`. A submodule entry and a symbolic link entry of a tree are not files for `list_files_at`.
 
 ## Non-functional requirements
 - Long-running operations (push, pull, network calls) must stream output rather than block the Tauri invoke; the UI Git panel relies on streaming for its push/pull output area.

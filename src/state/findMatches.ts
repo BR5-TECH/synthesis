@@ -13,7 +13,7 @@
  * buffer rather than through `"start search"` because that operation walks the
  * project on disk and cannot see an unsaved edit (EFR-FR-DKQT).
  */
-import type { SearchMode } from "../types";
+import type { LiteralSearchMode } from "../types";
 
 /** A half-open `[start, end)` range of a match within the text it was found in. */
 export interface FindMatch {
@@ -57,7 +57,7 @@ export function smartCaseIsSensitive(query: string): boolean {
  */
 export function compileQuery(
   query: string,
-  mode: SearchMode,
+  mode: LiteralSearchMode,
 ): RegExp | null {
   if (query === "") return null;
   switch (mode) {
@@ -107,7 +107,7 @@ export function compileQuery(
 export function findMatches(
   text: string,
   query: string,
-  mode: SearchMode,
+  mode: LiteralSearchMode,
 ): MatchResult {
   if (query === "") return NO_MATCHES;
   const re = compileQuery(query, mode);

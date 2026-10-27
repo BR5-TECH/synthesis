@@ -370,7 +370,9 @@ const CLASSIFIED: &[(&str, &str)] = &[
     ("aws-lc-sys", "bundled source"),
     // EAC-FR-HMBJ: the microsandbox runtime's own native code.
     ("zstd-sys", "bundled source unless ZSTD_SYS_USE_PKG_CONFIG is set"),
-    ("libsqlite3-sys", "bundled source; sqlx enables its `bundled` feature"),
+    ("libsqlite3-sys", "bundled source; sqlx and rusqlite enable its `bundled` feature"),
+    // EMB-FR-MHHY: ONNX Runtime for the embeddings models.
+    ("ort-sys", "prebuilt static library of `download-binaries` unless ORT_LIB_LOCATION is set"),
     ("bzip2-sys", "bundled source; built for the Linux VM monitor alone"),
     ("mac-notification-sys", "bundled source; system frameworks"),
     // Links only operating-system libraries or frameworks.

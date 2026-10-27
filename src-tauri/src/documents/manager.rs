@@ -99,6 +99,9 @@ pub(super) struct Inner {
     pub sources: Vec<StoredSource>,
     pub snapshot: DocumentsSnapshot,
     pub records: BTreeMap<String, DocRecord>,
+    /// EMB-FR-JIJH: a refresh committed its snapshot since the open, so the
+    /// snapshot describes the sources rather than the empty start.
+    pub refreshed: bool,
 }
 
 /// What a refresh did.
@@ -183,6 +186,7 @@ impl DocumentsCollection {
             sources: stored.unwrap_or_default(),
             snapshot: DocumentsSnapshot::default(),
             records: BTreeMap::new(),
+            refreshed: false,
         };
         drop(inner);
         self.fence_emitters();
@@ -235,6 +239,14 @@ impl DocumentsCollection {
     /// Whether a project is open and the collection is in use.
     pub fn is_open(&self) -> bool {
         lock(&self.inner).open
+    }
+
+    /// EMB-FR-JIJH: whether the collection is open and a refresh committed its
+    /// snapshot since the open. Before that, the documents it lists are not
+    /// the documents of its sources.
+    pub fn has_refreshed(&self) -> bool {
+        let inner = lock(&self.inner);
+        inner.open && inner.refreshed
     }
 
     /// Whether the collection is open for the project filed under `project_key`.
@@ -461,6 +473,7 @@ impl DocumentsCollection {
             let changed = inner.snapshot != snapshot;
             inner.records = records;
             inner.snapshot = snapshot.clone();
+            inner.refreshed = true;
             changed
         };
 

@@ -14,6 +14,7 @@
 //! reaches a registry at all, which is what makes that property inspectable
 //! rather than remembered.
 
+use crate::embeddings::InheritedEnvironment;
 use std::io::Read;
 use std::path::Path;
 use std::sync::atomic::Ordering;
@@ -84,6 +85,7 @@ fn build_with_cli(
     let args =
         docker_build_args(&request.dockerfile, &request.image_reference, &request.context_root);
     let mut child = match Command::new(program)
+        .with_inherited_hub_environment()
         .args(&args)
         // `docker build` resolves `--file` against the directory it is run in,
         // so the project root is the working directory. The context is a

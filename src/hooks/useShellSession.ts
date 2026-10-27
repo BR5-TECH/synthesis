@@ -404,6 +404,9 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     showBottom,
     specMap,
     activeTab,
+    // SCH-FR-09: called on a click, after both factories below have run.
+    openDocumentHit: (hit) => openDocumentById(hit.documentId ?? hit.id),
+    openDraftHit: (hit) => void openDraftById(hit.draftId ?? hit.id),
   });
   /**
    * TAB-FR-37 / TAB-FR-39: the eligible set, held here so the strip's menu can
@@ -584,7 +587,7 @@ export function useShellSession(stores: ShellSessionStores = {}) {
   } = createTabClosures({ tabs, setTabs, setActiveTab, sessions, flows });
 
   // TAB-FR-LKCT / TAB-FR-KUIN: the viewer tabs of the Documents collection.
-  const { openDocument, closeTabsForRemovedDocuments } = createDocumentActions({
+  const { openDocument, openDocumentById, closeTabsForRemovedDocuments } = createDocumentActions({
     tabsRef,
     setTabs,
     setActiveTab,

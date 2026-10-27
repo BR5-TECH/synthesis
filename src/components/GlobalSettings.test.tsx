@@ -192,7 +192,7 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
       preferences: {
         theme: "dark",
         mainWindowFullscreen: false,
-        searchQueryMode: "literal_insensitive",
+        searchQueryMode: "semantic",
         diffVisualizationMode: "unified",
         diffRenderingMode: "source",
         changesCommitAction: "commit",
@@ -334,7 +334,7 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
         preferences: {
           theme: "system",
           mainWindowFullscreen: false,
-          searchQueryMode: "literal_insensitive",
+          searchQueryMode: "semantic",
           diffVisualizationMode: "unified",
           diffRenderingMode: "source",
           changesCommitAction: "commit",

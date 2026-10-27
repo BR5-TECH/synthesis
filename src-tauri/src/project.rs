@@ -466,6 +466,11 @@ pub fn remount_content_root<R: tauri::Runtime>(
             indexer.mount(&rooted);
         }
     }
+    // EMB-FR-JIJH / EMB-FR-NHQG: the embeddings index keeps its store and
+    // checks its layers against the new root in the background, from the BM25
+    // snapshot of this mount. Mounted before the pass is requested, so the
+    // first publish of the new generation cannot come before it.
+    crate::embeddings::on_content_root_mounted(app);
     crate::bm25_index::request_pass(app, crate::bm25_index::PassScope::ALL);
     // DCL-FR-QGLH / DCL-FR-XHSJ: the Documents collection opens with the project
     // and, on a change of active worktree, keeps its sources and runs one
@@ -675,6 +680,8 @@ pub fn close_project<R: tauri::Runtime>(
     // snapshot, its documents instance, and its sources in memory. Its PDF text
     // cache stays for the application session.
     crate::documents::lifecycle::on_project_closed(&app);
+    // EMB-FR-RMZH: stop every embedding job and close the store.
+    crate::embeddings::on_project_closed(&app);
     // PST-FR-30: closing a project schedules the draft-asset housekeeping pass
     // of `DAS-draft-assets.md` (DAS-FR-19), **before** the unmount below
     // releases the project's storage context — so it addresses drafts that

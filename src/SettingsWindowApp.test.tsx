@@ -226,6 +226,7 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
       "GitHub",
       "AI API",
       "Agentic AI",
+      "Indexing",
       "Personal Agents",
       "Docker",
       "Isolation",
@@ -242,6 +243,7 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
       "Project Agents",
       "Docker",
       "Graduation",
+      "Indexing",
     ]);
     const global = screen.getByTestId("settings-group-global");
     const project = screen.getByTestId("settings-group-project");
@@ -361,9 +363,11 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
 
     // From the first row, ArrowUp wraps to the last row of the last group.
     await userEvent.keyboard("{ArrowUp}{ArrowUp}");
-    const graduation = screen.getByRole("tab", { name: "Graduation" });
-    expect(graduation).toHaveAttribute("aria-selected", "true");
-    expect(graduation).toHaveFocus();
+    const lastProjectRow = within(screen.getByRole("tablist", { name: "Project" })).getByRole("tab", {
+      name: "Indexing",
+    });
+    expect(lastProjectRow).toHaveAttribute("aria-selected", "true");
+    expect(lastProjectRow).toHaveFocus();
     expect(await screen.findByTestId("project-settings")).toBeInTheDocument();
 
     // …and ArrowDown from there crosses back over the divider to the top.

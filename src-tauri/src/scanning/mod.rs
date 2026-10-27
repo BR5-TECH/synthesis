@@ -733,7 +733,7 @@ fn walk_entries(root: &Path) -> Vec<Entry> {
 /// (DSS-FR-KQVN), and `DRS-draft-storage.md` (DRS-FR-04), and surfacing them
 /// would put one Library node per note, per commented artifact, and per draft in
 /// the tree.
-fn is_pruned_dir(rel: &str) -> bool {
+pub(crate) fn is_pruned_dir(rel: &str) -> bool {
     const PRUNED: &[&str] = &[
         ".git",
         ".synthesis/cache",

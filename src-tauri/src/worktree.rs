@@ -457,6 +457,12 @@ fn worktree_entries(repo: &Repository) -> Result<Vec<WorktreeEntry>, String> {
     Ok(entries)
 }
 
+/// EMB-FR-USBA: the branches that a worktree of the repository has checked
+/// out, a worktree whose directory is gone included (WTC-FR-05).
+pub fn checked_out_branches(repo: &Repository) -> Result<Vec<String>, String> {
+    Ok(worktree_entries(repo)?.into_iter().filter_map(|entry| entry.branch).collect())
+}
+
 fn short_hash_of(oid: git2::Oid) -> String {
     oid.to_string().chars().take(7).collect()
 }

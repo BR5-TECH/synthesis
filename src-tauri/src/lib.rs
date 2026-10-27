@@ -29,6 +29,7 @@ pub mod draft_history;
 pub mod draft_proposals;
 pub mod draft_watcher;
 pub mod drafts;
+pub mod embeddings;
 pub mod flow_validation;
 pub mod fonts;
 pub mod fs;
@@ -82,6 +83,8 @@ pub fn catalog_guard_main() -> Option<i32> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // EMB-FR-KUFM: before any other thread starts.
+    embeddings::pin_model_cache_environment();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -181,6 +184,10 @@ pub fn run() {
         // and nothing else (DCL-FR-VEVZ), and the PDF text cache lasts for the
         // application session (DCL-FR-QVYZ).
         .manage(documents::DocumentsCollection::default())
+        // EMB-FR-RFNF / EMB-FR-SWRV: the embeddings index — its switches, the
+        // loaded model, and the one worker that runs its jobs. The vectors live
+        // in the repository store, not here.
+        .manage(embeddings::EmbeddingsService::default())
         .manage(documents::DocumentsWatcher::default())
         // SCC-FR-12: the at-most-one running search.
         .manage(search::SearchRegistry::default())
@@ -213,6 +220,9 @@ pub fn run() {
             // every start, off this thread, and the first outbound call waits
             // for the result.
             tls::load_at_start(app.handle());
+            // EMB-FR-VXIS: read the embeddings settings. The model loads, and
+            // downloads, only when the Global switch is on.
+            embeddings::on_app_started(app.handle());
             // ASV-FR-20: tell the vault where migration's candidates come
             // from. A keyring enumerates no entry, so the earlier
             // one-entry-per-secret layout can only be found by asking the
@@ -555,6 +565,15 @@ pub fn run() {
             documents::commands::remove_document_source,
             documents::commands::read_document,
             documents::commands::read_document_pdf,
+            // Embeddings index (EMB-embeddings-index.md).
+            embeddings::load_embeddings_settings,
+            embeddings::save_embeddings_settings,
+            embeddings::list_embedding_models,
+            embeddings::retry_embeddings_model_download,
+            embeddings::load_project_embeddings_mode,
+            embeddings::save_project_embeddings_mode,
+            embeddings::get_embeddings_status,
+            embeddings::start_reindex,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

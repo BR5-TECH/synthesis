@@ -61,8 +61,8 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   theme: "system",
   mainWindowFullscreen: false,
   // GSS-FR-21 / SCH-FR-13: a user who has never chosen a mode starts in
-  // case-insensitive literal.
-  searchQueryMode: "literal_insensitive",
+  // Semantic.
+  searchQueryMode: "semantic",
   // GSS-FR-24 / DFV-FR-23: a user who has never chosen starts in Unified and
   // Source.
   diffVisualizationMode: "unified",

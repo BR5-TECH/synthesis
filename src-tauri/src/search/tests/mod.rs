@@ -137,5 +137,6 @@ mod modes;
 mod ordering_and_cap;
 mod read_only;
 mod responsiveness;
+mod semantic;
 mod snippets;
 mod wire_and_bounds;

@@ -18,11 +18,18 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * SCC-FR-05: what the query text means. Persisted user-global as the search
- * bar's active toggle (GSS-FR-21 / SCH-FR-13), and sent verbatim as the
- * dispatched search's `mode`.
+ * SCC-FR-05: the three literal modes, which match the text of every file. The
+ * Editor's Find panel offers these and no other (EFR-FR-CLZF).
  */
-export type SearchMode = "literal_insensitive" | "smart_case" | "regex";
+export type LiteralSearchMode = "literal_insensitive" | "smart_case" | "regex";
+
+/**
+ * SCC-FR-05 / SCC-FR-UYZW: what the query text means. Persisted user-global as
+ * the search bar's active toggle (GSS-FR-21 / SCH-FR-13), and sent verbatim as
+ * the dispatched search's `mode`. `semantic` ranks specifications, documents,
+ * and drafts through the indexes.
+ */
+export type SearchMode = "semantic" | LiteralSearchMode;
 
 /**
  * SCC-FR-11 / SCH-FR-18: how far the sweep runs. The overlay dispatches
@@ -40,6 +47,8 @@ export type SearchMatchKind = "content" | "name";
  */
 export type SearchGroup =
   | "artifact"
+  | "document"
+  | "draft"
   | "playbook"
   | "workstream"
   | "role"
@@ -66,8 +75,15 @@ export interface SearchHit {
   editContext?: SearchEditContext;
   /** Content matches only: 1-based line number of the first match. */
   line?: number;
-  /** Content matches only: the text of that line (SCC-FR-07). */
+  /**
+   * Content matches only: the text of that line (SCC-FR-07), or the chunk text
+   * of a semantic hit (SCC-FR-VXJL).
+   */
   snippet?: string;
+  /** Document group only: the document id (SCC-FR-UEDP). */
+  documentId?: string;
+  /** Draft group only: the draft id (SCC-FR-UDOH). */
+  draftId?: string;
 }
 
 /** Payload of the backend `"search results"` event (SCC-FR-19). */

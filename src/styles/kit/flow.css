@@ -657,6 +657,14 @@
 .search-result__snippet-text {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* SCH-FR-LTSO: a Semantic hit shows its matching chunk — prose, not a code
+   line — on at most two lines, indented as a line-number snippet is. */
+.search-result__snippet--chunk { font-family: inherit; }
+.search-result__snippet--chunk .search-result__snippet-text {
+  white-space: normal;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
 
 /* SCH-FR-19 / SCH-FR-21: in-progress, empty and error states. */
 .search-state { padding: 14px; font-size: var(--fs-ui-sm); color: var(--fg-3); }

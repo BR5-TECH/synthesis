@@ -161,6 +161,28 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 # opens a path itself. It extracts embedded text only and does no OCR.
 pdf-extract = "0.12"
 
+# EMB-FR-MHHY: the embeddings of the vector index. ONNX Runtime runs the
+# recommended models, and its binaries link statically (NLL-FR-VMBF). The
+# Candle features run the models that only Candle supports: the Qwen3 text
+# models and Nomic v2 MoE. The image features are not used, so the default
+# features stay off. TLS is rustls, as on every other outbound path.
+fastembed = { version = "7.5", default-features = false, features = ["ort-download-binaries-rustls-tls", "hf-hub-rustls-tls", "qwen3-text", "nomic-v2-moe"] }
+# EMB-FR-NNOK / EMB-FR-LYKW: the model download with byte progress. The same
+# version and cache layout that `fastembed` reads, so a file downloaded here is
+# a cache hit there.
+# EMB-FR-MHHY: the device and the number type a Candle model loads with. The
+# same version `fastembed` uses, named for its two types.
+candle-core = "0.11"
+hf-hub = { version = "0.5", default-features = false, features = ["ureq", "rustls-tls"] }
+# EMB-FR-KNBG: the per-project vector store. `0.39` is the version that uses
+# `libsqlite3-sys 0.37`, the copy `sqlx` already brings; two copies of that
+# crate cannot link into one binary. `bundled` compiles SQLite from source on
+# every target (NLL-FR-LTEO).
+rusqlite = { version = "0.39", features = ["bundled"] }
+# EMB-FR-KNBG: the vector distance functions, compiled
+# from C source into the binary and registered on each connection.
+sqlite-vec = "0.1.9"
+
 # AAP-FR-WMCX / AAP-FR-QLNV / AAP-FR-MXJD: one TLS trust setup for every outbound
 # HTTP(S) path. The roots are the operating system store (read live on each
 # start) plus the bundled Mozilla roots. `ureq`, the `rig` clients, and the

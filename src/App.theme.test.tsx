@@ -176,7 +176,7 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
       preferences: {
         theme: "dark",
         mainWindowFullscreen: false,
-        searchQueryMode: "literal_insensitive",
+        searchQueryMode: "semantic",
         diffVisualizationMode: "unified",
         diffRenderingMode: "source",
         changesCommitAction: "commit",
@@ -253,7 +253,7 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
         preferences: {
           theme: "system",
           mainWindowFullscreen: false,
-          searchQueryMode: "literal_insensitive",
+          searchQueryMode: "semantic",
           diffVisualizationMode: "unified",
           diffRenderingMode: "source",
           changesCommitAction: "commit",

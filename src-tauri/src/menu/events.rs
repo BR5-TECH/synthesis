@@ -152,6 +152,12 @@ pub fn handle_window_event<R: tauri::Runtime>(
     if crate::settings_window::handle_window_event(window, event) {
         return;
     }
+    // EMB-FR-VQSK: the main window gained focus, so the root branch tip may
+    // have moved while the author was elsewhere.
+    if matches!(event, tauri::WindowEvent::Focused(true)) {
+        crate::embeddings::note_root_tip_check(window.app_handle());
+        return;
+    }
     let tauri::WindowEvent::CloseRequested { api, .. } = event else {
         return;
     };

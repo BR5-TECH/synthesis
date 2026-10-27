@@ -2,38 +2,39 @@
  * The universal search bar's active query mode (`SCH-search.md` SCH-FR-12 /
  * SCH-FR-13).
  *
- * Exactly one of the three modes is active at any moment, and the choice is
+ * Exactly one of the four modes is active at any moment, and the choice is
  * user-global: read from `"load app preferences"` when the search input mounts,
  * written through `"save app preferences"` whenever the user changes it
- * (GSS-FR-21). A user who has never chosen one starts in case-insensitive
- * literal.
+ * (GSS-FR-21). A user who has never chosen one starts in Semantic.
  *
  * The write is a **patch**, not a replace. `save_app_preferences` writes the
  * record whole (GSS-FR-20), so sending a bare `{ searchQueryMode }` would clear
  * the theme and the main window's full-screen state, which share the record and
  * are edited elsewhere entirely (GLS-FR-14).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   loadAppPreferences,
   patchAppPreferences,
 } from "../state/appPreferences";
-import type { SearchMode } from "../types";
+import { logWarn } from "../logging";
+import type { LiteralSearchMode, SearchMode } from "../types";
 
 /** SCH-FR-13: the mode a user who has never chosen one starts in. */
-export const DEFAULT_QUERY_MODE: SearchMode = "literal_insensitive";
+export const DEFAULT_QUERY_MODE: SearchMode = "semantic";
 
 /**
- * SCH-FR-12: the three toggles, in the order they render inside the input —
- * leading edge, ahead of the text caret.
+ * SCC-FR-05 / EFR-FR-CLZF: the three literal toggles, in the order they render
+ * inside an input — leading edge, ahead of the text caret. The Editor's Find
+ * panel offers these alone.
  *
  * `label` is the affordance's glyph, as the wireframe specifies it; `title`
  * names the mode; `description` says what it actually does to a query. Two
  * glyphs a character apart (`Aa` / `aA`) cannot carry that difference on their
  * own, so the description is what the tooltip leads with.
  */
-export const QUERY_MODES: ReadonlyArray<{
-  value: SearchMode;
+export const LITERAL_QUERY_MODES: ReadonlyArray<{
+  value: LiteralSearchMode;
   label: string;
   title: string;
   description: string;
@@ -59,17 +60,47 @@ export const QUERY_MODES: ReadonlyArray<{
   },
 ];
 
+/**
+ * SCH-FR-12: the search bar's four toggles — Semantic first, then the three
+ * literal modes.
+ */
+export const QUERY_MODES: ReadonlyArray<{
+  value: SearchMode;
+  label: string;
+  title: string;
+  description: string;
+}> = [
+  {
+    value: "semantic",
+    label: "≈",
+    title: "Semantic",
+    description:
+      "Ranks specifications, documents, and drafts by what the query means.",
+  },
+  ...LITERAL_QUERY_MODES,
+];
+
 export function useSearchQueryMode() {
   const [mode, setMode] = useState<SearchMode>(DEFAULT_QUERY_MODE);
+  /** The mode the store holds, which a refused save restores. */
+  const confirmed = useRef<SearchMode>(DEFAULT_QUERY_MODE);
+  /** The last mode the author chose, or `null` before the first choice. */
+  const latest = useRef<SearchMode | null>(null);
+  /** Whether a save has stored a mode, which then wins over the read one. */
+  const saved = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     loadAppPreferences()
       .then((prefs) => {
-        if (!cancelled) setMode(prefs?.searchQueryMode ?? DEFAULT_QUERY_MODE);
+        const stored = prefs?.searchQueryMode ?? DEFAULT_QUERY_MODE;
+        if (!saved.current) confirmed.current = stored;
+        // A choice made before the read ended wins over the stored mode.
+        if (!cancelled && latest.current === null) setMode(stored);
       })
-      .catch(() => {
-        if (!cancelled) setMode(DEFAULT_QUERY_MODE);
+      .catch((e) => {
+        logWarn(["frontend"], "search query mode could not be read", { error: String(e) });
+        if (!cancelled && latest.current === null) setMode(DEFAULT_QUERY_MODE);
       });
     return () => {
       cancelled = true;
@@ -77,17 +108,27 @@ export function useSearchQueryMode() {
   }, []);
 
   /**
-   * SCH-FR-12: activating one deactivates the other two; there is no state in
-   * which none is active. A persistence failure rolls the applied value back
-   * rather than leaving the input showing a choice that will not survive
-   * relaunch — the toggles have no error affordance of their own.
+   * SCH-FR-12: activating one deactivates the other three; there is no state in
+   * which none is active. A persistence failure rolls the applied value back to
+   * the stored one rather than leaving the input showing a choice that will not
+   * survive relaunch — the toggles have no error affordance of their own. A
+   * later choice keeps showing until its own save ends.
    */
   const selectMode = (next: SearchMode) => {
-    const previous = mode;
+    latest.current = next;
     setMode(next);
-    patchAppPreferences({ searchQueryMode: next }).catch(() => {
-      setMode(previous);
-    });
+    patchAppPreferences({ searchQueryMode: next })
+      .then(() => {
+        saved.current = true;
+        confirmed.current = next;
+      })
+      .catch((e) => {
+        logWarn(["frontend"], "search query mode not saved", { mode: next, error: String(e) });
+        if (latest.current === next) {
+          latest.current = confirmed.current;
+          setMode(confirmed.current);
+        }
+      });
   };
 
   return { mode, selectMode };

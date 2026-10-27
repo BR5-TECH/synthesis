@@ -1,0 +1,36 @@
+/* GLS-FR-RQFK / SET-FR-UNRY / SET-FR-VGQB: the progress rows of the two
+   Indexing sections — the model download and the running embedding job. The
+   bar has the look of the Docker build bar (`.docker-build__bar`). */
+.indexing-progress {
+  display: flex; flex-direction: column; gap: 4px;
+  margin-top: 8px; max-width: 560px;
+}
+.indexing-progress progress {
+  display: block;
+  width: 100%;
+  height: 3px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  overflow: hidden;
+  background: var(--border-1);
+}
+.indexing-progress progress::-webkit-progress-bar { background: transparent; }
+.indexing-progress progress::-webkit-progress-value {
+  background: var(--accent);
+  transition: width var(--dur-fast) var(--ease-out);
+}
+.indexing-progress progress::-moz-progress-bar { background: var(--accent); }
+/* No total reported yet: a sliver crosses the track until one is. */
+.indexing-progress progress:indeterminate {
+  background-image: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: docker-build-sweep 1.1s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .indexing-progress progress:indeterminate {
+    animation: none;
+    background-position: 30% 0;
+  }
+}

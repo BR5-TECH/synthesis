@@ -15,6 +15,7 @@ use crate::tools::tests::{block_on, closed_project};
 
 mod behaviour;
 mod contract;
+mod ranking;
 mod records;
 
 fn search(fixture: &DocFixture, query: &str, limit: Option<i64>) -> Vec<DocumentMatch> {

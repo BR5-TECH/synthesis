@@ -31,6 +31,7 @@ export const GLOBAL_SECTION_KEYS = [
   "github",
   "ai-api",
   "ai-agentic",
+  "indexing",
   "agents",
   "docker",
   "isolation",
@@ -50,6 +51,7 @@ export const PROJECT_SECTION_KEYS = [
   "agents",
   "docker",
   "graduation",
+  "indexing",
 ] as const;
 export type ProjectSectionKey = (typeof PROJECT_SECTION_KEYS)[number];
 

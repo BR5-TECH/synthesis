@@ -14,6 +14,7 @@
 //! stops none of them. It ends when its standard input closes, which is also
 //! when this process ends.
 
+use crate::embeddings::InheritedEnvironment;
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -128,7 +129,7 @@ impl CatalogGuard {
     pub fn command(catalog: &Path) -> Result<Command, GuardError> {
         let exe = std::env::current_exe().map_err(|e| GuardError::Spawn(e.to_string()))?;
         let mut command = Command::new(exe);
-        command.arg(GUARD_ARG).arg(catalog);
+        command.with_inherited_hub_environment().arg(GUARD_ARG).arg(catalog);
         Ok(command)
     }
 

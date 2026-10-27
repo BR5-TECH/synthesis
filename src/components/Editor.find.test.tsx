@@ -254,7 +254,7 @@ describe("closing the panel (EFR-FR-CELO)", () => {
 });
 
 describe("query modes (EFR-FR-CLZF)", () => {
-  it("offers the same three modes as the universal search input, one active", async () => {
+  it("offers the three literal modes of the universal search input and no Semantic mode, one active", async () => {
     const { sessions } = await renderInTextMode("text");
     setFind(sessions, { form: "find" });
 
@@ -264,6 +264,7 @@ describe("query modes (EFR-FR-CLZF)", () => {
       "aA",
       ".*",
     ]);
+    expect(screen.queryByRole("radio", { name: /Semantic/ })).toBeNull();
     // Exactly one active, with no state in which none is.
     expect(
       toggles.filter((t) => t.getAttribute("aria-checked") === "true"),

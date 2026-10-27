@@ -16,6 +16,7 @@ import {
 import { NavigationSettings } from "./NavigationSettings";
 import { DockerSettings } from "./DockerSettings";
 import { IsolationSettings } from "./IsolationSettings";
+import { IndexingSettings } from "./IndexingSettings";
 import { RemoteConnectivitySettings } from "./RemoteConnectivitySettings";
 import { FontRoleControls } from "./FontRoleControls";
 import { GithubTokens } from "./GithubTokens";
@@ -79,6 +80,11 @@ export const GLOBAL_SECTIONS: [GlobalSectionKey, string][] = [
   // (GLS-FR-16, GLS-FR-24, `AII-ai-integrations.md` AII-FR-54).
   ["ai-api", "AI API"],
   ["ai-agentic", "Agentic AI"],
+  // GLS-FR-03 / GLS-FR-JDUM: the Indexing section, after the two AI sections
+  // because the model it picks runs on this machine for search — the third
+  // kind of AI the application uses. Every change in it applies immediately
+  // and it holds no dirty state (GLS-FR-UWFA).
+  ["indexing", "Indexing"],
   // GLS-FR-03 / GLS-FR-24: the Agents section. It sits after the two AI
   // sections because a persona *names* one of the providers configured there —
   // describing an agent before verifying a provider is describing one that
@@ -749,6 +755,10 @@ export function GlobalSettings({
           wholly its own (AII-FR-02). */}
       {section === "ai-api" && <AiApiIntegrations />}
       {section === "ai-agentic" && <AgenticAiIntegrations />}
+      {/* GLS-FR-UWFA: every change applies immediately through its own
+          operation, so the section never contributes to the window's
+          save-before-close sweep (GLS-FR-13, SWN-FR-08). */}
+      {section === "indexing" && <IndexingSettings />}
 
       {/* GLS-FR-24 / AGT-FR-21: every action here applies immediately through
           its own operation, so the section never contributes to the window's

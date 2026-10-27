@@ -31,14 +31,42 @@ fn app_preferences_default_to_system_theme_and_not_fullscreen() {
     assert!(!p.main_window_fullscreen, "GSS-FR-19: the flag defaults to false when unset");
     assert_eq!(
         p.search_query_mode,
-        SearchQueryMode::LiteralInsensitive,
-        "GSS-FR-21: the query mode defaults to case-insensitive literal"
+        SearchQueryMode::Semantic,
+        "GSS-FR-21: the query mode defaults to semantic"
     );
     let store = GlobalSettingsStore::in_memory();
     let loaded = store.load_app_preferences().unwrap();
     assert_eq!(loaded.theme, Theme::System);
     assert!(!loaded.main_window_fullscreen);
-    assert_eq!(loaded.search_query_mode, SearchQueryMode::LiteralInsensitive);
+    assert_eq!(loaded.search_query_mode, SearchQueryMode::Semantic);
+}
+
+#[test]
+fn search_query_mode_round_trips_the_semantic_mode() {
+    // GSS-FR-21: `semantic` is one of the four stored modes, and a stored
+    // literal mode reads back as written rather than as the new default.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("synthesis.toml");
+    let store = GlobalSettingsStore::with_path(path.clone());
+    store
+        .save_app_preferences(AppPreferences {
+            search_query_mode: SearchQueryMode::Semantic,
+            ..Default::default()
+        })
+        .unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.contains("searchQueryMode = \"semantic\""), "{text}");
+    store
+        .save_app_preferences(AppPreferences {
+            search_query_mode: SearchQueryMode::LiteralInsensitive,
+            ..Default::default()
+        })
+        .unwrap();
+    let reloaded = GlobalSettingsStore::with_path(path);
+    assert_eq!(
+        reloaded.load_app_preferences().unwrap().search_query_mode,
+        SearchQueryMode::LiteralInsensitive
+    );
 }
 
 #[test]

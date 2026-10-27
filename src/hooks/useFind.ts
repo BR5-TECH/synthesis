@@ -21,7 +21,7 @@ import {
   stepIndex,
   type FindMatch,
 } from "../state/findMatches";
-import type { SearchMode } from "../types";
+import type { LiteralSearchMode } from "../types";
 
 /** Which editing surface a match was found in. */
 export type FindSurfaceId = "source" | "frontmatter" | "body";
@@ -71,7 +71,7 @@ export interface FindEngine {
 export function useFind(
   targets: readonly FindTarget[],
   query: string,
-  mode: SearchMode,
+  mode: LiteralSearchMode,
   enabled: boolean,
   /**
    * Optional gate on whether a match is usable by the surface that holds it.

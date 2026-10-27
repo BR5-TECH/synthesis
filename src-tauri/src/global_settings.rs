@@ -146,6 +146,12 @@ pub struct ProjectSlot {
     /// holds no agent data.
     #[serde(rename = "enrolledAgents", skip_serializing)]
     legacy_enrolled_agents: Vec<String>,
+    /// GSS-FR-DSUG: whether embeddings improve this project's search —
+    /// `use_global` when unset. User-global and keyed by project (GSS-FR-18),
+    /// so each user chooses for self and every worktree reads one value. A
+    /// scalar, so it stays before the arrays and tables below.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embeddings_mode: Option<crate::embeddings::ProjectEmbeddingsMode>,
     /// GSS-FR-CDYK: the reference documents this project selects — an ordered
     /// list of `{ kind, path }`, empty until a source is added. References only:
     /// never a document's content, its extracted text, or an index.
@@ -265,6 +271,10 @@ pub struct PersistedState {
     /// table, declared beside the other user-global tables and before the two
     /// project tables below. It holds no credential.
     pub isolation: crate::isolation::IsolationRecord,
+    /// GSS-FR-MBJV: the Global embeddings switch and the selected model. One
+    /// table, declared beside the other user-global tables and before the two
+    /// project tables below. It holds no credential.
+    pub embeddings: crate::embeddings::EmbeddingsRecord,
     /// GSS-FR-WSZK: the size the author gave the Settings window, or `None`
     /// until they resize it. One table, declared beside the other user-global
     /// tables and before the two project tables below. It is deliberately not a
@@ -280,6 +290,7 @@ pub struct PersistedState {
     pub default_project: ProjectSlot,
 }
 
+mod embeddings;
 mod recents;
 pub use recents::*;
 

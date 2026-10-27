@@ -204,6 +204,42 @@ pub struct ChunkKey {
     pub ordinal: u32,
 }
 
+impl ChunkKey {
+    /// BMI-FR-OEQM: this chunk's stable chunk ID, shared with the vector index
+    /// of `EMB-embeddings-index.md`.
+    pub fn chunk_id(&self) -> String {
+        chunk_id(&self.path, self.ordinal)
+    }
+}
+
+/// BMI-FR-OEQM: the stable chunk ID of the chunk at `ordinal` in the file at
+/// `path` — the project-relative path, or the document id in the `documents`
+/// index. It names no branch, no worktree, and no content, so the same chunk
+/// of two checkouts has one ID.
+pub fn chunk_id(path: &str, ordinal: u32) -> String {
+    format!("{path}#{ordinal}")
+}
+
+/// BMI-FR-OEQM: the path and the ordinal a chunk ID names, or `None` for text
+/// that is not a chunk ID. The ordinal follows the last `#`, so a `#` in a path
+/// is kept in the path.
+pub fn parse_chunk_id(id: &str) -> Option<(&str, u32)> {
+    let (path, ordinal) = id.rsplit_once('#')?;
+    Some((path, ordinal.parse().ok()?))
+}
+
+/// BMI-FR-05 / BMI-FR-06 / BMI-FR-FGGU: the chunks of one file's text, cut by
+/// the rule a pass uses for it. `plain_text` selects the blank-line rule of a
+/// `text` or `pdf` document. The vector index cuts the files it reads from Git
+/// with this function, so its chunks and their IDs equal the indexed ones.
+pub fn chunk_file_text(text: &str, plain_text: bool) -> Vec<String> {
+    if plain_text {
+        documents::chunk_plain_text(text)
+    } else {
+        chunk_text(text)
+    }
+}
+
 /// The file a chunk belongs to — a [`ChunkKey`] without its ordinal.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FileRef {
@@ -331,9 +367,20 @@ pub struct IndexSet {
     /// evidence out of a bounded ring buffer to say the same thing a thousand
     /// times.
     skill_exclusions: Arc<BTreeMap<String, &'static str>>,
+    /// EMB-FR-JIJH: the `documents` index was built from a collection that had
+    /// read its sources. Before the first refresh of an open, the collection
+    /// lists no documents, and that empty list is not the true one.
+    documents_fed: bool,
 }
 
 impl IndexSet {
+    /// EMB-FR-JIJH: whether the `documents` index describes the sources of the
+    /// collection, and not the empty list of a collection that has not read
+    /// them yet.
+    pub fn documents_fed(&self) -> bool {
+        self.documents_fed
+    }
+
     /// BMI-FR-NEIW: a snapshot holding the `documents` index of this one and
     /// nothing else.
     fn only_documents(&self) -> IndexSet {
@@ -350,6 +397,7 @@ impl IndexSet {
                 .filter(|((index, _), _)| *index == IndexId::Documents)
                 .map(|(key, engine)| (*key, Arc::clone(engine)))
                 .collect(),
+            documents_fed: self.documents_fed,
             ..IndexSet::default()
         }
     }
@@ -401,6 +449,31 @@ impl IndexSet {
             .iter()
             .find(|((i, f), _)| *i == index && f.path == path)
             .map(|(_, e)| e.language.clone())
+    }
+
+    /// Every chunk of `index` with its text, in chunk-ID order. The vector
+    /// index reads the working copy's chunks from here (EMB-FR-DCXI), so it
+    /// reads no file and cuts no chunk of its own.
+    pub fn chunks(&self, index: IndexId) -> Vec<(ChunkKey, String)> {
+        let mut out: Vec<(ChunkKey, String)> = self
+            .shards
+            .iter()
+            .filter(|((i, _), _)| *i == index)
+            .flat_map(|(_, engine)| engine.iter().map(|doc| (doc.id, doc.contents)))
+            .collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
+
+    /// The hit for the chunk `key` of `index`, with `score`, or `None` when the
+    /// index does not hold that chunk now. The fields are the ones `search`
+    /// gives the same chunk (BMI-FR-10).
+    pub fn hit(&self, index: IndexId, key: &ChunkKey, score: f32) -> Option<ChunkHit> {
+        self.shards
+            .iter()
+            .filter(|((i, _), _)| *i == index)
+            .find_map(|(_, engine)| engine.get(key))
+            .map(|doc| retrieval::hit_of(index, doc.id, score, doc.contents))
     }
 
     fn total_chunks(&self) -> usize {
@@ -678,6 +751,13 @@ impl Bm25Indexer {
         );
 
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // EMB-FR-JIJH: read before the documents are, so a pass that saw a
+            // refreshed collection read the documents of that refresh or of a
+            // later one.
+            let documents_fed = scope.documents
+                && app
+                    .try_state::<crate::documents::DocumentsCollection>()
+                    .is_some_and(|collection| collection.has_refreshed());
             let (sources, skills, exclusions) = collect_sources(app, root, scope);
             progress::update_and_publish(
                 app,
@@ -724,6 +804,9 @@ impl Bm25Indexer {
             // neither can be observed without the other.
             next.set_skills(skills);
             next.set_skill_exclusions(exclusions);
+            if scope.documents {
+                next.documents_fed = documents_fed;
+            }
             (next, stats)
         }));
 
@@ -758,6 +841,10 @@ impl Bm25Indexer {
             return None;
         }
         progress::terminate_and_publish(app, &registry, operation, OperationState::Finished);
+        // EMB-FR-HWRQ / EMB-FR-IBXK: the vector index takes its working-copy
+        // and document chunks from this snapshot, so every change that reached
+        // this pass reaches it too, on the same channels and the same rules.
+        crate::embeddings::note_index_published(app, scope, generation);
         log_info(
             app,
             &BUFFER,

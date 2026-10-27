@@ -160,3 +160,19 @@ fn only_the_documents_part_survives_a_new_root() {
     assert_eq!(search_snapshot(&kept, &[IndexId::Documents], "ibex", 5).len(), 1);
     assert!(search_snapshot(&kept, &[IndexId::Spec], "ibex", 5).is_empty());
 }
+
+// EMB-FR-JIJH, BMI-FR-NEIW: whether the documents part was read from the
+// collection goes with that part across a new content root, and a pass that
+// does not cover the documents keeps it.
+#[test]
+fn the_documents_read_flag_goes_with_the_documents_part() {
+    let mut full = pass(
+        &IndexSet::default(),
+        vec![document("doc-a", "ibex horns", true)],
+        PassScope::DOCUMENTS,
+    );
+    assert!(!full.documents_fed(), "no collection was read");
+    full.documents_fed = true;
+    assert!(full.only_documents().documents_fed());
+    assert!(pass(&full, Vec::new(), PassScope::DRAFTS).documents_fed());
+}

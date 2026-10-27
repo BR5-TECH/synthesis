@@ -4,6 +4,7 @@
 //! A child of `runtime` so that both backends reach the program resolution and
 //! the connection they already own.
 
+use crate::embeddings::InheritedEnvironment;
 use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
@@ -23,6 +24,7 @@ impl ImageExporter for HostDockerCli {
     fn image_id<'a>(&'a self, reference: &'a str) -> BoxFuture<'a, Result<String, String>> {
         Box::pin(async move {
             let run = tokio::process::Command::new(self.program().await)
+                .with_inherited_hub_environment()
                 .args(["image", "inspect", "--format", "{{.Id}}", reference])
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())
@@ -55,6 +57,7 @@ impl ImageExporter for HostDockerCli {
             // The Docker CLI writes the archive itself. The cache that asked
             // for it moves and deletes it through `FsAccess`.
             let run = tokio::process::Command::new(self.program().await)
+                .with_inherited_hub_environment()
                 .arg("save")
                 .arg("--output")
                 .arg(destination)

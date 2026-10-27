@@ -10,7 +10,8 @@
  * Plain closures rather than a hook: the strip stays owned by `useShellSession`.
  */
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { logDebug } from "../../logging";
+import * as api from "../../api";
+import { logDebug, logWarn } from "../../logging";
 import { pruneViewState } from "../../state/documentViewState";
 import type { DocumentEntry, Tab } from "../../types";
 import { documentTabId, neverEmpty } from "./tabRecords";
@@ -24,6 +25,7 @@ export interface DocumentActionDeps {
 
 export interface DocumentActions {
   openDocument: (entry: DocumentEntry) => void;
+  openDocumentById: (documentId: string) => void;
   closeTabsForRemovedDocuments: (documentIds: string[]) => void;
 }
 
@@ -55,6 +57,27 @@ export function createDocumentActions(deps: DocumentActionDeps): DocumentActions
           ],
     );
     activateTab(id);
+  };
+
+  /**
+   * SCH-FR-09: open a document named by its id, as the Documents panel opens
+   * it. The entry is read through `"list documents"`, so the tab carries the
+   * collection's own name, path, and format. A document that left the
+   * collection opens nothing.
+   */
+  const openDocumentById = (documentId: string) => {
+    void api
+      .listDocuments()
+      .then((snapshot) => {
+        const entry = snapshot.documents.find((d) => d.id === documentId);
+        if (entry) openDocument(entry);
+        else logWarn(["frontend"], "search hit names a document no longer in the collection", { documentId });
+      })
+      .catch((e) => {
+        logWarn(["frontend"], "documents could not be listed to open a search hit", {
+          error: e instanceof Error ? e.message : String(e),
+        });
+      });
   };
 
   /**
@@ -94,7 +117,7 @@ export function createDocumentActions(deps: DocumentActionDeps): DocumentActions
     }
   };
 
-  return { openDocument, closeTabsForRemovedDocuments };
+  return { openDocument, openDocumentById, closeTabsForRemovedDocuments };
 }
 
 /**

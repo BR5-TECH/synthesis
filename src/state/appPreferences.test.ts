@@ -253,7 +253,7 @@ describe("patchAppPreferences — GSS-FR-20 whole-record write", () => {
     expect(savedPayloads()[0]).toEqual({
       theme: "dark",
       mainWindowFullscreen: true,
-      searchQueryMode: "literal_insensitive",
+      searchQueryMode: "semantic",
       diffVisualizationMode: "unified",
       diffRenderingMode: "source",
       changesCommitAction: "commit",
@@ -287,7 +287,7 @@ describe("patchAppPreferences — GSS-FR-20 whole-record write", () => {
     expect(payloads[payloads.length - 1]).toEqual({
       theme: "dark",
       mainWindowFullscreen: true,
-      searchQueryMode: "literal_insensitive",
+      searchQueryMode: "semantic",
       diffVisualizationMode: "unified",
       diffRenderingMode: "source",
       changesCommitAction: "commit",
@@ -354,7 +354,7 @@ describe("patchAppPreferences — GSS-FR-20 whole-record write", () => {
     expect(peekAppPreferences()).toEqual({
       theme: "system",
       mainWindowFullscreen: true,
-      searchQueryMode: "literal_insensitive",
+      searchQueryMode: "semantic",
       diffVisualizationMode: "unified",
       diffRenderingMode: "source",
       changesCommitAction: "commit",

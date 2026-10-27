@@ -26,12 +26,14 @@ pub enum Theme {
 /// User-global rather than project-scoped because it describes how the user
 /// searches rather than anything about a project. This module persists the value
 /// and does not interpret it: the modes themselves are defined by
-/// `SCC-search.md` SCC-FR-05, and their wire vocabulary is the one
-/// `search::SearchMode` decodes.
+/// `SCC-search.md` SCC-FR-05 and SCC-FR-UYZW, and their wire vocabulary is the
+/// one `search::SearchMode` decodes. A user who never chose a mode searches in
+/// `semantic` (GSS-FR-21, `SCH-search.md` SCH-FR-13).
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchQueryMode {
     #[default]
+    Semantic,
     LiteralInsensitive,
     SmartCase,
     Regex,

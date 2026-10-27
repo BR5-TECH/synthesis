@@ -41,6 +41,10 @@ export interface OpenActionDeps {
   /** SMP-FR-QNUH: the map session a Project row selection is routed into. */
   specMap: SpecMapSessionStore;
   activeTab: string;
+  /** SCH-FR-09: open a document hit in its viewer tab (DPN-FR-CDFO). */
+  openDocumentHit: (hit: SearchHit) => void;
+  /** SCH-FR-09: open a draft hit as the Drafts panel opens it (DRP-FR-09). */
+  openDraftHit: (hit: SearchHit) => void;
 }
 
 export interface OpenActions {
@@ -64,6 +68,8 @@ export function createOpenActions(deps: OpenActionDeps): OpenActions {
     showBottom,
     specMap,
     activeTab,
+    openDocumentHit,
+    openDraftHit,
   } = deps;
   const openRuns = () => showBottom("runs");
 
@@ -192,6 +198,12 @@ export function createOpenActions(deps: OpenActionDeps): OpenActions {
         // populates the `history` group at all (`../../specifications/core/
         // SCC-search.md` SCC-FR-09). Scoping lands with the History viewer.
         showBottom("history");
+        return;
+      case "document":
+        openDocumentHit(hit);
+        return;
+      case "draft":
+        openDraftHit(hit);
         return;
       default:
         openArtifact({

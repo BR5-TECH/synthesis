@@ -371,3 +371,79 @@ describe("page states (SCH-FR-19 / SCH-FR-21)", () => {
     );
   });
 });
+
+describe("Semantic results on the full results page (SCH-FR-LTSO / SCH-FR-RAAU)", () => {
+  const semanticHits = () => [
+    hit({
+      id: "specifications/a.md",
+      path: "specifications/a.md",
+      group: "artifact",
+      subtype: "spec",
+      line: undefined,
+      snippet: "How a worktree is torn down.",
+    }),
+    hit({
+      id: "doc-1",
+      documentId: "doc-1",
+      name: "manual.md",
+      path: "/refs/manual.md",
+      group: "document",
+      line: undefined,
+      snippet: "Rate limits of the interface.",
+    }),
+    hit({
+      id: "draft-1",
+      draftId: "draft-1",
+      name: "Search",
+      path: "Core",
+      group: "draft",
+      line: undefined,
+      snippet: "Hybrid retrieval for search.",
+    }),
+  ];
+
+  it("SCH-FR-LTSO, SCH-FR-08: a Semantic page dispatches a full Semantic search and groups specifications, documents, and drafts", async () => {
+    render(
+      <SearchResults
+        tabId="search:1"
+        target={{ query: "teardown", mode: "semantic" }}
+        onActivate={vi.fn()}
+        sessions={new SearchSessionStore()}
+      />,
+    );
+    await waitFor(() => expect(startCalls()).toHaveLength(1));
+    expect(startCalls()[0][1]).toEqual({ query: "teardown", mode: "semantic", scope: "full" });
+    act(() => {
+      emitResults(bus, lastSearchId(), semanticHits());
+      emitEnded(bus, lastSearchId());
+    });
+    expect(await screen.findByText("Documents")).toBeInTheDocument();
+    expect(screen.getByText("Drafts")).toBeInTheDocument();
+    expect(screen.queryByText("Files")).toBeNull();
+    expect(screen.getByText("How a worktree is torn down.")).toBeInTheDocument();
+    expect(screen.getByText("Rate limits of the interface.")).toBeInTheDocument();
+    expect(document.querySelector(".search-result__line")).toBeNull();
+  });
+
+  it("SCH-FR-RAAU: activating each Semantic hit on the page routes it with its ids", async () => {
+    const onActivate = vi.fn();
+    render(
+      <SearchResults
+        tabId="search:1"
+        target={{ query: "teardown", mode: "semantic" }}
+        onActivate={onActivate}
+        sessions={new SearchSessionStore()}
+      />,
+    );
+    await waitFor(() => expect(searchIds).toHaveLength(1));
+    act(() => emitResults(bus, lastSearchId(), semanticHits()));
+    await userEvent.click(await screen.findByText("manual.md"));
+    await userEvent.click(screen.getByText("Search"));
+    await userEvent.click(screen.getByText("a.md"));
+    expect(onActivate.mock.calls.map((c) => c[0])).toEqual([
+      expect.objectContaining({ group: "document", documentId: "doc-1" }),
+      expect.objectContaining({ group: "draft", draftId: "draft-1" }),
+      expect.objectContaining({ group: "artifact", subtype: "spec", id: "specifications/a.md" }),
+    ]);
+  });
+});

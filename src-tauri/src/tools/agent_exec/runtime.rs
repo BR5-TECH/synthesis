@@ -20,6 +20,7 @@
 //! "docker failed" would make the log record useless at exactly the moment it
 //! is read.
 
+use crate::embeddings::InheritedEnvironment;
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -306,6 +307,7 @@ impl HostDockerCli {
     /// missing — two different corrections for the author.
     async fn starts(program: &str) -> bool {
         let run = tokio::process::Command::new(program)
+            .with_inherited_hub_environment()
             .arg("--version")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -319,6 +321,7 @@ impl HostDockerCli {
     /// bounded so an unresponsive daemon cannot wedge a launch.
     async fn control(&self, args: &[&str]) -> Result<std::process::Output, RuntimeError> {
         let run = tokio::process::Command::new(self.program().await)
+            .with_inherited_hub_environment()
             .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -374,7 +377,9 @@ impl DockerRuntime for HostDockerCli {
     ) -> BoxFuture<'a, Result<RuntimeOutcome, RuntimeError>> {
         Box::pin(async move {
             let mut command = tokio::process::Command::new(self.program().await);
+            // EMB-FR-MRDV: `--env NAME` reads the value from this process.
             command
+                .with_inherited_hub_environment()
                 .args(&self.arg_prefix)
                 .args(request.argv)
                 .stdin(Stdio::piped())

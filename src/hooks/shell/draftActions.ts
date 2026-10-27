@@ -199,6 +199,7 @@ export function createDraftTabActions(
       const record = await api.openDraft(draftId);
       openDraft({ id: record.id, name: record.name });
     } catch (e) {
+      logWarn(["frontend"], "draft could not be opened", { draftId, error: String(e) });
       flashToast(String(e));
     }
   };

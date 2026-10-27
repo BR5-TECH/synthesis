@@ -394,4 +394,13 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "remove_document_source",
     "read_document",
     "read_document_pdf",
+    // Embeddings index (EMB-embeddings-index.md).
+    "load_embeddings_settings",
+    "save_embeddings_settings",
+    "list_embedding_models",
+    "retry_embeddings_model_download",
+    "load_project_embeddings_mode",
+    "save_project_embeddings_mode",
+    "get_embeddings_status",
+    "start_reindex",
 ];

@@ -822,13 +822,16 @@ fn nothing_an_author_can_reach_varies_the_retry_policy() {
     // `../specifications/core/GHP-github-publication.md` GHP-FR-OWLB) continues
     // one publication attempt, and `retry_github_claim` (per
     // `../specifications/core/GPP-github-polling.md` GPP-FR-TOED) completes
-    // one pending claim's local steps. None carries a delay, a count or a
+    // one pending claim's local steps, and `retry_embeddings_model_download`
+    // (per `../specifications/core/EMB-embeddings-index.md` EMB-FR-KEGS) starts
+    // one failed model download again. None carries a delay, a count or a
     // deadline.
-    const ASKS_AGAIN: [&str; 4] = [
+    const ASKS_AGAIN: [&str; 5] = [
         "retry_agent_turn",
         "retry_work_stream_update",
         "retry_draft_publication",
         "retry_github_claim",
+        "retry_embeddings_model_download",
     ];
     // One command spells a forbidden word while meaning something else:
     // `cancel_draft_publication_attempt` abandons the persisted publication

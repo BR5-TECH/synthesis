@@ -722,6 +722,28 @@ pub fn changes_change_count(
     worktree + seen.len()
 }
 
+/// CHC-FR-VHAA: how many ref changes in a batch come from the common Git
+/// directory of a linked worktree. Only `refs/` and `packed-refs` count: the
+/// `HEAD` and `index` there belong to the main worktree, and the Git directory
+/// of each linked worktree (`worktrees/<name>/`) is counted by
+/// [`changes_change_count`] or not at all.
+pub fn common_dir_change_count(result: &DebounceEventResult, common_dir: Option<&Path>) -> usize {
+    let (Ok(events), Some(common_dir)) = (result, common_dir) else {
+        return 0;
+    };
+    let mut seen = BTreeSet::new();
+    for ev in events {
+        let Ok(rel) = ev.path.strip_prefix(common_dir) else {
+            continue;
+        };
+        let rel = to_forward(rel);
+        if is_git_meta_rel(&rel) && (rel == "packed-refs" || rel.starts_with("refs/")) {
+            seen.insert(rel);
+        }
+    }
+    seen.len()
+}
+
 // ---------------------------------------------------------------------------
 // Tauri commands (CHC contract surface)
 // ---------------------------------------------------------------------------

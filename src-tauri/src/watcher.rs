@@ -112,15 +112,19 @@ pub fn attribution_is_self_write(baseline: Option<&str>, current: Option<&str>) 
 
 /// ASC-FR-RSGA / BMI-FR-GJLW / CHC-FR-AADZ: the working-tree paths of a batch
 /// with the `.gitignore`d ones removed, and how many changes in it could alter
-/// the change set (CHC-FR-16). The callback and the tests call this same code.
+/// the change set (CHC-FR-16), the ref writes in the common Git directory of a
+/// linked worktree included (CHC-FR-VHAA). The callback and the tests call this
+/// same code.
 pub fn batch_changes(
     result: &DebounceEventResult,
     root: &crate::fs::RootFs,
     git_dir: Option<&Path>,
+    common_dir: Option<&Path>,
 ) -> (Vec<String>, usize) {
     let mut changed = scanning::changed_rel_paths(result, root);
     scanning::drop_gitignored(root, &mut changed);
-    let count = changes::changes_change_count(&changed, result, git_dir);
+    let count = changes::changes_change_count(&changed, result, git_dir)
+        + changes::common_dir_change_count(result, common_dir);
     (changed, count)
 }
 
@@ -178,6 +182,36 @@ pub fn git_watch_targets(root: &Path) -> (Option<PathBuf>, Option<PathBuf>) {
     (Some(git_dir), extra)
 }
 
+/// CHC-FR-VHAA: the common Git directory of a linked worktree, canonical, or
+/// `None` when the Git directory is the common directory. The branch refs and
+/// `packed-refs` live there, so a commit in another worktree shows only there.
+pub fn common_dir_target(root: &Path) -> Option<PathBuf> {
+    let repo = changes::open_repo(root).ok()?;
+    let git_dir = changes::canonicalize_lenient(repo.path());
+    let common = changes::canonicalize_lenient(repo.commondir());
+    (common != git_dir).then_some(common)
+}
+
+/// CHC-FR-16, CHC-FR-VHAA: the Git paths to watch beside the project root,
+/// each with its mode. For a linked worktree, the common Git directory itself
+/// (for `packed-refs`) and its `refs/` tree, but not its `objects/`, which every
+/// fetch and commit writes. The Git directory of a co-located project, or of
+/// the linked worktree, is watched whole.
+pub fn git_watch_paths(
+    common: Option<&Path>,
+    extra: Option<&Path>,
+) -> Vec<(PathBuf, RecursiveMode)> {
+    let mut paths = Vec::new();
+    if let Some(common) = common {
+        paths.push((common.to_path_buf(), RecursiveMode::NonRecursive));
+        paths.push((common.join("refs"), RecursiveMode::Recursive));
+    }
+    if let Some(gd) = extra {
+        paths.push((gd.to_path_buf(), RecursiveMode::Recursive));
+    }
+    paths
+}
+
 /// Start (or replace) the recursive watcher on `root`, emitting a debounced
 /// `"project tree changed"` event when the filesystem under the root changes
 /// (ASC-FR-10). Best-effort: a watcher-init failure is logged and never blocks
@@ -201,6 +235,8 @@ pub fn start_watching<R: tauri::Runtime>(
     // a commit or a checkout alters every diff while touching no working-tree
     // file.
     let (git_dir_owned, extra_git_watch) = git_watch_targets(root);
+    let common_dir_owned = common_dir_target(root);
+    let common_dir_batch = common_dir_owned.clone();
     let debouncer =
         new_debouncer(Duration::from_millis(300), move |result: DebounceEventResult| {
             // The debounced batch carries no event kinds (notify-mini collapses
@@ -233,11 +269,16 @@ pub fn start_watching<R: tauri::Runtime>(
             // No record per batch: a build makes one every 300 ms, and the
             // log is a bounded ring (LGC-FR-07) that such records would empty
             // of everything else.
-            let (mut changed, changes_count) =
-                batch_changes(&result, &root_owned, git_dir_owned.as_deref());
-            // EMB-FR-VQSK: Git metadata changed — a commit, a checkout, a pull,
-            // a ref write — so the root branch tip may have moved. The count
-            // holds the working-tree paths plus the Git-directory paths.
+            let (mut changed, changes_count) = batch_changes(
+                &result,
+                &root_owned,
+                git_dir_owned.as_deref(),
+                common_dir_batch.as_deref(),
+            );
+            // EMB-FR-VQSK / EMB-FR-HTIQ: Git metadata changed — a commit, a
+            // checkout, a pull, a ref write — so the root branch tip, the
+            // branch, or the HEAD may have moved. The count holds the
+            // working-tree paths plus the Git-directory paths.
             if changes_count > changed.len() {
                 crate::embeddings::note_root_tip_check(&app_handle);
             }
@@ -472,8 +513,10 @@ pub fn start_watching<R: tauri::Runtime>(
     // CHC-FR-16, co-located mode: the host repository's Git directory sits
     // outside the project root. Best-effort — a project whose Git directory
     // cannot be watched still gets working-tree events and the manual refresh.
-    if let Some(gd) = &extra_git_watch {
-        if let Err(e) = debouncer.watcher().watch(gd, RecursiveMode::Recursive) {
+    // CHC-FR-VHAA, linked worktree: the ref writes of every worktree land in
+    // the common Git directory.
+    for (gd, mode) in git_watch_paths(common_dir_owned.as_deref(), extra_git_watch.as_deref()) {
+        if let Err(e) = debouncer.watcher().watch(&gd, mode) {
             eprintln!("synthesis: failed to watch git directory {gd:?}: {e}");
         }
     }

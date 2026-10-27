@@ -133,3 +133,48 @@ fn the_project_commands_need_an_open_project() {
         ERR_NO_PROJECT_OPEN
     );
 }
+
+// EMB-FR-KUFM: the hub variables are removed, and FastEmbed reads its cache
+// folder from `app_data_dir()/models/`, or from nowhere when there is none.
+#[test]
+fn the_model_cache_environment_names_only_the_application_folder() {
+    let dir = std::path::PathBuf::from("/data/synthesis/models");
+    let set = super::super::model_cache_environment(Ok(dir.clone()));
+    assert_eq!(
+        set,
+        [
+            ("HF_HOME", None),
+            ("HF_ENDPOINT", None),
+            ("FASTEMBED_CACHE_DIR", Some(dir.into_os_string())),
+        ]
+    );
+    let none = super::super::model_cache_environment(Err("no folder".to_string()));
+    assert!(none.iter().all(|(_, value)| value.is_none()));
+}
+
+// EMB-FR-MRDV: a child process gets the hub variables that the application
+// started with: a value it had is set again, and one it did not have is
+// removed, whatever the pinned process environment holds.
+#[test]
+fn a_child_process_gets_the_hub_environment_the_application_started_with() {
+    let inherited = [
+        ("HF_HOME", Some(std::ffi::OsString::from("/home/u/hf"))),
+        ("HF_ENDPOINT", None),
+        ("FASTEMBED_CACHE_DIR", None),
+    ];
+    let mut command = std::process::Command::new("true");
+    super::super::apply_inherited(&mut command, Some(&inherited));
+    let envs: Vec<(String, Option<String>)> = command
+        .get_envs()
+        .map(|(k, v)| {
+            (k.to_string_lossy().into_owned(), v.map(|v| v.to_string_lossy().into_owned()))
+        })
+        .collect();
+    assert!(envs.contains(&("HF_HOME".to_string(), Some("/home/u/hf".to_string()))));
+    assert!(envs.contains(&("HF_ENDPOINT".to_string(), None)));
+    assert!(envs.contains(&("FASTEMBED_CACHE_DIR".to_string(), None)));
+
+    let mut untouched = std::process::Command::new("true");
+    super::super::apply_inherited(&mut untouched, None);
+    assert_eq!(untouched.get_envs().count(), 0, "before the pin, nothing changes");
+}

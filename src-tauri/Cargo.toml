@@ -179,7 +179,7 @@ hf-hub = { version = "0.5", default-features = false, features = ["ureq", "rustl
 # crate cannot link into one binary. `bundled` compiles SQLite from source on
 # every target (NLL-FR-LTEO).
 rusqlite = { version = "0.39", features = ["bundled"] }
-# EMB-FR-KNBG: the `vec0` tables and the vector distance functions, compiled
+# EMB-FR-KNBG: the vector distance functions, compiled
 # from C source into the binary and registered on each connection.
 sqlite-vec = "0.1.9"
 

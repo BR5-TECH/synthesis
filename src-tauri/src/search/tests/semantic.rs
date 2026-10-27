@@ -3,7 +3,7 @@
 //! the embeddings index off — so the ranking is BM25 alone.
 
 use super::*;
-use tauri::{Listener, Manager};
+use tauri::Manager;
 
 fn semantic_app(root: Option<&Path>) -> tauri::App<tauri::test::MockRuntime> {
     let app = tauri::test::mock_app();
@@ -25,45 +25,17 @@ fn semantic_app(root: Option<&Path>) -> tauri::App<tauri::test::MockRuntime> {
 }
 
 /// Run one semantic search and return its hits and its end reason.
+///
+/// The hits are taken from a recording sink, not from the event bus: a Tauri
+/// emit that meets a busy listener table is delivered later, after the end
+/// event, and other threads of the app (the log flush, the progress of an
+/// earlier search) emit at any time. `start_search` still runs, for the claim
+/// that a semantic query is never refused.
 fn run_semantic(
     app: &tauri::App<tauri::test::MockRuntime>,
     query: &str,
     scope: SearchScope,
 ) -> (Vec<SearchHit>, String) {
-    let (hits_tx, hits_rx) = std::sync::mpsc::channel::<Vec<SearchHit>>();
-    let (end_tx, end_rx) = std::sync::mpsc::channel::<String>();
-    app.listen(SEARCH_RESULTS, move |event| {
-        let payload: serde_json::Value = serde_json::from_str(event.payload()).unwrap();
-        let hits: Vec<SearchHit> = payload["hits"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|h| SearchHit {
-                id: h["id"].as_str().unwrap().to_string(),
-                name: h["name"].as_str().unwrap().to_string(),
-                path: h["path"].as_str().unwrap().to_string(),
-                ordinal: h["ordinal"].as_u64().unwrap(),
-                group: match h["group"].as_str().unwrap() {
-                    "artifact" => SearchGroup::Artifact,
-                    "document" => SearchGroup::Document,
-                    "draft" => SearchGroup::Draft,
-                    _ => SearchGroup::File,
-                },
-                match_kind: MatchKind::Content,
-                subtype: h["subtype"].as_str().map(|_| ArtifactType::Spec),
-                edit_context: h["editContext"].as_str().map(|_| EditContext::Standalone),
-                line: h["line"].as_u64().map(|l| l as u32),
-                snippet: h["snippet"].as_str().map(str::to_string),
-                document_id: None,
-                draft_id: None,
-            })
-            .collect();
-        let _ = hits_tx.send(hits);
-    });
-    app.listen(SEARCH_ENDED, move |event| {
-        let payload: serde_json::Value = serde_json::from_str(event.payload()).unwrap();
-        let _ = end_tx.send(payload["reason"].as_str().unwrap_or_default().to_string());
-    });
     start_search(
         app.handle().clone(),
         query.into(),
@@ -73,9 +45,20 @@ fn run_semantic(
         app.state::<SearchRegistry>(),
     )
     .expect("SCC-FR-DBBK: a semantic query is never invalid");
-    let reason = end_rx.recv_timeout(Duration::from_secs(10)).expect("a terminal event");
-    let hits = hits_rx.try_iter().flatten().collect();
-    (hits, reason)
+    let recorder = Recorder::default();
+    let root =
+        app.state::<crate::project::ProjectState>().root().map(|r| crate::fs::RootFs::for_root(&r));
+    let reason = super::super::semantic::run(
+        app.handle(),
+        &recorder,
+        "test-search",
+        root,
+        query,
+        scope,
+        &Stop::new(),
+    );
+    let reason = serde_json::to_value(reason).unwrap().as_str().unwrap_or_default().to_string();
+    (recorder.hits(), reason)
 }
 
 // SCC-FR-UYZW, SCC-FR-NRMI, SCC-FR-VXJL, SCC-FR-LXCP: specifications by

@@ -2,6 +2,7 @@
 //! traits, and the real implementations of them.
 
 use super::*;
+use crate::embeddings::InheritedEnvironment;
 
 // ---------------------------------------------------------------------------
 // The outside dependencies, behind traits
@@ -102,6 +103,7 @@ impl CliRunner for RealCliRunner {
         use std::process::{Command, Stdio};
 
         let mut child = match Command::new(path)
+            .with_inherited_hub_environment()
             .args(args)
             // AIC-FR-04: a working directory this module chooses. The open
             // project's path is deliberately not used — nothing about the

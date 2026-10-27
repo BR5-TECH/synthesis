@@ -68,3 +68,61 @@ fn a_query_is_embedded_between_two_batches() {
     let reindex: Vec<usize> = batches[batches.len() - 3..].to_vec();
     assert_eq!(reindex, [16, 1, 4], "batch, then the query, then the next batch: {batches:?}");
 }
+
+// EMB-FR-QQER: the query of BGE-small-en-v1.5 is embedded with the retrieval
+// instruction of its model card; its chunks are embedded with no prefix.
+#[test]
+fn the_default_model_embeds_a_query_with_its_instruction() {
+    let h = Harness::new();
+    h.ready();
+    assert!(h.texts().iter().all(|text| !text.starts_with("Represent this")));
+    h.service().embed_query("needle").unwrap();
+    assert_eq!(
+        h.texts().last().map(String::as_str),
+        Some("Represent this sentence for searching relevant passages: needle")
+    );
+}
+
+// EMB-FR-QQER, EMB-FR-CZND: EmbeddingGemma gets its passage and query
+// prefixes; the chunk IDs and content hashes of the view do not change.
+#[test]
+fn a_model_with_prefixes_embeds_with_them_and_keeps_chunk_ids_and_hashes() {
+    let h = Harness::new();
+    h.ready();
+    let view = |h: &Harness| {
+        let outcome = h.service().lock().project.as_ref().unwrap().outcome.clone().unwrap();
+        store::Store::open_existing(&h.store_file())
+            .unwrap()
+            .view_entries(outcome.spec_view)
+            .unwrap()
+    };
+    let before = view(&h);
+    let texts_before = h.texts().len();
+    h.service().apply_settings(EmbeddingsRecord {
+        enabled: true,
+        model: Some("EmbeddingGemma300M".into()),
+    });
+    h.settle(Instant::now());
+    let texts = h.texts();
+    assert!(texts.len() > texts_before);
+    assert!(texts[texts_before..].iter().all(|t| t.starts_with("title: none | text: ")));
+    assert_eq!(view(&h), before);
+    h.service().embed_query("q").unwrap();
+    assert_eq!(h.texts().last().map(String::as_str), Some("task: search result | query: q"));
+}
+
+// EMB-FR-YLBN, EMB-FR-CZND: an edited chunk whose new text has no vector yet
+// gets its BM25 rank only, and search stays ready for the rest of the index.
+#[test]
+fn a_chunk_with_no_current_vector_gets_its_bm25_rank_only() {
+    let h = Harness::new();
+    h.ready();
+    h.write("specifications/b.md", "# Search\n\nThe zebraquux bar finds files.");
+    h.pass();
+    // Inside the debounce window: the pass that embeds the edit has not run.
+    assert!(h.ready_for_spec());
+    let indexer = h.app.state::<Bm25Indexer>();
+    let hits = search_open_project(h.handle(), &indexer, IndexId::Spec, "zebraquux", 5);
+    let edited = hits.iter().find(|hit| hit.path == "specifications/b.md").unwrap();
+    assert!((edited.score as f64 - 1.0 / 61.0).abs() < 1e-6, "{}", edited.score);
+}

@@ -96,7 +96,7 @@ Project settings is the **Project group** of the Settings window (`SWN-settings-
 93. **SET-FR-UNRY** The section shows the index status of the open project from "get embeddings status" and `"embeddings status changed"`: the state, the root branch with its tip, the active branch or a detached HEAD or "not a Git repository", the chunk counts of specifications and documents, the running job with its progress, and the last error.
 94. **SET-FR-WZPS** A **Reindex** button opens a confirmation dialog with two scope choices: **Current branch**, the default, and **Whole trace**. Each choice states what it embeds again (per `../core/EMB-embeddings-index.md` EMB-FR-HRYV). Confirming calls "start reindex (scope)". Cancelling, Escape, and a click outside the dialog call nothing.
 95. **SET-FR-HRRN** The Reindex button is disabled while embeddings do not work for the project, and the section names the reason. On a detached HEAD, the Current branch choice states that it embeds the documents again only. Outside Git, the dialog states that Current branch embeds the whole project again.
-96. **SET-FR-VGQB** The Indexing section holds no model picker and starts no model download. Those are in the Global Indexing section (`GLS-global-settings.md` GLS-FR-JDUM).
+96. **SET-FR-VGQB** The Indexing section holds no model picker and starts no model download. Those are in the Global Indexing section (`GLS-global-settings.md` GLS-FR-JDUM). While the model downloads, the section shows the download progress in bytes from the same status, as the Global Indexing section does.
 
 ## Non-functional requirements
 - The Project group can be opened, navigated, and forms rendered before any plugin or adapter is installed (empty states are first-class).

@@ -2,8 +2,9 @@
  * Project settings → **Indexing** (SET-FR-QCUJ through SET-FR-VGQB).
  *
  * The project's embeddings switch — Use Global, On, Off — with the index status
- * of the open project and the Reindex action. The model picker and the model
- * download stay in the Global Indexing section (SET-FR-VGQB).
+ * of the open project and the Reindex action. The model picker and the start
+ * of a model download stay in the Global Indexing section; this section only
+ * shows the progress of a download (SET-FR-VGQB).
  *
  * A choice persists at once through `"save project embeddings mode"`, outside
  * the section dirty state and the save-before-close sweep (SET-FR-DHIZ).
@@ -12,10 +13,10 @@ import { useEffect, useRef, useState } from "react";
 
 import * as api from "../api";
 import { useEmbeddingsStatus } from "../hooks/useEmbeddingsStatus";
-import { logWarn } from "../logging";
+import { logInfo, logWarn } from "../logging";
 import { formatSectionAddress } from "../settingsWindow";
 import type { EmbeddingsProjectStatus, ProjectEmbeddingsMode } from "../types";
-import { JobProgress, STATE_LABELS } from "./IndexingParts";
+import { DownloadProgress, JobProgress, STATE_LABELS } from "./IndexingParts";
 import { ReindexDialog } from "./ReindexDialog";
 
 const MODE_CHOICES: [ProjectEmbeddingsMode, string][] = [
@@ -93,6 +94,7 @@ export function ProjectIndexingSettings() {
       .then(() => api.saveProjectEmbeddingsMode(next))
       .then((saved) => {
         confirmed.current = saved;
+        logInfo(["frontend"], "project embeddings mode saved", { mode: saved });
       })
       .catch((e) => {
         if (latest.current === next) {
@@ -114,6 +116,12 @@ export function ProjectIndexingSettings() {
   const effectiveMode = mode ?? "use_global";
   const reason = notWorkingReason(globalEnabled, effectiveMode);
   const project = status?.project;
+
+  // The dialog belongs to the project it was opened for. When the status loses
+  // the project, the dialog closes and does not open again by itself later.
+  useEffect(() => {
+    if (!project && reindexOpen) setReindexOpen(false);
+  }, [project, reindexOpen]);
 
   return (
     <div data-testid="project-indexing-settings">
@@ -143,7 +151,8 @@ export function ProjectIndexingSettings() {
       {/* SET-FR-MKDJ: whether they work, and why not. */}
       {status && (
         <p className="t-ui-xs t-muted" data-testid="project-indexing-working" style={{ maxWidth: 560 }}>
-          {reason ?? "Embeddings work for this project."}{" "}
+          {reason ??
+            (project ? "Embeddings work for this project." : "The index status is not known yet.")}{" "}
           {!globalEnabled && (
             <button type="button" className="btn btn--sm btn--ghost" onClick={openGlobal}>
               Open Global Indexing
@@ -151,6 +160,9 @@ export function ProjectIndexingSettings() {
           )}
         </p>
       )}
+
+      {/* SET-FR-VGQB: the model download, which the Global section starts. */}
+      {status && <DownloadProgress status={status} />}
 
       {/* SET-FR-UNRY: the index status of the open project. */}
       {project && (

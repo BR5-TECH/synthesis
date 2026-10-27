@@ -9,7 +9,7 @@ import { useState } from "react";
 
 import * as api from "../api";
 import { Modal } from "./DraftsPanelParts";
-import { logWarn } from "../logging";
+import { logInfo, logWarn } from "../logging";
 import type { EmbeddingsProjectStatus, ReindexScope } from "../types";
 
 export interface ReindexDialogProps {
@@ -48,6 +48,7 @@ export function ReindexDialog({ project, onClose, returnFocus }: ReindexDialogPr
     setError(null);
     try {
       await api.startReindex(scope);
+      logInfo(["frontend"], "reindex started", { scope });
       onClose();
     } catch (e) {
       setSubmitting(false);

@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 
 import * as api from "../api";
 import { useEmbeddingsStatus } from "../hooks/useEmbeddingsStatus";
-import { logWarn } from "../logging";
+import { logInfo, logWarn } from "../logging";
 import type { EmbeddingModel, EmbeddingsSettings } from "../types";
 import { Modal } from "./DraftsPanelParts";
 import { DownloadProgress, JobProgress } from "./IndexingParts";
@@ -77,6 +77,10 @@ export function IndexingSettings() {
       .then(() => api.saveEmbeddingsSettings(next))
       .then((saved) => {
         confirmed.current = saved;
+        logInfo(["frontend"], "embeddings settings saved", {
+          enabled: saved.enabled,
+          model: saved.model,
+        });
         // A later change already shown keeps showing until its own write ends.
         if (latest.current === next) {
           latest.current = saved;
@@ -189,7 +193,12 @@ export function IndexingSettings() {
                 type="button"
                 className="btn btn--default btn--sm"
                 onClick={() => {
-                  void api.retryEmbeddingsModelDownload().catch((e) => setError(errorText(e)));
+                  void api.retryEmbeddingsModelDownload().catch((e) => {
+                    setError(errorText(e));
+                    logWarn(["frontend"], "embeddings model download retry failed", {
+                      error: errorText(e),
+                    });
+                  });
                 }}
               >
                 Retry

@@ -17,7 +17,7 @@ export const JOB_LABELS: Record<EmbeddingJobKind, string> = {
   branch_update: "Checking embeddings",
   root_update: "Checking embeddings",
   model_switch: "Switching embedding model",
-  stale_rebuild: "Switching embedding model",
+  stale_rebuild: "Rebuilding embeddings",
   reindex: "Reindexing embeddings",
   incremental: "Updating embeddings",
 };
@@ -35,7 +35,7 @@ function megabytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** GLS-FR-RQFK: the model download, in bytes. */
+/** GLS-FR-RQFK, SET-FR-VGQB: the model download, in bytes. */
 export function DownloadProgress({ status }: { status: EmbeddingsStatus }) {
   if (status.modelState !== "downloading") return null;
   const download = status.download;

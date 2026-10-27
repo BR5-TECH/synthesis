@@ -103,3 +103,71 @@ fn git_dir_to_watch_only_asks_for_a_second_watch_when_it_is_outside_the_root() {
         Some(canonicalize_lenient(&root.join(".git")))
     );
 }
+
+// CHC-FR-VHAA: in the common Git directory only a ref write counts — `refs/`
+// and `packed-refs`. Its `HEAD` and index belong to the main worktree, the
+// Git directory of each linked worktree is counted elsewhere, and lock files,
+// objects, and logs are no change.
+#[test]
+fn common_dir_change_count_counts_ref_writes_only() {
+    use notify_debouncer_mini::DebouncedEvent;
+
+    let common = PathBuf::from("/tmp/repo/.git");
+    let ev = |rel: &str| DebouncedEvent {
+        path: common.join(rel),
+        kind: notify_debouncer_mini::DebouncedEventKind::Any,
+    };
+    let count = |rels: &[&str]| {
+        common_dir_change_count(&Ok(rels.iter().map(|r| ev(r)).collect()), Some(&common))
+    };
+    assert_eq!(count(&["refs/heads/main"]), 1);
+    assert_eq!(count(&["packed-refs"]), 1);
+    assert_eq!(count(&["refs/heads/main", "packed-refs"]), 2);
+    assert_eq!(count(&["refs/heads/main", "refs/heads/main"]), 1);
+    assert_eq!(count(&["refs/remotes/origin/main", "refs/tags/v1"]), 2);
+    for rel in [
+        "HEAD",
+        "index",
+        "ORIG_HEAD",
+        "refs/heads/main.lock",
+        "packed-refs.lock",
+        "worktrees/wt/HEAD",
+        "worktrees/wt/index",
+        "objects/ab/cd",
+        "logs/refs/heads/main",
+    ] {
+        assert_eq!(count(&[rel]), 0, "{rel}");
+    }
+    let outside = DebouncedEvent {
+        path: PathBuf::from("/tmp/wt/src/a.rs"),
+        kind: notify_debouncer_mini::DebouncedEventKind::Any,
+    };
+    assert_eq!(common_dir_change_count(&Ok(vec![outside]), Some(&common)), 0);
+    assert_eq!(common_dir_change_count(&Ok(vec![ev("refs/heads/main")]), None), 0);
+    let errored: DebounceEventResult =
+        Err(notify_debouncer_mini::notify::Error::generic("watcher failed"));
+    assert_eq!(common_dir_change_count(&errored, Some(&common)), 0);
+}
+
+// CHC-FR-VHAA, CHC-FR-16: a batch of a linked worktree counts its own `HEAD`
+// once, through its Git directory, and a ref write in the common directory
+// once, through the common directory.
+#[test]
+fn a_linked_worktree_batch_is_counted_once() {
+    use notify_debouncer_mini::DebouncedEvent;
+
+    let common = PathBuf::from("/tmp/repo/.git");
+    let git_dir = common.join("worktrees/wt");
+    let batch: DebounceEventResult = Ok(vec![
+        DebouncedEvent {
+            path: git_dir.join("HEAD"),
+            kind: notify_debouncer_mini::DebouncedEventKind::Any,
+        },
+        DebouncedEvent {
+            path: common.join("refs/heads/feature"),
+            kind: notify_debouncer_mini::DebouncedEventKind::Any,
+        },
+    ]);
+    assert_eq!(changes_change_count(&[], &batch, Some(&git_dir)), 1);
+    assert_eq!(common_dir_change_count(&batch, Some(&common)), 1);
+}

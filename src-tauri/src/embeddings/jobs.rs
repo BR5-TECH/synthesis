@@ -15,7 +15,7 @@ use super::service::{
 use super::settings::embeddings_work;
 use super::store::Store;
 use crate::bm25_index::{Bm25Indexer, IndexId};
-use crate::logging::{log_error, log_info, log_warn, Domain, BUFFER};
+use crate::logging::{log_debug, log_error, log_info, log_warn, Domain, BUFFER};
 use crate::progress::{self, OperationState, ProgressRegistry};
 
 /// EMB-FR-ZFGT: the event that carries the status.
@@ -228,7 +228,7 @@ impl EmbeddingsService {
                     Ok(slot) => slot,
                     Err(poisoned) => poisoned.into_inner(),
                 };
-                *slot = Some(embedder);
+                *slot = Some(super::service::LoadedModel { embedder, prefixes: spec.prefixes });
                 self.embedder_serial.fetch_add(1, Ordering::SeqCst);
                 drop(slot);
                 st.model.state = ModelState::Ready;
@@ -253,6 +253,9 @@ impl EmbeddingsService {
     }
 
     fn model_failed<R: tauri::Runtime>(&self, app: &tauri::AppHandle<R>, id: &str, reason: String) {
+        // EMB-FR-LYKW: a hub error can name a signed link; its query string
+        // is neither stored nor logged.
+        let reason = super::model::without_url_queries(&reason);
         {
             let mut st = self.lock();
             if st.settings.model_id() == id {
@@ -271,7 +274,8 @@ impl EmbeddingsService {
         self.emit(app);
     }
 
-    /// EMB-FR-VQSK: queue a root update when the root tip moved.
+    /// EMB-FR-VQSK, EMB-FR-HTIQ: queue a full evaluation when the root tip,
+    /// the branch, or the `HEAD` moved.
     fn root_check(&self, serial: u64) {
         let root = {
             let st = self.lock();
@@ -283,9 +287,9 @@ impl EmbeddingsService {
         let facts = layers::git_facts(&root);
         let mut st = self.lock();
         if let Some(project) = st.project.as_mut().filter(|p| p.serial == serial) {
-            let moved = project.facts.as_ref().map(|f| f.root_tip()) != Some(facts.root_tip());
-            if moved {
-                project.pending.full.get_or_insert(JobKind::RootUpdate);
+            if let Some(kind) = project.facts.as_ref().and_then(|previous| moved(previous, &facts))
+            {
+                project.pending.full.get_or_insert(kind);
             }
         }
     }
@@ -293,23 +297,17 @@ impl EmbeddingsService {
     /// EMB-FR-BZZT, EMB-FR-NHQG: an incremental pass, or a full evaluation
     /// when the branch, the `HEAD`, or the root tip changed under it.
     fn incremental<R: tauri::Runtime>(&self, app: &tauri::AppHandle<R>, serial: u64) {
-        let (root, previous) = {
+        let previous = {
             let st = self.lock();
             match st.project.as_ref().filter(|p| p.serial == serial) {
-                Some(project) => (project.root.clone(), project.facts.clone()),
+                Some(project) => project.facts.clone(),
                 None => return,
             }
         };
-        let facts = layers::git_facts(&root);
+        // The job reads the Git facts itself and makes the pass a full
+        // evaluation when they moved (EMB-FR-DQVX), so it is the one place that
+        // decides.
         match previous {
-            Some(previous) if previous.root_tip() != facts.root_tip() => {
-                self.run_job(app, serial, JobKind::RootUpdate, None, false)
-            }
-            Some(previous)
-                if previous.branch() != facts.branch() || repository_changed(&previous, &facts) =>
-            {
-                self.run_job(app, serial, JobKind::BranchUpdate, None, false)
-            }
             Some(_) => self.run_job(app, serial, JobKind::Incremental, None, true),
             None => self.run_job(app, serial, JobKind::OpenCheck, None, false),
         }
@@ -347,8 +345,39 @@ impl EmbeddingsService {
         let snapshot = indexer.snapshot();
         let working = layers::chunks_from(snapshot.chunks(IndexId::Spec));
         let documents = layers::chunks_from(snapshot.chunks(IndexId::Documents));
-        let fingerprint = fingerprint_of(&working, &documents);
+        // EMB-FR-JIJH: the documents of a collection that has not read its
+        // sources yet are not compared, so a project open keeps their vectors.
+        let documents_fed = snapshot.documents_fed();
+        if !documents_fed {
+            log_debug(
+                app,
+                &BUFFER,
+                &[Domain::Backend],
+                "embeddings keep the documents layer until the collection is read",
+                crate::log_fields! { "job" => job_name(kind) },
+            );
+        }
+        let fingerprint = fingerprint_of(&working, documents_fed.then_some(&documents));
         let facts = layers::git_facts(&root);
+        // EMB-FR-DQVX: the root tip or the branch moved after the incremental
+        // pass was chosen. The pass then becomes a full evaluation, so the
+        // facts it records always match the layers it wrote.
+        let mut skip_root = skip_root;
+        if kind == JobKind::Incremental {
+            let previous = self
+                .lock()
+                .project
+                .as_ref()
+                .filter(|p| p.serial == serial)
+                .and_then(|p| p.facts.clone());
+            if let Some(full) = previous.as_ref().and_then(|previous| moved(previous, &facts)) {
+                kind = full;
+                skip_root = false;
+            }
+        }
+        // EMB-FR-USBA: only a full evaluation deletes branch layers, so only it
+        // lists the worktrees.
+        let facts = if skip_root { facts } else { layers::keep_checked_out(facts, &root) };
         // EMB-FR-BZZT: a pass of another index changed no chunk this index
         // holds, so there is nothing to compare and no operation to show.
         if kind == JobKind::Incremental {
@@ -446,7 +475,7 @@ impl EmbeddingsService {
             &Evaluation {
                 facts: &facts,
                 working: &working,
-                documents: &documents,
+                documents: documents_fed.then_some(&documents),
                 skip_root,
                 drop,
                 root_reader: &root_reader,
@@ -607,10 +636,28 @@ fn repository_changed(previous: &GitFacts, now: &GitFacts) -> bool {
     matches!(previous, GitFacts::NoRepository) != matches!(now, GitFacts::NoRepository)
 }
 
+/// EMB-FR-VQSK, EMB-FR-NHQG, EMB-FR-HTIQ: the full evaluation that a change of
+/// the Git facts needs — a root update when the root tip moved, a branch update
+/// when the branch, the `HEAD`, or the repository changed — or `None`.
+fn moved(previous: &GitFacts, now: &GitFacts) -> Option<JobKind> {
+    if previous.root_tip() != now.root_tip() {
+        Some(JobKind::RootUpdate)
+    } else if previous.branch() != now.branch() || repository_changed(previous, now) {
+        Some(JobKind::BranchUpdate)
+    } else {
+        None
+    }
+}
+
 /// EMB-FR-BZZT: the chunk IDs and content hashes a pass saw, as one digest.
-fn fingerprint_of(working: &layers::Chunks, documents: &layers::Chunks) -> String {
+/// Documents that were not compared (EMB-FR-JIJH) give a digest of their own,
+/// so the first pass that compares them never reads as unchanged.
+fn fingerprint_of(working: &layers::Chunks, documents: Option<&layers::Chunks>) -> String {
     let mut text = String::new();
-    for (id, chunk) in working.iter().chain(documents.iter()) {
+    if documents.is_none() {
+        text.push_str("documents not read\n");
+    }
+    for (id, chunk) in working.iter().chain(documents.into_iter().flatten()) {
         text.push_str(id);
         text.push('\u{1f}');
         text.push_str(&chunk.hash);
@@ -631,3 +678,6 @@ fn job_name(kind: JobKind) -> &'static str {
         JobKind::Incremental => "incremental",
     }
 }
+
+#[cfg(test)]
+mod tests;

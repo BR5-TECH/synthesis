@@ -35,6 +35,7 @@ const MODELS: EmbeddingModel[] = [
 let stored: EmbeddingsSettings;
 let status: EmbeddingsStatus;
 let refuseSave: string | null;
+let refuseRetry: string | null;
 
 const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd);
 
@@ -49,6 +50,7 @@ beforeEach(() => {
   listeners.clear();
   invokeMock.mockReset();
   refuseSave = null;
+  refuseRetry = null;
   stored = { enabled: false, model: "BGESmallENV15" };
   status = { enabled: false, model: "BGESmallENV15", modelState: "not_downloaded" };
   invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
@@ -60,7 +62,10 @@ beforeEach(() => {
       stored = (args as { settings: EmbeddingsSettings }).settings;
       return stored;
     }
-    if (cmd === "retry_embeddings_model_download") return status;
+    if (cmd === "retry_embeddings_model_download") {
+      if (refuseRetry) throw new Error(refuseRetry);
+      return status;
+    }
     if (cmd === "append_log_records") return undefined;
     throw new Error(`unexpected command ${cmd}`);
   });
@@ -218,5 +223,38 @@ describe("Global Indexing section", () => {
     expect(alert).toHaveTextContent(/BM25 only/);
     await user.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(calls("retry_embeddings_model_download")).toHaveLength(1));
+  });
+
+  it("GLS-FR-HEPP: a refused Retry shows its reason and stays available", async () => {
+    const user = userEvent.setup();
+    refuseRetry = "no network";
+    status = { enabled: true, model: "BGESmallENV15", modelState: "failed", modelError: "network unreachable" };
+    render(<IndexingSettings />);
+    const retry = await screen.findByRole("button", { name: "Retry" });
+    await user.click(retry);
+    expect(await screen.findByText("no network")).toBeInTheDocument();
+    expect(retry).toBeEnabled();
+    await user.click(retry);
+    await waitFor(() => expect(calls("retry_embeddings_model_download")).toHaveLength(2));
+  });
+
+  it("EMB-FR-WJCW: a stale-store rebuild is named as a rebuild", async () => {
+    status = {
+      enabled: true,
+      model: "BGESmallENV15",
+      modelState: "ready",
+      project: {
+        mode: "use_global",
+        working: true,
+        state: "preparing",
+        job: { kind: "stale_rebuild", completed: 1, total: 4 },
+        git: "repository",
+        detached: false,
+        specChunks: 0,
+        documentChunks: 0,
+      },
+    };
+    render(<IndexingSettings />);
+    expect(await screen.findByTestId("embeddings-job")).toHaveTextContent("Rebuilding embeddings — 1 of 4 chunks");
   });
 });

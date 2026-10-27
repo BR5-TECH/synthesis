@@ -406,14 +406,15 @@ export function Settings({
           the tab's save-before-close sweep (SET-FR-08, SWN-FR-08). */}
       {section === "docker" && <ProjectDockerImages contentRoot={contentRoot} />}
 
+      {/* SET-FR-QCUJ through SET-FR-VGQB: the Indexing section persists at
+          once, so it takes no part in the save-before-close sweep. */}
+      {section === "indexing" && <ProjectIndexingSettings />}
+
       {/* SET-FR-QKKQ through SET-FR-IHQE: the concurrency limit. SET-FR-PSLD
           through SET-FR-OVTW: the pass and time limit sliders. SET-FR-DHFS /
           SET-FR-YMRV: the execution time limit row. The sliders and the row
           persist at once, so they take no part in the save-before-close sweep
           (SET-FR-08, SWN-FR-08). */}
-      {/* SET-FR-QCUJ through SET-FR-VGQB: the Indexing section persists at
-          once, so it takes no part in the save-before-close sweep. */}
-      {section === "indexing" && <ProjectIndexingSettings />}
 
       {section === "graduation" && (
         <>

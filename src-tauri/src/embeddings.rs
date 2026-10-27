@@ -58,21 +58,85 @@ impl Default for EmbeddingsService {
     }
 }
 
-/// EMB-FR-NNOK: the model cache.
-fn models_dir() -> std::path::PathBuf {
+/// EMB-FR-NNOK, EMB-FR-KUFM: the model cache, or the reason there is none.
+/// There is no other folder to fall back to.
+fn models_dir() -> Result<std::path::PathBuf, String> {
     crate::fs::app_data_dir()
         .map(|dir| dir.join("models"))
-        .unwrap_or_else(|_| std::env::temp_dir().join("synthesis-models"))
+        .map_err(|e| format!("the model cache folder is not available: {e}"))
+}
+
+/// EMB-FR-KUFM: FastEmbed and `hf-hub` read the cache folder and the hub
+/// address from the environment, and `HF_HOME` wins over the folder they are
+/// given. This sets their cache folder to `app_data_dir()/models/` and removes
+/// the two variables that would send a download or a load somewhere else.
+///
+/// Called first in `run`, while the process has only the main thread, because
+/// a change of the environment is not safe while other threads read it.
+pub fn pin_model_cache_environment() {
+    let names = model_cache_environment(Ok(std::path::PathBuf::new())).map(|(name, _)| name);
+    let _ = INHERITED_ENVIRONMENT.set(names.map(|name| (name, std::env::var_os(name))));
+    for (name, value) in model_cache_environment(models_dir()) {
+        match value {
+            Some(value) => std::env::set_var(name, value),
+            None => std::env::remove_var(name),
+        }
+    }
+}
+
+/// EMB-FR-MRDV: the three variables as the application started with them,
+/// recorded before they were pinned.
+static INHERITED_ENVIRONMENT: std::sync::OnceLock<[(&'static str, Option<std::ffi::OsString>); 3]> =
+    std::sync::OnceLock::new();
+
+/// EMB-FR-MRDV: give a child process the hub variables that the application
+/// started with, not the pinned ones. Before the pin, it changes nothing.
+pub trait InheritedEnvironment {
+    fn with_inherited_hub_environment(&mut self) -> &mut Self;
+}
+
+impl InheritedEnvironment for std::process::Command {
+    fn with_inherited_hub_environment(&mut self) -> &mut Self {
+        apply_inherited(self, INHERITED_ENVIRONMENT.get());
+        self
+    }
+}
+
+impl InheritedEnvironment for tokio::process::Command {
+    fn with_inherited_hub_environment(&mut self) -> &mut Self {
+        apply_inherited(self.as_std_mut(), INHERITED_ENVIRONMENT.get());
+        self
+    }
+}
+
+fn apply_inherited(
+    command: &mut std::process::Command,
+    inherited: Option<&[(&'static str, Option<std::ffi::OsString>); 3]>,
+) {
+    for (name, value) in inherited.into_iter().flatten() {
+        match value {
+            Some(value) => command.env(name, value),
+            None => command.env_remove(name),
+        };
+    }
+}
+
+/// EMB-FR-KUFM: the value each variable gets, `None` for one that is removed.
+/// With no cache folder, FastEmbed gets none either, and the factory refuses
+/// every download and load.
+fn model_cache_environment(
+    models: Result<std::path::PathBuf, String>,
+) -> [(&'static str, Option<std::ffi::OsString>); 3] {
+    [
+        ("HF_HOME", None),
+        ("HF_ENDPOINT", None),
+        ("FASTEMBED_CACHE_DIR", models.ok().map(std::path::PathBuf::into_os_string)),
+    ]
 }
 
 /// Read the Global settings at startup and start the worker when embeddings are
 /// on. Called once from the application's setup.
 pub fn on_app_started<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    // The Candle models read their files from `fastembed`'s cache directory,
-    // which only this variable sets. It is set before any thread reads it.
-    if std::env::var_os("FASTEMBED_CACHE_DIR").is_none() {
-        std::env::set_var("FASTEMBED_CACHE_DIR", models_dir());
-    }
     let (Some(service), Some(store)) = (
         app.try_state::<EmbeddingsService>(),
         app.try_state::<crate::global_settings::GlobalSettingsStore>(),

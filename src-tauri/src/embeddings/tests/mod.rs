@@ -17,7 +17,9 @@ use super::service::{JobKind, ModelState, Phase};
 use super::*;
 use crate::bm25_index::{Bm25Indexer, PassScope};
 
+mod documents;
 mod failures;
+mod git_moves;
 mod jobs;
 mod search;
 mod switches;

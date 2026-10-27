@@ -26,8 +26,10 @@ pub struct Evaluation<'a> {
     pub facts: &'a GitFacts,
     /// The specification chunks of the working copy (EMB-FR-DCXI).
     pub working: &'a Chunks,
-    /// The document chunks of the collection (EMB-FR-PYCS).
-    pub documents: &'a Chunks,
+    /// The document chunks of the collection (EMB-FR-PYCS), or `None` while
+    /// the collection has not read its sources: the documents layer then
+    /// stays as stored (EMB-FR-JIJH).
+    pub documents: Option<&'a Chunks>,
     /// EMB-FR-BZZT: an incremental pass leaves the root layer alone.
     pub skip_root: bool,
     pub drop: Option<ReindexScope>,
@@ -113,10 +115,17 @@ pub fn evaluate(
     let mut outcome = Outcome::default();
     let stored_layers = store.layers()?;
     // EMB-FR-HRYV, EMB-FR-QNWF: the layers a Reindex embeds again.
-    let dropped: Vec<i64> = match input.drop {
+    let mut dropped: Vec<i64> = match input.drop {
         Some(scope) => reindex_ids(&stored_layers, input.facts, scope),
         None => Vec::new(),
     };
+    // EMB-FR-JIJH: documents that were not read cannot be embedded again, so a
+    // Reindex keeps their layer, and the next pass that reads them compares it.
+    if input.documents.is_none() {
+        dropped.retain(|id| {
+            stored_layers.iter().any(|layer| layer.id == *id && layer.kind != LayerKind::Documents)
+        });
+    }
     let find = |kind: LayerKind, branch: Option<&str>| {
         stored_layers
             .iter()
@@ -186,12 +195,14 @@ pub fn evaluate(
             desired: layers::whole(input.working),
         }),
         GitFacts::Repository { head: layers::Head::Detached, .. } => None,
-        GitFacts::Repository { head: layers::Head::Branch(name), root_tip, .. } => Some(Plan {
+        // EMB-FR-USBA: the root tip the difference was compared with is the
+        // tip the root layer holds, which a pass that skips the root keeps.
+        GitFacts::Repository { head: layers::Head::Branch(name), .. } => Some(Plan {
             layer_id: find(LayerKind::Branch, Some(name)).map(|layer| layer.id),
             kind: LayerKind::Branch,
             branch: Some(name.clone()),
             tip: None,
-            root_tip: root_tip.clone(),
+            root_tip: outcome.root_tip.clone(),
             desired: layers::branch_difference(input.working, &root_entries),
         }),
     };
@@ -200,22 +211,32 @@ pub fn evaluate(
         LayerRef::Planned(plans.len() - 1)
     });
 
-    // EMB-FR-PYCS: the one documents layer.
-    let documents_ref = LayerRef::Planned(plans.len());
-    plans.push(Plan {
-        layer_id: find(LayerKind::Documents, None).map(|layer| layer.id),
-        kind: LayerKind::Documents,
-        branch: None,
-        tip: None,
-        root_tip: None,
-        desired: layers::whole(input.documents),
-    });
+    // EMB-FR-PYCS: the one documents layer. EMB-FR-JIJH: a collection that has
+    // not read its sources yet lists no documents, and that list must not empty
+    // the stored layer.
+    let documents_ref = match input.documents {
+        Some(documents) => {
+            plans.push(Plan {
+                layer_id: find(LayerKind::Documents, None).map(|layer| layer.id),
+                kind: LayerKind::Documents,
+                branch: None,
+                tip: None,
+                root_tip: None,
+                desired: layers::whole(documents),
+            });
+            Some(LayerRef::Planned(plans.len() - 1))
+        }
+        None => find(LayerKind::Documents, None).map(|layer| LayerRef::Stored(layer.id)),
+    };
 
-    // EMB-FR-USBA: a branch that no longer exists loses its layer. The active
+    // EMB-FR-USBA: at each full evaluation, a branch that no longer exists, or
+    // that no worktree has checked out, loses its layer. The active
     // branch keeps its layer even while it is unborn, and so is not yet in the
     // list; an empty list means the list could not be read, and deletes nothing.
     let mut deleted = dropped.clone();
-    if let GitFacts::Repository { branches, .. } = input.facts {
+    // Only a full evaluation deletes the layers of other branches; an
+    // incremental pass changes the active layers alone.
+    if let (GitFacts::Repository { branches, .. }, false) = (input.facts, input.skip_root) {
         let active = input.facts.branch();
         deleted.extend(
             stored_layers
@@ -281,10 +302,12 @@ pub fn evaluate(
     outcome.embedded = vectors.len();
     outcome.removed = removed;
     outcome.spec_view = View { root: root_ref.map(resolve), branch: branch_ref.map(resolve) };
-    let documents_layer = resolve(documents_ref);
-    outcome.documents_layer = Some(documents_layer);
+    outcome.documents_layer = documents_ref.map(resolve);
     outcome.spec_chunks = store.view_entries(outcome.spec_view)?.len();
-    outcome.document_chunks = store.entries(documents_layer)?.len();
+    outcome.document_chunks = match outcome.documents_layer {
+        Some(layer) => store.entries(layer)?.len(),
+        None => 0,
+    };
     Ok(outcome)
 }
 

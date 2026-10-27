@@ -3,9 +3,13 @@
  *
  * The Global and Project Indexing sections (GLS-FR-JDUM, SET-FR-QCUJ) and the
  * Semantic mode of the search bar (SCH-FR-12). `?embeddings=` picks the start
- * state: `off` (the default), `ready`, `downloading`, `failed`, or `job` (ready,
- * with a running first indexing). A save, a retry, and a Reindex emit
- * `"embeddings-status-changed"` with the whole status.
+ * state: `off` (the default), `ready`, `downloading`, `downloading_unknown` (a
+ * download with no total yet), `failed`, or `job` (ready, with a running job).
+ * `&job=<kind>` names the job kind of `job` (default `first_indexing`), and
+ * `&jobTotal=0` makes its count unknown. A save, a retry, and a Reindex emit
+ * `"embeddings-status-changed"` with the whole status. The Document hit of the
+ * Semantic search opens only with `&documentsSeeded=1`, which puts its document
+ * in the collection (mock-documents.ts).
  */
 
 import { NOT_HANDLED } from "./mock-github-polling";
@@ -30,19 +34,27 @@ const MODELS = [
   },
 ];
 
-const start = new URLSearchParams(location.search).get("embeddings") ?? "off";
+const query = new URLSearchParams(location.search);
+const start = query.get("embeddings") ?? "off";
+const unknownDownloadTotal = start === "downloading_unknown";
+const jobKind = query.get("job") ?? "first_indexing";
+const jobTotal = query.get("jobTotal") === "0" ? undefined : 1280;
 
 let enabled = start !== "off";
 let model = "BGESmallENV15";
 let modelState: ModelState =
   start === "off"
     ? "not_downloaded"
-    : start === "downloading" || start === "failed"
-      ? start
-      : "ready";
+    : start === "downloading" || start === "downloading_unknown"
+      ? "downloading"
+      : start === "failed"
+        ? "failed"
+        : "ready";
 let projectMode: Mode = "use_global";
 let job: Job | undefined =
-  start === "job" ? { kind: "first_indexing", completed: 412, total: 1280 } : undefined;
+  start === "job"
+    ? { kind: jobKind, ...(jobTotal ? { completed: 412, total: jobTotal } : {}) }
+    : undefined;
 
 function working(): boolean {
   return projectMode !== "off" && enabled;
@@ -55,7 +67,11 @@ function status() {
     model,
     modelState,
     ...(modelState === "downloading"
-      ? { download: { completedBytes: 48_234_496, totalBytes: 133_169_152 } }
+      ? {
+          download: unknownDownloadTotal
+            ? { completedBytes: 48_234_496 }
+            : { completedBytes: 48_234_496, totalBytes: 133_169_152 },
+        }
       : {}),
     ...(modelState === "failed"
       ? { modelError: "the download from huggingface.co timed out after 30 seconds" }

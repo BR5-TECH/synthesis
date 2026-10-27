@@ -190,6 +190,27 @@ describe("centre region — progress (STB-FR-05–STB-FR-09)", () => {
   });
 });
 
+describe("embedding jobs in the progress region (STB-FR-08, EMB-FR-WJCW)", () => {
+  it("STB-FR-08, EMB-FR-WJCW: an embedding job with a total shows its label and a determinate bar", () => {
+    renderBar({
+      operations: [
+        operation({ kind: "embed", label: "Updating embeddings…", completed: 3, total: 12 }),
+      ],
+    });
+    expect(screen.getByText("Updating embeddings…")).toBeInTheDocument();
+    const track = screen.getByTestId("progress-track");
+    expect(track).toHaveAttribute("data-determinate", "true");
+    expect(track).toHaveAttribute("aria-valuenow", "3");
+    expect(track).toHaveAttribute("aria-valuemax", "12");
+  });
+
+  it("STB-FR-08, EMB-FR-WJCW: an embedding job with no total yet is indeterminate", () => {
+    renderBar({ operations: [operation({ kind: "embed", label: "Rebuilding embeddings…" })] });
+    expect(screen.getByText("Rebuilding embeddings…")).toBeInTheDocument();
+    expect(screen.getByTestId("progress-track")).toHaveAttribute("data-determinate", "false");
+  });
+});
+
 describe("in-flight operations overlay (STB-FR-10–STB-FR-14)", () => {
   const three = [
     operation({ id: "op-3", label: "Installing plugin…", sequence: 3 }),

@@ -868,7 +868,7 @@ pub fn start_search<R: tauri::Runtime>(
         );
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             if mode == SearchMode::Semantic {
-                semantic::run(&app, &spawned_id, root, &query, scope, &stop)
+                semantic::run(&app, &app, &spawned_id, root, &query, scope, &stop)
             } else {
                 search_thread_body(&app, &spawned_id, root, matcher, scope, &stop, operation)
             }

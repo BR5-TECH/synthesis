@@ -367,9 +367,20 @@ pub struct IndexSet {
     /// evidence out of a bounded ring buffer to say the same thing a thousand
     /// times.
     skill_exclusions: Arc<BTreeMap<String, &'static str>>,
+    /// EMB-FR-JIJH: the `documents` index was built from a collection that had
+    /// read its sources. Before the first refresh of an open, the collection
+    /// lists no documents, and that empty list is not the true one.
+    documents_fed: bool,
 }
 
 impl IndexSet {
+    /// EMB-FR-JIJH: whether the `documents` index describes the sources of the
+    /// collection, and not the empty list of a collection that has not read
+    /// them yet.
+    pub fn documents_fed(&self) -> bool {
+        self.documents_fed
+    }
+
     /// BMI-FR-NEIW: a snapshot holding the `documents` index of this one and
     /// nothing else.
     fn only_documents(&self) -> IndexSet {
@@ -386,6 +397,7 @@ impl IndexSet {
                 .filter(|((index, _), _)| *index == IndexId::Documents)
                 .map(|(key, engine)| (*key, Arc::clone(engine)))
                 .collect(),
+            documents_fed: self.documents_fed,
             ..IndexSet::default()
         }
     }
@@ -739,6 +751,13 @@ impl Bm25Indexer {
         );
 
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // EMB-FR-JIJH: read before the documents are, so a pass that saw a
+            // refreshed collection read the documents of that refresh or of a
+            // later one.
+            let documents_fed = scope.documents
+                && app
+                    .try_state::<crate::documents::DocumentsCollection>()
+                    .is_some_and(|collection| collection.has_refreshed());
             let (sources, skills, exclusions) = collect_sources(app, root, scope);
             progress::update_and_publish(
                 app,
@@ -785,6 +804,9 @@ impl Bm25Indexer {
             // neither can be observed without the other.
             next.set_skills(skills);
             next.set_skill_exclusions(exclusions);
+            if scope.documents {
+                next.documents_fed = documents_fed;
+            }
             (next, stats)
         }));
 

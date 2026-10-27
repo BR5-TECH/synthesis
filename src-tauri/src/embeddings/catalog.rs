@@ -36,6 +36,57 @@ const CANDLE_MODELS: [(&str, &str, &str, usize, CandleKind); 4] = [
     ),
 ];
 
+/// EMB-FR-QQER: the text a model expects before a query and before a
+/// passage, as its model card defines it. Empty for a model with no prefix.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Prefixes {
+    pub query: &'static str,
+    pub passage: &'static str,
+}
+
+impl Prefixes {
+    /// The text a query is embedded as.
+    pub fn query(&self, query: &str) -> String {
+        format!("{}{query}", self.query)
+    }
+
+    /// The texts a batch of chunks is embedded as.
+    pub fn passages(&self, texts: &[String]) -> Vec<String> {
+        if self.passage.is_empty() {
+            return texts.to_vec();
+        }
+        texts.iter().map(|text| format!("{}{text}", self.passage)).collect()
+    }
+}
+
+/// The BGE English instruction for a retrieval query, which mxbai and
+/// Snowflake Arctic use too.
+const BGE_QUERY: &str = "Represent this sentence for searching relevant passages: ";
+
+/// EMB-FR-QQER: the prefixes of the model with `id`. A model that is not
+/// named here uses none. A change here is a change of the store schema
+/// version (`store::SCHEMA_VERSION`).
+pub fn prefixes_for(id: &str) -> Prefixes {
+    let starts = |prefix: &str| id.starts_with(prefix);
+    let bge = ["BGESmallENV15", "BGEBaseENV15", "BGELargeENV15", "MxbaiEmbedLargeV1"];
+    if bge.iter().any(|name| starts(name)) || starts("SnowflakeArcticEmbed") {
+        Prefixes { query: BGE_QUERY, passage: "" }
+    } else if starts("EmbeddingGemma300M") {
+        Prefixes { query: "task: search result | query: ", passage: "title: none | text: " }
+    } else if starts("MultilingualE5") {
+        Prefixes { query: "query: ", passage: "passage: " }
+    } else if starts("NomicEmbedText") {
+        Prefixes { query: "search_query: ", passage: "search_document: " }
+    } else if starts("Qwen3Embedding") {
+        Prefixes {
+            query: "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:",
+            passage: "",
+        }
+    } else {
+        Prefixes::default()
+    }
+}
+
 /// The tokenizer files `fastembed` reads for an ONNX model.
 const TOKENIZER_FILES: [&str; 4] =
     ["tokenizer.json", "config.json", "special_tokens_map.json", "tokenizer_config.json"];
@@ -81,6 +132,7 @@ pub enum ModelSource {
 pub struct ModelSpec {
     pub entry: EmbeddingModelEntry,
     pub source: ModelSource,
+    pub prefixes: Prefixes,
 }
 
 /// EMB-FR-MIDG: every model of this build, the recommended four first in their
@@ -103,6 +155,7 @@ fn all_specs() -> Vec<ModelSpec> {
             let mut files = vec![info.model_file.clone()];
             files.extend(info.additional_files.iter().cloned());
             files.extend(TOKENIZER_FILES.iter().map(|f| f.to_string()));
+            let prefixes = prefixes_for(&id);
             ModelSpec {
                 entry: EmbeddingModelEntry {
                     name: recommended
@@ -119,6 +172,7 @@ fn all_specs() -> Vec<ModelSpec> {
                     repo: info.model_code.clone(),
                     files,
                 },
+                prefixes,
             }
         })
         .collect();
@@ -132,6 +186,7 @@ fn all_specs() -> Vec<ModelSpec> {
             default: false,
         },
         source: ModelSource::Candle { kind: *kind, repo: repo.to_string() },
+        prefixes: prefixes_for(id),
     });
     onnx.extend(candle);
 
@@ -209,4 +264,65 @@ mod tests {
         assert!(find("unknown-model").is_none());
         assert!(matches!(find("BGEM3").unwrap().source, ModelSource::Onnx { .. }));
     }
+
+    // EMB-FR-QQER: the prefixes of each model family, from its model card; a
+    // model with none, or an unknown id, gets none.
+    #[test]
+    fn each_model_family_has_its_prefixes() {
+        let bge = Prefixes { query: BGE_QUERY, passage: "" };
+        for id in ["BGESmallENV15", "BGESmallENV15Q", "BGEBaseENV15", "MxbaiEmbedLargeV1"] {
+            assert_eq!(prefixes_for(id), bge, "{id}");
+        }
+        assert_eq!(prefixes_for("SnowflakeArcticEmbedM"), bge);
+        assert_eq!(
+            prefixes_for("EmbeddingGemma300M"),
+            Prefixes { query: "task: search result | query: ", passage: "title: none | text: " }
+        );
+        assert_eq!(prefixes_for("MultilingualE5Small").passage, "passage: ");
+        assert_eq!(prefixes_for("NomicEmbedTextV15").query, "search_query: ");
+        assert_eq!(prefixes_for("NomicEmbedTextV2MoE").passage, "search_document: ");
+        assert!(prefixes_for("Qwen3Embedding06B").query.starts_with("Instruct: "));
+        for id in ["BGEM3", "AllMiniLML6V2", "unknown-model"] {
+            assert_eq!(prefixes_for(id), Prefixes::default(), "{id}");
+        }
+    }
+
+    // EMB-FR-QQER: a prefix goes before the text; no passage prefix leaves the
+    // texts as they are; every catalogue entry carries the prefixes of its id.
+    #[test]
+    fn prefixes_go_before_the_text_and_every_entry_carries_them() {
+        let gemma = prefixes_for("EmbeddingGemma300M");
+        assert_eq!(gemma.query("rate limits"), "task: search result | query: rate limits");
+        assert_eq!(gemma.passages(&["a".to_string()]), ["title: none | text: a"]);
+        let bge = prefixes_for("BGESmallENV15");
+        let texts = vec!["# Title\n\nBody.".to_string()];
+        assert_eq!(bge.passages(&texts), texts);
+        for spec in all_specs() {
+            assert_eq!(spec.prefixes, prefixes_for(&spec.entry.id), "{}", spec.entry.id);
+        }
+    }
+
+    // EMB-FR-QQER, EMB-FR-UJLS: the prefixes are part of the store schema. A
+    // change of this digest without a new `SCHEMA_VERSION` is a defect: the
+    // stored vectors would mix two prefix sets.
+    #[test]
+    fn a_change_of_the_prefixes_needs_a_new_schema_version() {
+        let mut text = String::new();
+        // Only the models with a prefix: a new model with none changes nothing.
+        for spec in all_specs().into_iter().filter(|spec| spec.prefixes != Prefixes::default()) {
+            text.push_str(&format!(
+                "{}|{}|{}\n",
+                spec.entry.id, spec.prefixes.query, spec.prefixes.passage
+            ));
+        }
+        let digest = crate::fs::sha256_bytes(text.as_bytes());
+        assert_eq!(
+            (super::super::store::SCHEMA_VERSION, digest.as_str()),
+            ("2", PREFIX_DIGEST),
+            "update SCHEMA_VERSION and this digest together"
+        );
+    }
+
+    /// The digest of the prefixes that schema version 2 was built with.
+    const PREFIX_DIGEST: &str = "2a4069fefb421ace914edf6bea331baaa3e1376c063dc8e7f8709167b2642759";
 }

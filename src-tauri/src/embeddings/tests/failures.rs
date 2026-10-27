@@ -165,3 +165,48 @@ fn turning_off_during_a_download_leaves_no_stale_model_state() {
     assert_eq!(status.model_state, ModelState::NotDownloaded);
     assert!(h.service().embedder.lock().unwrap().is_none());
 }
+
+// EMB-FR-EAEA: a failed incremental pass keeps the last good view and writes
+// an ERROR record. The next trigger, with no new change, tries the same pass
+// again.
+#[test]
+fn a_failed_incremental_pass_is_logged_and_tried_again() {
+    let sentinel = format!("failedpass{}", std::process::id());
+    let reason = format!("embed failed {sentinel}reason");
+    let h = Harness::new();
+    h.ready();
+    h.log.fail_embed.store(true, Ordering::SeqCst);
+    *h.log.fail_reason.lock().unwrap() = Some(reason.clone());
+    h.write("specifications/c.md", &format!("# Third\n\nA new {sentinel} specification."));
+    h.pass();
+    h.settle(Instant::now() + LATER);
+    let project = h.service().status().project.unwrap();
+    assert_eq!(project.last_error.as_deref(), Some(reason.as_str()));
+    assert_eq!(project.state, Phase::Ready);
+    assert!(h.ready_for_spec());
+    assert_eq!(project.spec_chunks, 3);
+    // The one ERROR record of this pass, found by its unique reason.
+    let record = failed_record(&reason).expect("an ERROR record of the failed pass");
+    assert_eq!(record["message"], "embedding job failed");
+    assert_eq!(record["fields"]["job"], "incremental");
+    assert!(!rendered_log().contains(&format!("A new {sentinel}")), "no chunk text in a record");
+
+    h.log.fail_embed.store(false, Ordering::SeqCst);
+    let generation = h.app.state::<Bm25Indexer>().generation();
+    h.service().index_published(true, generation, Instant::now());
+    h.settle(Instant::now() + LATER);
+    let project = h.service().status().project.unwrap();
+    assert_eq!(project.spec_chunks, 4);
+    assert_eq!(project.last_error, None);
+}
+
+/// The ERROR record whose `reason` field is `reason`, rendered.
+fn failed_record(reason: &str) -> Option<serde_json::Value> {
+    use crate::logging::{LogFilter, LogLevel, BUFFER};
+    let records = BUFFER
+        .query(&LogFilter { min_level: LogLevel::Error, ..LogFilter::default() }, None, 100_000)
+        .unwrap()
+        .records;
+    let records = serde_json::to_value(records).unwrap();
+    records.as_array()?.iter().find(|r| r["fields"]["reason"] == reason).cloned()
+}

@@ -12,11 +12,12 @@
  * the theme and the main window's full-screen state, which share the record and
  * are edited elsewhere entirely (GLS-FR-14).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   loadAppPreferences,
   patchAppPreferences,
 } from "../state/appPreferences";
+import { logWarn } from "../logging";
 import type { LiteralSearchMode, SearchMode } from "../types";
 
 /** SCH-FR-13: the mode a user who has never chosen one starts in. */
@@ -81,15 +82,25 @@ export const QUERY_MODES: ReadonlyArray<{
 
 export function useSearchQueryMode() {
   const [mode, setMode] = useState<SearchMode>(DEFAULT_QUERY_MODE);
+  /** The mode the store holds, which a refused save restores. */
+  const confirmed = useRef<SearchMode>(DEFAULT_QUERY_MODE);
+  /** The last mode the author chose, or `null` before the first choice. */
+  const latest = useRef<SearchMode | null>(null);
+  /** Whether a save has stored a mode, which then wins over the read one. */
+  const saved = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     loadAppPreferences()
       .then((prefs) => {
-        if (!cancelled) setMode(prefs?.searchQueryMode ?? DEFAULT_QUERY_MODE);
+        const stored = prefs?.searchQueryMode ?? DEFAULT_QUERY_MODE;
+        if (!saved.current) confirmed.current = stored;
+        // A choice made before the read ended wins over the stored mode.
+        if (!cancelled && latest.current === null) setMode(stored);
       })
-      .catch(() => {
-        if (!cancelled) setMode(DEFAULT_QUERY_MODE);
+      .catch((e) => {
+        logWarn(["frontend"], "search query mode could not be read", { error: String(e) });
+        if (!cancelled && latest.current === null) setMode(DEFAULT_QUERY_MODE);
       });
     return () => {
       cancelled = true;
@@ -98,16 +109,26 @@ export function useSearchQueryMode() {
 
   /**
    * SCH-FR-12: activating one deactivates the other three; there is no state in
-   * which none is active. A persistence failure rolls the applied value back
-   * rather than leaving the input showing a choice that will not survive
-   * relaunch — the toggles have no error affordance of their own.
+   * which none is active. A persistence failure rolls the applied value back to
+   * the stored one rather than leaving the input showing a choice that will not
+   * survive relaunch — the toggles have no error affordance of their own. A
+   * later choice keeps showing until its own save ends.
    */
   const selectMode = (next: SearchMode) => {
-    const previous = mode;
+    latest.current = next;
     setMode(next);
-    patchAppPreferences({ searchQueryMode: next }).catch(() => {
-      setMode(previous);
-    });
+    patchAppPreferences({ searchQueryMode: next })
+      .then(() => {
+        saved.current = true;
+        confirmed.current = next;
+      })
+      .catch((e) => {
+        logWarn(["frontend"], "search query mode not saved", { mode: next, error: String(e) });
+        if (latest.current === next) {
+          latest.current = confirmed.current;
+          setMode(confirmed.current);
+        }
+      });
   };
 
   return { mode, selectMode };

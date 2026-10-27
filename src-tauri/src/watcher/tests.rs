@@ -147,6 +147,116 @@ fn a_project_that_is_not_a_repository_has_nothing_to_attribute_or_watch() {
     assert_eq!(git_watch_targets(dir.path()), (None, None));
 }
 
+/// A repository with one commit, so that a linked worktree can be added.
+fn committed_repo_at(dir: &Path) -> git2::Repository {
+    let repo = repo_at(dir);
+    {
+        let sig = git2::Signature::now("t", "t@example.com").unwrap();
+        let tree = repo.find_tree(repo.index().unwrap().write_tree().unwrap()).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "first", &tree, &[]).unwrap();
+    }
+    repo
+}
+
+// CHC-FR-VHAA: a standalone repository and a folder outside Git have no
+// common directory to watch; the primary worktree has none either, also
+// while a linked worktree exists.
+#[test]
+fn only_a_linked_worktree_has_a_common_dir_to_watch() {
+    let plain = tempfile::TempDir::new().unwrap();
+    assert_eq!(common_dir_target(plain.path()), None);
+
+    let main = tempfile::TempDir::new().unwrap();
+    let repo = committed_repo_at(main.path());
+    assert_eq!(common_dir_target(main.path()), None);
+
+    let linked = tempfile::TempDir::new().unwrap();
+    let wt = linked.path().join("wt");
+    repo.worktree("wt", &wt, None).unwrap();
+    assert_eq!(common_dir_target(main.path()), None, "the primary worktree");
+
+    let common = common_dir_target(&wt).expect("a linked worktree");
+    assert_eq!(common, crate::changes::canonicalize_lenient(&main.path().join(".git")));
+    assert_eq!(common, crate::changes::canonicalize_lenient(&common), "already canonical");
+    let (git_dir, extra) = git_watch_targets(&wt);
+    assert!(git_dir.unwrap().starts_with(&common));
+    let watched: Vec<PathBuf> =
+        git_watch_paths(Some(&common), extra.as_deref()).into_iter().map(|(p, _)| p).collect();
+    assert!(watched.contains(&common.join("refs")), "the refs of every worktree");
+    assert!(
+        watched.iter().any(|p| p.ends_with("worktrees/wt")),
+        "the Git directory of the worktree: {watched:?}"
+    );
+}
+
+// CHC-FR-16, CHC-FR-VHAA: which Git paths are watched beside the project
+// root. The common directory is watched without its `objects/`: the folder
+// itself for `packed-refs`, and its `refs/` tree.
+#[test]
+fn the_git_watch_paths_cover_the_refs_but_not_the_objects() {
+    use notify_debouncer_mini::notify::RecursiveMode::{NonRecursive, Recursive};
+    let common = PathBuf::from("/r/.git");
+    let inside = common.join("worktrees/wt");
+    let elsewhere = PathBuf::from("/host/.git");
+    assert_eq!(
+        git_watch_paths(Some(&common), Some(&inside)),
+        vec![
+            (common.clone(), NonRecursive),
+            (common.join("refs"), Recursive),
+            (inside.clone(), Recursive),
+        ]
+    );
+    assert_eq!(git_watch_paths(None, Some(&elsewhere)), vec![(elsewhere, Recursive)]);
+    assert_eq!(
+        git_watch_paths(Some(&common), None),
+        vec![(common.clone(), NonRecursive), (common.join("refs"), Recursive)]
+    );
+    assert!(git_watch_paths(None, None).is_empty());
+}
+
+// EMB-FR-HTIQ, CHC-FR-16: a branch switch that changes no file still makes a
+// batch whose count is above its working-tree paths, which is what starts the
+// root check of the embeddings index.
+#[test]
+fn a_head_only_batch_is_a_git_metadata_change() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let root = &crate::fs::RootFs::for_root(dir.path());
+    drop(repo_at(root));
+    let (git_dir, _) = git_watch_targets(root);
+    let git_dir = git_dir.unwrap();
+    let batch: DebounceEventResult = Ok(vec![notify_debouncer_mini::DebouncedEvent {
+        path: git_dir.join("HEAD"),
+        kind: notify_debouncer_mini::DebouncedEventKind::Any,
+    }]);
+    let (changed, count) = batch_changes(&batch, root, Some(&git_dir), None);
+    assert!(changed.is_empty());
+    assert!(count > changed.len());
+}
+
+// CHC-FR-VHAA, EMB-FR-VQSK: in a linked worktree, a commit on the default
+// branch from another worktree writes only a ref in the common Git directory.
+// The batch counts it, which starts the root check.
+#[test]
+fn a_ref_write_in_the_common_dir_counts_for_a_linked_worktree() {
+    let main = tempfile::TempDir::new().unwrap();
+    let repo = committed_repo_at(main.path());
+    let linked = tempfile::TempDir::new().unwrap();
+    let wt = linked.path().join("wt");
+    repo.worktree("wt", &wt, None).unwrap();
+    let root = &crate::fs::RootFs::for_root(&wt);
+    let (git_dir, _) = git_watch_targets(root);
+    let common = common_dir_target(root).unwrap();
+    let batch: DebounceEventResult = Ok(vec![notify_debouncer_mini::DebouncedEvent {
+        path: common.join("refs/heads/main"),
+        kind: notify_debouncer_mini::DebouncedEventKind::Any,
+    }]);
+    let (changed, count) = batch_changes(&batch, root, git_dir.as_deref(), Some(&common));
+    assert!(changed.is_empty());
+    assert_eq!(count, 1);
+    let (_, without) = batch_changes(&batch, root, git_dir.as_deref(), None);
+    assert_eq!(without, 0, "only the common directory sees the write");
+}
+
 #[test]
 fn a_watched_change_invalidates_the_candidate_list() {
     // ASC-FR-10 / ASC-FR-15 / ASC-FR-17: the watcher is what keeps the
@@ -743,19 +853,19 @@ fn a_batch_of_ignored_paths_alone_is_no_change() {
     let git_dir = root.join(".git");
 
     let batch = Ok(vec![ev(root.join("target/debug/a")), ev(root.join("target/debug/b"))]);
-    let (changed, count) = batch_changes(&batch, root, Some(&git_dir));
+    let (changed, count) = batch_changes(&batch, root, Some(&git_dir), None);
     assert!(changed.is_empty(), "nothing is left to route: {changed:?}");
     assert_eq!(count, 0, "no `changes updated` is due (CHC-FR-AADZ)");
 
     // CHC-FR-16: a Git-directory change in the same batch still counts.
     let batch = Ok(vec![ev(root.join("target/debug/a")), ev(git_dir.join("HEAD"))]);
-    let (changed, count) = batch_changes(&batch, root, Some(&git_dir));
+    let (changed, count) = batch_changes(&batch, root, Some(&git_dir), None);
     assert!(changed.is_empty());
     assert_eq!(count, 1);
 
     // A tracked path beside the ignored ones is routed and counted alone.
     let batch = Ok(vec![ev(root.join("target/debug/a")), ev(root.join("a.md"))]);
-    let (changed, count) = batch_changes(&batch, root, Some(&git_dir));
+    let (changed, count) = batch_changes(&batch, root, Some(&git_dir), None);
     assert_eq!(changed, vec!["a.md".to_string()]);
     assert_eq!(count, 1);
 }
@@ -774,6 +884,6 @@ fn an_ignored_skill_edit_still_reaches_the_callback() {
         DebouncedEvent { path, kind: DebouncedEventKind::Any },
         DebouncedEvent { path: root.join(".claude/settings.json"), kind: DebouncedEventKind::Any },
     ]);
-    let (changed, _) = batch_changes(&batch, root, None);
+    let (changed, _) = batch_changes(&batch, root, None, None);
     assert_eq!(changed, vec![".claude/skills/a/SKILL.md".to_string()]);
 }

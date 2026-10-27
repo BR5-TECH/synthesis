@@ -26,9 +26,11 @@ const OVERFETCH_FACTOR: usize = 5;
 /// SCC-FR-VXJL: the longest snippet, in characters.
 pub const SNIPPET_CHARS: usize = 280;
 
-/// SCC-FR-UYZW: run one semantic search and emit its hits and its end.
+/// SCC-FR-UYZW: run one semantic search and emit its hits and its end to
+/// `sink`, which is the application in production.
 pub(super) fn run<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
+    sink: &dyn SearchSink,
     search_id: &str,
     root: Option<crate::fs::RootFs>,
     query: &str,
@@ -36,7 +38,7 @@ pub(super) fn run<R: tauri::Runtime>(
     stop: &Stop,
 ) -> EndReason {
     let end = |reason: EndReason| {
-        app.ended(&SearchEndedPayload { search_id: search_id.to_string(), reason });
+        sink.ended(&SearchEndedPayload { search_id: search_id.to_string(), reason });
         reason
     };
     // SCC-FR-17: no project open — an id, no hits, and an immediate end.
@@ -68,7 +70,7 @@ pub(super) fn run<R: tauri::Runtime>(
         return end(reason);
     }
     if !hits.is_empty() {
-        app.results(&SearchResultsPayload { search_id: search_id.to_string(), hits });
+        sink.results(&SearchResultsPayload { search_id: search_id.to_string(), hits });
     }
     end(EndReason::Completed)
 }

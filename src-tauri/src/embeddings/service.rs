@@ -67,7 +67,8 @@ impl JobKind {
             JobKind::OpenCheck | JobKind::BranchUpdate | JobKind::RootUpdate => {
                 "Checking embeddings…"
             }
-            JobKind::ModelSwitch | JobKind::StaleRebuild => "Switching embedding model…",
+            JobKind::ModelSwitch => "Switching embedding model…",
+            JobKind::StaleRebuild => "Rebuilding embeddings…",
             JobKind::Reindex => "Reindexing embeddings…",
             JobKind::Incremental => "Updating embeddings…",
         }
@@ -191,7 +192,7 @@ pub struct EmbeddingsService {
     pub(super) wake: Condvar,
     /// EMB-FR-SWRV: a job stops when this moves past the value it started at.
     pub(super) epoch: AtomicU64,
-    pub(super) embedder: Mutex<Option<Box<dyn Embedder>>>,
+    pub(super) embedder: Mutex<Option<LoadedModel>>,
     /// Bumped each time a model is put in `embedder`, so a drop asked for
     /// before that never removes the newer model.
     pub(super) embedder_serial: AtomicU64,
@@ -516,7 +517,7 @@ impl EmbeddingsService {
         let _leave = Leave(self);
         let mut slot = self.embedder.lock().map_err(|_| "model poisoned")?;
         let vectors = match slot.as_mut() {
-            Some(model) => model.embed(&[query.to_string()])?,
+            Some(model) => model.embedder.embed(&[model.prefixes.query(query)])?,
             None => return Err("no model is loaded".to_string()),
         };
         vectors.into_iter().next().ok_or_else(|| "the model returned no vector".to_string())
@@ -532,10 +533,16 @@ impl EmbeddingsService {
         }
         let mut slot = self.embedder.lock().map_err(|_| "model poisoned")?;
         match slot.as_mut() {
-            Some(model) => model.embed(texts),
+            Some(model) => model.embedder.embed(&model.prefixes.passages(texts)),
             None => Err("no model is loaded".to_string()),
         }
     }
+}
+
+/// The model in use, with the prefixes it is embedded with (EMB-FR-QQER).
+pub(super) struct LoadedModel {
+    pub embedder: Box<dyn Embedder>,
+    pub prefixes: super::catalog::Prefixes,
 }
 
 pub(super) fn status_of(st: &State) -> EmbeddingsStatus {

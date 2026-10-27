@@ -174,3 +174,26 @@ fn a_content_change_of_the_same_size_gives_a_new_revision() {
     let after = docs.snapshot().documents[0].revision.clone();
     assert_ne!(before, after);
 }
+
+// EMB-FR-JIJH: the collection reports a refresh only after one committed its
+// snapshot since the open: not while closed, not right after an open, and not
+// when the stored sources could not be read.
+#[test]
+fn has_refreshed_follows_the_first_refresh_of_each_open() {
+    let docs = Docs::new();
+    assert!(!docs.collection.has_refreshed(), "open, not read yet");
+    docs.refresh();
+    assert!(docs.collection.has_refreshed());
+
+    docs.collection.close();
+    assert!(!docs.collection.has_refreshed(), "closed");
+    docs.collection.open("project-key", Ok(Vec::new()));
+    assert!(!docs.collection.has_refreshed(), "a new open starts unread");
+    docs.refresh();
+    assert!(docs.collection.has_refreshed());
+
+    docs.collection.close();
+    docs.collection.open("project-key", Err(()));
+    docs.refresh();
+    assert!(!docs.collection.has_refreshed(), "unreadable sources are never read");
+}

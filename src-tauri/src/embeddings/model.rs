@@ -14,6 +14,18 @@ pub trait Embedder: Send {
     fn embed(&mut self, texts: &[String]) -> Result<Vec<Vec<f32>>, String>;
 }
 
+/// EMB-FR-LYKW: `text` with the query string of every URL in it removed, so
+/// a signed download link in an error does not reach the status or the log.
+pub fn without_url_queries(text: &str) -> String {
+    text.split(' ')
+        .map(|word| match (word.contains("://"), word.find('?')) {
+            (true, Some(at)) => &word[..at],
+            _ => word,
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Download progress in bytes (EMB-FR-LYKW).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DownloadProgress {
@@ -39,21 +51,27 @@ pub trait EmbedderFactory: Send + Sync {
 /// The production factory: HuggingFace downloads into `cache_dir`, FastEmbed
 /// inference.
 pub struct FastEmbedFactory {
-    pub cache_dir: PathBuf,
+    /// EMB-FR-KUFM: `app_data_dir()/models/`, or the reason it is not
+    /// available. Without it, nothing downloads and nothing loads.
+    pub cache_dir: Result<PathBuf, String>,
 }
 
 impl FastEmbedFactory {
+    fn cache_dir(&self) -> Result<PathBuf, String> {
+        self.cache_dir.clone()
+    }
+
     fn api(&self) -> Result<hf_hub::api::sync::Api, String> {
         hf_hub::api::sync::ApiBuilder::new()
-            .with_cache_dir(self.cache_dir.clone())
+            .with_cache_dir(self.cache_dir()?)
             .with_progress(false)
             .with_token(std::env::var("HF_TOKEN").ok().filter(|t| !t.trim().is_empty()))
             .build()
             .map_err(|e| format!("hub client: {e}"))
     }
 
-    fn cache_repo(&self, repo: &str) -> hf_hub::CacheRepo {
-        hf_hub::Cache::new(self.cache_dir.clone()).model(repo.to_string())
+    fn cache_repo(&self, repo: &str) -> Result<hf_hub::CacheRepo, String> {
+        Ok(hf_hub::Cache::new(self.cache_dir()?).model(repo.to_string()))
     }
 
     /// The files a model needs. The weights of a Candle model are one file or
@@ -80,7 +98,7 @@ impl FastEmbedFactory {
     ) -> Result<Vec<String>, String> {
         const SINGLE: &str = "model.safetensors";
         const INDEX: &str = "model.safetensors.index.json";
-        let cache = self.cache_repo(repo);
+        let cache = self.cache_repo(repo)?;
         if cache.get(SINGLE).is_some() {
             return Ok(vec![SINGLE.to_string()]);
         }
@@ -143,7 +161,9 @@ impl EmbedderFactory for FastEmbedFactory {
         let Ok((repo, files)) = self.files(spec, None) else {
             return false;
         };
-        let cache = self.cache_repo(&repo);
+        let Ok(cache) = self.cache_repo(&repo) else {
+            return false;
+        };
         files.iter().all(|file| cache.get(file).is_some())
     }
 
@@ -154,7 +174,7 @@ impl EmbedderFactory for FastEmbedFactory {
     ) -> Result<(), String> {
         let api = self.api()?;
         let (repo, files) = self.files(spec, Some(&api))?;
-        let cache = self.cache_repo(&repo);
+        let cache = self.cache_repo(&repo)?;
         let remote = api.model(repo.clone());
         let missing: Vec<&String> = files.iter().filter(|file| cache.get(file).is_none()).collect();
         // The total is known before the first byte: one ranged request per file.
@@ -184,10 +204,13 @@ impl EmbedderFactory for FastEmbedFactory {
     }
 
     fn load(&self, spec: &ModelSpec) -> Result<Box<dyn Embedder>, String> {
+        // EMB-FR-KUFM: with no cache folder, no backend may fall back to a
+        // folder of its own and download there.
+        let cache_dir = self.cache_dir()?;
         match &spec.source {
             ModelSource::Onnx { model, .. } => {
                 let options = fastembed::TextInitOptions::new(model.clone())
-                    .with_cache_dir(self.cache_dir.clone())
+                    .with_cache_dir(cache_dir)
                     .with_max_length(MAX_TOKENS)
                     .with_show_download_progress(false);
                 let model =
@@ -267,6 +290,8 @@ pub(crate) mod fake {
         pub texts: Mutex<Vec<String>>,
         /// When set, every embedding call fails.
         pub fail_embed: std::sync::atomic::AtomicBool,
+        /// The reason a failing call gives, `"embed failed"` when unset.
+        pub fail_reason: Mutex<Option<String>>,
         /// Runs once, inside the next embedding call — what a test does while
         /// a job is running, with no sleep.
         pub on_embed: Mutex<Option<Box<dyn FnOnce() + Send>>>,
@@ -288,7 +313,8 @@ pub(crate) mod fake {
                 hook();
             }
             if self.fail || self.log.fail_embed.load(Ordering::SeqCst) {
-                return Err("embed failed".to_string());
+                let reason = self.log.fail_reason.lock().unwrap().clone();
+                return Err(reason.unwrap_or_else(|| "embed failed".to_string()));
             }
             self.log.batches.lock().unwrap().push(texts.len());
             self.log.embedded.fetch_add(texts.len(), Ordering::SeqCst);
@@ -344,5 +370,44 @@ pub(crate) mod fake {
         fn load(&self, _spec: &ModelSpec) -> Result<Box<dyn Embedder>, String> {
             Ok(Box::new(FakeEmbedder { log: self.log.clone(), fail: false }))
         }
+    }
+}
+
+#[cfg(test)]
+mod no_cache_folder {
+    use super::*;
+
+    // EMB-FR-LYKW: the query string of a URL in a failure reason is removed;
+    // the rest of the reason stays.
+    #[test]
+    fn a_failure_reason_loses_the_query_strings_of_its_urls() {
+        let reason =
+            "model.onnx: https://cdn.example/x/model.onnx?X-Amz-Signature=abc&e=1: status 403";
+        assert_eq!(
+            without_url_queries(reason),
+            "model.onnx: https://cdn.example/x/model.onnx status 403"
+        );
+        assert_eq!(without_url_queries("network unreachable? retry"), "network unreachable? retry");
+    }
+
+    fn factory() -> FastEmbedFactory {
+        FastEmbedFactory { cache_dir: Err("the model cache folder is not available".to_string()) }
+    }
+
+    // EMB-FR-KUFM: with no `app_data_dir()`, no model is cached, no download
+    // starts, and no backend loads a model from a folder of its own.
+    #[test]
+    fn without_a_cache_folder_nothing_downloads_and_nothing_loads() {
+        let onnx = super::super::catalog::find("BGESmallENV15").unwrap();
+        let candle = super::super::catalog::find("NomicEmbedTextV2MoE").unwrap();
+        let factory = factory();
+        assert!(!factory.is_cached(&onnx));
+        assert!(!factory.is_cached(&candle));
+        let mut reported = false;
+        let error = factory.download(&onnx, &mut |_| reported = true).unwrap_err();
+        assert!(error.contains("not available"), "{error}");
+        assert!(!reported, "no progress for a download that did not start");
+        assert!(factory.load(&onnx).err().unwrap().contains("not available"));
+        assert!(factory.load(&candle).err().unwrap().contains("not available"));
     }
 }

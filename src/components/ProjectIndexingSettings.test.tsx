@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { resetLogBufferForTest } from "../logging";
@@ -9,10 +9,23 @@ const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
+type Handler = (event: { payload: unknown }) => void;
+const listeners = new Map<string, Handler[]>();
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: () => Promise.resolve(() => undefined),
+  listen: (name: string, handler: Handler) => {
+    listeners.set(name, [...(listeners.get(name) ?? []), handler]);
+    return Promise.resolve(() => {
+      listeners.set(name, (listeners.get(name) ?? []).filter((h) => h !== handler));
+    });
+  },
   emit: () => Promise.resolve(),
 }));
+
+function pushStatus(next: EmbeddingsStatus) {
+  act(() => {
+    for (const handler of listeners.get("embeddings-status-changed") ?? []) handler({ payload: next });
+  });
+}
 
 import { ProjectIndexingSettings } from "./ProjectIndexingSettings";
 
@@ -40,6 +53,7 @@ function project(over: Partial<EmbeddingsProjectStatus> = {}): EmbeddingsProject
 
 beforeEach(() => {
   resetLogBufferForTest();
+  listeners.clear();
   invokeMock.mockReset();
   mode = "use_global";
   refuseMode = null;
@@ -205,5 +219,36 @@ describe("Project Indexing section", () => {
     render(<ProjectIndexingSettings />);
     await user.click(await screen.findByRole("button", { name: "Reindex…" }));
     expect(await screen.findByTestId("reindex-dialog")).toHaveTextContent(/whole project and the documents again/);
+  });
+
+  it("SET-FR-VGQB: the model download shows its progress here too, with no Retry", async () => {
+    status = {
+      enabled: true,
+      model: "BGESmallENV15",
+      modelState: "downloading",
+      download: { completedBytes: 5 * 1024 * 1024, totalBytes: 10 * 1024 * 1024 },
+      project: project({ state: "preparing" }),
+    };
+    render(<ProjectIndexingSettings />);
+    expect(await screen.findByTestId("embeddings-download")).toHaveTextContent("5.0 MB of 10.0 MB");
+    pushStatus({ ...status, modelState: "ready", download: undefined });
+    await waitFor(() => expect(screen.queryByTestId("embeddings-download")).toBeNull());
+    pushStatus({ ...status, modelState: "failed", modelError: "network unreachable" });
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(calls("retry_embeddings_model_download")).toHaveLength(0);
+  });
+
+  it("SET-FR-WZPS: the dialog closes when the project status goes, and does not open again", async () => {
+    const user = userEvent.setup();
+    render(<ProjectIndexingSettings />);
+    await user.click(await screen.findByRole("button", { name: "Reindex…" }));
+    expect(await screen.findByTestId("reindex-dialog")).toBeInTheDocument();
+    pushStatus({ enabled: true, model: "BGESmallENV15", modelState: "ready" });
+    await waitFor(() => expect(screen.queryByTestId("reindex-dialog")).toBeNull());
+    expect(screen.getByTestId("project-indexing-working")).toHaveTextContent(/not known yet/);
+    pushStatus({ enabled: true, model: "BGESmallENV15", modelState: "ready", project: project() });
+    await screen.findByTestId("project-indexing-status");
+    expect(screen.queryByTestId("reindex-dialog")).toBeNull();
+    expect(calls("start_reindex")).toHaveLength(0);
   });
 });

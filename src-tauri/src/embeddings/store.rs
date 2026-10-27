@@ -11,14 +11,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Once;
 use std::time::Duration;
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
 /// EMB-FR-RFNF: the file name of the store in the repository store.
 pub const STORE_FILE: &str = "embeddings.sqlite";
 
 /// EMB-FR-UJLS: the schema version of this build. A store with another version
-/// is stale and is built again.
-pub const SCHEMA_VERSION: &str = "1";
+/// is stale and is built again. EMB-FR-QQER: a change of the model prefixes
+/// (`catalog::prefixes_for`) changes this version too.
+pub const SCHEMA_VERSION: &str = "2";
 
 /// EMB-FR-RFBJ: how long an open waits for another process before the store is
 /// unavailable for that attempt.
@@ -133,9 +134,15 @@ impl Store {
         }
     }
 
-    /// Open an existing store for a search, with no schema change.
+    /// Open an existing store for a search, read-only. A search writes nothing:
+    /// it sets no journal mode, creates no table, and creates no file.
     pub fn open_existing(path: &Path) -> Result<Store, String> {
-        Store::connect(path)
+        register_sqlite_vec();
+        let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        let conn = Connection::open_with_flags(path, flags)
+            .map_err(|e| format!("{UNAVAILABLE}: open: {e}"))?;
+        conn.busy_timeout(BUSY_TIMEOUT).map_err(|e| format!("{UNAVAILABLE}: busy timeout: {e}"))?;
+        Ok(Store { conn })
     }
 
     /// FSA-FR-19 exception, deliberate and narrow: SQLite owns its database
@@ -659,5 +666,25 @@ mod tests {
         assert_eq!(store.vector_count().unwrap(), 1, "only the documents layer needed `own`");
         assert_eq!(store.missing_vectors(&["shared".to_string()]).unwrap(), Vec::<String>::new());
         assert_eq!(store.layers().unwrap().iter().map(|l| l.id).collect::<Vec<_>>(), [root]);
+    }
+
+    // EMB-FR-BWTI, EMB-FR-RFBJ: a search opens the store read-only: a missing
+    // store is an error and no file is created, and a write through the search
+    // connection fails while the file stays as it was.
+    #[test]
+    fn a_search_connection_is_read_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(STORE_FILE);
+        let missing = Store::open_existing(&path).err().unwrap();
+        assert!(missing.starts_with(UNAVAILABLE), "{missing}");
+        assert!(!path.exists(), "a search creates no store");
+
+        drop(open(&dir, "fake"));
+        let before = std::fs::read(&path).unwrap();
+        let reader = Store::open_existing(&path).unwrap();
+        assert!(reader.layers().unwrap().is_empty());
+        assert!(reader.conn.execute("DELETE FROM meta", []).is_err());
+        drop(reader);
+        assert_eq!(std::fs::read(&path).unwrap(), before);
     }
 }

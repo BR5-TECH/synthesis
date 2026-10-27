@@ -83,6 +83,8 @@ pub fn catalog_guard_main() -> Option<i32> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // EMB-FR-KUFM: before any other thread starts.
+    embeddings::pin_model_cache_environment();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())

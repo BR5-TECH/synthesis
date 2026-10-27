@@ -34,6 +34,26 @@ impl Fixture {
         git_facts(self.repo_dir.path())
     }
 
+    /// Point `refs/heads/main` at a new commit that adds `files`, while the
+    /// `HEAD` stays where it is.
+    fn commit_on_main(&self, files: &[(&str, &str)]) -> git2::Oid {
+        let head = self.repo.head().unwrap().name().unwrap().to_string();
+        self.repo.set_head("refs/heads/main").unwrap();
+        let oid = commit(&self.repo, files);
+        self.repo.set_head(&head).unwrap();
+        oid
+    }
+
+    /// Check `branch` out in a new linked worktree, outside the main one.
+    fn add_worktree(&self, branch: &str) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let reference = self.repo.find_reference(&format!("refs/heads/{branch}")).unwrap();
+        let mut options = git2::WorktreeAddOptions::new();
+        options.reference(Some(&reference));
+        self.repo.worktree(branch, &dir.path().join("wt"), Some(&options)).unwrap();
+        dir
+    }
+
     fn branch(&self, name: &str) {
         let head = self.repo.head().unwrap().peel_to_commit().unwrap();
         self.repo.branch(name, &head, false).unwrap();
@@ -82,12 +102,30 @@ impl Run {
         skip_root: bool,
         drop: Option<ReindexScope>,
     ) -> Result<Outcome, String> {
+        self.eval_docs(store, fx, work, Some(docs), skip_root, drop)
+    }
+
+    /// `eval`, with `None` for documents that the collection has not read.
+    fn eval_docs(
+        &self,
+        store: &mut Store,
+        fx: &Fixture,
+        work: &Chunks,
+        docs: Option<&Chunks>,
+        skip_root: bool,
+        drop: Option<ReindexScope>,
+    ) -> Result<Outcome, String> {
         let root_dir = fx.repo_dir.path().to_path_buf();
         let reader = move |tip: &str, prefix: &str| {
             let repo = Repository::open(&root_dir).unwrap();
             root_chunks(&repo, tip, prefix)
         };
-        let facts = fx.facts();
+        // The worker lists the worktrees for a full evaluation only.
+        let facts = if skip_root {
+            fx.facts()
+        } else {
+            crate::embeddings::layers::keep_checked_out(fx.facts(), fx.repo_dir.path())
+        };
         let mut embed = |texts: &[String]| -> Result<Vec<Vec<f32>>, String> {
             if self.fail.get() {
                 return Err("model failed".to_string());
@@ -250,7 +288,7 @@ fn a_project_outside_git_has_one_working_copy_layer() {
         &Evaluation {
             facts: &facts,
             working: &work,
-            documents: &Chunks::new(),
+            documents: Some(&Chunks::new()),
             skip_root: false,
             drop: None,
             root_reader: &reader,
@@ -554,7 +592,7 @@ fn a_wrong_number_of_vectors_fails_the_pass() {
         &Evaluation {
             facts: &facts,
             working: &work,
-            documents: &Chunks::new(),
+            documents: Some(&Chunks::new()),
             skip_root: false,
             drop: None,
             root_reader: &reader,
@@ -564,4 +602,190 @@ fn a_wrong_number_of_vectors_fails_the_pass() {
     .unwrap_err();
     assert!(err.contains("wrong number"));
     assert!(store.layers().unwrap().is_empty());
+}
+
+// EMB-FR-USBA: at a full evaluation, a branch that still exists but that no
+// worktree has checked out loses its layer.
+#[test]
+fn the_layer_of_a_branch_with_no_worktree_is_removed() {
+    let files = [("specifications/a.md", SPEC_A)];
+    let fx = Fixture::new(&files);
+    let mut store = fx.store();
+    let run = Run::new();
+    run.eval(&mut store, &fx, &working(&files), &Chunks::new(), false, None).unwrap();
+    fx.branch("feature");
+    run.eval(&mut store, &fx, &working(&files), &Chunks::new(), false, None).unwrap();
+    assert!(store.find_layer(LayerKind::Branch, Some("feature")).unwrap().is_some());
+
+    fx.repo.set_head("refs/heads/main").unwrap();
+    run.eval(&mut store, &fx, &working(&files), &Chunks::new(), false, None).unwrap();
+    assert!(fx.repo.find_branch("feature", git2::BranchType::Local).is_ok(), "the branch stays");
+    assert!(store.find_layer(LayerKind::Branch, Some("feature")).unwrap().is_none());
+}
+
+// EMB-FR-USBA: a branch that a linked worktree has checked out keeps its layer
+// while another worktree is active; the layer goes when that worktree is
+// removed.
+#[test]
+fn a_branch_checked_out_in_a_linked_worktree_keeps_its_layer() {
+    let files = [("specifications/a.md", SPEC_A)];
+    let fx = Fixture::new(&files);
+    let mut store = fx.store();
+    let run = Run::new();
+    run.eval(&mut store, &fx, &working(&files), &Chunks::new(), false, None).unwrap();
+    fx.branch("feature");
+    let edited = SPEC_A.replace("torn down", "removed");
+    let work = working(&[("specifications/a.md", edited.as_str())]);
+    run.eval(&mut store, &fx, &work, &Chunks::new(), false, None).unwrap();
+    fx.repo.set_head("refs/heads/main").unwrap();
+    let linked = fx.add_worktree("feature");
+
+    run.eval(&mut store, &fx, &working(&files), &Chunks::new(), false, None).unwrap();
+    assert!(store.find_layer(LayerKind::Branch, Some("feature")).unwrap().is_some());
+
+    std::fs::remove_dir_all(linked.path().join("wt")).unwrap();
+    let mut prune = git2::WorktreePruneOptions::new();
+    prune.valid(true).working_tree(true);
+    fx.repo.find_worktree("feature").unwrap().prune(Some(&mut prune)).unwrap();
+    run.eval(&mut store, &fx, &working(&files), &Chunks::new(), false, None).unwrap();
+    assert!(store.find_layer(LayerKind::Branch, Some("feature")).unwrap().is_none());
+}
+
+// EMB-FR-USBA, EMB-FR-BZZT: an incremental pass deletes no layer of another
+// branch; only a full evaluation does.
+#[test]
+fn an_incremental_pass_keeps_the_layers_of_other_branches() {
+    let files = [("specifications/a.md", SPEC_A)];
+    let fx = Fixture::new(&files);
+    let mut store = fx.store();
+    let run = Run::new();
+    run.eval(&mut store, &fx, &working(&files), &Chunks::new(), false, None).unwrap();
+    fx.branch("feature");
+    run.eval(&mut store, &fx, &working(&files), &Chunks::new(), false, None).unwrap();
+    fx.repo.set_head("refs/heads/main").unwrap();
+    run.eval(&mut store, &fx, &working(&files), &Chunks::new(), true, None).unwrap();
+    assert!(store.find_layer(LayerKind::Branch, Some("feature")).unwrap().is_some());
+}
+
+// EMB-FR-USBA, EMB-FR-DQVX: a pass that skips the root records in the branch
+// layer the tip that the root layer holds, not a tip it did not read. A full
+// evaluation then records the new tip in both.
+#[test]
+fn the_branch_layer_records_the_tip_the_root_layer_holds() {
+    let files = [("specifications/a.md", SPEC_A)];
+    let fx = Fixture::new(&files);
+    let mut store = fx.store();
+    let run = Run::new();
+    fx.branch("feature");
+    run.eval(&mut store, &fx, &working(&files), &Chunks::new(), false, None).unwrap();
+    let old_tip = fx.facts().root_tip().unwrap().to_string();
+    let new_tip = fx.commit_on_main(&[("specifications/b.md", SPEC_B)]).to_string();
+    assert_eq!(fx.facts().root_tip(), Some(new_tip.as_str()));
+
+    let edited = SPEC_A.replace("torn down", "removed");
+    let work = working(&[("specifications/a.md", edited.as_str())]);
+    let outcome = run.eval(&mut store, &fx, &work, &Chunks::new(), true, None).unwrap();
+    let root = store.find_layer(LayerKind::Root, None).unwrap().unwrap();
+    let branch = store.find_layer(LayerKind::Branch, Some("feature")).unwrap().unwrap();
+    assert_eq!(root.tip.as_deref(), Some(old_tip.as_str()));
+    assert_eq!(branch.root_tip.as_deref(), Some(old_tip.as_str()));
+    assert_eq!(outcome.root_tip.as_deref(), Some(old_tip.as_str()));
+
+    let outcome = run.eval(&mut store, &fx, &work, &Chunks::new(), false, None).unwrap();
+    let root = store.find_layer(LayerKind::Root, None).unwrap().unwrap();
+    let branch = store.find_layer(LayerKind::Branch, Some("feature")).unwrap().unwrap();
+    assert_eq!(root.tip.as_deref(), Some(new_tip.as_str()));
+    assert_eq!(branch.root_tip.as_deref(), Some(new_tip.as_str()));
+    assert_eq!(outcome.root_tip.as_deref(), Some(new_tip.as_str()));
+}
+
+// EMB-FR-JIJH, EMB-FR-HBLQ: documents that the collection has not read keep
+// the stored documents layer and its vectors; the first read compares them,
+// and a read with no documents then empties the layer.
+#[test]
+fn unread_documents_keep_the_stored_documents_layer() {
+    let files = [("specifications/a.md", SPEC_A)];
+    let fx = Fixture::new(&files);
+    let mut store = fx.store();
+    let run = Run::new();
+    let docs = working(&[("doc-1", "# Manual\n\nRate limits."), ("doc-2", "# Other\n\nText.")]);
+    let first = run.eval(&mut store, &fx, &working(&files), &docs, false, None).unwrap();
+    let layer = first.documents_layer.unwrap();
+    let entries = store.entries(layer).unwrap();
+    let vectors = store.vector_count().unwrap();
+    run.take();
+
+    let kept = run.eval_docs(&mut store, &fx, &working(&files), None, false, None).unwrap();
+    assert_eq!(kept.documents_layer, Some(layer));
+    assert_eq!(kept.document_chunks, 2);
+    assert_eq!(store.entries(layer).unwrap(), entries);
+    assert_eq!(store.vector_count().unwrap(), vectors);
+    assert!(run.take().is_empty());
+
+    let read = run.eval(&mut store, &fx, &working(&files), &docs, true, None).unwrap();
+    assert_eq!(read.document_chunks, 2);
+    assert!(run.take().is_empty(), "the kept vectors serve the read documents");
+
+    let none = run.eval(&mut store, &fx, &working(&files), &Chunks::new(), true, None).unwrap();
+    assert_eq!(none.document_chunks, 0);
+    assert_eq!(store.vector_count().unwrap(), vectors - 2);
+}
+
+// EMB-FR-JIJH: with no stored documents layer and no documents read, the pass
+// has no documents layer and does not fail.
+#[test]
+fn unread_documents_with_no_stored_layer_give_no_documents_layer() {
+    let files = [("specifications/a.md", SPEC_A)];
+    let fx = Fixture::new(&files);
+    let mut store = fx.store();
+    let run = Run::new();
+    let outcome = run.eval_docs(&mut store, &fx, &working(&files), None, false, None).unwrap();
+    assert_eq!(outcome.documents_layer, None);
+    assert_eq!(outcome.document_chunks, 0);
+    assert_eq!(outcome.spec_chunks, 2);
+}
+
+// EMB-FR-JIJH, EMB-FR-HRYV: a Reindex while the documents are not read keeps
+// the documents layer and its vectors, for both scopes.
+#[test]
+fn a_reindex_keeps_documents_that_were_not_read() {
+    let files = [("specifications/a.md", SPEC_A)];
+    let fx = Fixture::new(&files);
+    let mut store = fx.store();
+    let run = Run::new();
+    let docs = working(&[("doc-1", "# Manual\n\nRate limits.")]);
+    run.eval(&mut store, &fx, &working(&files), &docs, false, None).unwrap();
+    for scope in [ReindexScope::CurrentBranch, ReindexScope::WholeTrace] {
+        let outcome =
+            run.eval_docs(&mut store, &fx, &working(&files), None, false, Some(scope)).unwrap();
+        assert_eq!(outcome.document_chunks, 1, "{scope:?}");
+        let layer = outcome.documents_layer.unwrap();
+        assert_eq!(store.entries(layer).unwrap().len(), 1, "{scope:?}");
+    }
+}
+
+// EMB-FR-QNWF, EMB-FR-MGML: outside Git, both scopes embed the one
+// working-copy layer and the documents again, and there is no root layer.
+#[test]
+fn a_reindex_outside_git_embeds_the_working_copy_layer_again() {
+    let dir = tempfile::tempdir().unwrap();
+    // A repository elsewhere fills the fixture; the project folder is in none.
+    let elsewhere = tempfile::tempdir().unwrap();
+    let fx = Fixture {
+        repo_dir: dir,
+        store_dir: tempfile::tempdir().unwrap(),
+        repo: Repository::init(elsewhere.path()).unwrap(),
+    };
+    assert_eq!(fx.facts(), GitFacts::NoRepository);
+    let mut store = fx.store();
+    let run = Run::new();
+    let work = working(&[("specifications/a.md", SPEC_A)]);
+    let docs = working(&[("doc-1", "# Manual\n\nRate limits.")]);
+    run.eval(&mut store, &fx, &work, &docs, false, None).unwrap();
+    run.take();
+    for scope in [ReindexScope::CurrentBranch, ReindexScope::WholeTrace] {
+        run.eval(&mut store, &fx, &work, &docs, false, Some(scope)).unwrap();
+        assert_eq!(run.take().len(), 3, "two working chunks and one document chunk: {scope:?}");
+    }
+    assert!(store.find_layer(LayerKind::Root, None).unwrap().is_none());
 }

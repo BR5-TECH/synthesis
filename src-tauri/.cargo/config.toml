@@ -1,0 +1,12 @@
+# EMB-FR-YGXX: an aarch64 Linux build enables the half-precision extension.
+# `gemm-common`, under Candle, has `asm!` helpers with half-precision
+# instructions and no `#[target_feature(enable = "fp16")]`. A debug build emits
+# them as separate functions, and without the feature they do not assemble
+# ("instruction requires: fullfp16"). The macOS aarch64 target has the feature
+# by default. Such a build runs only on a CPU with ARMv8.2 FP16.
+#
+# Cargo reads this file only when it runs from `src-tauri/` or below. A
+# `RUSTFLAGS` variable replaces these flags, so a build that sets one adds
+# `-C target-feature=+fp16` to it itself.
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "target-feature=+fp16"]

@@ -20,6 +20,48 @@ fn two_images_exist_and_pin_their_base_by_digest() {
     assert_ne!(CLAUDE_DOCKERFILE, CODEX_DOCKERFILE);
 }
 
+/// AVI-FR-DHCF — both images build from one base, Debian 13 (trixie). Its
+/// glibc is new enough for the prebuilt ONNX Runtime that `ort-sys` links.
+/// The version itself is a fact of the built image, so `verify.sh` asks it.
+#[test]
+fn both_images_build_from_one_trixie_base() {
+    let bases: Vec<String> = dockerfiles()
+        .iter()
+        .map(|(vendor, dockerfile)| {
+            directives(dockerfile)
+                .into_iter()
+                .find(|line| line.starts_with("FROM "))
+                .unwrap_or_else(|| panic!("{vendor} names no base"))
+                .to_string()
+        })
+        .collect();
+    for base in &bases {
+        assert!(
+            base.starts_with("FROM node:22-trixie-slim@sha256:"),
+            "a base other than the Debian 13 one AVI-FR-DHCF names: {base}"
+        );
+    }
+    assert!(bases.iter().all(|base| base == &bases[0]), "the images build from different bases");
+}
+
+/// EMB-FR-YGXX — no image sets `RUSTFLAGS` or `CARGO_ENCODED_RUSTFLAGS`. Either
+/// one replaces the target flags of `src-tauri/.cargo/config.toml`, so the
+/// `fp16` feature would be lost in the image where the aarch64 Linux build
+/// runs. That the flag takes effect is shown only by a real aarch64 Linux build
+/// from `src-tauri/`; no suite here compiles that target.
+#[test]
+fn no_image_overrides_the_cargo_target_flags() {
+    for (vendor, dockerfile) in dockerfiles() {
+        for assignment in env_assignments(dockerfile) {
+            let name = assignment.split('=').next().unwrap_or_default();
+            assert!(
+                name != "RUSTFLAGS" && name != "CARGO_ENCODED_RUSTFLAGS",
+                "{vendor} sets {name}, which replaces the fp16 flag of EMB-FR-YGXX"
+            );
+        }
+    }
+}
+
 /// AVI-FR-06, AVI-FR-13 — the vendor CLI is installed at an exact version, never from a
 /// floating tag, and that version is the one the manifest records.
 #[test]
@@ -146,16 +188,16 @@ fn each_image_installs_exactly_the_packages_avi_names() {
                 "curl",
                 "fonts-liberation",
                 "git",
-                "libasound2",
-                "libatk-bridge2.0-0",
-                "libatk1.0-0",
-                "libatspi2.0-0",
+                "libasound2t64",
+                "libatk-bridge2.0-0t64",
+                "libatk1.0-0t64",
+                "libatspi2.0-0t64",
                 "libcairo2",
-                "libcups2",
+                "libcups2t64",
                 "libdbus-1-3",
                 "libdrm2",
                 "libgbm1",
-                "libglib2.0-0",
+                "libglib2.0-0t64",
                 "libnspr4",
                 "libnss3",
                 "libpango-1.0-0",

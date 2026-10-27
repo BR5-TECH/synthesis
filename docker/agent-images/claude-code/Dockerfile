@@ -6,9 +6,13 @@
 # (AVI-FR-02, AVI-FR-16).
 #
 # AVI-FR-05: the base is pinned by digest, not by tag, so a rebuild a year from
-# now reproduces this foundation rather than whatever `22-bookworm-slim` has
+# now reproduces this foundation rather than whatever `22-trixie-slim` has
 # come to mean by then.
-FROM node:22-bookworm-slim@sha256:d649c27dae7ba0137b3cef5dd75baa422c08dc3d9e3fc0c23dfb172dc3cc6436
+#
+# AVI-FR-DHCF: Debian 13 (trixie), because the work links a prebuilt ONNX
+# Runtime archive (`ort-sys`, under the embeddings index) that calls glibc 2.38
+# functions. On an older C library the application build does not link.
+FROM node:22-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf
 
 # AVI-FR-02: CA certificates because the agent reaches its vendor's service over
 # TLS, curl because the vendor CLI shells out to it, and Python because
@@ -20,7 +24,7 @@ FROM node:22-bookworm-slim@sha256:d649c27dae7ba0137b3cef5dd75baa422c08dc3d9e3fc0
 # than a flag that overrides it.
 #
 # The interpreter's version is not named here. It is the one the pinned base
-# digest carries (Python 3.11 today), which is the reproducibility argument
+# digest carries (Python 3.13 today), which is the reproducibility argument
 # AVI-FR-05 already makes for the rest of this layer.
 #
 # The `lib*` packages and `fonts-liberation` are the browser's floor
@@ -75,16 +79,16 @@ RUN apt-get update \
         curl \
         fonts-liberation \
         git \
-        libasound2 \
-        libatk-bridge2.0-0 \
-        libatk1.0-0 \
-        libatspi2.0-0 \
+        libasound2t64 \
+        libatk-bridge2.0-0t64 \
+        libatk1.0-0t64 \
+        libatspi2.0-0t64 \
         libcairo2 \
-        libcups2 \
+        libcups2t64 \
         libdbus-1-3 \
         libdrm2 \
         libgbm1 \
-        libglib2.0-0 \
+        libglib2.0-0t64 \
         libnspr4 \
         libnss3 \
         libpango-1.0-0 \

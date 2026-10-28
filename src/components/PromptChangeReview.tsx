@@ -51,7 +51,7 @@ import type { TargetEditing } from "./DiffTarget";
 import { useHistoryAccelerators } from "../hooks/useHistoryAccelerators";
 import { logError, logInfo, logWarn } from "../logging";
 import { originFor } from "../state/discussionOrigin";
-import { loggableTurnFailure } from "./CommentRail/messages";
+import { loggableTurnFailure } from "./discussion/messages";
 import {
   closePromptReview,
   usePromptProposals,

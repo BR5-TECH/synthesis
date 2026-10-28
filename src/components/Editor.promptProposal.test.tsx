@@ -291,7 +291,7 @@ describe("the pending indication (EDT-FR-16, PCR-FR-16)", () => {
     ).toBeInTheDocument();
   });
 
-  it("EDT-FR-16, EDT-FR-LGQA, EDT-FR-84: the cluster reads comments, the indication, the table of contents, then the mode toggle", async () => {
+  it("EDT-FR-16, EDT-FR-LGQA, EDT-FR-84, CMT-FR-29: the cluster reads the indication, the table of contents, the mode toggle, then the column's controls", async () => {
     proposals = [proposal()];
     render(
       <Editor
@@ -307,18 +307,22 @@ describe("the pending indication (EDT-FR-16, PCR-FR-16)", () => {
       "editor-prompt-proposal-indication",
     );
     const cluster = indication.closest(".editor__actions") as HTMLElement;
-    const comments = cluster.querySelector(".editor__comments-toggle");
-    expect(comments).not.toBeNull();
     const toc = within(cluster).getByRole("button", { name: "Table of contents" });
     const toggle = within(cluster).getByRole("button", {
       name: "Edit as Markdown source",
     });
-    expect(
-      comments!.compareDocumentPosition(indication) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    const presets = within(cluster).getByRole("radiogroup");
+    const hide = within(cluster).getByTestId("editor-discussion-toggle");
     // The pair rule: the indication stands directly before the pair, and no
     // control stands between the table of contents and the toggle.
     expect(toc.closest(".toc")?.previousElementSibling).toBe(indication);
     expect(toc.closest(".toc")?.nextElementSibling).toBe(toggle);
+    // CMT-FR-29: the column's presets follow the toggle, and the control that
+    // hides the column is the last in the cluster.
+    expect(
+      toggle.compareDocumentPosition(presets) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const buttons = cluster.querySelectorAll("button");
+    expect(buttons[buttons.length - 1]).toBe(hide);
   });
 });

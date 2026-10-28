@@ -111,31 +111,6 @@
   color: var(--accent);
 }
 
-/* EDT-FR-63 / CMT-FR-64: where the page sits along the tab's inline axis.
-   Centring is what the tab does with field it has no other use for — so where
-   the margin beside the page carries comments and the tab is too narrow to
-   leave them their measure, the page gives up its LEADING field and slides
-   toward that edge, widening the trailing field until the cards fit in it. Its
-   measure is untouched, so nothing reflows and the caret does not move.
-
-   `100%` resolves at each use site against that element's containing block, and
-   the page, the raw-text sheet and the frontmatter region all have the tab's own
-   width behind them — which is why one declaration here reaches all three and
-   they cannot slide apart from one another.
-
-   The middle term is the leading field left when the trailing one has taken what
-   it needs; the upper clamp is the centred position, so a wide tab keeps it, and
-   the lower is the inset the page keeps from the tab's edge, which it never
-   passes. A rail that is closed, or whose cards have gone below the page, leaves
-   the variable unset and the page centred (the `auto` fallback at each use). */
-.editor-tab[data-rail="open"][data-comments="beside"],
-.draft-editor[data-rail="open"][data-comments="beside"] {
-  --page-lead: clamp(
-    var(--doc-page-inset),
-    calc(100% - var(--doc-page-outer) - var(--comment-margin-need)),
-    calc((100% - var(--doc-page-outer)) / 2)
-  );
-}
 /* EDT-FR-63: the editing surface renders as a **page** — a bounded sheet
    carrying a background of its own, inset from the tab's boundaries on every
    side and separated from the **field** behind it by an edge, so where the
@@ -164,9 +139,8 @@
     var(--doc-page-outer),
     calc(100% - var(--doc-page-inset) * 2)
   );
-  /* EDT-FR-63: centred, unless the comment margin beside it needs the width —
-     see `--page-lead` above. */
-  margin: var(--doc-page-inset) auto var(--doc-page-inset) var(--page-lead, auto);
+  /* EDT-FR-63: centred on the field. */
+  margin: var(--doc-page-inset) auto;
   background: var(--doc-page-bg);
   border: 1px solid var(--border-1);
   border-radius: var(--doc-page-radius);
@@ -277,6 +251,14 @@
 }
 /* EDT-FR-16: right-aligned cluster of graphical action controls. */
 .editor__actions { display: flex; align-items: center; gap: 4px; flex: none; }
+/* DDS-FR-PNXR / DDS-FR-XQMF: the column's split controls keep the spacing they
+   have in the New Artifact tab's action row, so the two tabs read alike. */
+.editor__split-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 6px;
+}
 /* EDT-FR-OWNT / EDT-FR-PNGU / EDT-FR-IZHD: the dropdowns of the Editor's
    chrome — the diagram type menu of the toolbar and the table of contents
    panel. Each is the filterable selector (`filterable-select.css`) under an
@@ -359,7 +341,7 @@
     var(--doc-page-outer),
     calc(100% - var(--doc-page-inset) * 2)
   );
-  margin: var(--doc-page-inset) auto var(--doc-page-inset) var(--page-lead, auto);
+  margin: var(--doc-page-inset) auto var(--doc-page-inset) auto;
   background: var(--doc-page-bg);
   border: 1px solid var(--border-1);
   border-radius: var(--doc-page-radius);
@@ -451,7 +433,7 @@
     var(--doc-page-outer),
     calc(100% - var(--doc-page-inset) * 2)
   );
-  margin: var(--doc-page-inset) auto 0 var(--page-lead, auto);
+  margin: var(--doc-page-inset) auto 0 auto;
   border: 1px solid var(--border-1);
   border-bottom: 0;
   border-radius: var(--doc-page-radius) var(--doc-page-radius) 0 0;
@@ -477,13 +459,6 @@
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }
-/* …and the comment layer follows the page's top wherever it is. The rail is
-   pinned to where the page STARTS, not to a fixed inset (CMT-FR-27): the page
-   gives up its top margin to the frontmatter region above it, so a rail still
-   held at `--doc-page-inset` puts every card exactly that far below the line it
-   annotates — on every artifact that carries frontmatter, which is most of
-   them. */
-.editor-tab[data-frontmatter="on"] .comment-rail { top: 0; }
 .editor__frontmatter-label {
   font-family: var(--font-mono); font-size: var(--fs-ui-2xs); letter-spacing: 0.08em; text-transform: uppercase;
   /* Registered with the prose below rather than with the sheet's edge. */

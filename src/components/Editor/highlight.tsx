@@ -27,9 +27,7 @@ type LineSpan = { start: number; end: number; role: YamlRole };
  *
  * The rich body carries these as ProseMirror decorations; a `<textarea>` cannot
  * carry a mark at all, so on the source surface they are drawn on the same
- * aria-hidden layer the tokens and the find matches are — which is also what
- * makes them measurable, since the rail needs a pixel offset to align a card to
- * (CMT-FR-27).
+ * aria-hidden layer the tokens and the find matches are.
  */
 export interface LayerAnchor {
   start: number;

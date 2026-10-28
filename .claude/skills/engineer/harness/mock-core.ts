@@ -15,7 +15,7 @@ const now = "2026-07-28T11:24:00Z";
 
 /**
  * A state the seeded project cannot be driven into from the UI, asked for on the
- * URL instead — `?noComments`, `?notARepo`, `?noChanges`.
+ * URL instead — `?noComments`, `?notARepo`, `?noChanges`, `?pullLands`.
  *
  * The empty states of SNV-FR-60 are the reason this exists: a read-only panel
  * (Comments) and a panel reporting on the repository (Changes) have no action
@@ -9354,6 +9354,19 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     // merge-or-rebase dialog opens (GIT-FR-MRBQ).
     case "pull_current_branch":
       await new Promise((resolve) => setTimeout(resolve, 800));
+      // `?pullLands` answers a fast-forward, so the pull toast shows
+      // (NTF-FR-PLQV). The default answer opens the merge-or-rebase dialog.
+      if (harnessFlag("pullLands")) {
+        return {
+          state: "fast_forwarded",
+          branch: "main",
+          upstream: "origin/main",
+          ahead: 0,
+          behind: 3,
+          updatedPaths: ["src/App.tsx"],
+          refresh: { context: worktreeContext, remoteState: "refreshed" },
+        };
+      }
       return {
         state: "diverged",
         branch: "main",
@@ -9447,6 +9460,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
 
     // ---- comments --------------------------------------------------------
     case "list_comment_threads": {
+      // `?noComments` also empties every file's discussions, so the Editor's
+      // discussion column shows its empty statement (EDT / DDS-FR-QPHL).
+      if (harnessFlag("noComments")) return [];
       // The seeded anchors quote `LIB-library.md`'s body. `EDT-editor.md` is the
       // frontmatter-carrying artifact, so it gets its own set quoting passages
       // that actually occur in `MD_BODY_FM` — otherwise every thread on the one

@@ -41,7 +41,7 @@ import {
   setNotificationsEnabled,
   withdrawForRoot,
 } from "../state/notifications";
-import { clearToasts } from "../state/toasts";
+import { clearToasts, releaseToastsForRoot } from "../state/toasts";
 import { logDebug, logInfo } from "../logging";
 import { dockerSocketRaise, onDockerSocketRefusal } from "../state/dockerSocketRefusal";
 import { setSelectionFollowsTab } from "../state/selectionFollowsTab";
@@ -141,6 +141,8 @@ export function useAppNotifications(deps: AppNotificationDeps) {
   // minted in one worktree does not resolve in another.
   const projectKey = s.projectPath || null;
   const worktree = s.activeWorktree?.path ?? s.projectPath ?? null;
+  /** NTF-FR-WTFB: the active worktree is read, so the root is final. */
+  const worktreeResolved = s.activeWorktree !== null;
 
   /**
    * NTF-FR-08: what the main viewport's active tab is showing, when it is
@@ -811,8 +813,13 @@ export function useAppNotifications(deps: AppNotificationDeps) {
       // opening of a project.
       clearToasts();
     }
+    // NTF-FR-WTFB: a toast about the project that opened shows after the
+    // removal above, so the opening does not take it away. It waits for the
+    // active worktree: until that resolves, the root is the project path, and
+    // the change to the worktree path would remove the toast again.
+    if (current && worktreeResolved) releaseToastsForRoot(current.key);
     previousRoot.current = current;
-  }, [projectKey, worktree, s.contentRootEpoch]);
+  }, [projectKey, worktree, worktreeResolved, s.contentRootEpoch]);
 
   const notifications = useNotifications(
     {

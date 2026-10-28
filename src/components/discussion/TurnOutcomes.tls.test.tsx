@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
-import { TurnOutcomes as DiscussionTurnOutcomes } from "../discussion/DiscussionParts";
+import { TurnOutcomes as DiscussionTurnOutcomes } from "./DiscussionParts";
 import type { AgentTurn, Discussion } from "../../types";
 
 afterEach(cleanup);

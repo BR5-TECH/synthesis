@@ -1,13 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  BESIDE_MIN_WIDTH,
-  CARD_MIN_WIDTH,
-  MARGIN_GUTTERS,
-  PAGE_INSET,
-  PAGE_OUTER,
-} from "../hooks/useCommentArrangement";
 import { blocksFor, decl, layersOf, sheet } from "./cssRules";
 
 /**

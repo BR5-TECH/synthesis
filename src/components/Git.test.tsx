@@ -25,6 +25,7 @@ import {
   history,
 } from "../test/gitPanelFixtures";
 import type { SwitchOutcome } from "./WorktreeSelector";
+import { resetToasts } from "../state/toasts";
 
 // The Git panel's branches section is the second route to a checkout
 // (GIT-FR-06). It reaches the backend through `invoke` for the listing, and
@@ -78,6 +79,7 @@ let onSwitchWorktree: Mock<
 let handedOperation: (() => Promise<WorktreeContext>) | null;
 
 beforeEach(() => {
+  resetToasts();
   handlers = [];
   listError = null;
   // Two commits the remote does not have, so Push is offered by default and the

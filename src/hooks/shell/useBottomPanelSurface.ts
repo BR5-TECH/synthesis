@@ -19,7 +19,7 @@ import {
   setActiveLayoutProject,
 } from "../../state/layoutPreferences";
 import { nextPanelToggleState } from "../../state/panelToggle";
-import { restoreDraftRatios } from "../../state/draftDiscussion";
+import { restoreDiscussionColumns } from "../../state/discussionColumn";
 import type { BottomSurface } from "../../types";
 
 export interface BottomPanelSurface {
@@ -67,7 +67,7 @@ export function useBottomPanelSurface(
     // through its own store rather than being read out here, because that store
     // is also what writes it — and a ratio the author sets is written against
     // the same record this read returns.
-    void restoreDraftRatios(projectPath);
+    void restoreDiscussionColumns(projectPath);
     loadLayoutPreferences(projectPath)
       .then((prefs) => {
         if (cancelled) return;

@@ -33,7 +33,7 @@ import {
 } from "../CommentAttachments";
 import { MentionComposer } from "../Agents";
 import { agentRoster } from "../agentTags";
-import { commentErrorMessage } from "../CommentRail/messages";
+import { commentErrorMessage } from "./messages";
 import { logDebug, logWarn } from "../../logging";
 import { activeAgents, composerPlaceholder } from "../../state/activeAgents";
 import {

@@ -1,5 +1,6 @@
 /**
- * ACT-FR-QWNP / NAW-FR-32 / DDS-FR-VHZN: how a draft's discussion is begun.
+ * ACT-FR-QWNP / ACT-FR-BRZK / NAW-FR-32 / DDS-FR-VHZN: how a discussion of a
+ * draft or of a file is begun.
  *
  * The composer sits **in the column** rather than in the action control's own
  * floating surface: on this tab the conversation is already on screen, so a
@@ -20,6 +21,7 @@
 import { DiscussionComposer, type OpenDiscussionRequest } from "../discussion";
 import type {
   Discussion,
+  DiscussionTarget,
   FragmentTarget,
   ProjectAgent,
   ProposalHunkReference,
@@ -35,7 +37,7 @@ export interface HunkOpening {
 
 /** DDS layout: the states a column showing no transcript can be in. */
 export type OpenState =
-  /** Nobody has spoken about this draft. */
+  /** Nobody has spoken about this item. */
   | "unspoken"
   /** Every discussion about it is resolved. */
   | "resolved"
@@ -56,6 +58,8 @@ function statementFor(
   state: OpenState,
   resolved: number,
   hunk: HunkOpening | null,
+  noun: string,
+  material: string,
 ): { lead: string; hint: string } {
   if (state === "hunk") {
     // DDS-FR-RHKW: the composer names the change it is about. DCR-FR-JTXE: and
@@ -72,15 +76,15 @@ function statementFor(
   if (state === "fragment") {
     return {
       lead: "This begins a discussion about the passage you selected.",
-      hint: "The passage stays marked in the prompt while the discussion is open.",
+      hint: `The passage stays marked in the ${material} while the discussion is open.`,
     };
   }
   if (state === "resolved") {
     return {
       lead:
         resolved === 1
-          ? "The discussion about this draft is resolved."
-          : "Every discussion about this draft is resolved.",
+          ? `The discussion about this ${noun} is resolved.`
+          : `Every discussion about this ${noun} is resolved.`,
       hint:
         `Open ${resolved === 1 ? "it" : "them"} above to read what was said, ` +
         "or address an agent by name to begin another.",
@@ -88,15 +92,15 @@ function statementFor(
   }
   if (state === "another") {
     return {
-      lead: "This begins another discussion about this draft.",
+      lead: `This begins another discussion about this ${noun}.`,
       hint: "The discussions above stay where they are, and this one joins them.",
     };
   }
   return {
-    lead: "Nothing has been said about this draft yet.",
+    lead: `Nothing has been said about this ${noun} yet.`,
     hint:
       "Address an agent by name and the conversation is read here, beside the " +
-      "prompt it is about.",
+      `${material} it is about.`,
   };
 }
 
@@ -106,7 +110,9 @@ export function OpenDiscussion({
   error,
   state,
   resolved,
-  draftId,
+  target,
+  noun,
+  material,
   fragment,
   hunk = null,
   onOpen,
@@ -129,7 +135,12 @@ export function OpenDiscussion({
   state: OpenState;
   /** CMT-FR-17: how many resolved discussions the disclosure above holds. */
   resolved: number;
-  draftId: string;
+  /** What the discussion is about: the draft, or the file. */
+  target: DiscussionTarget;
+  /** What the statements call the item: `draft`, `file`, or `specification`. */
+  noun: string;
+  /** What the item's text is called: the draft's `prompt`, or the file. */
+  material: string;
   /** DDS-FR-QMBC: the passage the discussion will be about, if it has one. */
   fragment: FragmentTarget | null;
   /** DDS-FR-RHKW: the change the discussion will be about, if it is one. */
@@ -139,7 +150,7 @@ export function OpenDiscussion({
   /** The author discarded the composer. */
   onCancel: () => void;
 }) {
-  const statement = statementFor(state, resolved, hunk);
+  const statement = statementFor(state, resolved, hunk, noun, material);
 
   return (
     <div className="dds-open" data-testid="draft-open-discussion">
@@ -164,13 +175,13 @@ export function OpenDiscussion({
       </div>
       <DiscussionComposer
         mode="opening"
-        target={{ kind: "draft", draftId }}
+        target={target}
         fragmentTarget={fragment}
         agents={agents}
         disabled={disabled}
         error={error}
-        ariaLabel="Discuss this draft"
-        placeholder="Ask an agent about this draft…"
+        ariaLabel={`Discuss this ${noun}`}
+        placeholder={`Ask an agent about this ${noun}…`}
         showAcceleratorHint
         alwaysShowCancel={fragment !== null || hunk !== null}
         extraAttachments={hunk !== null ? [hunk.reference] : undefined}

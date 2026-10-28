@@ -23,6 +23,7 @@ import {
   primary,
   resetHandlers,
 } from "../test/changesFixtures";
+import { resetToasts } from "../state/toasts";
 
 // GIT-FR-QMYB: the top-chrome control, the Git panel, and the Changes panel are
 // three ways to start one push. They are rendered here under one provider, as
@@ -93,6 +94,7 @@ function Window({ initiallyOpen = true }: { initiallyOpen?: boolean }) {
 }
 
 beforeEach(() => {
+  resetToasts();
   bus.reset();
   resetPanelReveals();
   resetAppPreferencesCache();

@@ -12,7 +12,7 @@
 import { dispatchAgentTurn, listProjectAgents } from "../../api";
 import { logInfo, logWarn } from "../../logging";
 import { originFor } from "../../state/discussionOrigin";
-import { loggableTurnFailure } from "../CommentRail/messages";
+import { loggableTurnFailure } from "../discussion/messages";
 import { refreshThread } from "../../state/conversationThreads";
 import { agentRoster } from "../agentTags";
 import { decisionTargets } from "../../state/activeAgents";

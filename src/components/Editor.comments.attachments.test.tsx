@@ -11,12 +11,14 @@ import {
 
 import { Editor } from "./Editor";
 import { EditSessionStore } from "../state/editSessions";
+import { resetLogBufferForTest } from "../logging";
+import { resetProjectIdentity } from "../state/projectIdentity";
 import type { Attachment, AttachmentInput, Discussion } from "../types";
 import {
   BODY,
   human,
   makeThread,
-  openRail,
+  openColumn,
   wireBackend,
   fragment,
 } from "../test/editorCommentsFixtures";
@@ -25,11 +27,11 @@ import type { Backend } from "../test/editorCommentsFixtures";
 /**
  * CMT-comments.md, driven through the real Editor.
  *
- * The rail's arithmetic — re-anchoring, tracking an edit, card stacking — lives
- * in `../state/commentAnchors` and is covered by its own unit tests. What is
+ * The anchor arithmetic — re-anchoring and tracking an edit — lives in
+ * `../state/commentAnchors` and is covered by its own unit tests. What is
  * exercised here is the wiring: which command each affordance invokes, what the
- * rail renders in each of its states, and the claims the Editor spec makes about
- * hosting it (EDT-FR-61).
+ * discussion column renders in each of its states, and the claims the Editor
+ * spec makes about hosting it (EDT-FR-61).
  */
 const invokeMock = vi.fn();
 const unlistenMock = vi.fn();
@@ -39,7 +41,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 /**
- * The rail follows `"discussion changed"` (CMT-FR-04), so the mock keeps the
+ * The column follows `"discussion changed"` (CMT-FR-04), so the mock keeps the
  * handlers rather than discarding them — a test emits on a channel exactly as
  * the backend would.
  */
@@ -63,12 +65,18 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 beforeEach(() => {
   invokeMock.mockReset();
-  unlistenMock.mockReset();
+  unlistenMock.mockReset();  // The project login and the log buffer are module-level.
+  resetProjectIdentity();
+  resetLogBufferForTest();
 });
 
 afterEach(() => {
   cleanup();
 });
+
+/** CMT-FR-17: the disclosure that holds the resolved discussions. */
+const resolvedDisclosure = (column: HTMLElement) =>
+  within(column).getByRole("button", { name: /^\d+ resolved$/ });
 
 async function mount(over: Partial<Backend> = {}) {
   const sessions = new EditSessionStore();
@@ -145,7 +153,7 @@ function pngFile(name: string, bytes = "hello") {
 describe("CMT-FR-15 / CMT-FR-45: how an attachment is added", () => {
   it("offers a file and a link, and attaches a dropped or pasted file without the control", async () => {
     await mount({ threads: [makeThread()] });
-    await openRail();
+    await openColumn();
 
     // The Attach control offers exactly the two entries.
     fireEvent.click(screen.getByTestId("comment-attach-button"));
@@ -182,10 +190,10 @@ describe("CMT-FR-15 / CMT-FR-45: how an attachment is added", () => {
   });
 
   it("CMT-FR-45, CMT-FR-16: carries no Attach control on a resolved thread", async () => {
-    // A resolved card has no composer and therefore nowhere to attach.
+    // A resolved discussion has no composer and therefore nowhere to attach.
     await mount({ threads: [makeThread({ resolved: true })] });
-    await openRail();
-    fireEvent.click(screen.getByRole("button", { name: /resolved thread/i }));
+    const column = await openColumn();
+    fireEvent.click(resolvedDisclosure(column));
     expect(await screen.findByTestId("comment-thread-t1")).toBeInTheDocument();
     expect(screen.queryByTestId("comment-attach-button")).not.toBeInTheDocument();
   });
@@ -194,7 +202,7 @@ describe("CMT-FR-15 / CMT-FR-45: how an attachment is added", () => {
 describe("CMT-FR-11 / CMT-FR-46, CMT-FR-47: the pending strip and what a post carries", () => {
   it("holds attachments until the post, removes one without invoking anything, and discards them on cancel", async () => {
     const { backend } = await mount({ threads: [makeThread()] });
-    await openRail();
+    await openColumn();
 
     const input = screen.getByTestId("comment-attach-file-input");
     await act(async () => {
@@ -247,7 +255,7 @@ describe("CMT-FR-11 / CMT-FR-46, CMT-FR-47: the pending strip and what a post ca
 
   it("discards the strip with the typed body when the composer is cancelled", async () => {
     const { backend } = await mount({ threads: [makeThread()] });
-    await openRail();
+    await openColumn();
     await act(async () => {
       fireEvent.change(screen.getByTestId("comment-attach-file-input"), {
         target: { files: [pngFile("gone.png")] },
@@ -267,7 +275,7 @@ describe("CMT-FR-11 / CMT-FR-46, CMT-FR-47: the pending strip and what a post ca
 
   it("sends an empty list when nothing is attached", async () => {
     const { backend } = await mount({ threads: [makeThread()] });
-    await openRail();
+    await openColumn();
     fireEvent.change(screen.getByLabelText("Reply to thread t1"), {
       target: { value: "plain reply" },
     });
@@ -313,7 +321,7 @@ describe("CMT-FR-48, CMT-FR-49: how a posted attachment renders", () => {
 
   it("renders an image as a thumbnail and anything else as a named chip", async () => {
     const { backend } = await mount({ threads: [threadWithAttachments()] });
-    await openRail();
+    await openColumn();
 
     const image = await screen.findByTestId("comment-attachment-image");
     expect(image.querySelector("img")).toHaveAttribute(
@@ -358,13 +366,12 @@ describe("CMT-FR-48, CMT-FR-49: how a posted attachment renders", () => {
     vi.unstubAllGlobals();
   });
 
-  it("reads an attachment only for a card that is rendered", async () => {
-    // CMT-FR-49: a resolved thread's card lives behind the collapsed disclosure
-    // (CMT-FR-17), so it is not rendered and its attachment costs nothing until
-    // the author asks to see it.
+  it("CMT-FR-49, CMT-FR-17: reads an attachment only for a discussion that is rendered", async () => {
+    // A resolved discussion lives behind the collapsed disclosure, so it is not
+    // rendered and its attachment costs nothing until the author asks to see it.
     const resolved = { ...threadWithAttachments(), resolved: true };
     const { backend } = await mount({ threads: [resolved] });
-    await openRail();
+    const column = await openColumn();
     await waitFor(() =>
       expect(
         backend.calls.filter((c) => c.cmd === "list_discussions"),
@@ -374,7 +381,7 @@ describe("CMT-FR-48, CMT-FR-49: how a posted attachment renders", () => {
       backend.calls.some((c) => c.cmd === "read_comment_attachment"),
     ).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: /resolved thread/i }));
+    fireEvent.click(resolvedDisclosure(column));
     await waitFor(() =>
       expect(
         backend.calls.some((c) => c.cmd === "read_comment_attachment"),
@@ -387,7 +394,7 @@ describe("CMT-FR-48, CMT-FR-49: how a posted attachment renders", () => {
       threads: [threadWithAttachments()],
       readAttachmentError: "attachment_not_found",
     });
-    await openRail();
+    await openColumn();
     const broken = await screen.findAllByTestId("comment-attachment-broken");
     expect(broken[0]).toHaveTextContent("diff.png");
     expect(broken[0]).toHaveTextContent("could not be loaded");
@@ -417,7 +424,7 @@ describe("CMT-FR-48, CMT-FR-49: how a posted attachment renders", () => {
         }),
       ],
     });
-    await openRail();
+    await openColumn();
     const image = await screen.findByTestId("comment-attachment-image");
     expect(image.querySelector("img")).toHaveAttribute(
       "src",
@@ -455,9 +462,9 @@ describe("CMT-FR-14 / CMT-FR-50: an attachment is immutable with its comment", (
         }),
       ],
     });
-    await openRail();
+    await openColumn();
     const posted = await screen.findByTestId("comment-attachments");
-    // The strip's removal control is the only one in the rail, and a posted
+    // The strip's removal control is the only one in the column, and a posted
     // comment's list is not a strip.
     expect(within(posted).queryByRole("button")).not.toBeInTheDocument();
 
@@ -475,7 +482,7 @@ describe("CMT-FR-34, CMS-FR-47 / CMT-FR-51: an append refused for its attachment
       threads: [makeThread()],
       addCommentError: "unsupported_media_type",
     });
-    await openRail();
+    await openColumn();
 
     await act(async () => {
       fireEvent.change(screen.getByTestId("comment-attach-file-input"), {
@@ -513,37 +520,48 @@ describe("CMT-FR-34, CMS-FR-47 / CMT-FR-51: an append refused for its attachment
   });
 });
 
-describe("CMT-FR-45 … CMT-FR-47 on the draft card, which owns its own strip", () => {
-  async function openDraftCard() {
-    await openRail();
+describe("CMT-FR-05, CMT-FR-45 … CMT-FR-47: the column's opening composer for a passage owns its own strip", () => {
+  /**
+   * DDS-FR-QMBC / CMT-FR-05: the Comment affordance puts the column on the
+   * opening composer for the selected passage.
+   */
+  async function openFragmentComposer() {
+    const column = await openColumn();
     selectInBody("the first session");
     fireEvent.click(
       await screen.findByRole("button", { name: "Comment on selection" }),
     );
-    return screen.findByTestId("comment-draft");
+    await within(column).findByText(
+      "This begins a discussion about the passage you selected.",
+    );
+    return within(column).getByTestId("draft-open-discussion");
   }
 
-  it("carries an attachment into the thread it opens", async () => {
+  it("CMT-FR-05, CMT-FR-45, CMT-FR-47: carries an attachment into the discussion it opens", async () => {
     const { backend } = await mount();
-    const draft = await openDraftCard();
+    const opening = await openFragmentComposer();
+    expect(within(opening).getByTestId("discussion-opening-fragment")).toHaveTextContent(
+      "the first session",
+    );
 
     await act(async () => {
-      fireEvent.change(screen.getByTestId("comment-attach-file-input"), {
+      fireEvent.change(within(opening).getByTestId("comment-attach-file-input"), {
         target: { files: [pngFile("first.png")] },
       });
     });
-    expect(await screen.findByText("first.png")).toBeInTheDocument();
+    expect(await within(opening).findByText("first.png")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("New comment"), {
+    fireEvent.change(within(opening).getByLabelText("Discuss this file"), {
       target: { value: "needs tightening" },
     });
-    fireEvent.click(within(draft).getByRole("button", { name: "Post" }));
+    fireEvent.click(within(opening).getByRole("button", { name: "Post" }));
 
     await waitFor(() =>
       expect(backend.calls.some((c) => c.cmd === "open_discussion")).toBe(true),
     );
     const args = backend.calls.find((c) => c.cmd === "open_discussion")!
-      .args as { attachments: AttachmentInput[] };
+      .args as { attachments: AttachmentInput[]; fragmentTarget: { quote: string } };
+    expect(args.fragmentTarget).toMatchObject({ quote: "the first session" });
     expect(args.attachments).toHaveLength(1);
     expect(args.attachments[0]).toMatchObject({
       kind: "inline",
@@ -552,35 +570,35 @@ describe("CMT-FR-45 … CMT-FR-47 on the draft card, which owns its own strip", 
     });
   });
 
-  it("attaches a dropped file and discards the strip when cancelled", async () => {
+  it("CMT-FR-05, CMT-FR-45, CMT-FR-46: attaches a dropped file and discards the strip when cancelled", async () => {
     const { backend } = await mount();
-    const draft = await openDraftCard();
+    const opening = await openFragmentComposer();
 
     await act(async () => {
-      fireEvent.drop(screen.getByLabelText("New comment").parentElement!, {
+      fireEvent.drop(within(opening).getByLabelText("Discuss this file").parentElement!, {
         dataTransfer: { files: [pngFile("dropped.png")] },
       });
     });
-    expect(await screen.findByText("dropped.png")).toBeInTheDocument();
+    expect(await within(opening).findByText("dropped.png")).toBeInTheDocument();
 
-    fireEvent.click(within(draft).getByRole("button", { name: "Cancel" }));
+    fireEvent.click(within(opening).getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
-      expect(screen.queryByTestId("comment-draft")).not.toBeInTheDocument(),
+      expect(screen.queryByTestId("discussion-opening-fragment")).not.toBeInTheDocument(),
     );
     expect(screen.queryByText("dropped.png")).not.toBeInTheDocument();
     expect(backend.calls.some((c) => c.cmd === "open_discussion")).toBe(false);
   });
 });
 
-describe("CMT-FR-04: a new thread arriving twice is still one card", () => {
-  it("does not double-insert when the event beats the command's reply", async () => {
-    // `open_comment_thread` emits `"discussion changed"` from inside the
-    // command, so the event can land before the `await` resolves and there is no
-    // ordering between the two. A blind append would render the same thread as
-    // two cards sharing one id — and every later update would only reach the
-    // first copy.
+describe("CMT-FR-04: a new discussion arriving twice is still one discussion", () => {
+  it("CMT-FR-04, CMT-FR-53: does not double-insert when the event beats the command's reply", async () => {
+    // `open_discussion` emits `"discussion changed"` from inside the command,
+    // so the event can land before the `await` resolves and there is no
+    // ordering between the two. A blind append would hold the same discussion
+    // twice under one id — and every later update would only reach the first
+    // copy.
     const { backend } = await mount();
-    await openRail();
+    const column = await openColumn();
 
     let created: Discussion | undefined;
     backend.onOpenThread = () => {
@@ -594,22 +612,23 @@ describe("CMT-FR-04: a new thread arriving twice is still one card", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Comment on selection" }),
     );
-    fireEvent.change(screen.getByLabelText("New comment"), {
+    const opening = await within(column).findByTestId("draft-open-discussion");
+    fireEvent.change(within(opening).getByLabelText("Discuss this file"), {
       target: { value: "needs tightening" },
     });
-    fireEvent.click(
-      within(await screen.findByTestId("comment-draft")).getByRole("button", {
-        name: "Post",
-      }),
-    );
+    fireEvent.click(within(opening).getByRole("button", { name: "Post" }));
 
+    // CMT-FR-05: focus goes to the new discussion, in place of the composer.
+    await screen.findByTestId("comment-thread-t-new");
     await waitFor(() =>
-      expect(screen.queryByTestId("comment-draft")).not.toBeInTheDocument(),
+      expect(screen.getByLabelText("Reply to thread t-new")).toHaveFocus(),
     );
+    expect(screen.queryByTestId("draft-open-discussion")).not.toBeInTheDocument();
     expect(screen.getAllByTestId("comment-thread-t-new")).toHaveLength(1);
+    expect(within(column).getAllByRole("tab")).toHaveLength(1);
 
-    // And the single card still tracks later updates, which a duplicate would
-    // have broken by leaving the stale copy first in the list.
+    // And the one discussion still tracks later updates, which a duplicate
+    // would have broken by leaving the stale copy first in the list.
     act(() =>
       emitEvent("discussion-changed", {
         ...created!,
@@ -628,6 +647,7 @@ describe("CMT-FR-04: a new thread arriving twice is still one card", () => {
     );
     expect(await screen.findByText("a later reply")).toBeInTheDocument();
     expect(screen.getAllByTestId("comment-thread-t-new")).toHaveLength(1);
+    expect(within(column).getAllByRole("tab")).toHaveLength(1);
   });
 });
 
@@ -637,7 +657,7 @@ describe("CMT-FR-32: the attach menu is one of the card's transient surfaces", (
 
   it("dismisses on Escape and on an outside pointer-down, invoking nothing", async () => {
     const { backend } = await mount({ threads: [makeThread()] });
-    await openRail();
+    await openColumn();
     const before = backend.calls.length;
 
     fireEvent.click(screen.getByTestId("comment-attach-button"));
@@ -666,7 +686,7 @@ describe("CMT-FR-32: the attach menu is one of the card's transient surfaces", (
 
   it("is mutually exclusive with the card's overflow menu", async () => {
     await mount({ threads: [makeThread()] });
-    await openRail();
+    await openColumn();
 
     // Opening the overflow menu dismisses the attach menu…
     fireEvent.click(screen.getByTestId("comment-attach-button"));
@@ -685,7 +705,7 @@ describe("CMT-FR-32: the attach menu is one of the card's transient surfaces", (
 
   it("returns focus to the control when the link form is confirmed", async () => {
     await mount({ threads: [makeThread()] });
-    await openRail();
+    await openColumn();
 
     fireEvent.click(screen.getByTestId("comment-attach-button"));
     fireEvent.click(screen.getByRole("menuitem", { name: "Attach a link…" }));

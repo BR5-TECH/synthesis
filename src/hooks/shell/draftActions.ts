@@ -9,6 +9,7 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import * as api from "../../api";
 import { logWarn } from "../../logging";
+import { showDraftCreateFailed, showDraftOpenFailed } from "../../state/shellToasts";
 import type { DraftSessionStore } from "../../state/draftSessions";
 import type { SpecMapSessionStore } from "../../state/specMap/session";
 import { clearDiscussionSession } from "../../state/discussionSession";
@@ -24,7 +25,6 @@ export interface DraftTabActionDeps {
   setActiveTab: Dispatch<SetStateAction<string>>;
   activateTab: (id: string) => void;
   bumpDrafts: () => void;
-  flashToast: (message: string) => void;
   /** SMD-FR-OYLC: the map session a draft created from the map is placed in. */
   specMap: SpecMapSessionStore;
 }
@@ -55,7 +55,6 @@ export function createDraftTabActions(
     setActiveTab,
     activateTab,
     bumpDrafts,
-    flashToast,
     specMap,
   } = deps;
 
@@ -148,7 +147,7 @@ export function createDraftTabActions(
         folder: seed.folder ?? "",
         reason: String(e),
       });
-      flashToast(failureMessage ?? String(e));
+      showDraftCreateFailed(failureMessage ?? String(e));
       return null;
     }
   };
@@ -200,7 +199,7 @@ export function createDraftTabActions(
       openDraft({ id: record.id, name: record.name });
     } catch (e) {
       logWarn(["frontend"], "draft could not be opened", { draftId, error: String(e) });
-      flashToast(String(e));
+      showDraftOpenFailed(String(e));
     }
   };
 

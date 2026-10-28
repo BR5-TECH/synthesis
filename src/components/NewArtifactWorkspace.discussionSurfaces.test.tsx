@@ -119,7 +119,7 @@ describe("New Artifact discussions: the surfaces, the event path, and what is st
     ).toEqual([]);
   });
 
-  it("CMT-FR-52, CMT-FR-53, CMT-FR-54, CMT-FR-55, CMT-FR-62: a discussion redraws from the `discussion changed` payload, without re-reading", async () => {
+  it("CMT-FR-52, CMT-FR-53, CMT-FR-54, CMT-FR-55: a discussion redraws from the `discussion changed` payload, without re-reading", async () => {
     // CMT-FR-54 / CTA-FR-QTNB: the only route by which an agent's delivered answer,
     // or a lock set in another window, reaches a card.
     stubDiscussions({
@@ -170,7 +170,7 @@ describe("New Artifact discussions: the surfaces, the event path, and what is st
     await within(column).findByTestId("comment-thread-disc-1");
   });
 
-  it("CMT-FR-52, CMT-FR-53, CMT-FR-54, CMT-FR-55, CMT-FR-62: a payload for another draft, or for an anchored thread, is ignored", async () => {
+  it("CMT-FR-52, CMT-FR-53, CMT-FR-54, CMT-FR-55: a payload for another draft, or for an anchored thread, is ignored", async () => {
     stubDiscussions({
       existing: [
         discussionThread("disc-1", [

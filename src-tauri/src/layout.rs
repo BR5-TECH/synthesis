@@ -92,6 +92,19 @@ pub struct LayoutPreferences {
     /// still be read, and a draft that is read rather than discussed takes the
     /// whole tab. A draft with no entry has never been hidden.
     pub draft_discussion_hidden: std::collections::BTreeMap<String, bool>,
+    /// SNV-FR-08: the split of each file's Editor tab between its document
+    /// column and its discussion column (`DDS-draft-discussion.md`
+    /// DDS-FR-PNXR, `CMT-comments.md` CMT-FR-30), keyed by the file's
+    /// project-relative path.
+    ///
+    /// Separate from the draft map because a draft id and a path are two kinds
+    /// of key. A value is stored as it is given, as for a draft.
+    pub file_discussion_ratios: std::collections::BTreeMap<String, String>,
+    /// SNV-FR-08: whether each file's discussion column is hidden
+    /// (`DDS-draft-discussion.md` DDS-FR-XQMF, `CMT-comments.md` CMT-FR-30),
+    /// keyed by the file's project-relative path. A file with no entry shows
+    /// its column.
+    pub file_discussion_hidden: std::collections::BTreeMap<String, bool>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -161,6 +174,14 @@ mod tests {
                 "chat70".to_string(),
             )]),
             draft_discussion_hidden: std::collections::BTreeMap::from([("d1".to_string(), true)]),
+            file_discussion_ratios: std::collections::BTreeMap::from([(
+                "docs/README.md".to_string(),
+                "doc70".to_string(),
+            )]),
+            file_discussion_hidden: std::collections::BTreeMap::from([(
+                "src/main.rs".to_string(),
+                true,
+            )]),
         }
     }
 
@@ -184,6 +205,10 @@ mod tests {
         // SNV-FR-08 / DDS-FR-XQMF: and no draft has had its discussion column
         // hidden, so every draft opens on two columns.
         assert!(p.draft_discussion_hidden.is_empty());
+        // SNV-FR-08 / CMT-FR-30: no file holds a split or a hidden column, so
+        // every file opens with its discussion column shown at the default.
+        assert!(p.file_discussion_ratios.is_empty());
+        assert!(p.file_discussion_hidden.is_empty());
     }
 
     #[test]
@@ -207,6 +232,9 @@ mod tests {
             // mismatch is dropped on save and absent on load, with no error.
             "draftDiscussionRatios",
             "draftDiscussionHidden",
+            // SNV-FR-08 / CMT-FR-30: the two per-file maps, on the same terms.
+            "fileDiscussionRatios",
+            "fileDiscussionHidden",
         ] {
             assert!(
                 json.get(key).is_some(),
@@ -230,7 +258,9 @@ mod tests {
             "mainWindowOuterHeight": 1080.0,
             "mainWindowMaximized": true,
             "draftDiscussionRatios": { "d-1": "doc70" },
-            "draftDiscussionHidden": { "d-1": true, "d-4": false }
+            "draftDiscussionHidden": { "d-1": true, "d-4": false },
+            "fileDiscussionRatios": { "docs/README.md": "chat70" },
+            "fileDiscussionHidden": { "src/main.rs": true }
         }"#;
         let p: LayoutPreferences = serde_json::from_str(json).unwrap();
         assert_eq!(p.vertical_panel_fraction, 0.32);
@@ -250,6 +280,13 @@ mod tests {
         assert_eq!(p.draft_discussion_ratios.get("d-1").map(String::as_str), Some("doc70"));
         assert_eq!(p.draft_discussion_hidden.get("d-1"), Some(&true));
         assert_eq!(p.draft_discussion_hidden.get("d-4"), Some(&false));
+        // SNV-FR-08 / CMT-FR-30: each file's split and hidden state arrive
+        // keyed by the file's project-relative path.
+        assert_eq!(
+            p.file_discussion_ratios.get("docs/README.md").map(String::as_str),
+            Some("chat70")
+        );
+        assert_eq!(p.file_discussion_hidden.get("src/main.rs"), Some(&true));
     }
 
     #[test]
@@ -297,6 +334,9 @@ mod tests {
         // reads back clean, and every draft opens on two columns.
         assert!(p.draft_discussion_hidden.is_empty());
         assert!(p.draft_discussion_ratios.is_empty());
+        // SNV-FR-08 / CMT-FR-30: and every file opens with its column shown.
+        assert!(p.file_discussion_hidden.is_empty());
+        assert!(p.file_discussion_ratios.is_empty());
     }
 
     /// The distinction the `Option` exists for: a record saved for an unrelated

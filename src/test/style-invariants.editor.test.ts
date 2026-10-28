@@ -1,17 +1,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  BESIDE_MIN_WIDTH,
-  CARD_MIN_WIDTH,
-  MARGIN_GUTTERS,
-  PAGE_INSET,
-  PAGE_OUTER,
-} from "../hooks/useCommentArrangement";
 import { blocksFor, decl, sheet } from "./cssRules";
 
 /**
- * Stylesheet invariants no rendering test can see — the editing surface, the New Artifact control, and the comment rail.
+ * Stylesheet invariants no rendering test can see — the editing surface, the New Artifact control, and the discussion column beside the document.
  *
  * One part of the group `./cssRules.ts` heads, which carries the whole rule
  * these are written under.
@@ -23,7 +16,7 @@ describe("the editing surface reads as a page set on a field (EDT-FR-63)", () =>
   // inset, and a field behind it or is a wall of text filling the tab — which
   // is the state this change exists to end.
 
-  /** The three tones that have to stay apart from one another under a theme. */
+  /** The two tones that have to stay apart from one another under a theme. */
   function tones(themeBlock: string) {
     const css = sheet("colors_and_type.css");
     const m = css.match(
@@ -42,7 +35,6 @@ describe("the editing surface reads as a page set on a field (EDT-FR-63)", () =>
     return {
       page: read("--doc-page-bg"),
       field: read("--doc-field-bg"),
-      card: read("--bg-panel"),
     };
   }
 
@@ -80,14 +72,13 @@ describe("the editing surface reads as a page set on a field (EDT-FR-63)", () =>
     expect(token("--doc-page-radius")).not.toBeNull();
   });
 
-  it("keeps the page, the field, and a comment card distinct under either theme", () => {
-    // CMT-FR-38: a card carries a surface distinct from BOTH the page and the
-    // field it sits on. Two of the three collapsing into one colour is exactly
+  it("EDT-FR-63: keeps the page and the field distinct under either theme", () => {
+    // The page and the field it sits on collapsing into one colour is exactly
     // the "no visual difference between the editor area and its boundaries"
     // this requirement answers, and no rendering test can see it.
     for (const theme of ['\\[data-theme="light"\\]', '\\[data-theme="dark"\\]']) {
-      const { page, field, card } = tones(theme);
-      expect(new Set([page, field, card]).size, `${theme}: ${page}/${field}/${card}`).toBe(3);
+      const { page, field } = tones(theme);
+      expect(page, `${theme}: ${page}/${field}`).not.toBe(field);
     }
   });
 
@@ -100,13 +91,10 @@ describe("the editing surface reads as a page set on a field (EDT-FR-63)", () =>
     expect(decl(page, "box-shadow")).toBe("var(--shadow-2)");
     // Inset from the tab's boundaries on every side, and centred: `0 auto`
     // leaves the page flush against the band above it, which is the defect.
-    // The leading margin is a variable rather than `auto` so the page can slide
-    // toward that edge when the comment margin needs the width (CMT-FR-64); it
-    // falls back to `auto`, so a tab with no margin showing centres exactly as
-    // it did.
-    expect(decl(page, "margin")).toBe(
-      "var(--doc-page-inset) auto var(--doc-page-inset) var(--page-lead, auto)",
-    );
+    // EDT-FR-61: the page is centred in the document column. The discussion
+    // column is a column of its own, so the page has no reason to move toward
+    // one edge.
+    expect(decl(page, "margin")).toBe("var(--doc-page-inset) auto");
   });
 
   it("DDS-FR-TGBX: sizes every page on one measure, and keeps the inset an inset when the tab is narrow", () => {
@@ -159,11 +147,9 @@ describe("the editing surface reads as a page set on a field (EDT-FR-63)", () =>
     expect(fm).toHaveLength(1);
     expect(decl(fm[0], "width")).toBe("100%");
     expect(decl(fm[0], "max-width")).toContain("--doc-page-outer");
-    // The region slides with the page rather than staying centred behind it
-    // (CMT-FR-64) — the same variable, so the two cannot come apart.
-    expect(decl(fm[0], "margin")).toBe(
-      "var(--doc-page-inset) auto 0 var(--page-lead, auto)",
-    );
+    // The region is centred as the page is (EDT-FR-61), so their edges stay
+    // on one line.
+    expect(decl(fm[0], "margin")).toBe("var(--doc-page-inset) auto 0 auto");
     // EDT-FR-63: the region's edge is the page's edge on every side that has
     // one — the same hairline at the same weight, and the same soft elevation.
     // The head used to draw a 3px accent rule inside its leading edge with the
@@ -286,7 +272,7 @@ describe("the editing surface reads as a page set on a field (EDT-FR-63)", () =>
     expect(decl(source[0], "border")).toBe("1px solid var(--border-1)");
     expect(decl(source[0], "box-shadow")).toBe("var(--shadow-2)");
     expect(decl(source[0], "margin")).toBe(
-      "var(--doc-page-inset) auto var(--doc-page-inset) var(--page-lead, auto)",
+      "var(--doc-page-inset) auto var(--doc-page-inset) auto",
     );
   });
 
@@ -300,78 +286,6 @@ describe("the editing surface reads as a page set on a field (EDT-FR-63)", () =>
     const band = blocksFor(css, ".editor__toolbar");
     expect(band).toHaveLength(1);
     expect(decl(band[0], "background")).toBe("var(--doc-field-bg)");
-  });
-
-  it("keeps the comment layer level with the page it aligns against", () => {
-    // CMT-FR-27: a card's top is placed at its anchor's offset within the
-    // page's scroller. The page now starts a `--doc-page-inset` below the top
-    // of the region the rail is positioned in, so a rail still pinned to `top:
-    // 0` puts every card exactly that far above the line it belongs to — an
-    // off-by-16px no DOM assertion can see.
-    const css = sheet("kit.css");
-    const rail = blocksFor(css, ".comment-rail");
-    expect(rail).toHaveLength(1);
-    expect(decl(rail[0], "top")).toBe("var(--doc-page-inset)");
-    expect(decl(rail[0], "bottom")).toBe("var(--doc-page-inset)");
-
-    // …and it follows the page's top wherever the page puts it. With
-    // frontmatter the sheet gives up its top margin to the region above it, so
-    // a rail left at the inset drops every card 16px below its line — on every
-    // artifact carrying frontmatter, which is most of them. The two rules move
-    // together or the alignment is wrong in one of the two cases.
-    const pageTop = blocksFor(css, '.editor-tab[data-frontmatter="on"] .editor');
-    expect(pageTop).toHaveLength(1);
-    const railTop = blocksFor(
-      css,
-      '.editor-tab[data-frontmatter="on"] .comment-rail',
-    );
-    expect(railTop, "the rail does not follow the page's top").toHaveLength(1);
-    expect(decl(railTop[0], "top")).toBe(decl(pageTop[0], "margin-top"));
-  });
-
-  /**
-   * Both loops below claim something about a card **in the rail**, beside the
-   * document it annotates. `--embedded` is the same conversation rendered in a
-   * detached overlay or a conversation tab (CVP-FR-32), where there is no page
-   * to compete with — the surface *is* the conversation — and where the
-   * composer's floating footer takes the elevated surface and a lift of its own
-   * deliberately (CVP-FR-SDMQ). Nothing matching this renders in an Editor tab.
-   */
-  const embedded = (selector: string) => selector.includes("--embedded");
-
-  it("weights a comment card below the page, with no elevation of its own", () => {
-    // CMT-FR-38: the document stays the most prominent thing in the tab. A card
-    // that out-elevates the page reads as a second document competing with the
-    // first — and the focused state is where that crept in, at `--shadow-3`
-    // against the page's `--shadow-2`.
-    const css = sheet("kit.css");
-    const card = blocksFor(css, ".comment-card");
-    expect(card).toHaveLength(1);
-    expect(decl(card[0], "box-shadow")).toBe("none");
-    // The card's body sets in the UI role at a scale smaller than the page's
-    // prose, which is the Rich Markdown role.
-    expect(decl(card[0], "font-family")).toBe("var(--font-ui-family)");
-    expect(decl(card[0], "font-size")).toBe("var(--fs-ui-sm)");
-
-    // CMT-FR-38: distinct from the page under every state, focus included.
-    // `--bg-elevated` is the page's own colour in the light theme, so a card
-    // that lifted onto it while focused stopped being distinguishable from the
-    // document it annotates.
-    for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      if (!m[1].split(",").some((sel) => /^\.comment-card\b/.test(sel.trim()))) continue;
-      if (embedded(m[1])) continue;
-      expect(decl(m[2], "background"), m[1].trim()).not.toBe("var(--bg-elevated)");
-    }
-
-    const elevations = new Set<string>();
-    for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      if (!m[1].split(",").some((s) => /^\.comment-card\b/.test(s.trim()))) continue;
-      if (embedded(m[1])) continue;
-      const shadow = decl(m[2], "box-shadow");
-      if (shadow && shadow !== "none") elevations.add(shadow);
-    }
-    // Whatever states a card has, none of them reaches past the page's own.
-    expect([...elevations].sort()).toEqual(["var(--shadow-1)"]);
   });
 
   it("frames a Diff tab's Rich rendering as the same page over the same field (DFV-FR-38)", () => {
@@ -502,14 +416,14 @@ describe("the New Artifact tab's collapsed control never covers its page (NAW-FR
     expect(decl(toggle, "width")).toBe("var(--draft-actions-size)");
 
     // ACT-FR-09: **one control, one strip.** The Editor holds this same strip
-    // on `.editor__with-rail`, because on an Editor tab that wrapper is the
-    // outermost thing below the toolbar. A draft tab renders the Editor inside
+    // on `.editor__document`, because on an Editor tab that wrapper is the
+    // outermost thing of the document column. A draft tab renders the Editor inside
     // its own surface, so both fire for one control and the page stops two
     // strips above the column's foot — a band of empty field with nothing in it
     // but the control. The surface keeps it and the Editor's stands down.
     const nested = blocksFor(
       sheet("components/the-drafts-tree.css"),
-      ".draft-editor .editor__with-rail",
+      ".draft-editor .editor__document",
     );
     expect(nested).toHaveLength(1);
     expect(decl(nested[0], "padding-bottom")).toBe("0");
@@ -540,7 +454,7 @@ describe("the New Artifact tab's collapsed control never covers its page (NAW-FR
     // surface would break the symmetry with nothing else failing.
     const page = blocksFor(sheet("kit/dashboard-widgets.css"), ".editor")[0];
     expect(decl(page, "margin")?.replace(/\s+/g, " ")).toBe(
-      "var(--doc-page-inset) auto var(--doc-page-inset) var(--page-lead, auto)",
+      "var(--doc-page-inset) auto",
     );
     expect(decl(surface[0], "padding-top")).toBeNull();
 
@@ -673,14 +587,14 @@ describe("the New Artifact tab's collapsed control never covers its page (NAW-FR
   });
 });
 
-describe("the attach surface stays inside the rail (CMT-FR-45 / CMT-FR-01)", () => {
+describe("the attach surface stays inside the discussion column (CMT-FR-45 / CMT-FR-01)", () => {
   // Every property below was found by driving the app in a browser, and none of
   // them is visible to a component test: with `css: false`, jsdom renders the
   // menu at zero size wherever it is anchored, so a rule that slices 39% of the
   // surface off passes the whole Vitest suite.
   //
-  // `.comment-rail` is `overflow: hidden` and the detached overlay is a fixed
-  // box, so the surface must hang from whichever of the control's edges has the
+  // The discussion column scrolls within its own bounds and the detached
+  // overlay is a fixed box, so the surface must hang from whichever of the control's edges has the
   // composer behind it. A control ending a control row
   // (`.draft-composer__actions`, `justify-content: flex-end`) opens leftward;
   // one leading the inline field (CMT-FR-45) opens rightward. Get it backwards
@@ -698,7 +612,7 @@ describe("the attach surface stays inside the rail (CMT-FR-45 / CMT-FR-01)", () 
     expect(decl(menu[0], "right")).toBe("0");
     expect(
       decl(menu[0], "left"),
-      "opening rightward from a trailing control runs the menu out of the rail",
+      "opening rightward from a trailing control runs the menu out of the column",
     ).toBeNull();
   });
 
@@ -766,7 +680,7 @@ describe("the attach surface stays inside the rail (CMT-FR-45 / CMT-FR-01)", () 
     for (const scoped of [
       ".conversation-tab .comment-composer",
       ".conversation-overlay .comment-composer",
-      ".comment-rail .comment-composer",
+      ".dds-discussion .comment-composer",
     ]) {
       expect(
         blocksFor(css, scoped),
@@ -792,8 +706,8 @@ describe("the attach surface stays inside the rail (CMT-FR-45 / CMT-FR-01)", () 
 
   it("bounds what attachments can add to a card's height", () => {
     const css = sheet("kit.css");
-    // An unbounded list pushes the card's own composer under the rail's pinned
-    // footer, where it cannot be clicked at all.
+    // An unbounded list pushes the card's own composer below the foot of the
+    // surface that holds it, where it cannot be clicked at all.
     const list = blocksFor(css, ".comment__attachments");
     expect(list, "no rule for .comment__attachments").toHaveLength(1);
     expect(decl(list[0], "max-height")).not.toBeNull();
@@ -821,165 +735,88 @@ describe("the attach surface stays inside the rail (CMT-FR-45 / CMT-FR-01)", () 
   });
 });
 
-describe("the comments never overlap the page (CMT-FR-64 / EDT-FR-63)", () => {
-  // The tab spends its width in a fixed order, and every step of it lives in
-  // CSS: the page slides before the cards move, and the cards move before
-  // anything is covered. With `css: false` a component test sees none of it —
-  // the cards were laid over the page's trailing edge for as long as this rule
-  // was missing, and the DOM was identical throughout.
+describe("the Editor tab's discussion column stands beside the document column (EDT-FR-61)", () => {
+  // The grid is the draft tab's `.dds-split`, and the document column is the
+  // Editor's own. With `css: false` a component test sees the same DOM whether
+  // the column can shrink or not, and whether the control's strip is held
+  // open below the page or not. These rules are what the eye sees.
 
-  it("hands the page's leading field to the margin before anything overlaps", () => {
-    const css = sheet("kit.css");
-    const lead = blocksFor(
-      css,
-      '.editor-tab[data-rail="open"][data-comments="beside"]',
-    );
-    expect(lead, "nothing declares where a page beside comments sits").toHaveLength(1);
-    const value = decl(lead[0], "--page-lead")?.replace(/\s+/g, " ") ?? "";
-    // Asserted whole rather than by its parts. `clamp()` takes its arguments in
-    // one order — min, preferred, max — and a value holding all three terms in
-    // any other one is a different rule: swap the first and the last and the
-    // clamp collapses to its minimum at every width, pinning the page at the
-    // centred position and sliding never.
-    expect(value).toBe(
-      "clamp( var(--doc-page-inset), " +
-        "calc(100% - var(--doc-page-outer) - var(--comment-margin-need)), " +
-        "calc((100% - var(--doc-page-outer)) / 2) )",
-    );
-
-    // The draft tab declares it on its own field-owning element: its page is a
-    // nested Editor whose own rail is closed, so the Editor's rule cannot reach
-    // it and the draft's page would stay centred while its margin ran out.
-    expect(
-      blocksFor(css, '.draft-editor[data-rail="open"][data-comments="beside"]'),
-      "a draft's page never slides for its discussions",
-    ).toHaveLength(1);
-  });
-
-  it("measures the margin from where the page actually sits", () => {
-    // Half the leftover width is the margin only while the page is centred.
-    // Once it slides, a rail still sized on half of it stays as narrow as it was
-    // and the width handed over goes to nobody.
-    const rail = blocksFor(sheet("kit.css"), ".comment-rail")[0];
-    const width = decl(rail, "width")?.replace(/\s+/g, " ") ?? "";
-    expect(width).toContain("var(--page-lead, 0px)");
-    expect(width).toContain("var(--doc-page-outer)");
-    expect(width).toContain("var(--comment-card-min-w)");
-  });
-
-  it("moves the cards under the page rather than over it", () => {
-    const css = sheet("kit.css");
-    // The wrapper that held the page and the margin side by side becomes a
-    // column, so the rail follows the page instead of floating on it.
-    const column = blocksFor(
-      css,
-      '.editor-tab[data-comments="below"] .editor__with-rail',
-    );
-    expect(column, "the wrapper never stacks").toHaveLength(1);
+  it("EDT-FR-61, DDS-FR-KTVW: the document column is a flex column that can shrink to nothing", () => {
+    const column = blocksFor(sheet("kit.css"), ".dds-split > .editor__column");
+    expect(column, "no rule lays out the Editor's document column").toHaveLength(1);
+    // A grid item's automatic minimum is its content. A long source line would
+    // then push the discussion column off the tab.
+    expect(decl(column[0], "min-width")).toBe("0");
+    expect(decl(column[0], "min-height")).toBe("0");
+    // The frontmatter region, the page, and the review bar stack in it.
+    expect(decl(column[0], "display")).toBe("flex");
     expect(decl(column[0], "flex-direction")).toBe("column");
 
-    // Both tabs' rails leave the field and take a region of their own.
-    const stacked = blocksFor(
-      css,
-      '.editor-tab[data-comments="below"] .comment-rail',
-    );
-    expect(stacked, "an Editor tab's rail never leaves the margin").toHaveLength(1);
-    expect(decl(stacked[0], "position")).toBe("static");
-    expect(decl(stacked[0], "width")).toBe("auto");
-    expect(decl(stacked[0], "overflow-y")).toBe("auto");
-    // Bounded, so a long review does not push the page off a short window, and
-    // clickable, because it is no longer a layer with a document behind it.
-    expect(decl(stacked[0], "max-height")).toBe("40%");
-    expect(decl(stacked[0], "pointer-events")).toBe("auto");
-    // The bound means the whole box. Without this the column is its padding and
-    // its border taller than the share it was given, at the page's expense.
-    expect(decl(stacked[0], "box-sizing")).toBe("border-box");
-
-    // CMT-FR-64: the cards keep the measure they hold in the margin. The
-    // section is full width, and a card stretched to match it is a comment set
-    // across a thousand pixels.
-    const card = blocksFor(css, '.editor-tab[data-comments="below"] .comment-card');
-    expect(card, "a stacked card is set at the column's full width").toHaveLength(1);
-    expect(decl(card[0], "max-width")).toBe("360px");
-
-    // The rule is written for both tabs at once; a draft's rail is a child of
-    // the tab rather than of the wrapper, so it needs its own selector.
-    const forDraft = css.replace(/\s+/g, " ");
-    expect(forDraft).toContain('.draft-editor[data-comments="below"] > .comment-rail');
+    // The page wrapper takes what the column has left, and also shrinks.
+    const documentBlocks = blocksFor(sheet("kit.css"), ".editor__document");
+    const layout = documentBlocks.find((b) => decl(b, "display") !== null);
+    expect(layout, "no rule lays out the page wrapper").toBeDefined();
+    expect(decl(layout!, "flex")).toBe("1");
+    expect(decl(layout!, "min-width")).toBe("0");
+    expect(decl(layout!, "min-height")).toBe("0");
   });
 
-  it("unpins the two sections when the rail is the one scrolling", () => {
-    const css = sheet("kit.css").replace(/\s+/g, " ");
-    // A section scrolling inside a scrolling rail is two scrollbars for one
-    // list, and a head pinned against a fold the column no longer has.
-    expect(css).toContain('.editor-tab[data-comments="below"] .comment-rail__pinned-head');
-    expect(css).toContain('.editor-tab[data-comments="below"] .comment-rail__unaligned');
-    const unpinned = blocksFor(
-      sheet("kit.css"),
-      '.editor-tab[data-comments="below"] .comment-rail__pinned-head',
+  it("ACT-FR-09: the page wrapper holds the control's strip, and stands it down while the column shows", () => {
+    // The same step the New Artifact tab holds on its surface, with the same
+    // tokens, so the strip and the control it clears cannot drift apart.
+    const kit = sheet("kit.css");
+    const strips = blocksFor(kit, ".editor__document")
+      .map((b) => decl(b, "padding-bottom"))
+      .filter((v): v is string => v !== null);
+    expect(strips, "the page wrapper holds no strip, or holds two").toHaveLength(1);
+    const draftStrip = decl(
+      blocksFor(sheet("components.css"), ".draft-editor__surface")[0],
+      "padding-bottom",
     );
-    expect(unpinned).toHaveLength(1);
-    expect(decl(unpinned[0], "max-height")).toBe("none");
-    expect(decl(unpinned[0], "overflow")).toBe("visible");
-    expect(decl(unpinned[0], "margin-top")).toBe("0");
+    expect(strips[0].replace(/\s+/g, " ")).toBe(draftStrip!.replace(/\s+/g, " "));
 
-    // The aligned layer joins the flow too: absolutely positioned, it would
-    // stack every card on the rail's first line.
-    const aligned = blocksFor(
-      sheet("kit.css"),
-      '.editor-tab[data-comments="below"] .comment-rail__aligned',
+    // DDS-FR-TGBX: with the discussion column shown, the control's corner falls
+    // over that column, so nothing is held open below the page.
+    const shown = blocksFor(
+      kit,
+      '.editor__split[data-discussion="shown"] .editor__document',
     );
-    expect(aligned).toHaveLength(1);
-    expect(decl(aligned[0], "position")).toBe("static");
+    expect(shown).toHaveLength(1);
+    expect(decl(shown[0], "padding-bottom")).toBe("0");
 
-    // …and the head's own header stops sticking with it. It stuck to the top of
-    // a section that scrolled within itself; here the rail is the scroller, so a
-    // sticky header rides down over the orphaned and resolved cards below,
-    // labelling them Discussion.
-    const header = blocksFor(
-      sheet("kit.css"),
-      '.editor-tab[data-comments="below"] .comment-rail__pinned-head > .comment-rail__section-title',
+    // One control, one strip: a draft's embedded Editor leaves the strip to
+    // the draft's own surface.
+    const nested = blocksFor(
+      sheet("components/the-drafts-tree.css"),
+      ".draft-editor .editor__document",
     );
-    expect(header, "the section header still sticks in the column").toHaveLength(1);
-    expect(decl(header[0], "position")).toBe("static");
+    expect(nested).toHaveLength(1);
+    expect(decl(nested[0], "padding-bottom")).toBe("0");
   });
 
-  it("keeps the breakpoint's arithmetic and the stylesheet's tokens in step", () => {
-    // The arrangement is decided in JS and the geometry declared in CSS. The
-    // numbers are the same numbers; nothing in either file would fail if one of
-    // them changed, so this is what fails instead.
-    const tokens = sheet("colors_and_type.css");
-    const token = (name: string): number => {
-      const m = tokens.match(new RegExp(`${name}:\\s*(\\d+)px`));
-      expect(m, `no ${name} token`).not.toBeNull();
-      return Number.parseInt(m![1], 10);
-    };
-    expect(token("--doc-page-inset")).toBe(PAGE_INSET);
-    expect(token("--comment-card-min-w")).toBe(CARD_MIN_WIDTH);
-
-    // The width the CSS stops sliding at has to be the width the JS stacks at.
-    // Read from the token rather than from the two spacing steps directly: a
-    // `--comment-margin-need` that dropped the gutter between a card and the
-    // prose would leave a band of widths where the page has stopped moving,
-    // the rail's clamp has floored, and the cards are over the text again.
-    const need = tokens.match(
-      /--comment-margin-need:\s*calc\(\s*var\(--comment-card-min-w\)\s*\+\s*var\(--sp-6\)\s*\+\s*var\(--sp-4\)\s*\)/,
-    );
-    expect(need, "--comment-margin-need is not card + both gutters").not.toBeNull();
-    expect(token("--sp-6") + token("--sp-4")).toBe(MARGIN_GUTTERS);
-
-    // `--doc-page-outer` is `--doc-page-box` plus the hairline each side, and
-    // `--doc-page-box` is the page's max-width plus its horizontal padding.
-    // Both compositions are read, so a page whose box or border changed moves
-    // the breakpoint here rather than only in the browser.
-    const box = tokens.match(/--doc-page-box:\s*calc\((\d+)px \+ (\d+)px\)/);
-    expect(box, "no --doc-page-box token").not.toBeNull();
-    expect(tokens).toMatch(
-      /--doc-page-outer:\s*calc\(var\(--doc-page-box\) \+ 2px\)/,
-    );
-    expect(
-      Number.parseInt(box![1], 10) + Number.parseInt(box![2], 10) + 2,
-    ).toBe(PAGE_OUTER);
+  it("EDT-FR-61: no rule of the retired margin layout stays in the stylesheets", () => {
+    // The page no longer moves toward one edge for a margin of cards, and no
+    // card is placed beside or below it. A rule that comes back for any of
+    // these lays out a region the tab no longer renders.
+    const all = ["colors_and_type.css", "components.css", "kit.css"]
+      .map((name) => sheet(name))
+      .join("\n");
+    for (const retired of [
+      "--page-lead",
+      "--comment-card-min-w",
+      "--comment-margin-need",
+      "--comment-card-floor",
+      ".editor__with-rail",
+      ".editor__comments-toggle",
+      ".comment-rail__aligned",
+      ".comment-rail__unaligned",
+      ".comment-rail__pinned-head",
+      "data-comments=",
+    ]) {
+      expect(all.includes(retired), `${retired} is still in the stylesheets`).toBe(false);
+    }
+    // The container itself, but not the classes the column still borrows
+    // (`__blocked`, `__route`, `__section`, `__disclosure`).
+    expect(all).not.toMatch(/\.comment-rail(?![_\w-])/);
   });
 });
-

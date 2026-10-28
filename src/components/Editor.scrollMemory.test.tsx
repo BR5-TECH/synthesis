@@ -24,11 +24,6 @@ import {
   limitScroll,
   resizeAll,
 } from "../test/fakeScroll";
-import {
-  BODY,
-  makeThread,
-  wireBackend as wireCommentsBackend,
-} from "../test/editorCommentsFixtures";
 import { otherCommand } from "../test/invokeMocks";
 import type { ArtifactContents } from "../types";
 
@@ -249,29 +244,6 @@ describe("Editor scroll memory", () => {
     act(() => resizeAll());
 
     expect(body().scrollTop).toBe(100);
-  });
-
-  it("EDT-FR-NYCP, CMT-FR-27: the comment rail follows a restore that finishes later, with no scroll event", async () => {
-    wireCommentsBackend(invokeMock, {
-      load: { body: BODY, checksum: "ck1" },
-      threads: [makeThread()],
-      calls: [],
-    });
-    holdTabScroll("tab-a", documentSurface("a.md", "wysiwyg"), 600);
-    limitScroll(".editor", 100);
-    mount();
-    await screen.findByLabelText("artifact body");
-    const layer = await waitFor(() => {
-      const el = document.querySelector(".comment-rail__aligned") as HTMLElement | null;
-      if (!el) throw new Error("the rail is not open");
-      return el;
-    });
-
-    limitScroll(".editor", null);
-    act(() => resizeAll());
-
-    expect(body().scrollTop).toBe(600);
-    expect(layer.style.transform).toBe("translateY(-600px)");
   });
 
   describe("with the find panel open", () => {

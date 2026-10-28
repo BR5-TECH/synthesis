@@ -13,12 +13,9 @@ export interface EditorScrollMemoryInput {
   sourceRef: RefObject<HTMLTextAreaElement | null>;
   /** The highlight layer drawn behind the source surface. */
   sourceHlRef: RefObject<HTMLPreElement | null>;
-  /** Whether the comment rail follows the source surface (CMT-FR-27). */
-  railOnSource: boolean;
   /** What each surface shows, so a restore that waits for content retries. */
   docVersion: number;
   sourceText: string;
-  setScrollTop: (top: number) => void;
   setAtTop: Dispatch<SetStateAction<boolean>>;
   setExpandOverride: Dispatch<SetStateAction<boolean | null>>;
 }
@@ -35,10 +32,8 @@ export function useEditorScrollMemory({
   bodyScrollRef,
   sourceRef,
   sourceHlRef,
-  railOnSource,
   docVersion,
   sourceText,
-  setScrollTop,
   setAtTop,
   setExpandOverride,
 }: EditorScrollMemoryInput): () => void {
@@ -47,16 +42,14 @@ export function useEditorScrollMemory({
       mode === "text" ? sourceRef.current : bodyScrollRef.current,
     surface: documentSurface(artifactId, mode),
     content: mode === "text" ? sourceText : docVersion,
-    // EDT-FR-NYCP: the restored offset puts the comment rail and the
+    // EDT-FR-NYCP: the restored offset puts the highlight layer and the
     // frontmatter region where a scroll to that offset puts them.
     onRestored: (top) => {
       if (mode === "text") {
         const hl = sourceHlRef.current;
         if (hl) hl.scrollTop = top;
-        if (railOnSource) setScrollTop(top);
         return;
       }
-      setScrollTop(top);
       setAtTop(top <= FRONTMATTER_TOP_THRESHOLD);
       setExpandOverride(null);
     },

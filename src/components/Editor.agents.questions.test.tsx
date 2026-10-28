@@ -1,4 +1,4 @@
-// Addressing an agent from the comment rail — `specifications/ui/CMT-comments.md`
+// Addressing an agent from the discussion column — `specifications/ui/CMT-comments.md`
 // CTA-FR-SKXK, CMT-FR-15, AGT-FR-25, AGT-FR-27 … CMT-FR-37, CTA-FR-RPVU, AGC-FR-07.
 //
 // Driven through the real Editor, so what is exercised is the wiring: which
@@ -28,6 +28,7 @@ import {
   turn,
 } from "../test/editorAgentsFixtures";
 import type { Backend } from "../test/editorAgentsFixtures";
+import { openColumn } from "../test/editorCommentsFixtures";
 import {
   artifactCommentOrigin,
   expectBackendOrigin,
@@ -191,13 +192,7 @@ async function mount(over: Partial<Backend> = {}) {
     />,
   );
   await screen.findByLabelText("artifact body");
-  const toggle = screen.getByRole("button", {
-    name: /comments \(\d+ unresolved\)/i,
-  });
-  if (toggle.getAttribute("aria-expanded") !== "true") {
-    await userEvent.click(toggle);
-  }
-  await screen.findByRole("complementary", { name: "Comments" });
+  await openColumn();
   return b;
 }
 
@@ -218,13 +213,7 @@ async function remount(b: Backend) {
     />,
   );
   await screen.findByLabelText("artifact body");
-  const toggle = screen.getByRole("button", {
-    name: /comments \(\d+ unresolved\)/i,
-  });
-  if (toggle.getAttribute("aria-expanded") !== "true") {
-    await userEvent.click(toggle);
-  }
-  await screen.findByRole("complementary", { name: "Comments" });
+  await openColumn();
   return b;
 }
 
@@ -249,7 +238,7 @@ describe("CTA-FR-LCVQ, CTA-FR-ELIJ: a turn that ends by asking a question", () =
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
     // The first dispatch of this mount, so `turn-1`.
     await waitFor(() =>
-      expect(screen.getByTestId("comment-pending")).toHaveTextContent("Thinking…"),
+      expect(screen.getByTestId("dds-transient-status")).toHaveTextContent("thinking"),
     );
 
     emitTurn(
@@ -262,7 +251,7 @@ describe("CTA-FR-LCVQ, CTA-FR-ELIJ: a turn that ends by asking a question", () =
     );
 
     await waitFor(() =>
-      expect(screen.queryByTestId("comment-pending")).not.toBeInTheDocument(),
+      expect(screen.queryByTestId("dds-transient")).not.toBeInTheDocument(),
     );
     // No failure is rendered either: asking is not a failure (CVL-FR-15).
     expect(screen.queryByTestId("comment-turn-error")).not.toBeInTheDocument();
@@ -412,7 +401,7 @@ describe("CTA-FR-LCVQ, CTA-FR-ELIJ: a turn that ends by asking a question", () =
       ],
     });
     await waitFor(() => expect(calls(b, "list_agent_turns")).toHaveLength(1));
-    expect(screen.queryByTestId("comment-pending")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("dds-transient")).not.toBeInTheDocument();
 
     // The thread's own comments name nobody, so the awaiting turn is the only
     // thing that could have produced a recipient. It produces none.
@@ -423,7 +412,7 @@ describe("CTA-FR-LCVQ, CTA-FR-ELIJ: a turn that ends by asking a question", () =
   });
 
   it("dispatches nothing for an agent withdrawn while it waited, and everything for the active one", async () => {
-    // AGC-FR-28 discards the registration without announcing it, so the rail can
+    // AGC-FR-28 discards the registration without announcing it, so the column can
     // still hold the turn. `@ghost` is no longer enrolled and was never named,
     // so the reply reaches `@arch` alone — the conversation's active agent — and
     // the held turn adds nobody (CTA-FR-DMNI, per AGT-FR-28).

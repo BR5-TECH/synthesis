@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import { coveredBy, dayLabel, streamItems } from "./streamItems";
-import type { PairedHalf } from "../../CommentRail/questionPairs";
+import type { PairedHalf } from "../../discussion/questionPairs";
 import type { Attachment, Comment, Participant } from "../../../types";
 
 const HELGA: Participant = { kind: "agent", agentId: "a1", handle: "helga" };

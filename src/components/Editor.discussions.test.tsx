@@ -1,13 +1,13 @@
-// An artifact's **discussions**, read and continued from the Editor's rail —
-// `specifications/ui/ACT-action-control.md` ACT-FR-19 / ACT-FR-22 and
-// `specifications/ui/CMT-comments.md` CTA-FR-ZOLW, -43, -56, -58, -60, -61.
+// An artifact's **discussions**, read and continued from the Editor's
+// discussion column — `specifications/ui/ACT-action-control.md` ACT-FR-19 /
+// ACT-FR-22 and `specifications/ui/CMT-comments.md` CMT-FR-53, -56, -61.
 //
-// The rail is one surface over two conversations: the Discussion section at its
-// head is the action control's, the aligned cards below it are `useComments`'s,
-// and the two obey different rules. Everything here is about the seam — which
-// hook a card's channel reaches, and what the tab counts — because that is what
-// a single shared rail gets wrong, and it gets it wrong silently: an untagged
-// follow-up simply goes unanswered and a turn simply never shows.
+// The column is one surface over two conversations: the whole-file discussions
+// are the action control's, the fragment ones are `useComments`'s, and the two
+// obey different rules. Everything here is about the seam — which hook a
+// discussion's channel reaches, and what the chooser offers — because that is
+// what a single shared column gets wrong, and it gets it wrong silently: an
+// untagged follow-up simply goes unanswered and a turn simply never shows.
 //
 // Driven through the real Editor for that reason. A hook test would have both
 // hooks behaving correctly in isolation while the tab wired the wrong one in.
@@ -17,6 +17,8 @@ import userEvent from "@testing-library/user-event";
 
 import { Editor } from "./Editor";
 import { EditSessionStore } from "../state/editSessions";
+import { resetLogBufferForTest } from "../logging";
+import { resetProjectIdentity } from "../state/projectIdentity";
 import { followAgentTurn } from "../state/discussionSession";
 import { onAgentTurnStateChanged } from "../events";
 import type {
@@ -30,6 +32,7 @@ import {
   artifactDiscussionOrigin,
   expectBackendOrigin,
 } from "../test/origins";
+import { openColumn } from "../test/editorCommentsFixtures";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -62,10 +65,7 @@ const human = (login: string) => ({ kind: "human", login }) as const;
 const bot = (nickname: string) =>
   ({ kind: "agent", handle: nickname, agentId: `agent-${nickname}` }) as const;
 
-/**
- * CMT-FR-55: a discussion aligns to nothing, which is what `anchor: null` says
- * here and what keeps it out of the aligned layer.
- */
+/** CMT-FR-55: a whole-target discussion, which has no fragment target. */
 function discussion(over: Partial<Discussion> = {}): Discussion {
   return {
     id: "d1",
@@ -304,15 +304,19 @@ function wire(b: Backend) {
       }
       case "cancel_agent_turn":
         return null;
+      case "append_log_records":
+        return undefined;
       default:
-        return null;
+        return Promise.reject(new Error(`unexpected invoke ${cmd}`));
     }
   });
 }
 
 beforeEach(() => {
   invokeMock.mockReset();
-  listeners.clear();
+  listeners.clear();  // The project login and the log buffer are module-level.
+  resetProjectIdentity();
+  resetLogBufferForTest();
 });
 afterEach(cleanup);
 
@@ -337,19 +341,30 @@ async function mount(over: Partial<Backend> = {}) {
     />,
   );
   await screen.findByLabelText("artifact body");
-  const toggle = await screen.findByRole("button", {
-    name: /comments \(\d+ unresolved\)/i,
-  });
-  if (toggle.getAttribute("aria-expanded") !== "true") {
-    await userEvent.click(toggle);
-  }
-  await screen.findByRole("complementary", { name: "Comments" });
-  await screen.findByTestId("discussion-section");
+  const column = await openColumn();
+  // CMT-FR-53: the column has read the file's discussions once a tab stands.
+  await within(column).findAllByRole("tab");
   return b;
 }
 
-const counter = () =>
-  screen.getByRole("button", { name: /comments \(\d+ unresolved\)/i });
+/** CMT-FR-29 / CMT-FR-53: the chooser tabs, one per unresolved discussion. */
+const chooserTabs = () =>
+  within(screen.getByTestId("editor-discussion-column")).queryAllByRole("tab");
+
+/**
+ * CMT-FR-53: put the column on one discussion. The column reads one discussion
+ * at a time, so a test chooses it through its tab before it reads or writes it.
+ */
+async function show(threadId: string): Promise<HTMLElement> {
+  const shown = () => screen.queryByTestId(`comment-thread-${threadId}`);
+  // The tabs are read again on each pass, because a click renders them again.
+  for (let at = 0; !shown() && at < chooserTabs().length; at += 1) {
+    await userEvent.click(chooserTabs()[at]);
+  }
+  const card = shown();
+  if (!card) throw new Error(`no chooser tab shows discussion ${threadId}`);
+  return card;
+}
 
 /** A turn of this artifact's discussion `d1`, as the backend would publish it. */
 const runningTurn = (id: string, nickname = "arch"): AgentTurn =>
@@ -367,6 +382,7 @@ const runningTurn = (id: string, nickname = "arch"): AgentTurn =>
   }) as AgentTurn;
 
 async function replyTo(threadId: string, text: string) {
+  await show(threadId);
   const box = await screen.findByLabelText(`Reply to thread ${threadId}`);
   await userEvent.click(box);
   await userEvent.type(box, text);
@@ -415,8 +431,8 @@ describe("a follow-up reaches the conversation's active agents (CTA-FR-HCMJ)", (
     expect(b.dispatches[0].nickname).toBe("sec");
   });
 
-  it("CMT-FR-61, CTA-FR-RPVU, ACT-FR-13 / CTA-FR-DGOC: routes an anchored card in the same rail on identical terms", async () => {
-    // The active set binds every conversation this rail holds and distinguishes
+  it("CMT-FR-61, CTA-FR-RPVU, ACT-FR-13 / CTA-FR-DGOC: routes a fragment discussion in the same column on identical terms", async () => {
+    // The active set binds every conversation this column holds and distinguishes
     // none of them. The anchored thread's own newest naming comment reads
     // `@arch which session?`, so an untagged reply there reaches `@arch` — by
     // the same rule and the same code path the discussion above uses.
@@ -467,9 +483,9 @@ describe("a follow-up reaches the conversation's active agents (CTA-FR-HCMJ)", (
 });
 
 describe("what a discussion card shows while a turn is outstanding", () => {
-  it("renders Thinking… on the discussion card (CTA-FR-AZEU)", async () => {
-    // The reported gap. The turn is held by the control's hook, and the rail was
-    // given the rail hook's outstanding set alone, so the placeholder that says
+  it("CTA-FR-AZEU: renders the pending row on the discussion", async () => {
+    // The reported gap. The turn is held by the control's hook, and the column
+    // was once given the anchored hook's outstanding set alone, so the placeholder that says
     // an answer is coming never appeared and the author had nothing to tell a
     // dispatched turn from a dropped one.
     await mount();
@@ -477,8 +493,9 @@ describe("what a discussion card shows while a turn is outstanding", () => {
     await replyTo("d1", "isn't it too much?");
 
     const card = await screen.findByTestId("comment-thread-d1");
-    const pending = await within(card).findByTestId("comment-pending");
-    expect(pending).toHaveTextContent("Thinking…");
+    const pending = await within(card).findByTestId("dds-transient");
+    // DDS-FR-TGWY: a dot and one lowercase word.
+    expect(pending).toHaveTextContent("thinking");
     expect(pending).toHaveTextContent("arch");
   });
 
@@ -486,7 +503,7 @@ describe("what a discussion card shows while a turn is outstanding", () => {
     await mount();
     await replyTo("d1", "isn't it too much?");
     const card = await screen.findByTestId("comment-thread-d1");
-    await within(card).findByTestId("comment-pending");
+    await within(card).findByTestId("dds-transient");
 
     emitTurn({
       id: "turn-1",
@@ -501,7 +518,7 @@ describe("what a discussion card shows while a turn is outstanding", () => {
     } as AgentTurn);
 
     await waitFor(() =>
-      expect(within(card).queryByTestId("comment-pending")).not.toBeInTheDocument(),
+      expect(within(card).queryByTestId("dds-transient")).not.toBeInTheDocument(),
     );
     expect(await within(card).findByTestId("comment-turn-error")).toHaveTextContent(
       /provider could not be reached/,
@@ -509,9 +526,9 @@ describe("what a discussion card shows while a turn is outstanding", () => {
   });
 
   it("clears the failure when the author retries, and does not restore it", async () => {
-    // Both hooks file the failure — the rail hook keeps a discussion's turns so
-    // its `allTurns` is complete for the control — but only the control clears
-    // one. Merged by last-writer-wins, the rail hook's copy outlives the clear
+    // Both hooks file the failure — the anchored hook keeps a discussion's turns
+    // so its `allTurns` is complete for the control — but only the control clears
+    // one. Merged by last-writer-wins, the anchored hook's copy outlives the clear
     // and the card reports a failure the author has already retried past.
     const b = await mount();
     emitTurn({
@@ -540,26 +557,26 @@ describe("what a discussion card shows while a turn is outstanding", () => {
     await mount();
     await replyTo("d1", "isn't it too much?");
     const card = await screen.findByTestId("comment-thread-d1");
-    await within(card).findByTestId("comment-pending");
+    await within(card).findByTestId("dds-transient");
 
-    await userEvent.click(within(card).getByTestId("comment-pending-cancel"));
+    await userEvent.click(within(card).getByTestId("dds-transient-cancel"));
 
     await waitFor(() =>
-      expect(within(card).queryByTestId("comment-pending")).not.toBeInTheDocument(),
+      expect(within(card).queryByTestId("dds-transient")).not.toBeInTheDocument(),
     );
   });
 
   it("renders one from the registration event alone, with nothing dispatched here", async () => {
     // The other half of where a turn can come from: the tab's own snapshot,
-    // supplied by the rail hook. A discussion whose turn was started elsewhere —
+    // supplied by the anchored hook. A discussion whose turn was started elsewhere —
     // or before this tab opened — still says an answer is coming.
     await mount();
 
     emitTurn(runningTurn("turn-9"));
 
     const card = await screen.findByTestId("comment-thread-d1");
-    expect(await within(card).findByTestId("comment-pending")).toHaveTextContent(
-      "Thinking…",
+    expect(await within(card).findByTestId("dds-transient")).toHaveTextContent(
+      "thinking",
     );
   });
 
@@ -571,11 +588,11 @@ describe("what a discussion card shows while a turn is outstanding", () => {
     await replyTo("d1", "isn't it too much?");
     await waitFor(() => expect(b.dispatches).toHaveLength(1));
     const card = await screen.findByTestId("comment-thread-d1");
-    await within(card).findByTestId("comment-pending");
+    await within(card).findByTestId("dds-transient");
 
     emitTurn(runningTurn("turn-1"));
 
-    expect(within(card).getAllByTestId("comment-pending")).toHaveLength(1);
+    expect(within(card).getAllByTestId("dds-transient")).toHaveLength(1);
   });
 
   it("does not let a late running event resurrect a cancelled turn", async () => {
@@ -585,16 +602,16 @@ describe("what a discussion card shows while a turn is outstanding", () => {
     await mount();
     emitTurn(runningTurn("turn-9"));
     const card = await screen.findByTestId("comment-thread-d1");
-    await within(card).findByTestId("comment-pending");
-    await userEvent.click(within(card).getByTestId("comment-pending-cancel"));
+    await within(card).findByTestId("dds-transient");
+    await userEvent.click(within(card).getByTestId("dds-transient-cancel"));
     await waitFor(() =>
-      expect(within(card).queryByTestId("comment-pending")).not.toBeInTheDocument(),
+      expect(within(card).queryByTestId("dds-transient")).not.toBeInTheDocument(),
     );
 
     emitTurn(runningTurn("turn-9"));
 
     expect(
-      within(card).queryByTestId("comment-pending"),
+      within(card).queryByTestId("dds-transient"),
     ).not.toBeInTheDocument();
   });
 
@@ -615,12 +632,12 @@ describe("what a discussion card shows while a turn is outstanding", () => {
     const card = await screen.findByTestId("comment-thread-d1");
 
     emitTurn(runningTurn("turn-1"));
-    await within(card).findByTestId("comment-pending");
+    await within(card).findByTestId("dds-transient");
     emitTurn({ ...runningTurn("turn-1"), state: "delivered" });
     await act(async () => release());
     await waitFor(() => expect(b.dispatches).toHaveLength(1));
 
-    expect(within(card).queryByTestId("comment-pending")).not.toBeInTheDocument();
+    expect(within(card).queryByTestId("dds-transient")).not.toBeInTheDocument();
   });
 
   it("keeps one conversation's turns off the other's card", async () => {
@@ -644,24 +661,24 @@ describe("what a discussion card shows while a turn is outstanding", () => {
       ],
     });
 
-    const discussionCard = await screen.findByTestId("comment-thread-d1");
+    const discussionCard = await show("d1");
     expect(
-      await within(discussionCard).findByTestId("comment-pending"),
+      await within(discussionCard).findByTestId("dds-transient"),
     ).toBeInTheDocument();
-    const anchoredCard = screen.getByTestId("comment-thread-t1");
+    const anchoredCard = await show("t1");
     expect(
-      within(anchoredCard).queryByTestId("comment-pending"),
+      within(anchoredCard).queryByTestId("dds-transient"),
     ).not.toBeInTheDocument();
   });
 });
 
-describe("the tab counts one conversation once (CMT-FR-56)", () => {
-  it("does not inflate the count when a discussion is replied to", async () => {
+describe("the chooser offers one conversation once (CMT-FR-29, CMT-FR-56)", () => {
+  it("CMT-FR-29, CMT-FR-53: gives a discussion one tab, and a reply adds no second", async () => {
     // The reported miscount: replying folded the returned discussion into the
-    // anchored list, so the one thread was counted by both hooks and the tab
-    // read 2 for a single unresolved conversation.
+    // anchored list, so the one thread was held by both hooks and offered twice
+    // for a single unresolved conversation.
     await mount();
-    expect(counter()).toHaveAccessibleName(/\(1 unresolved\)/);
+    expect(chooserTabs()).toHaveLength(1);
 
     await replyTo("d1", "isn't it too much?");
     await waitFor(() =>
@@ -670,17 +687,19 @@ describe("the tab counts one conversation once (CMT-FR-56)", () => {
       ),
     );
 
-    expect(counter()).toHaveAccessibleName(/\(1 unresolved\)/);
-    // And it is still one card, not two: a discussion folded into the aligned
-    // layer renders a second time, as an orphan.
+    expect(chooserTabs()).toHaveLength(1);
+    // And it is still one surface, not two: a discussion folded into the
+    // anchored list renders a second time, as an orphan.
     expect(screen.getAllByTestId("comment-thread-d1")).toHaveLength(1);
   });
 
-  it("counts an anchored thread and a discussion as two", async () => {
-    // The other half of CMT-FR-56 — the count is the tab's total, so a rail
-    // holding one of each reads 2 and neither is omitted.
+  it("CMT-FR-29, CMT-FR-53: gives a fragment discussion and a whole-file one a tab each", async () => {
+    // The other half of CMT-FR-56: the chooser holds both kinds, so a column
+    // holding one of each offers 2 and neither is omitted.
     await mount({ anchoredThreads: [anchored()] });
-    expect(counter()).toHaveAccessibleName(/\(2 unresolved\)/);
+    const tabs = chooserTabs();
+    expect(tabs).toHaveLength(2);
+    expect(tabs.map((t) => t.dataset.target).sort()).toEqual(["fragment", "whole"]);
   });
 
   it("CMT-FR-15, CMT-FR-16: resolves the discussion from its own card, on the command's reply alone", async () => {
@@ -689,10 +708,9 @@ describe("the tab counts one conversation once (CMT-FR-56)", () => {
     // card would go on offering a composer for a conversation that takes no
     // further comment — and only a test that emits nothing catches it.
     const b = await mount();
-    const card = await screen.findByTestId("comment-thread-d1");
-    await userEvent.click(
-      within(card).getByRole("button", { name: "Thread actions for d1" }),
-    );
+    await show("d1");
+    // DDS-FR-MZQJ: the column's header holds the discussion's menu.
+    await userEvent.click(screen.getByRole("button", { name: "Thread actions for d1" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Mark resolved" }));
 
     await waitFor(() =>
@@ -706,20 +724,23 @@ describe("the tab counts one conversation once (CMT-FR-56)", () => {
     expect(b.calls.some((c) => c.cmd === "set_discussion_lock")).toBe(false);
   });
 
-  it("drops back when the discussion is resolved from its own card", async () => {
+  it("CMT-FR-56, CMT-FR-17: moves the discussion from its tab to the resolved disclosure", async () => {
     // The resolution channel is routed by kind like the reply channel; performed
-    // against the anchored hook it would leave the control's count standing and
-    // the card in the rail.
+    // against the anchored hook it would leave the discussion's tab standing.
     await mount();
-    const card = await screen.findByTestId("comment-thread-d1");
-    await userEvent.click(
-      within(card).getByRole("button", { name: "Thread actions for d1" }),
-    );
+    await show("d1");
+    await userEvent.click(screen.getByRole("button", { name: "Thread actions for d1" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: /resolve/i }));
 
-    await waitFor(() =>
-      expect(counter()).toHaveAccessibleName(/\(0 unresolved\)/),
+    await waitFor(() => expect(chooserTabs()).toHaveLength(0));
+    const column = screen.getByTestId("editor-discussion-column");
+    expect(within(column).getByRole("button", { name: "1 resolved" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
     );
+    expect(
+      within(column).getByText("The discussion about this specification is resolved."),
+    ).toBeInTheDocument();
   });
 });
 
@@ -750,12 +771,10 @@ describe("the routing is per thread, not per kind in bulk", () => {
       nickname: "sec",
       origin: artifactDiscussionOrigin("d2", "a.md"),
     });
-    const answered = await screen.findByTestId("comment-thread-d2");
-    expect(await within(answered).findByTestId("comment-pending")).toBeInTheDocument();
+    const answered = await show("d2");
+    expect(await within(answered).findByTestId("dds-transient")).toBeInTheDocument();
     expect(
-      within(screen.getByTestId("comment-thread-d1")).queryByTestId(
-        "comment-pending",
-      ),
+      within(await show("d1")).queryByTestId("dds-transient"),
     ).not.toBeInTheDocument();
   });
 
@@ -852,7 +871,7 @@ describe("CTA-FR-YGYP / AGT-FR-37: @all in a discussion", () => {
     // moves with the project's enrolment — the clause that breaks the moment the
     // expansion is frozen into the message at post time.
     //
-    // The roster is read when the rail comes up (`useDiscussions`), so "enrolled
+    // The roster is read when the column comes up (`useDiscussions`), so "enrolled
     // afterwards" is exercised by the same stored discussion coming up against a
     // larger enrolment — a reopened tab, or the next launch. The comment is
     // byte-identical in both mounts; only who it reaches differs.
@@ -946,10 +965,10 @@ const failedDiscussionTurn = (id = "turn-1", nickname = "arch"): AgentTurn =>
 
 describe("CTA-FR-MGVJ / CTA-FR-RHPP: a discussion's failed contribution", () => {
   it("renders one offer, and Retry leaves no second copy behind", async () => {
-    // The tab mounts two conversational surfaces over one artifact — the rail's
-    // anchored threads and the action control's discussions (ACT-FR-22) — and
+    // The tab mounts two conversational surfaces over one artifact — the
+    // column's anchored threads and the action control's discussions (ACT-FR-22) — and
     // both read the recovery registry. A discussion's offer is the control's:
-    // nothing in the rail's own hook ever retries one, so a copy kept there
+    // nothing in the anchored hook ever retries one, so a copy kept there
     // would never be cleared by the retry that consumed it, and the card would
     // go on offering a turn already asked again *beside* the **Thinking…** of
     // the turn that replaced it.
@@ -971,7 +990,7 @@ describe("CTA-FR-MGVJ / CTA-FR-RHPP: a discussion's failed contribution", () => 
 
     // And the turn that replaced it renders alone in that position.
     emitTurn(runningTurn("turn-retry-1"));
-    expect(await screen.findByTestId("comment-pending")).toBeInTheDocument();
+    expect(await screen.findByTestId("dds-transient")).toBeInTheDocument();
     expect(screen.queryByTestId("comment-failed")).not.toBeInTheDocument();
     // CTA-FR-XNBS: nothing was posted by any of it.
     expect(b.calls.filter((c) => c.cmd === "add_comment")).toHaveLength(0);

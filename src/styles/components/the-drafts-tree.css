@@ -525,7 +525,7 @@
 .dds-split[data-discussion="shown"] .draft-editor__surface { padding-bottom: 0; }
 /* ACT-FR-09: one control, one strip.
  *
- * The Editor holds this same strip on `.editor__with-rail`, because on an
+ * The Editor holds this same strip on `.editor__document`, because on an
  * Editor tab that wrapper is the outermost thing below the toolbar and there is
  * nothing else to hold it. A draft tab renders the Editor **inside** its own
  * surface, which already holds the strip against the draft's own page box — so
@@ -538,7 +538,7 @@
  * control is the element that holds the space for it. This is also what closes
  * the gap between the page and the review bar, the bar standing at the foot of
  * the surface rather than inside the wrapper. */
-.draft-editor .editor__with-rail { padding-bottom: 0; }
+.draft-editor .editor__document { padding-bottom: 0; }
 /* NAW-FR-13: a report, not a control — it recedes once the write has landed.
    It is laid out **in** the band above the page rather than placed over it: the
    trailing corner of that band is where the rendering toggle sits, in the
@@ -867,19 +867,6 @@
   border-bottom: 1px solid var(--border-1);
   color: var(--fg-2);
 }
-/* The rail inside the panel is a plain scrolling column: it has no margin to
-   align to and nothing to travel with, so it drops the absolute placement it
-   uses beside a page (CMT-FR-64). */
-.action-control__panel .comment-rail {
-  position: static;
-  inset: auto;
-  width: auto;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--sp-2);
-}
-
 /* ACT-FR-21: the panel body is a plain scrolling column of shared surfaces. */
 .action-control__panel-body {
   flex: 1;
@@ -891,26 +878,6 @@
   padding: var(--sp-2);
 }
 
-/* ACT-FR-21: in the panel the Discussion section is the whole content, so it
-   stops being a section.
-
-   Beside a page it earns everything it carries: a label, because it is one of
-   several kinds of card in the margin; an opaque field colour and a rule,
-   because it is pinned in front of the aligned cards travelling under it; and a
-   scroller of its own, because it shares the margin's height with the resolved
-   footer. The panel gives it none of those neighbours — it holds discussions
-   alone, and its own header already names them. Left as-is, all three read as
-   defects: the word Discussion twice, a recessed field colour banding across an
-   elevated surface, and the cards boxed in a scroller inside a scroller. */
-.action-control__panel .comment-rail__pinned-head {
-  overflow: visible;
-  padding-bottom: 0;
-  background: none;
-  border-bottom: none;
-}
-.action-control__panel .comment-rail__pinned-head > .comment-rail__section-title {
-  display: none;
-}
 
 
 .action-control__resolved {

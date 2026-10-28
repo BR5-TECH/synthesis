@@ -9,3 +9,6 @@ export { authorHandle, decisionMessage } from "./messages";
 export { RatioControl } from "./RatioControl";
 export { Splitter } from "./Splitter";
 export * from "./ratio";
+export { SplitControls } from "./SplitControls";
+export { useDiscussionSplit } from "./useDiscussionSplit";
+export type { SurfaceTurns } from "./DiscussionColumn";

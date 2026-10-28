@@ -25,6 +25,13 @@ import type { CommitFile } from "../components/CommitMessageModal";
 import type { RollbackFile } from "../components/RollbackConfirm";
 import type { TabMenuState } from "../components/TabStrip";
 import type { CommitOutcome, PullOutcome, RollbackResult } from "../types";
+import { tokenErrorMessage } from "../components/GithubTokens";
+import {
+  PUSH_NO_TOKEN_SELECTED,
+  PUSH_TOKEN_MISSING,
+  showPushFailure,
+  showPushSucceeded,
+} from "../state/pushToast";
 
 export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
   /**
@@ -305,9 +312,8 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
    * operation, the same transcript in the Git panel's output area, and the same
    * two token causes, one of which opens the picker and runs the push on
    * confirmation. What differs is where it is reported: the publication choice
-   * has closed by the time the commit lands, so the outcome is said
-   * in the shell's own transient notice rather than inline in a surface that is
-   * no longer open.
+   * has closed by the time the commit lands, so the outcome is the push toast
+   * (NTF-FR-PSHT) rather than inline in a surface that is no longer open.
    *
    * `retried` bounds the token-selection loop to one retry: a binding still
    * unresolved after the picker confirmed is a failure to report, not a reason
@@ -316,6 +322,7 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
   const pushAfterGraduationCommit = async (retried = false): Promise<void> => {
     try {
       await api.pushCurrentBranch();
+      showPushSucceeded();
     } catch (e) {
       const raw = String(e);
       if (raw.includes("github_token_selection_required") && !retried) {
@@ -323,16 +330,16 @@ export function useAppOverlays(s: ReturnType<typeof useShellSession>) {
           openTokenPicker(null, resolve),
         );
         if (!chosen) {
-          s.flashToast("Push cancelled — no GitHub token was selected.");
+          showPushFailure(PUSH_NO_TOKEN_SELECTED);
           return;
         }
         return pushAfterGraduationCommit(true);
       }
       if (raw.includes("github_token_missing")) {
-        s.flashToast("Push needs a GitHub token. Add one in Global settings.");
+        showPushFailure(PUSH_TOKEN_MISSING, () => s.openGlobalSettings("github"));
         return;
       }
-      s.flashToast(`Push failed: ${raw}`);
+      showPushFailure(tokenErrorMessage(raw));
     }
   };
 

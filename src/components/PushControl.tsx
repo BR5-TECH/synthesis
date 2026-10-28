@@ -8,10 +8,10 @@
  * active worktree and its branch as they are. The push is the one the Git panel
  * and the Changes panel start (GIT-FR-QMYB), so the three controls share one
  * running state and one transcript, which the Git panel renders. This control
- * adds only its own note for the two token causes that need an action from the
- * author.
+ * adds the push toast when the push ends (NTF-FR-PSHT), and shows no note of its
+ * own (NTF-FR-TSRL).
  */
-import { useId, useRef, useState } from "react";
+import { useId, useRef } from "react";
 
 import {
   canStartPush,
@@ -19,6 +19,13 @@ import {
   pushUnavailableReason,
 } from "../gitSync";
 import { useGitTransfer } from "../hooks/useGitTransfer";
+import {
+  PUSH_NO_TOKEN_SELECTED,
+  PUSH_TOKEN_MISSING,
+  showPushFailure,
+  showPushSucceeded,
+} from "../state/pushToast";
+import { tokenErrorMessage } from "./GithubTokens";
 import { Icon } from "./icons";
 
 export interface PushControlProps {
@@ -36,18 +43,12 @@ export interface PushControlProps {
   onOpenGlobalSettings: () => void;
 }
 
-interface PushNote {
-  message: string;
-  missingToken: boolean;
-}
-
 export function PushControl({
   inRepository,
   onRequestGithubToken,
   onOpenGlobalSettings,
 }: PushControlProps) {
   const transfer = useGitTransfer();
-  const [note, setNote] = useState<PushNote | null>(null);
   const reasonId = useId();
   // Held in a ref so a second activation in the same tick sees the first.
   const startingRef = useRef(false);
@@ -72,33 +73,34 @@ export function PushControl({
    */
   const start = async (retried = false): Promise<void> => {
     const outcome = await transfer.pushBranch();
-    if (outcome.ok) return;
+    if (outcome.ok) {
+      showPushSucceeded();
+      return;
+    }
     if (outcome.cause === "busy") {
-      // Another control began a push while the picker was open.
-      if (retried) setNote({ message: PUSH_RUNNING_REASON, missingToken: false });
+      // Another control began a push while the picker was open. A first
+      // activation never gets here: the control is unavailable while one runs.
+      if (retried) showPushFailure(PUSH_RUNNING_REASON);
       return;
     }
     if (outcome.cause === "selection_required" && !retried) {
       const chosen = await onRequestGithubToken();
       if (chosen) return start(true);
-      setNote({
-        message: "Push cancelled — no GitHub token was selected.",
-        missingToken: false,
-      });
+      showPushFailure(PUSH_NO_TOKEN_SELECTED);
       return;
     }
     if (outcome.cause === "token_missing") {
-      setNote({ message: "Push needs a GitHub token.", missingToken: true });
+      showPushFailure(PUSH_TOKEN_MISSING, onOpenGlobalSettings);
+      return;
     }
-    // Any other failure is already in the Git panel's output area, written by
-    // the terminal event, and is not repeated here.
+    // The Git panel's output area has the whole transcript as well.
+    showPushFailure(tokenErrorMessage(outcome.error));
   };
 
   const activate = () => {
     // GIT-FR-CNQO: an unavailable control stays focusable and starts nothing.
     if (!available || startingRef.current) return;
     startingRef.current = true;
-    setNote(null);
     void start().finally(() => {
       startingRef.current = false;
     });
@@ -130,46 +132,11 @@ export function PushControl({
             {reason}
           </span>
           {/* GIT-FR-CNQO: the reason in words, visible on hover and on keyboard
-              focus. The `title` alone appears for a pointer only. A note uses
-              the same place below the control, so the bubble is not shown
-              while a note is open. */}
-          {!note && (
-            <span className="push-control__reason" aria-hidden="true">
-              {reason}
-            </span>
-          )}
+              focus. The `title` alone appears for a pointer only. */}
+          <span className="push-control__reason" aria-hidden="true">
+            {reason}
+          </span>
         </>
-      )}
-      {note && (
-        <div
-          className="push-control__note"
-          role="status"
-          data-testid="top-push-note"
-        >
-          <span className="push-control__note-text">⚠ {note.message}</span>
-          {note.missingToken && (
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              data-testid="top-push-note-settings"
-              onClick={() => {
-                setNote(null);
-                onOpenGlobalSettings();
-              }}
-            >
-              Global settings
-            </button>
-          )}
-          <button
-            type="button"
-            className="btn btn--ghost btn--icon btn--sm"
-            aria-label="Dismiss"
-            data-testid="top-push-note-dismiss"
-            onClick={() => setNote(null)}
-          >
-            <Icon.X size={11} />
-          </button>
-        </div>
       )}
     </div>
   );

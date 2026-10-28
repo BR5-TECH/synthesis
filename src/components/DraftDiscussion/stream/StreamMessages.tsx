@@ -21,7 +21,7 @@ import { coveredBy, streamItems, type StreamItem } from "./streamItems";
 import { activityStatus } from "../../../state/agentActivity";
 import type { AgentRoster } from "../../agentTags";
 import type { AgentTurn, Comment } from "../../../types";
-import type { PairedHalf } from "../../CommentRail/questionPairs";
+import type { PairedHalf } from "../../discussion/questionPairs";
 
 export interface StreamMessagesProps {
   comments: readonly Comment[];

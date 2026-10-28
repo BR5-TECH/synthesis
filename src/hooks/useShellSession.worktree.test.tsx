@@ -8,6 +8,7 @@ import type {
 } from "../types";
 import type { SwitchOutcome } from "../components/WorktreeSelector";
 import { resetPanelReveals } from "../state/panelReveal";
+import { releaseToastsForRoot, resetToasts, visibleToasts } from "../state/toasts";
 import {
   closeReview,
   ensureLoaded,
@@ -83,6 +84,7 @@ const fireEvent = (name: string, payload: unknown) =>
 /** Artifact ids whose `save_artifact_contents` should reject. */
 let failWrites = new Set<string>();
 beforeEach(() => {
+  resetToasts();
   // Module-level, like the preferences cache: reveal nonces are minted from
   // one counter for the app's life, so a suite that does not reset finds its
   // first request already consumed by the previous one.
@@ -421,6 +423,8 @@ describe("useShellSession worktree label (WTS-FR-25)", () => {
    */
   let reported: WorktreeEntry;
 
+  const fallback = () => visibleToasts().find((t) => t.key === "worktree-fallback");
+
   const openOnMain = () => {
     reported = ON_MAIN;
     invokeMock.mockImplementation(async (cmd: string) => {
@@ -434,7 +438,7 @@ describe("useShellSession worktree label (WTS-FR-25)", () => {
 
   // WTC-FR-17: the user is told when the project could not resume where it
   // left off, rather than being silently rerouted to the primary worktree.
-  it("says so when the remembered worktree is gone", async () => {
+  it("WTC-FR-17, NTF-FR-WTFB: says so in a Warn toast when the remembered worktree is gone", async () => {
     invokeMock.mockImplementation(async (cmd: string) => {
       if (cmd === "get_active_worktree") return ON_MAIN;
       return undefined;
@@ -447,13 +451,24 @@ describe("useShellSession worktree label (WTS-FR-25)", () => {
       }),
     );
 
-    await waitFor(() => expect(result.current.toast).toContain("no longer on disk"));
+    await waitFor(() => expect(result.current.activeWorktree).not.toBeNull());
+    // NTF-FR-WTFB: the toast waits for the content root of the project, so
+    // the removal of NTF-FR-15 at the opening does not take it away.
+    expect(fallback()).toBeUndefined();
+    releaseToastsForRoot("~/dev/acme");
+    expect(fallback()).toMatchObject({
+      level: "Warn",
+      title: "Worktree not found",
+      address: null,
+    });
+    expect(fallback()?.body).toContain("no longer on disk");
   });
 
   it("says nothing when the project resumed where it left off", async () => {
     const result = openOnMain();
     await waitFor(() => expect(result.current.activeWorktree).not.toBeNull());
-    expect(result.current.toast).toBeNull();
+    releaseToastsForRoot("~/dev/acme");
+    expect(fallback()).toBeUndefined();
   });
 
   it("labels itself from the worktree the open resolved to", async () => {

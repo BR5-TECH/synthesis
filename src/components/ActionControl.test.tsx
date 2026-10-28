@@ -172,7 +172,7 @@ const calls = (b: Backend, cmd: string) =>
 
 async function renderEditor(
   b: Backend,
-  opts: { artifactType?: "spec" | "prompt"; raw?: boolean } = {},
+  opts: { artifactType?: "spec" | "prompt" } = {},
 ) {
   wire(b);
   render(
@@ -184,14 +184,28 @@ async function renderEditor(
     />,
   );
   await screen.findByRole("button", { name: "Actions" });
-  // ACT-FR-13: the floating composer is the raw-Markdown mode's. In WYSIWYG
-  // Discuss opens the rail's composer instead (ACT-FR-BRZK).
-  if (opts.raw) {
-    await userEvent.click(
-      screen.getByRole("button", { name: "Edit as Markdown source" }),
-    );
-  }
 }
+
+/**
+ * ACT-FR-13 / ACT-FR-20: a host with no discussion column, so Discuss opens
+ * the floating composer and the discussions are read in the floating panel.
+ * An Editor tab has the column on every surface (ACT-FR-19), so the Diff tab
+ * on the same file is the host here.
+ */
+async function renderPanelHost(b: Backend) {
+  wire(b);
+  const target: DiffTarget = {
+    path: "a.md",
+    name: "a.md",
+    scope: { kind: "path", path: "a.md" },
+    comparisonLabel: "Uncommitted",
+  };
+  render(<DiffView target={target} sessions={new EditSessionStore()} />);
+  await screen.findByRole("button", { name: "Actions" });
+}
+
+/** Where a press is "elsewhere in the tab" of the panel host. */
+const panelHostTab = () => document.querySelector(".diff-view") as HTMLElement;
 
 const toggle = () => screen.getByRole("button", { name: "Actions" });
 async function openActions() {
@@ -324,7 +338,7 @@ describe("the control is the tab's own chrome (ACT-FR-01, ACT-FR-03)", () => {
 describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)", () => {
   it("ACT-FR-15, ACT-FR-16, AGC-FR-05, AGT-FR-36, AGT-FR-39, CVP-FR-64: posting targets the artifact and dispatches the artifact origin", async () => {
     const b = backend();
-    await renderEditor(b, { artifactType: "spec", raw: true });
+    await renderPanelHost(b);
 
     // ACT-FR-13: closed rather than always present.
     expect(
@@ -334,7 +348,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
     const composer = await screen.findByRole("textbox", {
-      name: "Discuss this specification",
+      name: "Discuss this file",
     });
     // ACT-FR-12: opening the composer collapsed the control.
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
@@ -364,7 +378,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
     // ACT-FR-15 / ACT-FR-16, on the terms AGT-FR-36 and AGT-FR-39 set. Driven
     // through the real composer because this surface dispatches on its own
     // (`useDiscussionControl`), so the handle reaching two agents here is a
-    // separate wiring from the rail's.
+    // separate wiring from the column's.
     const b = backend({
       agents: [
         { agent: { id: "a1", nickname: "arch" }, availability: "ready" },
@@ -375,12 +389,12 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
         },
       ],
     });
-    await renderEditor(b, { artifactType: "spec", raw: true });
+    await renderPanelHost(b);
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
     const composer = await screen.findByRole("textbox", {
-      name: "Discuss this specification",
+      name: "Discuss this file",
     });
 
     // AGT-FR-39: the handle leads, naming only the agents that can answer.
@@ -410,7 +424,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
 
   it("ACT-FR-13, ACT-FR-14 / ACT-FR-16, ACT-FR-17, ACT-FR-28: the composer keeps its text through any dismissal short of a successful post", async () => {
     const b = backend();
-    await renderEditor(b, { raw: true });
+    await renderPanelHost(b);
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -445,10 +459,10 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
     expect(calls(b, "open_discussion")).toHaveLength(0);
   });
 
-  it("ACT-FR-12, ACT-FR-14, ACT-FR-BRZK, CMT-FR-32: a host surface taking the rail composer's place keeps its text", async () => {
+  it("ACT-FR-12, ACT-FR-14: the discussion panel taking the composer's place keeps its text", async () => {
     const b = backend({ discussions: [discussion()] });
-    await renderEditor(b);
-    await screen.findByTestId("discussion-section");
+    await renderPanelHost(b);
+    const show = await screen.findByRole("button", { name: "Show discussion (1)" });
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -457,27 +471,34 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
       "half a thought",
     );
 
-    // ACT-FR-12: a card's overflow menu opening dismisses whatever this control
-    // had open — not an explicit close, but the composer goes all the same.
-    await userEvent.click(
-      screen.getByRole("button", { name: /^Thread actions for/ }),
-    );
+    // ACT-FR-12: opening the panel dismisses whatever this control had open —
+    // not an explicit close, but the composer goes all the same.
+    await userEvent.click(show);
+    await screen.findByRole("dialog", { name: "Discussion" });
     await waitFor(() =>
       expect(
         screen.queryByRole("textbox", { name: "Discuss this file" }),
       ).not.toBeInTheDocument(),
     );
 
+    // ACT-FR-14: reopening Discuss restores what was typed, and closes the
+    // panel in its turn.
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
     expect(
       await screen.findByRole("textbox", { name: "Discuss this file" }),
     ).toHaveValue("half a thought");
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Discussion" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(calls(b, "open_discussion")).toHaveLength(0);
   });
 
   it("ACT-FR-17: no identity disables the composer and opens nothing", async () => {
     const b = backend({ identityError: "github_token_selection_required" });
-    await renderEditor(b, { raw: true });
+    await renderPanelHost(b);
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -495,8 +516,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
     // And it is left the same way an enabled one is: a press elsewhere
     // dismisses it, there being nothing typed here that a dismissal could cost.
     await act(async () => {
-      document
-        .querySelector(".editor-tab")!
+      panelHostTab()
         .dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     });
     await waitFor(() =>
@@ -508,7 +528,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
 
   it("ACT-FR-17: a refused post keeps the body and opens nothing", async () => {
     const b = backend({ openError: "unsupported_media_type" });
-    await renderEditor(b, { raw: true });
+    await renderPanelHost(b);
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -526,12 +546,12 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
 
   it("ACT-FR-28, CVP-FR-40, CVP-FR-41: Ctrl/Cmd+Enter posts, and is a no-op while empty, disabled, or mid-mention-completion", async () => {
     const b = backend();
-    await renderEditor(b, { artifactType: "spec", raw: true });
+    await renderPanelHost(b);
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
     const composer = await screen.findByRole("textbox", {
-      name: "Discuss this specification",
+      name: "Discuss this file",
     });
 
     // Empty: the accelerator does nothing.
@@ -558,7 +578,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
 
   it("ACT-FR-28, CVP-FR-40, CVP-FR-41: the accelerator does nothing while the composer is disabled for want of an identity", async () => {
     const b = backend({ identityError: "github_token_selection_required" });
-    await renderEditor(b, { raw: true });
+    await renderPanelHost(b);
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -572,7 +592,7 @@ describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)"
 
   it("ACT-FR-16, ACT-FR-17, ACT-FR-28: a second Post while the first is still in flight invokes the operation once", async () => {
     const b = backend();
-    await renderEditor(b, { raw: true });
+    await renderPanelHost(b);
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -634,72 +654,41 @@ describe("no item affords an implementation (ACT-FR-04, ACT-FR-05)", () => {
 });
 
 describe("where the discussions are read (ACT-FR-19, ACT-FR-20)", () => {
-  it("ACT-FR-16, ACT-FR-19, CMT-FR-53, CVP-FR-SDMQ, CVP-FR-64: an Editor in WYSIWYG reads them in the rail and carries no panel", async () => {
+  it("ACT-FR-19, CMT-FR-53, CVP-FR-SDMQ, EDT-FR-61: an Editor reads them in its discussion column and carries no panel, in either mode", async () => {
     const b = backend({ discussions: [discussion()] });
     await renderEditor(b);
 
-    // ACT-FR-19: pinned at the rail's head, so there is no discussions control
-    // and no floating panel anywhere in the tab.
-    await waitFor(() =>
-      expect(calls(b, "list_discussions")).toHaveLength(1),
-    );
+    // ACT-FR-19: the discussion renders in the column through the shared
+    // surface, carrying its opening comment.
+    const column = screen.getByTestId("editor-discussion-column");
+    const card = await within(column).findByTestId("comment-thread-d1");
+    expect(within(card).getByText(/is this ready\?/)).toBeInTheDocument();
     expect(calls(b, "list_discussions")[0]).toEqual({
       target: { kind: "artifact", artifactId: "a.md" },
     });
+    // No discussions control and no floating panel anywhere in the tab.
     expect(
       screen.queryByRole("button", { name: /Show discussion/ }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("dialog", { name: "Discussion" }),
     ).not.toBeInTheDocument();
-  });
 
-  it("ACT-FR-16, ACT-FR-19, CMT-FR-53, CVP-FR-SDMQ, CVP-FR-64/CMT-FR-61: the Editor rail actually renders the discussion card", async () => {
-    const b = backend({ discussions: [discussion()] });
-    await renderEditor(b);
-
-    // CMT-FR-61 previously FORBADE this. The positive claim is the whole of the
-    // change, so it is asserted directly rather than inferred from the absence
-    // of a panel: the card is in the rail's pinned Discussion section, above the
-    // aligned cards, carrying its opening comment and no anchor quote.
-    await screen.findByTestId("discussion-section");
-    const rail = document.querySelector(".comment-rail") as HTMLElement;
-    expect(within(rail).getByText(/is this ready\?/)).toBeInTheDocument();
-  });
-
-  it("ACT-FR-16, ACT-FR-19, CMT-FR-53, CVP-FR-SDMQ / CVP-FR-64: posting from an Editor shows the new discussion in the rail through the shared surface", async () => {
-    const b = backend();
-    await renderEditor(b);
-
-    await openActions();
-    await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
-    await userEvent.type(
-      await screen.findByRole("textbox", { name: "Discuss this file" }),
-      "is this ready?",
+    // EDT-FR-61: raw-text mode keeps the same column, and still no panel.
+    await userEvent.click(
+      screen.getByRole("button", { name: "Edit as Markdown source" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Post" }));
-
-    // ACT-FR-16: the rail reveals itself and renders the new discussion in the
-    // shared surface, the only place it is ever shown.
-    await screen.findByTestId("discussion-section");
-    const rail = document.querySelector(".comment-rail") as HTMLElement;
+    expect(within(column).getByTestId("comment-thread-d1")).toBeInTheDocument();
     expect(
-      await within(rail).findByTestId("comment-thread-d-new"),
-    ).toBeInTheDocument();
-    // The composer emptied and closed behind it.
-    expect(
-      screen.queryByRole("textbox", { name: "Discuss this file" }),
+      screen.queryByRole("button", { name: /Show discussion/ }),
     ).not.toBeInTheDocument();
+    // The list was read once for the tab, not once per mode.
+    expect(calls(b, "list_discussions")).toHaveLength(1);
   });
 
   it("ACT-FR-20, ACT-FR-16, ACT-FR-24 / CVP-FR-64: posting from a panel host opens the panel on the shared surface", async () => {
     const b = backend();
-    await renderEditor(b);
-    // Raw-text mode has no margin, so this exercises the OTHER branch of the
-    // post path — the one Flow and Diff tabs always take (ACT-FR-20).
-    await userEvent.click(
-      screen.getByRole("button", { name: "Edit as Markdown source" }),
-    );
+    await renderPanelHost(b);
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -722,19 +711,23 @@ describe("where the discussions are read (ACT-FR-19, ACT-FR-20)", () => {
     ).toBeInTheDocument();
   });
 
-  it("ACT-FR-12: the control's surfaces and the rail's card menus are one set", async () => {
+  it("ACT-FR-12: the control's surfaces and the column's discussion menu are one set", async () => {
     const b = backend({ discussions: [discussion()] });
     await renderEditor(b);
-    await screen.findByTestId("discussion-section");
+    await within(screen.getByTestId("editor-discussion-column")).findByTestId(
+      "comment-thread-d1",
+    );
 
-    // Opening a card's overflow menu dismisses whatever the control had open.
+    // Opening the discussion's overflow menu dismisses whatever the control had
+    // open.
     await openActions();
     expect(screen.getByRole("menu")).toBeInTheDocument();
     await userEvent.click(
-      screen.getByRole("button", { name: /^Thread actions for/ }),
+      screen.getByRole("button", { name: "Thread actions for d1" }),
     );
     await waitFor(() =>
-      // The control's own column is gone; what is open now is the card's menu.
+      // The control's own column is gone; what is open now is the menu of the
+      // discussion.
       expect(
         screen.queryByRole("menuitem", { name: /Discuss/ }),
       ).not.toBeInTheDocument(),
@@ -743,7 +736,7 @@ describe("where the discussions are read (ACT-FR-19, ACT-FR-20)", () => {
 
   it("ACT-FR-13: a press elsewhere in the tab dismisses the composer, one inside it does not", async () => {
     const b = backend();
-    await renderEditor(b, { raw: true });
+    await renderPanelHost(b);
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -772,8 +765,7 @@ describe("where the discussions are read (ACT-FR-19, ACT-FR-20)", () => {
     // ACT-FR-03 / ACT-FR-13: the expansion and the composer are left the same
     // way — one small surface over the tab, dismissed by a press past its edge.
     await act(async () => {
-      document
-        .querySelector(".editor-tab")!
+      panelHostTab()
         .dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     });
     await waitFor(() =>
@@ -798,7 +790,7 @@ describe("where the discussions are read (ACT-FR-19, ACT-FR-20)", () => {
 
   it("ACT-FR-13: a press elsewhere while a post is in flight leaves the composer, and its refusal, standing", async () => {
     const b = backend();
-    await renderEditor(b, { raw: true });
+    await renderPanelHost(b);
 
     await openActions();
     await userEvent.click(screen.getByRole("menuitem", { name: /Discuss/ }));
@@ -823,8 +815,7 @@ describe("where the discussions are read (ACT-FR-19, ACT-FR-20)", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
     await act(async () => {
-      document
-        .querySelector(".editor-tab")!
+      panelHostTab()
         .dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     });
     // ACT-FR-17: the composer is the only surface the refusal has to render in,
@@ -841,16 +832,9 @@ describe("where the discussions are read (ACT-FR-19, ACT-FR-20)", () => {
     expect(composer).toHaveValue("is this ready?");
   });
 
-  it("ACT-FR-19, ACT-FR-20: raw-text mode reads them in the floating panel instead", async () => {
+  it("ACT-FR-20: a tab with no discussion column reads them in the floating panel", async () => {
     const b = backend({ discussions: [discussion()] });
-    await renderEditor(b);
-    await waitFor(() =>
-      expect(calls(b, "list_discussions")).toHaveLength(1),
-    );
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "Edit as Markdown source" }),
-    );
+    await renderPanelHost(b);
 
     // ACT-FR-20: the discussions control appears, carrying the unresolved count.
     const show = await screen.findByRole("button", { name: "Show discussion (1)" });
@@ -869,16 +853,13 @@ describe("where the discussions are read (ACT-FR-19, ACT-FR-20)", () => {
         screen.queryByRole("dialog", { name: "Discussion" }),
       ).not.toBeInTheDocument(),
     );
-    // The list was read once for the tab, not once per mode.
+    // Showing and hiding the panel reads nothing again.
     expect(calls(b, "list_discussions")).toHaveLength(1);
   });
 
   it("ACT-FR-12: a press elsewhere in the tab leaves the discussion panel open", async () => {
     const b = backend({ discussions: [discussion()] });
-    await renderEditor(b);
-    await userEvent.click(
-      screen.getByRole("button", { name: "Edit as Markdown source" }),
-    );
+    await renderPanelHost(b);
     await userEvent.click(
       await screen.findByRole("button", { name: "Show discussion (1)" }),
     );
@@ -888,19 +869,15 @@ describe("where the discussions are read (ACT-FR-19, ACT-FR-20)", () => {
     // read, and a press in the tab while reading one is as likely to be
     // scrolling what it is about as it is to be leaving it.
     await act(async () => {
-      document
-        .querySelector(".editor-tab")!
-        .dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      panelHostTab().dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     });
     expect(panel).toBeInTheDocument();
   });
 
   it("ACT-FR-20, ACT-FR-16, ACT-FR-24, CVP-FR-64: an item with no discussion carries one mark of chrome, not two", async () => {
     const b = backend();
-    await renderEditor(b);
-    await userEvent.click(
-      screen.getByRole("button", { name: "Edit as Markdown source" }),
-    );
+    await renderPanelHost(b);
+    await waitFor(() => expect(calls(b, "list_discussions")).toHaveLength(1));
     // ACT-FR-20: the control renders only once there is something to show.
     expect(
       screen.queryByRole("button", { name: /Show discussion/ }),
@@ -910,10 +887,7 @@ describe("where the discussions are read (ACT-FR-19, ACT-FR-20)", () => {
 
   it("ACT-FR-21, ACT-FR-22, CMT-FR-55: a discussion redraws from the event without a second read", async () => {
     const b = backend({ discussions: [discussion()] });
-    await renderEditor(b);
-    await userEvent.click(
-      screen.getByRole("button", { name: "Edit as Markdown source" }),
-    );
+    await renderPanelHost(b);
     await screen.findByRole("button", { name: "Show discussion (1)" });
 
     // ACT-FR-22: the surface follows `"discussion changed"` and re-reads for
@@ -932,21 +906,18 @@ describe("where the discussions are read (ACT-FR-19, ACT-FR-20)", () => {
     expect(calls(b, "list_discussions")).toHaveLength(1);
   });
 
-  it("a discussion is never merged into the rail's anchored threads", async () => {
+  it("CMT-FR-56, CMT-FR-17, ACT-FR-22: a whole-file discussion is one tab of the column's chooser, and once resolved one entry behind its disclosure", async () => {
     // A regression guard. An artifact's discussion carries the SAME `artifactId`
-    // its anchored threads do, so the rail's `discussion-changed` handler
-    // matched it and merged it into the anchored list — one thread in two lists.
-    // Once resolved it appeared in the resolved disclosure twice, under one React
-    // key, and the unresolved count changed on the first event rather than being
-    // right from the open.
+    // its fragment discussions do, so a `discussion-changed` handler that
+    // matched on the file alone merged it into the fragment list as well — one
+    // discussion in two lists, shown twice under one React key once resolved.
     const b = backend({ discussions: [discussion()] });
     await renderEditor(b);
-    await screen.findByTestId("discussion-section");
-
-    // CMT-FR-56: counted from the open, not from the first event.
-    expect(
-      screen.getByRole("button", { name: /Hide comments \(1 unresolved\)/ }),
-    ).toBeInTheDocument();
+    const column = screen.getByTestId("editor-discussion-column");
+    await within(column).findByTestId("comment-thread-d1");
+    const chooser = within(column).getByRole("tablist", { name: "Discussions" });
+    // Counted from the open, not from the first event.
+    expect(within(chooser).getAllByRole("tab")).toHaveLength(1);
 
     await act(async () => {
       emitEvent(
@@ -955,26 +926,19 @@ describe("where the discussions are read (ACT-FR-19, ACT-FR-20)", () => {
       );
     });
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /Hide comments \(0 unresolved\)/ }),
-      ).toBeInTheDocument(),
-    );
-    // One thread, counted once. Before the fix this read "2 resolved threads"
-    // and rendered the same card twice under one React key.
-    const disclosure = screen.getByRole("button", { name: /resolved thread/ });
-    expect(disclosure).toHaveTextContent("1 resolved thread");
+    // CMT-FR-56: resolved, it leaves the tabs for the disclosure, counted once.
+    const disclosure = await within(column).findByRole("button", { name: "1 resolved" });
+    expect(within(chooser).queryAllByRole("tab")).toHaveLength(0);
     await userEvent.click(disclosure);
-    const rail = document.querySelector(".comment-rail") as HTMLElement;
-    expect(within(rail).queryAllByText(/is this ready\?/)).toHaveLength(1);
+    await waitFor(() => expect(within(chooser).getAllByRole("tab")).toHaveLength(1));
+    expect(within(column).queryAllByText(/is this ready\?/)).toHaveLength(1);
+    expect(calls(b, "list_discussions")).toHaveLength(1);
   });
 
   it("another file's discussion is ignored", async () => {
     const b = backend();
-    await renderEditor(b);
-    await userEvent.click(
-      screen.getByRole("button", { name: "Edit as Markdown source" }),
-    );
+    await renderPanelHost(b);
+    await waitFor(() => expect(calls(b, "list_discussions")).toHaveLength(1));
 
     await act(async () => {
       emitEvent("discussion-changed", discussion({ target: { kind: "artifact", artifactId: "other.md" } }));

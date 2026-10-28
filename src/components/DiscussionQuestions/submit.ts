@@ -29,7 +29,7 @@ import { logInfo, logWarn } from "../../logging";
 import { publishThread } from "../../state/conversationThreads";
 import { publishSet } from "../../state/questionSets";
 import { setDiscussionTurnFailure } from "../../state/discussionSession";
-import { loggableTurnFailure } from "../CommentRail/messages";
+import { loggableTurnFailure } from "../discussion/messages";
 import { activeAgents } from "../../state/activeAgents";
 import { agentRoster } from "../agentTags";
 import type {

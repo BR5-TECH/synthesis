@@ -7,7 +7,6 @@ import {
   resolveThreads,
   shiftAnchor,
   shiftThreads,
-  stackCards,
   unresolvedCount,
   type AnchoredThread,
 } from "./commentAnchors";
@@ -189,7 +188,7 @@ describe("shiftAnchor", () => {
     // the stored quote no longer describes the range. Keeping the anchor would
     // leave the card pointing at text that is no longer what was commented on;
     // orphaning is the conservative answer and the thread stays fully readable
-    // and repliable in the rail (CMT-FR-19). Pinned here because it is a real
+    // and repliable in the column (CMT-FR-19). Pinned here because it is a real
     // behavioural choice, not an accident of the boundary tests above.
     expect(shiftAnchor(a, { start: 15, end: 15, insertedLength: 3 })).toBeNull();
     // The two boundaries are NOT inside, and both keep the anchor.
@@ -243,7 +242,7 @@ describe("driftedAnchors", () => {
 
   it("resolves a thread that stores no anchor to no anchor, rather than orphaning it", () => {
     // CMT-FR-53: there is nothing to search for, so there is nothing to fail to
-    // find. The rail tells the two apart by the STORED anchor, which is what
+    // find. The column tells the two apart by the STORED anchor, which is what
     // keeps a discussion out of the orphaned section (CMT-FR-55).
     const discussion: Discussion = {
       ...thread("d1", anchor(0, 5, "hello")),
@@ -270,75 +269,6 @@ describe("driftedAnchors", () => {
     expect(
       driftedAnchors([{ thread: bare as Discussion, anchor: anchor(9, 14, "hello") }]),
     ).toEqual([]);
-  });
-});
-
-describe("stackCards", () => {
-  it("aligns each card to its anchor when they are far apart", () => {
-    // CMT-FR-27: a card is never above where its anchor is.
-    const stacked = stackCards(
-      [
-        { threadId: "a", anchorTop: 0 },
-        { threadId: "b", anchorTop: 400 },
-      ],
-      { a: 100, b: 100 },
-      80,
-    );
-    expect(stacked).toEqual([
-      { threadId: "a", top: 0 },
-      { threadId: "b", top: 400 },
-    ]);
-  });
-
-  it("pushes a card down only as far as it must go to clear the one above", () => {
-    // CMT-FR-27: three threads anchored to consecutive short lines.
-    const stacked = stackCards(
-      [
-        { threadId: "a", anchorTop: 0 },
-        { threadId: "b", anchorTop: 20 },
-        { threadId: "c", anchorTop: 40 },
-      ],
-      { a: 100, b: 60, c: 60 },
-      80,
-      8,
-    );
-    expect(stacked).toEqual([
-      { threadId: "a", top: 0 },
-      { threadId: "b", top: 108 },
-      { threadId: "c", top: 176 },
-    ]);
-    // No two cards overlap, and document order is preserved.
-    expect(stacked[1].top).toBeGreaterThanOrEqual(stacked[0].top + 100);
-    expect(stacked[2].top).toBeGreaterThanOrEqual(stacked[1].top + 60);
-  });
-
-  it("packs a run tightly rather than compounding the first card's push", () => {
-    // A card that clears its predecessor returns to its own anchor as soon as
-    // there is room, instead of every later card inheriting the offset.
-    const stacked = stackCards(
-      [
-        { threadId: "a", anchorTop: 0 },
-        { threadId: "b", anchorTop: 10 },
-        { threadId: "c", anchorTop: 900 },
-      ],
-      { a: 50, b: 50, c: 50 },
-      50,
-      0,
-    );
-    expect(stacked.map((s) => s.top)).toEqual([0, 50, 900]);
-  });
-
-  it("falls back to a default height before anything has been measured", () => {
-    const stacked = stackCards(
-      [
-        { threadId: "a", anchorTop: 0 },
-        { threadId: "b", anchorTop: 0 },
-      ],
-      {},
-      80,
-      8,
-    );
-    expect(stacked.map((s) => s.top)).toEqual([0, 88]);
   });
 });
 

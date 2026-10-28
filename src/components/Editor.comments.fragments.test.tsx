@@ -15,14 +15,14 @@ import {
   BODY,
   fragment,
   makeThread,
-  openRail,
+  openColumn,
   wireBackend,
 } from "../test/editorCommentsFixtures";
 import type { Backend } from "../test/editorCommentsFixtures";
 
 /**
- * The fragment of a discussion in the Editor's text surface, and the card in
- * the rail that holds the conversation (`CMT-comments.md` CMT-FR-28,
+ * The fragment of a discussion in the Editor's text surface, and the surface in
+ * the discussion column that holds the conversation (`CMT-comments.md` CMT-FR-28,
  * CMT-FR-RPLC, CMT-FR-HQNV; `CVP-conversation-presentation.md` CVP-FR-05,
  * CVP-FR-06).
  */
@@ -100,7 +100,7 @@ function selectInBody(text: string) {
 describe("CMT-FR-28, CMT-FR-18, CMT-FR-RPLC: a fragment is restored and shown", () => {
   it("CMT-FR-28: marks the fragment with an underline style and an accessible label", async () => {
     await mount({ threads: [threadAt(BODY.indexOf(QUOTE), QUOTE)] });
-    await openRail();
+    await openColumn("t1");
 
     await waitFor(() => expect(marks()).toHaveLength(1));
     const mark = marks()[0];
@@ -115,7 +115,7 @@ describe("CMT-FR-28, CMT-FR-18, CMT-FR-RPLC: a fragment is restored and shown", 
 
   it("CMT-FR-18: restores a fragment whose stored offsets are stale from its quote", async () => {
     await mount({ threads: [threadAt(0, QUOTE)] });
-    await openRail();
+    await openColumn("t1");
 
     await waitFor(() => expect(marks()).toHaveLength(1));
     expect(marks()[0].textContent).toBe(QUOTE);
@@ -125,12 +125,9 @@ describe("CMT-FR-28, CMT-FR-18, CMT-FR-RPLC: a fragment is restored and shown", 
     const { backend } = await mount({
       threads: [threadAt(3, "a passage nobody wrote")],
     });
-    await openRail();
+    const column = await openColumn("t1");
 
-    const section = await screen.findByText("Orphaned", {
-      selector: ".comment-rail__section-title",
-    });
-    const card = within(section.parentElement!).getByTestId("comment-thread-t1");
+    const card = await within(column).findByTestId("comment-thread-t1");
     expect(card).toHaveAttribute("data-availability", "orphaned");
     expect(within(card).getByText("Orphaned")).toBeInTheDocument();
     expect(card).toHaveTextContent("a passage nobody wrote");
@@ -147,20 +144,30 @@ describe("CMT-FR-28, CMT-FR-18, CMT-FR-RPLC: a fragment is restored and shown", 
 });
 
 describe("CMT-FR-28, CVP-FR-06: the fragment and the discussion focus each other", () => {
-  it("CMT-FR-28: focusing the card gives its fragment the focused style and scrolls it into view", async () => {
-    await mount({ threads: [threadAt(BODY.indexOf(QUOTE), QUOTE)] });
-    await openRail();
-    await waitFor(() => expect(marks()).toHaveLength(1));
+  it("CMT-FR-28, DDS-FR-QMBC: choosing the discussion in the column gives its fragment the focused style and scrolls it into view", async () => {
+    await mount({
+      threads: [
+        threadAt(BODY.indexOf("Onboarding"), "Onboarding", "t1"),
+        threadAt(BODY.indexOf(QUOTE), QUOTE, "t2"),
+      ],
+    });
+    const column = await openColumn("t1");
+    await waitFor(() => expect(marks()).toHaveLength(2));
+    const markOf = (id: string) =>
+      marks().find((m) => m.dataset.commentThread === id)!;
+    // Nothing is focused before the author chooses.
+    expect(markOf("t2")).toHaveAttribute("aria-label", "Fragment of discussion t2");
 
-    fireEvent.click(screen.getByTestId("comment-thread-t1"));
+    fireEvent.click(within(column).getAllByRole("tab")[1]);
 
     await waitFor(() =>
-      expect(marks()[0]).toHaveAttribute("aria-label", "Fragment of discussion t1 (focused)"),
+      expect(markOf("t2")).toHaveAttribute("aria-label", "Fragment of discussion t2 (focused)"),
     );
-    expect(marks()[0].classList.contains("comment-anchor--focused")).toBe(true);
-    expect(marks()[0]).toHaveAttribute("data-comment-focused", "true");
+    expect(markOf("t2").classList.contains("comment-anchor--focused")).toBe(true);
+    expect(markOf("t2")).toHaveAttribute("data-comment-focused", "true");
+    expect(markOf("t1")).not.toHaveAttribute("data-comment-focused", "true");
     await waitFor(() =>
-      expect(scrollIntoView.mock.contexts.some((el) => el === marks()[0])).toBe(true),
+      expect(scrollIntoView.mock.contexts.some((el) => el === markOf("t2"))).toBe(true),
     );
   });
 
@@ -168,7 +175,7 @@ describe("CMT-FR-28, CVP-FR-06: the fragment and the discussion focus each other
     const { sessions, backend } = await mount({
       threads: [threadAt(BODY.indexOf(QUOTE), QUOTE)],
     });
-    await openRail();
+    await openColumn("t1");
     await waitFor(() => expect(marks()).toHaveLength(1));
     const before = sessions.get("a.md")?.buffer;
     const calls = backend.calls.length;
@@ -190,9 +197,9 @@ describe("CMT-FR-28, CVP-FR-06: the fragment and the discussion focus each other
 
   it("CMT-FR-28: activating the card's quote scrolls the fragment into view again", async () => {
     await mount({ threads: [threadAt(BODY.indexOf(QUOTE), QUOTE)] });
-    await openRail();
+    await openColumn("t1");
     await waitFor(() => expect(marks()).toHaveLength(1));
-    fireEvent.click(screen.getByTestId("comment-thread-t1"));
+    fireEvent.click(screen.getByTestId("discussion-fragment-quote"));
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
     scrollIntoView.mockClear();
 
@@ -204,33 +211,47 @@ describe("CMT-FR-28, CVP-FR-06: the fragment and the discussion focus each other
   });
 });
 
-describe("CMT-FR-HQNV, CVP-FR-05: the rail card is the shared surface, once", () => {
-  it("renders each discussion as one surface owned by the rail", async () => {
+describe("CMT-FR-HQNV, CVP-FR-05: the column holds the shared surface, once", () => {
+  it("CMT-FR-53: renders the chosen discussion as one surface owned by the column", async () => {
     await mount({
       threads: [
         threadAt(BODY.indexOf(QUOTE), QUOTE, "t1"),
         threadAt(BODY.indexOf("Onboarding"), "Onboarding", "t2"),
       ],
     });
-    await openRail();
+    const column = await openColumn("t1");
+    const tabs = within(column).getAllByRole("tab");
+    expect(tabs).toHaveLength(2);
 
-    for (const id of ["t1", "t2"]) {
+    for (const [at, id] of [[0, "t1"], [1, "t2"]] as const) {
+      fireEvent.click(tabs[at]);
       const cards = await screen.findAllByTestId(`comment-thread-${id}`);
       expect(cards).toHaveLength(1);
-      expect(cards[0]).toHaveAttribute("data-discussion-owner", "rail");
+      expect(column).toContainElement(cards[0]);
+      expect(cards[0]).toHaveAttribute("data-discussion-owner", "column");
       expect(cards[0]).toHaveAttribute("data-target", "fragment");
+      // One discussion at a time: the other is reached through its tab.
+      const other = id === "t1" ? "t2" : "t1";
+      expect(screen.queryByTestId(`comment-thread-${other}`)).toBeNull();
     }
   });
 });
 
-describe("CVP-FR-40, CMT-FR-07: opening a fragment discussion from a selection", () => {
-  it("posts the draft card on Ctrl+Enter with the fragment target", async () => {
+describe("CVP-FR-40, CMT-FR-07, DDS-FR-QMBC: opening a fragment discussion from a selection", () => {
+  /** The opening composer of the column, which carries the passage. */
+  const opener = () =>
+    within(screen.getByTestId("draft-open-discussion")).getByRole("textbox", {
+      name: "Discuss this file",
+    });
+
+  it("posts the opening composer on Ctrl+Enter with the fragment target", async () => {
     const { backend } = await mount({ threads: [] });
-    await openRail();
+    await openColumn();
 
     selectInBody(QUOTE);
     fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    const field = await screen.findByLabelText("New comment");
+    await screen.findByTestId("discussion-opening-fragment");
+    const field = opener();
     await waitFor(() => expect(field).toHaveFocus());
     fireEvent.change(field, { target: { value: "needs tightening" } });
     fireEvent.keyDown(field, { key: "Enter", ctrlKey: true });
@@ -248,22 +269,20 @@ describe("CVP-FR-40, CMT-FR-07: opening a fragment discussion from a selection",
     expect(args.fragmentTarget.path).toBe("a.md");
     expect(BODY.slice(args.fragmentTarget.start, args.fragmentTarget.end)).toBe(QUOTE);
     expect(args.body).toBe("needs tightening");
-    await waitFor(() => expect(screen.queryByTestId("comment-draft")).toBeNull());
     expect(await screen.findAllByTestId("comment-thread-t-new")).toHaveLength(1);
+    expect(screen.queryByTestId("discussion-opening-fragment")).toBeNull();
   });
 
   it("opens nothing on Ctrl+Enter while the draft is empty", async () => {
     const { backend } = await mount({ threads: [] });
-    await openRail();
+    await openColumn();
 
     selectInBody(QUOTE);
     fireEvent.click(await screen.findByRole("button", { name: "Comment on selection" }));
-    fireEvent.keyDown(await screen.findByLabelText("New comment"), {
-      key: "Enter",
-      ctrlKey: true,
-    });
+    await screen.findByTestId("discussion-opening-fragment");
+    fireEvent.keyDown(opener(), { key: "Enter", ctrlKey: true });
 
     expect(backend.calls.some((c) => c.cmd === "open_discussion")).toBe(false);
-    expect(screen.getByTestId("comment-draft")).toBeInTheDocument();
+    expect(screen.getByTestId("discussion-opening-fragment")).toHaveTextContent(QUOTE);
   });
 });

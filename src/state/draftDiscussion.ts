@@ -1,49 +1,29 @@
 /**
- * What the New Artifact tab's two columns hold that is neither the draft nor
- * the conversation (`DDS-draft-discussion.md`).
+ * What the New Artifact tab's review holds that is neither the draft nor the
+ * conversation (`DCR-draft-change-review.md`): the hunk under review and the
+ * requests to show it.
  *
- * A module-level store rather than tab state, for the reason DDS-FR-PNXR gives
- * about the ratio and DDS-FR-GKMT gives about the reading position: both are
- * things about *the author's place in a draft*, and both must survive the tab
- * being backgrounded, another tab being read, and this tab being returned to.
- * Tab state is thrown away by the first of those.
+ * How the tab is split between its columns is the shared column store's
+ * (`./discussionColumn.ts`), which the Editor tab uses too. The draft-named
+ * functions below reach that store under the draft's own column key.
  *
- * Only the ratio is persisted. Where the author had scrolled to is about this
- * sitting rather than about the draft, and a session that restored an unread
- * divider from last week would be describing messages the author has read.
+ * A module-level store rather than tab state, because the hunk under review
+ * must survive the tab being backgrounded and returned to.
  */
 import { useSyncExternalStore } from "react";
 
+import type { SplitRatio } from "../components/DraftDiscussion/ratio";
 import {
-  DEFAULT_RATIO,
-  parseRatio,
-  serialiseRatio,
-  type SplitRatio,
-} from "../components/DraftDiscussion/ratio";
-import { logDebug } from "../logging";
-import {
-  loadLayoutPreferences,
-  patchLayoutPreferences,
-} from "./layoutPreferences";
+  discussionColumnState,
+  draftColumn,
+  resetDiscussionColumns,
+  setColumnHidden,
+  setColumnRatio,
+  type DiscussionColumnState,
+} from "./discussionColumn";
 
-/**
- * What one draft's two columns hold that the discussion itself does not. The
- * reading position and the unread state are the shared surface's, in
- * `discussionSession.ts`.
- */
-export interface DraftDiscussionState {
-  ratio: SplitRatio;
-  /**
-   * DDS-FR-XQMF: the discussion column is hidden, so the document column takes
-   * the tab's full width.
-   *
-   * Separate from the ratio because hiding is not narrowing: the narrowest
-   * either column is dragged to is one that can still be read, and a draft
-   * being read rather than discussed wants the whole window.
-   */
-  hidden: boolean;
-  /** DDS-FR-CLBK: the collapsed head of a long discussion has been expanded. */
-  historyExpanded: boolean;
+/** What one draft's review holds that the discussion itself does not. */
+export interface DraftReviewState {
   /** DCR-FR-12: the hunk the review bar and the action chip are about. */
   focusedHunkId: string | null;
   /**
@@ -54,18 +34,16 @@ export interface DraftDiscussionState {
   hunkReveal: number;
 }
 
-const INITIAL: DraftDiscussionState = {
-  ratio: DEFAULT_RATIO,
-  hidden: false,
-  historyExpanded: false,
+/** A draft's column and review state together, as one read. */
+export type DraftDiscussionState = DiscussionColumnState & DraftReviewState;
+
+const INITIAL: DraftReviewState = {
   focusedHunkId: null,
   hunkReveal: 0,
 };
 
-let states: ReadonlyMap<string, DraftDiscussionState> = new Map();
+let states: ReadonlyMap<string, DraftReviewState> = new Map();
 const listeners = new Set<() => void>();
-/** The project the persisted ratios belong to, so a switch cannot reuse them. */
-let projectKey: string | null = null;
 
 function emit(): void {
   listeners.forEach((l) => l());
@@ -78,125 +56,38 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-/** One draft's state, defaulted until something has been set on it. */
-export function draftDiscussionState(draftId: string): DraftDiscussionState {
+function reviewState(draftId: string): DraftReviewState {
   return states.get(draftId) ?? INITIAL;
 }
 
-function update(
-  draftId: string,
-  change: Partial<DraftDiscussionState>,
-): DraftDiscussionState {
-  const held = draftDiscussionState(draftId);
+/** One draft's column and review state, defaulted until something is set. */
+export function draftDiscussionState(draftId: string): DraftDiscussionState {
+  return { ...discussionColumnState(draftColumn(draftId)), ...reviewState(draftId) };
+}
+
+function update(draftId: string, change: Partial<DraftReviewState>): void {
+  const held = reviewState(draftId);
   const next = { ...held, ...change };
-  // A no-op write would still notify, and every subscriber would re-render for
-  // a scroll event that changed nothing — which is most scroll events.
   if (
-    next.ratio === held.ratio &&
-    next.hidden === held.hidden &&
-    next.historyExpanded === held.historyExpanded &&
     next.focusedHunkId === held.focusedHunkId &&
     next.hunkReveal === held.hunkReveal
   ) {
-    return held;
+    return;
   }
   const map = new Map(states);
   map.set(draftId, next);
   states = map;
   emit();
-  return next;
 }
 
 /** DDS-FR-PNXR: how this draft's tab is split, restored per draft. */
 export function setDraftRatio(draftId: string, ratio: SplitRatio): void {
-  update(draftId, { ratio });
-  persist(draftId, { ratio: serialiseRatio(ratio) });
+  setColumnRatio(draftColumn(draftId), ratio);
 }
 
 /** DDS-FR-XQMF: whether this draft's discussion column is hidden. */
 export function setDraftDiscussionHidden(draftId: string, hidden: boolean): void {
-  update(draftId, { hidden });
-  persist(draftId, { hidden });
-  logDebug(["frontend"], "the draft discussion column was hidden or shown", {
-    draftId,
-    hidden,
-  });
-}
-
-/**
- * Write one draft's entry into the record, keeping every other draft's.
- *
- * The entry is folded in **inside** the patch rather than before it, against the
- * record as it stands at that moment. A map built here from a copy read earlier
- * would replace the stored map wholesale, so hiding one draft's column would
- * drop the split another draft was left at — the two writes are separate but
- * the field they share is one.
- */
-function persist(draftId: string, entry: { ratio?: string; hidden?: boolean }): void {
-  if (projectKey === null) return;
-  const key = projectKey;
-  void patchLayoutPreferences(key, (base) => {
-    const patch: {
-      draftDiscussionRatios?: Record<string, string>;
-      draftDiscussionHidden?: Record<string, boolean>;
-    } = {};
-    if (entry.ratio !== undefined) {
-      patch.draftDiscussionRatios = {
-        ...(base.draftDiscussionRatios ?? {}),
-        [draftId]: entry.ratio,
-      };
-    }
-    if (entry.hidden !== undefined) {
-      patch.draftDiscussionHidden = {
-        ...(base.draftDiscussionHidden ?? {}),
-        [draftId]: entry.hidden,
-      };
-    }
-    return patch;
-  }).catch(() => {
-    // A preference that could not be persisted is still the arrangement on
-    // screen. The author is not told, because there is nothing they would do
-    // about it and what they just chose is exactly what they are looking at.
-  });
-}
-
-/**
- * DDS-FR-PNXR / DDS-FR-XQMF: restore one project's per-draft view preferences.
- *
- * Called when a project opens. A draft with nothing stored keeps the defaults,
- * and a stored value this build does not recognise is ignored rather than
- * refused — a preset added later must not break a session that reads it.
- */
-export async function restoreDraftRatios(key: string): Promise<void> {
-  projectKey = key;
-  const prefs = await loadLayoutPreferences(key);
-  const stored = prefs.draftDiscussionRatios ?? {};
-  const storedHidden = prefs.draftDiscussionHidden ?? {};
-  const map = new Map(states);
-  let changed = false;
-  for (const [draftId, raw] of Object.entries(stored)) {
-    const ratio = parseRatio(raw);
-    if (ratio === null) continue;
-    map.set(draftId, { ...(map.get(draftId) ?? INITIAL), ratio });
-    changed = true;
-  }
-  for (const [draftId, hidden] of Object.entries(storedHidden)) {
-    if (typeof hidden !== "boolean") continue;
-    map.set(draftId, { ...(map.get(draftId) ?? INITIAL), hidden });
-    changed = true;
-  }
-  if (!changed) return;
-  states = map;
-  logDebug(["frontend"], "restored the draft column splits of a project", {
-    drafts: Object.keys(stored).length,
-    hidden: Object.keys(storedHidden).length,
-  });
-  emit();
-}
-
-/** DDS-FR-CLBK: show the messages above the viewport, in place. */
-export function expandHistory(draftId: string): void {
-  update(draftId, { historyExpanded: true });
+  setColumnHidden(draftColumn(draftId), hidden);
 }
 
 /** DCR-FR-12: the hunk the review is on. */
@@ -209,25 +100,26 @@ export function setFocusedHunk(draftId: string, hunkId: string | null): void {
  * to it, also when the review is on it already.
  */
 export function revealHunk(draftId: string, hunkId: string): void {
-  const held = draftDiscussionState(draftId);
+  const held = reviewState(draftId);
   update(draftId, { focusedHunkId: hunkId, hunkReveal: held.hunkReveal + 1 });
 }
 
-/** One draft's state, in React. */
-export function useDraftDiscussion(draftId: string): DraftDiscussionState {
+/** One draft's review state, in React. */
+export function useDraftReviewState(draftId: string): DraftReviewState {
   return useSyncExternalStore(
     subscribe,
-    () => draftDiscussionState(draftId),
-    () => draftDiscussionState(draftId),
+    () => reviewState(draftId),
+    () => reviewState(draftId),
   );
 }
 
 /**
  * DCR-FR-33: everything here belongs to the project it was read in, and is
- * discarded when the project closes or the active worktree changes.
+ * discarded when the project closes or the active worktree changes — the
+ * column splits of every draft and every file with it.
  */
 export function resetDraftDiscussions(): void {
   states = new Map();
-  projectKey = null;
+  resetDiscussionColumns();
   emit();
 }

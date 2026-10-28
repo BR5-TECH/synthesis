@@ -10,12 +10,12 @@ import type {
   GithubIssueLink,
 } from "../../types";
 import type { UseDraftPublicationResult } from "../../hooks/useDraftPublication";
-import type { DraftDiscussionState } from "../../state/draftDiscussion";
+import type { DiscussionColumnState } from "../../state/discussionColumn";
 import { setFocusedHunk } from "../../state/draftDiscussion";
 import { openReview, undecidedHunks } from "../../state/draftProposals";
 import { stateLabel } from "../../state/graduation";
 import { Icon } from "../icons";
-import { RatioControl, type SplitRatio } from "../DraftDiscussion";
+import { SplitControls, type SplitRatio } from "../DraftDiscussion";
 import { DraftPublicationTag } from "../DraftPublication";
 import { GithubShadowTag } from "./GithubShadow";
 import type { DraftRename } from "./useDraftRename";
@@ -51,7 +51,7 @@ export function DraftChrome({
   onOpenRun: (runId: string) => void;
   publication: UseDraftPublicationResult;
   pendingProposal: DraftChangeProposal | undefined;
-  view: DraftDiscussionState;
+  view: DiscussionColumnState;
   onRatioChange: (ratio: SplitRatio) => void;
   onToggleDiscussion: () => void;
 }) {
@@ -179,32 +179,13 @@ export function DraftChrome({
 
       <div className="spacer" />
 
-      {/* DDS-FR-PNXR: the three presets, and the accelerator that cycles
-          them, at the trailing edge of the tab's own row. They arrange two
-          columns, so they stand down while one of them is hidden. */}
-      {!view.hidden && (
-        <>
-          <RatioControl ratio={view.ratio} onChange={onRatioChange} />
-          <kbd className="draft-workspace__kbd t-meta" title="Cycle the split">
-            ⌘\
-          </kbd>
-        </>
-      )}
-
-      {/* DDS-FR-XQMF: the way to the whole window for the draft, and the way
-          back to the conversation. One control in both states, so hiding the
-          column never puts the discussion out of reach. */}
-      <button
-        type="button"
-        className="btn btn--ghost btn--icon-sm draft-workspace__discussion-toggle"
-        aria-pressed={!view.hidden}
-        data-testid="draft-discussion-toggle"
-        title={view.hidden ? "Show the discussion" : "Hide the discussion"}
-        aria-label={view.hidden ? "Show the discussion" : "Hide the discussion"}
-        onClick={onToggleDiscussion}
-      >
-        <Icon.Comment size={13} />
-      </button>
+      <SplitControls
+        ratio={view.ratio}
+        hidden={view.hidden}
+        onRatioChange={onRatioChange}
+        onToggle={onToggleDiscussion}
+        toggleTestId="draft-discussion-toggle"
+      />
     </div>
   );
 }

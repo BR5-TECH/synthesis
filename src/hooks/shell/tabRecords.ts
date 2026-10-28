@@ -59,15 +59,15 @@ export function documentTabId(documentId: string): string {
 }
 
 /**
- * CMP-FR-11 / CMT-FR-36: the surface an arriving thread has to land on — the one
- * that renders the rail (CMT-FR-02).
+ * CMP-FR-11 / CMT-FR-36: the surface an arriving fragment discussion has to land
+ * on — one that marks its fragment (CMT-FR-02).
  *
  * For a Markdown file that is WYSIWYG, whatever mode the tab was left in; for a
  * source file it is the one surface it has, so the activation says nothing about
  * the mode at all rather than asking for a rich surface the file does not have
  * (ESH-FR-SSDV).
  */
-export function railSurfaceFor(artifactId: string): { mode?: EditMode } {
+export function fragmentSurfaceFor(artifactId: string): { mode?: EditMode } {
   return isMarkdownFile(artifactId) ? { mode: "wysiwyg" } : {};
 }
 

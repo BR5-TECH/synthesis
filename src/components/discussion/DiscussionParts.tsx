@@ -12,7 +12,7 @@
 import { Icon } from "../icons";
 import { isFragmentTargeted } from "../../types";
 import type { AgentTurn, Discussion } from "../../types";
-import { failedTurnDetail } from "../CommentRail/messages";
+import { failedTurnDetail } from "./messages";
 
 export interface ThreadActionsProps {
   thread: Discussion;

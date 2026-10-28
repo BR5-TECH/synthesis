@@ -241,7 +241,7 @@ describe("diagram fences in an Editor tab", () => {
       }
       return base(cmd, args);
     });
-    sessions.update("a.md", { mode: "wysiwyg", railOpen: true });
+    sessions.update("a.md", { mode: "wysiwyg" });
     await mount();
     await waitFor(() => expect(fence().getAttribute("data-diagram-commented")).toBe("true"));
     expect(viewOf()).toBe("diagram");
@@ -251,7 +251,9 @@ describe("diagram fences in an Editor tab", () => {
   it("ESH-FR-RKHL, EDT-FR-MOYS: a source file that holds a mermaid fence shows it as text, with no diagram", async () => {
     wireBackend("notes\n```mermaid\ngraph TD\nA-->B\n```\n");
     render(<Editor artifactId="notes.txt" artifactName="notes.txt" sessions={sessions} />);
-    const source = (await screen.findByRole("textbox")) as HTMLTextAreaElement;
+    // The source surface by its name: the discussion column beside it holds a
+    // composer, which is a text box too.
+    const source = (await screen.findByLabelText("Source")) as HTMLTextAreaElement;
     await waitFor(() => expect(source.value).toContain("```mermaid"));
     expect(document.querySelector(".mermaid-block, .mermaid-diagram")).toBeNull();
     expect(mermaidApi.render).not.toHaveBeenCalled();

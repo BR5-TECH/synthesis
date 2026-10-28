@@ -1,39 +1,34 @@
 /**
- * Where each thread's passage sits on the editing surface, and which card has
- * the focus (CMT-FR-27, CMT-FR-28, CMT-FR-36, CMT-FR-64).
+ * Where each thread's passage sits on the editing surface, and which discussion
+ * has the focus (CMT-FR-28, CMT-FR-36).
  *
- * Split out of the Editor whole because the three pieces are one measurement:
- * an anchor is a range in the Markdown source, the layout effect finds that
- * text in the rendered body to get a pixel offset, and the decoration plugin
- * marks the range the same lookup produced. A card aligned by one of them and
- * marked by another would drift apart.
+ * Split out of the Editor whole because the pieces are one lookup: an anchor is
+ * a range in the Markdown source, the layout effect finds that text in the
+ * rendered body, and the decoration plugin marks the range the same lookup
+ * produced.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { RefObject } from "react";
 import type { Editor as TiptapEditor } from "@tiptap/react";
 import { docText, rangeToPositions } from "../findHighlight";
 import { commentHighlightKey, type AnchorRange } from "../commentHighlight";
-import { DIAGRAM_LAYOUT_EVENT, fragmentTop } from "../markdownMermaid";
+import { DIAGRAM_LAYOUT_EVENT } from "../markdownMermaid";
 import { findNearest } from "../../state/commentAnchors";
-import { identityBlockFor, DRAFT_KEY } from "../../hooks/useComments";
-import { useCommentArrangement } from "../../hooks/useCommentArrangement";
+import { identityBlockFor } from "../../hooks/useComments";
 import type { EditMode } from "../../state/editHistory";
 import type { EditSession } from "../../state/editSessions/types";
-import type { CommentSelection } from "./selection";
 
 export interface CommentAnchorDeps {
-  rootRef: RefObject<HTMLDivElement | null>;
   editor: TiptapEditor | null;
   session: EditSession;
   mode: EditMode;
-  railOpen: boolean;
+  /** CMT-FR-28: whether the body marks the fragments at all. */
+  marksShown: boolean;
   docVersion: number;
   /** The anchored-thread hook's state, which the placement is computed over. */
   comments: {
     threads: { thread: { id: string; resolved: boolean }; anchor: { quote: string; start: number } | null }[];
     identityError: Parameters<typeof identityBlockFor>[0];
   };
-  draft: CommentSelection | null;
   focusedThread: string | null;
   setFocusedThread: (id: string | null) => void;
   focusThreadId: string | null | undefined;
@@ -42,14 +37,12 @@ export interface CommentAnchorDeps {
 
 export function useCommentAnchors(deps: CommentAnchorDeps) {
   const {
-    rootRef,
     editor,
     session,
     mode,
-    railOpen,
+    marksShown,
     docVersion,
     comments,
-    draft,
     focusedThread,
     setFocusedThread,
     focusThreadId,
@@ -57,17 +50,9 @@ export function useCommentAnchors(deps: CommentAnchorDeps) {
   } = deps;
 
   const bodyScrollRef = useRef<HTMLDivElement>(null);
-  // CMT-FR-64: measured on the tab rather than on the window, because the tab is
-  // what the cards have to fit in — dragging the Library panel wider narrows it
-  // without the window changing size at all.
-  const arrangement = useCommentArrangement(rootRef);
-  // How far the editing surface has scrolled, which the comment layer subtracts
-  // from each card's placement so the two move together (CMT-FR-27).
-  const [scrollTop, setScrollTop] = useState(0);
-  const [anchorTops, setAnchorTops] = useState<Record<string, number>>({});
   const [anchorRanges, setAnchorRanges] = useState<AnchorRange[]>([]);
-  // EDT-FR-UYEN: a diagram fence changes height without a document change — a
-  // change of view, or a render that finished — so the cards align again on it.
+  // EDT-FR-UYEN: a diagram fence changes its text without a document change — a
+  // change of view, or a render that finished — so the marks are placed again.
   const [diagramLayout, setDiagramLayout] = useState(0);
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
@@ -98,7 +83,7 @@ export function useCommentAnchors(deps: CommentAnchorDeps) {
 
   /**
    * CMT-FR-36: land on the thread the Comments panel sent us to. The mode and
-   * the rail's open state are set by the shell before the tab is focused, so all
+   * the column's shown state are set by the shell before the tab is focused, so all
    * that is left here is the focus itself — which drives the scroll-into-view
    * effect below and the distinct highlight of CMT-FR-28.
    *
@@ -114,7 +99,7 @@ export function useCommentAnchors(deps: CommentAnchorDeps) {
   }, [focusThreadId]);
 
   /**
-   * CMT-FR-28: focusing a card scrolls its anchor into view — once per thread,
+   * CMT-FR-28: focusing a discussion scrolls its anchor into view — once per thread,
    * so re-rendering for any other reason does not yank the body around under the
    * author.
    *
@@ -152,54 +137,46 @@ export function useCommentAnchors(deps: CommentAnchorDeps) {
   }, [focusedThread, mode, anchorRanges, scrollFragmentIntoView]);
 
   /**
-   * CMT-FR-27: the pixel offset of each thread's anchor within the editing
-   * surface, which is what the rail aligns its cards to.
+   * CMT-FR-28: the fragment quote of a discussion was activated in the column.
+   * The fragment is scrolled into view again, also when its discussion already
+   * has the focus. On the raw-text surface the caller puts the tab on WYSIWYG
+   * first, and the effect above scrolls once the marks are painted there.
+   */
+  const revealFragment = useCallback(
+    (threadId: string) => {
+      scrolledForRef.current = null;
+      setFocusedThread(threadId);
+      if (mode === "wysiwyg" && scrollFragmentIntoView(threadId)) {
+        scrolledForRef.current = threadId;
+      }
+    },
+    [mode, scrollFragmentIntoView, setFocusedThread],
+  );
+
+  /**
+   * CMT-FR-28: the range of each thread's anchor within the rendered body, which
+   * the decoration plugin marks.
    *
    * The anchor itself is a range in the Markdown **source** — that is what is
-   * persisted and what means the same thing in either mode (CMT-FR-06). Turning
-   * it into a screen position means finding the same text in the *rendered* body,
-   * because that is where the pixels are. For ordinary prose the two are the same
-   * characters; where they are not (a quote that includes Markdown syntax the
-   * WYSIWYG surface hides), the lookup fails and the card falls back to the top of
-   * the rail rather than being placed somewhere wrong. The thread is never lost
-   * either way — only its alignment is best-effort.
+   * persisted and what means the same thing in either mode (CMT-FR-06). Marking
+   * it means finding the same text in the *rendered* body. For ordinary prose the
+   * two are the same characters; where they are not (a quote that includes
+   * Markdown syntax the WYSIWYG surface hides), the lookup fails and nothing is
+   * marked rather than something wrong. The thread is never lost either way.
    */
   useLayoutEffect(() => {
-    if (mode !== "wysiwyg" || !railOpen || !editor || editor.isDestroyed) return;
-    const container = bodyScrollRef.current;
-    if (!container) return;
+    if (mode !== "wysiwyg" || !marksShown || !editor || editor.isDestroyed) return;
     const index = docText(editor.state.doc);
-    const containerTop = container.getBoundingClientRect().top - container.scrollTop;
-    const tops: Record<string, number> = {};
     const ranges: AnchorRange[] = [];
-    const place = (key: string, quote: string, hint: number, mark: boolean) => {
-      const at = findNearest(index.text, quote, hint);
-      if (at === -1) return;
-      const pos = rangeToPositions(index, at, at + quote.length);
-      if (!pos) return;
-      if (mark) ranges.push({ threadId: key, from: pos.from, to: pos.to });
-      try {
-        // EDT-FR-UYEN: a fragment in a fence that shows its diagram aligns
-        // with the top of the diagram, since its text has no height there.
-        tops[key] = Math.max(0, fragmentTop(editor.view, pos.from) - containerTop);
-      } catch {
-        // A position the view cannot resolve (mid-relayout) simply has no
-        // alignment this pass; the next one picks it up.
-      }
-    };
     for (const entry of comments.threads) {
-      if (entry.anchor === null) continue;
       // A resolved thread's passage is no longer under discussion, so it is not
       // marked in the body — the disclosure is where it lives now (CMT-FR-17).
-      place(
-        entry.thread.id,
-        entry.anchor.quote,
-        entry.anchor.start,
-        !entry.thread.resolved,
-      );
-    }
-    if (draft) {
-      place(DRAFT_KEY, draft.quote, draft.start, false);
+      if (entry.anchor === null || entry.thread.resolved) continue;
+      const { quote, start } = entry.anchor;
+      const at = findNearest(index.text, quote, start);
+      if (at === -1) continue;
+      const pos = rangeToPositions(index, at, at + quote.length);
+      if (pos) ranges.push({ threadId: entry.thread.id, from: pos.from, to: pos.to });
     }
     setAnchorRanges((prev) =>
       prev.length === ranges.length &&
@@ -212,35 +189,24 @@ export function useCommentAnchors(deps: CommentAnchorDeps) {
         ? prev
         : ranges,
     );
-    setAnchorTops((prev) => {
-      const sameKeys =
-        Object.keys(prev).length === Object.keys(tops).length &&
-        Object.keys(tops).every((k) => prev[k] === tops[k]);
-      return sameKeys ? prev : tops;
-    });
     // `docVersion` stands in for the mutable document, and `diagramLayout` for
     // the height of its diagram fences.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     mode,
-    railOpen,
+    marksShown,
     editor,
     docVersion,
     diagramLayout,
     comments.threads,
-    draft,
     session.seedToken,
   ]);
 
   return {
     bodyScrollRef,
-    arrangement,
-    scrollTop,
-    setScrollTop,
-    anchorTops,
-    setAnchorTops,
     anchorRanges,
     identityBlock,
     scrollFragmentIntoView,
+    revealFragment,
   };
 }

@@ -163,15 +163,25 @@ export function wireBackend(invokeMock: Mock, b: Backend) {
   });
 }
 
-export const commentsToggle = () =>
-  screen.getByRole("button", { name: /comments \(\d+ unresolved\)/i });
+/** DDS-FR-XQMF / CMT-FR-29: the control that hides and shows the column. */
+export const discussionToggle = () => screen.getByTestId("editor-discussion-toggle");
 
-export async function openRail() {
-  await waitFor(() => expect(commentsToggle()).toBeInTheDocument());
-  if (commentsToggle().getAttribute("aria-expanded") !== "true") {
-    fireEvent.click(commentsToggle());
+/**
+ * CMT-FR-01: the Editor tab's discussion column, shown where it is hidden.
+ *
+ * The column is shown by default, so it exists before the discussions are
+ * read. Give `threadId` to wait also until the column renders that discussion.
+ */
+export async function openColumn(threadId?: string): Promise<HTMLElement> {
+  const column = await screen.findByTestId("editor-discussion-column");
+  if (column.hidden) fireEvent.click(discussionToggle());
+  await waitFor(() => expect(column.hidden).toBe(false));
+  if (threadId !== undefined) {
+    await waitFor(() =>
+      expect(column.querySelector(`[data-testid="comment-thread-${threadId}"]`)).not.toBeNull(),
+    );
   }
-  return screen.getByRole("complementary", { name: "Comments" });
+  return column;
 }
 
 /**

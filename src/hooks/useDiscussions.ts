@@ -1,6 +1,6 @@
 /**
  * One thing's discussions, as the tab showing it reads and continues them
- * (`CMT-comments.md` CMT-FR-52 … CMT-FR-62, `ACT-action-control.md` ACT-FR-16,
+ * (`CMT-comments.md` CMT-FR-52 … CMT-FR-61, `ACT-action-control.md` ACT-FR-16,
  * ACT-FR-22).
  *
  * The counterpart of `useComments` for threads that are about a whole thing
@@ -45,7 +45,7 @@ import {
 import { addressesEveryone, agentRoster } from "../components/agentTags";
 import type { AgentRoster } from "../components/agentTags";
 import { logDebug, logWarn } from "../logging";
-import { loggableTurnFailure } from "../components/CommentRail/messages";
+import { loggableTurnFailure } from "../components/discussion/messages";
 import {
   setDiscussionTurnFailure,
   hasTurnEnded,

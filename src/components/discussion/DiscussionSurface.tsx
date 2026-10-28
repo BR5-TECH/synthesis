@@ -29,8 +29,8 @@ import { agentRoster } from "../agentTags";
 import { DiscussionQuestions } from "../DiscussionQuestions";
 import { submitQuestionAnswers } from "../DiscussionQuestions/submit";
 import { StreamMessages } from "../DraftDiscussion/stream";
-import { commentErrorMessage, turnFailureMessage } from "../CommentRail/messages";
-import { pairedHalves } from "../CommentRail/questionPairs";
+import { commentErrorMessage, turnFailureMessage } from "./messages";
+import { pairedHalves } from "./questionPairs";
 import { useDiscussionRuntime } from "../../hooks/useDiscussionRuntime";
 import { usePendingContributions } from "../../hooks/usePendingContributions";
 import { logDebug } from "../../logging";
@@ -74,7 +74,7 @@ export interface DiscussionSurfaceProps {
   discussion: Discussion;
   /**
    * The owner layout this surface sits in, for the focus registry and for
-   * announcements: `"rail"`, `"column"`, `"panel"`, `"tab"`, or any name the
+   * announcements: `"column"`, `"panel"`, `"tab"`, or any name the
    * owner chooses.
    */
   owner: string;
@@ -82,7 +82,12 @@ export interface DiscussionSurfaceProps {
   /** CVP-FR-32: who the author writes as, so their own messages are told apart. */
   identity?: Participant | null;
   /** CMT-FR-24: why posting is unavailable, drawn above the messages. */
-  identityBlock?: { message: string; route?: string | null } | null;
+  identityBlock?: {
+    message: string;
+    route?: string | null;
+    /** CMT-FR-25: the one refusal the author can clear from here. */
+    action?: { label: string; onActivate: () => void };
+  } | null;
   /** The composer is off for want of an identity. Reading is unaffected. */
   disabled?: boolean;
   /** An operation of the surface is in flight, so Resolve and Post are off. */
@@ -134,12 +139,9 @@ export interface DiscussionSurfaceProps {
   /** False reads and follows no turn. For an owner that supplies all of them. */
   liveTurns?: boolean;
 
-  /** Rail alignment: the card's top, whether it is positioned, and its measure. */
-  top?: number;
-  positioned?: boolean;
+  /** Whether the owner has this discussion in focus, and how it learns of it. */
   focused?: boolean;
   onFocus?: () => void;
-  onMeasure?: (discussionId: string, height: number) => void;
 
   /** DDS-FR-CLBK: the first message to render, so a long head can be folded. */
   visibleFrom?: number;
@@ -238,22 +240,6 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
     countedIds,
     growthIds,
   });
-
-  // The rail stacks cards by their measured heights (CMT-FR-27).
-  const { onMeasure } = props;
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el || !onMeasure || !active) return;
-    const report = () => {
-      const height = el.getBoundingClientRect().height;
-      if (height > 0) onMeasure(thread.id, height);
-    };
-    report();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(report);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [thread.id, onMeasure, active]);
 
   // NAW-FR-32 / CMT-FR-28: bring a focused card into view.
   useEffect(() => {
@@ -374,8 +360,6 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
             ? "comment-card comment-card--embedded"
             : "comment-card"
       }
-      style={props.positioned ? { top: props.top } : undefined}
-      data-positioned={props.positioned ?? false}
       data-focused={props.focused ?? false}
       data-resolved={thread.resolved}
       data-discussion-id={thread.id}
@@ -428,6 +412,15 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
           {props.identityBlock.message}
           {props.identityBlock.route && (
             <div className="comment-rail__route">{props.identityBlock.route}</div>
+          )}
+          {props.identityBlock.action && (
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={props.identityBlock.action.onActivate}
+            >
+              {props.identityBlock.action.label}
+            </button>
           )}
         </div>
       )}

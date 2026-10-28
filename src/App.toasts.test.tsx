@@ -15,6 +15,7 @@ import { mintAddress } from "./state/notificationAddress";
 import { resetNotifications } from "./state/notifications";
 import { resetPanelReveals } from "./state/panelReveal";
 import { resetToasts } from "./state/toasts";
+import { resetLogBufferForTest } from "./logging";
 import {
   activeWorktreePath,
   defaultInvoke,
@@ -77,6 +78,7 @@ beforeEach(() => {
   resetPanelReveals();
   resetNotifications();
   resetToasts();
+  resetLogBufferForTest();
   for (const k in eventHandlers) delete eventHandlers[k];
   invokeMock.mockReset();
   invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) =>
@@ -176,5 +178,50 @@ describe("the publication metadata startup toast", () => {
     expect(toast).toHaveTextContent("GitHub publication data not loaded");
     expect(toast).toHaveTextContent("The project has no GitHub token.");
     expect(kept).toBeNull();
+  });
+});
+
+describe("the worktree fallback toast", () => {
+  /** Open `acme` with its remembered worktree gone, on `worktreePath`. */
+  async function openOnFallback(worktreePath: string | null) {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const answer = await defaultInvoke(cmd, args);
+      if (cmd === "open_project_at_path") {
+        return { ...(answer as object), rememberedWorktreeUnavailable: true };
+      }
+      if (cmd === "get_active_worktree" && worktreePath !== null) {
+        return { ...(answer as object), path: worktreePath };
+      }
+      return answer;
+    });
+    render(<App />);
+    await enterIde();
+    return waitFor(() => {
+      const shown = document.querySelector<HTMLElement>(
+        '[data-testid="notification-toast"][data-key="worktree-fallback"]',
+      );
+      expect(shown).not.toBeNull();
+      return shown!;
+    });
+  }
+
+  it("WTC-FR-17, NTF-FR-WTFB: a project that opens on the primary worktree shows a Warn toast that the opening does not remove", async () => {
+    const toast = await openOnFallback(null);
+    expect(toast).toHaveAttribute("data-level", "Warn");
+    expect(toast).toHaveTextContent("Worktree not found");
+    expect(toast).toHaveTextContent("no longer on disk");
+  });
+
+  it("NTF-FR-WTFB: the toast stays when the primary worktree is at another path than the project", async () => {
+    // The root moves from the project path to the worktree path when the
+    // worktree resolves, and NTF-FR-15 removes every toast at that move.
+    const toast = await openOnFallback("~/dev/acme-repo");
+    expect(toast).toHaveAttribute("data-level", "Warn");
+    await waitFor(() =>
+      expect(invokeMock.mock.calls.some((c) => c[0] === "get_active_worktree")).toBe(true),
+    );
+    expect(
+      document.querySelector('[data-testid="notification-toast"][data-key="worktree-fallback"]'),
+    ).not.toBeNull();
   });
 });

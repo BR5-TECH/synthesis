@@ -38,7 +38,7 @@ import { addressesEveryone, agentRoster } from "../components/agentTags";
 import { logDebug, logWarn } from "../logging";
 import { hasTurnEnded } from "../state/discussionSession";
 import { useAgentRegistryRevision } from "../state/agentRegistry";
-import { loggableTurnFailure } from "../components/CommentRail/messages";
+import { loggableTurnFailure } from "../components/discussion/messages";
 import { publishThread, publishThreads } from "../state/conversationThreads";
 import { originArtifactId, originFor, originKind } from "../state/discussionOrigin";
 import {

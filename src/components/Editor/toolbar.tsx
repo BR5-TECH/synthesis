@@ -1,15 +1,17 @@
 import { Icon } from "../icons";
+import { SplitControls, type SplitRatio } from "../DraftDiscussion";
 import type { EditMode } from "../../state/editHistory";
 import { TocControl } from "./TocControl";
 import type { DocumentOutline } from "./useDocumentOutline";
 
 /**
  * EDT-FR-16: the Editor's primary actions rendered as graphical icon controls in
- * a single right-aligned cluster — the comments control, the pending proposal
- * indication, the table of contents control (EDT-FR-LGQA), and the
- * WYSIWYG⇄source mode toggle (EDT-FR-17). The table of contents control and the
- * toggle are a pair, with no control between them. `mode`/`onToggleMode` are
- * omitted on surfaces without dual-mode editing (the mock).
+ * a single right-aligned cluster — the pending proposal indication, the table
+ * of contents control (EDT-FR-LGQA), the WYSIWYG⇄source mode toggle
+ * (EDT-FR-17), and the discussion column's split controls at the trailing end
+ * (DDS-FR-PNXR, DDS-FR-XQMF). The table of contents control and the toggle are
+ * a pair, with no control between them. `mode`/`onToggleMode` are omitted on
+ * surfaces without dual-mode editing (the mock).
  *
  * The cluster carries no Save control: an artifact writes itself (EDT-FR-70), so
  * a control to write it would either do nothing or duplicate what has already
@@ -21,11 +23,17 @@ interface ActionClusterProps {
   mode?: EditMode;
   onToggleMode?: () => void;
   /**
-   * CMT-FR-29: the comments control and the artifact's unresolved-thread count.
-   * Omitted on surfaces with no rail (the mock). Present in **both** editing
-   * modes, so switching to raw text never hides the fact that threads exist.
+   * CMT-FR-29 / DDS-FR-XQMF: the discussion column's presets, accelerator hint,
+   * and hide control. Omitted on surfaces with no column (a draft's embedded
+   * Editor, the mock). Present in **both** editing modes, so switching to raw
+   * text never hides the way to the discussions.
    */
-  comments?: { count: number; open: boolean; onToggle: () => void };
+  split?: {
+    ratio: SplitRatio;
+    hidden: boolean;
+    onRatioChange: (ratio: SplitRatio) => void;
+    onToggle: () => void;
+  };
   /**
    * PCR-FR-16 / EDT-FR-84: the pending indication an artifact carrying an
    * undecided proposed change renders, which opens the review on it.
@@ -57,7 +65,7 @@ export function ActionCluster({
   dirty,
   mode,
   onToggleMode,
-  comments,
+  split,
   proposal,
   report,
   outline,
@@ -74,25 +82,6 @@ export function ActionCluster({
             ● unsaved
           </span>
         )
-      )}
-      {comments && (
-        <button
-          className="btn btn--ghost btn--icon editor__comments-toggle"
-          aria-label={
-            comments.open
-              ? `Hide comments (${comments.count} unresolved)`
-              : `Show comments (${comments.count} unresolved)`
-          }
-          title={`${comments.count} unresolved ${
-            comments.count === 1 ? "thread" : "threads"
-          }`}
-          aria-expanded={comments.open}
-          data-active={comments.open}
-          onClick={comments.onToggle}
-        >
-          <Icon.Comment size={15} />
-          <span className="editor__comments-count">{comments.count}</span>
-        </button>
       )}
       {/* PCR-FR-16: the way back to a review that was dismissed, and the way in
           to one that arrived while the tab was closed. It clears the moment the
@@ -127,6 +116,19 @@ export function ActionCluster({
         >
           {mode === "wysiwyg" ? <Icon.Code size={15} /> : <Icon.Doc size={15} />}
         </button>
+      )}
+      {/* EDT-FR-16 / DDS-FR-XQMF: the column's controls at the trailing end,
+          with the hide control last in both states. */}
+      {split && (
+        <span className="editor__split-controls">
+          <SplitControls
+            ratio={split.ratio}
+            hidden={split.hidden}
+            onRatioChange={split.onRatioChange}
+            onToggle={split.onToggle}
+            toggleTestId="editor-discussion-toggle"
+          />
+        </span>
       )}
     </div>
   );

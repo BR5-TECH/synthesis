@@ -10,6 +10,12 @@ import type { DiscussionReveal } from "../state/revealDiscussion";
 import { resetPanelReveals } from "../state/panelReveal";
 import { resetDraftProposals } from "../state/draftProposals";
 import {
+  discussionColumnState,
+  fileColumn,
+  setColumnHidden,
+} from "../state/discussionColumn";
+import { fragment } from "../test/discussionFixtures";
+import {
   FLOW_BODY,
   handle,
   seedDirty,
@@ -729,50 +735,102 @@ describe("useShellSession.revealDiscussion on an available artifact (CMP-FR-10 /
     });
   });
 
-  it("lands a source file on the one surface it has, without asking for a rich one", () => {
-    // CMP-FR-11 / CMT-FR-02: the activation puts the tab on the surface that
-    // renders the rail. For a source file (ESH-FR-SSDV) that is the surface it is
-    // already on — writing `mode: "wysiwyg"` would ask for a rich rendering the
-    // file never gets, and the rail would then be beside nothing.
+  it("CMT-FR-36, ESH-FR-SSDV: lands a fragment discussion on a source file on the one surface it has, with the column shown", () => {
+    // CMT-FR-02: a source file marks its fragments on the one surface it has.
+    // Writing `mode: "wysiwyg"` would ask for a rich rendering the file never
+    // gets.
     const { result } = renderHook(() => useShellSession());
-    const sourceTarget = reveal("src/main.rs", "t9");
+    setColumnHidden(fileColumn("src/main.rs"), true);
+    const sourceTarget: DiscussionReveal = {
+      ...reveal("src/main.rs", "t9"),
+      fragmentTarget: fragment({ start: 0, end: 4, quote: "fn m" }, "src/main.rs"),
+    };
 
     act(() => result.current.revealDiscussion(sourceTarget));
 
     const session = result.current.sessions.get("src/main.rs")!;
     expect(session.mode).toBe("text");
-    expect(session.railOpen).toBe(true);
+    expect(discussionColumnState(fileColumn("src/main.rs")).hidden).toBe(false);
     expect(result.current.focusThread).toEqual({
       artifactId: "src/main.rs",
       threadId: "t9",
     });
   });
 
-  it("puts the tab in WYSIWYG with the rail showing, whatever state it was left in", () => {
+  it("CMT-FR-36: puts a Markdown tab in WYSIWYG with the column shown for a fragment discussion, whatever state it was left in", () => {
     const { result } = renderHook(() => useShellSession());
 
-    // The author had this artifact open in raw-text mode with the rail closed.
+    // The author had this artifact open in raw-text mode with the column hidden.
     act(() => result.current.openArtifact({ id: "specs/onboarding.md", name: "onboarding.md" }));
-    act(() =>
+    act(() => {
       result.current.sessions.update("specs/onboarding.md", {
         mode: "text",
-        railOpen: false,
         // Expanded by the author. A non-resolved click-through must not collapse
         // it — `resolvedOpen: target.resolved` would, and would pass a test that
         // only ever saw the `false` default.
         resolvedOpen: true,
+      });
+      setColumnHidden(fileColumn("specs/onboarding.md"), true);
+    });
+
+    act(() =>
+      result.current.revealDiscussion({
+        ...target,
+        fragmentTarget: fragment(
+          { start: 0, end: 17, quote: "the first session" },
+          "specs/onboarding.md",
+        ),
       }),
     );
 
-    act(() => result.current.revealDiscussion(target));
-
     const session = result.current.sessions.get("specs/onboarding.md")!;
-    // CMT-FR-36: the rail renders only in WYSIWYG, so the navigation has to
-    // switch the mode or it lands on nothing.
+    // CMT-FR-36: raw-text mode marks no fragment, so the navigation has to
+    // switch the mode or the fragment it reveals is not shown.
     expect(session.mode).toBe("wysiwyg");
-    expect(session.railOpen).toBe(true);
+    expect(discussionColumnState(fileColumn("specs/onboarding.md")).hidden).toBe(false);
     // Not a resolved thread, so the disclosure is left as the author had it.
     expect(session.resolvedOpen).toBe(true);
+  });
+
+  it("CMT-FR-36: shows the column for a whole-file discussion and leaves the editing mode as it was", () => {
+    // EDT-FR-61: the column stands on every surface, so a discussion with no
+    // fragment is read in raw-text mode as well, and the mode is the author's.
+    const { result } = renderHook(() => useShellSession());
+    act(() => result.current.openArtifact({ id: "specs/onboarding.md", name: "onboarding.md" }));
+    act(() => {
+      result.current.sessions.update("specs/onboarding.md", { mode: "text" });
+      setColumnHidden(fileColumn("specs/onboarding.md"), true);
+      setColumnHidden(fileColumn("specs/other.md"), true);
+    });
+
+    act(() => result.current.revealDiscussion(target));
+
+    expect(result.current.sessions.get("specs/onboarding.md")!.mode).toBe("text");
+    expect(discussionColumnState(fileColumn("specs/onboarding.md")).hidden).toBe(false);
+    // The column of another file is not touched.
+    expect(discussionColumnState(fileColumn("specs/other.md")).hidden).toBe(true);
+  });
+
+  it("CMT-FR-36, CMP-FR-11: a resolved fragment discussion puts the tab in WYSIWYG and expands the resolved disclosure", () => {
+    const { result } = renderHook(() => useShellSession());
+    act(() => result.current.openArtifact({ id: "specs/onboarding.md", name: "onboarding.md" }));
+    act(() => result.current.sessions.update("specs/onboarding.md", { mode: "text" }));
+
+    act(() =>
+      result.current.revealDiscussion({
+        ...target,
+        resolved: true,
+        fragmentTarget: fragment(
+          { start: 0, end: 17, quote: "the first session" },
+          "specs/onboarding.md",
+        ),
+      }),
+    );
+
+    const session = result.current.sessions.get("specs/onboarding.md")!;
+    expect(session.mode).toBe("wysiwyg");
+    expect(session.resolvedOpen).toBe(true);
+    expect(discussionColumnState(fileColumn("specs/onboarding.md")).hidden).toBe(false);
   });
 
   it("expands the resolved disclosure only for a resolved thread (CMP-FR-11)", () => {

@@ -116,7 +116,7 @@
   outline-offset: -2px;
 }
 
-.draft-workspace__kbd {
+.dds-kbd {
   color: var(--fg-4);
   padding: 0 var(--sp-1);
   border: 1px solid var(--border-1);
@@ -126,7 +126,7 @@
 /* DDS-FR-XQMF: the control that hides and shows the discussion column. It reads
    as pressed while the column stands, so one control says which of the two
    arrangements the tab is in and offers the other. */
-.draft-workspace__discussion-toggle[aria-pressed="true"] {
+.dds-discussion-toggle[aria-pressed="true"] {
   color: var(--fg-1);
   background: var(--bg-active);
 }

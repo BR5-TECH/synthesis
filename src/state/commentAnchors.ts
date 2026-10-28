@@ -13,9 +13,6 @@
  * - {@link shiftAnchor} tracks an anchor through a live edit, moving it when text
  *   is inserted or removed before it and orphaning it when the anchored text is
  *   itself destroyed (CMT-FR-20).
- * - {@link stackCards} turns anchor positions into the rail's card layout, each
- *   card aligned to its anchor and pushed down only as far as it must be to clear
- *   the one above (CMT-FR-27).
  */
 
 import { discussionFragment } from "../types";
@@ -228,48 +225,12 @@ export function driftedAnchors(
   return out;
 }
 
-/** A card's placement in the rail: which thread, and its top offset in pixels. */
-export interface StackedCard {
-  threadId: string;
-  top: number;
-}
-
-/**
- * CMT-FR-27: place each card at its anchor's line, pushing a card down only as
- * far as it must go to clear the one above.
- *
- * Cards are laid out in the order given (anchor order, CMS-FR-23) and each is
- * placed at `max(its own anchor top, the bottom of the previous card)`. A card is
- * therefore never *above* where its anchor is, never overlaps its neighbour, and
- * a run of closely-anchored threads packs tightly instead of every card after the
- * first being shoved to the bottom of the rail.
- *
- * `heights` is keyed by thread id; a card whose height is not yet measured falls
- * back to `defaultHeight`, so the first render (before any measurement) still
- * produces a non-overlapping layout.
- */
-export function stackCards(
-  cards: readonly { threadId: string; anchorTop: number }[],
-  heights: Readonly<Record<string, number>>,
-  defaultHeight: number,
-  gap = 8,
-): StackedCard[] {
-  const out: StackedCard[] = [];
-  let floor = 0;
-  for (const card of cards) {
-    const top = Math.max(card.anchorTop, floor);
-    out.push({ threadId: card.threadId, top });
-    floor = top + (heights[card.threadId] ?? defaultHeight) + gap;
-  }
-  return out;
-}
-
 /**
  * CMT-FR-29: the artifact's unresolved-thread count, orphaned threads included.
  *
  * Orphaned counts because an orphaned thread is exactly the one most at risk of
- * being forgotten: it has left the aligned column, and if it did not count the
- * control would read zero while unanswered objections sat in the rail.
+ * being forgotten: its passage is gone from the file, and if it did not count
+ * the total would read zero while unanswered objections stood in the column.
  */
 export function unresolvedCount(anchored: readonly AnchoredThread[]): number {
   return anchored.filter((entry) => !entry.thread.resolved).length;

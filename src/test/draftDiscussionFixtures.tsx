@@ -10,6 +10,7 @@
 import { vi } from "vitest";
 
 import { DiscussionColumn } from "../components/DraftDiscussion";
+import { draftColumn } from "../state/discussionColumn";
 import type {
   Comment,
   Discussion,
@@ -90,7 +91,10 @@ export function fragmentDiscussion(
 export function columnElement(over: Partial<ColumnProps> = {}) {
   return (
     <DiscussionColumn
-      draftId={DRAFT}
+      column={draftColumn(DRAFT)}
+      target={{ kind: "draft", draftId: DRAFT }}
+      noun="draft"
+      material="prompt"
       discussions={[discussionSaying("disc-1", ["opening"])]}
       selectedThreadId={null}
       onSelectThread={vi.fn()}

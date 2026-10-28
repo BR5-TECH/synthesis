@@ -9,13 +9,14 @@
 import { GITHUB_TOKEN_ERRORS, type PullOutcome } from "../types";
 import { logDebug } from "../logging";
 import { pullNote } from "./pullText";
+import { OPEN_GITHUB_SETTINGS } from "./pushToast";
 import { showToast } from "./toasts";
 
 /** NTF-FR-PLQV: the key of the pull toast. A second pull replaces the first. */
 export const PULL_RESULT_KEY = "pull-result";
 
 /** NTF-FR-PLQV: the label of the link a missing-token failure carries. */
-export const OPEN_GITHUB_SETTINGS = "Open GitHub settings";
+export { OPEN_GITHUB_SETTINGS };
 
 /** NTF-FR-PLQV: an Error toast that names why the pull did not land. */
 export function showPullFailure(

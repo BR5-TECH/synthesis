@@ -27,6 +27,8 @@ import { resetDraftDiscussions } from "../../state/draftDiscussion";
 import { resetPromptProposals } from "../../state/promptProposals";
 import { resetSharedCommentIdentity } from "../useSharedCommentIdentity";
 import { resetProjectIdentity } from "../../state/projectIdentity";
+import { showWorktreeFallback } from "../../state/shellToasts";
+import { logInfo } from "../../logging";
 import type { EditSessionStore } from "../../state/editSessions";
 import type { FlowSessionStore } from "../../state/flowSessions";
 import type { DraftSessionStore } from "../../state/draftSessions";
@@ -54,7 +56,6 @@ export interface LifecycleDeps {
   specMap: SpecMapSessionStore;
   focusBlocker: (artifactId: string) => void;
   focusDraft: (draftId: string) => void;
-  flashToast: (message: string) => void;
   setScreen: (screen: "picker" | "ide") => void;
   setProjectName: (name: string) => void;
   setProjectPath: (path: string) => void;
@@ -98,7 +99,6 @@ export function createLifecycleActions(deps: LifecycleDeps): LifecycleActions {
     specMap,
     focusBlocker,
     focusDraft,
-    flashToast,
     setScreen,
     setProjectName,
     setProjectPath,
@@ -336,9 +336,8 @@ export function createLifecycleActions(deps: LifecycleDeps): LifecycleActions {
     // silently rerouted to the primary worktree with no indication that the one
     // they were working in has disappeared.
     if (handle.rememberedWorktreeUnavailable) {
-      flashToast(
-        "That worktree is no longer on disk — opened the main one instead",
-      );
+      logInfo(["frontend"], "remembered worktree is gone, opened the primary one");
+      showWorktreeFallback(handle.path);
     }
   };
 

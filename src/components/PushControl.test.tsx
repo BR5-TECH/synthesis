@@ -4,9 +4,10 @@ import userEvent from "@testing-library/user-event";
 
 import { PushControl } from "./PushControl";
 import { GIT_OPERATION_FINISHED, GIT_OUTPUT_LINE } from "../events";
-import { flushLogs } from "../logging";
+import { flushLogs, resetLogBufferForTest } from "../logging";
 import { createEventBus } from "../test/searchEvents";
 import type { UpstreamSyncState } from "../types";
+import { resetToasts, visibleToasts } from "../state/toasts";
 
 // The top-chrome Push control (GIT-FR-XXLE). It reaches the backend through
 // `invoke` and follows the transfer channels on the event bus.
@@ -33,6 +34,8 @@ const AHEAD: UpstreamSyncState = {
 };
 
 beforeEach(() => {
+  resetToasts();
+  resetLogBufferForTest();
   bus.reset();
   sync = AHEAD;
   pushImpl = async () => undefined;
@@ -62,6 +65,16 @@ const renderControl = (inRepository = true) =>
   );
 
 const button = () => screen.getByRole("button", { name: "Push" });
+
+/** NTF-FR-PSHT: the toast the push shows when it ends, or undefined. */
+const pushToast = () => visibleToasts().find((t) => t.key === "push-result");
+/** Wait until the push toast shows. */
+const findPushToast = () =>
+  waitFor(() => {
+    const shown = pushToast();
+    expect(shown).toBeDefined();
+    return shown!;
+  });
 
 const waitAvailable = () =>
   waitFor(() => expect(button()).toHaveAttribute("aria-disabled", "false"));
@@ -353,7 +366,8 @@ describe("typed token errors (GIT-FR-IMSH)", () => {
     await userEvent.click(button());
     await waitFor(() => expect(onRequestGithubToken).toHaveBeenCalledOnce());
     await waitFor(() => expect(pushCalls()).toBe(2));
-    expect(screen.queryByTestId("top-push-note")).toBeNull();
+    // NTF-FR-PSHT: the retried push succeeded.
+    expect(await findPushToast()).toMatchObject({ level: "Info", title: "Branch pushed" });
   });
 
   it("GIT-FR-IMSH abandons the push when the picker is cancelled", async () => {
@@ -365,9 +379,12 @@ describe("typed token errors (GIT-FR-IMSH)", () => {
     await waitAvailable();
 
     await userEvent.click(button());
-    expect(await screen.findByTestId("top-push-note")).toHaveTextContent(
-      "Push cancelled — no GitHub token was selected.",
-    );
+    expect(await findPushToast()).toMatchObject({
+      level: "Error",
+      title: "Push failed",
+      body: "No GitHub token was selected, so nothing was pushed.",
+      link: null,
+    });
     expect(pushCalls()).toBe(1);
   });
 
@@ -387,17 +404,15 @@ describe("typed token errors (GIT-FR-IMSH)", () => {
     await waitAvailable();
 
     await userEvent.click(button());
-    const note = await screen.findByTestId("top-push-note");
-    expect(note).toHaveTextContent("A push is already running.");
-    expect(note).toHaveAttribute("role", "status");
+    expect(await findPushToast()).toMatchObject({
+      level: "Error",
+      title: "Push failed",
+      body: "A push is already running.",
+    });
     expect(pushCalls()).toBe(1);
-    // GIT-FR-CNQO: the note and the reason bubble use one place, so only the
-    // note shows. The reason stays the accessible description.
+    // GIT-FR-CNQO: the reason stays the accessible description and its bubble.
     expect(button()).toHaveAttribute("data-state", "busy");
-    expect(document.querySelector(".push-control__reason")).toBeNull();
     expect(button()).toHaveAccessibleDescription("A push is already running.");
-
-    await userEvent.click(screen.getByTestId("top-push-note-dismiss"));
     expect(document.querySelector(".push-control__reason")).toHaveTextContent(
       "A push is already running.",
     );
@@ -413,9 +428,11 @@ describe("typed token errors (GIT-FR-IMSH)", () => {
     await userEvent.click(button());
     await waitFor(() => expect(pushCalls()).toBe(2));
     expect(onRequestGithubToken).toHaveBeenCalledOnce();
+    // NTF-FR-PSHT: the retried push that still has no token is a failure.
+    expect(await findPushToast()).toMatchObject({ level: "Error", title: "Push failed" });
   });
 
-  it("GIT-FR-IMSH offers the Global settings route on a missing-token error and dismisses its note", async () => {
+  it("GIT-FR-IMSH, NTF-FR-PSHT: a missing-token error shows an Error toast with the GitHub settings link", async () => {
     pushImpl = async () => {
       throw "github_token_missing";
     };
@@ -423,28 +440,29 @@ describe("typed token errors (GIT-FR-IMSH)", () => {
     await waitAvailable();
 
     await userEvent.click(button());
-    expect(await screen.findByTestId("top-push-note")).toHaveTextContent(
-      "Push needs a GitHub token.",
-    );
+    const shown = await findPushToast();
+    expect(shown).toMatchObject({
+      level: "Error",
+      title: "Push failed",
+      body: "Pushing to the remote needs a GitHub token.",
+    });
     expect(onRequestGithubToken).not.toHaveBeenCalled();
 
-    await userEvent.click(screen.getByTestId("top-push-note-settings"));
+    expect(shown.link?.label).toBe("Open GitHub settings");
+    shown.link?.onActivate();
     expect(onOpenGlobalSettings).toHaveBeenCalledOnce();
-    expect(screen.queryByTestId("top-push-note")).toBeNull();
   });
 
-  it("GIT-FR-IMSH renders a note that can be dismissed", async () => {
-    pushImpl = async () => {
-      throw "github_token_missing";
-    };
+  it("NTF-FR-PSHT: a push that succeeds shows an Info toast", async () => {
     renderControl();
     await waitAvailable();
     await userEvent.click(button());
-    await screen.findByTestId("top-push-note");
-
-    await userEvent.click(screen.getByTestId("top-push-note-dismiss"));
-    expect(screen.queryByTestId("top-push-note")).toBeNull();
-    expect(onOpenGlobalSettings).not.toHaveBeenCalled();
+    expect(await findPushToast()).toMatchObject({
+      level: "Info",
+      title: "Branch pushed",
+      body: "The commits of the branch are on the remote.",
+      address: null,
+    });
   });
 
   it("GIT-FR-IMSH writes no push failure to the diagnostic Logs panel", async () => {
@@ -463,8 +481,9 @@ describe("typed token errors (GIT-FR-IMSH)", () => {
     expect(
       invokeMock.mock.calls.filter((c) => c[0] === "append_log_records"),
     ).toHaveLength(0);
-    // The failure is the transcript's to carry, so the control adds no note.
-    expect(screen.queryByTestId("top-push-note")).toBeNull();
+    // NTF-FR-PSHT: the failure shows as an Error toast.
+    expect(pushToast()).toMatchObject({ level: "Error", title: "Push failed" });
+    expect(pushToast()?.body).toContain("remote rejected the push");
   });
 });
 

@@ -61,8 +61,8 @@ export { conversationTabId };
 
 /**
  * Owns the entire per-project IDE shell: which project is open, the open tabs,
- * the vertical/bottom panel state, the search overlay, the
- * transient toast, and the Global-settings dirty flag. These pieces are tightly
+ * the vertical/bottom panel state, the search overlay, and the Global-settings
+ * dirty flag. These pieces are tightly
  * coupled — `resetShellState` (run on initial open and on project switch,
  * OVW-FR-04/05/11) clears all of them together — so they live in one hook rather
  * than several. `App` becomes a thin orchestrator that wires this to the chrome.
@@ -257,7 +257,6 @@ export function useShellSession(stores: ShellSessionStores = {}) {
   // other one. Like the rest, exclusion is enforced in the *opening* logic
   // rather than by listeners coordinating after the fact.
   const [progressOverlayOpen, setProgressOverlayOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
 
   // NTS-FR-08: when the active tab changes, drop any Library-initiated Notes
   // override so the panel rescopes to the active tab's entity.
@@ -551,11 +550,6 @@ export function useShellSession(stores: ShellSessionStores = {}) {
   const openRuns = () => showBottom("runs");
   const openGit = () => showBottom("git");
 
-  // Transient confirmation toast, auto-dismissed.
-  const flashToast = (message: string) => {
-    setToast(message);
-    setTimeout(() => setToast(null), 3000);
-  };
 
 
   // NAW-new-artifact.md / DRP-drafts-panel.md: the New Artifact tab's lifecycle.
@@ -573,7 +567,6 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     setActiveTab,
     activateTab,
     bumpDrafts,
-    flashToast,
     specMap,
   });
   // SMD-FR-LKVU: planned chips follow their drafts through the drafts revision.
@@ -694,7 +687,6 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     specMap,
     focusBlocker,
     focusDraft,
-    flashToast,
     setScreen,
     setProjectName,
     setProjectPath,
@@ -849,7 +841,7 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     historyEnabled,
     openRuns,
     openGit,
-    // search + toast
+    // search
     // drafts / New Artifact tab (NAW-new-artifact.md / DRP-drafts-panel.md)
     openDraft,
     openDraftById,
@@ -888,8 +880,6 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     progressOverlayOpen,
     openProgressOverlay,
     closeProgressOverlay,
-    toast,
-    flashToast,
     // global settings dirty flag
     // artifact edit sessions (EDT-FR-28) + Flow sessions (FLO-FR-26) + the
     // draft selections and buffers of NAW-FR-09 / NAW-FR-11

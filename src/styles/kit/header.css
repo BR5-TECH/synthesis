@@ -501,15 +501,6 @@ button.top-chrome__project { background: transparent; border: 0; cursor: pointer
 }
 .push-control__button:hover + .sr-only + .push-control__reason,
 .push-control__button:focus-visible + .sr-only + .push-control__reason { display: block; }
-.push-control__note {
-  position: absolute; top: calc(100% + 4px); left: 0; z-index: 210;
-  display: flex; align-items: center; gap: 6px;
-  max-width: 380px; padding: 4px 4px 4px 8px;
-  background: var(--bg-elevated); border: 1px solid var(--border-1);
-  border-radius: var(--r-sm); box-shadow: var(--shadow-3);
-  color: var(--fg-2); font-size: var(--fs-ui-xs);
-}
-.push-control__note-text { flex: 1; min-width: 0; }
 /* WTS non-functional: a stable maximum width, so a long branch name cannot
    push the universal search bar out of the top chrome. */
 .wt-select__label {

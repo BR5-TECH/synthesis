@@ -7,8 +7,11 @@
  * is showing and what waits, and nothing else. It records nothing (NTF-FR-22):
  * a toast that has left is gone, and the store reaches no backend operation.
  *
- * The facility (`notifications.ts`) is the only writer, with one exception: the
- * dismissal and click paths of the stack component remove the toast they act on.
+ * It is also the one place where a surface reports the result of an action of
+ * the author (NTF-FR-TSRL). The facility (`notifications.ts`) writes the toasts
+ * of a raise. A surface writes the toast of a result through `showToast`, from a
+ * small module of its own (for example `pullToast.ts`). The dismissal and click
+ * paths of the stack component remove the toast they act on.
  */
 import { useSyncExternalStore } from "react";
 
@@ -130,6 +133,29 @@ export function clearToasts(): void {
   removeWhere(() => true);
 }
 
+/**
+ * NTF-FR-WTFB: toasts about a project that is opening, held until its content
+ * root is open. The opening removes every toast (NTF-FR-15), so a toast shown
+ * before it would go at once.
+ */
+let pendingForRoot: { projectKey: string; input: ToastInput }[] = [];
+
+/** NTF-FR-WTFB: show `input` when the content root of `projectKey` is open. */
+export function showToastWhenRootOpens(projectKey: string, input: ToastInput): void {
+  pendingForRoot = [
+    ...pendingForRoot.filter((p) => p.input.key !== input.key),
+    { projectKey, input },
+  ];
+}
+
+/** NTF-FR-WTFB: the content root of `projectKey` is open. Show what waits for it. */
+export function releaseToastsForRoot(projectKey: string): void {
+  const due = pendingForRoot.filter((p) => p.projectKey === projectKey);
+  if (due.length === 0) return;
+  pendingForRoot = pendingForRoot.filter((p) => p.projectKey !== projectKey);
+  for (const { input } of due) showToast(input);
+}
+
 /** Tests only: the toasts that wait for a slot. */
 export function queuedToasts(): readonly ToastEntry[] {
   return queue;
@@ -144,6 +170,7 @@ export function visibleToasts(): readonly ToastEntry[] {
 export function resetToasts(): void {
   visible = [];
   queue = [];
+  pendingForRoot = [];
   publish();
 }
 

@@ -27,6 +27,7 @@ import {
   topChromeInvoke,
 } from "../test/topChromeHarness";
 import type { SearchHit, WorktreeEntry } from "../types";
+import { resetToasts } from "../state/toasts";
 
 // The top chrome hosts the universal search bar and its overlay (SCH-FR-07).
 // The chrome also mounts the project switcher, whose import chain reaches the
@@ -77,6 +78,7 @@ const streamResults = (
 ) => streamInto(bus, searchIds, user, query, hits);
 
 beforeEach(() => {
+  resetToasts();
   bus.reset();
   searchIds = [];
   resetHitOrdinals();

@@ -25,7 +25,6 @@ import { TabStrip } from "./components/TabStrip";
 import { Viewport } from "./components/Viewport";
 import { BottomPanel } from "./components/BottomPanel";
 import { StatusBar } from "./components/StatusBar";
-import { Toast } from "./components/Toast";
 import { NewFileModal } from "./components/NewFileModal";
 import { AboutPanel } from "./components/AboutPanel";
 import { DiagramEditorHost } from "./components/DiagramEditor";
@@ -871,7 +870,6 @@ export function AppShell(props: AppShellProps) {
         </span>
       </div>
 
-      <Toast message={s.toast} />
     </div>
   );
 }

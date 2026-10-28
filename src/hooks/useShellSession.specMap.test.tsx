@@ -6,6 +6,7 @@ import { useShellSession } from "./useShellSession";
 import { DASHBOARD_TAB, SPEC_MAP_TAB } from "./shell/tabRecords";
 import { createTabClosures } from "./shell/tabClosures";
 import { MAP_DRAFT_FAILED } from "./shell/draftActions";
+import { resetToasts, visibleToasts } from "../state/toasts";
 import { createLifecycleActions, type LifecycleDeps } from "./shell/lifecycleActions";
 import { INITIAL_VIEW } from "../state/specMap/session";
 import { SearchSessionStore } from "../state/searchSessions";
@@ -36,6 +37,7 @@ let listing: Listing = [];
 let failCreate = false;
 
 beforeEach(() => {
+  resetToasts();
   resetPanelReveals();
   listing = [];
   failCreate = false;
@@ -245,7 +247,12 @@ describe("drafts started from the map (SMD)", () => {
     await act(async () => {
       await result.current.createDraftForMapNode("g1");
     });
-    expect(result.current.toast).toBe(MAP_DRAFT_FAILED);
+    // NTF-FR-DRFT: the failure shows as an Error toast.
+    expect(visibleToasts().find((t) => t.key === "draft-create-failed")).toMatchObject({
+      level: "Error",
+      title: "Draft not created",
+      body: MAP_DRAFT_FAILED,
+    });
     expect(result.current.tabs.some((t) => t.kind === "draft")).toBe(false);
     expect(result.current.activeTab).toBe(SPEC_MAP_TAB.id);
     expect(store.tree()!.planned.size).toBe(0);

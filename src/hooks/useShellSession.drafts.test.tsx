@@ -4,6 +4,7 @@ import { useShellSession } from "./useShellSession";
 import type { DraftSessionStore } from "../state/draftSessions";
 import { resetPanelReveals } from "../state/panelReveal";
 import { resetDraftProposals } from "../state/draftProposals";
+import { resetToasts, visibleToasts } from "../state/toasts";
 import {
   FLOW_BODY,
   handle,
@@ -73,6 +74,7 @@ beforeEach(() => {
   // Module-level for the same reason, and holding what the shell's teardown is
   // asserted to discard (DCR-FR-33).
   resetDraftProposals();
+  resetToasts();
   eventHandlers = [];
   failWrites = new Set();
   invokeMock.mockReset();
@@ -382,5 +384,44 @@ describe("draft tabs (NAW-FR-02 / NAW-FR-13 / TAB-FR-17 / TAB-FR-18)", () => {
       .filter((c) => c[0] === "save_draft_file_contents")
       .map((c) => (c[1] as { path: string }).path);
     expect(written).toEqual(["overview.md"]);
+  });
+});
+
+describe("draft failures are toasts (NTF-FR-DRFT)", () => {
+  it("NTF-FR-DRFT: an open by id that fails shows an Error toast and opens no tab", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "open_draft") throw "draft_not_found";
+      return undefined;
+    });
+    const { result } = renderHook(() => useShellSession());
+    await act(async () => result.current.loadProject(handle("a", "/a")));
+    const before = result.current.activeTab;
+    await act(async () => result.current.openDraftById("gone"));
+    expect(visibleToasts().find((t) => t.key === "draft-open-failed")).toMatchObject({
+      level: "Error",
+      title: "Draft not opened",
+      body: "draft_not_found",
+      address: null,
+    });
+    expect(result.current.tabs.some((t) => t.kind === "draft")).toBe(false);
+    expect(result.current.activeTab).toBe(before);
+  });
+
+  it("NTF-FR-DRFT: a creation that fails shows an Error toast with the failure text", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "create_draft") throw "drafts_store_malformed";
+      return undefined;
+    });
+    const { result } = renderHook(() => useShellSession());
+    await act(async () => result.current.loadProject(handle("a", "/a")));
+    await act(async () => {
+      await result.current.createDraft({});
+    });
+    expect(visibleToasts().find((t) => t.key === "draft-create-failed")).toMatchObject({
+      level: "Error",
+      title: "Draft not created",
+      body: "drafts_store_malformed",
+    });
+    expect(result.current.tabs.some((t) => t.kind === "draft")).toBe(false);
   });
 });

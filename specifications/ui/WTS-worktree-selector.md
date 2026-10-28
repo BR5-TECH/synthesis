@@ -26,14 +26,15 @@ Top-chrome control that makes Git worktrees and branches a first-class dimension
                   project switcher    worktree selector       pull
 ```
 
-### Pull whose remote leg failed
+### Pull that brought commits
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ ◈ Synthesis  [ acme-platform ▾ ] [ ⑂ feature/new-window ▾ ] ⤓  ⌕ search … │
-│                                    ┌───────────────────────────────────┐ │
-│                                    │ ⚠ couldn't reach the remote —     │ │
-│                                    │   local branches are up to date ✕ │ │
-│                                    └───────────────────────────────────┘ │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                   ┌────────────────────────────────────┐ │
+│                                   │ (i) Info   Branch pulled         ✕ │ │
+│                                   │ Pulled 3 commits into main.        │ │
+│                                   └────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -108,7 +109,7 @@ Layout notes for the generator:
 - The pull control is an icon-only button sized to the chrome's control height, reading as a sibling of the selector rather than as part of it — it is outside the selector's activation area, so pressing it never opens the dropdown.
 - Its icon depicts material arriving from elsewhere — a downward arrow into a line, tray, or cloud — rather than the circular arrows of a generic reload, because what it does is reach the remote and bring back what is there (WTS-FR-37).
 - The pull control's busy state renders in place, within its own footprint, so the leading cluster does not reflow while a pull runs and the search bar does not shift.
-- A pull outcome worth reporting attaches under the leading cluster, anchored to the pull control, as a dismissible note that overlays the chrome rather than displacing it. When the dropdown is open the same note renders inside the dropdown instead, above the group regions.
+- A pull outcome shows in the toast stack at the top-trailing corner of the shell (per `NTF-notifications.md` NTF-FR-LAWP), not at the pull control and not inside the dropdown.
 - The dropdown is anchored under the control. The filter input is the first focusable element inside it and is always the topmost row. Its label names what is on offer: worktrees and branches from the primary worktree, worktrees alone from a linked one.
 - Group headings (**Worktrees**, **Branches**) are non-interactive labels. Worktrees always precede Branches. Inside a linked worktree the **Branches** heading and its region are absent, and the **Worktrees** group runs straight into the divider above **New worktree…**.
 - A worktree row is two lines — branch (or detached marker) on the first, absolute path on the second. A branch row is one line.
@@ -167,8 +168,8 @@ Layout notes for the generator:
 31. **WTS-FR-31** While a pull is in flight the control renders a busy state. While any pull or push is in flight, whichever control started it (per `GIT-git.md` GIT-FR-QMYB), the control is not activatable. The status bar reports the pull (per `../core/GTC-git.md` GTC-FR-IHCE).
 32. **WTS-FR-32** On a pull returning, the selector's label and — when the dropdown is open — its rows re-render from the `refresh` context of the outcome, as on `"worktree context changed"` (WTS-FR-25). An open dropdown keeps its filter query and its scroll position. The selector also re-renders on `"branches changed"` (per `../core/WTC-worktree-context.md` WTC-FR-25) whatever raised it.
 33. **WTS-FR-33** A pull never drives the worktree-switch transition of `OVW-overview.md` OVW-FR-12: it flushes nothing, closes no tab, changes no active worktree, and leaves the viewport as it was. A pull is available while an Editor tab holds unsaved changes. A file the pull rewrites reaches an open Editor tab as an external change (per `EXC-editor-external-change.md`).
-34. **WTS-FR-34** A pull applies its refreshed listing whatever its remote leg did (per `../core/WTC-worktree-context.md` WTC-FR-23). Its outcome is a dismissible note at the pull control, or inside the open dropdown. The note names the commits a fast-forward brought, an up-to-date branch, or the cause: no remote, no reach, a refused credential, no upstream, the paths it would overwrite, or busy work.
-35. **WTS-FR-35** A remote leg that failed for want of a credential is routed by its typed cause (per `../core/GTC-git.md` GTC-FR-10). A selection-required failure opens the token picker (`GHA-github-authentication.md` GHA-FR-16): confirming re-invokes `"pull current branch"`, and cancelling abandons the pull (GHA-FR-17). A missing-token failure renders the note of WTS-FR-34 with a route to the Global settings GitHub section (GHA-FR-19).
+34. **WTS-FR-34** A pull applies its refreshed listing whatever its remote leg did (per `../core/WTC-worktree-context.md` WTC-FR-23). Its outcome shows as the toast of `NTF-notifications.md` NTF-FR-PLQV, and the control shows no note of its own (NTF-FR-TSRL). The toast names the commits a fast-forward brought, an up-to-date branch, or the cause: no remote, no reach, a refused credential, no upstream, the paths it would overwrite, or busy work.
+35. **WTS-FR-35** A remote leg that failed for want of a credential is routed by its typed cause (per `../core/GTC-git.md` GTC-FR-10). A selection-required failure opens the token picker (`GHA-github-authentication.md` GHA-FR-16): confirming re-invokes `"pull current branch"`, and cancelling abandons the pull (GHA-FR-17). A missing-token failure shows the toast of WTS-FR-34 with its link to the Global settings GitHub section (GHA-FR-19).
 35. **WTS-FR-DVGQ** A pull that returns `diverged` closes the dropdown and opens the merge-or-rebase dialog of `GIT-git.md` GIT-FR-MRBQ. The dialog is a floating overlay and obeys the mutual exclusion of WTS-FR-05.
 36. **WTS-FR-36** The token picker the pull control opens is a floating overlay and obeys the mutual exclusion of WTS-FR-05: it closes the dropdown if it is open, and dismissing it returns to the chrome rather than reopening the dropdown.
 37. **WTS-FR-37** The pull control's icon depicts **material arriving from elsewhere** — a downward arrow into a line, a tray, or a cloud — not the circular arrows of a reload. It does not vary with what a previous pull reported (WTS-FR-34). Only the busy state of WTS-FR-31 replaces it, while a pull is in flight.

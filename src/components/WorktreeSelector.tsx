@@ -4,7 +4,8 @@ import { onBranchesChanged, onWorktreeContextChanged } from "../events";
 
 import { useGitTransfer } from "../hooks/useGitTransfer";
 import { graduationErrorMessage, splitTyped } from "../state/graduation";
-import { pullErrorText, pullNote } from "../state/pullText";
+import { pullErrorText } from "../state/pullText";
+import { showPullFailure, showPullOutcome } from "../state/pullToast";
 import { normalizeBranchInput } from "../state/worktreeBranchName";
 import { Icon } from "./icons";
 import {
@@ -34,7 +35,7 @@ import {
  * Beside the selector sits the pull control (WTS-FR-29 .. WTS-FR-37), which
  * lives in this file because what it does is inseparable from the dropdown: a
  * returning pull re-renders the open rows in place (WTS-FR-32), its outcome
- * note moves inside the dropdown while that is open (WTS-FR-34), and the token
+ * shows as a toast (WTS-FR-34, NTF-FR-PLQV), and the token
  * picker and the merge-or-rebase dialog it can open have to close it
  * (WTS-FR-36, WTS-FR-DVGQ). It is nonetheless a *sibling* of the selector, not
  * part of it — its own button, outside the selector's activation area, so
@@ -91,7 +92,7 @@ export interface WorktreeSelectorProps {
    */
   onRequestGithubToken?: () => Promise<boolean>;
   /**
-   * WTS-FR-35 / GHA-FR-19: the route the note offers when no token is stored at
+   * WTS-FR-35 / GHA-FR-19: the route the toast offers when no token is stored at
    * all. There is nothing to choose between, so the author is sent to where one
    * is added rather than shown a picker with no rows.
    */
@@ -140,52 +141,6 @@ export function matchesFilter(
   return haystacks.some((h) => !!h && h.toLowerCase().includes(needle));
 }
 
-/**
- * WTS-FR-34 / WTS-FR-35: the dismissible remote-outcome note, rendered in
- * whichever of its two positions applies — one component so the two cannot
- * diverge in what they say or in what they offer.
- */
-function RemoteNote({
-  note,
-  onDismiss,
-  onOpenGlobalSettings,
-}: {
-  note: { message: string; missingToken: boolean; ok?: boolean };
-  onDismiss: () => void;
-  onOpenGlobalSettings?: () => void;
-}) {
-  return (
-    <>
-      <span className="wt-select__note-text" role="status">
-        {note.ok ? "✓" : "⚠"} {note.message}
-      </span>
-      {/* WTS-FR-35 / GHA-FR-19: a real route, not a sentence naming one. */}
-      {note.missingToken && onOpenGlobalSettings && (
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          data-testid="worktree-refresh-note-settings"
-          onClick={() => {
-            onDismiss();
-            onOpenGlobalSettings();
-          }}
-        >
-          Global settings
-        </button>
-      )}
-      <button
-        type="button"
-        className="btn btn--ghost btn--icon btn--sm"
-        aria-label="Dismiss"
-        data-testid="worktree-refresh-note-dismiss"
-        onClick={onDismiss}
-      >
-        <Icon.X size={11} />
-      </button>
-    </>
-  );
-}
-
 interface NewWorktreeDraft {
   branch: string;
   location: string;
@@ -228,18 +183,6 @@ export function WorktreeSelector({
    */
   const [refreshing, setRefreshing] = useState(false);
   const refreshingRef = useRef(false);
-  /**
-   * WTS-FR-34: the remote outcome worth reporting, or null. Dismissible, and it
-   * carries `missingToken` so the note can offer the Global settings route
-   * without re-deriving which cause produced it (WTS-FR-35).
-   */
-  const [note, setNote] = useState<{
-    message: string;
-    missingToken: boolean;
-    /** WTS-FR-34: the pull landed or found nothing to land. */
-    ok?: boolean;
-  } | null>(null);
-
   const rootRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
   const branchRef = useRef<HTMLInputElement>(null);
@@ -444,18 +387,15 @@ export function WorktreeSelector({
     if (!retrying && refreshingRef.current) return;
     refreshingRef.current = true;
     setRefreshing(true);
-    setNote(null);
     try {
       const call = await transfer.pullBranch();
       if (!call.ok) {
         // GIT-FR-QMYB: another transfer runs, so none starts here.
-        setNote({
-          message:
-            call.cause === "busy"
-              ? "A push or a pull is already running."
-              : pullErrorText(call.error),
-          missingToken: false,
-        });
+        showPullFailure(
+          call.cause === "busy"
+            ? "A push or a pull is already running."
+            : pullErrorText(call.error),
+        );
         return;
       }
       const outcome = call.outcome;
@@ -480,13 +420,13 @@ export function WorktreeSelector({
         setOpen(false);
         // The control stays busy while the picker is up: the pull is still
         // outstanding, and clearing it here would let a second one start
-        // alongside — leaving two in flight with their notes racing.
+        // alongside — leaving two in flight with their toasts racing.
         const chosen = await onRequestGithubToken();
         if (chosen) {
           await runRefresh(true);
           return;
         }
-        setNote({ message: pullNote(outcome) ?? "", missingToken: false });
+        showPullOutcome(outcome);
         return;
       }
 
@@ -498,24 +438,13 @@ export function WorktreeSelector({
         return;
       }
 
-      const message = pullNote(outcome);
-      setNote(
-        message
-          ? {
-              message,
-              ok:
-                outcome.state === "up_to_date" ||
-                outcome.state === "fast_forwarded",
-              // WTS-FR-35: nothing to choose between, so the note routes to
-              // where a token is added instead of opening a picker.
-              missingToken: outcome.error === GITHUB_TOKEN_ERRORS.tokenMissing,
-            }
-          : null,
-      );
+      // NTF-FR-PLQV / WTS-FR-35: a missing token has nothing to choose
+      // between, so the toast routes to where a token is added.
+      showPullOutcome(outcome, onOpenGlobalSettings);
     } catch (e) {
       // The pull hook answers every rejection itself; a throw here is a
       // programming error, reported rather than lost.
-      setNote({ message: errorMessage(e), missingToken: false });
+      showPullFailure(errorMessage(e));
     } finally {
       refreshingRef.current = false;
       setRefreshing(false);
@@ -638,19 +567,6 @@ export function WorktreeSelector({
         {refreshing ? <Icon.Refresh size={13} /> : <Icon.PullDown size={13} />}
       </button>
 
-      {/* WTS-FR-34: anchored to the control while the dropdown is closed; it
-          moves inside the dropdown when that is open, so one note never renders
-          twice. */}
-      {note && !open && (
-        <div className="wt-select__note" data-testid="worktree-refresh-note">
-          <RemoteNote
-            note={note}
-            onDismiss={() => setNote(null)}
-            onOpenGlobalSettings={onOpenGlobalSettings}
-          />
-        </div>
-      )}
-
       {open && (
         <div
           id="worktree-selector-menu"
@@ -675,21 +591,6 @@ export function WorktreeSelector({
               onChange={(e) => setFilter(e.target.value)}
             />
           </div>
-
-          {/* WTS-FR-34: above the group regions while the dropdown is open, so
-              the outcome is read where the refreshed rows are. */}
-          {note && (
-            <div
-              className="wt-select__note wt-select__note--inline"
-              data-testid="worktree-refresh-note"
-            >
-              <RemoteNote
-                note={note}
-                onDismiss={() => setNote(null)}
-                onOpenGlobalSettings={onOpenGlobalSettings}
-              />
-            </div>
-          )}
 
           {context === null && (
             <div className="wt-select__empty t-muted">Loading…</div>

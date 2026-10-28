@@ -57,24 +57,6 @@
   font-size: var(--fs-ui-sm);
   color: var(--danger);
 }
-.pr-notice {
-  position: fixed;
-  left: 56px;
-  bottom: calc(var(--font-ui-size) * 26 / 13 + 10px);
-  z-index: 250;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  max-width: min(420px, 60vw);
-  padding: 8px 12px;
-  border: 1px solid var(--border-1);
-  border-radius: var(--r-md);
-  background: var(--bg-elevated, var(--bg-panel));
-  box-shadow: var(--shadow-3);
-  font-size: var(--fs-ui-sm);
-}
-.pr-notice__text { flex: 1; min-width: 0; }
-.pr-notice__link { color: var(--accent); }
 /* CHG-FR-UCRL: the unavailable treatment of a button that stays reachable. */
 .create-pr-button[aria-disabled="true"] {
   opacity: 0.5;

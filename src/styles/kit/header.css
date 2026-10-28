@@ -474,22 +474,6 @@ button.top-chrome__project { background: transparent; border: 0; cursor: pointer
 @media (prefers-reduced-motion: reduce) {
   .wt-select__refresh[data-busy="true"] svg { animation: none; }
 }
-/* WTS-FR-34: the remote-outcome note overlays the chrome rather than displacing
-   it, anchored under the leading cluster. */
-.wt-select__note {
-  position: absolute; top: calc(100% + 4px); left: 0; z-index: 210;
-  display: flex; align-items: center; gap: 6px;
-  max-width: 380px; padding: 4px 4px 4px 8px;
-  background: var(--bg-elevated); border: 1px solid var(--border-1);
-  border-radius: var(--r-sm); box-shadow: var(--shadow-3);
-  color: var(--fg-2); font-size: var(--fs-ui-xs);
-}
-/* Inside the open dropdown it is a row above the groups, not a floating card. */
-.wt-select__note--inline {
-  position: static; max-width: none; z-index: auto;
-  margin: 0 6px 4px; box-shadow: none;
-}
-.wt-select__note-text { flex: 1; min-width: 0; }
 /* ---------- PUSH CONTROL (GIT-FR-XXLE, GIT-FR-CNQO) ---------- */
 .push-control { position: relative; display: inline-flex; align-items: center; }
 .push-control__button { flex: none; position: relative; }

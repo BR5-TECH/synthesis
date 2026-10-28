@@ -33,8 +33,8 @@ The one window where the author defines a pull request and submits it to GitHub 
 12. **CPR-FR-KMHY** **Submit** invokes `"create pull request (title, body, base, head, draft)"`, after the push of CPR-FR-ODTB when one is due, with the title as typed, the description as typed, the chosen base branch, the head branch of the source, and the state of the draft toggle. The activation is refused on the client before any command is invoked while another one is running, including a second activation in the same moment as the first.
 13. **CPR-FR-XMRL** While the request runs, **Submit** is unavailable and says `Pushing the branch…` while the push runs, then `Creating the pull request…`. The push and the creation are one request. **Cancel**, Escape and the backdrop do nothing until the request settles. Title, description, base and the toggle cannot be edited while the request runs.
 14. **CPR-FR-SSQI** **Cancel**, Escape, and a click on the backdrop close the window and start nothing. Closing the window discards what the author typed, and opening it again starts from the source.
-15. **CPR-FR-ITWJ** On success the window closes and a **pull request notice** appears. The notice names the pull request by its number and holds a link to it. Activating the link opens the pull request's page in the system browser. The notice is a status announced to assistive technology, it is dismissible, it stays until the author dismisses it or another notice replaces it, and it holds no focus until the author moves to it.
-16. **CPR-FR-RDJP** The notice is not a floating overlay of SNV-FR-56: it opens no window, it closes none, and no overlay closes it. A change of the project removes it.
+15. **CPR-FR-ITWJ** On success the window closes and the toast of `NTF-notifications.md` NTF-FR-PRCK shows. The toast names the pull request by its number and carries a link to it. Activating the link opens the pull request's page in the system browser. The window leaves no notice of its own (NTF-FR-TSRL).
+16. **CPR-FR-RDJP** The toast of CPR-FR-ITWJ is not a floating overlay of SNV-FR-56 (per `NTF-notifications.md` NTF-FR-21): it opens no window, it closes none, and no overlay closes it. A change of the project removes it (NTF-FR-15).
 17. **CPR-FR-SQEP** A failure leaves the window open, keeps the title, the description, the base branch and the toggle as the author left them, and shows the failure inline above the action row. The window does not resize its inputs to show it.
 18. **CPR-FR-VZUZ** A failure with `github_token_selection_required`, from the push or from the creation, makes the window give way to the token picker (per `GHA-github-authentication.md` GHA-FR-16), because the picker is an overlay of the same window and the two cannot stand together (SNV-FR-56). What the author typed is held while the picker is open. When the author confirms a token, the submission runs once with what was held. When the author cancels, the window returns with what was held and says inline that no GitHub token was selected.
 19. **CPR-FR-FGGU** A failure with `github_token_missing`, from the push or from the creation, shows inline that a pull request needs a GitHub token and offers a route to the Global settings GitHub section (per `GHA-github-authentication.md` GHA-FR-19). Taking the route leaves the window open.
@@ -65,19 +65,21 @@ The one window where the author defines a pull request and submits it to GitHub 
 └────────────────────────────────────────────────────┘
 ```
 
-The pull request notice:
+The toast that a created pull request shows:
 
 ```
-┌────────────────────────────────────────────────────┐
-│ Pull request #42 created: Open on GitHub        ✕ │
-└────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────┐
+│ (i) Info   Pull request created          ✕ │
+│ Pull request #42 is created.               │
+│ Open pull request #42                      │
+└────────────────────────────────────────────┘
 ```
 
-- Layout notes: the window is a centered modal. The title is one line, the description is the tall field, and the head branch and base branch stand as one labelled pair below them, so the author reads where the pull request goes before they confirm. Blocks, the push notice and failures attach above the action row. The push notice reads as information, not as a warning. A long branch name truncates from the middle and holds its whole value in accessible semantics. The notice stands at the foot of the main window above the status bar and does not cover a control.
+- Layout notes: the window is a centered modal. The title is one line, the description is the tall field, and the head branch and base branch stand as one labelled pair below them, so the author reads where the pull request goes before they confirm. Blocks, the push notice and failures attach above the action row. The push notice reads as information, not as a warning. A long branch name truncates from the middle and holds its whole value in accessible semantics. The toast shows in the toast stack (per `NTF-notifications.md` NTF-FR-LAWP).
 
 ## UI contract boundary
 
-**Owned by the UI**: the window, its fields, its validation of the title, its blocks, its push notice and their wording, when a submission pushes first, its holding of the author's input while the token picker is open, the pull request notice and its link, and which surfaces open it with which source. The window decides nothing about a branch. It reads what the backend reports and shows it.
+**Owned by the UI**: the window, its fields, its validation of the title, its blocks, its push notice and their wording, when a submission pushes first, its holding of the author's input while the token picker is open, the text and the link of the pull request toast, and which surfaces open it with which source. The window decides nothing about a branch. It reads what the backend reports and shows it.
 
 **Delegated to backend (abstract)**:
 - `"get pull request head state (head, base)"` — owned by `../core/GTC-git.md`.
@@ -85,9 +87,9 @@ The pull request notice:
 - `"create pull request (title, body, base, head, draft)"` — owned by `../core/GTC-git.md`. It returns the number and the page address of the pull request it created.
 - `"list branches"` — owned by `../core/GTC-git.md`.
 
-The link of the notice is opened by the application's opener, and no backend operation of this specification does it.
+The link of the toast is opened by the application's opener, and no backend operation of this specification does it.
 
 ## Non-functional requirements
 - The window opens without waiting on the backend. It shows the loading state of CPR-FR-SQGZ while the read runs, and the author can type while it runs.
-- No text the window or the notice renders holds a token secret, because none reaches it (per `../core/GTC-git.md` GTC-FR-11).
+- No text the window or the toast renders holds a token secret, because none reaches it (per `../core/GTC-git.md` GTC-FR-11).
 - A response that arrives after the window closed, after the project changed, or after a newer read of the same kind is discarded and changes nothing the author sees.

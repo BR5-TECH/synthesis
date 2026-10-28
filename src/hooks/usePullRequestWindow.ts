@@ -1,8 +1,8 @@
 /**
  * The shell's half of the Create a PR window
  * (`../../specifications/ui/CPR-create-pull-request.md`): which source it is
- * open for, what the author typed while the token picker stood in its place,
- * and the notice a created pull request leaves.
+ * open for, and what the author typed while the token picker stood in its
+ * place. A created pull request shows a toast (CPR-FR-ITWJ).
  *
  * The window is a floating overlay of the main window, so opening it closes the
  * others (CPR-FR-IWDK) and every other opener closes it through `dismiss`. That
@@ -17,6 +17,7 @@ import type {
   PullRequestSource,
 } from "../components/CreatePullRequest/types";
 import { logInfo } from "../logging";
+import { showPullRequestCreated } from "../state/pullRequestToast";
 import type { CreatedPullRequest } from "../types";
 
 interface PullRequestWindowState {
@@ -36,13 +37,12 @@ export interface PullRequestWindowDeps {
   closeOthers: () => void;
   /** Open the token picker; resolves with whether a token was chosen. */
   requestToken: () => Promise<boolean>;
-  /** The project path, so a project change removes the notice (CPR-FR-RDJP). */
+  /** The project path, so a project change closes the window. */
   projectPath: string | null;
 }
 
 export function usePullRequestWindow(deps: PullRequestWindowDeps) {
   const [window, setWindow] = useState<PullRequestWindowState | null>(null);
-  const [notice, setNotice] = useState<CreatedPullRequest | null>(null);
   const windowRef = useRef<PullRequestWindowState | null>(null);
   /** CPR-FR-XMRL: a request runs, so nothing may take the window down. */
   const submittingRef = useRef(false);
@@ -121,12 +121,12 @@ export function usePullRequestWindow(deps: PullRequestWindowDeps) {
   const created = (pr: CreatedPullRequest) => {
     submittingRef.current = false;
     put(null);
-    setNotice(pr);
+    showPullRequestCreated(pr);
   };
 
-  // CPR-FR-RDJP: a change of the project removes the notice and the window.
+  // A change of the project closes the window. The toast of a created pull
+  // request goes with every other toast (CPR-FR-RDJP, NTF-FR-15).
   useEffect(() => {
-    setNotice(null);
     submittingRef.current = false;
     put(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -134,8 +134,6 @@ export function usePullRequestWindow(deps: PullRequestWindowDeps) {
 
   return {
     pullRequestWindow: window && !window.yielded ? window : null,
-    pullRequestNotice: notice,
-    dismissPullRequestNotice: () => setNotice(null),
     openPullRequestWindow: open,
     closePullRequestWindow: close,
     dismissPullRequestWindow: dismiss,

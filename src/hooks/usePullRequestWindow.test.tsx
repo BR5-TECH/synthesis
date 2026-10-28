@@ -10,8 +10,20 @@ import { act, renderHook } from "@testing-library/react";
 import { usePullRequestWindow } from "./usePullRequestWindow";
 import type { PullRequestSource } from "../components/CreatePullRequest/types";
 import { resetLogBufferForTest } from "../logging";
+import { clearToasts, visibleToasts } from "../state/toasts";
 
 const invokeMock = vi.fn();
+const openUrlMock = vi.fn(async (_url: string) => {});
+const logWarnMock = vi.fn();
+vi.mock("../logging", async (original) => ({
+  ...(await original<typeof import("../logging")>()),
+  logWarn: (...args: unknown[]) => logWarnMock(...args),
+}));
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: (url: string) => openUrlMock(url),
+}));
+
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
@@ -20,6 +32,9 @@ const SOURCE: PullRequestSource = { head: "feature", base: "main", title: "Featu
 const INPUT = { title: "T", body: "B", base: "main", draft: false };
 
 beforeEach(() => {
+  clearToasts();
+  openUrlMock.mockClear();
+  logWarnMock.mockClear();
   resetLogBufferForTest();
   invokeMock.mockReset();
   invokeMock.mockImplementation(async (cmd: string) =>
@@ -200,27 +215,66 @@ describe("the opener (CPR-FR-IWDK)", () => {
   });
 });
 
-describe("the notice (CPR-FR-ITWJ, CPR-FR-RDJP)", () => {
-  it("CPR-FR-ITWJ: a created pull request closes the window and leaves the notice until dismissed", () => {
+describe("the toast of a created pull request (CPR-FR-ITWJ, CPR-FR-RDJP)", () => {
+  const created = () => visibleToasts().find((t) => t.key === "pull-request-created");
+
+  it("CPR-FR-ITWJ, NTF-FR-PRCK: a created pull request closes the window and shows an Info toast with a link to it", () => {
     const { result } = setup();
     act(() => result.current.openPullRequestWindow(SOURCE));
     act(() =>
       result.current.pullRequestCreated({ number: 5, url: "https://github.com/a/b/pull/5" }),
     );
     expect(result.current.pullRequestWindow).toBeNull();
-    expect(result.current.pullRequestNotice?.number).toBe(5);
-    act(() => result.current.dismissPullRequestNotice());
-    expect(result.current.pullRequestNotice).toBeNull();
+    expect(created()).toMatchObject({
+      level: "Info",
+      title: "Pull request created",
+      body: "Pull request #5 is created.",
+      address: null,
+    });
+    expect(created()?.link?.label).toBe("Open pull request #5");
+    created()?.link?.onActivate();
+    expect(openUrlMock).toHaveBeenCalledWith("https://github.com/a/b/pull/5");
   });
 
-  it("CPR-FR-RDJP: the notice is no overlay, so opening another overlay leaves it, and a change of project removes it", () => {
-    const { result, rerender } = setup();
+  it("CPR-FR-RDJP: the toast is no overlay, so a window that opens and closes after it leaves it", () => {
+    const { result } = setup();
     act(() =>
       result.current.pullRequestCreated({ number: 5, url: "https://github.com/a/b/pull/5" }),
     );
+    act(() => result.current.openPullRequestWindow(SOURCE));
+    expect(result.current.pullRequestWindow).not.toBeNull();
     act(() => result.current.dismissPullRequestWindow());
-    expect(result.current.pullRequestNotice).not.toBeNull();
-    rerender({ projectPath: "/other" });
-    expect(result.current.pullRequestNotice).toBeNull();
+    expect(result.current.pullRequestWindow).toBeNull();
+    expect(created()).toBeDefined();
+  });
+
+  it("NTF-FR-PRCK: a second pull request replaces the toast of the first", () => {
+    const { result } = setup();
+    act(() =>
+      result.current.pullRequestCreated({ number: 5, url: "https://github.com/a/b/pull/5" }),
+    );
+    act(() =>
+      result.current.pullRequestCreated({ number: 6, url: "https://github.com/a/b/pull/6" }),
+    );
+    const all = visibleToasts().filter((t) => t.key === "pull-request-created");
+    expect(all).toHaveLength(1);
+    expect(all[0].body).toBe("Pull request #6 is created.");
+  });
+
+  it("NTF-FR-PRCK: a link that does not open is logged and leaves no unhandled error", async () => {
+    const { result } = setup();
+    act(() =>
+      result.current.pullRequestCreated({ number: 5, url: "https://github.com/a/b/pull/5" }),
+    );
+    openUrlMock.mockRejectedValueOnce(new Error("opener refused"));
+    created()?.link?.onActivate();
+    await vi.waitFor(() =>
+      expect(logWarnMock).toHaveBeenCalledWith(
+        ["frontend", "remote"],
+        "pull request link did not open",
+        { number: 5, error: "Error: opener refused" },
+      ),
+    );
+    expect(created()).toBeDefined();
   });
 });

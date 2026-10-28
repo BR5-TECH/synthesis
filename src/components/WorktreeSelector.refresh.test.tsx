@@ -26,6 +26,9 @@ import {
   REPO,
   defaultWorktreeContext,
 } from "../test/worktreeFixtures";
+import { NotificationToasts } from "./NotificationToasts";
+import { clearToasts } from "../state/toasts";
+import { resetLogBufferForTest } from "../logging";
 
 // The selector talks to the backend only through `invoke` (`../api`), and hands
 // every switch to `onSwitch` — the shell owns the transition itself, so these
@@ -97,6 +100,8 @@ let onSwitch: Mock<
 let handedOperation: (() => Promise<WorktreeContext>) | null;
 
 beforeEach(() => {
+  clearToasts();
+  resetLogBufferForTest();
   handlers = [];
   listError = null;
   proposed = "/dev/acme-platform-fix-editor-scroll";
@@ -140,12 +145,15 @@ function renderSelector(
   },
 ) {
   return render(
-    <WorktreeSelector
-      active={active}
-      onSwitch={onSwitch}
-      onOpen={onOpen}
-      {...extra}
-    />,
+    <>
+      <WorktreeSelector
+        active={active}
+        onSwitch={onSwitch}
+        onOpen={onOpen}
+        {...extra}
+      />
+      <NotificationToasts onActivate={vi.fn()} />
+    </>,
   );
 }
 
@@ -174,7 +182,21 @@ async function invokedByHandedOperation(): Promise<[string, unknown]> {
 // ---------------------------------------------------------------------------
 
 const refreshBtn = () => screen.getByTestId("worktree-refresh");
-const note = () => screen.queryByTestId("worktree-refresh-note");
+/** NTF-FR-PLQV: the toast a pull shows, or null. */
+const note = () =>
+  document.querySelector<HTMLElement>(
+    '[data-testid="notification-toast"][data-key="pull-result"]',
+  );
+/** Wait until the pull toast shows. */
+const findNote = () =>
+  waitFor(() => {
+    const shown = note();
+    expect(shown).not.toBeNull();
+    return shown!;
+  });
+/** NTF-FR-PLQV: the link a missing-token failure carries. */
+const settingsLink = () =>
+  note() ? within(note()!).queryByTestId("notification-toast-link") : null;
 
 /** A promise a test resolves by hand, for asserting an in-flight state. */
 function deferred<T>() {
@@ -355,18 +377,15 @@ describe("WorktreeSelector remote outcome note (WTS-FR-34)", () => {
     renderSelector();
     await userEvent.click(refreshBtn());
 
-    const shown = await screen.findByTestId("worktree-refresh-note");
+    const shown = await findNote();
     expect(shown).toHaveTextContent(/couldn't reach the remote/i);
+
+    // Dismissing the toast removes it and nothing else.
+    await userEvent.click(within(shown).getByRole("button", { name: "Dismiss" }));
+    expect(note()).toBeNull();
 
     // The locally refreshed listing was applied anyway.
     await openDropdown();
-    expect(
-      within(screen.getByTestId("branch-group")).getByText("wip"),
-    ).toBeInTheDocument();
-
-    // And dismissing the note leaves those rows in place.
-    await userEvent.click(screen.getByTestId("worktree-refresh-note-dismiss"));
-    expect(note()).toBeNull();
     expect(
       within(screen.getByTestId("branch-group")).getByText("wip"),
     ).toBeInTheDocument();
@@ -379,7 +398,7 @@ describe("WorktreeSelector remote outcome note (WTS-FR-34)", () => {
     renderSelector();
     await userEvent.click(refreshBtn());
 
-    const shown = await screen.findByTestId("worktree-refresh-note");
+    const shown = await findNote();
     expect(shown).toHaveTextContent(/no remote is configured/i);
     expect(shown).not.toHaveTextContent(/reach/i);
     expect(shown).not.toHaveTextContent(/token/i);
@@ -391,7 +410,8 @@ describe("WorktreeSelector remote outcome note (WTS-FR-34)", () => {
     await waitFor(() =>
       expect(note()).toHaveTextContent("main is up to date with origin/main."),
     );
-    expect(note()).not.toHaveTextContent("⚠");
+    expect(note()).toHaveAttribute("data-level", "Info");
+    expect(note()).toHaveTextContent("Branch up to date");
   });
 
   it("WTS-FR-34: names the commits a fast-forward brought", async () => {
@@ -401,6 +421,8 @@ describe("WorktreeSelector remote outcome note (WTS-FR-34)", () => {
     await waitFor(() =>
       expect(note()).toHaveTextContent("Pulled 3 commits into main."),
     );
+    expect(note()).toHaveAttribute("data-level", "Info");
+    expect(note()).toHaveTextContent("Branch pulled");
   });
 
   it("WTS-FR-34: names the uncommitted paths a pull would overwrite", async () => {
@@ -468,7 +490,7 @@ describe("WorktreeSelector refresh token routing (WTS-FR-35 .. WTS-FR-36, WTS-FR
     expect(
       within(screen.getByTestId("branch-group")).getByText("origin/fetched"),
     ).toBeInTheDocument();
-    // The retried pull reached the remote, so the note is its outcome and
+    // The retried pull reached the remote, so the toast is its outcome and
     // no token cause stands any more.
     expect(note()).toHaveTextContent(/is up to date/);
     expect(note()).not.toHaveTextContent(/token/i);
@@ -485,8 +507,10 @@ describe("WorktreeSelector refresh token routing (WTS-FR-35 .. WTS-FR-36, WTS-FR
     await waitFor(() => expect(onRequestGithubToken).toHaveBeenCalledTimes(1));
     expect(refreshCalls).toBe(1);
 
-    const shown = await screen.findByTestId("worktree-refresh-note");
+    const shown = await findNote();
     expect(shown).toHaveTextContent(/no github token was selected/i);
+    expect(shown).toHaveAttribute("data-level", "Error");
+    expect(settingsLink()).toBeNull();
     await openDropdown();
     expect(
       within(screen.getByTestId("branch-group")).queryByText("origin/fetched"),
@@ -512,14 +536,14 @@ describe("WorktreeSelector refresh token routing (WTS-FR-35 .. WTS-FR-36, WTS-FR
     });
 
     await userEvent.click(refreshBtn());
-    const shown = await screen.findByTestId("worktree-refresh-note");
+    const shown = await findNote();
     expect(onRequestGithubToken).not.toHaveBeenCalled();
     expect(shown).toHaveTextContent(/needs a github token/i);
 
     // A route, not a sentence naming one.
-    await userEvent.click(
-      screen.getByTestId("worktree-refresh-note-settings"),
-    );
+    expect(shown).toHaveAttribute("data-level", "Error");
+    expect(settingsLink()).toHaveTextContent("Open GitHub settings");
+    await userEvent.click(settingsLink()!);
     expect(onOpenGlobalSettings).toHaveBeenCalledTimes(1);
   });
 
@@ -603,12 +627,12 @@ describe("WorktreeSelector refresh failure and note vocabulary (WTS-FR-31 / WTS-
     renderSelector();
     await userEvent.click(refreshBtn());
 
-    const shown = await screen.findByTestId("worktree-refresh-note");
+    const shown = await findNote();
     expect(shown).toHaveTextContent(/refused the credential/i);
     expect(shown).not.toHaveTextContent(/couldn't reach/i);
     expect(shown).not.toHaveTextContent(/no remote is configured/i);
     // Nothing to route to Global settings for — a token IS bound, it was refused.
-    expect(screen.queryByTestId("worktree-refresh-note-settings")).toBeNull();
+    expect(settingsLink()).toBeNull();
   });
 
   it("does not dress an unrecognised cause up as one of the three known ones", async () => {
@@ -620,7 +644,7 @@ describe("WorktreeSelector refresh failure and note vocabulary (WTS-FR-31 / WTS-
     renderSelector();
     await userEvent.click(refreshBtn());
 
-    const shown = await screen.findByTestId("worktree-refresh-note");
+    const shown = await findNote();
     expect(shown).toHaveTextContent(/could not be fetched/i);
     expect(shown).not.toHaveTextContent(/couldn't reach/i);
     expect(shown).not.toHaveTextContent(/no remote is configured/i);
@@ -639,12 +663,10 @@ describe("WorktreeSelector refresh failure and note vocabulary (WTS-FR-31 / WTS-
     renderSelector();
     await userEvent.click(refreshBtn());
 
-    await waitFor(() =>
-      expect(screen.getByTestId("worktree-refresh-note")).toHaveTextContent(
-        "not a git repository",
-      ),
-    );
-    expect(refreshBtn()).not.toBeDisabled();
+    await waitFor(() => expect(note()).toHaveTextContent("not a git repository"));
+    // The toast renders from its store, so the control is idle again in a
+    // later commit than the toast. Wait for that state, not for the order.
+    await waitFor(() => expect(refreshBtn()).not.toBeDisabled());
     expect(refreshBtn()).toHaveAttribute("aria-busy", "false");
 
     refresh = async () => ({ context, remoteState: "refreshed" });
@@ -652,34 +674,35 @@ describe("WorktreeSelector refresh failure and note vocabulary (WTS-FR-31 / WTS-
     await waitFor(() => expect(refreshCalls).toBe(2));
   });
 
-  it("replaces a previous note once a pull succeeds", async () => {
+  it("NTF-FR-PLQV: a pull that succeeds replaces the toast of an earlier failure", async () => {
     refresh = async () => ({ context, remoteState: "skipped" });
     renderSelector();
     await userEvent.click(refreshBtn());
-    await screen.findByTestId("worktree-refresh-note");
+    await findNote();
+    await waitFor(() => expect(refreshBtn()).not.toBeDisabled());
 
     refresh = async () => ({ context, remoteState: "refreshed" });
     await userEvent.click(refreshBtn());
     await waitFor(() => expect(note()).toHaveTextContent(/is up to date/));
     expect(note()).not.toHaveTextContent(/no remote/i);
+    expect(screen.getAllByTestId("notification-toast")).toHaveLength(1);
   });
 
-  it("renders exactly one note, inside the dropdown while it is open", async () => {
-    // WTS-FR-34: two positions, never both — a note duplicated across them would
-    // read as two separate outcomes.
+  it("WTS-FR-34, NTF-FR-TSRL: a failed pull shows an Error toast and no note of the control", async () => {
     refresh = async () => ({ context, remoteState: "skipped" });
     renderSelector();
     await userEvent.click(refreshBtn());
-    await screen.findByTestId("worktree-refresh-note");
-    expect(screen.getAllByTestId("worktree-refresh-note")).toHaveLength(1);
-    expect(
-      screen.getByTestId("worktree-refresh-note").closest(".wt-select__menu"),
-    ).toBeNull();
+    const shown = await findNote();
+    expect(shown).toHaveAttribute("data-level", "Error");
+    expect(shown).toHaveTextContent("Pull failed");
+    expect(document.querySelector(".wt-select__note")).toBeNull();
 
+    // The open dropdown holds no copy of the outcome either.
     await openDropdown();
-    const notes = screen.getAllByTestId("worktree-refresh-note");
-    expect(notes).toHaveLength(1);
-    expect(notes[0].closest(".wt-select__menu")).not.toBeNull();
+    expect(
+      screen.getByTestId("worktree-selector-menu").textContent,
+    ).not.toMatch(/no remote is configured/i);
+    expect(screen.getAllByTestId("notification-toast")).toHaveLength(1);
   });
 });
 
@@ -687,7 +710,7 @@ describe("WorktreeSelector refresh cannot be stacked across the picker (WTS-FR-3
   it("starts no second refresh while the token picker is outstanding", async () => {
     // The refresh is still outstanding while the picker is up — the author has
     // not answered it yet. A control that reported itself idle there would let a
-    // second refresh run alongside the first, with two notes racing to report
+    // second refresh run alongside the first, with two toasts racing to report
     // different outcomes.
     let attempt = 0;
     refresh = async () => {
@@ -739,11 +762,11 @@ describe("WorktreeSelector refresh cannot be stacked across the picker (WTS-FR-3
 
     await userEvent.click(refreshBtn());
     await waitFor(() => expect(refreshCalls).toBe(2));
-    const shown = await screen.findByTestId("worktree-refresh-note");
+    const shown = await findNote();
 
     expect(onRequestGithubToken).toHaveBeenCalledTimes(1);
     expect(shown).toHaveTextContent(/no github token was selected/i);
-    expect(refreshBtn()).not.toBeDisabled();
+    await waitFor(() => expect(refreshBtn()).not.toBeDisabled());
   });
 });
 
@@ -812,7 +835,7 @@ describe("WorktreeSelector refresh icon (WTS-FR-31, WTS-FR-37, WTS-FR-34)", () =
 
   it("does not vary with what a refresh reported (WTS-FR-34)", async () => {
     // A remote leg that could not run still leaves the resting icon alone —
-    // the note beside the control is what carries the outcome.
+    // the toast is what carries the outcome.
     refresh = async () => ({
       context,
       remoteState: "failed" as const,
@@ -823,7 +846,7 @@ describe("WorktreeSelector refresh icon (WTS-FR-31, WTS-FR-37, WTS-FR-34)", () =
 
     await userEvent.click(refreshBtn());
     await waitFor(() => expect(note()).toBeInTheDocument());
-    expect(glyph()).toBe("pull-down");
+    await waitFor(() => expect(glyph()).toBe("pull-down"));
   });
 });
 
@@ -850,7 +873,7 @@ describe("WorktreeSelector diverged pull (WTS-FR-DVGQ)", () => {
       remoteTip: "2222222bbbb",
     });
     expect(screen.queryByTestId("worktree-selector-menu")).toBeNull();
-    // The dialog says what happened, so no note stands beside it.
+    // The dialog says what happened, so no toast stands beside it.
     expect(note()).toBeNull();
   });
 });

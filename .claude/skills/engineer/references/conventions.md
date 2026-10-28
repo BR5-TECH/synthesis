@@ -18,6 +18,7 @@ These are the project-specific rules that are easy to miss and expensive to get 
 - **Port 1420 coupling.** `vite.config.ts` (`strictPort: true`) and `src-tauri/tauri.conf.json` (`devUrl`) must agree on port 1420. Don't change one without the other; if a spec demands a port change, surface it to the user rather than silently editing both.
 - **Vite watcher ignores `src-tauri/**`.** Keep that ignore — removing it causes HMR loops on Rust build artifacts.
 - **Rust toolchain is pinned** via `src-tauri/rust-toolchain.toml` (edition 2024 / rustc ≥ 1.95). The dep tree requires it; use the pinned toolchain.
+- **Outcomes go to toasts.** Report the result of an author's action with `showToast` from `src/state/toasts.ts` (`NTF-notifications.md` NTF-FR-TSRL): an Info toast for a success, an Error toast for a failure, and a toast link (NTF-FR-XNCG) for a route. Do not add a notice, banner, or note of a surface's own that floats or waits for a manual dismissal. A failure line inside the dialog the action was made in, a row's refusal, and a panel's output log stay where they are.
 
 ## Logging
 

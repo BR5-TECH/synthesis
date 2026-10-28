@@ -55,7 +55,6 @@ import {
 import type { useDiscussionAnnouncement } from "./state/discussionAnnouncer";
 import type { TabAttention } from "./components/TabStrip";
 import { CreatePullRequestWindow } from "./components/CreatePullRequestWindow";
-import { PullRequestNotice } from "./components/PullRequestNotice";
 import { PullReconcileDialog } from "./components/PullReconcileDialog";
 import { TabScrollScope } from "./hooks/useRememberedScroll";
 
@@ -147,8 +146,6 @@ export function AppShell(props: AppShellProps) {
     dismissRollbackWindow,
     requestRollback,
     pullRequestWindow,
-    pullRequestNotice,
-    dismissPullRequestNotice,
     openPullRequestWindow,
     closePullRequestWindow,
     dismissPullRequestWindow,
@@ -859,13 +856,6 @@ export function AppShell(props: AppShellProps) {
           onConfirm={() => settlePicker(true)}
         />
       )}
-
-      {/* CPR-FR-ITWJ / CPR-FR-RDJP: what a created pull request leaves. A status
-          of the shell, outside the single-overlay rule (SNV-FR-56). */}
-      <PullRequestNotice
-        notice={pullRequestNotice}
-        onDismiss={dismissPullRequestNotice}
-      />
 
       {/* CVP-FR-43: every reveal is announced, so a conversation is followed
           without being watched. Keyed on the sequence so a repeated message

@@ -6,6 +6,8 @@ import App from "./App";
 import { MENU_NEW_FILE } from "./events";
 import { resetAppPreferencesCache } from "./state/appPreferences";
 import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
+import { clearToasts } from "./state/toasts";
+import { resetLogBufferForTest } from "./logging";
 
 /**
  * App-level wiring for the Create a PR window
@@ -157,6 +159,8 @@ function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
 }
 
 beforeEach(() => {
+  clearToasts();
+  resetLogBufferForTest();
   createResult = () => CREATED;
   invokeMock.mockReset();
   invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) =>
@@ -193,6 +197,18 @@ async function openFromChanges() {
 
 const submit = () => screen.getByTestId("create-pr-submit");
 const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd);
+/** NTF-FR-PRCK: the toast a created pull request shows, or null. */
+const createdToast = () =>
+  document.querySelector<HTMLElement>(
+    '[data-testid="notification-toast"][data-key="pull-request-created"]',
+  );
+/** Wait until the toast of a created pull request shows. */
+const findCreatedToast = () =>
+  waitFor(() => {
+    const shown = createdToast();
+    expect(shown).not.toBeNull();
+    return shown!;
+  });
 
 describe("the Create a PR window at the App seam", () => {
   it("CPR-FR-FDVO, CPR-FR-JOIG: the Changes footer opens the window for the current branch", async () => {
@@ -285,23 +301,29 @@ describe("the Create a PR window at the App seam", () => {
     expect(screen.getByLabelText("Title")).toHaveValue("feature");
   });
 
-  it("CPR-FR-ITWJ, CPR-FR-RDJP: a created pull request closes the window and leaves a notice with a link that opens in the browser", async () => {
+  it("CPR-FR-ITWJ, CPR-FR-RDJP, NTF-FR-PRCK: a created pull request closes the window and shows an Info toast with a link that opens in the browser", async () => {
     render(<App />);
     await enterIde();
     await openFromChanges();
     await waitFor(() => expect(submit()).toBeEnabled());
     await userEvent.click(submit());
 
-    const notice = await screen.findByTestId("pull-request-notice");
-    expect(notice).toHaveTextContent("Pull request #42 created");
+    const toast = await findCreatedToast();
+    expect(toast).toHaveAttribute("data-level", "Info");
+    expect(toast).toHaveTextContent("Pull request created");
+    expect(toast).toHaveTextContent("Pull request #42 is created.");
     expect(screen.queryByTestId("create-pr-window")).toBeNull();
-    await userEvent.click(screen.getByTestId("pull-request-notice-link"));
+    const link = within(toast).getByTestId("notification-toast-link");
+    expect(link).toHaveTextContent("Open pull request #42");
+    await userEvent.click(link);
     expect(openUrlMock).toHaveBeenCalledWith(CREATED.url);
+    // NTF-FR-XNCG: the link leaves the toast in the stack.
+    expect(createdToast()).not.toBeNull();
 
-    // The notice is no overlay: another overlay opening leaves it standing.
+    // The toast is no overlay: another overlay opening leaves it standing.
     fireBusEvent(MENU_NEW_FILE);
     await screen.findByText("New File");
-    expect(screen.getByTestId("pull-request-notice")).toBeInTheDocument();
+    expect(createdToast()).not.toBeNull();
   });
 
   it("CPR-FR-VZUZ: a selection-required failure opens the token picker in the window's place, and a confirmed token submits again with what was typed", async () => {
@@ -324,7 +346,7 @@ describe("the Create a PR window at the App seam", () => {
     await userEvent.click(within(picker).getByRole("radio", { name: "personal" }));
     await userEvent.click(within(picker).getByRole("button", { name: "Use" }));
 
-    await screen.findByTestId("pull-request-notice");
+    await findCreatedToast();
     expect(calls("create_pull_request")).toHaveLength(2);
     expect(calls("create_pull_request")[1][1]).toEqual({
       title: "feature",

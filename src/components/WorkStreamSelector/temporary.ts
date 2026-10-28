@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import * as api from "../../api";
 import { onGraduationQueueChanged } from "../../events";
-import { logError, logInfo } from "../../logging";
+import { logDebug, logError, logInfo } from "../../logging";
 import { splitTyped, runsOfStream, streamWorkIsDone } from "../../state/graduation";
 import type { GraduationRun, WorkStreamSummary } from "../../types";
 import { useOtherOverlayOpen } from "./overlayIdle";
@@ -119,8 +119,11 @@ export function useTemporaryStreams(
           }
         } else if (mergeRun.state === "failed") {
           followed.current.delete(mergeRun.runId);
-        } else {
+        } else if (!followed.current.has(mergeRun.runId)) {
           followed.current.add(mergeRun.runId);
+          logInfo(["frontend"], "a temporary stream's merge run is followed", {
+            streamId: stream.id,
+          });
         }
       }
       const working =
@@ -128,6 +131,11 @@ export function useTemporaryStreams(
         Boolean(stream.busyRunId) ||
         runsOfStream(runs, stream).some((run) => run.state !== "completed");
       if (working) {
+        if (!seenWorking.current.has(stream.id)) {
+          logDebug(["frontend"], "a temporary stream is seen with work", {
+            streamId: stream.id,
+          });
+        }
         seenWorking.current.add(stream.id);
         removing.current.delete(stream.id);
         settled.push(stream.id);

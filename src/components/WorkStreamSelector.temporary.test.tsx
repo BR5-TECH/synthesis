@@ -11,6 +11,7 @@ import { act, cleanup, render, screen, waitFor, within } from "@testing-library/
 import userEvent from "@testing-library/user-event";
 
 import { WorkStreamSelector } from "./WorkStreamSelector";
+import { logDebug, logInfo } from "../logging";
 import type { GraduationRun, GraduationRunState, WorkStreamSummary } from "../types";
 import { makeQueue, makeRun } from "../test/graduationFixtures";
 import { conflictedResult, mergedResult, mergeRunLink, summary } from "../test/streamFixtures";
@@ -18,6 +19,12 @@ import { conflictedResult, mergedResult, mergeRunLink, summary } from "../test/s
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
+}));
+
+vi.mock("../logging", async (original) => ({
+  ...(await original<typeof import("../logging")>()),
+  logDebug: vi.fn(),
+  logInfo: vi.fn(),
 }));
 
 type EventHandler = (ev: { payload: unknown }) => void;
@@ -60,6 +67,24 @@ function backend() {
 
 const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd);
 
+/** How many times the selector logged `message` through `fn`. */
+const logged = (fn: typeof logInfo, message: string) =>
+  vi.mocked(fn).mock.calls.filter((c) => c[1] === message).length;
+
+/**
+ * Wait until the selector has seen work on the stream. The answers at launch
+ * come outside `act`, so a call to the backend is not enough: the answer must
+ * reach the selector before the first move, or the selector never sees the work.
+ */
+const seenWithWork = () =>
+  waitFor(() => expect(logged(logDebug, "a temporary stream is seen with work")).toBe(1));
+
+/** Wait until the selector follows the merge run of the stream. */
+const mergeRunFollowed = () =>
+  waitFor(() =>
+    expect(logged(logInfo, "a temporary stream's merge run is followed")).toBe(1),
+  );
+
 /** Fire every handler of an event, as the backend does when something changed. */
 async function emit(name: string) {
   await act(async () => {
@@ -96,6 +121,8 @@ const prompt = () => screen.queryByTestId("merge-prompt");
 
 beforeEach(() => {
   invokeMock.mockReset();
+  vi.mocked(logDebug).mockClear();
+  vi.mocked(logInfo).mockClear();
   handlers = [];
   listing = [];
   runs = [];
@@ -111,7 +138,7 @@ async function finishWork() {
   runs = [runOf("a", "working")];
   renderSelector();
   await screen.findByTestId("stream-selector");
-  await waitFor(() => expect(calls("list_graduation_queue").length).toBeGreaterThan(0));
+  await seenWithWork();
   await move([temporary()], [runOf("a", "completed")]);
 }
 
@@ -161,7 +188,7 @@ describe("the merge prompt", () => {
       listing = [temporary({ queuedRunCount: 1 })];
       runs = [runOf("a", "working")];
       renderSelector();
-      await waitFor(() => expect(calls("list_graduation_queue").length).toBeGreaterThan(0));
+      await seenWithWork();
       await move([temporary()], [runOf("a", "completed"), runOf("b", state)]);
       expect(prompt()).toBeNull();
     },
@@ -171,7 +198,7 @@ describe("the merge prompt", () => {
     listing = [temporary({ queuedRunCount: 1 })];
     runs = [runOf("a", "working")];
     renderSelector();
-    await waitFor(() => expect(calls("list_graduation_queue").length).toBeGreaterThan(0));
+    await seenWithWork();
     await move([temporary()], [runOf("a", "discarded")]);
     expect(prompt()).toBeNull();
   });
@@ -212,7 +239,7 @@ describe("the merge prompt", () => {
       runs = [runOf("a", "working")];
       renderSelector();
       await screen.findByTestId("stream-selector");
-      await waitFor(() => expect(calls("list_graduation_queue").length).toBeGreaterThan(0));
+      await seenWithWork();
       await move([temporary()], [runOf("a", "completed")]);
       // The stream is due: the same listing shows the prompt once the overlay goes.
       expect(prompt()).toBeNull();
@@ -229,8 +256,9 @@ describe("the merge prompt", () => {
     runs = [runOf("a", "working")];
     deleteAnswer = () => Promise.reject(new Error("stream_dirty"));
     renderSelector();
-    await waitFor(() => expect(calls("list_graduation_queue").length).toBeGreaterThan(0));
+    await seenWithWork();
     await move([temporary({ mergeRun: mergeRunLink("working") })], [runOf("a", "completed")]);
+    await mergeRunFollowed();
     await move([temporary({ mergeRun: mergeRunLink("completed") })], [runOf("a", "completed")]);
     await waitFor(() => expect(calls("delete_work_stream")).toHaveLength(1));
     expect(prompt()).toBeNull();
@@ -354,7 +382,7 @@ describe("the automatic deletion", () => {
     listing = [temporary({ mergeRun: mergeRunLink("working") })];
     renderSelector();
     await screen.findByTestId("stream-selector");
-    await waitFor(() => expect(calls("list_work_streams").length).toBeGreaterThan(0));
+    await mergeRunFollowed();
     await move([temporary({ mergeRun: mergeRunLink("completed") })], []);
     await waitFor(() => expect(calls("delete_work_stream")).toHaveLength(1));
   });

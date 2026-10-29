@@ -200,6 +200,13 @@ pub struct PersistedState {
     /// beside `active_agentic` for the scalar-ordering reason above.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_ai_api: Option<String>,
+    /// GSS-FR-PCTL: the document size limit, a whole percent from 1 to 100.
+    /// `None` reads as 30. A scalar, so it is declared before the tables.
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "document_limit::lenient_percent"
+    )]
+    pub document_limit_percent: Option<u8>,
     pub app_preferences: AppPreferences,
     pub recent_projects: Vec<RecentProjectEntry>,
     pub installed_plugins: Vec<InstalledPlugin>,
@@ -290,8 +297,10 @@ pub struct PersistedState {
     pub default_project: ProjectSlot,
 }
 
+mod document_limit;
 mod embeddings;
 mod recents;
+pub use document_limit::*;
 pub use recents::*;
 
 /// Disk-backed user-global store (GSS-FR-01/02/03). State is persisted to

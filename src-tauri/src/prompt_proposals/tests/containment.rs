@@ -6,6 +6,7 @@ use super::*;
 fn module_source() -> String {
     [
         include_str!("../../prompt_proposals.rs"),
+        include_str!("../candidate.rs"),
         include_str!("../model.rs"),
         include_str!("../reconcile.rs"),
         include_str!("../commands.rs"),
@@ -51,6 +52,28 @@ fn a_command_names_a_proposal_the_worktree_does_not_hold() {
         list_proposals_impl(&f.root, "prompts/nothing.md").is_empty(),
         "an artifact with no proposals lists none",
     );
+}
+
+#[test]
+fn the_shared_hunk_module_names_neither_proposal_module() {
+    // PCP-FR-29, PPC-FR-21: the one module both use is pure text. It reaches no
+    // store and names neither side, so sharing it shares no operation.
+    let neutral = [
+        include_str!("../../text_hunks.rs"),
+        include_str!("../../text_hunks/anchors.rs"),
+        include_str!("../../text_hunks/hunks.rs"),
+    ]
+    .join("\n");
+    for reached in
+        ["draft_proposals", "prompt_proposals", "drafts::", "draft_history", "comments::"]
+    {
+        assert!(!neutral.contains(reached), "the neutral module names no {reached}");
+    }
+    for io in ["std::fs", "RootFs", "tauri::"] {
+        assert!(!neutral.contains(io), "the neutral module does no {io}");
+    }
+    // The prompt side reaches it, and reaches the draft side through nothing.
+    assert!(module_source().contains("crate::text_hunks"));
 }
 
 #[test]

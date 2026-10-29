@@ -131,6 +131,56 @@ export interface AgentTurn {
    * `listAgentTurnImageNotices` (AGC-FR-39).
    */
   imagesOmitted: boolean;
+  /**
+   * AGC-FR-NJXW: the context figures of the turn's latest model call, or `null`
+   * before the first one. Memory of the running session only (AGC-FR-NUKP).
+   * What the discussion column's context indicator reads (DDS-FR-KXWQ).
+   */
+  context?: TurnContext | null;
+}
+
+/**
+ * AGC-FR-OYVH: the split of one turn's input in tokens. Every value is an
+ * estimate at the fixed characters-per-token rate (CVL-FR-PGII), never a usage
+ * value.
+ */
+export interface ContextSplit {
+  instructions: number;
+  document: number;
+  history: number;
+  currentComment: number;
+  toolResults: number;
+}
+
+/** AGC-FR-OYVH: the size of the whole document under discussion. */
+export interface DocumentSize {
+  lines: number;
+  characters: number;
+  estimatedTokens: number;
+}
+
+/** AGC-FR-NJXW: what a turn reports of its context after a model call. */
+export interface TurnContext {
+  /** The model's context window in tokens, or `null` where none is known. */
+  window: number | null;
+  /** The input tokens the provider reported for the latest call, if it did. */
+  inputTokens: number | null;
+  split: ContextSplit;
+  /** `null` on a note target. */
+  document: DocumentSize | null;
+  limitTokens: number | null;
+  aboveLimit: boolean;
+}
+
+/** AGC-FR-JFBZ: the same figures before any turn, all of them estimates. */
+export interface DiscussionContext {
+  window: number | null;
+  /** The sum of `split` (AGC-FR-OBUA). */
+  estimatedTokens: number;
+  split: ContextSplit;
+  document: DocumentSize | null;
+  limitTokens: number | null;
+  aboveLimit: boolean;
 }
 
 /**

@@ -35,6 +35,7 @@ export function EditorDiscussionColumn({
   showResolved,
   onShowResolved,
   focusSignal,
+  documentDirty,
 }: {
   group: ReturnType<typeof useEditorDiscussions>;
   /** The grid the splitter's drag is measured against. */
@@ -57,6 +58,8 @@ export function EditorDiscussionColumn({
   onShowResolved: (shown: boolean) => void;
   /** ACT-FR-BRZK: raised by Discuss to put the caret in the column's composer. */
   focusSignal: number;
+  /** DDS-FR-HJMF: the file has unsaved changes; clearing is a save. */
+  documentDirty?: boolean;
 }) {
   const { comments, control, split } = group;
   // The discussion target names the file, and so do the statements: a
@@ -164,6 +167,7 @@ export function EditorDiscussionColumn({
         onFocusFragment={(_fragment, discussion) => onFocusFragment(discussion.id)}
         ownerLabel={artifactName ?? artifactId}
         focusSignal={focusSignal}
+        documentDirty={documentDirty}
         turnsFor={group.turnsFor}
         showResolved={showResolved}
         onShowResolved={onShowResolved}

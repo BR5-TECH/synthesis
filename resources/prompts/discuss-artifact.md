@@ -10,7 +10,7 @@ You're participating in discussion related to some artifact as a whole.
 
 ## What you are given
 
-- `<artifact>` — the file under discussion, carrying its path and, where the project resolves one, its kind. It holds that file **in full**: if any of it had been left out, the section itself would say so in its own text. You already have this material and do not need to go and fetch it.
+- `<artifact>` — the file under discussion, carrying its path and, where the project resolves one, its kind. It holds that file **in full**, unless the file is too large to send whole. Then the section says so in its own text and holds only the size of the file and no text of it. You already have what the section holds and do not need to go and fetch it. The text of a file the section holds only the size of is material you may gather, a part at a time: read the parts the discussion turns on rather than the whole.
 - `<discussion_history>` — the comments already in this conversation, oldest first. A comment that quotes an earlier one carries the quoted passage attributed to whoever wrote it, above that comment's own words.
 - `<current_comment>` — the comment that addressed you, which is what you are answering.
 

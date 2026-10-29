@@ -26,6 +26,7 @@ import type { PendingAttachment } from "../components/CommentAttachments";
 import { logDebug } from "../logging";
 import { forgetEveryDraft } from "./questionAnswerDrafts";
 import { mergeKnownTurn } from "./activeAgents";
+import { clearTurnContexts, noteTurnContext } from "./turnContexts";
 import type { AgentTurn, CommentQuote } from "../types";
 
 export interface DiscussionSession {
@@ -273,6 +274,8 @@ export function mergeDiscussionTurn(key: string, turn: AgentTurn): void {
  */
 export function followAgentTurn(turn: AgentTurn): void {
   if (turn.state !== "running") noteTurnEnded(turn.id);
+  // DDS-FR-KXWQ: the figures outlive the turn's place in this store.
+  noteTurnContext(turn);
   const key = turn.origin.discussionId;
   // Nothing to fold into a discussion this session never held.
   if (!key || !sessions.has(key)) return;
@@ -325,6 +328,7 @@ export function clearDiscussionSession(key: string): void {
  */
 export function clearAllDiscussionSessions(): void {
   forgetEveryDraft();
+  clearTurnContexts();
   endedTurnIds = new Set();
   if (sessions.size === 0) return;
   sessions = new Map();

@@ -298,10 +298,12 @@ fn a_tool_heavy_turn_reports_each_call_begun_and_finished_and_nothing_else() {
     let (terminal, _) = run_one(&h, "arch");
     assert_eq!(terminal.state, AgentTurnState::Delivered);
 
-    let raw: Vec<serde_json::Value> =
-        rx.try_iter().filter(|p| p["id"] == serde_json::json!(terminal.id)).collect();
+    let all: Vec<AgentTurn> =
+        rx.try_iter().map(|p| serde_json::from_value(p).expect("an AgentTurn")).collect();
     let payloads: Vec<AgentTurn> =
-        raw.iter().map(|p| serde_json::from_value(p.clone()).expect("an AgentTurn")).collect();
+        without_context_reports(all).into_iter().filter(|t| t.id == terminal.id).collect();
+    let raw: Vec<serde_json::Value> =
+        payloads.iter().map(|t| serde_json::to_value(t).expect("serialises")).collect();
     // Two for the turn itself, and one further event per call begun and per
     // call finished (CVL-FR-33).
     assert_eq!(
@@ -352,6 +354,8 @@ fn a_tool_heavy_turn_reports_each_call_begun_and_finished_and_nothing_else() {
             vec![
                 "activeToolCalls",
                 "agentId",
+                // AGC-FR-NJXW: numbers about the context, and nothing of it.
+                "context",
                 "endedAt",
                 "failure",
                 "id",
@@ -405,7 +409,10 @@ fn every_call_of_one_reply_is_begun_before_any_of_their_results_is_appended() {
     let (terminal, _) = run_one(&h, "arch");
     assert_eq!(terminal.state, AgentTurnState::Delivered);
 
-    let payloads: Vec<AgentTurn> = rx.try_iter().filter(|t| t.id == terminal.id).collect();
+    let payloads: Vec<AgentTurn> = without_context_reports(rx.try_iter().collect())
+        .into_iter()
+        .filter(|t| t.id == terminal.id)
+        .collect();
     let active: Vec<Vec<&str>> = payloads
         .iter()
         .map(|t| t.active_tool_calls.iter().map(|c| c.tool.as_str()).collect())
@@ -495,7 +502,10 @@ fn a_provider_native_call_is_reported_begun_and_finished_within_the_call_that_ra
     // round of its own either (CVL-FR-31).
     assert_eq!(h.seam.call_count(), 1);
 
-    let payloads: Vec<AgentTurn> = rx.try_iter().filter(|t| t.id == terminal.id).collect();
+    let payloads: Vec<AgentTurn> = without_context_reports(rx.try_iter().collect())
+        .into_iter()
+        .filter(|t| t.id == terminal.id)
+        .collect();
     assert_eq!(
         payloads
             .iter()
@@ -575,7 +585,10 @@ fn active_calls_are_ordered_by_activation_and_emptied_when_the_turn_ends() {
         h.turns().terminate(&turn.id, AgentTurnState::Delivered, None).expect("terminate");
     assert!(ended.active_tool_calls.is_empty(), "a terminating turn leaves none behind",);
 
-    let payloads: Vec<AgentTurn> = rx.try_iter().filter(|t| t.id == turn.id).collect();
+    let payloads: Vec<AgentTurn> = without_context_reports(rx.try_iter().collect())
+        .into_iter()
+        .filter(|t| t.id == turn.id)
+        .collect();
     assert_eq!(payloads.len(), 5, "one per activation and one per finish");
     assert!(
         payloads.iter().all(|t| t.state == AgentTurnState::Running && t.ended_at.is_none()),
@@ -604,7 +617,10 @@ fn two_provider_native_calls_of_one_reply_are_active_together() {
     let (terminal, _) = run_one(&h, "arch");
     assert_eq!(terminal.state, AgentTurnState::Delivered);
 
-    let payloads: Vec<AgentTurn> = rx.try_iter().filter(|t| t.id == terminal.id).collect();
+    let payloads: Vec<AgentTurn> = without_context_reports(rx.try_iter().collect())
+        .into_iter()
+        .filter(|t| t.id == terminal.id)
+        .collect();
     assert_eq!(
         payloads
             .iter()
@@ -675,7 +691,10 @@ fn a_turn_cancelled_with_calls_active_leaves_none_behind() {
     report_tool_finished(&handle, &h.turns(), &turn.id, &first);
     assert!(h.turns().in_flight(Some(&origin)).is_empty());
 
-    let payloads: Vec<AgentTurn> = rx.try_iter().filter(|t| t.id == turn.id).collect();
+    let payloads: Vec<AgentTurn> = without_context_reports(rx.try_iter().collect())
+        .into_iter()
+        .filter(|t| t.id == turn.id)
+        .collect();
     assert_eq!(payloads.len(), 3, "two activations and the terminal event");
     assert!(
         payloads[2].ended_at.is_some(),
@@ -702,7 +721,10 @@ fn a_turn_that_answered_immediately_emits_exactly_two_events() {
     let (terminal, _) = run_one(&h, "arch");
     assert_eq!(terminal.state, AgentTurnState::Delivered);
 
-    let payloads: Vec<AgentTurn> = rx.try_iter().filter(|t| t.id == terminal.id).collect();
+    let payloads: Vec<AgentTurn> = without_context_reports(rx.try_iter().collect())
+        .into_iter()
+        .filter(|t| t.id == terminal.id)
+        .collect();
     assert_eq!(payloads.len(), 2);
     assert!(
         payloads.iter().all(|t| t.active_tool_calls.is_empty()),

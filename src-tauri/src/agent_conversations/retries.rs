@@ -175,6 +175,17 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 // reports its own record, which is a distinct reliable record
                 // of the same logical invocation rather than a second turn.
                 record_refinement_usage(app, plan, model_calls, attempt as u32, compaction, &reply);
+                // CVL-FR-OPTI: the context figures of this answered call, for
+                // every target kind. A compaction call reports none.
+                if !compaction {
+                    report_context(
+                        app,
+                        plan,
+                        endpoint.context_size,
+                        reply.prompt_tokens,
+                        split_of_call(request, exchange),
+                    );
+                }
                 logging::log_info(
                     app,
                     turns.buffer(),

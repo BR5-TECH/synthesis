@@ -156,6 +156,20 @@ pub const DRAFT_INCONSISTENT: &str = "That draft does not contain its required s
 /// back to `search_drafts` for an id it already had.
 pub const DRAFT_PROMPT_UNREADABLE: &str = "That draft's prompt could not be read. It may not be text, or it may have changed since it was found.";
 
+/// MDT-FR-OTUZ: a call carrying both targets, or neither.
+pub const MEASURE_NOT_ONE_TARGET: &str =
+    "Pass exactly one of `path`, for a project file, or `draft_id`, for a draft.";
+
+/// MDT-FR-TWVZ: a path naming no file of the project.
+pub const MEASURE_FILE_NOT_FOUND: &str =
+    "The project holds no file at that path. Check the path, or search for the file again.";
+
+/// MDT-FR-TVWI: the draft does not hold its single live prompt.
+pub const MEASURE_DRAFT_INCONSISTENT: &str = "That draft does not contain its required single live prompt, so it cannot be measured. It must be resolved outside this tool before a later call can succeed.";
+
+/// MDT-FR-VHHI: the document resolved and could not be read.
+pub const MEASURE_UNREADABLE: &str = "That document could not be read. It may not be text, or it may have changed since it was found.";
+
 /// AUC-FR-06: the model asked the author nothing.
 pub const QUESTION_BLANK: &str =
     "The question must say what you want to know. Write it as you would write it to a colleague.";
@@ -447,6 +461,12 @@ pub enum ToolRefusal {
     /// RDT-FR-18: the draft holds its one prompt and that prompt could not be
     /// read — it does not decode as UTF-8, or the read failed.
     DraftPromptUnreadable,
+    /// MDT-FR-TWVZ: the path names no file of the project.
+    MeasureFileNotFound,
+    /// MDT-FR-TVWI: the draft does not hold its single live prompt.
+    MeasureDraftInconsistent,
+    /// MDT-FR-VHHI: the document resolved and could not be read.
+    MeasureUnreadable,
     /// RGF-FR-06: the path resolved outside the run's execution directory.
     /// `PermissionDenied` for the reason [`ToolRefusal::PathOutsideProject`]
     /// is: the argument was well-formed and named somewhere this tool may not
@@ -500,6 +520,8 @@ impl ToolRefusal {
             // RDT-FR-12: an id naming no draft is material that is not there,
             // which is what `NotFound` means (TLC-FR-10).
             | ToolRefusal::DraftNotFound
+            // MDT-FR-TWVZ: a path naming no file is material that is not there.
+            | ToolRefusal::MeasureFileNotFound
             // GDT-FR-FZHF: an id naming no selected document is material that is
             // not there, on the terms of an id naming no draft.
             | ToolRefusal::DocumentNotFound
@@ -565,6 +587,9 @@ impl ToolRefusal {
             // RDT-FR-18: likewise present, correctly named, and unreadable —
             // exactly where RFT-FR-15's non-text file lands.
             | ToolRefusal::DraftPromptUnreadable
+            // MDT-FR-TVWI, MDT-FR-VHHI: the same two shapes, for a measure.
+            | ToolRefusal::MeasureDraftInconsistent
+            | ToolRefusal::MeasureUnreadable
             // ESU-FR-08, ESU-FR-05: no argument is at fault and none would
             // help, and the run is plainly there, so neither `InvalidArgs` nor
             // `NotFound` — TLC-FR-10's "`Other` otherwise" is exactly this.
@@ -661,6 +686,11 @@ impl ToolRefusal {
             // RDT-FR-18: a read that failed once may well succeed next time, on
             // the same terms AUC-FR-11's failed append is retryable.
             | ToolRefusal::DraftPromptUnreadable
+            // MDT-FR-TWVZ, MDT-FR-TVWI, MDT-FR-VHHI: a different path or id, or
+            // the same read again, can succeed.
+            | ToolRefusal::MeasureFileNotFound
+            | ToolRefusal::MeasureDraftInconsistent
+            | ToolRefusal::MeasureUnreadable
             // RGF-FR-06, RGF-FR-13: both turn on the path the model chose, so a
             // different one reaches a file the working copy holds.
             | ToolRefusal::GraduationPathOutside
@@ -709,6 +739,9 @@ impl ToolRefusal {
             ToolRefusal::DocumentNoText => "document_no_text",
             ToolRefusal::DraftInconsistent => "draft_not_single_file",
             ToolRefusal::DraftPromptUnreadable => "draft_prompt_unreadable",
+            ToolRefusal::MeasureFileNotFound => "file_not_found",
+            ToolRefusal::MeasureDraftInconsistent => "draft_not_single_file",
+            ToolRefusal::MeasureUnreadable => "document_unreadable",
             ToolRefusal::GraduationPathOutside => "path_outside_working_copy",
             ToolRefusal::GraduationFileNotFound => "file_not_found",
             ToolRefusal::GraduationWorkingCopyUnavailable => "working_copy_unavailable",
@@ -771,6 +804,9 @@ impl std::fmt::Display for ToolRefusal {
             ToolRefusal::DocumentNoText => f.write_str(DOCUMENT_NO_TEXT),
             ToolRefusal::DraftInconsistent => f.write_str(DRAFT_INCONSISTENT),
             ToolRefusal::DraftPromptUnreadable => f.write_str(DRAFT_PROMPT_UNREADABLE),
+            ToolRefusal::MeasureFileNotFound => f.write_str(MEASURE_FILE_NOT_FOUND),
+            ToolRefusal::MeasureDraftInconsistent => f.write_str(MEASURE_DRAFT_INCONSISTENT),
+            ToolRefusal::MeasureUnreadable => f.write_str(MEASURE_UNREADABLE),
             ToolRefusal::GraduationPathOutside => f.write_str(GRADUATION_PATH_OUTSIDE),
             ToolRefusal::GraduationFileNotFound => f.write_str(GRADUATION_FILE_NOT_FOUND),
             ToolRefusal::GraduationWorkingCopyUnavailable => {

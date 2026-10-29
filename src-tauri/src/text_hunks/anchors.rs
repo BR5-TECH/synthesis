@@ -253,13 +253,59 @@ fn find_nearest_where(
         .min_by_key(|at| at.abs_diff(hint))
 }
 
-/// How many times `before` occurs in `text`. Record-time validation refuses a
-/// hunk that names text occurring more than once (DCP-FR-JGCD).
+/// How many times `before` occurs in `text`, overlapping occurrences included.
+/// Record-time validation refuses a hunk that names text occurring more than
+/// once (DCP-FR-JGCD).
+///
+/// Overlapping occurrences count, because each of them is a place the text
+/// could name: `aba` occurs twice in `ababa`, and a count that skipped the
+/// second would call it unique.
 pub fn occurrences(text: &str, before: &str) -> usize {
     if before.is_empty() {
         return 0;
     }
-    text.match_indices(before).count()
+    overlapping_count(text, before)
+}
+
+/// Where `needle` occurs in `text`, when it occurs exactly once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Occurrence {
+    /// The text is not there, or the needle is empty.
+    None,
+    /// The byte offset of the one occurrence.
+    Once(usize),
+    /// Two or more occurrences, overlapping ones included.
+    Many,
+}
+
+/// Find the one occurrence of `needle` in `text`, overlapping occurrences
+/// included (PDC-FR-WCXD, PPC-FR-RJCA).
+pub fn find_once(text: &str, needle: &str) -> Occurrence {
+    if needle.is_empty() {
+        return Occurrence::None;
+    }
+    let Some(first) = text.find(needle) else {
+        return Occurrence::None;
+    };
+    // The next search starts one character after the first match, so a match
+    // that overlaps the first is still found.
+    let step = text[first..].chars().next().map_or(1, char::len_utf8);
+    match text[first + step..].find(needle) {
+        Some(_) => Occurrence::Many,
+        None => Occurrence::Once(first),
+    }
+}
+
+fn overlapping_count(text: &str, needle: &str) -> usize {
+    let mut count = 0;
+    let mut from = 0;
+    while let Some(at) = text[from..].find(needle) {
+        count += 1;
+        let start = from + at;
+        // A non-empty needle matched here, so a character starts at `start`.
+        from = start + text[start..].chars().next().map_or(1, char::len_utf8);
+    }
+    count
 }
 
 /// Replace one resolved range. The caller has already resolved, so this is the

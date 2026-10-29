@@ -14,6 +14,9 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string) => {
     if (cmd === "append_log_records") return undefined;
+    if (cmd === "estimate_discussion_context") {
+      return (await import("../../test/invokeMocks")).CONTEXT_ESTIMATE;
+    }
     throw new Error(`unexpected command ${cmd}`);
   }),
 }));

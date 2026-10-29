@@ -279,6 +279,10 @@ pub struct AgentTurn {
     /// as any answer is.
     #[serde(default)]
     pub images_omitted: bool,
+    /// AGC-FR-NJXW: the context figures of the latest answered model call, null
+    /// until the first one. Session state only (AGC-FR-NUKP).
+    #[serde(default)]
+    pub context: Option<TurnContext>,
 }
 
 /// AGC-FR-33: one tool call the loop has begun and has not yet finished.

@@ -26,14 +26,16 @@ const STYLES = resolve(process.cwd(), "src/styles");
  * The selector text of every rule in the stylesheets.
  *
  * Comments are stripped first, and declarations are dropped, so a class named
- * in prose or inside a `url()` cannot answer for a class a component uses.
+ * in prose or inside a `url()` cannot answer for a class a component uses. A
+ * rule nested in an at-rule (`@container`, `@media`) counts too: its selector
+ * follows the at-rule's `{` rather than a `}`.
  */
 function selectorText(): string {
   const sheets = ["colors_and_type.css", "components.css", "kit.css"]
     .map((name) => readStylesheet(name))
     .join("\n");
   const withoutComments = sheets.replace(/\/\*[\s\S]*?\*\//g, " ");
-  return [...withoutComments.matchAll(/(?:^|\})([^{}]*)\{/g)]
+  return [...withoutComments.matchAll(/(?<=^|[{}])([^{}]*)\{/g)]
     .map((match) => match[1])
     .join(" ");
 }

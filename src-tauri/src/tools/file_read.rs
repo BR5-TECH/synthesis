@@ -76,7 +76,7 @@ pub struct ReadFileArgs {
 /// fall back to the documented default rather than refusing — losing a
 /// perfectly good `path` over the shape of an optional parameter is what
 /// TLC-FR-07 exists to prevent.
-fn lenient_integer<'de, D: serde::Deserializer<'de>>(
+pub(crate) fn lenient_integer<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<i64>, D::Error> {
     let value = serde_json::Value::deserialize(deserializer)?;

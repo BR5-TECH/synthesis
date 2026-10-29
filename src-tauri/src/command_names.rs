@@ -384,6 +384,7 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "dispatch_agent_turn",
     "cancel_agent_turn",
     "list_agent_turns",
+    "estimate_discussion_context",
     "list_recoverable_agent_turn_failures",
     "list_agent_turn_image_notices",
     "retry_agent_turn",
@@ -397,6 +398,9 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // Embeddings index (EMB-embeddings-index.md).
     "load_embeddings_settings",
     "save_embeddings_settings",
+    // Document size limit (GSS-global-settings-storage.md GSS-FR-PCTL).
+    "load_document_limit_percent",
+    "save_document_limit_percent",
     "list_embedding_models",
     "retry_embeddings_model_download",
     "load_project_embeddings_mode",

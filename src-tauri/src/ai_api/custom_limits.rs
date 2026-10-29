@@ -42,14 +42,15 @@ pub fn custom_reasoning_error(choice: &ReasoningChoice) -> Option<&'static str> 
     }
 }
 
-/// AAP-FR-RANS: the effective context size of one Custom model — the detected
-/// value, else the provider's max context size, else `None`. `None` for every
-/// other provider.
+/// AAP-FR-RANS: the effective context size of one model — the detected value
+/// for every provider, else, for a Custom model alone, the provider's max
+/// context size, else `None`.
 pub fn effective_context_size(record: &AiApiRecord, model: Option<&ModelOption>) -> Option<u64> {
+    let detected = model.and_then(|m| m.detected_context_size);
     if record.provider != CUSTOM {
-        return None;
+        return detected;
     }
-    model.and_then(|m| m.detected_context_size).or(record.max_context_size)
+    detected.or(record.max_context_size)
 }
 
 /// AAP-FR-HFQZ: the effective output limit — the Custom provider's max output

@@ -189,7 +189,7 @@ fn two_recordings_racing_one_artifact_leave_exactly_one_proposal() {
                         &root,
                         NewPromptProposal {
                             artifact_id: PROMPT,
-                            content: &format!("# Review\n\nVersion {n}.\n"),
+                            change: ProposedChange::Content(&format!("# Review\n\nVersion {n}.\n")),
                             rationale: "why",
                             agent: &agent(),
                             thread_id: &thread_id,

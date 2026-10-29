@@ -838,6 +838,7 @@ export function NewArtifactWorkspace({
           onCancelHunk={hunkDiscussion.cancel}
           openingFragment={fragmentsGroup.openingFragment}
           onCancelFragment={fragmentsGroup.cancelOpening}
+          documentDirty={dirty}
           availabilityOf={fragmentsGroup.availabilityOf}
           onFocusFragment={fragmentsGroup.focusFragment}
           ownerLabel={name}

@@ -98,6 +98,7 @@ pub fn revise_hunk_impl(
     let planned = hunks::plan(&prompt, std::slice::from_ref(proposed), || hunk_id.to_string())
         .map_err(|e| match e {
             hunks::PlanError::Ambiguous(_) => ERR_HUNK_AMBIGUOUS.to_string(),
+            hunks::PlanError::ContextTooLong(_) => ERR_HUNK_CONTEXT_TOO_LONG.to_string(),
             // A one-change revision can neither overlap another change nor be
             // empty, so the two remaining errors are one lost anchor.
             _ => ERR_ANCHOR_LOST.to_string(),

@@ -7,6 +7,13 @@
 //! accepts it or declines it, with a word of feedback if they have one, and that
 //! decision brings the agent back with the whole conversation in front of it.
 //!
+//! ## Why it takes hunks as well as a whole text
+//!
+//! A document can be far larger than the agent's context. With `hunks` the
+//! agent names only the passages it changes, and the backend builds the whole
+//! candidate from the file on disk (PPC-FR-RJCA, PCP-FR-CVNA). The author still
+//! decides one complete candidate, whichever form built it (PPC-FR-JGSH).
+//!
 //! ## Why nothing it does changes the file
 //!
 //! This is the point of the tool rather than a limitation of it. A proposal is
@@ -46,7 +53,8 @@ use crate::agent_conversations::ConversationOrigin;
 use crate::comments::Participant;
 use crate::log_fields;
 use crate::logging::{LogBuffer, BUFFER};
-use crate::prompt_proposals::{self, NewPromptProposal, RecordRefusal};
+use crate::prompt_proposals::{self, NewPromptProposal, ProposedChange, RecordRefusal};
+use crate::text_hunks::hunks::ProposedHunk;
 
 #[cfg(test)]
 mod tests;
@@ -59,11 +67,68 @@ mod tests;
 pub const NAME: &str = "propose_prompt_changes";
 
 /// PPC-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Propose an improved version of a prompt or a project document the project holds, when you can see how its text would be better and want the author to decide. It reaches a Prompt file or a project document and no other kind of file, and the file has to exist already — this offers a rewrite and never a new file. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Pass its complete new text — every line the file should hold once the change lands, and not a patch, not a diff, not the changed section on its own, and not a description of what to change: whatever you pass is what the file becomes if the author accepts. Say why the change is worth making, in a sentence or two as you would put it to a colleague. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decision, and whatever they said about it, in front of you. Propose one change at a time: because your turn ends here, anything else you asked for in the same message is not carried out. It changes nothing — the file is not rewritten unless the author accepts.";
+pub const DESCRIPTION: &str = "Propose an improved version of a prompt or a project document the project holds, when you can see how its text would be better and want the author to decide. It reaches a prompt or a project document and no other kind of file, and the file has to exist already — this offers a rewrite and never a new file. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Give the change in one of two forms, never both. Pass `content` with the complete new text — every line the file should hold once the change lands, and not a patch, not a diff, and not the changed section on its own. Or pass `hunks`, a list of changes: each one names, in `before`, the exact text it changes, copied character for character from the file, and gives in `after` the text that should stand in its place; to insert, give `after` alone and put the exact text it follows in `after_text`; to delete, give `before` alone. Use `hunks` for a large document: you do not need the whole file in front of you, only the parts you change, which you can read with `offset` and `limit` on `read_file`. The text you name must appear once in the file. Where it can appear more than once, put the exact text immediately before it in `lead`, or the exact text immediately after it in `trail`, up to 200 characters each. A change whose text is not found, or not found once, is refused and you are told which change to correct. Whichever form you use, the author reads and decides the whole new file. Say why the change is worth making, in a sentence or two as you would put it to a colleague. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decision, and whatever they said about it, in front of you. Propose one change at a time: because your turn ends here, anything else you asked for in the same message is not carried out. It changes nothing — the file is not rewritten unless the author accepts.";
 
 const PATH_DESCRIPTION: &str = "The project-relative path of the prompt or project document you are proposing a new version of. The file has to exist and has to be a Prompt file or a project document; anything else is refused and nothing is created.";
 
-const CONTENT_DESCRIPTION: &str = "The file's complete new text: the whole document as it should stand once the change lands. Not a patch, not a diff, not only the part you changed. If the author accepts, this becomes the file's entire contents. Pass nothing at all only if you mean to propose emptying the file, which is a change like any other and is offered to the author the same way.";
+const CONTENT_DESCRIPTION: &str = "The file's complete new text: the whole document as it should stand once the change lands. Not a patch, not a diff, not only the part you changed. If the author accepts, this becomes the file's entire contents. Leave it out when you pass `hunks`. Pass an empty text only if you mean to propose emptying the file, which is a change like any other and is offered to the author the same way.";
+
+const HUNKS_DESCRIPTION: &str = "The changes, in the order they should be read, when you do not pass `content`. In each, `before` is the exact existing text you are changing, copied character for character from the file, and `after` is what should stand in its place. For an insertion give `after` and put the exact text it follows in `after_text`; for a deletion give `before` alone. The text you name must appear only once in the file. When it does not, give `lead`, the exact text immediately before it, or `trail`, the exact text immediately after it, or both, up to 200 characters each: the text `lead` + `before` + `trail` must then appear once, and only `before` changes. For an insertion, `lead` and `trail` stand around `after_text`. Two changes must not cover the same text.";
+
+const HUNK_DESCRIPTION: &str = "One change to the file. A replacement gives `before` and `after`; an insertion gives `after` and `after_text`; a deletion gives `before` alone.";
+
+const KIND_DESCRIPTION: &str = "What this change does: `replace` puts `after` in place of `before`, `del` removes `before`, `add` inserts `after` immediately following `after_text`. The fields you send are what decide.";
+
+const BEFORE_DESCRIPTION: &str = "The exact existing text this change replaces or deletes, copied character for character from the file. It must appear only once in the file; where it does not, add `lead` or `trail`. Leave it out for an insertion.";
+
+const AFTER_DESCRIPTION: &str = "The exact text that should stand in place of `before`, or the text to insert. Leave it out for a deletion.";
+
+const AFTER_TEXT_DESCRIPTION: &str = "For an insertion only: the exact existing text the new text goes immediately after, copied character for character from the file.";
+
+const LEAD_DESCRIPTION: &str = "Optional. The exact text immediately before `before` (for an insertion, immediately before `after_text`), up to 200 characters. Give it when the text you change appears more than once. It is not changed.";
+
+const TRAIL_DESCRIPTION: &str = "Optional. The exact text immediately after `before` (for an insertion, immediately after `after_text`), up to 200 characters. Give it when the text you change appears more than once. It is not changed.";
+
+/// PPC-FR-XHHT.
+pub const PROPOSAL_NOT_ONE_FORM: &str =
+    "Pass exactly one of `content`, the complete new text, or `hunks`, the list of changes.";
+/// PPC-FR-DLHS.
+pub const PROPOSAL_NO_HUNKS: &str =
+    "Pass at least one change. An empty list has nothing for the author to decide.";
+/// PPC-FR-DLHS.
+pub const PROPOSAL_TEXT_NOT_FOUND: &str =
+    "The text you gave in `before` is not in the file. Copy it character for character from the file as you read it.";
+/// PPC-FR-RXCS: the same refusal with and without `lead` and `trail`.
+pub const PROPOSAL_TEXT_NOT_UNIQUE: &str =
+    "The text you gave in `before` appears more than once in the file. Add `lead` or `trail` with the exact text around it so it names one place.";
+/// PPC-FR-DLHS.
+pub const PROPOSAL_HUNKS_OVERLAP: &str =
+    "Two of your changes cover the same text. Combine them into one change.";
+/// PPC-FR-DLHS.
+pub const PROPOSAL_CONTEXT_TOO_LONG: &str =
+    "The text you gave in `lead` or `trail` is longer than 200 characters. Give only the few words next to the text you change.";
+
+/// PPC-FR-19: which of this tool's invalid-argument refusals fired, as a
+/// stable code, so a record names the correction the model was asked to make
+/// without carrying any of the text it sent.
+fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
+    let message = match refusal {
+        ToolRefusal::InvalidArguments(message) => message,
+        ToolRefusal::InvalidArgumentsAt { message, .. } => message,
+        _ => return None,
+    };
+    Some(match *message {
+        PROPOSAL_NOT_ONE_FORM => "not_one_form",
+        PROPOSAL_NO_HUNKS => "no_changes",
+        PROPOSAL_TEXT_NOT_FOUND => "text_not_found",
+        PROPOSAL_TEXT_NOT_UNIQUE => "text_not_unique",
+        PROPOSAL_HUNKS_OVERLAP => "changes_overlap",
+        PROPOSAL_CONTEXT_TOO_LONG => "context_too_long",
+        PROMPT_PROPOSAL_RATIONALE_BLANK => "rationale_blank",
+        PROPOSAL_NO_CHANGE => "no_change",
+        _ => "other",
+    })
+}
 
 const RATIONALE_DESCRIPTION: &str = "Why the change is worth making, in a sentence or two as you would put it to a colleague. The author reads this as your comment, beside the comparison.";
 
@@ -91,8 +156,46 @@ const PATH_LOG_CHARS: usize = 200;
 #[derive(Debug, Clone, Deserialize)]
 pub struct ProposePromptChangesArgs {
     pub path: String,
-    pub content: String,
+    /// PPC-FR-XHHT: the complete new text, or absent when `hunks` is given.
+    #[serde(default)]
+    pub content: Option<String>,
+    /// PPC-FR-XHHT: the changes, or absent when `content` is given.
+    #[serde(default)]
+    pub hunks: Option<Vec<PromptHunkArg>>,
     pub rationale: String,
+}
+
+/// One change as the model composed it (PPC-FR-RJCA). The shape of a draft's
+/// hunk without `revises`; a `note` the model sends is an unknown field and is
+/// ignored (TLC-FR-07), because the author decides the whole candidate.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PromptHunkArg {
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub before: Option<String>,
+    #[serde(default)]
+    pub after: Option<String>,
+    #[serde(default)]
+    pub after_text: Option<String>,
+    #[serde(default)]
+    pub lead: Option<String>,
+    #[serde(default)]
+    pub trail: Option<String>,
+}
+
+impl PromptHunkArg {
+    /// The change in the neutral hunk shape, its kind read from its fields.
+    fn to_proposed(&self) -> ProposedHunk {
+        ProposedHunk::from_fields(
+            self.before.clone(),
+            self.after.clone(),
+            self.after_text.clone(),
+            self.lead.clone(),
+            self.trail.clone(),
+            None,
+        )
+    }
 }
 
 /// TLC-FR-08 / PPC-FR-15: a JSON object with stable named fields, carrying the
@@ -112,9 +215,31 @@ pub fn parameters() -> serde_json::Value {
         "properties": {
             "path": { "type": "string", "description": PATH_DESCRIPTION },
             "content": { "type": "string", "description": CONTENT_DESCRIPTION },
+            "hunks": {
+                "type": "array",
+                "description": HUNKS_DESCRIPTION,
+                "items": {
+                    "type": "object",
+                    "description": HUNK_DESCRIPTION,
+                    "properties": {
+                        "kind": {
+                            "type": "string",
+                            "enum": ["replace", "del", "add"],
+                            "description": KIND_DESCRIPTION,
+                        },
+                        "before": { "type": "string", "description": BEFORE_DESCRIPTION },
+                        "after": { "type": "string", "description": AFTER_DESCRIPTION },
+                        "after_text": { "type": "string", "description": AFTER_TEXT_DESCRIPTION },
+                        "lead": { "type": "string", "description": LEAD_DESCRIPTION },
+                        "trail": { "type": "string", "description": TRAIL_DESCRIPTION },
+                    },
+                },
+            },
             "rationale": { "type": "string", "description": RATIONALE_DESCRIPTION },
         },
-        "required": ["path", "content", "rationale"],
+        // PPC-FR-XHHT: exactly one of `content` and `hunks`, which the tool
+        // checks itself, so neither is listed as required.
+        "required": ["path", "rationale"],
     })
 }
 
@@ -158,6 +283,16 @@ fn is_project_relative(path: &str) -> bool {
     !trimmed.split(['/', '\\']).any(|segment| segment == ".." || segment == ".")
 }
 
+/// PPC-FR-19: which form the model sent, as a code a record can carry.
+fn form_of(args: &ProposePromptChangesArgs) -> &'static str {
+    match (&args.content, &args.hunks) {
+        (Some(_), None) => "content",
+        (None, Some(_)) => "hunks",
+        (Some(_), Some(_)) => "both",
+        (None, None) => "neither",
+    }
+}
+
 /// `crate::prompt_proposals`' refusals in this tool's terms (PPC-FR-06,
 /// PPC-FR-08, PPC-FR-09, PPC-FR-10, PPC-FR-12).
 fn refusal_for(refusal: RecordRefusal) -> ToolRefusal {
@@ -166,6 +301,20 @@ fn refusal_for(refusal: RecordRefusal) -> ToolRefusal {
         RecordRefusal::ArtifactNotFound => ToolRefusal::PromptProposalPathMissing,
         RecordRefusal::NotAPromptArtifact => ToolRefusal::NotAPromptArtifact,
         RecordRefusal::NoChange => ToolRefusal::InvalidArguments(PROPOSAL_NO_CHANGE),
+        RecordRefusal::NoHunks => ToolRefusal::InvalidArguments(PROPOSAL_NO_HUNKS),
+        // PPC-FR-DLHS: which of the changes, as the model counted them.
+        RecordRefusal::HunkAnchorLost { at, of } => {
+            ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_TEXT_NOT_FOUND, at, of }
+        }
+        RecordRefusal::HunkAmbiguous { at, of } => {
+            ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_TEXT_NOT_UNIQUE, at, of }
+        }
+        RecordRefusal::HunkOverlap { at, of } => {
+            ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_HUNKS_OVERLAP, at, of }
+        }
+        RecordRefusal::HunkContextTooLong { at, of } => {
+            ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_CONTEXT_TOO_LONG, at, of }
+        }
         RecordRefusal::ThreadResolved => ToolRefusal::ProposalConversationResolved,
         RecordRefusal::NotRecorded => ToolRefusal::ProposalNotRecorded,
     }
@@ -218,16 +367,29 @@ impl<R: tauri::Runtime> ProposePromptChangesTool<R> {
         // composed by the model, plus `path` — this tool's one loggable
         // argument, because a record about a proposed rewrite is unfollowable
         // without saying which file was rewritten. Never the `content`, the
-        // `rationale`, or any part of the file being replaced.
-        let fields = log_fields! {
+        // `rationale`, or any part of the file being replaced. The form and the
+        // count of hunks are a shape and carry no text.
+        let mut fields = log_fields! {
             "originKind" => self.origin.kind().as_str(),
             "discussionId" => self.origin.discussion_id(),
             "path" => super::bounded_argument(&args.path, PATH_LOG_CHARS),
+            "form" => form_of(&args),
+            "hunks" => args.hunks.as_ref().map_or(0, Vec::len),
         };
         let outcome = self.propose(args);
         match &outcome {
             Ok(_) => log_tool_success(&self.app, self.buffer, NAME, fields),
-            Err(refusal) => log_tool_refusal_with(&self.app, self.buffer, NAME, refusal, fields),
+            Err(refusal) => {
+                if let Some(code) = refusal_code(refusal) {
+                    fields.insert("refusal".to_string(), serde_json::json!(code));
+                }
+                // PPC-FR-19: the place of the hunk a refusal is about, and no
+                // part of what the model wrote.
+                if let ToolRefusal::InvalidArgumentsAt { at, .. } = refusal {
+                    fields.insert("refusalAt".to_string(), serde_json::json!(at));
+                }
+                log_tool_refusal_with(&self.app, self.buffer, NAME, refusal, fields)
+            }
         }
         outcome
     }
@@ -243,6 +405,18 @@ impl<R: tauri::Runtime> ProposePromptChangesTool<R> {
         require_open_project(&self.app)?;
         let thread_id = thread_of(&self.origin)?;
 
+        // PPC-FR-XHHT: one form, never both and never neither. Checked first,
+        // because no other answer means anything until the model has said
+        // which change it is making.
+        let hunks: Vec<ProposedHunk> = match (&args.content, &args.hunks) {
+            (Some(_), None) => Vec::new(),
+            (None, Some(hunks)) => hunks.iter().map(PromptHunkArg::to_proposed).collect(),
+            _ => return Err(ToolRefusal::InvalidArguments(PROPOSAL_NOT_ONE_FORM)),
+        };
+        // PPC-FR-DLHS: an empty list is nothing for the author to decide.
+        if args.hunks.as_ref().is_some_and(Vec::is_empty) {
+            return Err(ToolRefusal::InvalidArguments(PROPOSAL_NO_HUNKS));
+        }
         // PPC-FR-08, before anything is resolved on disk. An empty `content` is
         // deliberately **not** among these: emptying a prompt is a change like
         // any other, and it meets the no-change refusal on the one term every
@@ -257,6 +431,13 @@ impl<R: tauri::Runtime> ProposePromptChangesTool<R> {
             return Err(ToolRefusal::PromptProposalPathMissing);
         }
 
+        // PPC-FR-RJCA / PPC-FR-JGSH: hunks are resolved against the file on
+        // disk by the recording path, which builds the whole candidate.
+        let change = match &args.content {
+            Some(content) => ProposedChange::Content(content),
+            None => ProposedChange::Hunks(&hunks),
+        };
+
         // PPC-FR-12: the candidate and the comment are one act, and neither this
         // tool nor the model performs either write — `crate::prompt_proposals`
         // does, so a failure of one leaves neither behind (PCP-FR-06).
@@ -266,7 +447,7 @@ impl<R: tauri::Runtime> ProposePromptChangesTool<R> {
             &self.roots.store,
             NewPromptProposal {
                 artifact_id: args.path.trim(),
-                content: &args.content,
+                change,
                 rationale: &args.rationale,
                 agent: &self.author,
                 thread_id,

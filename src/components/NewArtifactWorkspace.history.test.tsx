@@ -809,6 +809,8 @@ describe("the History rail (NAW-FR-07 … NAW-FR-43)", () => {
 
     const invoked = new Set(invokeMock.mock.calls.map((c) => String(c[0])));
     expect([...invoked].sort()).toEqual([
+      // DDS-FR-KXWQ: the context indicator's estimate, which reads no history.
+      "estimate_discussion_context",
       // NAW-FR-44 / DRS-FR-18: the draft's lock is the run's state, read from
       // the queue rather than remembered — so the tab asks for it on mount.
       "get_draft_graduation",

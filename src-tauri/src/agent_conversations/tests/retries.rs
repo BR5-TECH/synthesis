@@ -483,6 +483,8 @@ fn the_recovery_registry_answers_for_a_conversation_and_carries_nothing_else() {
         // AGC-FR-RWPT: carried, and null unless the turn failed on a refused
         // certificate.
         "tlsFailure",
+        // AGC-FR-NJXW: carried, and null until a call answered.
+        "context",
     ];
     expected.sort_unstable();
     assert_eq!(keys, expected, "the entry is the turn and nothing beside it");

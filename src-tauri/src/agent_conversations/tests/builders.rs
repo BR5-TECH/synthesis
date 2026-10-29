@@ -323,7 +323,7 @@ fn a_drafts_sections_name_the_type_its_own_prompt_declares() {
 
 #[test]
 fn the_discussion_builder_bounds_and_survives_what_it_cannot_read() {
-    // AGC-FR-11, AGC-FR-12.
+    // AGC-FR-11, AGC-FR-12, AGC-FR-VAIY.
     let h = Harness::new(vec![]);
     let (draft_id, thread) = seed_discussion(&h, &["@arch what now?"]);
     let origin = ConversationOrigin::of(&thread);
@@ -347,7 +347,14 @@ fn the_discussion_builder_bounds_and_survives_what_it_cannot_read() {
     let artifact =
         section_of(&build_input(Roots::same(&h.root()), &origin, &trigger), TAG_ARTIFACT).clone();
     assert!(artifact.truncated);
-    assert!(artifact.body.contains("partial"));
+    // AGC-FR-VAIY: a whole-target discussion of a document above the bound
+    // holds its size and no text.
+    assert!(artifact.body.contains("not included"));
+    assert!(!artifact.body.contains("xxx"));
+    let attribute =
+        |name: &str| artifact.attributes.iter().find(|(n, _)| n == name).map(|(_, v)| v.clone());
+    assert_eq!(attribute("characters"), Some((SECTION_MAX_CHARS + 1).to_string()));
+    assert_eq!(attribute("path").as_deref(), Some("artifact-window.md"));
 
     // A prompt that does not decode as UTF-8 yields no `artifact` section at
     // all, and the turn proceeds on its history alone.

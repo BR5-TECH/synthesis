@@ -97,7 +97,7 @@ impl Fixture {
             &self.root,
             NewPromptProposal {
                 artifact_id,
-                content,
+                change: ProposedChange::Content(content),
                 rationale: "The instructions bury the important step.",
                 agent: &agent(),
                 thread_id: &self.thread_id,
@@ -292,4 +292,5 @@ mod accepting;
 mod candidate;
 mod containment;
 mod deciding;
+mod hunks;
 mod recording;

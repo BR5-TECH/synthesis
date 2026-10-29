@@ -655,6 +655,7 @@ export function EditorView(props: EditorViewProps) {
               sessions.update(artifactId, { resolvedOpen: shown })
             }
             focusSignal={discussFocus}
+            documentDirty={doc.dirty}
           />
         </div>
       ) : (

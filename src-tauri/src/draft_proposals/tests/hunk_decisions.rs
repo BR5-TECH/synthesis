@@ -10,6 +10,8 @@ fn replace(before: &str, after: &str) -> ProposedHunk {
         before: Some(before.into()),
         after: Some(after.into()),
         after_text: None,
+        lead: None,
+        trail: None,
         note: None,
     }
 }
@@ -295,6 +297,8 @@ fn an_insertion_with_no_context_is_refused_unless_the_prompt_is_empty() {
         before: None,
         after: Some("A new paragraph.".into()),
         after_text: None,
+        lead: None,
+        trail: None,
         note: None,
     };
 

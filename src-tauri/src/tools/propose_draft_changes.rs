@@ -72,20 +72,25 @@ mod tests;
 pub const NAME: &str = "propose_draft_changes";
 
 /// PDC-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Propose changes to the prompt of the draft under discussion, when you can see how its text would be better and want the author to decide. A draft is one prompt, so this is the one file there is to propose changes to. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Pass a list of changes. Each one names, in `before`, the exact text it changes, copied character for character from the prompt as you read it, and gives in `after` the text that should stand in its place. To insert new text, give `after` alone and put the exact text it follows in `after_text`. To delete, give `before` alone. Copy enough surrounding words into `before` that the text you name appears once in the prompt; if it appears more than once the call is refused and you are asked to include more. Say why the changes are worth making, in a sentence or two as you would put it to a colleague. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decisions, and whatever they said about them, in front of you. The author decides each change separately, so send the changes you believe in together rather than holding some back. Offer the changes for the whole prompt one time, rather than a small improvement each time you read it. When you are answering about one change the author asked you to reconsider, name that change in `revises` and send only the one change that replaces it; the rest of what you would change waits until the author has decided the changes already standing. It reaches only the draft you were asked about, and it changes nothing — the prompt is not rewritten unless the author accepts.";
+pub const DESCRIPTION: &str = "Propose changes to the prompt of the draft under discussion, when you can see how its text would be better and want the author to decide. A draft is one prompt, so this is the one file there is to propose changes to. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Pass a list of changes. Each one names, in `before`, the exact text it changes, copied character for character from the prompt as you read it, and gives in `after` the text that should stand in its place. To insert new text, give `after` alone and put the exact text it follows in `after_text`. To delete, give `before` alone. You do not need the whole prompt in front of you: read only the parts you change, with `offset` and `limit` on `read_draft`. The text you name must appear once in the prompt. Where it can appear more than once, put the exact text immediately before it in `lead`, or the exact text immediately after it in `trail`, up to 200 characters each; only `before` changes. A change whose text is not found, or not found once, is refused and you are told which change to correct. Say why the changes are worth making, in a sentence or two as you would put it to a colleague. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decisions, and whatever they said about them, in front of you. The author decides each change separately, so send the changes you believe in together rather than holding some back. Offer the changes for the whole prompt one time, rather than a small improvement each time you read it. When you are answering about one change the author asked you to reconsider, name that change in `revises` and send only the one change that replaces it; the rest of what you would change waits until the author has decided the changes already standing. It reaches only the draft you were asked about, and it changes nothing — the prompt is not rewritten unless the author accepts.";
 
 const PATH_DESCRIPTION: &str = "The draft-relative path of the draft's prompt, which is the one file a draft holds and the only thing you can propose changes to.";
 
-const HUNKS_DESCRIPTION: &str = "The changes, in the order they should be read. In each, `before` is the exact existing text you are changing, copied character for character from the prompt, and `after` is what should stand in its place. Copy enough surrounding words into `before` that it appears only once in the prompt. For an insertion give `after` and put the exact text it follows in `after_text`; for a deletion give `before` alone.";
+const HUNKS_DESCRIPTION: &str = "The changes, in the order they should be read. In each, `before` is the exact existing text you are changing, copied character for character from the prompt, and `after` is what should stand in its place. For an insertion give `after` and put the exact text it follows in `after_text`; for a deletion give `before` alone. The text you name must appear only once in the prompt. When it does not, give `lead`, the exact text immediately before it, or `trail`, the exact text immediately after it, or both, up to 200 characters each: the text `lead` + `before` + `trail` must then appear once, and only `before` changes. For an insertion, `lead` and `trail` stand around `after_text`.";
 
-/// PDC-FR-TZKQ: the four refusals record-time placement produces, each naming
-/// the correction the model has to make.
+/// PDC-FR-TZKQ: the refusals record-time placement produces, each naming the
+/// correction the model has to make.
 pub const PROPOSAL_NO_HUNKS: &str =
     "Pass at least one change. An empty proposal has nothing for the author to decide.";
 pub const PROPOSAL_TEXT_NOT_FOUND: &str =
     "The text you gave in `before` is not in the prompt. Copy it character for character from the prompt as you read it.";
+/// PDC-FR-YSKV: the same refusal with and without `lead` and `trail`, and it
+/// names them as the correction.
 pub const PROPOSAL_TEXT_NOT_UNIQUE: &str =
-    "The text you gave in `before` appears more than once in the prompt. Include more of the words around it so it names one place.";
+    "The text you gave in `before` appears more than once in the prompt. Add `lead` or `trail` with the exact text around it so it names one place.";
+/// PDC-FR-DMTH.
+pub const PROPOSAL_CONTEXT_TOO_LONG: &str =
+    "The text you gave in `lead` or `trail` is longer than 200 characters. Give only the few words next to the text you change.";
 pub const PROPOSAL_REVISE_ONE: &str =
     "You named a change to replace, so send only the one change that replaces it. Wait for the author to decide the changes already standing before you propose the rest.";
 pub const PROPOSAL_NO_SUCH_CHANGE: &str =
@@ -97,11 +102,15 @@ const HUNK_DESCRIPTION: &str = "One change to the prompt. A replacement gives `b
 
 const KIND_DESCRIPTION: &str = "What this change does: `replace` puts `after` in place of `before`, `del` removes `before`, `add` inserts `after` immediately following `after_text`. The fields you send are what decide, so give the fields that match what you mean: a rewrite gives `before` and `after` together, and calling it `add` does not make it one.";
 
-const BEFORE_DESCRIPTION: &str = "The exact existing text this change replaces or deletes, copied character for character from the prompt as you read it — including its punctuation and its capitals. Copy enough surrounding words that it appears only once in the prompt. Leave it out for an insertion.";
+const BEFORE_DESCRIPTION: &str = "The exact existing text this change replaces or deletes, copied character for character from the prompt as you read it — including its punctuation and its capitals. It must appear only once in the prompt; where it does not, add `lead` or `trail`. Leave it out for an insertion.";
 
 const AFTER_DESCRIPTION: &str = "The exact text that should stand in place of `before`, or the text to insert. Leave it out for a deletion.";
 
 const AFTER_TEXT_DESCRIPTION: &str = "For an insertion only: the exact existing text the new text goes immediately after, copied character for character from the prompt. This is what says where the insertion goes, so it is required for an insertion into a prompt that has any text in it.";
+
+const LEAD_DESCRIPTION: &str = "Optional. The exact text immediately before `before` (for an insertion, immediately before `after_text`), copied character for character, up to 200 characters. Give it when the text you change appears more than once, so that `lead` + `before` + `trail` appears once. It is not changed.";
+
+const TRAIL_DESCRIPTION: &str = "Optional. The exact text immediately after `before` (for an insertion, immediately after `after_text`), copied character for character, up to 200 characters. Give it when the text you change appears more than once, so that `lead` + `before` + `trail` appears once. It is not changed.";
 
 const NOTE_DESCRIPTION: &str = "What this one change is for, in a few words. Optional; the author reads the rationale for the proposal as a whole.";
 
@@ -128,6 +137,7 @@ fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
         PROPOSAL_NO_HUNKS => "no_changes",
         PROPOSAL_TEXT_NOT_FOUND => "text_not_found",
         PROPOSAL_TEXT_NOT_UNIQUE => "text_not_unique",
+        PROPOSAL_CONTEXT_TOO_LONG => "context_too_long",
         PROPOSAL_HUNKS_OVERLAP => "changes_overlap",
         PROPOSAL_REVISE_ONE => "revise_one",
         PROPOSAL_NO_SUCH_CHANGE => "no_such_change",
@@ -228,6 +238,12 @@ pub struct HunkArg {
     pub after: Option<String>,
     #[serde(default)]
     pub after_text: Option<String>,
+    /// PDC-FR-WCXD: the exact text just before the change, which names its place.
+    #[serde(default)]
+    pub lead: Option<String>,
+    /// PDC-FR-WCXD: the exact text just after the change, which names its place.
+    #[serde(default)]
+    pub trail: Option<String>,
     #[serde(default)]
     pub note: Option<String>,
 }
@@ -254,26 +270,18 @@ impl HunkArg {
     ///
     /// A change carrying neither text names nothing to do, which no kind can
     /// make sense of. It is read as a replacement so that placing it refuses on
-    /// the `before` it does not hold (per `../draft_proposals/hunks.rs`), rather
+    /// the `before` it does not hold (per `../text_hunks/hunks.rs`), rather
     /// than as an insertion, which is placed on its `after_text` alone and would
     /// record a change with no text in it at all.
     fn to_proposed(&self) -> crate::draft_proposals::hunks::ProposedHunk {
-        use crate::draft_proposals::anchors::HunkKind;
-        let has_before = self.before.as_deref().is_some_and(|s| !s.is_empty());
-        let has_after = self.after.as_deref().is_some_and(|s| !s.is_empty());
-        let kind = match (has_before, has_after) {
-            (true, true) => HunkKind::Replace,
-            (true, false) => HunkKind::Del,
-            (false, true) => HunkKind::Add,
-            (false, false) => HunkKind::Replace,
-        };
-        crate::draft_proposals::hunks::ProposedHunk {
-            kind,
-            before: self.before.clone(),
-            after: self.after.clone(),
-            after_text: self.after_text.clone(),
-            note: self.note.clone(),
-        }
+        crate::draft_proposals::hunks::ProposedHunk::from_fields(
+            self.before.clone(),
+            self.after.clone(),
+            self.after_text.clone(),
+            self.lead.clone(),
+            self.trail.clone(),
+            self.note.clone(),
+        )
     }
 }
 
@@ -321,6 +329,14 @@ pub fn parameters() -> serde_json::Value {
                         "after_text": {
                             "type": "string",
                             "description": AFTER_TEXT_DESCRIPTION,
+                        },
+                        "lead": {
+                            "type": "string",
+                            "description": LEAD_DESCRIPTION,
+                        },
+                        "trail": {
+                            "type": "string",
+                            "description": TRAIL_DESCRIPTION,
                         },
                         "note": { "type": "string", "description": NOTE_DESCRIPTION },
                     },
@@ -394,6 +410,9 @@ fn refusal_for(refusal: RecordRefusal) -> ToolRefusal {
         }
         RecordRefusal::HunkOverlap { at, of } => {
             ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_HUNKS_OVERLAP, at, of }
+        }
+        RecordRefusal::HunkContextTooLong { at, of } => {
+            ToolRefusal::InvalidArgumentsAt { message: PROPOSAL_CONTEXT_TOO_LONG, at, of }
         }
         RecordRefusal::ThreadResolved => ToolRefusal::ProposalConversationResolved,
         RecordRefusal::NotRecorded => ToolRefusal::ProposalNotRecorded,
@@ -584,6 +603,9 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
                     }
                     crate::draft_proposals::ERR_HUNK_AMBIGUOUS => {
                         ToolRefusal::InvalidArguments(PROPOSAL_TEXT_NOT_UNIQUE)
+                    }
+                    crate::draft_proposals::ERR_HUNK_CONTEXT_TOO_LONG => {
+                        ToolRefusal::InvalidArguments(PROPOSAL_CONTEXT_TOO_LONG)
                     }
                     crate::draft_proposals::ERR_HUNK_NOT_FOUND
                     | crate::draft_proposals::ERR_HUNK_ALREADY_DECIDED

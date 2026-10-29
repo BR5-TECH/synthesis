@@ -870,6 +870,11 @@ describe("the AI API level's explanation (AII-FR-54, AII-FR-12, AII-FR-45)", () 
         "agent uses its own model and reasoning, set in the Agents section.",
       "Agents are served by the provider that is active for the project, so " +
         "activating a provider here changes the endpoint every agent uses.",
+      // GLS-FR-DLMP: the Document size limit's note, which says what the
+      // agent is given and not what it runs on.
+      "How much of the model's context window the document under discussion " +
+        "may fill. A larger document is given to the agent in part, and the " +
+        "agent reads the rest when it needs it.",
       "Bounds each agent conversation turn on this provider. Empty uses the " +
         "project's execution timeout, or 5 minutes.",
     ]);

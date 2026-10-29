@@ -11,13 +11,13 @@ use super::*;
 
 /// The smallest byte sequence the asset store accepts as a PNG, tagged so two
 /// pictures can be told apart by their content.
-fn png_bytes(tag: &str) -> Vec<u8> {
+pub(super) fn png_bytes(tag: &str) -> Vec<u8> {
     let mut bytes = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
     bytes.extend_from_slice(tag.as_bytes());
     bytes
 }
 
-fn encoded(bytes: &[u8]) -> String {
+pub(super) fn encoded(bytes: &[u8]) -> String {
     use base64::Engine as _;
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
@@ -498,6 +498,7 @@ fn agc_ts58_the_notice_registry_replaces_and_retires_its_entry() {
         ended_at: Some("2026-01-01T00:00:01Z".into()),
         active_tool_calls: Vec::new(),
         images_omitted: omitted,
+        context: None,
     };
 
     turns.record_image_notice(&entry("turn-1", &origin, true), PROJECT_KEY);

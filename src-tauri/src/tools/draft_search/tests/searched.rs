@@ -28,7 +28,11 @@ fn every_retained_status_is_searchable_and_readable() {
     for m in &matches {
         let loaded = crate::tools::draft_read::read(
             &root,
-            &crate::tools::draft_read::ReadDraftArgs { draft_id: m.draft_id.clone() },
+            &crate::tools::draft_read::ReadDraftArgs {
+                draft_id: m.draft_id.clone(),
+                offset: None,
+                limit: None,
+            },
         )
         .expect("a returned draft loads");
         assert_eq!(loaded.draft_id, m.draft_id);

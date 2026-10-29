@@ -136,6 +136,29 @@ pub fn validate_ai_api_selection(
     Ok(())
 }
 
+/// AAP-FR-RANS, AAP-FR-BKBF: the effective context size of one model of one
+/// provider, read from the registry alone.
+///
+/// No key is read and no network is reached, so the conversation module can
+/// call this at dispatch and for an estimate (AGC-FR-GMSF, AGC-FR-JFBZ). A
+/// provider that is not configured, a model the provider does not list, and a
+/// model with no effective size all answer `None`; nothing is refused.
+pub fn resolve_context_window(
+    store: &GlobalSettingsStore,
+    provider: &str,
+    model_id: &str,
+) -> Option<u64> {
+    let descriptor = provider_descriptor(provider)?;
+    let (records, _) = store.load_ai_api_registry().ok()?;
+    let record = records.iter().find(|r| r.provider == provider)?;
+    if state_assuming_key(record, descriptor.key_required) == IntegrationState::Unconfigured {
+        return None;
+    }
+    let models = available_models(record, descriptor);
+    let model = models.iter().find(|m| m.id == model_id)?;
+    custom_limits::effective_context_size(record, Some(model))
+}
+
 /// AAP-FR-34: the endpoint and key of a provider the **caller** names, carrying
 /// the **caller's** model and reasoning.
 ///

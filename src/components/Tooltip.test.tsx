@@ -140,3 +140,48 @@ describe("Tooltip hover delay (SNV-FR-49)", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 });
+
+describe("Tooltip below a header control (DDS-FR-WRNB)", () => {
+  afterEach(cleanup);
+
+  it("DDS-FR-WRNB: opens below with rich content, and keeps the label as the name", async () => {
+    render(
+      <Tooltip label="Context use" side="below" content={<span>Split rows</span>}>
+        {(aria) => (
+          <span tabIndex={0} role="img" {...aria}>
+            42%
+          </span>
+        )}
+      </Tooltip>,
+    );
+    const control = screen.getByRole("img", { name: "Context use" });
+    act(() => control.focus());
+    const tip = await screen.findByRole("tooltip");
+    expect(tip).toHaveTextContent("Split rows");
+    expect(tip).not.toHaveTextContent("Context use");
+    expect(tip).toHaveAttribute("data-side", "below");
+  });
+
+  it("DDS-FR-WRNB: stays closed while `blocked` answers true, and opens once it answers false", () => {
+    let blocked = true;
+    const asked = vi.fn((anchor: HTMLElement) => anchor.classList.contains("tooltip-anchor") && blocked);
+    render(
+      <Tooltip label="Context use" side="below" blocked={asked}>
+        {(aria) => (
+          <span tabIndex={0} role="img" {...aria}>
+            42%
+          </span>
+        )}
+      </Tooltip>,
+    );
+    const control = screen.getByRole("img", { name: "Context use" });
+    act(() => control.focus());
+    expect(asked).toHaveBeenCalled();
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    act(() => control.blur());
+    blocked = false;
+    act(() => control.focus());
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+  });
+});
+

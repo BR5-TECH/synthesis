@@ -406,3 +406,56 @@ describe("the discussion column with nothing in it yet (DDS-FR-ZMXQ, DDS-FR-XQMF
     expect(blocksFor(css, ".dds-splitter[hidden]")[0]).toBeDefined();
   });
 });
+
+describe("the context indicator and the warning (DDS-FR-CTXI, DDS-FR-ZQVE)", () => {
+  const css = style();
+
+  it("DDS-FR-RJEV: sizes the indicator, its ring and its tips from tokens alone", () => {
+    const value = blocksFor(css, ".dds-context__value")[0];
+    expect(decl(value, "font-size")).toBe("var(--fs-ui-sm)");
+    expect(decl(value, "color")).toBe("var(--fg-2)");
+    const ring = blocksFor(css, ".dds-context__ring")[0];
+    expect(decl(ring, "width")).toBe("var(--sp-3)");
+    expect(decl(ring, "height")).toBe("var(--sp-3)");
+    const group = blocksFor(css, ".dds-context")[0];
+    expect(decl(group, "gap")).toBe("var(--sp-1)");
+    expect(decl(group, "flex")).toBe("none");
+  });
+
+  it("DDS-FR-CTXI, DDS-FR-MZQJ: a narrow header gives way from its leading end and keeps the menu host", () => {
+    // The title and the states shrink to an ellipsis.
+    for (const selector of [".dds-discussion__title", ".dds-discussion__state"]) {
+      const block = blocksFor(css, selector).find((b) => decl(b, "min-width") !== null);
+      expect(block, `no shrink rule for ${selector}`).toBeDefined();
+      expect(decl(block!, "min-width")).toBe("0");
+      expect(decl(block!, "overflow")).toBe("hidden");
+      expect(decl(block!, "text-overflow")).toBe("ellipsis");
+      expect(decl(block!, "white-space")).toBe("nowrap");
+    }
+    // The indicator and the menu host keep their size.
+    const actions = blocksFor(css, ".dds-discussion__actions")[0];
+    expect(decl(actions, "flex")).toBe("none");
+    expect(decl(blocksFor(css, ".dds-context")[0], "flex")).toBe("none");
+    // In a narrow column a value with a ring shows the ring alone.
+    const query = css.match(/@container \(max-width: (\d+)px\) \{([^{}]*\{[^{}]*\})/);
+    expect(query, "no container query for the indicator").not.toBeNull();
+    expect(query![2]).toContain(".dds-context__ring + .dds-context__text");
+    expect(decl(blocksFor(css, ".dds-context__ring + .dds-context__text")[0], "display")).toBe(
+      "none",
+    );
+  });
+
+  it("DDS-FR-ZQVE: draws the warning in the warning token", () => {
+    const warning = blocksFor(css, ".dds-context__warning")[0];
+    expect(decl(warning, "color")).toBe("var(--warn)");
+  });
+
+  it("DDS layout: a tooltip opens below its control and inside the column", () => {
+    const below = blocksFor(sheet("kit/header.css"), '.tooltip[data-side="below"]')[0];
+    expect(below, "no rule for the below tooltip").toBeDefined();
+    expect(decl(below, "top")).toContain("100%");
+    expect(decl(below, "right")).toBe("0");
+    expect(decl(below, "transform")).toBe("none");
+  });
+});
+

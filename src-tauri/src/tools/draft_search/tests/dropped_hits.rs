@@ -153,7 +153,11 @@ fn two_drafts_of_the_same_name_are_two_results() {
     for m in &matches {
         let loaded = crate::tools::draft_read::read(
             &root,
-            &crate::tools::draft_read::ReadDraftArgs { draft_id: m.draft_id.clone() },
+            &crate::tools::draft_read::ReadDraftArgs {
+                draft_id: m.draft_id.clone(),
+                offset: None,
+                limit: None,
+            },
         )
         .expect("loads");
         let expected = if loaded.draft_id == first { "first way" } else { "second way" };

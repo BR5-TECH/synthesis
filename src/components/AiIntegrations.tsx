@@ -13,6 +13,7 @@ import {
 } from "../types";
 import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
 import { AiApiTurnTimeoutRow } from "./AiApiTurnTimeoutRow";
+import { AiApiDocumentLimitRow } from "./AiApiDocumentLimitRow";
 import { aiErrorMessage } from "./aiErrorMessage";
 import {
   CUSTOM_GATEWAY_ORIGIN,
@@ -511,6 +512,9 @@ export function AiApiIntegrations() {
           activating a provider here changes the endpoint every agent uses.
         </p>
       </div>
+
+      {/* GLS-FR-DLMP: one setting for every provider, above the tabs. */}
+      <AiApiDocumentLimitRow />
 
       {integrations === null && <div className="t-muted">Loading…</div>}
 

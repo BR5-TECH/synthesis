@@ -19,6 +19,8 @@ import type {
   AgentScope,
   AgentTurn,
   ConversationOrigin,
+  DiscussionContext,
+  DiscussionTarget,
   ProjectAgent,
   GithubTokenBinding,
   GithubTokenRecord,
@@ -286,6 +288,20 @@ export const setAiApiMaxOutputTokens = (
 ) => invoke<AiApiIntegration>("set_ai_api_max_output_tokens", { provider, tokens });
 
 /**
+ * GSS-FR-PCTL: the Document size limit, a whole percent of the model's context
+ * window. 30 while nothing is stored.
+ */
+export const loadDocumentLimitPercent = () =>
+  invoke<number>("load_document_limit_percent");
+
+/**
+ * GSS-FR-RVQK: store the Document size limit. Rejects `percent_out_of_range`
+ * for a value outside 1 to 100, and writes nothing then.
+ */
+export const saveDocumentLimitPercent = (percent: number) =>
+  invoke<number>("save_document_limit_percent", { percent });
+
+/**
  * AAP-FR-ITBL: store the Custom provider's max context size. `null` clears it.
  * Rejects as `setAiApiMaxOutputTokens` does.
  */
@@ -377,6 +393,17 @@ export const dispatchAgentTurn = (args: {
  * appending nothing. */
 export const cancelAgentTurn = (turnId: string) =>
   invoke<AgentTurn>("cancel_agent_turn", { turnId });
+
+/**
+ * AGC-FR-JFBZ: the context figures a turn would carry for this target and
+ * discussion, estimated without a model call. `agentId` names the agent whose
+ * model's window applies; absent, the window is `null` (AGC-FR-OBUA).
+ */
+export const estimateDiscussionContext = (args: {
+  target: DiscussionTarget;
+  discussionId: string | null;
+  agentId: string | null;
+}) => invoke<DiscussionContext>("estimate_discussion_context", args);
 
 /**
  * AGC-FR-22: the turns still in flight, most recently started first. An

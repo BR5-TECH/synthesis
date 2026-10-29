@@ -71,6 +71,8 @@ pub const ERR_ANCHOR_LOST: &str = "anchor_lost";
 /// because the corrections are opposites: copy the text again, against copy more
 /// of the words around it.
 pub const ERR_HUNK_AMBIGUOUS: &str = "hunk_ambiguous";
+/// DCP-FR-JGCD: a change's `lead` or `trail` is longer than its bound.
+pub const ERR_HUNK_CONTEXT_TOO_LONG: &str = "hunk_context_too_long";
 /// DCP-FR-22: `hunk_id` names no change of this proposal.
 pub const ERR_HUNK_NOT_FOUND: &str = "hunk_not_found";
 /// DCP-FR-17: that change is already accepted or rejected.
@@ -101,13 +103,17 @@ pub enum RecordRefusal {
     NoChange,
     /// DCP-FR-07: no changes at all.
     NoHunks,
-    /// DCP-FR-JGCD: a `before` the prompt does not hold. Carries the one-based
+    /// DCP-FR-JGCD: a `lead` + `before` + `trail` the prompt does not hold.
+    /// Carries the one-based
     /// place of the change in the list the caller passed, and how many it
     /// passed — a proposal of eight changes refused for one of them cannot be
     /// corrected by a caller that is not told which.
     HunkAnchorLost { at: usize, of: usize },
-    /// DCP-FR-JGCD: a `before` naming more than one place, and which change.
+    /// DCP-FR-JGCD: a `lead` + `before` + `trail` naming more than one place,
+    /// and which change.
     HunkAmbiguous { at: usize, of: usize },
+    /// DCP-FR-JGCD: a `lead` or `trail` over its bound, and which change.
+    HunkContextTooLong { at: usize, of: usize },
     /// DCP-FR-JGCD: two changes covering the same text, and the later of them.
     HunkOverlap { at: usize, of: usize },
     /// CMS-FR-17: the conversation takes no further comments.
@@ -983,5 +989,5 @@ pub use record::*;
 mod commands;
 pub use commands::*;
 
-pub mod anchors;
+pub use crate::text_hunks::anchors;
 pub mod hunks;

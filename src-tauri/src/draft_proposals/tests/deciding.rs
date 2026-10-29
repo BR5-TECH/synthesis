@@ -91,6 +91,8 @@ fn accepting_applies_one_change_and_keeps_the_authors_other_edits() {
                 before: Some("original".into()),
                 after: Some("revised".into()),
                 after_text: None,
+                lead: None,
+                trail: None,
                 note: None,
             }],
         )
@@ -121,6 +123,8 @@ fn accepting_a_change_whose_text_the_author_rewrote_is_refused() {
                 before: Some("original".into()),
                 after: Some("revised".into()),
                 after_text: None,
+                lead: None,
+                trail: None,
                 note: None,
             }],
         )

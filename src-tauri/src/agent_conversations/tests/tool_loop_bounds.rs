@@ -164,7 +164,7 @@ fn every_prompt_tells_the_agent_it_may_gather_without_naming_a_tool() {
             "{name} does not say its material section holds its material in full",
         );
         assert!(
-            lower.contains("would say so"),
+            lower.contains("would say so") || lower.contains("says so in its own text"),
             "{name} does not say a partial section says so itself",
         );
         assert!(

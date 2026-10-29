@@ -663,7 +663,7 @@ impl CompletionSeam for ToolThenGated {
     }
 }
 
-pub(super) const EXPECTED_TOOLS: [&str; 11] = [
+pub(super) const EXPECTED_TOOLS: [&str; 12] = [
     "search_specifications",
     "read_file",
     "search_drafts",
@@ -674,6 +674,7 @@ pub(super) const EXPECTED_TOOLS: [&str; 11] = [
     "search_skills",
     "list_skills",
     "load_skill",
+    "measure_document",
     "ask_user_comment",
 ];
 

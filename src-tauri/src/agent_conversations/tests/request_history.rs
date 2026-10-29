@@ -701,7 +701,7 @@ fn the_history_ends_at_the_comment_that_addressed_the_agent() {
 
 #[test]
 fn a_section_past_its_bound_says_that_it_is_partial() {
-    // AGC-FR-11.
+    // AGC-FR-11, AGC-FR-XHHT, AGC-FR-IJSE.
     //
     // Multibyte throughout, because the bound is counted in characters and read
     // back by character: a byte-sliced implementation passes an all-ASCII
@@ -717,11 +717,12 @@ fn a_section_past_its_bound_says_that_it_is_partial() {
     );
     let source = section_of(&sections, TAG_ARTIFACT);
     assert!(source.truncated);
-    assert!(source.body.contains("partial"));
-    // It actually shrank, and what was kept is the head. Without these an
-    // implementation that appended the marker to the whole body would pass.
-    assert!(source.body.chars().count() < big.chars().count());
-    assert!(source.body.starts_with(&"日".repeat(100)));
+    // AGC-FR-IJSE: the fragment's one line exceeds the bound, so the passage
+    // opens with the size line and holds that line up to the bound.
+    assert!(source.body.starts_with("[This is a passage of a larger document"));
+    let (lead, kept) = source.body.split_once("]\n\n").expect("a lead line");
+    assert!(lead.contains("holds lines 1 to 1"));
+    assert_eq!(kept, "日".repeat(SECTION_MAX_CHARS));
 
     let small = h.seed_artifact_thread("small.md", "Short enough for one section.");
     let sections =

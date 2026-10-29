@@ -54,6 +54,7 @@ pub mod draft_read;
 pub mod draft_search;
 pub mod escalate_to_user;
 pub mod file_read;
+pub mod measure_document;
 pub mod note_search;
 pub mod propose_draft_changes;
 pub mod propose_prompt_changes;

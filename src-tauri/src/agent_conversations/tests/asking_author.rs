@@ -521,7 +521,10 @@ fn a_turn_ending_on_a_question_reports_every_call_of_that_reply_finished() {
     let (terminal, _) = run_one(&h, "arch");
     assert_eq!(terminal.state, AgentTurnState::AwaitingReply);
 
-    let payloads: Vec<AgentTurn> = rx.try_iter().filter(|t| t.id == terminal.id).collect();
+    let payloads: Vec<AgentTurn> = without_context_reports(rx.try_iter().collect())
+        .into_iter()
+        .filter(|t| t.id == terminal.id)
+        .collect();
     // The registration, four begins, four finishes, and the terminal event.
     assert_eq!(
         payloads.len(),

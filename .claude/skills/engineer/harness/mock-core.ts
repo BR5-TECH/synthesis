@@ -3712,12 +3712,57 @@ Object.defineProperty(globalThis, "__mockRetryDelayMs", {
   turn.endedAt = state === "running" ? null : new Date().toISOString();
   // AGC-FR-34: a terminating turn leaves no active call behind.
   if (state !== "running") turn.activeToolCalls = [];
+  // AGC-FR-NJXW: a turn that reached the model ends with its figures.
+  if (state !== "running" && !turn.context) turn.context = mockTurnContext();
   if (state !== "running" && state !== "awaiting_reply") {
     agentTurns = agentTurns.filter((t) => t.id !== turnId);
   }
   fireBus("agent-turn-state-changed", { ...turn });
   return { ...turn };
 };
+
+/**
+ * AGC-FR-NJXW / DDS-FR-KXWQ: report a running or ended turn's context figures,
+ * as the loop does after each model call. The figures default to a turn of
+ * 84,210 input tokens in a 200,000 window.
+ *
+ *   window.__mockSetTurnContext("turn-1", { aboveLimit: true })
+ */
+(globalThis as Record<string, unknown>).__mockSetTurnContext = (
+  turnId: string,
+  over: Record<string, unknown> = {},
+): any => {
+  const turn = agentTurns.find((t) => t.id === turnId) ?? { id: turnId };
+  turn.context = { ...mockTurnContext(), ...over };
+  fireBus("agent-turn-state-changed", { ...turn });
+  return { ...turn };
+};
+
+/** DDS-FR-WRNB: the split every mocked figure carries. */
+const MOCK_CONTEXT_SPLIT = {
+  instructions: 2100,
+  document: 60000,
+  history: 9400,
+  currentComment: 120,
+  toolResults: 12500,
+};
+
+/** `?contextAboveLimit=1` puts the document above the limit (DDS-FR-ZQVE). */
+const mockAboveLimit = () => harnessValue("contextAboveLimit") === "1";
+
+function mockTurnContext(): Record<string, unknown> {
+  return {
+    window: 200000,
+    inputTokens: 84210,
+    split: { ...MOCK_CONTEXT_SPLIT },
+    document: { lines: 4000, characters: 608000, estimatedTokens: mockAboveLimit() ? 152000 : 40000 },
+    limitTokens: Math.floor((200000 * documentLimitPercent) / 100),
+    aboveLimit: mockAboveLimit(),
+  };
+}
+
+/** GSS-FR-PCTL: the Document size limit the harness holds. */
+let documentLimitPercent = 30;
 
 /**
  * AGC-FR-33 / CMT-FR-80: begin a tool call in a running turn, so its pending
@@ -10141,6 +10186,29 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       if (cmd === "set_ai_api_max_output_tokens") record.maxOutputTokens = tokens;
       else record.maxContextSize = tokens;
       return record;
+    }
+    // GSS-FR-PCTL / GSS-FR-RVQK: the Document size limit.
+    case "load_document_limit_percent":
+      return documentLimitPercent;
+    case "save_document_limit_percent": {
+      const percent = a.percent;
+      if (!Number.isInteger(percent) || percent < 1 || percent > 100) throw "percent_out_of_range";
+      documentLimitPercent = percent;
+      return documentLimitPercent;
+    }
+    // AGC-FR-JFBZ: the context figures before any turn, all estimates.
+    case "estimate_discussion_context": {
+      const figures = mockTurnContext();
+      const split = { ...MOCK_CONTEXT_SPLIT, currentComment: 0, toolResults: 0 };
+      const estimatedTokens = Object.values(split).reduce((n, v) => n + v, 0);
+      return {
+        window: a.agentId ? figures.window : null,
+        estimatedTokens,
+        split,
+        document: figures.document,
+        limitTokens: a.agentId ? figures.limitTokens : null,
+        aboveLimit: a.agentId ? figures.aboveLimit : false,
+      };
     }
     case "get_project_ai_api_integration":
       return { provider: "anthropic", resolution: "inherited", overrideProvider: null };

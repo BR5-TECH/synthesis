@@ -11,6 +11,8 @@ fn replace(before: &str, after: &str) -> ProposedHunk {
         before: Some(before.into()),
         after: Some(after.into()),
         after_text: None,
+        lead: None,
+        trail: None,
         note: None,
     }
 }

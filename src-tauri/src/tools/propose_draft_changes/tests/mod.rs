@@ -173,6 +173,8 @@ fn args(path: &str, content: &str, rationale: &str) -> ProposeDraftChangesArgs {
             before: Some(ORIGINAL.into()),
             after: Some(content.into()),
             after_text: None,
+            lead: None,
+            trail: None,
             note: None,
         }],
     }
@@ -707,5 +709,6 @@ fn tree_of(root: &std::path::Path) -> Vec<String> {
     out
 }
 
+mod lead_trail;
 mod second;
 mod third;

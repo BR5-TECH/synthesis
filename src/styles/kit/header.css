@@ -683,6 +683,16 @@ button.top-chrome__project { background: transparent; border: 0; cursor: pointer
 }
 .tooltip[data-side="left"] { left: calc(100% + 8px); }
 .tooltip[data-side="right"] { right: calc(100% + 8px); }
+/* DDS-FR-WRNB: a bubble under a control at the trailing end of a header. It is
+   aligned to that end, so it opens into the column and not past its edge. It
+   may hold more than one line. */
+.tooltip[data-side="below"] {
+  top: calc(100% + var(--sp-1-5));
+  right: 0;
+  transform: none;
+  white-space: normal;
+  padding: var(--sp-2) var(--sp-2-5);
+}
 
 .vpanel {
   grid-area: panel;

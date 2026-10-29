@@ -96,6 +96,12 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
             at: 3,
             of: 8,
         },
+        // MDT-FR-OTUZ, MDT-FR-TWVZ, MDT-FR-TVWI, MDT-FR-VHHI: this tool's own
+        // refusals join the group and are held to exactly the same rules.
+        ToolRefusal::InvalidArguments(crate::tools::MEASURE_NOT_ONE_TARGET),
+        ToolRefusal::MeasureFileNotFound,
+        ToolRefusal::MeasureDraftInconsistent,
+        ToolRefusal::MeasureUnreadable,
     ]
     .into_iter()
     .inspect(|refusal| match refusal {
@@ -121,6 +127,9 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         | ToolRefusal::DraftNotFound
         | ToolRefusal::DraftInconsistent
         | ToolRefusal::DraftPromptUnreadable
+        | ToolRefusal::MeasureFileNotFound
+        | ToolRefusal::MeasureDraftInconsistent
+        | ToolRefusal::MeasureUnreadable
         | ToolRefusal::GraduationPathOutside
         | ToolRefusal::GraduationFileNotFound
         | ToolRefusal::GraduationWorkingCopyUnavailable

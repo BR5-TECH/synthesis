@@ -16,6 +16,8 @@ fn one_change() -> Vec<HunkArg> {
         before: Some(ORIGINAL.into()),
         after: Some(PROPOSED.into()),
         after_text: None,
+        lead: None,
+        trail: None,
         note: None,
     }]
 }
@@ -38,6 +40,8 @@ fn five_changes() -> Vec<HunkArg> {
             before: Some((*before).into()),
             after: Some(after.into()),
             after_text: None,
+            lead: None,
+            trail: None,
             note: None,
         })
         .collect()
@@ -64,6 +68,8 @@ fn three_changes() -> Vec<HunkArg> {
             before: Some((*before).into()),
             after: Some(after.into()),
             after_text: None,
+            lead: None,
+            trail: None,
             note: None,
         })
         .collect()
@@ -117,6 +123,8 @@ fn a_name_that_resolves_replaces_that_one_change_in_place() {
             before: Some("The".into()),
             after: Some("That".into()),
             after_text: None,
+            lead: None,
+            trail: None,
             note: None,
         }],
     })
@@ -263,6 +271,8 @@ fn a_revision_naming_text_the_prompt_does_not_hold_is_told_that_and_not_that_the
                 before: Some("words the prompt has never held".into()),
                 after: Some("something else".into()),
                 after_text: None,
+                lead: None,
+                trail: None,
                 note: None,
             }],
         })
@@ -303,6 +313,8 @@ fn a_change_the_author_held_for_discussion_is_revisable() {
             before: Some("The".into()),
             after: Some("That".into()),
             after_text: None,
+            lead: None,
+            trail: None,
             note: None,
         }],
     })
@@ -373,6 +385,8 @@ fn a_change_the_author_rejected_is_revised_and_undecided_again() {
             before: Some("The".into()),
             after: Some("That".into()),
             after_text: None,
+            lead: None,
+            trail: None,
             note: None,
         }],
     })
@@ -416,6 +430,8 @@ fn a_revision_naming_text_the_prompt_holds_twice_is_asked_for_more_of_it() {
                 before: Some("i".into()),
                 after: Some("y".into()),
                 after_text: None,
+                lead: None,
+                trail: None,
                 note: None,
             }],
         })
@@ -500,6 +516,8 @@ fn a_name_with_space_around_it_still_names_the_change() {
             before: Some("The".into()),
             after: Some("That".into()),
             after_text: None,
+            lead: None,
+            trail: None,
             note: None,
         }],
     })
@@ -533,6 +551,8 @@ fn a_revision_records_no_proposal_and_appends_no_comment() {
             before: Some("The".into()),
             after: Some("That".into()),
             after_text: None,
+            lead: None,
+            trail: None,
             note: None,
         }],
     })
@@ -581,6 +601,8 @@ fn a_refusal_about_one_of_several_changes_names_which_one() {
         before: Some("words the prompt has never held".into()),
         after: Some("something else".into()),
         after_text: None,
+        lead: None,
+        trail: None,
         note: None,
     };
 
@@ -628,6 +650,8 @@ fn a_refusal_that_names_a_change_still_records_no_text() {
                 before: Some(secret.into()),
                 after: Some("x".into()),
                 after_text: None,
+                lead: None,
+                trail: None,
                 note: None,
             },
         ],
@@ -657,6 +681,8 @@ fn every_placement_refusal_names_the_change_it_is_about() {
         before: Some("i".into()),
         after: Some("y".into()),
         after_text: None,
+        lead: None,
+        trail: None,
         note: None,
     };
     let refused = f
@@ -682,6 +708,8 @@ fn every_placement_refusal_names_the_change_it_is_about() {
                     before: Some("The original".into()),
                     after: Some("A rewritten".into()),
                     after_text: None,
+                    lead: None,
+                    trail: None,
                     note: None,
                 },
                 HunkArg {
@@ -689,6 +717,8 @@ fn every_placement_refusal_names_the_change_it_is_about() {
                     before: Some("original.".into()),
                     after: Some("revised.".into()),
                     after_text: None,
+                    lead: None,
+                    trail: None,
                     note: None,
                 },
             ],
@@ -719,6 +749,8 @@ fn named(kind: Option<&str>, before: Option<&str>, after: Option<&str>) -> HunkA
         before: before.map(str::to_string),
         after: after.map(str::to_string),
         after_text: Some("the text it follows".into()),
+        lead: None,
+        trail: None,
         note: None,
     }
 }

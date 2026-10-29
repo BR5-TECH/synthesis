@@ -96,26 +96,37 @@
    other one renders exactly as it did before the wrapper existed. */
 .discussion-questions__group { display: contents; }
 
-/* DQA-FR-MIBQ: the two rails — the answers on the left, one description on the
-   right. The description takes the wider share, because it is the prose; the
-   labels are a couple of words each. */
-.discussion-questions__rails {
+/* DQA-FR-MIBQ, DQA-FR-SRMF: the two rails inside the answer group — the option
+   rows on the left, one description on the right — and the own answer and the
+   note below both at the group's full width. The group itself is the grid, so
+   the narrow layout can move the description to its foot (DQA-FR-OGVU)
+   without a change to the order of the markup. The rails add no background of
+   their own, and the labels take the larger share, because a label is one
+   short line and the description wraps. */
+.discussion-questions__group--railed {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-  gap: var(--sp-3);
-  align-items: start;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 4fr);
+  column-gap: var(--sp-3);
 }
-/* In the rails the group is a column of its own rather than `display:
-   contents`, or its rows would each become a cell of the grid. */
-.discussion-questions__rails > .discussion-questions__group {
+.discussion-questions__rails { display: contents; }
+.discussion-questions__group--railed > :not(.discussion-questions__rails) {
+  grid-column: 1 / -1;
+}
+.discussion-questions__options {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-/* DQA-FR-TKUM: the description of the option under consideration. Quieter than
-   the labels, which are what the author picks, and set off from them by one
-   hairline rather than a box, so the rail reads as a note beside the choice. */
+/* DQA-FR-SRMF: one thin vertical rule divides the rails. DQA-FR-LFIB: the top
+   inset and the type are the option row's own, so the first line of the
+   description stands level with the first label. */
 .discussion-questions__detail {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  align-content: start;
   min-width: 0;
   border-left: 1px solid var(--border-1);
   padding: 3px 0 3px var(--sp-3);
@@ -124,28 +135,49 @@
   color: var(--fg-2);
   overflow-wrap: anywhere;
 }
+/* DQA-FR-LFIB: every description and the placeholder share one cell, and only
+   the one shown is visible, so the rail is as tall as the longest of them and
+   moving between options moves nothing else in the block. */
+.discussion-questions__detail-text {
+  grid-area: 1 / 1;
+  visibility: hidden;
+}
+.discussion-questions__detail-text[data-shown="true"] { visibility: visible; }
 /* DQA-FR-TKUM, DQA-FR-USTA: the placeholder is meta text, in the quietest tone
    the block uses. */
-.discussion-questions__detail[data-placeholder="true"] { color: var(--fg-3); }
+.discussion-questions__detail-text[data-kind="placeholder"] { color: var(--fg-3); }
+/* DQA-FR-USTA: with the own answer chosen and no option row hovered, the rail
+   shows nothing, its rule included. It keeps its place, so the labels do not
+   move when it returns on a hover. */
+.discussion-questions__detail[data-hidden="true"],
+.discussion-questions__detail[data-hidden="true"] .discussion-questions__detail-text {
+  visibility: hidden;
+}
 
 /* DQA-FR-OGVU: under the threshold the rails stack, and the description moves
-   below the note as a panel of its own. Three lines are held for it, so moving
-   the pointer between options does not move the foot of the block. */
+   to the foot of the group, below the own answer and the note, after a thin
+   horizontal rule. A hidden rail (DQA-FR-USTA) takes no space there. */
 @container discussion-questions (max-width: 559.98px) {
-  .discussion-questions__rails { grid-template-columns: minmax(0, 1fr); }
+  .discussion-questions__group--railed { grid-template-columns: minmax(0, 1fr); }
+  .discussion-questions__options { grid-row: auto; }
   .discussion-questions__detail {
+    grid-column: 1;
+    grid-row: auto;
+    order: 1;
     border-left: 0;
     border-top: 1px solid var(--border-1);
-    padding: var(--sp-2) var(--sp-2) 0;
-    min-height: 3lh;
+    margin-top: var(--sp-2);
+    padding: var(--sp-2);
   }
+  .discussion-questions__detail[data-hidden="true"] { display: none; }
 }
 
 /* DQA-FR-XQOR: the recorded question text. It is the thing being asked, so it
    is the largest text in the block. */
 .discussion-questions__ask {
   padding: 0;
-  font-size: var(--fs-ui-title);
+  /* DQA-FR-FJXQ: two steps above the default text. */
+  font-size: var(--fs-ui-lg);
   line-height: var(--lh-normal);
   color: var(--fg-1);
   margin-bottom: var(--sp-2);

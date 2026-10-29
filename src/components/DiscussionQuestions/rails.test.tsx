@@ -14,7 +14,7 @@ import { DiscussionQuestions } from "./index";
 import {
   DESCRIPTION_PLACEHOLDER,
   setHasDescriptions,
-  shownDescription,
+  shownOption,
 } from "./answers";
 import { forgetEveryDraft } from "../../state/questionAnswerDrafts";
 import { resetLogBufferForTest } from "../../logging";
@@ -74,7 +74,14 @@ function renderBlock(
   return { onSubmit, onSubmitted };
 }
 
-const detail = () => screen.getByTestId("discussion-questions-detail");
+/** The right rail, which holds every description of the question in layers. */
+const detailRail = () => screen.getByTestId("discussion-questions-detail");
+/** The one layer of the right rail that is shown (DQA-FR-LFIB). */
+const detail = () => {
+  const shown = detailRail().querySelectorAll('[data-shown="true"]');
+  expect(shown).toHaveLength(1);
+  return shown[0] as HTMLElement;
+};
 const optionRow = (label: string) =>
   screen.getByText(label, { selector: ".discussion-questions__option" }).closest("label")!;
 const optionRadio = (label: string) => within(optionRow(label)).getByRole("radio");
@@ -88,29 +95,64 @@ describe("the two rails of a described set", () => {
   });
   afterEach(() => cleanup());
 
-  it("DQA-FR-MIBQ, DQA-FR-QWTB: the answers stand in the left rail and one description in the right", () => {
+  it("DQA-FR-MIBQ, DQA-FR-QWTB: the option rows stand in the left rail, one description in the right, and the own answer below both", () => {
     renderBlock(describedSet());
     const rails = screen.getByTestId("discussion-questions-rails");
-    // The left rail holds the rows by their labels; the right rail no control.
-    const group = rails.querySelector(".discussion-questions__group")!;
-    expect(within(group as HTMLElement).getAllByRole("radio")).toHaveLength(3);
-    expect(optionRow("One 1")).toBeInTheDocument();
-    expect(within(detail()).queryAllByRole("radio")).toHaveLength(0);
-    expect(within(detail()).queryAllByRole("button")).toHaveLength(0);
-    expect(detail().parentElement).toBe(rails);
+    // The left rail holds the recorded rows by their labels, and no other.
+    const options = rails.querySelector(".discussion-questions__options") as HTMLElement;
+    expect(within(options).getAllByRole("radio")).toHaveLength(2);
+    expect(options).toContainElement(optionRow("One 1"));
+    expect(options.nextElementSibling).toBe(detailRail());
+    // The right rail holds no control.
+    expect(within(detailRail()).queryAllByRole("radio")).toHaveLength(0);
+    expect(within(detailRail()).queryAllByRole("button")).toHaveLength(0);
+    // The own answer is not in the rails: it follows them in the group.
+    expect(rails).not.toContainElement(ownRow());
+    const group = rails.parentElement!;
+    expect(group).toHaveClass("discussion-questions__group");
+    expect(group).toContainElement(ownRow());
+    expect(rails.compareDocumentPosition(ownRow()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("DQA-FR-TKUM, DQA-FR-LFIB: an option with no description shows the placeholder, hovered or selected", () => {
+    const set = describedSet("s1", 1);
+    set.questions[0].options[1].description = "   ";
+    renderBlock(set);
+    fireEvent.pointerEnter(optionRow("Two 1"));
+    expect(detail()).toHaveAttribute("data-kind", "placeholder");
+    fireEvent.pointerLeave(optionRow("Two 1"));
+    fireEvent.click(optionRadio("Two 1"));
+    expect(detail()).toHaveAttribute("data-kind", "placeholder");
+    // The described option still shows its own.
+    fireEvent.pointerEnter(optionRow("One 1"));
+    expect(detail()).toHaveTextContent("Easy to find 1; it grows large.");
+  });
+
+  it("DQA-FR-LFIB: every description and the placeholder share the rail, and exactly one is shown", () => {
+    renderBlock(describedSet());
+    const layers = [...detailRail().querySelectorAll(".discussion-questions__detail-text")];
+    expect(layers.map((layer) => layer.textContent)).toEqual([
+      "Easy to find 1; it grows large.",
+      "Each stays small 1.",
+      DESCRIPTION_PLACEHOLDER,
+    ]);
+    fireEvent.pointerEnter(optionRow("Two 1"));
+    expect(layers.filter((layer) => layer.getAttribute("data-shown") === "true")).toEqual([
+      layers[1],
+    ]);
   });
 
   it("DQA-FR-TKUM: with nothing hovered and nothing selected, the rail shows the placeholder", () => {
     renderBlock(describedSet());
     expect(detail()).toHaveTextContent(DESCRIPTION_PLACEHOLDER);
-    expect(detail()).toHaveAttribute("data-placeholder", "true");
+    expect(detail()).toHaveAttribute("data-kind", "placeholder");
   });
 
   it("DQA-FR-TKUM: the hovered option's description shows, and leaving falls back", () => {
     renderBlock(describedSet());
     fireEvent.pointerEnter(optionRow("Two 1"));
     expect(detail()).toHaveTextContent("Each stays small 1.");
-    expect(detail()).not.toHaveAttribute("data-placeholder");
+    expect(detail()).not.toHaveAttribute("data-kind");
 
     fireEvent.pointerLeave(optionRow("Two 1"));
     expect(detail()).toHaveTextContent(DESCRIPTION_PLACEHOLDER);
@@ -136,11 +178,48 @@ describe("the two rails of a described set", () => {
     expect(detail()).toHaveTextContent("Easy to find 1; it grows large.");
   });
 
-  it("DQA-FR-USTA: choosing the own answer shows the placeholder", () => {
+  it("DQA-FR-USTA: choosing the own answer hides the rail, and an option hovered shows it again", () => {
     renderBlock(describedSet());
+    expect(detailRail()).not.toHaveAttribute("data-hidden");
     fireEvent.click(optionRadio("One 1"));
+    expect(detailRail()).not.toHaveAttribute("data-hidden");
     fireEvent.click(ownRadio());
-    expect(detail()).toHaveTextContent(DESCRIPTION_PLACEHOLDER);
+    expect(detailRail()).toHaveAttribute("data-hidden", "true");
+
+    fireEvent.pointerEnter(optionRow("Two 1"));
+    expect(detailRail()).not.toHaveAttribute("data-hidden");
+    expect(detail()).toHaveTextContent("Each stays small 1.");
+    fireEvent.pointerLeave(optionRow("Two 1"));
+    expect(detailRail()).toHaveAttribute("data-hidden", "true");
+
+    // Choosing an option again brings the rail back with that option.
+    fireEvent.click(optionRadio("Two 1"));
+    expect(detailRail()).not.toHaveAttribute("data-hidden");
+    expect(detail()).toHaveTextContent("Each stays small 1.");
+  });
+
+  it("DQA-FR-USTA: with the own answer chosen, hovering its own row keeps the rail hidden", () => {
+    renderBlock(describedSet());
+    fireEvent.click(ownRadio());
+    fireEvent.pointerEnter(ownRow());
+    expect(detailRail()).toHaveAttribute("data-hidden", "true");
+  });
+
+  it("DQA-FR-USTA: the rail is hidden on the question answered in own words and on no other", () => {
+    renderBlock(describedSet());
+    fireEvent.click(ownRadio());
+    expect(detailRail()).toHaveAttribute("data-hidden", "true");
+    fireEvent.click(screen.getByTestId("discussion-questions-next"));
+    expect(detailRail()).not.toHaveAttribute("data-hidden");
+    fireEvent.click(screen.getByTestId("discussion-questions-previous"));
+    expect(detailRail()).toHaveAttribute("data-hidden", "true");
+  });
+
+  it("DQA-FR-USTA: hovering the own-answer row before choosing it shows the placeholder, not a hidden rail", () => {
+    renderBlock(describedSet());
+    fireEvent.pointerEnter(ownRow());
+    expect(detailRail()).not.toHaveAttribute("data-hidden");
+    expect(detail()).toHaveAttribute("data-kind", "placeholder");
   });
 
   it("DQA-FR-KBJA: keyboard focus on an option row counts as hovering it", () => {
@@ -186,7 +265,7 @@ describe("the two rails of a described set", () => {
     );
     expect(optionRadio("Two 1")).toHaveAccessibleDescription("Each stays small 1.");
     expect(ownRadio()).not.toHaveAttribute("aria-describedby");
-    expect(detail()).toHaveAttribute("aria-hidden", "true");
+    expect(detailRail()).toHaveAttribute("aria-hidden", "true");
     // The label stays the row's name: the description is not part of it.
     expect(optionRadio("One 1")).toHaveAccessibleName("One 1");
   });
@@ -227,13 +306,13 @@ describe("the rail under the pointer and the keyboard together", () => {
     expect(detail()).toHaveTextContent("Easy to find 1; it grows large.");
   });
 
-  it("DQA-FR-TKUM, DQA-FR-USTA: with the own answer chosen, hovering an option shows it, and leaving shows the placeholder", () => {
+  it("DQA-FR-TKUM, DQA-FR-USTA: with the own answer chosen, hovering an option shows it, and leaving hides the rail", () => {
     renderBlock(describedSet());
     fireEvent.click(ownRadio());
     fireEvent.pointerEnter(optionRow("Two 1"));
     expect(detail()).toHaveTextContent("Each stays small 1.");
     fireEvent.pointerLeave(optionRow("Two 1"));
-    expect(detail()).toHaveTextContent(DESCRIPTION_PLACEHOLDER);
+    expect(detailRail()).toHaveAttribute("data-hidden", "true");
   });
 
   it("DQA-FR-TKUM: a three-option question describes each of its three rows", () => {
@@ -282,13 +361,18 @@ describe("the rail under the pointer and the keyboard together", () => {
     expect(detail()).toHaveTextContent(DESCRIPTION_PLACEHOLDER);
   });
 
-  it("DQA-FR-MIBQ, DQA-FR-OGVU: the description follows the group, so a stacked layout puts it below the note", () => {
+  // The markup keeps one order in both layouts: the description beside the
+  // options. Only the stylesheet moves it to the foot of the group when the
+  // rails stack (DQA-FR-OGVU, asserted in `style-invariants.questions.test.ts`).
+  it("DQA-FR-MIBQ: the markup puts the description after the option rows and before the own answer and the note", () => {
     renderBlock(describedSet());
     fireEvent.click(optionRadio("One 1"));
-    const group = screen.getByTestId("discussion-questions-rails").firstElementChild!;
-    expect(group).toHaveClass("discussion-questions__group");
-    expect(group.nextElementSibling).toBe(detail());
-    expect(group).toContainElement(screen.getByTestId("discussion-questions-note"));
+    const note = screen.getByTestId("discussion-questions-note");
+    const after = (first: Node, second: Node) =>
+      Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(after(optionRow("Two 1"), detailRail())).toBe(true);
+    expect(after(detailRail(), ownRow())).toBe(true);
+    expect(after(ownRow(), note)).toBe(true);
   });
 
   it("DQA-FR-CLHJ: two renderings of one set describe their rows by ids of their own", () => {
@@ -320,21 +404,22 @@ describe("the block's own behaviour, on a described set", () => {
   });
   afterEach(() => cleanup());
 
-  it("DQA-FR-ROXG, DQA-FR-JJON, DQA-FR-MIBQ: the note is offered beside a chosen option, in the left rail", () => {
+  it("DQA-FR-ROXG, DQA-FR-JJON, DQA-FR-MIBQ: the note is offered beside a chosen option, below the rails", () => {
     renderBlock(describedSet());
     expect(screen.queryByTestId("discussion-questions-note")).toBeNull();
     fireEvent.click(optionRadio("One 1"));
     const note = screen.getByTestId("discussion-questions-note");
     expect(note.closest(".discussion-questions__group")).not.toBeNull();
-    expect(detail()).not.toContainElement(note);
+    expect(screen.getByTestId("discussion-questions-rails")).not.toContainElement(note);
   });
 
-  it("DQA-FR-FCZL, DQA-FR-MIBQ: the own answer opens its field in the left rail and takes the keyboard", () => {
+  it("DQA-FR-FCZL, DQA-FR-MIBQ: the own answer opens its field below the rails and takes the keyboard", () => {
     renderBlock(describedSet());
     fireEvent.click(ownRadio());
     const field = screen.getByTestId("discussion-questions-own-field");
     expect(field).toHaveFocus();
     expect(field.closest(".discussion-questions__group")).not.toBeNull();
+    expect(screen.getByTestId("discussion-questions-rails")).not.toContainElement(field);
   });
 
   it("DQA-FR-TFCE: a page turn takes the keyboard to the question that arrived", () => {
@@ -370,6 +455,9 @@ describe("a set recorded without descriptions", () => {
     expect(screen.queryByTestId("discussion-questions-rails")).toBeNull();
     expect(screen.queryByTestId("discussion-questions-detail")).toBeNull();
     expect(screen.queryByText(DESCRIPTION_PLACEHOLDER)).toBeNull();
+    // The plain group stays the one-column group, not the railed grid.
+    const group = optionRow("One 1").closest(".discussion-questions__group");
+    expect(group).not.toHaveClass("discussion-questions__group--railed");
     fireEvent.pointerEnter(optionRow("One 1"));
     expect(screen.queryByText(DESCRIPTION_PLACEHOLDER)).toBeNull();
     expect(optionRadio("One 1")).not.toHaveAttribute("aria-describedby");
@@ -402,17 +490,17 @@ describe("the rail helpers", () => {
     expect(setHasDescriptions(blank)).toBe(false);
   });
 
-  it("DQA-FR-TKUM, DQA-FR-USTA: the shown description follows hover, then selection, then none", () => {
+  it("DQA-FR-TKUM, DQA-FR-USTA: the shown option follows hover, then selection, then none", () => {
     const question = describedSet().questions[0];
     const draft = { selected: 1, ownWords: false, typed: "", note: "" };
-    expect(shownDescription(question, 2, draft)).toBe("Each stays small 1.");
-    expect(shownDescription(question, null, draft)).toBe("Easy to find 1; it grows large.");
-    expect(shownDescription(question, "own", draft)).toBeNull();
-    expect(shownDescription(question, null, { ...draft, ownWords: true })).toBeNull();
-    expect(shownDescription(question, null, { ...draft, selected: null })).toBeNull();
+    expect(shownOption(question, 2, draft)).toBe(2);
+    expect(shownOption(question, null, draft)).toBe(1);
+    expect(shownOption(question, "own", draft)).toBeNull();
+    expect(shownOption(question, null, { ...draft, ownWords: true })).toBeNull();
+    expect(shownOption(question, null, { ...draft, selected: null })).toBeNull();
     // A position the question does not record, and a blank description.
-    expect(shownDescription(question, 7, draft)).toBeNull();
+    expect(shownOption(question, 7, draft)).toBeNull();
     const blank = { ...question, options: [{ ...question.options[0], description: "  " }] };
-    expect(shownDescription(blank, null, draft)).toBeNull();
+    expect(shownOption(blank, null, draft)).toBeNull();
   });
 });

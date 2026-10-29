@@ -58,7 +58,7 @@ import {
   isAnswered,
   progressLine,
   setHasDescriptions,
-  shownDescription,
+  shownOption,
   type HoveredRow,
 } from "./answers";
 import { stripCitationMarkers } from "../../text/citationMarkers";
@@ -194,7 +194,7 @@ export function DiscussionQuestions({
   // DQA-FR-MIBQ, DQA-FR-EWUG: two rails only where the set carries descriptions.
   const railed = setHasDescriptions(set);
   const shown = railed
-    ? shownDescription(question, pointed ?? focused, draft)
+    ? shownOption(question, pointed ?? focused, draft)
     : null;
   /** DQA-FR-CLHJ: the hidden element an option row is described by. */
   const descriptionId = (position: number) =>
@@ -208,72 +208,126 @@ export function DiscussionQuestions({
     setPage(next);
   };
 
-  // The answer rows and the note, as one group: the whole of the block where
-  // the set carries no descriptions, and the left rail where it does.
-  const answerGroup = (
-    <div className="discussion-questions__group">
-      {/* DQA-FR-QWTB: the two or three recorded options as rows of one answer
-          group, each reading as its recorded label, and none preselected. */}
-      {question.options.map((option) => (
-        <Fragment key={option.position}>
-          <label
-            className="discussion-questions__choice"
-            data-selected={
-              !draft.ownWords && draft.selected === option.position
-                ? "true"
-                : undefined
-            }
-            // DQA-FR-TKUM: the right rail follows the pointer.
-            onPointerEnter={
-              railed ? () => setPointed(option.position) : undefined
-            }
-            onPointerLeave={
-              railed ? () => setPointed(release(option.position)) : undefined
-            }
-          >
-            <input
-              type="radio"
-              name={`discussion-question-${set.setId}-${question.position}`}
-              // DQA-FR-KBJA: and the keyboard, exactly as it follows the pointer.
-              onFocus={railed ? () => setFocused(option.position) : undefined}
-              onBlur={
-                railed ? () => setFocused(release(option.position)) : undefined
-              }
-              aria-describedby={
-                railed && option.description
-                  ? descriptionId(option.position)
-                  : undefined
-              }
-              // DQA-FR-HLDS: exactly one option stands selected. Choosing
-              // another replaces the selection rather than adding to it, which
-              // one radio group per question is what guarantees.
-              checked={!draft.ownWords && draft.selected === option.position}
-              disabled={locked}
-              // DQA-FR-ROXG: choosing leaves the note the author typed where it
-              // was — the note belongs to the question, not to the option.
-              // DQA-FR-HLDS: and it takes the answer off the own-answer row,
-              // the two being rows of one group.
-              onChange={() =>
-                write({ selected: option.position, ownWords: false })
-              }
-            />
-            <span className="discussion-questions__option">
-              {stripCitationMarkers(option.value)}
-            </span>
-          </label>
-          {/* DQA-FR-CLHJ: the row's own description, read with its label by a
+  // DQA-FR-QWTB: the two or three recorded options as rows of one answer
+  // group, each reading as its recorded label, and none preselected.
+  const optionRows = question.options.map((option) => (
+    <Fragment key={option.position}>
+      <label
+        className="discussion-questions__choice"
+        data-selected={
+          !draft.ownWords && draft.selected === option.position
+            ? "true"
+            : undefined
+        }
+        // DQA-FR-TKUM: the right rail follows the pointer.
+        onPointerEnter={railed ? () => setPointed(option.position) : undefined}
+        onPointerLeave={
+          railed ? () => setPointed(release(option.position)) : undefined
+        }
+      >
+        <input
+          type="radio"
+          name={`discussion-question-${set.setId}-${question.position}`}
+          // DQA-FR-KBJA: and the keyboard, exactly as it follows the pointer.
+          onFocus={railed ? () => setFocused(option.position) : undefined}
+          onBlur={
+            railed ? () => setFocused(release(option.position)) : undefined
+          }
+          aria-describedby={
+            railed && option.description
+              ? descriptionId(option.position)
+              : undefined
+          }
+          // DQA-FR-HLDS: exactly one option stands selected. Choosing
+          // another replaces the selection rather than adding to it, which
+          // one radio group per question is what guarantees.
+          checked={!draft.ownWords && draft.selected === option.position}
+          disabled={locked}
+          // DQA-FR-ROXG: choosing leaves the note the author typed where it
+          // was — the note belongs to the question, not to the option.
+          // DQA-FR-HLDS: and it takes the answer off the own-answer row,
+          // the two being rows of one group.
+          onChange={() => write({ selected: option.position, ownWords: false })}
+        />
+        <span className="discussion-questions__option">
+          {stripCitationMarkers(option.value)}
+        </span>
+      </label>
+      {/* DQA-FR-CLHJ: the row's own description, read with its label by a
             screen reader; the visible rail is not announced. Outside the label,
             so it describes the row rather than becoming part of its name. */}
-          {railed && option.description && (
-            <span id={descriptionId(option.position)} className="sr-only">
-              {stripCitationMarkers(option.description)}
-            </span>
-          )}
-        </Fragment>
-      ))}
+      {railed && option.description && (
+        <span id={descriptionId(option.position)} className="sr-only">
+          {stripCitationMarkers(option.description)}
+        </span>
+      )}
+    </Fragment>
+  ));
+
+  // DQA-FR-LFIB: every description of the question and the placeholder stand
+  // in one cell, one shown and the rest hidden, so the rail is as tall as the
+  // longest of them and moving between options moves nothing else.
+  const descriptionLayers = [
+    ...question.options
+      .filter((option) => option.description)
+      .map((option) => (
+        <span
+          key={option.position}
+          className="discussion-questions__detail-text"
+          data-shown={shown === option.position ? "true" : undefined}
+        >
+          {/* DQA-FR-JADB: less any provider citation marker. */}
+          {stripCitationMarkers(option.description ?? "")}
+        </span>
+      )),
+    <span
+      key="placeholder"
+      className="discussion-questions__detail-text"
+      data-kind="placeholder"
+      data-shown={shown === null ? "true" : undefined}
+    >
+      {DESCRIPTION_PLACEHOLDER}
+    </span>,
+  ];
+
+  // The answer rows and the note, as one group.
+  const answerGroup = (
+    <div
+      className={
+        railed
+          ? "discussion-questions__group discussion-questions__group--railed"
+          : "discussion-questions__group"
+      }
+    >
+      {/* DQA-FR-MIBQ, DQA-FR-SRMF: where the set carries descriptions, the
+          option rows are the left rail and one description stands in the
+          right, both on the group's own background. DQA-FR-CLHJ: the rail
+          repeats what each row is described by, so it is hidden from
+          assistive technology rather than announced on every move. */}
+      {railed ? (
+        <div
+          className="discussion-questions__rails"
+          data-testid="discussion-questions-rails"
+        >
+          <div className="discussion-questions__options">{optionRows}</div>
+          <div
+            className="discussion-questions__detail"
+            data-testid="discussion-questions-detail"
+            // DQA-FR-USTA: while the own answer is chosen and no option row
+            // is hovered, the rail shows nothing, its rule included.
+            data-hidden={draft.ownWords && shown === null ? "true" : undefined}
+            aria-hidden="true"
+          >
+            {descriptionLayers}
+          </div>
+        </div>
+      ) : (
+        optionRows
+      )}
 
       {/* DQA-FR-FCZL: the own answer, a row of the same group after the
-          recorded options, so exactly one answer stands (DQA-FR-HLDS). It is
+          recorded options, so exactly one answer stands (DQA-FR-HLDS). It
+          stands below the rails at the group's full width (DQA-FR-MIBQ). It is
           offered on every question — the agent cannot withhold it. The label
           wraps the radio and its words and stops there, so nothing the author
           types becomes part of the name the row announces itself by. */}
@@ -394,33 +448,8 @@ export function DiscussionQuestions({
             holds the question, and a surface that draws the group as a card
             needs the card to surround the answers alone — a legend notches the
             border of the box it is inside. It is `display: contents` by
-            default, so every presentation that draws no card is unaffected.
-            DQA-FR-MIBQ: where the set carries descriptions, the group is the
-            left rail and one description stands in the right. DQA-FR-CLHJ: the
-            rail repeats what each row is described by, so it is hidden from
-            assistive technology rather than announced on every move of the
-            pointer. */}
-        {railed ? (
-          <div
-            className="discussion-questions__rails"
-            data-testid="discussion-questions-rails"
-          >
-            {answerGroup}
-            <div
-              className="discussion-questions__detail"
-              data-testid="discussion-questions-detail"
-              data-placeholder={shown === null ? "true" : undefined}
-              aria-hidden="true"
-            >
-              {/* DQA-FR-JADB: less any provider citation marker. */}
-              {shown === null
-                ? DESCRIPTION_PLACEHOLDER
-                : stripCitationMarkers(shown)}
-            </div>
-          </div>
-        ) : (
-          answerGroup
-        )}
+            default, so every presentation that draws no card is unaffected. */}
+        {answerGroup}
       </fieldset>
 
       {refusal && (

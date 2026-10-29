@@ -125,19 +125,18 @@ export function setHasDescriptions(set: PendingQuestionSet): boolean {
 export type HoveredRow = number | "own" | null;
 
 /**
- * DQA-FR-TKUM, DQA-FR-USTA: the description the right rail shows — the hovered
- * option's, else the selected option's, else none. The own-answer row has no
- * description, so hovering it or choosing it shows none.
+ * The recorded position of the option whose description the right rail shows,
+ * or `null` where it shows the placeholder (DQA-FR-TKUM, DQA-FR-USTA).
  */
-export function shownDescription(
+export function shownOption(
   question: PendingQuestion,
   hovered: HoveredRow,
   draft: QuestionDraftAnswer,
-): string | null {
+): number | null {
   if (hovered === "own") return null;
   const position = hovered ?? (draft.ownWords ? null : draft.selected);
   if (position === null) return null;
   const description = question.options.find((option) => option.position === position)
     ?.description;
-  return description && description.trim() !== "" ? description : null;
+  return description && description.trim() !== "" ? position : null;
 }

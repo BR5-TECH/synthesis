@@ -54,30 +54,119 @@ describe("the two rails (DQA-FR-MIBQ, DQA-FR-OGVU)", () => {
     }
   });
 
-  it("DQA-FR-MIBQ: the rails stand side by side, the group as a column rather than as grid cells", () => {
-    const rails = blocksFor(style(), ".discussion-questions__rails")[0];
-    expect(decl(rails, "display")).toBe("grid");
-    expect(decl(rails, "grid-template-columns")).toBe("minmax(0, 2fr) minmax(0, 3fr)");
-    const group = blocksFor(
-      style(),
-      ".discussion-questions__rails > .discussion-questions__group",
-    )[0];
-    expect(decl(group, "display")).toBe("flex");
+  it("DQA-FR-MIBQ, DQA-FR-SRMF: the rails stand side by side, the labels the wider share, a thin rule between them", () => {
+    const css = style();
+    // The group is the grid, and the rails wrapper adds no box of its own.
+    const group = blocksFor(css, ".discussion-questions__group--railed")[0];
+    expect(decl(group, "display")).toBe("grid");
+    expect(decl(group, "grid-template-columns")).toBe("minmax(0, 5fr) minmax(0, 4fr)");
+    expect(decl(blocksFor(css, ".discussion-questions__rails")[0], "display")).toBe("contents");
+    // The draft column's card rule is the more specific one, so it sets the
+    // grid again rather than leaving the group a flex column.
+    expect(
+      decl(blocksFor(sheet("kit/discussion-stream.css"), ".dds-discussion .discussion-questions__group--railed")[0], "display"),
+    ).toBe("grid");
+    // The options and the description share the first row, side by side; the
+    // own answer and the note span both columns below them.
+    const options = blocksFor(css, ".discussion-questions__options")[0];
+    const detail = blocksFor(css, ".discussion-questions__detail")[0];
+    expect([decl(options, "grid-column"), decl(options, "grid-row")]).toEqual(["1", "1"]);
+    expect([decl(detail, "grid-column"), decl(detail, "grid-row")]).toEqual(["2", "1"]);
+    expect(
+      decl(
+        blocksFor(css, ".discussion-questions__group--railed > :not(.discussion-questions__rails)")[0],
+        "grid-column",
+      ),
+    ).toBe("1 / -1");
+    expect(decl(detail, "border-left")).toBe("1px solid var(--border-1)");
+
+    // The draft column keeps that rule: it overrides no border of the rail,
+    // side by side or stacked.
+    const stream = sheet("kit/discussion-stream.css");
+    for (const block of [
+      ...blocksFor(stream, ".dds-discussion .discussion-questions__detail"),
+      ...blocksFor(stackedRules(stream), ".dds-discussion .discussion-questions__detail"),
+    ]) {
+      for (const prop of ["border", "border-left", "border-top"]) {
+        expect(decl(block, prop)).toBeNull();
+      }
+    }
+  });
+
+  it("DQA-FR-SRMF: the rails add no background, in any surface", () => {
+    for (const name of ["kit/discussion-questions.css", "kit/discussion-stream.css"]) {
+      let examined = 0;
+      for (const rule of sheet(name).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        if (!/__(rails|options|detail|group--railed)/.test(rule[1])) continue;
+        examined += 1;
+        expect(decl(rule[2], "background")).toBeNull();
+        expect(decl(rule[2], "background-color")).toBeNull();
+      }
+      // A guard that matches nothing passes for nothing.
+      expect(examined).toBeGreaterThan(0);
+    }
+  });
+
+  it("DQA-FR-LFIB: the description takes the option row's top inset and type, and every layer shares one cell", () => {
+    const css = style();
+    const row = blocksFor(css, ".discussion-questions__choice")[0];
+    const option = blocksFor(css, ".discussion-questions__option")[0];
+    const detail = blocksFor(css, ".discussion-questions__detail")[0];
+    expect(decl(detail, "padding")?.split(" ")[0]).toBe(decl(row, "padding")?.split(" ")[0]);
+    expect(decl(detail, "font-size")).toBe(decl(option, "font-size"));
+    expect(decl(detail, "line-height")).toBe(decl(option, "line-height"));
+    // Every layer shares one cell of a grid and keeps its space while it is
+    // hidden, so the rail is as tall as the longest layer.
+    expect(decl(detail, "display")).toBe("grid");
+    const layer = blocksFor(css, ".discussion-questions__detail-text")[0];
+    expect(decl(layer, "grid-area")).toBe("1 / 1");
+    expect(decl(layer, "visibility")).toBe("hidden");
+    expect(
+      decl(blocksFor(css, '.discussion-questions__detail-text[data-shown="true"]')[0], "visibility"),
+    ).toBe("visible");
+    for (const name of ["kit/discussion-questions.css", "kit/discussion-stream.css"]) {
+      for (const rule of sheet(name).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        if (rule[1].includes("__detail-text")) expect(decl(rule[2], "display")).toBeNull();
+      }
+    }
+
+    // The draft column on the same terms, against its own row.
+    const stream = sheet("kit/discussion-stream.css");
+    const columnRow = blocksFor(stream, ".dds-discussion .discussion-questions__choice")[0];
+    const columnOption = blocksFor(stream, ".dds-discussion .discussion-questions__option")[0];
+    const columnDetail = blocksFor(stream, ".dds-discussion .discussion-questions__detail")[0];
+    expect(decl(columnDetail, "padding")?.split(" ")[0]).toBe(
+      decl(columnRow, "padding")?.split(" ")[0],
+    );
+    expect(decl(columnDetail, "line-height")).toBe(decl(columnOption, "line-height"));
+    // A row set taller than its text would push its label below the
+    // description's first line, so no row sets a height of its own.
+    for (const block of [row, columnRow]) {
+      expect(decl(block, "min-height")).toBeNull();
+      expect(decl(block, "height")).toBeNull();
+    }
+    // The size is the base one, which the column's option takes too.
+    expect(decl(columnDetail, "font-size") ?? decl(detail, "font-size")).toBe(
+      decl(columnOption, "font-size"),
+    );
   });
 
   it("DQA-FR-OGVU: under 560 px of the block's own width the rails stack into one column", () => {
     const css = style();
     expect(css).not.toContain("@media (max-width");
     const stacked = stackedRules(css);
-    const rails = blocksFor(stacked, ".discussion-questions__rails")[0];
-    expect(decl(rails, "grid-template-columns")).toBe("minmax(0, 1fr)");
-    // The description becomes a panel below the note, set off by its top edge
-    // rather than by the side rule it takes beside the labels.
+    const group = blocksFor(stacked, ".discussion-questions__group--railed")[0];
+    expect(decl(group, "grid-template-columns")).toBe("minmax(0, 1fr)");
+    // The description moves to the foot of the group, after the own answer and
+    // the note, set off by a thin top rule rather than by the side rule.
     const detail = blocksFor(stacked, ".discussion-questions__detail")[0];
+    expect(decl(detail, "order")).toBe("1");
+    // Back to the one column, or the grid would add a column beside the group.
+    expect(decl(detail, "grid-column")).toBe("1");
+    expect(decl(detail, "grid-row")).toBe("auto");
+    expect(decl(blocksFor(stacked, ".discussion-questions__options")[0], "grid-row")).toBe("auto");
     expect(decl(detail, "border-left")).toBe("0");
     expect(decl(detail, "border-top")).toContain("1px solid");
-    // Lines held for the description, so the foot stays put under the pointer.
-    expect(decl(detail, "min-height")).toBe("3lh");
   });
 
   it("DQA-FR-OGVU: the draft column stacks on the same query, so its own detail rule follows it", () => {
@@ -91,7 +180,7 @@ describe("the two rails (DQA-FR-MIBQ, DQA-FR-OGVU)", () => {
     const detail = blocksFor(css, ".discussion-questions__detail")[0];
     const placeholder = blocksFor(
       css,
-      '.discussion-questions__detail[data-placeholder="true"]',
+      '.discussion-questions__detail-text[data-kind="placeholder"]',
     )[0];
     expect(decl(detail, "color")).toBe("var(--fg-2)");
     expect(decl(placeholder, "color")).toBe("var(--fg-3)");
@@ -99,7 +188,7 @@ describe("the two rails (DQA-FR-MIBQ, DQA-FR-OGVU)", () => {
     expect(
       blocksFor(
         sheet("kit/discussion-stream.css"),
-        '.dds-discussion .discussion-questions__detail[data-placeholder="true"]',
+        '.dds-discussion .discussion-questions__detail-text[data-kind="placeholder"]',
       ),
     ).toHaveLength(0);
   });
@@ -143,5 +232,66 @@ describe("the descriptions control is always visible (DQA-FR-MDMU)", () => {
     expect(
       decl(blocksFor(stream, ".dds-question__descriptions-toggle + .dds-stream__time")[0], "margin-left"),
     ).toBe("0");
+  });
+});
+
+describe("the rail while the own answer is chosen (DQA-FR-USTA)", () => {
+  it("DQA-FR-USTA: a hidden rail keeps its place side by side and takes none when stacked", () => {
+    const css = style();
+    expect(
+      decl(blocksFor(css, '.discussion-questions__detail[data-hidden="true"]')[0], "visibility"),
+    ).toBe("hidden");
+    // The shown layer sets its own visibility, so the hidden rail must reach it
+    // too, or the placeholder stays on screen without its rule.
+    expect(
+      decl(
+        blocksFor(
+          css,
+          '.discussion-questions__detail[data-hidden="true"] .discussion-questions__detail-text',
+        )[0],
+        "visibility",
+      ),
+    ).toBe("hidden");
+    expect(
+      decl(blocksFor(stackedRules(css), '.discussion-questions__detail[data-hidden="true"]')[0], "display"),
+    ).toBe("none");
+  });
+});
+
+describe("the question text (DQA-FR-FJXQ)", () => {
+  it("DQA-FR-FJXQ: one step above the default text in the draft column, two steps elsewhere", () => {
+    const stream = sheet("kit/discussion-stream.css");
+    expect(decl(blocksFor(style(), ".discussion-questions__ask")[0], "font-size")).toBe(
+      "var(--fs-ui-lg)",
+    );
+    expect(
+      decl(blocksFor(stream, ".dds-discussion .discussion-questions__ask")[0], "font-size"),
+    ).toBe("var(--fs-ui-title)");
+    // The default text the steps count from is the option labels' size.
+    expect(decl(blocksFor(style(), ".discussion-questions__option")[0], "font-size")).toBe(
+      "var(--fs-ui-md)",
+    );
+    expect(
+      decl(blocksFor(stream, ".dds-discussion .discussion-questions__option")[0], "font-size"),
+    ).toBe("var(--fs-ui-md)");
+  });
+
+  it("DQA-FR-FJXQ: no other text of the block is as large as the question", () => {
+    // Ordered smallest first; a text at or above the question's step fails.
+    const scale = ["--fs-ui-xs", "--fs-ui-sm", "--fs-ui-md", "--fs-ui-title", "--fs-ui-lg"];
+    const step = (size: string) => scale.findIndex((token) => size.includes(`${token})`));
+    for (const [name, prefix, ask] of [
+      ["kit/discussion-questions.css", "", "--fs-ui-lg"],
+      ["kit/discussion-stream.css", ".dds-discussion ", "--fs-ui-title"],
+    ] as const) {
+      for (const rule of sheet(name).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selector = rule[1].trim();
+        if (!selector.startsWith(`${prefix}.discussion-questions`)) continue;
+        if (selector.includes("__ask")) continue;
+        const size = decl(rule[2], "font-size");
+        if (size === null) continue;
+        expect(step(size), `${selector}: ${size}`).toBeLessThan(step(`var(${ask})`));
+      }
+    }
   });
 });

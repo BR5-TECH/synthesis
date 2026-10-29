@@ -15,7 +15,7 @@ Where the author answers a discussion agent that has asked several things at onc
 
 ## Wireframes
 
-The block, above the composer of a discussion, with the pointer on the first option:
+The block, above the composer of a discussion, with the pointer on the first option. The rails stand inside the answer group, on its own background, divided by a thin vertical rule; the own answer and the note span the group below them:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -24,14 +24,16 @@ The block, above the composer of a discussion, with the pointer on the first opt
 ├──────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │   Should the ontology live in one spec or two?                       │
-│                                                                      │
-│    ( ) One spec ◂               │  One spec covers both layers. It   │
-│    (•) Paired specs             │  is easy to find, but it grows     │
-│    ( ) Something else — I will  │  past the size limit and mixes UI  │
-│        say                      │  and storage rules.                │
-│                                 │                                    │
-│    Add a note…                  │                                    │
-│    ──────────────────────────   │                                    │
+│  ┌────────────────────────────────────────────────────────────────┐  │
+│  │ ( ) One spec ◂                    │ One spec covers both       │  │
+│  │ (•) Paired specs                  │ layers. It is easy to      │  │
+│  │                                   │ find, but it grows past    │  │
+│  │                                   │ the size limit.            │  │
+│  │ ( ) Something else — I will say                                │  │
+│  │                                                                │  │
+│  │     Add a note…                                                │  │
+│  │     ────────────────────────────────────────────────────────   │  │
+│  └────────────────────────────────────────────────────────────────┘  │
 │                                                                      │
 ├──────────────────────────────────────────────────────────────────────┤
 │  [ ‹ Previous ]          ● ○ ●          [ Next › ]  [ Submit ]       │
@@ -44,29 +46,27 @@ The block, above the composer of a discussion, with the pointer on the first opt
 The same question with no option hovered and none selected:
 
 ```
-│    ( ) One spec                 │  The description appears once you  │
-│    ( ) Paired specs             │  select an option.                 │
-│    ( ) Something else — I will  │                                    │
-│        say                      │                                    │
+│  │ ( ) One spec                      │ The description appears    │  │
+│  │ ( ) Paired specs                  │ once you select an option. │  │
+│  │                                   │                            │  │
+│  │                                   │                            │  │
+│  │ ( ) Something else — I will say                                │  │
 ```
 
-The same question, answered in the author's own words. The own answer opens a field of its own, no note is offered beside it, and the right rail shows the placeholder:
+The same question, answered in the author's own words. The own answer opens a field of its own at the group's full width, no note is offered beside it, and the right rail shows nothing, its rule included:
 
 ```
-│                                                                      │
-│   Should the ontology live in one spec or two?                       │
-│                                                                      │
-│    ( ) One spec                 │  The description appears once you  │
-│    ( ) Paired specs             │  select an option.                 │
-│    (•) Something else — I will  │                                    │
-│        say                      │                                    │
-│    ┌────────────────────────┐   │                                    │
-│    │ three — one per layer  │   │                                    │
-│    └────────────────────────┘   │                                    │
-│                                                                      │
+│  │ ( ) One spec                                                   │  │
+│  │ ( ) Paired specs                                               │  │
+│  │                                                                │  │
+│  │                                                                │  │
+│  │ (•) Something else — I will say                                │  │
+│  │     ┌──────────────────────────────────────────────────────┐   │  │
+│  │     │ three — one per layer and one for the join           │   │  │
+│  │     └──────────────────────────────────────────────────────┘   │  │
 ```
 
-The same block below the width threshold, in a floating discussion panel or the draft's discussion column. The rails stack:
+The same block below the width threshold, in a floating discussion panel or the draft's discussion column. The description moves to the foot of the group, under the own answer and the note, divided from them by a thin horizontal rule:
 
 ```
 ┌────────────────────────────────────────┐
@@ -75,18 +75,17 @@ The same block below the width threshold, in a floating discussion panel or the 
 ├────────────────────────────────────────┤
 │  Should the ontology live in one spec  │
 │  or two?                               │
-│                                        │
-│   ( ) One spec                         │
-│   (•) Paired specs                     │
-│   ( ) Something else — I will say      │
-│                                        │
-│   Add a note…                          │
-│   ────────────────────────────────     │
-│  ┌──────────────────────────────────┐  │
-│  │ Two specs, one in ui/ and one in │  │
-│  │ core/. Each stays small; a       │  │
-│  │ change crosses two files.        │  │
-│  └──────────────────────────────────┘  │
+│ ┌────────────────────────────────────┐ │
+│ │ ( ) One spec                       │ │
+│ │ (•) Paired specs                   │ │
+│ │ ( ) Something else — I will say    │ │
+│ │     Add a note…                    │ │
+│ │     ────────────────────────────   │ │
+│ │ ────────────────────────────────── │ │
+│ │ Two specs, one in ui/ and one in   │ │
+│ │ core/. Each stays small; a change  │ │
+│ │ crosses two files.                 │ │
+│ └────────────────────────────────────┘ │
 ├────────────────────────────────────────┤
 │  [ ‹ ]      ● ○ ●     [ › ] [ Submit ] │
 └────────────────────────────────────────┘
@@ -159,7 +158,7 @@ The same two entries in the draft's discussion column, each as one question card
 └──────────────────────────────────────────────────────────────┘
 ```
 
-- Layout notes: the block sits between the conversation's message list and its composer, inside whichever surface renders that discussion, and it is no floating overlay and no modal — the rest of the window stays operable while it stands. It carries a background of its own, distinct from the surface behind it; that background is white in neither theme, except in the draft's discussion column, where it is the canvas tone every card there takes. Its head names the agent that asked and its title where the participant carries one, and states which question of how many is showing and how many still need an answer. Its body is one question at a time: the question text, then two rails. The left rail holds the recorded option labels and the own answer as rows of one answer group, and below them the note of that question, which is a field marked by its placeholder alone. The right rail holds one description, or the placeholder, in the quieter text tone. The own answer opens a field of its own in the left rail, and a question answered in it offers no note. Below the width threshold the right rail moves under the left rail, set off as a panel of its own. A set recorded without descriptions renders the left rail alone, full width. Its foot carries Previous, a position indicator, Next, and Submit on one line; Previous and Next disable themselves at the two ends of the set. The block is set on the measure of the conversation it stands in, and is centred within its surface rather than filled to that surface's width. The composer below it renders disabled with one line of text saying why. In history, a question comment and the answer comment immediately after it are drawn as one entry rather than as two stacked cards: a single rule between the two halves in every owner surface other than the draft's discussion column, and one question card in the draft's discussion column, where the chosen option is marked in the option list and the note stands in the card's footer. A question half or a question card whose comment carries descriptions shows a small caret control in its heading, visible at all times; it points right while the descriptions are hidden and down while they show.
+- Layout notes: the block sits between the conversation's message list and its composer, inside whichever surface renders that discussion, and it is no floating overlay and no modal — the rest of the window stays operable while it stands. It carries a background of its own, distinct from the surface behind it; that background is white in neither theme, except in the draft's discussion column, where it is the canvas tone every card there takes. Its head names the agent that asked and its title where the participant carries one, and states which question of how many is showing and how many still need an answer. Its body is one question at a time: the question text, the largest text in the block, then one answer group. Inside the group the recorded option labels stand in a left rail, the wider of the two, and one description, or the placeholder, stands in a right rail in the quieter text tone. A thin vertical rule divides the rails, and the first line of the description stands level with the first label. The rails take the group's own background and add none. Below them, at the group's full width, stand the own-answer row and the note of that question, which is a field marked by its placeholder alone. The own answer opens a field of its own there, and a question answered in it offers no note. Below the width threshold the description moves to the foot of the group, under the own answer and the note, divided from them by a thin horizontal rule. While the own answer is chosen and no option row is hovered, the right rail shows nothing, its rule included. A set recorded without descriptions renders no rails. Its foot carries Previous, a position indicator, Next, and Submit on one line; Previous and Next disable themselves at the two ends of the set. The block is set on the measure of the conversation it stands in, and is centred within its surface rather than filled to that surface's width. The composer below it renders disabled with one line of text saying why. In history, a question comment and the answer comment immediately after it are drawn as one entry rather than as two stacked cards: a single rule between the two halves in every owner surface other than the draft's discussion column, and one question card in the draft's discussion column, where the chosen option is marked in the option list and the note stands in the card's footer. A question half or a question card whose comment carries descriptions shows a small caret control in its heading, visible at all times; it points right while the descriptions are hidden and down while they show.
 
 ## UI contract boundary
 - **Owned by the UI**: the block's placement, measure, and treatment in every owner surface that renders it; the rendering of every recorded question in its recorded order with its recorded options; the two rails, which description the right rail shows, its placeholder, and the width threshold under which the rails stack; the answer rows of one question, the own-answer field, and the note beneath them; what counts as answered; the pagination and what it moves; the enablement of Submit and the reason it states while unavailable; the disabling of the composer and of every other human-authored contribution route while a set stands; the unsent answer draft — what it is keyed by, what it holds, what it survives, and when it is dropped; the single routing decision the accepted submission takes and the dispatch it performs; the pairing of a question comment with the answer comment after it into one history entry; and the control that shows and hides a question comment's descriptions in history, with its state.
@@ -171,6 +170,7 @@ The same two entries in the draft's discussion column, each as one question card
  3. **DQA-FR-CKYP** It is an in-panel block and never a floating overlay of the window and never an application modal (per `SNV-shell-navigation.md` SNV-FR-56). It takes no focus trap, and the rest of the window stays operable while it stands.
  4. **DQA-FR-JWEF** A surface reads the set from `"read discussion question set"` when it mounts the discussion and follows `"discussion question set changed"` thereafter, so a set recorded while the author is reading appears without a reopen and one submitted elsewhere goes.
  5. **DQA-FR-XQOR** It renders every recorded question in its recorded order with its recorded text and its recorded options, exactly as they were recorded, and composes no prose of its own around them.
+5. **DQA-FR-FJXQ** The question text is the **largest text** in the block: one step of the type scale above the default text in the draft's discussion column, and two steps above it in every other owner surface.
  6. **DQA-FR-PDLN** It names the agent that asked, from the set's own recorded participant snapshot, and renders that participant's title on the terms every agent contribution renders one (per `CTA-comment-agent-turns.md` CTA-FR-KFUF, CTA-FR-KYPK).
  7. **DQA-FR-BXHU** The set is answered **one question at a time**, with pagination in both directions, the author moving forward and backward through every recorded question.
  8. **DQA-FR-GVSA** A set the author has not paged shows its **first** question, and a set that replaces another does the same, a page belonging to the set it was turned in.
@@ -178,11 +178,14 @@ The same two entries in the draft's discussion column, each as one question card
 10. **DQA-FR-TFCE** Moving takes the keyboard with it: focus lands in the question that arrived rather than staying on the control that moved it, because Previous and Next disable themselves at the two ends of the set.
 11. **DQA-FR-MJPV** The block states which question of how many is showing and how many of the set still need an answer, so the author knows what is left without paging through to find out.
 12. **DQA-FR-QWTB** Each question renders its **two or three** recorded options as rows of one answer group, each row reading as that option's recorded label (its `value`), and **no option is preselected**.
-12. **DQA-FR-MIBQ** A question whose set carries descriptions renders **two rails** below its text. The left rail holds the answer rows, the own-answer field, and the note. The right rail holds one description or the placeholder, and no control.
-12. **DQA-FR-TKUM** The right rail shows the description of the **hovered** option row. With no option row hovered, it shows the description of the **selected** option. With neither, it shows the placeholder *"The description appears once you select an option."* A move to another question clears the hovered row.
-12. **DQA-FR-USTA** The own-answer row has no description. Hovering it, or selecting it with no option row hovered, shows the placeholder in the right rail.
+12. **DQA-FR-MIBQ** A question whose set carries descriptions renders **two rails** inside its answer group. The left rail holds the recorded option rows. The right rail holds one description or the placeholder, and no control. The own-answer row, its field, and the note stand below both rails, at the group's full width.
+12. **DQA-FR-SRMF** The rails add **no background**: they stand on the answer group's own background, the one the group has in a set without descriptions. A thin vertical rule divides them, and the left rail takes the larger share of the width.
+    - *Why:* An option label is one short line, and the description wraps over several lines in the narrower rail.
+12. **DQA-FR-LFIB** The first line of the description stands **level with the first option's label**, and the right rail is as tall as the longest description of the question. So moving between options moves no other part of the block.
+12. **DQA-FR-TKUM** The right rail shows the description of the **hovered** option row. With no option row hovered, it shows the description of the **selected** option. With neither, it shows the placeholder *"The description appears once you select an option."*, except as DQA-FR-USTA states. A move to another question clears the hovered row.
+12. **DQA-FR-USTA** The own-answer row has no description, and hovering it shows the placeholder. While the own answer is chosen and no option row is hovered, the right rail shows **nothing**: no placeholder and no rule. Hovering an option row still shows that option's description. A rail hidden in the stacked layout takes no space.
 12. **DQA-FR-KBJA** Keyboard focus on an option row counts as hovering it, so the right rail follows the keyboard exactly as it follows the pointer.
-12. **DQA-FR-OGVU** Where the block is narrower than **560 px**, the rails **stack** into one column: the right rail's content renders below the note, set off as a panel of its own. The block measures its own width, so the floating discussion panel and the draft's discussion column at its default split stack.
+12. **DQA-FR-OGVU** Where the block is narrower than **560 px**, the rails **stack** into one column: the description renders at the foot of the answer group, below the own answer and the note, after a thin horizontal rule. The block measures its own width, so the floating discussion panel and the draft's discussion column at its default split stack.
 12. **DQA-FR-EWUG** A set whose options carry **no description** renders its questions in one column with no right rail and no placeholder (per `../tools/ADQ-ask-discussion-questions-tool.md` ADQ-FR-RTDD). Such a set answers and submits on the same terms as any other.
 12. **DQA-FR-CLHJ** Each option row exposes its own description to assistive technology as the row's description, so a screen reader reads it with the label. The right rail itself is not announced when the hovered row changes.
 13. **DQA-FR-FCZL** Each question's answer group carries an **own answer** row after its recorded options, and choosing that row opens a field for the author's own words. The row stands on every question, and the agent that asked cannot withhold it.

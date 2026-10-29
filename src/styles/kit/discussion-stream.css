@@ -579,7 +579,9 @@
 /* DQA-FR-XQOR: the question stands above the group rather than inside it, at
    the measure a message body is read on. */
 .dds-discussion .discussion-questions__ask {
-  font-size: var(--fs-ui-md);
+  /* DQA-FR-FJXQ: one step above the default text, so the question stands out
+     from the options below it. */
+  font-size: var(--fs-ui-title);
   line-height: var(--lh-message);
   color: var(--fg-1);
   margin: 0 0 var(--sp-2-5);
@@ -675,19 +677,24 @@
   padding: var(--sp-1-5);
 }
 
-/* DQA-FR-MIBQ: in this column the group is the card, so the description beside
-   it needs no rule of its own — the card's edge already divides the two. Its
-   text starts level with the first option's words. */
-.dds-discussion .discussion-questions__detail {
-  border: 0;
-  padding: calc(var(--sp-1-5) + var(--sp-2)) 0 0;
-  line-height: var(--lh-message);
+/* DQA-FR-MIBQ, DQA-FR-SRMF: in this column the group is the card, and the rails
+   stand inside it. The option rows keep the spacing they have without rails.
+   DQA-FR-LFIB: the description takes the row's own top inset and line height,
+   so its first line stands level with the first label. */
+.dds-discussion .discussion-questions__options { gap: var(--sp-0-5); }
+/* The card's own flex rule is the more specific one, so the railed group is
+   made a grid again here, with the rails' own column gap. */
+.dds-discussion .discussion-questions__group--railed {
+  display: grid;
+  column-gap: var(--sp-3);
 }
-/* DQA-FR-OGVU: stacked under the card, the description is a panel of its own on
-   the column's ground, inset to the card's own padding. */
+.dds-discussion .discussion-questions__detail {
+  padding: var(--sp-2) var(--sp-2-5) var(--sp-2) var(--sp-3);
+  line-height: var(--lh-snug);
+}
 @container discussion-questions (max-width: 559.98px) {
   .dds-discussion .discussion-questions__detail {
-    padding: var(--sp-1) calc(var(--sp-1-5) + var(--sp-2-5)) 0;
+    padding: var(--sp-2) var(--sp-2-5);
   }
 }
 
